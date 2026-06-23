@@ -12,9 +12,20 @@ import ParticleBackground from '../components/display/ParticleBackground.jsx'
 // ─── Pre-show waiting screen ───────────────────────────────────────────────
 
 function PreShowScreen({ show }) {
+  console.log('[PreShowScreen] show prop:', show)
+  console.log('[PreShowScreen] show?.teams:', show?.teams)
+
   const { theme } = useTheme()
   const [teams, setTeams] = useState([])
   const [qrDataUrl, setQrDataUrl] = useState(null)
+
+  if (!show) {
+    return (
+      <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2b1e3e' }}>
+        <p style={{ color: '#e6e6fa', fontSize: '1.5rem' }}>PreShowScreen: show is null</p>
+      </div>
+    )
+  }
 
   const joinUrl = `${window.location.origin}/join?show=${show.id}`
 
@@ -256,15 +267,16 @@ export default function Display() {
         const res = await supabase.from('shows').select('*').eq('id', showId).single()
         data = res.data
       } else {
-        // No URL param — prefer the live show, fall back to most recently created
-        const res = await supabase
+        // No URL param — load the most recently created show
+        const { data: res, error } = await supabase
           .from('shows')
           .select('*')
-          .order('is_live', { ascending: false })
           .order('created_at', { ascending: false })
           .limit(1)
           .single()
-        data = res.data
+        if (error) console.error('[Display] show fetch error:', error)
+        console.log('[Display] show fetch result:', res)
+        data = res
       }
 
       if (data) {
@@ -313,6 +325,14 @@ export default function Display() {
           Baynes Trivia
         </p>
         <p className="text-white/20 text-sm">No live show — host needs to go live</p>
+      </div>
+    )
+  }
+
+  if (!show) {
+    return (
+      <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2b1e3e' }}>
+        <p style={{ color: '#e6e6fa', fontSize: '1.5rem' }}>Loading show...</p>
       </div>
     )
   }
