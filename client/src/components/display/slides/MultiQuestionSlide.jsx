@@ -45,7 +45,7 @@ export default function MultiQuestionSlide({ slide, show }) {
         )}
         <h2
           style={{
-            fontFamily: `'Handters', 'Anton', sans-serif`,
+            fontFamily: `'Boogaloo', sans-serif`,
             color: theme.colors.highlight,
             fontSize: 'clamp(2rem, 4vw, 4rem)',
             fontWeight: 700,
@@ -73,7 +73,7 @@ export default function MultiQuestionSlide({ slide, show }) {
                   width: 44,
                   height: 44,
                   background: theme.colors.accent,
-                  fontFamily: `'Handters', 'Anton', sans-serif`,
+                  fontFamily: `'Boogaloo', sans-serif`,
                   color: theme.colors.highlight,
                   fontSize: '1.1rem',
                   fontWeight: 700,

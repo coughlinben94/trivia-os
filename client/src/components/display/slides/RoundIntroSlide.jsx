@@ -43,7 +43,7 @@ export default function RoundIntroSlide({ slide, show }) {
         transition={{ type: 'spring', duration: 0.4, bounce: 0.25 }}
         className="relative z-10"
         style={{
-          fontFamily: `'Handters', 'Anton', sans-serif`,
+          fontFamily: `'Boogaloo', sans-serif`,
           color: theme.roundIntro.numberColor,
           fontSize: 'clamp(6rem, 20vw, 18rem)',
           lineHeight: 0.9,
@@ -61,7 +61,7 @@ export default function RoundIntroSlide({ slide, show }) {
         transition={{ delay: 0.2, duration: 0.25, ease: EASE_SNAP }}
         className="relative z-10 text-center mt-2"
         style={{
-          fontFamily: `'Handters', 'Anton', sans-serif`,
+          fontFamily: `'Boogaloo', sans-serif`,
           color: theme.roundIntro.titleColor,
           fontSize: 'clamp(2.5rem, 5vw, 5rem)',
           fontWeight: 700,
@@ -118,7 +118,7 @@ export default function RoundIntroSlide({ slide, show }) {
           className="absolute bottom-16 left-1/2 -translate-x-1/2 px-8 py-3 rounded-full"
           style={{ background: theme.colors.shinyAccent + '22', border: `2px solid ${theme.colors.shinyAccent}66` }}
         >
-          <span style={{ color: theme.colors.shinyAccent, fontFamily: `'Handters', 'Anton', sans-serif`, fontSize: '1.5rem' }}>
+          <span style={{ color: theme.colors.shinyAccent, fontFamily: `'Boogaloo', sans-serif`, fontSize: '1.5rem' }}>
             {data.theme}
           </span>
         </motion.div>

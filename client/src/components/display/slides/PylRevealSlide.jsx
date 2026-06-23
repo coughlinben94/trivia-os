@@ -51,7 +51,7 @@ export default function PylRevealSlide({ slide, show }) {
         </p>
         <h2
           style={{
-            fontFamily: `'Handters', 'Anton', sans-serif`,
+            fontFamily: `'Boogaloo', sans-serif`,
             color: theme.colors.highlight,
             fontSize: 'clamp(2rem, 4vw, 4rem)',
             fontWeight: 700,
@@ -77,7 +77,7 @@ export default function PylRevealSlide({ slide, show }) {
               <span
                 className="shrink-0"
                 style={{
-                  fontFamily: `'Handters', 'Anton', sans-serif`,
+                  fontFamily: `'Boogaloo', sans-serif`,
                   color: theme.colors.textMuted,
                   fontSize: '1rem',
                   fontWeight: 700,
@@ -100,7 +100,7 @@ export default function PylRevealSlide({ slide, show }) {
               {item.points != null && (
                 <span
                   style={{
-                    fontFamily: `'Handters', 'Anton', sans-serif`,
+                    fontFamily: `'Boogaloo', sans-serif`,
                     color: theme.colors.shinyAccent,
                     fontSize: '1.5rem',
                     fontWeight: 700,
@@ -152,7 +152,7 @@ export default function PylRevealSlide({ slide, show }) {
           </span>
           <span
             style={{
-              fontFamily: `'Handters', 'Anton', sans-serif`,
+              fontFamily: `'Boogaloo', sans-serif`,
               color: theme.colors.shinyAccent,
               fontSize: '2rem',
               fontWeight: 700,

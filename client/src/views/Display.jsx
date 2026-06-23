@@ -8,6 +8,8 @@ import SlideRenderer from '../components/display/SlideRenderer.jsx'
 import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import BaynesWatermark from '../components/display/BaynesWatermark.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
+import ThemeCanvas from '../components/display/ThemeCanvas.jsx'
+import ThemeForeground from '../components/display/ThemeForeground.jsx'
 
 // ─── Pre-show waiting screen ───────────────────────────────────────────────
 
@@ -78,6 +80,8 @@ function PreShowScreen({ show }) {
       className="w-screen h-screen overflow-hidden relative flex flex-col select-none"
       style={{ background: theme.colors.bg }}
     >
+      <ThemeCanvas theme={theme} />
+      <ThemeForeground theme={theme} />
       <ParticleBackground theme={theme} />
 
       {/* ── Centre content ──────────────────────────────────────────── */}
@@ -98,7 +102,7 @@ function PreShowScreen({ show }) {
           <h1
             className="leading-none text-center"
             style={{
-              fontFamily: "'Handters', 'Anton', sans-serif",
+              fontFamily: "'Boogaloo', sans-serif",
               fontSize: 'clamp(4rem, 8vw, 7.5rem)',
               color: theme.colors.text,
               letterSpacing: '-0.02em',
@@ -110,7 +114,7 @@ function PreShowScreen({ show }) {
           <p
             className="text-xl tracking-widest uppercase"
             style={{
-              fontFamily: "'Roquen', 'Inter', sans-serif",
+              fontFamily: "'DM Sans', sans-serif",
               color: theme.colors.textMuted,
               letterSpacing: '0.22em',
             }}
@@ -148,7 +152,7 @@ function PreShowScreen({ show }) {
           <p
             className="text-xl"
             style={{
-              fontFamily: "'Roquen', 'Inter', sans-serif",
+              fontFamily: "'DM Sans', sans-serif",
               color: theme.colors.textMuted,
             }}
           >
@@ -161,7 +165,7 @@ function PreShowScreen({ show }) {
           <span
             className="tabular-nums leading-none"
             style={{
-              fontFamily: "'Handters', 'Anton', sans-serif",
+              fontFamily: "'Boogaloo', sans-serif",
               fontSize: 'clamp(3.5rem, 6vw, 5.5rem)',
               color: theme.colors.highlight,
             }}
@@ -171,7 +175,7 @@ function PreShowScreen({ show }) {
           <span
             className="text-2xl"
             style={{
-              fontFamily: "'Roquen', 'Inter', sans-serif",
+              fontFamily: "'DM Sans', sans-serif",
               color: `${theme.colors.text}55`,
             }}
           >
@@ -199,7 +203,7 @@ function PreShowScreen({ show }) {
               <span
                 className="whitespace-nowrap px-8"
                 style={{
-                  fontFamily: "'Roquen', 'Inter', sans-serif",
+                  fontFamily: "'DM Sans', sans-serif",
                   fontSize: '0.9rem',
                   fontWeight: 500,
                   letterSpacing: '0.04em',
@@ -230,6 +234,10 @@ function DisplayInner({ show, direction }) {
       className="w-screen h-screen overflow-hidden relative select-none"
       style={{ background: theme.colors.bg }}
     >
+      {/* z-0: theme background canvas — draws per-theme ambient animation */}
+      <ThemeCanvas theme={theme} />
+
+      {/* z-auto: slide content — above canvas via DOM order */}
       <AnimatePresence mode="wait" custom={direction}>
         {currentSlide && (
           <SlideRenderer
@@ -241,7 +249,10 @@ function DisplayInner({ show, direction }) {
         )}
       </AnimatePresence>
 
-      {/* Persistent overlays — outside AnimatePresence so they don't re-animate */}
+      {/* z-20: theme foreground overlay — above slides, below z-50 persistent overlays */}
+      <ThemeForeground theme={theme} />
+
+      {/* z-50: persistent overlays — always on top */}
       <QuestionCounter slide={currentSlide} show={show} />
       <BaynesWatermark />
     </div>
@@ -311,20 +322,6 @@ export default function Display() {
     return (
       <div className="w-screen h-screen bg-black flex items-center justify-center">
         <div className="text-white/20 text-sm tracking-widest uppercase">Loading</div>
-      </div>
-    )
-  }
-
-  if (!show) {
-    return (
-      <div className="w-screen h-screen bg-black flex flex-col items-center justify-center gap-3">
-        <p
-          className="text-white/50 text-3xl font-bold"
-          style={{ fontFamily: "'Handters', 'Anton', sans-serif" }}
-        >
-          Baynes Trivia
-        </p>
-        <p className="text-white/20 text-sm">No live show — host needs to go live</p>
       </div>
     )
   }

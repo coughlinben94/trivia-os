@@ -101,7 +101,7 @@ function LeaderboardOverlay({ leaderboard, myTeamId, onClose }) {
       <div className="flex items-center justify-between px-4 pt-safe pb-3 pt-4 border-b border-white/10 shrink-0">
         <h2
           className="text-white text-lg font-bold"
-          style={{ fontFamily: "'Handters', 'Anton', sans-serif" }}
+          style={{ fontFamily: "'Boogaloo', sans-serif" }}
         >
           🏆 Leaderboard
         </h2>
@@ -143,7 +143,7 @@ function LeaderboardOverlay({ leaderboard, myTeamId, onClose }) {
               <span className={`font-bold text-sm tabular-nums shrink-0 ${
                 index === 0 ? 'text-yellow-400' : isMe ? 'text-white' : 'text-white/60'
               }`}
-                style={index === 0 ? { fontFamily: "'Handters', 'Anton', sans-serif" } : undefined}
+                style={index === 0 ? { fontFamily: "'Boogaloo', sans-serif" } : undefined}
               >
                 {team.total}
               </span>
@@ -218,7 +218,7 @@ function WaitingScreen({ teamName, show, showId }) {
         {/* Headline */}
         <p
           className="text-[#f5f0e8] text-2xl font-bold text-center leading-snug"
-          style={{ fontFamily: "'Handters', 'Anton', sans-serif" }}
+          style={{ fontFamily: "'Boogaloo', sans-serif" }}
         >
           Scan to join tonight's trivia
         </p>
@@ -238,7 +238,7 @@ function WaitingScreen({ teamName, show, showId }) {
         <div className="flex items-baseline gap-2">
           <span
             className="text-[#60c000] text-5xl font-bold leading-none tabular-nums"
-            style={{ fontFamily: "'Handters', 'Anton', sans-serif" }}
+            style={{ fontFamily: "'Boogaloo', sans-serif" }}
           >
             {teams.length}
           </span>
@@ -252,7 +252,7 @@ function WaitingScreen({ teamName, show, showId }) {
           <p className="text-[#f5f0e8]/30 text-xs uppercase tracking-wider mb-1">You're in as</p>
           <p
             className="text-[#f5f0e8] text-xl font-bold"
-            style={{ fontFamily: "'Handters', 'Anton', sans-serif" }}
+            style={{ fontFamily: "'Boogaloo', sans-serif" }}
           >
             {teamName}
           </p>
@@ -385,7 +385,7 @@ function SlideViewer({ show, team, slides, viewedIndex, setViewedIndex,
                 <span className="text-white/30 text-xs">Your score</span>
                 <span
                   className="text-[#60c000] font-bold text-sm tabular-nums"
-                  style={{ fontFamily: "'Handters', 'Anton', sans-serif" }}
+                  style={{ fontFamily: "'Boogaloo', sans-serif" }}
                 >
                   {totalScore} pts
                 </span>

@@ -66,24 +66,6 @@ textarea {
 .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
-/* ─── Display fonts ─── */
-@font-face {
-  font-family: 'Handters';
-  src: url('/fonts/Handters.woff2') format('woff2'),
-       url('/fonts/Handters.woff') format('woff');
-  font-weight: bold;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Roquen';
-  src: url('/fonts/Roquen.woff2') format('woff2'),
-       url('/fonts/Roquen.woff') format('woff');
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
 
 /* ─── Display: shiny slide flash ─── */
 @keyframes shinyFlash {

@@ -51,7 +51,7 @@ export default function TitleSlide({ slide, show }) {
         transition={{ delay: 0.18, duration: 0.5, ease: EASE_SNAP }}
         className="relative z-10 text-center font-bold"
         style={{
-          fontFamily: `'Handters', 'Anton', sans-serif`,
+          fontFamily: `'Boogaloo', sans-serif`,
           color: theme.roundIntro.titleColor,
           fontSize: 'clamp(4rem, 9vw, 9rem)',
           lineHeight: 1,

@@ -95,7 +95,7 @@ function ScoreRow({ team, rank, isLeader, maxScore, theme, delay }) {
       <div className="shrink-0">
         <span
           style={{
-            fontFamily: `'Handters', 'Anton', sans-serif`,
+            fontFamily: `'Boogaloo', sans-serif`,
             color: isLeader ? theme.colors.shinyAccent : theme.colors.highlight,
             fontSize: '1.75rem',
             fontWeight: 700,
@@ -150,7 +150,7 @@ export default function ScoreboardRevealSlide({ slide, show }) {
         transition={{ duration: 0.3, ease: EASE_SNAP }}
         className="mb-10 text-center shrink-0"
         style={{
-          fontFamily: `'Handters', 'Anton', sans-serif`,
+          fontFamily: `'Boogaloo', sans-serif`,
           color: theme.colors.highlight,
           fontSize: 'clamp(2.5rem, 5vw, 4.5rem)',
           fontWeight: 700,
