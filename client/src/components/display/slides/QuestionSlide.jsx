@@ -36,7 +36,7 @@ function StandardQuestion({ slide, show, theme }) {
         >
           <span
             style={{
-              fontFamily: `'Gopher Bold', 'Anton', sans-serif`,
+              fontFamily: `'Handters', 'Anton', sans-serif`,
               color: theme.colors.highlight,
               fontSize: '0.9rem',
               fontWeight: 700,
@@ -64,7 +64,7 @@ function StandardQuestion({ slide, show, theme }) {
       >
         <span
           style={{
-            fontFamily: `'Gopher Bold', 'Anton', sans-serif`,
+            fontFamily: `'Handters', 'Anton', sans-serif`,
             color: theme.colors.highlight,
             fontSize: data.seriesLabel ? '2rem' : '2.25rem',
             fontWeight: 700,
@@ -86,7 +86,7 @@ function StandardQuestion({ slide, show, theme }) {
           className="text-center leading-relaxed"
           style={{
             color: theme.colors.text,
-            fontFamily: `'${theme.fonts.body}', Inter, sans-serif`,
+            fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
             fontSize: 'clamp(2rem, 4.5vw, 4.5rem)',
             fontWeight: 500,
             maxWidth: '80ch',
@@ -177,7 +177,7 @@ function ShinyVisualQuestion({ slide, theme }) {
               className="text-center leading-relaxed"
               style={{
                 color: theme.colors.text,
-                fontFamily: `'${theme.fonts.body}', Inter, sans-serif`,
+                fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
                 fontSize: 'clamp(1.75rem, 3.5vw, 3.5rem)',
                 fontWeight: 500,
               }}
@@ -215,7 +215,7 @@ function ShinyVisualQuestion({ slide, theme }) {
               className="text-center leading-snug"
               style={{
                 color: '#f5f0e8',
-                fontFamily: `'${theme.fonts.body}', Inter, sans-serif`,
+                fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
                 fontSize: 'clamp(1.75rem, 3.5vw, 3.5rem)',
                 fontWeight: 500,
               }}
@@ -273,7 +273,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
           transition={{ delay: 0.08, duration: 0.22, ease: EASE_SNAP }}
           style={{
             color: theme.colors.textMuted,
-            fontFamily: `'${theme.fonts.ui}', system-ui, sans-serif`,
+            fontFamily: `'${theme.fonts.ui}', 'Inter', system-ui, sans-serif`,
             fontSize: '0.85rem',
             fontWeight: 700,
             letterSpacing: '0.2em',
@@ -293,7 +293,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
       >
         <p
           style={{
-            fontFamily: `'Gopher Bold', 'Anton', sans-serif`,
+            fontFamily: `'Handters', 'Anton', sans-serif`,
             color: theme.colors.text,
             fontSize: 'clamp(4rem, 12vw, 10rem)',
             fontWeight: 700,

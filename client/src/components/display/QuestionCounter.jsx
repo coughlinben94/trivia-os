@@ -16,7 +16,7 @@ export default function QuestionCounter({ slide, show }) {
       style={{
         color: theme.colors.accent,
         opacity: 0.7,
-        fontFamily: `'${theme.fonts.ui}', system-ui, sans-serif`,
+        fontFamily: `'${theme.fonts.ui}', 'Inter', system-ui, sans-serif`,
         fontSize: '0.75rem',
         fontWeight: 700,
         letterSpacing: '0.12em',

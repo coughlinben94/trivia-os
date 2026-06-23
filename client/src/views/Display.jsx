@@ -60,7 +60,7 @@ export default function Display() {
   if (!show) {
     return (
       <div className="w-screen h-screen bg-black flex flex-col items-center justify-center gap-3">
-        <p className="text-white/50 text-3xl font-bold" style={{ fontFamily: "'Anton', sans-serif" }}>
+        <p className="text-white/50 text-3xl font-bold" style={{ fontFamily: "'Handters', 'Anton', sans-serif" }}>
           Baynes Trivia
         </p>
         <p className="text-white/20 text-sm">No live show — host needs to go live</p>

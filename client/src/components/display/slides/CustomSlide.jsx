@@ -43,7 +43,7 @@ export default function CustomSlide({ slide }) {
           transition={{ delay: data.mediaUrl ? 0.1 : 0, duration: 0.28, ease: EASE_SNAP }}
           className="relative z-10 text-center mb-6"
           style={{
-            fontFamily: `'Gopher Bold', 'Anton', sans-serif`,
+            fontFamily: `'Handters', 'Anton', sans-serif`,
             color: theme.colors.highlight,
             fontSize: 'clamp(2.5rem, 6vw, 6rem)',
             fontWeight: 700,

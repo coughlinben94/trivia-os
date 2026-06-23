@@ -54,7 +54,7 @@ export default function GradingBreakSlide({ slide }) {
         className="relative z-10 text-center px-24 leading-relaxed max-w-4xl"
         style={{
           color: theme.colors.text,
-          fontFamily: `'${theme.fonts.body}', Inter, sans-serif`,
+          fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
           fontSize: 'clamp(1.5rem, 3.5vw, 3.2rem)',
           fontWeight: 400,
         }}

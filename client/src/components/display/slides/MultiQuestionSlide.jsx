@@ -45,7 +45,7 @@ export default function MultiQuestionSlide({ slide, show }) {
         )}
         <h2
           style={{
-            fontFamily: `'Gopher Bold', 'Anton', sans-serif`,
+            fontFamily: `'Handters', 'Anton', sans-serif`,
             color: theme.colors.highlight,
             fontSize: 'clamp(2rem, 4vw, 4rem)',
             fontWeight: 700,
@@ -73,7 +73,7 @@ export default function MultiQuestionSlide({ slide, show }) {
                   width: 44,
                   height: 44,
                   background: theme.colors.accent,
-                  fontFamily: `'Gopher Bold', 'Anton', sans-serif`,
+                  fontFamily: `'Handters', 'Anton', sans-serif`,
                   color: theme.colors.highlight,
                   fontSize: '1.1rem',
                   fontWeight: 700,
@@ -85,7 +85,7 @@ export default function MultiQuestionSlide({ slide, show }) {
               <p
                 style={{
                   color: theme.colors.text,
-                  fontFamily: `'${theme.fonts.body}', Inter, sans-serif`,
+                  fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
                   fontSize: 'clamp(1.25rem, 2.5vw, 2.25rem)',
                   fontWeight: 400,
                   lineHeight: 1.4,

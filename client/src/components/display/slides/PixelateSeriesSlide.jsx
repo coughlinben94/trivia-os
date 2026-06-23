@@ -54,7 +54,7 @@ export default function PixelateSeriesSlide({ slide, show }) {
             className="leading-snug flex-1"
             style={{
               color: '#f5f0e8',
-              fontFamily: `'${theme.fonts.body}', Inter, sans-serif`,
+              fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
               fontSize: 'clamp(1.75rem, 3.5vw, 3.5rem)',
               fontWeight: 500,
             }}
@@ -99,7 +99,7 @@ export default function PixelateSeriesSlide({ slide, show }) {
       >
         <span
           style={{
-            fontFamily: `'Gopher Bold', 'Anton', sans-serif`,
+            fontFamily: `'Handters', 'Anton', sans-serif`,
             color: theme.colors.highlight,
             fontSize: '1.75rem',
             fontWeight: 700,
