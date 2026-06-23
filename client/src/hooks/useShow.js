@@ -302,6 +302,90 @@ export function useShow() {
       }))
   }
 
+  // --- Live Mode navigation ---
+
+  async function goLive() {
+    if (!show) return
+    const sorted = sortedSlides(show)
+    const first = sorted[0] ?? null
+    const now = new Date().toISOString()
+    setShow(s => ({
+      ...s,
+      updatedAt: now,
+      showState: { ...s.showState, isLive: true, currentSlideIndex: 0, currentSlideId: first?.id ?? null },
+    }))
+    await supabase.from('shows').update({
+      is_live: true,
+      current_slide_index: 0,
+      current_slide_id: first?.id ?? null,
+      updated_at: now,
+    }).eq('id', show.id)
+  }
+
+  async function nextSlide() {
+    if (!show) return
+    const sorted = sortedSlides(show)
+    const cur = show.showState.currentSlideIndex ?? 0
+    const target = Math.min(cur + 1, sorted.length - 1)
+    if (target === cur) return
+    const slide = sorted[target]
+    setShow(s => ({
+      ...s,
+      showState: { ...s.showState, currentSlideIndex: target, currentSlideId: slide?.id ?? null },
+    }))
+    await supabase.from('shows').update({
+      current_slide_index: target,
+      current_slide_id: slide?.id ?? null,
+    }).eq('id', show.id)
+  }
+
+  async function prevSlide() {
+    if (!show) return
+    const sorted = sortedSlides(show)
+    const cur = show.showState.currentSlideIndex ?? 0
+    const target = Math.max(cur - 1, 0)
+    if (target === cur) return
+    const slide = sorted[target]
+    setShow(s => ({
+      ...s,
+      showState: { ...s.showState, currentSlideIndex: target, currentSlideId: slide?.id ?? null },
+    }))
+    await supabase.from('shows').update({
+      current_slide_index: target,
+      current_slide_id: slide?.id ?? null,
+    }).eq('id', show.id)
+  }
+
+  async function setScoreboardVisible(visible) {
+    if (!show) return
+    setShow(s => ({ ...s, showState: { ...s.showState, scoreboardVisible: visible } }))
+    await supabase.from('shows').update({ scoreboard_visible: visible }).eq('id', show.id)
+  }
+
+  async function updateRoundScore(teamId, roundIndex, score) {
+    if (!show) return
+    const { data: existing } = await supabase
+      .from('team_scores')
+      .select('id')
+      .eq('team_id', teamId)
+      .eq('round_index', roundIndex)
+      .maybeSingle()
+    if (existing?.id) {
+      await supabase
+        .from('team_scores')
+        .update({ score, updated_at: new Date().toISOString() })
+        .eq('id', existing.id)
+    } else {
+      await supabase.from('team_scores').insert({
+        id: `sc_${nanoid(10)}`,
+        show_id: show.id,
+        team_id: teamId,
+        round_index: roundIndex,
+        score,
+      })
+    }
+  }
+
   const refresh = useCallback(() => {
     if (show?.id) return fetchShow(show.id)
   }, [show?.id])
@@ -328,5 +412,10 @@ export function useShow() {
     deletePowerup,
     uploadMedia,
     getHostPhotos,
+    goLive,
+    nextSlide,
+    prevSlide,
+    setScoreboardVisible,
+    updateRoundScore,
   }
 }

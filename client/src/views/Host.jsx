@@ -3,11 +3,18 @@ import { useShow } from '../hooks/useShow.js'
 import { supabase } from '../lib/supabase.js'
 import ShowManager from '../components/host/ShowManager.jsx'
 import BuildMode from '../components/host/BuildMode.jsx'
+import LiveMode from '../components/host/LiveMode.jsx'
 
 export default function Host() {
   const showApi = useShow()
   const { show, loading } = showApi
   const [toasts, setToasts] = useState([])
+  const [isLiveMode, setIsLiveMode] = useState(false)
+
+  // Restore live mode on show load (e.g. page refresh mid-show)
+  useEffect(() => {
+    if (show?.showState?.isLive) setIsLiveMode(true)
+  }, [show?.id]) // intentional: only fire when show identity changes
 
   // Subscribe to team alerts when a show is active
   useEffect(() => {
@@ -41,6 +48,12 @@ export default function Host() {
               message: `📵 ${team.name} left the app`,
               autoDismiss: 6000,
             })
+          } else if (action === 'used_powerup') {
+            addToast({
+              id: `${team.id}-${Date.now()}`,
+              type: 'error',
+              message: `⚡ ${team.name} used their powerup!`,
+            })
           }
         }
       )
@@ -72,6 +85,18 @@ export default function Host() {
     getHostPhotos:  showApi.getHostPhotos,
   }
 
+  const liveActions = {
+    nextSlide:           showApi.nextSlide,
+    prevSlide:           showApi.prevSlide,
+    setScoreboardVisible: showApi.setScoreboardVisible,
+    updateRoundScore:    showApi.updateRoundScore,
+  }
+
+  async function handleGoLive() {
+    await showApi.goLive()
+    setIsLiveMode(true)
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -95,11 +120,19 @@ export default function Host() {
 
   return (
     <div className="relative">
-      <BuildMode
-        show={show}
-        actions={actions}
-        onGoLive={() => alert('Live Mode — coming in step 6!')}
-      />
+      {isLiveMode ? (
+        <LiveMode
+          show={show}
+          actions={liveActions}
+          onExitLive={() => setIsLiveMode(false)}
+        />
+      ) : (
+        <BuildMode
+          show={show}
+          actions={actions}
+          onGoLive={handleGoLive}
+        />
+      )}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   )

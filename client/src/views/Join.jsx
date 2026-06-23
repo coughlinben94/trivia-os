@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { nanoid } from 'nanoid'
+import QRCode from 'qrcode'
 import { supabase } from '../lib/supabase.js'
 
 const TEAM_COLORS = [
@@ -24,31 +25,282 @@ function saveStoredTeam(showId, team) {
   localStorage.setItem(getTeamKey(showId), JSON.stringify(team))
 }
 
-// --- Views ---
+// --- Sub-components ---
 
-function WaitingScreen({ teamName, show }) {
-  return (
-    <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center p-6 text-center">
-      <div className="mb-8 opacity-40">
-        <div className="w-12 h-12 rounded-full border-2 border-white mx-auto mb-4 flex items-center justify-center">
-          <span className="text-xl">🍺</span>
+function PowerupButton({ powerup, used, onInvoke }) {
+  const [confirming, setConfirming] = useState(false)
+  const [invoking, setInvoking] = useState(false)
+
+  if (!powerup) return null
+
+  if (used) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-2.5 bg-white/5 rounded-xl">
+        <span className="text-base opacity-40">{powerup.icon}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-white/25 text-xs font-medium">{powerup.name}</p>
+          <p className="text-white/20 text-xs">Used ✓</p>
         </div>
       </div>
-      <h2 className="text-white text-2xl font-bold mb-2">You're in!</h2>
-      <p className="text-white/60 text-base mb-1">
-        Team <span className="text-white font-semibold">{teamName}</span>
-      </p>
-      <p className="text-white/40 text-sm mt-6">
-        Hang tight while Ben gets things going…
-      </p>
-      {show?.title && (
-        <p className="text-white/30 text-xs mt-2">{show.title}</p>
+    )
+  }
+
+  if (confirming) {
+    return (
+      <div className="p-4 bg-white/10 rounded-xl border border-white/20">
+        <p className="text-white text-sm font-semibold mb-1">
+          Use your {powerup.name}?
+        </p>
+        <p className="text-white/50 text-xs mb-3 leading-relaxed">
+          {powerup.description} This cannot be undone.
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setConfirming(false)}
+            className="flex-1 py-2.5 rounded-lg bg-white/10 text-white/70 text-sm font-medium active:bg-white/20 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            disabled={invoking}
+            onClick={async () => {
+              setInvoking(true)
+              await onInvoke(powerup)
+              setConfirming(false)
+              setInvoking(false)
+            }}
+            className="flex-1 py-2.5 rounded-lg bg-[#e02020] text-white text-sm font-bold active:bg-[#c01818] transition-colors disabled:opacity-50"
+          >
+            {invoking ? '…' : `${powerup.icon} Use it!`}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <button
+      onClick={() => setConfirming(true)}
+      className="w-full flex items-center gap-3 px-4 py-2.5 bg-[#004000]/50 border border-[#60c000]/25 rounded-xl active:bg-[#004000]/80 transition-colors"
+      style={{ WebkitTapHighlightColor: 'transparent' }}
+    >
+      <span className="text-base">{powerup.icon}</span>
+      <div className="flex-1 text-left min-w-0">
+        <p className="text-[#60c000] text-xs font-bold leading-none mb-0.5">{powerup.name}</p>
+        <p className="text-white/35 text-xs truncate">{powerup.description}</p>
+      </div>
+      <span className="text-white/25 text-xs shrink-0">Tap →</span>
+    </button>
+  )
+}
+
+function LeaderboardOverlay({ leaderboard, myTeamId, onClose }) {
+  return (
+    <div className="absolute inset-0 bg-gray-950 z-40 flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 pt-safe pb-3 pt-4 border-b border-white/10 shrink-0">
+        <h2
+          className="text-white text-lg font-bold"
+          style={{ fontFamily: "'Handters', 'Anton', sans-serif" }}
+        >
+          🏆 Leaderboard
+        </h2>
+        <button
+          onClick={onClose}
+          className="text-white/40 text-sm px-3 py-1 rounded-lg bg-white/5 active:bg-white/10 transition-colors"
+        >
+          Back
+        </button>
+      </div>
+
+      {/* Rows */}
+      <div className="flex-1 overflow-y-auto py-3 px-4 space-y-2">
+        {leaderboard.map((team, index) => {
+          const isMe = team.id === myTeamId
+          const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : null
+          return (
+            <div
+              key={team.id}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl ${
+                isMe
+                  ? 'bg-white/15 border border-white/25'
+                  : 'bg-white/5'
+              }`}
+            >
+              <span className={`text-base w-6 text-center shrink-0 ${
+                !medal ? 'text-white/30 text-sm font-bold' : ''
+              }`}>
+                {medal ?? `${index + 1}`}
+              </span>
+              <span className={`flex-1 text-sm font-medium truncate ${
+                isMe ? 'text-white' : 'text-white/65'
+              }`}>
+                {team.name}
+                {isMe && (
+                  <span className="text-white/35 text-xs font-normal ml-1.5">you</span>
+                )}
+              </span>
+              <span className={`font-bold text-sm tabular-nums shrink-0 ${
+                index === 0 ? 'text-yellow-400' : isMe ? 'text-white' : 'text-white/60'
+              }`}
+                style={index === 0 ? { fontFamily: "'Handters', 'Anton', sans-serif" } : undefined}
+              >
+                {team.total}
+              </span>
+            </div>
+          )
+        })}
+        {leaderboard.length === 0 && (
+          <p className="text-white/30 text-sm text-center pt-8">No scores yet</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// --- WaitingScreen ---
+
+function WaitingScreen({ teamName, show, showId }) {
+  const [teams, setTeams] = useState([])
+  const [qrDataUrl, setQrDataUrl] = useState(null)
+
+  const joinUrl = `${window.location.origin}/join?show=${showId}`
+
+  useEffect(() => {
+    if (!showId) return
+
+    supabase
+      .from('teams')
+      .select('id, name')
+      .eq('show_id', showId)
+      .order('registered_at', { ascending: true })
+      .then(({ data }) => { if (data) setTeams(data) })
+
+    const channel = supabase
+      .channel(`waiting-teams:${showId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'teams',
+        filter: `show_id=eq.${showId}`,
+      }, (payload) => {
+        setTeams(prev => {
+          if (prev.some(t => t.id === payload.new.id)) return prev
+          return [...prev, { id: payload.new.id, name: payload.new.name }]
+        })
+      })
+      .subscribe()
+
+    return () => supabase.removeChannel(channel)
+  }, [showId])
+
+  useEffect(() => {
+    if (!joinUrl) return
+    QRCode.toDataURL(joinUrl, {
+      width: 220,
+      margin: 2,
+      color: { dark: '#0d0d0d', light: '#f5f0e8' },
+    }).then(url => setQrDataUrl(url))
+  }, [joinUrl])
+
+  const tickerText = teams.length > 0
+    ? teams.map(t => t.name).join(' · ') + ' · '
+    : null
+
+  const tickerDuration = tickerText
+    ? Math.max((tickerText.length * 8) / 80, 6)
+    : 8
+
+  return (
+    <div className="min-h-screen bg-[#0d0d0d] flex flex-col items-center justify-center relative overflow-hidden">
+      <div className="flex flex-col items-center gap-5 px-8 w-full max-w-xs pb-16">
+
+        {/* Headline */}
+        <p
+          className="text-[#f5f0e8] text-2xl font-bold text-center leading-snug"
+          style={{ fontFamily: "'Handters', 'Anton', sans-serif" }}
+        >
+          Scan to join tonight's trivia
+        </p>
+
+        {/* QR Code */}
+        <div className="rounded-2xl overflow-hidden p-3.5 bg-[#f5f0e8]">
+          {qrDataUrl ? (
+            <img src={qrDataUrl} alt="Scan to join trivia" width={208} height={208} className="block" />
+          ) : (
+            <div className="w-52 h-52 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-full border-2 border-[#004000] border-t-transparent animate-spin" />
+            </div>
+          )}
+        </div>
+
+        {/* Live team count */}
+        <div className="flex items-baseline gap-2">
+          <span
+            className="text-[#60c000] text-5xl font-bold leading-none tabular-nums"
+            style={{ fontFamily: "'Handters', 'Anton', sans-serif" }}
+          >
+            {teams.length}
+          </span>
+          <span className="text-[#f5f0e8]/50 text-base">
+            {teams.length === 1 ? 'team in' : 'teams in'}
+          </span>
+        </div>
+
+        {/* Registered team name */}
+        <div className="text-center">
+          <p className="text-[#f5f0e8]/30 text-xs uppercase tracking-wider mb-1">You're in as</p>
+          <p
+            className="text-[#f5f0e8] text-xl font-bold"
+            style={{ fontFamily: "'Handters', 'Anton', sans-serif" }}
+          >
+            {teamName}
+          </p>
+        </div>
+
+        {show?.title && (
+          <p className="text-[#f5f0e8]/20 text-xs text-center">{show.title}</p>
+        )}
+      </div>
+
+      {/* Scrolling team name ticker */}
+      {tickerText && (
+        <div
+          className="absolute bottom-0 left-0 right-0 bg-[#004000] py-2.5 overflow-hidden"
+          aria-hidden="true"
+        >
+          <div
+            className="ticker-track"
+            style={{ animationDuration: `${tickerDuration}s` }}
+          >
+            <span className="text-[#f5f0e8]/70 text-xs font-medium tracking-wide px-4">
+              {tickerText}{tickerText}
+            </span>
+          </div>
+        </div>
       )}
     </div>
   )
 }
 
-function SlideViewer({ show, team, slides, viewedIndex, setViewedIndex }) {
+// --- SlideViewer ---
+
+function SlideViewer({ show, team, slides, viewedIndex, setViewedIndex,
+                       powerupUsed, onInvokePowerup, myScores, leaderboard }) {
+  const [showLeaderboard, setShowLeaderboard] = useState(false)
+  const prevRevealedRef = useRef(show?.scores_revealed ?? false)
+
+  // Auto-open leaderboard the first time scores are revealed this session
+  useEffect(() => {
+    if (show?.scores_revealed && !prevRevealedRef.current) {
+      setShowLeaderboard(true)
+    }
+    prevRevealedRef.current = show?.scores_revealed ?? false
+  }, [show?.scores_revealed])
+
+  const totalScore = myScores.reduce((sum, s) => sum + (s.score || 0), 0)
+  const powerup = show.powerups?.[0] ?? null
+
   const hostIndex = show?.current_slide_index ?? 0
   const canGoForward = viewedIndex < hostIndex
   const canGoBack = viewedIndex > 0
@@ -66,7 +318,6 @@ function SlideViewer({ show, team, slides, viewedIndex, setViewedIndex }) {
   }
 
   async function handleForwardBlocked() {
-    // The button is disabled but touch events can still fire — log the attempt
     if (team) {
       await supabase.from('teams').update({
         last_action: 'tried_to_advance',
@@ -76,15 +327,34 @@ function SlideViewer({ show, team, slides, viewedIndex, setViewedIndex }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex flex-col">
+    <div className="min-h-screen bg-gray-950 flex flex-col relative">
+      {/* Leaderboard overlay */}
+      {showLeaderboard && leaderboard && (
+        <LeaderboardOverlay
+          leaderboard={leaderboard}
+          myTeamId={team?.id}
+          onClose={() => setShowLeaderboard(false)}
+        />
+      )}
+
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-safe pb-3 pt-4 border-b border-white/10">
-        <span className="text-white/50 text-xs font-medium">
+      <div className="flex items-center justify-between px-4 pt-safe pb-3 pt-4 border-b border-white/10 shrink-0">
+        <span className="text-white/50 text-xs font-medium truncate mr-3">
           {team?.name ?? 'Team'}
         </span>
-        <span className="text-white/30 text-xs">
-          {currentSlide ? `${viewedIndex + 1} / ${slides.length}` : '—'}
-        </span>
+        <div className="flex items-center gap-3 shrink-0">
+          {leaderboard && (
+            <button
+              onClick={() => setShowLeaderboard(true)}
+              className="text-yellow-400 text-xs font-semibold px-2 py-1 rounded-lg bg-yellow-400/10 active:bg-yellow-400/20 transition-colors"
+            >
+              🏆 Scores
+            </button>
+          )}
+          <span className="text-white/30 text-xs">
+            {currentSlide ? `${viewedIndex + 1} / ${slides.length}` : '—'}
+          </span>
+        </div>
       </div>
 
       {/* Slide content */}
@@ -98,34 +368,63 @@ function SlideViewer({ show, team, slides, viewedIndex, setViewedIndex }) {
         )}
       </div>
 
-      {/* Navigation */}
-      <div className="flex items-center justify-between px-6 py-4 pb-safe border-t border-white/10 gap-4">
-        <button
-          onClick={handleBack}
-          disabled={!canGoBack}
-          className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-colors ${
-            canGoBack
-              ? 'bg-white/10 text-white hover:bg-white/20 active:bg-white/30'
-              : 'bg-white/5 text-white/20 cursor-not-allowed'
-          }`}
-        >
-          ← Back
-        </button>
-        <button
-          onClick={canGoForward ? () => setViewedIndex(v => v + 1) : handleForwardBlocked}
-          disabled={!canGoForward}
-          className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-colors ${
-            canGoForward
-              ? 'bg-white text-gray-900 hover:bg-white/90 active:bg-white/80'
-              : 'bg-white/5 text-white/20 cursor-not-allowed'
-          }`}
-        >
-          {canGoForward ? 'Next →' : 'Wait →'}
-        </button>
+      {/* Bottom bar: score + powerup + nav */}
+      <div className="border-t border-white/10 shrink-0">
+        {/* Powerup + score row */}
+        {(powerup || totalScore > 0) && (
+          <div className="px-6 pt-3 pb-1 space-y-2">
+            {powerup && (
+              <PowerupButton
+                powerup={powerup}
+                used={powerupUsed}
+                onInvoke={onInvokePowerup}
+              />
+            )}
+            {totalScore > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-white/30 text-xs">Your score</span>
+                <span
+                  className="text-[#60c000] font-bold text-sm tabular-nums"
+                  style={{ fontFamily: "'Handters', 'Anton', sans-serif" }}
+                >
+                  {totalScore} pts
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Navigation */}
+        <div className="flex items-center justify-between px-6 py-4 pb-safe gap-4">
+          <button
+            onClick={handleBack}
+            disabled={!canGoBack}
+            className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-colors ${
+              canGoBack
+                ? 'bg-white/10 text-white active:bg-white/20'
+                : 'bg-white/5 text-white/20 cursor-not-allowed'
+            }`}
+          >
+            ← Back
+          </button>
+          <button
+            onClick={canGoForward ? () => setViewedIndex(v => v + 1) : handleForwardBlocked}
+            disabled={!canGoForward}
+            className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-colors ${
+              canGoForward
+                ? 'bg-white text-gray-900 active:bg-white/90'
+                : 'bg-white/5 text-white/20 cursor-not-allowed'
+            }`}
+          >
+            {canGoForward ? 'Next →' : 'Wait →'}
+          </button>
+        </div>
       </div>
     </div>
   )
 }
+
+// --- SlideContent ---
 
 function SlideContent({ slide, show }) {
   const roundName = show?.rounds?.find(r => r.id === slide.roundId)?.title ?? null
@@ -243,6 +542,8 @@ function SlideContent({ slide, show }) {
   }
 }
 
+// --- RegistrationScreen ---
+
 function RegistrationScreen({ onRegister, show, loading }) {
   const [name, setName] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -327,12 +628,16 @@ export default function Join() {
   const [viewedIndex, setViewedIndex] = useState(0)
   const [registering, setRegistering] = useState(false)
 
-  // Load show and check for existing team registration
+  // Step 8: powerup + scoring state
+  const [powerupUsed, setPowerupUsed] = useState(false)
+  const [myScores, setMyScores] = useState([])
+  const [leaderboard, setLeaderboard] = useState(null)
+
+  // Load show and restore team from localStorage
   useEffect(() => {
     if (!showId) { setShowLoading(false); return }
 
     async function init() {
-      // First try to find the live show (or load by ID if provided)
       let targetId = showId
       if (showId === 'live') {
         const { data } = await supabase.from('shows').select('*').eq('is_live', true).single()
@@ -345,7 +650,6 @@ export default function Join() {
       if (data) setShow(data)
       setShowLoading(false)
 
-      // Restore team registration from localStorage
       const storedTeam = loadStoredTeam(targetId)
       if (storedTeam) setTeam(storedTeam)
     }
@@ -353,7 +657,7 @@ export default function Join() {
     init()
   }, [showId])
 
-  // Subscribe to show changes (current_slide_index, is_live)
+  // Subscribe to show updates (slide changes, is_live, scores_revealed)
   useEffect(() => {
     if (!showId || showId === 'live') return
     const channel = supabase
@@ -366,6 +670,84 @@ export default function Join() {
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [showId])
+
+  // Keep viewedIndex capped at host's current position
+  useEffect(() => {
+    const hostIndex = show?.current_slide_index ?? 0
+    setViewedIndex(prev => Math.min(prev, hostIndex))
+  }, [show?.current_slide_index])
+
+  // Load powerup state when team is set (covers localStorage restore)
+  useEffect(() => {
+    if (!team?.id) return
+    supabase
+      .from('teams')
+      .select('powerup_used')
+      .eq('id', team.id)
+      .single()
+      .then(({ data }) => { if (data) setPowerupUsed(data.powerup_used ?? false) })
+  }, [team?.id])
+
+  // Load + subscribe to this team's round scores
+  useEffect(() => {
+    if (!team?.id) return
+
+    supabase
+      .from('team_scores')
+      .select('round_index, score')
+      .eq('team_id', team.id)
+      .then(({ data }) => { if (data) setMyScores(data) })
+
+    const channel = supabase
+      .channel(`my-scores:${team.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'team_scores',
+        filter: `team_id=eq.${team.id}`,
+      }, (payload) => {
+        if (payload.eventType !== 'DELETE') {
+          setMyScores(prev => {
+            const rest = prev.filter(s => s.round_index !== payload.new.round_index)
+            return [...rest, { round_index: payload.new.round_index, score: payload.new.score }]
+          })
+        }
+      })
+      .subscribe()
+
+    return () => supabase.removeChannel(channel)
+  }, [team?.id])
+
+  // Build leaderboard when host reveals scores
+  useEffect(() => {
+    if (!show?.scores_revealed) {
+      setLeaderboard(null)
+      return
+    }
+
+    const actualShowId = show?.id ?? showId
+    if (!actualShowId) return
+
+    async function loadLeaderboard() {
+      const [{ data: teams }, { data: scores }] = await Promise.all([
+        supabase.from('teams').select('id, name, color').eq('show_id', actualShowId).order('registered_at'),
+        supabase.from('team_scores').select('team_id, score').eq('show_id', actualShowId),
+      ])
+
+      const built = (teams ?? [])
+        .map(t => ({
+          ...t,
+          total: (scores ?? [])
+            .filter(s => s.team_id === t.id)
+            .reduce((sum, s) => sum + (s.score || 0), 0),
+        }))
+        .sort((a, b) => b.total - a.total)
+
+      setLeaderboard(built)
+    }
+
+    loadLeaderboard()
+  }, [show?.scores_revealed, show?.id, showId])
 
   // Track when team leaves the app
   useEffect(() => {
@@ -381,17 +763,8 @@ export default function Join() {
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [team?.id])
 
-  // Sync viewedIndex forward when host advances (don't fall too far behind)
-  useEffect(() => {
-    const hostIndex = show?.current_slide_index ?? 0
-    // Auto-advance viewer to host position if they're more than 1 slide behind
-    // (but never further than host's current position)
-    setViewedIndex(prev => Math.min(prev, hostIndex))
-  }, [show?.current_slide_index])
-
   async function handleRegister(name) {
     setRegistering(true)
-    // Check for duplicate team name
     const { data: existing } = await supabase
       .from('teams')
       .select('id')
@@ -415,8 +788,22 @@ export default function Join() {
     const newTeam = { id: teamId, name, color, showId }
     setTeam(newTeam)
     saveStoredTeam(showId, newTeam)
+    setPowerupUsed(false)
     setRegistering(false)
   }
+
+  async function handleInvokePowerup() {
+    if (!team?.id) return
+    const { error } = await supabase.from('teams').update({
+      powerup_used: true,
+      powerup_used_on: show?.current_slide_id ?? null,
+      last_action: 'used_powerup',
+      last_action_at: new Date().toISOString(),
+    }).eq('id', team.id)
+    if (!error) setPowerupUsed(true)
+  }
+
+  // --- Render ---
 
   if (!showId) {
     return (
@@ -457,7 +844,7 @@ export default function Join() {
   }
 
   if (!show.is_live) {
-    return <WaitingScreen teamName={team.name} show={show} />
+    return <WaitingScreen teamName={team.name} show={show} showId={show.id} />
   }
 
   const slides = (show.slides ?? []).slice().sort((a, b) => a.order - b.order)
@@ -469,6 +856,10 @@ export default function Join() {
       slides={slides}
       viewedIndex={viewedIndex}
       setViewedIndex={setViewedIndex}
+      powerupUsed={powerupUsed}
+      onInvokePowerup={handleInvokePowerup}
+      myScores={myScores}
+      leaderboard={leaderboard}
     />
   )
 }

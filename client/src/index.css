@@ -44,6 +44,24 @@ textarea {
   to   { transform: translateX(0);   opacity: 1; }
 }
 
+/* ─── Host panel: button press feedback (Section 20) ─── */
+.host-button {
+  transition: transform 120ms ease-out, background-color 100ms ease;
+}
+.host-button:active {
+  transform: scale(0.97);
+}
+
+/* ─── Hold-to-confirm (Section 20) ─── */
+.confirm-overlay {
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 200ms ease-out; /* release: fast */
+}
+.confirm-button[data-held="true"] .confirm-overlay {
+  clip-path: inset(0 0% 0 0);
+  transition: clip-path 1.2s linear; /* hold: deliberate */
+}
+
 /* Safe area padding for mobile (Join view) */
 .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
@@ -108,4 +126,17 @@ textarea {
 @keyframes gradingGlow {
   0%, 100% { opacity: 0.4; transform: scale(1);    }
   50%       { opacity: 0.65; transform: scale(1.08); }
+}
+
+/* ─── Join: team name ticker ─── */
+@keyframes tickerScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.ticker-track {
+  display: inline-block;
+  animation: tickerScroll linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track { animation: none; }
 }
