@@ -76,142 +76,91 @@ function PreShowScreen({ show }) {
     : 14
 
   return (
-    <div
-      className="w-screen h-screen overflow-hidden relative flex flex-col select-none"
-      style={{ background: theme.colors.bg }}
-    >
+    <div className="w-screen h-screen overflow-hidden relative select-none"
+      style={{ background: theme.colors.bg }}>
+
       <ThemeCanvas theme={theme} />
       <ThemeForeground theme={theme} />
       <ParticleBackground theme={theme} />
 
-      {/* ── Centre content ──────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col items-center justify-center gap-10 relative z-10 px-16">
+      {/* UI bar — sits at 8% from top, above the treeline */}
+      <div style={{
+        position: 'absolute',
+        top: '8%',
+        left: 0,
+        right: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '1.5rem',
+        zIndex: 10,
+      }}>
+        <h1 style={{
+          fontFamily: "'Boogaloo', sans-serif",
+          fontSize: 'clamp(3rem, 6vw, 5.5rem)',
+          color: theme.colors.text,
+          letterSpacing: '-0.02em',
+          margin: 0,
+          lineHeight: 1,
+          textWrap: 'balance',
+          textAlign: 'center',
+        }}>Trivia Night</h1>
 
-        {/* Logo + title */}
-        <div className="flex flex-col items-center gap-4">
-          <img
-            src="/baynes-logo.svg"
-            alt="Baynes Apple Valley"
-            className="h-16 object-contain"
-            style={{
-              filter: 'brightness(0) invert(1)',
-              opacity: 0.35,
-              tintColor: theme.colors.highlight,
-            }}
-          />
-          <h1
-            className="leading-none text-center"
-            style={{
-              fontFamily: "'Boogaloo', sans-serif",
-              fontSize: 'clamp(4rem, 8vw, 7.5rem)',
-              color: theme.colors.text,
-              letterSpacing: '-0.02em',
-              textWrap: 'balance',
-            }}
-          >
-            Trivia Night
-          </h1>
-          <p
-            className="text-xl tracking-widest uppercase"
-            style={{
-              fontFamily: "'DM Sans', sans-serif",
-              color: theme.colors.textMuted,
-              letterSpacing: '0.22em',
-            }}
-          >
-            Baynes Apple Valley
-          </p>
-        </div>
-
-        {/* QR code */}
-        <div className="flex flex-col items-center gap-5">
-          <div
-            className="rounded-3xl overflow-hidden"
-            style={{ padding: '18px', background: '#f5f0e8' }}
-          >
-            {qrDataUrl ? (
-              <img
-                src={qrDataUrl}
-                alt="Scan to join trivia"
-                width={240}
-                height={240}
-                className="block"
-              />
-            ) : (
-              <div
-                className="flex items-center justify-center"
-                style={{ width: 240, height: 240 }}
-              >
-                <div
-                  className="w-10 h-10 rounded-full border-[3px] border-t-transparent animate-spin"
-                  style={{ borderColor: theme.colors.accent, borderTopColor: 'transparent' }}
-                />
-              </div>
-            )}
+        {/* QR + team count side by side */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '3rem' }}>
+          <div style={{ borderRadius: '1.5rem', overflow: 'hidden', padding: '14px', background: '#f5f0e8' }}>
+            {qrDataUrl
+              ? <img src={qrDataUrl} alt="Scan to join trivia" width={160} height={160} style={{ display: 'block' }} />
+              : <div style={{ width: 160, height: 160 }} />}
           </div>
-          <p
-            className="text-xl"
-            style={{
-              fontFamily: "'DM Sans', sans-serif",
-              color: theme.colors.textMuted,
-            }}
-          >
-            Scan to join tonight's trivia
-          </p>
-        </div>
 
-        {/* Team count */}
-        <div className="flex items-baseline gap-4">
-          <span
-            className="tabular-nums leading-none"
-            style={{
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{
               fontFamily: "'Boogaloo', sans-serif",
-              fontSize: 'clamp(3.5rem, 6vw, 5.5rem)',
+              fontSize: 'clamp(3rem, 5vw, 4.5rem)',
               color: theme.colors.highlight,
-            }}
-          >
-            {teams.length}
-          </span>
-          <span
-            className="text-2xl"
-            style={{
+              lineHeight: 1,
+            }}>{teams.length}</span>
+            <span style={{
               fontFamily: "'DM Sans', sans-serif",
-              color: `${theme.colors.text}55`,
-            }}
-          >
-            {teams.length === 1 ? 'team registered' : 'teams registered'}
-          </span>
+              fontSize: '1rem',
+              color: `${theme.colors.text}88`,
+            }}>{teams.length === 1 ? 'team in' : 'teams in'}</span>
+            <span style={{
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: '0.75rem',
+              color: theme.colors.textMuted,
+              textAlign: 'center',
+              maxWidth: '120px',
+            }}>Scan to join</span>
+          </div>
         </div>
       </div>
 
-      {/* ── Ticker ──────────────────────────────────────────────────── */}
+      {/* Ticker — pinned to bottom */}
       {tickerText && (
-        <div
-          className="relative z-10 shrink-0 overflow-hidden"
-          style={{
-            height: '3.75rem',
-            background: theme.colors.bgDeep,
-            borderTop: `1px solid ${theme.colors.accent}50`,
-          }}
-          aria-hidden="true"
-        >
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: '3rem',
+          background: theme.colors.bgDeep,
+          borderTop: `1px solid ${theme.colors.accent}50`,
+          overflow: 'hidden',
+          zIndex: 10,
+        }}>
           <div className="flex items-center h-full">
-            <div
-              className="ticker-track"
-              style={{ animationDuration: `${tickerDuration}s` }}
-            >
-              <span
-                className="whitespace-nowrap px-8"
-                style={{
-                  fontFamily: "'DM Sans', sans-serif",
-                  fontSize: '0.9rem',
-                  fontWeight: 500,
-                  letterSpacing: '0.04em',
-                  color: `${theme.colors.text}55`,
-                }}
-              >
-                {tickerText}{tickerText}
-              </span>
+            <div className="ticker-track" style={{ animationDuration: `${tickerDuration}s` }}>
+              <span style={{
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.85rem',
+                fontWeight: 500,
+                letterSpacing: '0.04em',
+                color: `${theme.colors.text}55`,
+                whiteSpace: 'nowrap',
+                padding: '0 2rem',
+              }}>{tickerText}{tickerText}</span>
             </div>
           </div>
         </div>
