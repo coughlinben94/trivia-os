@@ -4,6 +4,16 @@ import { THEMES } from '../../themes/index.js'
 export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  const joinUrl = `${window.location.origin}/join?show=${show.id}`
+
+  function copyJoinUrl() {
+    navigator.clipboard.writeText(joinUrl).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   function startEdit() {
     setTitleDraft(show.title)
@@ -63,6 +73,21 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport }) {
             <option key={t.id} value={t.id}>{t.name}</option>
           ))}
         </select>
+      </div>
+
+      {/* Join URL */}
+      <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg pl-2.5 pr-1.5 py-1 shrink-0 max-w-[260px]">
+        <span className="text-[11px] text-gray-400 font-mono truncate flex-1">
+          /join?show={show.id}
+        </span>
+        <button
+          onClick={copyJoinUrl}
+          title="Copy join URL"
+          className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded transition-colors"
+          style={{ color: copied ? '#004000' : '#9ca3af' }}
+        >
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
       </div>
 
       {/* Actions */}

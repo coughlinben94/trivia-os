@@ -643,12 +643,13 @@ export default function Join() {
         const { data } = await supabase.from('shows').select('*').eq('is_live', true).single()
         if (data) { targetId = data.id; setShow(data) }
         setShowLoading(false)
-        return
+        // Fall through so we still restore the stored team using the real show ID
+        if (!targetId || targetId === 'live') return
+      } else {
+        const { data } = await supabase.from('shows').select('*').eq('id', targetId).single()
+        if (data) setShow(data)
+        setShowLoading(false)
       }
-
-      const { data } = await supabase.from('shows').select('*').eq('id', targetId).single()
-      if (data) setShow(data)
-      setShowLoading(false)
 
       const storedTeam = loadStoredTeam(targetId)
       if (storedTeam) setTeam(storedTeam)
@@ -657,19 +658,20 @@ export default function Join() {
     init()
   }, [showId])
 
-  // Subscribe to show updates (slide changes, is_live, scores_revealed)
+  // Subscribe to show updates — keyed to show.id so it works whether we loaded
+  // via an explicit ?show=ID param or via the ?show=live fallback.
   useEffect(() => {
-    if (!showId || showId === 'live') return
+    if (!show?.id) return
     const channel = supabase
-      .channel(`join-show:${showId}`)
+      .channel(`join-show:${show.id}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'shows', filter: `id=eq.${showId}` },
+        { event: 'UPDATE', schema: 'public', table: 'shows', filter: `id=eq.${show.id}` },
         (payload) => { setShow(payload.new) }
       )
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [showId])
+  }, [show?.id])
 
   // Keep viewedIndex capped at host's current position
   useEffect(() => {
@@ -765,10 +767,12 @@ export default function Join() {
 
   async function handleRegister(name) {
     setRegistering(true)
+    // Always use show.id — the URL param may be 'live' which is not a real show_id
+    const actualShowId = show.id
     const { data: existing } = await supabase
       .from('teams')
       .select('id')
-      .eq('show_id', showId)
+      .eq('show_id', actualShowId)
       .ilike('name', name)
       .single()
     if (existing) throw new Error('That name is taken — try something else!')
@@ -777,7 +781,7 @@ export default function Join() {
     const teamId = `team_${nanoid(8)}`
     const { error } = await supabase.from('teams').insert({
       id: teamId,
-      show_id: showId,
+      show_id: actualShowId,
       name,
       color,
       is_connected: true,
@@ -785,9 +789,9 @@ export default function Join() {
     })
     if (error) throw new Error(error.message)
 
-    const newTeam = { id: teamId, name, color, showId }
+    const newTeam = { id: teamId, name, color, showId: actualShowId }
     setTeam(newTeam)
-    saveStoredTeam(showId, newTeam)
+    saveStoredTeam(actualShowId, newTeam)
     setPowerupUsed(false)
     setRegistering(false)
   }
