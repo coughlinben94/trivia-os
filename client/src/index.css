@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbars — thin, unobtrusive */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Textarea resize handle */
+textarea {
+  resize: vertical;
+}
+
+/* Focus ring */
+:focus-visible {
+  outline: 2px solid #004000;
+  outline-offset: 2px;
+}
+
+/* Toast slide-in */
+@keyframes slideInRight {
+  from { transform: translateX(16px); opacity: 0; }
+  to   { transform: translateX(0);   opacity: 1; }
+}
+
+/* Safe area padding for mobile (Join view) */
+.pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* ─── Display view: Gopher Bold (add GopherBold.woff2 to /public/fonts/) ─── */
+@font-face {
+  font-family: 'Gopher Bold';
+  src: url('/fonts/GopherBold.woff2') format('woff2'),
+       url('/fonts/GopherBold.woff') format('woff');
+  font-weight: bold;
+  font-display: swap;
+}
+
+/* ─── Display: shiny slide flash ─── */
+@keyframes shinyFlash {
+  0%   { opacity: 1; }
+  8%   { opacity: 0; }
+  100% { opacity: 0; }
+}
+.shiny-flash { animation: shinyFlash 220ms ease-out forwards; }
+
+/* ─── Display: shiny glow burst ─── */
+@keyframes shinyGlow {
+  0%   { opacity: 0.9; transform: scale(0.85); }
+  50%  { opacity: 0.5; transform: scale(1.2); }
+  100% { opacity: 0;   transform: scale(1.5); }
+}
+
+/* ─── Display: waveform bars ─── */
+@keyframes waveformBar {
+  0%, 100% { transform: scaleY(0.15); }
+  50%       { transform: scaleY(1);    }
+}
+@keyframes waveformIdle {
+  0%, 100% { transform: scaleY(0.08); }
+  50%       { transform: scaleY(0.28); }
+}
+
+/* ─── Display: play button pulse ─── */
+@keyframes playPulse {
+  0%, 100% { box-shadow: 0 0 0 0 currentColor; }
+  50%       { box-shadow: 0 0 0 16px transparent; }
+}
+
+/* ─── Display: ambient particle float ─── */
+@keyframes particleFloat {
+  0%, 100% { transform: translateY(0)    scale(1);   opacity: 0.2; }
+  50%       { transform: translateY(-30px) scale(1.3); opacity: 0.55; }
+}
+
+/* ─── Display: grading break glow pulse ─── */
+@keyframes gradingGlow {
+  0%, 100% { opacity: 0.4; transform: scale(1);    }
+  50%       { opacity: 0.65; transform: scale(1.08); }
+}
