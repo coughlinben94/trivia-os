@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
+import ParticleBackground from '../ParticleBackground.jsx'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
@@ -15,15 +16,14 @@ function StandardQuestion({ slide, show, theme }) {
   return (
     <div
       className="w-full h-full relative overflow-hidden"
-      style={{ background: theme.colors.bgDeep }}
+      style={{ background: theme.colors.bg }}
     >
-      {/* Subtle radial glow */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: `radial-gradient(ellipse 70% 50% at 50% 50%, ${theme.colors.accent}20 0%, transparent 70%)`,
-        }}
-      />
+      <ParticleBackground theme={theme} />
+      {/* Reading-well — soft radial darken behind text center */}
+      <div aria-hidden style={{
+        position: 'absolute', inset: 0, zIndex: 18, pointerEvents: 'none',
+        background: 'radial-gradient(ellipse 56% 46% at 50% 52%, rgba(0,0,0,0.40) 0%, rgba(0,0,0,0.20) 45%, transparent 72%)',
+      }} />
 
       {/* Series banner — top */}
       {hasSeries && (
@@ -31,7 +31,7 @@ function StandardQuestion({ slide, show, theme }) {
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, ease: EASE_SNAP }}
-          className="absolute top-0 left-0 right-0 py-3 px-10 text-center z-10"
+          className="absolute top-0 left-0 right-0 py-3 px-10 text-center z-[30]"
           style={{ background: theme.colors.accent }}
         >
           <span
@@ -54,7 +54,7 @@ function StandardQuestion({ slide, show, theme }) {
         initial={{ scale: 0.6, opacity: 0, y: 8 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 340, damping: 22, delay: 0.05 }}
-        className="absolute left-12 z-10 flex items-center justify-center rounded-full"
+        className="absolute left-12 z-[30] flex items-center justify-center rounded-full"
         style={{
           top: badgeTop,
           width: 96,
@@ -80,7 +80,7 @@ function StandardQuestion({ slide, show, theme }) {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1], delay: 0.18 }}
-        className="absolute inset-0 flex items-center justify-center px-24 py-20"
+        className="absolute inset-0 flex items-center justify-center px-24 py-20 z-[30]"
       >
         <p
           className="text-center leading-relaxed"
@@ -90,6 +90,7 @@ function StandardQuestion({ slide, show, theme }) {
             fontSize: 'clamp(2rem, 4.5vw, 4.5rem)',
             fontWeight: 500,
             maxWidth: '80ch',
+            textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
           }}
         >
           {data.text}
@@ -102,7 +103,7 @@ function StandardQuestion({ slide, show, theme }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 0.7 }}
           transition={{ delay: 0.2, duration: 0.4 }}
-          className="absolute bottom-20 right-10 pointer-events-none z-10"
+          className="absolute bottom-20 right-10 pointer-events-none z-[30]"
         >
           <img
             src={data.hostPhotoUrl}

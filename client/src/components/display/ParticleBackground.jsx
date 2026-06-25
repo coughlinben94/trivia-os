@@ -100,18 +100,18 @@ function GlowLayer({ style, lo, hi, duration = '4s', delay = '0s', flicker = fal
   )
 }
 
-function FallingParticle({ left, size, color, duration, delay, drift = '8px', opacity = 0.85, square = false }) {
+function FallingParticle({ left, size, color, duration, delay, drift = '8px', opacity = 0.85, square = false, ratio = 1 }) {
   return (
     <div
       aria-hidden
       style={{
         position: 'absolute', top: '-3%', left, pointerEvents: 'none',
-        width: size, height: size,
+        width: size, height: ratio === 1 ? size : size * ratio,
         borderRadius: square ? '1px' : '50%',
         background: color,
         willChange: 'transform, opacity',
         '--hi': opacity, '--drift': drift,
-        animation: `ambientFallSlow ${duration} ${delay} linear infinite`,
+        animation: `ambientFallSlow ${duration} ${delay} ease-in-out infinite`,
       }}
     />
   )
@@ -127,7 +127,7 @@ function RisingParticle({ left, bottom = '5%', size, color, duration, delay, opa
         background: color,
         willChange: 'transform, opacity',
         '--hi': opacity,
-        animation: `ambientRiseUp ${duration} ${delay} ease-out infinite`,
+        animation: `ambientRiseUp ${duration} ${delay} ease-in-out infinite`,
       }}
     />
   )
@@ -161,17 +161,17 @@ function PureMichiganAmbient() {
   })), [])
 
   return <>
-    <GlowLayer lo={0.08} hi={0.20} duration="12s" style={{
+    <GlowLayer lo={0.15} hi={0.35} duration="12s" style={{
       inset: 0, bottom: '60%',
-      background: 'linear-gradient(to bottom, rgba(40,20,60,0.20) 0%, rgba(0,40,80,0.18) 100%)',
+      background: 'linear-gradient(to bottom, rgba(0,25,80,0.32) 0%, rgba(0,40,100,0.22) 70%, transparent 100%)',
     }}/>
-    <GlowLayer lo={0.10} hi={0.28} duration="18s" delay="3s" style={{
-      bottom: 0, left: 0, right: 0, height: '25%',
-      background: 'linear-gradient(to top, rgba(0,60,120,0.22), rgba(0,40,80,0.12), transparent)',
+    <GlowLayer lo={0.18} hi={0.42} duration="18s" delay="3s" style={{
+      bottom: 0, left: 0, right: 0, height: '30%',
+      background: 'linear-gradient(to top, rgba(0,70,140,0.40), rgba(0,50,100,0.20), transparent)',
     }}/>
     {fireflies.map((f, i) => (
       <PulseDot key={i} left={f.left} top={f.top} size={f.size}
-        color="rgba(180,255,80,0.95)" glowColor="rgba(140,255,40,0.50)"
+        color="rgba(180,255,80,0.95)" glowColor="rgba(140,255,40,0.55)"
         duration={f.dur} delay={f.delay}
       />
     ))}
@@ -193,17 +193,17 @@ function MidnightGalaxyAmbient() {
     {/* Large purple nebula cloud — right-center */}
     <GlowLayer lo={0.35} hi={0.70} duration="22s" style={{
       top: '5%', right: '-5%', width: '65%', height: '60%',
-      background: 'radial-gradient(ellipse, rgba(120,40,220,0.45), transparent 70%)',
+      background: 'radial-gradient(ellipse, rgba(120,40,220,0.60), transparent 70%)',
     }}/>
     {/* Pink/magenta accent nebula — upper left */}
-    <GlowLayer lo={0.20} hi={0.50} duration="28s" delay="8s" style={{
+    <GlowLayer lo={0.20} hi={0.52} duration="28s" delay="8s" style={{
       top: '-5%', left: '-10%', width: '55%', height: '50%',
-      background: 'radial-gradient(ellipse, rgba(200,40,160,0.35), transparent 70%)',
+      background: 'radial-gradient(ellipse, rgba(200,40,160,0.50), transparent 70%)',
     }}/>
     {/* Deep blue base wash */}
-    <GlowLayer lo={0.25} hi={0.45} duration="35s" delay="4s" style={{
+    <GlowLayer lo={0.25} hi={0.48} duration="35s" delay="4s" style={{
       bottom: '10%', left: '20%', right: '20%', height: '40%',
-      background: 'radial-gradient(ellipse, rgba(30,60,200,0.30), transparent 70%)',
+      background: 'radial-gradient(ellipse, rgba(30,60,200,0.42), transparent 70%)',
     }}/>
     {/* Stars */}
     {stars.map((s, i) => (
@@ -233,7 +233,7 @@ function AutumnHarvestAmbient() {
     { color: 'rgba(230,70,5,0.84)',   size: 4,  dur: '10.5s', delay: '5.1s', drift: '12px'  },
   ].map((l, i) => ({ ...l, left: `${6 + i * 10}%` })), [])
 
-  const embers = useMemo(() => Array.from({ length: 8 }, (_, i) => ({
+  const embers = useMemo(() => Array.from({ length: 5 }, (_, i) => ({
     left:  `${42 + (i % 4) * 4 - 6}%`,
     size:  2 + (i % 2) * 1.0,
     dur:   `${3 + (i % 3) * 1.0}s`,
@@ -242,23 +242,23 @@ function AutumnHarvestAmbient() {
 
   return <>
     {/* Warm sky glow — top */}
-    <GlowLayer lo={0.25} hi={0.55} duration="20s" style={{
+    <GlowLayer lo={0.28} hi={0.62} duration="20s" style={{
       top: 0, left: 0, right: 0, height: '40%',
-      background: 'linear-gradient(to bottom, rgba(200,60,10,0.40) 0%, rgba(180,40,5,0.18) 60%, transparent 100%)',
+      background: 'linear-gradient(to bottom, rgba(200,60,10,0.52) 0%, rgba(180,40,5,0.24) 60%, transparent 100%)',
     }}/>
     {/* Hearth glow — bottom */}
-    <GlowLayer lo={0.20} hi={0.45} duration="14s" delay="5s" style={{
+    <GlowLayer lo={0.22} hi={0.55} duration="14s" delay="5s" style={{
       bottom: 0, left: 0, right: 0, height: '20%',
-      background: 'linear-gradient(to top, rgba(200,80,10,0.38), transparent)',
+      background: 'linear-gradient(to top, rgba(200,80,10,0.50), transparent)',
     }}/>
     {/* Firelight pulse — center bottom */}
-    <GlowLayer lo={0.15} hi={0.40} duration="3.2s" flicker style={{
-      bottom: '4%', left: '38%', right: '38%', height: '28%',
-      background: 'radial-gradient(ellipse at bottom center, rgba(255,100,20,0.45), transparent)',
+    <GlowLayer lo={0.18} hi={0.52} duration="3.2s" flicker style={{
+      inset: 0,
+      background: 'radial-gradient(ellipse 12% 28% at 50% 96%, rgba(255,100,20,0.58), transparent)',
     }}/>
     {leaves.map((l, i) => (
-      <FallingParticle key={i} left={l.left} size={l.size} color={l.color}
-        duration={l.dur} delay={l.delay} drift={l.drift} opacity={0.88}/>
+      <FallingParticle key={i} left={l.left} size={Math.round(l.size * 2)} color={l.color}
+        duration={l.dur} delay={l.delay} drift={l.drift} opacity={0.88} ratio={0.6}/>
     ))}
     {embers.map((e, i) => (
       <RisingParticle key={i} left={e.left} size={e.size}
@@ -270,30 +270,54 @@ function AutumnHarvestAmbient() {
 // ─── 4. NORTHERN LIGHTS ───────────────────────────────────────────────────
 function NorthernLightsAmbient() {
   return <>
-    {/* Primary teal aurora band */}
-    <div aria-hidden style={{
-      position: 'absolute', top: '8%', left: '-5%', right: '-5%', height: '22%',
-      background: 'linear-gradient(to bottom, transparent, rgba(30,220,130,0.35), rgba(20,200,110,0.22), transparent)',
-      pointerEvents: 'none', willChange: 'opacity',
-      '--hi': 0.90,
-      animation: 'ambientAuroraFade 22s 0s ease-in-out infinite',
-    }}/>
-    {/* Secondary purple aurora band */}
-    <div aria-hidden style={{
-      position: 'absolute', top: '16%', left: '-5%', right: '-5%', height: '18%',
-      background: 'linear-gradient(to bottom, transparent, rgba(100,40,240,0.28), rgba(80,20,200,0.18), transparent)',
-      pointerEvents: 'none', willChange: 'opacity',
-      '--hi': 0.80,
-      animation: 'ambientAuroraFade 30s 8s ease-in-out infinite',
-    }}/>
-    {/* Tertiary teal shimmer — lower sky */}
-    <div aria-hidden style={{
-      position: 'absolute', top: '22%', left: '-5%', right: '-5%', height: '14%',
-      background: 'linear-gradient(to bottom, transparent, rgba(30,220,130,0.18), transparent)',
-      pointerEvents: 'none', willChange: 'opacity',
-      '--hi': 0.70,
-      animation: 'ambientAuroraFade 26s 14s ease-in-out infinite',
-    }}/>
+    {/* SVG wavy aurora curtains — zero straight edges */}
+    <svg
+      aria-hidden
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      style={{
+        position: 'absolute', inset: 0,
+        width: '100%', height: '100%',
+        pointerEvents: 'none',
+        filter: 'blur(6px)',
+      }}
+    >
+      <defs>
+        <linearGradient id="nlAur1" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor="rgb(30,220,130)"  stopOpacity="0" />
+          <stop offset="50%"  stopColor="rgb(30,220,130)"  stopOpacity="0.65" />
+          <stop offset="100%" stopColor="rgb(30,220,130)"  stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="nlAur2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor="rgb(100,40,240)"  stopOpacity="0" />
+          <stop offset="50%"  stopColor="rgb(100,40,240)"  stopOpacity="0.55" />
+          <stop offset="100%" stopColor="rgb(100,40,240)"  stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="nlAur3" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor="rgb(30,220,130)"  stopOpacity="0" />
+          <stop offset="50%"  stopColor="rgb(30,220,130)"  stopOpacity="0.42" />
+          <stop offset="100%" stopColor="rgb(30,220,130)"  stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {/* Curtain 1 — teal primary, wavy band y ≈ 8–22 */}
+      <path
+        d="M -2 10 C 20 4,40 16,60 9 C 80 3,95 14,102 10 L 102 22 C 95 28,80 17,60 22 C 40 28,20 16,-2 22 Z"
+        fill="url(#nlAur1)"
+        style={{ willChange: 'opacity', '--hi': 0.90, animation: 'ambientAuroraFade 22s 0s ease-in-out infinite' }}
+      />
+      {/* Curtain 2 — purple, wavy band y ≈ 16–28, overlapping */}
+      <path
+        d="M -2 16 C 15 10,35 22,55 14 C 75 6,92 20,102 16 L 102 28 C 90 35,70 20,50 27 C 30 34,12 18,-2 28 Z"
+        fill="url(#nlAur2)"
+        style={{ willChange: 'opacity', '--hi': 0.80, animation: 'ambientAuroraFade 30s 8s ease-in-out infinite' }}
+      />
+      {/* Curtain 3 — teal faint, wavy band y ≈ 22–34 */}
+      <path
+        d="M -2 22 C 18 16,38 28,58 21 C 78 14,96 26,102 22 L 102 34 C 96 40,76 26,55 33 C 34 40,16 26,-2 34 Z"
+        fill="url(#nlAur3)"
+        style={{ willChange: 'opacity', '--hi': 0.70, animation: 'ambientAuroraFade 26s 14s ease-in-out infinite' }}
+      />
+    </svg>
     {/* Star field */}
     {Array.from({ length: 30 }, (_, i) => (
       <div key={i} aria-hidden style={{
@@ -319,24 +343,19 @@ function MedievalTavernAmbient() {
 
   return <>
     {/* Left torch sconce */}
-    <GlowLayer lo={0.25} hi={0.58} duration="3.4s" flicker style={{
+    <GlowLayer lo={0.25} hi={0.62} duration="3.4s" flicker style={{
       top: 0, left: 0, bottom: 0, width: '28%',
-      background: 'radial-gradient(ellipse at left center, rgba(240,140,20,0.50), transparent 75%)',
+      background: 'radial-gradient(ellipse at left center, rgba(240,140,20,0.62), transparent 75%)',
     }}/>
     {/* Right torch sconce */}
-    <GlowLayer lo={0.22} hi={0.52} duration="2.9s" delay="1.1s" flicker style={{
+    <GlowLayer lo={0.22} hi={0.56} duration="2.9s" delay="1.1s" flicker style={{
       top: 0, right: 0, bottom: 0, width: '28%',
-      background: 'radial-gradient(ellipse at right center, rgba(240,130,18,0.48), transparent 75%)',
-    }}/>
-    {/* Hearth fire — bottom center */}
-    <GlowLayer lo={0.30} hi={0.65} duration="2.2s" delay="0.5s" flicker style={{
-      bottom: 0, left: '25%', right: '25%', height: '30%',
-      background: 'radial-gradient(ellipse at bottom center, rgba(255,100,15,0.55), transparent 80%)',
+      background: 'radial-gradient(ellipse at right center, rgba(240,130,18,0.58), transparent 75%)',
     }}/>
     {/* Warm ceiling glow */}
-    <GlowLayer lo={0.12} hi={0.28} duration="8s" style={{
+    <GlowLayer lo={0.18} hi={0.42} duration="8s" style={{
       inset: 0,
-      background: 'rgba(180,80,10,0.12)',
+      background: 'rgba(180,80,10,0.22)',
     }}/>
     {/* Smoke wisps */}
     {wisps.map((w, i) => (
@@ -374,10 +393,10 @@ function SunsetBoulevardAmbient() {
       top: 0, right: 0, bottom: 0, width: '30%',
       background: 'radial-gradient(ellipse at right center, rgba(160,10,80,0.30), transparent 70%)',
     }}/>
-    {/* Bottom shadow strip */}
+    {/* Bottom shadow — fades to transparent upward */}
     <div aria-hidden style={{
-      position: 'absolute', bottom: 0, left: 0, right: 0, height: '8%',
-      background: '#040100', pointerEvents: 'none',
+      position: 'absolute', bottom: 0, left: 0, right: 0, height: '16%',
+      background: 'linear-gradient(to top, rgba(4,1,0,0.72), transparent)', pointerEvents: 'none',
     }}/>
   </>
 }
@@ -401,19 +420,19 @@ function RetroArcadeAmbient() {
       animation: 'ambientScanline 0.5s linear infinite',
     }}/>
     {/* Purple/violet left neon */}
-    <GlowLayer lo={0.25} hi={0.60} duration="1.8s" buzz style={{
+    <GlowLayer lo={0.25} hi={0.75} duration="1.8s" buzz style={{
       top: 0, left: 0, bottom: 0, width: '28%',
-      background: 'radial-gradient(ellipse at left center, rgba(160,20,255,0.55), transparent 75%)',
+      background: 'radial-gradient(ellipse at left center, rgba(160,20,255,0.70), transparent 75%)',
     }}/>
     {/* Cyan/green right neon */}
-    <GlowLayer lo={0.20} hi={0.52} duration="2.2s" delay="0.5s" buzz style={{
+    <GlowLayer lo={0.20} hi={0.68} duration="2.2s" delay="0.5s" buzz style={{
       top: 0, right: 0, bottom: 0, width: '28%',
-      background: 'radial-gradient(ellipse at right center, rgba(20,220,80,0.48), transparent 75%)',
+      background: 'radial-gradient(ellipse at right center, rgba(20,220,80,0.62), transparent 75%)',
     }}/>
     {/* CRT phosphor center glow */}
-    <GlowLayer lo={0.10} hi={0.28} duration="4s" delay="1.2s" style={{
+    <GlowLayer lo={0.15} hi={0.42} duration="4s" delay="1.2s" style={{
       top: '20%', left: '20%', right: '20%', bottom: '20%',
-      background: 'radial-gradient(ellipse, rgba(180,80,255,0.22), transparent 70%)',
+      background: 'radial-gradient(ellipse, rgba(180,80,255,0.38), transparent 70%)',
     }}/>
     {/* Pixel static */}
     {pixelStatic.map((p, i) => (
@@ -452,9 +471,9 @@ function SandDuneChillAmbient() {
       background: 'linear-gradient(to top, rgba(60,140,200,0.45), transparent)',
     }}/>
     {/* Warm golden sky glow */}
-    <GlowLayer lo={0.15} hi={0.35} duration="25s" delay="5s" style={{
+    <GlowLayer lo={0.20} hi={0.50} duration="25s" delay="5s" style={{
       top: '20%', left: '20%', right: '20%', height: '35%',
-      background: 'radial-gradient(ellipse, rgba(220,140,30,0.28), transparent 70%)',
+      background: 'radial-gradient(ellipse, rgba(220,140,30,0.42), transparent 70%)',
     }}/>
     {/* Stars emerging */}
     {stars.map((s, i) => (
@@ -492,9 +511,9 @@ function HalloweenAmbient() {
       background: 'linear-gradient(to top, rgba(255,80,0,0.42), transparent)',
     }}/>
     {/* Purple fog center */}
-    <GlowLayer lo={0.08} hi={0.22} duration="18s" delay="4s" style={{
+    <GlowLayer lo={0.14} hi={0.38} duration="18s" delay="4s" style={{
       top: '15%', left: '20%', right: '20%', height: '55%',
-      background: 'radial-gradient(ellipse, rgba(100,0,160,0.28), transparent 70%)',
+      background: 'radial-gradient(ellipse, rgba(100,0,160,0.42), transparent 70%)',
     }}/>
     {/* Ember particles */}
     {embers.map((e, i) => (
@@ -525,12 +544,12 @@ function JazzClubAmbient() {
       background: 'radial-gradient(ellipse at top center, rgba(255,195,70,0.60), transparent 75%)',
     }}/>
     {/* Fill spotlight — stage left */}
-    <GlowLayer lo={0.20} hi={0.48} duration="3.5s" delay="1.4s" style={{
+    <GlowLayer lo={0.22} hi={0.58} duration="3.5s" delay="1.4s" style={{
       top: 0, left: '8%', width: '35%', height: '55%',
-      background: 'radial-gradient(ellipse at top left, rgba(255,165,50,0.40), transparent 70%)',
+      background: 'radial-gradient(ellipse at top left, rgba(255,165,50,0.50), transparent 70%)',
     }}/>
     {/* Floor amber glow */}
-    <GlowLayer lo={0.15} hi={0.35} duration="5s" style={{
+    <GlowLayer lo={0.18} hi={0.40} duration="5s" style={{
       bottom: 0, left: 0, right: 0, height: '18%',
       background: 'linear-gradient(to top, rgba(180,80,10,0.32), transparent)',
     }}/>
@@ -555,65 +574,29 @@ function JazzClubAmbient() {
   </>
 }
 
-// ─── 11. SPEAKEASY ───────────────────────────────────────────────────────
-function SpeakeasyAmbient() {
-  return <>
-    {/* Art deco gold center light */}
-    <GlowLayer lo={0.35} hi={0.68} duration="6s" style={{
-      top: 0, left: '30%', right: '30%', height: '75%',
-      background: 'radial-gradient(ellipse at top center, rgba(210,170,25,0.58), transparent 75%)',
-    }}/>
-    {/* Corner art deco accents */}
-    <div aria-hidden style={{
-      position: 'absolute', top: 0, left: 0, width: '30%', height: '30%',
-      background: 'radial-gradient(ellipse at top left, rgba(200,160,20,0.22), transparent 75%)',
-      pointerEvents: 'none',
-    }}/>
-    <div aria-hidden style={{
-      position: 'absolute', top: 0, right: 0, width: '30%', height: '30%',
-      background: 'radial-gradient(ellipse at top right, rgba(200,160,20,0.20), transparent 75%)',
-      pointerEvents: 'none',
-    }}/>
-    <div aria-hidden style={{
-      position: 'absolute', bottom: 0, left: 0, width: '30%', height: '25%',
-      background: 'radial-gradient(ellipse at bottom left, rgba(180,140,15,0.18), transparent 75%)',
-      pointerEvents: 'none',
-    }}/>
-    <div aria-hidden style={{
-      position: 'absolute', bottom: 0, right: 0, width: '30%', height: '25%',
-      background: 'radial-gradient(ellipse at bottom right, rgba(180,140,15,0.16), transparent 75%)',
-      pointerEvents: 'none',
-    }}/>
-    {/* Overall warm gold tint */}
-    <GlowLayer lo={0.12} hi={0.28} duration="9s" style={{
-      inset: 0,
-      background: 'rgba(200,160,20,0.14)',
-    }}/>
-  </>
-}
 
 // ─── 12. DIVE BAR ────────────────────────────────────────────────────────
 function DiveBarAmbient() {
   return <>
     {/* Red neon sign — left wall */}
-    <GlowLayer lo={0.22} hi={0.55} duration="1.6s" buzz style={{
+    <GlowLayer lo={0.22} hi={0.70} duration="1.6s" buzz style={{
       top: 0, left: 0, bottom: 0, width: '30%',
-      background: 'radial-gradient(ellipse at left center, rgba(255,25,45,0.50), transparent 75%)',
+      background: 'radial-gradient(ellipse at left center, rgba(255,25,45,0.65), transparent 75%)',
     }}/>
     {/* Blue/white neon sign — right wall */}
-    <GlowLayer lo={0.18} hi={0.45} duration="2.2s" delay="0.5s" buzz style={{
+    <GlowLayer lo={0.18} hi={0.60} duration="2.2s" delay="0.5s" buzz style={{
       top: 0, right: 0, bottom: 0, width: '28%',
-      background: 'radial-gradient(ellipse at right center, rgba(40,100,255,0.42), transparent 75%)',
+      background: 'radial-gradient(ellipse at right center, rgba(40,100,255,0.58), transparent 75%)',
     }}/>
     {/* Warm amber floor — sticky bar residue */}
-    <GlowLayer lo={0.15} hi={0.38} duration="8s" style={{
+    <GlowLayer lo={0.15} hi={0.42} duration="8s" style={{
       bottom: 0, left: 0, right: 0, height: '20%',
-      background: 'linear-gradient(to top, rgba(180,80,10,0.35), transparent)',
+      background: 'linear-gradient(to top, rgba(180,80,10,0.45), transparent)',
     }}/>
     {/* Center bar light pool */}
-    <GlowLayer lo={0.10} hi={0.25} duration="6s" delay="3s" style={{
+    <GlowLayer lo={0.14} hi={0.38} duration="6s" delay="3s" style={{
       top: '15%', left: '30%', right: '30%', bottom: '15%',
-      background: 'radial-gradient(ellipse, rgba(220,120,30,0.22), transparent 70%)',
+      background: 'radial-gradient(ellipse, rgba(220,120,30,0.35), transparent 70%)',
     }}/>
   </>
 }
@@ -631,14 +614,14 @@ function RooftopPartyAmbient() {
 
   return <>
     {/* City sky glow from below */}
-    <GlowLayer lo={0.22} hi={0.50} duration="20s" style={{
+    <GlowLayer lo={0.26} hi={0.58} duration="20s" style={{
       bottom: 0, left: 0, right: 0, height: '28%',
-      background: 'linear-gradient(to top, rgba(255,200,80,0.38), rgba(100,150,255,0.18), transparent)',
+      background: 'linear-gradient(to top, rgba(255,200,80,0.50), rgba(100,150,255,0.25), transparent)',
     }}/>
     {/* City light haze rising */}
-    <GlowLayer lo={0.10} hi={0.28} duration="30s" delay="8s" style={{
-      bottom: '15%', left: 0, right: 0, height: '25%',
-      background: 'linear-gradient(to top, rgba(200,160,80,0.22), transparent)',
+    <GlowLayer lo={0.16} hi={0.40} duration="30s" delay="8s" style={{
+      inset: 0,
+      background: 'radial-gradient(ellipse 80% 22% at 50% 78%, rgba(200,160,80,0.35), transparent)',
     }}/>
     {/* City lights grid */}
     {cityLights.map((l, i) => (
@@ -650,73 +633,7 @@ function RooftopPartyAmbient() {
   </>
 }
 
-// ─── 14. SOLAR FLARE ─────────────────────────────────────────────────────
-function SolarFlareAmbient() {
-  return <>
-    {/* Plasma pulse */}
-    <GlowLayer lo={0.15} hi={0.40} duration="2.4s" style={{
-      inset: 0,
-      background: 'rgba(255,140,20,0.18)',
-    }}/>
-    {/* Radiating edge heat */}
-    <GlowLayer lo={0.20} hi={0.48} duration="3.1s" delay="0.8s" style={{
-      inset: 0,
-      background: 'radial-gradient(ellipse 90% 90% at 50% 50%, transparent 50%, rgba(255,100,10,0.28) 100%)',
-    }}/>
-    {/* Solar eruption — top-left corona */}
-    <GlowLayer lo={0.25} hi={0.60} duration="35s" delay="12s" style={{
-      top: 0, left: 0, right: 0, height: '45%',
-      background: 'radial-gradient(ellipse at top left, rgba(255,200,50,0.38), transparent 75%)',
-    }}/>
-    {/* Warm gradient from top */}
-    <div aria-hidden style={{
-      position: 'absolute', top: 0, left: 0, right: 0, height: '30%',
-      background: 'linear-gradient(to bottom, rgba(200,60,10,0.28), transparent)',
-      pointerEvents: 'none',
-    }}/>
-  </>
-}
 
-// ─── 15. NEBULA DREAMS ───────────────────────────────────────────────────
-function NebulaDreamsAmbient() {
-  const stars = useMemo(() => Array.from({ length: 50 }, (_, i) => ({
-    left:    `${(i * 97 + i % 7 * 31) % 100}%`,
-    top:     `${(i * 83 + i % 5 * 43) % 100}%`,
-    size:    0.6 + (i % 3) * 0.4,
-    opacity: 0.30 + (i % 4) * 0.08,
-    dur:     `${10 + (i % 6) * 3}s`,
-    delay:   `${(i * 0.8) % 9}s`,
-  })), [])
-
-  return <>
-    {/* Large pink/magenta nebula — upper left */}
-    <GlowLayer lo={0.30} hi={0.65} duration="14s" style={{
-      top: '-5%', left: '-10%', width: '65%', height: '65%',
-      background: 'radial-gradient(ellipse, rgba(220,60,180,0.45), transparent 70%)',
-    }}/>
-    {/* Large teal/cyan nebula — lower right */}
-    <GlowLayer lo={0.28} hi={0.58} duration="18s" delay="6s" style={{
-      bottom: '-5%', right: '-10%', width: '60%', height: '60%',
-      background: 'radial-gradient(ellipse, rgba(40,180,200,0.40), transparent 70%)',
-    }}/>
-    {/* Purple center blend */}
-    <GlowLayer lo={0.15} hi={0.35} duration="22s" delay="3s" style={{
-      top: '20%', left: '20%', right: '20%', bottom: '20%',
-      background: 'radial-gradient(ellipse, rgba(120,60,200,0.28), transparent 70%)',
-    }}/>
-    {/* Stars */}
-    {stars.map((s, i) => (
-      <div key={i} aria-hidden style={{
-        position: 'absolute', left: s.left, top: s.top, pointerEvents: 'none',
-        width: s.size, height: s.size, borderRadius: '50%',
-        background: `rgba(255,255,255,${s.opacity})`,
-        willChange: 'opacity',
-        '--lo': s.opacity * 0.4, '--hi': s.opacity,
-        animation: `ambientBreathe ${s.dur} ${s.delay} ease-in-out infinite`,
-      }}/>
-    ))}
-  </>
-}
 
 // ─── 16. CHRISTMAS EVE ───────────────────────────────────────────────────
 function ChristmasEveAmbient() {
@@ -731,19 +648,19 @@ function ChristmasEveAmbient() {
 
   return <>
     {/* Christmas red glow — left edge */}
-    <GlowLayer lo={0.25} hi={0.58} duration="4s" flicker style={{
+    <GlowLayer lo={0.25} hi={0.68} duration="4s" flicker style={{
       top: 0, left: 0, bottom: 0, width: '30%',
-      background: 'radial-gradient(ellipse at left center, rgba(220,20,20,0.52), transparent 75%)',
+      background: 'radial-gradient(ellipse at left center, rgba(220,20,20,0.62), transparent 75%)',
     }}/>
     {/* Christmas green glow — right edge */}
-    <GlowLayer lo={0.22} hi={0.52} duration="4.5s" delay="2s" flicker style={{
+    <GlowLayer lo={0.22} hi={0.62} duration="4.5s" delay="2s" flicker style={{
       top: 0, right: 0, bottom: 0, width: '30%',
-      background: 'radial-gradient(ellipse at right center, rgba(20,180,40,0.48), transparent 75%)',
+      background: 'radial-gradient(ellipse at right center, rgba(20,180,40,0.58), transparent 75%)',
     }}/>
     {/* Warm gold fireplace/candle — center */}
-    <GlowLayer lo={0.20} hi={0.48} duration="3s" delay="1s" flicker style={{
+    <GlowLayer lo={0.24} hi={0.58} duration="3s" delay="1s" flicker style={{
       bottom: '5%', left: '35%', right: '35%', height: '35%',
-      background: 'radial-gradient(ellipse at bottom center, rgba(255,180,40,0.45), transparent 80%)',
+      background: 'radial-gradient(ellipse at bottom center, rgba(255,180,40,0.55), transparent 80%)',
     }}/>
     {/* Snowflakes */}
     {flakes.map((f, i) => (
@@ -765,20 +682,20 @@ function DriveInMovieAmbient() {
   })), [])
 
   return <>
-    {/* Movie screen — bright rectangular glow */}
+    {/* Movie screen — upward glow from bottom center, fades in all directions */}
     <div aria-hidden style={{
-      position: 'absolute', bottom: 0, left: '22%', right: '22%', height: '100%',
-      background: 'linear-gradient(to top, rgba(255,248,220,0.18) 0%, rgba(255,248,220,0.08) 45%, transparent 72%)',
+      position: 'absolute', inset: 0,
+      background: 'radial-gradient(ellipse 50% 62% at 50% 100%, rgba(255,248,220,0.45) 0%, rgba(255,248,220,0.20) 50%, transparent 100%)',
       pointerEvents: 'none',
     }}/>
     {/* Projector beam colors — red/blue cinematic */}
-    <GlowLayer lo={0.12} hi={0.30} duration="12s" style={{
+    <GlowLayer lo={0.15} hi={0.42} duration="12s" style={{
       top: 0, left: 0, right: 0, height: '30%',
-      background: 'linear-gradient(to bottom, rgba(255,80,80,0.18), transparent)',
+      background: 'linear-gradient(to bottom, rgba(255,80,80,0.32), transparent)',
     }}/>
-    <GlowLayer lo={0.10} hi={0.25} duration="12s" delay="6s" style={{
+    <GlowLayer lo={0.12} hi={0.35} duration="12s" delay="6s" style={{
       top: 0, left: 0, right: 0, height: '30%',
-      background: 'linear-gradient(to bottom, rgba(80,80,255,0.15), transparent)',
+      background: 'linear-gradient(to bottom, rgba(80,80,255,0.28), transparent)',
     }}/>
     {/* Projector dust motes */}
     {projectorDust.map((d, i) => (
@@ -790,34 +707,6 @@ function DriveInMovieAmbient() {
   </>
 }
 
-// ─── 18. VINYL NIGHT ─────────────────────────────────────────────────────
-function VinylNightAmbient() {
-  return <>
-    {/* Warm lamp pool — center-left, inset: 0 so no box edge */}
-    <GlowLayer lo={0.32} hi={0.65} duration="5s" style={{
-      inset: 0,
-      background: 'radial-gradient(ellipse 55% 70% at 32% 45%, rgba(220,130,45,0.52), transparent)',
-    }}/>
-    {/* Warm ambient fill */}
-    <GlowLayer lo={0.15} hi={0.32} duration="7s" delay="2.5s" style={{
-      inset: 0,
-      background: 'rgba(180,100,30,0.12)',
-    }}/>
-    {/* Record ring — subtle ring pulse */}
-    <GlowLayer lo={0.06} hi={0.18} duration="5s" style={{
-      top: '18%', left: '22%', right: '22%', bottom: '18%',
-      background: 'radial-gradient(circle at center, transparent 42%, rgba(255,220,100,0.15) 44%, rgba(255,220,100,0.08) 52%, transparent 54%)',
-    }}/>
-    {/* Dust motes in lamplight */}
-    {Array.from({ length: 5 }, (_, i) => (
-      <RisingParticle key={i}
-        left={`${24 + i * 8}%`} size={1.2}
-        color="rgba(220,160,60,0.55)"
-        duration={`${8 + i * 2}s`} delay={`${i * 1.8}s`} opacity={0.50}
-      />
-    ))}
-  </>
-}
 
 // ─── 19. WESTERN SHOWDOWN ────────────────────────────────────────────────
 function WesternShowdownAmbient() {
@@ -863,20 +752,24 @@ function UnderTheSeaAmbient() {
   })), [])
 
   return <>
-    <GlowLayer lo={0.10} hi={0.28} duration="6s" style={{
-      top: 0, left: '30%', right: '30%', height: '70%',
-      background: 'linear-gradient(to bottom, rgba(80,200,255,0.22), transparent)',
+    <GlowLayer lo={0.15} hi={0.35} duration="20s" delay="3s" style={{
+      inset: 0,
+      background: 'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(0,80,100,0.28), transparent 70%)',
+    }}/>
+    <GlowLayer lo={0.18} hi={0.45} duration="6s" style={{
+      inset: 0,
+      background: 'radial-gradient(ellipse 40% 55% at 50% 0%, rgba(80,200,255,0.42), transparent)',
     }}/>
     {bio.map((b, i) => (
       <PulseDot key={i} left={b.left} top={b.top} size={b.size}
-        color="rgba(40,210,170,0.38)" glowColor="rgba(20,180,140,0.22)"
+        color="rgba(40,210,170,0.75)" glowColor="rgba(20,180,140,0.45)"
         duration={b.dur} delay={b.delay}
       />
     ))}
     {bubbles.map((b, i) => (
       <RisingParticle key={i} left={b.left} bottom="0%" size={b.size}
-        color="rgba(180,225,255,0.32)"
-        duration={b.dur} delay={b.delay} opacity={0.32}
+        color="rgba(180,225,255,0.55)"
+        duration={b.dur} delay={b.delay} opacity={0.55}
       />
     ))}
   </>
@@ -893,19 +786,19 @@ function NeonTokyoAmbient() {
 
   return <>
     {/* Hot pink/magenta neon — left */}
-    <GlowLayer lo={0.28} hi={0.62} duration="1.3s" buzz style={{
+    <GlowLayer lo={0.28} hi={0.78} duration="1.3s" buzz style={{
       top: 0, left: 0, bottom: 0, width: '28%',
-      background: 'radial-gradient(ellipse at left center, rgba(255,0,190,0.55), transparent 75%)',
+      background: 'radial-gradient(ellipse at left center, rgba(255,0,190,0.70), transparent 75%)',
     }}/>
     {/* Cyan neon — right */}
-    <GlowLayer lo={0.22} hi={0.55} duration="1.8s" delay="0.4s" buzz style={{
+    <GlowLayer lo={0.22} hi={0.72} duration="1.8s" delay="0.4s" buzz style={{
       top: 0, right: 0, bottom: 0, width: '28%',
-      background: 'radial-gradient(ellipse at right center, rgba(0,210,255,0.50), transparent 75%)',
+      background: 'radial-gradient(ellipse at right center, rgba(0,210,255,0.65), transparent 75%)',
     }}/>
     {/* Purple top neon (overhead signs) */}
-    <GlowLayer lo={0.15} hi={0.40} duration="2.6s" delay="0.9s" buzz style={{
+    <GlowLayer lo={0.18} hi={0.52} duration="2.6s" delay="0.9s" buzz style={{
       top: 0, left: 0, right: 0, height: '25%',
-      background: 'radial-gradient(ellipse at top center, rgba(200,0,255,0.38), transparent 70%)',
+      background: 'radial-gradient(ellipse at top center, rgba(200,0,255,0.52), transparent 70%)',
     }}/>
     {/* Rain streaks — neon tinted */}
     {rain.map((r, i) => (
@@ -922,34 +815,6 @@ function NeonTokyoAmbient() {
   </>
 }
 
-// ─── 22. HAUNTED MANSION ─────────────────────────────────────────────────
-function HauntedMansionAmbient() {
-  return <>
-    {/* Ghost light band — cold horizontal drift */}
-    <div aria-hidden style={{
-      position: 'absolute', top: '18%', left: '-15%', right: '-15%', height: '22%',
-      background: 'radial-gradient(ellipse, rgba(180,220,255,0.28), transparent 70%)',
-      pointerEvents: 'none', willChange: 'transform, opacity',
-      '--hi': 0.75,
-      animation: 'ambientDriftAcross 55s 10s ease-in-out infinite',
-    }}/>
-    {/* Cold moonlight — top center */}
-    <GlowLayer lo={0.18} hi={0.42} duration="8s" style={{
-      top: 0, left: '25%', right: '25%', height: '45%',
-      background: 'radial-gradient(ellipse at top center, rgba(160,200,240,0.38), transparent 70%)',
-    }}/>
-    {/* Deep purple vignette shadow */}
-    <GlowLayer lo={0.22} hi={0.48} duration="3s" delay="1.5s" style={{
-      inset: 0,
-      background: 'radial-gradient(ellipse 85% 85% at 50% 50%, transparent 40%, rgba(30,0,50,0.42) 100%)',
-    }}/>
-    {/* Ghost pulse — window light */}
-    <GlowLayer lo={0.08} hi={0.28} duration="2.2s" flicker style={{
-      top: '8%', right: '12%', width: '12%', height: '18%',
-      background: 'radial-gradient(ellipse, rgba(180,220,255,0.35), transparent 75%)',
-    }}/>
-  </>
-}
 
 // ─── 23. FIREFLY SUMMER ──────────────────────────────────────────────────
 function FireflySummerAmbient() {
@@ -962,13 +827,17 @@ function FireflySummerAmbient() {
   })), [])
 
   return <>
-    <GlowLayer lo={0.08} hi={0.22} duration="25s" style={{
+    <GlowLayer lo={0.15} hi={0.35} duration="25s" style={{
       top: 0, left: 0, right: 0, height: '30%',
-      background: 'linear-gradient(to bottom, rgba(180,110,35,0.20), transparent)',
+      background: 'linear-gradient(to bottom, rgba(180,110,35,0.32), transparent)',
+    }}/>
+    <GlowLayer lo={0.12} hi={0.30} duration="30s" delay="8s" style={{
+      inset: 0,
+      background: 'radial-gradient(ellipse 80% 60% at 50% 60%, rgba(0,60,15,0.22), transparent)',
     }}/>
     <div aria-hidden style={{
-      position: 'absolute', bottom: 0, left: 0, right: 0, height: '14%',
-      background: 'rgba(80,60,10,0.14)', pointerEvents: 'none',
+      position: 'absolute', bottom: 0, left: 0, right: 0, height: '20%',
+      background: 'linear-gradient(to top, rgba(80,60,10,0.18), transparent)', pointerEvents: 'none',
     }}/>
     {fireflies.map((f, i) => (
       <PulseDot key={i} left={f.left} top={f.top} size={f.size}
@@ -979,129 +848,39 @@ function FireflySummerAmbient() {
   </>
 }
 
-// ─── 24. KARAOKE NIGHT ───────────────────────────────────────────────────
-function KaraokeNightAmbient() {
-  const confetti = useMemo(() => Array.from({ length: 22 }, (_, i) => {
-    const colors = ['rgba(255,0,170,0.72)', 'rgba(0,210,255,0.68)', 'rgba(255,230,0,0.65)', 'rgba(0,255,100,0.62)']
-    return {
-      left:  `${(i * 53 + i % 4 * 17) % 100}%`,
-      size:  4 + (i % 4) * 1.8,
-      color: colors[i % 4],
-      dur:   `${3 + (i % 4) * 0.8}s`,
-      delay: `${(i * 0.5) % 5}s`,
-      drift: `${(i % 2 === 0 ? 1 : -1) * 14}px`,
-    }
-  }), [])
-
-  return <>
-    <GlowLayer lo={0.22} hi={0.52} duration="3.2s" style={{
-      top: 0, left: 0, bottom: 0, width: '35%',
-      background: 'radial-gradient(ellipse at left center, rgba(255,0,170,0.42), transparent 75%)',
-    }}/>
-    <GlowLayer lo={0.18} hi={0.45} duration="3.2s" delay="1.6s" style={{
-      top: 0, right: 0, bottom: 0, width: '35%',
-      background: 'radial-gradient(ellipse at right center, rgba(0,210,255,0.38), transparent 75%)',
-    }}/>
-    <GlowLayer lo={0.12} hi={0.32} duration="2.8s" delay="0.8s" style={{
-      top: 0, left: '28%', right: '28%', height: '50%',
-      background: 'radial-gradient(ellipse at top center, rgba(255,255,255,0.22), transparent 70%)',
-    }}/>
-    {confetti.map((c, i) => (
-      <FallingParticle key={i} left={c.left} size={c.size} color={c.color}
-        duration={c.dur} delay={c.delay} drift={c.drift} opacity={0.80}
-      />
-    ))}
-  </>
-}
 
 // ─── 25. WINE CELLAR ─────────────────────────────────────────────────────
 // Deep stone cellar — burgundy walls closing in, one small candle center
 function WineCellarAmbient() {
   return <>
     {/* Burgundy stone walls — dominant edge treatment */}
-    <GlowLayer lo={0.22} hi={0.50} duration="9s" style={{
+    <GlowLayer lo={0.25} hi={0.62} duration="9s" style={{
       inset: 0,
-      background: 'radial-gradient(ellipse 75% 75% at 50% 50%, transparent 38%, rgba(120,0,25,0.55) 100%)',
+      background: 'radial-gradient(ellipse 75% 75% at 50% 50%, transparent 38%, rgba(120,0,25,0.70) 100%)',
     }}/>
     {/* Deep wine-red overlay — left wall */}
-    <GlowLayer lo={0.15} hi={0.38} duration="12s" style={{
+    <GlowLayer lo={0.18} hi={0.45} duration="12s" style={{
       inset: 0,
-      background: 'radial-gradient(ellipse 40% 100% at 0% 50%, rgba(100,0,20,0.40), transparent)',
+      background: 'radial-gradient(ellipse 40% 100% at 0% 50%, rgba(100,0,20,0.52), transparent)',
     }}/>
     {/* Deep wine-red overlay — right wall */}
-    <GlowLayer lo={0.12} hi={0.32} duration="15s" delay="5s" style={{
+    <GlowLayer lo={0.14} hi={0.38} duration="15s" delay="5s" style={{
       inset: 0,
-      background: 'radial-gradient(ellipse 40% 100% at 100% 50%, rgba(100,0,20,0.35), transparent)',
+      background: 'radial-gradient(ellipse 40% 100% at 100% 50%, rgba(100,0,20,0.45), transparent)',
     }}/>
     {/* Single candle — center, small and warm */}
-    <GlowLayer lo={0.22} hi={0.55} duration="2.4s" flicker style={{
+    <GlowLayer lo={0.26} hi={0.68} duration="2.4s" flicker style={{
       inset: 0,
-      background: 'radial-gradient(ellipse 30% 45% at 50% 60%, rgba(240,170,60,0.48), transparent)',
+      background: 'radial-gradient(ellipse 30% 45% at 50% 60%, rgba(240,170,60,0.62), transparent)',
     }}/>
     {/* Faint warm floor glow */}
-    <GlowLayer lo={0.08} hi={0.20} duration="6s" delay="3s" style={{
-      bottom: 0, left: 0, right: 0, height: '15%',
-      background: 'rgba(160,60,10,0.18)',
-    }}/>
-  </>
-}
-
-// ─── 26. AURORA BOREALIS ─────────────────────────────────────────────────
-// Different from Northern Lights: column-style vertical curtains that drape
-// down from sky, bright lime-green + ice white, fills more vertical space
-function AuroraBorealisAmbient() {
-  const stars = useMemo(() => Array.from({ length: 60 }, (_, i) => ({
-    left:    `${(i * 97 + i % 7 * 31) % 100}%`,
-    top:     `${(i * 83 + i % 5 * 43) % 100}%`,
-    size:    0.7 + (i % 3) * 0.4,
-    opacity: 0.28 + (i % 5) * 0.07,
-    dur:     `${8 + (i % 6) * 3}s`,
-    delay:   `${(i * 0.6) % 8}s`,
-  })), [])
-
-  return <>
-    {/* Star field */}
-    {stars.map((s, i) => (
-      <div key={`s${i}`} aria-hidden style={{
-        position: 'absolute', left: s.left, top: s.top, pointerEvents: 'none',
-        width: s.size, height: s.size, borderRadius: '50%',
-        background: `rgba(200,255,220,${s.opacity})`,
-        willChange: 'opacity',
-        '--lo': s.opacity * 0.3, '--hi': s.opacity,
-        animation: `ambientBreathe ${s.dur} ${s.delay} ease-in-out infinite`,
-      }}/>
-    ))}
-    {/* Vertical curtain column — far left, bright lime-green */}
-    <div aria-hidden style={{
-      position: 'absolute', inset: 0,
-      background: 'radial-gradient(ellipse 22% 75% at 12% 0%, rgba(0,255,100,0.45), transparent)',
-      pointerEvents: 'none', willChange: 'opacity',
-      '--hi': 0.90,
-      animation: 'ambientAuroraFade 16s 0s ease-in-out infinite',
-    }}/>
-    {/* Vertical curtain column — center, ice white/teal */}
-    <div aria-hidden style={{
-      position: 'absolute', inset: 0,
-      background: 'radial-gradient(ellipse 30% 80% at 48% 0%, rgba(120,255,200,0.38), transparent)',
-      pointerEvents: 'none', willChange: 'opacity',
-      '--hi': 0.80,
-      animation: 'ambientAuroraFade 22s 6s ease-in-out infinite',
-    }}/>
-    {/* Vertical curtain column — right, yellow-green */}
-    <div aria-hidden style={{
-      position: 'absolute', inset: 0,
-      background: 'radial-gradient(ellipse 20% 65% at 80% 0%, rgba(80,255,150,0.35), transparent)',
-      pointerEvents: 'none', willChange: 'opacity',
-      '--hi': 0.75,
-      animation: 'ambientAuroraFade 19s 11s ease-in-out infinite',
-    }}/>
-    {/* Horizon glow — the aurora's reflection on snow below */}
-    <GlowLayer lo={0.12} hi={0.28} duration="25s" style={{
+    <GlowLayer lo={0.12} hi={0.30} duration="6s" delay="3s" style={{
       bottom: 0, left: 0, right: 0, height: '20%',
-      background: 'linear-gradient(to top, rgba(0,180,80,0.22), transparent)',
+      background: 'linear-gradient(to top, rgba(160,60,10,0.30), transparent)',
     }}/>
   </>
 }
+
 
 // ─── 27. METEOR SHOWER ───────────────────────────────────────────────────
 function MeteorShowerAmbient() {
@@ -1119,11 +898,21 @@ function MeteorShowerAmbient() {
   })), [])
 
   return <>
+    {/* Deep blue-indigo night sky wash */}
+    <GlowLayer lo={0.22} hi={0.45} duration="30s" style={{
+      inset: 0,
+      background: 'radial-gradient(ellipse 100% 80% at 50% 30%, rgba(20,30,100,0.42), transparent)',
+    }}/>
+    {/* Milky Way band — subtle indigo-violet */}
+    <GlowLayer lo={0.10} hi={0.28} duration="40s" delay="12s" style={{
+      inset: 0,
+      background: 'radial-gradient(ellipse 60% 25% at 50% 45%, rgba(80,60,180,0.25), transparent)',
+    }}/>
     {stars.map((s, i) => (
       <div key={i} aria-hidden style={{
         position: 'absolute', left: s.left, top: s.top, pointerEvents: 'none',
         width: s.size, height: s.size, borderRadius: '50%',
-        background: `rgba(255,255,255,${s.opacity})`,
+        background: `rgba(255,255,255,${Math.min(s.opacity + 0.10, 0.85)})`,
       }}/>
     ))}
     {meteors.map((m, i) => (
@@ -1140,44 +929,6 @@ function MeteorShowerAmbient() {
   </>
 }
 
-// ─── 28. OKTOBERFEST ─────────────────────────────────────────────────────
-function OktoberfestAmbient() {
-  const drops = useMemo(() => Array.from({ length: 10 }, (_, i) => ({
-    left:  `${8 + i * 9}%`,
-    size:  4 + (i % 3) * 1.5,
-    color: i % 3 === 0 ? 'rgba(255,200,50,0.78)' : i % 3 === 1 ? 'rgba(220,160,30,0.72)' : 'rgba(255,230,100,0.70)',
-    dur:   `${11 + (i % 4) * 3}s`,
-    delay: `${(i * 1.2) % 10}s`,
-    drift: `${(i % 2 === 0 ? 1 : -1) * 6}px`,
-  })), [])
-
-  return <>
-    {/* Warm lantern glow — from above (tent roof) */}
-    <GlowLayer lo={0.35} hi={0.68} duration="5s" style={{
-      top: 0, left: '15%', right: '15%', height: '50%',
-      background: 'radial-gradient(ellipse at top center, rgba(240,170,40,0.58), transparent 75%)',
-    }}/>
-    {/* Side lantern accents */}
-    <GlowLayer lo={0.20} hi={0.48} duration="6s" delay="2s" style={{
-      top: '5%', left: 0, width: '20%', height: '35%',
-      background: 'radial-gradient(ellipse at top left, rgba(220,150,30,0.42), transparent 75%)',
-    }}/>
-    <GlowLayer lo={0.18} hi={0.44} duration="7s" delay="3.5s" style={{
-      top: '5%', right: 0, width: '20%', height: '35%',
-      background: 'radial-gradient(ellipse at top right, rgba(220,150,30,0.38), transparent 75%)',
-    }}/>
-    {/* Warm floor */}
-    <GlowLayer lo={0.10} hi={0.25} duration="8s" style={{
-      bottom: 0, left: 0, right: 0, height: '15%',
-      background: 'rgba(200,120,20,0.18)',
-    }}/>
-    {/* Golden foam drops */}
-    {drops.map((d, i) => (
-      <FallingParticle key={i} left={d.left} size={d.size} color={d.color}
-        duration={d.dur} delay={d.delay} drift={d.drift} opacity={0.75}/>
-    ))}
-  </>
-}
 
 // ─── 29. 80S NIGHT ───────────────────────────────────────────────────────
 function EightiesNightAmbient() {
@@ -1189,23 +940,23 @@ function EightiesNightAmbient() {
       backgroundSize: '100% 39px',
     }}/>
     {/* Hot pink/magenta — top neon */}
-    <GlowLayer lo={0.28} hi={0.60} duration="15s" style={{
+    <GlowLayer lo={0.28} hi={0.65} duration="15s" style={{
       top: 0, left: 0, right: 0, height: '35%',
-      background: 'linear-gradient(to bottom, rgba(255,0,200,0.42) 0%, rgba(180,0,255,0.25) 60%, transparent 100%)',
+      background: 'linear-gradient(to bottom, rgba(255,0,200,0.55) 0%, rgba(180,0,255,0.35) 60%, transparent 100%)',
     }}/>
     {/* Cyan/teal — bottom horizon */}
-    <GlowLayer lo={0.22} hi={0.52} duration="18s" delay="5s" style={{
+    <GlowLayer lo={0.22} hi={0.58} duration="18s" delay="5s" style={{
       bottom: 0, left: 0, right: 0, height: '30%',
-      background: 'linear-gradient(to top, rgba(0,220,255,0.38), rgba(0,180,255,0.20), transparent)',
+      background: 'linear-gradient(to top, rgba(0,220,255,0.52), rgba(0,180,255,0.28), transparent)',
     }}/>
     {/* Purple side glows */}
-    <GlowLayer lo={0.18} hi={0.42} duration="12s" delay="3s" style={{
+    <GlowLayer lo={0.20} hi={0.50} duration="12s" delay="3s" style={{
       top: 0, left: 0, bottom: 0, width: '25%',
-      background: 'radial-gradient(ellipse at left center, rgba(180,0,255,0.38), transparent 75%)',
+      background: 'radial-gradient(ellipse at left center, rgba(180,0,255,0.50), transparent 75%)',
     }}/>
-    <GlowLayer lo={0.15} hi={0.38} duration="14s" delay="6s" style={{
+    <GlowLayer lo={0.18} hi={0.45} duration="14s" delay="6s" style={{
       top: 0, right: 0, bottom: 0, width: '25%',
-      background: 'radial-gradient(ellipse at right center, rgba(255,0,180,0.35), transparent 75%)',
+      background: 'radial-gradient(ellipse at right center, rgba(255,0,180,0.45), transparent 75%)',
     }}/>
   </>
 }
@@ -1222,24 +973,16 @@ const AMBIENT_MAP = {
   'sand-dune-chill':    SandDuneChillAmbient,
   'halloween':          HalloweenAmbient,
   'jazz-club':          JazzClubAmbient,
-  'speakeasy':          SpeakeasyAmbient,
   'dive-bar':           DiveBarAmbient,
   'rooftop-party':      RooftopPartyAmbient,
-  'solar-flare':        SolarFlareAmbient,
-  'nebula-dreams':      NebulaDreamsAmbient,
   'christmas-eve':      ChristmasEveAmbient,
   'drive-in-movie':     DriveInMovieAmbient,
-  'vinyl-night':        VinylNightAmbient,
   'western-showdown':   WesternShowdownAmbient,
   'under-the-sea':      UnderTheSeaAmbient,
   'neon-tokyo':         NeonTokyoAmbient,
-  'haunted-mansion':    HauntedMansionAmbient,
   'firefly-summer':     FireflySummerAmbient,
-  'karaoke-night':      KaraokeNightAmbient,
   'wine-cellar':        WineCellarAmbient,
-  'aurora-borealis':    AuroraBorealisAmbient,
   'meteor-shower':      MeteorShowerAmbient,
-  'oktoberfest':        OktoberfestAmbient,
   'eighties-night':     EightiesNightAmbient,
 }
 

@@ -300,6 +300,7 @@ function DisplayInner({ show, direction }) {
 
 export default function Display() {
   const [searchParams] = useSearchParams()
+  const isDemo = searchParams.get('demo') === '1'
   const showId = searchParams.get('show')
   const isPreview = searchParams.get('preview') === 'true'
   const [show, setShow] = useState(null)
@@ -308,6 +309,7 @@ export default function Display() {
   const [direction, setDirection] = useState(1)
 
   useEffect(() => {
+    if (isDemo) return
     async function load() {
       let data = null
 
@@ -372,6 +374,32 @@ export default function Display() {
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [show?.id])
+
+  if (isDemo) {
+    const demoThemeId = searchParams.get('theme') ?? 'pure-michigan'
+    return (
+      <ThemeProvider showThemeId={demoThemeId}>
+        <DisplayInner
+          show={{
+            id: 'demo',
+            theme: demoThemeId,
+            is_live: true,
+            current_slide_id: 'demo-q1',
+            current_slide_index: 0,
+            slides: [{
+              id: 'demo-q1', type: 'question', order: 0, roundId: null,
+              data: {
+                questionNumber: 1, questionLabel: 'Q1', questionMode: 'regular',
+                isShiny: false, text: 'What is the capital of France?', mediaSlots: [],
+              },
+            }],
+            rounds: [], showState: { isLive: true }, audio_playing: null,
+          }}
+          direction={1}
+        />
+      </ThemeProvider>
+    )
+  }
 
   if (loading) {
     return (
