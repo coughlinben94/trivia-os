@@ -1,471 +1,362 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { nanoid } from 'nanoid'
-import QRCode from 'qrcode'
 import { supabase } from '../lib/supabase.js'
+import { getTheme } from '../themes/index.js'
+import BenPhoto from '../components/shared/BenPhoto.jsx'
 
-const TEAM_COLORS = [
-  '#f5c842', '#e02020', '#60c000', '#4a90d9', '#c96fff',
-  '#ff8c00', '#00bcd4', '#e91e8c', '#8bc34a', '#ff5722',
-]
-
-function getTeamKey(showId) {
-  return `trivia-os:team:${showId}`
-}
-
+// ─── localStorage ─────────────────────────────────────────────────────────────
+function getTeamKey(showId) { return `trivia-os:team:${showId}` }
 function loadStoredTeam(showId) {
-  try {
-    return JSON.parse(localStorage.getItem(getTeamKey(showId))) ?? null
-  } catch {
-    return null
-  }
+  try { return JSON.parse(localStorage.getItem(getTeamKey(showId))) ?? null }
+  catch { return null }
 }
-
 function saveStoredTeam(showId, team) {
   localStorage.setItem(getTeamKey(showId), JSON.stringify(team))
 }
 
-// --- Sub-components ---
+const TEAM_COLORS = [
+  '#f5c842','#e02020','#60c000','#4a90d9','#c96fff',
+  '#ff8c00','#00bcd4','#e91e8c','#8bc34a','#ff5722',
+]
 
-function PowerupButton({ powerup, used, onInvoke }) {
-  const [confirming, setConfirming] = useState(false)
-  const [invoking, setInvoking] = useState(false)
+// ─── Easing constants ─────────────────────────────────────────────────────────
+const EASE_DRAWER = [0.32, 0.72, 0, 1]
+const EASE_SNAP   = [0.23, 1, 0.32, 1]
 
-  if (!powerup) return null
-
-  if (used) {
-    return (
-      <div className="flex items-center gap-3 px-4 py-2.5 bg-white/5 rounded-xl">
-        <span className="text-base opacity-40">{powerup.icon}</span>
-        <div className="flex-1 min-w-0">
-          <p className="text-white/25 text-xs font-medium">{powerup.name}</p>
-          <p className="text-white/20 text-xs">Used ✓</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (confirming) {
-    return (
-      <div className="p-4 bg-white/10 rounded-xl border border-white/20">
-        <p className="text-white text-sm font-semibold mb-1">
-          Use your {powerup.name}?
-        </p>
-        <p className="text-white/50 text-xs mb-3 leading-relaxed">
-          {powerup.description} This cannot be undone.
-        </p>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setConfirming(false)}
-            className="flex-1 py-2.5 rounded-lg bg-white/10 text-white/70 text-sm font-medium active:bg-white/20 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            disabled={invoking}
-            onClick={async () => {
-              setInvoking(true)
-              await onInvoke(powerup)
-              setConfirming(false)
-              setInvoking(false)
-            }}
-            className="flex-1 py-2.5 rounded-lg bg-[#e02020] text-white text-sm font-bold active:bg-[#c01818] transition-colors disabled:opacity-50"
-          >
-            {invoking ? '…' : `${powerup.icon} Use it!`}
-          </button>
-        </div>
-      </div>
-    )
-  }
-
+// ─── Loading ──────────────────────────────────────────────────────────────────
+function LoadingScreen() {
   return (
-    <button
-      onClick={() => setConfirming(true)}
-      className="w-full flex items-center gap-3 px-4 py-2.5 bg-[#004000]/50 border border-[#60c000]/25 rounded-xl active:bg-[#004000]/80 transition-colors"
-      style={{ WebkitTapHighlightColor: 'transparent' }}
-    >
-      <span className="text-base">{powerup.icon}</span>
-      <div className="flex-1 text-left min-w-0">
-        <p className="text-[#60c000] text-xs font-bold leading-none mb-0.5">{powerup.name}</p>
-        <p className="text-white/35 text-xs truncate">{powerup.description}</p>
-      </div>
-      <span className="text-white/25 text-xs shrink-0">Tap →</span>
-    </button>
+    <div style={{
+      minHeight: '100dvh', background: '#050505',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        width: 28, height: 28, borderRadius: '50%',
+        border: '2.5px solid rgba(255,255,255,0.12)',
+        borderTopColor: 'rgba(255,255,255,0.5)',
+        animation: 'spin 0.8s linear infinite',
+      }} />
+    </div>
   )
 }
 
-function LeaderboardOverlay({ leaderboard, myTeamId, onClose }) {
+// ─── No show ──────────────────────────────────────────────────────────────────
+function NoShowScreen() {
   return (
-    <div className="absolute inset-0 bg-gray-950 z-40 flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-safe pb-3 pt-4 border-b border-white/10 shrink-0">
-        <h2
-          className="text-white text-lg font-bold"
-          style={{ fontFamily: "'Boogaloo', sans-serif" }}
-        >
-          🏆 Leaderboard
-        </h2>
-        <button
-          onClick={onClose}
-          className="text-white/40 text-sm px-3 py-1 rounded-lg bg-white/5 active:bg-white/10 transition-colors"
-        >
-          Back
-        </button>
-      </div>
+    <div style={{
+      minHeight: '100dvh', background: '#050505',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', padding: '2rem',
+    }}>
+      <img src="/baynes-logo.svg" alt="" style={{ height: 40, opacity: 0.3, marginBottom: '1.5rem' }} />
+      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.9375rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.6 }}>
+        No show running right now.
+      </p>
+      <p style={{ color: 'rgba(255,255,255,0.18)', fontSize: '0.8rem', marginTop: '0.5rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif' }}>
+        Ask Ben for the QR code when things kick off.
+      </p>
+    </div>
+  )
+}
 
-      {/* Rows */}
-      <div className="flex-1 overflow-y-auto py-3 px-4 space-y-2">
-        {leaderboard.map((team, index) => {
-          const isMe = team.id === myTeamId
-          const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : null
-          return (
-            <div
-              key={team.id}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl ${
-                isMe
-                  ? 'bg-white/15 border border-white/25'
-                  : 'bg-white/5'
-              }`}
-            >
-              <span className={`text-base w-6 text-center shrink-0 ${
-                !medal ? 'text-white/30 text-sm font-bold' : ''
-              }`}>
-                {medal ?? `${index + 1}`}
-              </span>
-              <span className={`flex-1 text-sm font-medium truncate ${
-                isMe ? 'text-white' : 'text-white/65'
-              }`}>
-                {team.name}
-                {isMe && (
-                  <span className="text-white/35 text-xs font-normal ml-1.5">you</span>
-                )}
-              </span>
-              <span className={`font-bold text-sm tabular-nums shrink-0 ${
-                index === 0 ? 'text-yellow-400' : isMe ? 'text-white' : 'text-white/60'
-              }`}
-                style={index === 0 ? { fontFamily: "'Boogaloo', sans-serif" } : undefined}
+// ─── Registration ─────────────────────────────────────────────────────────────
+function RegistrationScreen({ onRegister, show, theme }) {
+  const [name, setName]           = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError]         = useState(null)
+  const inputRef = useRef(null)
+  const pref = useReducedMotion()
+
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 150)
+    return () => clearTimeout(t)
+  }, [])
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed) { setError('Enter your team name to join'); return }
+    if (trimmed.length > 30) { setError('Keep it under 30 characters'); return }
+    setSubmitting(true)
+    setError(null)
+    try { await onRegister(trimmed) }
+    catch (err) { setError(err.message); setSubmitting(false) }
+  }
+
+  const bg        = theme?.colors?.bg       ?? '#050505'
+  const accent    = theme?.colors?.accent   ?? '#1a6b4a'
+  const highlight = theme?.colors?.highlight ?? '#4dffc3'
+  const text      = theme?.colors?.text      ?? '#ffffff'
+
+  return (
+    <div style={{
+      minHeight: '100dvh', background: bg,
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      padding: '1.5rem', fontFamily: 'DM Sans, sans-serif',
+    }}>
+      <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+
+        {/* Ben photo — container reserves 100px so heading doesn't shift when photo loads */}
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <div style={{
+            width: 100, height: 100, borderRadius: '50%',
+            background: 'rgba(255,255,255,0.06)',
+            overflow: 'hidden', flexShrink: 0,
+          }}>
+            <BenPhoto size={100} />
+          </div>
+        </div>
+
+        {/* Heading */}
+        <div style={{ textAlign: 'center' }}>
+          <h1 style={{
+            fontFamily: 'Boogaloo, Anton, sans-serif',
+            fontSize: 'clamp(2.25rem, 10vw, 2.75rem)',
+            color: highlight, margin: 0, letterSpacing: '-0.02em', lineHeight: 1.1,
+          }}>
+            Trivia Night
+          </h1>
+          <p style={{ color: `${text}b3`, fontSize: '1rem', margin: '0.5rem 0 0', lineHeight: 1.4 }}>
+            Enter your team name to join
+          </p>
+          {show?.title && (
+            <p style={{ color: `${text}45`, fontSize: '0.8rem', marginTop: '0.3rem' }}>{show.title}</p>
+          )}
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <input
+            ref={inputRef}
+            type="text"
+            value={name}
+            onChange={e => { setName(e.target.value); setError(null) }}
+            placeholder="Quiz Khalifa, etc."
+            maxLength={30}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="words"
+            spellCheck="false"
+            style={{
+              width: '100%', height: 56, boxSizing: 'border-box',
+              background: 'rgba(255,255,255,0.09)',
+              border: `1.5px solid ${error ? 'rgba(255,100,100,0.6)' : 'rgba(255,255,255,0.20)'}`,
+              borderRadius: 12, color: text, fontSize: '1.2rem',
+              padding: '0 1rem', outline: 'none',
+              fontFamily: 'DM Sans, sans-serif',
+              transition: 'border-color 120ms ease',
+              WebkitAppearance: 'none',
+            }}
+            onFocus={e  => { e.target.style.borderColor = `${accent}aa` }}
+            onBlur={e   => { e.target.style.borderColor = error ? 'rgba(255,100,100,0.6)' : 'rgba(255,255,255,0.20)' }}
+          />
+
+          <AnimatePresence>
+            {error && (
+              <motion.p
+                initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                style={{ color: '#ff6b6b', fontSize: '0.875rem', margin: 0, lineHeight: 1.4 }}
               >
-                {team.total}
-              </span>
-            </div>
-          )
-        })}
-        {leaderboard.length === 0 && (
-          <p className="text-white/30 text-sm text-center pt-8">No scores yet</p>
-        )}
+                {error}
+              </motion.p>
+            )}
+          </AnimatePresence>
+
+          <button
+            type="submit"
+            disabled={!name.trim() || submitting}
+            onPointerDown={e => { if (name.trim() && !submitting) e.currentTarget.style.transform = 'scale(0.98)' }}
+            onPointerUp={e   => { e.currentTarget.style.transform = 'scale(1)' }}
+            onPointerLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+            style={{
+              width: '100%', height: 56, borderRadius: 12,
+              background: submitting ? `${accent}cc` : accent,
+              color: '#fff', fontSize: '1.1rem', fontWeight: 700,
+              border: 'none', cursor: submitting ? 'default' : 'pointer',
+              opacity: !name.trim() ? 0.45 : 1,
+              transition: 'opacity 120ms ease, transform 120ms ease',
+              fontFamily: 'DM Sans, sans-serif', letterSpacing: '0.01em',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+              WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
+            }}
+          >
+            {submitting
+              ? (<><span style={{
+                    width: 18, height: 18, borderRadius: '50%',
+                    border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff',
+                    animation: 'spin 0.7s linear infinite', display: 'inline-block', flexShrink: 0,
+                  }} />Joining…</>)
+              : 'Join the Show'}
+          </button>
+        </form>
+
+        <p style={{ textAlign: 'center', color: `${text}35`, fontSize: '0.7rem', margin: 0 }}>
+          Have fun out there — and don't yell at me, I'm not a professional 😂
+        </p>
+
+        {/* Watermark */}
+        <p style={{ textAlign: 'center', color: `${text}28`, fontSize: '0.65rem', margin: '-1rem 0 0' }}>
+          Baynes Apple Valley Trivia Night
+        </p>
       </div>
     </div>
   )
 }
 
-// --- WaitingScreen ---
-
-function WaitingScreen({ teamName, show, showId }) {
-  const [teams, setTeams] = useState([])
-  const [qrDataUrl, setQrDataUrl] = useState(null)
-
-  const joinUrl = `${window.location.origin}/join?show=${showId}`
-
-  useEffect(() => {
-    if (!showId) return
-
-    supabase
-      .from('teams')
-      .select('id, name')
-      .eq('show_id', showId)
-      .order('registered_at', { ascending: true })
-      .then(({ data }) => { if (data) setTeams(data) })
-
-    const channel = supabase
-      .channel(`waiting-teams:${showId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'teams',
-        filter: `show_id=eq.${showId}`,
-      }, (payload) => {
-        setTeams(prev => {
-          if (prev.some(t => t.id === payload.new.id)) return prev
-          return [...prev, { id: payload.new.id, name: payload.new.name }]
-        })
-      })
-      .subscribe()
-
-    return () => supabase.removeChannel(channel)
-  }, [showId])
-
-  useEffect(() => {
-    if (!joinUrl) return
-    QRCode.toDataURL(joinUrl, {
-      width: 220,
-      margin: 2,
-      color: { dark: '#0d0d0d', light: '#f5f0e8' },
-    }).then(url => setQrDataUrl(url))
-  }, [joinUrl])
-
-  const tickerText = teams.length > 0
-    ? teams.map(t => t.name).join(' · ') + ' · '
-    : null
-
-  const tickerDuration = tickerText
-    ? Math.max((tickerText.length * 8) / 80, 6)
-    : 8
+// ─── Waiting ──────────────────────────────────────────────────────────────────
+function WaitingScreen({ teamName, myScore, theme }) {
+  const pref   = useReducedMotion()
+  const bg        = theme?.colors?.bg       ?? '#050505'
+  const accent    = theme?.colors?.accent   ?? '#1a6b4a'
+  const highlight = theme?.colors?.highlight ?? '#4dffc3'
+  const text      = theme?.colors?.text      ?? '#ffffff'
 
   return (
-    <div className="min-h-screen bg-[#0d0d0d] flex flex-col items-center justify-center relative overflow-hidden">
-      <div className="flex flex-col items-center gap-5 px-8 w-full max-w-xs pb-16">
+    <div style={{
+      minHeight: '100dvh', background: bg,
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      padding: '2rem', fontFamily: 'DM Sans, sans-serif',
+    }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', textAlign: 'center', maxWidth: 320 }}>
 
-        {/* Headline */}
-        <p
-          className="text-[#f5f0e8] text-2xl font-bold text-center leading-snug"
-          style={{ fontFamily: "'Boogaloo', sans-serif" }}
+        {/* Logo */}
+        <img src="/baynes-logo.svg" alt="Baynes Apple Valley" style={{ height: 34, opacity: 0.65 }} />
+
+        {/* Checkmark */}
+        <motion.div
+          initial={pref ? { opacity: 0 } : { scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={pref
+            ? { duration: 0.25 }
+            : { type: 'spring', duration: 0.55, bounce: 0.35 }}
+          style={{
+            width: 72, height: 72, borderRadius: '50%',
+            background: `${accent}2e`, border: `2px solid ${accent}55`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '1.9rem', color: highlight,
+          }}
         >
-          Scan to join tonight's trivia
-        </p>
+          ✓
+        </motion.div>
 
-        {/* QR Code */}
-        <div className="rounded-2xl overflow-hidden p-3.5 bg-[#f5f0e8]">
-          {qrDataUrl ? (
-            <img src={qrDataUrl} alt="Scan to join trivia" width={208} height={208} className="block" />
-          ) : (
-            <div className="w-52 h-52 flex items-center justify-center">
-              <div className="w-7 h-7 rounded-full border-2 border-[#004000] border-t-transparent animate-spin" />
-            </div>
-          )}
-        </div>
-
-        {/* Live team count */}
-        <div className="flex items-baseline gap-2">
-          <span
-            className="text-[#60c000] text-5xl font-bold leading-none tabular-nums"
-            style={{ fontFamily: "'Boogaloo', sans-serif" }}
-          >
-            {teams.length}
-          </span>
-          <span className="text-[#f5f0e8]/50 text-base">
-            {teams.length === 1 ? 'team in' : 'teams in'}
-          </span>
-        </div>
-
-        {/* Registered team name */}
-        <div className="text-center">
-          <p className="text-[#f5f0e8]/30 text-xs uppercase tracking-wider mb-1">You're in as</p>
-          <p
-            className="text-[#f5f0e8] text-xl font-bold"
-            style={{ fontFamily: "'Boogaloo', sans-serif" }}
-          >
+        {/* Team name */}
+        <motion.div
+          initial={pref ? { opacity: 0 } : { y: 10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: pref ? 0 : 0.18, duration: 0.28, ease: EASE_SNAP }}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}
+        >
+          <p style={{ color: `${text}55`, fontSize: '0.7rem', margin: 0, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+            You&rsquo;re in as
+          </p>
+          <p style={{
+            fontFamily: 'Boogaloo, Anton, sans-serif',
+            fontSize: 'clamp(1.75rem, 8vw, 2.25rem)',
+            color: text, margin: 0, letterSpacing: '-0.01em',
+          }}>
             {teamName}
           </p>
-        </div>
+        </motion.div>
 
-        {show?.title && (
-          <p className="text-[#f5f0e8]/20 text-xs text-center">{show.title}</p>
-        )}
-      </div>
-
-      {/* Scrolling team name ticker */}
-      {tickerText && (
-        <div
-          className="absolute bottom-0 left-0 right-0 bg-[#004000] py-2.5 overflow-hidden"
-          aria-hidden="true"
+        {/* Waiting message */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: pref ? 0 : 0.32, duration: 0.35 }}
+          style={{ color: `${text}65`, fontSize: '1rem', margin: 0, lineHeight: 1.5 }}
         >
-          <div
-            className="ticker-track"
-            style={{ animationDuration: `${tickerDuration}s` }}
-          >
-            <span className="text-[#f5f0e8]/70 text-xs font-medium tracking-wide px-4">
-              {tickerText}{tickerText}
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+          Show starts soon 🍺
+        </motion.p>
 
-// --- SlideViewer ---
+        {/* Pulsing dot */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: pref ? 0 : 0.45, duration: 0.3 }}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+        >
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%', background: highlight, flexShrink: 0,
+            animation: 'breathePulse 2.2s ease-in-out infinite',
+            display: 'inline-block',
+          }} />
+          <span style={{ color: `${text}45`, fontSize: '0.8rem' }}>Waiting for Ben…</span>
+        </motion.div>
+      </div>
 
-function SlideViewer({ show, team, slides, viewedIndex, setViewedIndex,
-                       powerupUsed, onInvokePowerup, myScores, leaderboard }) {
-  const [showLeaderboard, setShowLeaderboard] = useState(false)
-  const prevRevealedRef = useRef(show?.scores_revealed ?? false)
-
-  // Auto-open leaderboard the first time scores are revealed this session
-  useEffect(() => {
-    if (show?.scores_revealed && !prevRevealedRef.current) {
-      setShowLeaderboard(true)
-    }
-    prevRevealedRef.current = show?.scores_revealed ?? false
-  }, [show?.scores_revealed])
-
-  const totalScore = myScores.reduce((sum, s) => sum + (s.score || 0), 0)
-  const powerup = show.powerups?.[0] ?? null
-
-  const hostIndex = show?.current_slide_index ?? 0
-  const canGoForward = viewedIndex < hostIndex
-  const canGoBack = viewedIndex > 0
-  const currentSlide = slides[viewedIndex]
-
-  async function handleBack() {
-    if (!canGoBack) return
-    setViewedIndex(v => v - 1)
-    if (team) {
-      await supabase.from('teams').update({
-        last_action: 'went_back',
-        last_action_at: new Date().toISOString(),
-      }).eq('id', team.id)
-    }
-  }
-
-  async function handleForwardBlocked() {
-    if (team) {
-      await supabase.from('teams').update({
-        last_action: 'tried_to_advance',
-        last_action_at: new Date().toISOString(),
-      }).eq('id', team.id)
-    }
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-950 flex flex-col relative">
-      {/* Leaderboard overlay */}
-      {showLeaderboard && leaderboard && (
-        <LeaderboardOverlay
-          leaderboard={leaderboard}
-          myTeamId={team?.id}
-          onClose={() => setShowLeaderboard(false)}
-        />
-      )}
-
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-safe pb-3 pt-4 border-b border-white/10 shrink-0">
-        <span className="text-white/50 text-xs font-medium truncate mr-3">
-          {team?.name ?? 'Team'}
+      {/* Score bar */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        padding: '0.875rem 1.5rem calc(0.875rem + env(safe-area-inset-bottom, 0px))',
+        background: `${bg}e8`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      }}>
+        <span style={{ color: `${text}45`, fontSize: '0.8rem' }}>Your score</span>
+        <span style={{ fontFamily: 'Boogaloo, Anton, sans-serif', color: `${text}45`, fontSize: '1rem' }}>
+          {myScore > 0 ? `${myScore} pts` : '—'}
         </span>
-        <div className="flex items-center gap-3 shrink-0">
-          {leaderboard && (
-            <button
-              onClick={() => setShowLeaderboard(true)}
-              className="text-yellow-400 text-xs font-semibold px-2 py-1 rounded-lg bg-yellow-400/10 active:bg-yellow-400/20 transition-colors"
-            >
-              🏆 Scores
-            </button>
-          )}
-          <span className="text-white/30 text-xs">
-            {currentSlide ? `${viewedIndex + 1} / ${slides.length}` : '—'}
-          </span>
-        </div>
-      </div>
-
-      {/* Slide content */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        {currentSlide ? (
-          <SlideContent slide={currentSlide} show={show} />
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-white/30 text-sm">No slide</p>
-          </div>
-        )}
-      </div>
-
-      {/* Bottom bar: score + powerup + nav */}
-      <div className="border-t border-white/10 shrink-0">
-        {/* Powerup + score row */}
-        {(powerup || totalScore > 0) && (
-          <div className="px-6 pt-3 pb-1 space-y-2">
-            {powerup && (
-              <PowerupButton
-                powerup={powerup}
-                used={powerupUsed}
-                onInvoke={onInvokePowerup}
-              />
-            )}
-            {totalScore > 0 && (
-              <div className="flex items-center justify-between">
-                <span className="text-white/30 text-xs">Your score</span>
-                <span
-                  className="text-[#60c000] font-bold text-sm tabular-nums"
-                  style={{ fontFamily: "'Boogaloo', sans-serif" }}
-                >
-                  {totalScore} pts
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Navigation */}
-        <div className="flex items-center justify-between px-6 py-4 pb-safe gap-4">
-          <button
-            onClick={handleBack}
-            disabled={!canGoBack}
-            className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-colors ${
-              canGoBack
-                ? 'bg-white/10 text-white active:bg-white/20'
-                : 'bg-white/5 text-white/20 cursor-not-allowed'
-            }`}
-          >
-            ← Back
-          </button>
-          <button
-            onClick={canGoForward ? () => setViewedIndex(v => v + 1) : handleForwardBlocked}
-            disabled={!canGoForward}
-            className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-colors ${
-              canGoForward
-                ? 'bg-white text-gray-900 active:bg-white/90'
-                : 'bg-white/5 text-white/20 cursor-not-allowed'
-            }`}
-          >
-            {canGoForward ? 'Next →' : 'Wait →'}
-          </button>
-        </div>
       </div>
     </div>
   )
 }
 
-// --- SlideContent ---
-
-function SlideContent({ slide, show }) {
-  const roundName = show?.rounds?.find(r => r.id === slide.roundId)?.title ?? null
+// ─── Slide content ────────────────────────────────────────────────────────────
+function SlideContent({ slide, show, theme }) {
+  if (!slide) return null
+  const text      = theme?.colors?.text      ?? '#ffffff'
+  const accent    = theme?.colors?.accent   ?? '#1a6b4a'
+  const highlight = theme?.colors?.highlight ?? '#4dffc3'
+  const round     = show?.rounds?.find(r => r.id === slide.roundId) ?? null
 
   switch (slide.type) {
     case 'question':
       return (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            {roundName && (
-              <span className="text-white/40 text-xs font-medium uppercase tracking-wider">
-                {roundName}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {round?.title && (
+              <span style={{ color: `${text}55`, fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                {round.title}
               </span>
             )}
             {slide.data.questionLabel && (
-              <span className="bg-white/10 text-white/70 text-xs font-bold px-2 py-0.5 rounded">
+              <span style={{ background: accent, color: '#fff', fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.55rem', borderRadius: 6, letterSpacing: '0.03em' }}>
                 {slide.data.questionLabel}
               </span>
             )}
             {slide.data.isShiny && (
-              <span className="text-yellow-400 text-xs">✨ Shiny</span>
+              <span style={{ color: '#f5c842', fontSize: '0.8rem' }}>✨</span>
             )}
           </div>
+
           {slide.data.isSeries && slide.data.seriesTheme && (
-            <p className="text-white/50 text-xs font-medium uppercase tracking-widest">
-              {slide.data.seriesTheme}
-            </p>
+            <div style={{
+              background: `${accent}2a`, border: `1px solid ${accent}44`,
+              borderRadius: 8, padding: '0.3rem 0.65rem',
+              display: 'inline-flex', alignSelf: 'flex-start',
+            }}>
+              <span style={{ color: highlight, fontSize: '0.8rem', fontWeight: 600 }}>{slide.data.seriesTheme}</span>
+            </div>
           )}
-          <p className="text-white text-xl font-medium leading-relaxed">
-            {slide.data.text || <span className="text-white/30 italic">No question text</span>}
+
+          <p style={{
+            color: text, fontSize: 'clamp(1.15rem, 4.5vw, 1.35rem)',
+            lineHeight: 1.55, margin: 0, fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
+          }}>
+            {slide.data.text || <span style={{ opacity: 0.3, fontStyle: 'italic' }}>No question text</span>}
           </p>
+
           {slide.data.mediaUrl && slide.data.mediaType?.startsWith('image/') && (
-            <img
-              src={slide.data.mediaUrl}
-              alt="Question media"
-              className="w-full rounded-xl object-cover max-h-56"
-            />
+            <img src={slide.data.mediaUrl} alt="Question media"
+              style={{ width: '100%', borderRadius: 10, objectFit: 'cover', maxHeight: 220 }} />
           )}
           {slide.data.mediaUrl && slide.data.mediaType?.startsWith('audio/') && (
-            <div className="bg-white/5 rounded-xl p-4 text-center">
-              <p className="text-white/50 text-sm">🎵 Audio question — listen on the main screen</p>
+            <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: '0.75rem 1rem', textAlign: 'center' }}>
+              <p style={{ color: `${text}55`, fontSize: '0.875rem', margin: 0 }}>🎵 Listen on the main screen</p>
             </div>
           )}
         </div>
@@ -473,61 +364,74 @@ function SlideContent({ slide, show }) {
 
     case 'round-intro':
       return (
-        <div className="space-y-3 pt-8">
-          <p className="text-white/40 text-sm uppercase tracking-widest">Round {slide.data.roundNumber}</p>
-          <h2 className="text-white text-3xl font-bold">{slide.data.roundTitle}</h2>
+        <motion.div
+          initial={false}
+          animate={{ opacity: 1 }}
+          style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingTop: '2.5rem', textAlign: 'center' }}
+        >
+          <p style={{ color: `${text}45`, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.12em', margin: 0 }}>
+            Round {slide.data.roundNumber}
+          </p>
+          <h2 style={{
+            fontFamily: 'Boogaloo, Anton, sans-serif',
+            fontSize: 'clamp(1.9rem, 9vw, 2.5rem)',
+            color: text, margin: 0, letterSpacing: '-0.02em', lineHeight: 1.1,
+          }}>
+            {slide.data.roundTitle}
+          </h2>
           {slide.data.subtitle && (
-            <p className="text-white/60 text-lg italic">{slide.data.subtitle}</p>
+            <p style={{ color: `${text}55`, fontSize: '1rem', margin: 0, fontStyle: 'italic' }}>{slide.data.subtitle}</p>
           )}
-        </div>
+        </motion.div>
       )
 
     case 'grading-break':
       return (
-        <div className="pt-8 text-center space-y-4">
-          <div className="text-4xl">☕</div>
-          <p className="text-white text-lg font-medium">
-            {slide.data.message || 'Grading break — sit back and relax!'}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem', paddingTop: '2.5rem', textAlign: 'center' }}>
+          <span style={{ fontSize: '2.5rem' }}>✏️</span>
+          <p style={{ color: text, fontSize: '1.1rem', margin: 0, lineHeight: 1.6, fontFamily: 'DM Sans, sans-serif' }}>
+            {slide.data.message || 'Ben is grading papers… hang tight 😊'}
           </p>
         </div>
       )
 
     case 'scoreboard-reveal':
       return (
-        <div className="pt-8 text-center space-y-3">
-          <div className="text-4xl">🏆</div>
-          <h2 className="text-white text-2xl font-bold">
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', paddingTop: '2.5rem', textAlign: 'center' }}>
+          <span style={{ fontSize: '2.5rem' }}>🏆</span>
+          <h2 style={{ fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '1.75rem', color: text, margin: 0 }}>
             {slide.data.title || 'Leaderboard'}
           </h2>
-          <p className="text-white/40 text-sm">Scores will appear when revealed</p>
+          <p style={{ color: `${text}45`, fontSize: '0.875rem', margin: 0 }}>
+            Tap Scores below to see where you stand
+          </p>
         </div>
       )
 
     case 'title':
       return (
-        <div className="pt-8 text-center space-y-2">
-          <h1 className="text-white text-3xl font-bold">{slide.data.title || 'Trivia Night'}</h1>
+        <div style={{ paddingTop: '2.5rem', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <h1 style={{ fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: 'clamp(2rem, 9vw, 2.5rem)', color: text, margin: 0, letterSpacing: '-0.02em' }}>
+            {slide.data.title || 'Trivia Night'}
+          </h1>
           {slide.data.subtitle && (
-            <p className="text-white/60 text-lg">{slide.data.subtitle}</p>
+            <p style={{ color: `${text}55`, fontSize: '1.1rem', margin: 0 }}>{slide.data.subtitle}</p>
           )}
         </div>
       )
 
     case 'multi-question':
       return (
-        <div className="space-y-4">
-          {roundName && (
-            <p className="text-white/40 text-xs font-medium uppercase tracking-wider">{roundName}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {round?.title && (
+            <p style={{ color: `${text}45`, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>{round.title}</p>
           )}
-          <h3 className="text-white text-lg font-semibold">
+          <h3 style={{ color: text, fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>
             {slide.data.title || 'Questions'}
           </h3>
-          <ol className="space-y-3">
+          <ol style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {(slide.data.questions ?? []).map((q, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="text-white/40 font-bold shrink-0">{i + 1}.</span>
-                <span className="text-white">{q.text}</span>
-              </li>
+              <li key={i} style={{ color: text, fontSize: '1rem', lineHeight: 1.5 }}>{q.text}</li>
             ))}
           </ol>
         </div>
@@ -535,225 +439,495 @@ function SlideContent({ slide, show }) {
 
     default:
       return (
-        <div className="pt-8 text-center">
-          <p className="text-white/50 text-sm capitalize">{slide.type.replace(/-/g, ' ')}</p>
+        <div style={{ paddingTop: '2.5rem', textAlign: 'center' }}>
+          <p style={{ color: `${text}35`, fontSize: '0.875rem' }}>{slide.type.replace(/-/g, ' ')}</p>
         </div>
       )
   }
 }
 
-// --- RegistrationScreen ---
-
-function RegistrationScreen({ onRegister, show, loading }) {
-  const [name, setName] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState(null)
-  const inputRef = useRef(null)
-
-  useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 100)
-  }, [])
-
-  async function handleSubmit(e) {
-    e.preventDefault()
-    const trimmed = name.trim()
-    if (!trimmed) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      await onRegister(trimmed)
-    } catch (err) {
-      setError(err.message)
-      setSubmitting(false)
-    }
-  }
+// ─── Scoreboard sheet ─────────────────────────────────────────────────────────
+function ScoreboardSheet({ leaderboard, myTeamId, onClose, theme }) {
+  const pref      = useReducedMotion()
+  const text      = theme?.colors?.text      ?? '#ffffff'
+  const accent    = theme?.colors?.accent   ?? '#1a6b4a'
+  const highlight = theme?.colors?.highlight ?? '#4dffc3'
+  const bg        = theme?.colors?.bg       ?? '#050505'
+  const maxScore  = leaderboard.length > 0 ? Math.max(...leaderboard.map(t => t.total)) : 1
 
   return (
-    <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-white/10 mx-auto mb-4 flex items-center justify-center">
-            <span className="text-2xl">🍺</span>
-          </div>
-          <h1 className="text-white text-2xl font-bold">Baynes Trivia</h1>
-          {show?.title && (
-            <p className="text-white/40 text-sm mt-1">{show.title}</p>
-          )}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(0,0,0,0.6)', zIndex: 400,
+        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+      }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={pref ? { opacity: 0 } : { y: '100%' }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={pref ? { opacity: 0 } : { y: '100%' }}
+        transition={pref
+          ? { duration: 0.22 }
+          : { ease: EASE_DRAWER, duration: 0.32 }}
+        drag={pref ? false : 'y'}
+        dragConstraints={{ top: 0 }}
+        dragElastic={{ top: 0.05, bottom: 0.4 }}
+        onDragEnd={(_, info) => {
+          if (info.velocity.y > 300 || info.offset.y > 120) onClose()
+        }}
+        style={{
+          background: `color-mix(in srgb, ${bg} 93%, #000 7%)`,
+          borderRadius: '20px 20px 0 0',
+          height: '72dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          cursor: 'grab',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Handle */}
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '0.75rem 0 0' }}>
+          <div style={{ width: 32, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.22)' }} />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-white/60 text-xs font-medium mb-2 uppercase tracking-wider">
-              Team Name
-            </label>
-            <input
-              ref={inputRef}
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Quiz Khalifa"
-              maxLength={40}
-              autoComplete="off"
-              autoCapitalize="words"
-              className="w-full bg-white/10 text-white text-lg font-medium px-4 py-4 rounded-xl border border-white/10 placeholder:text-white/20 focus:outline-none focus:border-white/30 focus:bg-white/15 transition-all"
-            />
-          </div>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.25rem' }}>
+          <h2 style={{ fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '1.5rem', color: text, margin: 0, letterSpacing: '-0.01em' }}>
+            🏆 Leaderboard
+          </h2>
           <button
-            type="submit"
-            disabled={!name.trim() || submitting || loading}
-            className="w-full bg-white text-gray-900 font-bold text-base py-4 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-opacity active:scale-95"
-          >
-            {submitting ? 'Joining…' : "Let's Go"}
-          </button>
-        </form>
+            onClick={onClose}
+            style={{
+              background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 8,
+              color: `${text}65`, fontSize: '0.85rem', cursor: 'pointer',
+              minHeight: 44, minWidth: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'DM Sans, sans-serif', WebkitTapHighlightColor: 'transparent',
+            }}
+          >✕</button>
+        </div>
 
-        <p className="text-white/20 text-xs text-center mt-6">
-          Have fun, and don't yell at me, I'm not a professional trivia writer! lol
-        </p>
-      </div>
-    </div>
+        {/* Rows */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0.25rem 1rem calc(1.5rem + env(safe-area-inset-bottom, 0px))', display: 'flex', flexDirection: 'column', gap: '0.5rem', cursor: 'default' }}>
+          {leaderboard.length === 0
+            ? <p style={{ color: `${text}30`, textAlign: 'center', fontSize: '0.875rem', paddingTop: '2rem' }}>No scores yet</p>
+            : leaderboard.map((team, i) => {
+                const isMe    = team.id === myTeamId
+                const medal   = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
+                const barPct  = maxScore > 0 ? Math.max(4, (team.total / maxScore) * 100) : 4
+
+                return (
+                  <motion.div
+                    key={team.id}
+                    initial={pref ? { opacity: 0 } : { y: 12, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: pref ? 0 : 0.055 * i, duration: 0.22, ease: EASE_SNAP }}
+                    style={{
+                      borderRadius: 10, padding: '0.75rem 0.875rem',
+                      background: isMe ? `${accent}25` : 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${isMe ? `${accent}50` : 'transparent'}`,
+                      position: 'relative', overflow: 'hidden',
+                    }}
+                  >
+                    {/* Score bar — scaleX is GPU-composited, width is not */}
+                    <motion.div
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: barPct / 100 }}
+                      transition={{ delay: pref ? 0 : 0.055 * i + 0.12, duration: 0.48, ease: [0.4, 0, 0.2, 1] }}
+                      style={{
+                        position: 'absolute', bottom: 0, left: 0, height: 2, width: '100%',
+                        transformOrigin: 'left center',
+                        background: isMe ? highlight : `${text}28`,
+                        borderRadius: '0 2px 2px 0',
+                        willChange: 'transform',
+                      }}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'relative' }}>
+                      <span style={{ fontSize: '1.05rem', width: 24, textAlign: 'center', flexShrink: 0 }}>
+                        {medal ?? <span style={{ color: `${text}30`, fontSize: '0.8rem', fontWeight: 700 }}>{i + 1}</span>}
+                      </span>
+                      <span style={{
+                        flex: 1, color: isMe ? text : `${text}65`,
+                        fontSize: '0.9375rem', fontWeight: isMe ? 600 : 400,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        fontFamily: 'DM Sans, sans-serif',
+                      }}>
+                        {team.name.length > 22 ? `${team.name.slice(0, 21)}…` : team.name}
+                        {isMe && <span style={{ color: `${text}35`, fontSize: '0.72rem', fontWeight: 400, marginLeft: '0.4rem' }}>← you</span>}
+                      </span>
+                      <span style={{
+                        fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '1.05rem', flexShrink: 0,
+                        color: i === 0 ? '#f5c842' : isMe ? highlight : `${text}60`,
+                      }}>
+                        {team.total}
+                      </span>
+                    </div>
+                  </motion.div>
+                )
+              })
+          }
+        </div>
+      </motion.div>
+    </motion.div>
   )
 }
 
-// --- Main component ---
+// ─── Reconnecting banner ──────────────────────────────────────────────────────
+function ReconnectingBanner({ visible }) {
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          initial={{ y: -44, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -44, opacity: 0 }}
+          transition={{ duration: 0.2, ease: EASE_SNAP }}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 500,
+            background: 'rgba(255,195,50,0.93)', color: '#1a1000',
+            fontSize: '0.8rem', fontWeight: 600, textAlign: 'center',
+            padding: '0.55rem', fontFamily: 'DM Sans, sans-serif',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          Reconnecting…
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
 
-export default function Join() {
-  const [searchParams] = useSearchParams()
-  const showId = searchParams.get('show')
+// ─── Live view ────────────────────────────────────────────────────────────────
+function LiveView({ show, team, powerupUsed, onInvokePowerup, myScores, leaderboard, theme }) {
+  const [showScoreboard, setShowScoreboard]   = useState(false)
+  const [viewedIndex, setViewedIndex]         = useState(show?.current_slide_index ?? 0)
+  const [powerupConfirming, setPowerupConfirming] = useState(false)
+  const pref = useReducedMotion()
+  const prevRevealedRef = useRef(show?.scores_revealed ?? false)
 
-  const [show, setShow] = useState(null)
-  const [showLoading, setShowLoading] = useState(true)
-  const [team, setTeam] = useState(null)
-  const [viewedIndex, setViewedIndex] = useState(0)
-  const [registering, setRegistering] = useState(false)
+  const bg        = theme?.colors?.bg       ?? '#050505'
+  const accent    = theme?.colors?.accent   ?? '#1a6b4a'
+  const highlight = theme?.colors?.highlight ?? '#4dffc3'
+  const text      = theme?.colors?.text      ?? '#ffffff'
 
-  // Step 8: powerup + scoring state
-  const [powerupUsed, setPowerupUsed] = useState(false)
-  const [myScores, setMyScores] = useState([])
-  const [leaderboard, setLeaderboard] = useState(null)
-
-  // Load show and restore team from localStorage
+  // Auto-open scoreboard on first scores reveal
   useEffect(() => {
-    if (!showId) { setShowLoading(false); return }
+    if (show?.scores_revealed && !prevRevealedRef.current) setShowScoreboard(true)
+    prevRevealedRef.current = show?.scores_revealed ?? false
+  }, [show?.scores_revealed])
 
-    async function init() {
-      let targetId = showId
-      if (showId === 'live') {
-        const { data } = await supabase.from('shows').select('*').eq('is_live', true).single()
-        if (data) { targetId = data.id; setShow(data) }
-        setShowLoading(false)
-        // Fall through so we still restore the stored team using the real show ID
-        if (!targetId || targetId === 'live') return
-      } else {
-        const { data } = await supabase.from('shows').select('*').eq('id', targetId).single()
-        if (data) setShow(data)
-        setShowLoading(false)
-      }
-
-      const storedTeam = loadStoredTeam(targetId)
-      if (storedTeam) setTeam(storedTeam)
-    }
-
-    init()
-  }, [showId])
-
-  // Subscribe to show updates — keyed to show.id so it works whether we loaded
-  // via an explicit ?show=ID param or via the ?show=live fallback.
-  useEffect(() => {
-    if (!show?.id) return
-    const channel = supabase
-      .channel(`join-show:${show.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'shows', filter: `id=eq.${show.id}` },
-        (payload) => { setShow(payload.new) }
-      )
-      .subscribe()
-    return () => supabase.removeChannel(channel)
-  }, [show?.id])
-
-  // Keep viewedIndex capped at host's current position
+  // Keep viewedIndex ≤ host's position
   useEffect(() => {
     const hostIndex = show?.current_slide_index ?? 0
     setViewedIndex(prev => Math.min(prev, hostIndex))
   }, [show?.current_slide_index])
 
-  // Load powerup state when team is set (covers localStorage restore)
+  const slides = useMemo(
+    () => (show?.slides ?? []).slice().sort((a, b) => a.order - b.order),
+    [show?.slides]
+  )
+  const currentSlide  = slides[viewedIndex] ?? null
+  const canGoBack     = viewedIndex > 0
+  const totalScore    = myScores.reduce((sum, s) => sum + (s.score || 0), 0)
+  const scoreboardOn  = (show?.scoreboard_visible ?? false) && leaderboard
+  const powerup       = show?.powerups?.[0] ?? null
+
+  // Top bar content
+  let topLeft = '', topRight = ''
+  if (currentSlide?.type === 'question') {
+    const r = show?.rounds?.find(rd => rd.id === currentSlide.roundId)
+    topLeft  = r?.title ?? ''
+    topRight = currentSlide.data.questionLabel ?? ''
+  } else if (currentSlide?.type === 'round-intro') {
+    topLeft = currentSlide.data.roundTitle ?? ''
+  }
+
+  async function handleBack() {
+    if (!canGoBack) return
+    setViewedIndex(v => v - 1)
+    if (team?.id) {
+      await supabase.from('teams').update({ last_action: 'went_back', last_action_at: new Date().toISOString() }).eq('id', team.id)
+    }
+  }
+
+  return (
+    <div style={{ minHeight: '100dvh', background: bg, display: 'flex', flexDirection: 'column', fontFamily: 'DM Sans, sans-serif' }}>
+
+      {/* Scoreboard sheet */}
+      <AnimatePresence>
+        {showScoreboard && leaderboard && (
+          <ScoreboardSheet
+            leaderboard={leaderboard}
+            myTeamId={team?.id}
+            onClose={() => setShowScoreboard(false)}
+            theme={theme}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* TOP BAR — paddingTop accounts for Dynamic Island / notch when viewport-fit=cover */}
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200,
+        background: `${bg}e8`, backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingLeft: '1rem', paddingRight: '1rem',
+        minHeight: 56,
+      }}>
+        <span style={{
+          color: `${accent}cc`, fontSize: '0.8rem', fontWeight: 600,
+          maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {topLeft}
+        </span>
+        <span style={{ color: accent, fontSize: '0.8rem', fontWeight: 700, flexShrink: 0 }}>
+          {topRight}
+        </span>
+      </div>
+
+      {/* SCROLLABLE CONTENT */}
+      <div style={{ flex: 1, padding: 'calc(4.5rem + env(safe-area-inset-top, 0px)) 1.25rem 5.75rem', overflowY: 'auto' }}>
+        <SlideContent slide={currentSlide} show={show} theme={theme} />
+
+        {/* Back navigation */}
+        {canGoBack && (
+          <button
+            onClick={handleBack}
+            onPointerDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
+            onPointerUp={e   => e.currentTarget.style.transform = 'scale(1)'}
+            onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+            style={{
+              marginTop: '2rem', background: 'rgba(255,255,255,0.07)',
+              border: 'none', borderRadius: 10, color: `${text}65`,
+              fontSize: '0.875rem', fontWeight: 500, padding: '0.65rem 1rem',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
+              minHeight: 44, WebkitTapHighlightColor: 'transparent',
+              fontFamily: 'DM Sans, sans-serif',
+              transition: 'transform 120ms ease',
+            }}
+          >
+            ← Back
+          </button>
+        )}
+      </div>
+
+      {/* BOTTOM BAR */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0, height: 'auto', zIndex: 200,
+        background: `${bg}f0`, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        borderTop: '1px solid rgba(255,255,255,0.07)',
+        display: 'flex', alignItems: 'center',
+        padding: `0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px))`,
+        gap: '0.5rem', minHeight: 64,
+      }}>
+        {/* Score */}
+        <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 60 }}>
+          <span style={{ color: `${text}45`, fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.08em', lineHeight: 1 }}>Score</span>
+          <span style={{ fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '1.15rem', lineHeight: 1.25, color: totalScore > 0 ? highlight : `${text}35` }}>
+            {totalScore > 0 ? `${totalScore} pts` : '—'}
+          </span>
+        </div>
+
+        {/* Scoreboard pill */}
+        <button
+          onClick={() => scoreboardOn && setShowScoreboard(true)}
+          disabled={!scoreboardOn}
+          onPointerDown={e => { if (scoreboardOn) e.currentTarget.style.transform = 'scale(0.97)' }}
+          onPointerUp={e   => { e.currentTarget.style.transform = 'scale(1)' }}
+          onPointerLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+          style={{
+            flex: 1, height: 44, borderRadius: 10,
+            background: scoreboardOn ? `${accent}30` : 'rgba(255,255,255,0.05)',
+            border: `1px solid ${scoreboardOn ? `${accent}50` : 'rgba(255,255,255,0.08)'}`,
+            color: scoreboardOn ? highlight : `${text}28`,
+            fontSize: '0.85rem', fontWeight: 600,
+            cursor: scoreboardOn ? 'pointer' : 'default',
+            opacity: scoreboardOn ? 1 : 0.5,
+            transition: 'transform 120ms ease',
+            fontFamily: 'DM Sans, sans-serif',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          🏆 Scores
+        </button>
+
+        {/* Powerup */}
+        {powerup && (
+          <div style={{ flex: '0 0 auto', position: 'relative' }}>
+            {/* Confirm popover */}
+            <AnimatePresence>
+              {powerupConfirming && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                  transition={{ duration: 0.16, ease: EASE_SNAP }}
+                  style={{
+                    position: 'absolute', bottom: 52, right: 0, width: 224,
+                    background: `color-mix(in srgb, ${bg} 95%, #fff 5%)`,
+                    border: '1px solid rgba(255,255,255,0.14)',
+                    borderRadius: 14, padding: '0.875rem', zIndex: 300,
+                    boxShadow: '0 -8px 32px rgba(0,0,0,0.55)',
+                    fontFamily: 'DM Sans, sans-serif',
+                  }}
+                >
+                  <p style={{ color: text, fontSize: '0.875rem', fontWeight: 600, margin: '0 0 0.25rem' }}>
+                    Use {powerup.icon} {powerup.name}?
+                  </p>
+                  <p style={{ color: `${text}55`, fontSize: '0.775rem', lineHeight: 1.5, margin: '0 0 0.75rem' }}>
+                    {powerup.description} This can&apos;t be undone.
+                  </p>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      onClick={() => setPowerupConfirming(false)}
+                      style={{ flex: 1, padding: '0.55rem', borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: 'none', color: `${text}65`, fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', minHeight: 44, fontFamily: 'DM Sans, sans-serif' }}
+                    >Cancel</button>
+                    <button
+                      onClick={async () => { await onInvokePowerup(); setPowerupConfirming(false) }}
+                      style={{ flex: 1, padding: '0.55rem', borderRadius: 8, background: '#e02020', border: 'none', color: '#fff', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', minHeight: 44, fontFamily: 'DM Sans, sans-serif' }}
+                    >{powerup.icon} Use it!</button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <button
+              onClick={() => !powerupUsed && setPowerupConfirming(c => !c)}
+              style={{
+                height: 44, minWidth: 44, borderRadius: 10, padding: '0 0.6rem',
+                background: powerupUsed ? 'rgba(255,255,255,0.04)' : `${accent}20`,
+                border: `1px solid ${powerupUsed ? 'rgba(255,255,255,0.08)' : `${accent}40`}`,
+                color: powerupUsed ? `${text}22` : highlight,
+                fontSize: '1.1rem', cursor: powerupUsed ? 'default' : 'pointer',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                lineHeight: 1, WebkitTapHighlightColor: 'transparent',
+              }}
+              title={powerupUsed ? 'Used' : `Use ${powerup.name}`}
+            >
+              <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>{powerup.icon}</span>
+              {powerupUsed && <span style={{ fontSize: '0.6rem', color: `${text}40`, lineHeight: 1, marginTop: 2 }}>Used ✓</span>}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+export default function Join() {
+  const [searchParams] = useSearchParams()
+  const showParam = searchParams.get('show')
+
+  const [phase, setPhase]         = useState('loading')
+  const [show, setShow]           = useState(null)
+  const [team, setTeam]           = useState(null)
+  const [powerupUsed, setPowerupUsed] = useState(false)
+  const [myScores, setMyScores]   = useState([])
+  const [leaderboard, setLeaderboard] = useState(null)
+  const [connStatus, setConnStatus]   = useState('SUBSCRIBED')
+
+  const theme = useMemo(() => show?.theme_id ? getTheme(show.theme_id) : null, [show?.theme_id])
+
+  // ── Mount: fetch show + restore session ───────────────────────────────
+  useEffect(() => {
+    if (!showParam) { setPhase('no-show'); return }
+
+    async function init() {
+      try {
+        let fetchedShow = null
+        if (showParam === 'live') {
+          const { data } = await supabase.from('shows').select('*').eq('is_live', true).single()
+          fetchedShow = data
+        } else {
+          const { data } = await supabase.from('shows').select('*').eq('id', showParam).single()
+          fetchedShow = data
+        }
+        if (!fetchedShow) { setPhase('no-show'); return }
+        setShow(fetchedShow)
+
+        // Session restore — verify team still exists
+        const stored = loadStoredTeam(fetchedShow.id)
+        if (stored?.id) {
+          const { data: teamRow } = await supabase.from('teams').select('id, name, color, powerup_used').eq('id', stored.id).single()
+          if (teamRow) {
+            setTeam({ ...stored, ...teamRow })
+            setPowerupUsed(teamRow.powerup_used ?? false)
+            setPhase(fetchedShow.is_live ? 'live' : 'waiting')
+            return
+          }
+        }
+        setPhase('register')
+      } catch {
+        setPhase('register')
+      }
+    }
+
+    init()
+  }, [showParam])
+
+  // ── Subscribe to show updates ─────────────────────────────────────────
+  useEffect(() => {
+    if (!show?.id) return
+    const channel = supabase
+      .channel(`join-show:${show.id}`)
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'shows', filter: `id=eq.${show.id}` },
+        (payload) => {
+          setShow(payload.new)
+          if (payload.new.is_live) setPhase(prev => prev === 'waiting' ? 'live' : prev)
+        }
+      )
+      .subscribe(status => setConnStatus(status))
+    return () => supabase.removeChannel(channel)
+  }, [show?.id])
+
+  // ── Keep viewedIndex ≤ host (handled inside LiveView) ─────────────────
+  // ── Team scores subscription ──────────────────────────────────────────
   useEffect(() => {
     if (!team?.id) return
-    supabase
-      .from('teams')
-      .select('powerup_used')
-      .eq('id', team.id)
-      .single()
-      .then(({ data }) => { if (data) setPowerupUsed(data.powerup_used ?? false) })
-  }, [team?.id])
-
-  // Load + subscribe to this team's round scores
-  useEffect(() => {
-    if (!team?.id) return
-
-    supabase
-      .from('team_scores')
-      .select('round_index, score')
-      .eq('team_id', team.id)
+    supabase.from('team_scores').select('round_index, score').eq('team_id', team.id)
       .then(({ data }) => { if (data) setMyScores(data) })
-
     const channel = supabase
       .channel(`my-scores:${team.id}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'team_scores',
-        filter: `team_id=eq.${team.id}`,
-      }, (payload) => {
-        if (payload.eventType !== 'DELETE') {
-          setMyScores(prev => {
-            const rest = prev.filter(s => s.round_index !== payload.new.round_index)
-            return [...rest, { round_index: payload.new.round_index, score: payload.new.score }]
-          })
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'team_scores', filter: `team_id=eq.${team.id}` },
+        (payload) => {
+          if (payload.eventType !== 'DELETE') {
+            setMyScores(prev => {
+              const rest = prev.filter(s => s.round_index !== payload.new.round_index)
+              return [...rest, { round_index: payload.new.round_index, score: payload.new.score }]
+            })
+          }
         }
-      })
+      )
       .subscribe()
-
     return () => supabase.removeChannel(channel)
   }, [team?.id])
 
-  // Build leaderboard when host reveals scores
+  // ── Leaderboard ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!show?.scores_revealed) {
-      setLeaderboard(null)
-      return
-    }
-
-    const actualShowId = show?.id ?? showId
-    if (!actualShowId) return
-
-    async function loadLeaderboard() {
+    if (!show?.scores_revealed || !show?.id) { setLeaderboard(null); return }
+    async function load() {
       const [{ data: teams }, { data: scores }] = await Promise.all([
-        supabase.from('teams').select('id, name, color').eq('show_id', actualShowId).order('registered_at'),
-        supabase.from('team_scores').select('team_id, score').eq('show_id', actualShowId),
+        supabase.from('teams').select('id, name, color').eq('show_id', show.id).order('registered_at'),
+        supabase.from('team_scores').select('team_id, score').eq('show_id', show.id),
       ])
-
       const built = (teams ?? [])
-        .map(t => ({
-          ...t,
-          total: (scores ?? [])
-            .filter(s => s.team_id === t.id)
-            .reduce((sum, s) => sum + (s.score || 0), 0),
-        }))
+        .map(t => ({ ...t, total: (scores ?? []).filter(s => s.team_id === t.id).reduce((sum, s) => sum + (s.score || 0), 0) }))
         .sort((a, b) => b.total - a.total)
-
       setLeaderboard(built)
     }
+    load()
+  }, [show?.scores_revealed, show?.id])
 
-    loadLeaderboard()
-  }, [show?.scores_revealed, show?.id, showId])
-
-  // Track when team leaves the app
+  // ── visibilitychange ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!team) return
+    if (!team?.id) return
     function handleVisibility() {
       supabase.from('teams').update({
         is_connected: !document.hidden,
@@ -765,37 +939,25 @@ export default function Join() {
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [team?.id])
 
+  // ── Register ──────────────────────────────────────────────────────────
   async function handleRegister(name) {
-    setRegistering(true)
-    // Always use show.id — the URL param may be 'live' which is not a real show_id
     const actualShowId = show.id
-    const { data: existing } = await supabase
-      .from('teams')
-      .select('id')
-      .eq('show_id', actualShowId)
-      .ilike('name', name)
-      .single()
-    if (existing) throw new Error('That name is taken — try something else!')
+    const { data: existing } = await supabase.from('teams').select('id').eq('show_id', actualShowId).ilike('name', name).single()
+    if (existing) throw new Error("That name's taken — try another")
 
-    const color = TEAM_COLORS[Math.floor(Math.random() * TEAM_COLORS.length)]
+    const color  = TEAM_COLORS[Math.floor(Math.random() * TEAM_COLORS.length)]
     const teamId = `team_${nanoid(8)}`
-    const { error } = await supabase.from('teams').insert({
-      id: teamId,
-      show_id: actualShowId,
-      name,
-      color,
-      is_connected: true,
-      powerup_used: false,
-    })
+    const { error } = await supabase.from('teams').insert({ id: teamId, show_id: actualShowId, name, color, is_connected: true, powerup_used: false })
     if (error) throw new Error(error.message)
 
     const newTeam = { id: teamId, name, color, showId: actualShowId }
     setTeam(newTeam)
     saveStoredTeam(actualShowId, newTeam)
     setPowerupUsed(false)
-    setRegistering(false)
+    setPhase(show.is_live ? 'live' : 'waiting')
   }
 
+  // ── Powerup ───────────────────────────────────────────────────────────
   async function handleInvokePowerup() {
     if (!team?.id) return
     const { error } = await supabase.from('teams').update({
@@ -807,63 +969,39 @@ export default function Join() {
     if (!error) setPowerupUsed(true)
   }
 
-  // --- Render ---
+  // ── Render ────────────────────────────────────────────────────────────
+  const totalScore = myScores.reduce((sum, s) => sum + (s.score || 0), 0)
+  const disconnected = connStatus === 'CHANNEL_ERROR' || connStatus === 'TIMED_OUT' || connStatus === 'CLOSED'
 
-  if (!showId) {
+  if (!showParam) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-6">
-        <p className="text-white/40 text-sm text-center">
-          Scan the QR code at the bar to join tonight's trivia!
+      <div style={{ minHeight: '100dvh', background: '#050505', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+        <p style={{ color: 'rgba(255,255,255,0.28)', fontSize: '0.9rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif' }}>
+          Scan the QR code at Baynes to join tonight's trivia!
         </p>
       </div>
     )
   }
 
-  if (showLoading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-white/30 text-sm">Loading…</div>
-      </div>
-    )
-  }
-
-  if (!show) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-6">
-        <p className="text-white/40 text-sm text-center">
-          Show not found. Ask Ben for the QR code!
-        </p>
-      </div>
-    )
-  }
-
-  if (!team) {
-    return (
-      <RegistrationScreen
-        onRegister={handleRegister}
-        show={show}
-        loading={registering}
-      />
-    )
-  }
-
-  if (!show.is_live) {
-    return <WaitingScreen teamName={team.name} show={show} showId={show.id} />
-  }
-
-  const slides = (show.slides ?? []).slice().sort((a, b) => a.order - b.order)
+  if (phase === 'loading') return <LoadingScreen />
+  if (phase === 'no-show') return <NoShowScreen />
 
   return (
-    <SlideViewer
-      show={show}
-      team={team}
-      slides={slides}
-      viewedIndex={viewedIndex}
-      setViewedIndex={setViewedIndex}
-      powerupUsed={powerupUsed}
-      onInvokePowerup={handleInvokePowerup}
-      myScores={myScores}
-      leaderboard={leaderboard}
-    />
+    <>
+      <ReconnectingBanner visible={disconnected} />
+      {phase === 'register' && <RegistrationScreen onRegister={handleRegister} show={show} theme={theme} />}
+      {phase === 'waiting'  && <WaitingScreen teamName={team?.name ?? ''} myScore={totalScore} theme={theme} />}
+      {phase === 'live'     && (
+        <LiveView
+          show={show}
+          team={team}
+          powerupUsed={powerupUsed}
+          onInvokePowerup={handleInvokePowerup}
+          myScores={myScores}
+          leaderboard={leaderboard}
+          theme={theme}
+        />
+      )}
+    </>
   )
 }

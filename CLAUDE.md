@@ -16,8 +16,8 @@ Before doing anything in this project — including answering questions — read
 
 1. `/Users/bencoughlin/Projects/trivia-os/SKILL.md` — full project blueprint, architecture, schema, design system, build order. This is the single source of truth.
 2. `~/.agents/skills/emilkowal-animations/SKILL.md` — animation technical reference
-3. `/mnt/skills/user/emil-design-eng/SKILL.md` — animation philosophy
-4. `/mnt/skills/user/baynes-design/SKILL.md` — Baynes brand identity
+3. `~/.agents/skills/emil-design-eng/SKILL.md` — animation philosophy
+4. `~/.agents/skills/baynes-design/SKILL.md` — Baynes brand identity
 
 ## Before Building Any Feature
 - Run `systematic-debugging` skill if fixing a bug

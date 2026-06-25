@@ -58,7 +58,7 @@ export default function RoundIntroSlide({ slide, show }) {
       <motion.div
         initial={{ y: 60, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.2, duration: 0.25, ease: EASE_SNAP }}
+        transition={{ delay: 0.25, duration: 0.25, ease: EASE_SNAP }}
         className="relative z-10 text-center mt-2"
         style={{
           fontFamily: `'Boogaloo', sans-serif`,

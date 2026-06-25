@@ -8,26 +8,14 @@ import SlideRenderer from '../components/display/SlideRenderer.jsx'
 import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import BaynesWatermark from '../components/display/BaynesWatermark.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
-import ThemeCanvas from '../components/display/ThemeCanvas.jsx'
-import ThemeForeground from '../components/display/ThemeForeground.jsx'
+import BenPhoto from '../components/shared/BenPhoto.jsx'
 
 // ─── Pre-show waiting screen ───────────────────────────────────────────────
 
 function PreShowScreen({ show }) {
-  console.log('[PreShowScreen] show prop:', show)
-  console.log('[PreShowScreen] show?.teams:', show?.teams)
-
   const { theme } = useTheme()
   const [teams, setTeams] = useState([])
   const [qrDataUrl, setQrDataUrl] = useState(null)
-
-  if (!show) {
-    return (
-      <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2b1e3e' }}>
-        <p style={{ color: '#e6e6fa', fontSize: '1.5rem' }}>PreShowScreen: show is null</p>
-      </div>
-    )
-  }
 
   const joinUrl = `${window.location.origin}/join?show=${show.id}`
 
@@ -67,26 +55,38 @@ function PreShowScreen({ show }) {
     }).then(url => setQrDataUrl(url))
   }, [joinUrl])
 
-  // Ticker: ~55px/s, minimum 14s so it never blazes past on a big TV
-  const tickerText = teams.length > 0
+  // Ticker — always visible, always fills the full 1920px width.
+  // Uses custom messages from show.ticker_messages when teams < 5.
+  // Switches to scrolling team names once 5+ teams have joined.
+  const TEAM_THRESHOLD = 5
+  const customMessages = show.ticker_messages ?? []
+  const defaultMessages = [
+    "No teams in yet — get off your booty and scan that code 📱",
+    "Don't make Ben do this by himself, he gets lonely 🥺",
+    "Scan the QR code to join tonight's trivia — yes, you",
+    "First team to join gets bragging rights. Go.",
+  ]
+
+  const rawTickerText = teams.length >= TEAM_THRESHOLD
     ? teams.map(t => t.name).join('  ·  ') + '  ·  '
-    : null
-  const tickerDuration = tickerText
-    ? Math.max((tickerText.length * 14) / 55, 14)
-    : 14
+    : (customMessages.length > 0 ? customMessages : defaultMessages).join('  ·  ') + '  ·  '
+
+  const AVG_CHAR_PX = 10
+  const MIN_COPY_PX = 2400
+  const repeatCount = Math.max(1, Math.ceil(MIN_COPY_PX / (rawTickerText.length * AVG_CHAR_PX)))
+  const tickerText = rawTickerText.repeat(repeatCount)
+  const tickerDuration = Math.max((tickerText.length * AVG_CHAR_PX) / 55, 20)
 
   return (
     <div className="w-screen h-screen overflow-hidden relative select-none"
       style={{ background: theme.colors.bg }}>
 
-      <ThemeCanvas theme={theme} />
-      <ThemeForeground theme={theme} />
       <ParticleBackground theme={theme} />
 
-      {/* UI bar — sits at 8% from top, above the treeline */}
+      {/* UI bar — sits at 23% from top, above the treeline */}
       <div style={{
         position: 'absolute',
-        top: '8%',
+        top: '23%',
         left: 0,
         right: 0,
         display: 'flex',
@@ -137,34 +137,127 @@ function PreShowScreen({ show }) {
         </div>
       </div>
 
-      {/* Ticker — pinned to bottom */}
-      {tickerText && (
-        <div style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: '3rem',
-          background: theme.colors.bgDeep,
-          borderTop: `1px solid ${theme.colors.accent}50`,
-          overflow: 'hidden',
-          zIndex: 10,
-        }}>
-          <div className="flex items-center h-full">
-            <div className="ticker-track" style={{ animationDuration: `${tickerDuration}s` }}>
-              <span style={{
-                fontFamily: "'DM Sans', sans-serif",
-                fontSize: '0.85rem',
-                fontWeight: 500,
-                letterSpacing: '0.04em',
-                color: `${theme.colors.text}55`,
-                whiteSpace: 'nowrap',
-                padding: '0 2rem',
-              }}>{tickerText}{tickerText}</span>
-            </div>
+      {/* Ticker — pinned to bottom, always visible */}
+      <div style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '3rem',
+        background: theme.colors.bgDeep,
+        borderTop: `1px solid ${theme.colors.accent}50`,
+        overflow: 'hidden',
+        zIndex: 10,
+      }}>
+        <div className="flex items-center h-full">
+          <div className="ticker-track" style={{ animationDuration: `${tickerDuration}s` }}>
+            <span style={{
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: '1.1rem',
+              fontWeight: 500,
+              letterSpacing: '0.04em',
+              color: `${theme.colors.text}cc`,
+              whiteSpace: 'nowrap',
+              padding: '0 2rem',
+            }}>{tickerText}{tickerText}</span>
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Ben photo — bottom-left corner */}
+      <div style={{
+        position: 'absolute',
+        bottom: 80,
+        left: 40,
+        zIndex: 10,
+        opacity: 0.7,
+      }}>
+        <BenPhoto size={120} />
+      </div>
+
+      <BaynesWatermark />
+    </div>
+  )
+}
+
+// ─── Preview slide ─────────────────────────────────────────────────────────
+
+function PreviewSlide() {
+  const { theme } = useTheme()
+
+  return (
+    <div
+      className="w-screen h-screen overflow-hidden relative select-none"
+      style={{ background: theme.colors.bgDeep }}
+    >
+      <ParticleBackground theme={theme} />
+
+      {/* PREVIEW MODE label */}
+      <div
+        className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
+        style={{ opacity: 0.25 }}
+      >
+        <span
+          className="text-xs font-bold tracking-widest uppercase"
+          style={{ color: theme.colors.text, fontFamily: "'DM Sans', sans-serif" }}
+        >
+          PREVIEW MODE
+        </span>
+      </div>
+
+      {/* Radial glow */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `radial-gradient(ellipse 70% 50% at 50% 50%, ${theme.colors.accent}20 0%, transparent 70%)`,
+        }}
+      />
+
+      {/* Q1 badge — top-left */}
+      <div
+        className="absolute left-12 z-10 flex items-center justify-center rounded-full"
+        style={{ top: 40, width: 96, height: 96, background: theme.colors.accent }}
+      >
+        <span
+          style={{
+            fontFamily: "'Boogaloo', sans-serif",
+            color: theme.colors.highlight,
+            fontSize: '2.25rem',
+            fontWeight: 700,
+            lineHeight: 1,
+          }}
+        >Q1</span>
+      </div>
+
+      {/* Q1 · R1 counter — top-right */}
+      <div
+        className="absolute top-5 right-8 z-50"
+        style={{
+          fontFamily: "'DM Sans', sans-serif",
+          color: `${theme.colors.text}55`,
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          letterSpacing: '0.05em',
+        }}
+      >
+        Q1 · R1
+      </div>
+
+      {/* Sample question text — centered */}
+      <div className="absolute inset-0 flex items-center justify-center px-24 py-20">
+        <p
+          className="text-center leading-relaxed"
+          style={{
+            color: theme.colors.text,
+            fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+            fontSize: 'clamp(2rem, 4.5vw, 4.5rem)',
+            fontWeight: 500,
+            maxWidth: '80ch',
+          }}
+        >
+          This is what your questions will look like on screen.
+        </p>
+      </div>
 
       <BaynesWatermark />
     </div>
@@ -183,10 +276,8 @@ function DisplayInner({ show, direction }) {
       className="w-screen h-screen overflow-hidden relative select-none"
       style={{ background: theme.colors.bg }}
     >
-      {/* z-0: theme background canvas — draws per-theme ambient animation */}
-      <ThemeCanvas theme={theme} />
+      <ParticleBackground theme={theme} />
 
-      {/* z-auto: slide content — above canvas via DOM order */}
       <AnimatePresence mode="wait" custom={direction}>
         {currentSlide && (
           <SlideRenderer
@@ -197,9 +288,6 @@ function DisplayInner({ show, direction }) {
           />
         )}
       </AnimatePresence>
-
-      {/* z-20: theme foreground overlay — above slides, below z-50 persistent overlays */}
-      <ThemeForeground theme={theme} />
 
       {/* z-50: persistent overlays — always on top */}
       <QuestionCounter slide={currentSlide} show={show} />
@@ -213,6 +301,7 @@ function DisplayInner({ show, direction }) {
 export default function Display() {
   const [searchParams] = useSearchParams()
   const showId = searchParams.get('show')
+  const isPreview = searchParams.get('preview') === 'true'
   const [show, setShow] = useState(null)
   const [loading, setLoading] = useState(true)
   const prevIndexRef = useRef(0)
@@ -235,7 +324,6 @@ export default function Display() {
           .limit(1)
           .single()
         if (error) console.error('[Display] show fetch error:', error)
-        console.log('[Display] show fetch result:', res)
         data = res
       }
 
@@ -278,14 +366,22 @@ export default function Display() {
   if (!show) {
     return (
       <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2b1e3e' }}>
-        <p style={{ color: '#e6e6fa', fontSize: '1.5rem' }}>Loading show...</p>
+        <p style={{ color: '#e6e6fa', fontSize: '1.5rem' }}>No show found</p>
       </div>
     )
   }
 
+  if (isPreview) {
+    return (
+      <ThemeProvider showThemeId={show.theme}>
+        <PreviewSlide />
+      </ThemeProvider>
+    )
+  }
+
   return (
-    <ThemeProvider showThemeId={show.theme_id}>
-      {show.is_live ? (
+    <ThemeProvider showThemeId={show.theme}>
+      {show.is_live && show.current_slide_id !== null ? (
         <DisplayInner show={show} direction={direction} />
       ) : (
         <PreShowScreen show={show} />

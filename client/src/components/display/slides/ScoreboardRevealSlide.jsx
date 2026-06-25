@@ -8,11 +8,11 @@ const EASE_SMOOTH = [0.4, 0, 0.2, 1]
 
 function ScoreRow({ team, rank, isLeader, maxScore, theme, delay }) {
   const pct = maxScore > 0 ? Math.round((team.total / maxScore) * 100) : 0
-  const [barPct, setBarPct] = useState(0)
+  const [barScale, setBarScale] = useState(0)
 
   useEffect(() => {
     // Bar expands 120ms after row appears — Section 5 / Section 20
-    const t = setTimeout(() => setBarPct(pct), (delay + 0.12) * 1000)
+    const t = setTimeout(() => setBarScale(pct / 100), (delay + 0.12) * 1000)
     return () => clearTimeout(t)
   }, [pct, delay])
 
@@ -75,17 +75,19 @@ function ScoreRow({ team, rank, isLeader, maxScore, theme, delay }) {
           {team.name}
         </p>
 
-        {/* Score bar — width animates via CSS transition, EASE_SMOOTH 600ms — Section 5 */}
+        {/* Score bar — scaleX animates via CSS transition (GPU-composited), EASE_SMOOTH 600ms — Section 5 */}
         <div
           className="mt-2 rounded-full overflow-hidden"
           style={{ height: 8, background: 'rgba(255,255,255,0.08)' }}
         >
           <div
-            className="h-full rounded-full"
+            className="h-full w-full rounded-full"
             style={{
-              width: `${barPct}%`,
-              transition: `width 600ms cubic-bezier(${EASE_SMOOTH.join(',')})`,
+              transform: `scaleX(${barScale})`,
+              transformOrigin: 'left center',
+              transition: `transform 600ms cubic-bezier(${EASE_SMOOTH.join(',')})`,
               background: isLeader ? theme.colors.shinyAccent : theme.colors.accent,
+              willChange: 'transform',
             }}
           />
         </div>

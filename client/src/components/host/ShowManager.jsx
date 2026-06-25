@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { THEMES, DEFAULT_THEME_ID } from '../../themes/index.js'
 
 export default function ShowManager({ onShowReady, listShows, createShow, loadShow, deleteShow, duplicateShow }) {
   const [tab, setTab] = useState('new')
@@ -7,6 +8,8 @@ export default function ShowManager({ onShowReady, listShows, createShow, loadSh
   const [shows, setShows] = useState([])
   const [working, setWorking] = useState(false)
   const [error, setError] = useState(null)
+  const [selectedThemeId, setSelectedThemeId] = useState(DEFAULT_THEME_ID)
+  const [confirmDelete, setConfirmDelete] = useState(null)
 
   useEffect(() => {
     if (tab === 'load') {
@@ -21,7 +24,7 @@ export default function ShowManager({ onShowReady, listShows, createShow, loadSh
     setWorking(true)
     setError(null)
     try {
-      const show = await createShow(title || defaultTitle, date)
+      const show = await createShow(title || defaultTitle, date, selectedThemeId)
       onShowReady(show)
     } catch (err) {
       setError(err.message)
@@ -45,7 +48,11 @@ export default function ShowManager({ onShowReady, listShows, createShow, loadSh
 
   async function handleDelete(id, e) {
     e.stopPropagation()
-    if (!confirm('Delete this show? This cannot be undone.')) return
+    setConfirmDelete(id)
+  }
+
+  async function confirmDeleteShow(id) {
+    setConfirmDelete(null)
     await deleteShow(id)
     setShows(prev => prev.filter(s => s.id !== id))
   }
@@ -75,10 +82,10 @@ export default function ShowManager({ onShowReady, listShows, createShow, loadSh
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                className={`flex-1 py-3.5 text-sm font-semibold transition-colors ${
                   tab === t
                     ? 'text-baynes-forest border-b-2 border-baynes-forest bg-white'
-                    : 'text-gray-500 hover:text-gray-700'
+                    : 'text-gray-400 hover:text-gray-600'
                 }`}
               >
                 {t === 'new' ? "Tonight's Show" : 'Load Previous'}
@@ -90,7 +97,7 @@ export default function ShowManager({ onShowReady, listShows, createShow, loadSh
             {tab === 'new' && (
               <form onSubmit={handleCreate} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">Show Title</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Show Title</label>
                   <input
                     type="text"
                     value={title}
@@ -100,13 +107,37 @@ export default function ShowManager({ onShowReady, listShows, createShow, loadSh
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">Date</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Date</label>
                   <input
                     type="date"
                     value={date}
                     onChange={e => setDate(e.target.value)}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-baynes-forest focus:border-transparent"
                   />
+                </div>
+                <div className="mt-4">
+                  <p className="text-xs font-medium text-gray-500 mb-3">Theme</p>
+                  <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                    {THEMES.map(t => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setSelectedThemeId(t.id)}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-all"
+                        style={{
+                          background: selectedThemeId === t.id ? t.colors.bg : 'transparent',
+                          borderColor: selectedThemeId === t.id ? t.colors.highlight : '#e5e7eb',
+                          color: selectedThemeId === t.id ? t.colors.highlight : '#374151',
+                        }}
+                      >
+                        <span
+                          className="w-4 h-4 rounded-full shrink-0 border border-black/10"
+                          style={{ background: t.colors.highlight }}
+                        />
+                        <span className="text-xs font-medium truncate">{t.name}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 {error && <p className="text-red-600 text-sm">{error}</p>}
                 <button
@@ -137,20 +168,36 @@ export default function ShowManager({ onShowReady, listShows, createShow, loadSh
                       </p>
                     </div>
                     <div className="flex items-center gap-1 ml-2 shrink-0">
-                      <button
-                        onClick={e => handleDuplicate(s.id, e)}
-                        title="Duplicate"
-                        className="p-1.5 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        ⧉
-                      </button>
-                      <button
-                        onClick={e => handleDelete(s.id, e)}
-                        title="Delete"
-                        className="p-1.5 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        ✕
-                      </button>
+                      {confirmDelete === s.id ? (
+                        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                          <span className="text-xs text-red-600">Delete?</span>
+                          <button
+                            onClick={() => confirmDeleteShow(s.id)}
+                            className="text-xs font-semibold text-red-600 hover:text-red-700 px-1 transition-colors"
+                          >Yes</button>
+                          <button
+                            onClick={() => setConfirmDelete(null)}
+                            className="text-xs text-gray-400 hover:text-gray-600 px-1 transition-colors"
+                          >No</button>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            onClick={e => handleDuplicate(s.id, e)}
+                            title="Duplicate"
+                            className="p-1.5 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            ⧉
+                          </button>
+                          <button
+                            onClick={e => handleDelete(s.id, e)}
+                            title="Delete"
+                            className="p-1.5 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            ✕
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}

@@ -1,38 +1,54 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import HostHeader from './HostHeader.jsx'
 import RoundSidebar from './RoundSidebar.jsx'
 import SlideEditor from './SlideEditor.jsx'
+import AddSlideWizard from './AddSlideWizard.jsx'
+import FormatLibrary from './FormatLibrary.jsx'
+import TickerMessageManager from './TickerMessageManager.jsx'
 import { sortedSlides } from '../../hooks/useShow.js'
 
-export default function BuildMode({ show, actions, onGoLive }) {
-  const [selectedSlideId, setSelectedSlideId] = useState(() => {
-    const sorted = [...show.slides].sort((a, b) => a.order - b.order)
-    return sorted[0]?.id ?? null
-  })
+export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
+  const [showFormatLibrary, setShowFormatLibrary] = useState(false)
+  const [showTickerManager, setShowTickerManager] = useState(false)
+  const [mode, setMode] = useState('wizard')
+  const [selectedSlide, setSelectedSlide] = useState(null)
+  const [wizardInitialData, setWizardInitialData] = useState({})
+  const [wizardKey, setWizardKey] = useState(0)
 
-  const selectedSlide = show.slides.find(s => s.id === selectedSlideId)
-  const sorted = sortedSlides(show)
+  // Always use the live version of the selected slide from show data
+  const syncedSelectedSlide = selectedSlide
+    ? (show.slides.find(s => s.id === selectedSlide.id) ?? selectedSlide)
+    : null
+
+  function enterWizard(initialData = {}) {
+    setSelectedSlide(null)
+    setMode('wizard')
+    setWizardInitialData(initialData)
+    setWizardKey(k => k + 1)
+  }
+
+  function enterEditing(slide) {
+    setSelectedSlide(slide)
+    setMode('editing')
+  }
+
+  // Escape returns to wizard, preserving round context
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key === 'Escape' && mode === 'editing') {
+        setSelectedSlide(null)
+        setMode('wizard')
+        setWizardInitialData({ roundId: selectedSlide?.roundId })
+        setWizardKey(k => k + 1)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [mode, selectedSlide])
 
   async function handleAddRound() {
     const round = await actions.addRound({})
-    // Auto-add a round-intro slide
-    const slide = await actions.addSlide({
-      type: 'round-intro',
-      roundId: round.id,
-      order: sorted.length,
-      data: {
-        roundNumber: round.number,
-        roundTitle: round.title,
-        subtitle: '',
-        hostPhotoUrl: null,
-      },
-    })
-    if (slide) setSelectedSlideId(slide.id)
-  }
-
-  async function handleAddSlide(slideData) {
-    const slide = await actions.addSlide(slideData)
-    return slide
+    enterWizard({ type: 'round-intro', roundId: round.id })
   }
 
   return (
@@ -42,65 +58,65 @@ export default function BuildMode({ show, actions, onGoLive }) {
         onUpdateMeta={actions.updateShowMeta}
         onGoLive={onGoLive}
         onExport={actions.exportShow}
+        onOpenFormatLibrary={() => setShowFormatLibrary(true)}
+        onOpenTicker={() => setShowTickerManager(true)}
+        onOpenLibrary={onOpenLibrary}
       />
 
       <div className="flex flex-1 min-h-0">
         <RoundSidebar
           show={show}
-          selectedSlideId={selectedSlideId}
-          onSelectSlide={setSelectedSlideId}
+          selectedSlideId={syncedSelectedSlide?.id ?? null}
+          onSelectSlide={slide => enterEditing(slide)}
           onAddRound={handleAddRound}
           onUpdateRound={actions.updateRound}
           onDeleteRound={actions.deleteRound}
-          onAddSlide={handleAddSlide}
           onDeleteSlide={async (id) => {
             await actions.deleteSlide(id)
-            if (id === selectedSlideId) {
-              const remaining = sortedSlides(show).filter(s => s.id !== id)
-              setSelectedSlideId(remaining[0]?.id ?? null)
-            }
+            if (syncedSelectedSlide?.id === id) enterWizard()
           }}
         />
 
-        {/* Main editor area */}
         <main className="flex-1 overflow-hidden bg-white">
-          {!selectedSlide ? (
-            <EmptyState onAddRound={handleAddRound} />
-          ) : (
+          {mode === 'editing' && syncedSelectedSlide ? (
             <SlideEditor
-              key={selectedSlide.id}
-              slide={selectedSlide}
+              key={syncedSelectedSlide.id}
+              slide={syncedSelectedSlide}
               show={show}
               onUpdateSlide={actions.updateSlide}
               onDeleteSlide={async (id) => {
                 await actions.deleteSlide(id)
-                const remaining = sortedSlides(show).filter(s => s.id !== id)
-                setSelectedSlideId(remaining[0]?.id ?? null)
+                enterWizard()
               }}
+              onClose={() => enterWizard({ roundId: syncedSelectedSlide.roundId })}
               uploadMedia={actions.uploadMedia}
               getHostPhotos={actions.getHostPhotos}
+            />
+          ) : (
+            <AddSlideWizard
+              key={wizardKey}
+              show={show}
+              onAddSlide={async (slideData) => {
+                const slide = await actions.addSlide(slideData)
+                if (slide) enterEditing(slide)
+              }}
+              initialData={wizardInitialData}
             />
           )}
         </main>
       </div>
-    </div>
-  )
-}
 
-function EmptyState({ onAddRound }) {
-  return (
-    <div className="h-full flex flex-col items-center justify-center text-center p-8 gap-4">
-      <div className="text-5xl">🎯</div>
-      <div>
-        <p className="text-gray-900 font-semibold">No slides yet</p>
-        <p className="text-gray-500 text-sm mt-1">Add a round to get started, or select a slide from the sidebar.</p>
-      </div>
-      <button
-        onClick={onAddRound}
-        className="mt-2 bg-baynes-forest text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-green-900 transition-colors"
-      >
-        Add first round
-      </button>
+      {showFormatLibrary && (
+        <FormatLibrary onClose={() => setShowFormatLibrary(false)} />
+      )}
+
+      {showTickerManager && (
+        <TickerMessageManager
+          messages={show.tickerMessages ?? []}
+          onSave={actions.updateTickerMessages}
+          onClose={() => setShowTickerManager(false)}
+        />
+      )}
     </div>
   )
 }

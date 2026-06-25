@@ -51,9 +51,9 @@ function StandardQuestion({ slide, show, theme }) {
 
       {/* Question number badge — top-left — spring bounce — Section 20 */}
       <motion.div
-        initial={{ scale: 0.7, opacity: 0, y: -12 }}
+        initial={{ scale: 0.6, opacity: 0, y: 8 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
-        transition={{ type: 'spring', duration: 0.3, bounce: 0.2 }}
+        transition={{ type: 'spring', stiffness: 340, damping: 22, delay: 0.05 }}
         className="absolute left-12 z-10 flex items-center justify-center rounded-full"
         style={{
           top: badgeTop,
@@ -77,9 +77,9 @@ function StandardQuestion({ slide, show, theme }) {
 
       {/* Question text — large, centered — Section 23 */}
       <motion.div
-        initial={{ opacity: 0, y: 18 }}
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.06, duration: 0.22, ease: EASE_SNAP }}
+        transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1], delay: 0.18 }}
         className="absolute inset-0 flex items-center justify-center px-24 py-20"
       >
         <p
@@ -295,7 +295,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
           style={{
             fontFamily: `'Boogaloo', sans-serif`,
             color: theme.colors.text,
-            fontSize: 'clamp(4rem, 12vw, 10rem)',
+            fontSize: 'clamp(3rem, 8vw, 6rem)',
             fontWeight: 700,
             lineHeight: 1,
           }}

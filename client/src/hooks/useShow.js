@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
+import { DEFAULT_THEME_ID } from '../themes/index.js'
 
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 const SHOW_MEDIA_BUCKET = 'trivia-show-media'
@@ -17,6 +18,7 @@ function normalizeShow(row) {
     slides: row.slides ?? [],
     rounds: row.rounds ?? [],
     powerups: row.powerups ?? [],
+    tickerMessages: row.ticker_messages ?? [],
     showState: {
       currentSlideId: row.current_slide_id ?? null,
       currentSlideIndex: row.current_slide_index ?? 0,
@@ -68,13 +70,13 @@ export function useShow() {
     return normalized
   }
 
-  async function createShow(title, date) {
+  async function createShow(title, date, themeId) {
     const id = `show_${nanoid(8)}`
     const { error } = await supabase.from('shows').insert({
       id,
       title,
       date,
-      theme_id: 'midnight-galaxy',
+      theme_id: themeId ?? DEFAULT_THEME_ID,
       slides: [],
       rounds: [],
       powerups: [],
@@ -96,7 +98,7 @@ export function useShow() {
   async function listShows() {
     const { data, error } = await supabase
       .from('shows')
-      .select('id, title, date, updated_at')
+      .select('id, title, date, updated_at, slides, rounds')
       .order('updated_at', { ascending: false })
     if (error) throw new Error(error.message)
     return (data ?? []).map(row => ({
@@ -104,7 +106,53 @@ export function useShow() {
       title: row.title,
       date: row.date,
       updatedAt: row.updated_at,
+      slideCount: (row.slides ?? []).length,
+      roundCount: (row.rounds ?? []).length,
     }))
+  }
+
+  function unloadShow() {
+    setShow(null)
+    localStorage.removeItem(ACTIVE_SHOW_KEY)
+  }
+
+  async function exportShowById(id) {
+    const { data, error } = await supabase.from('shows').select('*').eq('id', id).single()
+    if (error || !data) throw new Error('Show not found')
+    const normalized = normalizeShow(data)
+    const json = JSON.stringify(normalized, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const safeName = (normalized.title ?? 'show').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '')
+    a.download = `${safeName}-${normalized.date ?? 'export'}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function importShow(json) {
+    const now = new Date().toISOString()
+    const newId = `show_${nanoid(8)}`
+    const { error } = await supabase.from('shows').insert({
+      id: newId,
+      title: json.title ?? 'Imported Show',
+      date: json.date ?? now.split('T')[0],
+      theme_id: json.theme_id ?? json.theme ?? DEFAULT_THEME_ID,
+      slides: json.slides ?? [],
+      rounds: json.rounds ?? [],
+      powerups: json.powerups ?? [],
+      is_live: false,
+      scoreboard_visible: false,
+      scores_revealed: false,
+      ticker_messages: json.tickerMessages ?? json.ticker_messages ?? [],
+      current_slide_id: null,
+      current_slide_index: 0,
+      created_at: now,
+      updated_at: now,
+    })
+    if (error) throw new Error(error.message)
+    return loadShow(newId)
   }
 
   async function deleteShow(id) {
@@ -133,7 +181,14 @@ export function useShow() {
       updated_at: now,
     })
     if (insertError) throw new Error(insertError.message)
-    return { id: newId, title: `${original.title} (copy)`, date: original.date, updatedAt: now }
+    return {
+      id: newId,
+      title: `${original.title} (copy)`,
+      date: original.date,
+      updatedAt: now,
+      slideCount: (original.slides ?? []).length,
+      roundCount: (original.rounds ?? []).length,
+    }
   }
 
   async function exportShow() {
@@ -386,6 +441,12 @@ export function useShow() {
     }
   }
 
+  async function updateTickerMessages(messages) {
+    if (!show) return
+    setShow(prev => ({ ...prev, tickerMessages: messages }))
+    await supabase.from('shows').update({ ticker_messages: messages }).eq('id', show.id)
+  }
+
   const refresh = useCallback(() => {
     if (show?.id) return fetchShow(show.id)
   }, [show?.id])
@@ -400,6 +461,9 @@ export function useShow() {
     deleteShow,
     duplicateShow,
     exportShow,
+    exportShowById,
+    importShow,
+    unloadShow,
     updateShowMeta,
     addRound,
     updateRound,
@@ -417,5 +481,6 @@ export function useShow() {
     prevSlide,
     setScoreboardVisible,
     updateRoundScore,
+    updateTickerMessages,
   }
 }

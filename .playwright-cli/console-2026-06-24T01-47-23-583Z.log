@@ -1,0 +1,6 @@
+[      75ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5174/@fs/Users/bencoughlin/Projects/trivia-os/node_modules/.vite/deps/chunk-GKJBSOWT.js?v=45f81bce:21550
+[      76ms] Error: supabaseUrl is required.
+    at validateSupabaseUrl (http://localhost:5174/@fs/Users/bencoughlin/Projects/trivia-os/node_modules/.vite/deps/@supabase_supabase-js.js?v=45f81bce:20772:26)
+    at new SupabaseClient (http://localhost:5174/@fs/Users/bencoughlin/Projects/trivia-os/node_modules/.vite/deps/@supabase_supabase-js.js?v=45f81bce:21001:21)
+    at createClient (http://localhost:5174/@fs/Users/bencoughlin/Projects/trivia-os/node_modules/.vite/deps/@supabase_supabase-js.js?v=45f81bce:21214:10)
+    at http://localhost:5174/src/lib/supabase.js:3:25

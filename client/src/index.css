@@ -110,6 +110,15 @@ textarea {
   50%       { opacity: 0.65; transform: scale(1.08); }
 }
 
+/* ─── Join: spinner + waiting pulse ─── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes breathePulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.78); }
+  50%       { opacity: 1;    transform: scale(1);    }
+}
+
 /* ─── Join: team name ticker ─── */
 @keyframes tickerScroll {
   from { transform: translateX(0); }

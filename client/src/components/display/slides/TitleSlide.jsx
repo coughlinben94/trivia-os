@@ -53,7 +53,7 @@ export default function TitleSlide({ slide, show }) {
         style={{
           fontFamily: `'Boogaloo', sans-serif`,
           color: theme.roundIntro.titleColor,
-          fontSize: 'clamp(4rem, 9vw, 9rem)',
+          fontSize: 'clamp(3rem, 7vw, 6rem)',
           lineHeight: 1,
           letterSpacing: '-0.02em',
         }}
