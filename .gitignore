@@ -1,3 +1,15 @@
 node_modules/
 .vercel
 .env*
+
+# Build output (Vercel rebuilds these)
+dist/
+client/dist/
+
+# Test artifacts
+.playwright-cli/
+test-results/
+
+# Theme screenshots
+theme-screenshots/
+theme-screenshots-v2/

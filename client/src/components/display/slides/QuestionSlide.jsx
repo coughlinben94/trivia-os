@@ -243,12 +243,36 @@ function ShinyAudioQuestion({ slide, show, theme }) {
   const { data } = slide
   const [playing, setPlaying] = useState(false)
   const audioRef = useRef(null)
+  const audioCtxRef = useRef(null)
+
+  useEffect(() => {
+    return () => { audioCtxRef.current?.close() }
+  }, [])
+
+  function ensureAudioGraph() {
+    if (!audioRef.current || audioCtxRef.current) return audioCtxRef.current
+    const ctx = new AudioContext()
+    const src = ctx.createMediaElementSource(audioRef.current)
+    const gainNode = ctx.createGain()
+    gainNode.gain.value = Math.pow(10, (data.audioGainDb ?? 0) / 20)
+    src.connect(gainNode)
+    gainNode.connect(ctx.destination)
+    audioCtxRef.current = ctx
+    return ctx
+  }
+
+  async function playWithGain() {
+    const ctx = ensureAudioGraph()
+    if (ctx?.state === 'suspended') await ctx.resume()
+    await audioRef.current.play()
+    setPlaying(true)
+  }
 
   // React to show.audio_playing from Supabase (wired in step 5 Live Mode)
   useEffect(() => {
     const ap = show?.audio_playing
     if (ap?.slideId === slide.id && ap?.playing && audioRef.current) {
-      audioRef.current.play().then(() => setPlaying(true)).catch(() => {})
+      playWithGain().catch(() => {})
     }
   }, [show?.audio_playing, slide.id])
 
@@ -339,7 +363,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
                 if (playing) {
                   audioRef.current?.pause(); setPlaying(false)
                 } else {
-                  audioRef.current?.play().then(() => setPlaying(true))
+                  playWithGain()
                 }
               }}
               style={{

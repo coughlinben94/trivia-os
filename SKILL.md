@@ -162,10 +162,13 @@ A show is one trivia night — one row in `shows`. Slides, rounds, powerups are 
     "seriesLabel": null,
     "seriesTheme": null,
     "hostPhotoUrl": null,
-    "hostPhotoPosition": null
+    "hostPhotoPosition": null,
+    "audioGainDb": null
   }
 }
 ```
+
+`audioGainDb` — computed at upload time by `analyzeAudioGain()` (`client/src/lib/audioNormalize.js`). Target RMS: −20 dBFS, peak ceiling: −1 dBFS, clamped to ±12 dB. Applied via a Web Audio GainNode on the display side. `null` or missing → unity gain (backwards compatible).
 
 Full slide type specs → `references/slides.md`
 

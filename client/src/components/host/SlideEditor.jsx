@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { analyzeAudioGain } from '../../lib/audioNormalize.js'
 import MediaUpload from './MediaUpload.jsx'
 import HostPhotoLibrary from './HostPhotoLibrary.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
@@ -82,8 +83,11 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   async function handleMediaUpload(file) {
     const result = await uploadMedia(file)
     if (result?.url) {
-      change('mediaUrl', result.url)
-      change('mediaType', result.mimetype)
+      const updates = { mediaUrl: result.url, mediaType: result.mimetype }
+      if (file.type.startsWith('audio/')) {
+        updates.audioGainDb = await analyzeAudioGain(file)
+      }
+      batchChange(updates)
     }
     return result
   }
