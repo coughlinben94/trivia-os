@@ -91,6 +91,7 @@ function HostInner({ showApi }) {
     updateRound:    showApi.updateRound,
     deleteRound:    showApi.deleteRound,
     addSlide:       showApi.addSlide,
+    addSiblingSlides: showApi.addSiblingSlides,
     updateSlide:    showApi.updateSlide,
     deleteSlide:    showApi.deleteSlide,
     reorderSlides:  showApi.reorderSlides,

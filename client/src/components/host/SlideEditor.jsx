@@ -42,7 +42,7 @@ function getNavLabel(slide) {
   return type
 }
 
-export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide, onClose, uploadMedia, getHostPhotos }) {
+export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide, onClose, uploadMedia, getHostPhotos, addSiblingSlides }) {
   const [data, setData] = useState(slide.data)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const saveTimer = useRef(null)
@@ -168,7 +168,8 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
             uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
         )}
         {slide.type === 'question' && (
-          <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} />
+          <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia}
+            slideId={slide.id} slideRoundId={slide.roundId} addSiblingSlides={addSiblingSlides} />
         )}
         {slide.type === 'grading-break' && (
           <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
@@ -315,7 +316,7 @@ function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos 
   )
 }
 
-function QuestionEditor({ data, onChange, onBatchChange, uploadMedia }) {
+function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, slideRoundId, addSiblingSlides }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
 
   const mode = data.questionMode
@@ -448,7 +449,9 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia }) {
           {schema.type === 'image' && slots > 0 && (
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                {slots === 1 ? 'Image' : `Images (${slots} slots)`}
+                {data.slotTotal > 1
+                  ? `Image ${data.slotIndex} of ${data.slotTotal}`
+                  : slots === 1 ? 'Image' : `Images (${slots} slots)`}
               </label>
               <div className="space-y-3">
                 {Array.from({ length: slots }).map((_, i) => (
@@ -563,12 +566,51 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia }) {
         <FormatLibrary
           onClose={() => setShowFormatLibrary(false)}
           onSelectFormat={fmt => {
-            onBatchChange({
-              shinyFormatId: fmt.id,
-              shinyFormatName: fmt.name,
-              shinyFormatIcon: fmt.icon,
-              shinyInputSchema: fmt.input_schema,
-            })
+            const totalSlots = fmt.input_schema?.slots ?? 1
+            if (totalSlots > 1 && addSiblingSlides) {
+              const singleSchema = { ...fmt.input_schema, slots: 1 }
+              onBatchChange({
+                shinyFormatId: fmt.id,
+                shinyFormatName: fmt.name,
+                shinyFormatIcon: fmt.icon,
+                shinyInputSchema: singleSchema,
+                isSeries: true,
+                seriesLabel: `1 of ${totalSlots}`,
+                seriesTheme: fmt.name,
+                slotIndex: 1,
+                slotTotal: totalSlots,
+                mediaSlots: [],
+              })
+              addSiblingSlides(slideId, Array.from({ length: totalSlots - 1 }, (_, i) => ({
+                type: 'question',
+                roundId: slideRoundId,
+                data: {
+                  questionNumber: data.questionNumber,
+                  questionLabel: data.questionLabel,
+                  questionMode: 'shiny',
+                  isShiny: true,
+                  shinyType: fmt.input_schema.type,
+                  shinyFormatId: fmt.id,
+                  shinyFormatName: fmt.name,
+                  shinyFormatIcon: fmt.icon,
+                  shinyInputSchema: singleSchema,
+                  isSeries: true,
+                  seriesLabel: `${i + 2} of ${totalSlots}`,
+                  seriesTheme: fmt.name,
+                  slotIndex: i + 2,
+                  slotTotal: totalSlots,
+                  text: '',
+                  mediaSlots: [],
+                },
+              })))
+            } else {
+              onBatchChange({
+                shinyFormatId: fmt.id,
+                shinyFormatName: fmt.name,
+                shinyFormatIcon: fmt.icon,
+                shinyInputSchema: fmt.input_schema,
+              })
+            }
             setShowFormatLibrary(false)
           }}
         />

@@ -263,6 +263,27 @@ export function useShow() {
     return slide
   }
 
+  async function addSiblingSlides(afterSlideId, slidesData) {
+    if (!show || !slidesData.length) return []
+    const afterSlide = show.slides.find(s => s.id === afterSlideId)
+    const insertAfterOrder = afterSlide?.order ?? show.slides.length - 1
+    const count = slidesData.length
+    const shifted = show.slides.map(s =>
+      s.order > insertAfterOrder ? { ...s, order: s.order + count } : s
+    )
+    const newSlides = slidesData.map((d, i) => ({
+      id: `slide_${nanoid(8)}`,
+      type: d.type ?? 'question',
+      roundId: d.roundId ?? null,
+      order: insertAfterOrder + 1 + i,
+      data: d.data ?? {},
+    }))
+    const allSlides = [...shifted, ...newSlides]
+    setShow(prev => ({ ...prev, slides: allSlides }))
+    await supabase.from('shows').update({ slides: allSlides }).eq('id', show.id)
+    return newSlides
+  }
+
   function updateSlide(id, patch) {
     if (!show) return
     setShow(prev => {
@@ -469,6 +490,7 @@ export function useShow() {
     updateRound,
     deleteRound,
     addSlide,
+    addSiblingSlides,
     updateSlide,
     deleteSlide,
     reorderSlides,

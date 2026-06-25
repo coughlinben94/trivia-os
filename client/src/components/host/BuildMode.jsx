@@ -91,6 +91,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
               onClose={() => enterWizard({ roundId: syncedSelectedSlide.roundId })}
               uploadMedia={actions.uploadMedia}
               getHostPhotos={actions.getHostPhotos}
+              addSiblingSlides={actions.addSiblingSlides}
             />
           ) : (
             <AddSlideWizard

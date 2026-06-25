@@ -119,7 +119,7 @@ export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
   const currentStepNum = step === 'type' ? 1 : step === 'question-mode' ? 2 : step === 'format' ? 3 : totalSteps
 
   return (
-    <div className="h-full flex flex-col items-center justify-center px-8 py-6 overflow-y-auto">
+    <div className="h-full flex flex-col items-center justify-start px-8 pt-[15dvh] pb-6 overflow-y-auto">
       <div className="w-full max-w-2xl">
 
         {/* Back + step indicator row */}
