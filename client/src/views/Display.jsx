@@ -328,6 +328,24 @@ export default function Display() {
       }
 
       if (data) {
+        // Jukebox return: advance past the grading-break slide that sent us there
+        if (searchParams.get('from') === 'jukebox') {
+          const sorted = [...(data.slides ?? [])].sort((a, b) => a.order - b.order)
+          const cur = data.current_slide_index ?? 0
+          const next = Math.min(cur + 1, sorted.length - 1)
+          if (next > cur) {
+            const nextSlide = sorted[next]
+            await supabase.from('shows').update({
+              current_slide_index: next,
+              current_slide_id: nextSlide?.id ?? null,
+            }).eq('id', data.id)
+            data = { ...data, current_slide_index: next, current_slide_id: nextSlide?.id ?? null }
+          }
+          const url = new URL(window.location.href)
+          url.searchParams.delete('from')
+          window.history.replaceState({}, '', url.toString())
+        }
+
         prevIndexRef.current = data.current_slide_index ?? 0
         setShow(data)
       }
