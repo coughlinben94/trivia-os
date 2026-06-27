@@ -638,6 +638,14 @@ function JazzClubAmbient() {
 
 // ─── 12. DIVE BAR ────────────────────────────────────────────────────────
 function DiveBarAmbient() {
+  const haze = useMemo(() => Array.from({ length: 4 }, (_, i) => ({
+    left:   `${8 + i * 24}%`,
+    bottom: `${(i % 3) * 6}%`,
+    dur:    `${20 + i * 3}s`,
+    delay:  `-${((i / 4) * (20 + i * 3)).toFixed(1)}s`,
+    hi:     0.07 + (i % 2) * 0.02,
+  })), [])
+
   return <>
     {/* Red neon sign — left wall */}
     <GlowLayer lo={0.22} hi={0.70} duration="1.6s" buzz style={{
@@ -650,15 +658,27 @@ function DiveBarAmbient() {
       background: 'radial-gradient(ellipse at right center, rgba(40,100,255,0.58), transparent 75%)',
     }}/>
     {/* Warm amber floor — sticky bar residue */}
-    <GlowLayer lo={0.15} hi={0.42} duration="8s" style={{
+    <GlowLayer lo={0.15} hi={0.52} duration="8s" style={{
       bottom: 0, left: 0, right: 0, height: '20%',
       background: 'linear-gradient(to top, rgba(180,80,10,0.45), transparent)',
     }}/>
     {/* Center bar light pool */}
-    <GlowLayer lo={0.14} hi={0.38} duration="6s" delay="3s" style={{
+    <GlowLayer lo={0.18} hi={0.50} duration="6s" delay="3s" style={{
       top: '15%', left: '30%', right: '30%', bottom: '15%',
       background: 'radial-gradient(ellipse, rgba(220,120,30,0.35), transparent 70%)',
     }}/>
+    {/* Slow rising haze */}
+    {haze.map((h, i) => (
+      <div key={i} aria-hidden style={{
+        position: 'absolute', bottom: h.bottom, left: h.left,
+        width: '18%', height: '26%',
+        background: 'radial-gradient(ellipse, rgba(200,140,80,1.0), transparent)',
+        willChange: 'transform, opacity',
+        '--hi': h.hi,
+        animation: `ambientRiseUp ${h.dur} ${h.delay} ${EASE.mover} infinite`,
+        pointerEvents: 'none',
+      }}/>
+    ))}
   </>
 }
 
