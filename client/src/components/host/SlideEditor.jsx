@@ -156,6 +156,28 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
             {SLIDE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
         </div>
+        {!data.isShiny && (
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Transition</label>
+            <select
+              value={data.transition ?? ''}
+              onChange={e => change('transition', e.target.value === '' ? null : e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-baynes-forest"
+            >
+              <option value="">Default</option>
+              <option value="random">✦ Random</option>
+              <option value="dissolve">Dissolve</option>
+              <option value="drop">Drop</option>
+              <option value="rise">Rise</option>
+              <option value="zoom">Zoom</option>
+              <option value="settle">Settle</option>
+              <option value="punch">Punch</option>
+              <option value="swoop">Swoop</option>
+              <option value="tilt">Tilt</option>
+              <option value="floatin">Float In</option>
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Type-specific editor */}
