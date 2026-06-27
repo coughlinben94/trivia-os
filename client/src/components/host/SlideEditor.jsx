@@ -166,15 +166,23 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
             >
               <option value="">Default</option>
               <option value="random">✦ Random</option>
-              <option value="dissolve">Dissolve</option>
-              <option value="drop">Drop</option>
-              <option value="rise">Rise</option>
-              <option value="zoom">Zoom</option>
-              <option value="settle">Settle</option>
-              <option value="punch">Punch</option>
-              <option value="swoop">Swoop</option>
-              <option value="tilt">Tilt</option>
-              <option value="floatin">Float In</option>
+              <optgroup label="Fade from back">
+                <option value="dissolve">Dissolve</option>
+                <option value="emerge">Emerge</option>
+                <option value="zoom">Zoom</option>
+                <option value="punch">Punch</option>
+              </optgroup>
+              <optgroup label="Down from top">
+                <option value="drop">Drop</option>
+                <option value="descend">Descend</option>
+              </optgroup>
+              <optgroup label="Compound">
+                <option value="sink">Sink</option>
+              </optgroup>
+              <optgroup label="Push from front">
+                <option value="settle">Settle</option>
+                <option value="loom">Loom</option>
+              </optgroup>
             </select>
           </div>
         )}
