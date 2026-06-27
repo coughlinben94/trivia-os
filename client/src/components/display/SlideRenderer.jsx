@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import TitleSlide from './slides/TitleSlide.jsx'
 import RoundIntroSlide from './slides/RoundIntroSlide.jsx'
@@ -11,106 +11,62 @@ import MultiQuestionSlide from './slides/MultiQuestionSlide.jsx'
 import PylRevealSlide from './slides/PylRevealSlide.jsx'
 import StateOfUnionSlide from './slides/StateOfUnionSlide.jsx'
 
-const EASE_SNAP      = [0.23, 1, 0.32, 1]
 const EASE_OVERSHOOT = [0.34, 1.56, 0.64, 1]
-const EASE_SMOOTH    = [0.4, 0, 0.2, 1]
-const EASE_WEIGHT    = [0.25, 1, 0.25, 1]        // ease-out-quart: heavy landing, no bounce
-const EASE_FLOAT     = [0.25, 0.46, 0.45, 0.94]  // ease-out-sine: soft slow settle
+const EASE_QUINT     = [0.22, 1, 0.36, 1]   // standard ease-out
+const EASE_QUART     = [0.25, 1, 0.25, 1]   // weighted hard land (drop)
+const EASE_CUBIC     = [0.33, 1, 0.68, 1]   // gentle
 
 // Per-slide content animation config — tune these without touching component logic
 const SLIDE_ANIMATIONS = {
   'question': {
     initial: { opacity: 0, y: 18 },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.22, ease: EASE_SNAP } },
-    exit:    { opacity: 0, y: -12, transition: { duration: 0.14, ease: EASE_SMOOTH } },
+    animate: { opacity: 1, y: 0,  transition: { duration: 0.22, ease: EASE_QUINT } },
+    exit:    { opacity: 0, y: -12, transition: { duration: 0.14, ease: EASE_CUBIC } },
   },
   'round-intro': {
     initial: { opacity: 0, scale: 0.92 },
     animate: { opacity: 1, scale: 1, transition: { duration: 0.04 } },
-    exit:    { opacity: 0, scale: 0.94, transition: { duration: 0.3, ease: EASE_SMOOTH } },
+    exit:    { opacity: 0, scale: 0.94, transition: { duration: 0.3, ease: EASE_CUBIC } },
   },
   'grading-break': {
     initial: { opacity: 0 },
-    animate: { opacity: 1, transition: { duration: 0.4, ease: EASE_SNAP } },
-    exit:    { opacity: 0, transition: { duration: 0.28, ease: EASE_SMOOTH } },
+    animate: { opacity: 1, transition: { duration: 0.4, ease: EASE_QUINT } },
+    exit:    { opacity: 0, transition: { duration: 0.28, ease: EASE_CUBIC } },
   },
   'scoreboard-reveal': {
     initial: { opacity: 0 },
-    animate: { opacity: 1, transition: { duration: 0.3, ease: EASE_SNAP } },
-    exit:    { opacity: 0, scale: 0.98, transition: { duration: 0.25, ease: EASE_SMOOTH } },
+    animate: { opacity: 1, transition: { duration: 0.3, ease: EASE_QUINT } },
+    exit:    { opacity: 0, scale: 0.98, transition: { duration: 0.25, ease: EASE_CUBIC } },
   },
   'title': {
     initial: { opacity: 0 },
-    animate: { opacity: 1, transition: { duration: 0.5, ease: EASE_SNAP } },
-    exit:    { opacity: 0, transition: { duration: 0.3, ease: EASE_SMOOTH } },
+    animate: { opacity: 1, transition: { duration: 0.5, ease: EASE_QUINT } },
+    exit:    { opacity: 0, transition: { duration: 0.3, ease: EASE_CUBIC } },
   },
   'state-of-union': {
     initial: { opacity: 0 },
-    animate: { opacity: 1, transition: { duration: 0.5, ease: EASE_SNAP } },
-    exit:    { opacity: 0, transition: { duration: 0.3, ease: EASE_SMOOTH } },
+    animate: { opacity: 1, transition: { duration: 0.5, ease: EASE_QUINT } },
+    exit:    { opacity: 0, transition: { duration: 0.3, ease: EASE_CUBIC } },
   },
   'shiny': {
     initial: { opacity: 0, scale: 1.06 },
-    animate: { opacity: 1, scale: 1, transition: { delay: 0.05, duration: 0.28, ease: EASE_SNAP } },
-    exit:    { opacity: 0, scale: 0.96, transition: { duration: 0.2, ease: EASE_SMOOTH } },
+    animate: { opacity: 1, scale: 1, transition: { delay: 0.05, duration: 0.28, ease: EASE_QUINT } },
+    exit:    { opacity: 0, scale: 0.96, transition: { duration: 0.2, ease: EASE_CUBIC } },
   },
 }
 
 // ─── Named entrance library ────────────────────────────────────────────────────
-// GPU-only (opacity, y, scale, rotate). Exits always faster than enters.
+// GPU-only (opacity, y, scale). Exits always faster than enters.
 const TRANSITIONS = {
-  'dissolve': {
-    initial: { opacity: 0 },
-    animate: { opacity: 1, transition: { duration: 0.26, ease: EASE_SMOOTH } },
-    exit:    { opacity: 0, transition: { duration: 0.14, ease: EASE_SMOOTH } },
-  },
-  'drop': {
-    initial: { opacity: 0, y: -280 },
-    animate: { opacity: 1, y: 0,    transition: { duration: 0.34, ease: EASE_WEIGHT } },
-    exit:    { opacity: 0, y: -16,  transition: { duration: 0.16, ease: EASE_SMOOTH } },
-  },
-  'rise': {
-    initial: { opacity: 0, y: 70 },
-    animate: { opacity: 1, y: 0,   transition: { duration: 0.26, ease: EASE_SNAP } },
-    exit:    { opacity: 0, y: -12, transition: { duration: 0.14, ease: EASE_SMOOTH } },
-  },
-  'zoom': {
-    initial: { opacity: 0, scale: 0.8 },
-    animate: { opacity: 1, scale: 1,    transition: { duration: 0.28, ease: EASE_SNAP } },
-    exit:    { opacity: 0, scale: 0.96, transition: { duration: 0.16, ease: EASE_SMOOTH } },
-  },
-  'settle': {
-    initial: { opacity: 0, scale: 1.08 },
-    animate: { opacity: 1, scale: 1,    transition: { duration: 0.30, ease: EASE_SMOOTH } },
-    exit:    { opacity: 0, scale: 0.98, transition: { duration: 0.16, ease: EASE_SMOOTH } },
-  },
-  'punch': {
-    initial: { opacity: 0, scale: 0.6 },
-    animate: { opacity: 1, scale: 1,   transition: { duration: 0.22, ease: EASE_SNAP } },
-    exit:    { opacity: 0, scale: 0.9, transition: { duration: 0.14, ease: EASE_SMOOTH } },
-  },
-  'swoop': {
-    initial: { opacity: 0, y: -180, scale: 0.9 },
-    animate: { opacity: 1, y: 0,   scale: 1, transition: { duration: 0.34, ease: EASE_SNAP } },
-    exit:    { opacity: 0, y: -14,           transition: { duration: 0.16, ease: EASE_SMOOTH } },
-  },
-  'tilt': {
-    initial: { opacity: 0, y: 24, rotate: -4 },
-    animate: { opacity: 1, y: 0,  rotate: 0, transition: { duration: 0.30, ease: EASE_SNAP } },
-    exit:    { opacity: 0, rotate: 2,         transition: { duration: 0.16, ease: EASE_SMOOTH } },
-  },
-  'floatin': {
-    initial: { opacity: 0, y: 40, scale: 0.96 },
-    animate: { opacity: 1, y: 0,  scale: 1,   transition: { duration: 0.46, ease: EASE_FLOAT } },
-    exit:    { opacity: 0, y: -10,             transition: { duration: 0.18, ease: EASE_SMOOTH } },
-  },
-  // TODO: staggerChildren only fires when direct children use Framer Motion variants;
-  //       until slide components adopt variant-driven children, this behaves like 'rise'
-  'stagger': {
-    initial: { opacity: 0, y: 70 },
-    animate: { opacity: 1, y: 0,   transition: { duration: 0.26, ease: EASE_SNAP, staggerChildren: 0.05 } },
-    exit:    { opacity: 0, y: -12, transition: { duration: 0.14, ease: EASE_SMOOTH } },
-  },
+  'dissolve': { initial: { opacity: 0 },             animate: { opacity: 1,           transition: { duration: 0.28, ease: EASE_CUBIC } }, exit: { opacity: 0,            transition: { duration: 0.16, ease: EASE_CUBIC } } },
+  'emerge':   { initial: { opacity: 0, scale: 0.92 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.44, ease: EASE_CUBIC } }, exit: { opacity: 0, scale: 0.98, transition: { duration: 0.16, ease: EASE_CUBIC } } },
+  'zoom':     { initial: { opacity: 0, scale: 0.82 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.30, ease: EASE_QUINT } }, exit: { opacity: 0, scale: 0.97, transition: { duration: 0.16, ease: EASE_CUBIC } } },
+  'punch':    { initial: { opacity: 0, scale: 0.62 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.24, ease: EASE_QUINT } }, exit: { opacity: 0, scale: 0.90, transition: { duration: 0.14, ease: EASE_CUBIC } } },
+  'drop':     { initial: { opacity: 0, y: -260 },    animate: { opacity: 1, y: 0,     transition: { duration: 0.36, ease: EASE_QUART } }, exit: { opacity: 0, y: -16,      transition: { duration: 0.16, ease: EASE_CUBIC } } },
+  'descend':  { initial: { opacity: 0, y: -140 },    animate: { opacity: 1, y: 0,     transition: { duration: 0.52, ease: EASE_CUBIC } }, exit: { opacity: 0, y: -12,      transition: { duration: 0.16, ease: EASE_CUBIC } } },
+  'sink':     { initial: { opacity: 0, y: -60, scale: 1.06 }, animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.38, ease: EASE_QUINT } }, exit: { opacity: 0, y: -10, transition: { duration: 0.16, ease: EASE_CUBIC } } },
+  'settle':   { initial: { opacity: 0, scale: 1.07 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.32, ease: EASE_CUBIC } }, exit: { opacity: 0, scale: 0.99, transition: { duration: 0.16, ease: EASE_CUBIC } } },
+  'loom':     { initial: { opacity: 0, scale: 1.14 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.34, ease: EASE_QUINT } }, exit: { opacity: 0, scale: 0.98, transition: { duration: 0.16, ease: EASE_CUBIC } } },
 }
 
 const TRANSITION_KEYS = Object.keys(TRANSITIONS)
@@ -153,7 +109,8 @@ const SLIDE_COMPONENTS = {
 
 export default function SlideRenderer({ slide, show, direction }) {
   const { theme } = useTheme()
-  const variants = getVariants(slide)
+  const reduce = useReducedMotion()
+  const variants = (reduce && !slide?.data?.isShiny) ? TRANSITIONS.dissolve : getVariants(slide)
   const SlideComponent = SLIDE_COMPONENTS[slide.type] ?? CustomSlide
 
   return (
