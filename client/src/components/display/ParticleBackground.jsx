@@ -230,13 +230,15 @@ function MidnightGalaxyAmbient() {
 // ─── 3. AUTUMN HARVEST ────────────────────────────────────────────────────
 function AutumnHarvestAmbient() {
   const leaves = useMemo(() => [
-    { color: 'rgba(190,65,10,0.90)',  size: 6,  dur: '9s',    delay: '0s',   drift: '14px',  rot: '260deg' },
-    { color: 'rgba(210,95,0,0.85)',   size: 5,  dur: '11s',   delay: '2.1s', drift: '-10px', rot: '320deg' },
-    { color: 'rgba(200,120,0,0.82)',  size: 5,  dur: '13s',   delay: '1.2s', drift: '-16px', rot: '280deg' },
-    { color: 'rgba(175,55,8,0.90)',   size: 6,  dur: '10s',   delay: '6.5s', drift: '8px',   rot: '360deg' },
-    { color: 'rgba(150,40,5,0.86)',   size: 7,  dur: '9.5s',  delay: '7.2s', drift: '18px',  rot: '300deg' },
-    { color: 'rgba(230,70,5,0.84)',   size: 4,  dur: '10.5s', delay: '5.1s', drift: '12px',  rot: '340deg' },
-  ].map((l, i) => ({ ...l, left: `${6 + i * 14}%` })), [])
+    { color: 'rgba(235,100,25,0.95)', size: 6,  dur: '9s',    delay: '0s',   drift: '14px',  rot: '260deg' },
+    { color: 'rgba(245,150,20,0.93)', size: 5,  dur: '13s',   delay: '1.2s', drift: '-16px', rot: '280deg' },
+    { color: 'rgba(255,130,30,0.95)', size: 5,  dur: '11s',   delay: '2.1s', drift: '-10px', rot: '320deg' },
+    { color: 'rgba(250,118,15,0.94)', size: 5,  dur: '8.5s',  delay: '3.4s', drift: '-18px', rot: '310deg' },
+    { color: 'rgba(240,95,20,0.93)',  size: 6,  dur: '12s',   delay: '4.8s', drift: '16px',  rot: '250deg' },
+    { color: 'rgba(255,110,28,0.94)', size: 4,  dur: '10.5s', delay: '5.1s', drift: '12px',  rot: '340deg' },
+    { color: 'rgba(220,85,22,0.92)',  size: 6,  dur: '10s',   delay: '6.5s', drift: '8px',   rot: '360deg' },
+    { color: 'rgba(230,78,18,0.92)',  size: 7,  dur: '9.5s',  delay: '7.2s', drift: '18px',  rot: '300deg' },
+  ].map((l, i) => ({ ...l, left: `${5 + i * 12}%` })), [])
 
   const embers = useMemo(() => Array.from({ length: 5 }, (_, i) => ({
     left:  `${42 + (i % 4) * 4 - 6}%`,
