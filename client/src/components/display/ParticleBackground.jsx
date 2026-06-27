@@ -474,7 +474,7 @@ function RetroArcadeAmbient() {
     {/* Scanlines */}
     <div aria-hidden style={{
       position: 'absolute', inset: 0, pointerEvents: 'none',
-      backgroundImage: 'repeating-linear-gradient(transparent 0px, transparent 3px, rgba(0,0,0,0.18) 3px, rgba(0,0,0,0.18) 4px)',
+      backgroundImage: 'repeating-linear-gradient(transparent 0px, transparent 3px, rgba(0,0,0,0.45) 3px, rgba(0,0,0,0.45) 4px)',
       backgroundSize: '100% 4px',
       willChange: 'transform',
       animation: 'ambientScanline 0.5s linear infinite',
