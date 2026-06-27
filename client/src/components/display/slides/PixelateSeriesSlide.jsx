@@ -79,11 +79,12 @@ export default function PixelateSeriesSlide({ slide, show }) {
               {stages.map((_, i) => (
                 <div
                   key={i}
-                  className="rounded-full transition-all duration-300"
+                  className="rounded-full transition-opacity duration-300"
                   style={{
                     width: 10,
                     height: 10,
-                    background: i <= activeStage ? theme.colors.shinyAccent : `${theme.colors.accent}55`,
+                    background: theme.colors.shinyAccent,
+                    opacity: i <= activeStage ? 1 : 0.25,
                   }}
                 />
               ))}
