@@ -45,7 +45,7 @@ Full-screen interstitial between rounds.
 - Animated subtle looping background
 - **Back button:** "↩ Back to Q1" — jumps host to first question of that round (`backLinkSlideId` in data)
 - Ben photo shown (thumbnail, lower-left corner)
-- Trivia Jukebox plays during this time (triggered manually via Stream Deck)
+- **Jukebox handoff (nav mechanism):** full-page navigation, NOT iframe and NOT postMessage (Spotify refuses iframe embedding; theme can't cross origins). After the phase-1 message (~10s; Space/ArrowRight skips it, which is what the Stream Deck Next key sends), `transitionToJukebox` runs `window.location.href = 'https://trivia-jukebox.vercel.app'`. Return is manual: the Jukebox's `b` keydown handler navigates to `trivia-os.vercel.app/display?from=jukebox`; Display.jsx detects `from=jukebox`, advances `current_slide_index` past the grading break in Supabase (clamped, next>cur guard), then strips the param via `history.replaceState`.
 - Implemented: `GradingBreakSlide.jsx`
 
 ### `scoreboard-reveal`

@@ -34,6 +34,13 @@ const KEYFRAMES = `
     92%  { opacity: var(--hi, 0.7); }
     100% { transform: translateY(108vh) translateX(var(--drift, 8px)); opacity: 0; }
   }
+  @keyframes ambientLeafFall {
+    0%   { transform: translateY(-10%) translateX(0) rotate(0deg);                                            opacity: 0; }
+    10%  { opacity: var(--hi, 0.8); }
+    50%  { transform: translateY(55vh)  translateX(calc(var(--drift, 8px) * -1)) rotate(120deg); }
+    90%  { opacity: var(--hi, 0.7); }
+    100% { transform: translateY(110vh) translateX(var(--drift, 8px)) rotate(var(--rot, 300deg));             opacity: 0; }
+  }
   @keyframes ambientRiseUp {
     0%   { transform: translateY(0) scale(1);    opacity: 0;    }
     10%  { opacity: var(--hi, 0.6); }
@@ -100,18 +107,19 @@ function GlowLayer({ style, lo, hi, duration = '4s', delay = '0s', flicker = fal
   )
 }
 
-function FallingParticle({ left, size, color, duration, delay, drift = '8px', opacity = 0.85, square = false, ratio = 1 }) {
+function FallingParticle({ left, size, color, duration, delay, drift = '8px', opacity = 0.85, square = false, ratio = 1, leaf = false, rot = '300deg' }) {
   return (
     <div
       aria-hidden
       style={{
         position: 'absolute', top: '-3%', left, pointerEvents: 'none',
         width: size, height: ratio === 1 ? size : size * ratio,
-        borderRadius: square ? '1px' : '50%',
+        borderRadius: leaf ? '0 100% 0 100%' : square ? '1px' : '50%',
         background: color,
         willChange: 'transform, opacity',
         '--hi': opacity, '--drift': drift,
-        animation: `ambientFallSlow ${duration} ${delay} ease-in-out infinite`,
+        ...(leaf && { '--rot': rot }),
+        animation: `${leaf ? 'ambientLeafFall' : 'ambientFallSlow'} ${duration} ${delay} ease-in-out infinite`,
       }}
     />
   )
@@ -222,16 +230,13 @@ function MidnightGalaxyAmbient() {
 // ─── 3. AUTUMN HARVEST ────────────────────────────────────────────────────
 function AutumnHarvestAmbient() {
   const leaves = useMemo(() => [
-    { color: 'rgba(190,65,10,0.90)',  size: 6,  dur: '9s',    delay: '0s',   drift: '14px'  },
-    { color: 'rgba(210,95,0,0.85)',   size: 5,  dur: '11s',   delay: '2.1s', drift: '-10px' },
-    { color: 'rgba(160,45,5,0.88)',   size: 7,  dur: '8s',    delay: '4.3s', drift: '20px'  },
-    { color: 'rgba(200,120,0,0.82)',  size: 5,  dur: '13s',   delay: '1.2s', drift: '-16px' },
-    { color: 'rgba(175,55,8,0.90)',   size: 6,  dur: '10s',   delay: '6.5s', drift: '8px'   },
-    { color: 'rgba(220,80,0,0.80)',   size: 4,  dur: '12s',   delay: '3.8s', drift: '-22px' },
-    { color: 'rgba(150,40,5,0.86)',   size: 7,  dur: '9.5s',  delay: '7.2s', drift: '18px'  },
-    { color: 'rgba(195,100,0,0.88)',  size: 5,  dur: '11.5s', delay: '0.8s', drift: '-8px'  },
-    { color: 'rgba(230,70,5,0.84)',   size: 4,  dur: '10.5s', delay: '5.1s', drift: '12px'  },
-  ].map((l, i) => ({ ...l, left: `${6 + i * 10}%` })), [])
+    { color: 'rgba(190,65,10,0.90)',  size: 6,  dur: '9s',    delay: '0s',   drift: '14px',  rot: '260deg' },
+    { color: 'rgba(210,95,0,0.85)',   size: 5,  dur: '11s',   delay: '2.1s', drift: '-10px', rot: '320deg' },
+    { color: 'rgba(200,120,0,0.82)',  size: 5,  dur: '13s',   delay: '1.2s', drift: '-16px', rot: '280deg' },
+    { color: 'rgba(175,55,8,0.90)',   size: 6,  dur: '10s',   delay: '6.5s', drift: '8px',   rot: '360deg' },
+    { color: 'rgba(150,40,5,0.86)',   size: 7,  dur: '9.5s',  delay: '7.2s', drift: '18px',  rot: '300deg' },
+    { color: 'rgba(230,70,5,0.84)',   size: 4,  dur: '10.5s', delay: '5.1s', drift: '12px',  rot: '340deg' },
+  ].map((l, i) => ({ ...l, left: `${6 + i * 14}%` })), [])
 
   const embers = useMemo(() => Array.from({ length: 5 }, (_, i) => ({
     left:  `${42 + (i % 4) * 4 - 6}%`,
@@ -258,7 +263,8 @@ function AutumnHarvestAmbient() {
     }}/>
     {leaves.map((l, i) => (
       <FallingParticle key={i} left={l.left} size={Math.round(l.size * 2)} color={l.color}
-        duration={l.dur} delay={l.delay} drift={l.drift} opacity={0.88} ratio={0.6}/>
+        duration={l.dur} delay={l.delay} drift={l.drift} opacity={0.88} ratio={0.6}
+        leaf={true} rot={l.rot}/>
     ))}
     {embers.map((e, i) => (
       <RisingParticle key={i} left={e.left} size={e.size}
