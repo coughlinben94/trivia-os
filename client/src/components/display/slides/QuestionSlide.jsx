@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
-import ParticleBackground from '../ParticleBackground.jsx'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
@@ -16,9 +15,8 @@ function StandardQuestion({ slide, show, theme }) {
   return (
     <div
       className="w-full h-full relative overflow-hidden"
-      style={{ background: theme.colors.bg }}
+      style={{ background: 'transparent' }}
     >
-      <ParticleBackground theme={theme} />
       {/* Reading-well — soft radial darken behind text center */}
       <div aria-hidden style={{
         position: 'absolute', inset: 0, zIndex: 18, pointerEvents: 'none',
