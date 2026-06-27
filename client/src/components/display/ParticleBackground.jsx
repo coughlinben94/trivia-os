@@ -230,14 +230,14 @@ function MidnightGalaxyAmbient() {
 // ─── 3. AUTUMN HARVEST ────────────────────────────────────────────────────
 function AutumnHarvestAmbient() {
   const leaves = useMemo(() => [
-    { color: 'rgba(235,100,25,0.95)', size: 6,  dur: '9s',    delay: '0s',   drift: '14px',  rot: '260deg' },
-    { color: 'rgba(245,150,20,0.93)', size: 5,  dur: '13s',   delay: '1.2s', drift: '-16px', rot: '280deg' },
-    { color: 'rgba(255,130,30,0.95)', size: 5,  dur: '11s',   delay: '2.1s', drift: '-10px', rot: '320deg' },
-    { color: 'rgba(250,118,15,0.94)', size: 5,  dur: '8.5s',  delay: '3.4s', drift: '-18px', rot: '310deg' },
-    { color: 'rgba(240,95,20,0.93)',  size: 6,  dur: '12s',   delay: '4.8s', drift: '16px',  rot: '250deg' },
-    { color: 'rgba(255,110,28,0.94)', size: 4,  dur: '10.5s', delay: '5.1s', drift: '12px',  rot: '340deg' },
-    { color: 'rgba(220,85,22,0.92)',  size: 6,  dur: '10s',   delay: '6.5s', drift: '8px',   rot: '360deg' },
-    { color: 'rgba(230,78,18,0.92)',  size: 7,  dur: '9.5s',  delay: '7.2s', drift: '18px',  rot: '300deg' },
+    { color: 'rgba(245,166,35,1.0)',  size: 6,  dur: '9s',    delay: '0s',    drift: '14px',  rot: '260deg' }, // #f5a623 amber
+    { color: 'rgba(232,130,30,1.0)',  size: 5,  dur: '13s',   delay: '-1.6s', drift: '-16px', rot: '280deg' }, // #e8821e burnt-orange
+    { color: 'rgba(212,100,26,1.0)',  size: 5,  dur: '11s',   delay: '-2.8s', drift: '-10px', rot: '320deg' }, // #d4641a deep-orange
+    { color: 'rgba(242,184,74,1.0)',  size: 5,  dur: '8.5s',  delay: '-3.2s', drift: '-18px', rot: '310deg' }, // #f2b84a gold
+    { color: 'rgba(201,82,26,1.0)',   size: 6,  dur: '12s',   delay: '-6s',   drift: '16px',  rot: '250deg' }, // #c9521a rust
+    { color: 'rgba(245,166,35,1.0)',  size: 4,  dur: '10.5s', delay: '-6.6s', drift: '12px',  rot: '340deg' }, // #f5a623 amber
+    { color: 'rgba(232,130,30,1.0)',  size: 6,  dur: '10s',   delay: '-7.5s', drift: '8px',   rot: '360deg' }, // #e8821e burnt-orange
+    { color: 'rgba(242,184,74,1.0)',  size: 7,  dur: '9.5s',  delay: '-8.3s', drift: '18px',  rot: '300deg' }, // #f2b84a gold
   ].map((l, i) => ({ ...l, left: `${5 + i * 12}%` })), [])
 
   const embers = useMemo(() => Array.from({ length: 5 }, (_, i) => ({
@@ -265,7 +265,7 @@ function AutumnHarvestAmbient() {
     }}/>
     {leaves.map((l, i) => (
       <FallingParticle key={i} left={l.left} size={Math.round(l.size * 2)} color={l.color}
-        duration={l.dur} delay={l.delay} drift={l.drift} opacity={0.88} ratio={0.6}
+        duration={l.dur} delay={l.delay} drift={l.drift} opacity={0.95} ratio={0.6}
         leaf={true} rot={l.rot}/>
     ))}
     {embers.map((e, i) => (
