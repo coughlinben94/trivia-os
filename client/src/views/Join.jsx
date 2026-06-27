@@ -605,6 +605,8 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, myScores, leaderbo
   const [showScoreboard, setShowScoreboard]   = useState(false)
   const [viewedIndex, setViewedIndex]         = useState(show?.current_slide_index ?? 0)
   const [powerupConfirming, setPowerupConfirming] = useState(false)
+  const [powerupInvoking, setPowerupInvoking]   = useState(false)
+  const [powerupError, setPowerupError]         = useState(null)
   const pref = useReducedMotion()
   const prevRevealedRef = useRef(show?.scores_revealed ?? false)
 
@@ -781,22 +783,46 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, myScores, leaderbo
                   <p style={{ color: `${text}55`, fontSize: '0.775rem', lineHeight: 1.5, margin: '0 0 0.75rem' }}>
                     {powerup.description} This can&apos;t be undone.
                   </p>
+                  {powerupError && (
+                    <p style={{ color: '#ff6b6b', fontSize: '0.75rem', margin: '0 0 0.6rem', lineHeight: 1.4 }}>
+                      {powerupError}
+                    </p>
+                  )}
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button
-                      onClick={() => setPowerupConfirming(false)}
-                      style={{ flex: 1, padding: '0.55rem', borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: 'none', color: `${text}65`, fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', minHeight: 44, fontFamily: 'DM Sans, sans-serif' }}
+                      onClick={() => { setPowerupConfirming(false); setPowerupError(null) }}
+                      disabled={powerupInvoking}
+                      style={{ flex: 1, padding: '0.55rem', borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: 'none', color: `${text}65`, fontSize: '0.8rem', fontWeight: 500, cursor: powerupInvoking ? 'default' : 'pointer', opacity: powerupInvoking ? 0.4 : 1, minHeight: 44, fontFamily: 'DM Sans, sans-serif' }}
                     >Cancel</button>
                     <button
-                      onClick={async () => { await onInvokePowerup(); setPowerupConfirming(false) }}
-                      style={{ flex: 1, padding: '0.55rem', borderRadius: 8, background: '#e02020', border: 'none', color: '#fff', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', minHeight: 44, fontFamily: 'DM Sans, sans-serif' }}
-                    >{powerup.icon} Use it!</button>
+                      onClick={async () => {
+                        if (powerupInvoking) return
+                        setPowerupInvoking(true)
+                        setPowerupError(null)
+                        try {
+                          await onInvokePowerup()
+                          setPowerupConfirming(false)
+                        } catch (err) {
+                          setPowerupError(err.message ?? "Couldn't use powerup — try again")
+                        } finally {
+                          setPowerupInvoking(false)
+                        }
+                      }}
+                      disabled={powerupInvoking}
+                      style={{ flex: 1, padding: '0.55rem', borderRadius: 8, background: powerupInvoking ? '#a01010' : '#e02020', border: 'none', color: '#fff', fontSize: '0.8rem', fontWeight: 700, cursor: powerupInvoking ? 'default' : 'pointer', minHeight: 44, fontFamily: 'DM Sans, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
+                    >
+                      {powerupInvoking
+                        ? (<><span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.7s linear infinite', display: 'inline-block', flexShrink: 0 }} />Using…</>)
+                        : <>{powerup.icon} Use it!</>
+                      }
+                    </button>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
 
             <button
-              onClick={() => !powerupUsed && setPowerupConfirming(c => !c)}
+              onClick={() => { if (!powerupUsed) { setPowerupConfirming(c => !c); setPowerupError(null) } }}
               style={{
                 height: 44, minWidth: 44, borderRadius: 10, padding: '0 0.6rem',
                 background: powerupUsed ? 'rgba(255,255,255,0.04)' : `${accent}20`,
@@ -966,7 +992,8 @@ export default function Join() {
       last_action: 'used_powerup',
       last_action_at: new Date().toISOString(),
     }).eq('id', team.id)
-    if (!error) setPowerupUsed(true)
+    if (error) throw new Error("Couldn't use powerup — try again")
+    setPowerupUsed(true)
   }
 
   // ── Render ────────────────────────────────────────────────────────────
