@@ -9,7 +9,7 @@ const path = require('path')
 const playwright = require('/Users/bencoughlin/Projects/trivia-os/node_modules/playwright')
 const { PNG } = require('/Users/bencoughlin/Projects/trivia-os/node_modules/pngjs')
 
-const BASE_URL = 'http://localhost:5174'
+const BASE_URL = 'https://trivia-os.vercel.app'
 const OUT_DIR = path.join(__dirname, '..', 'theme-screenshots-v2')
 const REPORT_PATH = path.join(__dirname, '..', 'theme-audit-report.md')
 const GRID_PATH = path.join(__dirname, '..', 'theme-grid-v2.html')
@@ -22,6 +22,9 @@ const THEMES = [
   'drive-in-movie', 'western-showdown', 'under-the-sea', 'neon-tokyo',
   'firefly-summer', 'wine-cellar', 'meteor-shower', 'eighties-night',
 ]
+const arg = process.argv[2]
+const TARGET = arg ? THEMES.filter(t => t === arg) : THEMES
+if (arg && !TARGET.length) { console.error(`Unknown theme "${arg}". Valid: ${THEMES.join(', ')}`); process.exit(1) }
 
 // Still capture config
 const STILL_W = 1920, STILL_H = 1080
@@ -118,9 +121,9 @@ async function main() {
   const browser = await playwright.chromium.launch({ headless: true })
   const results = []
 
-  for (let i = 0; i < THEMES.length; i++) {
-    const themeId = THEMES[i]
-    process.stdout.write(`[${i + 1}/${THEMES.length}] ${themeId}... `)
+  for (let i = 0; i < TARGET.length; i++) {
+    const themeId = TARGET[i]
+    process.stdout.write(`[${i + 1}/${TARGET.length}] ${themeId}... `)
     const errors = []
 
     const lum = await captureStill(browser, themeId, errors)
