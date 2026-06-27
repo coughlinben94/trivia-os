@@ -202,30 +202,35 @@ const EASE = {
 
 // ─── 1. PURE MICHIGAN ─────────────────────────────────────────────────────
 function PureMichiganAmbient() {
-  const fireflies = useMemo(() => Array.from({ length: 14 }, (_, i) => ({
-    left:   `${12 + (i * 6.5 + (i % 3) * 9)}%`,
-    top:    `${48 + (i % 5) * 8 + (i % 2) * 6}%`,
+  const motes = useMemo(() => Array.from({ length: 22 }, (_, i) => ({
+    left:   `${(i * 97 + i % 7 * 31) % 100}%`,
+    top:    `${(i * 83 + i % 7 * 29) % 100}%`,
     size:   3 + (i % 3) * 1.0,
-    dur:    `${2.8 + (i % 4) * 0.9}s`,
-    delay:  `-${((i / 14) * (2.8 + (i % 4) * 0.9)).toFixed(1)}s`,
-    wDur:   `${6.2 + (i % 3) * 1.4}s`,
-    wDelay: `-${((i * 1.3) % 8).toFixed(1)}s`,
+    dur:    `${5.0 + (i % 4) * 1.2}s`,
+    delay:  `-${((i / 22) * (5.0 + (i % 4) * 1.2)).toFixed(1)}s`,
+    wDur:   `${14 + (i % 4) * 2}s`,
+    wDelay: `-${((i * 2.3) % 14).toFixed(1)}s`,
   })), [])
 
   return <>
-    <GlowLayer lo={0.15} hi={0.35} duration="12s" style={{
+    <GlowLayer lo={0.18} hi={0.42} duration="12s" style={{
       inset: 0, bottom: '60%',
       background: 'linear-gradient(to bottom, rgba(0,25,80,0.32) 0%, rgba(0,40,100,0.22) 70%, transparent 100%)',
     }}/>
-    <GlowLayer lo={0.18} hi={0.42} duration="18s" delay="3s" style={{
+    <GlowLayer lo={0.22} hi={0.52} duration="18s" delay="3s" style={{
       bottom: 0, left: 0, right: 0, height: '30%',
       background: 'linear-gradient(to top, rgba(0,70,140,0.40), rgba(0,50,100,0.20), transparent)',
     }}/>
-    {fireflies.map((f, i) => (
+    {/* Water shimmer band — light on the lake surface */}
+    <GlowLayer lo={0.15} hi={0.35} duration="24s" delay="6s" style={{
+      top: '55%', left: 0, right: 0, height: '20%',
+      background: 'radial-gradient(ellipse 100% 50% at 50% 100%, rgba(40,120,200,0.22), transparent)',
+    }}/>
+    {motes.map((f, i) => (
       <PulseDot key={i} left={f.left} top={f.top} size={f.size}
-        color="rgba(180,255,80,0.95)" glowColor="rgba(140,255,40,0.55)"
+        color="rgba(210,240,255,0.90)" glowColor="rgba(150,210,255,0.40)"
         duration={f.dur} delay={f.delay}
-        lo={0.15} wander={true} wanderDur={f.wDur} wanderDelay={f.wDelay}
+        lo={0.45} wander={true} wanderDur={f.wDur} wanderDelay={f.wDelay}
       />
     ))}
   </>
