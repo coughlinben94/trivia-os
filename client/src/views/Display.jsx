@@ -368,7 +368,7 @@ export default function Display() {
           const nextIndex = next.current_slide_index ?? 0
           setDirection(nextIndex >= prevIndexRef.current ? 1 : -1)
           prevIndexRef.current = nextIndex
-          setShow(next)
+          setShow({ ...next, theme: next.theme_id ?? next.theme })
         }
       )
       .subscribe()
