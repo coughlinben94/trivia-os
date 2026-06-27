@@ -177,6 +177,8 @@ export function useShow() {
       id: newId,
       title: `${original.title} (copy)`,
       is_live: false,
+      current_slide_id: null,
+      current_slide_index: 0,
       created_at: now,
       updated_at: now,
     })
