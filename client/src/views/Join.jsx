@@ -42,6 +42,22 @@ function LoadingScreen() {
   )
 }
 
+// ─── Error ────────────────────────────────────────────────────────────────────
+function ErrorScreen({ message }) {
+  return (
+    <div style={{
+      minHeight: '100dvh', background: '#050505',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', padding: '2rem',
+    }}>
+      <img src="/baynes-logo.svg" alt="" style={{ height: 40, opacity: 0.3, marginBottom: '1.5rem' }} />
+      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.9375rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.6 }}>
+        {message}
+      </p>
+    </div>
+  )
+}
+
 // ─── No show ──────────────────────────────────────────────────────────────────
 function NoShowScreen() {
   return (
@@ -447,13 +463,13 @@ function SlideContent({ slide, show, theme }) {
 }
 
 // ─── Scoreboard sheet ─────────────────────────────────────────────────────────
-function ScoreboardSheet({ leaderboard, myTeamId, onClose, theme }) {
+function ScoreboardSheet({ leaderboard, leaderboardStatus, onRetryLeaderboard, myTeamId, onClose, theme }) {
   const pref      = useReducedMotion()
   const text      = theme?.colors?.text      ?? '#ffffff'
   const accent    = theme?.colors?.accent   ?? '#1a6b4a'
   const highlight = theme?.colors?.highlight ?? '#4dffc3'
   const bg        = theme?.colors?.bg       ?? '#050505'
-  const maxScore  = leaderboard.length > 0 ? Math.max(...leaderboard.map(t => t.total)) : 1
+  const maxScore  = leaderboard && leaderboard.length > 0 ? Math.max(...leaderboard.map(t => t.total)) : 1
 
   return (
     <motion.div
@@ -512,9 +528,18 @@ function ScoreboardSheet({ leaderboard, myTeamId, onClose, theme }) {
 
         {/* Rows */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0.25rem 1rem calc(1.5rem + env(safe-area-inset-bottom, 0px))', display: 'flex', flexDirection: 'column', gap: '0.5rem', cursor: 'default' }}>
-          {leaderboard.length === 0
+          {leaderboardStatus === 'loading'
+            ? <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '2.5rem' }}>
+                <span style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid ${accent}30`, borderTopColor: accent, animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />
+              </div>
+            : leaderboardStatus === 'error'
+            ? <div style={{ textAlign: 'center', paddingTop: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                <p style={{ color: 'rgba(255,100,100,0.7)', fontSize: '0.875rem', margin: 0 }}>Couldn&apos;t load scores</p>
+                <button onClick={onRetryLeaderboard} style={{ background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: 8, color: `${text}65`, fontSize: '0.8rem', padding: '0.5rem 1.25rem', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', minHeight: 44 }}>Tap to retry</button>
+              </div>
+            : leaderboard?.length === 0
             ? <p style={{ color: `${text}30`, textAlign: 'center', fontSize: '0.875rem', paddingTop: '2rem' }}>No scores yet</p>
-            : leaderboard.map((team, i) => {
+            : (leaderboard ?? []).map((team, i) => {
                 const isMe    = team.id === myTeamId
                 const medal   = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
                 const barPct  = maxScore > 0 ? Math.max(4, (team.total / maxScore) * 100) : 4
@@ -601,7 +626,7 @@ function ReconnectingBanner({ visible }) {
 }
 
 // ─── Live view ────────────────────────────────────────────────────────────────
-function LiveView({ show, team, powerupUsed, onInvokePowerup, myScores, leaderboard, theme }) {
+function LiveView({ show, team, powerupUsed, onInvokePowerup, myScores, leaderboard, leaderboardStatus, onRetryLeaderboard, theme }) {
   const [showScoreboard, setShowScoreboard]   = useState(false)
   const [viewedIndex, setViewedIndex]         = useState(show?.current_slide_index ?? 0)
   const [powerupConfirming, setPowerupConfirming] = useState(false)
@@ -634,7 +659,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, myScores, leaderbo
   const currentSlide  = slides[viewedIndex] ?? null
   const canGoBack     = viewedIndex > 0
   const totalScore    = myScores.reduce((sum, s) => sum + (s.score || 0), 0)
-  const scoreboardOn  = (show?.scoreboard_visible ?? false) && leaderboard
+  const scoreboardOn  = (show?.scoreboard_visible ?? false) && (leaderboard !== null || leaderboardStatus !== null)
   const powerup       = show?.powerups?.[0] ?? null
 
   // Top bar content
@@ -660,9 +685,11 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, myScores, leaderbo
 
       {/* Scoreboard sheet */}
       <AnimatePresence>
-        {showScoreboard && leaderboard && (
+        {showScoreboard && (leaderboard !== null || leaderboardStatus !== null) && (
           <ScoreboardSheet
             leaderboard={leaderboard}
+            leaderboardStatus={leaderboardStatus}
+            onRetryLeaderboard={onRetryLeaderboard}
             myTeamId={team?.id}
             onClose={() => setShowScoreboard(false)}
             theme={theme}
@@ -854,8 +881,11 @@ export default function Join() {
   const [team, setTeam]           = useState(null)
   const [powerupUsed, setPowerupUsed] = useState(false)
   const [myScores, setMyScores]   = useState([])
-  const [leaderboard, setLeaderboard] = useState(null)
-  const [connStatus, setConnStatus]   = useState('SUBSCRIBED')
+  const [leaderboard, setLeaderboard]         = useState(null)
+  const [leaderboardStatus, setLeaderboardStatus] = useState(null) // null | 'loading' | 'error'
+  const [leaderboardRetry, setLeaderboardRetry]   = useState(0)
+  const [initError, setInitError]             = useState(null)
+  const [connStatus, setConnStatus]           = useState('SUBSCRIBED')
 
   const theme = useMemo(() => show?.theme_id ? getTheme(show.theme_id) : null, [show?.theme_id])
 
@@ -864,8 +894,9 @@ export default function Join() {
     if (!showParam) { setPhase('no-show'); return }
 
     async function init() {
+      // Show fetch — hard network failure → error screen, not register
+      let fetchedShow = null
       try {
-        let fetchedShow = null
         if (showParam === 'live') {
           const { data } = await supabase.from('shows').select('*').eq('is_live', true).single()
           fetchedShow = data
@@ -873,12 +904,18 @@ export default function Join() {
           const { data } = await supabase.from('shows').select('*').eq('id', showParam).single()
           fetchedShow = data
         }
-        if (!fetchedShow) { setPhase('no-show'); return }
-        setShow(fetchedShow)
+      } catch {
+        setInitError("Can't reach the show right now — check your connection and refresh.")
+        setPhase('error')
+        return
+      }
+      if (!fetchedShow) { setPhase('no-show'); return }
+      setShow(fetchedShow)
 
-        // Session restore — verify team still exists
-        const stored = loadStoredTeam(fetchedShow.id)
-        if (stored?.id) {
+      // Session restore — verify team still exists
+      const stored = loadStoredTeam(fetchedShow.id)
+      if (stored?.id) {
+        try {
           const { data: teamRow } = await supabase.from('teams').select('id, name, color, powerup_used').eq('id', stored.id).single()
           if (teamRow) {
             setTeam({ ...stored, ...teamRow })
@@ -886,11 +923,13 @@ export default function Join() {
             setPhase(fetchedShow.is_live ? 'live' : 'waiting')
             return
           }
+        } catch {
+          // network error on session restore — treat as stale, fall through to register
         }
-        setPhase('register')
-      } catch {
-        setPhase('register')
+        // stale or unreachable — clear dead entry so it doesn't retry next time
+        localStorage.removeItem(getTeamKey(fetchedShow.id))
       }
+      setPhase('register')
     }
 
     init()
@@ -937,19 +976,25 @@ export default function Join() {
 
   // ── Leaderboard ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!show?.scores_revealed || !show?.id) { setLeaderboard(null); return }
+    if (!show?.scores_revealed || !show?.id) { setLeaderboard(null); setLeaderboardStatus(null); return }
+    setLeaderboardStatus('loading')
     async function load() {
-      const [{ data: teams }, { data: scores }] = await Promise.all([
-        supabase.from('teams').select('id, name, color').eq('show_id', show.id).order('registered_at'),
-        supabase.from('team_scores').select('team_id, score').eq('show_id', show.id),
-      ])
-      const built = (teams ?? [])
-        .map(t => ({ ...t, total: (scores ?? []).filter(s => s.team_id === t.id).reduce((sum, s) => sum + (s.score || 0), 0) }))
-        .sort((a, b) => b.total - a.total)
-      setLeaderboard(built)
+      try {
+        const [{ data: teams }, { data: scores }] = await Promise.all([
+          supabase.from('teams').select('id, name, color').eq('show_id', show.id).order('registered_at'),
+          supabase.from('team_scores').select('team_id, score').eq('show_id', show.id),
+        ])
+        const built = (teams ?? [])
+          .map(t => ({ ...t, total: (scores ?? []).filter(s => s.team_id === t.id).reduce((sum, s) => sum + (s.score || 0), 0) }))
+          .sort((a, b) => b.total - a.total)
+        setLeaderboard(built)
+        setLeaderboardStatus(null)
+      } catch {
+        setLeaderboardStatus('error')
+      }
     }
     load()
-  }, [show?.scores_revealed, show?.id])
+  }, [show?.scores_revealed, show?.id, leaderboardRetry])
 
   // ── visibilitychange ──────────────────────────────────────────────────
   useEffect(() => {
@@ -1012,6 +1057,7 @@ export default function Join() {
 
   if (phase === 'loading') return <LoadingScreen />
   if (phase === 'no-show') return <NoShowScreen />
+  if (phase === 'error')   return <ErrorScreen message={initError} />
 
   return (
     <>
@@ -1026,6 +1072,8 @@ export default function Join() {
           onInvokePowerup={handleInvokePowerup}
           myScores={myScores}
           leaderboard={leaderboard}
+          leaderboardStatus={leaderboardStatus}
+          onRetryLeaderboard={() => setLeaderboardRetry(n => n + 1)}
           theme={theme}
         />
       )}
