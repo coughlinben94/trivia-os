@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useState } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
-import { getTheme } from '../../themes/index.js'
+import { getTheme, THEMES } from '../../themes/index.js'
 import ScorePanel from './ScorePanel.jsx'
 
 const SLIDE_META = {
@@ -155,8 +155,9 @@ function UpNextCard({ slide, offset }) {
 
 // ─── LiveMode ──────────────────────────────────────────────────────────────
 
-export default function LiveMode({ show, actions, onExitLive }) {
+export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
   const [scorePanelOpen, setScorePanelOpen] = useState(false)
+  const [themePickerOpen, setThemePickerOpen] = useState(false)
 
   const slides = sortedSlides(show)
   const currentIndex = show.showState.currentSlideIndex ?? 0
@@ -174,11 +175,11 @@ export default function LiveMode({ show, actions, onExitLive }) {
   }).length
 
   const handleKeyDown = useCallback((e) => {
-    if (scorePanelOpen) return
+    if (scorePanelOpen || themePickerOpen) return
     if (e.code === 'ArrowRight') { e.preventDefault(); actions.nextSlide() }
     if (e.code === 'ArrowLeft')  { e.preventDefault(); actions.prevSlide() }
     if (e.code === 'KeyS')       setScorePanelOpen(true)
-  }, [scorePanelOpen, actions])
+  }, [scorePanelOpen, themePickerOpen, actions])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -212,9 +213,37 @@ export default function LiveMode({ show, actions, onExitLive }) {
           {counterLabel(currentSlide, currentIndex, slides.length, show)}
         </div>
 
-        {/* Right: Next + Score */}
+        {/* Right: Next + Theme + Score */}
         <div className="absolute right-0 flex items-center gap-1 px-4 h-full">
           <NavButton onClick={actions.nextSlide} disabled={atEnd} label="Next ▶" title="Next (→)" primary />
+          {onThemeChange && (
+            <div className="relative ml-1">
+              <button
+                onClick={() => setThemePickerOpen(v => !v)}
+                className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <span className="w-3 h-3 rounded-full shrink-0" style={{ background: theme.colors.highlight }} />
+                Theme
+              </button>
+              {themePickerOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setThemePickerOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-52 max-h-72 overflow-y-auto">
+                    {THEMES.map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => { onThemeChange(t.id); setThemePickerOpen(false) }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-gray-50 transition-colors"
+                      >
+                        <span className="w-3 h-3 rounded-full shrink-0" style={{ background: t.colors.highlight }} />
+                        <span className={t.id === theme.id ? 'font-semibold text-gray-900' : 'text-gray-700'}>{t.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <button
             onClick={() => setScorePanelOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-baynes-forest text-white text-sm font-semibold hover:bg-green-900 transition-colors ml-1"
