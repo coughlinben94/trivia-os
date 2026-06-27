@@ -29,10 +29,13 @@ const KEYFRAMES = `
     100%{ opacity: calc(var(--hi, 0.48) * 0.95); }
   }
   @keyframes ambientFallSlow {
-    0%   { transform: translateY(-8px) translateX(0px);   opacity: 0;    }
+    0%   { transform: translateY(-8px) translateX(0px);                               opacity: 0; }
     8%   { opacity: var(--hi, 0.8); }
+    25%  { transform: translateY(25vh)  translateX(calc(var(--drift, 8px) * -0.5)); }
+    50%  { transform: translateY(52vh)  translateX(0px); }
+    75%  { transform: translateY(78vh)  translateX(calc(var(--drift, 8px) * 0.7)); }
     92%  { opacity: var(--hi, 0.7); }
-    100% { transform: translateY(108vh) translateX(var(--drift, 8px)); opacity: 0; }
+    100% { transform: translateY(108vh) translateX(var(--drift, 8px));                 opacity: 0; }
   }
   @keyframes ambientLeafFall {
     0%   { transform: translateY(-10%) translateX(0) rotate(0deg);                                            opacity: 0; }
@@ -50,6 +53,23 @@ const KEYFRAMES = `
   @keyframes ambientPulseIn {
     0%, 100% { opacity: 0;              transform: scale(0.5); }
     40%, 60% { opacity: var(--hi, 0.9); transform: scale(1.2); }
+  }
+  @keyframes ambientFireflyWander {
+    0%   { transform: translate(0, 0); }
+    20%  { transform: translate(10px, -8px); }
+    40%  { transform: translate(-6px, 4px); }
+    60%  { transform: translate(9px, -10px); }
+    80%  { transform: translate(-8px, 6px); }
+    100% { transform: translate(0, 0); }
+  }
+  @keyframes ambientBubbleRise {
+    0%   { transform: translateY(0) translateX(0) scale(1);            opacity: 0; }
+    10%  { opacity: var(--hi, 0.55); }
+    25%  { transform: translateY(-10vh) translateX(5px) scale(0.95); }
+    50%  { transform: translateY(-20vh) translateX(0) scale(1.0); }
+    75%  { transform: translateY(-28vh) translateX(-5px) scale(0.95); }
+    90%  { opacity: var(--lo, 0.08); }
+    100% { transform: translateY(-38vh) translateX(0) scale(0.6);     opacity: 0; }
   }
   @keyframes ambientDriftAcross {
     0%   { transform: translateX(-12%); opacity: 0; }
@@ -72,7 +92,15 @@ const KEYFRAMES = `
     to   { transform: translateY(4px); }
   }
   @media (prefers-reduced-motion: reduce) {
-    * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+    @keyframes ambientFallSlow    { 0%, 100% { opacity: 0; } 8%, 92%  { opacity: var(--hi, 0.8); } }
+    @keyframes ambientLeafFall    { 0%, 100% { opacity: 0; } 10%, 90% { opacity: var(--hi, 0.8); } }
+    @keyframes ambientRiseUp      { 0%, 100% { opacity: 0; } 10%, 90% { opacity: var(--hi, 0.6); } }
+    @keyframes ambientBubbleRise  { 0%, 100% { opacity: 0; } 10%, 90% { opacity: var(--hi, 0.55); } }
+    @keyframes ambientPulseIn     { 0%, 100% { opacity: 0; } 40%, 60% { opacity: var(--hi, 0.9); } }
+    @keyframes ambientFireflyWander { 0%, 100% { transform: none; } }
+    @keyframes ambientDriftAcross { 0%, 100% { opacity: 0; } 15%, 85% { opacity: var(--hi, 0.20); } }
+    @keyframes ambientMeteor      { 0%, 100% { opacity: 0; } 4%, 96%  { opacity: 0.9; } }
+    @keyframes ambientScanline    { from, to { transform: none; } }
   }
 `
 
@@ -107,7 +135,7 @@ function GlowLayer({ style, lo, hi, duration = '4s', delay = '0s', flicker = fal
   )
 }
 
-function FallingParticle({ left, size, color, duration, delay, drift = '8px', opacity = 0.85, square = false, ratio = 1, leaf = false, rot = '300deg' }) {
+function FallingParticle({ left, size, color, duration, delay, drift = '8px', opacity = 0.85, square = false, ratio = 1, leaf = false, rot = '300deg', ease = 'cubic-bezier(0.77, 0, 0.175, 1)' }) {
   return (
     <div
       aria-hidden
@@ -119,13 +147,13 @@ function FallingParticle({ left, size, color, duration, delay, drift = '8px', op
         willChange: 'transform, opacity',
         '--hi': opacity, '--drift': drift,
         ...(leaf && { '--rot': rot }),
-        animation: `${leaf ? 'ambientLeafFall' : 'ambientFallSlow'} ${duration} ${delay} ease-in-out infinite`,
+        animation: `${leaf ? 'ambientLeafFall' : 'ambientFallSlow'} ${duration} ${delay} ${ease} infinite`,
       }}
     />
   )
 }
 
-function RisingParticle({ left, bottom = '5%', size, color, duration, delay, opacity = 0.6 }) {
+function RisingParticle({ left, bottom = '5%', size, color, duration, delay, opacity = 0.6, ease = 'cubic-bezier(0.77, 0, 0.175, 1)', bubble = false }) {
   return (
     <div
       aria-hidden
@@ -135,13 +163,20 @@ function RisingParticle({ left, bottom = '5%', size, color, duration, delay, opa
         background: color,
         willChange: 'transform, opacity',
         '--hi': opacity,
-        animation: `ambientRiseUp ${duration} ${delay} ease-in-out infinite`,
+        '--lo': opacity * 0.15,
+        animation: `${bubble ? 'ambientBubbleRise' : 'ambientRiseUp'} ${duration} ${delay} ${ease} infinite`,
       }}
     />
   )
 }
 
-function PulseDot({ left, top, size, color, duration, delay, glowColor }) {
+function PulseDot({ left, top, size, color, duration, delay, glowColor,
+  ease = 'ease', anim = 'ambientPulseIn', lo = 0.1,
+  wander = false, wanderDur = '6s', wanderDelay = '0s',
+}) {
+  const animation = wander
+    ? `ambientBreathe ${duration} ${delay} ease infinite, ambientFireflyWander ${wanderDur} ${wanderDelay} ease-in-out infinite`
+    : `${anim} ${duration} ${delay} ${ease} infinite`
   return (
     <div
       aria-hidden
@@ -151,21 +186,30 @@ function PulseDot({ left, top, size, color, duration, delay, glowColor }) {
         background: color,
         boxShadow: glowColor ? `0 0 ${size * 2}px ${glowColor}` : undefined,
         willChange: 'transform, opacity',
-        '--hi': 0.9,
-        animation: `ambientPulseIn ${duration} ${delay} ease-in-out infinite`,
+        '--hi': 0.9, '--lo': lo,
+        animation,
       }}
     />
   )
 }
 
+// ─── Motion constants ─────────────────────────────────────────────────────
+const EASE = {
+  mover:   'cubic-bezier(0.77, 0, 0.175, 1)', // fall / rise / drift — natural weight
+  twinkle: 'ease',                              // glow / opacity cycles — soft symmetry
+  linear:  'linear',                            // intentional: rain, scanlines, meteors
+}
+
 // ─── 1. PURE MICHIGAN ─────────────────────────────────────────────────────
 function PureMichiganAmbient() {
   const fireflies = useMemo(() => Array.from({ length: 14 }, (_, i) => ({
-    left:  `${12 + (i * 6.5 + (i % 3) * 9)}%`,
-    top:   `${48 + (i % 5) * 8 + (i % 2) * 6}%`,
-    size:  3 + (i % 3) * 1.0,
-    dur:   `${2.8 + (i % 4) * 0.9}s`,
-    delay: `${(i * 0.7) % 6}s`,
+    left:   `${12 + (i * 6.5 + (i % 3) * 9)}%`,
+    top:    `${48 + (i % 5) * 8 + (i % 2) * 6}%`,
+    size:   3 + (i % 3) * 1.0,
+    dur:    `${2.8 + (i % 4) * 0.9}s`,
+    delay:  `-${((i / 14) * (2.8 + (i % 4) * 0.9)).toFixed(1)}s`,
+    wDur:   `${6.2 + (i % 3) * 1.4}s`,
+    wDelay: `-${((i * 1.3) % 8).toFixed(1)}s`,
   })), [])
 
   return <>
@@ -181,6 +225,7 @@ function PureMichiganAmbient() {
       <PulseDot key={i} left={f.left} top={f.top} size={f.size}
         color="rgba(180,255,80,0.95)" glowColor="rgba(140,255,40,0.55)"
         duration={f.dur} delay={f.delay}
+        lo={0.15} wander={true} wanderDur={f.wDur} wanderDelay={f.wDelay}
       />
     ))}
   </>
@@ -194,7 +239,7 @@ function MidnightGalaxyAmbient() {
     size:    0.8 + (i % 4) * 0.5,
     opacity: 0.35 + (i % 5) * 0.10,
     dur:     `${12 + (i % 7) * 4}s`,
-    delay:   `${(i * 1.1) % 12}s`,
+    delay:   `-${((i / 120) * (12 + (i % 7) * 4)).toFixed(1)}s`,
   })), [])
 
   return <>
@@ -221,7 +266,7 @@ function MidnightGalaxyAmbient() {
         background: `rgba(255,255,255,${s.opacity})`,
         willChange: 'opacity',
         '--lo': s.opacity * 0.3, '--hi': s.opacity,
-        animation: `ambientBreathe ${s.dur} ${s.delay} ease-in-out infinite`,
+        animation: `ambientBreathe ${s.dur} ${s.delay} ease infinite`,
       }}/>
     ))}
   </>
@@ -244,7 +289,7 @@ function AutumnHarvestAmbient() {
     left:  `${42 + (i % 4) * 4 - 6}%`,
     size:  2 + (i % 2) * 1.0,
     dur:   `${3 + (i % 3) * 1.0}s`,
-    delay: `${(i * 0.6) % 4}s`,
+    delay: `-${((i / 5) * (3 + (i % 3) * 1.0)).toFixed(1)}s`,
   })), [])
 
   return <>
@@ -311,42 +356,49 @@ function NorthernLightsAmbient() {
       <path
         d="M -2 10 C 20 4,40 16,60 9 C 80 3,95 14,102 10 L 102 22 C 95 28,80 17,60 22 C 40 28,20 16,-2 22 Z"
         fill="url(#nlAur1)"
-        style={{ willChange: 'opacity', '--hi': 0.90, animation: 'ambientAuroraFade 22s 0s ease-in-out infinite' }}
+        style={{ willChange: 'opacity', '--hi': 0.90, animation: 'ambientAuroraFade 22s 0s ease infinite' }}
       />
       {/* Curtain 2 — purple, wavy band y ≈ 16–28, overlapping */}
       <path
         d="M -2 16 C 15 10,35 22,55 14 C 75 6,92 20,102 16 L 102 28 C 90 35,70 20,50 27 C 30 34,12 18,-2 28 Z"
         fill="url(#nlAur2)"
-        style={{ willChange: 'opacity', '--hi': 0.80, animation: 'ambientAuroraFade 30s 8s ease-in-out infinite' }}
+        style={{ willChange: 'opacity', '--hi': 0.80, animation: 'ambientAuroraFade 30s 8s ease infinite' }}
       />
       {/* Curtain 3 — teal faint, wavy band y ≈ 22–34 */}
       <path
         d="M -2 22 C 18 16,38 28,58 21 C 78 14,96 26,102 22 L 102 34 C 96 40,76 26,55 33 C 34 40,16 26,-2 34 Z"
         fill="url(#nlAur3)"
-        style={{ willChange: 'opacity', '--hi': 0.70, animation: 'ambientAuroraFade 26s 14s ease-in-out infinite' }}
+        style={{ willChange: 'opacity', '--hi': 0.70, animation: 'ambientAuroraFade 26s 14s ease infinite' }}
       />
     </svg>
     {/* Star field */}
-    {Array.from({ length: 30 }, (_, i) => (
-      <div key={i} aria-hidden style={{
-        position: 'absolute',
-        left: `${(i * 97 + i % 7 * 31) % 100}%`,
-        top:  `${(i * 83 + i % 5 * 43) % 65}%`,
-        width: 1.2 + (i % 3) * 0.4, height: 1.2 + (i % 3) * 0.4,
-        borderRadius: '50%',
-        background: `rgba(200,240,220,${0.40 + (i % 4) * 0.10})`,
-        pointerEvents: 'none',
-      }}/>
-    ))}
+    {Array.from({ length: 30 }, (_, i) => {
+      const op = 0.40 + (i % 4) * 0.10
+      const dur = 8 + (i % 5) * 4
+      return (
+        <div key={i} aria-hidden style={{
+          position: 'absolute',
+          left: `${(i * 97 + i % 7 * 31) % 100}%`,
+          top:  `${(i * 83 + i % 5 * 43) % 65}%`,
+          width: 1.2 + (i % 3) * 0.4, height: 1.2 + (i % 3) * 0.4,
+          borderRadius: '50%',
+          background: `rgba(200,240,220,${op})`,
+          pointerEvents: 'none',
+          willChange: 'opacity',
+          '--lo': op * 0.25, '--hi': op,
+          animation: `ambientBreathe ${dur}s -${((i / 30) * dur).toFixed(1)}s ease infinite`,
+        }}/>
+      )
+    })}
   </>
 }
 
 // ─── 5. MEDIEVAL TAVERN ───────────────────────────────────────────────────
 function MedievalTavernAmbient() {
   const wisps = useMemo(() => [
-    { left: '12%', dur: '14s', delay: '0s'  },
-    { left: '48%', dur: '18s', delay: '5s'  },
-    { left: '80%', dur: '16s', delay: '9s'  },
+    { left: '12%', dur: '14s', delay: '0s'     },
+    { left: '48%', dur: '18s', delay: '-6.0s'  },
+    { left: '80%', dur: '16s', delay: '-10.7s' },
   ], [])
 
   return <>
@@ -373,7 +425,7 @@ function MedievalTavernAmbient() {
         background: 'radial-gradient(ellipse, rgba(160,140,120,0.14), transparent)',
         willChange: 'transform, opacity',
         '--hi': 0.18,
-        animation: `ambientRiseUp ${w.dur} ${w.delay} ease-in-out infinite`,
+        animation: `ambientRiseUp ${w.dur} ${w.delay} ${EASE.mover} infinite`,
       }}/>
     ))}
   </>
@@ -464,7 +516,7 @@ function SandDuneChillAmbient() {
     top:   `${(i * 61 + i % 4 * 13) % 45}%`,
     size:  1.2 + (i % 3) * 0.5,
     dur:   `${4 + (i % 5) * 1.4}s`,
-    delay: `${(i * 0.9) % 8}s`,
+    delay: `-${((i / 18) * (4 + (i % 5) * 1.4)).toFixed(1)}s`,
   })), [])
 
   return <>
@@ -488,6 +540,7 @@ function SandDuneChillAmbient() {
       <PulseDot key={i} left={s.left} top={s.top} size={s.size}
         color="rgba(255,240,200,0.80)"
         duration={s.dur} delay={s.delay}
+        anim="ambientBreathe" ease={EASE.twinkle} lo={0.15}
       />
     ))}
   </>
@@ -499,7 +552,7 @@ function HalloweenAmbient() {
     left:  `${30 + (i % 5) * 8 - 8}%`,
     size:  1.5 + (i % 3) * 0.8,
     dur:   `${2.5 + (i % 4) * 0.8}s`,
-    delay: `${(i * 0.6) % 5}s`,
+    delay: `-${((i / 10) * (2.5 + (i % 4) * 0.8)).toFixed(1)}s`,
   })), [])
 
   return <>
@@ -537,12 +590,12 @@ function JazzClubAmbient() {
     left:  `${38 + (i % 4) * 7}%`,
     top:   `${8 + (i % 4) * 12}%`,
     dur:   `${6 + i * 1.5}s`,
-    delay: `${i * 1.1}s`,
+    delay: `-${((i / 6) * (6 + i * 1.5)).toFixed(1)}s`,
   })), [])
   const smoke = useMemo(() => Array.from({ length: 4 }, (_, i) => ({
     left:  `${18 + i * 22}%`,
     dur:   `${10 + i * 3}s`,
-    delay: `${i * 2.5}s`,
+    delay: `-${((i / 4) * (10 + i * 3)).toFixed(1)}s`,
   })), [])
 
   return <>
@@ -565,7 +618,7 @@ function JazzClubAmbient() {
     {motes.map((m, i) => (
       <PulseDot key={i} left={m.left} top={m.top} size={1.8}
         color="rgba(255,210,120,0.55)"
-        duration={m.dur} delay={m.delay}
+        duration={m.dur} delay={m.delay} ease={EASE.twinkle}
       />
     ))}
     {/* Smoke wisps */}
@@ -576,7 +629,7 @@ function JazzClubAmbient() {
         background: 'radial-gradient(ellipse, rgba(150,140,130,0.12), transparent)',
         willChange: 'transform, opacity',
         '--hi': 0.18,
-        animation: `ambientRiseUp ${s.dur} ${s.delay} ease-in-out infinite`,
+        animation: `ambientRiseUp ${s.dur} ${s.delay} ${EASE.mover} infinite`,
       }}/>
     ))}
   </>
@@ -617,7 +670,7 @@ function RooftopPartyAmbient() {
     size:    1.5 + (i % 4) * 0.8,
     opacity: 0.45 + (i % 5) * 0.12,
     dur:     `${1.5 + (i % 5) * 1.0}s`,
-    delay:   `${(i * 0.5) % 7}s`,
+    delay:   `-${((i / 55) * (1.5 + (i % 5) * 1.0)).toFixed(1)}s`,
   })), [])
 
   return <>
@@ -635,7 +688,7 @@ function RooftopPartyAmbient() {
     {cityLights.map((l, i) => (
       <PulseDot key={i} left={l.left} top={l.top} size={l.size}
         color={`rgba(255,215,120,${l.opacity})`}
-        duration={l.dur} delay={l.delay}
+        duration={l.dur} delay={l.delay} ease={EASE.twinkle}
       />
     ))}
   </>
@@ -650,7 +703,7 @@ function ChristmasEveAmbient() {
     size:    2.5 + (i % 4) * 1.5,
     opacity: 0.65 + (i % 4) * 0.12,
     dur:     `${10 + (i % 6) * 2.5}s`,
-    delay:   `${(i * 0.8) % 12}s`,
+    delay:   `-${((i / 32) * (10 + (i % 6) * 2.5)).toFixed(1)}s`,
     drift:   `${(i % 2 === 0 ? 1 : -1) * (5 + (i % 4) * 3)}px`,
   })), [])
 
@@ -686,7 +739,7 @@ function DriveInMovieAmbient() {
     left:  `${30 + (i % 6) * 7}%`,
     top:   `${5 + (i % 5) * 15}%`,
     dur:   `${7 + (i % 4) * 2}s`,
-    delay: `${(i * 1.0) % 9}s`,
+    delay: `-${((i / 14) * (7 + (i % 4) * 2)).toFixed(1)}s`,
   })), [])
 
   return <>
@@ -709,7 +762,7 @@ function DriveInMovieAmbient() {
     {projectorDust.map((d, i) => (
       <PulseDot key={i} left={d.left} top={d.top} size={1.2}
         color="rgba(255,255,255,0.42)"
-        duration={d.dur} delay={d.delay}
+        duration={d.dur} delay={d.delay} ease={EASE.twinkle}
       />
     ))}
   </>
@@ -749,14 +802,14 @@ function UnderTheSeaAmbient() {
     top:   `${(i * 61 + i % 4 * 23) % 100}%`,
     size:  3.5 + (i % 4) * 1.8,
     dur:   `${4.5 + (i % 5) * 1.8}s`,
-    delay: `${(i * 0.9) % 9}s`,
+    delay: `-${((i / 16) * (4.5 + (i % 5) * 1.8)).toFixed(1)}s`,
   })), [])
 
   const bubbles = useMemo(() => Array.from({ length: 6 }, (_, i) => ({
     left:  `${26 + i * 3}%`,
     size:  1.2 + (i % 3) * 0.6,
     dur:   `${7 + i * 1.5}s`,
-    delay: `${i * 1.8}s`,
+    delay: `-${((i / 6) * (7 + i * 1.5)).toFixed(1)}s`,
   })), [])
 
   return <>
@@ -771,13 +824,13 @@ function UnderTheSeaAmbient() {
     {bio.map((b, i) => (
       <PulseDot key={i} left={b.left} top={b.top} size={b.size}
         color="rgba(40,210,170,0.75)" glowColor="rgba(20,180,140,0.45)"
-        duration={b.dur} delay={b.delay}
+        duration={b.dur} delay={b.delay} ease={EASE.twinkle}
       />
     ))}
     {bubbles.map((b, i) => (
       <RisingParticle key={i} left={b.left} bottom="0%" size={b.size}
         color="rgba(180,225,255,0.55)"
-        duration={b.dur} delay={b.delay} opacity={0.55}
+        duration={b.dur} delay={b.delay} opacity={0.55} bubble={true}
       />
     ))}
   </>
@@ -789,7 +842,7 @@ function NeonTokyoAmbient() {
     left:   `${(i * 53 + i % 5 * 11) % 100}%`,
     height: 20 + (i % 4) * 12,
     dur:    `${1.8 + (i % 4) * 0.7}s`,
-    delay:  `${(i * 0.4) % 4}s`,
+    delay:  `-${((i / 24) * (1.8 + (i % 4) * 0.7)).toFixed(1)}s`,
   })), [])
 
   return <>
@@ -827,11 +880,13 @@ function NeonTokyoAmbient() {
 // ─── 23. FIREFLY SUMMER ──────────────────────────────────────────────────
 function FireflySummerAmbient() {
   const fireflies = useMemo(() => Array.from({ length: 16 }, (_, i) => ({
-    left:  `${8 + (i * 67 + i % 5 * 11) % 84}%`,
-    top:   `${35 + (i * 43 + i % 4 * 13) % 55}%`,
-    size:  3 + (i % 3) * 1.2,
-    dur:   `${2.4 + (i % 5) * 0.8}s`,
-    delay: `${(i * 0.6) % 7}s`,
+    left:   `${8 + (i * 67 + i % 5 * 11) % 84}%`,
+    top:    `${35 + (i * 43 + i % 4 * 13) % 55}%`,
+    size:   3 + (i % 3) * 1.2,
+    dur:    `${2.4 + (i % 5) * 0.8}s`,
+    delay:  `-${((i / 16) * (2.4 + (i % 5) * 0.8)).toFixed(1)}s`,
+    wDur:   `${7.0 + (i % 4) * 1.5}s`,
+    wDelay: `-${((i * 1.7) % 9).toFixed(1)}s`,
   })), [])
 
   return <>
@@ -851,6 +906,7 @@ function FireflySummerAmbient() {
       <PulseDot key={i} left={f.left} top={f.top} size={f.size}
         color="rgba(185,255,85,0.95)" glowColor="rgba(145,255,45,0.40)"
         duration={f.dur} delay={f.delay}
+        lo={0.15} wander={true} wanderDur={f.wDur} wanderDelay={f.wDelay}
       />
     ))}
   </>
@@ -897,6 +953,8 @@ function MeteorShowerAmbient() {
     top:     `${(i * 83 + i % 5 * 43) % 100}%`,
     size:    0.5 + (i % 4) * 0.4,
     opacity: 0.25 + (i % 5) * 0.09,
+    dur:     `${10 + (i % 7) * 4}s`,
+    delay:   `-${((i / 200) * (10 + (i % 7) * 4)).toFixed(1)}s`,
   })), [])
   const meteors = useMemo(() => Array.from({ length: 9 }, (_, i) => ({
     left:  `${20 + i * 7}%`,
@@ -921,6 +979,9 @@ function MeteorShowerAmbient() {
         position: 'absolute', left: s.left, top: s.top, pointerEvents: 'none',
         width: s.size, height: s.size, borderRadius: '50%',
         background: `rgba(255,255,255,${Math.min(s.opacity + 0.10, 0.85)})`,
+        willChange: 'opacity',
+        '--lo': s.opacity * 0.25, '--hi': Math.min(s.opacity + 0.10, 0.85),
+        animation: `ambientBreathe ${s.dur} ${s.delay} ease infinite`,
       }}/>
     ))}
     {meteors.map((m, i) => (
