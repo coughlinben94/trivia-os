@@ -606,7 +606,7 @@ function JazzClubAmbient() {
 
   return <>
     {/* Main center spotlight */}
-    <GlowLayer lo={0.35} hi={0.72} duration="2.8s" style={{
+    <GlowLayer lo={0.35} hi={0.72} duration="5.5s" style={{
       top: 0, left: '28%', right: '28%', height: '70%',
       background: 'radial-gradient(ellipse at top center, rgba(255,195,70,0.60), transparent 75%)',
     }}/>
