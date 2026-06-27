@@ -838,11 +838,12 @@ function UnderTheSeaAmbient() {
 
 // ─── 21. NEON TOKYO ──────────────────────────────────────────────────────
 function NeonTokyoAmbient() {
-  const rain = useMemo(() => Array.from({ length: 24 }, (_, i) => ({
-    left:   `${(i * 53 + i % 5 * 11) % 100}%`,
-    height: 20 + (i % 4) * 12,
-    dur:    `${1.8 + (i % 4) * 0.7}s`,
-    delay:  `-${((i / 24) * (1.8 + (i % 4) * 0.7)).toFixed(1)}s`,
+  const rain = useMemo(() => Array.from({ length: 34 }, (_, i) => ({
+    left:    `${(i * 53 + i % 5 * 11) % 100}%`,
+    height:  60 + (i % 4) * 18,
+    opacity: 0.60 + (i % 4) * 0.07,
+    dur:     `${1.8 + (i % 4) * 0.7}s`,
+    delay:   `-${((i / 34) * (1.8 + (i % 4) * 0.7)).toFixed(1)}s`,
   })), [])
 
   return <>
@@ -866,9 +867,9 @@ function NeonTokyoAmbient() {
       <div key={i} aria-hidden style={{
         position: 'absolute', left: r.left, top: '-3%',
         width: 1, height: r.height,
-        background: i % 3 === 0 ? 'rgba(255,0,200,0.18)' : i % 3 === 1 ? 'rgba(0,210,255,0.15)' : 'rgba(200,180,255,0.12)',
+        background: i % 3 === 0 ? 'rgba(191,234,255,1.0)' : i % 3 === 1 ? 'rgba(220,246,255,1.0)' : 'rgba(160,220,255,1.0)',
         willChange: 'transform, opacity',
-        '--hi': 0.18, '--drift': '0px',
+        '--hi': r.opacity, '--drift': '0px',
         animation: `ambientFallSlow ${r.dur} ${r.delay} linear infinite`,
         pointerEvents: 'none',
       }}/>
