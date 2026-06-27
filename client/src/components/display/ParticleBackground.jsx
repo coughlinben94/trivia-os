@@ -690,31 +690,36 @@ function DiveBarAmbient() {
 
 // ─── 13. ROOFTOP PARTY ───────────────────────────────────────────────────
 function RooftopPartyAmbient() {
-  const cityLights = useMemo(() => Array.from({ length: 55 }, (_, i) => ({
-    left:    `${(i * 97 + i % 7 * 13) % 100}%`,
-    top:     `${78 + (i % 5) * 3.5}%`,
-    size:    1.5 + (i % 4) * 0.8,
-    opacity: 0.45 + (i % 5) * 0.12,
-    dur:     `${1.5 + (i % 5) * 1.0}s`,
-    delay:   `-${((i / 55) * (1.5 + (i % 5) * 1.0)).toFixed(1)}s`,
-  })), [])
+  const N = 14
+  const bulbs = useMemo(() => Array.from({ length: N }, (_, i) => {
+    const sag = 7 * Math.sin(Math.PI * i / (N - 1))
+    const dur = 3.5 + (i % 4) * 0.6
+    return {
+      left:  `${5 + (i / (N - 1)) * 90}%`,
+      top:   `${12 + sag}%`,
+      size:  12 + (i % 3) * 2,
+      dur:   `${dur}s`,
+      delay: `-${((i / N) * dur).toFixed(1)}s`,
+    }
+  }), [])
 
   return <>
-    {/* City sky glow from below */}
-    <GlowLayer lo={0.26} hi={0.58} duration="20s" style={{
-      bottom: 0, left: 0, right: 0, height: '28%',
-      background: 'linear-gradient(to top, rgba(255,200,80,0.50), rgba(100,150,255,0.25), transparent)',
+    {/* Twilight sky — deep blue upper drench */}
+    <GlowLayer lo={0.55} hi={0.82} duration="30s" style={{
+      top: 0, left: 0, right: 0, height: '65%',
+      background: 'linear-gradient(to bottom, rgba(12,20,75,0.80) 0%, rgba(30,55,130,0.50) 60%, rgba(30,55,130,0) 100%)',
     }}/>
-    {/* City light haze rising */}
-    <GlowLayer lo={0.16} hi={0.40} duration="30s" delay="8s" style={{
-      inset: 0,
-      background: 'radial-gradient(ellipse 80% 22% at 50% 78%, rgba(200,160,80,0.35), transparent)',
+    {/* City glow — warm amber rising from below */}
+    <GlowLayer lo={0.38} hi={0.68} duration="22s" delay="5s" style={{
+      bottom: 0, left: 0, right: 0, height: '50%',
+      background: 'linear-gradient(to top, rgba(255,110,15,0.55) 0%, rgba(255,155,50,0.28) 55%, rgba(255,155,50,0) 100%)',
     }}/>
-    {/* City lights grid */}
-    {cityLights.map((l, i) => (
-      <PulseDot key={i} left={l.left} top={l.top} size={l.size}
-        color={`rgba(255,215,120,${l.opacity})`}
-        duration={l.dur} delay={l.delay} ease={EASE.twinkle}
+    {/* String light bulbs — catenary sag across upper third */}
+    {bulbs.map((b, i) => (
+      <PulseDot key={i} left={b.left} top={b.top} size={b.size}
+        color="rgba(255,210,138,0.95)" glowColor="rgba(255,179,71,0.50)"
+        duration={b.dur} delay={b.delay}
+        anim="ambientBreathe" ease={EASE.twinkle} lo={0.65}
       />
     ))}
   </>
