@@ -11,7 +11,6 @@ import MultiQuestionSlide from './slides/MultiQuestionSlide.jsx'
 import PylRevealSlide from './slides/PylRevealSlide.jsx'
 import StateOfUnionSlide from './slides/StateOfUnionSlide.jsx'
 
-const EASE_OVERSHOOT = [0.34, 1.56, 0.64, 1]
 const EASE_QUINT     = [0.22, 1, 0.36, 1]   // standard ease-out
 const EASE_QUART     = [0.25, 1, 0.25, 1]   // weighted hard land (drop)
 const EASE_CUBIC     = [0.33, 1, 0.68, 1]   // gentle
