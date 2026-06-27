@@ -744,10 +744,10 @@ function ChristmasEveAmbient() {
       top: 0, right: 0, bottom: 0, width: '30%',
       background: 'radial-gradient(ellipse at right center, rgba(20,180,40,0.58), transparent 75%)',
     }}/>
-    {/* Warm gold fireplace/candle — center */}
-    <GlowLayer lo={0.24} hi={0.58} duration="3s" delay="1s" flicker style={{
-      bottom: '5%', left: '35%', right: '35%', height: '35%',
-      background: 'radial-gradient(ellipse at bottom center, rgba(255,180,40,0.55), transparent 80%)',
+    {/* Warm gold candle glow — center */}
+    <GlowLayer lo={0.70} hi={1.0} duration="3.5s" delay="1s" style={{
+      bottom: '5%', left: '20%', right: '20%', height: '50%',
+      background: 'radial-gradient(ellipse 40% 65% at 50% 100%, rgba(255,180,40,0.55), rgba(255,180,40,0) 100%)',
     }}/>
     {/* Snowflakes */}
     {flakes.map((f, i) => (
