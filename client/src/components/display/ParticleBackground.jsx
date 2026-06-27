@@ -880,12 +880,12 @@ function NeonTokyoAmbient() {
 
 // ─── 23. FIREFLY SUMMER ──────────────────────────────────────────────────
 function FireflySummerAmbient() {
-  const fireflies = useMemo(() => Array.from({ length: 16 }, (_, i) => ({
-    left:   `${8 + (i * 67 + i % 5 * 11) % 84}%`,
+  const fireflies = useMemo(() => Array.from({ length: 19 }, (_, i) => ({
+    left:   `${(i * 53) % 100}%`,
     top:    `${35 + (i * 43 + i % 4 * 13) % 55}%`,
     size:   3 + (i % 3) * 1.2,
     dur:    `${2.4 + (i % 5) * 0.8}s`,
-    delay:  `-${((i / 16) * (2.4 + (i % 5) * 0.8)).toFixed(1)}s`,
+    delay:  `-${((i / 19) * (2.4 + (i % 5) * 0.8)).toFixed(1)}s`,
     wDur:   `${7.0 + (i % 4) * 1.5}s`,
     wDelay: `-${((i * 1.7) % 9).toFixed(1)}s`,
   })), [])
@@ -895,9 +895,9 @@ function FireflySummerAmbient() {
       top: 0, left: 0, right: 0, height: '30%',
       background: 'linear-gradient(to bottom, rgba(180,110,35,0.32), transparent)',
     }}/>
-    <GlowLayer lo={0.12} hi={0.30} duration="30s" delay="8s" style={{
+    <GlowLayer lo={0.18} hi={0.45} duration="30s" delay="8s" style={{
       inset: 0,
-      background: 'radial-gradient(ellipse 80% 60% at 50% 60%, rgba(0,60,15,0.22), transparent)',
+      background: 'radial-gradient(ellipse 80% 60% at 50% 60%, rgba(0,75,20,0.35), transparent)',
     }}/>
     <div aria-hidden style={{
       position: 'absolute', bottom: 0, left: 0, right: 0, height: '20%',
