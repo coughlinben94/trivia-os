@@ -160,6 +160,12 @@ Adapted from gestalt + isolation for TV-at-bar-distance:
 5. **Self-contained.** Each ambient component owns its layers and its `Vignette`.
 6. **Seamless zones — no banded rectangles (the #1 recurring offense).** Every vertical zone (sky, sea, sand, ground) is a **full-stage layer** (`position: absolute; inset: 0`) whose gradient is **transparent at *both* transitions** — it fades in *and* fades out. **Never** a rectangle parked at a fixed height (`top: X% / height: Y%`): its top and bottom edges read as **hard horizontal lines** at TV distance, which Ben rejects every time. Horizons and shorelines are soft gradient *blends*, not edges. Foreground ground (sand, etc.) is a **flat full-stage gradient**, not a mound/shape — Ben's call after testing both side by side.
 
+   Two shapes for a zone:
+   - **Flat (default / seamless):** `linear-gradient(to top, …, transparent)` over `inset:0`, soft at both ends — the baseline for skies, seas, sand, ground.
+   - **Rounded dome (dimensional option):** `radial-gradient(ellipse W% H% at 50% 100%)` anchored bottom-center, so the glow rises as a mound and its shoulders curve down into the corners — more depth than a flat shelf. First used on the 80s-night neon floor (`ellipse 72% 49%`; flatter reads as a broad dance floor).
+     - **Carry color to the edges:** a lone centered dome fades the corners to black (rejected). Layer a wide low base ellipse under it — `radial-gradient(ellipse 135% 32% at 50% 105%, …)` — so color still reaches the corners while the center rises.
+     - **Curve the light, keep the ground flat:** dome a glow / light pool (dance floor, horizon bloom); keep literal terrain (sand, ground) a flat gradient — a raised terrain mound reads as a weird hill (rejected on the sunset beach).
+
 `ParticleBackground` takes `{ theme }` and looks up `AMBIENT_MAP[theme.id]`. Components render under one `absolute inset-0` wrapper, so they tile cleanly in any container.
 
 ---
