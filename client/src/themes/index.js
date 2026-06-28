@@ -62,10 +62,10 @@ export const THEMES = [
   {
     id: 'sunset-boulevard',
     name: 'Sunset Boulevard',
-    colors: { bg: '#100818', bgDeep: '#080410', accent: '#801840', highlight: '#ff4080', text: '#f8e0f0', textMuted: '#905060', shinyBg: '#180820', shinyAccent: '#40d0ff' },
+    colors: { bg: '#100818', bgDeep: '#080410', accent: '#c2521e', highlight: '#ff9a4d', text: '#fbe8d6', textMuted: '#a8775f', shinyBg: '#180820', shinyAccent: '#40d0ff' },
     fonts: { display: 'Boogaloo', body: 'DM Sans', ui: 'DM Sans' },
     particles: { color: '#ff4080', count: 25, behavior: 'float' },
-    vignette: { r: 10, g: 2, b: 0, strength: 0.50 },
+    vignette: { r: 10, g: 2, b: 0, strength: 0.48 },
     scene: { background: null, foreground: null, cssClass: 'theme-sunset-boulevard' },
     transition: { type: 'default', duration: 160 },
     cutawayFrame: 'none',

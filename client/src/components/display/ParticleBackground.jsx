@@ -91,6 +91,10 @@ const KEYFRAMES = `
     from { transform: translateY(0); }
     to   { transform: translateY(4px); }
   }
+  @keyframes ambientWave {
+    0%,100% { transform: translateX(0) translateY(0); opacity: var(--lo,0.10); }
+    50%     { transform: translateX(var(--wx,12px)) translateY(var(--wy,-3px)); opacity: var(--hi,0.30); }
+  }
   @media (prefers-reduced-motion: reduce) {
     @keyframes ambientFallSlow    { 0%, 100% { opacity: 0; } 8%, 92%  { opacity: var(--hi, 0.8); } }
     @keyframes ambientLeafFall    { 0%, 100% { opacity: 0; } 10%, 90% { opacity: var(--hi, 0.8); } }
@@ -104,6 +108,7 @@ const KEYFRAMES = `
     @keyframes ambientFlicker     { 0%, 100% { opacity: var(--lo, 0.15); } }
     @keyframes ambientNeonBuzz    { 0%, 100% { opacity: var(--lo, 0.18); } }
     @keyframes ambientBreathe     { 0%, 100% { opacity: var(--lo, 0.03); } }
+    @keyframes ambientWave { 0%,100% { opacity:var(--lo,0.10);} 50% { opacity:var(--hi,0.30);} }
   }
 `
 
@@ -194,6 +199,16 @@ function PulseDot({ left, top, size, color, duration, delay, glowColor,
       }}
     />
   )
+}
+
+function Sun({ left, top, size, core, mid, rim, halo, haloBlur = 44, haloSpread = 12, dur = '9s' }) {
+  return <div aria-hidden style={{
+    position: 'absolute', left, top, width: size, aspectRatio: '1', borderRadius: '50%',
+    background: `radial-gradient(circle at 50% 47%, ${core} 0%, ${mid} 34%, ${rim} 58%, rgba(255,170,90,0.18) 78%, transparent 100%)`,
+    boxShadow: `0 0 ${haloBlur}px ${haloSpread}px ${halo}`,
+    willChange: 'opacity', '--lo': 0.9, '--hi': 1,
+    animation: `ambientBreathe ${dur} ease-in-out infinite`, pointerEvents: 'none',
+  }}/>
 }
 
 // ─── Motion constants ─────────────────────────────────────────────────────
@@ -441,31 +456,46 @@ function MedievalTavernAmbient() {
 
 // ─── 6. SUNSET BOULEVARD ─────────────────────────────────────────────────
 function SunsetBoulevardAmbient() {
+  const clouds = useMemo(() => [
+    { top: '8%',  w: '34%', h: '7%',  dur: '42s', delay: '-28s', hi: 0.24, color: 'rgba(255,150,90,0.50)'  },
+    { top: '14%', w: '50%', h: '12%', dur: '30s', delay: '0s',   hi: 0.40, color: 'rgba(255,110,60,0.60)'  },
+    { top: '22%', w: '42%', h: '10%', dur: '38s', delay: '-12s', hi: 0.34, color: 'rgba(255,150,110,0.52)' },
+    { top: '29%', w: '46%', h: '10%', dur: '34s', delay: '-22s', hi: 0.32, color: 'rgba(230,120,90,0.48)'  },
+  ], [])
+  const stars = useMemo(() => Array.from({ length: 6 }, (_, i) => ({
+    left: `${(i * 71 + i % 4 * 19) % 100}%`, top: `${(i * 37 + i % 3 * 11) % 14}%`,
+    size: 1.1 + (i % 3) * 0.4, dur: `${5 + (i % 5) * 1.6}s`, delay: `-${((i / 6) * (5 + (i % 5) * 1.6)).toFixed(1)}s`,
+  })), [])
   return <>
-    {/* Sunset sky — warm amber/orange upper half */}
-    <GlowLayer lo={0.35} hi={0.70} duration="18s" style={{
-      top: 0, left: 0, right: 0, height: '55%',
-      background: 'linear-gradient(to bottom, rgba(220,80,20,0.55) 0%, rgba(180,50,10,0.35) 50%, transparent 100%)',
-    }}/>
-    {/* Orange horizon glow — center */}
-    <GlowLayer lo={0.30} hi={0.60} duration="12s" delay="4s" style={{
-      top: '30%', left: '15%', right: '15%', height: '30%',
-      background: 'radial-gradient(ellipse at center, rgba(255,130,20,0.45), transparent 75%)',
-    }}/>
-    {/* Deep magenta/purple side wash */}
-    <GlowLayer lo={0.20} hi={0.45} duration="22s" delay="7s" style={{
-      top: 0, left: 0, bottom: 0, width: '30%',
-      background: 'radial-gradient(ellipse at left center, rgba(180,20,100,0.35), transparent 70%)',
-    }}/>
-    <GlowLayer lo={0.15} hi={0.38} duration="26s" delay="11s" style={{
-      top: 0, right: 0, bottom: 0, width: '30%',
-      background: 'radial-gradient(ellipse at right center, rgba(160,10,80,0.30), transparent 70%)',
-    }}/>
-    {/* Bottom shadow — fades to transparent upward */}
-    <div aria-hidden style={{
-      position: 'absolute', bottom: 0, left: 0, right: 0, height: '16%',
-      background: 'linear-gradient(to top, rgba(4,1,0,0.72), transparent)', pointerEvents: 'none',
-    }}/>
+    <GlowLayer lo={0.46} hi={0.76} duration="22s" style={{ inset: 0,
+      background: 'linear-gradient(to bottom, rgba(60,16,52,0.64) 0%, rgba(176,52,54,0.48) 30%, rgba(240,108,58,0.42) 46%, transparent 58%)' }}/>
+    <GlowLayer lo={0.30} hi={0.56} duration="20s" style={{ inset: 0,
+      background: 'radial-gradient(ellipse 46% 42% at 9% 44%, rgba(255,120,50,0.48), transparent 64%)' }}/>
+    {stars.map((s, i) => (
+      <PulseDot key={i} left={s.left} top={s.top} size={s.size}
+        color="rgba(255,235,210,0.78)" glowColor="rgba(255,220,180,0.28)" duration={s.dur} delay={s.delay} lo={0.10}/>
+    ))}
+    {clouds.map((c, i) => (
+      <div key={i} aria-hidden style={{ position: 'absolute', top: c.top, left: '-6%', width: c.w, height: c.h,
+        background: `radial-gradient(ellipse 52% 55% at 50% 78%, ${c.color}, transparent 74%)`,
+        willChange: 'transform, opacity', '--hi': c.hi,
+        animation: `ambientDriftAcross ${c.dur} ${c.delay} linear infinite`, pointerEvents: 'none' }}/>
+    ))}
+    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+      background: 'linear-gradient(to bottom, transparent 44%, rgba(150,64,66,0.42) 53%, rgba(78,38,58,0.52) 63%, rgba(46,24,48,0.42) 71%, transparent 78%)' }}/>
+    <Sun left="6%" top="33%" size="11%"
+      core="rgba(255,250,228,1)" mid="rgba(255,224,152,0.98)" rim="rgba(255,180,92,0.85)"
+      halo="rgba(255,150,70,0.40)" haloBlur={48} haloSpread={13}/>
+    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+      background: 'radial-gradient(ellipse 34% 6% at 32% 74%, rgba(255,168,96,0.30), transparent 70%)',
+      willChange: 'transform, opacity', '--lo': 0.12, '--hi': 0.30, '--wx': '16px', '--wy': '-2px',
+      animation: 'ambientWave 8s ease-in-out infinite' }}/>
+    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+      background: 'linear-gradient(to bottom, transparent 70%, rgba(216,152,110,0.34) 77%, transparent 85%)' }}/>
+    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+      background: 'linear-gradient(to bottom, transparent 72%, rgba(198,140,98,0.34) 80%, rgba(165,112,74,0.70) 89%, rgba(120,80,52,0.92) 96%, rgba(86,58,40,0.96) 100%)' }}/>
+    <GlowLayer lo={0.14} hi={0.32} duration="13s" delay="1s" style={{ inset: 0,
+      background: 'radial-gradient(ellipse 64% 18% at 30% 90%, rgba(255,170,96,0.32), transparent 70%)' }}/>
   </>
 }
 
