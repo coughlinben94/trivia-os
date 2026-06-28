@@ -147,8 +147,9 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
       {/* Slide type row */}
       <div className="flex items-center gap-3 px-5 pt-4 pb-4 border-b border-gray-100 shrink-0">
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1.5">Slide type</label>
+          <label htmlFor="slide-type" className="block text-xs font-medium text-gray-500 mb-1.5">Slide type</label>
           <select
+            id="slide-type"
             value={slide.type}
             onChange={e => changeType(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-baynes-forest"
@@ -158,8 +159,9 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
         </div>
         {!data.isShiny && (
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Transition</label>
+            <label htmlFor="slide-transition" className="block text-xs font-medium text-gray-500 mb-1.5">Transition</label>
             <select
+              id="slide-transition"
               value={data.transition ?? ''}
               onChange={e => change('transition', e.target.value === '' ? null : e.target.value)}
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-baynes-forest"
@@ -231,8 +233,10 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
 function Field({ label, children, hint }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-500 mb-1.5">{label}</label>
-      {children}
+      <label className="block text-xs font-medium text-gray-500">
+        <span className="block mb-1.5">{label}</span>
+        {children}
+      </label>
       {hint && <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">{hint}</p>}
     </div>
   )
