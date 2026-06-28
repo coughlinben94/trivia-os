@@ -95,6 +95,13 @@ const KEYFRAMES = `
     0%,100% { transform: translateX(0) translateY(0); opacity: var(--lo,0.10); }
     50%     { transform: translateX(var(--wx,12px)) translateY(var(--wy,-3px)); opacity: var(--hi,0.30); }
   }
+  @keyframes ambientGullBob {
+    0%   { transform: translateY(0); }
+    25%  { transform: translateY(-7px); }
+    55%  { transform: translateY(3px); }
+    80%  { transform: translateY(-4px); }
+    100% { transform: translateY(0); }
+  }
   @media (prefers-reduced-motion: reduce) {
     @keyframes ambientFallSlow    { 0%, 100% { opacity: 0; } 8%, 92%  { opacity: var(--hi, 0.8); } }
     @keyframes ambientLeafFall    { 0%, 100% { opacity: 0; } 10%, 90% { opacity: var(--hi, 0.8); } }
@@ -109,6 +116,7 @@ const KEYFRAMES = `
     @keyframes ambientNeonBuzz    { 0%, 100% { opacity: var(--lo, 0.18); } }
     @keyframes ambientBreathe     { 0%, 100% { opacity: var(--lo, 0.03); } }
     @keyframes ambientWave { 0%,100% { opacity:var(--lo,0.10);} 50% { opacity:var(--hi,0.30);} }
+    @keyframes ambientGullBob { 0%,100% { transform: none; } }
   }
 `
 
@@ -209,6 +217,19 @@ function Sun({ left, top, size, core, mid, rim, halo, haloBlur = 44, haloSpread 
     willChange: 'opacity', '--lo': 0.9, '--hi': 1,
     animation: `ambientBreathe ${dur} ease-in-out infinite`, pointerEvents: 'none',
   }}/>
+}
+
+function Gull({ top, size, dur, delay, opacity, flip, bobDur, bobDelay }) {
+  return <div aria-hidden style={{ position: 'absolute', top, left: 0, width: '100%', height: 0,
+    willChange: 'transform, opacity', '--hi': opacity,
+    animation: `ambientDriftAcross ${dur} ${delay} linear infinite`, pointerEvents: 'none' }}>
+    <div style={{ display: 'inline-block', willChange: 'transform',
+      animation: `ambientGullBob ${bobDur} ${bobDelay} ease-in-out infinite` }}>
+      <svg viewBox="0 0 24 8" width={size} style={{ display: 'block', overflow: 'visible', transform: flip ? 'scaleX(-1)' : 'none' }}>
+        <path d="M1,6 Q6,1 12,5 Q18,1 23,6" fill="none" stroke="rgba(34,40,58,0.9)" strokeWidth="1.8" strokeLinecap="round"/>
+      </svg>
+    </div>
+  </div>
 }
 
 // ─── Motion constants ─────────────────────────────────────────────────────
@@ -548,40 +569,38 @@ function RetroArcadeAmbient() {
 }
 
 // ─── 8. SAND DUNE CHILL ───────────────────────────────────────────────────
-// Theme: twilight beach — warm sand cooling, ocean shimmer, first stars
+// Theme: early-AM Lake Michigan — cool periwinkle dawn, last stars, gulls crossing
 function SandDuneChillAmbient() {
-  const stars = useMemo(() => Array.from({ length: 18 }, (_, i) => ({
-    left:  `${(i * 97 + i % 5 * 17) % 100}%`,
-    top:   `${(i * 61 + i % 4 * 13) % 45}%`,
-    size:  1.2 + (i % 3) * 0.5,
-    dur:   `${4 + (i % 5) * 1.4}s`,
-    delay: `-${((i / 18) * (4 + (i % 5) * 1.4)).toFixed(1)}s`,
+  const gulls = useMemo(() => [
+    { top: '20%', size: 34, dur: '30s', delay: '0s',   opacity: 0.62, flip: false, bobDur: '5s',   bobDelay: '0s'    },
+    { top: '31%', size: 26, dur: '38s', delay: '-12s', opacity: 0.50, flip: true,  bobDur: '6.5s', bobDelay: '-2s'   },
+    { top: '14%', size: 40, dur: '26s', delay: '-7s',  opacity: 0.66, flip: false, bobDur: '4.5s', bobDelay: '-1s'   },
+    { top: '39%', size: 24, dur: '42s', delay: '-22s', opacity: 0.46, flip: true,  bobDur: '7s',   bobDelay: '-3s'   },
+    { top: '25%', size: 30, dur: '34s', delay: '-18s', opacity: 0.56, flip: false, bobDur: '5.5s', bobDelay: '-4s'   },
+    { top: '34%', size: 22, dur: '46s', delay: '-30s', opacity: 0.44, flip: true,  bobDur: '6s',   bobDelay: '-1.5s' },
+  ], [])
+  const lastStars = useMemo(() => Array.from({ length: 4 }, (_, i) => ({
+    left: `${(i * 83 + 11) % 100}%`, top: `${(i * 29 + 5) % 16}%`,
+    size: 1.0 + (i % 2) * 0.4, dur: `${6 + (i % 3) * 2}s`, delay: `-${(i * 1.7).toFixed(1)}s`,
   })), [])
-
   return <>
-    {/* Sunset horizon — warm amber from bottom third */}
-    <GlowLayer lo={0.30} hi={0.60} duration="20s" style={{
-      bottom: 0, left: 0, right: 0, height: '35%',
-      background: 'linear-gradient(to top, rgba(210,120,20,0.50), rgba(180,80,10,0.28), transparent)',
-    }}/>
-    {/* Ocean shimmer — thin band at bottom */}
-    <GlowLayer lo={0.20} hi={0.48} duration="8s" delay="2s" style={{
-      bottom: 0, left: 0, right: 0, height: '8%',
-      background: 'linear-gradient(to top, rgba(60,140,200,0.45), transparent)',
-    }}/>
-    {/* Warm golden sky glow */}
-    <GlowLayer lo={0.20} hi={0.50} duration="25s" delay="5s" style={{
-      top: '20%', left: '20%', right: '20%', height: '35%',
-      background: 'radial-gradient(ellipse, rgba(220,140,30,0.42), transparent 70%)',
-    }}/>
-    {/* Stars emerging */}
-    {stars.map((s, i) => (
-      <PulseDot key={i} left={s.left} top={s.top} size={s.size}
-        color="rgba(255,240,200,0.80)"
-        duration={s.dur} delay={s.delay}
-        anim="ambientBreathe" ease={EASE.twinkle} lo={0.15}
-      />
+    <GlowLayer lo={0.42} hi={0.64} duration="24s" style={{ inset: 0,
+      background: 'linear-gradient(to bottom, rgba(108,132,182,0.50) 0%, rgba(152,142,176,0.40) 38%, rgba(228,182,156,0.34) 56%, transparent 70%)' }}/>
+    <GlowLayer lo={0.24} hi={0.46} duration="22s" delay="4s" style={{ inset: 0,
+      background: 'radial-gradient(ellipse 44% 46% at 80% 50%, rgba(255,205,160,0.42), transparent 68%)' }}/>
+    {lastStars.map((s, i) => (
+      <PulseDot key={i} left={s.left} top={s.top} size={s.size} color="rgba(225,232,255,0.55)" duration={s.dur} delay={s.delay} lo={0.06}/>
     ))}
+    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+      background: 'linear-gradient(to bottom, transparent 50%, rgba(120,150,175,0.30) 60%, rgba(64,94,124,0.46) 70%, rgba(42,64,90,0.34) 80%, transparent 86%)' }}/>
+    <Sun left="76%" top="42%" size="9%"
+      core="rgba(255,251,240,0.97)" mid="rgba(255,230,198,0.86)" rim="rgba(252,202,162,0.56)"
+      halo="rgba(255,212,172,0.34)" haloBlur={44} haloSpread={12} dur="12s"/>
+    {gulls.map((g, i) => <Gull key={i} {...g}/>)}
+    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+      background: 'linear-gradient(to bottom, transparent 66%, rgba(170,136,94,0.32) 76%, rgba(134,106,72,0.68) 86%, rgba(94,74,50,0.90) 95%, rgba(66,52,36,0.96) 100%)' }}/>
+    <GlowLayer lo={0.10} hi={0.24} duration="14s" delay="2s" style={{ inset: 0,
+      background: 'radial-gradient(ellipse 52% 15% at 62% 80%, rgba(255,212,150,0.26), transparent 72%)' }}/>
   </>
 }
 

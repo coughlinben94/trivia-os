@@ -86,10 +86,10 @@ export const THEMES = [
   {
     id: 'sand-dune-chill',
     name: 'Sand Dune Chill',
-    colors: { bg: '#100d05', bgDeep: '#0c0a03', accent: '#3a2808', highlight: '#e8c060', text: '#f0e8c8', textMuted: '#907040', shinyBg: '#181205', shinyAccent: '#60b8e0' },
+    colors: { bg: '#0a0d14', bgDeep: '#06080f', accent: '#6e84b6', highlight: '#f7cda0', text: '#e9edf7', textMuted: '#9aa6c0', shinyBg: '#181205', shinyAccent: '#60b8e0' },
     fonts: { display: 'Boogaloo', body: 'DM Sans', ui: 'DM Sans' },
     particles: { color: '#e8c060', count: 20, behavior: 'float' },
-    vignette: { r: 5, g: 3, b: 0, strength: 0.50 },
+    vignette: { r: 2, g: 4, b: 8, strength: 0.44 },
     scene: { background: null, foreground: null, cssClass: 'theme-sand-dune-chill' },
     transition: { type: 'default', duration: 160 },
     cutawayFrame: 'none',
