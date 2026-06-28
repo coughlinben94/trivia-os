@@ -61,7 +61,7 @@ Trivia OS is a real-time, multi-screen trivia night platform built for weekly pu
       AmbientAudit.jsx    ← dev-only theme preview tool
     /components
       /display
-        ParticleBackground.jsx   ← 29 unique ambient components, GPU-only
+        ParticleBackground.jsx   ← 21 unique ambient components, GPU-only
         SlideRenderer.jsx
         ThemeCanvas.jsx          ← wired but scene: null on all themes (future use)
         ThemeForeground.jsx      ← wired but scene: null on all themes (future use)
@@ -108,7 +108,7 @@ Trivia OS is a real-time, multi-screen trivia night platform built for weekly pu
     /lib
       supabase.js
     /themes
-      index.js                   ← 29 themes, getTheme(id) helper
+      index.js                   ← 21 themes, getTheme(id) helper
   /api
     ben-photos.js                ← Vercel serverless: reads /public/ben/, returns URL array
   /public
@@ -249,10 +249,10 @@ These rules have caused the most rework. They are never negotiable.
 `<ParticleBackground>` never re-mounts on slide changes. It persists for the entire session. Slide transitions animate content only — the ambient layer is locked. Never add `key` props that cause re-mount. Never conditionally render it.
 
 **2. GPU-only animations.**
-Every `@keyframes` in every ambient component animates ONLY `transform` and/or `opacity`. Never `width`, `height`, `background-position`, `color`, `box-shadow`, `filter`, or any layout property. This keeps 29 ambient themes at 60fps on a TV.
+Every `@keyframes` in every ambient component *animates* ONLY `transform` and/or `opacity` — never `width`, `height`, `background-position`, `color`, `box-shadow`, `filter`, or any layout property. (A *static* `box-shadow`/`filter` for softness is fine; the ban is on animating them.) This keeps all 21 ambient themes at 60fps on a TV.
 
-**3. No shapes, no objects in ambient.**
-The ambient system uses ONLY color gradients, glow layers, and CSS `@keyframes`. No SVG shapes, no characters, no icons, no pictorial elements. The world is conveyed through light, color, and motion alone.
+**3. No clip-art in ambient.**
+The world is conveyed through light, color, and motion. A theme's defined **anchor** may be a soft glowing form (a soft-edged sun disc, or soft SVG aurora curtains — `northern-lights` already does this) when legibility demands it, kept soft and reading as light. No hard pictorial icons, characters, or objects. Anchor rule + detail → `references/themes.md`.
 
 Full ambient architecture → `references/themes.md`
 
@@ -365,7 +365,7 @@ await supabase.from('teams').insert({ id: nanoid(), show_id: showId, name: teamN
 
 *Detailed specs:*
 - Slide types + transitions → `references/slides.md`
-- Theme system + 29 ambients → `references/themes.md`
+- Theme system + 21 ambients → `references/themes.md`
 - Brand, design philosophy, Emil principles, Impeccable → `references/brand.md`
 - /join, scoring, powerups, media, Jukebox → `references/features.md`
 - Current build state, known issues, next steps → `references/build-state.md`

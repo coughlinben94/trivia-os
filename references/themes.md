@@ -1,167 +1,207 @@
-# references/themes.md — Theme System + Ambient Architecture
+# references/themes.md — Theme System + Ambient Recipe
 
-**Read before:** adding a new theme, modifying `ParticleBackground.jsx`, changing theme colors, working on the theme picker, any ambient animation work.
+**Read before:** adding or reworking a theme, modifying `ParticleBackground.jsx`, changing theme colors, working on the theme picker, any ambient animation work.
+
+---
+
+## The Law (the governing spine)
+
+**Anchor + drifter + atmosphere — center kept open.**
+
+Every theme must have:
+1. **A named focal ANCHOR** — one defined element you can point at and say what it is (the sun, the hearth, the neon sign, the moon). Not a vague glow.
+2. **At least one trackable DRIFTER** — something that actually *moves* and the eye can follow (drift across, fall, rise, wander). Breathing-opacity gradients do not count.
+3. **ATMOSPHERE** — the layered color washes and near-invisible accents that set the world.
+
+…with the **center of the screen left open** for the question text.
+
+**Canonical exemplars (the bar to match):** `autumn-harvest`, `pure-michigan`, `firefly-summer`. Study them before building. What they share: a warm focal anchor plus discrete, trackable, in-family motion over layered glows.
+
+**The failure mode (what "bland" means here):** a pure breathing-gradient wash with no anchor and nothing to track. At 10 ft a pulsing gradient reads as a flat color field — there's nothing for the eye to lock onto. Most of the un-reworked themes fail this way; that is the whole point of the bland-pass.
 
 ---
 
 ## Theme Shape
 
-All 29 themes are defined in `client/src/themes/index.js`. Use `getTheme(id)` to access.
+All themes are defined in `client/src/themes/index.js`. Use `getTheme(id)`.
 
 ```js
 {
   id: 'midnight-galaxy',
   name: 'Midnight Galaxy',
   colors: {
-    bg:          '#2b1e3e',   // slide background
-    bgDeep:      '#1e1530',   // question slide background (darker)
-    accent:      '#4a4e8f',   // badge backgrounds, bars
-    highlight:   '#a490c2',   // titles, counter, key text
-    text:        '#e6e6fa',   // body text
-    textMuted:   '#9988bb',   // watermark, secondary text
-    shinyBg:     '#3d2060',   // shiny slide background
-    shinyAccent: '#c9a0ff',   // shiny slide highlight color
+    bg:          '#08001a',   // slide background (base wash)
+    bgDeep:      '#040010',   // question slide background (darker)
+    accent:      '#4a1a8f',   // mid glow bodies, bars
+    highlight:   '#c060ff',   // focal anchor + brightest glints, titles, key text
+    text:        '#e8d0ff',   // body text
+    textMuted:   '#8050b0',   // watermark, secondary text
+    shinyBg:     '#120030',
+    shinyAccent: '#ff40a0',
   },
+  vignette: { r: 0, g: 0, b: 3, strength: 0.60 },
 }
 ```
 
 Theme changes happen via Supabase UPDATE on `shows.theme_id`. All subscribers re-render via `useTheme()`. No Socket.io.
 
+### Color sourcing (in-family rule)
+
+Ambient layers must draw from the theme's own `colors`:
+
+| Layer | Sources from |
+|-------|--------------|
+| Base wash | `bg` / `bgDeep` |
+| Mid glow bodies (the drifters, washes) | `accent` |
+| Focal anchor + brightest glints | `highlight` |
+
+Every ambient hue must sit inside the **`accent` → `highlight`** family. The **only** permitted out-of-family color is a **hot near-white core at the anchor itself** (a sun's white center, a candle flame). Test: eyedrop any ambient layer — if its hue is outside accent→highlight and it isn't the anchor core, it fails.
+
 ---
 
-## Ambient Animation Architecture
+## The Recipe (build order)
 
-**File:** `client/src/components/display/ParticleBackground.jsx`
-**Last full audit:** 2026-06-23 (all 29 themes rewritten/validated)
+1. **Atmosphere (3 layers).** Build the world first:
+   - *Base* — slow foundational wash from `bg`/`bgDeep`, 10–25s loop.
+   - *Mid* — the signature wash/glow bodies from `accent`, 6–18s.
+   - *Accent* — near-invisible detail (0.04–0.08 over the floor), 12–25s, rewards close attention.
+2. **Anchor.** Add one defined focal element from `highlight` (+ optional near-white core). It must read as *what it is*. Place it **outside the safe-area** (low, high, or to a side). **Edge control:** the anchor carries the composition's *one* near-hard edge — defined enough to read as a sun / moon / sign; everything else (washes, drifters, glows) stays soft and fades to transparent. All-hard reads as clip-art; all-soft reads as mush. Both fail.
+3. **Drifter(s).** Add ≥1 trackable moving element (drift / fall / rise / wander), in-family. Focal-tier motion lives or passes **outside the safe-area**.
+4. **Motion register.** Name the world's felt state → its physical analogue → `breathe`/`flicker`/`buzz` + timing (table below).
+5. **Keep the center open.** Verify against the safe-area.
 
-### The 5 Non-Negotiable Constraints
+---
 
-1. **No shapes or objects.** Ambient uses ONLY color gradients, glow layers, and CSS `@keyframes`. No SVG shapes, no characters, no icons, no pictorial elements.
-2. **GPU-only animations.** Every `@keyframes` animates only `transform` and/or `opacity`. Never `width`, `height`, `background-position`, `color`, `box-shadow`, `filter`, or any layout property.
-3. **Locked background architecture.** `<ParticleBackground>` never re-mounts on slide changes. It persists for the entire session.
-4. **Pure CSS, no React state.** Ambient components have zero `useState`, `useEffect`, or `requestAnimationFrame`. All motion is `@keyframes`.
-5. **Self-contained components.** Each ambient component owns its full animation system — all `@keyframes`, all `GlowLayer` instances, the `Vignette`.
+## Center Safe-Area (hard constraint)
 
-### 3-Layer Architecture
+The box where the question text lives: **middle 60% width (20–80%) × middle 45% height (28–72%).**
 
-Every ambient component must have at least 3 layers:
+- **Atmosphere may pass behind it freely** — base color washes, low-opacity accent, subtle ambient motion are fine under the text.
+- **No focal-tier element is centered inside it** — not the anchor, not the primary drifters, not any high-energy motion (flicker / buzz / fast neon). Those live low, high, or to the sides.
+- Nothing inside the box peaks bright enough to compete with the text.
 
-1. **Base** — slow foundational atmosphere (gradient wash, 10–20s loop)
-2. **Mid** — signature animation that makes the theme identifiable at thumbnail scale (aurora bands, firefly dots, neon glow, 6–12s loop)
-3. **Accent** — near-invisible detail that rewards close attention (0.04–0.08 opacity, 12–25s loop)
+One-line test: *would a 10-ft viewer's eye get pulled off the centered question?* If a focal or high-energy element sits in the box → fail. (This is exactly why the sunset sun went hard-left and its waves sit at the bottom.)
 
-### Opacity Ranges (calibrated for TV at bar distance)
+---
 
-| Layer | Value range |
+## Motion vocabulary
+
+**Name the feeling first.** Find the world's felt state, pick its physical analogue, and let *that* choose the easing + timing — not the reverse.
+
+| Felt state | Physical analogue | Register | Timing / curve |
+|---|---|---|---|
+| Calm / contemplative (lakes, cellars, deep space, sunsets) | still water breathing, held exhale | slow `breathe` + drift | breathe 15–25s, drift up to ~60s, gentle `ease-in-out` |
+| Warm / analog (tavern, jazz, wine-cellar) | candle flame, hearth | organic `flicker` | 2–4s, irregular |
+| Electric / synthetic (arcade, neon-tokyo, dive-bar, 80s) | buzzing neon tube, CRT | fast `buzz` | 1.3–2.5s, near-stepped |
+| Weather / particle (snow, leaves, embers, rain) | falling / swinging particles | fall / rise | tuned per type, `cubic-bezier(0.77,0,0.175,1)` |
+
+Two hard rules over everything (emil):
+- **No pop-in.** Everything fades in/out via opacity. Nothing scales from `0` (start ≥`0.5` if it must scale) and nothing color-appears in place — slide/fade it in instead.
+- **No weak `ease-in`** on entrances. `ease-out` / `ease-in-out` with the strong curves below.
+
+**Reuse the existing keyframe set.** Add a *new* keyframe only when a signature genuinely demands one (e.g. `ambientWave` for the sunset water glints). A new keyframe means the commit touches both `KEYFRAMES` and the component — still one theme, one commit.
+
+### Reference values (calibrated for TV at bar distance)
+
+| Layer | Alpha range |
 |-------|-------------|
-| Background radial/gradient | 0.28–0.55 alpha |
-| GlowLayer `lo` (keyframe floor) | 0.12–0.25 |
-| GlowLayer `hi` (keyframe ceiling) | 0.40–0.70 |
-| Particle/dot elements | 0.70–0.95 |
+| Background radial/gradient | 0.28–0.55 |
+| GlowLayer floor `--lo` | 0.12–0.25 |
+| GlowLayer ceiling `--hi` | 0.40–0.70 |
+| Particle / dot elements | 0.70–0.95 |
 | Star field (per star) | 0.25–0.55 |
 
-**Critical:** Never use rgba alpha below 0.25 on glow layers. Values below 0.25 are invisible at TV distance in a dark bar. The old system used 0.03–0.13 — all themes were completely rewritten in the June 2026 audit.
+**Never** drop a glow layer below 0.25 — invisible at TV distance in a dark bar. (The pre-2026 system used 0.03–0.13; all themes were rewritten in the June 2026 audit.)
 
-### Timing Ranges
+Timing floors: ambient breathe never < 8s (loop seam shows); use prime-number staggers between layers to prevent sync. Flicker 2–4s (organic, not seizure-inducing). Neon buzz 1.3–2.5s (fast is correct for electrical).
 
-| Animation type | Duration range | Notes |
-|----------------|---------------|--------|
-| Ambient breathe (base) | 10–25s | Never shorter than 8s — loop seam becomes visible |
-| Signature animation (mid) | 6–18s | Use prime-number stagger to prevent sync |
-| Aurora curtains | 15–28s | Stagger 6–12s between layers |
-| Flicker (torch, candle) | 2–4s | Organic, not seizure-inducing |
-| Neon buzz | 1.3–2.5s | Fast is correct for electrical |
-| Falling particles | 8–14s | Leaves, snow, confetti |
-| Rising particles | 3–9s | Embers, bubbles, dust |
-
-### GlowLayer Primitive
-
-```jsx
-<GlowLayer lo={0.25} hi={0.55} duration="12s" delay="3s" style={{
-  inset: 0,   // ALWAYS use inset:0 — constrained divs create visible box boundaries
-  background: 'radial-gradient(ellipse 60% 70% at 30% 50%, rgba(R,G,B,0.40), transparent)',
-}}/>
-```
-
-**Rule:** Always use `inset: 0` on GlowLayers. Never constrain with `left/right/top/bottom` unless the gradient explicitly fades to transparent before those edges.
-
-All keyframes use CSS variables `--lo` and `--hi` for the opacity range. Never hardcode opacity values inside keyframes.
-
-### The Vignette System
-
-Each theme gets a `Vignette` component with tinted (never pure black) edge treatment:
-- `r`, `g`, `b`: tint toward theme's shadow color
-- `strength`: 0.45–0.68 (lower = lighter venue, higher = dark cellar/space)
-
-Applied as: `background: radial-gradient(ellipse at center, transparent 30%, rgba(r,g,b,strength) 100%)`
-
-Examples:
-- Warm amber bar: `{ r:4, g:2, b:0, strength:0.55 }`
-- Cold space: `{ r:0, g:0, b:3, strength:0.62 }`
-- Halloween: `{ r:3, g:0, b:5, strength:0.65 }`
-
-### Flicker vs Buzz vs Breathe
-
-- `flicker`: torch fire, candle, jack-o-lantern — warm analog light sources
-- `buzz`: neon signs, CRT, electrical — cool/cold synthetic light
-- `breathe` (default): everything else — slow organic pulsing
-
-### Available Keyframes
-
-`ambientBreathe`, `ambientFlicker`, `ambientNeonBuzz`, `ambientFallSlow`, `ambientRiseUp`, `ambientPulseIn`, `ambientDriftAcross`, `ambientAuroraFade`, `ambientMeteor`, `ambientScanline`
-
-### Creative Brief Template (for new themes)
-
-```
-Theme: [id]
-World: [one sentence — what physical place or feeling]
-Bg color: [hex — almost always very dark, #050505–#1a0800 range]
-Vignette: { r, g, b, strength }
-Signature element: [what makes this unmistakably THIS theme at thumbnail scale]
-Base layer: [gradient wash — direction, colors, opacity]
-Mid layer: [main animation — describe motion, timing, colors]
-Accent: [subtle detail — nearly invisible, rewards close attention]
-Distinctiveness test: [how would someone ID this theme without reading the title]
-```
+**GlowLayer / Vignette / keyframes** — primitives unchanged. Available keyframes in `ParticleBackground.jsx` today (13): `ambientBreathe`, `ambientFlicker`, `ambientNeonBuzz`, `ambientFallSlow`, `ambientLeafFall`, `ambientRiseUp`, `ambientBubbleRise`, `ambientPulseIn`, `ambientFireflyWander`, `ambientDriftAcross`, `ambientAuroraFade`, `ambientMeteor`, `ambientScanline`. (`ambientWave` is introduced by the sunset-boulevard rework — it lands when that commits.) All animate **only** `transform` / `opacity`; every keyframe has a `prefers-reduced-motion` branch that wins.
 
 ---
 
-## The 29 Themes (as of 2026-06-23 audit)
+## Acceptance Gate
 
-| Theme ID | Character | Signature Element |
+A theme ships only when all seven pass. Each is tagged for who judges it.
+
+| # | Check | Owner |
+|---|-------|-------|
+| 1 | **Anchor** — a named focal element exists | `[auto]` exists in code · `[eyes]` reads as what it is |
+| 2 | **Drifter** — a real translate, not just breathe | `[auto]` |
+| 3 | **Safe-area** — no focal-tier element centered in the 60%×45% box | `[auto]` coords outside box · `[eyes]` legible at 10 ft |
+| 4 | **In-family color** — hues in `accent`→`highlight`, near-white only at the anchor core | `[auto]` |
+| 5 | **Motion matches world** — tempo fits the register; no pop-in; no weak `ease-in` | `[auto]` no pop-in/ease-in · `[eyes]` feel |
+| 6 | **GPU-only + reduced-motion** — transform/opacity only, `reduce` branch wins | `[auto]` |
+| 7 | **Distinct at thumbnail** — identifiable without the title, not a near-twin of another theme | `[eyes]` |
+
+**Rule:** Claude self-gates every `[auto]` check against the actual code *before* presenting a prototype, and never presents something that fails one. Ben owns the `[eyes]` checks (feel, distance, distinctiveness) and the ship/commit decision. **Claude never self-certifies a commit.**
+
+### Three cheap eye-tests (how to run the `[eyes]` checks)
+
+Adapted from gestalt + isolation for TV-at-bar-distance:
+
+1. **Squint / figure-ground** (gate #3). Blur your eyes, or shrink to thumbnail. The question text must still read as the clear *figure* against the ambient *ground*. **Ambient is always ground — never let it become figure.** If the brightest mid-layer activity competes with the center, push it to the edges.
+2. **Grayscale** (gate #7). Desaturate the whole stage. The signature must still be identifiable by its *motion and shape*, not its hue. If a theme is only recognizable by color, the signature isn't doing its job.
+3. **Isolation discipline** (gate #5/#7). Keep base + accent quiet and homogeneous so the focal tier pops; if all layers compete, none reads. But resist *isolation inflation* — not every theme is max-drama. Calm themes (`pure-michigan`, `firefly-summer`) earn identity by restraint.
+
+---
+
+## Ambient Animation Architecture (constraints)
+
+**File:** `client/src/components/display/ParticleBackground.jsx`
+
+1. **Light, not clip-art.** Ambient is built from color gradients, glow layers, and CSS `@keyframes`. A defined **anchor** may be a glowing form (a soft-edged sun disc, soft SVG aurora curtains) when legibility demands it — kept soft, reading as *light*. Still no hard pictorial icons, characters, or objects. **This refines SKILL.md §7's blanket "no shapes / no SVG / no box-shadow" — `northern-lights` already ships soft SVG curtains and the anchor disc uses a *static* `box-shadow` glow. The real rule is *no clip-art*, not *no defined light forms*. Keep SKILL.md §7 in sync with this.**
+2. **GPU-only.** Every `@keyframes` animates only `transform` / `opacity`. Never `width`, `height`, `background-position`, `color`, `box-shadow`, `filter`, or any layout property. (Static `filter`/`box-shadow` for softness is fine; just don't animate them.)
+3. **Locked background.** `<ParticleBackground>` never re-mounts on slide changes; it persists for the session.
+4. **Pure CSS, no React state.** Ambient components have zero `useState`/`useEffect`/`rAF`. All motion is `@keyframes`. (`useMemo` for static element arrays is fine.)
+5. **Self-contained.** Each ambient component owns its layers and its `Vignette`.
+
+`ParticleBackground` takes `{ theme }` and looks up `AMBIENT_MAP[theme.id]`. Components render under one `absolute inset-0` wrapper, so they tile cleanly in any container.
+
+---
+
+## The 21 Themes
+
+Defined in `themes/index.js`, in this order:
+
+| Theme ID | Character | Signature anchor |
 |----------|-----------|------------------|
-| `pure-michigan` | Dark lake night | Green firefly pulse dots |
-| `midnight-galaxy` | Deep space | Large purple + magenta nebula clouds + star field |
-| `autumn-harvest` | Forest fire evening | Falling orange/red leaves + hearth glow from below |
-| `northern-lights` | Arctic sky | Tight horizontal teal + purple bands at very top |
-| `medieval-tavern` | Stone tavern | Orange torch side-glows + hearth flicker center-bottom |
-| `sunset-boulevard` | Sunset sky | Horizontal amber/orange gradient top half |
-| `retro-arcade` | CRT arcade | Purple left + green right neon + scanlines |
-| `sand-dune-chill` | Twilight beach | Warm golden horizon haze + emerging stars |
-| `halloween` | Jack-o-lantern | Orange edge glow + purple fog center + ember particles |
-| `jazz-club` | Smoky stage | Warm amber spotlight from top center + floor glow |
-| `speakeasy` | Art deco bar | Gold center downlight + corner ornaments |
-| `dive-bar` | Neon bar | Red left neon + blue right neon (two distinct sign colors) |
-| `rooftop-party` | City rooftop | Dense city light dots at very bottom + warm sky glow |
-| `solar-flare` | Solar corona | Radiating orange/red edge heat pulse |
-| `nebula-dreams` | Pink + teal nebula | Large pink upper-left + large teal lower-right (diagonal) |
-| `christmas-eve` | Christmas night | Red left + green right + gold candle center + snowflakes |
-| `drive-in-movie` | Movie screen | Pale screen rectangle from bottom + projector beam |
-| `vinyl-night` | Turntable room | Warm amber radial pool + subtle record ring circle |
-| `western-showdown` | Desert dusk | Warm orange sky top + golden horizon glow bottom-left |
-| `under-the-sea` | Bioluminescent deep | Teal bioluminescent pulse dots + bubble rise |
-| `neon-tokyo` | Tokyo alley | Hot pink left + cyan right neon buzz + rain streaks |
-| `haunted-mansion` | Gothic mansion | Cold horizontal ghost light band + deep purple shadow |
-| `firefly-summer` | Summer night | Yellow-green firefly pulse dots (forest variant) |
-| `karaoke-night` | Stage spotlight | Pink left + cyan right + multi-color confetti fall |
-| `wine-cellar` | Stone cellar | Deep burgundy edge closing in + tiny candle center |
-| `aurora-borealis` | Northern sky | Bright lime-green vertical curtain columns from top |
-| `meteor-shower` | Clear night sky | Dense star field + diagonal meteor streaks |
-| `oktoberfest` | Beer tent | Bright warm amber lantern glow from tent top |
-| `eighties-night` | Retrowave | Hot pink top + teal bottom + horizontal grid lines |
+| `pure-michigan` ★ | Dark lake night | Green firefly pulse dots over lake glow |
+| `midnight-galaxy` | Deep space | Purple + magenta nebula clouds + star field |
+| `autumn-harvest` ★ | Forest fire evening | Falling leaves + embers + hearth flicker |
+| `northern-lights` | Arctic sky | Wavy SVG aurora curtains |
+| `medieval-tavern` | Stone tavern | Torch side-glows + hearth flicker |
+| `sunset-boulevard` ⟳ | Sunset beach (rework) | Low-left sun disc + drifting underlit clouds + waves |
+| `retro-arcade` | CRT arcade | Neon side-glows + scanlines + pixel static |
+| `sand-dune-chill` | Twilight dune | Muted golden horizon haze + emerging stars |
+| `halloween` | Jack-o-lantern | Orange edge flicker + purple fog + embers |
+| `jazz-club` | Smoky stage | Amber spotlight + dust motes + smoke |
+| `dive-bar` | Neon bar | Red + blue neon buzz + haze |
+| `rooftop-party` | City rooftop | String-light bulbs + warm city glow |
+| `christmas-eve` | Christmas night | Red/green edges + gold candle + snow |
+| `drive-in-movie` | Movie screen | Screen glow + projector dust |
+| `western-showdown` | Desert dusk | Sun-on-horizon + dust haze |
+| `under-the-sea` | Bioluminescent deep | Teal pulse dots + bubble rise |
+| `neon-tokyo` | Tokyo alley | Pink/cyan neon buzz + rain streaks |
+| `firefly-summer` ★ | Summer night | Yellow-green firefly wander dots |
+| `wine-cellar` | Stone cellar | Burgundy edge closing in + candle |
+| `meteor-shower` | Clear night sky | Star field + meteor streaks |
+| `eighties-night` | Retrowave | Pink top + teal bottom + grid lines |
+
+★ = confirmed-good, leave alone. ⟳ = bland-pass rework in progress. Unmarked = bland-pass queue.
+
+> **Count note:** the pre-audit "29" was wrong — eight themes (`speakeasy`, `solar-flare`, `nebula-dreams`, `vinyl-night`, `haunted-mansion`, `karaoke-night`, `aurora-borealis`, `oktoberfest`) were **merged** into neighbors, not cut. The real count is **21**, sourced from `themes/index.js`.
+
+---
+
+## Rework workflow (bland-pass)
+
+1. Prototype in a side-by-side **CURRENT vs REWORKED** artifact on a 16:9 stage. (An in-app single-theme preview already exists: `AmbientAudit.jsx` at `/ambient?theme=<id>`, indexed at `/ambient`.)
+2. Ben annotates; iterate against the gate.
+3. Claude self-gates the `[auto]` checks, hands a **paste-ready single-component swap** for `ParticleBackground.jsx` (+ `KEYFRAMES` if a new keyframe was added, + `themes/index.js` `colors` if the rework changes the theme's identity — see sunset-boulevard).
+4. **One theme per commit.** Ben confirms on the live `/display` (the TVs), then commits.
 
 ---
 
 ## ThemeCanvas + ThemeForeground
 
-`ThemeCanvas.jsx` and `ThemeForeground.jsx` are wired into the display pipeline but currently have `scene: null` on all 29 themes. They are reserved for future 3D/WebGL foreground elements — do not add ambient logic to them. Keep them as pass-through until the feature spec is written.
+`ThemeCanvas.jsx` and `ThemeForeground.jsx` are wired into the display pipeline but currently have `scene: null` on all 21 themes. Reserved for future 3D/WebGL foreground elements — keep them pass-through until a feature spec exists. Do not add ambient logic to them.
