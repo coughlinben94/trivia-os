@@ -66,9 +66,10 @@ const TRANSITIONS = {
   'sink':     { initial: { opacity: 0, y: -60, scale: 1.06 }, animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.38, ease: EASE_QUINT } }, exit: { opacity: 0, y: -10, transition: { duration: 0.16, ease: EASE_CUBIC } } },
   'settle':   { initial: { opacity: 0, scale: 1.07 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.32, ease: EASE_CUBIC } }, exit: { opacity: 0, scale: 0.99, transition: { duration: 0.16, ease: EASE_CUBIC } } },
   'loom':     { initial: { opacity: 0, scale: 1.14 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.34, ease: EASE_QUINT } }, exit: { opacity: 0, scale: 0.98, transition: { duration: 0.16, ease: EASE_CUBIC } } },
+  'assemble': { initial: { opacity: 1 }, animate: { opacity: 1, transition: { duration: 0 } }, exit: { opacity: 0, transition: { duration: 0.16, ease: EASE_CUBIC } } },
 }
 
-const TRANSITION_KEYS = Object.keys(TRANSITIONS)
+const TRANSITION_KEYS = Object.keys(TRANSITIONS).filter(k => k !== 'assemble')
 let lastRandomKey = null
 
 function resolveTransition(slide) {
@@ -78,18 +79,10 @@ function resolveTransition(slide) {
     const pool = TRANSITION_KEYS.filter(k => k !== lastRandomKey)
     const picked = pool[Math.floor(Math.random() * pool.length)]
     lastRandomKey = picked
-    return TRANSITIONS[picked]
+    return { key: picked, variants: TRANSITIONS[picked] }
   }
-  return TRANSITIONS[key] ?? null
-}
-
-function getVariants(slide) {
-  const type = slide?.type
-  const isShiny = slide?.data?.isShiny
-  if (isShiny) return SLIDE_ANIMATIONS['shiny']
-  const resolved = resolveTransition(slide)
-  if (resolved) return resolved
-  return SLIDE_ANIMATIONS[type] ?? SLIDE_ANIMATIONS['question']
+  const variants = TRANSITIONS[key]
+  return variants ? { key, variants } : null
 }
 
 const SLIDE_COMPONENTS = {
@@ -109,7 +102,24 @@ const SLIDE_COMPONENTS = {
 export default function SlideRenderer({ slide, show, direction }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
-  const variants = (reduce && !slide?.data?.isShiny) ? TRANSITIONS.dissolve : getVariants(slide)
+  const isShiny = slide?.data?.isShiny
+
+  let transitionKey = null
+  let variants
+  if (reduce && !isShiny) {
+    variants = TRANSITIONS.dissolve
+  } else if (isShiny) {
+    variants = SLIDE_ANIMATIONS['shiny']
+  } else {
+    const resolved = resolveTransition(slide)
+    if (resolved) {
+      transitionKey = resolved.key
+      variants = resolved.variants
+    } else {
+      variants = SLIDE_ANIMATIONS[slide?.type] ?? SLIDE_ANIMATIONS['question']
+    }
+  }
+
   const SlideComponent = SLIDE_COMPONENTS[slide.type] ?? CustomSlide
 
   return (
@@ -130,7 +140,7 @@ export default function SlideRenderer({ slide, show, direction }) {
         animate="animate"
         exit="exit"
       >
-        <SlideComponent slide={slide} show={show} />
+        <SlideComponent slide={slide} show={show} transitionKey={transitionKey} />
       </motion.div>
     </>
   )

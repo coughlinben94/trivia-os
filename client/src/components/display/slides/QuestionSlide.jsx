@@ -4,13 +4,28 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
+const EASE_ASSEMBLE = [0.22, 1, 0.36, 1]
 
 // ─── Standard question ────────────────────────────────────────────────────────
 
-function StandardQuestion({ slide, show, theme }) {
+function StandardQuestion({ slide, show, theme, transitionKey }) {
   const { data } = slide
   const hasSeries = data.isSeries && data.seriesTheme
   const badgeTop = hasSeries ? 72 : 40
+  const isAssemble = transitionKey === 'assemble'
+
+  const banner = isAssemble
+    ? { initial: { opacity: 0, y: -40 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.42, delay: 0.04, ease: EASE_ASSEMBLE } }
+    : { initial: { opacity: 0, y: -12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: EASE_SNAP } }
+  const badge = isAssemble
+    ? { initial: { opacity: 0, x: -64, scale: 0.8 }, animate: { opacity: 1, x: 0, scale: 1 }, transition: { duration: 0.4, delay: 0.13, ease: EASE_ASSEMBLE } }
+    : { initial: { scale: 0.6, opacity: 0, y: 8 }, animate: { scale: 1, opacity: 1, y: 0 }, transition: { type: 'spring', stiffness: 340, damping: 22, delay: 0.05 } }
+  const question = isAssemble
+    ? { initial: { opacity: 0, y: 30, scale: 0.97 }, animate: { opacity: 1, y: 0, scale: 1 }, transition: { duration: 0.46, delay: 0.22, ease: EASE_ASSEMBLE } }
+    : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.22, ease: [0.23, 1, 0.32, 1], delay: 0.18 } }
+  const photo = isAssemble
+    ? { initial: { opacity: 0, scale: 0.8 }, animate: { opacity: 0.7, scale: 1 }, transition: { duration: 0.4, delay: 0.31, ease: EASE_ASSEMBLE } }
+    : { initial: { opacity: 0 }, animate: { opacity: 0.7 }, transition: { delay: 0.2, duration: 0.4 } }
 
   return (
     <div
@@ -26,9 +41,9 @@ function StandardQuestion({ slide, show, theme }) {
       {/* Series banner — top */}
       {hasSeries && (
         <motion.div
-          initial={{ opacity: 0, y: -12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, ease: EASE_SNAP }}
+          initial={banner.initial}
+          animate={banner.animate}
+          transition={banner.transition}
           className="absolute top-0 left-0 right-0 py-3 px-10 text-center z-[30]"
           style={{ background: theme.colors.accent }}
         >
@@ -49,9 +64,9 @@ function StandardQuestion({ slide, show, theme }) {
 
       {/* Question number badge — top-left — spring bounce — Section 20 */}
       <motion.div
-        initial={{ scale: 0.6, opacity: 0, y: 8 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 340, damping: 22, delay: 0.05 }}
+        initial={badge.initial}
+        animate={badge.animate}
+        transition={badge.transition}
         className="absolute left-12 z-[30] flex items-center justify-center rounded-full"
         style={{
           top: badgeTop,
@@ -75,9 +90,9 @@ function StandardQuestion({ slide, show, theme }) {
 
       {/* Question text — large, centered — Section 23 */}
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1], delay: 0.18 }}
+        initial={question.initial}
+        animate={question.animate}
+        transition={question.transition}
         className="absolute inset-0 flex items-center justify-center px-24 py-20 z-[30]"
       >
         <p
@@ -98,9 +113,9 @@ function StandardQuestion({ slide, show, theme }) {
       {/* Host photo — bottom-right, subtle */}
       {data.hostPhotoUrl && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.7 }}
-          transition={{ delay: 0.2, duration: 0.4 }}
+          initial={photo.initial}
+          animate={photo.animate}
+          transition={photo.transition}
           className="absolute bottom-20 right-10 pointer-events-none z-[30]"
         >
           <img
@@ -384,7 +399,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
 
 // ─── Main dispatcher ──────────────────────────────────────────────────────────
 
-export default function QuestionSlide({ slide, show }) {
+export default function QuestionSlide({ slide, show, transitionKey }) {
   const { theme } = useTheme()
   const { data } = slide
 
@@ -394,5 +409,5 @@ export default function QuestionSlide({ slide, show }) {
   if (data.isShiny && data.shinyType === 'audio') {
     return <ShinyAudioQuestion slide={slide} theme={theme} show={show} />
   }
-  return <StandardQuestion slide={slide} theme={theme} show={show} />
+  return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} />
 }
