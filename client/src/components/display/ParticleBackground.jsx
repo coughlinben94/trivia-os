@@ -1085,32 +1085,43 @@ function MeteorShowerAmbient() {
 
 // ─── 29. 80S NIGHT ───────────────────────────────────────────────────────
 function EightiesNightAmbient() {
+  const neon = useMemo(() => [
+    { bg: 'radial-gradient(ellipse 72% 49% at 50% 100%, rgba(255,16,200,0.58) 0%, rgba(255,16,200,0.24) 42%, transparent 76%), radial-gradient(ellipse 135% 32% at 50% 105%, rgba(255,16,200,0.40) 0%, rgba(255,16,200,0.15) 46%, transparent 78%)', delay: '0s'   },
+    { bg: 'radial-gradient(ellipse 72% 49% at 50% 100%, rgba(0,208,255,0.54) 0%, rgba(0,208,255,0.22) 42%, transparent 76%), radial-gradient(ellipse 135% 32% at 50% 105%, rgba(0,208,255,0.38) 0%, rgba(0,208,255,0.14) 46%, transparent 78%)',   delay: '-4s'  },
+    { bg: 'radial-gradient(ellipse 72% 49% at 50% 100%, rgba(160,32,255,0.56) 0%, rgba(160,32,255,0.22) 42%, transparent 76%), radial-gradient(ellipse 135% 32% at 50% 105%, rgba(160,32,255,0.38) 0%, rgba(160,32,255,0.14) 46%, transparent 78%)', delay: '-8s'  },
+    { bg: 'radial-gradient(ellipse 72% 49% at 50% 100%, rgba(255,80,160,0.54) 0%, rgba(255,80,160,0.22) 42%, transparent 76%), radial-gradient(ellipse 135% 32% at 50% 105%, rgba(255,80,160,0.38) 0%, rgba(255,80,160,0.14) 46%, transparent 78%)', delay: '-12s' },
+  ], [])
+  const dots = useMemo(() => [
+    { left: '6%',  top: '9%',  size: 5,   color: 'rgba(255,80,200,0.95)',  dur: '2.2s', delay: '0s'    },
+    { left: '14%', top: '18%', size: 3.5, color: 'rgba(0,210,255,0.95)',   dur: '2.7s', delay: '-0.7s' },
+    { left: '22%', top: '7%',  size: 4,   color: 'rgba(180,90,255,0.9)',   dur: '1.9s', delay: '-1.3s' },
+    { left: '30%', top: '16%', size: 4,   color: 'rgba(255,255,255,0.95)', dur: '2.4s', delay: '-0.4s' },
+    { left: '40%', top: '15%', size: 3.5, color: 'rgba(255,120,220,0.9)',  dur: '2.5s', delay: '-1.5s' },
+    { left: '48%', top: '21%', size: 5,   color: 'rgba(0,210,255,0.9)',    dur: '2.1s', delay: '-1.1s' },
+    { left: '56%', top: '15%', size: 4,   color: 'rgba(180,90,255,0.9)',   dur: '2.9s', delay: '-1.8s' },
+    { left: '66%', top: '17%', size: 3.5, color: 'rgba(255,255,255,0.9)',  dur: '2.0s', delay: '-0.9s' },
+    { left: '72%', top: '7%',  size: 4,   color: 'rgba(255,80,200,0.9)',   dur: '3.0s', delay: '-1.7s' },
+    { left: '80%', top: '15%', size: 4,   color: 'rgba(0,210,255,0.9)',    dur: '2.3s', delay: '-1.0s' },
+    { left: '88%', top: '9%',  size: 3,   color: 'rgba(180,90,255,0.9)',   dur: '2.8s', delay: '-2.0s' },
+    { left: '12%', top: '26%', size: 3,   color: 'rgba(255,255,255,0.9)',  dur: '3.1s', delay: '-2.2s' },
+    { left: '36%', top: '25%', size: 3,   color: 'rgba(0,210,255,0.85)',   dur: '3.2s', delay: '-1.4s' },
+    { left: '62%', top: '26%', size: 3.5, color: 'rgba(255,120,220,0.9)',  dur: '2.4s', delay: '-0.8s' },
+    { left: '86%', top: '24%', size: 3,   color: 'rgba(180,90,255,0.85)',  dur: '2.7s', delay: '-2.3s' },
+  ], [])
   return <>
-    {/* Retrowave grid lines */}
-    <div aria-hidden style={{
-      position: 'absolute', inset: 0, pointerEvents: 'none',
-      backgroundImage: 'repeating-linear-gradient(transparent 0px, transparent 38px, rgba(255,20,220,0.10) 38px, rgba(255,20,220,0.10) 39px)',
-      backgroundSize: '100% 39px',
-    }}/>
-    {/* Hot pink/magenta — top neon */}
-    <GlowLayer lo={0.28} hi={0.65} duration="15s" style={{
-      top: 0, left: 0, right: 0, height: '35%',
-      background: 'linear-gradient(to bottom, rgba(255,0,200,0.55) 0%, rgba(180,0,255,0.35) 60%, transparent 100%)',
-    }}/>
-    {/* Cyan/teal — bottom horizon */}
-    <GlowLayer lo={0.22} hi={0.58} duration="18s" delay="5s" style={{
-      bottom: 0, left: 0, right: 0, height: '30%',
-      background: 'linear-gradient(to top, rgba(0,220,255,0.52), rgba(0,180,255,0.28), transparent)',
-    }}/>
-    {/* Purple side glows */}
-    <GlowLayer lo={0.20} hi={0.50} duration="12s" delay="3s" style={{
-      top: 0, left: 0, bottom: 0, width: '25%',
-      background: 'radial-gradient(ellipse at left center, rgba(180,0,255,0.50), transparent 75%)',
-    }}/>
-    <GlowLayer lo={0.18} hi={0.45} duration="14s" delay="6s" style={{
-      top: 0, right: 0, bottom: 0, width: '25%',
-      background: 'radial-gradient(ellipse at right center, rgba(255,0,180,0.45), transparent 75%)',
-    }}/>
+    <GlowLayer lo={0.16} hi={0.34} duration="20s" style={{ inset: 0,
+      background: 'radial-gradient(ellipse 90% 70% at 50% 24%, rgba(60,10,90,0.42), transparent 75%)' }}/>
+    {neon.map((n, i) => (
+      <div key={i} aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: n.bg, willChange: 'opacity', '--lo': 0, '--hi': 0.9,
+        animation: `ambientBreathe 16s ${n.delay} ease-in-out infinite` }}/>
+    ))}
+    {dots.map((d, i) => (
+      <div key={i} aria-hidden style={{ position: 'absolute', left: d.left, top: d.top, width: d.size, height: d.size,
+        borderRadius: '50%', background: d.color, boxShadow: `0 0 ${d.size * 2.2}px ${d.color}`, pointerEvents: 'none',
+        willChange: 'transform, opacity', '--hi': 0.95,
+        animation: `ambientPulseIn ${d.dur} ${d.delay} ease infinite` }}/>
+    ))}
   </>
 }
 
