@@ -102,6 +102,28 @@ const KEYFRAMES = `
     80%  { transform: translateY(-4px); }
     100% { transform: translateY(0); }
   }
+  @keyframes ambientWeedCross {
+    0%    { transform: translateX(-250%); opacity: 0; }
+    1.5%  { opacity: var(--hi,0.7); }
+    28.5% { opacity: var(--hi,0.7); }
+    30%   { transform: translateX(2150%); opacity: 0; }
+    100%  { transform: translateX(2150%); opacity: 0; }
+  }
+  @keyframes ambientWeedCrossRev {
+    0%    { transform: translateX(2150%); opacity: 0; }
+    1.5%  { opacity: var(--hi,0.7); }
+    28.5% { opacity: var(--hi,0.7); }
+    30%   { transform: translateX(-250%); opacity: 0; }
+    100%  { transform: translateX(-250%); opacity: 0; }
+  }
+  @keyframes ambientWeedBounce {
+    0%   { transform: translateY(0);    animation-timing-function: ease-out; }
+    40%  { transform: translateY(-52%); animation-timing-function: ease-in; }
+    68%  { transform: translateY(0);    animation-timing-function: ease-out; }
+    84%  { transform: translateY(-19%); animation-timing-function: ease-in; }
+    100% { transform: translateY(0); }
+  }
+  @keyframes ambientSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) {
     @keyframes ambientFallSlow    { 0%, 100% { opacity: 0; } 8%, 92%  { opacity: var(--hi, 0.8); } }
     @keyframes ambientLeafFall    { 0%, 100% { opacity: 0; } 10%, 90% { opacity: var(--hi, 0.8); } }
@@ -117,6 +139,10 @@ const KEYFRAMES = `
     @keyframes ambientBreathe     { 0%, 100% { opacity: var(--lo, 0.03); } }
     @keyframes ambientWave { 0%,100% { opacity:var(--lo,0.10);} 50% { opacity:var(--hi,0.30);} }
     @keyframes ambientGullBob { 0%,100% { transform: none; } }
+    @keyframes ambientWeedCross { 0%,100%{opacity:0;} }
+    @keyframes ambientWeedCrossRev { 0%,100%{opacity:0;} }
+    @keyframes ambientWeedBounce { 0%,100%{transform:translateY(0);} }
+    @keyframes ambientSpin { from,to { transform: rotate(0deg); } }
   }
 `
 
@@ -230,6 +256,67 @@ function Gull({ top, size, dur, delay, opacity, flip, bobDur, bobDelay }) {
       </svg>
     </div>
   </div>
+}
+
+function makeRng(seed) { let s = (seed >>> 0) || 1; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+const WEED_STYLES = {
+  tidy:  { N: 41, steps: 60, skipSet: [4, 7, 11, 15, 18], centerLines: 4, rLo: 0.84, rHi: 1.08, bow: 1.8 },
+  loose: { N: 29, steps: 40, skipSet: [3, 6, 9, 12],      centerLines: 3, rLo: 0.76, rHi: 1.16, bow: 2.8 },
+  dense: { N: 47, steps: 64, skipSet: [5, 9, 14, 18, 22], centerLines: 5, rLo: 0.90, rHi: 1.04, bow: 1.4 },
+}
+function tumbleweedScribble(seed, style = 'tidy') {
+  const cfg = WEED_STYLES[style] || WEED_STYLES.tidy
+  const rng = makeRng(seed), rand = (a, b) => a + (b - a) * rng()
+  const cx = 24, cy = 24, R = 15, N = cfg.N, pts = []
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2 + rand(-0.06, 0.06), r = R * rand(cfg.rLo, cfg.rHi)
+    pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r])
+  }
+  let cur = Math.floor(rng() * N), prev = pts[cur]
+  let d = `M${prev[0].toFixed(1)} ${prev[1].toFixed(1)} `
+  for (let s = 0; s < cfg.steps; s++) {
+    const skip = cfg.skipSet[Math.floor(rng() * cfg.skipSet.length)]
+    const sign = rng() < 0.5 ? 1 : -1
+    cur = (cur + sign * skip + N * 4) % N
+    const p = pts[cur]
+    const mx = (prev[0] + p[0]) / 2, my = (prev[1] + p[1]) / 2
+    const dx = p[0] - prev[0], dy = p[1] - prev[1], len = Math.hypot(dx, dy) || 1
+    const px = -dy / len, py = dx / len, bow = rand(-cfg.bow, cfg.bow)
+    d += `Q${(mx + px * bow).toFixed(1)} ${(my + py * bow).toFixed(1)} ${p[0].toFixed(1)} ${p[1].toFixed(1)} `
+    prev = p
+  }
+  for (let c = 0; c < (cfg.centerLines || 0); c++) {
+    const ang = rand(0, Math.PI), off = rand(0, 4.5), offA = rand(0, Math.PI * 2)
+    const ox = cx + Math.cos(offA) * off, oy = cy + Math.sin(offA) * off
+    const L = R * rand(0.78, 1.02)
+    const x0 = ox + Math.cos(ang) * L, y0 = oy + Math.sin(ang) * L
+    const x1 = ox - Math.cos(ang) * L, y1 = oy - Math.sin(ang) * L
+    const pa = ang + Math.PI / 2, bw = rand(-cfg.bow, cfg.bow)
+    d += `M${x0.toFixed(1)} ${y0.toFixed(1)} Q${(ox + Math.cos(pa) * bw).toFixed(1)} ${(oy + Math.sin(pa) * bw).toFixed(1)} ${x1.toFixed(1)} ${y1.toFixed(1)} `
+  }
+  return d
+}
+function Tumbleweed({ top, size = '5.5%', seed = 1, style = 'tidy', dir = 'lr', crossDur = '18s', bounceDur = '1.05s', spinDur = '2.4s', delay = '0s', hi = 0.7 }) {
+  const d1 = useMemo(() => tumbleweedScribble(seed, style), [seed, style])
+  const d2 = useMemo(() => tumbleweedScribble(seed + 101, style), [seed, style])
+  const cross = dir === 'rl' ? 'ambientWeedCrossRev' : 'ambientWeedCross'
+  const spinDir = dir === 'rl' ? 'reverse' : 'normal'
+  return (
+    <div aria-hidden style={{ position: 'absolute', top, left: 0, width: size, aspectRatio: '1',
+      willChange: 'transform, opacity', '--hi': hi,
+      animation: `${cross} ${crossDur} ${delay} linear infinite`, pointerEvents: 'none' }}>
+      <div style={{ width: '100%', height: '100%', willChange: 'transform',
+        animation: `ambientWeedBounce ${bounceDur} ${delay} infinite` }}>
+        <div style={{ width: '100%', height: '100%', willChange: 'transform',
+          animation: `ambientSpin ${spinDur} ${delay} linear ${spinDir} infinite` }}>
+          <svg viewBox="0 0 48 48" width="100%" height="100%" style={{ display: 'block' }}>
+            <path d={d2} fill="none" stroke="rgba(94,66,36,0.30)" strokeWidth="0.6" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d={d1} fill="none" stroke="rgba(62,42,20,0.52)" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ─── Motion constants ─────────────────────────────────────────────────────
@@ -854,27 +941,44 @@ function DriveInMovieAmbient() {
 
 // ─── 19. WESTERN SHOWDOWN ────────────────────────────────────────────────
 function WesternShowdownAmbient() {
+  const dust = useMemo(() => [
+    { top: '70%', w: '42%', h: '8%', dur: '20s', delay: '0s',   hi: 0.42, color: 'rgba(150,118,72,0.7)'  },
+    { top: '78%', w: '52%', h: '9%', dur: '16s', delay: '-7s',  hi: 0.46, color: 'rgba(140,110,66,0.72)' },
+    { top: '86%', w: '46%', h: '8%', dur: '13s', delay: '-10s', hi: 0.40, color: 'rgba(132,104,62,0.7)'  },
+    { top: '68%', w: '34%', h: '6%', dur: '26s', delay: '-17s', hi: 0.30, color: 'rgba(160,128,80,0.6)'  },
+  ], [])
   return <>
-    {/* Blazing desert sky — top warm orange */}
-    <GlowLayer lo={0.30} hi={0.60} duration="18s" style={{
-      top: 0, left: 0, right: 0, height: '45%',
-      background: 'linear-gradient(to bottom, rgba(200,70,10,0.48) 0%, rgba(180,50,5,0.28) 60%, transparent 100%)',
-    }}/>
-    {/* Setting sun horizon — bottom left */}
-    <GlowLayer lo={0.28} hi={0.58} duration="22s" delay="6s" style={{
-      inset: 0,
-      background: 'radial-gradient(ellipse 60% 40% at 15% 100%, rgba(255,140,20,0.52), transparent)',
-    }}/>
-    {/* Dust haze — wide radial from bottom center */}
-    <GlowLayer lo={0.12} hi={0.28} duration="14s" delay="4s" style={{
-      inset: 0,
-      background: 'radial-gradient(ellipse 80% 35% at 50% 100%, rgba(220,160,60,0.28), transparent)',
-    }}/>
-    {/* Atmospheric heat shimmer — mid screen */}
-    <GlowLayer lo={0.06} hi={0.18} duration="9s" delay="2s" style={{
-      inset: 0,
-      background: 'radial-gradient(ellipse 70% 30% at 50% 65%, rgba(200,120,30,0.18), transparent)',
-    }}/>
+    {/* SKY — bright clear blue, deeper up high, whitening to the horizon haze */}
+    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+      background: 'linear-gradient(to bottom, rgba(72,132,196,0.92) 0%, rgba(100,160,214,0.88) 28%, rgba(142,188,225,0.82) 48%, rgba(200,222,237,0.80) 60%, rgba(245,245,236,0.82) 67%, transparent 73%)' }}/>
+    {/* DUSTY HAZE — warm dust veil rising from the horizon into the mid sky */}
+    <GlowLayer lo={0.30} hi={0.48} duration="20s" delay="2s" style={{ inset: 0,
+      background: 'linear-gradient(to top, transparent 16%, rgba(228,208,158,0.52) 30%, rgba(226,206,160,0.36) 46%, rgba(222,204,160,0.18) 58%, transparent 72%)' }}/>
+    {/* HORIZON glare — bright near-white haze, low */}
+    <GlowLayer lo={0.40} hi={0.60} duration="16s" style={{ inset: 0,
+      background: 'radial-gradient(ellipse 96% 11% at 50% 67%, rgba(252,250,236,0.6), transparent 72%)' }}/>
+    {/* sun glare — pale bloom, upper-right */}
+    <GlowLayer lo={0.32} hi={0.54} duration="10s" style={{ inset: 0,
+      background: 'radial-gradient(ellipse 40% 28% at 82% 4%, rgba(255,248,206,0.5), transparent 66%)' }}/>
+    {/* THE SUN — high, top-right (anchor); inline so it has no Sun-helper dependency */}
+    <div aria-hidden style={{ position: 'absolute', left: '78%', top: '-1%', width: '9%', aspectRatio: '1', borderRadius: '50%',
+      background: 'radial-gradient(circle at 50% 47%, rgba(255,255,246,1) 0%, rgba(255,247,192,0.98) 34%, rgba(236,208,132,0.85) 58%, rgba(255,200,140,0.16) 78%, transparent 100%)',
+      boxShadow: '0 0 54px 17px rgba(254,242,180,0.55)', willChange: 'opacity', '--lo': 0.9, '--hi': 1,
+      animation: 'ambientBreathe 11s ease-in-out infinite', pointerEvents: 'none' }}/>
+    {/* WARM GROUND — tan/ochre desert floor, FLAT */}
+    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+      background: 'linear-gradient(to bottom, transparent 64%, rgba(202,164,100,0.55) 72%, rgba(176,138,82,0.75) 86%, rgba(150,116,68,0.88) 100%)' }}/>
+    {/* BLOWING DUST — denser darker clouds drifting over the ground */}
+    {dust.map((d, i) => (
+      <div key={i} aria-hidden style={{ position: 'absolute', top: d.top, left: '-8%', width: d.w, height: d.h,
+        background: `radial-gradient(ellipse 50% 55% at 50% 50%, ${d.color}, transparent 78%)`,
+        willChange: 'transform, opacity', '--hi': d.hi,
+        animation: `ambientDriftAcross ${d.dur} ${d.delay} linear infinite`, pointerEvents: 'none' }}/>
+    ))}
+    {/* TUMBLEWEEDS — three styles, mixed L/R entry, phased so they take turns */}
+    <Tumbleweed top="74%" size="5.2%" seed={7}  style="loose" dir="lr" crossDur="18s" bounceDur="1.2s"  spinDur="2.9s" delay="0s"   hi={0.56}/>
+    <Tumbleweed top="80%" size="5.6%" seed={23} style="tidy"  dir="rl" crossDur="18s" bounceDur="1.05s" spinDur="2.4s" delay="-6s"  hi={0.66}/>
+    <Tumbleweed top="86%" size="6.5%" seed={42} style="dense" dir="lr" crossDur="18s" bounceDur="0.92s" spinDur="2.0s" delay="-12s" hi={0.72}/>
   </>
 }
 

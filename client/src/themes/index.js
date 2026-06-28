@@ -173,7 +173,7 @@ export const THEMES = [
     colors: { bg: '#100800', bgDeep: '#080400', accent: '#602000', highlight: '#e06010', text: '#f8e0b0', textMuted: '#905030', shinyBg: '#180a00', shinyAccent: '#ffd040' },
     fonts: { display: 'Boogaloo', body: 'DM Sans', ui: 'DM Sans' },
     particles: { color: '#e06010', count: 25, behavior: 'ash' },
-    vignette: { r: 8, g: 2, b: 0, strength: 0.55 },
+    vignette: { r: 20, g: 18, b: 14, strength: 0.30 },
     scene: { background: null, foreground: null, cssClass: 'theme-western-showdown' },
     transition: { type: 'default', duration: 160 },
     cutawayFrame: 'none',
