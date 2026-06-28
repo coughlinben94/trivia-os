@@ -185,6 +185,9 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                 <option value="settle">Settle</option>
                 <option value="loom">Loom</option>
               </optgroup>
+              <optgroup label="Construct">
+                <option value="assemble">Assemble</option>
+              </optgroup>
             </select>
           </div>
         )}
