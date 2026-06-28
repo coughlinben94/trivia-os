@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
-import ParticleBackground from '../ParticleBackground.jsx'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
@@ -17,9 +16,8 @@ export default function TitleSlide({ slide, show }) {
   return (
     <div
       className="w-full h-full relative flex flex-col items-center justify-center overflow-hidden"
-      style={{ background: theme.roundIntro.bgColor }}
+      style={{ background: 'transparent' }}
     >
-      <ParticleBackground theme={theme} />
 
       {/* Ambient radial glow */}
       <div
