@@ -575,7 +575,7 @@ function ScoreboardSheet({ leaderboard, leaderboardStatus, onRetryLeaderboard, m
                         {medal ?? <span style={{ color: `${text}30`, fontSize: '0.8rem', fontWeight: 700 }}>{i + 1}</span>}
                       </span>
                       <span style={{
-                        flex: 1, color: isMe ? text : `${text}65`,
+                        flex: 1, color: isMe ? text : `${text}f2`,
                         fontSize: '0.9375rem', fontWeight: isMe ? 600 : 400,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         fontFamily: 'DM Sans, sans-serif',
@@ -585,7 +585,7 @@ function ScoreboardSheet({ leaderboard, leaderboardStatus, onRetryLeaderboard, m
                       </span>
                       <span style={{
                         fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '1.05rem', flexShrink: 0,
-                        color: i === 0 ? '#f5c842' : isMe ? highlight : `${text}60`,
+                        color: i === 0 ? '#f5c842' : isMe ? highlight : `${text}8c`,
                       }}>
                         {team.total}
                       </span>
@@ -708,12 +708,12 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, myScores, leaderbo
         minHeight: 56,
       }}>
         <span style={{
-          color: `${accent}cc`, fontSize: '0.8rem', fontWeight: 600,
+          color: `${highlight}cc`, fontSize: '0.8rem', fontWeight: 600,
           maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {topLeft}
         </span>
-        <span style={{ color: accent, fontSize: '0.8rem', fontWeight: 700, flexShrink: 0 }}>
+        <span style={{ color: highlight, fontSize: '0.8rem', fontWeight: 700, flexShrink: 0 }}>
           {topRight}
         </span>
       </div>
