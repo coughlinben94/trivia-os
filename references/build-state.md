@@ -4,7 +4,7 @@
 
 ---
 
-## Completed (as of June 24, 2026)
+## Completed (as of June 27, 2026)
 
 **Steps 1–9 of build order — all complete.**
 
@@ -18,7 +18,7 @@
 - `ShowManager.jsx` — show list, create/load/duplicate/delete
 - `BuildMode.jsx` — slide builder layout, mode switching (wizard/editing)
 - `RoundSidebar.jsx` — round list, slide list per round, add round
-- `SlideEditor.jsx` — per-slide editing panel
+- `SlideEditor.jsx` — per-slide editing panel; semantic `label`/`htmlFor` on all fields (a11y)
 - `AddSlideWizard.jsx` — 4-step guided slide creation
 - `FormatLibrary.jsx` + `useShinyFormats.js` — shiny format manager, 8 seed formats
 - `HostHeader.jsx` — title edit, theme picker trigger, copy join link, Ticker button, Formats button, Go Live
@@ -30,15 +30,17 @@
 - `LiveMode.jsx` — pure control surface: prev/next, slide counter, scoreboard toggle
 - `ScorePanel.jsx` — fuzzy search (Fuse.js), score input, hold-to-confirm, reveal toggle
 - Host → Display sync via Supabase Realtime
+- **Live theme swap during show** (Step 11 ✓): `theme_id` Realtime propagation + LiveMode picker — theme changes during a show update all surfaces instantly
+- **Connection-loss banner**: `HostReconnectingBanner` at HostInner level — operator sees "Connection lost — your changes may not be saving. Reconnecting…" on `CHANNEL_ERROR` / `TIMED_OUT` / `CLOSED`; mirrors Join's pattern
 
 ### `/display`
 - `Display.jsx` — full routing waterfall (loading → null → preview → live → pre-show)
 - `PreShowScreen` — QR code, team ticker (always visible), ambient, Baynes watermark, Ben photo (bottom-left)
-- `SlideRenderer.jsx` — routes to per-type slide components
+- `SlideRenderer.jsx` — routes to per-type slide components; houses full transition system (9 named transitions + Random + reduced-motion crossfade fallback; `assemble` defined but NOT in picker — see Remaining)
 - All 10 slide types implemented: `TitleSlide`, `RoundIntroSlide`, `QuestionSlide`, `GradingBreakSlide`, `ScoreboardRevealSlide`, `CustomSlide`, `StateOfUnionSlide`, `MultiQuestionSlide`, `PixelateSeriesSlide`, `PylRevealSlide`
 - `ParticleBackground.jsx` — 29 GPU-accelerated ambient components, 3-layer architecture, full audit June 2026
 - `BaynesWatermark.jsx`, `QuestionCounter.jsx`, `WaveformBars.jsx`
-- `TransitionRegistry.js`, `FrameRegistry.js`
+- `FrameRegistry.js` (`TransitionRegistry.js` removed — dead code)
 - `ThemeCanvas.jsx`, `ThemeForeground.jsx` — wired, scene: null (future use)
 - Display routing fix: PreShowScreen shows when `is_live && current_slide_id === null`
 
@@ -51,11 +53,30 @@
 - BenPhoto at top of registration screen (100px)
 - Connection status tracked; forward-attempt, back-nav, and app-exit alerts to host panel
 - All three alert types implemented as toasts in `Host.jsx`
+- **Powerup hardened**: double-tap guard + full error handling; honest init/leaderboard error+loading states
+- **Cross-theme contrast floor**: top-bar labels use `highlight` (not `accent`) — 4 dark-accent themes were invisible; team-name opacity raised to 95% (`f2`); score opacity floor at 55% (`8c`)
 
 ### Powerup System
 - Host definition in Build Mode via powerups array
 - Phone invocation on /join with confirmation dialog
 - `powerup_used` written to teams table; host panel red alert toast
+
+### Transition System (Step 13 ✓)
+- 9 named per-slide transitions live: dissolve, emerge, zoom, punch, drop, descend, sink, settle, loom — plus Random
+- Assignable per-slide via SlideEditor picker (`<optgroup>` grouped select)
+- Resolved in `SlideRenderer.jsx`; reduced-motion collapses all to `dissolve` crossfade
+- `assemble` (10th) defined in SlideRenderer but NOT in picker — needs slide children wired as `motion` children for child-stagger to function
+
+### Animation, A11y & Polish (Impeccable audit closed June 27, 2026)
+- **NN#1 fully closed**: inner `ParticleBackground` removed from both `QuestionSlide` and `TitleSlide`; PB lives exclusively at DisplayInner level, outside `AnimatePresence` — never remounts during slide transitions
+- **DM Sans 600/700 loaded**: Google Fonts URL updated to include real weights; browser was synthesizing bold from 500, causing stroke artifacts on Android
+- **Reduced-motion coverage complete** (raw CSS animations now suppressed):
+  - `ParticleBackground.jsx`: `ambientFlicker`, `ambientNeonBuzz` (highest epilepsy risk), `ambientBreathe` frozen to `--lo` resting opacity
+  - `index.css`: `gradingGlow`, `playPulse`, `waveformBar`, `waveformIdle` all frozen
+  - `Join.jsx` WaitingScreen: `breathePulse` dot gated on `pref` variable
+- **RoundIntro slam gated**: `scale: 3.5 → 1` spring (`bounce: 0.25`) falls back to opacity dissolve when `useReducedMotion()` is true
+- **PreShow text**: "Scan to join" 0.75rem → 1.1rem; "teams in" 1rem → 1.25rem (TV legibility at 10ft)
+- **GPU cleanup**: dead `TransitionRegistry.js` + `EASE_OVERSHOOT` removed; PixelateSeries stage-dots are opacity-based; ScoreboardReveal leader glow already GPU-safe (static `boxShadow` on opacity-animated layer — no change needed)
 
 ### Pre-Show Ticker
 - Always visible on PreShowScreen (never conditional)
@@ -86,9 +107,10 @@
 | # | Step | Notes |
 |---|------|-------|
 | 10 | **Show library** | My shows screen, JSON export/import, duplicate, delete. ShowManager.jsx exists but may need enhancement. |
-| 11 | **Theme switcher live during show** | Theme picker is built but needs live-mode wire-up in LiveMode.jsx |
 | 12 | **Jukebox integration** | Stream Deck KeyJ → fetch to trivia-jukebox.vercel.app play/pause API |
-| 13 | **Polish pass** | Impeccable audit (`$impeccable polish`), mobile optimization for /join, transition polish, font loading (Handters/Roquen declared in index.css but not yet used) |
+| — | **`assemble` transition** | 10th transition — defined in SlideRenderer but NOT in the picker. Needs slide child-elements wired as `motion` children for child-stagger to work. |
+| — | **Cross-repo: pre-show library handoff** | Trivia OS appends `?lib=<name>` to Jukebox handoff nav; Jukebox reads it, auto-selects + shuffles that named library, default-safe when absent. Jukebox-side first. |
+| — | **Profiling-dependent P2s** | MeteorShower 200-node DOM field + `/join` `backdrop-filter: blur()` on cheap Androids — both need real-hardware profiling before deciding if there's a problem. NOT blind-fix items. |
 
 ---
 
@@ -108,8 +130,9 @@
 ## Next Session Starting Point
 
 1. Read this file
-2. Decide: Step 10 (show library) or Step 11 (theme switcher live) based on current priority
-3. For Step 10: Start in `ShowManager.jsx` — it likely has a show list already; check what export/import support exists in `useShow.js`
-4. For Step 11: Start in `LiveMode.jsx` — add a theme picker trigger that writes `theme_id` to Supabase; `Display.jsx` already subscribes to that field
+2. Decide: Step 10 (show library) or Step 12 (Jukebox integration) — both are independent
+3. For Step 10: Start in `ShowManager.jsx` — show list + CRUD exists; verify JSON export/import in `useShow.js`
+4. For Step 12: Wire Stream Deck KeyJ to `trivia-jukebox.vercel.app` play/pause API — check Jukebox API surface first
+5. Cross-repo handoff (whenever ready): implement `?lib=<name>` param on Jukebox side — reads URL param on mount, auto-selects + shuffles that named library, default-safe when absent
 
 Before building: read `references/build-state.md` (this file) + the relevant reference file for the feature. Always.
