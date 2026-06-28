@@ -1,10 +1,11 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
 export default function RoundIntroSlide({ slide, show }) {
   const { theme } = useTheme()
+  const reduce = useReducedMotion()
   const { data } = slide
   const isSwing = slide.type === 'swing-round-intro'
 
@@ -38,9 +39,11 @@ export default function RoundIntroSlide({ slide, show }) {
 
       {/* Round number — SLAM in with spring overshoot — Section 5 */}
       <motion.div
-        initial={{ scale: 3.5, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: 'spring', duration: 0.4, bounce: 0.25 }}
+        initial={reduce ? { opacity: 0 } : { scale: 3.5, opacity: 0 }}
+        animate={reduce ? { opacity: 1 } : { scale: 1, opacity: 1 }}
+        transition={reduce
+          ? { duration: 0.3, ease: EASE_SNAP }
+          : { type: 'spring', duration: 0.4, bounce: 0.25 }}
         className="relative z-10"
         style={{
           fontFamily: `'Boogaloo', sans-serif`,
