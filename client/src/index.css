@@ -130,4 +130,8 @@ textarea {
 }
 @media (prefers-reduced-motion: reduce) {
   .ticker-track { animation: none; }
+  @keyframes gradingGlow  { 0%, 100% { opacity: 0.4;  transform: scale(1); } }
+  @keyframes playPulse    { 0%, 100% { box-shadow: none; } }
+  @keyframes waveformBar  { 0%, 100% { transform: scaleY(0.5); } }
+  @keyframes waveformIdle { 0%, 100% { transform: scaleY(0.15); } }
 }

@@ -298,7 +298,7 @@ function WaitingScreen({ teamName, myScore, theme }) {
         >
           <span style={{
             width: 8, height: 8, borderRadius: '50%', background: highlight, flexShrink: 0,
-            animation: 'breathePulse 2.2s ease-in-out infinite',
+            animation: pref ? 'none' : 'breathePulse 2.2s ease-in-out infinite',
             display: 'inline-block',
           }} />
           <span style={{ color: `${text}45`, fontSize: '0.8rem' }}>Waiting for Ben…</span>

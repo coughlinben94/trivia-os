@@ -101,6 +101,9 @@ const KEYFRAMES = `
     @keyframes ambientDriftAcross { 0%, 100% { opacity: 0; } 15%, 85% { opacity: var(--hi, 0.20); } }
     @keyframes ambientMeteor      { 0%, 100% { opacity: 0; } 4%, 96%  { opacity: 0.9; } }
     @keyframes ambientScanline    { from, to { transform: none; } }
+    @keyframes ambientFlicker     { 0%, 100% { opacity: var(--lo, 0.15); } }
+    @keyframes ambientNeonBuzz    { 0%, 100% { opacity: var(--lo, 0.18); } }
+    @keyframes ambientBreathe     { 0%, 100% { opacity: var(--lo, 0.03); } }
   }
 `
 
