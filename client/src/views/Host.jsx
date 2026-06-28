@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useShow } from '../hooks/useShow.js'
 import { supabase } from '../lib/supabase.js'
 import { ThemeProvider, useTheme } from '../components/shared/ThemeProvider.jsx'
@@ -6,6 +7,8 @@ import ShowManager from '../components/host/ShowManager.jsx'
 import ShowLibrary from '../components/host/ShowLibrary.jsx'
 import BuildMode from '../components/host/BuildMode.jsx'
 import LiveMode from '../components/host/LiveMode.jsx'
+
+const EASE_SNAP = [0.23, 1, 0.32, 1]
 
 export default function Host() {
   const showApi = useShow()
@@ -45,6 +48,8 @@ function HostInner({ showApi }) {
   const [toasts, setToasts] = useState([])
   const [isLiveMode, setIsLiveMode] = useState(false)
   const [showLibrary, setShowLibrary] = useState(false)
+  const [connStatus, setConnStatus] = useState('SUBSCRIBED')
+  const disconnected = connStatus === 'CHANNEL_ERROR' || connStatus === 'TIMED_OUT' || connStatus === 'CLOSED'
 
   useEffect(() => {
     if (show?.showState?.isLive) setIsLiveMode(true)
@@ -72,7 +77,7 @@ function HostInner({ showApi }) {
           }
         }
       )
-      .subscribe()
+      .subscribe(status => setConnStatus(status))
     return () => supabase.removeChannel(channel)
   }, [show?.id])
 
@@ -145,8 +150,33 @@ function HostInner({ showApi }) {
           onOpenLibrary={() => setShowLibrary(true)}
         />
       )}
+      <HostReconnectingBanner visible={disconnected} />
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
+  )
+}
+
+function HostReconnectingBanner({ visible }) {
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          initial={{ y: -44, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -44, opacity: 0 }}
+          transition={{ duration: 0.2, ease: EASE_SNAP }}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 500,
+            background: 'rgba(255,195,50,0.93)', color: '#1a1000',
+            fontSize: '0.8rem', fontWeight: 600, textAlign: 'center',
+            padding: '0.55rem', fontFamily: 'DM Sans, sans-serif',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          Connection lost — your changes may not be saving. Reconnecting…
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 
