@@ -123,12 +123,12 @@ function PreShowScreen({ show }) {
             }}>{teams.length}</span>
             <span style={{
               fontFamily: "'DM Sans', sans-serif",
-              fontSize: '1rem',
+              fontSize: '1.25rem',
               color: `${theme.colors.text}88`,
             }}>{teams.length === 1 ? 'team in' : 'teams in'}</span>
             <span style={{
               fontFamily: "'DM Sans', sans-serif",
-              fontSize: '0.75rem',
+              fontSize: '1.1rem',
               color: theme.colors.textMuted,
               textAlign: 'center',
               maxWidth: '120px',
