@@ -55,7 +55,11 @@ Ambient layers must draw from the theme's own `colors`:
 | Mid glow bodies (the drifters, washes) | `accent` |
 | Focal anchor + brightest glints | `highlight` |
 
-Every ambient hue must sit inside the **`accent` → `highlight`** family. The **only** permitted out-of-family color is a **hot near-white core at the anchor itself** (a sun's white center, a candle flame). Test: eyedrop any ambient layer — if its hue is outside accent→highlight and it isn't the anchor core, it fails.
+Every ambient hue must sit inside the **`accent` → `highlight`** family. The permitted out-of-family colors are exactly two, both *tonal* rather than hue:
+- a **hot near-white core at the anchor itself** (a sun's white center, a candle flame), and
+- a **dark silhouette drifter** (distant birds, bats) — near-black, the dark twin of the anchor-core exception. Use only when the silhouette is genuinely part of the world (e.g. `sand-dune-chill`'s gulls).
+
+Test: eyedrop any ambient layer — if its hue is outside accent→highlight and it isn't the anchor core or a sanctioned silhouette, it fails.
 
 ---
 
@@ -65,7 +69,7 @@ Every ambient hue must sit inside the **`accent` → `highlight`** family. The *
    - *Base* — slow foundational wash from `bg`/`bgDeep`, 10–25s loop.
    - *Mid* — the signature wash/glow bodies from `accent`, 6–18s.
    - *Accent* — near-invisible detail (0.04–0.08 over the floor), 12–25s, rewards close attention.
-2. **Anchor.** Add one defined focal element from `highlight` (+ optional near-white core). It must read as *what it is*. Place it **outside the safe-area** (low, high, or to a side). **Edge control:** the anchor carries the composition's *one* near-hard edge — defined enough to read as a sun / moon / sign; everything else (washes, drifters, glows) stays soft and fades to transparent. All-hard reads as clip-art; all-soft reads as mush. Both fail.
+2. **Anchor.** Add one defined focal element from `highlight` (+ optional near-white core). It must read as *what it is*. Place it **outside the safe-area** (low, high, or to a side). **Edge control:** the anchor carries the composition's *one* near-hard edge — defined enough to read as a sun / moon / sign; everything else (washes, drifters, glows) stays soft and fades to transparent. All-hard reads as clip-art; all-soft reads as mush. Both fail. **Pull the anchor *off* the stage frame** (never let the edge clip it) and let its **rim dissolve to transparent** by ~75% radius rather than ending on a hard semi-opaque ring — a hard ring reads as a sticker.
 3. **Drifter(s).** Add ≥1 trackable moving element (drift / fall / rise / wander), in-family. Focal-tier motion lives or passes **outside the safe-area**.
 4. **Motion register.** Name the world's felt state → its physical analogue → `breathe`/`flicker`/`buzz` + timing (table below).
 5. **Keep the center open.** Verify against the safe-area.
@@ -115,7 +119,7 @@ Two hard rules over everything (emil):
 
 Timing floors: ambient breathe never < 8s (loop seam shows); use prime-number staggers between layers to prevent sync. Flicker 2–4s (organic, not seizure-inducing). Neon buzz 1.3–2.5s (fast is correct for electrical).
 
-**GlowLayer / Vignette / keyframes** — primitives unchanged. Available keyframes in `ParticleBackground.jsx` today (13): `ambientBreathe`, `ambientFlicker`, `ambientNeonBuzz`, `ambientFallSlow`, `ambientLeafFall`, `ambientRiseUp`, `ambientBubbleRise`, `ambientPulseIn`, `ambientFireflyWander`, `ambientDriftAcross`, `ambientAuroraFade`, `ambientMeteor`, `ambientScanline`. (`ambientWave` is introduced by the sunset-boulevard rework — it lands when that commits.) All animate **only** `transform` / `opacity`; every keyframe has a `prefers-reduced-motion` branch that wins.
+**GlowLayer / Vignette / keyframes** — primitives unchanged. Available keyframes in `ParticleBackground.jsx` today (15): `ambientBreathe`, `ambientFlicker`, `ambientNeonBuzz`, `ambientFallSlow`, `ambientLeafFall`, `ambientRiseUp`, `ambientBubbleRise`, `ambientPulseIn`, `ambientFireflyWander`, `ambientDriftAcross`, `ambientAuroraFade`, `ambientMeteor`, `ambientScanline`, `ambientWave` (soft drifting water-light, shipped with `sunset-boulevard`), `ambientGullBob` (vertical soar for silhouette drifters, shipped with `sand-dune-chill`). All animate **only** `transform` / `opacity`; every keyframe has a `prefers-reduced-motion` branch that wins.
 
 ---
 
@@ -128,7 +132,7 @@ A theme ships only when all seven pass. Each is tagged for who judges it.
 | 1 | **Anchor** — a named focal element exists | `[auto]` exists in code · `[eyes]` reads as what it is |
 | 2 | **Drifter** — a real translate, not just breathe | `[auto]` |
 | 3 | **Safe-area** — no focal-tier element centered in the 60%×45% box | `[auto]` coords outside box · `[eyes]` legible at 10 ft |
-| 4 | **In-family color** — hues in `accent`→`highlight`, near-white only at the anchor core | `[auto]` |
+| 4 | **In-family color** — hues in `accent`→`highlight`; near-white only at the anchor core; dark silhouette drifters exempt (tonal, not hue) | `[auto]` |
 | 5 | **Motion matches world** — tempo fits the register; no pop-in; no weak `ease-in` | `[auto]` no pop-in/ease-in · `[eyes]` feel |
 | 6 | **GPU-only + reduced-motion** — transform/opacity only, `reduce` branch wins | `[auto]` |
 | 7 | **Distinct at thumbnail** — identifiable without the title, not a near-twin of another theme | `[eyes]` |
@@ -154,6 +158,7 @@ Adapted from gestalt + isolation for TV-at-bar-distance:
 3. **Locked background.** `<ParticleBackground>` never re-mounts on slide changes; it persists for the session.
 4. **Pure CSS, no React state.** Ambient components have zero `useState`/`useEffect`/`rAF`. All motion is `@keyframes`. (`useMemo` for static element arrays is fine.)
 5. **Self-contained.** Each ambient component owns its layers and its `Vignette`.
+6. **Seamless zones — no banded rectangles (the #1 recurring offense).** Every vertical zone (sky, sea, sand, ground) is a **full-stage layer** (`position: absolute; inset: 0`) whose gradient is **transparent at *both* transitions** — it fades in *and* fades out. **Never** a rectangle parked at a fixed height (`top: X% / height: Y%`): its top and bottom edges read as **hard horizontal lines** at TV distance, which Ben rejects every time. Horizons and shorelines are soft gradient *blends*, not edges. Foreground ground (sand, etc.) is a **flat full-stage gradient**, not a mound/shape — Ben's call after testing both side by side.
 
 `ParticleBackground` takes `{ theme }` and looks up `AMBIENT_MAP[theme.id]`. Components render under one `absolute inset-0` wrapper, so they tile cleanly in any container.
 
@@ -170,9 +175,9 @@ Defined in `themes/index.js`, in this order:
 | `autumn-harvest` ★ | Forest fire evening | Falling leaves + embers + hearth flicker |
 | `northern-lights` | Arctic sky | Wavy SVG aurora curtains |
 | `medieval-tavern` | Stone tavern | Torch side-glows + hearth flicker |
-| `sunset-boulevard` ⟳ | Sunset beach (rework) | Low-left sun disc + drifting underlit clouds + waves |
+| `sunset-boulevard` ✓ | Sunset beach | Low-left sun on the sea + drifting underlit clouds + warm sand beach |
 | `retro-arcade` | CRT arcade | Neon side-glows + scanlines + pixel static |
-| `sand-dune-chill` | Twilight dune | Muted golden horizon haze + emerging stars |
+| `sand-dune-chill` ✓ | Early-AM Lake Michigan | Right-side pale dawn sun + soaring gull silhouettes + warm dune |
 | `halloween` | Jack-o-lantern | Orange edge flicker + purple fog + embers |
 | `jazz-club` | Smoky stage | Amber spotlight + dust motes + smoke |
 | `dive-bar` | Neon bar | Red + blue neon buzz + haze |
@@ -187,7 +192,7 @@ Defined in `themes/index.js`, in this order:
 | `meteor-shower` | Clear night sky | Star field + meteor streaks |
 | `eighties-night` | Retrowave | Pink top + teal bottom + grid lines |
 
-★ = confirmed-good, leave alone. ⟳ = bland-pass rework in progress. Unmarked = bland-pass queue.
+★ = confirmed-good, leave alone. ✓ = bland-pass rework shipped. ⟳ = rework in progress. Unmarked = bland-pass queue.
 
 > **Count note:** the pre-audit "29" was wrong — eight themes (`speakeasy`, `solar-flare`, `nebula-dreams`, `vinyl-night`, `haunted-mansion`, `karaoke-night`, `aurora-borealis`, `oktoberfest`) were **merged** into neighbors, not cut. The real count is **21**, sourced from `themes/index.js`.
 
