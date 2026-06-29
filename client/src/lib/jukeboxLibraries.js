@@ -1,6 +1,6 @@
-// ids MUST match the Jukebox's sets.items keys (e.g. 'main').
-// Update this list when a new Jukebox library is created.
-// Trivia OS does not fetch the Jukebox list — this stays decoupled.
+// Offline/fallback seed for the host's between-rounds music dropdown.
+// SlideEditor fetches the live list from the Jukebox's Supabase project on mount
+// and replaces this with the real data. This list is only used if that fetch fails.
 export const JUKEBOX_LIBRARIES = [
   { id: 'main', label: 'Main Library' },
 ]

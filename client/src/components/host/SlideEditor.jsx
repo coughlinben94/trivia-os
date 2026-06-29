@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { analyzeAudioGain } from '../../lib/audioNormalize.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
+import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import MediaUpload from './MediaUpload.jsx'
 import HostPhotoLibrary from './HostPhotoLibrary.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
@@ -46,7 +47,14 @@ function getNavLabel(slide) {
 export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide, onClose, uploadMedia, getHostPhotos, addSiblingSlides }) {
   const [data, setData] = useState(slide.data)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [jukeboxLibs, setJukeboxLibs] = useState(JUKEBOX_LIBRARIES)
   const saveTimer = useRef(null)
+
+  useEffect(() => {
+    let alive = true
+    fetchJukeboxLibraries().then(libs => { if (alive && libs) setJukeboxLibs(libs) })
+    return () => { alive = false }
+  }, [])
 
   // Sync local data when selected slide changes
   useEffect(() => { setData(slide.data); setConfirmingDelete(false) }, [slide.id])
@@ -723,7 +731,7 @@ function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostP
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-baynes-forest"
         >
           <option value="random">🎲 Random</option>
-          {JUKEBOX_LIBRARIES.map(lib => (
+          {jukeboxLibs.map(lib => (
             <option key={lib.id} value={lib.id}>{lib.label}</option>
           ))}
         </select>
