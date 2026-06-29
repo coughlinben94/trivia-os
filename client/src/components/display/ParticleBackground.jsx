@@ -1431,44 +1431,92 @@ function UnderTheSeaAmbient() {
 }
 
 // ─── 21. NEON TOKYO ──────────────────────────────────────────────────────
-function NeonTokyoAmbient() {
-  const rain = useMemo(() => Array.from({ length: 34 }, (_, i) => ({
-    left:    `${(i * 53 + i % 5 * 11) % 100}%`,
-    height:  60 + (i % 4) * 18,
-    opacity: 0.60 + (i % 4) * 0.07,
-    dur:     `${1.8 + (i % 4) * 0.7}s`,
-    delay:   `-${((i / 34) * (1.8 + (i % 4) * 0.7)).toFixed(1)}s`,
-  })), [])
+const NT = {
+  bg: "#040008", bgDeep: "#020005", accent: "#380048",
+  magenta: "#ff00c0", cyan: "#00ffff", purple: "#c800ff", pink: "#ff5ad8",
+  text: "#f8d0ff", rain: "#bfeaff",
+};
 
-  return <>
-    {/* Hot pink/magenta neon — left */}
-    <GlowLayer lo={0.28} hi={0.78} duration="1.3s" buzz style={{
-      top: 0, left: 0, bottom: 0, width: '28%',
-      background: 'radial-gradient(ellipse at left center, rgba(255,0,190,0.70), transparent 75%)',
-    }}/>
-    {/* Cyan neon — right */}
-    <GlowLayer lo={0.22} hi={0.72} duration="1.8s" delay="0.4s" buzz style={{
-      top: 0, right: 0, bottom: 0, width: '28%',
-      background: 'radial-gradient(ellipse at right center, rgba(0,210,255,0.65), transparent 75%)',
-    }}/>
-    {/* Purple top neon (overhead signs) */}
-    <GlowLayer lo={0.18} hi={0.52} duration="2.6s" delay="0.9s" buzz style={{
-      top: 0, left: 0, right: 0, height: '25%',
-      background: 'radial-gradient(ellipse at top center, rgba(200,0,255,0.52), transparent 70%)',
-    }}/>
-    {/* Rain streaks — neon tinted */}
-    {rain.map((r, i) => (
-      <div key={i} aria-hidden style={{
-        position: 'absolute', left: r.left, top: '-3%',
-        width: 1, height: r.height,
-        background: i % 3 === 0 ? 'rgba(191,234,255,1.0)' : i % 3 === 1 ? 'rgba(220,246,255,1.0)' : 'rgba(160,220,255,1.0)',
-        willChange: 'transform, opacity',
-        '--hi': r.opacity, '--drift': '0px',
-        animation: `ambientFallSlow ${r.dur} ${r.delay} linear infinite`,
-        pointerEvents: 'none',
-      }}/>
-    ))}
-  </>
+function ntRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+const NT_STYLE = `
+@keyframes ntPop  { 0%,100%{ opacity:0; transform:translate(-50%,-50%) scale(.65) } 50%{ opacity:var(--hi,.7); transform:translate(-50%,-50%) scale(1.05) } }
+@keyframes ntPopB { 0%,100%{ opacity:0; transform:translate(-50%,-50%) scale(.65) } 44%{ opacity:var(--hi,.7); transform:translate(-50%,-50%) scale(1.05) } }
+@keyframes ntPopC { 0%,100%{ opacity:0; transform:translate(-50%,-50%) scale(.65) } 58%{ opacity:var(--hi,.7); transform:translate(-50%,-50%) scale(1.05) } }
+@keyframes ntRain {
+  0%   { transform: translateY(-14vh); opacity: 0 }
+  7%   { opacity: var(--hi,.7) }
+  92%  { opacity: var(--hi,.7) }
+  100% { transform: translateY(112vh); opacity: 0 }
+}
+@media (prefers-reduced-motion: reduce){ .nt-anim{ animation:none !important } }
+`;
+
+function NeonTokyoAmbient() {
+  const pops = useMemo(() => {
+    const cols = 6, rows = 4, arr = [];
+    const kfs = ["ntPop", "ntPopB", "ntPopC"];
+    const cols5 = [NT.magenta, NT.magenta, NT.cyan, NT.cyan, NT.purple, NT.pink];
+    const push = (left, top) => {
+      arr.push({
+        color: cols5[Math.floor(Math.random() * cols5.length)],
+        kf: kfs[Math.floor(Math.random() * 3)],
+        left: left.toFixed(1) + "%", top: top.toFixed(1) + "%",
+        size: (Math.random() * 16 + 6).toFixed(1),
+        a: (Math.random() * 0.3 + 0.4).toFixed(2),
+        hi: (Math.random() * 0.3 + 0.6).toFixed(2),
+        dur: (Math.random() * 3.4 + 2.4).toFixed(2),
+        delay: (-Math.random() * 7).toFixed(2),
+        blur: (Math.random() * 8 + 5).toFixed(0),
+      });
+    };
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        push((c + 0.1 + Math.random() * 0.8) / cols * 100, (r + 0.1 + Math.random() * 0.8) / rows * 100);
+    return arr;
+  }, []);
+
+  const rain = useMemo(() => Array.from({ length: 24 }, () => {
+    const c = Math.random();
+    return {
+      left: (Math.random() * 100).toFixed(1) + "%",
+      height: (Math.random() * 50 + 55).toFixed(0),
+      hi: (Math.random() * 0.3 + 0.45).toFixed(2),
+      dur: (Math.random() * 1.0 + 1.7).toFixed(2),
+      delay: (-Math.random() * 3).toFixed(2),
+      color: c < 0.34 ? NT.rain : c < 0.67 ? "#dcf6ff" : ntRgba(NT.cyan, 0.9),
+    };
+  }), []);
+
+  return (
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden",
+      background: `radial-gradient(ellipse 120% 90% at 50% 34%, ${ntRgba(NT.accent, 0.4)}, ${NT.bg} 62%, ${NT.bgDeep} 94%)` }}>
+
+      <style>{NT_STYLE}</style>
+
+      {/* PULSING — color pop-ups all across the screen, each fully fading in/out at random */}
+      {pops.map((b, i) => (
+        <div key={i} className="nt-anim" style={{
+          position: "absolute", left: b.left, top: b.top, width: b.size + "%", aspectRatio: "1",
+          transform: "translate(-50%, -50%)", borderRadius: "50%",
+          background: `radial-gradient(circle at 50% 50%, ${ntRgba(b.color, b.a)}, transparent 64%)`,
+          filter: `blur(${b.blur}px)`, ["--hi"]: b.hi,
+          animation: `${b.kf} ${b.dur}s ease-in-out ${b.delay}s infinite`, willChange: "transform, opacity",
+        }} />
+      ))}
+
+      {/* LINES — neon rain (lessened 25%) */}
+      {rain.map((r, i) => (
+        <div key={i} className="nt-anim" style={{ position: "absolute", left: r.left, top: "-6%",
+          width: 1.4, height: r.height + "px", background: r.color, ["--hi"]: r.hi,
+          boxShadow: `0 0 4px ${ntRgba(NT.cyan, 0.5)}`,
+          animation: `ntRain ${r.dur}s ${r.delay}s linear infinite`, willChange: "transform, opacity" }} />
+      ))}
+    </div>
+  );
 }
 
 
