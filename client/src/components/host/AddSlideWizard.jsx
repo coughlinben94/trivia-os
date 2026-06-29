@@ -3,77 +3,100 @@ import { sortedSlides } from '../../hooks/useShow.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { SHINY_FORMATS } from '../../lib/shinyFormatDictionary.js'
 
-const TYPE_CARDS = [
-  { type: 'title',             icon: '🎬', name: 'State of the Union', desc: 'Opening address to the crowd' },
-  { type: 'round-intro',       icon: '🥊', name: 'Round Intro',         desc: 'Dramatic round opener' },
-  { type: 'question',          icon: '❓', name: 'Question',            desc: 'Regular or shiny question' },
-  { type: 'grading-break',     icon: '⏸️', name: 'Grading Break',       desc: 'While Ben grades papers' },
-  { type: 'scoreboard-reveal', icon: '🏆', name: 'Scoreboard',          desc: 'Reveal the standings' },
-  { type: 'custom',            icon: '✏️', name: 'Custom',              desc: 'Freeform slide' },
+export const TYPE_CARDS = [
+  { type: 'title',         icon: '🎬', name: 'State of the Union', desc: 'Opening address to the crowd' },
+  { type: 'round-intro',   icon: '🥊', name: 'Round Intro',         desc: 'Dramatic round opener' },
+  { type: 'question',      icon: '❓', name: 'Question',            desc: 'Regular or shiny question' },
+  { type: 'grading-break', icon: '⏸️', name: 'Grading Break',       desc: 'While Ben grades papers' },
+  { type: 'custom',        icon: '✏️', name: 'Custom',              desc: 'Freeform slide' },
 ]
 
 const NEEDS_ROUND = new Set(['round-intro', 'swing-round-intro', 'question', 'grading-break', 'pixelate-series', 'multi-question', 'pyl-reveal'])
 
-const MEDIA_LABEL = { image: 'img', audio: 'audio', text: 'text' }
+const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber-400' }
 
-export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
-  const hasPresetType = !!initialData.type
-  const [step, setStep] = useState(hasPresetType ? 'details' : 'type')
-  const [type, setType] = useState(initialData.type ?? null)
+const BTN = 'transition duration-[120ms] ease-out active:scale-[0.97]'
+
+// Editable: add a fundraiser type by adding one object here
+export const ROUND_TYPES = [
+  { id: 'normal', label: 'Normal Round',    needsNumber: true,  titleTemplate: 'Round {n}' },
+  { id: 'swing',  label: 'Swing Round',     needsNumber: false, title: 'Swing Round' },
+  { id: 'pyl',    label: 'Press Your Luck!', needsNumber: false, title: 'Press Your Luck!' },
+]
+
+export default function AddSlideWizard({ show, onAddSlide, onClose, initialData = {} }) {
+  const type     = initialData.type
+  const typeCard = TYPE_CARDS.find(c => c.type === type)
+
+  // Shared
   const [roundId, setRoundId] = useState(initialData.roundId ?? null)
+
+  // Question
   const [questionText, setQuestionText] = useState('')
-  const [roundTitle, setRoundTitle] = useState('')
+  const [isBonus, setIsBonus]           = useState(false)
+
+  // Round-intro — title is derived; type/number/subtitle held in state so clearing sticks (P0#1)
+  const [roundType,     setRoundType]     = useState('normal')
+  const [roundNumber,   setRoundNumber]   = useState(1)
+  const [roundSubtitle, setRoundSubtitle] = useState('')
+
+  // Grading-break
   const [jukeboxLib, setJukeboxLib] = useState('random')
 
   const sorted = sortedSlides(show)
-  const typeCard = TYPE_CARDS.find(c => c.type === type)
 
-  function pickType(t) {
-    setType(t)
-    setStep(t === 'question' ? 'question-split' : 'details')
-  }
+  // Derived — never stored, always recomputed
+  const selRoundType      = ROUND_TYPES.find(rt => rt.id === roundType) ?? ROUND_TYPES[0]
+  const derivedRoundTitle = selRoundType.needsNumber
+    ? selRoundType.titleTemplate.replace('{n}', roundNumber || '?')
+    : selRoundType.title
 
-  function goBack() {
-    if (hasPresetType) return
-    setType(null)
-    setQuestionText('')
-    setStep('type')
+  const roundNumValid = !selRoundType.needsNumber || (Number.isInteger(roundNumber) && roundNumber > 0)
+
+  function pickRound(id) {
+    setRoundId(id || null)
   }
 
   async function handleCreate() {
     const roundSlides = sorted.filter(s => s.roundId === roundId)
-    const qSlides = roundSlides.filter(s => s.type === 'question' || s.type === 'pixelate-series')
-    const qNum = qSlides.length + 1
-    const roundObj = show.rounds.find(r => r.id === roundId)
-    const rIdx = show.rounds.findIndex(r => r.id === roundId)
+    const nonBonusQ   = roundSlides.filter(s => (s.type === 'question' || s.type === 'pixelate-series') && !s.data?.isBonus)
+    const bonusQ      = roundSlides.filter(s => s.type === 'question' && s.data?.isBonus)
+    const qNum = nonBonusQ.length + 1
+    const bNum = bonusQ.length + 1
+
     let data = {}
 
     if (type === 'title') {
       data = { title: 'Baynes Apple Valley', subtitle: 'Trivia Night' }
+
     } else if (type === 'round-intro') {
       data = {
-        roundNumber: rIdx >= 0 ? rIdx + 1 : 1,
-        roundTitle: roundTitle || roundObj?.title || '',
-        subtitle: '',
+        roundNumber:  selRoundType.needsNumber ? roundNumber : undefined,
+        roundTitle:   derivedRoundTitle,
+        subtitle:     roundSubtitle,
         hostPhotoUrl: null,
+        roundType,
       }
+
     } else if (type === 'question') {
+      const num = isBonus ? bNum : qNum
       data = {
-        questionNumber: qNum,
-        questionLabel: `Q${qNum}`,
-        questionMode: 'regular',
-        isShiny: false,
-        text: questionText.trim(),
-        mediaSlots: [],
+        questionNumber: num,
+        questionLabel:  isBonus ? `B${num}` : `Q${num}`,
+        questionMode:   'regular',
+        isShiny:        false,
+        text:           questionText.trim(),
+        mediaSlots:     [],
+        ...(isBonus && { isBonus: true }),
       }
+
     } else if (type === 'grading-break') {
       data = {
-        message: "Now, please sit back, relax, and enjoy each other's company as Ben grades papers 😊",
+        message:         "Now, please sit back, relax, and enjoy each other's company as Ben grades papers 😊",
         backLinkSlideId: null,
-        jukeboxLib: jukeboxLib,
+        jukeboxLib,
       }
-    } else if (type === 'scoreboard-reveal') {
-      data = { afterRound: null, title: '' }
+
     } else if (type === 'custom') {
       data = { title: '', body: '', mediaUrl: null, mediaType: null }
     }
@@ -81,70 +104,56 @@ export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
     await onAddSlide({ type, roundId: roundId || null, order: sorted.length, data })
   }
 
-  const needsRound = NEEDS_ROUND.has(type)
-  const canCreate = !(needsRound && !roundId)
+  const needsRound     = NEEDS_ROUND.has(type)
+  const canCreate      = !(needsRound && !roundId) && (type !== 'round-intro' || roundNumValid)
   const canAddQuestion = !!roundId && questionText.trim().length > 0
+  const isQuestion     = type === 'question'
 
   return (
-    <div className="h-full flex flex-col items-center justify-start px-8 pt-[15dvh] pb-6 overflow-y-auto">
-      <div className={`w-full ${step === 'question-split' ? 'max-w-5xl' : 'max-w-2xl'}`}>
+    <div className="bg-white rounded-2xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
 
-        {/* Back nav row */}
-        {step !== 'type' && !hasPresetType && (
-          <div className="flex items-center mb-5">
-            <button
-              onClick={goBack}
-              className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-700 transition-colors"
-            >
-              ← Back
-            </button>
-          </div>
-        )}
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+        <h2 className="text-base font-semibold text-gray-900">
+          <span className="mr-2">{typeCard?.icon}</span>{typeCard?.name}
+        </h2>
+        <button
+          onClick={onClose}
+          className={`w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 text-lg ${BTN}`}
+        >
+          ✕
+        </button>
+      </div>
 
-        {/* ── Step 1: Type picker ── */}
-        {step === 'type' && (
-          <>
-            <h2 className="text-xl font-semibold text-gray-800 mb-1 text-center">Add a slide</h2>
-            <p className="text-sm text-gray-400 text-center mb-8">What kind of slide do you want to add?</p>
-            <div className="grid grid-cols-3 gap-3">
-              {TYPE_CARDS.map(card => (
-                <button
-                  key={card.type}
-                  onClick={() => pickType(card.type)}
-                  className="flex flex-col gap-2 p-4 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 text-left transition-colors group"
-                  style={{ minHeight: 100 }}
-                >
-                  <span className="text-2xl leading-none">{card.icon}</span>
-                  <span className="text-sm font-semibold text-gray-800 group-hover:text-[#1a6b4a]">{card.name}</span>
-                  <span className="text-xs text-gray-400 leading-snug">{card.desc}</span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto p-6">
 
-        {/* ── Question: split screen ── */}
-        {step === 'question-split' && (
-          <div className="grid grid-cols-2 gap-8">
+        {isQuestion ? (
+          /* ── SPLIT SCREEN: plain left / shiny right ── */
+          <div className="grid grid-cols-2 gap-6">
 
             {/* LEFT — plain question */}
-            <div className="flex flex-col gap-4 pr-8 border-r border-gray-200">
+            <div className="flex flex-col gap-4 border-r border-gray-100 pr-6">
               <div>
-                <h2 className="text-base font-semibold text-gray-800 mb-0.5">📝 Plain question</h2>
-                <p className="text-xs text-gray-400">Text question added directly to this round</p>
+                <p className="text-sm font-semibold text-gray-800">📝 Plain question</p>
+                <p className="text-xs text-gray-400 mt-0.5">Text question added to a round</p>
               </div>
+
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Question text</label>
+                <label htmlFor="add-question-text" className="block text-xs font-medium text-gray-500 mb-1.5">
+                  Question text
+                </label>
                 <textarea
+                  id="add-question-text"
                   value={questionText}
                   onChange={e => setQuestionText(e.target.value)}
                   onPaste={e => {
                     e.preventDefault()
                     const plain = e.clipboardData.getData('text/plain')
-                    const el = e.target
+                    const el    = e.target
                     const start = el.selectionStart ?? questionText.length
-                    const end = el.selectionEnd ?? questionText.length
-                    const next = questionText.slice(0, start) + plain + questionText.slice(end)
+                    const end   = el.selectionEnd   ?? questionText.length
+                    const next  = questionText.slice(0, start) + plain + questionText.slice(end)
                     setQuestionText(next)
                     requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + plain.length })
                   }}
@@ -153,14 +162,18 @@ export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
                 />
               </div>
+
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Round</label>
+                <label htmlFor="add-question-round" className="block text-xs font-medium text-gray-500 mb-1.5">
+                  Round
+                </label>
                 {show.rounds.length === 0 ? (
-                  <p className="text-sm text-gray-400">No rounds yet — use "+ Add Round" in the sidebar first.</p>
+                  <p className="text-sm text-gray-400">No rounds yet — use "+ Add Round" first.</p>
                 ) : (
                   <select
+                    id="add-question-round"
                     value={roundId ?? ''}
-                    onChange={e => setRoundId(e.target.value || null)}
+                    onChange={e => pickRound(e.target.value)}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
                   >
                     <option value="">Select a round…</option>
@@ -170,68 +183,85 @@ export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
                   </select>
                 )}
               </div>
-              <button
-                onClick={handleCreate}
-                disabled={!canAddQuestion}
-                className="w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Add question →
-              </button>
+
+              {/* Bonus checkbox */}
+              <div className="flex items-center gap-2">
+                <input
+                  id="add-question-bonus"
+                  type="checkbox"
+                  checked={isBonus}
+                  onChange={e => setIsBonus(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 cursor-pointer accent-[#1a6b4a]"
+                />
+                <label htmlFor="add-question-bonus" className="text-sm text-gray-700 cursor-pointer select-none">
+                  Bonus question
+                </label>
+              </div>
+
+              <div className="mt-auto flex flex-col gap-1.5">
+                <button
+                  onClick={handleCreate}
+                  disabled={!canAddQuestion}
+                  className={`w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed`}
+                >
+                  Add question →
+                </button>
+                {!canAddQuestion && (
+                  <p className="text-xs text-gray-400 text-center">
+                    {!roundId ? 'Select a round to continue' : 'Add question text to continue'}
+                  </p>
+                )}
+              </div>
             </div>
 
-            {/* RIGHT — shiny formats, display only */}
-            <div className="flex flex-col gap-2 pl-2">
-              <div className="mb-1">
-                <h2 className="text-base font-semibold text-gray-800 mb-0.5">✨ Shiny formats</h2>
-                <p className="text-xs text-gray-400">Special formats — coming soon</p>
+            {/* RIGHT — shiny format tiles, display only */}
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">✨ Shiny formats</p>
+                <p className="text-xs text-gray-400 mt-0.5">Coming soon — hover a tile for details</p>
               </div>
-              {SHINY_FORMATS.map(fmt => (
-                <div
-                  key={fmt.id}
-                  className="flex items-start gap-3 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-100"
-                >
-                  <span className="text-lg leading-none mt-0.5 shrink-0">{fmt.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-semibold text-gray-600">{fmt.name}</span>
-                      <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-400 leading-none">soon</span>
+              <div className="grid grid-cols-2 gap-2">
+                {SHINY_FORMATS.map(fmt => (
+                  <div
+                    key={fmt.id}
+                    title={fmt.blurb}
+                    className="flex items-start gap-2 p-2.5 rounded-lg bg-gray-50 border border-gray-100 cursor-default"
+                  >
+                    <span className="text-base leading-none mt-0.5 shrink-0">{fmt.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-gray-600 truncate leading-tight">{fmt.name}</p>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${MEDIA_DOT[fmt.media] ?? 'bg-gray-300'}`} />
+                        <span className="text-[11px] text-gray-400 leading-none">{fmt.media}</span>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{fmt.blurb}</p>
-                  </div>
-                  <div className="shrink-0 flex flex-col items-end gap-1 mt-0.5">
-                    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 leading-none">
-                      {MEDIA_LABEL[fmt.media] ?? fmt.media}
-                    </span>
-                    <span className="text-[9px] text-gray-400 leading-none">
-                      {fmt.count === 'ask' ? '×?' : `×${fmt.count}`}
+                    <span className="text-[11px] text-gray-400 shrink-0 self-start mt-0.5">
+                      ×{fmt.count === 'ask' ? '?' : fmt.count}
                     </span>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
 
           </div>
-        )}
 
-        {/* ── Details + create ── */}
-        {step === 'details' && (
-          <div className="flex flex-col gap-5 max-w-sm mx-auto">
-            {/* Icon + name confirmation */}
-            <div className="flex flex-col items-center gap-2 pb-1">
-              <span className="text-5xl leading-none">{typeCard?.icon}</span>
-              <p className="text-lg font-semibold text-gray-800 text-center">{typeCard?.name}</p>
-            </div>
+        ) : (
+          /* ── DETAILS FORM: all other types ── */
+          <div className="flex flex-col gap-5">
 
-            {/* Round selector */}
-            {NEEDS_ROUND.has(type) && (
+            {/* Round selector — sources from show.rounds (the real registry) */}
+            {needsRound && (
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Round</label>
+                <label htmlFor="add-round-select" className="block text-xs font-medium text-gray-500 mb-1.5">
+                  {type === 'grading-break' ? 'End of which round?' : 'Round'}
+                </label>
                 {show.rounds.length === 0 ? (
                   <p className="text-sm text-gray-400">No rounds yet — use "+ Add Round" in the sidebar first.</p>
                 ) : (
                   <select
+                    id="add-round-select"
                     value={roundId ?? ''}
-                    onChange={e => setRoundId(e.target.value || null)}
+                    onChange={e => pickRound(e.target.value)}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
                   >
                     <option value="">Select a round…</option>
@@ -243,25 +273,85 @@ export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
               </div>
             )}
 
-            {/* Round title (only for round-intro) */}
+            {/* ── ROUND INTRO: type → number → subtitle ── */}
             {type === 'round-intro' && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Round Title</label>
-                <input
-                  type="text"
-                  value={roundTitle || (show.rounds.find(r => r.id === roundId)?.title ?? '')}
-                  onChange={e => setRoundTitle(e.target.value)}
-                  placeholder="e.g. Round 1"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                />
-              </div>
+              <>
+                {/* Type picker */}
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-1.5">Round type</p>
+                  <div className="flex gap-1.5">
+                    {ROUND_TYPES.map(rt => (
+                      <button
+                        key={rt.id}
+                        type="button"
+                        onClick={() => setRoundType(rt.id)}
+                        className={`flex-1 py-2 px-2 rounded-lg text-xs font-semibold border ${BTN} ${
+                          roundType === rt.id
+                            ? 'bg-[#1a6b4a] text-white border-[#1a6b4a]'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-[#1a6b4a] hover:text-[#1a6b4a]'
+                        }`}
+                      >
+                        {rt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Number — free positive int, Normal only */}
+                {selRoundType.needsNumber && (
+                  <div>
+                    <label htmlFor="add-round-number" className="block text-xs font-medium text-gray-500 mb-1.5">
+                      Round number
+                    </label>
+                    <input
+                      id="add-round-number"
+                      type="number"
+                      min="1"
+                      value={roundNumber}
+                      onChange={e => {
+                        const v = parseInt(e.target.value, 10)
+                        setRoundNumber(isNaN(v) ? '' : v)
+                      }}
+                      placeholder="e.g. 3"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                    />
+                  </div>
+                )}
+
+                {/* Subtitle — optional punchline, fully controlled so clearing sticks */}
+                <div>
+                  <label htmlFor="add-round-subtitle" className="block text-xs font-medium text-gray-500 mb-1.5">
+                    Subtitle <span className="font-normal text-gray-400">(optional)</span>
+                  </label>
+                  <input
+                    id="add-round-subtitle"
+                    type="text"
+                    value={roundSubtitle}
+                    onChange={e => setRoundSubtitle(e.target.value)}
+                    placeholder='e.g. "Fight!" or "It did not went well."'
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                  />
+                </div>
+
+                {/* Derived title preview */}
+                <div className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5">
+                  <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-0.5">Will read as</p>
+                  <p className="text-sm font-semibold text-gray-800">{derivedRoundTitle}</p>
+                  {roundSubtitle && (
+                    <p className="text-xs text-gray-500 mt-0.5 italic">{roundSubtitle}</p>
+                  )}
+                </div>
+              </>
             )}
 
-            {/* Between-rounds music (only for grading-break) */}
+            {/* ── GRADING BREAK: jukebox only ── */}
             {type === 'grading-break' && (
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Between-rounds music</label>
+                <label htmlFor="add-jukebox-lib" className="block text-xs font-medium text-gray-500 mb-1.5">
+                  Between-rounds music
+                </label>
                 <select
+                  id="add-jukebox-lib"
                   value={jukeboxLib}
                   onChange={e => setJukeboxLib(e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
@@ -274,13 +364,24 @@ export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
               </div>
             )}
 
-            <button
-              onClick={handleCreate}
-              disabled={!canCreate}
-              className="w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Add Slide →
-            </button>
+            {/* Submit */}
+            <div className="flex flex-col gap-1.5 pt-1">
+              <button
+                onClick={handleCreate}
+                disabled={!canCreate}
+                className={`w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed`}
+              >
+                Add Slide →
+              </button>
+              {!canCreate && (
+                <p className="text-xs text-gray-400 text-center">
+                  {!roundId
+                    ? 'Select a round to continue'
+                    : 'Enter a round number to continue'}
+                </p>
+              )}
+            </div>
+
           </div>
         )}
 

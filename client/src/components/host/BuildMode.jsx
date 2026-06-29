@@ -67,7 +67,8 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
     openAddModal({ type: 'round-intro', roundId: round.id })
   }
 
-  const isQuestionModal = addModalData?.type === 'question'
+  const isQuestionModal   = addModalData?.type === 'question'
+  const isRoundIntroModal = addModalData?.type === 'round-intro'
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden">
@@ -147,7 +148,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
             onClick={closeAddModal}
           >
             <motion.div
-              className={`w-full ${isQuestionModal ? 'max-w-3xl' : 'max-w-md'}`}
+              className={`w-full ${isQuestionModal ? 'max-w-3xl' : isRoundIntroModal ? 'max-w-lg' : 'max-w-md'}`}
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
