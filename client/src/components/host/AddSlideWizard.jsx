@@ -116,25 +116,19 @@ export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
   const needsRound = NEEDS_ROUND.has(type)
   const canCreate = !(needsRound && !roundId)
 
-  const totalSteps = type === 'question'
-    ? (questionMode === 'shiny' ? 4 : 3)
-    : type ? 2 : 1
-  const currentStepNum = step === 'type' ? 1 : step === 'question-mode' ? 2 : step === 'format' ? 3 : totalSteps
-
   return (
     <div className="h-full flex flex-col items-center justify-start px-8 pt-[15dvh] pb-6 overflow-y-auto">
       <div className="w-full max-w-2xl">
 
-        {/* Back + step indicator row */}
+        {/* Back nav row */}
         {step !== 'type' && !hasPresetType && (
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center mb-5">
             <button
               onClick={goBack}
               className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-700 transition-colors"
             >
               ← Back
             </button>
-            <span className="text-xs text-gray-400">Step {currentStepNum} of {totalSteps}</span>
           </div>
         )}
 
