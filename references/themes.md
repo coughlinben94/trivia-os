@@ -185,7 +185,7 @@ Defined in `themes/index.js`, in this order:
 | `retro-arcade` | CRT arcade | Neon side-glows + scanlines + pixel static |
 | `sand-dune-chill` ✓ | Early-AM Lake Michigan | Right-side pale dawn sun + soaring gull silhouettes + warm dune |
 | `halloween` | Jack-o-lantern | Orange edge flicker + purple fog + embers |
-| `jazz-club` | Smoky stage | Amber spotlight + dust motes + smoke |
+| `jazz-club` ⟳ | Smoky stage | Sweeping amber spotlight pools + twinkling gold glints |
 | `dive-bar` | Neon bar | Red + blue neon buzz + haze |
 | `rooftop-party` | City rooftop | String-light bulbs + warm city glow |
 | `christmas-eve` | Christmas night | Red/green edges + gold candle + snow |
