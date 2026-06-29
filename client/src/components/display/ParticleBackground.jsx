@@ -877,22 +877,66 @@ function ChristmasEveAmbient() {
     drift:   `${(i % 2 === 0 ? 1 : -1) * (5 + (i % 4) * 3)}px`,
   })), [])
 
+  // Holiday-market garland: single corner-to-corner swag, red/white/green bulbs.
+  const bulbs = useMemo(() => {
+    const RWG = ['255,72,72', '255,248,235', '64,210,76']
+    const p0 = { x: -6, y: 3 }, p1 = { x: 50, y: 42 }, p2 = { x: 106, y: 3 }
+    const n = 19
+    return Array.from({ length: n }, (_, i) => {
+      const t = i / (n - 1), u = 1 - t
+      return {
+        x: u * u * p0.x + 2 * u * t * p1.x + t * t * p2.x,
+        y: u * u * p0.y + 2 * u * t * p1.y + t * t * p2.y,
+        c: RWG[i % 3],
+        dur: `${4 + (i % 4)}s`,
+        delay: `-${(i * 0.4).toFixed(1)}s`,
+      }
+    })
+  }, [])
+
+  const booths = [
+    { x: 20, w: 24, h: 38, lo: 0.24, hi: 0.40, dur: '8s',  delay: '0s',  c: '255,176,86' },
+    { x: 43, w: 22, h: 34, lo: 0.22, hi: 0.36, dur: '10s', delay: '-3s', c: '255,158,74' },
+    { x: 64, w: 24, h: 40, lo: 0.24, hi: 0.40, dur: '9s',  delay: '-5s', c: '255,184,96' },
+    { x: 84, w: 22, h: 36, lo: 0.20, hi: 0.34, dur: '11s', delay: '-7s', c: '255,166,80' },
+  ]
+
   return <>
-    {/* Christmas red glow — left edge */}
-    <GlowLayer lo={0.25} hi={0.68} duration="4s" flicker style={{
-      top: 0, left: 0, bottom: 0, width: '30%',
-      background: 'radial-gradient(ellipse at left center, rgba(220,20,20,0.62), transparent 75%)',
-    }}/>
-    {/* Christmas green glow — right edge */}
-    <GlowLayer lo={0.22} hi={0.62} duration="4.5s" delay="2s" flicker style={{
-      top: 0, right: 0, bottom: 0, width: '30%',
-      background: 'radial-gradient(ellipse at right center, rgba(20,180,40,0.58), transparent 75%)',
-    }}/>
-    {/* Warm gold candle glow — center */}
-    <GlowLayer lo={0.70} hi={1.0} duration="3.5s" delay="1s" style={{
-      bottom: '5%', left: '20%', right: '20%', height: '50%',
-      background: 'radial-gradient(ellipse 40% 65% at 50% 100%, rgba(255,180,40,0.55), rgba(255,180,40,0) 100%)',
-    }}/>
+    {/* night deepening at the top */}
+    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+      background: 'linear-gradient(to bottom, rgba(6,4,12,0.55) 0%, transparent 44%)' }}/>
+
+    {/* red (left) + green (right) family washes */}
+    <GlowLayer lo={0.34} hi={0.50} duration="17s" style={{ inset: 0,
+      background: 'radial-gradient(ellipse 48% 86% at 0% 52%, rgba(255,54,54,0.52), rgba(190,32,32,0.22) 36%, transparent 60%)' }}/>
+    <GlowLayer lo={0.30} hi={0.44} duration="21s" delay="3s" style={{ inset: 0,
+      background: 'radial-gradient(ellipse 48% 86% at 100% 52%, rgba(58,212,72,0.48), rgba(28,120,40,0.20) 36%, transparent 60%)' }}/>
+
+    {/* warm market floor: wide base + four booth pools */}
+    <GlowLayer lo={0.16} hi={0.26} duration="13s" style={{ inset: 0,
+      background: 'radial-gradient(ellipse 150% 24% at 50% 112%, rgba(150,72,30,0.38), transparent 78%)' }}/>
+    {booths.map((b, i) => (
+      <GlowLayer key={`booth-${i}`} lo={b.lo} hi={b.hi} duration={b.dur} delay={b.delay} style={{ inset: 0,
+        background: `radial-gradient(ellipse ${b.w}% ${b.h}% at ${b.x}% 108%, rgba(${b.c},0.58), rgba(${b.c},0.2) 44%, transparent 72%)` }}/>
+    ))}
+
+    {/* garland wire */}
+    <svg aria-hidden viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0,
+      width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none' }}>
+      <path d="M-6 3 Q50 42 106 3" fill="none" stroke="rgba(120,108,92,0.42)" strokeWidth="0.35"/>
+    </svg>
+    {/* garland bulbs — red / white / green */}
+    {bulbs.map((b, i) => (
+      <div key={`bulb-${i}`} aria-hidden style={{
+        position: 'absolute', left: `${b.x}%`, top: `${b.y}%`, width: '1.8%', aspectRatio: '1',
+        marginLeft: '-0.9%', marginTop: '-0.9%', borderRadius: '50%', pointerEvents: 'none', willChange: 'opacity',
+        background: `radial-gradient(circle at 50% 42%, rgba(255,255,250,0.98) 0%, rgba(${b.c},0.96) 40%, rgba(${b.c},0) 80%)`,
+        boxShadow: `0 0 15px 6px rgba(${b.c},0.5)`,
+        '--lo': 0.62, '--hi': 1, opacity: 0.62,
+        animation: `ambientBreathe ${b.dur} ease-in-out ${b.delay} infinite`,
+      }}/>
+    ))}
+
     {/* Snowflakes */}
     {flakes.map((f, i) => (
       <FallingParticle key={i} left={f.left} size={f.size}
