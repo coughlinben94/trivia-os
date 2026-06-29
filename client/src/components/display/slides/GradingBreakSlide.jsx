@@ -16,7 +16,8 @@ export default function GradingBreakSlide({ slide }) {
 
   function transitionToJukebox() {
     clearTimeout(autoTimerRef.current)
-    window.location.href = 'https://trivia-jukebox.vercel.app'
+    const lib = data.jukeboxLib ?? 'random'
+    window.location.href = `https://trivia-jukebox.vercel.app?lib=${encodeURIComponent(lib)}`
   }
 
   // 10s auto-advance to Jukebox
