@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:smoke": "playwright test e2e/host-smoke.spec.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

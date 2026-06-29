@@ -9,6 +9,8 @@ client/dist/
 # Test artifacts
 .playwright-cli/
 test-results/
+/playwright-report
+.playwright/
 
 # Theme screenshots
 theme-screenshots/
