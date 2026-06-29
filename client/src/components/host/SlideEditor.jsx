@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { analyzeAudioGain } from '../../lib/audioNormalize.js'
+import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import MediaUpload from './MediaUpload.jsx'
 import HostPhotoLibrary from './HostPhotoLibrary.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
@@ -713,6 +714,19 @@ function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostP
           placeholder="Now, please sit back, relax, and enjoy each other's company as Ben grades papers 😊"
           rows={4}
         />
+      </Field>
+
+      <Field label="Between-rounds music" hint="Jukebox library to auto-play at this break">
+        <select
+          value={data.jukeboxLib ?? 'random'}
+          onChange={e => onChange('jukeboxLib', e.target.value)}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+        >
+          <option value="random">🎲 Random</option>
+          {JUKEBOX_LIBRARIES.map(lib => (
+            <option key={lib.id} value={lib.id}>{lib.label}</option>
+          ))}
+        </select>
       </Field>
 
       <Field label="Back Link" hint="Jumps to this slide when host taps ↩ Back">
