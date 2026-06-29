@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 
 // ─── Keyframes ────────────────────────────────────────────────────────────
 const KEYFRAMES = `
@@ -139,6 +139,15 @@ const KEYFRAMES = `
     90%  { transform: translate(calc(var(--dx,40%)*0.97), calc(var(--dy,40%)*0.97)); opacity: 0.16; }
     100% { transform: translate(var(--dx,40%), var(--dy,40%)); opacity: 0; }
   }
+  @keyframes jcSpinCW  { to { transform: rotate(360deg); } }
+  @keyframes jcSpinCCW { to { transform: rotate(-360deg); } }
+  @keyframes jcGlintPop {
+    0%   { opacity: 0; }
+    14%  { opacity: var(--gop, 0.75); }
+    26%  { opacity: calc(var(--gop, 0.75) * 0.45); }
+    40%  { opacity: var(--gop, 0.75); }
+    100% { opacity: 0; }
+  }
   @media (prefers-reduced-motion: reduce) {
     @keyframes ambientFallSlow    { 0%, 100% { opacity: 0; } 8%, 92%  { opacity: var(--hi, 0.8); } }
     @keyframes ambientLeafFall    { 0%, 100% { opacity: 0; } 10%, 90% { opacity: var(--hi, 0.8); } }
@@ -160,6 +169,7 @@ const KEYFRAMES = `
     @keyframes ambientSpin { from,to { transform: rotate(0deg); } }
     @keyframes orbit { 0%,100% { transform: none; } }
     @keyframes streakOnce { 0%,100% { opacity: 0; } }
+    .jc-anim { animation: none !important; }
   }
 `
 
@@ -814,53 +824,70 @@ function HalloweenAmbient() {
 }
 
 // ─── 10. JAZZ CLUB ───────────────────────────────────────────────────────
-function JazzClubAmbient() {
-  const motes = useMemo(() => Array.from({ length: 6 }, (_, i) => ({
-    left:  `${38 + (i % 4) * 7}%`,
-    top:   `${8 + (i % 4) * 12}%`,
-    dur:   `${6 + i * 1.5}s`,
-    delay: `-${((i / 6) * (6 + i * 1.5)).toFixed(1)}s`,
-  })), [])
-  const smoke = useMemo(() => Array.from({ length: 4 }, (_, i) => ({
-    left:  `${18 + i * 22}%`,
-    dur:   `${10 + i * 3}s`,
-    delay: `-${((i / 4) * (10 + i * 3)).toFixed(1)}s`,
-  })), [])
-
-  return <>
-    {/* Main center spotlight */}
-    <GlowLayer lo={0.35} hi={0.72} duration="5.5s" style={{
-      top: 0, left: '28%', right: '28%', height: '70%',
-      background: 'radial-gradient(ellipse at top center, rgba(255,195,70,0.60), transparent 75%)',
-    }}/>
-    {/* Fill spotlight — stage left */}
-    <GlowLayer lo={0.22} hi={0.58} duration="3.5s" delay="1.4s" style={{
-      top: 0, left: '8%', width: '35%', height: '55%',
-      background: 'radial-gradient(ellipse at top left, rgba(255,165,50,0.50), transparent 70%)',
-    }}/>
-    {/* Floor amber glow */}
-    <GlowLayer lo={0.18} hi={0.40} duration="5s" style={{
-      bottom: 0, left: 0, right: 0, height: '18%',
-      background: 'linear-gradient(to top, rgba(180,80,10,0.32), transparent)',
-    }}/>
-    {/* Dust motes in spotlight beam */}
-    {motes.map((m, i) => (
-      <PulseDot key={i} left={m.left} top={m.top} size={1.8}
-        color="rgba(255,210,120,0.55)"
-        duration={m.dur} delay={m.delay} ease={EASE.twinkle}
-      />
-    ))}
-    {/* Smoke wisps */}
-    {smoke.map((s, i) => (
-      <div key={i} aria-hidden style={{
-        position: 'absolute', bottom: 0, left: s.left,
-        width: '5%', height: '35%',
-        background: 'radial-gradient(ellipse, rgba(150,140,130,0.12), transparent)',
-        willChange: 'transform, opacity',
-        '--hi': 0.18,
-        animation: `ambientRiseUp ${s.dur} ${s.delay} ${EASE.mover} infinite`,
+// accent #4a2808 = rgba(74,40,8), highlight #d4820c = rgba(212,130,12)
+// bg #080608, bgDeep #040404
+function JcSpotlight({ fx, fy, w, alpha, dur, dir, phase }) {
+  return (
+    <div aria-hidden className="jc-anim" style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none',
+      transformOrigin: '50% 50%',
+      animation: `${dir === 'cw' ? 'jcSpinCW' : 'jcSpinCCW'} ${dur}s linear ${phase}s infinite`,
+    }}>
+      <div style={{
+        position: 'absolute', left: fx, top: fy,
+        transform: 'translate(-50%,-50%)',
+        width: w, aspectRatio: '1',
+        background: `radial-gradient(circle at center, rgba(74,40,8,${alpha}) 0%, rgba(74,40,8,${(alpha * 0.5).toFixed(2)}) 46%, transparent 70%)`,
       }}/>
-    ))}
+    </div>
+  )
+}
+
+function JcGlint() {
+  const durRef   = useRef(`${(4.5 + Math.random() * 3).toFixed(1)}s`)
+  const delayRef = useRef(`${(Math.random() * 6).toFixed(1)}s`)
+  const [pos, setPos] = useState(() => ({
+    left: `${(3 + Math.random() * 94).toFixed(1)}%`,
+    top:  `${(4 + Math.random() * 88).toFixed(1)}%`,
+    size: `${(3 + Math.random() * 3).toFixed(1)}px`,
+    gop:  (0.6 + Math.random() * 0.3).toFixed(2),
+  }))
+  const reroll = useCallback(() => setPos({
+    left: `${(3 + Math.random() * 94).toFixed(1)}%`,
+    top:  `${(4 + Math.random() * 88).toFixed(1)}%`,
+    size: `${(3 + Math.random() * 3).toFixed(1)}px`,
+    gop:  (0.6 + Math.random() * 0.3).toFixed(2),
+  }), [])
+  return (
+    <div aria-hidden className="jc-anim" onAnimationIteration={reroll} style={{
+      position: 'absolute', left: pos.left, top: pos.top, pointerEvents: 'none',
+      width: pos.size, height: pos.size, borderRadius: '50%', willChange: 'opacity',
+      background: 'radial-gradient(circle, rgba(212,130,12,0.95), rgba(212,130,12,0.5) 40%, transparent 72%)',
+      '--gop': pos.gop,
+      animation: `jcGlintPop ${durRef.current} ease-in-out ${delayRef.current} infinite`,
+    }}/>
+  )
+}
+
+function JazzClubAmbient() {
+  return <>
+    {/* Base: deep near-black velvet wash */}
+    <div aria-hidden style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none',
+      background: 'radial-gradient(ellipse 120% 110% at 50% 56%, rgba(8,6,8,1), rgba(4,4,4,1) 80%)',
+    }}/>
+    {/* Three sweeping spotlight pools */}
+    <JcSpotlight fx="32%" fy="24%" w="26.4%" alpha={0.78} dur={40} dir="cw"  phase={0}/>
+    <JcSpotlight fx="69%" fy="21%" w="25.3%" alpha={0.72} dur={43} dir="ccw" phase={-11}/>
+    <JcSpotlight fx="50%" fy="89%" w="28.6%" alpha={0.74} dur={40} dir="cw"  phase={0}/>
+    {/* Twinkling gold glints */}
+    <JcGlint/><JcGlint/><JcGlint/><JcGlint/><JcGlint/>
+    <JcGlint/><JcGlint/><JcGlint/><JcGlint/>
+    {/* Vignette — bgDeep closing in from edges */}
+    <div aria-hidden style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none',
+      background: 'radial-gradient(ellipse at center, transparent 34%, rgba(4,4,4,0.62) 100%)',
+    }}/>
   </>
 }
 
