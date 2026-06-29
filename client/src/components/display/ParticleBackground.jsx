@@ -619,41 +619,232 @@ function NorthernLightsAmbient() {
 }
 
 // ─── 5. MEDIEVAL TAVERN ───────────────────────────────────────────────────
+const MT = {
+  bg: "#0e0800", bgDeep: "#080400", accent: "#5a2a08",
+  highlight: "#e08020", shiny: "#ffb040", core: "#ffe6b0",
+  ember: "#ffc060", text: "#f0d8a0", smoke: "#6b5a44",
+}
+
+const MT_FLAME = "M40 136 C22 132 14 114 18 94 C21 78 14 68 22 54 C28 44 24 34 33 22 C37 16 39 22 39 6 C41 18 44 13 48 22 C55 34 52 44 58 56 C65 70 60 80 63 96 C66 116 58 132 40 136 Z"
+
+const MT_STYLE = `
+@keyframes mtFlame {
+  0%   { transform: scaleY(1) scaleX(1) skewX(0deg) }
+  15%  { transform: scaleY(1.08) scaleX(.94) skewX(-4deg) }
+  30%  { transform: scaleY(.95) scaleX(1.05) skewX(3deg) }
+  45%  { transform: scaleY(1.06) scaleX(.97) skewX(-2deg) }
+  60%  { transform: scaleY(1.0) scaleX(1.0) skewX(3.5deg) }
+  75%  { transform: scaleY(1.09) scaleX(.95) skewX(-3deg) }
+  90%  { transform: scaleY(.97) scaleX(1.03) skewX(1.5deg) }
+  100% { transform: scaleY(1) scaleX(1) skewX(0deg) }
+}
+@keyframes mtFlame2 {
+  0%   { transform: scaleY(1) skewX(0deg); opacity:.9 }
+  20%  { transform: scaleY(1.1) skewX(4deg); opacity:1 }
+  43%  { transform: scaleY(.94) skewX(-3deg); opacity:.82 }
+  66%  { transform: scaleY(1.07) skewX(2.5deg); opacity:.97 }
+  85%  { transform: scaleY(.98) skewX(-2deg); opacity:.88 }
+  100% { transform: scaleY(1) skewX(0deg); opacity:.9 }
+}
+@keyframes mtCore { 0%,100%{opacity:.82;transform:scaleY(1)} 25%{opacity:1;transform:scaleY(1.08)} 50%{opacity:.7;transform:scaleY(.95)} 75%{opacity:.96} }
+@keyframes mtHalo { 0%,100%{opacity:.42} 28%{opacity:.66} 53%{opacity:.36} 79%{opacity:.58} }
+@keyframes mtGlow { 0%,100%{opacity:.55} 50%{opacity:.85} }
+@keyframes mtRise {
+  0%{transform:translate(0,0);opacity:0} 16%{opacity:var(--eo,.85)}
+  68%{opacity:calc(var(--eo,.85)*.65)} 100%{transform:translate(var(--drift,8px),calc(-1*var(--rise,200px)));opacity:0}
+}
+@keyframes mtSmoke { 0%{transform:translateY(0) scale(1);opacity:0} 22%{opacity:.12} 80%{opacity:.12} 100%{transform:translateY(-50%) scale(1.5);opacity:0} }
+@keyframes mtSwayChand { 0%,100%{transform:rotate(-5deg)} 50%{transform:rotate(5deg)} }
+@media (prefers-reduced-motion: reduce){ .mt-anim{ animation:none !important } }
+`
+
+function mtRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
+}
+
+function MtTorch({ id, dir, x, top, w = "13%", h = "36%", dur = 2.0, delay = "0s" }) {
+  const mx = (v) => (dir === 1 ? v : 100 - v)
+  const rot = 18 * dir
+  const gOut = `mo-${id}`, gIn = `mi-${id}`, gWood = `mw-${id}`, gCore = `mc-${id}`
+  const hx = mx(58), hy = 82, fbx = mx(60)
+  return (
+    <div style={{ position: "absolute", [dir === 1 ? "left" : "right"]: x, top, width: w, height: h }}>
+      <div className="mt-anim" style={{ position: "absolute", left: "-55%", right: "-55%", top: "-20%", bottom: "26%",
+        background: `radial-gradient(ellipse 44% 40% at ${dir === 1 ? 62 : 38}% 30%, ${mtRgba(MT.highlight, 0.4)}, transparent 64%)`,
+        animation: `mtHalo 3.2s ease-in-out ${delay} infinite` }} />
+      <svg viewBox="0 0 100 240" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block", overflow: "visible" }}>
+        <defs>
+          <linearGradient id={gWood} gradientUnits="userSpaceOnUse" x1="0" y1="92" x2="0" y2="200">
+            <stop offset="0%" stopColor="#754a22" />
+            <stop offset="55%" stopColor="#3e2510" />
+            <stop offset="100%" stopColor="#1f1204" />
+          </linearGradient>
+          <linearGradient id={gOut} x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0%" stopColor="#ffe6b0" stopOpacity="1" />
+            <stop offset="20%" stopColor="#ffc24e" stopOpacity="0.96" />
+            <stop offset="46%" stopColor="#f7901f" stopOpacity="0.92" />
+            <stop offset="70%" stopColor="#e2620e" stopOpacity="0.72" />
+            <stop offset="88%" stopColor="#bf4406" stopOpacity="0.32" />
+            <stop offset="100%" stopColor="#9c3200" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id={gIn} x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0%" stopColor="#fff6e0" stopOpacity="1" />
+            <stop offset="38%" stopColor="#ffd060" stopOpacity="0.96" />
+            <stop offset="74%" stopColor="#ffa030" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#ff8020" stopOpacity="0" />
+          </linearGradient>
+          <radialGradient id={gCore}>
+            <stop offset="0%" stopColor="#fff6e0" stopOpacity="1" />
+            <stop offset="45%" stopColor="#ffcf78" stopOpacity="0.7" />
+            <stop offset="100%" stopColor="#ffb040" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <line x1={mx(20)} y1="200" x2={mx(56)} y2="92" stroke={`url(#${gWood})`} strokeWidth="16" strokeLinecap="round" />
+        <ellipse cx={mx(20)} cy="194" rx="13" ry="7.5" fill="none" stroke="#171310" strokeWidth="6" transform={`rotate(${rot} ${mx(20)} 194)`} />
+        <ellipse cx={mx(8)} cy="200" rx="4" ry="12" fill="#171310" />
+        <ellipse cx={hx} cy={hy} rx="13" ry="22" fill="#33200e" transform={`rotate(${rot} ${hx} ${hy})`} />
+        <ellipse cx={hx} cy={hy - 8} rx="13" ry="3.6" fill="#14100b" transform={`rotate(${rot} ${hx} ${hy})`} />
+        <ellipse cx={hx} cy={hy + 7} rx="13" ry="3.6" fill="#14100b" transform={`rotate(${rot} ${hx} ${hy})`} />
+        <ellipse cx={hx} cy={hy - 11} rx="10" ry="7" fill={mtRgba(MT.highlight, 0.32)} transform={`rotate(${rot} ${hx} ${hy})`} />
+        <g transform={`translate(${fbx - 20} -4) scale(0.5)`}>
+          <path className="mt-anim" d={MT_FLAME} fill={`url(#${gOut})`}
+            style={{ transformBox: "fill-box", transformOrigin: "50% 100%", animation: `mtFlame ${dur}s ease-in-out ${delay} infinite` }} />
+          <g transform="translate(16 54.4) scale(0.6)">
+            <path className="mt-anim" d={MT_FLAME} fill={`url(#${gIn})`}
+              style={{ transformBox: "fill-box", transformOrigin: "50% 100%", animation: `mtFlame2 ${(dur * 0.82).toFixed(2)}s ease-in-out ${delay} infinite` }} />
+          </g>
+        </g>
+        <ellipse className="mt-anim" cx={fbx} cy="62" rx="8" ry="11" fill={`url(#${gCore})`}
+          style={{ transformBox: "fill-box", transformOrigin: "50% 100%", animation: `mtCore 1.5s ease-in-out ${delay} infinite` }} />
+      </svg>
+    </div>
+  )
+}
+
+function MtChandelier() {
+  const cx = 100, cy = 6, rx = 80, ry = 54
+  const cand = useMemo(() => {
+    const defs = [
+      { a: 90,  s: 1.12 },
+      { a: 64,  s: 1.0 }, { a: 116, s: 1.0 },
+      { a: 36,  s: 0.84 }, { a: 144, s: 0.84 },
+    ]
+    return defs.map((d, i) => {
+      const r = (d.a * Math.PI) / 180
+      return { x: cx + rx * Math.cos(r), y: cy + ry * Math.sin(r), s: d.s, delay: (i * 0.43).toFixed(2) }
+    })
+  }, [])
+
+  const OL = "#14100a"
+
+  const Candle = ({ x, y, s, delay }) => {
+    const ch = 30 * s, cw = 12 * s, topY = y - ch
+    return (
+      <g>
+        <ellipse cx={x} cy={topY - 3 * s} rx={12 * s} ry={15 * s} fill={mtRgba(MT.highlight, 0.18)} />
+        <path d={`M${x - cw * 0.85} ${y} L${x + cw * 0.85} ${y} L${x + cw * 0.55} ${y + 7 * s} L${x - cw * 0.55} ${y + 7 * s} Z`}
+          fill="#1c150d" stroke={OL} strokeWidth="1.8" strokeLinejoin="round" />
+        <rect x={x - cw / 2} y={topY} width={cw} height={ch} rx={cw * 0.36}
+          fill="url(#mtCandleWax)" stroke={OL} strokeWidth="2" />
+        <path d={`M${x - cw * 0.3} ${topY + 3} q${-cw * 0.18} ${ch * 0.32} 0 ${ch * 0.5}`} fill="none" stroke="#e9dcbf" strokeWidth={1.4 * s} strokeLinecap="round" opacity="0.7" />
+        <rect x={x - 0.8} y={topY - 3} width="1.6" height="4" rx="0.8" fill="#2a1c10" />
+        <ellipse className="mt-anim" cx={x} cy={topY - 6 * s} rx={3.4 * s} ry={7.4 * s} fill="#ffb240" stroke="#e07614" strokeWidth="1.3"
+          style={{ transformBox: "fill-box", transformOrigin: "50% 100%", animation: `mtFlame ${(2.0 + s * 0.6).toFixed(2)}s ease-in-out ${delay}s infinite` }} />
+        <ellipse className="mt-anim" cx={x} cy={topY - 5 * s} rx={1.6 * s} ry={4 * s} fill="#fff2d0"
+          style={{ transformBox: "fill-box", transformOrigin: "50% 100%", animation: `mtFlame2 ${((2.0 + s * 0.6) * 0.82).toFixed(2)}s ease-in-out ${delay}s infinite` }} />
+      </g>
+    )
+  }
+
+  return (
+    <div style={{ position: "absolute", left: "50%", top: "5%", width: "60%", height: "22%", transform: "translateX(-50%)" }}>
+      <div className="mt-anim" style={{ position: "absolute", inset: 0, transformOrigin: "50% -30%", animation: "mtSwayChand 12s ease-in-out infinite" }}>
+        <div className="mt-anim" style={{ position: "absolute", inset: "-20% -8% -60% -8%",
+          background: `radial-gradient(ellipse 44% 56% at 50% 36%, ${mtRgba(MT.highlight, 0.2)}, transparent 64%)`,
+          animation: "mtGlow 10s ease-in-out infinite" }} />
+        <svg viewBox="0 0 200 70" width="100%" height="100%" preserveAspectRatio="xMidYMin meet" style={{ display: "block" }}>
+          <defs>
+            <linearGradient id="mtCandleWax" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#f5ecd6" />
+              <stop offset="100%" stopColor="#cabd9f" />
+            </linearGradient>
+          </defs>
+          <g stroke={OL} strokeWidth="3.6" fill="none" strokeLinecap="round" strokeDasharray="3.5 3">
+            <line x1="58" y1="-4" x2="34" y2="34" />
+            <line x1="142" y1="-4" x2="166" y2="34" />
+          </g>
+          <g stroke={OL} strokeLinecap="round" fill="none">
+            <ellipse cx={cx} cy={cy} rx={rx} ry={ry} strokeWidth="9" />
+            <ellipse cx={cx} cy={cy + 5} rx={rx} ry={ry} strokeWidth="4.5" opacity="0.5" />
+            {Array.from({ length: 12 }, (_, i) => {
+              const r = (i / 12) * Math.PI * 2
+              return <line key={i} x1={cx} y1={cy} x2={cx + rx * Math.cos(r)} y2={cy + ry * Math.sin(r)} strokeWidth="2.6" opacity="0.7" />
+            })}
+          </g>
+          {cand.sort((a, b) => a.y - b.y).map((c, i) => <Candle key={i} {...c} />)}
+        </svg>
+      </div>
+    </div>
+  )
+}
+
 function MedievalTavernAmbient() {
-  const wisps = useMemo(() => [
-    { left: '12%', dur: '14s', delay: '0s'     },
-    { left: '48%', dur: '18s', delay: '-6.0s'  },
-    { left: '80%', dur: '16s', delay: '-10.7s' },
+  const embers = useMemo(() => {
+    const make = (lo, hi) => Array.from({ length: 6 }, () => ({
+      left:  (Math.random() * (hi - lo) + lo).toFixed(1) + "%",
+      top:   (Math.random() * 7 + 32).toFixed(1) + "%",
+      size:  (Math.random() * 2.5 + 2).toFixed(1),
+      rise:  (Math.random() * 90 + 120).toFixed(0) + "px",
+      drift: (Math.random() * 26 - 13).toFixed(0) + "px",
+      eo:    (Math.random() * 0.2 + 0.68).toFixed(2),
+      dur:   (Math.random() * 2.5 + 3.5).toFixed(1),
+      delay: (-Math.random() * 6).toFixed(1),
+    }))
+    return [...make(6, 13), ...make(87, 94)]
+  }, [])
+  const smoke = useMemo(() => [
+    { left: "7%",  w: "16%", dur: "14s", delay: "0s"  },
+    { left: "85%", w: "15%", dur: "16s", delay: "-8s" },
   ], [])
 
-  return <>
-    {/* Left torch sconce */}
-    <GlowLayer lo={0.25} hi={0.62} duration="3.4s" flicker style={{
-      top: 0, left: 0, bottom: 0, width: '28%',
-      background: 'radial-gradient(ellipse at left center, rgba(240,140,20,0.62), transparent 75%)',
-    }}/>
-    {/* Right torch sconce */}
-    <GlowLayer lo={0.22} hi={0.56} duration="2.9s" delay="1.1s" flicker style={{
-      top: 0, right: 0, bottom: 0, width: '28%',
-      background: 'radial-gradient(ellipse at right center, rgba(240,130,18,0.58), transparent 75%)',
-    }}/>
-    {/* Warm ceiling glow */}
-    <GlowLayer lo={0.18} hi={0.42} duration="8s" style={{
-      inset: 0,
-      background: 'rgba(180,80,10,0.22)',
-    }}/>
-    {/* Smoke wisps */}
-    {wisps.map((w, i) => (
-      <div key={i} aria-hidden style={{
-        position: 'absolute', bottom: 0, left: w.left,
-        width: '8%', height: '40%',
-        background: 'radial-gradient(ellipse, rgba(160,140,120,0.14), transparent)',
-        willChange: 'transform, opacity',
-        '--hi': 0.18,
-        animation: `ambientRiseUp ${w.dur} ${w.delay} ${EASE.mover} infinite`,
-      }}/>
-    ))}
-  </>
+  return (
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden",
+      background: `radial-gradient(ellipse 110% 85% at 50% 104%, ${MT.accent}, ${MT.bg} 46%, ${MT.bgDeep} 80%)` }}>
+
+      <style>{MT_STYLE}</style>
+
+      <div className="mt-anim" style={{ position: "absolute", inset: 0,
+        background: `radial-gradient(ellipse 64% 48% at 50% 98%, ${mtRgba(MT.highlight, 0.3)}, transparent 64%)`,
+        animation: "mtGlow 12s ease-in-out infinite" }} />
+      <div className="mt-anim" style={{ position: "absolute", inset: 0,
+        background: `radial-gradient(ellipse 120% 22% at 50% 106%, ${mtRgba(MT.shiny, 0.22)}, transparent 70%)`,
+        animation: "mtGlow 9s ease-in-out infinite" }} />
+
+      {smoke.map((s, i) => (
+        <div key={i} className="mt-anim" style={{
+          position: "absolute", bottom: "30%", left: s.left, width: s.w, height: "40%",
+          background: `radial-gradient(ellipse 50% 60% at 50% 100%, ${mtRgba(MT.smoke, 0.15)}, transparent 70%)`,
+          transformOrigin: "50% 100%", animation: `mtSmoke ${s.dur} ease-in-out ${s.delay} infinite`, willChange: "transform, opacity",
+        }} />
+      ))}
+
+      <MtChandelier />
+
+      <MtTorch id="L" dir={1}  x="2%" top="25%" dur={2.0} />
+      <MtTorch id="R" dir={-1} x="2%" top="26%" dur={2.3} delay="-1.1s" />
+
+      {embers.map((e, i) => (
+        <div key={i} className="mt-anim" style={{
+          position: "absolute", left: e.left, top: e.top,
+          width: e.size + "px", height: e.size + "px", borderRadius: "50%",
+          background: `radial-gradient(circle, ${mtRgba(MT.core, 0.95)}, ${mtRgba(MT.ember, 0.85)} 50%, transparent 76%)`,
+          ["--rise"]: e.rise, ["--drift"]: e.drift, ["--eo"]: e.eo,
+          animation: `mtRise ${e.dur}s ease-out ${e.delay}s infinite`, willChange: "transform, opacity",
+        }} />
+      ))}
+    </div>
+  )
 }
 
 // ─── 6. SUNSET BOULEVARD ─────────────────────────────────────────────────
