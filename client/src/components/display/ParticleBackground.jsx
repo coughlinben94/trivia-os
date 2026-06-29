@@ -893,51 +893,147 @@ function SunsetBoulevardAmbient() {
 }
 
 // ─── 7. RETRO ARCADE ──────────────────────────────────────────────────────
-function RetroArcadeAmbient() {
-  const pixelStatic = useMemo(() => Array.from({ length: 12 }, (_, i) => ({
-    left:  `${(i * 137) % 100}%`,
-    top:   `${(i * 91 + 23) % 100}%`,
-    delay: `${(i * 3.7) % 20}s`,
-    dur:   `${0.06 + (i % 3) * 0.04}s`,
-  })), [])
+const RA_C = {
+  bg: "#040010", bgDeep: "#020008", accent: "#3a0880",
+  violet: "#a020ff", green: "#20ff80", amber: "#ffb020",
+};
+function raRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+function raShuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0;[a[i], a[j]] = [a[j], a[i]]; } return a; }
 
-  return <>
-    {/* Scanlines */}
-    <div aria-hidden style={{
-      position: 'absolute', inset: 0, pointerEvents: 'none',
-      backgroundImage: 'repeating-linear-gradient(transparent 0px, transparent 3px, rgba(39,224,255,0.07) 3px, rgba(39,224,255,0.07) 4px)',
-      backgroundSize: '100% 4px',
-      mixBlendMode: 'screen',
-      willChange: 'transform',
-      animation: 'ambientScanline 0.5s linear infinite',
-    }}/>
-    {/* Purple/violet left neon */}
-    <GlowLayer lo={0.25} hi={0.75} duration="1.8s" buzz style={{
-      top: 0, left: 0, bottom: 0, width: '28%',
-      background: 'radial-gradient(ellipse at left center, rgba(160,20,255,0.70), transparent 75%)',
-    }}/>
-    {/* Cyan/green right neon */}
-    <GlowLayer lo={0.20} hi={0.68} duration="2.2s" delay="0.5s" buzz style={{
-      top: 0, right: 0, bottom: 0, width: '28%',
-      background: 'radial-gradient(ellipse at right center, rgba(20,220,80,0.62), transparent 75%)',
-    }}/>
-    {/* CRT phosphor center glow */}
-    <GlowLayer lo={0.15} hi={0.42} duration="4s" delay="1.2s" style={{
-      top: '20%', left: '20%', right: '20%', bottom: '20%',
-      background: 'radial-gradient(ellipse, rgba(180,80,255,0.38), transparent 70%)',
-    }}/>
-    {/* Pixel static */}
-    {pixelStatic.map((p, i) => (
-      <div key={i} aria-hidden style={{
-        position: 'absolute', left: p.left, top: p.top, pointerEvents: 'none',
-        width: 2, height: 2,
-        background: i % 3 === 0 ? 'rgba(255,80,255,0.90)' : i % 3 === 1 ? 'rgba(80,255,200,0.85)' : 'rgba(255,255,255,0.80)',
-        willChange: 'opacity',
-        '--lo': 0, '--hi': 0.90,
-        animation: `ambientBreathe ${p.dur} ${p.delay} steps(1) infinite`,
-      }}/>
-    ))}
-  </>
+const RA_APPLE = [
+  "      SS      ",
+  "      SS LL   ",
+  "      S  LLL  ",
+  "   RRR  RRR   ",
+  "  RRRRRRRRRR  ",
+  " RRRRRRRRRRRR ",
+  " RRHHRRRRRRRR ",
+  " RRHHRRRRRRRR ",
+  " RRRRRRRRRRRR ",
+  " RRRRRRRRRRRR ",
+  "  RRRRRRRRRR  ",
+  "  RRRRRRRRRR  ",
+  "   RRRRRRRR   ",
+  "    RR  RR    ",
+];
+const RA_APPLE_COL = { R: "#28e070", H: "#c4ffda", S: "#2a1c0e", L: "#4dff86" };
+const RA_APPLE_RECTS = RA_APPLE.flatMap((row, y) =>
+  [...row].map((ch, x) => (ch !== " "
+    ? <rect key={`${x}-${y}`} x={x} y={y} width="1.03" height="1.03" fill={RA_APPLE_COL[ch]} /> : null))
+);
+
+const RA_STYLE = `
+@keyframes raPop  { 0%,100%{ opacity:0; transform:translate(-50%,-50%) scale(.65) } 50%{ opacity:var(--hi,.7); transform:translate(-50%,-50%) scale(1.05) } }
+@keyframes raPopB { 0%,100%{ opacity:0; transform:translate(-50%,-50%) scale(.65) } 44%{ opacity:var(--hi,.7); transform:translate(-50%,-50%) scale(1.05) } }
+@keyframes raHue  { 0%{opacity:1} 22%{opacity:1} 44%{opacity:0} 88%{opacity:0} 100%{opacity:1} }
+@keyframes raBounceX { from{ transform: translateX(-46%) } to{ transform: translateX(46%) } }
+@keyframes raBounceY { from{ transform: translateY(-43%) } to{ transform: translateY(43%) } }
+@keyframes raStatic { 0%,9%{opacity:0} 10%{opacity:.95} 11.5%{opacity:0} 56%{opacity:0} 57%{opacity:.95} 58.5%{opacity:0} 100%{opacity:0} }
+@keyframes raScan { 0%{ transform: translateY(0) } 100%{ transform: translateY(4px) } }
+@keyframes raGlow { 0%,100%{ opacity:.45 } 50%{ opacity:.72 } }
+@keyframes raBuzz { 0%,100%{opacity:var(--hi,1)} 3%{opacity:var(--lo,.4)} 5%{opacity:var(--hi,1)} 49%{opacity:var(--hi,1)} 51%{opacity:var(--lo,.4)} 54%{opacity:var(--hi,1)} }
+@media (prefers-reduced-motion: reduce){ .ra-anim{ animation:none !important } }
+`;
+
+function RaPop({ b }) {
+  const layer = (color, frac) => (
+    <div className="ra-anim" style={{ position: "absolute", inset: 0, borderRadius: "50%",
+      background: `radial-gradient(circle at 50% 50%, ${raRgba(color, b.a)}, transparent 64%)`,
+      animation: `raHue ${b.hueDur}s linear ${(-b.hueDur * frac).toFixed(2)}s infinite` }} />
+  );
+  return (
+    <div className="ra-anim" style={{ position: "absolute", left: b.left, top: b.top, width: b.size + "%", aspectRatio: "1",
+      transform: "translate(-50%, -50%)", filter: `blur(${b.blur}px)`, ["--hi"]: b.hi,
+      animation: `${b.kf} ${b.dur}s ease-in-out ${b.delay}s infinite`, willChange: "transform, opacity" }}>
+      {layer(b.colors[0], 0)}
+      {layer(b.colors[1], 1 / 3)}
+      {layer(b.colors[2], 2 / 3)}
+    </div>
+  );
+}
+
+function RaAppleBouncer({ size = 8 }) {
+  return (
+    <div className="ra-anim" style={{ position: "absolute", inset: 0, pointerEvents: "none",
+      animation: "raBounceX 6.5s linear infinite alternate", willChange: "transform" }}>
+      <div className="ra-anim" style={{ position: "absolute", inset: 0,
+        animation: "raBounceY 4.9s linear infinite alternate", willChange: "transform" }}>
+        <div style={{ position: "absolute", left: "50%", top: "50%", width: size + "%", aspectRatio: "1",
+          transform: "translate(-50%, -50%)" }}>
+          <svg viewBox="0 0 14 14" width="100%" height="100%" shapeRendering="crispEdges"
+            style={{ display: "block", overflow: "visible", filter: `drop-shadow(0 0 3px ${raRgba(RA_C.green, 0.55)})` }}>
+            {RA_APPLE_RECTS}
+          </svg>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RetroArcadeAmbient() {
+  const pops = useMemo(() => {
+    const cols = 5, rows = 3, arr = [];
+    const kfs = ["raPop", "raPopB"];
+    const push = (left, top) => arr.push({
+      kf: kfs[(Math.random() * 2) | 0],
+      colors: raShuffle([RA_C.green, RA_C.violet, RA_C.amber]),
+      left: left.toFixed(1) + "%", top: top.toFixed(1) + "%",
+      size: (Math.random() * 18 + 8).toFixed(1),
+      a: (Math.random() * 0.34 + 0.32).toFixed(2),
+      hi: (Math.random() * 0.35 + 0.5).toFixed(2),
+      dur: (Math.random() * 4.1 + 2.4).toFixed(2),
+      delay: (-Math.random() * 9).toFixed(2),
+      hueDur: (Math.random() * 4 + 3).toFixed(2),
+      blur: (Math.random() * 10 + 5).toFixed(0),
+    });
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        push((c + Math.random()) / cols * 100, (r + Math.random()) / rows * 100);
+    return arr;
+  }, []);
+
+  const stat = useMemo(() => {
+    const palette = [raRgba(RA_C.violet, 0.9), raRgba(RA_C.green, 0.85), "rgba(255,255,255,0.85)"];
+    return Array.from({ length: 16 }, () => ({
+      left: (Math.random() * 100).toFixed(1) + "%", top: (Math.random() * 100).toFixed(1) + "%",
+      dur: (Math.random() * 6 + 3.5).toFixed(2), delay: (-Math.random() * 9).toFixed(2),
+      color: palette[(Math.random() * 3) | 0],
+    }));
+  }, []);
+
+  return (
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden",
+      background: `radial-gradient(ellipse 120% 90% at 50% 36%, ${raRgba(RA_C.accent, 0.5)}, ${RA_C.bg} 60%, ${RA_C.bgDeep} 92%)` }}>
+
+      <style>{RA_STYLE}</style>
+
+      <div className="ra-anim" style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: "26%",
+        background: `radial-gradient(ellipse at left center, ${raRgba(RA_C.violet, 0.5)}, transparent 75%)`,
+        ["--lo"]: 0.24, ["--hi"]: 0.62, animation: "raBuzz 1.8s linear infinite" }} />
+      <div className="ra-anim" style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "26%",
+        background: `radial-gradient(ellipse at right center, ${raRgba(RA_C.green, 0.42)}, transparent 75%)`,
+        ["--lo"]: 0.2, ["--hi"]: 0.58, animation: "raBuzz 2.2s linear .5s infinite" }} />
+
+      <div className="ra-anim" style={{ position: "absolute", top: "18%", left: "18%", right: "18%", bottom: "18%",
+        background: `radial-gradient(ellipse, ${raRgba(RA_C.violet, 0.26)}, transparent 70%)`, animation: "raGlow 5s ease-in-out infinite" }} />
+
+      {pops.map((b, i) => <RaPop key={i} b={b} />)}
+
+      <RaAppleBouncer size={8} />
+
+      {stat.map((p, i) => (
+        <div key={i} aria-hidden className="ra-anim" style={{ position: "absolute", left: p.left, top: p.top,
+          width: 2, height: 2, background: p.color, animation: `raStatic ${p.dur}s ${p.delay}s linear infinite` }} />
+      ))}
+
+      <div aria-hidden className="ra-anim" style={{ position: "absolute", inset: "-4px 0", pointerEvents: "none",
+        backgroundImage: `repeating-linear-gradient(transparent 0px, transparent 2px, ${raRgba(RA_C.violet, 0.11)} 2px, ${raRgba(RA_C.violet, 0.11)} 4px)`,
+        backgroundSize: "100% 4px", mixBlendMode: "screen", animation: "raScan 0.5s linear infinite", willChange: "transform" }} />
+    </div>
+  );
 }
 
 // ─── 8. SAND DUNE CHILL ───────────────────────────────────────────────────
