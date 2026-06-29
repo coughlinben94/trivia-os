@@ -1329,44 +1329,105 @@ function WesternShowdownAmbient() {
 }
 
 // ─── 20. UNDER THE SEA ───────────────────────────────────────────────────
+const US = {
+  bg: "#000c18", bgDeep: "#000810", accent: "#003848",
+  highlight: "#00d8c0", shiny: "#40ffb0", text: "#b0f0f0",
+  muted: "#207870", core: "#eafff9", mid: "#00222e",
+};
+
+function usRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+const US_STYLE = `
+@keyframes usGodray {
+  0%,100% { opacity:.12; transform: translateX(0) skewX(var(--sk,-9deg)) }
+  50%     { opacity:.26; transform: translateX(var(--sw,10px)) skewX(var(--sk,-9deg)) }
+}
+@keyframes usBubble {
+  0%   { transform: translate(0,0); opacity:0 }
+  12%  { opacity: var(--bo,.55) }
+  82%  { opacity: calc(var(--bo,.55)*.7) }
+  100% { transform: translate(var(--bx,6px), calc(-1*var(--br,300px))); opacity:0 }
+}
+@keyframes usGlow  { 0%,100%{ opacity:.5 } 50%{ opacity:.82 } }
+@keyframes usPop   { 0%,100%{ opacity:0; transform: scale(.55) } 50%{ opacity:.9; transform: scale(1.1) } }
+@media (prefers-reduced-motion: reduce){ .us-anim{ animation:none !important } }
+`;
+
+function UsGodray({ x, w, sk, sw, dur, delay }) {
+  return (
+    <div className="us-anim" style={{
+      position: "absolute", top: "-12%", height: "115%", left: x, width: w,
+      background: `linear-gradient(to bottom, ${usRgba(US.shiny, 0.5)}, ${usRgba(US.highlight, 0.22)} 28%, transparent 72%)`,
+      transformOrigin: "50% 0%", filter: "blur(7px)",
+      ["--sk"]: sk, ["--sw"]: sw,
+      animation: `usGodray ${dur}s ease-in-out ${delay}s infinite`, willChange: "transform, opacity",
+    }} />
+  );
+}
+
 function UnderTheSeaAmbient() {
-  const bio = useMemo(() => Array.from({ length: 16 }, (_, i) => ({
-    left:  `${(i * 73 + i % 5 * 17) % 100}%`,
-    top:   `${(i * 61 + i % 4 * 23) % 100}%`,
-    size:  3.5 + (i % 4) * 1.8,
-    dur:   `${4.5 + (i % 5) * 1.8}s`,
-    delay: `-${((i / 16) * (4.5 + (i % 5) * 1.8)).toFixed(1)}s`,
-  })), [])
+  const bubbles = useMemo(() => Array.from({ length: 18 }, () => ({
+    left: (Math.random() * 100).toFixed(1) + "%",
+    size: (Math.random() * 5 + 3).toFixed(1),
+    br: (Math.random() * 140 + 200).toFixed(0) + "px",
+    bx: (Math.random() * 20 - 10).toFixed(0) + "px",
+    bo: (Math.random() * 0.22 + 0.36).toFixed(2),
+    dur: (Math.random() * 5 + 7).toFixed(1),
+    delay: (-Math.random() * 12).toFixed(1),
+  })), []);
+  const bio = useMemo(() => Array.from({ length: 22 }, () => ({
+    left: (Math.random() * 100).toFixed(1) + "%",
+    top: (Math.random() * 100).toFixed(1) + "%",
+    size: (Math.random() * 4 + 2.5).toFixed(1),
+    dur: (Math.random() * 5 + 4).toFixed(1),
+    delay: (-Math.random() * 9).toFixed(1),
+  })), []);
 
-  const bubbles = useMemo(() => Array.from({ length: 6 }, (_, i) => ({
-    left:  `${26 + i * 3}%`,
-    size:  1.2 + (i % 3) * 0.6,
-    dur:   `${7 + i * 1.5}s`,
-    delay: `-${((i / 6) * (7 + i * 1.5)).toFixed(1)}s`,
-  })), [])
+  return (
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden",
+      background: `linear-gradient(to bottom, ${US.bg} 0%, ${US.mid} 58%, ${US.accent} 100%)` }}>
 
-  return <>
-    <GlowLayer lo={0.15} hi={0.35} duration="20s" delay="3s" style={{
-      inset: 0,
-      background: 'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(0,80,100,0.28), transparent 70%)',
-    }}/>
-    <GlowLayer lo={0.18} hi={0.45} duration="6s" style={{
-      inset: 0,
-      background: 'radial-gradient(ellipse 40% 55% at 50% 0%, rgba(80,200,255,0.42), transparent)',
-    }}/>
-    {bio.map((b, i) => (
-      <PulseDot key={i} left={b.left} top={b.top} size={b.size}
-        color="rgba(40,210,170,0.75)" glowColor="rgba(20,180,140,0.45)"
-        duration={b.dur} delay={b.delay} ease={EASE.twinkle}
-      />
-    ))}
-    {bubbles.map((b, i) => (
-      <RisingParticle key={i} left={b.left} bottom="0%" size={b.size}
-        color="rgba(180,225,255,0.55)"
-        duration={b.dur} delay={b.delay} opacity={0.55} bubble={true}
-      />
-    ))}
-  </>
+      <style>{US_STYLE}</style>
+
+      {/* surface light from above */}
+      <div className="us-anim" style={{ position: "absolute", inset: 0,
+        background: `radial-gradient(ellipse 120% 60% at 50% -10%, ${usRgba(US.highlight, 0.22)}, transparent 60%)`,
+        animation: "usGlow 18s ease-in-out infinite" }} />
+
+      {/* teal floor glow — rounded dome + wide low base to carry color into the corners */}
+      <div style={{ position: "absolute", inset: 0,
+        background: `radial-gradient(ellipse 150% 24% at 50% 106%, ${usRgba(US.accent, 0.75)}, transparent 78%)` }} />
+      <div className="us-anim" style={{ position: "absolute", inset: 0,
+        background: `radial-gradient(ellipse 64% 32% at 50% 102%, ${usRgba(US.highlight, 0.26)}, transparent 68%)`,
+        animation: "usGlow 14s ease-in-out infinite" }} />
+
+      {/* ATMOSPHERE — god-ray shafts */}
+      <UsGodray x="16%" w="9%" sk="-11deg" sw="12px" dur={11} delay={0} />
+      <UsGodray x="38%" w="7%" sk="-7deg" sw="9px" dur={14} delay={-3} />
+      <UsGodray x="60%" w="10%" sk="-9deg" sw="11px" dur={12} delay={-6} />
+      <UsGodray x="80%" w="7%" sk="-6deg" sw="8px" dur={15} delay={-2} />
+
+      {/* bioluminescent lights — fade in and out at random spots */}
+      {bio.map((b, i) => (
+        <div key={i} className="us-anim" style={{ position: "absolute", left: b.left, top: b.top,
+          width: b.size + "px", height: b.size + "px", borderRadius: "50%", background: usRgba(US.shiny, 0.8),
+          boxShadow: `0 0 7px ${usRgba(US.highlight, 0.55)}`, animation: `usPop ${b.dur}s ease-in-out ${b.delay}s infinite` }} />
+      ))}
+
+      {/* DRIFTERS — bubbles rising all over */}
+      {bubbles.map((b, i) => (
+        <div key={i} className="us-anim" style={{ position: "absolute", left: b.left, bottom: "0%",
+          width: b.size + "px", height: b.size + "px", borderRadius: "50%",
+          border: `1px solid ${usRgba(US.text, 0.5)}`,
+          background: `radial-gradient(circle at 35% 30%, ${usRgba(US.text, 0.32)}, transparent 60%)`,
+          ["--br"]: b.br, ["--bx"]: b.bx, ["--bo"]: b.bo,
+          animation: `usBubble ${b.dur}s linear ${b.delay}s infinite`, willChange: "transform, opacity" }} />
+      ))}
+    </div>
+  );
 }
 
 // ─── 21. NEON TOKYO ──────────────────────────────────────────────────────
