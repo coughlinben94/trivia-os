@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 import { sortedSlides } from '../../hooks/useShow.js'
+import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 
 const TYPE_CARDS = [
   { type: 'title',             icon: '🎬', name: 'State of the Union', desc: 'Opening address to the crowd' },
@@ -21,6 +22,7 @@ export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
   const [questionMode, setQuestionMode] = useState(null)
   const [selectedFormat, setSelectedFormat] = useState(null)
   const [roundTitle, setRoundTitle] = useState('')
+  const [jukeboxLib, setJukeboxLib] = useState('random')
   const { formats, loading: formatsLoading } = useShinyFormats()
 
   const sorted = sortedSlides(show)
@@ -100,6 +102,7 @@ export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
       data = {
         message: "Now, please sit back, relax, and enjoy each other's company as Ben grades papers 😊",
         backLinkSlideId: null,
+        jukeboxLib: jukeboxLib,
       }
     } else if (type === 'scoreboard-reveal') {
       data = { afterRound: null, title: '' }
@@ -277,6 +280,23 @@ export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
                   placeholder="e.g. Round 1"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
                 />
+              </div>
+            )}
+
+            {/* Between-rounds music (only for grading-break) */}
+            {type === 'grading-break' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Between-rounds music</label>
+                <select
+                  value={jukeboxLib}
+                  onChange={e => setJukeboxLib(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                >
+                  <option value="random">🎲 Random</option>
+                  {JUKEBOX_LIBRARIES.map(lib => (
+                    <option key={lib.id} value={lib.id}>{lib.label}</option>
+                  ))}
+                </select>
               </div>
             )}
 
