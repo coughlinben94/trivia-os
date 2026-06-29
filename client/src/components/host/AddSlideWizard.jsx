@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
+import { SHINY_FORMATS } from '../../lib/shinyFormatDictionary.js'
 
 const TYPE_CARDS = [
   { type: 'title',             icon: '🎬', name: 'State of the Union', desc: 'Opening address to the crowd' },
@@ -14,46 +14,30 @@ const TYPE_CARDS = [
 
 const NEEDS_ROUND = new Set(['round-intro', 'swing-round-intro', 'question', 'grading-break', 'pixelate-series', 'multi-question', 'pyl-reveal'])
 
+const MEDIA_LABEL = { image: 'img', audio: 'audio', text: 'text' }
+
 export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
   const hasPresetType = !!initialData.type
   const [step, setStep] = useState(hasPresetType ? 'details' : 'type')
   const [type, setType] = useState(initialData.type ?? null)
   const [roundId, setRoundId] = useState(initialData.roundId ?? null)
-  const [questionMode, setQuestionMode] = useState(null)
-  const [selectedFormat, setSelectedFormat] = useState(null)
+  const [questionText, setQuestionText] = useState('')
   const [roundTitle, setRoundTitle] = useState('')
   const [jukeboxLib, setJukeboxLib] = useState('random')
-  const { formats, loading: formatsLoading } = useShinyFormats()
 
   const sorted = sortedSlides(show)
   const typeCard = TYPE_CARDS.find(c => c.type === type)
 
   function pickType(t) {
     setType(t)
-    setStep(t === 'question' ? 'question-mode' : 'details')
-  }
-
-  function pickQuestionMode(qm) {
-    setQuestionMode(qm)
-    setStep(qm === 'shiny' ? 'format' : 'details')
-  }
-
-  function pickFormat(fmt) {
-    setSelectedFormat(fmt)
-    setStep('details')
+    setStep(t === 'question' ? 'question-split' : 'details')
   }
 
   function goBack() {
     if (hasPresetType) return
-    if (step === 'details') {
-      if (questionMode === 'shiny') { setStep('format'); return }
-      if (type === 'question') { setStep('question-mode'); return }
-      setType(null); setStep('type')
-    } else if (step === 'format') {
-      setStep('question-mode')
-    } else if (step === 'question-mode') {
-      setType(null); setStep('type')
-    }
+    setType(null)
+    setQuestionText('')
+    setStep('type')
   }
 
   async function handleCreate() {
@@ -74,29 +58,13 @@ export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
         hostPhotoUrl: null,
       }
     } else if (type === 'question') {
-      if (questionMode === 'shiny') {
-        data = {
-          questionNumber: qNum,
-          questionLabel: `Q${qNum}`,
-          questionMode: 'shiny',
-          isShiny: true,
-          shinyType: selectedFormat?.input_schema?.type ?? 'visual',
-          shinyFormatId: selectedFormat?.id,
-          shinyFormatName: selectedFormat?.name,
-          shinyFormatIcon: selectedFormat?.icon,
-          shinyInputSchema: selectedFormat?.input_schema,
-          text: '',
-          mediaSlots: [],
-        }
-      } else {
-        data = {
-          questionNumber: qNum,
-          questionLabel: `Q${qNum}`,
-          questionMode: 'regular',
-          isShiny: false,
-          text: '',
-          mediaSlots: [],
-        }
+      data = {
+        questionNumber: qNum,
+        questionLabel: `Q${qNum}`,
+        questionMode: 'regular',
+        isShiny: false,
+        text: questionText.trim(),
+        mediaSlots: [],
       }
     } else if (type === 'grading-break') {
       data = {
@@ -115,10 +83,11 @@ export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
 
   const needsRound = NEEDS_ROUND.has(type)
   const canCreate = !(needsRound && !roundId)
+  const canAddQuestion = !!roundId && questionText.trim().length > 0
 
   return (
     <div className="h-full flex flex-col items-center justify-start px-8 pt-[15dvh] pb-6 overflow-y-auto">
-      <div className="w-full max-w-2xl">
+      <div className={`w-full ${step === 'question-split' ? 'max-w-5xl' : 'max-w-2xl'}`}>
 
         {/* Back nav row */}
         {step !== 'type' && !hasPresetType && (
@@ -154,92 +123,103 @@ export default function AddSlideWizard({ show, onAddSlide, initialData = {} }) {
           </>
         )}
 
-        {/* ── Step 2: Question mode ── */}
-        {step === 'question-mode' && (
-          <>
-            <h2 className="text-xl font-semibold text-gray-800 mb-1 text-center">What kind of question?</h2>
-            <p className="text-sm text-gray-400 text-center mb-8">Regular text, or a special shiny format?</p>
-            <div className="grid grid-cols-2 gap-4">
+        {/* ── Question: split screen ── */}
+        {step === 'question-split' && (
+          <div className="grid grid-cols-2 gap-8">
+
+            {/* LEFT — plain question */}
+            <div className="flex flex-col gap-4 pr-8 border-r border-gray-200">
+              <div>
+                <h2 className="text-base font-semibold text-gray-800 mb-0.5">📝 Plain question</h2>
+                <p className="text-xs text-gray-400">Text question added directly to this round</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Question text</label>
+                <textarea
+                  value={questionText}
+                  onChange={e => setQuestionText(e.target.value)}
+                  onPaste={e => {
+                    e.preventDefault()
+                    const plain = e.clipboardData.getData('text/plain')
+                    const el = e.target
+                    const start = el.selectionStart ?? questionText.length
+                    const end = el.selectionEnd ?? questionText.length
+                    const next = questionText.slice(0, start) + plain + questionText.slice(end)
+                    setQuestionText(next)
+                    requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + plain.length })
+                  }}
+                  placeholder="Type or paste your question…"
+                  rows={4}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Round</label>
+                {show.rounds.length === 0 ? (
+                  <p className="text-sm text-gray-400">No rounds yet — use "+ Add Round" in the sidebar first.</p>
+                ) : (
+                  <select
+                    value={roundId ?? ''}
+                    onChange={e => setRoundId(e.target.value || null)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                  >
+                    <option value="">Select a round…</option>
+                    {show.rounds.map(r => (
+                      <option key={r.id} value={r.id}>R{r.number} — {r.title}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
               <button
-                onClick={() => pickQuestionMode('regular')}
-                className="flex flex-col items-center gap-3 p-8 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 transition-colors group"
-                style={{ minHeight: 140 }}
+                onClick={handleCreate}
+                disabled={!canAddQuestion}
+                className="w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <span className="text-4xl leading-none">📝</span>
-                <div className="text-center">
-                  <p className="text-base font-semibold text-gray-800 group-hover:text-[#1a6b4a]">Regular</p>
-                  <p className="text-xs text-gray-400 mt-1">Plain text question, clean and simple</p>
-                </div>
-              </button>
-              <button
-                onClick={() => pickQuestionMode('shiny')}
-                className="flex flex-col items-center gap-3 p-8 rounded-xl border border-gray-200 hover:border-yellow-400 hover:bg-yellow-50 transition-colors"
-                style={{ minHeight: 140 }}
-              >
-                <span className="text-4xl leading-none">✨</span>
-                <div className="text-center">
-                  <p className="text-base font-semibold text-gray-800">✨ Shiny</p>
-                  <p className="text-xs text-gray-400 mt-1">Image, audio, video, or puzzle format</p>
-                </div>
+                Add question →
               </button>
             </div>
-          </>
-        )}
 
-        {/* ── Step 3: Format picker ── */}
-        {step === 'format' && (
-          <>
-            <h2 className="text-xl font-semibold text-gray-800 mb-1 text-center">Choose a format</h2>
-            <p className="text-sm text-gray-400 text-center mb-8">Pick the shiny format for this question</p>
-            {formatsLoading ? (
-              <div className="text-center text-sm text-gray-400 py-8">Loading…</div>
-            ) : formats.length === 0 ? (
-              <div className="text-center text-sm text-gray-400 py-8">No formats yet — create one via ✨ Formats in the header.</div>
-            ) : (
-              <div className="grid grid-cols-3 gap-3">
-                {formats.map(fmt => (
-                  <button
-                    key={fmt.id}
-                    onClick={() => pickFormat(fmt)}
-                    className="flex flex-col gap-2 p-4 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 text-left transition-colors group"
-                    style={{ minHeight: 100 }}
-                  >
-                    <span className="text-2xl leading-none">{fmt.icon}</span>
-                    <span className="text-sm font-semibold text-gray-800 group-hover:text-[#1a6b4a]">{fmt.name}</span>
-                    {fmt.description && (
-                      <span className="text-xs text-gray-400 leading-snug line-clamp-2">{fmt.description}</span>
-                    )}
-                  </button>
-                ))}
+            {/* RIGHT — shiny formats, display only */}
+            <div className="flex flex-col gap-2 pl-2">
+              <div className="mb-1">
+                <h2 className="text-base font-semibold text-gray-800 mb-0.5">✨ Shiny formats</h2>
+                <p className="text-xs text-gray-400">Special formats — coming soon</p>
               </div>
-            )}
-          </>
+              {SHINY_FORMATS.map(fmt => (
+                <div
+                  key={fmt.id}
+                  className="flex items-start gap-3 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-100"
+                >
+                  <span className="text-lg leading-none mt-0.5 shrink-0">{fmt.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-semibold text-gray-600">{fmt.name}</span>
+                      <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-400 leading-none">soon</span>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{fmt.blurb}</p>
+                  </div>
+                  <div className="shrink-0 flex flex-col items-end gap-1 mt-0.5">
+                    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 leading-none">
+                      {MEDIA_LABEL[fmt.media] ?? fmt.media}
+                    </span>
+                    <span className="text-[9px] text-gray-400 leading-none">
+                      {fmt.count === 'ask' ? '×?' : `×${fmt.count}`}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+          </div>
         )}
 
-        {/* ── Step 4: Details + create ── */}
+        {/* ── Details + create ── */}
         {step === 'details' && (
           <div className="flex flex-col gap-5 max-w-sm mx-auto">
             {/* Icon + name confirmation */}
             <div className="flex flex-col items-center gap-2 pb-1">
-              <span className="text-5xl leading-none">
-                {type === 'question' && questionMode === 'shiny' && selectedFormat
-                  ? selectedFormat.icon
-                  : typeCard?.icon}
-              </span>
-              <div className="text-center">
-                <p className="text-lg font-semibold text-gray-800">
-                  {type === 'question' && questionMode === 'shiny' && selectedFormat
-                    ? selectedFormat.name
-                    : typeCard?.name}
-                </p>
-                {type === 'question' && (
-                  <p className="text-sm text-gray-400 mt-0.5">
-                    {questionMode === 'regular'
-                      ? 'Regular question'
-                      : `Shiny · ${selectedFormat?.input_schema?.type ?? 'custom'}`}
-                  </p>
-                )}
-              </div>
+              <span className="text-5xl leading-none">{typeCard?.icon}</span>
+              <p className="text-lg font-semibold text-gray-800 text-center">{typeCard?.name}</p>
             </div>
 
             {/* Round selector */}
