@@ -1263,54 +1263,121 @@ function WineCellarAmbient() {
 
 
 // ─── 27. METEOR SHOWER ───────────────────────────────────────────────────
+const DIPPER = [
+  { x: 9.0,  y: 8.0,  d: 3.0 }, // Dubhe
+  { x: 9.7,  y: 18.7, d: 2.6 }, // Merak
+  { x: 17.0, y: 20.0, d: 2.4 }, // Phecda
+  { x: 16.6, y: 11.5, d: 2.3 }, // Megrez
+  { x: 22.9, y: 9.9,  d: 2.6 }, // Alioth
+  { x: 28.7, y: 8.0,  d: 2.4 }, // Mizar
+  { x: 35.0, y: 11.5, d: 2.9 }, // Alkaid
+]
+
+function BigDipper() {
+  return <>
+    {DIPPER.map((s, i) => (
+      <div key={i} aria-hidden style={{
+        position: 'absolute', left: `${s.x}%`, top: `${s.y}%`, transform: 'translate(-50%,-50%)',
+        width: `${s.d}px`, height: `${s.d}px`, borderRadius: '50%', pointerEvents: 'none',
+        background: 'rgba(255,255,255,1)',
+        boxShadow: '0 0 5px rgba(220,240,255,0.95), 0 0 12px rgba(195,224,255,0.45)',
+        willChange: 'opacity', '--lo': 0.92, '--hi': 1,
+        animation: `ambientBreathe ${6 + (i % 4)}s -${i}s ease-in-out infinite`,
+      }}/>
+    ))}
+  </>
+}
+
+function rollMeteorShower() {
+  const theta = 135 + (Math.random() * 10 - 5)
+  const rad = theta * Math.PI / 180
+  const dist = 30 + Math.random() * 34
+  const sx = 20 + Math.random() * 88
+  const sy = -10 + Math.random() * 52
+  return {
+    sx: `${sx.toFixed(1)}%`, sy: `${sy.toFixed(1)}%`, ang: `${theta.toFixed(1)}deg`,
+    dx: `${(dist * Math.cos(rad)).toFixed(1)}%`, dy: `${(dist * Math.sin(rad)).toFixed(1)}%`,
+    speed: (0.4 + Math.random() * 0.7).toFixed(2),
+  }
+}
+
+function MeteorShowerStreak() {
+  const [shot, setShot] = useState(null)
+  useEffect(() => {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    let alive = true, k = 0, timer
+    const fire = () => {
+      if (!alive) return
+      setShot({ key: ++k, ...rollMeteorShower() })
+      timer = setTimeout(fire, 1500 + Math.random() * 2600)
+    }
+    timer = setTimeout(fire, Math.random() * 2500)
+    return () => { alive = false; clearTimeout(timer) }
+  }, [])
+  if (!shot) return null
+  return (
+    <div key={shot.key} aria-hidden style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none', willChange: 'transform,opacity', opacity: 0,
+      '--dx': shot.dx, '--dy': shot.dy,
+      animation: `streakOnce ${shot.speed}s linear forwards`,
+    }}>
+      <div style={{
+        position: 'absolute', left: shot.sx, top: shot.sy, width: '13%', height: '3px',
+        transform: `rotate(${shot.ang})`, transformOrigin: 'left center',
+      }}>
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(to right, rgba(200,228,255,0) 0%, rgba(208,232,255,0.22) 50%, rgba(228,244,255,0.72) 86%, rgba(248,252,255,1) 100%)',
+          clipPath: 'polygon(0 50%, 100% 0, 100% 100%)',
+        }}/>
+        <div style={{
+          position: 'absolute', right: '-3px', top: '50%', transform: 'translateY(-50%)',
+          width: '7px', height: '7px', borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(250,253,255,1), rgba(208,232,255,0.5) 45%, transparent 70%)',
+          boxShadow: '0 0 7px rgba(200,228,255,0.7)',
+        }}/>
+      </div>
+    </div>
+  )
+}
+
 function MeteorShowerAmbient() {
-  const stars = useMemo(() => Array.from({ length: 200 }, (_, i) => ({
-    left:    `${(i * 97 + i % 7 * 31) % 100}%`,
-    top:     `${(i * 83 + i % 5 * 43) % 100}%`,
-    size:    0.5 + (i % 4) * 0.4,
-    opacity: 0.25 + (i % 5) * 0.09,
-    dur:     `${10 + (i % 7) * 4}s`,
-    delay:   `-${((i / 200) * (10 + (i % 7) * 4)).toFixed(1)}s`,
-  })), [])
-  const meteors = useMemo(() => Array.from({ length: 9 }, (_, i) => ({
-    left:  `${20 + i * 7}%`,
-    top:   `${5 + (i % 4) * 14}%`,
-    width: 40 + (i % 4) * 18,
-    delay: `${i * 8 + (i % 3) * 3}s`,
-  })), [])
+  const stars = useMemo(() => Array.from({ length: 200 }, () => {
+    const op = 0.22 + Math.random() * 0.5
+    return {
+      left:  `${(Math.random() * 100).toFixed(2)}%`,
+      top:   `${(Math.random() * 100).toFixed(2)}%`,
+      size:  0.5 + Math.random() * 1.6,
+      hi:    Math.min(op, 0.85),
+      lo:    op * 0.25,
+      dur:   `${(9 + Math.random() * 18).toFixed(1)}s`,
+      delay: `-${(Math.random() * 20).toFixed(1)}s`,
+    }
+  }), [])
 
   return <>
-    {/* Deep blue-indigo night sky wash */}
-    <GlowLayer lo={0.22} hi={0.45} duration="30s" style={{
-      inset: 0,
-      background: 'radial-gradient(ellipse 100% 80% at 50% 30%, rgba(20,30,100,0.42), transparent)',
+    {/* Deep blue night sky wash */}
+    <GlowLayer lo={0.22} hi={0.42} duration="30s" style={{
+      inset: 0, background: 'radial-gradient(ellipse 100% 82% at 50% 28%, rgba(20,32,96,0.42), transparent)',
     }}/>
-    {/* Milky Way band — subtle indigo-violet */}
-    <GlowLayer lo={0.10} hi={0.28} duration="40s" delay="12s" style={{
-      inset: 0,
-      background: 'radial-gradient(ellipse 60% 25% at 50% 45%, rgba(80,60,180,0.25), transparent)',
+    {/* Faint milky-way band */}
+    <GlowLayer lo={0.10} hi={0.26} duration="40s" delay="12s" style={{
+      inset: 0, background: 'radial-gradient(ellipse 62% 24% at 48% 46%, rgba(70,80,170,0.24), transparent)',
     }}/>
+    {/* True-random twinkle field */}
     {stars.map((s, i) => (
       <div key={i} aria-hidden style={{
         position: 'absolute', left: s.left, top: s.top, pointerEvents: 'none',
         width: s.size, height: s.size, borderRadius: '50%',
-        background: `rgba(255,255,255,${Math.min(s.opacity + 0.10, 0.85)})`,
-        willChange: 'opacity',
-        '--lo': s.opacity * 0.25, '--hi': Math.min(s.opacity + 0.10, 0.85),
+        background: `rgba(255,255,255,${s.hi})`, willChange: 'opacity',
+        '--lo': s.lo, '--hi': s.hi,
         animation: `ambientBreathe ${s.dur} ${s.delay} ease infinite`,
       }}/>
     ))}
-    {meteors.map((m, i) => (
-      <div key={i} aria-hidden style={{
-        position: 'absolute', left: m.left, top: m.top, pointerEvents: 'none',
-        width: m.width, height: 1,
-        background: 'linear-gradient(to left, rgba(255,255,255,0.92), transparent)',
-        transform: 'rotate(-28deg)',
-        transformOrigin: 'right center',
-        willChange: 'transform, opacity',
-        animation: `ambientMeteor 0.18s ${m.delay}s linear infinite`,
-      }}/>
-    ))}
+    {/* Big Dipper anchor */}
+    <BigDipper/>
+    {/* Parallel meteors */}
+    <MeteorShowerStreak/><MeteorShowerStreak/><MeteorShowerStreak/><MeteorShowerStreak/>
   </>
 }
 
