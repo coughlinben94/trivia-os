@@ -3,6 +3,9 @@ export default {
   content: ['./client/index.html', './client/src/**/*.{js,jsx}'],
   theme: {
     extend: {
+      transitionTimingFunction: {
+        snap: 'cubic-bezier(0.23, 1, 0.32, 1)',
+      },
       colors: {
         baynes: {
           forest: '#004000',

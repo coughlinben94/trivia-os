@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import HostHeader from './HostHeader.jsx'
 import RoundSidebar from './RoundSidebar.jsx'
 import SlideEditor from './SlideEditor.jsx'
@@ -8,7 +8,7 @@ import AddRoundWizard from './AddRoundWizard.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
 import TickerMessageManager from './TickerMessageManager.jsx'
 
-const BTN = 'transition duration-[120ms] ease-out active:scale-[0.97]'
+const BTN = 'transition duration-[120ms] ease-snap active:scale-[0.97]'
 
 export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
@@ -67,6 +67,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
     openAddModal({ type: 'round-intro', roundId: round.id })
   }
 
+  const reducedMotion     = useReducedMotion()
   const isQuestionModal   = addModalData?.type === 'question'
   const isRoundIntroModal = addModalData?.type === 'round-intro'
 
@@ -143,15 +144,15 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
             className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            exit={{ opacity: 0, transition: { duration: 0.1 } }}
+            transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
             onClick={closeAddModal}
           >
             <motion.div
               className={`w-full ${isQuestionModal ? 'max-w-3xl' : isRoundIntroModal ? 'max-w-lg' : 'max-w-md'}`}
-              initial={{ opacity: 0, scale: 0.96 }}
+              initial={{ opacity: 0, scale: reducedMotion ? 1 : 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
+              exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96, transition: { duration: 0.1, ease: [0.23, 1, 0.32, 1] } }}
               transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
               onClick={e => e.stopPropagation()}
             >
@@ -179,15 +180,15 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
             className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            exit={{ opacity: 0, transition: { duration: 0.1 } }}
+            transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
             onClick={() => setAddRoundWizardOpen(false)}
           >
             <motion.div
               className="w-full max-w-sm"
-              initial={{ opacity: 0, scale: 0.96 }}
+              initial={{ opacity: 0, scale: reducedMotion ? 1 : 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
+              exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96, transition: { duration: 0.1, ease: [0.23, 1, 0.32, 1] } }}
               transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
               onClick={e => e.stopPropagation()}
             >
