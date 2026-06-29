@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 
 // ─── Keyframes ────────────────────────────────────────────────────────────
 const KEYFRAMES = `
@@ -124,6 +124,21 @@ const KEYFRAMES = `
     100% { transform: translateY(0); }
   }
   @keyframes ambientSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes orbit {
+    0%   { transform: translate(0%, -8%); }
+    25%  { transform: translate(11%, 0%); }
+    50%  { transform: translate(0%, 8%); }
+    75%  { transform: translate(-11%, 0%); }
+    100% { transform: translate(0%, -8%); }
+  }
+  @keyframes streakOnce {
+    0%   { transform: translate(0,0); opacity: 0; }
+    8%   { opacity: 1; }
+    45%  { transform: translate(calc(var(--dx,40%)*0.60), calc(var(--dy,40%)*0.60)); opacity: 1; }
+    72%  { transform: translate(calc(var(--dx,40%)*0.86), calc(var(--dy,40%)*0.86)); opacity: 0.55; }
+    90%  { transform: translate(calc(var(--dx,40%)*0.97), calc(var(--dy,40%)*0.97)); opacity: 0.16; }
+    100% { transform: translate(var(--dx,40%), var(--dy,40%)); opacity: 0; }
+  }
   @media (prefers-reduced-motion: reduce) {
     @keyframes ambientFallSlow    { 0%, 100% { opacity: 0; } 8%, 92%  { opacity: var(--hi, 0.8); } }
     @keyframes ambientLeafFall    { 0%, 100% { opacity: 0; } 10%, 90% { opacity: var(--hi, 0.8); } }
@@ -143,6 +158,8 @@ const KEYFRAMES = `
     @keyframes ambientWeedCrossRev { 0%,100%{opacity:0;} }
     @keyframes ambientWeedBounce { 0%,100%{transform:translateY(0);} }
     @keyframes ambientSpin { from,to { transform: rotate(0deg); } }
+    @keyframes orbit { 0%,100% { transform: none; } }
+    @keyframes streakOnce { 0%,100% { opacity: 0; } }
   }
 `
 
@@ -363,6 +380,71 @@ function PureMichiganAmbient() {
 }
 
 // ─── 2. MIDNIGHT GALAXY ───────────────────────────────────────────────────
+function GalaxyDriftGlow({ driftDur, driftDelay = '0s', driftDir = 'normal', lo, hi, breatheDur, breatheDelay = '0s', style }) {
+  return (
+    <div aria-hidden style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none', willChange: 'transform',
+      animation: `orbit ${driftDur} ease-in-out ${driftDelay} infinite ${driftDir}`,
+    }}>
+      <GlowLayer lo={lo} hi={hi} duration={breatheDur} delay={breatheDelay} style={style}/>
+    </div>
+  )
+}
+
+function galaxyRollStar() {
+  const rightward = Math.random() < 0.5
+  const dist = 45 + Math.random() * 28
+  const ang = rightward ? 35 + Math.random() * 23 : 122 + Math.random() * 23
+  const rad = ang * Math.PI / 180
+  const sx = rightward ? -10 + Math.random() * 60 : 50 + Math.random() * 60
+  const sy = -6 + Math.random() * 10
+  return {
+    sx: `${sx.toFixed(1)}%`, sy: `${sy.toFixed(1)}%`, ang: `${ang.toFixed(1)}deg`,
+    dx: `${(dist * Math.cos(rad)).toFixed(1)}%`, dy: `${(dist * Math.sin(rad)).toFixed(1)}%`,
+    speed: (0.5 + Math.random() * 0.9).toFixed(2),
+  }
+}
+
+function GalaxyShootingStar() {
+  const [shot, setShot] = useState(null)
+  useEffect(() => {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    let alive = true, k = 0, timer
+    const fire = () => {
+      if (!alive) return
+      setShot({ key: ++k, ...galaxyRollStar() })
+      timer = setTimeout(fire, 7000 + Math.random() * 5000)
+    }
+    timer = setTimeout(fire, 700 + Math.random() * 1500)
+    return () => { alive = false; clearTimeout(timer) }
+  }, [])
+  if (!shot) return null
+  return (
+    <div key={shot.key} aria-hidden style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none', willChange: 'transform,opacity', opacity: 0,
+      '--dx': shot.dx, '--dy': shot.dy,
+      animation: `streakOnce ${shot.speed}s linear forwards`,
+    }}>
+      <div style={{
+        position: 'absolute', left: shot.sx, top: shot.sy, width: '14%', height: '3px',
+        transform: `rotate(${shot.ang})`, transformOrigin: 'left center',
+      }}>
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(to right, rgba(210,160,255,0) 0%, rgba(214,164,255,0.22) 50%, rgba(236,212,255,0.72) 86%, rgba(250,244,255,1) 100%)',
+          clipPath: 'polygon(0 50%, 100% 0, 100% 100%)',
+        }}/>
+        <div style={{
+          position: 'absolute', right: '-3px', top: '50%', transform: 'translateY(-50%)',
+          width: '7px', height: '7px', borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(252,246,255,1), rgba(214,164,255,0.5) 45%, transparent 70%)',
+          boxShadow: '0 0 7px rgba(220,170,255,0.7)',
+        }}/>
+      </div>
+    </div>
+  )
+}
+
 function MidnightGalaxyAmbient() {
   const stars = useMemo(() => Array.from({ length: 120 }, (_, i) => ({
     left:    `${(i * 97 + i % 7 * 31) % 100}%`,
@@ -374,21 +456,23 @@ function MidnightGalaxyAmbient() {
   })), [])
 
   return <>
-    {/* Large purple nebula cloud — right-center */}
-    <GlowLayer lo={0.35} hi={0.70} duration="22s" style={{
-      top: '5%', right: '-5%', width: '65%', height: '60%',
-      background: 'radial-gradient(ellipse, rgba(120,40,220,0.60), transparent 70%)',
+    {/* GLOW 1 — home upper-right, slow orbit */}
+    <GalaxyDriftGlow driftDur="74s" lo={0.30} hi={0.56} breatheDur="22s" style={{
+      top: '-4%', right: '-8%', width: '54%', height: '54%',
+      background: 'radial-gradient(ellipse, rgba(150,80,225,0.50), transparent 70%)',
     }}/>
-    {/* Pink/magenta accent nebula — upper left */}
-    <GlowLayer lo={0.20} hi={0.52} duration="28s" delay="8s" style={{
-      top: '-5%', left: '-10%', width: '55%', height: '50%',
-      background: 'radial-gradient(ellipse, rgba(200,40,160,0.50), transparent 70%)',
+    {/* GLOW 2 — home far-left-mid, reverse orbit */}
+    <GalaxyDriftGlow driftDur="88s" driftDir="reverse" driftDelay="-30s" lo={0.22} hi={0.48} breatheDur="26s" breatheDelay="5s" style={{
+      top: '24%', left: '-16%', width: '50%', height: '50%',
+      background: 'radial-gradient(ellipse, rgba(138,66,208,0.48), transparent 70%)',
     }}/>
-    {/* Deep blue base wash */}
-    <GlowLayer lo={0.25} hi={0.48} duration="35s" delay="4s" style={{
-      bottom: '10%', left: '20%', right: '20%', height: '40%',
-      background: 'radial-gradient(ellipse, rgba(30,60,200,0.42), transparent 70%)',
+    {/* GLOW 3 — home bottom-center, slow orbit */}
+    <GalaxyDriftGlow driftDur="66s" driftDelay="-22s" lo={0.24} hi={0.44} breatheDur="19s" breatheDelay="3s" style={{
+      bottom: '-4%', left: '18%', right: '18%', height: '46%',
+      background: 'radial-gradient(ellipse, rgba(96,66,205,0.42), transparent 72%)',
     }}/>
+    {/* Random-speed shooting stars (scheduled, one in flight) */}
+    <GalaxyShootingStar/>
     {/* Stars */}
     {stars.map((s, i) => (
       <div key={i} aria-hidden style={{
