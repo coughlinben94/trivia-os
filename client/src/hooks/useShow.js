@@ -225,6 +225,8 @@ export function useShow() {
       title: data.title ?? `Round ${show.rounds.length + 1}`,
       subtitle: data.subtitle ?? '',
       type: data.type ?? 'standard',
+      roundType: data.roundType ?? 'normal',
+      ...(data.roundNumber !== undefined ? { roundNumber: data.roundNumber } : {}),
       slides: [],
     }
     const newRounds = [...show.rounds, round]

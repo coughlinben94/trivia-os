@@ -1,30 +1,33 @@
 import { useState, useEffect } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import HostHeader from './HostHeader.jsx'
 import RoundSidebar from './RoundSidebar.jsx'
 import SlideEditor from './SlideEditor.jsx'
-import AddSlideWizard from './AddSlideWizard.jsx'
+import AddSlideWizard, { TYPE_CARDS } from './AddSlideWizard.jsx'
+import AddRoundWizard from './AddRoundWizard.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
 import TickerMessageManager from './TickerMessageManager.jsx'
-import { sortedSlides } from '../../hooks/useShow.js'
+
+const BTN = 'transition duration-[120ms] ease-out active:scale-[0.97]'
 
 export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
   const [showTickerManager, setShowTickerManager] = useState(false)
   const [mode, setMode] = useState('wizard')
   const [selectedSlide, setSelectedSlide] = useState(null)
-  const [wizardInitialData, setWizardInitialData] = useState({})
-  const [wizardKey, setWizardKey] = useState(0)
+  const [addModalData, setAddModalData] = useState(null)  // null = modal closed
+  const [addRoundWizardOpen, setAddRoundWizardOpen] = useState(false)
 
-  // Always use the live version of the selected slide from show data
   const syncedSelectedSlide = selectedSlide
     ? (show.slides.find(s => s.id === selectedSlide.id) ?? selectedSlide)
     : null
 
-  function enterWizard(initialData = {}) {
-    setSelectedSlide(null)
-    setMode('wizard')
-    setWizardInitialData(initialData)
-    setWizardKey(k => k + 1)
+  function openAddModal(initialData = {}) {
+    setAddModalData(initialData)
+  }
+
+  function closeAddModal() {
+    setAddModalData(null)
   }
 
   function enterEditing(slide) {
@@ -32,24 +35,39 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
     setMode('editing')
   }
 
-  // Escape returns to wizard, preserving round context
+  function returnToDashboard() {
+    setSelectedSlide(null)
+    setMode('wizard')
+  }
+
+  // Unified Esc handler: modal close takes priority over editing escape
   useEffect(() => {
     function onKeyDown(e) {
-      if (e.key === 'Escape' && mode === 'editing') {
+      if (e.key !== 'Escape') return
+      if (addRoundWizardOpen) {
+        setAddRoundWizardOpen(false)
+      } else if (addModalData !== null) {
+        setAddModalData(null)
+      } else if (mode === 'editing') {
         setSelectedSlide(null)
         setMode('wizard')
-        setWizardInitialData({ roundId: selectedSlide?.roundId })
-        setWizardKey(k => k + 1)
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [mode, selectedSlide])
+  }, [addRoundWizardOpen, addModalData, mode])
 
-  async function handleAddRound() {
-    const round = await actions.addRound({})
-    enterWizard({ type: 'round-intro', roundId: round.id })
+  function handleAddRound() {
+    setAddRoundWizardOpen(true)
   }
+
+  async function handleRoundWizardAdd(data) {
+    setAddRoundWizardOpen(false)
+    const round = await actions.addRound(data)
+    openAddModal({ type: 'round-intro', roundId: round.id })
+  }
+
+  const isQuestionModal = addModalData?.type === 'question'
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden">
@@ -73,7 +91,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
           onDeleteRound={actions.deleteRound}
           onDeleteSlide={async (id) => {
             await actions.deleteSlide(id)
-            if (syncedSelectedSlide?.id === id) enterWizard()
+            if (syncedSelectedSlide?.id === id) returnToDashboard()
           }}
         />
 
@@ -86,26 +104,100 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
               onUpdateSlide={actions.updateSlide}
               onDeleteSlide={async (id) => {
                 await actions.deleteSlide(id)
-                enterWizard()
+                returnToDashboard()
               }}
-              onClose={() => enterWizard({ roundId: syncedSelectedSlide.roundId })}
+              onClose={() => returnToDashboard()}
               uploadMedia={actions.uploadMedia}
               getHostPhotos={actions.getHostPhotos}
               addSiblingSlides={actions.addSiblingSlides}
             />
           ) : (
-            <AddSlideWizard
-              key={wizardKey}
-              show={show}
-              onAddSlide={async (slideData) => {
-                const slide = await actions.addSlide(slideData)
-                if (slide) enterEditing(slide)
-              }}
-              initialData={wizardInitialData}
-            />
+            /* Dashboard rest state — type picker grid */
+            <div className="h-full flex flex-col items-center justify-center p-8">
+              <div className="w-full max-w-xl">
+                <p className="text-sm text-gray-400 text-center mb-6">What are we adding?</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {TYPE_CARDS.map(card => (
+                    <button
+                      key={card.type}
+                      onClick={() => openAddModal({ type: card.type })}
+                      className={`flex flex-col gap-2 p-4 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 text-left group min-h-[100px] ${BTN}`}
+                    >
+                      <span className="text-2xl leading-none">{card.icon}</span>
+                      <span className="text-sm font-semibold text-gray-800 group-hover:text-[#1a6b4a] transition-colors duration-[120ms]">{card.name}</span>
+                      <span className="text-xs text-gray-400 leading-snug">{card.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
         </main>
       </div>
+
+      {/* Add slide modal — reuses FormatLibrary's exact overlay primitive + framer-motion enter/exit */}
+      <AnimatePresence>
+        {addModalData !== null && (
+          <motion.div
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={closeAddModal}
+          >
+            <motion.div
+              className={`w-full ${isQuestionModal ? 'max-w-3xl' : 'max-w-md'}`}
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+              onClick={e => e.stopPropagation()}
+            >
+              <AddSlideWizard
+                key={addModalData.type + (addModalData.roundId ?? '')}
+                show={show}
+                initialData={addModalData}
+                onAddSlide={async (slideData) => {
+                  const slide = await actions.addSlide(slideData)
+                  if (slide) {
+                    closeAddModal()
+                    enterEditing(slide)
+                  }
+                }}
+                onClose={closeAddModal}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {addRoundWizardOpen && (
+          <motion.div
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={() => setAddRoundWizardOpen(false)}
+          >
+            <motion.div
+              className="w-full max-w-sm"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+              onClick={e => e.stopPropagation()}
+            >
+              <AddRoundWizard
+                onAdd={handleRoundWizardAdd}
+                onClose={() => setAddRoundWizardOpen(false)}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {showFormatLibrary && (
         <FormatLibrary onClose={() => setShowFormatLibrary(false)} />
