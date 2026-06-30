@@ -112,47 +112,6 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme }) {
                   }}
                 />
 
-                {/* Q badge — top-left */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: 60,
-                    top: 56,
-                    width: 128,
-                    height: 128,
-                    borderRadius: '50%',
-                    background: previewTheme.colors.accent,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 2,
-                  }}
-                >
-                  <span style={{
-                    fontFamily: "'Boogaloo', sans-serif",
-                    color: previewTheme.colors.highlight,
-                    fontSize: 56,
-                    lineHeight: 1,
-                  }}>Q1</span>
-                </div>
-
-                {/* Q·R counter — top-right */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 36,
-                    right: 56,
-                    fontFamily: "'DM Sans', sans-serif",
-                    color: `${previewTheme.colors.text}50`,
-                    fontSize: 24,
-                    fontWeight: 600,
-                    letterSpacing: '0.05em',
-                    zIndex: 2,
-                  }}
-                >
-                  Q1 · R1
-                </div>
-
                 {/* Sample question text */}
                 <div
                   style={{
