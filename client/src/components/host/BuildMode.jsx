@@ -317,7 +317,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                     <span className="text-xs text-gray-500 leading-snug">Edit pre-show ticker messages</span>
                   </button>
                   <button
-                    onClick={() => window.open('/shows', '_blank')}
+                    onClick={() => window.open('/dashboard', '_blank')}
                     className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['data']}`}
                   >
                     <span className="text-3xl leading-none">📊</span>
