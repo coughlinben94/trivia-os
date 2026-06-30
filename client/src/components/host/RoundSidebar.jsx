@@ -236,7 +236,11 @@ export default function RoundSidebar({
             <div
               key={round.id}
               data-round-id={round.id}
-              className={`border-t border-gray-100 first:border-t-0 ${roundDragging ? 'opacity-40' : ''} ${roundBefore ? 'border-t-2 border-t-blue-400' : ''} ${roundAfter ? 'border-b-2 border-b-blue-400' : ''}`}
+              className={`border-t border-gray-100 first:border-t-0 ${roundDragging ? 'opacity-40' : ''}`}
+              style={{
+                ...(roundBefore && { borderTop:    '2px solid #60a5fa' }),
+                ...(roundAfter  && { borderBottom: '2px solid #60a5fa' }),
+              }}
             >
               {/* Round header */}
               <div className="flex items-center gap-1.5 px-3 py-2 group">
