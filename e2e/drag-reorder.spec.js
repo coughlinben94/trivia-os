@@ -91,3 +91,38 @@ test('drag State of Union (general, order=1) above Q1 (Round 1, order=0)', async
   expect(order[0], 'State of Union should now be first').toMatch(/State of Union/)
   expect(order[1], 'Q1 should now be second').toMatch(/Q1/)
 })
+
+test('drag State of Union over Round 1 header drops before the round', async ({ page }) => {
+  // Reset: ensure SOU is after Round 1 again (beforeAll may have been changed by prior test)
+  const { data: show } = await sb.from('shows').select('slides').eq('id', TEST_SHOW_ID).single()
+  const slides = show.slides.map(s => {
+    if (s.type === 'title') return { ...s, order: 1 }
+    return { ...s, order: 0 }
+  })
+  await sb.from('shows').update({ slides }).eq('id', TEST_SHOW_ID)
+
+  await gotoEditor(page)
+
+  const aside = page.locator('aside')
+  await expect(aside.getByText('State of Union')).toBeVisible()
+
+  // Get the round header row (the "R1 · Round 1" label area)
+  const roundHeader = aside.getByText(/R1\s*·/).locator('..')
+  const souRow = aside.getByText('State of Union').locator('..')
+
+  const souBox = await souRow.boundingBox()
+  const rhdBox = await roundHeader.boundingBox()
+
+  // Drag from State of Union to the round header
+  await page.mouse.move(souBox.x + 6, souBox.y + souBox.height / 2)
+  await page.mouse.down()
+  await page.waitForTimeout(100)
+  await page.mouse.move(rhdBox.x + rhdBox.width / 2, rhdBox.y + rhdBox.height / 2, { steps: 10 })
+  await page.waitForTimeout(100)
+  await page.mouse.up()
+  await page.waitForTimeout(1000)
+
+  const order = await getSlideOrder()
+  console.log('Header-drop order:', order)
+  expect(order[0]).toMatch(/State of Union/)
+})

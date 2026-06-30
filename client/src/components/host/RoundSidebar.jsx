@@ -205,16 +205,13 @@ export default function RoundSidebar({
               onDrop={e => handleDrop(e, round.id, 'round')}
             >
               {/* Round header */}
-              <div
-                className="flex items-center gap-1.5 px-3 py-2 group"
-                draggable
-                onDragStart={() => handleRoundDragStart(round.id)}
-                onDragEnd={handleDragEnd}
-              >
+              <div className="flex items-center gap-1.5 px-3 py-2 group">
                 <span
                   className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 text-xs leading-none"
                   title="Drag to reorder round"
-                  onMouseDown={e => e.stopPropagation()}
+                  draggable
+                  onDragStart={e => { e.stopPropagation(); handleRoundDragStart(round.id) }}
+                  onDragEnd={e => { e.stopPropagation(); handleDragEnd() }}
                 >
                   ⠿
                 </span>
