@@ -38,11 +38,14 @@ export default function RoundSidebar({
   onUpdateRound,
   onDeleteRound,
   onDeleteSlide,
+  onReorderSlides,
 }) {
   const [collapsedRounds, setCollapsedRounds] = useState(new Set())
   const [renamingRound, setRenamingRound] = useState(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [confirmDeleteRound, setConfirmDeleteRound] = useState(null)
+  const [draggedId, setDraggedId] = useState(null)
+  const [dragOverId, setDragOverId] = useState(null)
 
   if (!show) return null
 
@@ -91,6 +94,38 @@ export default function RoundSidebar({
     setRenamingRound(null)
   }
 
+  function handleDragStart(id) {
+    setDraggedId(id)
+  }
+
+  function handleDragOver(e, id) {
+    e.preventDefault()
+    if (id !== draggedId) setDragOverId(id)
+  }
+
+  function handleDrop(e, targetId) {
+    e.preventDefault()
+    if (!draggedId || !onReorderSlides) { clear(); return }
+    if (draggedId === targetId) { clear(); return }
+
+    const ids = sorted.map(s => s.id)
+    const next = [...ids]
+    next.splice(next.indexOf(draggedId), 1)
+    const newTarget = next.indexOf(targetId)
+    next.splice(newTarget, 0, draggedId)
+    onReorderSlides(next)
+    clear()
+  }
+
+  function handleDragEnd() { clear() }
+
+  function clear() {
+    setDraggedId(null)
+    setDragOverId(null)
+  }
+
+  const dragProps = { onDragStart: handleDragStart, onDragOver: handleDragOver, onDrop: handleDrop, onDragEnd: handleDragEnd }
+
   return (
     <aside className="w-56 bg-gray-50 border-r border-gray-100 flex flex-col overflow-hidden shrink-0">
       <div className="flex-1 overflow-y-auto py-1">
@@ -105,8 +140,11 @@ export default function RoundSidebar({
                     key={slide.id}
                     slide={slide}
                     selected={slide.id === selectedSlideId}
+                    dragging={slide.id === draggedId}
+                    dragOver={slide.id === dragOverId}
                     onSelect={() => onSelectSlide(slide)}
                     onDelete={() => onDeleteSlide(slide.id)}
+                    dragProps={dragProps}
                   />
                 ))}
               </div>
@@ -179,8 +217,11 @@ export default function RoundSidebar({
                       key={slide.id}
                       slide={slide}
                       selected={slide.id === selectedSlideId}
+                      dragging={slide.id === draggedId}
+                      dragOver={slide.id === dragOverId}
                       onSelect={() => onSelectSlide(slide)}
                       onDelete={() => onDeleteSlide(slide.id)}
+                      dragProps={dragProps}
                       indent
                     />
                   ))}
@@ -205,20 +246,32 @@ export default function RoundSidebar({
   )
 }
 
-function SlideRow({ slide, selected, onSelect, onDelete, indent }) {
+function SlideRow({ slide, selected, dragging, dragOver, onSelect, onDelete, dragProps, indent }) {
   const meta = SLIDE_TYPE_META[slide.type] ?? { icon: '📄', label: slide.type }
   const label = slideLabel(slide)
 
   return (
     <div
-      className={`group flex items-center gap-2 px-3 cursor-pointer transition-colors ${
+      draggable
+      onDragStart={() => dragProps.onDragStart(slide.id)}
+      onDragOver={e => dragProps.onDragOver(e, slide.id)}
+      onDrop={e => dragProps.onDrop(e, slide.id)}
+      onDragEnd={dragProps.onDragEnd}
+      className={`group flex items-center gap-2 px-3 cursor-pointer transition-colors select-none ${
         selected
           ? 'border-l-2 border-[#1a6b4a] bg-white'
           : 'border-l-2 border-transparent hover:bg-gray-100'
-      } ${indent ? 'ml-4' : ''}`}
+      } ${indent ? 'ml-4' : ''} ${dragging ? 'opacity-40' : ''} ${dragOver ? 'border-t-2 border-t-blue-400' : ''}`}
       style={{ height: 36 }}
       onClick={onSelect}
     >
+      <span
+        className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 text-xs leading-none"
+        title="Drag to reorder"
+        onMouseDown={e => e.stopPropagation()}
+      >
+        ⠿
+      </span>
       <span className="text-sm shrink-0 leading-none">{meta.icon}</span>
       <span className={`text-sm flex-1 truncate ${selected ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
         {label}

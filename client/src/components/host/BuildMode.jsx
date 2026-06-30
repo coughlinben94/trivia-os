@@ -98,6 +98,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
             await actions.deleteSlide(id)
             if (syncedSelectedSlide?.id === id) returnToDashboard()
           }}
+          onReorderSlides={actions.reorderSlides}
         />
 
         <main className="flex-1 overflow-hidden bg-white">
