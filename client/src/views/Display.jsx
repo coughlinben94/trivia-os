@@ -288,15 +288,26 @@ export default function Display() {
         const res = await supabase.from('shows').select('*').eq('id', showId).single()
         data = res.data
       } else {
-        // No URL param — load the most recently created show
-        const { data: res, error } = await supabase
+        // No URL param — prefer the currently live show, fall back to most recently updated
+        const { data: liveRes } = await supabase
           .from('shows')
           .select('*')
-          .order('created_at', { ascending: false })
+          .eq('is_live', true)
+          .order('updated_at', { ascending: false })
           .limit(1)
           .single()
-        if (error) console.error('[Display] show fetch error:', error)
-        data = res
+        if (liveRes) {
+          data = liveRes
+        } else {
+          const { data: res, error } = await supabase
+            .from('shows')
+            .select('*')
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .single()
+          if (error) console.error('[Display] show fetch error:', error)
+          data = res
+        }
       }
 
       if (data) {
@@ -344,6 +355,26 @@ export default function Display() {
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [show?.id])
+
+  // Watch for any show going live — if it's not the one we're showing, switch to it
+  useEffect(() => {
+    if (showId || isDemo) return
+    const global = supabase
+      .channel('display:any-live')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'shows' },
+        (payload) => {
+          const next = payload.new
+          if (next.is_live && next.id !== show?.id) {
+            prevIndexRef.current = next.current_slide_index ?? 0
+            setShow({ ...next, theme: next.theme_id ?? next.theme })
+          }
+        }
+      )
+      .subscribe()
+    return () => supabase.removeChannel(global)
+  }, [show?.id, showId, isDemo])
 
   if (isDemo) {
     const demoThemeId = searchParams.get('theme') ?? 'pure-michigan'
