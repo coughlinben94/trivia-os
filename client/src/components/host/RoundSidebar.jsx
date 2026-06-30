@@ -103,6 +103,7 @@ export default function RoundSidebar({
     if (targetType === 'round-before' || targetType === 'round-after') {
       targetBlockIdx = b.findIndex(bl => bl.roundId === targetKey)
     } else {
+      // slide-before or slide-after
       targetBlockIdx = b.findIndex(bl => bl.slides.some(s => s.id === targetKey))
     }
     if (draggedBlockIdx === -1 || targetBlockIdx === -1) return null
@@ -110,24 +111,27 @@ export default function RoundSidebar({
     const next = [...b]
     const [removed] = next.splice(draggedBlockIdx, 1)
 
+    const insertAfter = targetType === 'round-after' || targetType === 'slide-after'
     let adjusted
-    if (targetType === 'round-after') {
-      // insert after the round block
+    if (insertAfter) {
       adjusted = draggedBlockIdx < targetBlockIdx ? targetBlockIdx : targetBlockIdx + 1
     } else {
-      // round-before or slide: insert at (before) the target
       adjusted = draggedBlockIdx < targetBlockIdx ? targetBlockIdx - 1 : targetBlockIdx
     }
 
-    if (adjusted === draggedBlockIdx) return null  // no-op
+    if (adjusted === draggedBlockIdx) return null
     next.splice(adjusted, 0, removed)
     return next.flatMap(bl => bl.slides.map(s => s.id))
   }
 
-  // Walk up the DOM from a point. For rounds, Y position picks before/after.
+  // Walk up the DOM. Top half of target = before, bottom half = after.
   function findDropTarget(el, clientY) {
     while (el && el !== document.body) {
-      if (el.dataset?.slideId) return { id: el.dataset.slideId, type: 'slide' }
+      if (el.dataset?.slideId) {
+        const rect = el.getBoundingClientRect()
+        const pos  = clientY < rect.top + rect.height / 2 ? 'slide-before' : 'slide-after'
+        return { id: el.dataset.slideId, type: pos }
+      }
       if (el.dataset?.roundId) {
         const rect = el.getBoundingClientRect()
         const pos  = clientY < rect.top + rect.height / 2 ? 'round-before' : 'round-after'
@@ -217,7 +221,8 @@ export default function RoundSidebar({
                     slide={slide}
                     selected={slide.id === selectedSlideId}
                     dragging={dragged?.id === slide.id}
-                    dragOver={dragOverId === slide.id && dragOverType === 'slide'}
+                    dragBefore={dragOverId === slide.id && dragOverType === 'slide-before'}
+                    dragAfter={dragOverId === slide.id && dragOverType === 'slide-after'}
                     onSelect={() => onSelectSlide(slide)}
                     onDelete={() => onDeleteSlide(slide.id)}
                     onGripDown={e => handleGripDown(e, slide.id, 'slide')}
@@ -336,7 +341,7 @@ export default function RoundSidebar({
   )
 }
 
-function SlideRow({ slide, selected, dragging, dragOver, onSelect, onDelete, onGripDown, indent }) {
+function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, onDelete, onGripDown, indent }) {
   const meta  = SLIDE_TYPE_META[slide.type] ?? { icon: '📄', label: slide.type }
   const label = slideLabel(slide)
 
@@ -347,7 +352,7 @@ function SlideRow({ slide, selected, dragging, dragOver, onSelect, onDelete, onG
         selected
           ? 'border-l-2 border-[#1a6b4a] bg-white'
           : 'border-l-2 border-transparent hover:bg-gray-100'
-      } ${indent ? 'ml-4' : ''} ${dragging ? 'opacity-40' : ''} ${dragOver ? 'border-t-2 border-t-blue-400' : ''}`}
+      } ${indent ? 'ml-4' : ''} ${dragging ? 'opacity-40' : ''} ${dragBefore ? 'border-t-2 border-t-blue-400' : ''} ${dragAfter ? 'border-b-2 border-b-blue-400' : ''}`}
       style={{ height: 36 }}
       onClick={onSelect}
     >
