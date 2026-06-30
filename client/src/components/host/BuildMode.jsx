@@ -128,24 +128,22 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                     <button
                       key={card.type}
                       onClick={() => openAddModal({ type: card.type })}
-                      className={`flex flex-col gap-2 p-4 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 text-left group min-h-[100px] ${BTN}`}
+                      className={`flex flex-col items-center justify-center gap-2 p-5 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 text-center group min-h-[120px] ${BTN}`}
                     >
                       <span className="text-2xl leading-none">{card.icon}</span>
                       <span className="text-sm font-semibold text-gray-800 group-hover:text-[#1a6b4a] transition-colors duration-[120ms]">{card.name}</span>
                       <span className="text-xs text-gray-400 leading-snug">{card.desc}</span>
                     </button>
                   ))}
+                  <button
+                    onClick={() => { window.location.href = '/questions' }}
+                    className={`flex flex-col items-center justify-center gap-2 p-5 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 text-center group min-h-[120px] ${BTN}`}
+                  >
+                    <span className="text-2xl leading-none">🗃️</span>
+                    <span className="text-sm font-semibold text-gray-800 group-hover:text-[#1a6b4a] transition-colors duration-[120ms]">Question Database</span>
+                    <span className="text-xs text-gray-400 leading-snug">Browse and search your question archive</span>
+                  </button>
                 </div>
-                <button
-                  onClick={() => { window.location.href = '/questions' }}
-                  className={`mt-3 flex items-center gap-3 w-full p-4 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 group ${BTN}`}
-                >
-                  <span className="text-2xl leading-none">🗃️</span>
-                  <div className="text-left">
-                    <p className="text-sm font-semibold text-gray-800 group-hover:text-[#1a6b4a] transition-colors duration-[120ms]">Question Database</p>
-                    <p className="text-xs text-gray-400 leading-snug">Browse and search your question archive</p>
-                  </div>
-                </button>
               </div>
             </div>
           )}
