@@ -213,36 +213,6 @@ function PreviewSlide() {
         }}
       />
 
-      {/* Q1 badge — top-left */}
-      <div
-        className="absolute left-12 z-10 flex items-center justify-center rounded-full"
-        style={{ top: 40, width: 96, height: 96, background: theme.colors.accent }}
-      >
-        <span
-          style={{
-            fontFamily: "'Boogaloo', sans-serif",
-            color: theme.colors.highlight,
-            fontSize: '2.25rem',
-            fontWeight: 700,
-            lineHeight: 1,
-          }}
-        >Q1</span>
-      </div>
-
-      {/* Q1 · R1 counter — top-right */}
-      <div
-        className="absolute top-5 right-8 z-50"
-        style={{
-          fontFamily: "'DM Sans', sans-serif",
-          color: `${theme.colors.text}55`,
-          fontSize: '0.75rem',
-          fontWeight: 600,
-          letterSpacing: '0.05em',
-        }}
-      >
-        Q1 · R1
-      </div>
-
       {/* Sample question text — centered */}
       <div className="absolute inset-0 flex items-center justify-center px-24 py-20">
         <p

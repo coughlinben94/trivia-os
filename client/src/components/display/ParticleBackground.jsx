@@ -1073,41 +1073,145 @@ function SandDuneChillAmbient() {
 }
 
 // ─── 9. HALLOWEEN ────────────────────────────────────────────────────────
+// Moonlit purple graveyard: mausoleum, headstones, cross, zombie hand, bats, fog
+const HW = {
+  skyTop:    "#0c0518",
+  skyMid:    "#1c0d38",
+  skyHorizon:"#311452",
+  moon:      "#e0c0f8",
+  moonGlow:  "#9a5fd0",
+  fog:       "#8f7ab8",
+  fogPale:   "#cdb6ea",
+  ink:       "#060109",
+}
+
+const HW_STYLE = `
+@keyframes hwFogR { 0%{transform:translateX(-32%);opacity:0} 15%{opacity:var(--op,.45)} 85%{opacity:var(--op,.45)} 100%{transform:translateX(32%);opacity:0} }
+@keyframes hwFogL { 0%{transform:translateX(32%);opacity:0} 15%{opacity:var(--op,.45)} 85%{opacity:var(--op,.45)} 100%{transform:translateX(-32%);opacity:0} }
+@keyframes hwMoon { 0%,100%{opacity:.82} 50%{opacity:1} }
+@keyframes hwBatFlap { 0%,100%{transform:scaleX(1)} 50%{transform:scaleX(.62)} }
+@keyframes zhTwitch { 0%,85%{transform:rotate(0deg)} 88%{transform:rotate(3.5deg)} 91%{transform:rotate(-2.5deg)} 94%{transform:rotate(1.8deg)} 97%,100%{transform:rotate(0deg)} }
+@media (prefers-reduced-motion: reduce){ .hw-anim{ animation:none !important } }
+`
+
+function hwRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
+}
+
+function HwHeadstone({ left, w, h, round, bottom = "6%" }) {
+  return <div style={{ position: "absolute", left, bottom, width: w, height: h, background: HW.ink, borderRadius: round }} />
+}
+
+function HwCross({ left, w, h, bottom = "6%" }) {
+  return (
+    <div style={{ position: "absolute", left, bottom, width: w, height: h }}>
+      <div style={{ position: "absolute", left: "39%", width: "22%", height: "100%", background: HW.ink, borderRadius: "26% 26% 0 0" }} />
+      <div style={{ position: "absolute", top: "20%", left: 0, width: "100%", height: "15%", background: HW.ink, borderRadius: "2px" }} />
+    </div>
+  )
+}
+
+function HwMausoleum({ left, w, h, bottom = "6%" }) {
+  const k = HW.ink
+  return (
+    <div style={{ position: "absolute", left, bottom, width: w, height: h }}>
+      <div style={{ position: "absolute", top: 0, left: "47%", width: "6%", height: "8%", background: k }} />
+      <div style={{ position: "absolute", top: "2%", left: "43%", width: "14%", height: "3%", background: k }} />
+      <div style={{ position: "absolute", top: "7%", left: "-7%", width: "114%", height: "17%", background: k, clipPath: "polygon(50% 0, 100% 100%, 0 100%)" }} />
+      <div style={{ position: "absolute", top: "23%", left: "-4%", width: "108%", height: "5%", background: k }} />
+      <div style={{ position: "absolute", top: "27%", left: "7%", width: "86%", height: "57%", background: k }} />
+      <div style={{ position: "absolute", top: "83%", left: "1%", width: "98%", height: "8%", background: k }} />
+      <div style={{ position: "absolute", top: "91%", left: "-8%", width: "116%", height: "9%", background: k }} />
+    </div>
+  )
+}
+
+function HwZombieHand({ left, bottom, w, h }) {
+  const k = HW.ink
+  return (
+    <div style={{ position: "absolute", left, bottom, width: w, height: h }}>
+      <svg viewBox="0 0 200 300" width="100%" height="100%" preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }}>
+        <g fill={k} stroke={k} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M84 176 L90 290 L100 274 L110 292 L120 274 L128 290 L132 176 Z" />
+          <g className="hw-anim" style={{ transformBox: "view-box", transformOrigin: "108px 182px", animation: "zhTwitch 8s ease-in-out infinite" }}>
+            <g transform="rotate(-45 108 182)">
+              <ellipse cx="108" cy="150" rx="36" ry="34" />
+              <path d="M86 160 Q50 156 44 128 Q46 114 60 112" fill="none" strokeWidth="25" />
+              <path d="M88 120 Q74 84 70 46 Q70 60 84 58" fill="none" strokeWidth="20" />
+              <path d="M104 116 Q102 72 106 30 Q108 46 120 44" fill="none" strokeWidth="21" />
+              <path d="M120 118 Q134 84 140 48 Q140 62 128 62" fill="none" strokeWidth="20" />
+              <path d="M134 124 Q152 100 160 74 Q158 88 150 88" fill="none" strokeWidth="17" />
+            </g>
+          </g>
+        </g>
+      </svg>
+    </div>
+  )
+}
+
+function HwBat({ id, base, size, dur, flap }) {
+  return (
+    <div className="hw-anim" style={{ position: "absolute", left: `${base.l}%`, top: `${base.t}%`, animation: `hwBatFly_${id} ${dur}s ease-in-out infinite`, willChange: "transform" }}>
+      <svg className="hw-anim" width={size} height={size * 0.5} viewBox="0 0 24 12" style={{ display: "block", animation: `hwBatFlap ${flap}s ease-in-out infinite`, transformOrigin: "center" }}>
+        <path d="M12 5 C11 2.5 8.5 2 6 3 C4 3.8 3 3 1 4 C2.5 4.4 2.8 5.6 4.2 5.8 C3 6.4 3.4 7.6 5 7.4 C7 7.2 8 6 9 7 C9.7 6 11 5.8 12 7 C13 5.8 14.3 6 15 7 C16 6 17 7.2 19 7.4 C20.6 7.6 21 6.4 19.8 5.8 C21.2 5.6 21.5 4.4 23 4 C21 3 20 3.8 18 3 C15.5 2 13 2.5 12 5 Z" fill={hwRgba(HW.ink, 0.95)} />
+      </svg>
+    </div>
+  )
+}
+
 function HalloweenAmbient() {
-  const embers = useMemo(() => Array.from({ length: 10 }, (_, i) => ({
-    left:  `${30 + (i % 5) * 8 - 8}%`,
-    size:  1.5 + (i % 3) * 0.8,
-    dur:   `${2.5 + (i % 4) * 0.8}s`,
-    delay: `-${((i / 10) * (2.5 + (i % 4) * 0.8)).toFixed(1)}s`,
+  const fog = useMemo(() => {
+    const N = 8
+    return Array.from({ length: N }, (_, i) => {
+      const w = Math.random() * 30 + 44
+      const cx = ((i + 0.5) / N) * 92 + 4 + (Math.random() * 8 - 4)
+      return {
+        top: (Math.random() * 36 + 7).toFixed(1) + "%",
+        w: w.toFixed(0) + "%",
+        left: (cx - w / 2).toFixed(1) + "%",
+        op: (Math.random() * 0.16 + 0.38).toFixed(2),
+        dur: (Math.random() * 26 + 46).toFixed(0),
+        delay: (-Math.random() * 60).toFixed(0),
+        dir: Math.random() < 0.5 ? "R" : "L",
+      }
+    })
+  }, [])
+
+  const bats = useMemo(() => Array.from({ length: 3 }, (_, i) => ({
+    id: i,
+    base: { l: +(Math.random() * 70 + 12).toFixed(1), t: +(Math.random() * 18 + 4).toFixed(1) },
+    pts: Array.from({ length: 3 }, () => ({ x: +(Math.random() * 24 - 12).toFixed(1), y: +(Math.random() * 12 - 6).toFixed(1) })),
+    size: Math.round(Math.random() * 10 + 14),
+    dur: (Math.random() * 12 + 15).toFixed(0),
+    flap: (Math.random() * 0.14 + 0.34).toFixed(2),
   })), [])
 
-  return <>
-    {/* Jack-o-lantern orange — left edge */}
-    <GlowLayer lo={0.25} hi={0.58} duration="3.2s" flicker style={{
-      top: 0, left: 0, bottom: 0, width: '30%',
-      background: 'radial-gradient(ellipse at left center, rgba(255,90,5,0.52), transparent 75%)',
-    }}/>
-    {/* Jack-o-lantern orange — right edge */}
-    <GlowLayer lo={0.22} hi={0.52} duration="2.8s" delay="0.9s" flicker style={{
-      top: 0, right: 0, bottom: 0, width: '30%',
-      background: 'radial-gradient(ellipse at right center, rgba(240,80,5,0.48), transparent 75%)',
-    }}/>
-    {/* Orange bottom glow (jack-o-lantern floor) */}
-    <GlowLayer lo={0.20} hi={0.48} duration="2.5s" delay="1.5s" flicker style={{
-      bottom: 0, left: 0, right: 0, height: '25%',
-      background: 'linear-gradient(to top, rgba(255,80,0,0.42), transparent)',
-    }}/>
-    {/* Purple fog center */}
-    <GlowLayer lo={0.14} hi={0.38} duration="18s" delay="4s" style={{
-      top: '15%', left: '20%', right: '20%', height: '55%',
-      background: 'radial-gradient(ellipse, rgba(100,0,160,0.42), transparent 70%)',
-    }}/>
-    {/* Ember particles */}
-    {embers.map((e, i) => (
-      <RisingParticle key={i} left={e.left} size={e.size}
-        color="rgba(255,100,10,0.95)" duration={e.dur} delay={e.delay} opacity={0.85}/>
-    ))}
-  </>
+  const batKeyframes = useMemo(() => bats.map((b) => {
+    const [p0, p1, p2] = b.pts
+    return `@keyframes hwBatFly_${b.id}{0%{transform:translate(0,0)}25%{transform:translate(${p0.x}vw,${p0.y}vh)}50%{transform:translate(${p1.x}vw,${p1.y}vh)}75%{transform:translate(${p2.x}vw,${p2.y}vh)}100%{transform:translate(0,0)}}`
+  }).join("\n"), [bats])
+
+  return (
+    <>
+      <style>{HW_STYLE}{batKeyframes}</style>
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden", background: `linear-gradient(to bottom, ${HW.skyTop} 18%, ${HW.skyMid} 56%, ${HW.skyHorizon} 90%)` }}>
+        <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 46% 50% at 82% 16%, ${hwRgba(HW.moonGlow, 0.4)}, transparent 60%)` }} />
+        <div style={{ position: "absolute", left: "-6%", right: "-6%", bottom: 0, height: "15%", background: `linear-gradient(to top, ${HW.ink}, ${HW.ink} 90%, transparent)`, borderRadius: "50% 50% 0 0 / 100% 100% 0 0" }} />
+        <HwMausoleum left="3%" w="8.5%" h="23%" bottom="6%" />
+        <HwHeadstone left="24%" w="4.4%" h="12.5%" bottom="11%" round="50% 50% 6% 6% / 38% 38% 6% 6%" />
+        <HwHeadstone left="34%" w="3.4%" h="10.5%" bottom="12%" round="52% 52% 6% 6% / 40% 40% 6% 6%" />
+        <HwCross left="46%" w="5%" h="15.5%" bottom="11%" />
+        <HwZombieHand left="67%" bottom="12.5%" w="6%" h="15%" />
+        <HwHeadstone left="79%" w="4.4%" h="13%" bottom="10%" round="50% 50% 6% 6% / 38% 38% 6% 6%" />
+        <div className="hw-anim" style={{ position: "absolute", inset: 0, background: `radial-gradient(circle 6.5% at 82% 16%, ${hwRgba(HW.moon, 1)} 0%, ${hwRgba(HW.moon, 0.95)} 42%, ${hwRgba(HW.moonGlow, 0.5)} 56%, transparent 70%)`, animation: "hwMoon 9s ease-in-out infinite" }} />
+        {bats.map((b) => <HwBat key={b.id} {...b} />)}
+        {fog.map((f, i) => (
+          <div key={i} className="hw-anim" style={{ position: "absolute", top: f.top, left: f.left, width: f.w, height: `calc(${f.w} * 0.26)`, ["--op"]: f.op, background: `radial-gradient(ellipse 50% 50% at 50% 50%, ${hwRgba(HW.fogPale, 0.7)}, ${hwRgba(HW.fog, 0.24)} 46%, transparent 72%)`, animation: `${f.dir === "R" ? "hwFogR" : "hwFogL"} ${f.dur}s ease-in-out ${f.delay}s infinite`, willChange: "transform, opacity" }} />
+        ))}
+      </div>
+    </>
+  )
 }
 
 // ─── 10. JAZZ CLUB ───────────────────────────────────────────────────────
@@ -1124,7 +1228,7 @@ function JcSpotlight({ fx, fy, w, alpha, dur, dir, phase }) {
         position: 'absolute', left: fx, top: fy,
         transform: 'translate(-50%,-50%)',
         width: w, aspectRatio: '1',
-        background: `radial-gradient(circle at center, rgba(74,40,8,${alpha}) 0%, rgba(74,40,8,${(alpha * 0.5).toFixed(2)}) 46%, transparent 70%)`,
+        background: `radial-gradient(circle at center, rgba(255,240,220,${alpha}) 0%, rgba(255,240,220,${(alpha * 0.5).toFixed(2)}) 46%, transparent 70%)`,
       }}/>
     </div>
   )
@@ -1149,7 +1253,7 @@ function JcGlint() {
     <div aria-hidden className="jc-anim" onAnimationIteration={reroll} style={{
       position: 'absolute', left: pos.left, top: pos.top, pointerEvents: 'none',
       width: pos.size, height: pos.size, borderRadius: '50%', willChange: 'opacity',
-      background: 'radial-gradient(circle, rgba(212,130,12,0.95), rgba(212,130,12,0.5) 40%, transparent 72%)',
+      background: 'radial-gradient(circle, rgba(255,245,235,0.95), rgba(255,245,235,0.5) 40%, transparent 72%)',
       '--gop': pos.gop,
       animation: `jcGlintPop ${durRef.current} ease-in-out ${delayRef.current} infinite`,
     }}/>
@@ -1158,22 +1262,22 @@ function JcGlint() {
 
 function JazzClubAmbient() {
   return <>
-    {/* Base: deep near-black velvet wash */}
+    {/* Base: deep stage red */}
     <div aria-hidden style={{
       position: 'absolute', inset: 0, pointerEvents: 'none',
-      background: 'radial-gradient(ellipse 120% 110% at 50% 56%, rgba(8,6,8,1), rgba(4,4,4,1) 80%)',
+      background: 'radial-gradient(ellipse 130% 110% at 50% 60%, #3a0808, #1a0404 65%, #0a0202)',
     }}/>
-    {/* Three sweeping spotlight pools */}
-    <JcSpotlight fx="32%" fy="24%" w="26.4%" alpha={0.78} dur={40} dir="cw"  phase={0}/>
-    <JcSpotlight fx="69%" fy="21%" w="25.3%" alpha={0.72} dur={43} dir="ccw" phase={-11}/>
-    <JcSpotlight fx="50%" fy="89%" w="28.6%" alpha={0.74} dur={40} dir="cw"  phase={0}/>
-    {/* Twinkling gold glints */}
+    {/* White stage spotlights sweeping */}
+    <JcSpotlight fx="32%" fy="24%" w="26.4%" alpha={0.72} dur={40} dir="cw"  phase={0}/>
+    <JcSpotlight fx="69%" fy="21%" w="25.3%" alpha={0.66} dur={43} dir="ccw" phase={-11}/>
+    <JcSpotlight fx="50%" fy="89%" w="28.6%" alpha={0.68} dur={40} dir="cw"  phase={0}/>
+    {/* Twinkling white glints */}
     <JcGlint/><JcGlint/><JcGlint/><JcGlint/><JcGlint/>
     <JcGlint/><JcGlint/><JcGlint/><JcGlint/>
-    {/* Vignette — bgDeep closing in from edges */}
+    {/* Edge vignette */}
     <div aria-hidden style={{
       position: 'absolute', inset: 0, pointerEvents: 'none',
-      background: 'radial-gradient(ellipse at center, transparent 34%, rgba(4,4,4,0.62) 100%)',
+      background: 'radial-gradient(ellipse at center, transparent 30%, rgba(4,0,0,0.7) 100%)',
     }}/>
   </>
 }
@@ -1182,17 +1286,17 @@ function JazzClubAmbient() {
 // ─── 12. DIVE BAR ────────────────────────────────────────────────────────
 const DB = {
   bg:      '#0c0008',
-  body:    '#160d12',
-  pillar:  '#201500',
-  strip:   '#cc7020',
-  red:     '#1a060a',
-  gold:    '#1c1000',
-  ctrl:    '#0c0e10',
-  base:    '#0e1012',
-  panel:   '#0d0a12',
+  body:    '#2e1a28',
+  pillar:  '#3a2200',
+  strip:   '#ff9040',
+  red:     '#3d0e18',
+  gold:    '#2a1c00',
+  ctrl:    '#1a1e22',
+  base:    '#1a1e20',
+  panel:   '#1a1430',
   signRed: '#ff2040',
   signBlu: '#3a78ff',
-  floor:   '#cc5010',
+  floor:   '#dd6015',
 }
 
 const dbRgba = (hex, a) => {
@@ -1204,20 +1308,20 @@ const dbRgba = (hex, a) => {
 
 const DB_STYLE = `
   @keyframes dbDomeCycle {
-    0%   { fill:#1a2a80; }
-    20%  { fill:#801a3a; }
-    40%  { fill:#1a6a30; }
-    60%  { fill:#6a1a70; }
-    80%  { fill:#6a4a10; }
-    100% { fill:#1a2a80; }
+    0%   { fill:#2244cc; }
+    20%  { fill:#cc1840; }
+    40%  { fill:#18aa44; }
+    60%  { fill:#9918cc; }
+    80%  { fill:#cc7818; }
+    100% { fill:#2244cc; }
   }
   @keyframes dbStripPulse {
-    0%,100% { opacity:0.6; }
+    0%,100% { opacity:0.75; }
     50%     { opacity:1; }
   }
   @keyframes dbFloat {
-    0%,100% { transform:translateY(0px); }
-    50%     { transform:translateY(-3px); }
+    0%,100% { transform:rotate(-8deg) translateY(0px); }
+    50%     { transform:rotate(-8deg) translateY(-3px); }
   }
   @keyframes dbFloorPulse {
     0%,100% { opacity:0.35; }
@@ -1282,7 +1386,7 @@ function DbSign() {
 function DbJukebox() {
   return (
     <div style={{
-      position:'absolute', bottom:'-6%', right:'2%', width:'22%',
+      position:'absolute', bottom:'-14%', right:'-5%', width:'24%',
       animation:'dbFloat 6.7s ease-in-out infinite',
     }}>
       {/* dome color-matched radiate glow */}
