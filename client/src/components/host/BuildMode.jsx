@@ -128,7 +128,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
             /* Dashboard rest state — type picker grid */
             <div className="h-full flex flex-col items-center justify-center p-8 -mt-[5%]">
               <div className="w-full max-w-2xl">
-                <p className="text-sm text-gray-400 text-center mb-6">What are we adding?</p>
                 <div className="grid grid-cols-3 gap-3">
                   {TYPE_CARDS.map(card => (
                     <button
