@@ -8,6 +8,8 @@ import AddRoundWizard from './AddRoundWizard.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
 import TickerMessageManager from './TickerMessageManager.jsx'
 import ThemePickerModal from './ThemePickerModal.jsx'
+import SwingRoundWizard from './SwingRoundWizard.jsx'
+import PYLWizard from './PYLWizard.jsx'
 
 const BTN = 'transition duration-[120ms] ease-snap active:scale-[0.97]'
 
@@ -21,6 +23,8 @@ const CARD_STYLE = {
   'theme':         'bg-gradient-to-br from-pink-50   to-fuchsia-100 border-pink-200   hover:border-pink-400',
   'ticker':        'bg-gradient-to-br from-sky-50    to-cyan-100    border-sky-200    hover:border-sky-400',
   'shiny':         'bg-gradient-to-br from-yellow-50 to-amber-100   border-yellow-200 hover:border-yellow-400',
+  'swing':         'bg-gradient-to-br from-orange-50 to-red-100     border-orange-200 hover:border-orange-400',
+  'pyl':           'bg-gradient-to-br from-purple-50 to-violet-100  border-purple-200 hover:border-purple-400',
 }
 
 export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
@@ -32,6 +36,8 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   const [addModalData, setAddModalData] = useState(null)  // null = modal closed
   const [addRoundWizardOpen, setAddRoundWizardOpen] = useState(false)
   const [activeRoundId, setActiveRoundId] = useState(null)
+  const [showSwingWizard, setShowSwingWizard] = useState(false)
+  const [showPylWizard,   setShowPylWizard]   = useState(false)
 
   // Reset active round if it gets deleted
   useEffect(() => {
@@ -39,6 +45,42 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
       setActiveRoundId(null)
     }
   }, [show?.rounds, activeRoundId])
+
+  async function handleSwingAdd(questions, roundId) {
+    setShowSwingWizard(false)
+    const sortedAll = [...(show?.slides ?? [])].sort((a, b) => a.order - b.order)
+    const roundSlides = sortedAll.filter(s => s.roundId === roundId)
+    const existingQCount = roundSlides.filter(s => s.type === 'question' && !s.data?.isBonus).length
+    const afterId = (roundSlides[roundSlides.length - 1] ?? sortedAll[sortedAll.length - 1])?.id ?? null
+    const nonEmpty = questions.filter(q => q.text.trim() || q.answer.trim())
+    const slidesData = nonEmpty.map((q, i) => ({
+      type: 'question',
+      roundId: roundId ?? null,
+      data: {
+        questionNumber: existingQCount + i + 1,
+        questionLabel:  `Q${existingQCount + i + 1}`,
+        questionMode:   'regular',
+        isShiny:        false,
+        text:           q.text.trim(),
+        answer:         q.answer.trim(),
+        mediaSlots:     [],
+      },
+    }))
+    if (slidesData.length) await actions.addSiblingSlides(afterId, slidesData)
+  }
+
+  async function handlePYLAdd(themes, roundId) {
+    setShowPylWizard(false)
+    const sortedAll = [...(show?.slides ?? [])].sort((a, b) => a.order - b.order)
+    const roundSlides = sortedAll.filter(s => s.roundId === roundId)
+    const afterId = (roundSlides[roundSlides.length - 1] ?? sortedAll[sortedAll.length - 1])?.id ?? null
+    const slidesData = themes.map((theme, i) => ({
+      type: 'pyl-reveal',
+      roundId: roundId ?? null,
+      data: { themeName: theme.name, themeType: theme.type, title: theme.name, themeIndex: i },
+    }))
+    if (slidesData.length) await actions.addSiblingSlides(afterId, slidesData)
+  }
 
   const syncedSelectedSlide = selectedSlide
     ? (show?.slides?.find(s => s.id === selectedSlide.id) ?? selectedSlide)
@@ -217,6 +259,22 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                     <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Shiny Formats</span>
                     <span className="text-xs text-gray-500 leading-snug">Add or edit shiny question styles</span>
                   </button>
+                  <button
+                    onClick={() => setShowSwingWizard(true)}
+                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['swing']}`}
+                  >
+                    <span className="text-3xl leading-none">🎷</span>
+                    <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Swing Round</span>
+                    <span className="text-xs text-gray-500 leading-snug">Bulk-add swing questions at once</span>
+                  </button>
+                  <button
+                    onClick={() => setShowPylWizard(true)}
+                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['pyl']}`}
+                  >
+                    <span className="text-3xl leading-none">🎰</span>
+                    <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Press Your Luck!</span>
+                    <span className="text-xs text-gray-500 leading-snug">Set up PYL themes and slides</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -307,6 +365,62 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
           onSelectTheme={themeId => actions.updateShowMeta({ theme: themeId })}
         />
       )}
+
+      <AnimatePresence>
+        {showSwingWizard && (
+          <motion.div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.1 } }}
+            transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+            onClick={() => setShowSwingWizard(false)}
+          >
+            <motion.div
+              className="w-full max-w-2xl"
+              initial={{ opacity: 0, scale: reducedMotion ? 1 : 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96, transition: { duration: 0.1, ease: [0.23, 1, 0.32, 1] } }}
+              transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+              onClick={e => e.stopPropagation()}
+            >
+              <SwingRoundWizard
+                activeRoundId={activeRoundId}
+                onAdd={handleSwingAdd}
+                onClose={() => setShowSwingWizard(false)}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showPylWizard && (
+          <motion.div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.1 } }}
+            transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+            onClick={() => setShowPylWizard(false)}
+          >
+            <motion.div
+              className="w-full max-w-sm"
+              initial={{ opacity: 0, scale: reducedMotion ? 1 : 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96, transition: { duration: 0.1, ease: [0.23, 1, 0.32, 1] } }}
+              transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+              onClick={e => e.stopPropagation()}
+            >
+              <PYLWizard
+                activeRoundId={activeRoundId}
+                onAdd={handlePYLAdd}
+                onClose={() => setShowPylWizard(false)}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
