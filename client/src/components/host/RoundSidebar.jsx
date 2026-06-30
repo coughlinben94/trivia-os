@@ -50,7 +50,7 @@ export default function RoundSidebar({
 
   // Build segments: groups of slides by roundId in display order
   const segments = []
-  let currentRoundId = null
+  let currentRoundId = Symbol('init')
   for (const slide of sorted) {
     if (slide.roundId !== currentRoundId) {
       currentRoundId = slide.roundId
