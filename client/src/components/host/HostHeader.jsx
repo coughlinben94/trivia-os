@@ -57,8 +57,7 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
   }
 
   return (
-    <>
-      <header className="h-16 bg-white border-b border-gray-200 flex items-center px-5 gap-4 shrink-0">
+    <header className="h-16 bg-white border-b border-gray-200 flex items-center px-5 gap-4 shrink-0">
         {/* Logo mark */}
         <div className="flex items-center gap-2.5 shrink-0">
           <div className="w-8 h-8 bg-baynes-forest rounded-lg flex items-center justify-center">
@@ -156,8 +155,6 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
             Go Live →
           </button>
         </div>
-      </header>
-
-    </>
+    </header>
   )
 }

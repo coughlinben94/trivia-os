@@ -1,11 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
 
-const SHINY_COLOR = {
-  visual: 'bg-emerald-100 text-emerald-700',
-  audio:  'bg-sky-100 text-sky-700',
-}
-
 function avg(arr) {
   if (!arr.length) return 0
   return Math.round(arr.reduce((s, n) => s + n, 0) / arr.length)
