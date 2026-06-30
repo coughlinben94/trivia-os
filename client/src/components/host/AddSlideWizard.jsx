@@ -11,7 +11,7 @@ export const TYPE_CARDS = [
   { type: 'custom',        icon: '✏️', name: 'Custom',              desc: 'Freeform slide' },
 ]
 
-const NEEDS_ROUND = new Set(['round-intro', 'swing-round-intro', 'question', 'grading-break', 'pixelate-series', 'multi-question', 'pyl-reveal'])
+const NEEDS_ROUND = new Set(['swing-round-intro', 'question', 'grading-break', 'pixelate-series', 'multi-question', 'pyl-reveal'])
 
 const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber-400', video: 'bg-purple-400', list: 'bg-orange-400' }
 
