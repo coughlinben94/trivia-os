@@ -121,51 +121,17 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
           onClick={onClose}
           className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 transition-colors"
         >
-          ← Add slides
+          ← Dashboard
         </button>
         <div className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
           <span className="leading-none">{navMeta.icon}</span>
           <span>{navLabel}</span>
         </div>
-        {confirmingDelete ? (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-red-600">Delete slide?</span>
-            <button
-              onClick={() => onDeleteSlide(slide.id)}
-              className="text-xs font-semibold text-red-600 hover:text-red-700 transition-colors"
-            >
-              Yes
-            </button>
-            <button
-              onClick={() => setConfirmingDelete(false)}
-              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              No
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setConfirmingDelete(true)}
-            className="text-sm text-gray-400 hover:text-red-500 transition-colors"
-          >
-            Delete
-          </button>
-        )}
+        <div className="w-20" />
       </div>
 
-      {/* Slide type row */}
+      {/* Transition row */}
       <div className="flex items-center gap-3 px-5 pt-4 pb-4 border-b border-gray-100 shrink-0">
-        <div>
-          <label htmlFor="slide-type" className="block text-xs font-medium text-gray-500 mb-1.5">Slide type</label>
-          <select
-            id="slide-type"
-            value={slide.type}
-            onChange={e => changeType(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-baynes-forest"
-          >
-            {SLIDE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-          </select>
-        </div>
         {!data.isShiny && (
           <div>
             <label htmlFor="slide-transition" className="block text-xs font-medium text-gray-500 mb-1.5">Transition</label>
@@ -234,6 +200,34 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
         )}
         {slide.type === 'pyl-reveal' && (
           <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
+        )}
+      </div>
+
+      {/* Footer — delete */}
+      <div className="shrink-0 px-5 py-3 border-t border-gray-100 flex justify-end">
+        {confirmingDelete ? (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-red-600">Delete slide?</span>
+            <button
+              onClick={() => onDeleteSlide(slide.id)}
+              className="text-xs font-semibold text-red-600 hover:text-red-700 transition-colors"
+            >
+              Yes
+            </button>
+            <button
+              onClick={() => setConfirmingDelete(false)}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              No
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmingDelete(true)}
+            className="text-sm font-medium text-red-500 hover:text-red-700 transition-colors"
+          >
+            Delete
+          </button>
         )}
       </div>
     </div>
@@ -417,19 +411,11 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
   if (mode === 'regular') {
     return (
       <>
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-mono bg-gray-100 text-gray-500 px-2 py-1 rounded">
-            {data.questionLabel || (data.questionNumber ? `Q${data.questionNumber}` : 'Q?')}
-          </span>
-          <button
-            onClick={() => onChange('questionMode', null)}
-            className="text-xs text-gray-400 hover:text-gray-600 underline"
-          >
-            Change type
-          </button>
-        </div>
         <Field label="Question Text">
           <TextArea value={data.text} onChange={v => onChange('text', v)} placeholder="Write the full question here…" rows={6} />
+        </Field>
+        <Field label="Answer">
+          <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="The answer…" />
         </Field>
       </>
     )
@@ -438,14 +424,8 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
   // ── Shiny mode ─────────────────────────────────────────────────────────
   return (
     <>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center">
         <span className="text-xs text-gray-400 font-medium">✨ Shiny</span>
-        <button
-          onClick={() => onChange('questionMode', null)}
-          className="text-xs text-gray-400 hover:text-gray-600 underline"
-        >
-          Change type
-        </button>
       </div>
 
       {/* Format selector */}

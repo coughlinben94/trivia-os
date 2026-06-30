@@ -1,54 +1,26 @@
 /**
- * AddSlideWizard exhaustive audit — runs against the live deploy.
+ * AddSlideWizard audit — tests the BuildMode grid + modal overlay flow.
  *
- * WIZARD STATE MACHINE (derived from AddSlideWizard.jsx):
+ * Architecture (as of the 3-step shiny wizard rework):
+ *   - BuildMode renders a flat 12-card grid in <main>
+ *   - Clicking a TYPE_CARD opens AddSlideWizard inside a modal overlay
+ *   - AddSlideWizard is a single-screen form (no multi-step wizard, no step counter)
+ *   - For 'question' type: split-screen (plain left / shiny right)
+ *   - For 'grading-break' / 'round-intro': single-column with round select gating
+ *   - For 'title' / 'custom': single-column, Add Slide → enabled immediately
  *
- * TYPE_CARDS (in render order):
- *   card name "State of the Union"  type: title           NOT in NEEDS_ROUND
- *   card name "Round Intro"         type: round-intro     NEEDS_ROUND
- *   card name "Question"            type: question        NEEDS_ROUND
- *   card name "Grading Break"       type: grading-break   NEEDS_ROUND
- *   card name "Scoreboard"          type: scoreboard-reveal NOT in NEEDS_ROUND
- *   card name "Custom"              type: custom          NOT in NEEDS_ROUND
+ * TYPE_CARDS (5): State of the Union, Round Intro, Question, Grading Break, Custom
+ * Extra grid cards (7): Theme, Swing Round, Press Your Luck!, Shiny Formats,
+ *                       Question Database, Ticker, Data
  *
- * STEP SEQUENCES:
- *   title / round-intro / grading-break / scoreboard / custom:
- *     type(1) → details(2)              totalSteps=2   counter: "Step 2 of 2"
- *   question + regular:
- *     type(1) → question-mode(2) → details(3)          totalSteps=3   "Step 2 of 3" / "Step 3 of 3"
- *   question + shiny:
- *     type(1) → question-mode(2) → format(3) → details(4)   totalSteps=4   "Step N of 4"
- *
- * STEP COUNTER: rendered in the back-nav row on ALL steps except type (step !== 'type').
- * BACK BUTTON ("← Back"): same condition — hidden on the type-picker step.
- *
- * DETAILS STEP HEADING: <h2> showing the card.name ("Question", "Grading Break", etc.)
- *
- * CREATE BUTTON: label "Add Slide →" on the details step for EVERY type.
- *   disabled when needsRound && !roundId  (round-intro, question, grading-break)
- *   always enabled for: title, scoreboard-reveal, custom
- *
- * ROUND INTRO EXTRAS: round picker select + "Round Title" input (placeholder "e.g. Round 1")
- *
- * BUG CONTRACT: every path's final details step MUST have an "Add Slide →" button.
- * Tests that reach the details step assert this with a named message so failures are obvious.
- *
- * GUESSED SELECTORS (flagged inline with GUESSED comments):
- *   1. Button accessible names for TYPE_CARDS — regex on card.name substring;
- *      full accessible name is emoji + name + desc concatenated.
- *   2. "Regular" / "Shiny" button names — same substring-regex approach.
- *   3. question-mode step heading "What kind of question?" — derived from JSX reading.
- *   4. format step heading "Choose a format" — derived from JSX reading.
- *   5. page.locator('main select').first() — round select; only select in main on detail steps.
- *   6. page.locator('main').getByRole('button').filter({ hasNotText: '← Back' }).first()
- *      for format cards — assumes format cards are the only non-Back buttons in main on format step.
+ * Tests are READ + CLICK-to-open-modal only. Nothing creates or mutates live data.
  */
 
 import { test, expect } from '@playwright/test'
 
 const SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID
 
-// ── Helpers (copied from host-audit.spec.js) ────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function attachErrors(page) {
   const errors = []
@@ -73,581 +45,367 @@ async function gotoEditor(page) {
   await page.locator('aside').waitFor({ state: 'visible', timeout: 15000 })
 }
 
-// ── Wizard-specific helpers ─────────────────────────────────────────────────
-
-async function assertOnTypePicker(page) {
-  await expect(page.getByRole('heading', { name: 'Add a slide' })).toBeVisible()
-}
-
-/** Click a TYPE_CARD from the type-picker step by its card.name.
- * GUESSED: button accessible name is emoji + name + desc — regex on name substring. */
-async function pickType(page, cardName) {
+/** Click a grid card by its card name (partial match). Opens the AddSlideWizard modal. */
+async function openModal(page, cardName) {
   await page.locator('main').getByRole('button', { name: new RegExp(cardName) }).first().click()
 }
 
-/** Assert the step counter shows "Step N of M". */
-async function assertStep(page, n, m) {
-  await expect(page.getByText(`Step ${n} of ${m}`, { exact: true })).toBeVisible()
+/** Wait for the modal to appear (overlay with the given heading). */
+async function waitForModal(page, heading) {
+  await expect(page.getByRole('heading', { name: heading })).toBeVisible({ timeout: 5000 })
 }
 
-/** The round <select> on the details step.
- * GUESSED: only <select> in main; scoped to avoid header/sidebar selects. */
-function roundSelectLocator(page) {
-  return page.locator('main select').first()
+/** Close the open modal via the ✕ button.
+ * Scoped to div.fixed.inset-0 to avoid matching sidebar delete-round/delete-slide ✕ buttons. */
+async function closeModal(page) {
+  await page.locator('div.fixed.inset-0').getByRole('button', { name: '✕' }).click()
 }
 
-/** Select the first real round (index 1, skipping the empty default).
- * Returns true if a round was selected, false if no rounds / select not present. */
-async function selectFirstRound(page) {
-  const sel = roundSelectLocator(page)
-  const visible = await sel.isVisible().catch(() => false)
-  if (!visible) return false
-  const optCount = await sel.locator('option').count()
-  if (optCount < 2) return false
-  await sel.selectOption({ index: 1 })
-  return true
-}
+// ── 1. Grid card inventory ────────────────────────────────────────────────────
 
-const ADD_BTN = 'Add Slide →'
+test.describe('1. Grid card inventory', () => {
 
-// ── 1. Type-picker ──────────────────────────────────────────────────────────
-
-test.describe('1. Type-picker (step 1)', () => {
-
-  test('1a: wizard mounts showing all 6 TYPE_CARDS, no Back button, no step counter', async ({ page }) => {
+  test('1a: all 5 TYPE_CARDS are visible in the grid', async ({ page }) => {
     test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
     const errors = attachErrors(page)
     await gotoEditor(page)
 
-    await assertOnTypePicker(page)
-
-    // All 6 TYPE_CARD buttons — accessible name contains the card.name (GUESSED: substring regex)
     for (const name of [
-      'State of the Union',  // type: title
-      'Round Intro',         // type: round-intro
-      'Question',            // type: question
-      'Grading Break',       // type: grading-break
-      'Scoreboard',          // type: scoreboard-reveal
-      'Custom',              // type: custom
+      'State of the Union',
+      'Round Intro',
+      'Question',
+      'Grading Break',
+      'Custom',
     ]) {
       await expect(
         page.locator('main').getByRole('button', { name: new RegExp(name) }).first(),
-        `TYPE_CARD "${name}" must be visible`,
+        `TYPE_CARD "${name}" must be visible in the grid`,
       ).toBeVisible()
     }
 
-    // Step counter only shows on non-type steps — must be absent here
-    await expect(page.getByText(/Step \d+ of \d+/)).not.toBeVisible()
+    assertNoErrors(errors)
+  })
 
-    // Back button only shows on non-type steps — must be absent here
-    await expect(
-      page.locator('main').getByRole('button', { name: '← Back' }),
-    ).not.toBeVisible()
+  test('1b: all 7 tool cards are visible in the grid', async ({ page }) => {
+    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
+    const errors = attachErrors(page)
+    await gotoEditor(page)
+
+    for (const name of ['Theme', 'Swing Round', 'Press Your Luck', 'Shiny Formats', 'Question Database', 'Ticker', 'Data']) {
+      await expect(
+        page.locator('main').getByRole('button', { name: new RegExp(name) }).first(),
+        `Tool card "${name}" must be visible in the grid`,
+      ).toBeVisible()
+    }
+
+    assertNoErrors(errors)
+  })
+
+  test('1c: no wizard heading visible at rest (wizard only opens via modal, not inline)', async ({ page }) => {
+    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
+    const errors = attachErrors(page)
+    await gotoEditor(page)
+
+    // "Add a slide" was the old inline wizard heading — must be absent in the current UI
+    await expect(page.getByRole('heading', { name: 'Add a slide' })).not.toBeVisible()
 
     assertNoErrors(errors)
   })
 
 })
 
-// ── 2. Question path — regular ──────────────────────────────────────────────
+// ── 2. Modal open / close mechanics ──────────────────────────────────────────
 
-test.describe('2. Question path — regular', () => {
+test.describe('2. Modal open / close mechanics', () => {
 
-  test('2a: picking Question → question-mode step (heading, Regular/Shiny, Step 2 of 3)', async ({ page }) => {
+  test('2a: clicking a type card opens the modal overlay', async ({ page }) => {
     test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
     const errors = attachErrors(page)
     await gotoEditor(page)
 
-    await pickType(page, 'Question')
+    await openModal(page, 'Grading Break')
+    await waitForModal(page, 'Grading Break')
 
-    // GUESSED: question-mode heading text from JSX
-    await expect(page.getByRole('heading', { name: 'What kind of question?' })).toBeVisible()
-    // GUESSED: button accessible name contains "Regular" as a substring
-    await expect(page.locator('main').getByRole('button', { name: /Regular/ })).toBeVisible()
-    // GUESSED: button accessible name contains "Shiny" as a substring
-    await expect(page.locator('main').getByRole('button', { name: /Shiny/ })).toBeVisible()
-    await expect(page.locator('main').getByRole('button', { name: '← Back' })).toBeVisible()
-    await assertStep(page, 2, 3)
+    // Overlay backdrop is present
+    await expect(page.locator('div.fixed.inset-0')).toBeVisible()
 
     assertNoErrors(errors)
   })
 
-  test('2b: regular → details (Step 3 of 3), round picker gated, create button present and gated', async ({ page }) => {
+  test('2b: ✕ button closes the modal', async ({ page }) => {
     test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
     const errors = attachErrors(page)
     await gotoEditor(page)
 
-    await pickType(page, 'Question')
-    await page.locator('main').getByRole('button', { name: /Regular/ }).click()
+    await openModal(page, 'Custom')
+    await waitForModal(page, 'Custom')
 
-    await assertStep(page, 3, 3)
-    // Details step card name is a <p> (line 233 of AddSlideWizard.jsx), NOT an <h2>
-    await expect(page.locator('main').getByText('Question', { exact: true }).first()).toBeVisible()
+    await closeModal(page)
+    await expect(page.getByRole('heading', { name: 'Custom' })).not.toBeVisible()
 
-    const addBtn = page.locator('main').getByRole('button', { name: ADD_BTN })
+    assertNoErrors(errors)
+  })
+
+  test('2c: Escape key closes the modal', async ({ page }) => {
+    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
+    const errors = attachErrors(page)
+    await gotoEditor(page)
+
+    await openModal(page, 'Custom')
+    await waitForModal(page, 'Custom')
+
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('heading', { name: 'Custom' })).not.toBeVisible()
+
+    assertNoErrors(errors)
+  })
+
+  test('2d: clicking the backdrop closes the modal', async ({ page }) => {
+    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
+    const errors = attachErrors(page)
+    await gotoEditor(page)
+
+    await openModal(page, 'Custom')
+    await waitForModal(page, 'Custom')
+
+    // Click the backdrop div (the dark overlay), not the card
+    await page.locator('div.fixed.inset-0').first().click({ position: { x: 10, y: 10 } })
+    await expect(page.getByRole('heading', { name: 'Custom' })).not.toBeVisible()
+
+    assertNoErrors(errors)
+  })
+
+})
+
+// ── 3. Question modal (split-screen) ─────────────────────────────────────────
+
+test.describe('3. Question modal', () => {
+
+  test('3a: Question modal shows split-screen with plain left and shiny right', async ({ page }) => {
+    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
+    const errors = attachErrors(page)
+    await gotoEditor(page)
+
+    await openModal(page, 'Question')
+    await waitForModal(page, 'Question')
+
+    // Left column: plain question
+    await expect(page.getByText('📝 Plain question')).toBeVisible()
+    await expect(page.getByLabel('Question text')).toBeVisible()
+    await expect(page.getByLabel('Answer')).toBeVisible()
+
+    // Right column: shiny formats
+    await expect(page.getByText('✨ Shiny formats')).toBeVisible()
+
+    await closeModal(page)
+    assertNoErrors(errors)
+  })
+
+  test('3b: plain question Add button is disabled until round + text + answer are filled', async ({ page }) => {
+    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
+    const errors = attachErrors(page)
+    await gotoEditor(page)
+
+    await openModal(page, 'Question')
+    await waitForModal(page, 'Question')
+
+    const addBtn = page.locator('main, div.fixed').getByRole('button', { name: 'Add question →' })
+    await expect(addBtn).toBeDisabled()
+
+    await closeModal(page)
+    assertNoErrors(errors)
+  })
+
+  test('3c: shiny format selection advances to the shiny details step', async ({ page }) => {
+    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
+    const errors = attachErrors(page)
+    await gotoEditor(page)
+
+    await openModal(page, 'Question')
+    await waitForModal(page, 'Question')
+
+    const noFormats = await page.getByText('No formats yet', { exact: false }).isVisible().catch(() => false)
+    test.skip(noFormats, 'No shiny formats in DB — add one via Add Shiny to test this path')
+
+    // Select the first shiny format tile.
+    // Format tiles use type="button"; submit buttons don't, so this scopes correctly.
+    const firstFmt = page.locator('div.fixed.inset-0').locator('button[type="button"]').first()
+    await firstFmt.click()
+
+    // "Add {name} →" proceed button appears
     await expect(
-      addBtn,
-      'FAIL: "Add Slide →" button MISSING on question/regular details step — this is the reported bug',
+      page.locator('div.fixed').getByRole('button', { name: /^Add .+ →$/ }),
     ).toBeVisible()
 
-    const hasNoRoundsMsg = await page.getByText('No rounds yet', { exact: false }).isVisible().catch(() => false)
-    if (hasNoRoundsMsg) {
-      await expect(addBtn, 'button must be disabled when no rounds exist').toBeDisabled()
-    } else {
-      const sel = roundSelectLocator(page)
-      await expect(sel, 'round select must be present for question type (NEEDS_ROUND)').toBeVisible()
-      await expect(addBtn, 'button must start disabled — no round selected').toBeDisabled()
-      const selected = await selectFirstRound(page)
-      if (selected) {
-        await expect(addBtn, 'button must be enabled after selecting a round').toBeEnabled()
-      }
-    }
-
-    assertNoErrors(errors)
-  })
-
-  test('2c: back from details (regular) → question-mode → type picker', async ({ page }) => {
-    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
-    const errors = attachErrors(page)
-    await gotoEditor(page)
-
-    await pickType(page, 'Question')
-    await page.locator('main').getByRole('button', { name: /Regular/ }).click()
-    await assertStep(page, 3, 3)
-
-    // Back: details → question-mode
-    await page.locator('main').getByRole('button', { name: '← Back' }).click()
-    await expect(page.getByRole('heading', { name: 'What kind of question?' })).toBeVisible()
-    await assertStep(page, 2, 3)
-
-    // Back: question-mode → type picker (no step counter, no Back button)
-    await page.locator('main').getByRole('button', { name: '← Back' }).click()
-    await assertOnTypePicker(page)
-    await expect(page.getByText(/Step \d+ of \d+/)).not.toBeVisible()
-    await expect(page.locator('main').getByRole('button', { name: '← Back' })).not.toBeVisible()
-
+    await closeModal(page)
     assertNoErrors(errors)
   })
 
 })
 
-// ── 3. Question path — shiny ────────────────────────────────────────────────
+// ── 4. Grading Break modal ────────────────────────────────────────────────────
 
-test.describe('3. Question path — shiny', () => {
+test.describe('4. Grading Break modal', () => {
 
-  test('3a: shiny → format step (Step 3 of 4) with format cards or no-formats message', async ({ page }) => {
+  test('4a: Grading Break modal shows round select and jukebox select', async ({ page }) => {
     test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
     const errors = attachErrors(page)
     await gotoEditor(page)
 
-    await pickType(page, 'Question')
-    await page.locator('main').getByRole('button', { name: /Shiny/ }).click()
+    await openModal(page, 'Grading Break')
+    await waitForModal(page, 'Grading Break')
 
-    // GUESSED: format step heading text from JSX
-    await expect(page.getByRole('heading', { name: 'Choose a format' })).toBeVisible()
-    await assertStep(page, 3, 4)
-    await expect(page.locator('main').getByRole('button', { name: '← Back' })).toBeVisible()
+    // Round selector label
+    await expect(page.getByText('End of which round?')).toBeVisible()
 
-    // Either format cards or a "No formats yet" message — both are valid live-show states
-    const noFormatsMsg = page.getByText('No formats yet', { exact: false })
-    const hasNoFormats = await noFormatsMsg.isVisible().catch(() => false)
-    if (hasNoFormats) {
-      await expect(noFormatsMsg).toBeVisible()
-    } else {
-      // GUESSED: format cards are the only non-Back buttons in main on this step
-      await expect(
-        page.locator('main').getByRole('button').filter({ hasNotText: '← Back' }).first(),
-        'At least one format card must be visible',
-      ).toBeVisible()
-    }
+    // Jukebox library select label
+    await expect(page.getByText('Between-rounds music')).toBeVisible()
 
+    // "Add Slide →" button visible
+    await expect(page.getByRole('button', { name: 'Add Slide →' })).toBeVisible()
+
+    await closeModal(page)
     assertNoErrors(errors)
   })
 
-  test('3b: shiny + format → details (Step 4 of 4), create button present and gated', async ({ page }) => {
+  test('4b: Add Slide → is disabled when no round is selected', async ({ page }) => {
     test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
     const errors = attachErrors(page)
     await gotoEditor(page)
 
-    await pickType(page, 'Question')
-    await page.locator('main').getByRole('button', { name: /Shiny/ }).click()
-    await expect(page.getByRole('heading', { name: 'Choose a format' })).toBeVisible()
+    await openModal(page, 'Grading Break')
+    await waitForModal(page, 'Grading Break')
 
-    const hasNoFormats = await page.getByText('No formats yet', { exact: false }).isVisible().catch(() => false)
-    test.skip(hasNoFormats, 'No shiny formats in live show — create one via ✨ Formats to test this path')
+    const addBtn = page.getByRole('button', { name: 'Add Slide →' })
 
-    // GUESSED: first non-Back button in main is the first format card
-    await page.locator('main').getByRole('button').filter({ hasNotText: '← Back' }).first().click()
-
-    await assertStep(page, 4, 4)
-    // assertStep(4,4) already confirms we're on the details step.
-    // The shiny path renders the selected format name alongside the card name,
-    // so exact-text matching on "Question" is unreliable here.
-    const addBtn = page.locator('main').getByRole('button', { name: ADD_BTN })
-    await expect(
-      addBtn,
-      'FAIL: "Add Slide →" button MISSING on question/shiny details step — this is the reported bug',
-    ).toBeVisible()
-
-    const hasNoRoundsMsg = await page.getByText('No rounds yet', { exact: false }).isVisible().catch(() => false)
-    if (hasNoRoundsMsg) {
+    const hasNoRounds = await page.getByText('No rounds yet', { exact: false }).isVisible().catch(() => false)
+    if (hasNoRounds) {
+      // Button disabled because no rounds exist
       await expect(addBtn).toBeDisabled()
     } else {
-      const sel = roundSelectLocator(page)
-      await expect(sel).toBeVisible()
-      await expect(addBtn, 'button must start disabled — no round selected').toBeDisabled()
-      const selected = await selectFirstRound(page)
-      if (selected) {
-        await expect(addBtn, 'button must be enabled after selecting a round').toBeEnabled()
-      }
-    }
-
-    // Navigate back without creating
-    await page.locator('main').getByRole('button', { name: '← Back' }).click()
-    await expect(page.getByRole('heading', { name: 'Choose a format' })).toBeVisible()
-
-    assertNoErrors(errors)
-  })
-
-  test('3c: back navigation details → format → question-mode → type picker', async ({ page }) => {
-    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
-    const errors = attachErrors(page)
-    await gotoEditor(page)
-
-    await pickType(page, 'Question')
-    await page.locator('main').getByRole('button', { name: /Shiny/ }).click()
-
-    const hasNoFormats = await page.getByText('No formats yet', { exact: false }).isVisible().catch(() => false)
-
-    if (!hasNoFormats) {
-      // Advance to details
-      await page.locator('main').getByRole('button').filter({ hasNotText: '← Back' }).first().click()
-      await assertStep(page, 4, 4)
-
-      // Back: details → format
-      await page.locator('main').getByRole('button', { name: '← Back' }).click()
-      await expect(page.getByRole('heading', { name: 'Choose a format' })).toBeVisible()
-      await assertStep(page, 3, 4)
-    }
-
-    // Back: format → question-mode
-    await page.locator('main').getByRole('button', { name: '← Back' }).click()
-    await expect(page.getByRole('heading', { name: 'What kind of question?' })).toBeVisible()
-    await assertStep(page, 2, 4)
-
-    // Back: question-mode → type picker
-    await page.locator('main').getByRole('button', { name: '← Back' }).click()
-    await assertOnTypePicker(page)
-    await expect(page.getByText(/Step \d+ of \d+/)).not.toBeVisible()
-
-    assertNoErrors(errors)
-  })
-
-})
-
-// ── 4. Grading Break path ───────────────────────────────────────────────────
-
-test.describe('4. Grading Break path', () => {
-
-  test('4a: Grading Break → details directly (no question-mode), Step 2 of 2, round gated', async ({ page }) => {
-    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
-    const errors = attachErrors(page)
-    await gotoEditor(page)
-
-    await pickType(page, 'Grading Break')
-
-    // Must skip question-mode (grading-break goes directly to details)
-    await expect(
-      page.getByRole('heading', { name: 'What kind of question?' }),
-    ).not.toBeVisible()
-
-    await assertStep(page, 2, 2)
-    // Details step card name is a <p> (line 233 of AddSlideWizard.jsx), NOT an <h2>
-    await expect(page.locator('main').getByText('Grading Break', { exact: true }).first()).toBeVisible()
-    await expect(page.locator('main').getByRole('button', { name: '← Back' })).toBeVisible()
-
-    const addBtn = page.locator('main').getByRole('button', { name: ADD_BTN })
-    await expect(addBtn).toBeVisible()
-    await expect(addBtn, 'button must start disabled — no round selected').toBeDisabled()
-
-    const hasNoRoundsMsg = await page.getByText('No rounds yet', { exact: false }).isVisible().catch(() => false)
-    if (!hasNoRoundsMsg) {
-      await expect(roundSelectLocator(page), 'round select must be present (Grading Break is NEEDS_ROUND)').toBeVisible()
-      const selected = await selectFirstRound(page)
-      if (selected) {
-        await expect(addBtn, 'button must be enabled after selecting a round').toBeEnabled()
-      }
-    }
-
-    assertNoErrors(errors)
-  })
-
-  test('4b: back from Grading Break details → type picker', async ({ page }) => {
-    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
-    const errors = attachErrors(page)
-    await gotoEditor(page)
-
-    await pickType(page, 'Grading Break')
-    await assertStep(page, 2, 2)
-
-    await page.locator('main').getByRole('button', { name: '← Back' }).click()
-    await assertOnTypePicker(page)
-    await expect(page.getByText(/Step \d+ of \d+/)).not.toBeVisible()
-
-    assertNoErrors(errors)
-  })
-
-})
-
-// ── 5. Round Intro path ─────────────────────────────────────────────────────
-
-test.describe('5. Round Intro path', () => {
-
-  test('5a: Round Intro → details (Step 2 of 2): round picker, round title input, create gated', async ({ page }) => {
-    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
-    const errors = attachErrors(page)
-    await gotoEditor(page)
-
-    await pickType(page, 'Round Intro')
-
-    await assertStep(page, 2, 2)
-    // Details step card name is a <p> (line 233 of AddSlideWizard.jsx), NOT an <h2>
-    await expect(page.locator('main').getByText('Round Intro', { exact: true }).first()).toBeVisible()
-
-    const addBtn = page.locator('main').getByRole('button', { name: ADD_BTN })
-    await expect(addBtn).toBeVisible()
-
-    const hasNoRoundsMsg = await page.getByText('No rounds yet', { exact: false }).isVisible().catch(() => false)
-    if (hasNoRoundsMsg) {
+      // Rounds exist — button starts disabled with no round selected
       await expect(addBtn).toBeDisabled()
-    } else {
-      await expect(roundSelectLocator(page), 'round select must be present (Round Intro is NEEDS_ROUND)').toBeVisible()
-      await expect(addBtn, 'button must start disabled — no round selected').toBeDisabled()
-
-      // Round Intro also has a Round Title text input (AddSlideWizard.jsx)
-      await expect(
-        page.locator('main').getByPlaceholder('e.g. Round 1'),
-        'Round Intro must show the Round Title input',
-      ).toBeVisible()
-
-      const selected = await selectFirstRound(page)
-      if (selected) {
-        await expect(addBtn, 'button must be enabled after selecting a round').toBeEnabled()
+      // Select first round → button becomes enabled
+      const sel = page.locator('#add-round-select')
+      const optCount = await sel.locator('option').count()
+      if (optCount >= 2) {
+        await sel.selectOption({ index: 1 })
+        await expect(addBtn).toBeEnabled()
       }
     }
 
-    assertNoErrors(errors)
-  })
-
-  test('5b: back from Round Intro details → type picker', async ({ page }) => {
-    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
-    const errors = attachErrors(page)
-    await gotoEditor(page)
-
-    await pickType(page, 'Round Intro')
-    await assertStep(page, 2, 2)
-
-    await page.locator('main').getByRole('button', { name: '← Back' }).click()
-    await assertOnTypePicker(page)
-
+    await closeModal(page)
     assertNoErrors(errors)
   })
 
 })
 
-// ── 6. Title path (State of the Union) ─────────────────────────────────────
+// ── 5. Round Intro modal ──────────────────────────────────────────────────────
 
-test.describe('6. Title path (State of the Union)', () => {
+test.describe('5. Round Intro modal', () => {
 
-  test('6a: Title → details (Step 2 of 2): NO round picker, create button immediately enabled', async ({ page }) => {
+  test('5a: Round Intro modal shows round association and subtitle input', async ({ page }) => {
     test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
     const errors = attachErrors(page)
     await gotoEditor(page)
 
-    await pickType(page, 'State of the Union')
+    await openModal(page, 'Round Intro')
+    await waitForModal(page, 'Round Intro')
 
-    await assertStep(page, 2, 2)
-    // Details step card name is a <p> (line 233 of AddSlideWizard.jsx), NOT an <h2>
-    await expect(page.locator('main').getByText('State of the Union', { exact: true }).first()).toBeVisible()
+    // Subtitle input
+    await expect(page.getByLabel(/Subtitle/)).toBeVisible()
 
-    const addBtn = page.locator('main').getByRole('button', { name: ADD_BTN })
+    // "Add Slide →" button visible
+    await expect(page.getByRole('button', { name: 'Add Slide →' })).toBeVisible()
+
+    await closeModal(page)
+    assertNoErrors(errors)
+  })
+
+  test('5b: Add Slide → is disabled when no round is associated', async ({ page }) => {
+    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
+    const errors = attachErrors(page)
+    await gotoEditor(page)
+
+    await openModal(page, 'Round Intro')
+    await waitForModal(page, 'Round Intro')
+
+    const addBtn = page.getByRole('button', { name: 'Add Slide →' })
+    await expect(addBtn).toBeDisabled()
+
+    await closeModal(page)
+    assertNoErrors(errors)
+  })
+
+})
+
+// ── 6. Title modal ────────────────────────────────────────────────────────────
+
+test.describe('6. Title modal (State of the Union)', () => {
+
+  test('6a: Title modal opens with Add Slide → immediately enabled (no round required)', async ({ page }) => {
+    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
+    const errors = attachErrors(page)
+    await gotoEditor(page)
+
+    await openModal(page, 'State of the Union')
+    await waitForModal(page, 'State of the Union')
+
+    const addBtn = page.getByRole('button', { name: 'Add Slide →' })
     await expect(addBtn).toBeVisible()
-    // title is NOT in NEEDS_ROUND — enabled immediately, no round required
-    await expect(addBtn, 'Title type must not require a round (not in NEEDS_ROUND)').toBeEnabled()
+    await expect(addBtn, 'Title type does not require a round').toBeEnabled()
 
-    // No round select rendered
-    await expect(roundSelectLocator(page)).not.toBeVisible()
+    // No round select rendered for title type
+    await expect(page.locator('#add-round-select')).not.toBeVisible()
 
-    assertNoErrors(errors)
-  })
-
-  test('6b: back from Title details → type picker', async ({ page }) => {
-    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
-    const errors = attachErrors(page)
-    await gotoEditor(page)
-
-    await pickType(page, 'State of the Union')
-    await page.locator('main').getByRole('button', { name: '← Back' }).click()
-    await assertOnTypePicker(page)
-
+    await closeModal(page)
     assertNoErrors(errors)
   })
 
 })
 
-// ── 7. Scoreboard path ──────────────────────────────────────────────────────
+// ── 7. Custom modal ───────────────────────────────────────────────────────────
 
-test.describe('7. Scoreboard path', () => {
+test.describe('7. Custom modal', () => {
 
-  test('7a: Scoreboard → details (Step 2 of 2): NO round picker, create immediately enabled', async ({ page }) => {
+  test('7a: Custom modal opens with Add Slide → immediately enabled (no round required)', async ({ page }) => {
     test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
     const errors = attachErrors(page)
     await gotoEditor(page)
 
-    await pickType(page, 'Scoreboard')
+    await openModal(page, 'Custom')
+    await waitForModal(page, 'Custom')
 
-    await assertStep(page, 2, 2)
-    // Details step card name is a <p> (line 233 of AddSlideWizard.jsx), NOT an <h2>
-    await expect(page.locator('main').getByText('Scoreboard', { exact: true }).first()).toBeVisible()
-
-    const addBtn = page.locator('main').getByRole('button', { name: ADD_BTN })
+    const addBtn = page.getByRole('button', { name: 'Add Slide →' })
     await expect(addBtn).toBeVisible()
-    // scoreboard-reveal is NOT in NEEDS_ROUND
-    await expect(addBtn, 'Scoreboard must not require a round (not in NEEDS_ROUND)').toBeEnabled()
-    await expect(roundSelectLocator(page)).not.toBeVisible()
+    await expect(addBtn, 'Custom type does not require a round').toBeEnabled()
 
-    assertNoErrors(errors)
-  })
-
-  test('7b: back from Scoreboard details → type picker', async ({ page }) => {
-    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
-    const errors = attachErrors(page)
-    await gotoEditor(page)
-
-    await pickType(page, 'Scoreboard')
-    await page.locator('main').getByRole('button', { name: '← Back' }).click()
-    await assertOnTypePicker(page)
-
+    await closeModal(page)
     assertNoErrors(errors)
   })
 
 })
 
-// ── 8. Custom path ──────────────────────────────────────────────────────────
+// ── 8. Multiple modal open/close cycles ──────────────────────────────────────
 
-test.describe('8. Custom path', () => {
+test.describe('8. Rapid open/close stress', () => {
 
-  test('8a: Custom → details (Step 2 of 2): NO round picker, create immediately enabled', async ({ page }) => {
+  test('8a: opening different modals back-to-back produces no errors', async ({ page }) => {
     test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
     const errors = attachErrors(page)
     await gotoEditor(page)
 
-    await pickType(page, 'Custom')
-
-    await assertStep(page, 2, 2)
-    // Details step card name is a <p> (line 233 of AddSlideWizard.jsx), NOT an <h2>
-    await expect(page.locator('main').getByText('Custom', { exact: true }).first()).toBeVisible()
-
-    const addBtn = page.locator('main').getByRole('button', { name: ADD_BTN })
-    await expect(addBtn).toBeVisible()
-    // custom is NOT in NEEDS_ROUND
-    await expect(addBtn, 'Custom type must not require a round (not in NEEDS_ROUND)').toBeEnabled()
-    await expect(roundSelectLocator(page)).not.toBeVisible()
-
-    assertNoErrors(errors)
-  })
-
-  test('8b: back from Custom details → type picker', async ({ page }) => {
-    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
-    const errors = attachErrors(page)
-    await gotoEditor(page)
-
-    await pickType(page, 'Custom')
-    await page.locator('main').getByRole('button', { name: '← Back' }).click()
-    await assertOnTypePicker(page)
-
-    assertNoErrors(errors)
-  })
-
-})
-
-// ── 9. Step-counter integrity ───────────────────────────────────────────────
-
-test.describe('9. Step-counter integrity', () => {
-
-  test('9a: type-picker step shows NO step counter (totalSteps=1 before any type picked)', async ({ page }) => {
-    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
-    const errors = attachErrors(page)
-    await gotoEditor(page)
-
-    await assertOnTypePicker(page)
-    await expect(page.getByText(/Step \d+ of \d+/)).not.toBeVisible()
-
-    assertNoErrors(errors)
-  })
-
-  test('9b: all five two-step paths show "Step 2 of 2" on their details step', async ({ page }) => {
-    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
-    // Seed once — addInitScript fires on every subsequent goto
-    await seedShowId(page)
-    const errors = []
-    page.on('pageerror', e => errors.push(`pageerror: ${e.message}`))
-    page.on('console', m => { if (m.type() === 'error') errors.push(`console.error: ${m.text()}`) })
-
-    const twoStepCards = [
-      'State of the Union',  // title
-      'Round Intro',         // round-intro
-      'Grading Break',       // grading-break
-      'Scoreboard',          // scoreboard-reveal
-      'Custom',              // custom
-    ]
-
-    for (const cardName of twoStepCards) {
-      await page.goto('/host', { waitUntil: 'networkidle' })
-      await page.locator('aside').waitFor({ state: 'visible', timeout: 15000 })
-      await pickType(page, cardName)
-      await expect(
-        page.getByText('Step 2 of 2', { exact: true }),
-        `"${cardName}" must show "Step 2 of 2" on its details step`,
-      ).toBeVisible()
+    for (const [cardName, heading] of [
+      ['State of the Union', 'State of the Union'],
+      ['Grading Break',      'Grading Break'],
+      ['Custom',             'Custom'],
+      ['Round Intro',        'Round Intro'],
+    ]) {
+      await openModal(page, cardName)
+      await waitForModal(page, heading)
+      await closeModal(page)
+      await expect(page.getByRole('heading', { name: heading })).not.toBeVisible()
     }
-
-    assertNoErrors(errors)
-  })
-
-  test('9c: question/regular counter: 2/3 on question-mode, 3/3 on details', async ({ page }) => {
-    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
-    const errors = attachErrors(page)
-    await gotoEditor(page)
-
-    await pickType(page, 'Question')
-    await assertStep(page, 2, 3)
-
-    await page.locator('main').getByRole('button', { name: /Regular/ }).click()
-    await assertStep(page, 3, 3)
-
-    assertNoErrors(errors)
-  })
-
-  test('9d: question/shiny counter: 2/4 on question-mode, 3/4 on format, 4/4 on details', async ({ page }) => {
-    test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to run wizard audit tests')
-    const errors = attachErrors(page)
-    await gotoEditor(page)
-
-    await pickType(page, 'Question')
-    // totalSteps starts at 3 (regular default) and only flips to 4 once Shiny is chosen.
-    // This is a known UX quirk: the counter reads "2 of 3" until the mode is picked.
-    await assertStep(page, 2, 3)
-
-    await page.locator('main').getByRole('button', { name: /Shiny/ }).click()
-    await assertStep(page, 3, 4)
-
-    const hasNoFormats = await page.getByText('No formats yet', { exact: false }).isVisible().catch(() => false)
-    test.skip(hasNoFormats, 'No formats — cannot reach Step 4 of 4')
-
-    // GUESSED: first non-Back button in main is the first format card
-    await page.locator('main').getByRole('button').filter({ hasNotText: '← Back' }).first().click()
-    await assertStep(page, 4, 4)
 
     assertNoErrors(errors)
   })

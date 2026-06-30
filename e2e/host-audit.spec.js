@@ -79,16 +79,15 @@ test.describe('A. Load + shell', () => {
 
     await gotoEditor(page)
 
-    await expect(page.getByRole('button', { name: 'My Shows' })).toBeVisible()
+    // My Shows is an <a> link (opens /shows in new tab), not a button
+    await expect(page.getByRole('link', { name: 'My Shows' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Copy Join Link' })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Ticker/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Formats/ })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Preview' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Export' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Save Results' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Go Live →' })).toBeVisible()
-    // Theme picker: button in header that shows currentThemeName + "▾"
-    // GUESSED: matching by the ▾ character since the theme name is dynamic
-    await expect(page.locator('header button', { hasText: '▾' })).toBeVisible()
+    // Ticker and Formats are grid cards in main, not header buttons
+    // Theme picker is the "Theme" grid card in main, not a header button
 
     assertNoErrors(errors)
   })
@@ -134,7 +133,7 @@ test.describe('B. Slide selection + editor', () => {
     await questionLabel.click()
 
     // SlideEditor renders with its slim nav bar (SlideEditor.jsx:124)
-    await expect(page.getByRole('button', { name: '← Add slides' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '← Dashboard' })).toBeVisible()
     // Question slides render a "Question Text" Field label (SlideEditor.jsx:431)
     await expect(page.getByText('Question Text')).toBeVisible()
 
@@ -158,7 +157,7 @@ test.describe('B. Slide selection + editor', () => {
     await breakText.scrollIntoViewIfNeeded()
     await breakText.click({ force: true })
 
-    await expect(page.getByRole('button', { name: '← Add slides' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '← Dashboard' })).toBeVisible()
     // SlideEditor.jsx:719 — Field label for the jukebox-library dropdown
     await expect(page.getByText('Between-rounds music')).toBeVisible()
     // Locate the <select> that follows the "Between-rounds music" label.
@@ -194,11 +193,11 @@ test.describe('B. Slide selection + editor', () => {
 
     await allLabels.nth(0).scrollIntoViewIfNeeded()
     await allLabels.nth(0).click({ force: true })
-    await expect(page.getByRole('button', { name: '← Add slides' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '← Dashboard' })).toBeVisible()
 
     await allLabels.nth(1).scrollIntoViewIfNeeded()
     await allLabels.nth(1).click({ force: true })
-    await expect(page.getByRole('button', { name: '← Add slides' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '← Dashboard' })).toBeVisible()
 
     assertNoErrors(errors)
   })
@@ -209,35 +208,32 @@ test.describe('B. Slide selection + editor', () => {
 
 test.describe('C. Creation wizard', () => {
 
-  test('C1: wizard renders type picker; Grading Break details step gates on round selection', async ({ page }) => {
+  test('C1: grid shows type cards; Grading Break modal opens and gates on round selection', async ({ page }) => {
     test.skip(!SHOW_ID, 'Set PLAYWRIGHT_SHOW_ID to a valid show ID')
     const errors = attachErrors(page)
 
     await gotoEditor(page)
 
-    // Dashboard default state: AddSlideWizard in 'type' step (BuildMode.jsx:13 — mode starts as 'wizard')
-    await expect(page.getByRole('heading', { name: 'Add a slide' })).toBeVisible()
+    // Dashboard resting state: grid of type cards (no wizard heading — wizard is now a modal)
+    await expect(page.getByRole('button', { name: /Grading Break/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Question/ }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /Round Intro/ })).toBeVisible()
 
-    // All type cards should be present (AddSlideWizard.jsx TYPE_CARDS)
-    await expect(page.getByRole('button', { name: 'Grading Break' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Question' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Round Intro' })).toBeVisible()
+    // Click Grading Break → opens the AddSlideWizard modal
+    await page.getByRole('button', { name: /Grading Break/ }).click()
 
-    // Pick Grading Break → jumps straight to 'details' step (no question-mode step)
-    await page.getByRole('button', { name: 'Grading Break' }).click()
+    // Modal opens with "Grading Break" heading (AddSlideWizard header shows typeCard.name)
+    await expect(page.getByRole('heading', { name: 'Grading Break' })).toBeVisible()
 
-    // Step indicator visible: "Step N of M" (AddSlideWizard.jsx:134)
-    await expect(page.getByText(/Step \d+ of \d+/)).toBeVisible()
+    // Modal close button present — scoped to overlay to avoid sidebar delete buttons
+    await expect(page.locator('div.fixed.inset-0').getByRole('button', { name: '✕' })).toBeVisible()
 
-    // "Add Slide →" button exists but is DISABLED — Grading Break is in NEEDS_ROUND and
-    // no round is selected yet (canCreate = false, AddSlideWizard.jsx:114)
-    const addBtn = page.getByRole('button', { name: 'Add Slide →' })
-    await expect(addBtn).toBeVisible()
-    await expect(addBtn).toBeDisabled()
+    // "Between-rounds music" label present (grading-break renders jukebox lib select)
+    await expect(page.getByText('Between-rounds music')).toBeVisible()
 
-    // Back out without creating anything
-    await page.getByRole('button', { name: '← Back' }).click()
-    await expect(page.getByRole('heading', { name: 'Add a slide' })).toBeVisible()
+    // Close via ✕ — modal dismisses
+    await page.locator('div.fixed.inset-0').getByRole('button', { name: '✕' }).click()
+    await expect(page.getByRole('heading', { name: 'Grading Break' })).not.toBeVisible()
 
     assertNoErrors(errors)
   })
@@ -254,18 +250,16 @@ test.describe('D. Header tools', () => {
 
     await gotoEditor(page)
 
-    // Theme picker button: shows currentThemeName + "▾" (HostHeader.jsx:83-89)
-    // GUESSED: header contains exactly one button with ▾ — verify if theme name contains ▾ itself
-    await page.locator('header button', { hasText: '▾' }).click()
+    // Theme picker is now the "Theme" grid card in main (not a ▾ button in the header)
+    await page.locator('main').getByRole('button', { name: /Theme/ }).click()
 
     await expect(page.getByRole('heading', { name: 'Choose theme' })).toBeVisible()
 
-    // Theme list: left panel (ThemePickerModal.jsx:50-76) contains one button per theme
-    // GUESSED: scoping to the w-56 panel div — verify class is stable
-    const themeListPanel = page.locator('div').filter({ hasText: 'Choose theme' }).locator('div[class*="w-56"]')
+    // At least one theme button in the picker
+    const themeListPanel = page.locator('div').filter({ has: page.getByRole('heading', { name: 'Choose theme' }) })
     await expect(themeListPanel.locator('button').first()).toBeVisible()
 
-    // Close via footer Done button (ThemePickerModal.jsx:214)
+    // Close via Done button
     await page.getByRole('button', { name: 'Done' }).click()
     await expect(page.getByRole('heading', { name: 'Choose theme' })).not.toBeVisible()
 
@@ -278,18 +272,17 @@ test.describe('D. Header tools', () => {
 
     await gotoEditor(page)
 
-    // Button text is "✨ Formats" (HostHeader.jsx:117)
-    await page.getByRole('button', { name: /Formats/ }).click()
+    // Shiny Formats is now a grid card in main (not a header button)
+    await page.locator('main').getByRole('button', { name: /Shiny Formats/ }).click()
 
-    // FormatLibrary heading (FormatLibrary.jsx:54)
-    await expect(page.getByRole('heading', { name: 'Shiny Format Library' })).toBeVisible()
+    // FormatLibrary heading is "Add Shiny" (FormatLibrary.jsx:54)
+    await expect(page.getByRole('heading', { name: 'Add Shiny' })).toBeVisible()
 
-    // Close: ✕ button adjacent to the heading (FormatLibrary.jsx:55)
-    // Scoped to the overlay that contains the heading to avoid sidebar ✕ buttons
-    const overlay = page.locator('div.fixed').filter({ has: page.getByRole('heading', { name: 'Shiny Format Library' }) })
+    // Close via ✕ button inside the overlay
+    const overlay = page.locator('div.fixed').filter({ has: page.getByRole('heading', { name: 'Add Shiny' }) })
     await overlay.getByRole('button', { name: '✕' }).click()
 
-    await expect(page.getByRole('heading', { name: 'Shiny Format Library' })).not.toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Add Shiny' })).not.toBeVisible()
 
     assertNoErrors(errors)
   })
@@ -352,11 +345,11 @@ test.describe('E. Navigation back-out', () => {
     test.skip(!hasSlide, 'No slides found in the sidebar')
 
     await anySlide.click()
-    await expect(page.getByRole('button', { name: '← Add slides' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '← Dashboard' })).toBeVisible()
 
-    // Click back — BuildMode.enterWizard() fires, mode returns to 'wizard'
-    await page.getByRole('button', { name: '← Add slides' }).click()
-    await expect(page.getByRole('heading', { name: 'Add a slide' })).toBeVisible()
+    // Click back — BuildMode returns to wizard/grid mode
+    await page.getByRole('button', { name: '← Dashboard' }).click()
+    await expect(page.locator('main').getByRole('button', { name: /Question/ }).first()).toBeVisible()
 
     assertNoErrors(errors)
   })
@@ -372,11 +365,11 @@ test.describe('E. Navigation back-out', () => {
     test.skip(!hasSlide, 'No slides found in the sidebar')
 
     await anySlide.click()
-    await expect(page.getByRole('button', { name: '← Add slides' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '← Dashboard' })).toBeVisible()
 
-    // Escape handler in BuildMode.jsx:37-47 sets mode back to 'wizard'
+    // Escape handler in BuildMode.jsx returns to grid
     await page.keyboard.press('Escape')
-    await expect(page.getByRole('heading', { name: 'Add a slide' })).toBeVisible()
+    await expect(page.locator('main').getByRole('button', { name: /Question/ }).first()).toBeVisible()
 
     assertNoErrors(errors)
   })

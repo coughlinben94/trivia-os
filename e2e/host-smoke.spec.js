@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 
-// Collects pageerror (uncaught exceptions) and console.error on a given path.
+const SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID || 'show_WLBM5jvb'
+
 async function loadAndCollect(page, path) {
   const errors = []
   page.on('pageerror', e => errors.push(`pageerror: ${e.message}`))
@@ -11,12 +12,12 @@ async function loadAndCollect(page, path) {
 
 test('host loads with no uncaught errors', async ({ page }) => {
   const errors = await loadAndCollect(page, '/host')
-  // Editor shell should be present — adjust selector if the host root differs.
   await expect(page.locator('body')).toBeVisible()
   expect(errors, `Errors on /host:\n${errors.join('\n')}`).toHaveLength(0)
 })
 
 test('display loads with no uncaught errors', async ({ page }) => {
-  const errors = await loadAndCollect(page, '/display')
+  // /display requires a show ID — without one Supabase returns 406
+  const errors = await loadAndCollect(page, `/display?show=${SHOW_ID}`)
   expect(errors, `Errors on /display:\n${errors.join('\n')}`).toHaveLength(0)
 })
