@@ -39,13 +39,16 @@ export default function RoundSidebar({
   onDeleteRound,
   onDeleteSlide,
   onReorderSlides,
+  onReorderRounds,
 }) {
   const [collapsedRounds, setCollapsedRounds] = useState(new Set())
   const [renamingRound, setRenamingRound] = useState(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [confirmDeleteRound, setConfirmDeleteRound] = useState(null)
-  const [draggedId, setDraggedId] = useState(null)
+  // drag state — type is 'slide' or 'round'
+  const [dragged, setDragged] = useState(null)   // { id, type }
   const [dragOverId, setDragOverId] = useState(null)
+  const [dragOverType, setDragOverType] = useState(null)
 
   if (!show) return null
 
@@ -94,37 +97,76 @@ export default function RoundSidebar({
     setRenamingRound(null)
   }
 
-  function handleDragStart(id) {
-    setDraggedId(id)
+  function clear() {
+    setDragged(null)
+    setDragOverId(null)
+    setDragOverType(null)
   }
 
-  function handleDragOver(e, id) {
+  function handleSlideDragStart(id) { setDragged({ id, type: 'slide' }) }
+  function handleRoundDragStart(id) { setDragged({ id, type: 'round' }) }
+
+  function handleSlideOver(e, id) {
     e.preventDefault()
-    if (id !== draggedId) setDragOverId(id)
+    e.stopPropagation()
+    setDragOverId(id)
+    setDragOverType('slide')
   }
 
-  function handleDrop(e, targetId) {
+  function handleRoundOver(e, id) {
     e.preventDefault()
-    if (!draggedId || !onReorderSlides) { clear(); return }
-    if (draggedId === targetId) { clear(); return }
+    setDragOverId(id)
+    setDragOverType('round')
+  }
 
-    const ids = sorted.map(s => s.id)
-    const next = [...ids]
-    next.splice(next.indexOf(draggedId), 1)
-    const newTarget = next.indexOf(targetId)
-    next.splice(newTarget, 0, draggedId)
-    onReorderSlides(next)
+  function handleSlideDrop(e, targetId) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!dragged) { clear(); return }
+
+    if (dragged.type === 'slide') {
+      // slide → slide: reorder individual slide
+      if (dragged.id === targetId || !onReorderSlides) { clear(); return }
+      const ids = sorted.map(s => s.id)
+      const next = [...ids]
+      next.splice(next.indexOf(dragged.id), 1)
+      next.splice(next.indexOf(targetId), 0, dragged.id)
+      onReorderSlides(next)
+    } else if (dragged.type === 'round') {
+      // round dragged onto a slide: move that round so its slides come before targetId
+      if (!onReorderRounds) { clear(); return }
+      const targetSlide = sorted.find(s => s.id === targetId)
+      const targetRoundId = targetSlide?.roundId ?? null
+      const roundIds = show.rounds.map(r => r.id)
+      if (targetRoundId && dragged.id !== targetRoundId) {
+        const next = roundIds.filter(id => id !== dragged.id)
+        next.splice(next.indexOf(targetRoundId), 0, dragged.id)
+        onReorderRounds(next)
+      }
+    }
+    clear()
+  }
+
+  function handleRoundDrop(e, targetRoundId) {
+    e.preventDefault()
+    if (!dragged || dragged.type !== 'round' || !onReorderRounds) { clear(); return }
+    if (dragged.id === targetRoundId) { clear(); return }
+    const roundIds = show.rounds.map(r => r.id)
+    const next = [...roundIds]
+    next.splice(next.indexOf(dragged.id), 1)
+    next.splice(next.indexOf(targetRoundId), 0, dragged.id)
+    onReorderRounds(next)
     clear()
   }
 
   function handleDragEnd() { clear() }
 
-  function clear() {
-    setDraggedId(null)
-    setDragOverId(null)
+  const slideProps = {
+    onDragStart: handleSlideDragStart,
+    onDragOver: handleSlideOver,
+    onDrop: handleSlideDrop,
+    onDragEnd: handleDragEnd,
   }
-
-  const dragProps = { onDragStart: handleDragStart, onDragOver: handleDragOver, onDrop: handleDrop, onDragEnd: handleDragEnd }
 
   return (
     <aside className="w-56 bg-gray-50 border-r border-gray-100 flex flex-col overflow-hidden shrink-0">
@@ -140,11 +182,11 @@ export default function RoundSidebar({
                     key={slide.id}
                     slide={slide}
                     selected={slide.id === selectedSlideId}
-                    dragging={slide.id === draggedId}
-                    dragOver={slide.id === dragOverId}
+                    dragging={dragged?.id === slide.id}
+                    dragOver={dragOverId === slide.id && dragOverType === 'slide'}
                     onSelect={() => onSelectSlide(slide)}
                     onDelete={() => onDeleteSlide(slide.id)}
-                    dragProps={dragProps}
+                    dragProps={slideProps}
                   />
                 ))}
               </div>
@@ -153,11 +195,30 @@ export default function RoundSidebar({
 
           const { round, slides } = seg
           const collapsed = collapsedRounds.has(round.id)
+          const roundDragging = dragged?.id === round.id && dragged?.type === 'round'
+          const roundDragOver = dragOverId === round.id && dragOverType === 'round'
 
           return (
-            <div key={round.id} className="border-t border-gray-100 first:border-t-0">
+            <div
+              key={round.id}
+              className={`border-t border-gray-100 first:border-t-0 ${roundDragging ? 'opacity-40' : ''} ${roundDragOver ? 'border-t-2 border-t-blue-400' : ''}`}
+              onDragOver={e => handleRoundOver(e, round.id)}
+              onDrop={e => handleRoundDrop(e, round.id)}
+            >
               {/* Round header */}
-              <div className="flex items-center gap-1.5 px-3 py-2 group">
+              <div
+                className="flex items-center gap-1.5 px-3 py-2 group"
+                draggable
+                onDragStart={() => handleRoundDragStart(round.id)}
+                onDragEnd={handleDragEnd}
+              >
+                <span
+                  className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 text-xs leading-none"
+                  title="Drag to reorder round"
+                  onMouseDown={e => e.stopPropagation()}
+                >
+                  ⠿
+                </span>
                 <button
                   onClick={() => toggleCollapse(round.id)}
                   className="text-gray-400 hover:text-gray-600 w-5 h-5 flex items-center justify-center text-[9px] shrink-0 rounded hover:bg-gray-200 transition-colors"
@@ -217,11 +278,11 @@ export default function RoundSidebar({
                       key={slide.id}
                       slide={slide}
                       selected={slide.id === selectedSlideId}
-                      dragging={slide.id === draggedId}
-                      dragOver={slide.id === dragOverId}
+                      dragging={dragged?.id === slide.id}
+                      dragOver={dragOverId === slide.id && dragOverType === 'slide'}
                       onSelect={() => onSelectSlide(slide)}
                       onDelete={() => onDeleteSlide(slide.id)}
-                      dragProps={dragProps}
+                      dragProps={slideProps}
                       indent
                     />
                   ))}

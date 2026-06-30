@@ -99,6 +99,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
             if (syncedSelectedSlide?.id === id) returnToDashboard()
           }}
           onReorderSlides={actions.reorderSlides}
+          onReorderRounds={actions.reorderRounds}
         />
 
         <main className="flex-1 overflow-hidden bg-white">

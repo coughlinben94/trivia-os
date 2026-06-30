@@ -337,6 +337,21 @@ export function useShow() {
     await supabase.from('shows').update({ slides: newSlides }).eq('id', show.id)
   }
 
+  async function reorderRounds(orderedRoundIds) {
+    if (!show) return
+    const newRounds = orderedRoundIds
+      .map(id => show.rounds.find(r => r.id === id))
+      .filter(Boolean)
+    // Reorder slides: general (no-round) slides keep their relative positions at the top,
+    // then each round's slides in the new round order
+    const allSorted = sortedSlides(show)
+    const generalSlides = allSorted.filter(s => !s.roundId)
+    const roundedSlides = orderedRoundIds.flatMap(id => allSorted.filter(s => s.roundId === id))
+    const newSlides = [...generalSlides, ...roundedSlides].map((s, i) => ({ ...s, order: i }))
+    setShow(prev => ({ ...prev, rounds: newRounds, slides: newSlides }))
+    await supabase.from('shows').update({ rounds: newRounds, slides: newSlides }).eq('id', show.id)
+  }
+
   // --- Powerups ---
 
   async function addPowerup(data = {}) {
@@ -510,6 +525,7 @@ export function useShow() {
     updateSlide,
     deleteSlide,
     reorderSlides,
+    reorderRounds,
     addPowerup,
     deletePowerup,
     uploadMedia,
