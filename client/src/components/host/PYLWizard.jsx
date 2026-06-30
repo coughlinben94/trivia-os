@@ -45,9 +45,19 @@ export default function PYLWizard({ activeRoundId, onAdd, onClose }) {
 
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
         <div className="flex items-center gap-2">
-          {step === 'theme' && themeIndex === 0 && (
+          {step === 'theme' && (
             <button
-              onClick={() => setStep('count')}
+              onClick={() => {
+                if (themeIndex === 0) {
+                  setStep('count')
+                } else {
+                  setCollected(prev => prev.slice(0, -1))
+                  setThemeIndex(i => i - 1)
+                  const prev = collected[collected.length - 1]
+                  setCurrentName(prev?.name ?? '')
+                  setCurrentType(prev?.type ?? null)
+                }
+              }}
               className={`text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100 ${BTN}`}
             >
               ←

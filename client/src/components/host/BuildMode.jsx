@@ -49,9 +49,12 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   async function handleSwingAdd(questions, roundId) {
     setShowSwingWizard(false)
     const sortedAll = [...(show?.slides ?? [])].sort((a, b) => a.order - b.order)
-    const roundSlides = sortedAll.filter(s => s.roundId === roundId)
+    const roundSlides = roundId ? sortedAll.filter(s => s.roundId === roundId) : []
     const existingQCount = roundSlides.filter(s => s.type === 'question' && !s.data?.isBonus).length
-    const afterId = (roundSlides[roundSlides.length - 1] ?? sortedAll[sortedAll.length - 1])?.id ?? null
+    // Insert after last slide in the round, or end of show if no round selected / round empty
+    const afterId = roundSlides.length > 0
+      ? roundSlides[roundSlides.length - 1].id
+      : sortedAll[sortedAll.length - 1]?.id ?? null
     const nonEmpty = questions.filter(q => q.text.trim() || q.answer.trim())
     const slidesData = nonEmpty.map((q, i) => ({
       type: 'question',
@@ -72,8 +75,10 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   async function handlePYLAdd(themes, roundId) {
     setShowPylWizard(false)
     const sortedAll = [...(show?.slides ?? [])].sort((a, b) => a.order - b.order)
-    const roundSlides = sortedAll.filter(s => s.roundId === roundId)
-    const afterId = (roundSlides[roundSlides.length - 1] ?? sortedAll[sortedAll.length - 1])?.id ?? null
+    const roundSlides = roundId ? sortedAll.filter(s => s.roundId === roundId) : []
+    const afterId = roundSlides.length > 0
+      ? roundSlides[roundSlides.length - 1].id
+      : sortedAll[sortedAll.length - 1]?.id ?? null
     const slidesData = themes.map((theme, i) => ({
       type: 'pyl-reveal',
       roundId: roundId ?? null,
@@ -108,7 +113,11 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   useEffect(() => {
     function onKeyDown(e) {
       if (e.key !== 'Escape') return
-      if (addRoundWizardOpen) {
+      if (showSwingWizard) {
+        setShowSwingWizard(false)
+      } else if (showPylWizard) {
+        setShowPylWizard(false)
+      } else if (addRoundWizardOpen) {
         setAddRoundWizardOpen(false)
       } else if (addModalData !== null) {
         setAddModalData(null)
@@ -119,7 +128,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [addRoundWizardOpen, addModalData, mode])
+  }, [showSwingWizard, showPylWizard, addRoundWizardOpen, addModalData, mode])
 
   function handleAddRound() {
     setAddRoundWizardOpen(true)
@@ -128,6 +137,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   async function handleRoundWizardAdd(data) {
     setAddRoundWizardOpen(false)
     const round = await actions.addRound(data)
+    setActiveRoundId(round.id)
     openAddModal({
       type: 'round-intro',
       roundId: round.id,
