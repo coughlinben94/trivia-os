@@ -265,7 +265,7 @@ export default function RoundSidebar({
                 </span>
                 <button
                   onClick={() => toggleCollapse(round.id)}
-                  className="text-gray-400 hover:text-gray-600 w-5 h-5 flex items-center justify-center text-[9px] shrink-0 rounded hover:bg-gray-200 transition-colors"
+                  className="text-gray-400 hover:text-gray-600 w-5 h-5 flex items-center justify-center text-[9px] shrink-0 rounded hover:bg-gray-200 host-button"
                 >
                   {collapsed ? '▶' : '▼'}
                 </button>
@@ -293,11 +293,11 @@ export default function RoundSidebar({
                   <>
                     <button
                       onClick={() => { onDeleteRound(round.id); setConfirmDeleteRound(null) }}
-                      className="text-[10px] font-semibold text-red-500 px-1 hover:text-red-700 transition-colors"
+                      className="text-[10px] font-semibold text-red-500 px-1 hover:text-red-700 host-button"
                     >Yes</button>
                     <button
                       onClick={() => setConfirmDeleteRound(null)}
-                      className="text-[10px] text-gray-400 px-1 hover:text-gray-600 transition-colors"
+                      className="text-[10px] text-gray-400 px-1 hover:text-gray-600 host-button"
                     >No</button>
                   </>
                 ) : (
@@ -347,7 +347,7 @@ export default function RoundSidebar({
       <div className="p-3 border-t border-gray-100 shrink-0">
         <button
           onClick={onAddRound}
-          className="w-full text-sm font-semibold text-[#1a6b4a] hover:text-green-800 hover:bg-green-50 py-2.5 rounded-lg transition-colors border-2 border-dashed border-[#1a6b4a]/30 hover:border-[#1a6b4a]/60"
+          className="w-full text-sm font-semibold text-[#1a6b4a] hover:text-green-800 hover:bg-green-50 py-2.5 rounded-lg host-button border-2 border-dashed border-[#1a6b4a]/30 hover:border-[#1a6b4a]/60"
         >
           + Add Round
         </button>

@@ -43,7 +43,7 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
         {onOpenLibrary && (
           <button
             onClick={onOpenLibrary}
-            className="shrink-0 text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg transition-colors"
+            className="shrink-0 text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
           >
             My Shows
           </button>
@@ -67,7 +67,7 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
             <button
               onClick={startEdit}
               title="Click to edit show title"
-              className="text-sm font-semibold text-gray-800 hover:text-gray-900 truncate max-w-full text-left transition-colors"
+              className="text-sm font-semibold text-gray-800 hover:text-gray-900 truncate max-w-full text-left host-button"
             >
               {show.title}
             </button>
@@ -78,7 +78,7 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
         <button
           onClick={copyJoinUrl}
           title="Copy join URL"
-          className="shrink-0 text-sm font-medium px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+          className="shrink-0 text-sm font-medium px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 host-button"
           style={{ color: copied ? '#1a6b4a' : '#6b7280' }}
         >
           {copied ? 'Copied!' : 'Copy Join Link'}
@@ -89,20 +89,20 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
           <button
             onClick={() => window.open(`/display?show=${show.id}&preview=true`, '_blank')}
             title="Preview display on current theme"
-            className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg transition-colors"
+            className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
           >
             Preview
           </button>
           <button
             onClick={onExport}
             title="Export show JSON"
-            className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg transition-colors"
+            className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
           >
             Export
           </button>
           <button
             onClick={onGoLive}
-            className="bg-baynes-forest text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-green-900 transition-colors ml-1"
+            className="bg-baynes-forest text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-green-900 host-button ml-1"
           >
             Go Live →
           </button>

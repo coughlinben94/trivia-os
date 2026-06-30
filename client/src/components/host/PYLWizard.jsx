@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-const BTN = 'transition duration-[120ms] ease-out active:scale-[0.97]'
+const BTN = 'host-button'
 
 const TYPE_OPTIONS = [
   { id: 'visual', icon: '👁️', label: 'Visual' },

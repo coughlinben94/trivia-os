@@ -6,7 +6,7 @@ const ROUND_TYPES = [
   { id: 'pyl',    icon: '🎰', label: 'Press Your Luck!',  title: 'Press Your Luck!' },
 ]
 
-const BTN = 'transition duration-[120ms] ease-out active:scale-[0.97]'
+const BTN = 'host-button'
 
 export default function AddRoundWizard({ defaultRoundNumber, onAdd, onClose }) {
   const [selectedTypeId, setSelectedTypeId] = useState(null)

@@ -16,7 +16,7 @@ const NEEDS_ROUND = new Set(['swing-round-intro', 'question', 'grading-break', '
 
 const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber-400', video: 'bg-purple-400', list: 'bg-orange-400' }
 
-const BTN = 'transition duration-[120ms] ease-snap active:scale-[0.97]'
+const BTN = 'host-button'
 
 // Editable: add a fundraiser type by adding one object here
 export const ROUND_TYPES = [
