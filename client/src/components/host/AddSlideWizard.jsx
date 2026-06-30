@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
+import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 
 export const TYPE_CARDS = [
@@ -36,13 +37,20 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
   const [questionAnswer, setQuestionAnswer] = useState('')
   const [isBonus, setIsBonus]               = useState(false)
 
-  // Round-intro — title is derived; type/number/subtitle held in state so clearing sticks (P0#1)
-  const [roundType,     setRoundType]     = useState('normal')
-  const [roundNumber,   setRoundNumber]   = useState(1)
-  const [roundSubtitle, setRoundSubtitle] = useState('')
+  // Round-intro — pre-filled from AddRoundWizard when opened sequentially
+  const [roundType,     setRoundType]     = useState(initialData.roundType     ?? 'normal')
+  const [roundNumber,   setRoundNumber]   = useState(initialData.roundNumber   ?? 1)
+  const [roundSubtitle, setRoundSubtitle] = useState(initialData.roundSubtitle ?? '')
 
   // Grading-break
-  const [jukeboxLib, setJukeboxLib] = useState('random')
+  const [jukeboxLib, setJukeboxLib]   = useState('random')
+  const [jukeboxLibs, setJukeboxLibs] = useState(JUKEBOX_LIBRARIES)
+
+  useEffect(() => {
+    let alive = true
+    fetchJukeboxLibraries().then(libs => { if (alive && libs) setJukeboxLibs(libs) })
+    return () => { alive = false }
+  }, [])
 
   const sorted = sortedSlides(show)
   const { formats: shinyFormats, loading: shinyLoading } = useShinyFormats()
@@ -387,7 +395,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
                 >
                   <option value="random">🎲 Random</option>
-                  {JUKEBOX_LIBRARIES.map(lib => (
+                  {jukeboxLibs.map(lib => (
                     <option key={lib.id} value={lib.id}>{lib.label}</option>
                   ))}
                 </select>

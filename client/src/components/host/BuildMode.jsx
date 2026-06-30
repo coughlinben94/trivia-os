@@ -64,7 +64,13 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   async function handleRoundWizardAdd(data) {
     setAddRoundWizardOpen(false)
     const round = await actions.addRound(data)
-    openAddModal({ type: 'round-intro', roundId: round.id })
+    openAddModal({
+      type: 'round-intro',
+      roundId: round.id,
+      roundType: data.roundType,
+      roundNumber: data.roundNumber,
+      roundSubtitle: data.subtitle,
+    })
   }
 
   const reducedMotion     = useReducedMotion()
