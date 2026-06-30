@@ -256,30 +256,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                     <span className="text-xs text-gray-500 leading-snug">Change the display look</span>
                   </button>
                   <button
-                    onClick={() => window.open('/questions', '_blank')}
-                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['database']}`}
-                  >
-                    <span className="text-3xl leading-none">🗃️</span>
-                    <span className="text-sm font-semibold text-gray-800 leading-tight">Question Database</span>
-                    <span className="text-xs text-gray-500 leading-snug">Browse and search your archive</span>
-                  </button>
-                  <button
-                    onClick={() => setShowTickerManager(true)}
-                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['ticker']}`}
-                  >
-                    <span className="text-3xl leading-none">📺</span>
-                    <span className="text-sm font-semibold text-gray-800 leading-tight">Ticker</span>
-                    <span className="text-xs text-gray-500 leading-snug">Edit pre-show ticker messages</span>
-                  </button>
-                  <button
-                    onClick={() => setShowFormatLibrary(true)}
-                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['shiny']}`}
-                  >
-                    <span className="text-3xl leading-none">✨</span>
-                    <span className="text-sm font-semibold text-gray-800 leading-tight">Shiny Formats</span>
-                    <span className="text-xs text-gray-500 leading-snug">Add or edit shiny question styles</span>
-                  </button>
-                  <button
                     onClick={() => setShowSwingWizard(true)}
                     className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['swing']}`}
                   >
@@ -294,6 +270,30 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                     <span className="text-3xl leading-none">🎰</span>
                     <span className="text-sm font-semibold text-gray-800 leading-tight">Press Your Luck!</span>
                     <span className="text-xs text-gray-500 leading-snug">Set up PYL themes and slides</span>
+                  </button>
+                  <button
+                    onClick={() => setShowFormatLibrary(true)}
+                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['shiny']}`}
+                  >
+                    <span className="text-3xl leading-none">✨</span>
+                    <span className="text-sm font-semibold text-gray-800 leading-tight">Shiny Formats</span>
+                    <span className="text-xs text-gray-500 leading-snug">Add or edit shiny question styles</span>
+                  </button>
+                  <button
+                    onClick={() => window.open('/questions', '_blank')}
+                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['database']}`}
+                  >
+                    <span className="text-3xl leading-none">🗃️</span>
+                    <span className="text-sm font-semibold text-gray-800 leading-tight">Question Database</span>
+                    <span className="text-xs text-gray-500 leading-snug">Browse and search your archive</span>
+                  </button>
+                  <button
+                    onClick={() => setShowTickerManager(true)}
+                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['ticker']}`}
+                  >
+                    <span className="text-3xl leading-none">📺</span>
+                    <span className="text-sm font-semibold text-gray-800 leading-tight">Ticker</span>
+                    <span className="text-xs text-gray-500 leading-snug">Edit pre-show ticker messages</span>
                   </button>
                 </div>
               </div>
