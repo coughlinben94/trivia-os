@@ -149,7 +149,7 @@ export default function Questions() {
             </select>
           )}
         </div>
-        <div className="flex gap-1.5 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap justify-center">
           {FILTERS.map(f => (
             <button
               key={f.id}
