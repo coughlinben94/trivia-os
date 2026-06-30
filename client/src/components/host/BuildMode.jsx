@@ -136,6 +136,16 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                     </button>
                   ))}
                 </div>
+                <button
+                  onClick={() => { window.location.href = '/questions' }}
+                  className={`mt-3 flex items-center gap-3 w-full p-4 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 group ${BTN}`}
+                >
+                  <span className="text-2xl leading-none">🗃️</span>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-gray-800 group-hover:text-[#1a6b4a] transition-colors duration-[120ms]">Question Database</p>
+                    <p className="text-xs text-gray-400 leading-snug">Browse and search your question archive</p>
+                  </div>
+                </button>
               </div>
             </div>
           )}

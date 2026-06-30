@@ -276,6 +276,27 @@ export function useShow() {
       .eq('id', show.id)
       .select()
     if (import.meta.env.DEV) console.log('[addSlide] write result:', { status, count, error, newCount: newSlides.length, showId: show.id })
+
+    if (slideData.type === 'question') {
+      const round = show.rounds.find(r => r.id === (slideData.roundId ?? null))
+      const d = slideData.data ?? {}
+      supabase.from('questions').insert({
+        show_id: show.id,
+        show_date: show.date ?? null,
+        type: d.isShiny ? 'shiny' : 'regular',
+        text: d.text ?? null,
+        answer: d.answer ?? null,
+        is_bonus: d.isBonus ?? false,
+        is_shiny: d.isShiny ?? false,
+        shiny_type: d.shinyType ?? null,
+        media_url: d.mediaUrl ?? null,
+        round_number: round?.roundNumber ?? round?.number ?? null,
+        question_number: d.questionNumber ?? null,
+      }).then(({ error: qErr }) => {
+        if (qErr && import.meta.env.DEV) console.warn('[addSlide] question archive write failed:', qErr)
+      })
+    }
+
     return slide
   }
 

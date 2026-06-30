@@ -32,8 +32,9 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
   const [roundId, setRoundId] = useState(initialData.roundId ?? null)
 
   // Question
-  const [questionText, setQuestionText] = useState('')
-  const [isBonus, setIsBonus]           = useState(false)
+  const [questionText,   setQuestionText]   = useState('')
+  const [questionAnswer, setQuestionAnswer] = useState('')
+  const [isBonus, setIsBonus]               = useState(false)
 
   // Round-intro — title is derived; type/number/subtitle held in state so clearing sticks (P0#1)
   const [roundType,     setRoundType]     = useState('normal')
@@ -87,6 +88,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
         questionMode:   'regular',
         isShiny:        false,
         text:           questionText.trim(),
+        answer:         questionAnswer.trim(),
         mediaSlots:     [],
         ...(isBonus && { isBonus: true }),
       }
@@ -107,7 +109,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
 
   const needsRound     = NEEDS_ROUND.has(type)
   const canCreate      = !(needsRound && !roundId) && (type !== 'round-intro' || roundNumValid)
-  const canAddQuestion = !!roundId && questionText.trim().length > 0
+  const canAddQuestion = !!roundId && questionText.trim().length > 0 && questionAnswer.trim().length > 0
   const isQuestion     = type === 'question'
 
 
@@ -166,6 +168,20 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
               </div>
 
               <div>
+                <label htmlFor="add-question-answer" className="block text-xs font-medium text-gray-500 mb-1.5">
+                  Answer
+                </label>
+                <input
+                  id="add-question-answer"
+                  type="text"
+                  value={questionAnswer}
+                  onChange={e => setQuestionAnswer(e.target.value)}
+                  placeholder="The answer…"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                />
+              </div>
+
+              <div>
                 <label htmlFor="add-question-round" className="block text-xs font-medium text-gray-500 mb-1.5">
                   Round
                 </label>
@@ -210,7 +226,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
                 </button>
                 {!canAddQuestion && (
                   <p className="text-xs text-gray-400 text-center">
-                    {!roundId ? 'Select a round to continue' : 'Add question text to continue'}
+                    {!roundId ? 'Select a round to continue' : !questionText.trim() ? 'Add question text to continue' : 'Add an answer to continue'}
                   </p>
                 )}
               </div>

@@ -1,0 +1,237 @@
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase.js'
+
+const TYPE_LABEL = { regular: 'Regular', shiny: 'Shiny', pyl: 'PYL', swing: 'Swing' }
+const TYPE_COLOR = {
+  regular: 'bg-gray-100 text-gray-600',
+  shiny:   'bg-yellow-100 text-yellow-700',
+  pyl:     'bg-purple-100 text-purple-700',
+  swing:   'bg-blue-100 text-blue-700',
+}
+const SHINY_COLOR = {
+  visual: 'bg-emerald-100 text-emerald-700',
+  audio:  'bg-sky-100 text-sky-700',
+}
+
+const FILTERS = [
+  { id: 'all',          label: 'All' },
+  { id: 'bonus',        label: 'Bonus' },
+  { id: 'shiny-visual', label: 'Shiny Visual' },
+  { id: 'shiny-audio',  label: 'Shiny Audio' },
+  { id: 'pyl',          label: 'PYL' },
+  { id: 'swing',        label: 'Swing' },
+]
+
+function matchesFilter(q, filter) {
+  if (filter === 'all')          return true
+  if (filter === 'bonus')        return q.is_bonus
+  if (filter === 'shiny-visual') return q.is_shiny && q.shiny_type === 'visual'
+  if (filter === 'shiny-audio')  return q.is_shiny && q.shiny_type === 'audio'
+  if (filter === 'pyl')          return q.type === 'pyl'
+  if (filter === 'swing')        return q.type === 'swing'
+  return true
+}
+
+export default function Questions() {
+  const [questions, setQuestions] = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [search, setSearch]       = useState('')
+  const [filter, setFilter]       = useState('all')
+  const [editingId, setEditingId] = useState(null)
+  const [editDraft, setEditDraft] = useState({ text: '', answer: '' })
+  const [saving, setSaving]       = useState(false)
+
+  useEffect(() => {
+    supabase
+      .from('questions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (!error) setQuestions(data ?? [])
+        setLoading(false)
+      })
+  }, [])
+
+  const q = search.trim().toLowerCase()
+  const visible = questions.filter(row => {
+    if (!matchesFilter(row, filter)) return false
+    if (!q) return true
+    return (row.text ?? '').toLowerCase().includes(q) || (row.answer ?? '').toLowerCase().includes(q)
+  })
+
+  function startEdit(row) {
+    setEditingId(row.id)
+    setEditDraft({ text: row.text ?? '', answer: row.answer ?? '' })
+  }
+
+  async function commitEdit(id) {
+    if (saving) return
+    setSaving(true)
+    const { error } = await supabase
+      .from('questions')
+      .update({ text: editDraft.text, answer: editDraft.answer })
+      .eq('id', id)
+    if (!error) {
+      setQuestions(prev => prev.map(r => r.id === id ? { ...r, ...editDraft } : r))
+    }
+    setEditingId(null)
+    setSaving(false)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-bold text-gray-900">Question Archive</h1>
+          <p className="text-xs text-gray-400 mt-0.5">{questions.length} questions total</p>
+        </div>
+        <a href="/host" className="text-xs text-gray-400 hover:text-gray-700 transition-colors">← Back to host</a>
+      </div>
+
+      {/* Controls */}
+      <div className="px-6 py-4 flex flex-col gap-3">
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search questions and answers…"
+          className="w-full max-w-lg border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+        />
+        <div className="flex gap-1.5 flex-wrap">
+          {FILTERS.map(f => (
+            <button
+              key={f.id}
+              onClick={() => setFilter(f.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                filter === f.id
+                  ? 'bg-[#1a6b4a] text-white'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:border-[#1a6b4a] hover:text-[#1a6b4a]'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="px-6 pb-12">
+        {loading ? (
+          <p className="text-sm text-gray-400">Loading…</p>
+        ) : visible.length === 0 ? (
+          <p className="text-sm text-gray-400">{search ? 'No results.' : 'No questions yet.'}</p>
+        ) : (
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide w-24">Date</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide w-20">Type</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">Question</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">Answer</th>
+                  <th className="w-16" />
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((row, i) => {
+                  const isEditing = editingId === row.id
+                  return (
+                    <tr
+                      key={row.id}
+                      className={`border-b border-gray-50 last:border-0 ${row.is_bonus ? 'bg-red-50' : i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}
+                    >
+                      {/* Date */}
+                      <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
+                        {row.show_date ?? '—'}
+                      </td>
+
+                      {/* Type badges */}
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold ${TYPE_COLOR[row.type] ?? TYPE_COLOR.regular}`}>
+                            {TYPE_LABEL[row.type] ?? row.type}
+                          </span>
+                          {row.is_bonus && (
+                            <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-red-100 text-red-700">
+                              Bonus
+                            </span>
+                          )}
+                          {row.is_shiny && row.shiny_type && (
+                            <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold ${SHINY_COLOR[row.shiny_type] ?? 'bg-gray-100 text-gray-600'}`}>
+                              {row.shiny_type}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Question text */}
+                      <td className="px-4 py-3 max-w-sm">
+                        {isEditing ? (
+                          <textarea
+                            value={editDraft.text}
+                            onChange={e => setEditDraft(d => ({ ...d, text: e.target.value }))}
+                            rows={3}
+                            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-900 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                          />
+                        ) : (
+                          <span className="text-gray-800 leading-snug">{row.text ?? <span className="text-gray-300 italic">—</span>}</span>
+                        )}
+                      </td>
+
+                      {/* Answer */}
+                      <td className="px-4 py-3 max-w-xs">
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editDraft.answer}
+                            onChange={e => setEditDraft(d => ({ ...d, answer: e.target.value }))}
+                            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                          />
+                        ) : (
+                          <span className="text-gray-600">{row.answer ?? <span className="text-gray-300 italic">—</span>}</span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3">
+                        {isEditing ? (
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => commitEdit(row.id)}
+                              disabled={saving}
+                              className="px-2.5 py-1 bg-[#1a6b4a] text-white text-xs font-semibold rounded-lg hover:bg-green-900 disabled:opacity-40"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              className="px-2.5 py-1 bg-white border border-gray-200 text-gray-600 text-xs font-semibold rounded-lg hover:border-gray-400"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => startEdit(row)}
+                            className="px-2.5 py-1 bg-white border border-gray-200 text-gray-500 text-xs font-semibold rounded-lg hover:border-gray-400 hover:text-gray-700"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
