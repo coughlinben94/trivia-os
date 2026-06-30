@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 
 const SLIDE_TYPE_META = {
@@ -39,22 +39,27 @@ export default function RoundSidebar({
   onDeleteRound,
   onDeleteSlide,
   onReorderSlides,
-  onReorderRounds,
 }) {
   const [collapsedRounds, setCollapsedRounds] = useState(new Set())
   const [renamingRound, setRenamingRound] = useState(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [confirmDeleteRound, setConfirmDeleteRound] = useState(null)
-  // drag state — type is 'slide' or 'round'
-  const [dragged, setDragged] = useState(null)   // { id, type }
+
+  // Pointer-events drag state
+  const [dragged, setDragged]       = useState(null)  // { id, type }
   const [dragOverId, setDragOverId] = useState(null)
   const [dragOverType, setDragOverType] = useState(null)
+
+  // Refs so event-handler closures always see current values
+  const draggedRef  = useRef(null)
+  const dragOverRef = useRef(null)
+  const blocksRef   = useRef([])
 
   if (!show) return null
 
   const sorted = sortedSlides(show)
 
-  // Build segments: groups of slides by roundId in display order
+  // Build segments
   const segments = []
   let currentRoundId = Symbol('init')
   for (const slide of sorted) {
@@ -70,11 +75,97 @@ export default function RoundSidebar({
       segments[segments.length - 1].slides.push(slide)
     }
   }
-  // Rounds with no slides yet
   for (const round of show.rounds) {
     if (!segments.some(s => s.roundId === round.id)) {
       segments.push({ type: 'round', roundId: round.id, round, slides: [] })
     }
+  }
+
+  // Build flat blocks
+  const blocks = []
+  for (const seg of segments) {
+    if (seg.type === 'general') {
+      for (const slide of seg.slides) {
+        blocks.push({ type: 'slide', key: slide.id, slides: [slide] })
+      }
+    } else {
+      blocks.push({ type: 'round', key: seg.roundId, roundId: seg.roundId, slides: seg.slides })
+    }
+  }
+  blocksRef.current = blocks
+
+  function computeNewOrder(draggedSpec, targetKey, targetType) {
+    const b = blocksRef.current
+    const draggedBlockIdx = b.findIndex(bl =>
+      draggedSpec.type === 'round' ? bl.roundId === draggedSpec.id : bl.slides.some(s => s.id === draggedSpec.id)
+    )
+    let targetBlockIdx
+    if (targetType === 'round') {
+      targetBlockIdx = b.findIndex(bl => bl.roundId === targetKey)
+    } else {
+      targetBlockIdx = b.findIndex(bl => bl.slides.some(s => s.id === targetKey))
+    }
+    if (draggedBlockIdx === -1 || targetBlockIdx === -1 || draggedBlockIdx === targetBlockIdx) return null
+    const next = [...b]
+    const [removed] = next.splice(draggedBlockIdx, 1)
+    const adjusted = draggedBlockIdx < targetBlockIdx ? targetBlockIdx - 1 : targetBlockIdx
+    next.splice(adjusted, 0, removed)
+    return next.flatMap(bl => bl.slides.map(s => s.id))
+  }
+
+  // Walk up the DOM from a point to find a [data-slide-id] or [data-round-id]
+  function findDropTarget(el) {
+    while (el && el !== document.body) {
+      if (el.dataset?.slideId) return { id: el.dataset.slideId, type: 'slide' }
+      if (el.dataset?.roundId) return { id: el.dataset.roundId, type: 'round' }
+      el = el.parentElement
+    }
+    return null
+  }
+
+  function handleGripDown(e, id, type) {
+    e.preventDefault()
+    e.stopPropagation()
+
+    draggedRef.current  = { id, type }
+    dragOverRef.current = null
+    setDragged({ id, type })
+    setDragOverId(null)
+    setDragOverType(null)
+
+    function onMove(ev) {
+      const el = document.elementFromPoint(ev.clientX, ev.clientY)
+      const target = findDropTarget(el)
+      dragOverRef.current = target
+      if (target) {
+        setDragOverId(target.id)
+        setDragOverType(target.type)
+      } else {
+        setDragOverId(null)
+        setDragOverType(null)
+      }
+    }
+
+    function onUp() {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+
+      const d    = draggedRef.current
+      const over = dragOverRef.current
+      if (d && over && onReorderSlides) {
+        const newOrder = computeNewOrder(d, over.id, over.type)
+        if (newOrder) onReorderSlides(newOrder)
+      }
+
+      draggedRef.current  = null
+      dragOverRef.current = null
+      setDragged(null)
+      setDragOverId(null)
+      setDragOverType(null)
+    }
+
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
   }
 
   function toggleCollapse(roundId) {
@@ -97,82 +188,11 @@ export default function RoundSidebar({
     setRenamingRound(null)
   }
 
-  // Build flat blocks: each general slide is its own block; each round is one block
-  const blocks = []
-  for (const seg of segments) {
-    if (seg.type === 'general') {
-      for (const slide of seg.slides) {
-        blocks.push({ type: 'slide', key: slide.id, slides: [slide] })
-      }
-    } else {
-      blocks.push({ type: 'round', key: seg.roundId, roundId: seg.roundId, slides: seg.slides })
-    }
-  }
-
-  function computeNewOrder(draggedSpec, targetKey, targetType) {
-    const draggedBlockIdx = blocks.findIndex(b =>
-      draggedSpec.type === 'round' ? b.roundId === draggedSpec.id : b.slides.some(s => s.id === draggedSpec.id)
-    )
-    let targetBlockIdx
-    if (targetType === 'round') {
-      targetBlockIdx = blocks.findIndex(b => b.roundId === targetKey)
-    } else {
-      targetBlockIdx = blocks.findIndex(b => b.slides.some(s => s.id === targetKey))
-    }
-    if (draggedBlockIdx === -1 || targetBlockIdx === -1 || draggedBlockIdx === targetBlockIdx) return null
-    const next = [...blocks]
-    const [removed] = next.splice(draggedBlockIdx, 1)
-    const adjusted = draggedBlockIdx < targetBlockIdx ? targetBlockIdx - 1 : targetBlockIdx
-    next.splice(adjusted, 0, removed)
-    return next.flatMap(b => b.slides.map(s => s.id))
-  }
-
-  function clear() {
-    setDragged(null)
-    setDragOverId(null)
-    setDragOverType(null)
-  }
-
-  function handleSlideDragStart(id) { setDragged({ id, type: 'slide' }) }
-  function handleRoundDragStart(id) { setDragged({ id, type: 'round' }) }
-
-  function handleSlideOver(e, id) {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragOverId(id)
-    setDragOverType('slide')
-  }
-
-  function handleRoundOver(e, id) {
-    e.preventDefault()
-    setDragOverId(id)
-    setDragOverType('round')
-  }
-
-  function handleDrop(e, targetKey, targetType) {
-    e.preventDefault()
-    e.stopPropagation()
-    if (!dragged || !onReorderSlides) { clear(); return }
-    const newOrder = computeNewOrder(dragged, targetKey, targetType)
-    if (newOrder) onReorderSlides(newOrder)
-    clear()
-  }
-
-  function handleDragEnd() { clear() }
-
-  const slideProps = {
-    onDragStart: handleSlideDragStart,
-    onDragOver: handleSlideOver,
-    onDrop: (e, id) => handleDrop(e, id, 'slide'),
-    onDragEnd: handleDragEnd,
-  }
-
   return (
     <aside className="w-56 bg-gray-50 border-r border-gray-100 flex flex-col overflow-hidden shrink-0">
       <div className="flex-1 overflow-y-auto py-1">
 
         {segments.map((seg, i) => {
-          // General (no-round) slides
           if (seg.type === 'general') {
             return (
               <div key={`general-${i}`} className="py-1">
@@ -185,7 +205,7 @@ export default function RoundSidebar({
                     dragOver={dragOverId === slide.id && dragOverType === 'slide'}
                     onSelect={() => onSelectSlide(slide)}
                     onDelete={() => onDeleteSlide(slide.id)}
-                    dragProps={slideProps}
+                    onGripDown={e => handleGripDown(e, slide.id, 'slide')}
                   />
                 ))}
               </div>
@@ -193,25 +213,22 @@ export default function RoundSidebar({
           }
 
           const { round, slides } = seg
-          const collapsed = collapsedRounds.has(round.id)
+          const collapsed    = collapsedRounds.has(round.id)
           const roundDragging = dragged?.id === round.id && dragged?.type === 'round'
           const roundDragOver = dragOverId === round.id && dragOverType === 'round'
 
           return (
             <div
               key={round.id}
+              data-round-id={round.id}
               className={`border-t border-gray-100 first:border-t-0 ${roundDragging ? 'opacity-40' : ''} ${roundDragOver ? 'border-t-2 border-t-blue-400' : ''}`}
-              onDragOver={e => handleRoundOver(e, round.id)}
-              onDrop={e => handleDrop(e, round.id, 'round')}
             >
               {/* Round header */}
               <div className="flex items-center gap-1.5 px-3 py-2 group">
                 <span
                   className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 text-xs leading-none"
                   title="Drag to reorder round"
-                  draggable
-                  onDragStart={e => { e.stopPropagation(); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', round.id); handleRoundDragStart(round.id) }}
-                  onDragEnd={e => { e.stopPropagation(); handleDragEnd() }}
+                  onMouseDown={e => handleGripDown(e, round.id, 'round')}
                 >
                   ⠿
                 </span>
@@ -278,7 +295,7 @@ export default function RoundSidebar({
                       dragOver={dragOverId === slide.id && dragOverType === 'slide'}
                       onSelect={() => onSelectSlide(slide)}
                       onDelete={() => onDeleteSlide(slide.id)}
-                      dragProps={slideProps}
+                      onGripDown={e => handleGripDown(e, slide.id, 'slide')}
                       indent
                     />
                   ))}
@@ -303,17 +320,13 @@ export default function RoundSidebar({
   )
 }
 
-function SlideRow({ slide, selected, dragging, dragOver, onSelect, onDelete, dragProps, indent }) {
-  const meta = SLIDE_TYPE_META[slide.type] ?? { icon: '📄', label: slide.type }
+function SlideRow({ slide, selected, dragging, dragOver, onSelect, onDelete, onGripDown, indent }) {
+  const meta  = SLIDE_TYPE_META[slide.type] ?? { icon: '📄', label: slide.type }
   const label = slideLabel(slide)
 
   return (
     <div
-      draggable
-      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', slide.id); dragProps.onDragStart(slide.id) }}
-      onDragOver={e => dragProps.onDragOver(e, slide.id)}
-      onDrop={e => dragProps.onDrop(e, slide.id)}
-      onDragEnd={dragProps.onDragEnd}
+      data-slide-id={slide.id}
       className={`group flex items-center gap-2 px-3 cursor-pointer transition-colors select-none ${
         selected
           ? 'border-l-2 border-[#1a6b4a] bg-white'
@@ -325,7 +338,7 @@ function SlideRow({ slide, selected, dragging, dragOver, onSelect, onDelete, dra
       <span
         className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 text-xs leading-none"
         title="Drag to reorder"
-        onMouseDown={e => e.stopPropagation()}
+        onMouseDown={onGripDown}
       >
         ⠿
       </span>
