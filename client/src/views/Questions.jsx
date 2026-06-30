@@ -84,32 +84,49 @@ export default function Questions() {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold text-gray-900">Question Archive</h1>
-          <p className="text-xs text-gray-400 mt-0.5">{questions.length} questions total</p>
+      <style>{`
+        @keyframes rowIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .row-animate {
+          animation: rowIn 240ms cubic-bezier(0.23,1,0.32,1) both;
+        }
+      `}</style>
+
+      {/* Header — full-width bar, centered inner */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-gray-900">Question Archive</h1>
+            <p className="text-xs text-gray-400 mt-0.5">{questions.length} questions total</p>
+          </div>
+          <a
+            href="/host"
+            className="text-xs text-gray-400 transition-[color] duration-[120ms] [cubic-bezier(0.23,1,0.32,1)] hover:text-gray-700"
+          >
+            ← Back to host
+          </a>
         </div>
-        <a href="/host" className="text-xs text-gray-400 hover:text-gray-700 transition-colors">← Back to host</a>
       </div>
 
-      {/* Controls */}
-      <div className="px-6 py-4 flex flex-col gap-3">
+      {/* Controls — centered */}
+      <div className="max-w-4xl mx-auto px-6 py-5 flex flex-col gap-3">
         <input
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search questions and answers…"
-          className="w-full max-w-lg border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a6b4a]/30 focus:border-[#1a6b4a] transition-[border-color,box-shadow] duration-[150ms] ease-out"
         />
         <div className="flex gap-1.5 flex-wrap">
           {FILTERS.map(f => (
             <button
               key={f.id}
               onClick={() => setFilter(f.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[transform,background-color,border-color,color] duration-[120ms] [transition-timing-function:cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] ${
                 filter === f.id
-                  ? 'bg-[#1a6b4a] text-white'
+                  ? 'bg-[#1a6b4a] text-white border border-[#1a6b4a]'
                   : 'bg-white border border-gray-200 text-gray-600 hover:border-[#1a6b4a] hover:text-[#1a6b4a]'
               }`}
             >
@@ -119,22 +136,24 @@ export default function Questions() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="px-6 pb-12">
+      {/* Table — centered */}
+      <div className="max-w-4xl mx-auto px-6 pb-16">
         {loading ? (
-          <p className="text-sm text-gray-400">Loading…</p>
+          <p className="text-sm text-gray-400 py-8 text-center">Loading…</p>
         ) : visible.length === 0 ? (
-          <p className="text-sm text-gray-400">{search ? 'No results.' : 'No questions yet.'}</p>
+          <p className="text-sm text-gray-400 py-8 text-center">
+            {search ? 'No results.' : 'No questions yet — add a question slide in the host to get started.'}
+          </p>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide w-24">Date</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide w-20">Type</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide w-28">Type</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">Question</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">Answer</th>
-                  <th className="w-16" />
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide w-48">Answer</th>
+                  <th className="w-20" />
                 </tr>
               </thead>
               <tbody>
@@ -143,15 +162,16 @@ export default function Questions() {
                   return (
                     <tr
                       key={row.id}
-                      className={`border-b border-gray-50 last:border-0 ${row.is_bonus ? 'bg-red-50' : i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}
+                      className={`border-b border-gray-50 last:border-0 row-animate ${row.is_bonus ? 'bg-red-50' : ''}`}
+                      style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
                     >
                       {/* Date */}
-                      <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
+                      <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap align-top pt-4">
                         {row.show_date ?? '—'}
                       </td>
 
                       {/* Type badges */}
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 align-top pt-4">
                         <div className="flex flex-col gap-1">
                           <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold ${TYPE_COLOR[row.type] ?? TYPE_COLOR.regular}`}>
                             {TYPE_LABEL[row.type] ?? row.type}
@@ -170,47 +190,51 @@ export default function Questions() {
                       </td>
 
                       {/* Question text */}
-                      <td className="px-4 py-3 max-w-sm">
+                      <td className="px-4 py-3 align-top">
                         {isEditing ? (
                           <textarea
                             value={editDraft.text}
                             onChange={e => setEditDraft(d => ({ ...d, text: e.target.value }))}
                             rows={3}
-                            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-900 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-900 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-[120ms] ease-out"
                           />
                         ) : (
-                          <span className="text-gray-800 leading-snug">{row.text ?? <span className="text-gray-300 italic">—</span>}</span>
+                          <span className="text-gray-800 leading-snug">
+                            {row.text ?? <span className="text-gray-300 italic">—</span>}
+                          </span>
                         )}
                       </td>
 
                       {/* Answer */}
-                      <td className="px-4 py-3 max-w-xs">
+                      <td className="px-4 py-3 align-top">
                         {isEditing ? (
                           <input
                             type="text"
                             value={editDraft.answer}
                             onChange={e => setEditDraft(d => ({ ...d, answer: e.target.value }))}
-                            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-[120ms] ease-out"
                           />
                         ) : (
-                          <span className="text-gray-600">{row.answer ?? <span className="text-gray-300 italic">—</span>}</span>
+                          <span className="text-gray-600">
+                            {row.answer ?? <span className="text-gray-300 italic">—</span>}
+                          </span>
                         )}
                       </td>
 
                       {/* Actions */}
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 align-top pt-3.5">
                         {isEditing ? (
                           <div className="flex gap-1.5">
                             <button
                               onClick={() => commitEdit(row.id)}
                               disabled={saving}
-                              className="px-2.5 py-1 bg-[#1a6b4a] text-white text-xs font-semibold rounded-lg hover:bg-green-900 disabled:opacity-40"
+                              className="px-2.5 py-1 bg-[#1a6b4a] text-white text-xs font-semibold rounded-lg transition-[transform,opacity] duration-[120ms] [transition-timing-function:cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] hover:bg-green-900 disabled:opacity-40"
                             >
                               Save
                             </button>
                             <button
                               onClick={cancelEdit}
-                              className="px-2.5 py-1 bg-white border border-gray-200 text-gray-600 text-xs font-semibold rounded-lg hover:border-gray-400"
+                              className="px-2.5 py-1 bg-white border border-gray-200 text-gray-600 text-xs font-semibold rounded-lg transition-[transform,border-color] duration-[120ms] [transition-timing-function:cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] hover:border-gray-400"
                             >
                               Cancel
                             </button>
@@ -218,7 +242,7 @@ export default function Questions() {
                         ) : (
                           <button
                             onClick={() => startEdit(row)}
-                            className="px-2.5 py-1 bg-white border border-gray-200 text-gray-500 text-xs font-semibold rounded-lg hover:border-gray-400 hover:text-gray-700"
+                            className="px-2.5 py-1 bg-white border border-gray-200 text-gray-500 text-xs font-semibold rounded-lg transition-[transform,border-color,color] duration-[120ms] [transition-timing-function:cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] hover:border-gray-400 hover:text-gray-700"
                           >
                             Edit
                           </button>
