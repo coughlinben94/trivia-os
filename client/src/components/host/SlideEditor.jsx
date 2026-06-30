@@ -217,7 +217,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
         )}
         {slide.type === 'grading-break' && (
           <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
-            uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
+            uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} />
         )}
         {slide.type === 'scoreboard-reveal' && (
           <ScoreboardRevealEditor data={data} onChange={change} show={show} />
@@ -712,7 +712,7 @@ function ShinyListBuilder({ items, hasPoints, onChange }) {
   )
 }
 
-function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostPhotos }) {
+function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostPhotos, jukeboxLibs }) {
   return (
     <>
       <Field label="Message">
