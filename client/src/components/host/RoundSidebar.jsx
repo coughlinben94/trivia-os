@@ -94,49 +94,29 @@ export default function RoundSidebar({
   }
   blocksRef.current = blocks
 
+  // Direction-based: dragging down = item lands after target; dragging up = before target.
+  // adjusted = targetBlockIdx handles both cases correctly — no top/bottom half needed.
   function computeNewOrder(draggedSpec, targetKey, targetType) {
     const b = blocksRef.current
     const draggedBlockIdx = b.findIndex(bl =>
       draggedSpec.type === 'round' ? bl.roundId === draggedSpec.id : bl.slides.some(s => s.id === draggedSpec.id)
     )
-    let targetBlockIdx
-    if (targetType === 'round-before' || targetType === 'round-after') {
-      targetBlockIdx = b.findIndex(bl => bl.roundId === targetKey)
-    } else {
-      // slide-before or slide-after
-      targetBlockIdx = b.findIndex(bl => bl.slides.some(s => s.id === targetKey))
-    }
-    if (draggedBlockIdx === -1 || targetBlockIdx === -1) return null
+    const targetBlockIdx = targetType === 'round'
+      ? b.findIndex(bl => bl.roundId === targetKey)
+      : b.findIndex(bl => bl.slides.some(s => s.id === targetKey))
+
+    if (draggedBlockIdx === -1 || targetBlockIdx === -1 || draggedBlockIdx === targetBlockIdx) return null
 
     const next = [...b]
     const [removed] = next.splice(draggedBlockIdx, 1)
-
-    const insertAfter = targetType === 'round-after' || targetType === 'slide-after'
-    let adjusted
-    if (insertAfter) {
-      adjusted = draggedBlockIdx < targetBlockIdx ? targetBlockIdx : targetBlockIdx + 1
-    } else {
-      adjusted = draggedBlockIdx < targetBlockIdx ? targetBlockIdx - 1 : targetBlockIdx
-    }
-
-    if (adjusted === draggedBlockIdx) return null
-    next.splice(adjusted, 0, removed)
+    next.splice(targetBlockIdx, 0, removed)
     return next.flatMap(bl => bl.slides.map(s => s.id))
   }
 
-  // Walk up the DOM. Top half of target = before, bottom half = after.
-  function findDropTarget(el, clientY) {
+  function findDropTarget(el) {
     while (el && el !== document.body) {
-      if (el.dataset?.slideId) {
-        const rect = el.getBoundingClientRect()
-        const pos  = clientY < rect.top + rect.height / 2 ? 'slide-before' : 'slide-after'
-        return { id: el.dataset.slideId, type: pos }
-      }
-      if (el.dataset?.roundId) {
-        const rect = el.getBoundingClientRect()
-        const pos  = clientY < rect.top + rect.height / 2 ? 'round-before' : 'round-after'
-        return { id: el.dataset.roundId, type: pos }
-      }
+      if (el.dataset?.slideId) return { id: el.dataset.slideId, type: 'slide' }
+      if (el.dataset?.roundId) return { id: el.dataset.roundId, type: 'round' }
       el = el.parentElement
     }
     return null
@@ -154,7 +134,7 @@ export default function RoundSidebar({
 
     function onMove(ev) {
       const el = document.elementFromPoint(ev.clientX, ev.clientY)
-      const target = findDropTarget(el, ev.clientY)
+      const target = findDropTarget(el)
       dragOverRef.current = target
       if (target) {
         setDragOverId(target.id)
@@ -207,6 +187,11 @@ export default function RoundSidebar({
     setRenamingRound(null)
   }
 
+  // Index of the block currently being dragged — used for indicator direction
+  const draggedBIdx = dragged
+    ? blocks.findIndex(bl => dragged.type === 'round' ? bl.roundId === dragged.id : bl.slides.some(s => s.id === dragged.id))
+    : -1
+
   return (
     <aside className="w-56 bg-gray-50 border-r border-gray-100 flex flex-col overflow-hidden shrink-0">
       <div className="px-3 pt-3 pb-1 shrink-0">
@@ -218,19 +203,23 @@ export default function RoundSidebar({
           if (seg.type === 'general') {
             return (
               <div key={`general-${i}`} className="py-1">
-                {seg.slides.map(slide => (
-                  <SlideRow
-                    key={slide.id}
-                    slide={slide}
-                    selected={slide.id === selectedSlideId}
-                    dragging={dragged?.id === slide.id}
-                    dragBefore={dragOverId === slide.id && dragOverType === 'slide-before'}
-                    dragAfter={dragOverId === slide.id && dragOverType === 'slide-after'}
-                    onSelect={() => onSelectSlide(slide)}
-                    onDelete={() => onDeleteSlide(slide.id)}
-                    onGripDown={e => handleGripDown(e, slide.id, 'slide')}
-                  />
-                ))}
+                {seg.slides.map(slide => {
+                  const tIdx = blocks.findIndex(bl => bl.slides.some(s => s.id === slide.id))
+                  const over = dragOverId === slide.id && dragOverType === 'slide'
+                  return (
+                    <SlideRow
+                      key={slide.id}
+                      slide={slide}
+                      selected={slide.id === selectedSlideId}
+                      dragging={dragged?.id === slide.id}
+                      dragBefore={over && draggedBIdx > tIdx}
+                      dragAfter={over && draggedBIdx < tIdx}
+                      onSelect={() => onSelectSlide(slide)}
+                      onDelete={() => onDeleteSlide(slide.id)}
+                      onGripDown={e => handleGripDown(e, slide.id, 'slide')}
+                    />
+                  )
+                })}
               </div>
             )
           }
@@ -238,8 +227,10 @@ export default function RoundSidebar({
           const { round, slides } = seg
           const collapsed     = collapsedRounds.has(round.id)
           const roundDragging = dragged?.id === round.id && dragged?.type === 'round'
-          const roundBefore   = dragOverId === round.id && dragOverType === 'round-before'
-          const roundAfter    = dragOverId === round.id && dragOverType === 'round-after'
+          const rIdx          = blocks.findIndex(bl => bl.roundId === round.id)
+          const rOver         = dragOverId === round.id && dragOverType === 'round'
+          const roundBefore   = rOver && draggedBIdx > rIdx
+          const roundAfter    = rOver && draggedBIdx < rIdx
 
           return (
             <div
@@ -310,19 +301,24 @@ export default function RoundSidebar({
               {/* Slides */}
               {!collapsed && (
                 <div className="pb-1">
-                  {slides.map(slide => (
-                    <SlideRow
-                      key={slide.id}
-                      slide={slide}
-                      selected={slide.id === selectedSlideId}
-                      dragging={dragged?.id === slide.id}
-                      dragOver={dragOverId === slide.id && dragOverType === 'slide'}
-                      onSelect={() => onSelectSlide(slide)}
-                      onDelete={() => onDeleteSlide(slide.id)}
-                      onGripDown={e => handleGripDown(e, slide.id, 'slide')}
-                      indent
-                    />
-                  ))}
+                  {slides.map(slide => {
+                    const tIdx = blocks.findIndex(bl => bl.slides.some(s => s.id === slide.id))
+                    const over = dragOverId === slide.id && dragOverType === 'slide'
+                    return (
+                      <SlideRow
+                        key={slide.id}
+                        slide={slide}
+                        selected={slide.id === selectedSlideId}
+                        dragging={dragged?.id === slide.id}
+                        dragBefore={over && draggedBIdx > tIdx}
+                        dragAfter={over && draggedBIdx < tIdx}
+                        onSelect={() => onSelectSlide(slide)}
+                        onDelete={() => onDeleteSlide(slide.id)}
+                        onGripDown={e => handleGripDown(e, slide.id, 'slide')}
+                        indent
+                      />
+                    )
+                  })}
                 </div>
               )}
             </div>

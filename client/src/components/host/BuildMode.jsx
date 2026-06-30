@@ -7,6 +7,7 @@ import AddSlideWizard, { TYPE_CARDS } from './AddSlideWizard.jsx'
 import AddRoundWizard from './AddRoundWizard.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
 import TickerMessageManager from './TickerMessageManager.jsx'
+import ThemePickerModal from './ThemePickerModal.jsx'
 
 const BTN = 'transition duration-[120ms] ease-snap active:scale-[0.97]'
 
@@ -17,11 +18,15 @@ const CARD_STYLE = {
   'grading-break': 'bg-gradient-to-br from-violet-50 to-purple-100  border-violet-200 hover:border-violet-400',
   'custom':        'bg-gradient-to-br from-teal-50   to-cyan-100    border-teal-200   hover:border-teal-400',
   'database':      'bg-gradient-to-br from-green-50  to-emerald-100 border-green-200  hover:border-green-400',
+  'theme':         'bg-gradient-to-br from-pink-50   to-fuchsia-100 border-pink-200   hover:border-pink-400',
+  'ticker':        'bg-gradient-to-br from-sky-50    to-cyan-100    border-sky-200    hover:border-sky-400',
+  'shiny':         'bg-gradient-to-br from-yellow-50 to-amber-100   border-yellow-200 hover:border-yellow-400',
 }
 
 export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
   const [showTickerManager, setShowTickerManager] = useState(false)
+  const [showThemePicker, setShowThemePicker] = useState(false)
   const [mode, setMode] = useState('wizard')
   const [selectedSlide, setSelectedSlide] = useState(null)
   const [addModalData, setAddModalData] = useState(null)  // null = modal closed
@@ -96,8 +101,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
         onUpdateMeta={actions.updateShowMeta}
         onGoLive={onGoLive}
         onExport={actions.exportShow}
-        onOpenFormatLibrary={() => setShowFormatLibrary(true)}
-        onOpenTicker={() => setShowTickerManager(true)}
         onOpenLibrary={onOpenLibrary}
       />
 
@@ -156,6 +159,30 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                     <span className="text-3xl leading-none">🗃️</span>
                     <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Question Database</span>
                     <span className="text-xs text-gray-500 leading-snug">Browse and search your question archive</span>
+                  </button>
+                  <button
+                    onClick={() => setShowThemePicker(true)}
+                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['theme']}`}
+                  >
+                    <span className="text-3xl leading-none">🎨</span>
+                    <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Theme</span>
+                    <span className="text-xs text-gray-500 leading-snug">Change the display look</span>
+                  </button>
+                  <button
+                    onClick={() => setShowTickerManager(true)}
+                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['ticker']}`}
+                  >
+                    <span className="text-3xl leading-none">📺</span>
+                    <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Ticker</span>
+                    <span className="text-xs text-gray-500 leading-snug">Edit pre-show ticker messages</span>
+                  </button>
+                  <button
+                    onClick={() => setShowFormatLibrary(true)}
+                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['shiny']}`}
+                  >
+                    <span className="text-3xl leading-none">✨</span>
+                    <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Shiny Formats</span>
+                    <span className="text-xs text-gray-500 leading-snug">Add or edit shiny question styles</span>
                   </button>
                 </div>
               </div>
@@ -237,6 +264,14 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
           messages={show.tickerMessages ?? []}
           onSave={actions.updateTickerMessages}
           onClose={() => setShowTickerManager(false)}
+        />
+      )}
+
+      {showThemePicker && (
+        <ThemePickerModal
+          show={show}
+          onClose={() => setShowThemePicker(false)}
+          onSelectTheme={themeId => actions.updateShowMeta({ theme: themeId })}
         />
       )}
     </div>

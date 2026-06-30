@@ -1,12 +1,9 @@
 import { useState } from 'react'
-import { THEMES } from '../../themes/index.js'
-import ThemePickerModal from './ThemePickerModal.jsx'
 
-export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onOpenFormatLibrary, onOpenTicker, onOpenLibrary }) {
+export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onOpenLibrary }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [copied, setCopied] = useState(false)
-  const [showThemePicker, setShowThemePicker] = useState(false)
 
   const joinUrl = `${window.location.origin}/join?show=${show.id}`
 
@@ -27,8 +24,6 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
     if (trimmed && trimmed !== show.title) onUpdateMeta({ title: trimmed })
     setEditingTitle(false)
   }
-
-  const currentThemeName = THEMES.find(t => t.id === show.theme)?.name ?? 'Theme'
 
   return (
     <>
@@ -79,15 +74,6 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
           )}
         </div>
 
-        {/* Theme picker trigger */}
-        <button
-          onClick={() => setShowThemePicker(true)}
-          className="shrink-0 flex items-center gap-2 text-sm text-gray-700 border border-gray-200 rounded-lg px-3 py-2 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-baynes-forest"
-        >
-          <span>{currentThemeName}</span>
-          <span className="text-gray-400 text-xs leading-none">▾</span>
-        </button>
-
         {/* Join URL copy */}
         <button
           onClick={copyJoinUrl}
@@ -100,24 +86,6 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
 
         {/* Actions */}
         <div className="flex items-center gap-1 shrink-0">
-          {onOpenTicker && (
-            <button
-              onClick={onOpenTicker}
-              title="Edit pre-show ticker messages"
-              className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg transition-colors"
-            >
-              📺 Ticker
-            </button>
-          )}
-          {onOpenFormatLibrary && (
-            <button
-              onClick={onOpenFormatLibrary}
-              title="Manage shiny formats"
-              className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg transition-colors"
-            >
-              ✨ Add Shiny
-            </button>
-          )}
           <button
             onClick={() => window.open(`/display?show=${show.id}&preview=true`, '_blank')}
             title="Preview display on current theme"
@@ -141,13 +109,6 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
         </div>
       </header>
 
-      {showThemePicker && (
-        <ThemePickerModal
-          show={show}
-          onClose={() => setShowThemePicker(false)}
-          onSelectTheme={themeId => onUpdateMeta({ theme: themeId })}
-        />
-      )}
     </>
   )
 }
