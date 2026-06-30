@@ -38,7 +38,7 @@
 - `PreShowScreen` — QR code, team ticker (always visible), ambient, Baynes watermark, Ben photo (bottom-left)
 - `SlideRenderer.jsx` — routes to per-type slide components; houses full transition system (9 named transitions + Random + reduced-motion crossfade fallback; `assemble` defined but NOT in picker — see Remaining)
 - All 10 slide types implemented: `TitleSlide`, `RoundIntroSlide`, `QuestionSlide`, `GradingBreakSlide`, `ScoreboardRevealSlide`, `CustomSlide`, `StateOfUnionSlide`, `MultiQuestionSlide`, `PixelateSeriesSlide`, `PylRevealSlide`
-- `ParticleBackground.jsx` — 29 GPU-accelerated ambient components, 3-layer architecture, full audit June 2026
+- `ParticleBackground.jsx` — 21 GPU-accelerated ambient components, 3-layer architecture, full audit June 2026
 - `BaynesWatermark.jsx`, `QuestionCounter.jsx`, `WaveformBars.jsx`
 - `FrameRegistry.js` (`TransitionRegistry.js` removed — dead code)
 - `ThemeCanvas.jsx`, `ThemeForeground.jsx` — wired, scene: null (future use)
@@ -92,11 +92,11 @@
 - `BenPhoto.jsx` — circle img, size prop, returns null while loading/if no photos
 - `vite.config.js` — `publicDir: '../public'` so images copy to `dist/ben/` on build
 
-### 29 Themes
+### 21 Themes
 - Full ambient audit completed June 23, 2026 — all themes rewritten or validated
 - 3-layer architecture enforced: base + mid + accent
 - Opacity recalibrated for TV at bar distance (no layer below rgba 0.25)
-- Tinted vignette system on all 29 themes
+- Tinted vignette system on all 21 themes
 - All GPU-only (transform + opacity only)
 - `AmbientAudit.jsx` — dev tool for cycling themes with screenshots
 
@@ -119,7 +119,7 @@
 - **`baynes-ops` skill** — referenced in `CLAUDE.md` but not yet written. Not blocking anything.
 - **Scheduler Vercel DATABASE_URL broken** — as of June 23, 2026. Fix before any scheduler prod deploy. Not blocking trivia-os.
 - **`StateOfUnionSlide.jsx`** — slide type exists in the file tree but may not be fully spec'd in SlideEditor or AddSlideWizard. Check before using.
-- **`ThemeCanvas.jsx` / `ThemeForeground.jsx`** — wired but `scene: null` on all 29 themes. Future use. Do not add ambient logic here.
+- **`ThemeCanvas.jsx` / `ThemeForeground.jsx`** — wired but `scene: null` on all 21 themes. Future use. Do not add ambient logic here.
 - **Handters + Roquen fonts** — `.woff2` files exist in `/public/fonts/` but `@font-face` declarations may not be in `index.css`. Brand typography is currently Boogaloo + DM Sans as fallbacks.
 - **`baynes-logo.svg`** — referenced in `NoShowScreen` and some components but the file doesn't exist in `dist/`. Broken img renders as nothing (acceptable for now).
 - **`AmbientAudit.jsx`** — dev tool, not routed in prod. Verify it's excluded from main bundle or gated.
