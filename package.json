@@ -9,7 +9,8 @@
     "test:e2e": "playwright test",
     "test:smoke": "playwright test e2e/host-smoke.spec.js",
     "test:audit": "playwright test e2e/host-audit.spec.js",
-    "test:wizard": "playwright test e2e/wizard-audit.spec.js"
+    "test:wizard": "playwright test e2e/wizard-audit.spec.js",
+    "test:wizard-create": "PLAYWRIGHT_SHOW_ID=show_WLBM5jvb playwright test e2e/wizard-create-verify.spec.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

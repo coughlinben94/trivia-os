@@ -66,4 +66,3 @@ keyframes injected via `<style>{XX_STYLE}</style>` inside the component, prefixe
 reduced-motion guard, and **no own vignette** (ParticleBackground adds the theme `Vignette` after).
 Keep the exported function name so `AMBIENT_MAP` still resolves. Never touch shared helpers
 (`GlowLayer`, `PulseDot`, shared `ambient*` keyframes) — other ambients depend on them.
-
