@@ -198,12 +198,12 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
             />
           ) : (
             /* Dashboard rest state — type picker grid */
-            <div className="h-full flex flex-col items-center justify-center p-8">
-              <div className="w-full max-w-2xl">
+            <div className="h-full flex flex-col items-center justify-center p-8 overflow-y-auto">
+              <div className="w-full max-w-5xl">
 
                 {/* Round context filter */}
                 {show.rounds.length > 0 && (
-                  <div className="mb-6">
+                  <div className="mb-5">
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
                       What round are you working on?
                     </p>
@@ -225,66 +225,76 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                   </div>
                 )}
 
-                <div className="grid grid-cols-3 gap-3">
-                  {TYPE_CARDS.map(card => (
-                    <button
-                      key={card.type}
-                      onClick={() => openAddModal({ type: card.type, roundId: activeRoundId })}
-                      className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE[card.type] ?? 'bg-white border-gray-200 hover:border-gray-400'}`}
-                    >
-                      <span className="text-3xl leading-none">{card.icon}</span>
-                      <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">{card.name}</span>
-                      <span className="text-xs text-gray-500 leading-snug">{card.desc}</span>
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setShowThemePicker(true)}
-                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['theme']}`}
-                  >
-                    <span className="text-3xl leading-none">🎨</span>
-                    <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Theme</span>
-                    <span className="text-xs text-gray-500 leading-snug">Change the display look</span>
-                  </button>
-                  <button
-                    onClick={() => { window.location.href = '/questions' }}
-                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['database']}`}
-                  >
-                    <span className="text-3xl leading-none">🗃️</span>
-                    <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Question Database</span>
-                    <span className="text-xs text-gray-500 leading-snug">Browse and search your question archive</span>
-                  </button>
-                  <button
-                    onClick={() => setShowTickerManager(true)}
-                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['ticker']}`}
-                  >
-                    <span className="text-3xl leading-none">📺</span>
-                    <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Ticker</span>
-                    <span className="text-xs text-gray-500 leading-snug">Edit pre-show ticker messages</span>
-                  </button>
-                  <button
-                    onClick={() => setShowFormatLibrary(true)}
-                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['shiny']}`}
-                  >
-                    <span className="text-3xl leading-none">✨</span>
-                    <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Shiny Formats</span>
-                    <span className="text-xs text-gray-500 leading-snug">Add or edit shiny question styles</span>
-                  </button>
+                {/* 3-5-3 layout: Swing | 9-card grid | PYL */}
+                <div className="grid gap-4 items-stretch" style={{ gridTemplateColumns: '3fr 5fr 3fr' }}>
+
+                  {/* LEFT: Swing Round */}
                   <button
                     onClick={() => setShowSwingWizard(true)}
-                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['swing']}`}
+                    className={`flex flex-col items-center justify-center gap-3 p-6 rounded-xl border text-center h-full ${BTN} ${CARD_STYLE['swing']}`}
                   >
-                    <span className="text-3xl leading-none">🎷</span>
-                    <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Swing Round</span>
-                    <span className="text-xs text-gray-500 leading-snug">Bulk-add swing questions at once</span>
+                    <span className="text-4xl leading-none">🎷</span>
+                    <span className="text-sm font-semibold text-gray-800">Swing Round</span>
+                    <span className="text-xs text-gray-500 leading-snug">Bulk-add all swing questions at once</span>
                   </button>
+
+                  {/* CENTER: 9 cards in 3×3 */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {TYPE_CARDS.map(card => (
+                      <button
+                        key={card.type}
+                        onClick={() => openAddModal({ type: card.type, roundId: activeRoundId })}
+                        className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE[card.type] ?? 'bg-white border-gray-200 hover:border-gray-400'}`}
+                      >
+                        <span className="text-3xl leading-none">{card.icon}</span>
+                        <span className="text-sm font-semibold text-gray-800 leading-tight">{card.name}</span>
+                        <span className="text-xs text-gray-500 leading-snug">{card.desc}</span>
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setShowThemePicker(true)}
+                      className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['theme']}`}
+                    >
+                      <span className="text-3xl leading-none">🎨</span>
+                      <span className="text-sm font-semibold text-gray-800 leading-tight">Theme</span>
+                      <span className="text-xs text-gray-500 leading-snug">Change the display look</span>
+                    </button>
+                    <button
+                      onClick={() => { window.location.href = '/questions' }}
+                      className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['database']}`}
+                    >
+                      <span className="text-3xl leading-none">🗃️</span>
+                      <span className="text-sm font-semibold text-gray-800 leading-tight">Question Database</span>
+                      <span className="text-xs text-gray-500 leading-snug">Browse and search your archive</span>
+                    </button>
+                    <button
+                      onClick={() => setShowTickerManager(true)}
+                      className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['ticker']}`}
+                    >
+                      <span className="text-3xl leading-none">📺</span>
+                      <span className="text-sm font-semibold text-gray-800 leading-tight">Ticker</span>
+                      <span className="text-xs text-gray-500 leading-snug">Edit pre-show ticker messages</span>
+                    </button>
+                    <button
+                      onClick={() => setShowFormatLibrary(true)}
+                      className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['shiny']}`}
+                    >
+                      <span className="text-3xl leading-none">✨</span>
+                      <span className="text-sm font-semibold text-gray-800 leading-tight">Shiny Formats</span>
+                      <span className="text-xs text-gray-500 leading-snug">Add or edit shiny question styles</span>
+                    </button>
+                  </div>
+
+                  {/* RIGHT: Press Your Luck! */}
                   <button
                     onClick={() => setShowPylWizard(true)}
-                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['pyl']}`}
+                    className={`flex flex-col items-center justify-center gap-3 p-6 rounded-xl border text-center h-full ${BTN} ${CARD_STYLE['pyl']}`}
                   >
-                    <span className="text-3xl leading-none">🎰</span>
-                    <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Press Your Luck!</span>
+                    <span className="text-4xl leading-none">🎰</span>
+                    <span className="text-sm font-semibold text-gray-800">Press Your Luck!</span>
                     <span className="text-xs text-gray-500 leading-snug">Set up PYL themes and slides</span>
                   </button>
+
                 </div>
               </div>
             </div>
