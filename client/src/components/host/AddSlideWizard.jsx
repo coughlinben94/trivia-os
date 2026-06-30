@@ -3,6 +3,7 @@ import { sortedSlides } from '../../hooks/useShow.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
+import { archiveQuestion } from '../../lib/archiveQuestion.js'
 
 export const TYPE_CARDS = [
   { type: 'title',         icon: '🎬', name: 'State of the Union', desc: 'Opening address to the crowd' },
@@ -136,6 +137,21 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
     }
 
     await onAddSlide({ type, roundId: roundId ?? null, order: sorted.length, data })
+
+    if (type === 'question') {
+      const isShiny = !!data.isShiny
+      archiveQuestion({
+        type:       isShiny ? 'shiny' : (isBonus ? 'regular' : 'regular'),
+        text:       isShiny ? data.text : questionText.trim(),
+        answer:     isShiny ? data.answer : questionAnswer.trim(),
+        is_bonus:   isBonus,
+        is_shiny:   isShiny,
+        shiny_type: isShiny ? (selectedShinyFmt?.media_type ?? null) : null,
+        show_id:    show?.id ?? null,
+        show_title: show?.title ?? null,
+        show_date:  show?.date ?? null,
+      })
+    }
   }
 
   const needsRound     = NEEDS_ROUND.has(type)

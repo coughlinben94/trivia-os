@@ -10,6 +10,7 @@ import TickerMessageManager from './TickerMessageManager.jsx'
 import ThemePickerModal from './ThemePickerModal.jsx'
 import SwingRoundWizard from './SwingRoundWizard.jsx'
 import PYLWizard from './PYLWizard.jsx'
+import { archiveQuestions } from '../../lib/archiveQuestion.js'
 
 const BTN = 'host-button'
 
@@ -69,7 +70,16 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
         mediaSlots:     [],
       },
     }))
-    if (slidesData.length) await actions.addSiblingSlides(afterId, slidesData)
+    if (slidesData.length) {
+      await actions.addSiblingSlides(afterId, slidesData)
+      archiveQuestions([{
+        type:            'swing',
+        questions_data:  nonEmpty.map(q => ({ text: q.text.trim(), answer: q.answer.trim() })),
+        show_id:         show.id,
+        show_title:      show.title,
+        show_date:       show.date ?? null,
+      }])
+    }
   }
 
   async function handlePYLAdd(themes, roundId) {
@@ -84,7 +94,17 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
       roundId: roundId ?? null,
       data: { themeName: theme.name, themeType: theme.type, title: theme.name, themeIndex: i },
     }))
-    if (slidesData.length) await actions.addSiblingSlides(afterId, slidesData)
+    if (slidesData.length) {
+      await actions.addSiblingSlides(afterId, slidesData)
+      archiveQuestions(themes.map(theme => ({
+        type:       'pyl',
+        text:       theme.name,
+        answer:     theme.type,
+        show_id:    show.id,
+        show_title: show.title,
+        show_date:  show.date ?? null,
+      })))
+    }
   }
 
   const syncedSelectedSlide = selectedSlide

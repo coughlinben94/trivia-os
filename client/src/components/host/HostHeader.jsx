@@ -39,16 +39,6 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
         {/* Divider */}
         <div className="w-px h-6 bg-gray-200 shrink-0" />
 
-        {/* My Shows nav */}
-        {onOpenLibrary && (
-          <button
-            onClick={onOpenLibrary}
-            className="shrink-0 text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
-          >
-            My Shows
-          </button>
-        )}
-
         {/* Divider */}
         <div className="w-px h-6 bg-gray-200 shrink-0" />
 

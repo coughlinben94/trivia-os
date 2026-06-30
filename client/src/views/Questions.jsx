@@ -220,7 +220,16 @@ export default function Questions() {
 
                       {/* Question text */}
                       <td className="px-4 py-3 align-middle">
-                        {isEditing ? (
+                        {row.type === 'swing' && row.questions_data ? (
+                          <ol className="list-decimal list-inside space-y-1 text-xs text-gray-700">
+                            {row.questions_data.map((q, qi) => (
+                              <li key={qi}>
+                                <span className="font-medium">{q.text}</span>
+                                {q.answer && <span className="text-gray-400"> — {q.answer}</span>}
+                              </li>
+                            ))}
+                          </ol>
+                        ) : isEditing ? (
                           <textarea
                             value={editDraft.text}
                             onChange={e => setEditDraft(d => ({ ...d, text: e.target.value }))}
@@ -236,13 +245,17 @@ export default function Questions() {
 
                       {/* Answer */}
                       <td className="px-4 py-3 align-middle">
-                        {isEditing ? (
+                        {row.type === 'swing' ? null : isEditing ? (
                           <input
                             type="text"
                             value={editDraft.answer}
                             onChange={e => setEditDraft(d => ({ ...d, answer: e.target.value }))}
                             className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-[120ms] ease-out"
                           />
+                        ) : row.type === 'pyl' && row.answer ? (
+                          <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-purple-100 text-purple-700 capitalize">
+                            {row.answer}
+                          </span>
                         ) : (
                           <span className="text-gray-600">
                             {row.answer ?? <span className="text-gray-300 italic">—</span>}
@@ -268,7 +281,7 @@ export default function Questions() {
                               Cancel
                             </button>
                           </div>
-                        ) : (
+                        ) : row.type === 'swing' ? null : (
                           <button
                             onClick={() => startEdit(row)}
                             className="px-2.5 py-1 bg-white border border-gray-200 text-gray-500 text-xs font-semibold rounded-lg transition-[transform,border-color,color] duration-[120ms] [transition-timing-function:cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] hover:border-gray-400 hover:text-gray-700"
