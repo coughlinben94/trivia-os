@@ -37,9 +37,17 @@ export default function Questions() {
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
   const [filter, setFilter]       = useState('all')
+  const [showFilter, setShowFilter] = useState(null) // show_id string or null
   const [editingId, setEditingId] = useState(null)
   const [editDraft, setEditDraft] = useState({ text: '', answer: '' })
   const [saving, setSaving]       = useState(false)
+
+  // Read ?show= param from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const showId = params.get('show')
+    if (showId) setShowFilter(showId)
+  }, [])
 
   useEffect(() => {
     supabase
@@ -52,8 +60,16 @@ export default function Questions() {
       })
   }, [])
 
+  // Unique shows from loaded questions for the show filter dropdown
+  const shows = [...new Map(
+    questions
+      .filter(q => q.show_id && q.show_title)
+      .map(q => [q.show_id, { id: q.show_id, title: q.show_title, date: q.show_date }])
+  ).values()].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''))
+
   const q = search.trim().toLowerCase()
   const visible = questions.filter(row => {
+    if (showFilter && row.show_id !== showFilter) return false
     if (!matchesFilter(row, filter)) return false
     if (!q) return true
     return (row.text ?? '').toLowerCase().includes(q) || (row.answer ?? '').toLowerCase().includes(q)
@@ -112,13 +128,27 @@ export default function Questions() {
 
       {/* Controls — centered */}
       <div className="max-w-4xl mx-auto px-6 py-5 flex flex-col gap-3">
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search questions and answers…"
-          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a6b4a]/30 focus:border-[#1a6b4a] transition-[border-color,box-shadow] duration-[150ms] ease-out"
-        />
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search questions and answers…"
+            className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a6b4a]/30 focus:border-[#1a6b4a] transition-[border-color,box-shadow] duration-[150ms] ease-out"
+          />
+          {shows.length > 0 && (
+            <select
+              value={showFilter ?? ''}
+              onChange={e => setShowFilter(e.target.value || null)}
+              className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a6b4a]/30 focus:border-[#1a6b4a] transition-[border-color,box-shadow] duration-[150ms] ease-out"
+            >
+              <option value="">All shows</option>
+              {shows.map(s => (
+                <option key={s.id} value={s.id}>{s.title ?? s.date ?? s.id}</option>
+              ))}
+            </select>
+          )}
+        </div>
         <div className="flex gap-1.5 flex-wrap">
           {FILTERS.map(f => (
             <button
@@ -149,8 +179,8 @@ export default function Questions() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide w-24">Date</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide w-28">Type</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide w-36">Show</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide w-28">Type</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">Question</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide w-48">Answer</th>
                   <th className="w-20" />
@@ -165,14 +195,15 @@ export default function Questions() {
                       className={`border-b border-gray-50 last:border-0 row-animate ${row.is_bonus ? 'bg-red-50' : ''}`}
                       style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
                     >
-                      {/* Date */}
-                      <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap align-top pt-4">
-                        {row.show_date ?? '—'}
+                      {/* Show */}
+                      <td className="px-4 py-3 align-top pt-4">
+                        <p className="text-xs font-medium text-gray-700 leading-snug">{row.show_title ?? '—'}</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">{row.show_date ?? ''}</p>
                       </td>
 
                       {/* Type badges */}
                       <td className="px-4 py-3 align-top pt-4">
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1 items-center">
                           <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold ${TYPE_COLOR[row.type] ?? TYPE_COLOR.regular}`}>
                             {TYPE_LABEL[row.type] ?? row.type}
                           </span>

@@ -182,6 +182,14 @@ export default function ShowManager({ onShowReady, listShows, createShow, loadSh
                         </div>
                       ) : (
                         <>
+                          <a
+                            href={`/questions?show=${s.id}`}
+                            onClick={e => e.stopPropagation()}
+                            title="View questions"
+                            className="p-1.5 text-xs text-gray-400 hover:text-baynes-forest opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            🗃️
+                          </a>
                           <button
                             onClick={e => handleDuplicate(s.id, e)}
                             title="Duplicate"

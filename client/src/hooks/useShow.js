@@ -283,6 +283,7 @@ export function useShow() {
       supabase.from('questions').insert({
         show_id: show.id,
         show_date: show.date ?? null,
+        show_title: show.title ?? null,
         type: d.isShiny ? 'shiny' : 'regular',
         text: d.text ?? null,
         answer: d.answer ?? null,
