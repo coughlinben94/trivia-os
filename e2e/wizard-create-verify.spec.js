@@ -122,6 +122,9 @@ test.use({ viewport: { width: 1280, height: 720 } })
 // ── beforeAll: snapshot + ensure ≥ 2 rounds ─────────────────────────────────
 
 test.beforeAll(async () => {
+  // Ensure the show is not live — LiveMode renders no <aside> and the test would fail
+  await sb.from('shows').update({ is_live: false, current_slide_id: null }).eq('id', TEST_SHOW_ID)
+
   const show = await readShowRow()
   snapshotSlides = JSON.parse(JSON.stringify(show.slides ?? []))
   snapshotRounds = JSON.parse(JSON.stringify(show.rounds ?? []))
@@ -397,7 +400,7 @@ test.describe('B. Title slide — create and verify', () => {
     await expect(page.getByText('What are we adding?')).not.toBeVisible()
 
     // ── Sidebar: label = data.title (RoundSidebar.jsx:27) ──
-    await expect(page.locator('aside').getByText('Baynes Apple Valley')).toBeVisible()
+    await expect(page.locator('aside').getByText('Baynes Apple Valley').first()).toBeVisible()
   })
 
 })
@@ -771,7 +774,7 @@ test.describe('I. Custom — create and verify', () => {
 
 test.describe('J. Shiny tiles — display-only guard', () => {
 
-  test('J1: 10 tiles render; clicking a tile creates no slide and does not close the modal', async ({ page }) => {
+  test('J1: shiny tiles render from Supabase; clicking a tile creates no slide and does not close the modal', async ({ page }) => {
     // NOTE: When a shiny format gains an action (e.g. single-image gets wired),
     // this test must be updated — clicking that tile will start a flow.
     await gotoEditor(page)
@@ -779,13 +782,12 @@ test.describe('J. Shiny tiles — display-only guard', () => {
 
     await openModal(page, 'Question')
 
-    // GUESSED: shiny tiles are div elements with class "cursor-default" (AddSlideWizard.jsx:118).
-    // They are NOT <button> elements — clicking them does nothing.
-    // Risk: other elements in the modal might also carry cursor-default.
-    // This count assertion confirms all 10 SHINY_FORMATS tiles rendered.
-    // CONFIRMED count: 10 entries in shinyFormatDictionary.js
+    // Shiny tiles are div.cursor-default — one per shiny_formats row in Supabase.
+    // Count is dynamic (Supabase-driven); assert ≥ 1 tile rendered.
     const tiles = page.locator('.cursor-default')
-    await expect(tiles).toHaveCount(10)
+    await expect(tiles.first()).toBeVisible({ timeout: 5_000 })
+    const tileCount = await tiles.count()
+    expect(tileCount, 'Expected at least one shiny tile to render').toBeGreaterThan(0)
 
     // Click the first tile
     await tiles.first().click()
