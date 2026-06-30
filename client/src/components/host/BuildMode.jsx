@@ -25,8 +25,8 @@ const CARD_STYLE = {
   'ticker':        'bg-gradient-to-br from-sky-50    to-cyan-100    border-sky-200    hover:border-sky-400',
   'shiny':         'bg-gradient-to-br from-yellow-50 to-amber-100   border-yellow-200 hover:border-yellow-400',
   'swing':         'bg-gradient-to-br from-orange-50 to-red-100     border-orange-200 hover:border-orange-400',
-  'pyl':           'bg-gradient-to-br from-purple-50 to-violet-100  border-purple-200 hover:border-purple-400',
-  'data':          'bg-gradient-to-br from-teal-50   to-blue-100    border-teal-200   hover:border-teal-400',
+  'pyl':           'bg-gradient-to-br from-teal-50   to-blue-100    border-teal-200   hover:border-teal-400',
+  'data':          'bg-gradient-to-br from-purple-50 to-violet-100  border-purple-200 hover:border-purple-400',
 }
 
 export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
