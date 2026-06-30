@@ -269,7 +269,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                       <span className="text-xs text-gray-500 leading-snug">Change the display look</span>
                     </button>
                     <button
-                      onClick={() => { window.location.href = '/questions' }}
+                      onClick={() => window.open('/questions', '_blank')}
                       className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['database']}`}
                     >
                       <span className="text-3xl leading-none">🗃️</span>
