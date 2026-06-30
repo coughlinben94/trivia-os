@@ -133,8 +133,8 @@ export default function RoundSidebar({
     setDragOverType(null)
   }
 
-  function handleSlideDragStart(id) { setDragged({ id, type: 'slide' }) }
-  function handleRoundDragStart(id) { setDragged({ id, type: 'round' }) }
+  function handleSlideDragStart(id) { console.log('[DND] slideStart', id); setDragged({ id, type: 'slide' }) }
+  function handleRoundDragStart(id) { console.log('[DND] roundStart', id); setDragged({ id, type: 'round' }) }
 
   function handleSlideOver(e, id) {
     e.preventDefault()
@@ -152,13 +152,15 @@ export default function RoundSidebar({
   function handleDrop(e, targetKey, targetType) {
     e.preventDefault()
     e.stopPropagation()
-    if (!dragged || !onReorderSlides) { clear(); return }
+    console.log('[DND] drop', targetKey, targetType, 'dragged=', dragged)
+    if (!dragged || !onReorderSlides) { console.log('[DND] drop bailed — dragged=', dragged, 'onReorderSlides=', !!onReorderSlides); clear(); return }
     const newOrder = computeNewOrder(dragged, targetKey, targetType)
+    console.log('[DND] newOrder', newOrder)
     if (newOrder) onReorderSlides(newOrder)
     clear()
   }
 
-  function handleDragEnd() { clear() }
+  function handleDragEnd() { console.log('[DND] dragEnd'); clear() }
 
   const slideProps = {
     onDragStart: handleSlideDragStart,
