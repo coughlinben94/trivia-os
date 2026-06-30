@@ -209,6 +209,9 @@ export default function RoundSidebar({
 
   return (
     <aside className="w-56 bg-gray-50 border-r border-gray-100 flex flex-col overflow-hidden shrink-0">
+      <div className="px-3 pt-3 pb-1 shrink-0">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Show Order</p>
+      </div>
       <div className="flex-1 overflow-y-auto py-1">
 
         {segments.map((seg, i) => {
