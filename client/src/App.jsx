@@ -4,6 +4,9 @@ import Display from './views/Display.jsx'
 import Scores from './views/Scores.jsx'
 import AmbientAudit from './views/AmbientAudit.jsx'
 import Questions from './views/Questions.jsx'
+import Shows from './views/Shows.jsx'
+import ShowDetail from './views/ShowDetail.jsx'
+import Dashboard from './views/Dashboard.jsx'
 
 export default function App() {
   return (
@@ -14,6 +17,9 @@ export default function App() {
         <Route path="/scores" element={<Scores />} />
         <Route path="/ambient" element={<AmbientAudit />} />
         <Route path="/questions" element={<Questions />} />
+        <Route path="/shows" element={<Shows />} />
+        <Route path="/shows/:showId" element={<ShowDetail />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="*" element={<Navigate to="/host" replace />} />
       </Routes>
     </BrowserRouter>

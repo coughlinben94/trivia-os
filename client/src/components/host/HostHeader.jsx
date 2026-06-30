@@ -1,9 +1,12 @@
 import { useState } from 'react'
+import { supabase } from '../../lib/supabase.js'
 
 export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onOpenLibrary }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [copied, setCopied] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   const joinUrl = `${window.location.origin}/join?show=${show.id}`
 
@@ -25,6 +28,34 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
     setEditingTitle(false)
   }
 
+  async function saveResults() {
+    if (saving) return
+    setSaving(true)
+    const [{ data: teamData }, { data: scoreData }] = await Promise.all([
+      supabase.from('teams').select('id, name, color').eq('show_id', show.id),
+      supabase.from('team_scores').select('team_id, round_index, score').eq('show_id', show.id),
+    ])
+    const teams = teamData ?? []
+    const scores = scoreData ?? []
+    const finalScores = teams
+      .map(t => {
+        const rounds = scores
+          .filter(s => s.team_id === t.id)
+          .sort((a, b) => a.round_index - b.round_index)
+          .map(s => s.score ?? 0)
+        const total = rounds.reduce((sum, n) => sum + n, 0)
+        return { teamId: t.id, name: t.name, color: t.color, total, rounds }
+      })
+      .sort((a, b) => b.total - a.total)
+    await supabase
+      .from('shows')
+      .update({ player_count: teams.length, final_scores: finalScores })
+      .eq('id', show.id)
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
+
   return (
     <>
       <header className="h-16 bg-white border-b border-gray-200 flex items-center px-5 gap-4 shrink-0">
@@ -38,6 +69,26 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
 
         {/* Divider */}
         <div className="w-px h-6 bg-gray-200 shrink-0" />
+
+        {/* My Shows + Dashboard */}
+        <div className="flex items-center gap-1 shrink-0">
+          <a
+            href="/shows"
+            target="_blank"
+            rel="noreferrer"
+            className="text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
+          >
+            My Shows
+          </a>
+          <a
+            href="/dashboard"
+            target="_blank"
+            rel="noreferrer"
+            className="text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
+          >
+            Dashboard
+          </a>
+        </div>
 
         {/* Divider */}
         <div className="w-px h-6 bg-gray-200 shrink-0" />
@@ -89,6 +140,14 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
             className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
           >
             Export
+          </button>
+          <button
+            onClick={saveResults}
+            disabled={saving}
+            className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button disabled:opacity-40"
+            title="Snapshot player count + final scores"
+          >
+            {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save Results'}
           </button>
           <button
             onClick={onGoLive}
