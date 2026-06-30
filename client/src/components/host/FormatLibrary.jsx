@@ -51,7 +51,7 @@ export default function FormatLibrary({ onClose, onSelectFormat }) {
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900">Shiny Format Library</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Add Shiny</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
         </div>
 

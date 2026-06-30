@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
-import { SHINY_FORMATS } from '../../lib/shinyFormatDictionary.js'
+import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 
 export const TYPE_CARDS = [
   { type: 'title',         icon: '🎬', name: 'State of the Union', desc: 'Opening address to the crowd' },
@@ -13,7 +13,7 @@ export const TYPE_CARDS = [
 
 const NEEDS_ROUND = new Set(['round-intro', 'swing-round-intro', 'question', 'grading-break', 'pixelate-series', 'multi-question', 'pyl-reveal'])
 
-const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber-400' }
+const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber-400', video: 'bg-purple-400', list: 'bg-orange-400' }
 
 const BTN = 'transition duration-[120ms] ease-snap active:scale-[0.97]'
 
@@ -43,8 +43,8 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
   // Grading-break
   const [jukeboxLib, setJukeboxLib] = useState('random')
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sorted = useMemo(() => sortedSlides(show), [show.slides])
+  const sorted = sortedSlides(show)
+  const { formats: shinyFormats, loading: shinyLoading } = useShinyFormats()
 
   // Derived — never stored, always recomputed
   const selRoundType      = ROUND_TYPES.find(rt => rt.id === roundType) ?? ROUND_TYPES[0]
@@ -110,26 +110,6 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
   const canAddQuestion = !!roundId && questionText.trim().length > 0
   const isQuestion     = type === 'question'
 
-  // Static — SHINY_FORMATS never changes after module load; build once per modal mount
-  const shinyTiles = useMemo(() => SHINY_FORMATS.map(fmt => (
-    <div
-      key={fmt.id}
-      title={fmt.blurb}
-      className="flex items-start gap-2 p-2.5 rounded-lg bg-gray-50 border border-gray-100 cursor-default"
-    >
-      <span className="text-base leading-none mt-0.5 shrink-0">{fmt.icon}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold text-gray-600 truncate leading-tight">{fmt.name}</p>
-        <div className="flex items-center gap-1 mt-0.5">
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${MEDIA_DOT[fmt.media] ?? 'bg-gray-300'}`} />
-          <span className="text-[11px] text-gray-400 leading-none">{fmt.media}</span>
-        </div>
-      </div>
-      <span className="text-[11px] text-gray-400 shrink-0 self-start mt-0.5">
-        ×{fmt.count === 'ask' ? '?' : fmt.count}
-      </span>
-    </div>
-  )), [])
 
   return (
     <div className="bg-white rounded-2xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
@@ -242,9 +222,39 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
                 <p className="text-sm font-semibold text-gray-800">✨ Shiny formats</p>
                 <p className="text-xs text-gray-400 mt-0.5">Coming soon — hover a tile for details</p>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {shinyTiles}
-              </div>
+              {shinyLoading ? (
+                <p className="text-xs text-gray-400">Loading…</p>
+              ) : shinyFormats.length === 0 ? (
+                <p className="text-xs text-gray-400">No formats yet — add one via ✨ Add Shiny.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {shinyFormats.map(fmt => {
+                    const mediaType = fmt.input_schema?.type
+                    const slots = fmt.input_schema?.slots
+                    return (
+                      <div
+                        key={fmt.id}
+                        title={fmt.description}
+                        className="flex items-start gap-2 p-2.5 rounded-lg bg-gray-50 border border-gray-100 cursor-default"
+                      >
+                        <span className="text-base leading-none mt-0.5 shrink-0">{fmt.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-gray-600 truncate leading-tight">{fmt.name}</p>
+                          {mediaType && (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${MEDIA_DOT[mediaType] ?? 'bg-gray-300'}`} />
+                              <span className="text-[11px] text-gray-400 leading-none">{mediaType}</span>
+                            </div>
+                          )}
+                        </div>
+                        {slots != null && (
+                          <span className="text-[11px] text-gray-400 shrink-0 self-start mt-0.5">×{slots}</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
           </div>

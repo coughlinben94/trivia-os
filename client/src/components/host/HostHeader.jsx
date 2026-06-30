@@ -115,7 +115,7 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
               title="Manage shiny formats"
               className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg transition-colors"
             >
-              ✨ Formats
+              ✨ Add Shiny
             </button>
           )}
           <button
