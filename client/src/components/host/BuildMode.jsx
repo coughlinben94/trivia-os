@@ -26,6 +26,7 @@ const CARD_STYLE = {
   'shiny':         'bg-gradient-to-br from-yellow-50 to-amber-100   border-yellow-200 hover:border-yellow-400',
   'swing':         'bg-gradient-to-br from-orange-50 to-red-100     border-orange-200 hover:border-orange-400',
   'pyl':           'bg-gradient-to-br from-purple-50 to-violet-100  border-purple-200 hover:border-purple-400',
+  'data':          'bg-gradient-to-br from-slate-50  to-gray-100    border-slate-200  hover:border-slate-400',
 }
 
 export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
@@ -254,7 +255,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                   </div>
                 )}
 
-                {/* 4-4-3 grid: all 11 cards flat, last row auto-centered by flexbox */}
+                {/* 4-4-4 grid: all 12 cards flat */}
                 <div className="flex flex-wrap gap-3 justify-center">
                   {TYPE_CARDS.map(card => (
                     <button
@@ -314,6 +315,14 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                     <span className="text-3xl leading-none">📺</span>
                     <span className="text-sm font-semibold text-gray-800 leading-tight">Ticker</span>
                     <span className="text-xs text-gray-500 leading-snug">Edit pre-show ticker messages</span>
+                  </button>
+                  <button
+                    onClick={() => window.open('/shows', '_blank')}
+                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['data']}`}
+                  >
+                    <span className="text-3xl leading-none">📊</span>
+                    <span className="text-sm font-semibold text-gray-800 leading-tight">Data</span>
+                    <span className="text-xs text-gray-500 leading-snug">Shows history & analytics</span>
                   </button>
                 </div>
               </div>
