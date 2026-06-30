@@ -212,7 +212,7 @@ export default function RoundSidebar({
                   className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 text-xs leading-none"
                   title="Drag to reorder round"
                   draggable
-                  onDragStart={e => { e.stopPropagation(); handleRoundDragStart(round.id) }}
+                  onDragStart={e => { e.stopPropagation(); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', round.id); handleRoundDragStart(round.id) }}
                   onDragEnd={e => { e.stopPropagation(); handleDragEnd() }}
                 >
                   ⠿
@@ -312,7 +312,7 @@ function SlideRow({ slide, selected, dragging, dragOver, onSelect, onDelete, dra
   return (
     <div
       draggable
-      onDragStart={() => dragProps.onDragStart(slide.id)}
+      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', slide.id); dragProps.onDragStart(slide.id) }}
       onDragOver={e => dragProps.onDragOver(e, slide.id)}
       onDrop={e => dragProps.onDrop(e, slide.id)}
       onDragEnd={dragProps.onDragEnd}
