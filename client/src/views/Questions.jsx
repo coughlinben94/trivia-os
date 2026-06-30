@@ -196,13 +196,13 @@ export default function Questions() {
                       style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
                     >
                       {/* Show */}
-                      <td className="px-4 py-3 align-top pt-4">
+                      <td className="px-4 py-3 align-middle">
                         <p className="text-xs font-medium text-gray-700 leading-snug">{row.show_title ?? '—'}</p>
                         <p className="text-[11px] text-gray-400 mt-0.5">{row.show_date ?? ''}</p>
                       </td>
 
                       {/* Type badges */}
-                      <td className="px-4 py-3 align-top pt-4">
+                      <td className="px-4 py-3 align-middle">
                         <div className="flex flex-col gap-1 items-center">
                           <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold ${TYPE_COLOR[row.type] ?? TYPE_COLOR.regular}`}>
                             {TYPE_LABEL[row.type] ?? row.type}
@@ -221,7 +221,7 @@ export default function Questions() {
                       </td>
 
                       {/* Question text */}
-                      <td className="px-4 py-3 align-top">
+                      <td className="px-4 py-3 align-middle">
                         {isEditing ? (
                           <textarea
                             value={editDraft.text}
@@ -237,7 +237,7 @@ export default function Questions() {
                       </td>
 
                       {/* Answer */}
-                      <td className="px-4 py-3 align-top">
+                      <td className="px-4 py-3 align-middle">
                         {isEditing ? (
                           <input
                             type="text"
@@ -253,7 +253,7 @@ export default function Questions() {
                       </td>
 
                       {/* Actions */}
-                      <td className="px-4 py-3 align-top pt-3.5">
+                      <td className="px-4 py-3 align-middle pt-3.5">
                         {isEditing ? (
                           <div className="flex gap-1.5">
                             <button
