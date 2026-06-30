@@ -69,7 +69,7 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
         {/* Divider */}
         <div className="w-px h-6 bg-gray-200 shrink-0" />
 
-        {/* My Shows + Dashboard */}
+        {/* My Shows */}
         <div className="flex items-center gap-1 shrink-0">
           <a
             href="/shows"
@@ -78,14 +78,6 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
             className="text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
           >
             My Shows
-          </a>
-          <a
-            href="/dashboard"
-            target="_blank"
-            rel="noreferrer"
-            className="text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
-          >
-            Dashboard
           </a>
         </div>
 
