@@ -31,6 +31,14 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   const [selectedSlide, setSelectedSlide] = useState(null)
   const [addModalData, setAddModalData] = useState(null)  // null = modal closed
   const [addRoundWizardOpen, setAddRoundWizardOpen] = useState(false)
+  const [activeRoundId, setActiveRoundId] = useState(null)
+
+  // Reset active round if it gets deleted
+  useEffect(() => {
+    if (activeRoundId && !show?.rounds?.find(r => r.id === activeRoundId)) {
+      setActiveRoundId(null)
+    }
+  }, [show?.rounds, activeRoundId])
 
   const syncedSelectedSlide = selectedSlide
     ? (show?.slides?.find(s => s.id === selectedSlide.id) ?? selectedSlide)
@@ -140,11 +148,36 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
             /* Dashboard rest state — type picker grid */
             <div className="h-full flex flex-col items-center justify-center p-8">
               <div className="w-full max-w-2xl">
+
+                {/* Round context filter */}
+                {show.rounds.length > 0 && (
+                  <div className="mb-6">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
+                      What round are you working on?
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {show.rounds.map(r => (
+                        <button
+                          key={r.id}
+                          onClick={() => setActiveRoundId(prev => prev === r.id ? null : r.id)}
+                          className={`px-3 py-1.5 rounded-lg border text-sm font-semibold ${BTN} ${
+                            activeRoundId === r.id
+                              ? 'bg-[#1a6b4a] text-white border-[#1a6b4a]'
+                              : 'bg-white text-gray-600 border-gray-200 hover:border-[#1a6b4a] hover:text-[#1a6b4a]'
+                          }`}
+                        >
+                          R{r.number} · {r.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-3 gap-3">
                   {TYPE_CARDS.map(card => (
                     <button
                       key={card.type}
-                      onClick={() => openAddModal({ type: card.type })}
+                      onClick={() => openAddModal({ type: card.type, roundId: activeRoundId })}
                       className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE[card.type] ?? 'bg-white border-gray-200 hover:border-gray-400'}`}
                     >
                       <span className="text-3xl leading-none">{card.icon}</span>

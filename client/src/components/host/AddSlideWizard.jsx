@@ -43,9 +43,10 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
   const [shinyQuestion,     setShinyQuestion]    = useState('')
   const [shinyAnswer,       setShinyAnswer]      = useState('')
 
-  // Round-intro — pre-filled from AddRoundWizard when opened sequentially
-  const [roundType,     setRoundType]     = useState(initialData.roundType     ?? 'normal')
-  const [roundNumber,   setRoundNumber]   = useState(initialData.roundNumber   ?? 1)
+  // Round-intro — pre-filled from AddRoundWizard or from round filter; also derived from selected round
+  const _preRound = initialData.roundId ? show.rounds.find(r => r.id === initialData.roundId) : null
+  const [roundType,     setRoundType]     = useState(initialData.roundType   ?? _preRound?.roundType ?? 'normal')
+  const [roundNumber,   setRoundNumber]   = useState(initialData.roundNumber ?? _preRound?.roundNumber ?? _preRound?.number ?? 1)
   const [roundSubtitle, setRoundSubtitle] = useState(initialData.roundSubtitle ?? '')
 
   // Grading-break
@@ -433,7 +434,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
               </div>
             )}
 
-            {/* ── ROUND INTRO: type → number → subtitle ── */}
+            {/* ── ROUND INTRO: associate round → subtitle ── */}
             {type === 'round-intro' && (
               <>
                 {/* Round association — only shown when not pre-filled from AddRoundWizard */}
@@ -451,7 +452,10 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
                         onChange={e => {
                           pickRound(e.target.value)
                           const r = show.rounds.find(r => r.id === e.target.value)
-                          if (r?.number) setRoundNumber(r.number)
+                          if (r) {
+                            setRoundType(r.roundType ?? 'normal')
+                            setRoundNumber(r.roundNumber ?? r.number ?? 1)
+                          }
                         }}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
                       >
@@ -461,48 +465,6 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
                         ))}
                       </select>
                     )}
-                  </div>
-                )}
-
-                {/* Type picker */}
-                <div>
-                  <p className="text-xs font-medium text-gray-500 mb-1.5">Round type</p>
-                  <div className="flex gap-1.5">
-                    {ROUND_TYPES.map(rt => (
-                      <button
-                        key={rt.id}
-                        type="button"
-                        onClick={() => setRoundType(rt.id)}
-                        className={`flex-1 py-2 px-2 rounded-lg text-xs font-semibold border ${BTN} ${
-                          roundType === rt.id
-                            ? 'bg-[#1a6b4a] text-white border-[#1a6b4a]'
-                            : 'bg-white text-gray-600 border-gray-200 hover:border-[#1a6b4a] hover:text-[#1a6b4a]'
-                        }`}
-                      >
-                        {rt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Number — free positive int, Normal only */}
-                {selRoundType.needsNumber && (
-                  <div>
-                    <label htmlFor="add-round-number" className="block text-xs font-medium text-gray-500 mb-1.5">
-                      Round number
-                    </label>
-                    <input
-                      id="add-round-number"
-                      type="number"
-                      min="1"
-                      value={roundNumber}
-                      onChange={e => {
-                        const v = parseInt(e.target.value, 10)
-                        setRoundNumber(isNaN(v) ? '' : v)
-                      }}
-                      placeholder="e.g. 3"
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                    />
                   </div>
                 )}
 
