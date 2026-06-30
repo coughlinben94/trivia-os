@@ -134,6 +134,18 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
     setAddRoundWizardOpen(true)
   }
 
+  // Default round number for the Add Round wizard: active round's number + 1,
+  // falling back to the highest existing round number + 1, or 1 if no rounds yet.
+  const nextRoundNumber = (() => {
+    const rounds = show?.rounds ?? []
+    if (!rounds.length) return 1
+    const anchor = activeRoundId ? rounds.find(r => r.id === activeRoundId) : null
+    const ref = anchor ?? rounds.reduce((hi, r) =>
+      (r.roundNumber ?? r.number ?? 0) > (hi?.roundNumber ?? hi?.number ?? 0) ? r : hi
+    , null)
+    return (ref?.roundNumber ?? ref?.number ?? 0) + 1
+  })()
+
   async function handleRoundWizardAdd(data) {
     setAddRoundWizardOpen(false)
     const round = await actions.addRound(data)
@@ -204,10 +216,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                 {/* Round context filter */}
                 {show.rounds.length > 0 && (
                   <div className="mb-5">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
-                      What round are you working on?
-                    </p>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 justify-center">
                       {show.rounds.map(r => (
                         <button
                           key={r.id}
@@ -231,10 +240,10 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                   {/* LEFT: Swing Round */}
                   <button
                     onClick={() => setShowSwingWizard(true)}
-                    className={`flex flex-col items-center justify-center gap-3 p-6 rounded-xl border text-center h-full ${BTN} ${CARD_STYLE['swing']}`}
+                    className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['swing']}`}
                   >
-                    <span className="text-4xl leading-none">🎷</span>
-                    <span className="text-sm font-semibold text-gray-800">Swing Round</span>
+                    <span className="text-3xl leading-none">🎷</span>
+                    <span className="text-sm font-semibold text-gray-800 leading-tight">Swing Round</span>
                     <span className="text-xs text-gray-500 leading-snug">Bulk-add all swing questions at once</span>
                   </button>
 
@@ -288,10 +297,10 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                   {/* RIGHT: Press Your Luck! */}
                   <button
                     onClick={() => setShowPylWizard(true)}
-                    className={`flex flex-col items-center justify-center gap-3 p-6 rounded-xl border text-center h-full ${BTN} ${CARD_STYLE['pyl']}`}
+                    className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['pyl']}`}
                   >
-                    <span className="text-4xl leading-none">🎰</span>
-                    <span className="text-sm font-semibold text-gray-800">Press Your Luck!</span>
+                    <span className="text-3xl leading-none">🎰</span>
+                    <span className="text-sm font-semibold text-gray-800 leading-tight">Press Your Luck!</span>
                     <span className="text-xs text-gray-500 leading-snug">Set up PYL themes and slides</span>
                   </button>
 
@@ -358,6 +367,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
               onClick={e => e.stopPropagation()}
             >
               <AddRoundWizard
+                defaultRoundNumber={nextRoundNumber}
                 onAdd={handleRoundWizardAdd}
                 onClose={() => setAddRoundWizardOpen(false)}
               />

@@ -8,9 +8,9 @@ const ROUND_TYPES = [
 
 const BTN = 'transition duration-[120ms] ease-out active:scale-[0.97]'
 
-export default function AddRoundWizard({ onAdd, onClose }) {
+export default function AddRoundWizard({ defaultRoundNumber, onAdd, onClose }) {
   const [selectedTypeId, setSelectedTypeId] = useState(null)
-  const [roundNumber, setRoundNumber] = useState('')
+  const [roundNumber, setRoundNumber] = useState(defaultRoundNumber != null ? String(defaultRoundNumber) : '')
   const [subtitle, setSubtitle] = useState('')
 
   const type = ROUND_TYPES.find(t => t.id === selectedTypeId)
