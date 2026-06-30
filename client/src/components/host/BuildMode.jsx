@@ -126,26 +126,26 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
             />
           ) : (
             /* Dashboard rest state — type picker grid */
-            <div className="h-full flex flex-col items-center justify-center p-8">
-              <div className="w-full max-w-xl">
+            <div className="h-full flex flex-col items-center justify-center p-8 -mt-[5%]">
+              <div className="w-full max-w-2xl">
                 <p className="text-sm text-gray-400 text-center mb-6">What are we adding?</p>
                 <div className="grid grid-cols-3 gap-3">
                   {TYPE_CARDS.map(card => (
                     <button
                       key={card.type}
                       onClick={() => openAddModal({ type: card.type })}
-                      className={`flex flex-col items-center justify-center gap-2 p-5 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 text-center group min-h-[120px] ${BTN}`}
+                      className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 text-center group min-h-[138px] ${BTN}`}
                     >
-                      <span className="text-2xl leading-none">{card.icon}</span>
+                      <span className="text-3xl leading-none">{card.icon}</span>
                       <span className="text-sm font-semibold text-gray-800 group-hover:text-[#1a6b4a] transition-colors duration-[120ms]">{card.name}</span>
                       <span className="text-xs text-gray-400 leading-snug">{card.desc}</span>
                     </button>
                   ))}
                   <button
                     onClick={() => { window.location.href = '/questions' }}
-                    className={`flex flex-col items-center justify-center gap-2 p-5 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 text-center group min-h-[120px] ${BTN}`}
+                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 text-center group min-h-[138px] ${BTN}`}
                   >
-                    <span className="text-2xl leading-none">🗃️</span>
+                    <span className="text-3xl leading-none">🗃️</span>
                     <span className="text-sm font-semibold text-gray-800 group-hover:text-[#1a6b4a] transition-colors duration-[120ms]">Question Database</span>
                     <span className="text-xs text-gray-400 leading-snug">Browse and search your question archive</span>
                   </button>
@@ -160,7 +160,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
       <AnimatePresence>
         {addModalData !== null && (
           <motion.div
-            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6"
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-6"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.1 } }}
@@ -196,7 +196,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
       <AnimatePresence>
         {addRoundWizardOpen && (
           <motion.div
-            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6"
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-6"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.1 } }}

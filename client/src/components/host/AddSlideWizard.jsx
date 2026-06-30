@@ -32,10 +32,14 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
   // Shared
   const [roundId, setRoundId] = useState(initialData.roundId ?? null)
 
-  // Question
+  // Question (plain)
   const [questionText,   setQuestionText]   = useState('')
   const [questionAnswer, setQuestionAnswer] = useState('')
   const [isBonus, setIsBonus]               = useState(false)
+
+  // Question (shiny)
+  const [selectedShinyFmt, setSelectedShinyFmt] = useState(null)
+  const [shinyAnswer, setShinyAnswer]           = useState('')
 
   // Round-intro — pre-filled from AddRoundWizard when opened sequentially
   const [roundType,     setRoundType]     = useState(initialData.roundType     ?? 'normal')
@@ -90,15 +94,31 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
 
     } else if (type === 'question') {
       const num = isBonus ? bNum : qNum
-      data = {
-        questionNumber: num,
-        questionLabel:  isBonus ? `B${num}` : `Q${num}`,
-        questionMode:   'regular',
-        isShiny:        false,
-        text:           questionText.trim(),
-        answer:         questionAnswer.trim(),
-        mediaSlots:     [],
-        ...(isBonus && { isBonus: true }),
+      if (selectedShinyFmt) {
+        data = {
+          questionNumber:   qNum,
+          questionLabel:    `Q${qNum}`,
+          questionMode:     'shiny',
+          isShiny:          true,
+          shinyFormatId:    selectedShinyFmt.id,
+          shinyFormatName:  selectedShinyFmt.name,
+          shinyFormatIcon:  selectedShinyFmt.icon,
+          shinyInputSchema: selectedShinyFmt.input_schema ?? null,
+          text:             '',
+          answer:           shinyAnswer.trim(),
+          mediaSlots:       [],
+        }
+      } else {
+        data = {
+          questionNumber: num,
+          questionLabel:  isBonus ? `B${num}` : `Q${num}`,
+          questionMode:   'regular',
+          isShiny:        false,
+          text:           questionText.trim(),
+          answer:         questionAnswer.trim(),
+          mediaSlots:     [],
+          ...(isBonus && { isBonus: true }),
+        }
       }
 
     } else if (type === 'grading-break') {
@@ -118,6 +138,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
   const needsRound     = NEEDS_ROUND.has(type)
   const canCreate      = !(needsRound && !roundId) && (type !== 'round-intro' || roundNumValid)
   const canAddQuestion = !!roundId && questionText.trim().length > 0 && questionAnswer.trim().length > 0
+  const canAddShiny    = !!roundId && !!selectedShinyFmt && shinyAnswer.trim().length > 0
   const isQuestion     = type === 'question'
 
 
@@ -240,11 +261,11 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
               </div>
             </div>
 
-            {/* RIGHT — shiny format tiles, display only */}
+            {/* RIGHT — shiny format tiles (clickable) */}
             <div className="flex flex-col gap-3">
               <div>
                 <p className="text-sm font-semibold text-gray-800">✨ Shiny formats</p>
-                <p className="text-xs text-gray-400 mt-0.5">Coming soon — hover a tile for details</p>
+                <p className="text-xs text-gray-400 mt-0.5">Pick a format to get started</p>
               </div>
               {shinyLoading ? (
                 <p className="text-xs text-gray-400">Loading…</p>
@@ -255,15 +276,22 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
                   {shinyFormats.map(fmt => {
                     const mediaType = fmt.input_schema?.type
                     const slots = fmt.input_schema?.slots
+                    const isSel = selectedShinyFmt?.id === fmt.id
                     return (
-                      <div
+                      <button
                         key={fmt.id}
+                        type="button"
+                        onClick={() => setSelectedShinyFmt(isSel ? null : fmt)}
                         title={fmt.description}
-                        className="flex items-start gap-2 p-2.5 rounded-lg bg-gray-50 border border-gray-100 cursor-default"
+                        className={`flex items-start gap-2 p-2.5 rounded-lg border text-left transition-[border-color,background-color,transform] duration-[120ms] [transition-timing-function:cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] ${
+                          isSel
+                            ? 'bg-yellow-50 border-yellow-400'
+                            : 'bg-gray-50 border-gray-100 hover:border-gray-300'
+                        }`}
                       >
                         <span className="text-base leading-none mt-0.5 shrink-0">{fmt.icon}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-gray-600 truncate leading-tight">{fmt.name}</p>
+                          <p className={`text-xs font-semibold truncate leading-tight ${isSel ? 'text-yellow-700' : 'text-gray-600'}`}>{fmt.name}</p>
                           {mediaType && (
                             <div className="flex items-center gap-1 mt-0.5">
                               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${MEDIA_DOT[mediaType] ?? 'bg-gray-300'}`} />
@@ -274,9 +302,56 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
                         {slots != null && (
                           <span className="text-[11px] text-gray-400 shrink-0 self-start mt-0.5">×{slots}</span>
                         )}
-                      </div>
+                      </button>
                     )
                   })}
+                </div>
+              )}
+
+              {/* Shiny form — shown once a format is selected */}
+              {selectedShinyFmt && (
+                <div className="flex flex-col gap-3 pt-1 border-t border-gray-100">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Round</label>
+                    {show.rounds.length === 0 ? (
+                      <p className="text-sm text-gray-400">No rounds yet — use "+ Add Round" first.</p>
+                    ) : (
+                      <select
+                        value={roundId ?? ''}
+                        onChange={e => pickRound(e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                      >
+                        <option value="">Select a round…</option>
+                        {show.rounds.map(r => (
+                          <option key={r.id} value={r.id}>R{r.number} — {r.title}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Answer</label>
+                    <input
+                      type="text"
+                      value={shinyAnswer}
+                      onChange={e => setShinyAnswer(e.target.value)}
+                      placeholder="The answer…"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <button
+                      onClick={handleCreate}
+                      disabled={!canAddShiny}
+                      className={`w-full bg-yellow-500 text-white text-sm font-semibold py-3 rounded-xl hover:bg-yellow-600 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed`}
+                    >
+                      Add {selectedShinyFmt.name} →
+                    </button>
+                    {!canAddShiny && (
+                      <p className="text-xs text-gray-400 text-center">
+                        {!roundId ? 'Select a round' : 'Add an answer to continue'}
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
