@@ -1180,49 +1180,191 @@ function JazzClubAmbient() {
 
 
 // ─── 12. DIVE BAR ────────────────────────────────────────────────────────
-function DiveBarAmbient() {
-  const haze = useMemo(() => Array.from({ length: 4 }, (_, i) => ({
-    left:   `${8 + i * 24}%`,
-    bottom: `${(i % 3) * 6}%`,
-    dur:    `${20 + i * 3}s`,
-    delay:  `-${((i / 4) * (20 + i * 3)).toFixed(1)}s`,
-    hi:     0.07 + (i % 2) * 0.02,
-  })), [])
+const DB = {
+  bg:      '#0c0008',
+  body:    '#160d12',
+  pillar:  '#201500',
+  strip:   '#cc7020',
+  red:     '#1a060a',
+  gold:    '#1c1000',
+  ctrl:    '#0c0e10',
+  base:    '#0e1012',
+  panel:   '#0d0a12',
+  signRed: '#ff2040',
+  signBlu: '#3a78ff',
+  floor:   '#cc5010',
+}
 
-  return <>
-    {/* Red neon sign — left wall */}
-    <GlowLayer lo={0.22} hi={0.70} duration="1.6s" buzz style={{
-      top: 0, left: 0, bottom: 0, width: '30%',
-      background: 'radial-gradient(ellipse at left center, rgba(255,25,45,0.65), transparent 75%)',
-    }}/>
-    {/* Blue/white neon sign — right wall */}
-    <GlowLayer lo={0.18} hi={0.60} duration="2.2s" delay="0.5s" buzz style={{
-      top: 0, right: 0, bottom: 0, width: '28%',
-      background: 'radial-gradient(ellipse at right center, rgba(40,100,255,0.58), transparent 75%)',
-    }}/>
-    {/* Warm amber floor — sticky bar residue */}
-    <GlowLayer lo={0.15} hi={0.52} duration="8s" style={{
-      bottom: 0, left: 0, right: 0, height: '20%',
-      background: 'linear-gradient(to top, rgba(180,80,10,0.45), transparent)',
-    }}/>
-    {/* Center bar light pool */}
-    <GlowLayer lo={0.18} hi={0.50} duration="6s" delay="3s" style={{
-      top: '15%', left: '30%', right: '30%', bottom: '15%',
-      background: 'radial-gradient(ellipse, rgba(220,120,30,0.35), transparent 70%)',
-    }}/>
-    {/* Slow rising haze */}
-    {haze.map((h, i) => (
-      <div key={i} aria-hidden style={{
-        position: 'absolute', bottom: h.bottom, left: h.left,
-        width: '18%', height: '26%',
-        background: 'radial-gradient(ellipse, rgba(200,140,80,1.0), transparent)',
-        willChange: 'transform, opacity',
-        '--hi': h.hi,
-        animation: `ambientRiseUp ${h.dur} ${h.delay} ${EASE.mover} infinite`,
-        pointerEvents: 'none',
+const dbRgba = (hex, a) => {
+  const r = parseInt(hex.slice(1,3),16)
+  const g = parseInt(hex.slice(3,5),16)
+  const b = parseInt(hex.slice(5,7),16)
+  return `rgba(${r},${g},${b},${a})`
+}
+
+const DB_STYLE = `
+  @keyframes dbDomeCycle {
+    0%   { fill:#1a2a80; }
+    20%  { fill:#801a3a; }
+    40%  { fill:#1a6a30; }
+    60%  { fill:#6a1a70; }
+    80%  { fill:#6a4a10; }
+    100% { fill:#1a2a80; }
+  }
+  @keyframes dbStripPulse {
+    0%,100% { opacity:0.6; }
+    50%     { opacity:1; }
+  }
+  @keyframes dbFloat {
+    0%,100% { transform:translateY(0px); }
+    50%     { transform:translateY(-3px); }
+  }
+  @keyframes dbFloorPulse {
+    0%,100% { opacity:0.35; }
+    50%     { opacity:0.65; }
+  }
+  @keyframes dbRadiate {
+    0%,100% { opacity:0.4; transform:scale(1); }
+    50%     { opacity:0.72; transform:scale(1.1); }
+  }
+  @keyframes dbSignBuzz {
+    0%,93%,97%,100% { opacity:1; }
+    95% { opacity:0.35; }
+  }
+  @keyframes dbFlicker {
+    0%,9%,13%,17%,100% { opacity:1; }
+    11% { opacity:0; }
+    15% { opacity:0.3; }
+  }
+  @keyframes dbCornerPulse {
+    0%,100% { opacity:0.7; }
+    50%     { opacity:1; }
+  }
+  .db-anim * { animation-play-state:running; }
+  @media (prefers-reduced-motion:reduce) { .db-anim * { animation:none !important; } }
+`
+
+function DbSign() {
+  return (
+    <div style={{ position:'absolute', top:'6%', left:'4%', transform:'rotate(-3deg)' }}>
+      <div style={{
+        position:'absolute', inset:-24,
+        background:`radial-gradient(ellipse at 30% 40%, ${dbRgba(DB.signBlu,0.2)} 0%, ${dbRgba(DB.signRed,0.08)} 55%, transparent 70%)`,
+        animation:'dbCornerPulse 3.4s ease-in-out infinite',
+        pointerEvents:'none',
       }}/>
-    ))}
-  </>
+      <div style={{
+        border:`3px solid ${DB.signBlu}`,
+        boxShadow:`0 0 8px ${DB.signBlu}, 0 0 22px ${dbRgba(DB.signBlu,0.4)}`,
+        padding:'8px 14px',
+        background:'rgba(0,0,15,0.75)',
+        animation:'dbSignBuzz 13s ease-in-out infinite',
+        display:'flex', gap:6, alignItems:'center',
+      }}>
+        {[
+          {ch:'O',dur:22,dl:-7},
+          {ch:'P',dur:26,dl:-14},
+          {ch:'E',dur:19,dl:-3},
+          {ch:'N',dur:9, dl:-2},
+        ].map(({ch,dur,dl}) => (
+          <span key={ch} style={{
+            fontFamily:'monospace', fontSize:28, fontWeight:900,
+            color:DB.signRed,
+            textShadow:`0 0 6px ${DB.signRed}, 0 0 16px ${DB.signRed}`,
+            animation:ch==='N' ? `dbFlicker ${dur}s step-start ${dl}s infinite` : 'none',
+          }}>{ch}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function DbJukebox() {
+  return (
+    <div style={{
+      position:'absolute', bottom:'-6%', right:'2%', width:'22%',
+      animation:'dbFloat 6.7s ease-in-out infinite',
+    }}>
+      {/* dome color-matched radiate glow */}
+      <div style={{
+        position:'absolute', top:'2%', left:'-25%', right:'-25%', height:'50%',
+        background:'radial-gradient(ellipse at 50% 35%, rgba(26,42,128,0.55) 0%, rgba(26,42,128,0.15) 55%, transparent 75%)',
+        animation:'dbRadiate 4.1s ease-in-out -1.2s infinite',
+        filter:'blur(16px)', pointerEvents:'none',
+      }}/>
+      {/* floor glow directly under */}
+      <div style={{
+        position:'absolute', bottom:'-10%', left:'-25%', right:'-25%', height:'18%',
+        background:`radial-gradient(ellipse, ${dbRgba(DB.floor,0.65)} 0%, transparent 70%)`,
+        animation:'dbFloorPulse 4.3s ease-in-out infinite',
+        filter:'blur(14px)', pointerEvents:'none',
+      }}/>
+      {/* color spill spreading left across the floor */}
+      <div style={{
+        position:'absolute', bottom:'-8%', right:'55%', left:'-140%', height:'10%',
+        background:`linear-gradient(to left, ${dbRgba(DB.floor,0.35)}, transparent)`,
+        animation:'dbFloorPulse 5.7s ease-in-out -2s infinite',
+        filter:'blur(10px)', pointerEvents:'none',
+      }}/>
+
+      <svg viewBox="0 0 511.988 511.988" xmlns="http://www.w3.org/2000/svg" style={{display:'block',width:'100%'}}>
+        <path fill={DB.body} d="M437.319,469.332H74.656c-5.891,0-10.656-4.781-10.656-10.687v-266.65c0-51.287,19.969-99.497,56.233-135.762C156.482,19.969,204.7,0,255.995,0c51.28,0,99.498,19.969,135.747,56.233c36.265,36.265,56.248,84.475,56.248,135.762v266.65C447.99,464.551,443.209,469.332,437.319,469.332z"/>
+        <rect fill={DB.pillar} x="63.995"  y="202.654" width="63.999" height="85.33"/>
+        <rect fill={DB.pillar} x="383.995" y="202.654" width="63.998" height="85.33"/>
+        <path fill={DB.gold}   d="M255.995,0c-20.39,0-40.265,3.164-59.123,9.234l43.108,70.1l34.374-3.836l40.749-66.264C296.244,3.164,276.37,0,255.995,0z"/>
+        <path fill={DB.red}    d="M127.999,490.644h255.993V191.995c0-34.187-13.328-66.334-37.499-90.505c-24.171-24.18-56.311-37.491-90.498-37.491c-34.202,0-66.342,13.312-90.513,37.491c-24.172,24.171-37.483,56.318-37.483,90.505V490.644z"/>
+        <path fill={DB.gold}   d="M255.995,0c-3.578,0-7.141,0.102-10.671,0.297v31.702c0,5.891,4.765,10.664,10.671,10.664c5.892,0,10.656-4.773,10.656-10.664V0.297C263.121,0.101,259.558,0,255.995,0z"/>
+        <path fill={DB.gold}   d="M255.995,469.332c-5.906,0-10.671-4.781-10.671-10.687v-21.311c0-5.906,4.765-10.688,10.671-10.688c5.892,0,10.656,4.781,10.656,10.688v21.312C266.651,464.551,261.887,469.332,255.995,469.332z"/>
+        <path fill={DB.ctrl}   d="M191.997,181.332c0,5.891-4.781,10.663-10.672,10.663s-10.672-4.772-10.672-10.663s4.781-10.672,10.672-10.672S191.997,175.441,191.997,181.332z"/>
+        <path fill={DB.ctrl}   d="M191.997,213.331c0,5.891-4.781,10.664-10.672,10.664s-10.672-4.773-10.672-10.664s4.781-10.672,10.672-10.672S191.997,207.44,191.997,213.331z"/>
+        <path fill={DB.ctrl}   d="M234.652,223.995h-31.999c-5.891,0-10.656-4.773-10.656-10.664s4.766-10.672,10.656-10.672h31.999c5.891,0,10.672,4.781,10.672,10.672S240.543,223.995,234.652,223.995z"/>
+        <path fill={DB.ctrl}   d="M234.652,191.995h-31.999c-5.891,0-10.656-4.772-10.656-10.663s4.766-10.672,10.656-10.672h31.999c5.891,0,10.672,4.781,10.672,10.672S240.543,191.995,234.652,191.995z"/>
+        <path fill={DB.ctrl}   d="M287.994,181.332c0,5.891-4.78,10.663-10.671,10.663s-10.672-4.772-10.672-10.663s4.781-10.672,10.672-10.672S287.994,175.441,287.994,181.332z"/>
+        <path fill={DB.ctrl}   d="M287.994,213.331c0,5.891-4.78,10.664-10.671,10.664s-10.672-4.773-10.672-10.664s4.781-10.672,10.672-10.672S287.994,207.44,287.994,213.331z"/>
+        <path fill={DB.ctrl}   d="M330.65,223.995h-32c-5.891,0-10.656-4.773-10.656-10.664s4.766-10.672,10.656-10.672h32c5.891,0,10.672,4.781,10.672,10.672S336.541,223.995,330.65,223.995z"/>
+        <path fill={DB.ctrl}   d="M330.65,191.995h-32c-5.891,0-10.656-4.772-10.656-10.663s4.766-10.672,10.656-10.672h32c5.891,0,10.672,4.781,10.672,10.672S336.541,191.995,330.65,191.995z"/>
+        <path fill={DB.ctrl}   d="M170.653,458.645h-21.327c-5.891,0-10.672-4.766-10.672-10.656s4.781-10.655,10.672-10.655h21.327c5.891,0,10.672,4.765,10.672,10.655S176.544,458.645,170.653,458.645z"/>
+        {/* dome — color cycles through jukebox colors */}
+        <path style={{animation:'dbDomeCycle 16s linear infinite'}} d="M135.248,149.333h241.479c-6.266-17.797-16.499-34.109-30.233-47.843c-24.172-24.18-56.312-37.491-90.499-37.491c-34.202,0-66.342,13.312-90.513,37.491C151.748,115.223,141.514,131.536,135.248,149.333z"/>
+        <path fill={DB.ctrl}   d="M255.901,95.998c-29.452,0-53.326,23.874-53.326,53.335h106.653C309.228,119.872,285.354,95.998,255.901,95.998z"/>
+        {/* center ring — offset phase */}
+        <path style={{animation:'dbDomeCycle 16s linear -5s infinite'}} d="M255.995,127.997c-11.796,0-21.343,9.555-21.343,21.336h42.671C277.323,137.552,267.776,127.997,255.995,127.997z"/>
+        <polygon fill={DB.panel} points="324.307,245.33 181.325,241.83 177.325,382.209 202.653,418.99 234.652,437.334 277.323,437.334 309.228,415.99 330.65,373.335"/>
+        <path fill={DB.base} d="M64,405.334v95.998c0,5.875,4.766,10.656,10.656,10.656h42.671c5.891,0,10.672-4.781,10.672-10.656v-95.998H64z"/>
+        <path fill={DB.base} d="M383.992,405.334v95.998c0,5.875,4.766,10.656,10.656,10.656h42.671c5.89,0,10.671-4.781,10.671-10.656v-95.998H383.992z"/>
+        {/* amber light strips — left pillar */}
+        <rect style={{fill:DB.strip,animation:'dbStripPulse 2.9s ease-in-out 0s infinite'}}     x="63.995"  y="277.334" width="63.999" height="21.312"/>
+        <rect style={{fill:DB.strip,animation:'dbStripPulse 2.9s ease-in-out -1s infinite'}}    x="63.995"  y="234.654" width="63.999" height="21.336"/>
+        <rect style={{fill:DB.strip,animation:'dbStripPulse 2.9s ease-in-out -1.9s infinite'}}  x="63.995"  y="191.994" width="63.999" height="21.336"/>
+        {/* amber light strips — right pillar */}
+        <rect style={{fill:DB.strip,animation:'dbStripPulse 2.9s ease-in-out -0.5s infinite'}}  x="383.995" y="277.334" width="63.998" height="21.312"/>
+        <rect style={{fill:DB.strip,animation:'dbStripPulse 2.9s ease-in-out -1.5s infinite'}}  x="383.995" y="234.654" width="63.998" height="21.336"/>
+        <rect style={{fill:DB.strip,animation:'dbStripPulse 2.9s ease-in-out -2.3s infinite'}}  x="383.995" y="191.994" width="63.998" height="21.336"/>
+        {/* display panel detail — offset color cycle */}
+        <path style={{animation:'dbDomeCycle 16s linear -8s infinite',opacity:0.45}} d="M330.65,234.658H181.325c-5.891,0-10.672,4.781-10.672,10.672v117.317c0,47.062,38.28,85.342,85.342,85.342c47.046,0,85.327-38.28,85.327-85.342V245.33C341.322,239.439,336.541,234.658,330.65,234.658z M319.947,364.632l-11.484-11.499l11.531-11.516v21.03C319.994,363.319,319.978,363.975,319.947,364.632z M197.716,389.115l20.89-20.905l22.297,22.312l-23.312,23.312C209.058,407.412,202.184,398.928,197.716,389.115z M191.997,362.647v-21.03l11.516,11.516l-11.484,11.499C191.997,363.975,191.997,363.319,191.997,362.647z M233.683,278.368l22.312-22.312l22.297,22.312l-22.297,22.297L233.683,278.368z M240.902,315.742l-22.297,22.312l-22.312-22.312l22.312-22.296L240.902,315.742z M286.103,255.994h14.547l-7.281,7.281L286.103,255.994z M218.605,263.275l-7.281-7.281h14.562L218.605,263.275z M203.513,278.368l-11.516,11.516V266.83L203.513,278.368z M233.683,353.133l22.312-22.297l22.297,22.297l-22.297,22.296L233.683,353.133z M271.073,315.742l22.296-22.296l22.312,22.296l-22.312,22.312L271.073,315.742z M308.463,278.368l11.531-11.538v23.054L308.463,278.368z M237.621,423.959l18.374-18.344l18.359,18.344c-5.828,1.75-11.983,2.688-18.359,2.688C249.604,426.646,243.449,425.709,237.621,423.959z M294.385,413.834l-23.312-23.312l22.296-22.312l20.891,20.905C309.791,398.928,302.916,407.412,294.385,413.834z"/>
+      </svg>
+    </div>
+  )
+}
+
+function DiveBarAmbient() {
+  return (
+    <div className="db-anim" style={{
+      position:'absolute', inset:0, overflow:'hidden',
+      background:`radial-gradient(ellipse at 15% 80%, rgba(26,6,10,0.9) 0%, ${DB.bg} 55%)`,
+    }}>
+      <style>{DB_STYLE}</style>
+      <DbSign />
+      <DbJukebox />
+      {/* ambient floor warmth across the bottom */}
+      <div aria-hidden style={{
+        position:'absolute', bottom:0, left:0, right:0, height:'18%',
+        background:'linear-gradient(to top, rgba(140,50,10,0.28), transparent)',
+        animation:'dbFloorPulse 7s ease-in-out -3s infinite',
+        pointerEvents:'none',
+      }}/>
+    </div>
+  )
 }
 
 // ─── 13. ROOFTOP PARTY ───────────────────────────────────────────────────
