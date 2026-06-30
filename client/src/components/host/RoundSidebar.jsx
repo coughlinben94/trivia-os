@@ -97,6 +97,36 @@ export default function RoundSidebar({
     setRenamingRound(null)
   }
 
+  // Build flat blocks: each general slide is its own block; each round is one block
+  const blocks = []
+  for (const seg of segments) {
+    if (seg.type === 'general') {
+      for (const slide of seg.slides) {
+        blocks.push({ type: 'slide', key: slide.id, slides: [slide] })
+      }
+    } else {
+      blocks.push({ type: 'round', key: seg.roundId, roundId: seg.roundId, slides: seg.slides })
+    }
+  }
+
+  function computeNewOrder(draggedSpec, targetKey, targetType) {
+    const draggedBlockIdx = blocks.findIndex(b =>
+      draggedSpec.type === 'round' ? b.roundId === draggedSpec.id : b.slides.some(s => s.id === draggedSpec.id)
+    )
+    let targetBlockIdx
+    if (targetType === 'round') {
+      targetBlockIdx = blocks.findIndex(b => b.roundId === targetKey)
+    } else {
+      targetBlockIdx = blocks.findIndex(b => b.slides.some(s => s.id === targetKey))
+    }
+    if (draggedBlockIdx === -1 || targetBlockIdx === -1 || draggedBlockIdx === targetBlockIdx) return null
+    const next = [...blocks]
+    const [removed] = next.splice(draggedBlockIdx, 1)
+    const adjusted = draggedBlockIdx < targetBlockIdx ? targetBlockIdx - 1 : targetBlockIdx
+    next.splice(adjusted, 0, removed)
+    return next.flatMap(b => b.slides.map(s => s.id))
+  }
+
   function clear() {
     setDragged(null)
     setDragOverId(null)
@@ -119,43 +149,12 @@ export default function RoundSidebar({
     setDragOverType('round')
   }
 
-  function handleSlideDrop(e, targetId) {
+  function handleDrop(e, targetKey, targetType) {
     e.preventDefault()
     e.stopPropagation()
-    if (!dragged) { clear(); return }
-
-    if (dragged.type === 'slide') {
-      // slide → slide: reorder individual slide
-      if (dragged.id === targetId || !onReorderSlides) { clear(); return }
-      const ids = sorted.map(s => s.id)
-      const next = [...ids]
-      next.splice(next.indexOf(dragged.id), 1)
-      next.splice(next.indexOf(targetId), 0, dragged.id)
-      onReorderSlides(next)
-    } else if (dragged.type === 'round') {
-      // round dragged onto a slide: move that round so its slides come before targetId
-      if (!onReorderRounds) { clear(); return }
-      const targetSlide = sorted.find(s => s.id === targetId)
-      const targetRoundId = targetSlide?.roundId ?? null
-      const roundIds = show.rounds.map(r => r.id)
-      if (targetRoundId && dragged.id !== targetRoundId) {
-        const next = roundIds.filter(id => id !== dragged.id)
-        next.splice(next.indexOf(targetRoundId), 0, dragged.id)
-        onReorderRounds(next)
-      }
-    }
-    clear()
-  }
-
-  function handleRoundDrop(e, targetRoundId) {
-    e.preventDefault()
-    if (!dragged || dragged.type !== 'round' || !onReorderRounds) { clear(); return }
-    if (dragged.id === targetRoundId) { clear(); return }
-    const roundIds = show.rounds.map(r => r.id)
-    const next = [...roundIds]
-    next.splice(next.indexOf(dragged.id), 1)
-    next.splice(next.indexOf(targetRoundId), 0, dragged.id)
-    onReorderRounds(next)
+    if (!dragged || !onReorderSlides) { clear(); return }
+    const newOrder = computeNewOrder(dragged, targetKey, targetType)
+    if (newOrder) onReorderSlides(newOrder)
     clear()
   }
 
@@ -164,7 +163,7 @@ export default function RoundSidebar({
   const slideProps = {
     onDragStart: handleSlideDragStart,
     onDragOver: handleSlideOver,
-    onDrop: handleSlideDrop,
+    onDrop: (e, id) => handleDrop(e, id, 'slide'),
     onDragEnd: handleDragEnd,
   }
 
@@ -203,7 +202,7 @@ export default function RoundSidebar({
               key={round.id}
               className={`border-t border-gray-100 first:border-t-0 ${roundDragging ? 'opacity-40' : ''} ${roundDragOver ? 'border-t-2 border-t-blue-400' : ''}`}
               onDragOver={e => handleRoundOver(e, round.id)}
-              onDrop={e => handleRoundDrop(e, round.id)}
+              onDrop={e => handleDrop(e, round.id, 'round')}
             >
               {/* Round header */}
               <div
