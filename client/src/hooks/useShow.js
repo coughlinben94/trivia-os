@@ -289,7 +289,7 @@ export function useShow() {
         answer: d.answer ?? null,
         is_bonus: d.isBonus ?? false,
         is_shiny: d.isShiny ?? false,
-        shiny_type: d.shinyType ?? null,
+        shiny_type: d.shinyType ?? d.shinyInputSchema?.type ?? null,
         media_url: d.mediaUrl ?? null,
         round_number: round?.roundNumber ?? round?.number ?? null,
         question_number: d.questionNumber ?? null,

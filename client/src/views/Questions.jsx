@@ -89,8 +89,8 @@ export default function Questions() {
       .eq('id', id)
     if (!error) {
       setQuestions(prev => prev.map(r => r.id === id ? { ...r, ...editDraft } : r))
+      setEditingId(null)
     }
-    setEditingId(null)
     setSaving(false)
   }
 
@@ -136,18 +136,16 @@ export default function Questions() {
             placeholder="Search questions and answers…"
             className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a6b4a]/30 focus:border-[#1a6b4a] transition-[border-color,box-shadow] duration-[150ms] ease-out"
           />
-          {shows.length > 0 && (
-            <select
-              value={showFilter ?? ''}
-              onChange={e => setShowFilter(e.target.value || null)}
-              className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a6b4a]/30 focus:border-[#1a6b4a] transition-[border-color,box-shadow] duration-[150ms] ease-out"
-            >
-              <option value="">All shows</option>
-              {shows.map(s => (
-                <option key={s.id} value={s.id}>{s.title ?? s.date ?? s.id}</option>
-              ))}
-            </select>
-          )}
+          <select
+            value={showFilter ?? ''}
+            onChange={e => setShowFilter(e.target.value || null)}
+            className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a6b4a]/30 focus:border-[#1a6b4a] transition-[border-color,box-shadow] duration-[150ms] ease-out"
+          >
+            <option value="">All shows</option>
+            {shows.map(s => (
+              <option key={s.id} value={s.id}>{s.title ?? s.date ?? s.id}</option>
+            ))}
+          </select>
         </div>
         <div className="flex gap-1.5 flex-wrap justify-center">
           {FILTERS.map(f => (

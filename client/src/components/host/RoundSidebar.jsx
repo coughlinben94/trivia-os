@@ -39,6 +39,7 @@ export default function RoundSidebar({
   onDeleteRound,
   onDeleteSlide,
   onReorderSlides,
+  onReorderRounds,
 }) {
   const [collapsedRounds, setCollapsedRounds] = useState(() => new Set(show?.rounds?.map(r => r.id) ?? []))
   const [renamingRound, setRenamingRound] = useState(null)
@@ -110,7 +111,11 @@ export default function RoundSidebar({
     const next = [...b]
     const [removed] = next.splice(draggedBlockIdx, 1)
     next.splice(targetBlockIdx, 0, removed)
-    return next.flatMap(bl => bl.slides.map(s => s.id))
+
+    if (draggedSpec.type === 'round') {
+      return { kind: 'rounds', ids: next.filter(bl => bl.type === 'round').map(bl => bl.roundId) }
+    }
+    return { kind: 'slides', ids: next.flatMap(bl => bl.slides.map(s => s.id)) }
   }
 
   function findDropTarget(el) {
@@ -151,9 +156,15 @@ export default function RoundSidebar({
 
       const d    = draggedRef.current
       const over = dragOverRef.current
-      if (d && over && onReorderSlides) {
+      if (d && over) {
         const newOrder = computeNewOrder(d, over.id, over.type)
-        if (newOrder) onReorderSlides(newOrder)
+        if (newOrder) {
+          if (newOrder.kind === 'rounds') {
+            onReorderRounds?.(newOrder.ids)
+          } else {
+            onReorderSlides?.(newOrder.ids)
+          }
+        }
       }
 
       draggedRef.current  = null
@@ -225,6 +236,7 @@ export default function RoundSidebar({
           }
 
           const { round, slides } = seg
+          if (!round) return null
           const collapsed     = collapsedRounds.has(round.id)
           const roundDragging = dragged?.id === round.id && dragged?.type === 'round'
           const rIdx          = blocks.findIndex(bl => bl.roundId === round.id)
