@@ -10,6 +10,15 @@ import TickerMessageManager from './TickerMessageManager.jsx'
 
 const BTN = 'transition duration-[120ms] ease-snap active:scale-[0.97]'
 
+const CARD_STYLE = {
+  'title':         'bg-gradient-to-br from-amber-50  to-orange-100  border-amber-200  hover:border-amber-400',
+  'round-intro':   'bg-gradient-to-br from-red-50    to-rose-100    border-red-200    hover:border-red-400',
+  'question':      'bg-gradient-to-br from-blue-50   to-indigo-100  border-blue-200   hover:border-blue-400',
+  'grading-break': 'bg-gradient-to-br from-violet-50 to-purple-100  border-violet-200 hover:border-violet-400',
+  'custom':        'bg-gradient-to-br from-teal-50   to-cyan-100    border-teal-200   hover:border-teal-400',
+  'database':      'bg-gradient-to-br from-green-50  to-emerald-100 border-green-200  hover:border-green-400',
+}
+
 export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
   const [showTickerManager, setShowTickerManager] = useState(false)
@@ -133,20 +142,20 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                     <button
                       key={card.type}
                       onClick={() => openAddModal({ type: card.type })}
-                      className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 text-center group min-h-[138px] ${BTN}`}
+                      className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE[card.type] ?? 'bg-white border-gray-200 hover:border-gray-400'}`}
                     >
                       <span className="text-3xl leading-none">{card.icon}</span>
-                      <span className="text-sm font-semibold text-gray-800 group-hover:text-[#1a6b4a] transition-colors duration-[120ms]">{card.name}</span>
-                      <span className="text-xs text-gray-400 leading-snug">{card.desc}</span>
+                      <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">{card.name}</span>
+                      <span className="text-xs text-gray-500 leading-snug">{card.desc}</span>
                     </button>
                   ))}
                   <button
                     onClick={() => { window.location.href = '/questions' }}
-                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border border-gray-200 hover:border-[#1a6b4a] hover:bg-green-50 text-center group min-h-[138px] ${BTN}`}
+                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['database']}`}
                   >
                     <span className="text-3xl leading-none">🗃️</span>
-                    <span className="text-sm font-semibold text-gray-800 group-hover:text-[#1a6b4a] transition-colors duration-[120ms]">Question Database</span>
-                    <span className="text-xs text-gray-400 leading-snug">Browse and search your question archive</span>
+                    <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Question Database</span>
+                    <span className="text-xs text-gray-500 leading-snug">Browse and search your question archive</span>
                   </button>
                 </div>
               </div>
