@@ -40,7 +40,7 @@ export default function RoundSidebar({
   onDeleteSlide,
   onReorderSlides,
 }) {
-  const [collapsedRounds, setCollapsedRounds] = useState(new Set())
+  const [collapsedRounds, setCollapsedRounds] = useState(() => new Set(show?.rounds?.map(r => r.id) ?? []))
   const [renamingRound, setRenamingRound] = useState(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [confirmDeleteRound, setConfirmDeleteRound] = useState(null)
