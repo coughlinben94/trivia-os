@@ -46,7 +46,7 @@ export default function FormatLibrary({ onClose, onSelectFormat }) {
   const schema = draft.input_schema
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
 
         {/* Header */}
