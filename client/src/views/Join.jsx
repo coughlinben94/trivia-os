@@ -628,7 +628,7 @@ function ReconnectingBanner({ visible }) {
 // ─── Live view ────────────────────────────────────────────────────────────────
 function LiveView({ show, team, powerupUsed, onInvokePowerup, myScores, leaderboard, leaderboardStatus, onRetryLeaderboard, theme }) {
   const [showScoreboard, setShowScoreboard]   = useState(false)
-  const [viewedIndex, setViewedIndex]         = useState(show?.current_slide_index ?? 0)
+  const [viewedIndex, setViewedIndex]         = useState(0)
   const [powerupConfirming, setPowerupConfirming] = useState(false)
   const [powerupInvoking, setPowerupInvoking]   = useState(false)
   const [powerupError, setPowerupError]         = useState(null)
