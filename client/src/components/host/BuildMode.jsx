@@ -138,7 +138,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
             />
           ) : (
             /* Dashboard rest state — type picker grid */
-            <div className="h-full flex flex-col items-center justify-center p-8 -mt-[5%]">
+            <div className="h-full flex flex-col items-center justify-center p-8">
               <div className="w-full max-w-2xl">
                 <div className="grid grid-cols-3 gap-3">
                   {TYPE_CARDS.map(card => (
@@ -153,20 +153,20 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                     </button>
                   ))}
                   <button
-                    onClick={() => { window.location.href = '/questions' }}
-                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['database']}`}
-                  >
-                    <span className="text-3xl leading-none">🗃️</span>
-                    <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Question Database</span>
-                    <span className="text-xs text-gray-500 leading-snug">Browse and search your question archive</span>
-                  </button>
-                  <button
                     onClick={() => setShowThemePicker(true)}
                     className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['theme']}`}
                   >
                     <span className="text-3xl leading-none">🎨</span>
                     <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Theme</span>
                     <span className="text-xs text-gray-500 leading-snug">Change the display look</span>
+                  </button>
+                  <button
+                    onClick={() => { window.location.href = '/questions' }}
+                    className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border text-center group min-h-[138px] ${BTN} ${CARD_STYLE['database']}`}
+                  >
+                    <span className="text-3xl leading-none">🗃️</span>
+                    <span className="text-sm font-semibold text-gray-800 transition-colors duration-[120ms]">Question Database</span>
+                    <span className="text-xs text-gray-500 leading-snug">Browse and search your question archive</span>
                   </button>
                   <button
                     onClick={() => setShowTickerManager(true)}
