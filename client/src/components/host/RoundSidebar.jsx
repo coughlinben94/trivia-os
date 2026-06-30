@@ -100,24 +100,39 @@ export default function RoundSidebar({
       draggedSpec.type === 'round' ? bl.roundId === draggedSpec.id : bl.slides.some(s => s.id === draggedSpec.id)
     )
     let targetBlockIdx
-    if (targetType === 'round') {
+    if (targetType === 'round-before' || targetType === 'round-after') {
       targetBlockIdx = b.findIndex(bl => bl.roundId === targetKey)
     } else {
       targetBlockIdx = b.findIndex(bl => bl.slides.some(s => s.id === targetKey))
     }
-    if (draggedBlockIdx === -1 || targetBlockIdx === -1 || draggedBlockIdx === targetBlockIdx) return null
+    if (draggedBlockIdx === -1 || targetBlockIdx === -1) return null
+
     const next = [...b]
     const [removed] = next.splice(draggedBlockIdx, 1)
-    const adjusted = draggedBlockIdx < targetBlockIdx ? targetBlockIdx - 1 : targetBlockIdx
+
+    let adjusted
+    if (targetType === 'round-after') {
+      // insert after the round block
+      adjusted = draggedBlockIdx < targetBlockIdx ? targetBlockIdx : targetBlockIdx + 1
+    } else {
+      // round-before or slide: insert at (before) the target
+      adjusted = draggedBlockIdx < targetBlockIdx ? targetBlockIdx - 1 : targetBlockIdx
+    }
+
+    if (adjusted === draggedBlockIdx) return null  // no-op
     next.splice(adjusted, 0, removed)
     return next.flatMap(bl => bl.slides.map(s => s.id))
   }
 
-  // Walk up the DOM from a point to find a [data-slide-id] or [data-round-id]
-  function findDropTarget(el) {
+  // Walk up the DOM from a point. For rounds, Y position picks before/after.
+  function findDropTarget(el, clientY) {
     while (el && el !== document.body) {
       if (el.dataset?.slideId) return { id: el.dataset.slideId, type: 'slide' }
-      if (el.dataset?.roundId) return { id: el.dataset.roundId, type: 'round' }
+      if (el.dataset?.roundId) {
+        const rect = el.getBoundingClientRect()
+        const pos  = clientY < rect.top + rect.height / 2 ? 'round-before' : 'round-after'
+        return { id: el.dataset.roundId, type: pos }
+      }
       el = el.parentElement
     }
     return null
@@ -135,7 +150,7 @@ export default function RoundSidebar({
 
     function onMove(ev) {
       const el = document.elementFromPoint(ev.clientX, ev.clientY)
-      const target = findDropTarget(el)
+      const target = findDropTarget(el, ev.clientY)
       dragOverRef.current = target
       if (target) {
         setDragOverId(target.id)
@@ -213,15 +228,16 @@ export default function RoundSidebar({
           }
 
           const { round, slides } = seg
-          const collapsed    = collapsedRounds.has(round.id)
+          const collapsed     = collapsedRounds.has(round.id)
           const roundDragging = dragged?.id === round.id && dragged?.type === 'round'
-          const roundDragOver = dragOverId === round.id && dragOverType === 'round'
+          const roundBefore   = dragOverId === round.id && dragOverType === 'round-before'
+          const roundAfter    = dragOverId === round.id && dragOverType === 'round-after'
 
           return (
             <div
               key={round.id}
               data-round-id={round.id}
-              className={`border-t border-gray-100 first:border-t-0 ${roundDragging ? 'opacity-40' : ''} ${roundDragOver ? 'border-t-2 border-t-blue-400' : ''}`}
+              className={`border-t border-gray-100 first:border-t-0 ${roundDragging ? 'opacity-40' : ''} ${roundBefore ? 'border-t-2 border-t-blue-400' : ''} ${roundAfter ? 'border-b-2 border-b-blue-400' : ''}`}
             >
               {/* Round header */}
               <div className="flex items-center gap-1.5 px-3 py-2 group">
