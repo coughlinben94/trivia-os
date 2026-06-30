@@ -48,17 +48,23 @@ export function useShow() {
     showIdRef.current = show?.id ?? null
   }, [show])
 
-  // On mount, restore the last active show
+  // On mount, restore the last active show.
+  // Cancel flag prevents a Strict Mode double-invocation from letting a
+  // stale async fetch clobber state after the first invocation has settled.
   useEffect(() => {
+    let cancelled = false
     const savedId = localStorage.getItem(ACTIVE_SHOW_KEY)
     if (savedId) {
-      fetchShow(savedId).finally(() => setLoading(false))
+      fetchShow(savedId, () => cancelled).finally(() => {
+        if (!cancelled) setLoading(false)
+      })
     } else {
       setLoading(false)
     }
+    return () => { cancelled = true }
   }, [])
 
-  async function fetchShow(id) {
+  async function fetchShow(id, isCancelled = () => false) {
     const { data, error } = await supabase
       .from('shows')
       .select('*')
@@ -66,7 +72,7 @@ export function useShow() {
       .single()
     if (error || !data) return null
     const normalized = normalizeShow(data)
-    setShow(normalized)
+    if (!isCancelled()) setShow(normalized)
     return normalized
   }
 
@@ -262,8 +268,14 @@ export function useShow() {
       data: slideData.data ?? {},
     }
     const newSlides = [...show.slides, slide]
+    if (import.meta.env.DEV) console.log('[addSlide] newSlides before write:', JSON.stringify(newSlides.map(s => s.id)))
     setShow(prev => ({ ...prev, slides: newSlides }))
-    await supabase.from('shows').update({ slides: newSlides }).eq('id', show.id)
+    const { data: _d, error, status, count } = await supabase
+      .from('shows')
+      .update({ slides: newSlides })
+      .eq('id', show.id)
+      .select()
+    if (import.meta.env.DEV) console.log('[addSlide] write result:', { status, count, error, newCount: newSlides.length, showId: show.id })
     return slide
   }
 

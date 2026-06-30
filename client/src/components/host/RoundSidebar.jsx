@@ -44,6 +44,8 @@ export default function RoundSidebar({
   const [renameDraft, setRenameDraft] = useState('')
   const [confirmDeleteRound, setConfirmDeleteRound] = useState(null)
 
+  if (!show) return null
+
   const sorted = sortedSlides(show)
 
   // Build segments: groups of slides by roundId in display order

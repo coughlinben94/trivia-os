@@ -19,7 +19,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   const [addRoundWizardOpen, setAddRoundWizardOpen] = useState(false)
 
   const syncedSelectedSlide = selectedSlide
-    ? (show.slides.find(s => s.id === selectedSlide.id) ?? selectedSlide)
+    ? (show?.slides?.find(s => s.id === selectedSlide.id) ?? selectedSlide)
     : null
 
   function openAddModal(initialData = {}) {
@@ -68,6 +68,9 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   }
 
   const reducedMotion     = useReducedMotion()
+
+  if (!show) return null
+
   const isQuestionModal   = addModalData?.type === 'question'
   const isRoundIntroModal = addModalData?.type === 'round-intro'
 

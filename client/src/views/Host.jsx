@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useShow } from '../hooks/useShow.js'
 import { supabase } from '../lib/supabase.js'
 import { ThemeProvider, useTheme } from '../components/shared/ThemeProvider.jsx'
+import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import ShowManager from '../components/host/ShowManager.jsx'
 import ShowLibrary from '../components/host/ShowLibrary.jsx'
 import BuildMode from '../components/host/BuildMode.jsx'
@@ -37,7 +38,9 @@ export default function Host() {
 
   return (
     <ThemeProvider showThemeId={show.theme}>
-      <HostInner showApi={showApi} />
+      <ErrorBoundary>
+        <HostInner showApi={showApi} />
+      </ErrorBoundary>
     </ThemeProvider>
   )
 }
