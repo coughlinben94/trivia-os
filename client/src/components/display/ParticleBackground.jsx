@@ -948,10 +948,10 @@ const RA_STYLE = `
 @media (prefers-reduced-motion: reduce){ .ra-anim{ animation:none !important } }
 `;
 
-function RaPop({ b }) {
+function RaPop({ b, tint }) {
   const layer = (color, frac) => (
     <div className="ra-anim" style={{ position: "absolute", inset: 0, borderRadius: "50%",
-      background: `radial-gradient(circle at 50% 50%, ${raRgba(color, b.a)}, transparent 64%)`,
+      background: `radial-gradient(circle at 50% 50%, ${tint(raRgba(color, b.a))}, transparent 64%)`,
       animation: `raHue ${b.hueDur}s linear ${(-b.hueDur * frac).toFixed(2)}s infinite` }} />
   );
   return (
@@ -965,7 +965,7 @@ function RaPop({ b }) {
   );
 }
 
-function RaAppleBouncer({ size = 8 }) {
+function RaAppleBouncer({ size = 8, tint }) {
   return (
     <div className="ra-anim" style={{ position: "absolute", inset: 0, pointerEvents: "none",
       animation: "raBounceX 6.5s linear infinite alternate", willChange: "transform" }}>
@@ -973,8 +973,11 @@ function RaAppleBouncer({ size = 8 }) {
         animation: "raBounceY 4.9s linear infinite alternate", willChange: "transform" }}>
         <div style={{ position: "absolute", left: "50%", top: "50%", width: size + "%", aspectRatio: "1",
           transform: "translate(-50%, -50%)" }}>
+          {/* drop-shadow is an atmospheric glow (in-family); the sprite's own fill palette (RA_APPLE_COL) is a
+              fixed original pixel-art critter design, not theme-derived — left untouched per "no copyrighted IP /
+              original critter" design law, same as Autumn Harvest's leaves don't reskin unrelated sprites */}
           <svg viewBox="0 0 14 14" width="100%" height="100%" shapeRendering="crispEdges"
-            style={{ display: "block", overflow: "visible", filter: `drop-shadow(0 0 3px ${raRgba(RA_C.green, 0.55)})` }}>
+            style={{ display: "block", overflow: "visible", filter: `drop-shadow(0 0 3px ${tint(raRgba(RA_C.green, 0.55))})` }}>
             {RA_APPLE_RECTS}
           </svg>
         </div>
@@ -983,7 +986,7 @@ function RaAppleBouncer({ size = 8 }) {
   );
 }
 
-function RetroArcadeAmbient() {
+function RetroArcadeAmbient({ tint }) {
   const pops = useMemo(() => {
     const cols = 5, rows = 3, arr = [];
     const kfs = ["raPop", "raPopB"];
@@ -1006,33 +1009,33 @@ function RetroArcadeAmbient() {
   }, []);
 
   const stat = useMemo(() => {
-    const palette = [raRgba(RA_C.violet, 0.9), raRgba(RA_C.green, 0.85), "rgba(255,255,255,0.85)"];
+    const palette = [tint(raRgba(RA_C.violet, 0.9)), tint(raRgba(RA_C.green, 0.85)), "rgba(255,255,255,0.85)"];
     return Array.from({ length: 16 }, () => ({
       left: (Math.random() * 100).toFixed(1) + "%", top: (Math.random() * 100).toFixed(1) + "%",
       dur: (Math.random() * 6 + 3.5).toFixed(2), delay: (-Math.random() * 9).toFixed(2),
       color: palette[(Math.random() * 3) | 0],
     }));
-  }, []);
+  }, [tint]);
 
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden",
-      background: `radial-gradient(ellipse 120% 90% at 50% 36%, ${raRgba(RA_C.accent, 0.5)}, ${RA_C.bg} 60%, ${RA_C.bgDeep} 92%)` }}>
+      background: `radial-gradient(ellipse 120% 90% at 50% 36%, ${tint(raRgba(RA_C.accent, 0.5))}, ${tint(RA_C.bg)} 60%, ${tint(RA_C.bgDeep)} 92%)` }}>
 
       <style>{RA_STYLE}</style>
 
       <div className="ra-anim" style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: "26%",
-        background: `radial-gradient(ellipse at left center, ${raRgba(RA_C.violet, 0.5)}, transparent 75%)`,
+        background: `radial-gradient(ellipse at left center, ${tint(raRgba(RA_C.violet, 0.5))}, transparent 75%)`,
         ["--lo"]: 0.24, ["--hi"]: 0.62, animation: "raBuzz 1.8s linear infinite" }} />
       <div className="ra-anim" style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "26%",
-        background: `radial-gradient(ellipse at right center, ${raRgba(RA_C.green, 0.42)}, transparent 75%)`,
+        background: `radial-gradient(ellipse at right center, ${tint(raRgba(RA_C.green, 0.42))}, transparent 75%)`,
         ["--lo"]: 0.2, ["--hi"]: 0.58, animation: "raBuzz 2.2s linear .5s infinite" }} />
 
       <div className="ra-anim" style={{ position: "absolute", top: "18%", left: "18%", right: "18%", bottom: "18%",
-        background: `radial-gradient(ellipse, ${raRgba(RA_C.violet, 0.26)}, transparent 70%)`, animation: "raGlow 5s ease-in-out infinite" }} />
+        background: `radial-gradient(ellipse, ${tint(raRgba(RA_C.violet, 0.26))}, transparent 70%)`, animation: "raGlow 5s ease-in-out infinite" }} />
 
-      {pops.map((b, i) => <RaPop key={i} b={b} />)}
+      {pops.map((b, i) => <RaPop key={i} b={b} tint={tint} />)}
 
-      <RaAppleBouncer size={8} />
+      <RaAppleBouncer size={8} tint={tint} />
 
       {stat.map((p, i) => (
         <div key={i} aria-hidden className="ra-anim" style={{ position: "absolute", left: p.left, top: p.top,
@@ -1040,7 +1043,7 @@ function RetroArcadeAmbient() {
       ))}
 
       <div aria-hidden className="ra-anim" style={{ position: "absolute", inset: "-4px 0", pointerEvents: "none",
-        backgroundImage: `repeating-linear-gradient(transparent 0px, transparent 2px, ${raRgba(RA_C.violet, 0.11)} 2px, ${raRgba(RA_C.violet, 0.11)} 4px)`,
+        backgroundImage: `repeating-linear-gradient(transparent 0px, transparent 2px, ${tint(raRgba(RA_C.violet, 0.11))} 2px, ${tint(raRgba(RA_C.violet, 0.11))} 4px)`,
         backgroundSize: "100% 4px", mixBlendMode: "screen", animation: "raScan 0.5s linear infinite", willChange: "transform" }} />
     </div>
   );
@@ -1048,7 +1051,7 @@ function RetroArcadeAmbient() {
 
 // ─── 8. SAND DUNE CHILL ───────────────────────────────────────────────────
 // Theme: early-AM Lake Michigan — cool periwinkle dawn, last stars, gulls crossing
-function SandDuneChillAmbient() {
+function SandDuneChillAmbient({ tint }) {
   const gulls = useMemo(() => [
     { top: '20%', size: 34, dur: '30s', delay: '0s',   opacity: 0.62, flip: false, bobDur: '5s',   bobDelay: '0s'    },
     { top: '31%', size: 26, dur: '38s', delay: '-12s', opacity: 0.50, flip: true,  bobDur: '6.5s', bobDelay: '-2s'   },
@@ -1063,22 +1066,22 @@ function SandDuneChillAmbient() {
   })), [])
   return <>
     <GlowLayer lo={0.42} hi={0.64} duration="24s" style={{ inset: 0,
-      background: 'linear-gradient(to bottom, rgba(108,132,182,0.50) 0%, rgba(152,142,176,0.40) 38%, rgba(228,182,156,0.34) 56%, transparent 70%)' }}/>
+      background: `linear-gradient(to bottom, ${tint('rgba(108,132,182,0.50)')} 0%, ${tint('rgba(152,142,176,0.40)')} 38%, ${tint('rgba(228,182,156,0.34)')} 56%, transparent 70%)` }}/>
     <GlowLayer lo={0.24} hi={0.46} duration="22s" delay="4s" style={{ inset: 0,
-      background: 'radial-gradient(ellipse 44% 46% at 80% 50%, rgba(255,205,160,0.42), transparent 68%)' }}/>
+      background: `radial-gradient(ellipse 44% 46% at 80% 50%, ${tint('rgba(255,205,160,0.42)')}, transparent 68%)` }}/>
     {lastStars.map((s, i) => (
-      <PulseDot key={i} left={s.left} top={s.top} size={s.size} color="rgba(225,232,255,0.55)" duration={s.dur} delay={s.delay} lo={0.06}/>
+      <PulseDot key={i} left={s.left} top={s.top} size={s.size} color={tint('rgba(225,232,255,0.55)')} duration={s.dur} delay={s.delay} lo={0.06}/>
     ))}
     <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
-      background: 'linear-gradient(to bottom, transparent 50%, rgba(120,150,175,0.30) 60%, rgba(64,94,124,0.46) 70%, rgba(42,64,90,0.34) 80%, transparent 86%)' }}/>
+      background: `linear-gradient(to bottom, transparent 50%, ${tint('rgba(120,150,175,0.30)')} 60%, ${tint('rgba(64,94,124,0.46)')} 70%, ${tint('rgba(42,64,90,0.34)')} 80%, transparent 86%)` }}/>
     <Sun left="76%" top="42%" size="9%"
-      core="rgba(255,251,240,0.97)" mid="rgba(255,230,198,0.86)" rim="rgba(252,202,162,0.56)"
-      halo="rgba(255,212,172,0.34)" haloBlur={44} haloSpread={12} dur="12s"/>
+      core="rgba(255,251,240,0.97)" mid={tint('rgba(255,230,198,0.86)')} rim={tint('rgba(252,202,162,0.56)')}
+      halo={tint('rgba(255,212,172,0.34)')} haloBlur={44} haloSpread={12} dur="12s"/>
     {gulls.map((g, i) => <Gull key={i} {...g}/>)}
     <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
-      background: 'linear-gradient(to bottom, transparent 66%, rgba(170,136,94,0.32) 76%, rgba(134,106,72,0.68) 86%, rgba(94,74,50,0.90) 95%, rgba(66,52,36,0.96) 100%)' }}/>
+      background: `linear-gradient(to bottom, transparent 66%, ${tint('rgba(170,136,94,0.32)')} 76%, ${tint('rgba(134,106,72,0.68)')} 86%, ${tint('rgba(94,74,50,0.90)')} 95%, ${tint('rgba(66,52,36,0.96)')} 100%)` }}/>
     <GlowLayer lo={0.10} hi={0.24} duration="14s" delay="2s" style={{ inset: 0,
-      background: 'radial-gradient(ellipse 52% 15% at 62% 80%, rgba(255,212,150,0.26), transparent 72%)' }}/>
+      background: `radial-gradient(ellipse 52% 15% at 62% 80%, ${tint('rgba(255,212,150,0.26)')}, transparent 72%)` }}/>
   </>
 }
 
@@ -1170,7 +1173,7 @@ function HwBat({ id, base, size, dur, flap }) {
   )
 }
 
-function HalloweenAmbient() {
+function HalloweenAmbient({ tint }) {
   const fog = useMemo(() => {
     const N = 8
     return Array.from({ length: N }, (_, i) => {
@@ -1205,19 +1208,22 @@ function HalloweenAmbient() {
   return (
     <>
       <style>{HW_STYLE}{batKeyframes}</style>
-      <div style={{ position: "absolute", inset: 0, overflow: "hidden", background: `linear-gradient(to bottom, ${HW.skyTop} 18%, ${HW.skyMid} 56%, ${HW.skyHorizon} 90%)` }}>
-        <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 46% 50% at 82% 16%, ${hwRgba(HW.moonGlow, 0.4)}, transparent 60%)` }} />
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden", background: `linear-gradient(to bottom, ${tint(HW.skyTop)} 18%, ${tint(HW.skyMid)} 56%, ${tint(HW.skyHorizon)} 90%)` }}>
+        <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 46% 50% at 82% 16%, ${tint(hwRgba(HW.moonGlow, 0.4))}, transparent 60%)` }} />
+        {/* dark ground silhouette — ink is a sanctioned dark-silhouette exception, left untinted */}
         <div style={{ position: "absolute", left: "-6%", right: "-6%", bottom: 0, height: "15%", background: `linear-gradient(to top, ${HW.ink}, ${HW.ink} 90%, transparent)`, borderRadius: "50% 50% 0 0 / 100% 100% 0 0" }} />
+        {/* headstones / mausoleum / cross / zombie hand all hardcode HW.ink internally — dark silhouettes, sanctioned exception */}
         <HwMausoleum left="3%" w="8.5%" h="23%" bottom="6%" />
         <HwHeadstone left="24%" w="4.4%" h="12.5%" bottom="11%" round="50% 50% 6% 6% / 38% 38% 6% 6%" />
         <HwHeadstone left="34%" w="3.4%" h="10.5%" bottom="12%" round="52% 52% 6% 6% / 40% 40% 6% 6%" />
         <HwCross left="46%" w="5%" h="15.5%" bottom="11%" />
         <HwZombieHand left="67%" bottom="12.5%" w="6%" h="15%" />
         <HwHeadstone left="79%" w="4.4%" h="13%" bottom="10%" round="50% 50% 6% 6% / 38% 38% 6% 6%" />
-        <div className="hw-anim" style={{ position: "absolute", inset: 0, background: `radial-gradient(circle 6.5% at 82% 16%, ${hwRgba(HW.moon, 1)} 0%, ${hwRgba(HW.moon, 0.95)} 42%, ${hwRgba(HW.moonGlow, 0.5)} 56%, transparent 70%)`, animation: "hwMoon 9s ease-in-out infinite" }} />
+        <div className="hw-anim" style={{ position: "absolute", inset: 0, background: `radial-gradient(circle 6.5% at 82% 16%, ${tint(hwRgba(HW.moon, 1))} 0%, ${tint(hwRgba(HW.moon, 0.95))} 42%, ${tint(hwRgba(HW.moonGlow, 0.5))} 56%, transparent 70%)`, animation: "hwMoon 9s ease-in-out infinite" }} />
+        {/* bats are drawn with HW.ink — dark silhouette drifters, sanctioned exception */}
         {bats.map((b) => <HwBat key={b.id} {...b} />)}
         {fog.map((f, i) => (
-          <div key={i} className="hw-anim" style={{ position: "absolute", top: f.top, left: f.left, width: f.w, height: `calc(${f.w} * 0.26)`, ["--op"]: f.op, background: `radial-gradient(ellipse 50% 50% at 50% 50%, ${hwRgba(HW.fogPale, 0.7)}, ${hwRgba(HW.fog, 0.24)} 46%, transparent 72%)`, animation: `${f.dir === "R" ? "hwFogR" : "hwFogL"} ${f.dur}s ease-in-out ${f.delay}s infinite`, willChange: "transform, opacity" }} />
+          <div key={i} className="hw-anim" style={{ position: "absolute", top: f.top, left: f.left, width: f.w, height: `calc(${f.w} * 0.26)`, ["--op"]: f.op, background: `radial-gradient(ellipse 50% 50% at 50% 50%, ${tint(hwRgba(HW.fogPale, 0.7))}, ${tint(hwRgba(HW.fog, 0.24))} 46%, transparent 72%)`, animation: `${f.dir === "R" ? "hwFogR" : "hwFogL"} ${f.dur}s ease-in-out ${f.delay}s infinite`, willChange: "transform, opacity" }} />
         ))}
       </div>
     </>
@@ -1227,7 +1233,7 @@ function HalloweenAmbient() {
 // ─── 10. JAZZ CLUB ───────────────────────────────────────────────────────
 // accent #4a2808 = rgba(74,40,8), highlight #d4820c = rgba(212,130,12)
 // bg #080608, bgDeep #040404
-function JcSpotlight({ fx, fy, w, alpha, dur, dir, phase }) {
+function JcSpotlight({ fx, fy, w, alpha, dur, dir, phase, tint }) {
   return (
     <div aria-hidden className="jc-anim" style={{
       position: 'absolute', inset: 0, pointerEvents: 'none',
@@ -1238,13 +1244,13 @@ function JcSpotlight({ fx, fy, w, alpha, dur, dir, phase }) {
         position: 'absolute', left: fx, top: fy,
         transform: 'translate(-50%,-50%)',
         width: w, aspectRatio: '1',
-        background: `radial-gradient(circle at center, rgba(255,240,220,${alpha}) 0%, rgba(255,240,220,${(alpha * 0.5).toFixed(2)}) 46%, transparent 70%)`,
+        background: `radial-gradient(circle at center, ${tint(`rgba(255,240,220,${alpha})`)} 0%, ${tint(`rgba(255,240,220,${(alpha * 0.5).toFixed(2)})`)} 46%, transparent 70%)`,
       }}/>
     </div>
   )
 }
 
-function JcGlint() {
+function JcGlint({ tint }) {
   const durRef   = useRef(`${(4.5 + Math.random() * 3).toFixed(1)}s`)
   const delayRef = useRef(`${(Math.random() * 6).toFixed(1)}s`)
   const [pos, setPos] = useState(() => ({
@@ -1263,27 +1269,30 @@ function JcGlint() {
     <div aria-hidden className="jc-anim" onAnimationIteration={reroll} style={{
       position: 'absolute', left: pos.left, top: pos.top, pointerEvents: 'none',
       width: pos.size, height: pos.size, borderRadius: '50%', willChange: 'opacity',
-      background: 'radial-gradient(circle, rgba(255,245,235,0.95), rgba(255,245,235,0.5) 40%, transparent 72%)',
+      background: `radial-gradient(circle, ${tint('rgba(255,245,235,0.95)')}, ${tint('rgba(255,245,235,0.5)')} 40%, transparent 72%)`,
       '--gop': pos.gop,
       animation: `jcGlintPop ${durRef.current} ease-in-out ${delayRef.current} infinite`,
     }}/>
   )
 }
 
-function JazzClubAmbient() {
+function JazzClubAmbient({ tint }) {
   return <>
-    {/* Base: deep stage red */}
+    {/* Base: deep stage red — an intentional off-family curtain/backdrop wash, not derived from
+        accent/highlight (hue 0 vs theme's amber ~30); left literal, same treatment as a sanctioned
+        atmospheric exception since there's no principled accent/highlight anchor relationship to derive it from */}
     <div aria-hidden style={{
       position: 'absolute', inset: 0, pointerEvents: 'none',
       background: 'radial-gradient(ellipse 130% 110% at 50% 60%, #3a0808, #1a0404 65%, #0a0202)',
     }}/>
-    {/* White stage spotlights sweeping */}
-    <JcSpotlight fx="32%" fy="24%" w="26.4%" alpha={0.72} dur={40} dir="cw"  phase={0}/>
-    <JcSpotlight fx="69%" fy="21%" w="25.3%" alpha={0.66} dur={43} dir="ccw" phase={-11}/>
-    <JcSpotlight fx="50%" fy="89%" w="28.6%" alpha={0.68} dur={40} dir="cw"  phase={0}/>
-    {/* Twinkling white glints */}
-    <JcGlint/><JcGlint/><JcGlint/><JcGlint/><JcGlint/>
-    <JcGlint/><JcGlint/><JcGlint/><JcGlint/>
+    {/* Stage spotlights — pale but hue-locked to highlight's amber (H~30-34, S=100%), not a true
+        achromatic near-white (fails the low-saturation half of the near-white test) — tinted */}
+    <JcSpotlight fx="32%" fy="24%" w="26.4%" alpha={0.72} dur={40} dir="cw"  phase={0} tint={tint}/>
+    <JcSpotlight fx="69%" fy="21%" w="25.3%" alpha={0.66} dur={43} dir="ccw" phase={-11} tint={tint}/>
+    <JcSpotlight fx="50%" fy="89%" w="28.6%" alpha={0.68} dur={40} dir="cw"  phase={0} tint={tint}/>
+    {/* Twinkling glints — same amber-hued pale tone as spotlights, tinted */}
+    <JcGlint tint={tint}/><JcGlint tint={tint}/><JcGlint tint={tint}/><JcGlint tint={tint}/><JcGlint tint={tint}/>
+    <JcGlint tint={tint}/><JcGlint tint={tint}/><JcGlint tint={tint}/><JcGlint tint={tint}/>
     {/* Edge vignette */}
     <div aria-hidden style={{
       position: 'absolute', inset: 0, pointerEvents: 'none',
@@ -1358,12 +1367,16 @@ const DB_STYLE = `
   @media (prefers-reduced-motion:reduce) { .db-anim * { animation:none !important; } }
 `
 
-function DbSign() {
+function DbSign({ tint }) {
+  // signRed == theme highlight exactly — tinted. signBlu is an intentional contrasting
+  // neon-tube color (blue border/glow on a red-lettered sign, a deliberate two-tone design
+  // feature, not derived from accent/highlight) — left literal, same call as Jazz Club's
+  // off-family stage-red base.
   return (
     <div style={{ position:'absolute', top:'6%', left:'4%', transform:'rotate(-3deg)' }}>
       <div style={{
         position:'absolute', inset:-24,
-        background:`radial-gradient(ellipse at 30% 40%, ${dbRgba(DB.signBlu,0.2)} 0%, ${dbRgba(DB.signRed,0.08)} 55%, transparent 70%)`,
+        background:`radial-gradient(ellipse at 30% 40%, ${dbRgba(DB.signBlu,0.2)} 0%, ${tint(dbRgba(DB.signRed,0.08))} 55%, transparent 70%)`,
         animation:'dbCornerPulse 3.4s ease-in-out infinite',
         pointerEvents:'none',
       }}/>
@@ -1383,8 +1396,8 @@ function DbSign() {
         ].map(({ch,dur,dl}) => (
           <span key={ch} style={{
             fontFamily:'monospace', fontSize:28, fontWeight:900,
-            color:DB.signRed,
-            textShadow:`0 0 6px ${DB.signRed}, 0 0 16px ${DB.signRed}`,
+            color:tint(DB.signRed),
+            textShadow:`0 0 6px ${tint(DB.signRed)}, 0 0 16px ${tint(DB.signRed)}`,
             animation:ch==='N' ? `dbFlicker ${dur}s step-start ${dl}s infinite` : 'none',
           }}>{ch}</span>
         ))}
@@ -1461,16 +1474,21 @@ function DbJukebox() {
   )
 }
 
-function DiveBarAmbient() {
+function DiveBarAmbient({ tint }) {
   return (
     <div className="db-anim" style={{
       position:'absolute', inset:0, overflow:'hidden',
-      background:`radial-gradient(ellipse at 15% 80%, rgba(26,6,10,0.9) 0%, ${DB.bg} 55%)`,
+      background:`radial-gradient(ellipse at 15% 80%, ${tint('rgba(26,6,10,0.9)')} 0%, ${tint(DB.bg)} 55%)`,
     }}>
       <style>{DB_STYLE}</style>
-      <DbSign />
+      <DbSign tint={tint} />
+      {/* DbJukebox is a self-contained decorative object with its own internal multi-color
+          dome-cycle identity (blue/red/green/purple/orange) plus wood/metal/glass body tones and
+          an amber strip/floor-glow palette — none of it is derived from accent/highlight, so it's
+          left entirely untinted, analogous to Retro Arcade's apple critter */}
       <DbJukebox />
-      {/* ambient floor warmth across the bottom */}
+      {/* ambient floor warmth — continuation of the jukebox's own amber floor spill, not
+          theme-derived, left untinted */}
       <div aria-hidden style={{
         position:'absolute', bottom:0, left:0, right:0, height:'18%',
         background:'linear-gradient(to top, rgba(140,50,10,0.28), transparent)',
