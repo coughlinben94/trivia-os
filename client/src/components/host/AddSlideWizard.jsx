@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
-import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 import { archiveQuestion } from '../../lib/archiveQuestion.js'
 
 export const TYPE_CARDS = [
@@ -27,7 +26,7 @@ export const ROUND_TYPES = [
   { id: 'pyl',    label: 'Press Your Luck!', needsNumber: false, title: 'Press Your Luck!' },
 ]
 
-export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange, initialData = {} }) {
+export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange, initialData = {}, shinyFormats, shinyLoading }) {
   const [type, setType] = useState(initialData.type ?? null)
   const typeCard = TYPE_CARDS.find(c => c.type === type)
 
@@ -62,7 +61,6 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   }, [])
 
   const sorted = sortedSlides(show)
-  const { formats: shinyFormats, loading: shinyLoading } = useShinyFormats()
 
   // Derived — never stored, always recomputed
   const selRoundType      = ROUND_TYPES.find(rt => rt.id === roundType) ?? ROUND_TYPES[0]

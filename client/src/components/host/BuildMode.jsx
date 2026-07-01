@@ -12,6 +12,7 @@ import SwingRoundWizard from './SwingRoundWizard.jsx'
 import PYLWizard from './PYLWizard.jsx'
 import { archiveQuestions } from '../../lib/archiveQuestion.js'
 import { sortedSlides } from '../../hooks/useShow.js'
+import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 
 const BTN = 'host-button'
 
@@ -198,6 +199,10 @@ function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReord
 }
 
 export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
+  // Preloaded on dashboard mount (not on modal open) so FormatLibrary and
+  // AddSlideWizard never show a blank-then-pop-in flash, and both share one
+  // fetch instead of each running its own.
+  const { formats: shinyFormats, loading: shinyFormatsLoading, createFormat, updateFormat, deleteFormat } = useShinyFormats()
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
   const [showTickerManager, setShowTickerManager] = useState(false)
   const [showThemePicker, setShowThemePicker] = useState(false)
@@ -572,6 +577,8 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                   }
                 }}
                 onClose={closeAddModal}
+                shinyFormats={shinyFormats}
+                shinyLoading={shinyFormatsLoading}
               />
             </motion.div>
           </motion.div>
@@ -607,7 +614,14 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
       </AnimatePresence>
 
       {showFormatLibrary && (
-        <FormatLibrary onClose={() => setShowFormatLibrary(false)} />
+        <FormatLibrary
+          onClose={() => setShowFormatLibrary(false)}
+          formats={shinyFormats}
+          loading={shinyFormatsLoading}
+          createFormat={createFormat}
+          updateFormat={updateFormat}
+          deleteFormat={deleteFormat}
+        />
       )}
 
       {showTickerManager && (

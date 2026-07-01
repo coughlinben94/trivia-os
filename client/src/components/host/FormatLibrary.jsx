@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 
 const INPUT_TYPES = ['image', 'audio', 'video', 'text', 'list']
 
@@ -10,8 +9,7 @@ const EMPTY_FORMAT = {
   input_schema: { type: 'image', slots: 1, sequential: false, seriesEnabled: false, hasPoints: false, labels: [] },
 }
 
-export default function FormatLibrary({ onClose, onSelectFormat }) {
-  const { formats, loading, createFormat, updateFormat, deleteFormat } = useShinyFormats()
+export default function FormatLibrary({ onClose, onSelectFormat, formats, loading, createFormat, updateFormat, deleteFormat }) {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState(null)
   const [draft, setDraft] = useState(EMPTY_FORMAT)
