@@ -13,6 +13,7 @@ function normalizeShow(row) {
     title: row.title,
     date: row.date,
     theme: row.theme_id ?? 'midnight-galaxy',
+    themeOverrides: row.theme_overrides ?? {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     slides: row.slides ?? [],
@@ -217,6 +218,7 @@ export function useShow() {
     if (meta.title !== undefined) row.title = meta.title
     if (meta.date !== undefined) row.date = meta.date
     if (meta.theme !== undefined) row.theme_id = meta.theme
+    if (meta.themeOverrides !== undefined) row.theme_overrides = meta.themeOverrides
     setShow(prev => ({ ...prev, ...meta, updatedAt: row.updated_at }))
     await supabase.from('shows').update(row).eq('id', show.id)
   }
