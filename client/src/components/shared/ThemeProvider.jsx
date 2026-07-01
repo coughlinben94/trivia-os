@@ -28,8 +28,8 @@ export function ThemeProvider({ showThemeId, overrides, children }) {
     const fontFace = new FontFace(family, `url(${url})`)
     fontFace.load().then(loaded => {
       document.fonts.add(loaded)
-    }).catch(() => {
-      // Font failed to load — text falls back to the next font in the stack, no crash
+    }).catch(err => {
+      console.warn(`Failed to load custom font "${family}":`, err)
     })
   }, [theme.fonts.displayUrl, theme.fonts.display])
 

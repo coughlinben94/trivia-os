@@ -32,7 +32,7 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
   }
 
   function setDisplayFont(font) {
-    const next = { ...overrides, fonts: { ...overrides.fonts, display: font } }
+    const next = { ...overrides, fonts: { ...overrides.fonts, display: font, displayUrl: undefined } }
     setOverrides(next)
     onUpdateOverrides(next)
   }
