@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { nanoid } from 'nanoid'
 
 // Preset positions — a 3x3 grid plus full-bleed. Values are CSS placement,
 // not raw coordinates, so elements always land somewhere sane regardless
@@ -37,7 +38,7 @@ export const TEXT_SIZES = {
 
 export function makeElement(type) {
   return {
-    id: `el_${Math.random().toString(36).slice(2, 10)}`,
+    id: `el_${nanoid(8)}`,
     type,
     position: 'center',
     size: 'md',
