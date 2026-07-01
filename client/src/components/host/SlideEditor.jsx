@@ -5,6 +5,13 @@ import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import MediaUpload from './MediaUpload.jsx'
 import HostPhotoLibrary from './HostPhotoLibrary.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
+import SlideRenderer from '../display/SlideRenderer.jsx'
+
+const INNER_W = 1280
+const INNER_H = 720
+const PREVIEW_W = 680
+const PREVIEW_H = Math.round(PREVIEW_W * (9 / 16))
+const SCALE = PREVIEW_W / INNER_W
 
 const SLIDE_TYPES = [
   { value: 'title',             label: 'Title' },
@@ -53,6 +60,7 @@ function getNavLabel(slide) {
 export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide, onClose, uploadMedia, getHostPhotos, addSiblingSlides }) {
   const [data, setData] = useState(slide.data)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [viewMode, setViewMode] = useState('edit') // 'edit' | 'preview'
   const [jukeboxLibs, setJukeboxLibs] = useState(JUKEBOX_LIBRARIES)
   const saveTimer = useRef(null)
 
@@ -133,46 +141,91 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
           <span className="leading-none">{navMeta.icon}</span>
           <span>{navLabel}</span>
         </div>
-        <div className="w-20" />
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+          <button
+            onClick={() => setViewMode('edit')}
+            className={`text-xs font-medium px-2.5 py-1 rounded-md transition-colors ${viewMode === 'edit' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => setViewMode('preview')}
+            className={`text-xs font-medium px-2.5 py-1 rounded-md transition-colors ${viewMode === 'preview' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+          >
+            Preview
+          </button>
+        </div>
       </div>
 
       {/* Type-specific editor */}
-      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
-        {slide.type === 'title' && (
-          <TitleEditor data={data} onChange={change} />
-        )}
-        {(slide.type === 'round-intro' || slide.type === 'swing-round-intro') && (
-          <RoundIntroEditor data={data} onChange={change} isSwing={slide.type === 'swing-round-intro'}
-            uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
-        )}
-        {slide.type === 'question' && (
-          <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia}
-            slideId={slide.id} slideRoundId={slide.roundId} addSiblingSlides={addSiblingSlides} />
-        )}
-        {slide.type === 'grading-break' && (
-          <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
-            uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} />
-        )}
-        {slide.type === 'scoreboard-reveal' && (
-          <ScoreboardRevealEditor data={data} onChange={change} show={show} />
-        )}
-        {slide.type === 'custom' && (
-          <CustomEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
-        )}
-        {slide.type === 'pixelate-series' && (
-          <PixelateSeriesEditor data={data} onChange={change}
-            onStageUpload={handleStageUpload} />
-        )}
-        {slide.type === 'multi-question' && (
-          <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
-        )}
-        {slide.type === 'pyl-reveal' && (
-          <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
-        )}
-        {slide.type === 'winner-reveal' && (
-          <WinnerRevealEditor />
-        )}
-      </div>
+      {viewMode === 'edit' && (
+        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+          {slide.type === 'title' && (
+            <TitleEditor data={data} onChange={change} />
+          )}
+          {(slide.type === 'round-intro' || slide.type === 'swing-round-intro') && (
+            <RoundIntroEditor data={data} onChange={change} isSwing={slide.type === 'swing-round-intro'}
+              uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
+          )}
+          {slide.type === 'question' && (
+            <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia}
+              slideId={slide.id} slideRoundId={slide.roundId} addSiblingSlides={addSiblingSlides} />
+          )}
+          {slide.type === 'grading-break' && (
+            <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
+              uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} />
+          )}
+          {slide.type === 'scoreboard-reveal' && (
+            <ScoreboardRevealEditor data={data} onChange={change} show={show} />
+          )}
+          {slide.type === 'custom' && (
+            <CustomEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
+          )}
+          {slide.type === 'pixelate-series' && (
+            <PixelateSeriesEditor data={data} onChange={change}
+              onStageUpload={handleStageUpload} />
+          )}
+          {slide.type === 'multi-question' && (
+            <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
+          )}
+          {slide.type === 'pyl-reveal' && (
+            <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
+          )}
+          {slide.type === 'winner-reveal' && (
+            <WinnerRevealEditor />
+          )}
+        </div>
+      )}
+
+      {viewMode === 'preview' && (
+        <div className="flex-1 bg-[#050505] flex items-center justify-center overflow-hidden">
+          <div
+            style={{
+              width: PREVIEW_W,
+              height: PREVIEW_H,
+              position: 'relative',
+              overflow: 'hidden',
+              borderRadius: 12,
+              flexShrink: 0,
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: INNER_W,
+                height: INNER_H,
+                transform: `scale(${SCALE})`,
+                transformOrigin: 'top left',
+                overflow: 'hidden',
+              }}
+            >
+              <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer — transition + delete */}
       <div className="shrink-0 px-5 py-3 border-t border-gray-100 flex items-center justify-between">
@@ -699,15 +752,6 @@ function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostP
         </select>
       </Field>
 
-      <Divider label="Final Night Closer" />
-
-      <Toggle
-        label="Final Break"
-        checked={!!data.isFinalBreak}
-        onChange={v => onChange('isFinalBreak', v)}
-        description="After the Jukebox, jump straight to the Winner Reveal slide (last slide in show)"
-      />
-
       <Divider label="Ben Photo" />
 
       <HostPhotoLibrary
@@ -727,7 +771,7 @@ function WinnerRevealEditor() {
         This slide plays a drum roll, then reveals the winning team with confetti.
       </p>
       <p className="text-xs text-gray-400 leading-relaxed">
-        The winner is calculated live from team scores at the time the slide appears. No configuration needed — place it last in your show order and mark the final grading break as <strong>Final Break</strong>.
+        The winner is calculated live from team scores at the time the slide appears. No configuration needed — just place it last in your show order.
       </p>
     </div>
   )

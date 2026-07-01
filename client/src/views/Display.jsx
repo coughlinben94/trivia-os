@@ -383,12 +383,13 @@ export default function Display() {
       }
 
       if (data) {
-        // Jukebox return: advance past grading-break; if it's a Final Break, jump to last slide
+        // Jukebox return: advance past grading-break; auto-jump to winner-reveal if last slide and no more grading breaks
         if (searchParams.get('from') === 'jukebox') {
           const sorted = [...(data.slides ?? [])].sort((a, b) => a.order - b.order)
           const cur = data.current_slide_index ?? 0
-          const curSlide = sorted[cur]
-          const next = curSlide?.data?.isFinalBreak
+          const lastSlideIsWinner = sorted[sorted.length - 1]?.type === 'winner-reveal'
+          const noMoreGradingBreaks = !sorted.slice(cur + 1).some(s => s.type === 'grading-break')
+          const next = (lastSlideIsWinner && noMoreGradingBreaks)
             ? sorted.length - 1
             : Math.min(cur + 1, sorted.length - 1)
           if (next > cur) {
