@@ -440,7 +440,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
           ) : (
             /* Dashboard rest state — type picker grid */
             <div className="h-full flex flex-col items-center justify-center p-8 overflow-y-auto">
-              <div className="w-full max-w-5xl -translate-y-[9%]">
+              <div className="w-full max-w-5xl -translate-y-[6%]">
 
                 {/* Round context filter */}
                 {show.rounds.length > 0 && (
@@ -463,7 +463,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
                   </div>
                 )}
 
-                {/* 4-4-4 grid: all 12 cards flat */}
+                {/* 4-4-4-1 grid: all 13 cards flat */}
                 <div className="flex flex-wrap gap-3 justify-center">
                   {TYPE_CARDS.map(card => (
                     <button
