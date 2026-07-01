@@ -224,7 +224,7 @@ function RegistrationScreen({ onRegister, show, theme }) {
 }
 
 // ─── Waiting ──────────────────────────────────────────────────────────────────
-function WaitingScreen({ teamName, myScore, theme }) {
+function WaitingScreen({ teamName, myScore, theme, onOpenScores }) {
   const pref   = useReducedMotion()
   const bg        = theme?.colors?.bg       ?? '#050505'
   const accent    = theme?.colors?.accent   ?? '#1a6b4a'
@@ -305,17 +305,41 @@ function WaitingScreen({ teamName, myScore, theme }) {
         </motion.div>
       </div>
 
-      {/* Score bar */}
+      {/* Bottom bar */}
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0,
-        padding: '0.875rem 1.5rem calc(0.875rem + env(safe-area-inset-bottom, 0px))',
+        padding: '0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px))',
         background: `${bg}e8`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        display: 'flex', alignItems: 'center', gap: '0.5rem', minHeight: 64,
       }}>
-        <span style={{ color: `${text}45`, fontSize: '0.8rem' }}>Your score</span>
-        <span style={{ fontFamily: 'Boogaloo, Anton, sans-serif', color: `${text}45`, fontSize: '1rem' }}>
-          {myScore > 0 ? `${myScore} pts` : '—'}
-        </span>
+        <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 60 }}>
+          <span style={{ color: `${text}45`, fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.08em', lineHeight: 1 }}>Score</span>
+          <span style={{ fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '1.15rem', lineHeight: 1.25, color: myScore > 0 ? highlight : `${text}35` }}>
+            {myScore > 0 ? `${myScore} pts` : '—'}
+          </span>
+        </div>
+
+        {/* Spacer */}
+        <div style={{ flex: 1 }} />
+
+        {/* Scores button */}
+        <button
+          onClick={onOpenScores}
+          onPointerDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
+          onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
+          onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+          style={{
+            height: 44, padding: '0 1rem', borderRadius: 10,
+            background: 'rgba(255,255,255,0.07)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            color: `${text}70`, fontSize: '0.85rem', fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
+            WebkitTapHighlightColor: 'transparent',
+            transition: 'transform 120ms ease',
+          }}
+        >
+          📊 Scores
+        </button>
       </div>
     </div>
   )
@@ -600,6 +624,141 @@ function ScoreboardSheet({ leaderboard, leaderboardStatus, onRetryLeaderboard, m
   )
 }
 
+// ─── Scores Drawer ───────────────────────────────────────────────────────────
+function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
+  const pref      = useReducedMotion()
+  const text      = theme?.colors?.text      ?? '#ffffff'
+  const accent    = theme?.colors?.accent   ?? '#1a6b4a'
+  const highlight = theme?.colors?.highlight ?? '#4dffc3'
+  const bg        = theme?.colors?.bg       ?? '#050505'
+
+  const myNameNorm = (myTeamName ?? '').trim().toLowerCase()
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(0,0,0,0.6)', zIndex: 450,
+        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+      }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={pref ? { opacity: 0 } : { y: '100%' }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={pref ? { opacity: 0 } : { y: '100%' }}
+        transition={pref
+          ? { duration: 0.22 }
+          : { ease: EASE_DRAWER, duration: 0.32 }}
+        drag={pref ? false : 'y'}
+        dragConstraints={{ top: 0 }}
+        dragElastic={{ top: 0.05, bottom: 0.4 }}
+        onDragEnd={(_, info) => {
+          if (info.velocity.y > 300 || info.offset.y > 120) onClose()
+        }}
+        style={{
+          background: `color-mix(in srgb, ${bg} 93%, #000 7%)`,
+          borderRadius: '20px 20px 0 0',
+          height: '72dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          cursor: 'grab',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Handle */}
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '0.75rem 0 0' }}>
+          <div style={{ width: 32, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.22)' }} />
+        </div>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.25rem' }}>
+          <h2 style={{ fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '1.5rem', color: text, margin: 0, letterSpacing: '-0.01em' }}>
+            📊 Scores
+          </h2>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 8,
+              color: `${text}65`, fontSize: '0.85rem', cursor: 'pointer',
+              minHeight: 44, minWidth: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'DM Sans, sans-serif', WebkitTapHighlightColor: 'transparent',
+            }}
+          >✕</button>
+        </div>
+
+        {/* Rows */}
+        <div style={{
+          flex: 1, overflowY: 'auto',
+          padding: '0.25rem 1rem calc(1.5rem + env(safe-area-inset-bottom, 0px))',
+          display: 'flex', flexDirection: 'column', gap: '0.5rem', cursor: 'default',
+        }}>
+          {loading
+            ? (
+              <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '2.5rem' }}>
+                <span style={{
+                  width: 24, height: 24, borderRadius: '50%',
+                  border: `2px solid ${accent}30`, borderTopColor: accent,
+                  animation: 'spin 0.8s linear infinite', display: 'inline-block',
+                }} />
+              </div>
+            )
+            : teams.length === 0
+            ? (
+              <p style={{ color: `${text}30`, textAlign: 'center', fontSize: '0.875rem', paddingTop: '2rem' }}>
+                No scores yet
+              </p>
+            )
+            : teams.map((t, i) => {
+                const isMe   = t.name.trim().toLowerCase() === myNameNorm
+                const medal  = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
+
+                return (
+                  <motion.div
+                    key={t.id}
+                    initial={pref ? { opacity: 0 } : { y: 12, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: pref ? 0 : 0.055 * i, duration: 0.22, ease: EASE_SNAP }}
+                    style={{
+                      borderRadius: 10, padding: '0.75rem 0.875rem',
+                      background: isMe ? `${accent}25` : 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${isMe ? `#f5c842` : 'transparent'}`,
+                      boxShadow: isMe ? `0 0 0 1px #f5c84222` : 'none',
+                      position: 'relative', overflow: 'hidden',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'relative' }}>
+                      <span style={{ fontSize: '1.05rem', width: 24, textAlign: 'center', flexShrink: 0 }}>
+                        {medal ?? <span style={{ color: `${text}30`, fontSize: '0.8rem', fontWeight: 700 }}>{i + 1}</span>}
+                      </span>
+                      <span style={{
+                        flex: 1, color: isMe ? '#f5c842' : `${text}f2`,
+                        fontSize: '0.9375rem', fontWeight: isMe ? 700 : 400,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        fontFamily: 'DM Sans, sans-serif',
+                      }}>
+                        {t.name.length > 22 ? `${t.name.slice(0, 21)}…` : t.name}
+                        {isMe && <span style={{ color: '#f5c84266', fontSize: '0.72rem', fontWeight: 400, marginLeft: '0.4rem' }}>← you</span>}
+                      </span>
+                      <span style={{
+                        fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '1.05rem', flexShrink: 0,
+                        color: i === 0 ? '#f5c842' : isMe ? '#f5c842' : `${text}8c`,
+                      }}>
+                        {t.total}
+                      </span>
+                    </div>
+                  </motion.div>
+                )
+              })
+          }
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 // ─── Reconnecting banner ──────────────────────────────────────────────────────
 function ReconnectingBanner({ visible }) {
   return (
@@ -626,7 +785,7 @@ function ReconnectingBanner({ visible }) {
 }
 
 // ─── Live view ────────────────────────────────────────────────────────────────
-function LiveView({ show, team, powerupUsed, onInvokePowerup, myScores, leaderboard, leaderboardStatus, onRetryLeaderboard, theme }) {
+function LiveView({ show, team, powerupUsed, onInvokePowerup, myScores, leaderboard, leaderboardStatus, onRetryLeaderboard, theme, onOpenScores }) {
   const [showScoreboard, setShowScoreboard]   = useState(false)
   const [viewedIndex, setViewedIndex]         = useState(0)
   const [powerupConfirming, setPowerupConfirming] = useState(false)
@@ -784,6 +943,27 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, myScores, leaderbo
           🏆 Scores
         </button>
 
+        {/* All-teams scores button */}
+        <button
+          onClick={onOpenScores}
+          onPointerDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
+          onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
+          onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+          style={{
+            height: 44, minWidth: 44, padding: '0 0.55rem', borderRadius: 10,
+            background: 'rgba(255,255,255,0.07)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            color: `${text}65`, fontSize: '1rem',
+            cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
+            WebkitTapHighlightColor: 'transparent',
+            transition: 'transform 120ms ease',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          title="View all team scores"
+        >
+          📊
+        </button>
+
         {/* Powerup */}
         {powerup && (
           <div style={{ flex: '0 0 auto', position: 'relative' }}>
@@ -886,6 +1066,9 @@ export default function Join() {
   const [leaderboardRetry, setLeaderboardRetry]   = useState(0)
   const [initError, setInitError]             = useState(null)
   const [connStatus, setConnStatus]           = useState('SUBSCRIBED')
+  const [scoresDrawerOpen, setScoresDrawerOpen]   = useState(false)
+  const [scoresDrawerTeams, setScoresDrawerTeams] = useState([])
+  const [scoresDrawerLoading, setScoresDrawerLoading] = useState(false)
 
   const theme = useMemo(() => show?.theme_id ? getTheme(show.theme_id) : null, [show?.theme_id])
 
@@ -1041,6 +1224,32 @@ export default function Join() {
     setPowerupUsed(true)
   }
 
+  // ── Scores drawer ─────────────────────────────────────────────────────
+  async function openScoresDrawer() {
+    setScoresDrawerOpen(true)
+    setScoresDrawerLoading(true)
+    try {
+      const { data } = await supabase
+        .from('scoreboard_teams')
+        .select('id, name, scores')
+        .eq('show_id', show?.id)
+        .order('sort_order', { ascending: true })
+      const withTotals = (data ?? [])
+        .map(t => ({
+          ...t,
+          total: t.scores
+            ? Object.values(t.scores).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0)
+            : 0,
+        }))
+        .sort((a, b) => b.total - a.total)
+      setScoresDrawerTeams(withTotals)
+    } catch {
+      setScoresDrawerTeams([])
+    } finally {
+      setScoresDrawerLoading(false)
+    }
+  }
+
   // ── Render ────────────────────────────────────────────────────────────
   const totalScore = myScores.reduce((sum, s) => sum + (s.score || 0), 0)
   const disconnected = connStatus === 'CHANNEL_ERROR' || connStatus === 'TIMED_OUT' || connStatus === 'CLOSED'
@@ -1063,7 +1272,7 @@ export default function Join() {
     <>
       <ReconnectingBanner visible={disconnected} />
       {phase === 'register' && <RegistrationScreen onRegister={handleRegister} show={show} theme={theme} />}
-      {phase === 'waiting'  && <WaitingScreen teamName={team?.name ?? ''} myScore={totalScore} theme={theme} />}
+      {phase === 'waiting'  && <WaitingScreen teamName={team?.name ?? ''} myScore={totalScore} theme={theme} onOpenScores={openScoresDrawer} />}
       {phase === 'live'     && (
         <LiveView
           show={show}
@@ -1075,8 +1284,22 @@ export default function Join() {
           leaderboardStatus={leaderboardStatus}
           onRetryLeaderboard={() => setLeaderboardRetry(n => n + 1)}
           theme={theme}
+          onOpenScores={openScoresDrawer}
         />
       )}
+
+      {/* Global scores drawer — available in waiting + live phases */}
+      <AnimatePresence>
+        {scoresDrawerOpen && (
+          <ScoresDrawer
+            teams={scoresDrawerTeams}
+            loading={scoresDrawerLoading}
+            myTeamName={team?.name ?? ''}
+            onClose={() => setScoresDrawerOpen(false)}
+            theme={theme}
+          />
+        )}
+      </AnimatePresence>
     </>
   )
 }
