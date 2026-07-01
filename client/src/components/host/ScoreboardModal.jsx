@@ -1,5 +1,167 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../../lib/supabase.js'
+
+// ─── Quick Entry ──────────────────────────────────────────────────────────────
+// Replicates the Excel VBA macro flow: team search → round → score → loop
+function QuickEntry({ teams, cols, onSave, onClose }) {
+  const [step, setStep]         = useState('team')   // team | round | score | disambig
+  const [teamQuery, setTeamQuery] = useState('')
+  const [roundInput, setRoundInput] = useState('')
+  const [scoreInput, setScoreInput] = useState('')
+  const [matches, setMatches]   = useState([])
+  const [picked, setPicked]     = useState(null)    // { team, colKey, colLabel }
+  const [flash, setFlash]       = useState(null)    // { text, ok }
+  const inputRef = useRef(null)
+
+  useEffect(() => { inputRef.current?.focus() }, [step])
+
+  function findMatches(q) {
+    const lower = q.toLowerCase()
+    return teams.filter(t => t.name.toLowerCase().includes(lower))
+  }
+
+  function resolveRound(raw) {
+    const up = raw.trim().toUpperCase()
+    // "M" or "?" → bonus
+    if (up === 'M' || up === 'MYSTERY' || up === '?') return cols.find(c => c.key === 'bonus') ?? null
+    // label match: SW, PYL, R1…
+    const byLabel = cols.find(c => c.label.toUpperCase() === up)
+    if (byLabel) return byLabel
+    // numeric: "1" → first col, "2" → second col (by label R1, R2, etc.)
+    if (/^\d+$/.test(up)) {
+      const n = parseInt(up)
+      const byNum = cols.find(c => c.label === `R${n}`)
+      if (byNum) return byNum
+      // fallback: nth col (1-indexed)
+      if (n >= 1 && n <= cols.length) return cols[n - 1]
+    }
+    return null
+  }
+
+  function showFlash(text, ok = true) {
+    setFlash({ text, ok })
+    setTimeout(() => setFlash(null), 1800)
+  }
+
+  function handleTeamSubmit() {
+    const q = teamQuery.trim()
+    if (!q) return
+    const found = findMatches(q)
+    if (found.length === 0) { showFlash('No team found', false); return }
+    if (found.length === 1) { setPicked({ team: found[0] }); setStep('round') }
+    else { setMatches(found); setStep('disambig') }
+  }
+
+  function handleDisambig(team) {
+    setPicked({ team })
+    setStep('round')
+  }
+
+  function handleRoundSubmit() {
+    const col = resolveRound(roundInput)
+    if (!col) { showFlash(`Unknown round "${roundInput}" — try 1–5, SW, PYL, M`, false); return }
+    setPicked(p => ({ ...p, col }))
+    setStep('score')
+  }
+
+  function handleScoreSubmit() {
+    const num = parseFloat(scoreInput)
+    if (isNaN(num)) { showFlash('Enter a number', false); return }
+    onSave(picked.team.id, picked.col.key, num)
+    showFlash(`✓ ${picked.team.name} · ${picked.col.label} → ${num}`)
+    // Reset for next entry
+    setStep('team')
+    setTeamQuery('')
+    setRoundInput('')
+    setScoreInput('')
+    setPicked(null)
+    setMatches([])
+  }
+
+  function handleKey(e, onEnter) {
+    if (e.key === 'Enter') { e.preventDefault(); onEnter() }
+    if (e.key === 'Escape') onClose()
+  }
+
+  const inputCls = 'w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#1a6b4a] focus:border-transparent'
+
+  return (
+    <div className="border-b border-gray-100 bg-green-50/50 px-6 py-4">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs font-semibold text-[#1a6b4a] uppercase tracking-widest">Quick Entry</span>
+        {flash && (
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${flash.ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+            {flash.text}
+          </span>
+        )}
+        <button onClick={onClose} className="ml-auto text-xs text-gray-400 hover:text-gray-600 host-button">✕ Close</button>
+      </div>
+
+      {step === 'team' && (
+        <div className="flex gap-2">
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Team name (partial ok)…"
+            value={teamQuery}
+            onChange={e => setTeamQuery(e.target.value)}
+            onKeyDown={e => handleKey(e, handleTeamSubmit)}
+            className={inputCls}
+          />
+          <button onClick={handleTeamSubmit} className="shrink-0 bg-[#1a6b4a] text-white text-sm font-semibold px-4 rounded-lg hover:bg-green-900 host-button">Find →</button>
+        </div>
+      )}
+
+      {step === 'disambig' && (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-xs text-gray-500">Multiple matches — pick one:</p>
+          <div className="flex flex-wrap gap-2">
+            {matches.map(t => (
+              <button key={t.id} onClick={() => handleDisambig(t)}
+                className="text-sm font-medium px-3 py-1.5 rounded-lg bg-white border border-gray-200 hover:border-[#1a6b4a] hover:text-[#1a6b4a] host-button">
+                {t.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {step === 'round' && (
+        <div className="flex gap-2 items-center">
+          <span className="text-sm font-semibold text-gray-700 shrink-0">{picked?.team?.name} →</span>
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder={`Round: ${cols.map(c => c.label).join(', ')}`}
+            value={roundInput}
+            onChange={e => setRoundInput(e.target.value)}
+            onKeyDown={e => handleKey(e, handleRoundSubmit)}
+            className={inputCls}
+          />
+          <button onClick={handleRoundSubmit} className="shrink-0 bg-[#1a6b4a] text-white text-sm font-semibold px-4 rounded-lg hover:bg-green-900 host-button">Next →</button>
+          <button onClick={() => setStep('team')} className="shrink-0 text-xs text-gray-400 hover:text-gray-600 host-button">← Back</button>
+        </div>
+      )}
+
+      {step === 'score' && (
+        <div className="flex gap-2 items-center">
+          <span className="text-sm font-semibold text-gray-700 shrink-0">{picked?.team?.name} · {picked?.col?.label} →</span>
+          <input
+            ref={inputRef}
+            type="number"
+            placeholder="Score"
+            value={scoreInput}
+            onChange={e => setScoreInput(e.target.value)}
+            onKeyDown={e => handleKey(e, handleScoreSubmit)}
+            className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+          />
+          <button onClick={handleScoreSubmit} className="shrink-0 bg-[#1a6b4a] text-white text-sm font-semibold px-4 rounded-lg hover:bg-green-900 host-button">Save ✓</button>
+          <button onClick={() => setStep('round')} className="shrink-0 text-xs text-gray-400 hover:text-gray-600 host-button">← Back</button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function deriveRoundCols(show) {
   const sorted = (show.rounds ?? []).slice().sort((a, b) => a.number - b.number)
@@ -102,6 +264,7 @@ export default function ScoreboardModal({ show, onClose }) {
   const [teams, setTeams] = useState([])
   const [loading, setLoading] = useState(true)
   const [highlightIds, setHighlightIds] = useState(null)
+  const [quickEntry, setQuickEntry] = useState(false)
   const saveTimers = useRef({})
   const cols = deriveRoundCols(show)
   const teamsWithStats = addStats(teams, cols)
@@ -178,6 +341,10 @@ export default function ScoreboardModal({ show, onClose }) {
     )
   }
 
+  function quickSave(teamId, colKey, score) {
+    updateScore(teamId, colKey, score)
+  }
+
   function pickRandomTwo() {
     if (teams.length < 2) return
     const shuffled = [...teams].sort(() => Math.random() - 0.5)
@@ -198,7 +365,11 @@ export default function ScoreboardModal({ show, onClose }) {
         <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100 shrink-0">
           <span className="text-lg">📊</span>
           <h2 className="text-base font-bold text-gray-900 flex-1">Scoreboard — {show.title}</h2>
-          <button onClick={addTeam} className={`${btnBase} bg-[#1a6b4a] text-white hover:bg-green-900`}>+ Team</button>
+          <button
+            onClick={() => setQuickEntry(v => !v)}
+            className={`${btnBase} ${quickEntry ? 'bg-[#1a6b4a] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          >⚡ Quick Entry</button>
+          <button onClick={addTeam} className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200`}>+ Team</button>
           <button onClick={sortTeams} className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200`}>Sort</button>
           <button onClick={pickRandomTwo} className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200`}>Random 2</button>
           <button onClick={clearScores} className={`${btnBase} bg-red-50 text-red-500 hover:bg-red-100`}>Clear</button>
@@ -207,6 +378,16 @@ export default function ScoreboardModal({ show, onClose }) {
             className="ml-1 w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 host-button"
           >✕</button>
         </div>
+
+        {/* Quick Entry */}
+        {quickEntry && (
+          <QuickEntry
+            teams={teams}
+            cols={cols}
+            onSave={quickSave}
+            onClose={() => setQuickEntry(false)}
+          />
+        )}
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-4">
