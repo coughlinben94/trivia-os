@@ -73,11 +73,11 @@ export default function PYLWizard({ activeRoundId, onAdd, onClose }) {
         </button>
       </div>
 
-      <div className="p-6 flex flex-col gap-5">
+      <div className="p-6 flex flex-col gap-5 items-center">
         {step === 'count' ? (
           <>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">How many themes?</label>
+            <div className="w-full flex flex-col items-center gap-1.5">
+              <label className="text-xs font-medium text-gray-500">How many themes?</label>
               <input
                 autoFocus
                 type="number"
@@ -86,7 +86,7 @@ export default function PYLWizard({ activeRoundId, onAdd, onClose }) {
                 value={themeCount}
                 onChange={e => setThemeCount(Math.max(1, parseInt(e.target.value) || 1))}
                 onKeyDown={e => { if (e.key === 'Enter') startThemes() }}
-                className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                className="w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
               />
             </div>
             {!activeRoundId && (

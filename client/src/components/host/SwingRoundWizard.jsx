@@ -44,9 +44,9 @@ export default function SwingRoundWizard({ activeRoundId, onAdd, onClose }) {
 
       <div className="flex-1 overflow-y-auto p-6">
         {step === 'count' ? (
-          <div className="flex flex-col gap-5">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">How many questions?</label>
+          <div className="flex flex-col gap-5 items-center">
+            <div className="w-full flex flex-col items-center gap-1.5">
+              <label className="text-xs font-medium text-gray-500">How many questions?</label>
               <input
                 autoFocus
                 type="number"
@@ -55,7 +55,7 @@ export default function SwingRoundWizard({ activeRoundId, onAdd, onClose }) {
                 value={count}
                 onChange={e => setCount(Math.max(1, parseInt(e.target.value) || 1))}
                 onKeyDown={e => { if (e.key === 'Enter') goToQuestions() }}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                className="w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
               />
             </div>
             {!activeRoundId && (
