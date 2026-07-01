@@ -288,7 +288,7 @@ function AnswerRevealOverlay({ show, currentSlide }) {
             </p>
             <p
               style={{
-                color: theme.colors.text,
+                color: theme.colors.accent,
                 fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
                 fontSize: 'clamp(2rem, 5vw, 4.5rem)',
                 lineHeight: 1.15,
