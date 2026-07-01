@@ -356,7 +356,7 @@ const EASE = {
 }
 
 // ─── 1. PURE MICHIGAN ─────────────────────────────────────────────────────
-function PureMichiganAmbient() {
+function PureMichiganAmbient({ tint }) {
   const motes = useMemo(() => Array.from({ length: 22 }, (_, i) => ({
     left:   `${(i * 97 + i % 7 * 31) % 100}%`,
     top:    `${(i * 83 + i % 7 * 29) % 100}%`,
@@ -370,20 +370,20 @@ function PureMichiganAmbient() {
   return <>
     <GlowLayer lo={0.18} hi={0.42} duration="12s" style={{
       inset: 0, bottom: '60%',
-      background: 'linear-gradient(to bottom, rgba(0,25,80,0.32) 0%, rgba(0,40,100,0.22) 70%, transparent 100%)',
+      background: `linear-gradient(to bottom, ${tint('rgba(0,25,80,0.32)')} 0%, ${tint('rgba(0,40,100,0.22)')} 70%, transparent 100%)`,
     }}/>
     <GlowLayer lo={0.22} hi={0.52} duration="18s" delay="3s" style={{
       bottom: 0, left: 0, right: 0, height: '30%',
-      background: 'linear-gradient(to top, rgba(0,70,140,0.40), rgba(0,50,100,0.20), transparent)',
+      background: `linear-gradient(to top, ${tint('rgba(0,70,140,0.40)')}, ${tint('rgba(0,50,100,0.20)')}, transparent)`,
     }}/>
     {/* Water shimmer band — light on the lake surface */}
     <GlowLayer lo={0.15} hi={0.35} duration="24s" delay="6s" style={{
       top: '55%', left: 0, right: 0, height: '20%',
-      background: 'radial-gradient(ellipse 100% 50% at 50% 100%, rgba(40,120,200,0.22), transparent)',
+      background: `radial-gradient(ellipse 100% 50% at 50% 100%, ${tint('rgba(40,120,200,0.22)')}, transparent)`,
     }}/>
     {motes.map((f, i) => (
       <PulseDot key={i} left={f.left} top={f.top} size={f.size}
-        color="rgba(210,240,255,0.90)" glowColor="rgba(150,210,255,0.40)"
+        color={tint('rgba(210,240,255,0.90)')} glowColor={tint('rgba(150,210,255,0.40)')}
         duration={f.dur} delay={f.delay}
         lo={0.45} wander={true} wanderDur={f.wDur} wanderDelay={f.wDelay}
       />
@@ -417,7 +417,7 @@ function galaxyRollStar() {
   }
 }
 
-function GalaxyShootingStar() {
+function GalaxyShootingStar({ tint }) {
   const [shot, setShot] = useState(null)
   useEffect(() => {
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
@@ -443,21 +443,23 @@ function GalaxyShootingStar() {
       }}>
         <div style={{
           position: 'absolute', inset: 0,
-          background: 'linear-gradient(to right, rgba(210,160,255,0) 0%, rgba(214,164,255,0.22) 50%, rgba(236,212,255,0.72) 86%, rgba(250,244,255,1) 100%)',
+          // near-white leading tip (100% stop) is a sanctioned hot-core exception; body stops are in-family purple
+          background: `linear-gradient(to right, ${tint('rgba(210,160,255,0)')} 0%, ${tint('rgba(214,164,255,0.22)')} 50%, ${tint('rgba(236,212,255,0.72)')} 86%, rgba(250,244,255,1) 100%)`,
           clipPath: 'polygon(0 50%, 100% 0, 100% 100%)',
         }}/>
         <div style={{
           position: 'absolute', right: '-3px', top: '50%', transform: 'translateY(-50%)',
           width: '7px', height: '7px', borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(252,246,255,1), rgba(214,164,255,0.5) 45%, transparent 70%)',
-          boxShadow: '0 0 7px rgba(220,170,255,0.7)',
+          // near-white core, in-family purple falloff
+          background: `radial-gradient(circle, rgba(252,246,255,1), ${tint('rgba(214,164,255,0.5)')} 45%, transparent 70%)`,
+          boxShadow: `0 0 7px ${tint('rgba(220,170,255,0.7)')}`,
         }}/>
       </div>
     </div>
   )
 }
 
-function MidnightGalaxyAmbient() {
+function MidnightGalaxyAmbient({ tint }) {
   const stars = useMemo(() => Array.from({ length: 120 }, (_, i) => ({
     left:    `${(i * 97 + i % 7 * 31) % 100}%`,
     top:     `${(i * 83 + i % 5 * 43) % 100}%`,
@@ -471,21 +473,21 @@ function MidnightGalaxyAmbient() {
     {/* GLOW 1 — home upper-right, slow orbit */}
     <GalaxyDriftGlow driftDur="74s" lo={0.30} hi={0.56} breatheDur="22s" style={{
       top: '-4%', right: '-8%', width: '54%', height: '54%',
-      background: 'radial-gradient(ellipse, rgba(150,80,225,0.50), transparent 70%)',
+      background: `radial-gradient(ellipse, ${tint('rgba(150,80,225,0.50)')}, transparent 70%)`,
     }}/>
     {/* GLOW 2 — home far-left-mid, reverse orbit */}
     <GalaxyDriftGlow driftDur="88s" driftDir="reverse" driftDelay="-30s" lo={0.22} hi={0.48} breatheDur="26s" breatheDelay="5s" style={{
       top: '24%', left: '-16%', width: '50%', height: '50%',
-      background: 'radial-gradient(ellipse, rgba(138,66,208,0.48), transparent 70%)',
+      background: `radial-gradient(ellipse, ${tint('rgba(138,66,208,0.48)')}, transparent 70%)`,
     }}/>
     {/* GLOW 3 — home bottom-center, slow orbit */}
     <GalaxyDriftGlow driftDur="66s" driftDelay="-22s" lo={0.24} hi={0.44} breatheDur="19s" breatheDelay="3s" style={{
       bottom: '-4%', left: '18%', right: '18%', height: '46%',
-      background: 'radial-gradient(ellipse, rgba(96,66,205,0.42), transparent 72%)',
+      background: `radial-gradient(ellipse, ${tint('rgba(96,66,205,0.42)')}, transparent 72%)`,
     }}/>
     {/* Random-speed shooting stars (scheduled, one in flight) */}
-    <GalaxyShootingStar/>
-    {/* Stars */}
+    <GalaxyShootingStar tint={tint}/>
+    {/* Stars — near-white twinkle field, sanctioned exception (not in-family hue) */}
     {stars.map((s, i) => (
       <div key={i} aria-hidden style={{
         position: 'absolute', left: s.left, top: s.top, pointerEvents: 'none',
@@ -550,7 +552,7 @@ function AutumnHarvestAmbient({ tint }) {
 }
 
 // ─── 4. NORTHERN LIGHTS ───────────────────────────────────────────────────
-function NorthernLightsAmbient() {
+function NorthernLightsAmbient({ tint }) {
   return <>
     {/* SVG wavy aurora curtains — zero straight edges */}
     <svg
@@ -566,19 +568,19 @@ function NorthernLightsAmbient() {
     >
       <defs>
         <linearGradient id="nlAur1" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor="rgb(30,220,130)"  stopOpacity="0" />
-          <stop offset="50%"  stopColor="rgb(30,220,130)"  stopOpacity="0.65" />
-          <stop offset="100%" stopColor="rgb(30,220,130)"  stopOpacity="0" />
+          <stop offset="0%"   stopColor={tint('rgb(30,220,130)')}  stopOpacity="0" />
+          <stop offset="50%"  stopColor={tint('rgb(30,220,130)')}  stopOpacity="0.65" />
+          <stop offset="100%" stopColor={tint('rgb(30,220,130)')}  stopOpacity="0" />
         </linearGradient>
         <linearGradient id="nlAur2" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor="rgb(100,40,240)"  stopOpacity="0" />
-          <stop offset="50%"  stopColor="rgb(100,40,240)"  stopOpacity="0.55" />
-          <stop offset="100%" stopColor="rgb(100,40,240)"  stopOpacity="0" />
+          <stop offset="0%"   stopColor={tint('rgb(100,40,240)')}  stopOpacity="0" />
+          <stop offset="50%"  stopColor={tint('rgb(100,40,240)')}  stopOpacity="0.55" />
+          <stop offset="100%" stopColor={tint('rgb(100,40,240)')}  stopOpacity="0" />
         </linearGradient>
         <linearGradient id="nlAur3" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor="rgb(30,220,130)"  stopOpacity="0" />
-          <stop offset="50%"  stopColor="rgb(30,220,130)"  stopOpacity="0.42" />
-          <stop offset="100%" stopColor="rgb(30,220,130)"  stopOpacity="0" />
+          <stop offset="0%"   stopColor={tint('rgb(30,220,130)')}  stopOpacity="0" />
+          <stop offset="50%"  stopColor={tint('rgb(30,220,130)')}  stopOpacity="0.42" />
+          <stop offset="100%" stopColor={tint('rgb(30,220,130)')}  stopOpacity="0" />
         </linearGradient>
       </defs>
       {/* Curtain 1 — teal primary, wavy band y ≈ 8–22 */}
@@ -611,7 +613,7 @@ function NorthernLightsAmbient() {
           top:  `${(i * 83 + i % 5 * 43) % 65}%`,
           width: 1.2 + (i % 3) * 0.4, height: 1.2 + (i % 3) * 0.4,
           borderRadius: '50%',
-          background: `rgba(200,240,220,${op})`,
+          background: tint(`rgba(200,240,220,${op})`),
           pointerEvents: 'none',
           willChange: 'opacity',
           '--lo': op * 0.25, '--hi': op,
@@ -667,7 +669,7 @@ function mtRgba(hex, a) {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
 }
 
-function MtTorch({ id, dir, x, top, w = "13%", h = "36%", dur = 2.0, delay = "0s" }) {
+function MtTorch({ id, dir, x, top, w = "13%", h = "36%", dur = 2.0, delay = "0s", tint }) {
   const mx = (v) => (dir === 1 ? v : 100 - v)
   const rot = 18 * dir
   const gOut = `mo-${id}`, gIn = `mi-${id}`, gWood = `mw-${id}`, gCore = `mc-${id}`
@@ -675,33 +677,35 @@ function MtTorch({ id, dir, x, top, w = "13%", h = "36%", dur = 2.0, delay = "0s
   return (
     <div style={{ position: "absolute", [dir === 1 ? "left" : "right"]: x, top, width: w, height: h }}>
       <div className="mt-anim" style={{ position: "absolute", left: "-55%", right: "-55%", top: "-20%", bottom: "26%",
-        background: `radial-gradient(ellipse 44% 40% at ${dir === 1 ? 62 : 38}% 30%, ${mtRgba(MT.highlight, 0.4)}, transparent 64%)`,
+        background: `radial-gradient(ellipse 44% 40% at ${dir === 1 ? 62 : 38}% 30%, ${tint(mtRgba(MT.highlight, 0.4))}, transparent 64%)`,
         animation: `mtHalo 3.2s ease-in-out ${delay} infinite` }} />
       <svg viewBox="0 0 100 240" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block", overflow: "visible" }}>
         <defs>
+          {/* wood handle — dark neutral, sanctioned exception */}
           <linearGradient id={gWood} gradientUnits="userSpaceOnUse" x1="0" y1="92" x2="0" y2="200">
             <stop offset="0%" stopColor="#754a22" />
             <stop offset="55%" stopColor="#3e2510" />
             <stop offset="100%" stopColor="#1f1204" />
           </linearGradient>
+          {/* outer flame — hot near-white tip (0%) is sanctioned exception; body is in-family amber/orange */}
           <linearGradient id={gOut} x1="0" y1="1" x2="0" y2="0">
             <stop offset="0%" stopColor="#ffe6b0" stopOpacity="1" />
-            <stop offset="20%" stopColor="#ffc24e" stopOpacity="0.96" />
-            <stop offset="46%" stopColor="#f7901f" stopOpacity="0.92" />
-            <stop offset="70%" stopColor="#e2620e" stopOpacity="0.72" />
-            <stop offset="88%" stopColor="#bf4406" stopOpacity="0.32" />
-            <stop offset="100%" stopColor="#9c3200" stopOpacity="0" />
+            <stop offset="20%" stopColor={tint('#ffc24e')} stopOpacity="0.96" />
+            <stop offset="46%" stopColor={tint('#f7901f')} stopOpacity="0.92" />
+            <stop offset="70%" stopColor={tint('#e2620e')} stopOpacity="0.72" />
+            <stop offset="88%" stopColor={tint('#bf4406')} stopOpacity="0.32" />
+            <stop offset="100%" stopColor={tint('#9c3200')} stopOpacity="0" />
           </linearGradient>
           <linearGradient id={gIn} x1="0" y1="1" x2="0" y2="0">
             <stop offset="0%" stopColor="#fff6e0" stopOpacity="1" />
-            <stop offset="38%" stopColor="#ffd060" stopOpacity="0.96" />
-            <stop offset="74%" stopColor="#ffa030" stopOpacity="0.55" />
-            <stop offset="100%" stopColor="#ff8020" stopOpacity="0" />
+            <stop offset="38%" stopColor={tint('#ffd060')} stopOpacity="0.96" />
+            <stop offset="74%" stopColor={tint('#ffa030')} stopOpacity="0.55" />
+            <stop offset="100%" stopColor={tint('#ff8020')} stopOpacity="0" />
           </linearGradient>
           <radialGradient id={gCore}>
             <stop offset="0%" stopColor="#fff6e0" stopOpacity="1" />
-            <stop offset="45%" stopColor="#ffcf78" stopOpacity="0.7" />
-            <stop offset="100%" stopColor="#ffb040" stopOpacity="0" />
+            <stop offset="45%" stopColor={tint('#ffcf78')} stopOpacity="0.7" />
+            <stop offset="100%" stopColor={tint('#ffb040')} stopOpacity="0" />
           </radialGradient>
         </defs>
         <line x1={mx(20)} y1="200" x2={mx(56)} y2="92" stroke={`url(#${gWood})`} strokeWidth="16" strokeLinecap="round" />
@@ -710,7 +714,7 @@ function MtTorch({ id, dir, x, top, w = "13%", h = "36%", dur = 2.0, delay = "0s
         <ellipse cx={hx} cy={hy} rx="13" ry="22" fill="#33200e" transform={`rotate(${rot} ${hx} ${hy})`} />
         <ellipse cx={hx} cy={hy - 8} rx="13" ry="3.6" fill="#14100b" transform={`rotate(${rot} ${hx} ${hy})`} />
         <ellipse cx={hx} cy={hy + 7} rx="13" ry="3.6" fill="#14100b" transform={`rotate(${rot} ${hx} ${hy})`} />
-        <ellipse cx={hx} cy={hy - 11} rx="10" ry="7" fill={mtRgba(MT.highlight, 0.32)} transform={`rotate(${rot} ${hx} ${hy})`} />
+        <ellipse cx={hx} cy={hy - 11} rx="10" ry="7" fill={tint(mtRgba(MT.highlight, 0.32))} transform={`rotate(${rot} ${hx} ${hy})`} />
         <g transform={`translate(${fbx - 20} -4) scale(0.5)`}>
           <path className="mt-anim" d={MT_FLAME} fill={`url(#${gOut})`}
             style={{ transformBox: "fill-box", transformOrigin: "50% 100%", animation: `mtFlame ${dur}s ease-in-out ${delay} infinite` }} />
@@ -726,7 +730,7 @@ function MtTorch({ id, dir, x, top, w = "13%", h = "36%", dur = 2.0, delay = "0s
   )
 }
 
-function MtChandelier() {
+function MtChandelier({ tint }) {
   const cx = 100, cy = 6, rx = 80, ry = 54
   const cand = useMemo(() => {
     const defs = [
@@ -746,15 +750,16 @@ function MtChandelier() {
     const ch = 30 * s, cw = 12 * s, topY = y - ch
     return (
       <g>
-        <ellipse cx={x} cy={topY - 3 * s} rx={12 * s} ry={15 * s} fill={mtRgba(MT.highlight, 0.18)} />
+        <ellipse cx={x} cy={topY - 3 * s} rx={12 * s} ry={15 * s} fill={tint(mtRgba(MT.highlight, 0.18))} />
         <path d={`M${x - cw * 0.85} ${y} L${x + cw * 0.85} ${y} L${x + cw * 0.55} ${y + 7 * s} L${x - cw * 0.55} ${y + 7 * s} Z`}
           fill="#1c150d" stroke={OL} strokeWidth="1.8" strokeLinejoin="round" />
         <rect x={x - cw / 2} y={topY} width={cw} height={ch} rx={cw * 0.36}
           fill="url(#mtCandleWax)" stroke={OL} strokeWidth="2" />
         <path d={`M${x - cw * 0.3} ${topY + 3} q${-cw * 0.18} ${ch * 0.32} 0 ${ch * 0.5}`} fill="none" stroke="#e9dcbf" strokeWidth={1.4 * s} strokeLinecap="round" opacity="0.7" />
         <rect x={x - 0.8} y={topY - 3} width="1.6" height="4" rx="0.8" fill="#2a1c10" />
-        <ellipse className="mt-anim" cx={x} cy={topY - 6 * s} rx={3.4 * s} ry={7.4 * s} fill="#ffb240" stroke="#e07614" strokeWidth="1.3"
+        <ellipse className="mt-anim" cx={x} cy={topY - 6 * s} rx={3.4 * s} ry={7.4 * s} fill={tint('#ffb240')} stroke={tint('#e07614')} strokeWidth="1.3"
           style={{ transformBox: "fill-box", transformOrigin: "50% 100%", animation: `mtFlame ${(2.0 + s * 0.6).toFixed(2)}s ease-in-out ${delay}s infinite` }} />
+        {/* hot near-white flame tip — sanctioned exception */}
         <ellipse className="mt-anim" cx={x} cy={topY - 5 * s} rx={1.6 * s} ry={4 * s} fill="#fff2d0"
           style={{ transformBox: "fill-box", transformOrigin: "50% 100%", animation: `mtFlame2 ${((2.0 + s * 0.6) * 0.82).toFixed(2)}s ease-in-out ${delay}s infinite` }} />
       </g>
@@ -765,7 +770,7 @@ function MtChandelier() {
     <div style={{ position: "absolute", left: "50%", top: "5%", width: "60%", height: "22%", transform: "translateX(-50%)" }}>
       <div className="mt-anim" style={{ position: "absolute", inset: 0, transformOrigin: "50% -30%", animation: "mtSwayChand 12s ease-in-out infinite" }}>
         <div className="mt-anim" style={{ position: "absolute", inset: "-20% -8% -60% -8%",
-          background: `radial-gradient(ellipse 44% 56% at 50% 36%, ${mtRgba(MT.highlight, 0.2)}, transparent 64%)`,
+          background: `radial-gradient(ellipse 44% 56% at 50% 36%, ${tint(mtRgba(MT.highlight, 0.2))}, transparent 64%)`,
           animation: "mtGlow 10s ease-in-out infinite" }} />
         <svg viewBox="0 0 200 70" width="100%" height="100%" preserveAspectRatio="xMidYMin meet" style={{ display: "block" }}>
           <defs>
@@ -793,7 +798,7 @@ function MtChandelier() {
   )
 }
 
-function MedievalTavernAmbient() {
+function MedievalTavernAmbient({ tint }) {
   const embers = useMemo(() => {
     const make = (lo, hi) => Array.from({ length: 6 }, () => ({
       left:  (Math.random() * (hi - lo) + lo).toFixed(1) + "%",
@@ -814,17 +819,18 @@ function MedievalTavernAmbient() {
 
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden",
-      background: `radial-gradient(ellipse 110% 85% at 50% 104%, ${MT.accent}, ${MT.bg} 46%, ${MT.bgDeep} 80%)` }}>
+      background: `radial-gradient(ellipse 110% 85% at 50% 104%, ${tint(MT.accent)}, ${tint(MT.bg)} 46%, ${tint(MT.bgDeep)} 80%)` }}>
 
       <style>{MT_STYLE}</style>
 
       <div className="mt-anim" style={{ position: "absolute", inset: 0,
-        background: `radial-gradient(ellipse 64% 48% at 50% 98%, ${mtRgba(MT.highlight, 0.3)}, transparent 64%)`,
+        background: `radial-gradient(ellipse 64% 48% at 50% 98%, ${tint(mtRgba(MT.highlight, 0.3))}, transparent 64%)`,
         animation: "mtGlow 12s ease-in-out infinite" }} />
       <div className="mt-anim" style={{ position: "absolute", inset: 0,
-        background: `radial-gradient(ellipse 120% 22% at 50% 106%, ${mtRgba(MT.shiny, 0.22)}, transparent 70%)`,
+        background: `radial-gradient(ellipse 120% 22% at 50% 106%, ${tint(mtRgba(MT.shiny, 0.22))}, transparent 70%)`,
         animation: "mtGlow 9s ease-in-out infinite" }} />
 
+      {/* smoke — neutral atmospheric tone, sanctioned exception (not a hue-identity color) */}
       {smoke.map((s, i) => (
         <div key={i} className="mt-anim" style={{
           position: "absolute", bottom: "30%", left: s.left, width: s.w, height: "40%",
@@ -833,16 +839,16 @@ function MedievalTavernAmbient() {
         }} />
       ))}
 
-      <MtChandelier />
+      <MtChandelier tint={tint} />
 
-      <MtTorch id="L" dir={1}  x="2%" top="25%" dur={2.0} />
-      <MtTorch id="R" dir={-1} x="2%" top="26%" dur={2.3} delay="-1.1s" />
+      <MtTorch id="L" dir={1}  x="2%" top="25%" dur={2.0} tint={tint} />
+      <MtTorch id="R" dir={-1} x="2%" top="26%" dur={2.3} delay="-1.1s" tint={tint} />
 
       {embers.map((e, i) => (
         <div key={i} className="mt-anim" style={{
           position: "absolute", left: e.left, top: e.top,
           width: e.size + "px", height: e.size + "px", borderRadius: "50%",
-          background: `radial-gradient(circle, ${mtRgba(MT.core, 0.95)}, ${mtRgba(MT.ember, 0.85)} 50%, transparent 76%)`,
+          background: `radial-gradient(circle, ${tint(mtRgba(MT.core, 0.95))}, ${tint(mtRgba(MT.ember, 0.85))} 50%, transparent 76%)`,
           ["--rise"]: e.rise, ["--drift"]: e.drift, ["--eo"]: e.eo,
           animation: `mtRise ${e.dur}s ease-out ${e.delay}s infinite`, willChange: "transform, opacity",
         }} />
@@ -852,25 +858,25 @@ function MedievalTavernAmbient() {
 }
 
 // ─── 6. SUNSET BOULEVARD ─────────────────────────────────────────────────
-function SunsetBoulevardAmbient() {
+function SunsetBoulevardAmbient({ tint }) {
   const clouds = useMemo(() => [
-    { top: '8%',  w: '34%', h: '7%',  dur: '42s', delay: '-28s', hi: 0.24, color: 'rgba(255,150,90,0.50)'  },
-    { top: '14%', w: '50%', h: '12%', dur: '30s', delay: '0s',   hi: 0.40, color: 'rgba(255,110,60,0.60)'  },
-    { top: '22%', w: '42%', h: '10%', dur: '38s', delay: '-12s', hi: 0.34, color: 'rgba(255,150,110,0.52)' },
-    { top: '29%', w: '46%', h: '10%', dur: '34s', delay: '-22s', hi: 0.32, color: 'rgba(230,120,90,0.48)'  },
-  ], [])
+    { top: '8%',  w: '34%', h: '7%',  dur: '42s', delay: '-28s', hi: 0.24, color: tint('rgba(255,150,90,0.50)')  },
+    { top: '14%', w: '50%', h: '12%', dur: '30s', delay: '0s',   hi: 0.40, color: tint('rgba(255,110,60,0.60)')  },
+    { top: '22%', w: '42%', h: '10%', dur: '38s', delay: '-12s', hi: 0.34, color: tint('rgba(255,150,110,0.52)') },
+    { top: '29%', w: '46%', h: '10%', dur: '34s', delay: '-22s', hi: 0.32, color: tint('rgba(230,120,90,0.48)')  },
+  ], [tint])
   const stars = useMemo(() => Array.from({ length: 6 }, (_, i) => ({
     left: `${(i * 71 + i % 4 * 19) % 100}%`, top: `${(i * 37 + i % 3 * 11) % 14}%`,
     size: 1.1 + (i % 3) * 0.4, dur: `${5 + (i % 5) * 1.6}s`, delay: `-${((i / 6) * (5 + (i % 5) * 1.6)).toFixed(1)}s`,
   })), [])
   return <>
     <GlowLayer lo={0.46} hi={0.76} duration="22s" style={{ inset: 0,
-      background: 'linear-gradient(to bottom, rgba(60,16,52,0.64) 0%, rgba(176,52,54,0.48) 30%, rgba(240,108,58,0.42) 46%, transparent 58%)' }}/>
+      background: `linear-gradient(to bottom, ${tint('rgba(60,16,52,0.64)')} 0%, ${tint('rgba(176,52,54,0.48)')} 30%, ${tint('rgba(240,108,58,0.42)')} 46%, transparent 58%)` }}/>
     <GlowLayer lo={0.30} hi={0.56} duration="20s" style={{ inset: 0,
-      background: 'radial-gradient(ellipse 46% 42% at 9% 44%, rgba(255,120,50,0.48), transparent 64%)' }}/>
+      background: `radial-gradient(ellipse 46% 42% at 9% 44%, ${tint('rgba(255,120,50,0.48)')}, transparent 64%)` }}/>
     {stars.map((s, i) => (
       <PulseDot key={i} left={s.left} top={s.top} size={s.size}
-        color="rgba(255,235,210,0.78)" glowColor="rgba(255,220,180,0.28)" duration={s.dur} delay={s.delay} lo={0.10}/>
+        color={tint('rgba(255,235,210,0.78)')} glowColor={tint('rgba(255,220,180,0.28)')} duration={s.dur} delay={s.delay} lo={0.10}/>
     ))}
     {clouds.map((c, i) => (
       <div key={i} aria-hidden style={{ position: 'absolute', top: c.top, left: '-6%', width: c.w, height: c.h,
@@ -879,20 +885,20 @@ function SunsetBoulevardAmbient() {
         animation: `ambientDriftAcross ${c.dur} ${c.delay} linear infinite`, pointerEvents: 'none' }}/>
     ))}
     <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
-      background: 'linear-gradient(to bottom, transparent 44%, rgba(150,64,66,0.42) 53%, rgba(78,38,58,0.52) 63%, rgba(46,24,48,0.42) 71%, transparent 78%)' }}/>
+      background: `linear-gradient(to bottom, transparent 44%, ${tint('rgba(150,64,66,0.42)')} 53%, ${tint('rgba(78,38,58,0.52)')} 63%, ${tint('rgba(46,24,48,0.42)')} 71%, transparent 78%)` }}/>
     <Sun left="6%" top="33%" size="11%"
-      core="rgba(255,250,228,1)" mid="rgba(255,224,152,0.98)" rim="rgba(255,180,92,0.85)"
-      halo="rgba(255,150,70,0.40)" haloBlur={48} haloSpread={13}/>
+      core="rgba(255,250,228,1)" mid={tint('rgba(255,224,152,0.98)')} rim={tint('rgba(255,180,92,0.85)')}
+      halo={tint('rgba(255,150,70,0.40)')} haloBlur={48} haloSpread={13}/>
     <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
-      background: 'radial-gradient(ellipse 34% 6% at 32% 74%, rgba(255,168,96,0.30), transparent 70%)',
+      background: `radial-gradient(ellipse 34% 6% at 32% 74%, ${tint('rgba(255,168,96,0.30)')}, transparent 70%)`,
       willChange: 'transform, opacity', '--lo': 0.12, '--hi': 0.30, '--wx': '16px', '--wy': '-2px',
       animation: 'ambientWave 8s ease-in-out infinite' }}/>
     <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
-      background: 'linear-gradient(to bottom, transparent 70%, rgba(216,152,110,0.34) 77%, transparent 85%)' }}/>
+      background: `linear-gradient(to bottom, transparent 70%, ${tint('rgba(216,152,110,0.34)')} 77%, transparent 85%)` }}/>
     <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
-      background: 'linear-gradient(to bottom, transparent 72%, rgba(198,140,98,0.34) 80%, rgba(165,112,74,0.70) 89%, rgba(120,80,52,0.92) 96%, rgba(86,58,40,0.96) 100%)' }}/>
+      background: `linear-gradient(to bottom, transparent 72%, ${tint('rgba(198,140,98,0.34)')} 80%, ${tint('rgba(165,112,74,0.70)')} 89%, ${tint('rgba(120,80,52,0.92)')} 96%, ${tint('rgba(86,58,40,0.96)')} 100%)` }}/>
     <GlowLayer lo={0.14} hi={0.32} duration="13s" delay="1s" style={{ inset: 0,
-      background: 'radial-gradient(ellipse 64% 18% at 30% 90%, rgba(255,170,96,0.32), transparent 70%)' }}/>
+      background: `radial-gradient(ellipse 64% 18% at 30% 90%, ${tint('rgba(255,170,96,0.32)')}, transparent 70%)` }}/>
   </>
 }
 
