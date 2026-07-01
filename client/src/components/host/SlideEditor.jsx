@@ -195,6 +195,9 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
           {slide.type === 'winner-reveal' && (
             <WinnerRevealEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
           )}
+          {slide.type === 'state-of-union' && (
+            <StateOfUnionEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
+          )}
         </div>
       )}
 
@@ -805,6 +808,22 @@ function WinnerRevealEditor({ data, onChange, onMediaUpload }) {
       </p>
       <p className="text-xs text-gray-400 leading-relaxed">
         The winner is calculated live from team scores at the time the slide appears. No configuration needed — just place it last in your show order.
+      </p>
+      <Divider label="Elements" />
+      <ElementsEditor
+        elements={data.elements}
+        onChange={next => onChange('elements', next)}
+        onUpload={onMediaUpload}
+      />
+    </div>
+  )
+}
+
+function StateOfUnionEditor({ data, onChange, onMediaUpload }) {
+  return (
+    <div className="flex flex-col gap-3 py-2">
+      <p className="text-sm text-gray-500 leading-relaxed">
+        This slide is generated automatically from live standings. No configuration needed.
       </p>
       <Divider label="Elements" />
       <ElementsEditor
