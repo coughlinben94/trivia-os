@@ -214,12 +214,19 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
           <NavButton onClick={actions.prevSlide} disabled={atStart} label="◀ Prev" title="Previous (←)" />
         </div>
 
-        {/* Center: slide counter — guaranteed centered */}
+        {/* Center: slide counter + answer-live badge */}
         <div
-          className="absolute text-sm font-medium text-gray-500 tabular-nums text-center"
+          className="absolute flex items-center gap-2 text-center"
           style={{ left: '50%', transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}
         >
-          {counterLabel(currentSlide, currentIndex, slides.length, show)}
+          <span className="text-sm font-medium text-gray-500 tabular-nums">
+            {counterLabel(currentSlide, currentIndex, slides.length, show)}
+          </span>
+          {show.showState.answerReveal && (
+            <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-green-100 text-green-700 animate-pulse">
+              Answer Live
+            </span>
+          )}
         </div>
 
         {/* Right: Next + Theme + Score */}

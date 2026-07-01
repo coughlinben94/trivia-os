@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useShow } from '../hooks/useShow.js'
+import { useShow, sortedSlides } from '../hooks/useShow.js'
 import { supabase } from '../lib/supabase.js'
 import { ThemeProvider, useTheme } from '../components/shared/ThemeProvider.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
@@ -51,6 +51,7 @@ function HostInner({ showApi }) {
   const [toasts, setToasts] = useState([])
   const [isLiveMode, setIsLiveMode] = useState(false)
   const [showLibrary, setShowLibrary] = useState(false)
+  const [goLivePicker, setGoLivePicker] = useState(false)
   const [connStatus, setConnStatus] = useState('SUBSCRIBED')
   const disconnected = connStatus === 'CHANNEL_ERROR' || connStatus === 'TIMED_OUT' || connStatus === 'CLOSED'
 
@@ -115,11 +116,17 @@ function HostInner({ showApi }) {
     nextSlide:            showApi.nextSlide,
     prevSlide:            showApi.prevSlide,
     setScoreboardVisible: showApi.setScoreboardVisible,
+    setAnswerReveal:      showApi.setAnswerReveal,
     updateRoundScore:     showApi.updateRoundScore,
   }
 
-  async function handleGoLive() {
-    await showApi.goLive()
+  function handleGoLive() {
+    setGoLivePicker(true)
+  }
+
+  async function handleGoLiveFrom(index) {
+    setGoLivePicker(false)
+    await showApi.goLiveFrom(index)
     setIsLiveMode(true)
   }
 
@@ -154,8 +161,93 @@ function HostInner({ showApi }) {
           onOpenLibrary={() => setShowLibrary(true)}
         />
       )}
+      {goLivePicker && (
+        <GoLivePicker
+          show={show}
+          onFromBeginning={() => handleGoLiveFrom(0)}
+          onFromSlide={handleGoLiveFrom}
+          onClose={() => setGoLivePicker(false)}
+        />
+      )}
       <HostReconnectingBanner visible={disconnected} />
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
+    </div>
+  )
+}
+
+// ─── Go Live picker ────────────────────────────────────────────────────────
+
+const SLIDE_ICON = {
+  'title': '📺', 'round-intro': '🎬', 'swing-round-intro': '🎷',
+  'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆',
+  'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
+}
+
+function slidePickerLabel(slide) {
+  const { data, type } = slide
+  if (type === 'question' || type === 'pixelate-series') {
+    if (data.isShiny) return data.shinyFormatName || '✨ Shiny'
+    return data.questionLabel || `Q${data.questionNumber || '?'}`
+  }
+  if (type === 'round-intro' || type === 'swing-round-intro') return data.roundTitle || 'Round Intro'
+  if (type === 'grading-break') return 'Grading Break'
+  if (type === 'scoreboard-reveal') return data.title || 'Scoreboard'
+  if (type === 'title') return data.title || 'Title'
+  if (type === 'multi-question') return data.seriesTitle || 'Multi-Q'
+  return type
+}
+
+function GoLivePicker({ show, onFromBeginning, onFromSlide, onClose }) {
+  const slides = sortedSlides(show)
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-[480px] max-h-[80vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+          <h2 className="text-base font-semibold text-gray-900">Go Live</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 host-button w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
+        </div>
+
+        {/* Start from beginning */}
+        <div className="px-6 py-4 border-b border-gray-100 shrink-0">
+          <button
+            onClick={onFromBeginning}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-baynes-forest text-white font-semibold text-sm hover:bg-green-900 host-button transition-colors"
+          >
+            <span className="text-lg">▶</span>
+            <span>Start from beginning</span>
+          </button>
+        </div>
+
+        {/* Slide picker */}
+        <div className="overflow-y-auto flex-1 px-3 py-3">
+          <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 px-3 pb-2">Or jump to a slide</p>
+          {slides.map((slide, index) => {
+            const round = show.rounds?.find(r => r.id === slide.roundId)
+            const isSubSlide = slide.data?.isSeries && (slide.data?.slotIndex ?? 1) > 1
+            if (isSubSlide) return null
+            return (
+              <button
+                key={slide.id}
+                onClick={() => onFromSlide(index)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 text-left host-button transition-colors group"
+              >
+                <span className="text-base shrink-0 w-6 text-center">{SLIDE_ICON[slide.type] ?? '📄'}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="text-sm font-medium text-gray-800 truncate block">{slidePickerLabel(slide)}</span>
+                  {round && <span className="text-xs text-gray-400">{round.title}</span>}
+                </span>
+                <span className="text-xs text-gray-300 group-hover:text-gray-500 shrink-0">#{index + 1}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }

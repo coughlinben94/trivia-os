@@ -471,6 +471,25 @@ export function useShow() {
     }).eq('id', show.id)
   }
 
+  async function goLiveFrom(index) {
+    if (!show) return
+    const sorted = sortedSlides(show)
+    const target = Math.max(0, Math.min(index, sorted.length - 1))
+    const slide = sorted[target] ?? null
+    const now = new Date().toISOString()
+    setShow(s => ({
+      ...s,
+      updatedAt: now,
+      showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: slide?.id ?? null },
+    }))
+    await supabase.from('shows').update({
+      is_live: true,
+      current_slide_index: target,
+      current_slide_id: slide?.id ?? null,
+      updated_at: now,
+    }).eq('id', show.id)
+  }
+
   async function nextSlide() {
     if (!show) return
     const sorted = sortedSlides(show)
@@ -582,6 +601,7 @@ export function useShow() {
     uploadFont,
     getHostPhotos,
     goLive,
+    goLiveFrom,
     nextSlide,
     prevSlide,
     setScoreboardVisible,
