@@ -193,28 +193,15 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
           </div>
         </div>
 
-        {/* Customize */}
+        {/* Customize + Done */}
         <ThemeCustomizeControls
           overrides={overrides}
           baseTheme={baseTheme}
           onSetDisplayFont={setDisplayFont}
           onUploadFont={handleUploadFont}
           onSetTextColor={setTextColor}
+          onDone={onClose}
         />
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-t border-gray-100 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-3 h-3 rounded-full shrink-0" style={{ background: previewTheme.colors.highlight }} />
-            <span className="text-sm font-semibold text-gray-800">{previewTheme.name}</span>
-          </div>
-          <button
-            onClick={onClose}
-            className="bg-gray-900 text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-          >
-            Done
-          </button>
-        </div>
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 const DISPLAY_FONTS = ['Boogaloo', 'Handters', 'Roquen', 'DM Sans']
 
-export default function ThemeCustomizeControls({ overrides, baseTheme, onSetDisplayFont, onUploadFont, onSetTextColor }) {
+export default function ThemeCustomizeControls({ overrides, baseTheme, onSetDisplayFont, onUploadFont, onSetTextColor, onDone }) {
   return (
     <div className="flex items-center gap-4 px-5 py-3 border-t border-gray-100 shrink-0 flex-wrap">
       <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
@@ -48,6 +48,12 @@ export default function ThemeCustomizeControls({ overrides, baseTheme, onSetDisp
           className="w-7 h-7 border border-gray-200 rounded-md cursor-pointer"
         />
       </label>
+      <button
+        onClick={onDone}
+        className="ml-auto bg-gray-900 text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-gray-700 transition-colors shrink-0"
+      >
+        Done
+      </button>
     </div>
   )
 }
