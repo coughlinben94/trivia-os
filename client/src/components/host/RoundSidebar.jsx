@@ -180,16 +180,15 @@ export default function RoundSidebar({
   }
 
   function openRound(roundId) {
-    setCollapsedRounds(prev => {
+    setCollapsedRounds(() => {
       const allClosed = new Set(show.rounds.map(r => r.id))
-      if (prev.has(roundId)) {
-        // Collapsed → open it, collapse everything else
-        allClosed.delete(roundId)
-        return allClosed
-      }
-      // Already open → collapse it
+      allClosed.delete(roundId)
       return allClosed
     })
+  }
+
+  function collapseAllRounds() {
+    setCollapsedRounds(new Set(show.rounds.map(r => r.id)))
   }
 
   function startRename(round) {
@@ -231,7 +230,7 @@ export default function RoundSidebar({
                       dragging={dragged?.id === slide.id}
                       dragBefore={over && draggedBIdx > tIdx}
                       dragAfter={over && draggedBIdx < tIdx}
-                      onSelect={() => onSelectSlide(slide)}
+                      onSelect={() => { collapseAllRounds(); onSelectSlide(slide) }}
                       onDelete={() => onDeleteSlide(slide.id)}
                       onGripDown={e => handleGripDown(e, slide.id, 'slide')}
                     />
