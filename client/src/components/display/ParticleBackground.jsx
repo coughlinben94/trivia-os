@@ -1,4 +1,6 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
+import { getTheme } from '../../themes/index.js'
+import { deriveTint } from '../../lib/colorTint.js'
 
 // ─── Keyframes ────────────────────────────────────────────────────────────
 const KEYFRAMES = `
@@ -498,17 +500,17 @@ function MidnightGalaxyAmbient() {
 }
 
 // ─── 3. AUTUMN HARVEST ────────────────────────────────────────────────────
-function AutumnHarvestAmbient() {
+function AutumnHarvestAmbient({ tint }) {
   const leaves = useMemo(() => [
-    { color: 'rgba(245,166,35,1.0)',  size: 6,  dur: '9s',    delay: '0s',    drift: '14px',  rot: '260deg' }, // #f5a623 amber
-    { color: 'rgba(232,130,30,1.0)',  size: 5,  dur: '13s',   delay: '-1.6s', drift: '-16px', rot: '280deg' }, // #e8821e burnt-orange
-    { color: 'rgba(212,100,26,1.0)',  size: 5,  dur: '11s',   delay: '-2.8s', drift: '-10px', rot: '320deg' }, // #d4641a deep-orange
-    { color: 'rgba(242,184,74,1.0)',  size: 5,  dur: '8.5s',  delay: '-3.2s', drift: '-18px', rot: '310deg' }, // #f2b84a gold
-    { color: 'rgba(201,82,26,1.0)',   size: 6,  dur: '12s',   delay: '-6s',   drift: '16px',  rot: '250deg' }, // #c9521a rust
-    { color: 'rgba(245,166,35,1.0)',  size: 4,  dur: '10.5s', delay: '-6.6s', drift: '12px',  rot: '340deg' }, // #f5a623 amber
-    { color: 'rgba(232,130,30,1.0)',  size: 6,  dur: '10s',   delay: '-7.5s', drift: '8px',   rot: '360deg' }, // #e8821e burnt-orange
-    { color: 'rgba(242,184,74,1.0)',  size: 7,  dur: '9.5s',  delay: '-8.3s', drift: '18px',  rot: '300deg' }, // #f2b84a gold
-  ].map((l, i) => ({ ...l, left: `${5 + i * 12}%` })), [])
+    { color: tint('rgba(245,166,35,1.0)'),  size: 6,  dur: '9s',    delay: '0s',    drift: '14px',  rot: '260deg' }, // #f5a623 amber
+    { color: tint('rgba(232,130,30,1.0)'),  size: 5,  dur: '13s',   delay: '-1.6s', drift: '-16px', rot: '280deg' }, // #e8821e burnt-orange
+    { color: tint('rgba(212,100,26,1.0)'),  size: 5,  dur: '11s',   delay: '-2.8s', drift: '-10px', rot: '320deg' }, // #d4641a deep-orange
+    { color: tint('rgba(242,184,74,1.0)'),  size: 5,  dur: '8.5s',  delay: '-3.2s', drift: '-18px', rot: '310deg' }, // #f2b84a gold
+    { color: tint('rgba(201,82,26,1.0)'),   size: 6,  dur: '12s',   delay: '-6s',   drift: '16px',  rot: '250deg' }, // #c9521a rust
+    { color: tint('rgba(245,166,35,1.0)'),  size: 4,  dur: '10.5s', delay: '-6.6s', drift: '12px',  rot: '340deg' }, // #f5a623 amber
+    { color: tint('rgba(232,130,30,1.0)'),  size: 6,  dur: '10s',   delay: '-7.5s', drift: '8px',   rot: '360deg' }, // #e8821e burnt-orange
+    { color: tint('rgba(242,184,74,1.0)'),  size: 7,  dur: '9.5s',  delay: '-8.3s', drift: '18px',  rot: '300deg' }, // #f2b84a gold
+  ].map((l, i) => ({ ...l, left: `${5 + i * 12}%` })), [tint])
 
   const embers = useMemo(() => Array.from({ length: 5 }, (_, i) => ({
     left:  `${42 + (i % 4) * 4 - 6}%`,
@@ -517,21 +519,23 @@ function AutumnHarvestAmbient() {
     delay: `-${((i / 5) * (3 + (i % 3) * 1.0)).toFixed(1)}s`,
   })), [])
 
+  const emberColor = tint('rgba(255,130,20,0.90)')
+
   return <>
     {/* Warm sky glow — top */}
     <GlowLayer lo={0.28} hi={0.62} duration="20s" style={{
       top: 0, left: 0, right: 0, height: '40%',
-      background: 'linear-gradient(to bottom, rgba(200,60,10,0.52) 0%, rgba(180,40,5,0.24) 60%, transparent 100%)',
+      background: `linear-gradient(to bottom, ${tint('rgba(200,60,10,0.52)')} 0%, ${tint('rgba(180,40,5,0.24)')} 60%, transparent 100%)`,
     }}/>
     {/* Hearth glow — bottom */}
     <GlowLayer lo={0.22} hi={0.55} duration="14s" delay="5s" style={{
       bottom: 0, left: 0, right: 0, height: '20%',
-      background: 'linear-gradient(to top, rgba(200,80,10,0.50), transparent)',
+      background: `linear-gradient(to top, ${tint('rgba(200,80,10,0.50)')}, transparent)`,
     }}/>
     {/* Firelight pulse — center bottom */}
     <GlowLayer lo={0.18} hi={0.52} duration="3.2s" flicker style={{
       inset: 0,
-      background: 'radial-gradient(ellipse 12% 28% at 50% 96%, rgba(255,100,20,0.58), transparent)',
+      background: `radial-gradient(ellipse 12% 28% at 50% 96%, ${tint('rgba(255,100,20,0.58)')}, transparent)`,
     }}/>
     {leaves.map((l, i) => (
       <FallingParticle key={i} left={l.left} size={Math.round(l.size * 2)} color={l.color}
@@ -540,7 +544,7 @@ function AutumnHarvestAmbient() {
     ))}
     {embers.map((e, i) => (
       <RisingParticle key={i} left={e.left} size={e.size}
-        color="rgba(255,130,20,0.90)" duration={e.dur} delay={e.delay} opacity={0.80}/>
+        color={emberColor} duration={e.dur} delay={e.delay} opacity={0.80}/>
     ))}
   </>
 }
@@ -2195,12 +2199,21 @@ const AMBIENT_MAP = {
 export default function ParticleBackground({ theme }) {
   const AmbientComponent = AMBIENT_MAP[theme.id]
   const v = theme.vignette ?? {}
+  const baseTheme = getTheme(theme.id)
+
+  // Retints a theme's hand-tuned color the same way its accent/highlight
+  // has shifted relative to the theme's own default — a no-op until a host
+  // actually overrides a color, so every theme renders unchanged by default.
+  const tint = useCallback((originalColorStr, anchor = 'highlight') =>
+    deriveTint(baseTheme.colors[anchor], theme.colors[anchor], originalColorStr),
+    [baseTheme.colors.accent, baseTheme.colors.highlight, theme.colors.accent, theme.colors.highlight]
+  )
 
   return (
     <>
       <style>{KEYFRAMES}</style>
       <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
-        {AmbientComponent && <AmbientComponent />}
+        {AmbientComponent && <AmbientComponent tint={tint} />}
         <Vignette
           r={v.r ?? 0}
           g={v.g ?? 0}

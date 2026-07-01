@@ -31,6 +31,24 @@ export default function ThemeCustomizeControls({ overrides, baseTheme, onSetDisp
         />
       </label>
       <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
+        Accent color
+        <input
+          type="color"
+          value={overrides.colors?.accent ?? baseTheme.colors.accent}
+          onChange={e => onSetTextColor('accent', e.target.value)}
+          className="w-7 h-7 border border-gray-200 rounded-md cursor-pointer"
+        />
+      </label>
+      <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
+        Highlight color
+        <input
+          type="color"
+          value={overrides.colors?.highlight ?? baseTheme.colors.highlight}
+          onChange={e => onSetTextColor('highlight', e.target.value)}
+          className="w-7 h-7 border border-gray-200 rounded-md cursor-pointer"
+        />
+      </label>
+      <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
         Text color
         <input
           type="color"
