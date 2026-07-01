@@ -23,7 +23,10 @@ const SLIDE_ICON = {
 
 function getSlideLabel(slide) {
   const { data, type } = slide
-  if (type === 'question' || type === 'pixelate-series') return data.questionLabel || `Q${data.questionNumber || '?'}`
+  if (type === 'question' || type === 'pixelate-series') {
+    if (data.isShiny) return data.shinyFormatName || '✨ Shiny'
+    return data.questionLabel || `Q${data.questionNumber || '?'}`
+  }
   if (type === 'round-intro' || type === 'swing-round-intro') return data.roundTitle || 'Round Intro'
   if (type === 'grading-break') return 'Grading Break'
   if (type === 'scoreboard-reveal') return data.title || 'Scoreboard'
@@ -31,6 +34,17 @@ function getSlideLabel(slide) {
   if (type === 'multi-question') return data.seriesTitle || 'Multi-Q'
   if (type === 'pyl-reveal') return 'PYL Reveal'
   return type
+}
+
+function getSeriesGroup(lead, allSlides) {
+  if (!lead.data.isSeries) return [lead]
+  const siblings = allSlides.filter(s =>
+    s.id !== lead.id &&
+    s.data.isSeries &&
+    s.data.shinyFormatId === lead.data.shinyFormatId &&
+    s.data.questionLabel === lead.data.questionLabel
+  )
+  return [lead, ...siblings.sort((a, b) => (a.data.slotIndex ?? 0) - (b.data.slotIndex ?? 0))]
 }
 
 function getSlidePreview(slide) {
@@ -93,18 +107,23 @@ function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReord
       const from = draggedRef.current
       const to = dragOverRef.current
       if (from && to && from !== to) {
-        const roundIds = slides.map(s => s.id)
-        const fromIdx = roundIds.indexOf(from)
-        const toIdx = roundIds.indexOf(to)
+        const visibleIds = visibleSlides.map(s => s.id)
+        const fromIdx = visibleIds.indexOf(from)
+        const toIdx = visibleIds.indexOf(to)
         if (fromIdx !== -1 && toIdx !== -1) {
-          const newRoundIds = [...roundIds]
-          newRoundIds.splice(fromIdx, 1)
-          newRoundIds.splice(toIdx, 0, from)
-          // Build full slide order: replace this round's slots with new order
+          const newVisibleIds = [...visibleIds]
+          newVisibleIds.splice(fromIdx, 1)
+          newVisibleIds.splice(toIdx, 0, from)
+          // Expand each visible id to its full series group (lead + siblings in order)
+          const expandedRoundIds = newVisibleIds.flatMap(id => {
+            const slide = slides.find(s => s.id === id)
+            return getSeriesGroup(slide, slides).map(s => s.id)
+          })
+          // Build full slide order: replace this round's slots with expanded order
           const allSorted = sortedSlides(show)
-          const roundSet = new Set(roundIds)
+          const roundSet = new Set(slides.map(s => s.id))
           let ri = 0
-          const fullOrder = allSorted.map(s => roundSet.has(s.id) ? newRoundIds[ri++] : s.id)
+          const fullOrder = allSorted.map(s => roundSet.has(s.id) ? expandedRoundIds[ri++] : s.id)
           onReorder(fullOrder)
         }
       }
@@ -118,6 +137,9 @@ function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReord
     document.addEventListener('pointerup', onUp)
   }
 
+  // Only show lead slides — sub-slides (slotIndex > 1) are carried along during reorder
+  const visibleSlides = slides.filter(s => !(s.data.isSeries && (s.data.slotIndex ?? 1) > 1))
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-3 h-11 px-5 border-b border-gray-100 shrink-0">
@@ -125,11 +147,11 @@ function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReord
           ← Dashboard
         </button>
         <span className="text-sm font-semibold text-gray-700">R{round.number} · {round.title}</span>
-        <span className="text-xs text-gray-400 ml-auto">{slides.length} slide{slides.length !== 1 ? 's' : ''}</span>
+        <span className="text-xs text-gray-400 ml-auto">{visibleSlides.length} slide{visibleSlides.length !== 1 ? 's' : ''}</span>
       </div>
       <div className="flex-1 overflow-y-auto p-8">
         <div className="flex flex-wrap gap-3 justify-start">
-          {slides.map(slide => {
+          {visibleSlides.map(slide => {
             const preview = getSlidePreview(slide)
             const isDragging = draggedId === slide.id
             const isOver = dragOverId === slide.id && draggedId !== slide.id
