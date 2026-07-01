@@ -346,8 +346,9 @@ export default function ScoreboardModal({ show, onClose }) {
   }
 
   function pickRandomTwo() {
-    if (teams.length < 2) return
-    const shuffled = [...teams].sort(() => Math.random() - 0.5)
+    if (teamsWithStats.length < 2) return
+    const pool = rightTeams.length >= 2 ? rightTeams : teamsWithStats
+    const shuffled = [...pool].sort(() => Math.random() - 0.5)
     setHighlightIds([shuffled[0].id, shuffled[1].id])
   }
 
