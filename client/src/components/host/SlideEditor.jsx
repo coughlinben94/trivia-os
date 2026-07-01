@@ -412,7 +412,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
     return (
       <>
         <Field label="Question Text">
-          <TextArea value={data.text} onChange={v => onChange('text', v)} placeholder="Write the full question here…" rows={6} />
+          <TextArea value={data.text} onChange={v => onChange('text', v)} placeholder="Write the full question here…" rows={4} />
         </Field>
         <Field label="Answer">
           <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="The answer…" />
@@ -424,40 +424,16 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
   // ── Shiny mode ─────────────────────────────────────────────────────────
   return (
     <>
-      <div className="flex items-center">
-        <span className="text-xs text-gray-400 font-medium">✨ Shiny</span>
-      </div>
-
-      {/* Format selector */}
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1.5">Format</label>
-        {data.shinyFormatId ? (
-          <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50">
-            <span className="text-xl">{data.shinyFormatIcon}</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800">{data.shinyFormatName}</p>
-              <p className="text-xs text-gray-400">
-                {schema.type ?? ''}
-                {slots > 0 ? ` · ${slots} slot${slots !== 1 ? 's' : ''}` : ''}
-              </p>
-            </div>
-            <button
-              onClick={() => setShowFormatLibrary(true)}
-              className="text-xs text-gray-500 hover:text-gray-700 underline shrink-0"
-            >
-              Change
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowFormatLibrary(true)}
-            className="w-full flex items-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-gray-300 hover:border-gray-400 text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <span>✨</span>
-            <span className="text-sm">Choose Format from Library</span>
-          </button>
-        )}
-      </div>
+      {/* No format assigned — edge case, show minimal picker */}
+      {!data.shinyFormatId && (
+        <button
+          onClick={() => setShowFormatLibrary(true)}
+          className="w-full flex items-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-gray-300 hover:border-gray-400 text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <span>✨</span>
+          <span className="text-sm">Choose Format from Library</span>
+        </button>
+      )}
 
       {data.shinyFormatId && (
         <>
@@ -471,27 +447,20 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
             </Field>
           </div>
 
-          {/* Image slots */}
+          {/* Image slots — side by side */}
           {schema.type === 'image' && slots > 0 && (
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                {data.slotTotal > 1
-                  ? `Image ${data.slotIndex} of ${data.slotTotal}`
-                  : slots === 1 ? 'Image' : `Images (${slots} slots)`}
-              </label>
-              <div className="space-y-3">
-                {Array.from({ length: slots }).map((_, i) => (
-                  <MediaUpload
-                    key={i}
-                    accept="image"
-                    label={schema.labels?.[i] ?? (slots > 1 ? `Image ${i + 1}` : 'Image')}
-                    currentUrl={mediaSlots[i]?.url}
-                    currentType={mediaSlots[i]?.type}
-                    onUpload={file => uploadSlot(i, file)}
-                    onRemove={() => removeSlot(i)}
-                  />
-                ))}
-              </div>
+            <div className={slots === 1 ? '' : 'grid grid-cols-2 gap-3'}>
+              {Array.from({ length: slots }).map((_, i) => (
+                <MediaUpload
+                  key={i}
+                  accept="image"
+                  label={schema.labels?.[i] ?? (slots > 1 ? `Image ${i + 1}` : 'Image')}
+                  currentUrl={mediaSlots[i]?.url}
+                  currentType={mediaSlots[i]?.type}
+                  onUpload={file => uploadSlot(i, file)}
+                  onRemove={() => removeSlot(i)}
+                />
+              ))}
             </div>
           )}
 
@@ -559,7 +528,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
           {/* Question text — not for list type */}
           {schema.type !== 'list' && (
             <Field label="Question Text">
-              <TextArea value={data.text} onChange={v => onChange('text', v)} placeholder="Write the question here…" rows={4} />
+              <TextArea value={data.text} onChange={v => onChange('text', v)} placeholder="Write the question here…" rows={3} />
             </Field>
           )}
 
