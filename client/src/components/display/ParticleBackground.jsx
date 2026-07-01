@@ -1500,7 +1500,7 @@ function DiveBarAmbient({ tint }) {
 }
 
 // ─── 13. ROOFTOP PARTY ───────────────────────────────────────────────────
-function RooftopPartyAmbient() {
+function RooftopPartyAmbient({ tint }) {
   const N = 14
   const bulbs = useMemo(() => Array.from({ length: N }, (_, i) => {
     const sag = 7 * Math.sin(Math.PI * i / (N - 1))
@@ -1518,17 +1518,17 @@ function RooftopPartyAmbient() {
     {/* Twilight sky — deep blue upper drench */}
     <GlowLayer lo={0.55} hi={0.82} duration="30s" style={{
       top: 0, left: 0, right: 0, height: '65%',
-      background: 'linear-gradient(to bottom, rgba(12,20,75,0.80) 0%, rgba(30,55,130,0.50) 60%, rgba(30,55,130,0) 100%)',
+      background: `linear-gradient(to bottom, ${tint('rgba(12,20,75,0.80)')} 0%, ${tint('rgba(30,55,130,0.50)')} 60%, ${tint('rgba(30,55,130,0)')} 100%)`,
     }}/>
     {/* City glow — warm amber rising from below */}
     <GlowLayer lo={0.38} hi={0.68} duration="22s" delay="5s" style={{
       bottom: 0, left: 0, right: 0, height: '50%',
-      background: 'linear-gradient(to top, rgba(255,110,15,0.55) 0%, rgba(255,155,50,0.28) 55%, rgba(255,155,50,0) 100%)',
+      background: `linear-gradient(to top, ${tint('rgba(255,110,15,0.55)')} 0%, ${tint('rgba(255,155,50,0.28)')} 55%, ${tint('rgba(255,155,50,0)')} 100%)`,
     }}/>
     {/* String light bulbs — catenary sag across upper third */}
     {bulbs.map((b, i) => (
       <PulseDot key={i} left={b.left} top={b.top} size={b.size}
-        color="rgba(255,210,138,0.95)" glowColor="rgba(255,179,71,0.50)"
+        color={tint('rgba(255,210,138,0.95)')} glowColor={tint('rgba(255,179,71,0.50)')}
         duration={b.dur} delay={b.delay}
         anim="ambientBreathe" ease={EASE.twinkle} lo={0.65}
       />
@@ -1539,7 +1539,7 @@ function RooftopPartyAmbient() {
 
 
 // ─── 16. CHRISTMAS EVE ───────────────────────────────────────────────────
-function ChristmasEveAmbient() {
+function ChristmasEveAmbient({ tint }) {
   const flakes = useMemo(() => Array.from({ length: 32 }, (_, i) => ({
     left:    `${(i * 97 + i % 6 * 11) % 100}%`,
     size:    2.5 + (i % 4) * 1.5,
@@ -1550,16 +1550,23 @@ function ChristmasEveAmbient() {
   })), [])
 
   // Holiday-market garland: single corner-to-corner swag, red/white/green bulbs.
+  // Red is in-family (matches theme highlight hue) and gets tinted at each usage below;
+  // the near-white bulb (255,248,235 — high lightness, low saturation) and green bulb
+  // (an intentional off-family accent color, not derived from accent/highlight, same
+  // treatment as Dive Bar's jukebox dome colors) are sanctioned exceptions, left literal.
+  // `isRed` flags which entries need tint() applied at the point of use.
   const bulbs = useMemo(() => {
-    const RWG = ['255,72,72', '255,248,235', '64,210,76']
+    const RWG = [{ c: '255,72,72', isRed: true }, { c: '255,248,235', isRed: false }, { c: '64,210,76', isRed: false }]
     const p0 = { x: -6, y: 3 }, p1 = { x: 50, y: 42 }, p2 = { x: 106, y: 3 }
     const n = 19
     return Array.from({ length: n }, (_, i) => {
       const t = i / (n - 1), u = 1 - t
+      const rwg = RWG[i % 3]
       return {
         x: u * u * p0.x + 2 * u * t * p1.x + t * t * p2.x,
         y: u * u * p0.y + 2 * u * t * p1.y + t * t * p2.y,
-        c: RWG[i % 3],
+        c: rwg.c,
+        isRed: rwg.isRed,
         dur: `${4 + (i % 4)}s`,
         delay: `-${(i * 0.4).toFixed(1)}s`,
       }
@@ -1578,18 +1585,19 @@ function ChristmasEveAmbient() {
     <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
       background: 'linear-gradient(to bottom, rgba(6,4,12,0.55) 0%, transparent 44%)' }}/>
 
-    {/* red (left) + green (right) family washes */}
+    {/* red (left) + green (right) family washes — green is the same intentional
+        off-family accent as the garland's green bulb, left literal; red is in-family, tinted */}
     <GlowLayer lo={0.34} hi={0.50} duration="17s" style={{ inset: 0,
-      background: 'radial-gradient(ellipse 48% 86% at 0% 52%, rgba(255,54,54,0.52), rgba(190,32,32,0.22) 36%, transparent 60%)' }}/>
+      background: `radial-gradient(ellipse 48% 86% at 0% 52%, ${tint('rgba(255,54,54,0.52)')}, ${tint('rgba(190,32,32,0.22)')} 36%, transparent 60%)` }}/>
     <GlowLayer lo={0.30} hi={0.44} duration="21s" delay="3s" style={{ inset: 0,
       background: 'radial-gradient(ellipse 48% 86% at 100% 52%, rgba(58,212,72,0.48), rgba(28,120,40,0.20) 36%, transparent 60%)' }}/>
 
     {/* warm market floor: wide base + four booth pools */}
     <GlowLayer lo={0.16} hi={0.26} duration="13s" style={{ inset: 0,
-      background: 'radial-gradient(ellipse 150% 24% at 50% 112%, rgba(150,72,30,0.38), transparent 78%)' }}/>
+      background: `radial-gradient(ellipse 150% 24% at 50% 112%, ${tint('rgba(150,72,30,0.38)')}, transparent 78%)` }}/>
     {booths.map((b, i) => (
       <GlowLayer key={`booth-${i}`} lo={b.lo} hi={b.hi} duration={b.dur} delay={b.delay} style={{ inset: 0,
-        background: `radial-gradient(ellipse ${b.w}% ${b.h}% at ${b.x}% 108%, rgba(${b.c},0.58), rgba(${b.c},0.2) 44%, transparent 72%)` }}/>
+        background: `radial-gradient(ellipse ${b.w}% ${b.h}% at ${b.x}% 108%, ${tint(`rgba(${b.c},0.58)`)}, ${tint(`rgba(${b.c},0.2)`)} 44%, transparent 72%)` }}/>
     ))}
 
     {/* garland wire */}
@@ -1597,19 +1605,25 @@ function ChristmasEveAmbient() {
       width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none' }}>
       <path d="M-6 3 Q50 42 106 3" fill="none" stroke="rgba(120,108,92,0.42)" strokeWidth="0.35"/>
     </svg>
-    {/* garland bulbs — red / white / green */}
-    {bulbs.map((b, i) => (
-      <div key={`bulb-${i}`} aria-hidden style={{
-        position: 'absolute', left: `${b.x}%`, top: `${b.y}%`, width: '1.8%', aspectRatio: '1',
-        marginLeft: '-0.9%', marginTop: '-0.9%', borderRadius: '50%', pointerEvents: 'none', willChange: 'opacity',
-        background: `radial-gradient(circle at 50% 42%, rgba(255,255,250,0.98) 0%, rgba(${b.c},0.96) 40%, rgba(${b.c},0) 80%)`,
-        boxShadow: `0 0 15px 6px rgba(${b.c},0.5)`,
-        '--lo': 0.62, '--hi': 1, opacity: 0.62,
-        animation: `ambientBreathe ${b.dur} ease-in-out ${b.delay} infinite`,
-      }}/>
-    ))}
+    {/* garland bulbs — red / white / green; red is tinted per-bulb (b.isRed), white/green left literal */}
+    {bulbs.map((b, i) => {
+      const mid = b.isRed ? tint(`rgba(${b.c},0.96)`) : `rgba(${b.c},0.96)`
+      const edge = b.isRed ? tint(`rgba(${b.c},0)`) : `rgba(${b.c},0)`
+      const glow = b.isRed ? tint(`rgba(${b.c},0.5)`) : `rgba(${b.c},0.5)`
+      return (
+        <div key={`bulb-${i}`} aria-hidden style={{
+          position: 'absolute', left: `${b.x}%`, top: `${b.y}%`, width: '1.8%', aspectRatio: '1',
+          marginLeft: '-0.9%', marginTop: '-0.9%', borderRadius: '50%', pointerEvents: 'none', willChange: 'opacity',
+          background: `radial-gradient(circle at 50% 42%, rgba(255,255,250,0.98) 0%, ${mid} 40%, ${edge} 80%)`,
+          boxShadow: `0 0 15px 6px ${glow}`,
+          '--lo': 0.62, '--hi': 1, opacity: 0.62,
+          animation: `ambientBreathe ${b.dur} ease-in-out ${b.delay} infinite`,
+        }}/>
+      )
+    })}
 
-    {/* Snowflakes */}
+    {/* Snowflakes — pure white (rgba 255,255,255), the sanctioned achromatic
+        near-white exception (0% saturation), left untinted */}
     {flakes.map((f, i) => (
       <FallingParticle key={i} left={f.left} size={f.size}
         color={`rgba(255,255,255,${f.opacity})`}
@@ -1639,49 +1653,53 @@ function dmRgba(hex, a) {
 }
 
 // A car roof, cropped by the frame — only the top crests into view, like
-// looking over the dash at the car parked ahead of us
-function DmCarRoof({ left, top, width, height }) {
+// looking over the dash at the car parked ahead of us. DM.car fill is a
+// dark silhouette, sanctioned exception, left untinted; the highlight rim
+// bleeding onto its edge is in-family and tinted.
+function DmCarRoof({ left, top, width, height, tint }) {
   return (
     <div className="dm-anim" style={{ position: "absolute", left, top, width, height, borderRadius: "50%",
-      background: `radial-gradient(ellipse 90% 100% at 50% 0%, ${dmRgba(DM.highlight, 0.16)}, ${DM.car} 38%)`,
+      background: `radial-gradient(ellipse 90% 100% at 50% 0%, ${tint(dmRgba(DM.highlight, 0.16))}, ${DM.car} 38%)`,
       animation: "dmGlowBreathe 23s ease-in-out infinite" }} />
   )
 }
 
-function DmScreen() {
+function DmScreen({ tint }) {
   return (
     <>
       {/* light bleeding out to the left of the screen — generously oversized box so
           the radial falloff fully completes well before any edge (no hard cutoff) */}
       <div className="dm-anim" style={{ position: "absolute", top: "-12%", left: "-40%", width: "100%", height: "100%",
-        background: `radial-gradient(ellipse 26% 26% at 50% 50%, ${dmRgba(DM.highlight, 0.40)}, transparent 72%)`,
+        background: `radial-gradient(ellipse 26% 26% at 50% 50%, ${tint(dmRgba(DM.highlight, 0.40))}, transparent 72%)`,
         animation: "dmGlowBreathe 17s ease-in-out infinite" }} />
       {/* light bleeding out to the right of the screen — same oversized-box technique */}
       <div className="dm-anim" style={{ position: "absolute", top: "-12%", left: "40%", width: "100%", height: "100%",
-        background: `radial-gradient(ellipse 26% 26% at 50% 50%, ${dmRgba(DM.highlight, 0.40)}, transparent 72%)`,
+        background: `radial-gradient(ellipse 26% 26% at 50% 50%, ${tint(dmRgba(DM.highlight, 0.40))}, transparent 72%)`,
         animation: "dmGlowBreathe 20s ease-in-out 3s infinite" }} />
       {/* soft halo behind the screen itself */}
       <div className="dm-anim" style={{ position: "absolute", top: "-12%", left: "0%", width: "100%", height: "100%",
-        background: `radial-gradient(ellipse 30% 30% at 50% 50%, ${dmRgba(DM.highlight, 0.28)}, transparent 70%)`,
+        background: `radial-gradient(ellipse 30% 30% at 50% 50%, ${tint(dmRgba(DM.highlight, 0.28))}, transparent 70%)`,
         animation: "dmGlowBreathe 14s ease-in-out infinite" }} />
-      {/* support poles — holding the screen up off the lot. Anchored at the screen's
-          own edges (9.5% / 89.5%) so they sit entirely outside the center safe-area */}
+      {/* support poles — holding the screen up off the lot. Dark neutral silhouette
+          colors, sanctioned exception, left untinted. Anchored at the screen's own
+          edges (9.5% / 89.5%) so they sit entirely outside the center safe-area */}
       <div style={{ position: "absolute", top: "70%", left: "9.5%", width: "1%", height: "15%",
         background: `linear-gradient(to bottom, ${DM.car}, rgba(6,3,12,0.7))` }} />
       <div style={{ position: "absolute", top: "70%", left: "89.5%", width: "1%", height: "15%",
         background: `linear-gradient(to bottom, ${DM.car}, rgba(6,3,12,0.7))` }} />
-      {/* the screen — one flat color inside, where question text renders. All the
-          brightness/gradient work lives outside it, in the glow layers above */}
+      {/* the screen — one flat dark-neutral color inside, where question text renders
+          (sanctioned exception, not theme-derived). All the brightness/gradient work
+          lives outside it, in the glow layers above (tinted) */}
       <div className="dm-anim" style={{ position: "absolute", top: "6%", left: "10%", width: "80%", height: "64%",
         borderRadius: 2,
         background: "#241e16",
-        boxShadow: `0 0 22px 5px ${dmRgba(DM.highlight, 0.45)}, 0 0 64px 16px ${dmRgba(DM.highlight, 0.22)}`,
+        boxShadow: `0 0 22px 5px ${tint(dmRgba(DM.highlight, 0.45))}, 0 0 64px 16px ${tint(dmRgba(DM.highlight, 0.22))}`,
         animation: "dmScreenPulse 2.6s ease-in-out infinite" }} />
     </>
   )
 }
 
-function DriveInMovieAmbient() {
+function DriveInMovieAmbient({ tint }) {
   const moths = useMemo(() => Array.from({ length: 7 }, (_, i) => ({
     left:   `${14 + (i * 11) % 72}%`,
     top:    `${2 + (i * 5) % 22}%`,
@@ -1700,63 +1718,69 @@ function DriveInMovieAmbient() {
 
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden",
-      background: `linear-gradient(to bottom, ${DM.bgDeep} 0%, ${DM.bg} 45%, ${dmRgba(DM.accent, 0.5)} 100%)` }}>
+      background: `linear-gradient(to bottom, ${tint(DM.bgDeep)} 0%, ${tint(DM.bg)} 45%, ${tint(dmRgba(DM.accent, 0.5))} 100%)` }}>
 
       <style>{DM_STYLE}</style>
 
       {/* atmosphere — distant glow where the lot meets the night sky */}
       <div className="dm-anim" style={{ position: "absolute", bottom: "20%", left: 0, right: 0, height: "14%",
-        background: `linear-gradient(to top, ${dmRgba(DM.accent, 0.45)}, transparent)`,
+        background: `linear-gradient(to top, ${tint(dmRgba(DM.accent, 0.45))}, transparent)`,
         animation: "dmGlowBreathe 19s ease-in-out 5s infinite" }} />
 
       {/* anchor — the screen, light spilling to both sides */}
-      <DmScreen />
+      <DmScreen tint={tint} />
 
-      {/* drifter — moths wandering through the screen light */}
+      {/* drifter — moths wandering through the screen light. screenCore is a pale,
+          hue-locked-to-highlight warm white (fails the low-saturation half of the
+          near-white test, same reasoning as Jazz Club's spotlight), so it's tinted */}
       {moths.map((m, i) => (
         <PulseDot key={i} left={m.left} top={m.top} size={m.size}
-          color={dmRgba(DM.screenCore, 0.85)} glowColor={dmRgba(DM.highlight, 0.3)}
+          color={tint(dmRgba(DM.screenCore, 0.85))} glowColor={tint(dmRgba(DM.highlight, 0.3))}
           duration={m.dur} delay={m.delay} lo={0.2}
           wander={true} wanderDur={m.wDur} wanderDelay={m.wDelay}
         />
       ))}
 
-      {/* dark silhouette — cars parked just ahead, only their roofs visible */}
-      {cars.map((c, i) => <DmCarRoof key={i} left={c.left} top={c.top} width={c.width} height={c.height} />)}
+      {/* dark silhouette — cars parked just ahead, only their roofs visible (DM.car fill untinted) */}
+      {cars.map((c, i) => <DmCarRoof key={i} left={c.left} top={c.top} width={c.width} height={c.height} tint={tint} />)}
     </div>
   )
 }
 
 
 // ─── 19. WESTERN SHOWDOWN ────────────────────────────────────────────────
-function WesternShowdownAmbient() {
+function WesternShowdownAmbient({ tint }) {
   const dust = useMemo(() => [
-    { top: '70%', w: '42%', h: '8%', dur: '20s', delay: '0s',   hi: 0.42, color: 'rgba(150,118,72,0.7)'  },
-    { top: '78%', w: '52%', h: '9%', dur: '16s', delay: '-7s',  hi: 0.46, color: 'rgba(140,110,66,0.72)' },
-    { top: '86%', w: '46%', h: '8%', dur: '13s', delay: '-10s', hi: 0.40, color: 'rgba(132,104,62,0.7)'  },
-    { top: '68%', w: '34%', h: '6%', dur: '26s', delay: '-17s', hi: 0.30, color: 'rgba(160,128,80,0.6)'  },
-  ], [])
+    { top: '70%', w: '42%', h: '8%', dur: '20s', delay: '0s',   hi: 0.42, color: tint('rgba(150,118,72,0.7)')  },
+    { top: '78%', w: '52%', h: '9%', dur: '16s', delay: '-7s',  hi: 0.46, color: tint('rgba(140,110,66,0.72)') },
+    { top: '86%', w: '46%', h: '8%', dur: '13s', delay: '-10s', hi: 0.40, color: tint('rgba(132,104,62,0.7)')  },
+    { top: '68%', w: '34%', h: '6%', dur: '26s', delay: '-17s', hi: 0.30, color: tint('rgba(160,128,80,0.6)')  },
+  ], [tint])
   return <>
-    {/* SKY — bright clear blue, deeper up high, whitening to the horizon haze */}
+    {/* SKY — bright clear blue, deeper up high, whitening to the horizon haze.
+        An intentional dual-tone atmosphere (cool sky + warm ground/sun), same
+        treatment as Sunset Boulevard/Rooftop Party's multi-stop skies — tinted. */}
     <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
-      background: 'linear-gradient(to bottom, rgba(72,132,196,0.92) 0%, rgba(100,160,214,0.88) 28%, rgba(142,188,225,0.82) 48%, rgba(200,222,237,0.80) 60%, rgba(245,245,236,0.82) 67%, transparent 73%)' }}/>
+      background: `linear-gradient(to bottom, ${tint('rgba(72,132,196,0.92)')} 0%, ${tint('rgba(100,160,214,0.88)')} 28%, ${tint('rgba(142,188,225,0.82)')} 48%, ${tint('rgba(200,222,237,0.80)')} 60%, ${tint('rgba(245,245,236,0.82)')} 67%, transparent 73%)` }}/>
     {/* DUSTY HAZE — warm dust veil rising from the horizon into the mid sky */}
     <GlowLayer lo={0.30} hi={0.48} duration="20s" delay="2s" style={{ inset: 0,
-      background: 'linear-gradient(to top, transparent 16%, rgba(228,208,158,0.52) 30%, rgba(226,206,160,0.36) 46%, rgba(222,204,160,0.18) 58%, transparent 72%)' }}/>
+      background: `linear-gradient(to top, transparent 16%, ${tint('rgba(228,208,158,0.52)')} 30%, ${tint('rgba(226,206,160,0.36)')} 46%, ${tint('rgba(222,204,160,0.18)')} 58%, transparent 72%)` }}/>
     {/* HORIZON glare — bright near-white haze, low */}
     <GlowLayer lo={0.40} hi={0.60} duration="16s" style={{ inset: 0,
-      background: 'radial-gradient(ellipse 96% 11% at 50% 67%, rgba(252,250,236,0.6), transparent 72%)' }}/>
+      background: `radial-gradient(ellipse 96% 11% at 50% 67%, ${tint('rgba(252,250,236,0.6)')}, transparent 72%)` }}/>
     {/* sun glare — pale bloom, upper-right */}
     <GlowLayer lo={0.32} hi={0.54} duration="10s" style={{ inset: 0,
-      background: 'radial-gradient(ellipse 40% 28% at 82% 4%, rgba(255,248,206,0.5), transparent 66%)' }}/>
-    {/* THE SUN — high, top-right (anchor); inline so it has no Sun-helper dependency */}
+      background: `radial-gradient(ellipse 40% 28% at 82% 4%, ${tint('rgba(255,248,206,0.5)')}, transparent 66%)` }}/>
+    {/* THE SUN — high, top-right (anchor); inline so it has no Sun-helper dependency.
+        0% stop (rgba(255,255,246,1), H=60/S=100/L=98) is the hot near-white core at
+        the anchor, sanctioned exception, left untinted; every stop past it is tinted. */}
     <div aria-hidden style={{ position: 'absolute', left: '78%', top: '-1%', width: '9%', aspectRatio: '1', borderRadius: '50%',
-      background: 'radial-gradient(circle at 50% 47%, rgba(255,255,246,1) 0%, rgba(255,247,192,0.98) 34%, rgba(236,208,132,0.85) 58%, rgba(255,200,140,0.16) 78%, transparent 100%)',
-      boxShadow: '0 0 54px 17px rgba(254,242,180,0.55)', willChange: 'opacity', '--lo': 0.9, '--hi': 1,
+      background: `radial-gradient(circle at 50% 47%, rgba(255,255,246,1) 0%, ${tint('rgba(255,247,192,0.98)')} 34%, ${tint('rgba(236,208,132,0.85)')} 58%, ${tint('rgba(255,200,140,0.16)')} 78%, transparent 100%)`,
+      boxShadow: `0 0 54px 17px ${tint('rgba(254,242,180,0.55)')}`, willChange: 'opacity', '--lo': 0.9, '--hi': 1,
       animation: 'ambientBreathe 11s ease-in-out infinite', pointerEvents: 'none' }}/>
     {/* WARM GROUND — tan/ochre desert floor, FLAT */}
     <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
-      background: 'linear-gradient(to bottom, transparent 64%, rgba(202,164,100,0.55) 72%, rgba(176,138,82,0.75) 86%, rgba(150,116,68,0.88) 100%)' }}/>
+      background: `linear-gradient(to bottom, transparent 64%, ${tint('rgba(202,164,100,0.55)')} 72%, ${tint('rgba(176,138,82,0.75)')} 86%, ${tint('rgba(150,116,68,0.88)')} 100%)` }}/>
     {/* BLOWING DUST — denser darker clouds drifting over the ground */}
     {dust.map((d, i) => (
       <div key={i} aria-hidden style={{ position: 'absolute', top: d.top, left: '-8%', width: d.w, height: d.h,
@@ -1764,7 +1788,9 @@ function WesternShowdownAmbient() {
         willChange: 'transform, opacity', '--hi': d.hi,
         animation: `ambientDriftAcross ${d.dur} ${d.delay} linear infinite`, pointerEvents: 'none' }}/>
     ))}
-    {/* TUMBLEWEEDS — three styles, mixed L/R entry, phased so they take turns */}
+    {/* TUMBLEWEEDS — three styles, mixed L/R entry, phased so they take turns.
+        Tumbleweed is a shared helper hardcoding its own dark neutral twine color
+        internally (not theme-derived), left untouched. */}
     <Tumbleweed top="74%" size="5.2%" seed={7}  style="loose" dir="lr" crossDur="18s" bounceDur="1.2s"  spinDur="2.9s" delay="0s"   hi={0.56}/>
     <Tumbleweed top="80%" size="5.6%" seed={23} style="tidy"  dir="rl" crossDur="18s" bounceDur="1.05s" spinDur="2.4s" delay="-6s"  hi={0.66}/>
     <Tumbleweed top="86%" size="6.5%" seed={42} style="dense" dir="lr" crossDur="18s" bounceDur="0.92s" spinDur="2.0s" delay="-12s" hi={0.72}/>
@@ -1799,11 +1825,11 @@ const US_STYLE = `
 @media (prefers-reduced-motion: reduce){ .us-anim{ animation:none !important } }
 `;
 
-function UsGodray({ x, w, sk, sw, dur, delay }) {
+function UsGodray({ x, w, sk, sw, dur, delay, tint }) {
   return (
     <div className="us-anim" style={{
       position: "absolute", top: "-12%", height: "115%", left: x, width: w,
-      background: `linear-gradient(to bottom, ${usRgba(US.shiny, 0.5)}, ${usRgba(US.highlight, 0.22)} 28%, transparent 72%)`,
+      background: `linear-gradient(to bottom, ${tint(usRgba(US.shiny, 0.5))}, ${tint(usRgba(US.highlight, 0.22))} 28%, transparent 72%)`,
       transformOrigin: "50% 0%", filter: "blur(7px)",
       ["--sk"]: sk, ["--sw"]: sw,
       animation: `usGodray ${dur}s ease-in-out ${delay}s infinite`, willChange: "transform, opacity",
@@ -1811,7 +1837,7 @@ function UsGodray({ x, w, sk, sw, dur, delay }) {
   );
 }
 
-function UnderTheSeaAmbient() {
+function UnderTheSeaAmbient({ tint }) {
   const bubbles = useMemo(() => Array.from({ length: 18 }, () => ({
     left: (Math.random() * 100).toFixed(1) + "%",
     size: (Math.random() * 5 + 3).toFixed(1),
@@ -1831,41 +1857,43 @@ function UnderTheSeaAmbient() {
 
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden",
-      background: `linear-gradient(to bottom, ${US.bg} 0%, ${US.mid} 58%, ${US.accent} 100%)` }}>
+      background: `linear-gradient(to bottom, ${tint(US.bg)} 0%, ${tint(US.mid)} 58%, ${tint(US.accent)} 100%)` }}>
 
       <style>{US_STYLE}</style>
 
       {/* surface light from above */}
       <div className="us-anim" style={{ position: "absolute", inset: 0,
-        background: `radial-gradient(ellipse 120% 60% at 50% -10%, ${usRgba(US.highlight, 0.22)}, transparent 60%)`,
+        background: `radial-gradient(ellipse 120% 60% at 50% -10%, ${tint(usRgba(US.highlight, 0.22))}, transparent 60%)`,
         animation: "usGlow 18s ease-in-out infinite" }} />
 
       {/* teal floor glow — rounded dome + wide low base to carry color into the corners */}
       <div style={{ position: "absolute", inset: 0,
-        background: `radial-gradient(ellipse 150% 24% at 50% 106%, ${usRgba(US.accent, 0.75)}, transparent 78%)` }} />
+        background: `radial-gradient(ellipse 150% 24% at 50% 106%, ${tint(usRgba(US.accent, 0.75))}, transparent 78%)` }} />
       <div className="us-anim" style={{ position: "absolute", inset: 0,
-        background: `radial-gradient(ellipse 64% 32% at 50% 102%, ${usRgba(US.highlight, 0.26)}, transparent 68%)`,
+        background: `radial-gradient(ellipse 64% 32% at 50% 102%, ${tint(usRgba(US.highlight, 0.26))}, transparent 68%)`,
         animation: "usGlow 14s ease-in-out infinite" }} />
 
       {/* ATMOSPHERE — god-ray shafts */}
-      <UsGodray x="16%" w="9%" sk="-11deg" sw="12px" dur={11} delay={0} />
-      <UsGodray x="38%" w="7%" sk="-7deg" sw="9px" dur={14} delay={-3} />
-      <UsGodray x="60%" w="10%" sk="-9deg" sw="11px" dur={12} delay={-6} />
-      <UsGodray x="80%" w="7%" sk="-6deg" sw="8px" dur={15} delay={-2} />
+      <UsGodray x="16%" w="9%" sk="-11deg" sw="12px" dur={11} delay={0} tint={tint} />
+      <UsGodray x="38%" w="7%" sk="-7deg" sw="9px" dur={14} delay={-3} tint={tint} />
+      <UsGodray x="60%" w="10%" sk="-9deg" sw="11px" dur={12} delay={-6} tint={tint} />
+      <UsGodray x="80%" w="7%" sk="-6deg" sw="8px" dur={15} delay={-2} tint={tint} />
 
       {/* bioluminescent lights — fade in and out at random spots */}
       {bio.map((b, i) => (
         <div key={i} className="us-anim" style={{ position: "absolute", left: b.left, top: b.top,
-          width: b.size + "px", height: b.size + "px", borderRadius: "50%", background: usRgba(US.shiny, 0.8),
-          boxShadow: `0 0 7px ${usRgba(US.highlight, 0.55)}`, animation: `usPop ${b.dur}s ease-in-out ${b.delay}s infinite` }} />
+          width: b.size + "px", height: b.size + "px", borderRadius: "50%", background: tint(usRgba(US.shiny, 0.8)),
+          boxShadow: `0 0 7px ${tint(usRgba(US.highlight, 0.55))}`, animation: `usPop ${b.dur}s ease-in-out ${b.delay}s infinite` }} />
       ))}
 
-      {/* DRIFTERS — bubbles rising all over */}
+      {/* DRIFTERS — bubbles rising all over. US.text (#b0f0f0, H=180/S=68/L=82) is a
+          pale but hue-locked cyan-family tone, not a true achromatic near-white
+          (fails the low-saturation half of the near-white test) — tinted. */}
       {bubbles.map((b, i) => (
         <div key={i} className="us-anim" style={{ position: "absolute", left: b.left, bottom: "0%",
           width: b.size + "px", height: b.size + "px", borderRadius: "50%",
-          border: `1px solid ${usRgba(US.text, 0.5)}`,
-          background: `radial-gradient(circle at 35% 30%, ${usRgba(US.text, 0.32)}, transparent 60%)`,
+          border: `1px solid ${tint(usRgba(US.text, 0.5))}`,
+          background: `radial-gradient(circle at 35% 30%, ${tint(usRgba(US.text, 0.32))}, transparent 60%)`,
           ["--br"]: b.br, ["--bx"]: b.bx, ["--bo"]: b.bo,
           animation: `usBubble ${b.dur}s linear ${b.delay}s infinite`, willChange: "transform, opacity" }} />
       ))}
