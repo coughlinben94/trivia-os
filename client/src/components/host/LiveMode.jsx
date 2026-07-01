@@ -176,7 +176,15 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
 
   const handleKeyDown = useCallback((e) => {
     if (scorePanelOpen || themePickerOpen) return
-    if (e.code === 'ArrowRight') { e.preventDefault(); actions.nextSlide() }
+    if (e.code === 'ArrowRight') {
+      e.preventDefault()
+      if (show.showState.answerReveal) {
+        actions.setAnswerReveal(false)
+        setTimeout(() => actions.nextSlide(), 280)
+      } else {
+        actions.nextSlide()
+      }
+    }
     if (e.code === 'ArrowLeft')  { e.preventDefault(); actions.prevSlide() }
     if (e.code === 'KeyS')       setScorePanelOpen(true)
     if (e.code === 'KeyA')       actions.setAnswerReveal(!show.showState.answerReveal)
