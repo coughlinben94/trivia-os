@@ -55,7 +55,7 @@ export default function SwingRoundWizard({ activeRoundId, onAdd, onClose }) {
                 value={count}
                 onChange={e => setCount(Math.max(1, parseInt(e.target.value) || 1))}
                 onKeyDown={e => { if (e.key === 'Enter') goToQuestions() }}
-                className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
               />
             </div>
             {!activeRoundId && (
