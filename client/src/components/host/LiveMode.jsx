@@ -227,6 +227,11 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
               Answer Live
             </span>
           )}
+          {!show.showState.answerReveal && currentSlide?.type === 'grading-break' && (
+            <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 animate-pulse">
+              Jukebox Live
+            </span>
+          )}
         </div>
 
         {/* Right: Next + Theme + Score */}

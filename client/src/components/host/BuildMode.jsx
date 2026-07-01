@@ -146,7 +146,6 @@ function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReord
         <button onClick={onBack} className="text-sm text-gray-400 hover:text-gray-700 transition-colors">
           ← Dashboard
         </button>
-        <span className="text-sm font-semibold text-gray-700">R{round.number} · {round.title}</span>
         <span className="text-xs text-gray-400 ml-auto">{visibleSlides.length} slide{visibleSlides.length !== 1 ? 's' : ''}</span>
       </div>
       <div className="flex-1 overflow-y-auto p-8">

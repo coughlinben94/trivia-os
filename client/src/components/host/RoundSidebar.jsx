@@ -256,7 +256,13 @@ export default function RoundSidebar({
               }}
             >
               {/* Round header */}
-              <div className="flex items-center gap-1.5 px-3 py-2 group">
+              <div
+                className="flex items-center gap-1.5 px-3 py-2 group"
+                style={viewingRoundId === round.id
+                  ? { background: 'linear-gradient(to right, rgba(34,197,94,0.12), transparent)', borderLeft: '2px solid #1a6b4a' }
+                  : { borderLeft: '2px solid transparent' }
+                }
+              >
                 <span
                   className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 text-xs leading-none"
                   title="Drag to reorder round"
@@ -367,12 +373,15 @@ function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, 
   return (
     <div
       data-slide-id={slide.id}
-      className={`group flex items-center gap-2 px-3 cursor-pointer transition-colors select-none ${
+      className={`group flex items-center gap-2 px-3 cursor-pointer transition-colors select-none border-l-2 ${
         selected
-          ? 'border-l-2 border-[#1a6b4a] bg-white'
-          : 'border-l-2 border-transparent hover:bg-gray-100'
+          ? 'border-[#1a6b4a]'
+          : 'border-transparent hover:bg-gray-100'
       } ${indent ? 'ml-4' : ''} ${dragging ? 'opacity-40' : ''} ${dragBefore ? 'border-t-2 border-t-blue-400' : ''} ${dragAfter ? 'border-b-2 border-b-blue-400' : ''}`}
-      style={{ height: 36 }}
+      style={{
+        height: 36,
+        ...(selected && { background: 'linear-gradient(to right, rgba(34,197,94,0.12), transparent)' }),
+      }}
       onClick={onSelect}
     >
       <span
