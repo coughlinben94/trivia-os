@@ -4,11 +4,19 @@ import { supabase } from '../lib/supabase.js'
 
 const MEDAL = ['🥇', '🥈', '🥉']
 
+function getRoundLabel(round, slides) {
+  const roundSlides = slides.filter(s => s.roundId === round.id)
+  if (roundSlides.some(s => s.type === 'swing-round-intro')) return 'SW'
+  if (roundSlides.some(s => s.type === 'pyl-reveal')) return 'PYL'
+  return `R${round.number ?? round.roundNumber ?? ''}`
+}
+
 export default function ShowDetail() {
   const { showId } = useParams()
   const navigate = useNavigate()
   const [show, setShow] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [scoreboardTeams, setScoreboardTeams] = useState(null)
 
   useEffect(() => {
     supabase
@@ -19,6 +27,17 @@ export default function ShowDetail() {
       .then(({ data }) => {
         setShow(data)
         setLoading(false)
+      })
+  }, [showId])
+
+  useEffect(() => {
+    supabase
+      .from('scoreboard_teams')
+      .select('*')
+      .eq('show_id', showId)
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => {
+        setScoreboardTeams(data ?? [])
       })
   }, [showId])
 
@@ -41,6 +60,25 @@ export default function ShowDetail() {
   const scores = show.final_scores ?? []
   const rounds = show.rounds ?? []
   const slides = show.slides ?? []
+
+  // Scoreboard from scoreboard_teams
+  const sortedRounds = rounds
+    .slice()
+    .sort((a, b) => (a.number ?? a.roundNumber ?? 0) - (b.number ?? b.roundNumber ?? 0))
+
+  const roundCols = sortedRounds.map(r => ({
+    round: r,
+    key: `r_${r.id}`,
+    label: getRoundLabel(r, slides),
+  }))
+
+  const rankedTeams = (scoreboardTeams ?? [])
+    .map(team => {
+      const scoresObj = team.scores ?? {}
+      const total = Object.values(scoresObj).reduce((sum, v) => sum + (Number(v) || 0), 0)
+      return { ...team, total }
+    })
+    .sort((a, b) => b.total - a.total)
 
   // Build questions grouped by round
   const roundGroups = rounds
@@ -93,8 +131,73 @@ export default function ShowDetail() {
 
       <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
 
-        {/* Scoreboard */}
-        {scores.length > 0 && (
+        {/* Scoreboard from scoreboard_teams */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden fade-up">
+          <div className="px-5 py-3 border-b border-gray-100">
+            <h2 className="text-sm font-semibold text-gray-700">📊 Final Scoreboard</h2>
+          </div>
+          {scoreboardTeams === null ? (
+            <p className="text-xs text-gray-400 text-center py-5">Loading scores…</p>
+          ) : rankedTeams.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-5">No scores recorded for this show.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 w-10">#</th>
+                    <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500">Team</th>
+                    {roundCols.map(col => (
+                      <th key={col.key} className="text-center px-3 py-2 text-xs font-semibold text-gray-500 whitespace-nowrap">
+                        {col.label}
+                      </th>
+                    ))}
+                    {(scoreboardTeams ?? []).some(t => (t.scores ?? {})['bonus'] != null) && (
+                      <th className="text-center px-3 py-2 text-xs font-semibold text-gray-500">?</th>
+                    )}
+                    <th className="text-right px-4 py-2 text-xs font-semibold text-[#1a6b4a]">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rankedTeams.map((team, i) => (
+                    <tr
+                      key={team.id}
+                      className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}
+                    >
+                      <td className="px-4 py-2.5 text-center">
+                        {MEDAL[i]
+                          ? <span className="text-base">{MEDAL[i]}</span>
+                          : <span className="text-xs text-gray-400 font-bold">#{i + 1}</span>
+                        }
+                      </td>
+                      <td className="px-4 py-2.5 font-medium text-gray-800">{team.name}</td>
+                      {roundCols.map(col => (
+                        <td key={col.key} className="px-3 py-2.5 text-center text-gray-600 tabular-nums">
+                          {(team.scores ?? {})[col.key] != null
+                            ? Number((team.scores ?? {})[col.key])
+                            : <span className="text-gray-300">—</span>
+                          }
+                        </td>
+                      ))}
+                      {(scoreboardTeams ?? []).some(t => (t.scores ?? {})['bonus'] != null) && (
+                        <td className="px-3 py-2.5 text-center text-gray-600 tabular-nums">
+                          {(team.scores ?? {})['bonus'] != null
+                            ? Number((team.scores ?? {})['bonus'])
+                            : <span className="text-gray-300">—</span>
+                          }
+                        </td>
+                      )}
+                      <td className="px-4 py-2.5 text-right font-bold text-[#1a6b4a] tabular-nums">{team.total}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Legacy final_scores (kept as fallback if no scoreboard_teams) */}
+        {rankedTeams.length === 0 && scores.length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden fade-up">
             <div className="px-5 py-3 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-700">Final Scoreboard</h2>
