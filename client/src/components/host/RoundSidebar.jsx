@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 
 const SLIDE_TYPE_META = {
-  'title':             { label: 'Title Slide',      icon: '📺' },
+  'title':             { label: 'Title Slide',      icon: '🇺🇸' },
   'round-intro':       { label: 'Round Intro',       icon: '🎬' },
   'swing-round-intro': { label: 'Swing Intro',       icon: '🎷' },
   'question':          { label: 'Question',          icon: '❓' },
@@ -12,6 +12,7 @@ const SLIDE_TYPE_META = {
   'pixelate-series':   { label: 'Pixelate Series',   icon: '🎨' },
   'multi-question':    { label: 'Multi-Question',    icon: '📋' },
   'pyl-reveal':        { label: 'PYL Reveal',        icon: '🎰' },
+  'winner-reveal':     { label: 'Winner Reveal',     icon: '🥇' },
 }
 
 function slideLabel(slide) {
