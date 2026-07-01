@@ -187,7 +187,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
       }
     }
     if (e.code === 'ArrowLeft')  { e.preventDefault(); actions.prevSlide() }
-    if (e.code === 'KeyS')       setScorePanelOpen(true)
+    if (e.code === 'KeyS')       actions.setScoreboardVisible(!show.showState.scoreboardVisible)
     if (e.code === 'KeyA')       actions.setAnswerReveal(!show.showState.answerReveal)
   }, [scorePanelOpen, themePickerOpen, actions, show.showState.answerReveal])
 
@@ -267,8 +267,20 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
             </div>
           )}
           <button
+            onClick={() => actions.setScoreboardVisible(!show.showState.scoreboardVisible)}
+            title="Toggle TV scoreboard (S)"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ml-1 ${
+              show.showState.scoreboardVisible
+                ? 'bg-green-500 text-white hover:bg-green-600'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <span style={{ fontSize: '0.85em' }}>📊</span>
+            Score
+          </button>
+          <button
             onClick={() => setScorePanelOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-baynes-forest text-white text-sm font-semibold hover:bg-green-900 transition-colors ml-1"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-baynes-forest text-white text-sm font-semibold hover:bg-green-900 transition-colors"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <rect x="1" y="9" width="2" height="4" rx="1" fill="currentColor"/>
@@ -276,7 +288,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
               <rect x="8" y="3" width="2" height="10" rx="1" fill="currentColor"/>
               <rect x="11.5" y="1" width="2" height="12" rx="1" fill="currentColor"/>
             </svg>
-            Score
+            Edit
           </button>
         </div>
       </div>
@@ -337,7 +349,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
             <div className="space-y-2">
               {[
                 ['← →', 'Navigate slides'],
-                ['S', 'Score panel'],
+                ['A', 'Toggle answer'],
+                ['S', 'TV scoreboard'],
               ].map(([key, label]) => (
                 <div key={key} className="flex items-center justify-between">
                   <code className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">{key}</code>

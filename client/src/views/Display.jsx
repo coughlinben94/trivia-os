@@ -8,6 +8,7 @@ import SlideRenderer from '../components/display/SlideRenderer.jsx'
 import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import BaynesWatermark from '../components/display/BaynesWatermark.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
+import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
 
 // ─── Pre-show waiting screen ───────────────────────────────────────────────
@@ -333,6 +334,7 @@ function DisplayInner({ show, direction }) {
       {/* z-50: persistent overlays — always on top */}
       <QuestionCounter slide={currentSlide} show={show} />
       <AnswerRevealOverlay show={show} currentSlide={currentSlide} />
+      <ScoreboardOverlay show={show} />
       <BaynesWatermark />
     </div>
   )
