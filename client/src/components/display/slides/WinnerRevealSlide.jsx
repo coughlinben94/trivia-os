@@ -149,6 +149,24 @@ export default function WinnerRevealSlide({ show }) {
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ zIndex: 1 }}>
+
+      {/* Background gradient flares */}
+      <motion.div
+        className="absolute inset-0"
+        initial={{ opacity: 0.15 }}
+        animate={{ opacity: phase === 'reveal' ? 1 : 0.15 }}
+        transition={{ duration: 1.4, ease: EASE_OUT }}
+        style={{
+          zIndex: 0,
+          background: [
+            'radial-gradient(ellipse 80% 70% at 50% 54%, rgba(251,191,36,0.30) 0%, transparent 68%)',
+            'radial-gradient(ellipse 55% 55% at 10% 15%, rgba(139,92,246,0.20) 0%, transparent 65%)',
+            'radial-gradient(ellipse 50% 50% at 90% 85%, rgba(16,185,129,0.18) 0%, transparent 65%)',
+          ].join(', '),
+          pointerEvents: 'none',
+        }}
+      />
+
       <Confetti active={phase === 'reveal'} />
 
       <motion.p
