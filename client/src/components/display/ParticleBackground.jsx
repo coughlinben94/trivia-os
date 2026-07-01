@@ -1789,8 +1789,10 @@ function WesternShowdownAmbient({ tint }) {
         animation: `ambientDriftAcross ${d.dur} ${d.delay} linear infinite`, pointerEvents: 'none' }}/>
     ))}
     {/* TUMBLEWEEDS — three styles, mixed L/R entry, phased so they take turns.
-        Tumbleweed is a shared helper hardcoding its own dark neutral twine color
-        internally (not theme-derived), left untouched. */}
+        Tumbleweed is theme-specific (only used here), not a shared helper — but its
+        twine colors (~29° hue, ~30-52% sat, dark) are a desaturated non-identity
+        neutral, not a derived highlight variant, same treatment as Medieval Tavern's
+        wood-handle color. Left untouched on that basis. */}
     <Tumbleweed top="74%" size="5.2%" seed={7}  style="loose" dir="lr" crossDur="18s" bounceDur="1.2s"  spinDur="2.9s" delay="0s"   hi={0.56}/>
     <Tumbleweed top="80%" size="5.6%" seed={23} style="tidy"  dir="rl" crossDur="18s" bounceDur="1.05s" spinDur="2.4s" delay="-6s"  hi={0.66}/>
     <Tumbleweed top="86%" size="6.5%" seed={42} style="dense" dir="lr" crossDur="18s" bounceDur="0.92s" spinDur="2.0s" delay="-12s" hi={0.72}/>
