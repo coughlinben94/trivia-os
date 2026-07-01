@@ -96,7 +96,7 @@ function PreShowScreen({ show }) {
         zIndex: 10,
       }}>
         <h1 style={{
-          fontFamily: "'Boogaloo', sans-serif",
+          fontFamily: `'${theme.fonts.display}', sans-serif`,
           fontSize: 'clamp(3rem, 6vw, 5.5rem)',
           color: theme.colors.text,
           letterSpacing: '-0.02em',
