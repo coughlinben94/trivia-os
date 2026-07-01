@@ -166,14 +166,12 @@ function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReord
               >
                 <button
                   onClick={() => !draggedId && onSelectSlide(slide)}
-                  className={`w-full h-full flex flex-col gap-2 p-4 rounded-xl border text-left ${BTN} ${CARD_STYLE[slide.type] ?? 'bg-white border-gray-200 hover:border-gray-400'}`}
+                  className={`w-full h-full flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center ${BTN} ${CARD_STYLE[slide.type] ?? 'bg-white border-gray-200 hover:border-gray-400'}`}
                 >
-                  <div className="flex items-center gap-2 pr-4">
-                    <span className="text-xl leading-none">{SLIDE_ICON[slide.type] ?? '📄'}</span>
-                    <span className="text-sm font-semibold text-gray-800 truncate">{getSlideLabel(slide)}</span>
-                  </div>
+                  <span className="text-2xl leading-none">{SLIDE_ICON[slide.type] ?? '📄'}</span>
+                  <span className="text-sm font-semibold text-gray-800 leading-tight">{getSlideLabel(slide)}</span>
                   {preview && (
-                    <p className="text-xs text-gray-500 leading-snug line-clamp-3">{preview}</p>
+                    <p className="text-xs text-gray-500 leading-snug line-clamp-2">{preview}</p>
                   )}
                 </button>
                 <span
