@@ -330,7 +330,7 @@ export default function Display() {
         }
 
         prevIndexRef.current = data.current_slide_index ?? 0
-        setShow(data)
+        setShow({ ...data, theme: data.theme_id ?? data.theme, themeOverrides: data.theme_overrides ?? data.themeOverrides })
       }
       setLoading(false)
     }
@@ -349,7 +349,7 @@ export default function Display() {
           const nextIndex = next.current_slide_index ?? 0
           setDirection(nextIndex >= prevIndexRef.current ? 1 : -1)
           prevIndexRef.current = nextIndex
-          setShow({ ...next, theme: next.theme_id ?? next.theme })
+          setShow({ ...next, theme: next.theme_id ?? next.theme, themeOverrides: next.theme_overrides ?? next.themeOverrides })
         }
       )
       .subscribe()
@@ -368,7 +368,7 @@ export default function Display() {
           const next = payload.new
           if (next.is_live && next.id !== show?.id) {
             prevIndexRef.current = next.current_slide_index ?? 0
-            setShow({ ...next, theme: next.theme_id ?? next.theme })
+            setShow({ ...next, theme: next.theme_id ?? next.theme, themeOverrides: next.theme_overrides ?? next.themeOverrides })
           }
         }
       )
@@ -420,14 +420,14 @@ export default function Display() {
 
   if (isPreview) {
     return (
-      <ThemeProvider showThemeId={show.theme}>
+      <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
         <PreviewSlide />
       </ThemeProvider>
     )
   }
 
   return (
-    <ThemeProvider showThemeId={show.theme}>
+    <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
       {show.is_live && show.current_slide_id !== null ? (
         <DisplayInner show={show} direction={direction} />
       ) : (
