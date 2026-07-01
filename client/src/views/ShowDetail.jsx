@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
+import { deriveRoundCols, computeTotal } from '../lib/scoreboardMath.js'
 
 const MEDAL = ['🥇', '🥈', '🥉']
 
@@ -71,13 +72,10 @@ export default function ShowDetail() {
     key: `r_${r.id}`,
     label: getRoundLabel(r, slides),
   }))
+  const totalCols = deriveRoundCols(show)
 
   const rankedTeams = (scoreboardTeams ?? [])
-    .map(team => {
-      const scoresObj = team.scores ?? {}
-      const total = Object.values(scoresObj).reduce((sum, v) => sum + (Number(v) || 0), 0)
-      return { ...team, total }
-    })
+    .map(team => ({ ...team, total: computeTotal(team.scores, totalCols) }))
     .sort((a, b) => b.total - a.total)
 
   // Build questions grouped by round

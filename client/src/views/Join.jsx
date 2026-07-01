@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
+import { deriveRoundCols, computeTotal } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
 
@@ -1319,13 +1320,9 @@ export default function Join() {
         .select('id, name, scores')
         .eq('show_id', show?.id)
         .order('sort_order', { ascending: true })
+      const cols = show ? deriveRoundCols(show) : []
       const withTotals = (data ?? [])
-        .map(t => ({
-          ...t,
-          total: t.scores
-            ? Object.values(t.scores).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0)
-            : 0,
-        }))
+        .map(t => ({ ...t, total: computeTotal(t.scores, cols) }))
         .sort((a, b) => b.total - a.total)
       setScoresDrawerTeams(withTotals)
     } catch {

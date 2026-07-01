@@ -2,28 +2,11 @@ import { useState, useEffect } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
+import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
 
 // ─── Easing ────────────────────────────────────────────────────────────────
 const EASE_OUT   = [0.22, 1, 0.36, 1]
 const EASE_QUART = [0.25, 1, 0.25, 1]
-
-// ─── Helpers ───────────────────────────────────────────────────────────────
-function computeTotal(scores) {
-  if (!scores || typeof scores !== 'object') return 0
-  return Object.values(scores).reduce((sum, v) => sum + (Number(v) || 0), 0)
-}
-
-function deriveRoundCols(show) {
-  const sorted = (show.rounds ?? []).slice().sort((a, b) => (a.number ?? 0) - (b.number ?? 0))
-  const cols = sorted.map(round => {
-    const slides = (show.slides ?? []).filter(s => s.roundId === round.id)
-    if (slides.some(s => s.type === 'swing-round-intro')) return { key: `r_${round.id}`, label: 'SW' }
-    if (slides.some(s => s.type === 'pyl-reveal')) return { key: `r_${round.id}`, label: 'PYL' }
-    return { key: `r_${round.id}`, label: `R${round.number ?? '?'}` }
-  })
-  cols.push({ key: 'bonus', label: '?' })
-  return cols
-}
 
 const MEDALS = ['🥇', '🥈', '🥉']
 
@@ -148,7 +131,7 @@ function ScoreboardContent({ show }) {
         .order('sort_order')
       if (!data) return
       const sorted = data
-        .map(t => ({ ...t, total: computeTotal(t.scores) }))
+        .map(t => ({ ...t, total: computeTotal(t.scores, cols) }))
         .sort((a, b) => b.total - a.total)
       setRanked(sorted)
     }

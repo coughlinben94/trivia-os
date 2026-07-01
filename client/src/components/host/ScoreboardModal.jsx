@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
+import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
 import gsap from 'gsap'
 
 // ─── Quick Entry ──────────────────────────────────────────────────────────────
@@ -129,22 +130,6 @@ function QuickEntry({ teams, cols, onSave, onClose }) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function deriveRoundCols(show) {
-  const sorted = (show.rounds ?? []).slice().sort((a, b) => a.number - b.number)
-  const cols = sorted.map(round => {
-    const slides = (show.slides ?? []).filter(s => s.roundId === round.id)
-    if (slides.some(s => s.type === 'swing-round-intro')) return { key: `r_${round.id}`, label: 'SW' }
-    if (slides.some(s => s.type === 'pyl-reveal')) return { key: `r_${round.id}`, label: 'PYL' }
-    return { key: `r_${round.id}`, label: `R${round.number}` }
-  })
-  cols.push({ key: 'bonus', label: '?' })
-  return cols
-}
-
-function computeTotal(scores, cols) {
-  return cols.reduce((sum, c) => sum + (Number(scores[c.key]) || 0), 0)
-}
 
 function addStats(teams, cols) {
   const withTotals = teams.map(t => ({ ...t, _total: computeTotal(t.scores, cols) }))
