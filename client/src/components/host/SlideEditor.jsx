@@ -4,10 +4,11 @@ import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import MediaUpload from './MediaUpload.jsx'
 import HostPhotoLibrary from './HostPhotoLibrary.jsx'
-import ElementsEditor from './ElementsEditor.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
 import SlideRenderer from '../display/SlideRenderer.jsx'
 import ParticleBackground from '../display/ParticleBackground.jsx'
+import { makeElement } from '../display/SlideElements.jsx'
+import { DISPLAY_FONTS } from './ThemeCustomizeControls.jsx'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 
 const INNER_W = 1280
@@ -65,9 +66,12 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   const { theme } = useTheme()
   const [data, setData] = useState(slide.data)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  const [viewMode, setViewMode] = useState('edit') // 'edit' | 'preview'
+  const [viewMode, setViewMode] = useState('preview') // 'edit' | 'preview'
   const [jukeboxLibs, setJukeboxLibs] = useState(JUKEBOX_LIBRARIES)
+  const [selectedElId, setSelectedElId] = useState(null)
   const saveTimer = useRef(null)
+  const overlayRef = useRef(null)
+  const dragStateRef = useRef(null)
 
   useEffect(() => {
     let alive = true
@@ -76,7 +80,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   }, [])
 
   // Sync local data when selected slide changes
-  useEffect(() => { setData(slide.data); setConfirmingDelete(false) }, [slide.id])
+  useEffect(() => { setData(slide.data); setConfirmingDelete(false); setSelectedElId(null) }, [slide.id])
 
   function change(key, value) {
     const next = { ...data, [key]: value }
@@ -105,6 +109,77 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
     const next = { ...data, ...updates }
     setData(next)
     scheduleSave({ data: next })
+  }
+
+  // Element overlay helpers
+  function updateElement(id, updates) {
+    const next = (data.elements ?? []).map(el => el.id === id ? { ...el, ...updates } : el)
+    change('elements', next)
+  }
+
+  function addElement(type) {
+    const el = makeElement(type)
+    const next = [...(data.elements ?? []), el]
+    change('elements', next)
+    setSelectedElId(el.id)
+  }
+
+  function deleteElement(id) {
+    const next = (data.elements ?? []).filter(el => el.id !== id)
+    change('elements', next)
+    if (selectedElId === id) setSelectedElId(null)
+  }
+
+  function duplicateElement(id) {
+    const el = (data.elements ?? []).find(e => e.id === id)
+    if (!el) return
+    const dupe = { ...el, id: `el_${Math.random().toString(36).slice(2, 10)}`, x: (el.x ?? 50) + 4, y: (el.y ?? 50) + 4 }
+    const next = [...(data.elements ?? []), dupe]
+    change('elements', next)
+    setSelectedElId(dupe.id)
+  }
+
+  function bringForward(id) {
+    const els = [...(data.elements ?? [])]
+    const i = els.findIndex(e => e.id === id)
+    if (i < els.length - 1) { [els[i], els[i + 1]] = [els[i + 1], els[i]]; change('elements', els) }
+  }
+
+  function sendBackward(id) {
+    const els = [...(data.elements ?? [])]
+    const i = els.findIndex(e => e.id === id)
+    if (i > 0) { [els[i - 1], els[i]] = [els[i], els[i - 1]]; change('elements', els) }
+  }
+
+  function startDrag(e, elId, el) {
+    e.stopPropagation()
+    const overlay = overlayRef.current
+    if (!overlay) return
+    const rect = overlay.getBoundingClientRect()
+    dragStateRef.current = {
+      elId,
+      startMouseX: e.clientX, startMouseY: e.clientY,
+      startElX: el.x ?? 50, startElY: el.y ?? 50,
+      rectW: rect.width, rectH: rect.height,
+    }
+    setSelectedElId(elId)
+    function onMove(ev) {
+      const s = dragStateRef.current
+      if (!s) return
+      const dx = (ev.clientX - s.startMouseX) / s.rectW * 100
+      const dy = (ev.clientY - s.startMouseY) / s.rectH * 100
+      updateElement(s.elId, {
+        x: Math.max(2, Math.min(98, s.startElX + dx)),
+        y: Math.max(2, Math.min(98, s.startElY + dy)),
+      })
+    }
+    function onUp() {
+      dragStateRef.current = null
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
   }
 
   // Media upload helpers
@@ -205,37 +280,555 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
         </div>
       )}
 
-      {viewMode === 'preview' && (
-        <div className="flex-1 bg-[#050505] flex items-center justify-center overflow-hidden">
-          <div
-            style={{
-              width: PREVIEW_W,
-              height: PREVIEW_H,
-              position: 'relative',
-              overflow: 'hidden',
-              borderRadius: 12,
-              flexShrink: 0,
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: INNER_W,
-                height: INNER_H,
-                transform: `scale(${SCALE})`,
-                transformOrigin: 'top left',
-                overflow: 'hidden',
-                background: theme.colors.bg,
-              }}
-            >
-              <ParticleBackground theme={theme} />
-              <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} />
+      {viewMode === 'preview' && (() => {
+        const elements = data.elements ?? []
+        const selectedEl = elements.find(el => el.id === selectedElId) ?? null
+        return (
+          <div className="flex-1 bg-[#050505] flex flex-col items-center justify-center gap-4 p-5 overflow-y-auto">
+            {/* Slide + drag overlay */}
+            <div style={{ width: PREVIEW_W, height: PREVIEW_H, position: 'relative', borderRadius: 12, overflow: 'hidden', flexShrink: 0 }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${SCALE})`, transformOrigin: 'top left', overflow: 'hidden', background: theme.colors.bg }}>
+                <ParticleBackground theme={theme} />
+                <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} />
+              </div>
+              {/* Interactive overlay */}
+              <div
+                ref={overlayRef}
+                style={{ position: 'absolute', inset: 0, zIndex: 50 }}
+                onPointerDown={() => setSelectedElId(null)}
+              >
+                {elements.map(el => {
+                  const isSel = el.id === selectedElId
+                  const elX = el.x ?? 50
+                  const elY = el.y ?? 50
+                  const elW = el.width ?? (el.type === 'image' ? 40 : 60)
+                  const rot = el.rotation ?? 0
+                  const fH  = el.flipH ? -1 : 1
+                  const fV  = el.flipV ? -1 : 1
+                  return (
+                    <div
+                      key={el.id}
+                      style={{
+                        position: 'absolute',
+                        left: `${elX}%`, top: `${elY}%`,
+                        width: `${elW}%`,
+                        transform: `translate(-50%, -50%) rotate(${rot}deg) scaleX(${fH}) scaleY(${fV})`,
+                        border: isSel ? '2px solid #3b82f6' : '1px dashed rgba(255,255,255,0.35)',
+                        borderRadius: 4, minHeight: 24, cursor: 'move',
+                        background: isSel ? 'rgba(59,130,246,0.07)' : 'transparent',
+                        boxSizing: 'border-box',
+                      }}
+                      onPointerDown={e => { e.stopPropagation(); startDrag(e, el.id, el) }}
+                    >
+                      {isSel && (
+                        <button
+                          style={{ position: 'absolute', top: -9, right: -9, background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: 18, height: 18, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}
+                          onPointerDown={e => { e.stopPropagation(); deleteElement(el.id) }}
+                        >×</button>
+                      )}
+                      <span style={{ position: 'absolute', top: -16, left: 0, fontSize: 10, color: isSel ? '#60a5fa' : 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+                        {el.type === 'text' ? (el.content?.slice(0, 22) || 'Text box') : 'Image'}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Controls panel */}
+            <div style={{ width: PREVIEW_W }} className="bg-white/[0.06] rounded-xl p-3 space-y-3">
+              {/* Add buttons */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => addElement('text')}
+                  className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium text-white/60 border border-dashed border-white/20 rounded-lg py-2 hover:border-white/50 hover:text-white transition-colors"
+                >
+                  <span className="font-bold text-base leading-none">T</span> Add text box
+                </button>
+                <button
+                  onClick={() => addElement('image')}
+                  className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium text-white/60 border border-dashed border-white/20 rounded-lg py-2 hover:border-white/50 hover:text-white transition-colors"
+                >
+                  🖼 Add image
+                </button>
+              </div>
+
+              {/* ── Text element properties ────────────────────── */}
+              {selectedEl?.type === 'text' && (
+                <div className="space-y-2.5 pt-2 border-t border-white/10">
+                  {/* Content */}
+                  <textarea
+                    autoFocus
+                    value={selectedEl.content ?? ''}
+                    onChange={e => updateElement(selectedElId, { content: e.target.value })}
+                    rows={2}
+                    placeholder="Type your text…"
+                    className="w-full text-sm bg-white/10 text-white rounded-lg px-3 py-2 border border-white/10 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none placeholder:text-white/30"
+                  />
+                  {/* Font */}
+                  <select
+                    value={selectedEl.font ?? 'Boogaloo'}
+                    onChange={e => updateElement(selectedElId, { font: e.target.value })}
+                    className="w-full text-xs bg-white/10 text-white border border-white/10 rounded-md px-2 py-1 focus:outline-none"
+                  >
+                    {DISPLAY_FONTS.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                  {/* Style: B I U S̶ */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[
+                      ['bold',          'B'],
+                      ['italic',        'I'],
+                      ['underline',     'U'],
+                      ['strikethrough', 'S̶'],
+                    ].map(([key, label]) => (
+                      <button key={key}
+                        onClick={() => updateElement(selectedElId, { [key]: !selectedEl[key] })}
+                        className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl[key] ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                      >{label}</button>
+                    ))}
+                    {/* Text transform */}
+                    {[
+                      ['none',       'Aa'],
+                      ['uppercase',  'AA'],
+                      ['lowercase',  'aa'],
+                      ['capitalize', 'Abc'],
+                    ].map(([val, label]) => (
+                      <button key={val}
+                        onClick={() => updateElement(selectedElId, { textTransform: val })}
+                        className={`text-xs px-2 py-1 rounded border transition-colors ${(selectedEl.textTransform ?? 'none') === val ? 'bg-violet-500 border-violet-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                      >{label}</button>
+                    ))}
+                  </div>
+                  {/* Align + color */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[
+                      ['left',    '▤'],
+                      ['center',  '☰'],
+                      ['right',   '▥'],
+                      ['justify', '▦'],
+                    ].map(([a, icon]) => (
+                      <button key={a}
+                        onClick={() => updateElement(selectedElId, { align: a })}
+                        className={`text-[11px] px-1.5 py-1 rounded border transition-colors ${(selectedEl.align ?? 'center') === a ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                      >{icon}</button>
+                    ))}
+                    <input type="color" value={selectedEl.color ?? '#ffffff'}
+                      onChange={e => updateElement(selectedElId, { color: e.target.value })}
+                      className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0" title="Text color"
+                    />
+                    {selectedEl.color && (
+                      <button onClick={() => updateElement(selectedElId, { color: null })} className="text-[10px] text-white/30 hover:text-white/60">↺</button>
+                    )}
+                  </div>
+                  {/* Size + width */}
+                  {[
+                    ['Size',  'fontSize',     16, 200, 2,   60, 'px'],
+                    ['Width', 'width',        10, 100, 1,   60, '%'],
+                  ].map(([label, key, min, max, step, def, unit]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-xs text-white/40 w-9 shrink-0">{label}</span>
+                      <input type="range" min={min} max={max} step={step}
+                        value={selectedEl[key] ?? def}
+                        onChange={e => updateElement(selectedElId, { [key]: Number(e.target.value) })}
+                        className="flex-1"
+                      />
+                      <span className="text-xs text-white/40 w-12 text-right">{selectedEl[key] ?? def}{unit}</span>
+                    </div>
+                  ))}
+                  {/* Curve + Spacing */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-white/40 w-9 shrink-0">Curve</span>
+                    <input type="range" min="-100" max="100"
+                      value={selectedEl.curve ?? 0}
+                      onChange={e => updateElement(selectedElId, { curve: Number(e.target.value) })}
+                      className="flex-1"
+                    />
+                    <span className="text-xs text-white/40 w-8 text-right">{selectedEl.curve ?? 0}</span>
+                    {(selectedEl.curve ?? 0) !== 0 && (
+                      <button onClick={() => updateElement(selectedElId, { curve: 0 })} className="text-[10px] text-white/30 hover:text-white/60">↺</button>
+                    )}
+                  </div>
+                  {[
+                    ['Spacing', 'letterSpacing', -5, 30, 0.5, 0,   'px'],
+                    ['Line ht', 'lineHeight',    0.8,  3, 0.1, 1.2, '×'],
+                  ].map(([label, key, min, max, step, def, unit]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-xs text-white/40 w-9 shrink-0">{label}</span>
+                      <input type="range" min={min} max={max} step={step}
+                        value={selectedEl[key] ?? def}
+                        onChange={e => updateElement(selectedElId, { [key]: Number(e.target.value) })}
+                        className="flex-1"
+                      />
+                      <span className="text-xs text-white/40 w-12 text-right">{(selectedEl[key] ?? def)}{unit}</span>
+                    </div>
+                  ))}
+                  {/* Shadow */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateElement(selectedElId, { shadow: !selectedEl.shadow })}
+                        className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.shadow ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                      >Shadow</button>
+                      {selectedEl.shadow && (
+                        <>
+                          <span className="text-[10px] text-white/30">blur</span>
+                          <input type="range" min="0" max="40"
+                            value={selectedEl.shadowBlur ?? 8}
+                            onChange={e => updateElement(selectedElId, { shadowBlur: Number(e.target.value) })}
+                            className="flex-1"
+                          />
+                          <span className="text-xs text-white/40 w-5">{selectedEl.shadowBlur ?? 8}</span>
+                          <input type="color" value={selectedEl.shadowColor?.startsWith('#') ? selectedEl.shadowColor : '#000000'}
+                            onChange={e => updateElement(selectedElId, { shadowColor: e.target.value })}
+                            className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Shadow color"
+                          />
+                        </>
+                      )}
+                    </div>
+                    {selectedEl.shadow && (
+                      <div className="flex items-center gap-2 pl-1">
+                        <span className="text-[10px] text-white/30 w-6">X</span>
+                        <input type="range" min="-30" max="30"
+                          value={selectedEl.shadowX ?? 2}
+                          onChange={e => updateElement(selectedElId, { shadowX: Number(e.target.value) })}
+                          className="flex-1"
+                        />
+                        <span className="text-xs text-white/40 w-8 text-right">{selectedEl.shadowX ?? 2}px</span>
+                        <span className="text-[10px] text-white/30 w-4">Y</span>
+                        <input type="range" min="-30" max="30"
+                          value={selectedEl.shadowY ?? 2}
+                          onChange={e => updateElement(selectedElId, { shadowY: Number(e.target.value) })}
+                          className="flex-1"
+                        />
+                        <span className="text-xs text-white/40 w-8 text-right">{selectedEl.shadowY ?? 2}px</span>
+                      </div>
+                    )}
+                  </div>
+                  {/* Outline/stroke */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => updateElement(selectedElId, { stroke: !selectedEl.stroke })}
+                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.stroke ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                    >Outline</button>
+                    {selectedEl.stroke && (
+                      <>
+                        <input type="range" min="1" max="12"
+                          value={selectedEl.strokeWidth ?? 2}
+                          onChange={e => updateElement(selectedElId, { strokeWidth: Number(e.target.value) })}
+                          className="flex-1"
+                        />
+                        <span className="text-xs text-white/40 w-7">{selectedEl.strokeWidth ?? 2}px</span>
+                        <input type="color" value={selectedEl.strokeColor ?? '#000000'}
+                          onChange={e => updateElement(selectedElId, { strokeColor: e.target.value })}
+                          className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Outline color"
+                        />
+                      </>
+                    )}
+                  </div>
+                  {/* Glow */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => updateElement(selectedElId, { glow: !selectedEl.glow })}
+                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.glow ? 'bg-yellow-500 border-yellow-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                    >Glow</button>
+                    {selectedEl.glow && (
+                      <>
+                        <input type="range" min="2" max="60"
+                          value={selectedEl.glowRadius ?? 20}
+                          onChange={e => updateElement(selectedElId, { glowRadius: Number(e.target.value) })}
+                          className="flex-1"
+                        />
+                        <span className="text-xs text-white/40 w-7">{selectedEl.glowRadius ?? 20}</span>
+                        <input type="color" value={selectedEl.glowColor ?? '#ffffff'}
+                          onChange={e => updateElement(selectedElId, { glowColor: e.target.value })}
+                          className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Glow color"
+                        />
+                      </>
+                    )}
+                  </div>
+                  {/* Background fill */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateElement(selectedElId, { bgFill: !selectedEl.bgFill })}
+                        className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.bgFill ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                      >BG Fill</button>
+                      {selectedEl.bgFill && (
+                        <>
+                          <input type="color" value={selectedEl.bgColor ?? '#000000'}
+                            onChange={e => updateElement(selectedElId, { bgColor: e.target.value })}
+                            className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Fill color"
+                          />
+                          <span className="text-[10px] text-white/30">opacity</span>
+                          <input type="range" min="0" max="1" step="0.05"
+                            value={selectedEl.bgOpacity ?? 0.6}
+                            onChange={e => updateElement(selectedElId, { bgOpacity: Number(e.target.value) })}
+                            className="flex-1"
+                          />
+                          <span className="text-xs text-white/40 w-7">{Math.round((selectedEl.bgOpacity ?? 0.6) * 100)}%</span>
+                        </>
+                      )}
+                    </div>
+                    {selectedEl.bgFill && (
+                      <div className="flex items-center gap-2 pl-1">
+                        <span className="text-[10px] text-white/30 w-8">Pad</span>
+                        <input type="range" min="0" max="40"
+                          value={selectedEl.bgPadding ?? 12}
+                          onChange={e => updateElement(selectedElId, { bgPadding: Number(e.target.value) })}
+                          className="flex-1"
+                        />
+                        <span className="text-xs text-white/40 w-7">{selectedEl.bgPadding ?? 12}px</span>
+                        <span className="text-[10px] text-white/30 w-8">R</span>
+                        <input type="range" min="0" max="40"
+                          value={selectedEl.bgRadius ?? 8}
+                          onChange={e => updateElement(selectedElId, { bgRadius: Number(e.target.value) })}
+                          className="flex-1"
+                        />
+                        <span className="text-xs text-white/40 w-7">{selectedEl.bgRadius ?? 8}px</span>
+                      </div>
+                    )}
+                  </div>
+                  {/* Opacity */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-white/40 w-9 shrink-0">Opacity</span>
+                    <input type="range" min="0" max="1" step="0.05"
+                      value={selectedEl.opacity ?? 1}
+                      onChange={e => updateElement(selectedElId, { opacity: Number(e.target.value) })}
+                      className="flex-1"
+                    />
+                    <span className="text-xs text-white/40 w-12 text-right">{Math.round((selectedEl.opacity ?? 1) * 100)}%</span>
+                  </div>
+                  {/* Transform */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-white/40 shrink-0">Rotate</span>
+                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) - 90 + 360) % 360 })} className="text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white px-2 py-1 rounded transition-colors">↺ 90°</button>
+                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) + 90) % 360 })} className="text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white px-2 py-1 rounded transition-colors">↻ 90°</button>
+                    <input type="range" min="-180" max="180"
+                      value={selectedEl.rotation ?? 0}
+                      onChange={e => updateElement(selectedElId, { rotation: Number(e.target.value) })}
+                      className="flex-1"
+                    />
+                    <span className="text-xs text-white/40 w-10 text-right">{selectedEl.rotation ?? 0}°</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button onClick={() => updateElement(selectedElId, { flipH: !selectedEl.flipH })}
+                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipH ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                    >↔ Flip H</button>
+                    <button onClick={() => updateElement(selectedElId, { flipV: !selectedEl.flipV })}
+                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipV ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                    >↕ Flip V</button>
+                    {((selectedEl.rotation ?? 0) !== 0 || selectedEl.flipH || selectedEl.flipV) && (
+                      <button onClick={() => updateElement(selectedElId, { rotation: 0, flipH: false, flipV: false })} className="text-[10px] text-white/30 hover:text-white/60">↺ reset</button>
+                    )}
+                  </div>
+                  {/* Align to slide */}
+                  <div className="space-y-1">
+                    <span className="text-xs text-white/40">Align to slide</span>
+                    <div className="flex gap-1">
+                      {[['⬅', 10], ['↔', 50], ['➡', 90]].map(([icon, x]) => (
+                        <button key={x} onClick={() => updateElement(selectedElId, { x })}
+                          className="flex-1 text-sm bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors"
+                          title={x === 10 ? 'Align left' : x === 50 ? 'Center' : 'Align right'}
+                        >{icon}</button>
+                      ))}
+                    </div>
+                    <div className="flex gap-1">
+                      {[['⬆', 10], ['⬛', 50], ['⬇', 90]].map(([icon, y]) => (
+                        <button key={y} onClick={() => updateElement(selectedElId, { y })}
+                          className="flex-1 text-sm bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors"
+                          title={y === 10 ? 'Align top' : y === 50 ? 'Middle' : 'Align bottom'}
+                        >{icon}</button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Z-order + duplicate */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-white/40 shrink-0">Layer</span>
+                    <button onClick={() => bringForward(selectedElId)} className="flex-1 text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors">▲ Forward</button>
+                    <button onClick={() => sendBackward(selectedElId)} className="flex-1 text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors">▼ Back</button>
+                    <button onClick={() => duplicateElement(selectedElId)} className="flex-1 text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors">⧉ Dupe</button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Image element properties ───────────────────── */}
+              {selectedEl?.type === 'image' && (
+                <div className="space-y-2.5 pt-2 border-t border-white/10">
+                  <div className="bg-white/10 rounded-lg p-3">
+                    <MediaUpload
+                      accept="image"
+                      label="Image"
+                      currentUrl={selectedEl.url}
+                      onUpload={async file => {
+                        const result = await uploadMedia(file)
+                        if (result?.url) updateElement(selectedElId, { url: result.url })
+                        return result
+                      }}
+                      onRemove={() => updateElement(selectedElId, { url: null })}
+                    />
+                  </div>
+                  {/* Width + Radius */}
+                  {[
+                    ['Width',  'width',        5, 100, 1,  40, '%'],
+                    ['Radius', 'borderRadius', 0,  50, 1,   0, '%'],
+                  ].map(([label, key, min, max, step, def, unit]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-xs text-white/40 w-9 shrink-0">{label}</span>
+                      <input type="range" min={min} max={max} step={step}
+                        value={selectedEl[key] ?? def}
+                        onChange={e => updateElement(selectedElId, { [key]: Number(e.target.value) })}
+                        className="flex-1"
+                      />
+                      <span className="text-xs text-white/40 w-12 text-right">{selectedEl[key] ?? def}{unit}</span>
+                    </div>
+                  ))}
+                  {/* Opacity */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-white/40 w-9 shrink-0">Opacity</span>
+                    <input type="range" min="0" max="1" step="0.05"
+                      value={selectedEl.opacity ?? 1}
+                      onChange={e => updateElement(selectedElId, { opacity: Number(e.target.value) })}
+                      className="flex-1"
+                    />
+                    <span className="text-xs text-white/40 w-12 text-right">{Math.round((selectedEl.opacity ?? 1) * 100)}%</span>
+                  </div>
+                  {/* Blend mode */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-white/40 w-9 shrink-0">Blend</span>
+                    <select
+                      value={selectedEl.blendMode ?? 'normal'}
+                      onChange={e => updateElement(selectedElId, { blendMode: e.target.value })}
+                      className="flex-1 text-xs bg-white/10 text-white border border-white/10 rounded-md px-2 py-1 focus:outline-none"
+                    >
+                      {['normal','multiply','screen','overlay','darken','lighten','color-dodge','color-burn','hard-light','soft-light','difference','exclusion','hue','saturation','color','luminosity'].map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {/* CSS Filters */}
+                  {[
+                    ['Bright', 'filterBrightness', 0, 200, 1, 100, '%'],
+                    ['Contrast','filterContrast',  0, 200, 1, 100, '%'],
+                    ['Saturat','filterSaturate',   0, 200, 1, 100, '%'],
+                    ['Hue',    'filterHue',        0, 360, 1,   0, '°'],
+                    ['Blur',   'filterBlur',       0,  20, 0.5, 0, 'px'],
+                    ['Gray',   'filterGrayscale',  0, 100, 1,   0, '%'],
+                  ].map(([label, key, min, max, step, def, unit]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-xs text-white/40 w-9 shrink-0">{label}</span>
+                      <input type="range" min={min} max={max} step={step}
+                        value={selectedEl[key] ?? def}
+                        onChange={e => updateElement(selectedElId, { [key]: Number(e.target.value) })}
+                        className="flex-1"
+                      />
+                      <span className="text-xs text-white/40 w-12 text-right">{selectedEl[key] ?? def}{unit}</span>
+                      {(selectedEl[key] ?? def) !== def && (
+                        <button onClick={() => updateElement(selectedElId, { [key]: def })} className="text-[10px] text-white/30 hover:text-white/60">↺</button>
+                      )}
+                    </div>
+                  ))}
+                  {/* Image glow */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => updateElement(selectedElId, { imgGlow: !selectedEl.imgGlow })}
+                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.imgGlow ? 'bg-yellow-500 border-yellow-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                    >Glow</button>
+                    {selectedEl.imgGlow && (
+                      <>
+                        <input type="range" min="2" max="60"
+                          value={selectedEl.imgGlowRadius ?? 20}
+                          onChange={e => updateElement(selectedElId, { imgGlowRadius: Number(e.target.value) })}
+                          className="flex-1"
+                        />
+                        <span className="text-xs text-white/40 w-7">{selectedEl.imgGlowRadius ?? 20}</span>
+                        <input type="color" value={selectedEl.imgGlowColor ?? '#3b82f6'}
+                          onChange={e => updateElement(selectedElId, { imgGlowColor: e.target.value })}
+                          className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Glow color"
+                        />
+                      </>
+                    )}
+                  </div>
+                  {/* Image border */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => updateElement(selectedElId, { imgBorder: !selectedEl.imgBorder })}
+                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.imgBorder ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                    >Border</button>
+                    {selectedEl.imgBorder && (
+                      <>
+                        <input type="range" min="1" max="20"
+                          value={selectedEl.imgBorderWidth ?? 3}
+                          onChange={e => updateElement(selectedElId, { imgBorderWidth: Number(e.target.value) })}
+                          className="flex-1"
+                        />
+                        <span className="text-xs text-white/40 w-7">{selectedEl.imgBorderWidth ?? 3}px</span>
+                        <input type="color" value={selectedEl.imgBorderColor ?? '#ffffff'}
+                          onChange={e => updateElement(selectedElId, { imgBorderColor: e.target.value })}
+                          className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Border color"
+                        />
+                      </>
+                    )}
+                  </div>
+                  {/* Transform */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-white/40 shrink-0">Rotate</span>
+                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) - 90 + 360) % 360 })} className="text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white px-2 py-1 rounded transition-colors">↺ 90°</button>
+                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) + 90) % 360 })} className="text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white px-2 py-1 rounded transition-colors">↻ 90°</button>
+                    <input type="range" min="-180" max="180"
+                      value={selectedEl.rotation ?? 0}
+                      onChange={e => updateElement(selectedElId, { rotation: Number(e.target.value) })}
+                      className="flex-1"
+                    />
+                    <span className="text-xs text-white/40 w-10 text-right">{selectedEl.rotation ?? 0}°</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button onClick={() => updateElement(selectedElId, { flipH: !selectedEl.flipH })}
+                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipH ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                    >↔ Flip H</button>
+                    <button onClick={() => updateElement(selectedElId, { flipV: !selectedEl.flipV })}
+                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipV ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                    >↕ Flip V</button>
+                    {((selectedEl.rotation ?? 0) !== 0 || selectedEl.flipH || selectedEl.flipV) && (
+                      <button onClick={() => updateElement(selectedElId, { rotation: 0, flipH: false, flipV: false })} className="text-[10px] text-white/30 hover:text-white/60">↺ reset</button>
+                    )}
+                  </div>
+                  {/* Align to slide */}
+                  <div className="space-y-1">
+                    <span className="text-xs text-white/40">Align to slide</span>
+                    <div className="flex gap-1">
+                      {[['⬅', 10], ['↔', 50], ['➡', 90]].map(([icon, x]) => (
+                        <button key={x} onClick={() => updateElement(selectedElId, { x })}
+                          className="flex-1 text-sm bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors"
+                          title={x === 10 ? 'Align left' : x === 50 ? 'Center' : 'Align right'}
+                        >{icon}</button>
+                      ))}
+                    </div>
+                    <div className="flex gap-1">
+                      {[['⬆', 10], ['⬛', 50], ['⬇', 90]].map(([icon, y]) => (
+                        <button key={y} onClick={() => updateElement(selectedElId, { y })}
+                          className="flex-1 text-sm bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors"
+                          title={y === 10 ? 'Align top' : y === 50 ? 'Middle' : 'Align bottom'}
+                        >{icon}</button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Z-order + duplicate */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-white/40 shrink-0">Layer</span>
+                    <button onClick={() => bringForward(selectedElId)} className="flex-1 text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors">▲ Forward</button>
+                    <button onClick={() => sendBackward(selectedElId)} className="flex-1 text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors">▼ Back</button>
+                    <button onClick={() => duplicateElement(selectedElId)} className="flex-1 text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors">⧉ Dupe</button>
+                  </div>
+                </div>
+              )}
+
+              {elements.length > 0 && !selectedEl && (
+                <p className="text-xs text-white/25 text-center pt-1">Click an element on the slide to edit it</p>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Footer — transition + delete */}
       <div className="shrink-0 px-5 py-3 border-t border-gray-100 flex items-center justify-between">
@@ -392,12 +985,6 @@ function TitleEditor({ data, onChange, onMediaUpload }) {
     <>
       <Field label="Title"><TextInput value={data.title} onChange={v => onChange('title', v)} placeholder="Baynes Apple Valley" /></Field>
       <Field label="Subtitle"><TextInput value={data.subtitle} onChange={v => onChange('subtitle', v)} placeholder="Trivia Night" /></Field>
-      <Divider label="Elements" />
-      <ElementsEditor
-        elements={data.elements}
-        onChange={next => onChange('elements', next)}
-        onUpload={onMediaUpload}
-      />
     </>
   )
 }
@@ -423,12 +1010,6 @@ function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos,
         uploadMedia={uploadMedia}
         currentPhotoUrl={data.hostPhotoUrl}
         onSelectPhoto={url => onChange('hostPhotoUrl', url)}
-      />
-      <Divider label="Elements" />
-      <ElementsEditor
-        elements={data.elements}
-        onChange={next => onChange('elements', next)}
-        onUpload={onMediaUpload}
       />
     </>
   )
@@ -495,12 +1076,6 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
         <Field label="Answer">
           <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="The answer…" />
         </Field>
-        <Divider label="Elements" />
-        <ElementsEditor
-          elements={data.elements}
-          onChange={next => onChange('elements', next)}
-          onUpload={onMediaUpload}
-        />
       </>
     )
   }
@@ -634,12 +1209,6 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
             </>
           )}
 
-          <Divider label="Elements" />
-          <ElementsEditor
-            elements={data.elements}
-            onChange={next => onChange('elements', next)}
-            onUpload={onMediaUpload}
-          />
         </>
       )}
 
@@ -795,13 +1364,6 @@ function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostP
         currentPhotoUrl={data.hostPhotoUrl}
         onSelectPhoto={url => onChange('hostPhotoUrl', url)}
       />
-
-      <Divider label="Elements" />
-      <ElementsEditor
-        elements={data.elements}
-        onChange={next => onChange('elements', next)}
-        onUpload={onMediaUpload}
-      />
     </>
   )
 }
@@ -815,12 +1377,6 @@ function WinnerRevealEditor({ data, onChange, onMediaUpload }) {
       <p className="text-xs text-gray-400 leading-relaxed">
         The winner is calculated live from team scores at the time the slide appears. No configuration needed — just place it last in your show order.
       </p>
-      <Divider label="Elements" />
-      <ElementsEditor
-        elements={data.elements}
-        onChange={next => onChange('elements', next)}
-        onUpload={onMediaUpload}
-      />
     </div>
   )
 }
@@ -831,12 +1387,6 @@ function StateOfUnionEditor({ data, onChange, onMediaUpload }) {
       <p className="text-sm text-gray-500 leading-relaxed">
         This slide is generated automatically from live standings. No configuration needed.
       </p>
-      <Divider label="Elements" />
-      <ElementsEditor
-        elements={data.elements}
-        onChange={next => onChange('elements', next)}
-        onUpload={onMediaUpload}
-      />
     </div>
   )
 }
@@ -859,12 +1409,6 @@ function ScoreboardRevealEditor({ data, onChange, show, onMediaUpload }) {
           ))}
         </select>
       </Field>
-      <Divider label="Elements" />
-      <ElementsEditor
-        elements={data.elements}
-        onChange={next => onChange('elements', next)}
-        onUpload={onMediaUpload}
-      />
     </>
   )
 }
@@ -881,12 +1425,6 @@ function CustomEditor({ data, onChange, onMediaUpload }) {
         currentType={data.mediaType}
         onUpload={onMediaUpload}
         onRemove={() => { onChange('mediaUrl', null); onChange('mediaType', null) }}
-      />
-      <Divider label="Elements" />
-      <ElementsEditor
-        elements={data.elements}
-        onChange={next => onChange('elements', next)}
-        onUpload={onMediaUpload}
       />
     </>
   )
@@ -920,12 +1458,6 @@ function PixelateSeriesEditor({ data, onChange, onStageUpload, onMediaUpload }) 
           }}
         />
       ))}
-      <Divider label="Elements" />
-      <ElementsEditor
-        elements={data.elements}
-        onChange={next => onChange('elements', next)}
-        onUpload={onMediaUpload}
-      />
     </>
   )
 }
@@ -980,12 +1512,6 @@ function MultiQuestionEditor({ data, onChange, setData, scheduleSave, onMediaUpl
       >
         + Add question
       </button>
-      <Divider label="Elements" />
-      <ElementsEditor
-        elements={data.elements}
-        onChange={next => onChange('elements', next)}
-        onUpload={onMediaUpload}
-      />
     </>
   )
 }
@@ -1044,12 +1570,6 @@ function PylRevealEditor({ data, onChange, setData, scheduleSave, onMediaUpload 
       <button onClick={addStage} className="text-xs text-baynes-forest hover:text-green-800 font-medium transition-colors">
         + Add reveal stage
       </button>
-      <Divider label="Elements" />
-      <ElementsEditor
-        elements={data.elements}
-        onChange={next => onChange('elements', next)}
-        onUpload={onMediaUpload}
-      />
     </>
   )
 }

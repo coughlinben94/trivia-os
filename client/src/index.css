@@ -145,6 +145,11 @@ textarea {
   display: inline-block;
   animation: tickerScroll linear infinite;
 }
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(10px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ticker-track { animation: none; }
   @keyframes gradingGlow  { 0%, 100% { opacity: 0.4;  transform: scale(1); } }
