@@ -330,7 +330,7 @@ export function useShow() {
     if (!show) return
     setShow(prev => {
       const newSlides = prev.slides.map(s =>
-        s.id === id ? { ...s, data: { ...s.data, ...patch } } : s
+        s.id === id ? { ...s, ...patch } : s
       )
       slidesRef.current = newSlides
       return { ...prev, slides: newSlides }
