@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useShow, sortedSlides } from '../hooks/useShow.js'
 import { supabase } from '../lib/supabase.js'
@@ -52,6 +52,7 @@ function HostInner({ showApi }) {
   const [isLiveMode, setIsLiveMode] = useState(false)
   const [showLibrary, setShowLibrary] = useState(false)
   const [goLivePicker, setGoLivePicker] = useState(false)
+  const savedResultsRef = useRef(false)
   const [connStatus, setConnStatus] = useState('SUBSCRIBED')
   const disconnected = connStatus === 'CHANNEL_ERROR' || connStatus === 'TIMED_OUT' || connStatus === 'CLOSED'
 
@@ -102,6 +103,20 @@ function HostInner({ showApi }) {
     setAnswerReveal:      showApi.setAnswerReveal,
     updateRoundScore:     showApi.updateRoundScore,
   }
+
+  useEffect(() => {
+    if (!isLiveMode || !show) return
+    const slides = sortedSlides(show)
+    const currentSlide = slides[show.showState.currentSlideIndex ?? 0]
+    if (currentSlide?.type === 'winner-reveal') {
+      if (!savedResultsRef.current) {
+        savedResultsRef.current = true
+        showApi.saveResults()
+      }
+    } else {
+      savedResultsRef.current = false
+    }
+  }, [isLiveMode, show?.showState?.currentSlideIndex])
 
   function handleGoLive() {
     setGoLivePicker(true)

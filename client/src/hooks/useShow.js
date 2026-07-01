@@ -565,6 +565,24 @@ export function useShow() {
     }
   }
 
+  async function saveResults() {
+    if (!show) return
+    const [{ data: teamData }, { data: scoreData }] = await Promise.all([
+      supabase.from('teams').select('id, name, color').eq('show_id', show.id),
+      supabase.from('team_scores').select('team_id, round_index, score').eq('show_id', show.id),
+    ])
+    const teams = teamData ?? []
+    const scores = scoreData ?? []
+    const finalScores = teams.map(t => {
+      const rounds = scores
+        .filter(s => s.team_id === t.id)
+        .sort((a, b) => a.round_index - b.round_index)
+        .map(s => s.score ?? 0)
+      return { teamId: t.id, name: t.name, color: t.color, total: rounds.reduce((n, s) => n + s, 0), rounds }
+    }).sort((a, b) => b.total - a.total)
+    await supabase.from('shows').update({ player_count: teams.length, final_scores: finalScores }).eq('id', show.id)
+  }
+
   async function updateTickerMessages(messages) {
     if (!show) return
     setShow(prev => ({ ...prev, tickerMessages: messages }))
@@ -610,6 +628,7 @@ export function useShow() {
     setScoreboardVisible,
     setAnswerReveal,
     updateRoundScore,
+    saveResults,
     updateTickerMessages,
   }
 }

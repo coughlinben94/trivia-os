@@ -19,6 +19,7 @@ const SLIDE_ICON = {
   'title': '📺', 'round-intro': '🎬', 'swing-round-intro': '🎷',
   'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆',
   'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
+  'winner-reveal': '🥇',
 }
 
 function getSlideLabel(slide) {
@@ -33,6 +34,7 @@ function getSlideLabel(slide) {
   if (type === 'title') return data.title || 'Title'
   if (type === 'multi-question') return data.seriesTitle || 'Multi-Q'
   if (type === 'pyl-reveal') return 'PYL Reveal'
+  if (type === 'winner-reveal') return '🥇 Winner Reveal'
   return type
 }
 

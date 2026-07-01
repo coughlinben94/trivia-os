@@ -1592,38 +1592,111 @@ function ChristmasEveAmbient() {
 }
 
 // ─── 17. DRIVE-IN MOVIE ──────────────────────────────────────────────────
+// A bright screen at the top of a purple night sky, light bleeding out to
+// both sides, moths wandering in the glow, a row of parked cars below
+const DM = {
+  bg: "#080410", bgDeep: "#040208", accent: "#280848",
+  highlight: "#e0a000", screenCore: "#fffaf0", car: "#06030c",
+}
+
+const DM_STYLE = `
+@keyframes dmScreenPulse { 0%, 100% { opacity: .94 } 45% { opacity: 1 } 60% { opacity: .90 } 80% { opacity: .97 } }
+@keyframes dmGlowBreathe { 0%, 100% { opacity: .55 } 50% { opacity: .85 } }
+@media (prefers-reduced-motion: reduce) { .dm-anim { animation: none !important } }
+`
+
+function dmRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
+}
+
+// A car roof, cropped by the frame — only the top crests into view, like
+// looking over the dash at the car parked ahead of us
+function DmCarRoof({ left, top, width, height }) {
+  return (
+    <div className="dm-anim" style={{ position: "absolute", left, top, width, height, borderRadius: "50%",
+      background: `radial-gradient(ellipse 90% 100% at 50% 0%, ${dmRgba(DM.highlight, 0.16)}, ${DM.car} 38%)`,
+      animation: "dmGlowBreathe 23s ease-in-out infinite" }} />
+  )
+}
+
+function DmScreen() {
+  return (
+    <>
+      {/* light bleeding out to the left of the screen — generously oversized box so
+          the radial falloff fully completes well before any edge (no hard cutoff) */}
+      <div className="dm-anim" style={{ position: "absolute", top: "-12%", left: "-40%", width: "100%", height: "100%",
+        background: `radial-gradient(ellipse 26% 26% at 50% 50%, ${dmRgba(DM.highlight, 0.40)}, transparent 72%)`,
+        animation: "dmGlowBreathe 17s ease-in-out infinite" }} />
+      {/* light bleeding out to the right of the screen — same oversized-box technique */}
+      <div className="dm-anim" style={{ position: "absolute", top: "-12%", left: "40%", width: "100%", height: "100%",
+        background: `radial-gradient(ellipse 26% 26% at 50% 50%, ${dmRgba(DM.highlight, 0.40)}, transparent 72%)`,
+        animation: "dmGlowBreathe 20s ease-in-out 3s infinite" }} />
+      {/* soft halo behind the screen itself */}
+      <div className="dm-anim" style={{ position: "absolute", top: "-12%", left: "0%", width: "100%", height: "100%",
+        background: `radial-gradient(ellipse 30% 30% at 50% 50%, ${dmRgba(DM.highlight, 0.28)}, transparent 70%)`,
+        animation: "dmGlowBreathe 14s ease-in-out infinite" }} />
+      {/* support poles — holding the screen up off the lot. Anchored at the screen's
+          own edges (9.5% / 89.5%) so they sit entirely outside the center safe-area */}
+      <div style={{ position: "absolute", top: "70%", left: "9.5%", width: "1%", height: "15%",
+        background: `linear-gradient(to bottom, ${DM.car}, rgba(6,3,12,0.7))` }} />
+      <div style={{ position: "absolute", top: "70%", left: "89.5%", width: "1%", height: "15%",
+        background: `linear-gradient(to bottom, ${DM.car}, rgba(6,3,12,0.7))` }} />
+      {/* the screen — one flat color inside, where question text renders. All the
+          brightness/gradient work lives outside it, in the glow layers above */}
+      <div className="dm-anim" style={{ position: "absolute", top: "6%", left: "10%", width: "80%", height: "64%",
+        borderRadius: 2,
+        background: "#241e16",
+        boxShadow: `0 0 22px 5px ${dmRgba(DM.highlight, 0.45)}, 0 0 64px 16px ${dmRgba(DM.highlight, 0.22)}`,
+        animation: "dmScreenPulse 2.6s ease-in-out infinite" }} />
+    </>
+  )
+}
+
 function DriveInMovieAmbient() {
-  const projectorDust = useMemo(() => Array.from({ length: 14 }, (_, i) => ({
-    left:  `${30 + (i % 6) * 7}%`,
-    top:   `${5 + (i % 5) * 15}%`,
-    dur:   `${7 + (i % 4) * 2}s`,
-    delay: `-${((i / 14) * (7 + (i % 4) * 2)).toFixed(1)}s`,
+  const moths = useMemo(() => Array.from({ length: 7 }, (_, i) => ({
+    left:   `${14 + (i * 11) % 72}%`,
+    top:    `${2 + (i * 5) % 22}%`,
+    size:   1.6 + (i % 3) * 0.6,
+    dur:    `${2.2 + (i % 4) * 0.6}s`,
+    delay:  `-${((i / 7) * 3).toFixed(1)}s`,
+    wDur:   `${5 + (i % 3) * 1.4}s`,
+    wDelay: `-${((i * 1.3) % 6).toFixed(1)}s`,
   })), [])
 
-  return <>
-    {/* Movie screen — upward glow from bottom center, fades in all directions */}
-    <div aria-hidden style={{
-      position: 'absolute', inset: 0,
-      background: 'radial-gradient(ellipse 50% 62% at 50% 100%, rgba(255,248,220,0.45) 0%, rgba(255,248,220,0.20) 50%, transparent 100%)',
-      pointerEvents: 'none',
-    }}/>
-    {/* Projector beam colors — red/blue cinematic */}
-    <GlowLayer lo={0.15} hi={0.42} duration="12s" style={{
-      top: 0, left: 0, right: 0, height: '30%',
-      background: 'linear-gradient(to bottom, rgba(255,80,80,0.32), transparent)',
-    }}/>
-    <GlowLayer lo={0.12} hi={0.35} duration="12s" delay="6s" style={{
-      top: 0, left: 0, right: 0, height: '30%',
-      background: 'linear-gradient(to bottom, rgba(80,80,255,0.28), transparent)',
-    }}/>
-    {/* Projector dust motes */}
-    {projectorDust.map((d, i) => (
-      <PulseDot key={i} left={d.left} top={d.top} size={1.2}
-        color="rgba(255,255,255,0.42)"
-        duration={d.dur} delay={d.delay} ease={EASE.twinkle}
-      />
-    ))}
-  </>
+  // Two car roofs, parked just ahead of us — only their tops crest the frame
+  const cars = useMemo(() => ([
+    { left: "2%",  top: "87%", width: "44%", height: "30%" },
+    { left: "53%", top: "90%", width: "43%", height: "25%" },
+  ]), [])
+
+  return (
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden",
+      background: `linear-gradient(to bottom, ${DM.bgDeep} 0%, ${DM.bg} 45%, ${dmRgba(DM.accent, 0.5)} 100%)` }}>
+
+      <style>{DM_STYLE}</style>
+
+      {/* atmosphere — distant glow where the lot meets the night sky */}
+      <div className="dm-anim" style={{ position: "absolute", bottom: "20%", left: 0, right: 0, height: "14%",
+        background: `linear-gradient(to top, ${dmRgba(DM.accent, 0.45)}, transparent)`,
+        animation: "dmGlowBreathe 19s ease-in-out 5s infinite" }} />
+
+      {/* anchor — the screen, light spilling to both sides */}
+      <DmScreen />
+
+      {/* drifter — moths wandering through the screen light */}
+      {moths.map((m, i) => (
+        <PulseDot key={i} left={m.left} top={m.top} size={m.size}
+          color={dmRgba(DM.screenCore, 0.85)} glowColor={dmRgba(DM.highlight, 0.3)}
+          duration={m.dur} delay={m.delay} lo={0.2}
+          wander={true} wanderDur={m.wDur} wanderDelay={m.wDelay}
+        />
+      ))}
+
+      {/* dark silhouette — cars parked just ahead, only their roofs visible */}
+      {cars.map((c, i) => <DmCarRoof key={i} left={c.left} top={c.top} width={c.width} height={c.height} />)}
+    </div>
+  )
 }
 
 

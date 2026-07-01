@@ -9,8 +9,9 @@ export const TYPE_CARDS = [
   { type: 'title',         icon: '📺', name: 'State of the Union', desc: 'Opening address to the crowd' },
   { type: 'round-intro',   icon: '🎬', name: 'Round Intro',         desc: 'Dramatic round opener' },
   { type: 'question',      icon: '❓', name: 'Question',            desc: 'Regular or shiny question' },
-  { type: 'grading-break', icon: '⏸️', name: 'Grading Break',       desc: 'While Ben grades papers' },
-  { type: 'custom',        icon: '✏️', name: 'Custom',              desc: 'Freeform slide' },
+  { type: 'grading-break',  icon: '⏸️', name: 'Grading Break',    desc: 'While Ben grades papers' },
+  { type: 'winner-reveal',  icon: '🥇', name: 'Winner Reveal',    desc: 'Drum roll → winner + confetti' },
+  { type: 'custom',         icon: '✏️', name: 'Custom',           desc: 'Freeform slide' },
 ]
 
 const NEEDS_ROUND = new Set(['swing-round-intro', 'question', 'grading-break', 'pixelate-series', 'multi-question', 'pyl-reveal'])

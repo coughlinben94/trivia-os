@@ -17,6 +17,7 @@ const SLIDE_TYPES = [
   { value: 'pixelate-series',   label: 'Pixelate Series' },
   { value: 'multi-question',    label: 'Multi-Question' },
   { value: 'pyl-reveal',        label: 'PYL Reveal' },
+  { value: 'winner-reveal',     label: 'Winner Reveal' },
 ]
 
 const SLIDE_NAV_META = {
@@ -30,6 +31,7 @@ const SLIDE_NAV_META = {
   'pixelate-series':   { icon: '🎨' },
   'multi-question':    { icon: '📋' },
   'pyl-reveal':        { icon: '🎰' },
+  'winner-reveal':     { icon: '🥇' },
 }
 
 function getNavLabel(slide) {
@@ -44,6 +46,7 @@ function getNavLabel(slide) {
   if (type === 'title') return data.title || 'Title'
   if (type === 'multi-question') return data.seriesTitle || 'Multi-Q'
   if (type === 'pyl-reveal') return 'PYL Reveal'
+  if (type === 'winner-reveal') return 'Winner Reveal'
   return type
 }
 
@@ -165,6 +168,9 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
         )}
         {slide.type === 'pyl-reveal' && (
           <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
+        )}
+        {slide.type === 'winner-reveal' && (
+          <WinnerRevealEditor />
         )}
       </div>
 
@@ -693,6 +699,15 @@ function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostP
         </select>
       </Field>
 
+      <Divider label="Final Night Closer" />
+
+      <Toggle
+        label="Final Break"
+        checked={!!data.isFinalBreak}
+        onChange={v => onChange('isFinalBreak', v)}
+        description="After the Jukebox, jump straight to the Winner Reveal slide (last slide in show)"
+      />
+
       <Divider label="Ben Photo" />
 
       <HostPhotoLibrary
@@ -702,6 +717,19 @@ function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostP
         onSelectPhoto={url => onChange('hostPhotoUrl', url)}
       />
     </>
+  )
+}
+
+function WinnerRevealEditor() {
+  return (
+    <div className="flex flex-col gap-3 py-2">
+      <p className="text-sm text-gray-500 leading-relaxed">
+        This slide plays a drum roll, then reveals the winning team with confetti.
+      </p>
+      <p className="text-xs text-gray-400 leading-relaxed">
+        The winner is calculated live from team scores at the time the slide appears. No configuration needed — place it last in your show order and mark the final grading break as <strong>Final Break</strong>.
+      </p>
+    </div>
   )
 }
 

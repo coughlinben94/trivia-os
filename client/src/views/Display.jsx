@@ -383,11 +383,14 @@ export default function Display() {
       }
 
       if (data) {
-        // Jukebox return: advance past the grading-break slide that sent us there
+        // Jukebox return: advance past grading-break; if it's a Final Break, jump to last slide
         if (searchParams.get('from') === 'jukebox') {
           const sorted = [...(data.slides ?? [])].sort((a, b) => a.order - b.order)
           const cur = data.current_slide_index ?? 0
-          const next = Math.min(cur + 1, sorted.length - 1)
+          const curSlide = sorted[cur]
+          const next = curSlide?.data?.isFinalBreak
+            ? sorted.length - 1
+            : Math.min(cur + 1, sorted.length - 1)
           if (next > cur) {
             const nextSlide = sorted[next]
             await supabase.from('shows').update({

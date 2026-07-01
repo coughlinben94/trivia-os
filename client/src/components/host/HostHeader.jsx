@@ -1,13 +1,9 @@
 import { useState } from 'react'
-import { supabase } from '../../lib/supabase.js'
 
 export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onOpenLibrary }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [copied, setCopied] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-
   const joinUrl = `${window.location.origin}/join?show=${show.id}`
 
   function copyJoinUrl() {
@@ -26,34 +22,6 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
     const trimmed = titleDraft.trim()
     if (trimmed && trimmed !== show.title) onUpdateMeta({ title: trimmed })
     setEditingTitle(false)
-  }
-
-  async function saveResults() {
-    if (saving) return
-    setSaving(true)
-    const [{ data: teamData }, { data: scoreData }] = await Promise.all([
-      supabase.from('teams').select('id, name, color').eq('show_id', show.id),
-      supabase.from('team_scores').select('team_id, round_index, score').eq('show_id', show.id),
-    ])
-    const teams = teamData ?? []
-    const scores = scoreData ?? []
-    const finalScores = teams
-      .map(t => {
-        const rounds = scores
-          .filter(s => s.team_id === t.id)
-          .sort((a, b) => a.round_index - b.round_index)
-          .map(s => s.score ?? 0)
-        const total = rounds.reduce((sum, n) => sum + n, 0)
-        return { teamId: t.id, name: t.name, color: t.color, total, rounds }
-      })
-      .sort((a, b) => b.total - a.total)
-    await supabase
-      .from('shows')
-      .update({ player_count: teams.length, final_scores: finalScores })
-      .eq('id', show.id)
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
   }
 
   return (
@@ -131,14 +99,6 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
             className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
           >
             Export
-          </button>
-          <button
-            onClick={saveResults}
-            disabled={saving}
-            className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button disabled:opacity-40"
-            title="Snapshot player count + final scores"
-          >
-            {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save Results'}
           </button>
           <button
             onClick={onGoLive}

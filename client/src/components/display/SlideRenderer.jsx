@@ -10,6 +10,7 @@ import PixelateSeriesSlide from './slides/PixelateSeriesSlide.jsx'
 import MultiQuestionSlide from './slides/MultiQuestionSlide.jsx'
 import PylRevealSlide from './slides/PylRevealSlide.jsx'
 import StateOfUnionSlide from './slides/StateOfUnionSlide.jsx'
+import WinnerRevealSlide from './slides/WinnerRevealSlide.jsx'
 
 const EASE_QUINT     = [0.22, 1, 0.36, 1]   // standard ease-out
 const EASE_QUART     = [0.25, 1, 0.25, 1]   // weighted hard land (drop)
@@ -36,6 +37,11 @@ const SLIDE_ANIMATIONS = {
     initial: { opacity: 0 },
     animate: { opacity: 1, transition: { duration: 0.3, ease: EASE_QUINT } },
     exit:    { opacity: 0, scale: 0.98, transition: { duration: 0.25, ease: EASE_CUBIC } },
+  },
+  'winner-reveal': {
+    initial: { opacity: 0 },
+    animate: { opacity: 1, transition: { duration: 0.6, ease: EASE_QUINT } },
+    exit:    { opacity: 0, transition: { duration: 0.3, ease: EASE_CUBIC } },
   },
   'title': {
     initial: { opacity: 0 },
@@ -97,6 +103,7 @@ const SLIDE_COMPONENTS = {
   'multi-question':    MultiQuestionSlide,
   'pyl-reveal':        PylRevealSlide,
   'state-of-union':    StateOfUnionSlide,
+  'winner-reveal':     WinnerRevealSlide,
 }
 
 export default function SlideRenderer({ slide, show, direction }) {

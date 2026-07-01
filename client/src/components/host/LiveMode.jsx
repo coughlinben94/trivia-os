@@ -14,6 +14,7 @@ const SLIDE_META = {
   'pixelate-series':   { label: 'Pixelate',    color: 'bg-cyan-100 text-cyan-700' },
   'multi-question':    { label: 'Multi-Q',     color: 'bg-orange-100 text-orange-700' },
   'pyl-reveal':        { label: 'PYL',         color: 'bg-red-100 text-red-700' },
+  'winner-reveal':     { label: 'Winner',      color: 'bg-yellow-100 text-yellow-800' },
 }
 
 function typeMeta(type) {

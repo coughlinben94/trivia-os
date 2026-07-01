@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Handters';
+  src: url('/fonts/Handters.woff2') format('woff2'),
+       url('/fonts/Handters.woff') format('woff');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Roquen';
+  src: url('/fonts/Roquen.woff2') format('woff2'),
+       url('/fonts/Roquen.woff') format('woff');
+  font-display: swap;
+}
+
 * {
   box-sizing: border-box;
 }
