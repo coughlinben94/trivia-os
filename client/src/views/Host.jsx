@@ -37,7 +37,7 @@ export default function Host() {
   }
 
   return (
-    <ThemeProvider showThemeId={show.theme}>
+    <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
       <ErrorBoundary>
         <HostInner showApi={showApi} />
       </ErrorBoundary>
@@ -107,6 +107,7 @@ function HostInner({ showApi }) {
     deletePowerup:        showApi.deletePowerup,
     updateTickerMessages: showApi.updateTickerMessages,
     uploadMedia:    showApi.uploadMedia,
+    uploadFont:     showApi.uploadFont,
     getHostPhotos:  showApi.getHostPhotos,
   }
 

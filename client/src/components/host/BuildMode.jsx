@@ -622,6 +622,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
           onClose={() => setShowThemePicker(false)}
           onSelectTheme={themeId => actions.updateShowMeta({ theme: themeId })}
           onUpdateOverrides={themeOverrides => actions.updateShowMeta({ themeOverrides })}
+          onUploadFont={actions.uploadFont}
         />
       )}
 
