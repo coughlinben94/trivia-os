@@ -29,7 +29,8 @@ const SLIDE_TYPES = [
 ]
 
 const SLIDE_NAV_META = {
-  'title':             { icon: '📺' },
+  'title':             { icon: '🇺🇸' },
+  'state-of-union':    { icon: '🇺🇸' },
   'round-intro':       { icon: '🎬' },
   'swing-round-intro': { icon: '🎷' },
   'question':          { icon: '❓' },

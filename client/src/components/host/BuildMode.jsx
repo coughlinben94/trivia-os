@@ -17,7 +17,7 @@ import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 const BTN = 'host-button'
 
 const SLIDE_ICON = {
-  'title': '🇺🇸', 'round-intro': '🎬', 'swing-round-intro': '🎷',
+  'title': '🇺🇸', 'state-of-union': '🇺🇸', 'round-intro': '🎬', 'swing-round-intro': '🎷',
   'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆',
   'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
   'winner-reveal': '🥇',

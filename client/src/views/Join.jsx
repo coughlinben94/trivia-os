@@ -1157,6 +1157,19 @@ export default function Join() {
     return () => supabase.removeChannel(channel)
   }, [team?.id])
 
+  // ── Scoreboard drawer live updates ───────────────────────────────────
+  useEffect(() => {
+    if (!scoresDrawerOpen || !show?.id) return
+    const channel = supabase
+      .channel(`scores-drawer:${show.id}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'scoreboard_teams', filter: `show_id=eq.${show.id}` },
+        () => { openScoresDrawer() }
+      )
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [scoresDrawerOpen, show?.id])
+
   // ── Leaderboard ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!show?.scores_revealed || !show?.id) { setLeaderboard(null); setLeaderboardStatus(null); return }
