@@ -219,7 +219,7 @@ export default function RoundSidebar({
         {segments.map((seg, i) => {
           if (seg.type === 'general') {
             return (
-              <div key={`general-${i}`} className="py-1">
+              <div key={`general-${i}`} className={`py-1 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
                 {seg.slides.map(slide => {
                   const tIdx = blocks.findIndex(bl => bl.slides.some(s => s.id === slide.id))
                   const over = dragOverId === slide.id && dragOverType === 'slide'
@@ -254,7 +254,7 @@ export default function RoundSidebar({
             <div
               key={round.id}
               data-round-id={round.id}
-              className={`border-t border-gray-100 first:border-t-0 ${roundDragging ? 'opacity-40' : ''}`}
+              className={`${i > 0 ? 'border-t border-gray-100' : ''} ${roundDragging ? 'opacity-40' : ''}`}
               style={{
                 ...(roundBefore && { borderTop:    '2px solid #60a5fa' }),
                 ...(roundAfter  && { borderBottom: '2px solid #60a5fa' }),
