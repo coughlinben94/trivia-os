@@ -93,24 +93,7 @@ function HostInner({ showApi }) {
     await supabase.from('shows').update({ theme_id: newThemeId }).eq('id', show.id)
   }
 
-  const actions = {
-    updateShowMeta: showApi.updateShowMeta,
-    exportShow:     showApi.exportShow,
-    addRound:       showApi.addRound,
-    updateRound:    showApi.updateRound,
-    deleteRound:    showApi.deleteRound,
-    addSlide:       showApi.addSlide,
-    addSiblingSlides: showApi.addSiblingSlides,
-    updateSlide:    showApi.updateSlide,
-    deleteSlide:    showApi.deleteSlide,
-    reorderSlides:  showApi.reorderSlides,
-    addPowerup:           showApi.addPowerup,
-    deletePowerup:        showApi.deletePowerup,
-    updateTickerMessages: showApi.updateTickerMessages,
-    uploadMedia:    showApi.uploadMedia,
-    uploadFont:     showApi.uploadFont,
-    getHostPhotos:  showApi.getHostPhotos,
-  }
+  const actions = { ...showApi }
 
   const liveActions = {
     nextSlide:            showApi.nextSlide,

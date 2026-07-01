@@ -425,6 +425,9 @@ export function useShow() {
     if (!['woff2', 'woff', 'ttf', 'otf'].includes(ext)) {
       throw new Error('Font file must be .woff2, .woff, .ttf, or .otf')
     }
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error('Font file must be under 5MB')
+    }
     const familyName = `Custom-${nanoid(8)}`
     const path = `${show.id}/${familyName}.${ext}`
 
