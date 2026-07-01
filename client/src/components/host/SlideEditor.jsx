@@ -464,27 +464,20 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
 
       {data.shinyFormatId && (
         <>
-          {/* Image slots */}
+          {/* Image slots — side by side */}
           {schema.type === 'image' && slots > 0 && (
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                {data.slotTotal > 1
-                  ? `Image ${data.slotIndex} of ${data.slotTotal}`
-                  : slots === 1 ? 'Image' : `Images (${slots} slots)`}
-              </label>
-              <div className="space-y-3">
-                {Array.from({ length: slots }).map((_, i) => (
-                  <MediaUpload
-                    key={i}
-                    accept="image"
-                    label={schema.labels?.[i] ?? (slots > 1 ? `Image ${i + 1}` : 'Image')}
-                    currentUrl={mediaSlots[i]?.url}
-                    currentType={mediaSlots[i]?.type}
-                    onUpload={file => uploadSlot(i, file)}
-                    onRemove={() => removeSlot(i)}
-                  />
-                ))}
-              </div>
+            <div className={slots > 1 ? 'grid grid-cols-2 gap-3' : ''}>
+              {Array.from({ length: slots }).map((_, i) => (
+                <MediaUpload
+                  key={i}
+                  accept="image"
+                  label={schema.labels?.[i] ?? (slots > 1 ? `Image ${i + 1}` : 'Image')}
+                  currentUrl={mediaSlots[i]?.url}
+                  currentType={mediaSlots[i]?.type}
+                  onUpload={file => uploadSlot(i, file)}
+                  onRemove={() => removeSlot(i)}
+                />
+              ))}
             </div>
           )}
 
@@ -552,9 +545,14 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
           {/* Question text — not for list type */}
           {schema.type !== 'list' && (
             <Field label="Question Text">
-              <TextArea value={data.text} onChange={v => onChange('text', v)} placeholder="Write the question here…" rows={4} />
+              <TextArea value={data.text} onChange={v => onChange('text', v)} placeholder="Write the question here…" rows={3} />
             </Field>
           )}
+
+          {/* Answer — all shiny types */}
+          <Field label="Answer">
+            <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="The answer…" />
+          </Field>
 
           {/* Series settings — only if schema.seriesEnabled */}
           {schema.seriesEnabled && (
