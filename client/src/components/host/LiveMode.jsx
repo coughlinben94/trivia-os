@@ -179,7 +179,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
     if (e.code === 'ArrowRight') { e.preventDefault(); actions.nextSlide() }
     if (e.code === 'ArrowLeft')  { e.preventDefault(); actions.prevSlide() }
     if (e.code === 'KeyS')       setScorePanelOpen(true)
-  }, [scorePanelOpen, themePickerOpen, actions])
+    if (e.code === 'KeyA')       actions.setAnswerReveal(!show.showState.answerReveal)
+  }, [scorePanelOpen, themePickerOpen, actions, show.showState.answerReveal])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)

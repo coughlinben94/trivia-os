@@ -6,6 +6,7 @@ import { DEFAULT_THEME_ID } from '../themes/index.js'
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 const SHOW_MEDIA_BUCKET = 'trivia-show-media'
 const HOST_PHOTOS_BUCKET = 'trivia-host-photos'
+const FONT_BUCKET = 'trivia-fonts'
 
 function normalizeShow(row) {
   return {
@@ -26,6 +27,7 @@ function normalizeShow(row) {
       isLive: row.is_live ?? false,
       scoreboardVisible: row.scoreboard_visible ?? false,
       scoresRevealed: row.scores_revealed ?? false,
+      answerReveal: row.answer_reveal ?? false,
     },
   }
 }
@@ -417,6 +419,22 @@ export function useShow() {
     return { url: publicUrl, filename: path, type: file.type }
   }
 
+  async function uploadFont(file) {
+    if (!show) throw new Error('No active show')
+    const ext = file.name.split('.').pop().toLowerCase()
+    if (!['woff2', 'woff', 'ttf', 'otf'].includes(ext)) {
+      throw new Error('Font file must be .woff2, .woff, .ttf, or .otf')
+    }
+    const familyName = `Custom-${nanoid(8)}`
+    const path = `${show.id}/${familyName}.${ext}`
+
+    const { error } = await supabase.storage.from(FONT_BUCKET).upload(path, file, { upsert: false })
+    if (error) throw new Error(error.message)
+
+    const { data: { publicUrl } } = supabase.storage.from(FONT_BUCKET).getPublicUrl(path)
+    return { familyName, url: publicUrl }
+  }
+
   async function getHostPhotos() {
     if (!show) return []
     const { data, error } = await supabase.storage
@@ -462,11 +480,12 @@ export function useShow() {
     const slide = sorted[target]
     setShow(s => ({
       ...s,
-      showState: { ...s.showState, currentSlideIndex: target, currentSlideId: slide?.id ?? null },
+      showState: { ...s.showState, currentSlideIndex: target, currentSlideId: slide?.id ?? null, answerReveal: false },
     }))
     await supabase.from('shows').update({
       current_slide_index: target,
       current_slide_id: slide?.id ?? null,
+      answer_reveal: false,
     }).eq('id', show.id)
   }
 
@@ -479,11 +498,12 @@ export function useShow() {
     const slide = sorted[target]
     setShow(s => ({
       ...s,
-      showState: { ...s.showState, currentSlideIndex: target, currentSlideId: slide?.id ?? null },
+      showState: { ...s.showState, currentSlideIndex: target, currentSlideId: slide?.id ?? null, answerReveal: false },
     }))
     await supabase.from('shows').update({
       current_slide_index: target,
       current_slide_id: slide?.id ?? null,
+      answer_reveal: false,
     }).eq('id', show.id)
   }
 
@@ -491,6 +511,12 @@ export function useShow() {
     if (!show) return
     setShow(s => ({ ...s, showState: { ...s.showState, scoreboardVisible: visible } }))
     await supabase.from('shows').update({ scoreboard_visible: visible }).eq('id', show.id)
+  }
+
+  async function setAnswerReveal(visible) {
+    if (!show) return
+    setShow(s => ({ ...s, showState: { ...s.showState, answerReveal: visible } }))
+    await supabase.from('shows').update({ answer_reveal: visible }).eq('id', show.id)
   }
 
   async function updateRoundScore(teamId, roundIndex, score) {
@@ -553,11 +579,13 @@ export function useShow() {
     addPowerup,
     deletePowerup,
     uploadMedia,
+    uploadFont,
     getHostPhotos,
     goLive,
     nextSlide,
     prevSlide,
     setScoreboardVisible,
+    setAnswerReveal,
     updateRoundScore,
     updateTickerMessages,
   }

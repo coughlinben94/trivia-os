@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { AnimatePresence } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import QRCode from 'qrcode'
 import { supabase } from '../lib/supabase.js'
 import { ThemeProvider, useTheme } from '../components/shared/ThemeProvider.jsx'
@@ -234,6 +234,75 @@ function PreviewSlide() {
   )
 }
 
+// ─── Answer reveal overlay ─────────────────────────────────────────────────
+
+function AnswerRevealOverlay({ show, currentSlide }) {
+  const { theme } = useTheme()
+  const visible = show.answer_reveal ?? show.showState?.answerReveal ?? false
+
+  // Walk back to series lead to find the answer for shiny sub-slides
+  const answer = (() => {
+    if (!currentSlide) return null
+    const d = currentSlide.data
+    if (d?.answer) return d.answer
+    if (d?.isSeries && (d.slotIndex ?? 1) > 1) {
+      const lead = (show.slides ?? []).find(s =>
+        s.data?.isSeries &&
+        s.data?.slotIndex === 1 &&
+        s.data?.shinyFormatId === d.shinyFormatId &&
+        s.data?.questionLabel === d.questionLabel
+      )
+      return lead?.data?.answer ?? null
+    }
+    return null
+  })()
+
+  return (
+    <AnimatePresence>
+      {visible && answer && (
+        <motion.div
+          key="answer-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+          className="absolute inset-0 flex items-center justify-center z-50"
+          style={{ backdropFilter: 'blur(18px)', backgroundColor: 'rgba(0,0,0,0.55)' }}
+        >
+          <motion.div
+            initial={{ scale: 0.92, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+            className="px-16 py-12 rounded-3xl text-center max-w-4xl mx-8"
+            style={{
+              background: theme.colors.bg,
+              boxShadow: '0 32px 80px rgba(0,0,0,0.6)',
+            }}
+          >
+            <p
+              className="text-sm font-semibold uppercase tracking-widest mb-5"
+              style={{ color: theme.colors.accent, opacity: 0.7 }}
+            >
+              Answer
+            </p>
+            <p
+              style={{
+                color: theme.colors.text,
+                fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
+                fontSize: 'clamp(2rem, 5vw, 4.5rem)',
+                lineHeight: 1.15,
+              }}
+            >
+              {answer}
+            </p>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 // ─── Live display ──────────────────────────────────────────────────────────
 
 function DisplayInner({ show, direction }) {
@@ -261,6 +330,7 @@ function DisplayInner({ show, direction }) {
 
       {/* z-50: persistent overlays — always on top */}
       <QuestionCounter slide={currentSlide} show={show} />
+      <AnswerRevealOverlay show={show} currentSlide={currentSlide} />
       <BaynesWatermark />
     </div>
   )
