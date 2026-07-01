@@ -7,6 +7,8 @@ import HostPhotoLibrary from './HostPhotoLibrary.jsx'
 import ElementsEditor from './ElementsEditor.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
 import SlideRenderer from '../display/SlideRenderer.jsx'
+import ParticleBackground from '../display/ParticleBackground.jsx'
+import { useTheme } from '../shared/ThemeProvider.jsx'
 
 const INNER_W = 1280
 const INNER_H = 720
@@ -60,6 +62,7 @@ function getNavLabel(slide) {
 }
 
 export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide, onClose, uploadMedia, getHostPhotos, addSiblingSlides }) {
+  const { theme } = useTheme()
   const [data, setData] = useState(slide.data)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [viewMode, setViewMode] = useState('edit') // 'edit' | 'preview'
@@ -224,8 +227,10 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                 transform: `scale(${SCALE})`,
                 transformOrigin: 'top left',
                 overflow: 'hidden',
+                background: theme.colors.bg,
               }}
             >
+              <ParticleBackground theme={theme} />
               <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} />
             </div>
           </div>
