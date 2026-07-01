@@ -49,7 +49,7 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
         >
           <span
             style={{
-              fontFamily: `'Boogaloo', sans-serif`,
+              fontFamily: `'${theme.fonts.display}', sans-serif`,
               color: theme.colors.highlight,
               fontSize: '0.9rem',
               fontWeight: 700,
@@ -77,7 +77,7 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
       >
         <span
           style={{
-            fontFamily: `'Boogaloo', sans-serif`,
+            fontFamily: `'${theme.fonts.display}', sans-serif`,
             color: theme.colors.highlight,
             fontSize: data.seriesLabel ? '2rem' : '2.25rem',
             fontWeight: 700,
@@ -331,7 +331,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
       >
         <p
           style={{
-            fontFamily: `'Boogaloo', sans-serif`,
+            fontFamily: `'${theme.fonts.display}', sans-serif`,
             color: theme.colors.text,
             fontSize: 'clamp(3rem, 8vw, 6rem)',
             fontWeight: 700,

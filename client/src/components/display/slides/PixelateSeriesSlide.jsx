@@ -100,7 +100,7 @@ export default function PixelateSeriesSlide({ slide, show }) {
       >
         <span
           style={{
-            fontFamily: `'Boogaloo', sans-serif`,
+            fontFamily: `'${theme.fonts.display}', sans-serif`,
             color: theme.colors.highlight,
             fontSize: '1.75rem',
             fontWeight: 700,
