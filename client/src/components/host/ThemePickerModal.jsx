@@ -9,7 +9,7 @@ const PREVIEW_H = Math.round(PREVIEW_W * (9 / 16))
 const SCALE = PREVIEW_W / INNER_W
 const DISPLAY_FONTS = ['Boogaloo', 'Handters', 'Roquen', 'DM Sans']
 
-export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdateOverrides }) {
+export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdateOverrides, onUploadFont }) {
   const [previewId, setPreviewId] = useState(show.theme)
   const [overrides, setOverrides] = useState(show.themeOverrides ?? {})
   const activeRef = useRef(null)
@@ -197,6 +197,26 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
             >
               {DISPLAY_FONTS.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
+            Upload font
+            <input
+              type="file"
+              accept=".woff2,.woff,.ttf,.otf"
+              onChange={async e => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                try {
+                  const { familyName, url } = await onUploadFont(file)
+                  const next = { ...overrides, fonts: { ...overrides.fonts, display: familyName, displayUrl: url } }
+                  setOverrides(next)
+                  onUpdateOverrides(next)
+                } catch (err) {
+                  alert(err.message)
+                }
+              }}
+              className="text-xs"
+            />
           </label>
           <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
             Text color
