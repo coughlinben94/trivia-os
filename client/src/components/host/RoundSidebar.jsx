@@ -220,21 +220,22 @@ export default function RoundSidebar({
           if (seg.type === 'general') {
             return (
               <div key={`general-${i}`} className={`py-1 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
-                {seg.slides.map(slide => {
+                {seg.slides.map((slide, slideIdx) => {
                   const tIdx = blocks.findIndex(bl => bl.slides.some(s => s.id === slide.id))
                   const over = dragOverId === slide.id && dragOverType === 'slide'
                   return (
-                    <SlideRow
-                      key={slide.id}
-                      slide={slide}
-                      selected={slide.id === selectedSlideId}
-                      dragging={dragged?.id === slide.id}
-                      dragBefore={over && draggedBIdx > tIdx}
-                      dragAfter={over && draggedBIdx < tIdx}
-                      onSelect={() => { collapseAllRounds(); onSelectSlide(slide) }}
-                      onDelete={() => onDeleteSlide(slide.id)}
-                      onGripDown={e => handleGripDown(e, slide.id, 'slide')}
-                    />
+                    <div key={slide.id} className={slideIdx > 0 ? 'border-t border-gray-100' : ''}>
+                      <SlideRow
+                        slide={slide}
+                        selected={slide.id === selectedSlideId}
+                        dragging={dragged?.id === slide.id}
+                        dragBefore={over && draggedBIdx > tIdx}
+                        dragAfter={over && draggedBIdx < tIdx}
+                        onSelect={() => { collapseAllRounds(); onSelectSlide(slide) }}
+                        onDelete={() => onDeleteSlide(slide.id)}
+                        onGripDown={e => handleGripDown(e, slide.id, 'slide')}
+                      />
+                    </div>
                   )
                 })}
               </div>
