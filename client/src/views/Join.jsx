@@ -322,7 +322,7 @@ function WaitingScreen({ teamName, myScore, theme, onOpenScores }) {
         {/* Spacer */}
         <div style={{ flex: 1 }} />
 
-        {/* Scores button */}
+        {/* Scoreboard button */}
         <button
           onClick={onOpenScores}
           onPointerDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
@@ -330,15 +330,16 @@ function WaitingScreen({ teamName, myScore, theme, onOpenScores }) {
           onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
           style={{
             height: 44, padding: '0 1rem', borderRadius: 10,
-            background: 'rgba(255,255,255,0.07)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            color: `${text}70`, fontSize: '0.85rem', fontWeight: 600,
+            background: 'rgba(255,255,255,0.09)',
+            border: '1px solid rgba(255,255,255,0.14)',
+            color: `${text}90`, fontSize: '0.85rem', fontWeight: 600,
             cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
             WebkitTapHighlightColor: 'transparent',
             transition: 'transform 120ms ease',
+            display: 'flex', alignItems: 'center', gap: '0.35rem',
           }}
         >
-          📊 Scores
+          📊 Scoreboard
         </button>
       </div>
     </div>
@@ -759,6 +760,77 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
   )
 }
 
+// ─── Landscape prompt ─────────────────────────────────────────────────────────
+function LandscapePrompt() {
+  const [portrait, setPortrait] = useState(() => typeof window !== 'undefined' && window.innerHeight > window.innerWidth)
+  const [dismissed, setDismissed] = useState(false)
+  const pref = useReducedMotion()
+
+  useEffect(() => {
+    function update() {
+      const isPortrait = window.innerHeight > window.innerWidth
+      setPortrait(isPortrait)
+      if (!isPortrait) setDismissed(false)
+    }
+    window.addEventListener('resize', update)
+    window.addEventListener('orientationchange', update)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('orientationchange', update)
+    }
+  }, [])
+
+  return (
+    <AnimatePresence>
+      {portrait && !dismissed && (
+        <motion.div
+          initial={pref ? { opacity: 0 } : { y: '100%', opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={pref ? { opacity: 0 } : { y: '100%', opacity: 0 }}
+          transition={pref ? { duration: 0.2 } : { ease: EASE_DRAWER, duration: 0.35 }}
+          style={{
+            position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 600,
+            background: 'rgba(5,5,5,0.96)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+            borderTop: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '20px 20px 0 0',
+            padding: 'clamp(1.25rem,4vw,1.75rem) 1.5rem',
+            paddingBottom: 'calc(clamp(1.25rem,4vw,1.75rem) + env(safe-area-inset-bottom, 0px))',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+            <span style={{
+              fontSize: '2.5rem', display: 'block', lineHeight: 1,
+              animation: pref ? 'none' : 'rotatePulse 2s ease-in-out infinite',
+            }}>
+              📱
+            </span>
+            <div>
+              <p style={{ fontFamily: 'Boogaloo, sans-serif', fontSize: '1.2rem', color: '#fff', margin: 0, lineHeight: 1.2 }}>
+                Rotate for a better view
+              </p>
+              <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.82rem', margin: '0.25rem 0 0', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.4 }}>
+                Turn your phone sideways to see the full question
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setDismissed(true)}
+            style={{
+              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 10, color: 'rgba(255,255,255,0.45)', fontSize: '0.8rem',
+              padding: '0.5rem 1.25rem', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
+              WebkitTapHighlightColor: 'transparent', minHeight: 40,
+            }}
+          >
+            Stay in portrait
+          </button>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 // ─── Reconnecting banner ──────────────────────────────────────────────────────
 function ReconnectingBanner({ visible }) {
   return (
@@ -943,25 +1015,25 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, myScores, leaderbo
           🏆 Scores
         </button>
 
-        {/* All-teams scores button */}
+        {/* Scoreboard button */}
         <button
           onClick={onOpenScores}
           onPointerDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
           onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
           onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
           style={{
-            height: 44, minWidth: 44, padding: '0 0.55rem', borderRadius: 10,
+            height: 44, padding: '0 0.75rem', borderRadius: 10,
             background: 'rgba(255,255,255,0.07)',
             border: '1px solid rgba(255,255,255,0.1)',
-            color: `${text}65`, fontSize: '1rem',
+            color: `${text}70`, fontSize: '0.8rem', fontWeight: 600,
             cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
             WebkitTapHighlightColor: 'transparent',
             transition: 'transform 120ms ease',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            display: 'flex', alignItems: 'center', gap: '0.3rem',
+            whiteSpace: 'nowrap',
           }}
-          title="View all team scores"
         >
-          📊
+          📊 Scores
         </button>
 
         {/* Powerup */}
@@ -1285,20 +1357,28 @@ export default function Join() {
     <>
       <ReconnectingBanner visible={disconnected} />
       {phase === 'register' && <RegistrationScreen onRegister={handleRegister} show={show} theme={theme} />}
-      {phase === 'waiting'  && <WaitingScreen teamName={team?.name ?? ''} myScore={totalScore} theme={theme} onOpenScores={openScoresDrawer} />}
+      {phase === 'waiting'  && (
+        <>
+          <WaitingScreen teamName={team?.name ?? ''} myScore={totalScore} theme={theme} onOpenScores={openScoresDrawer} />
+          <LandscapePrompt />
+        </>
+      )}
       {phase === 'live'     && (
-        <LiveView
-          show={show}
-          team={team}
-          powerupUsed={powerupUsed}
-          onInvokePowerup={handleInvokePowerup}
-          myScores={myScores}
-          leaderboard={leaderboard}
-          leaderboardStatus={leaderboardStatus}
-          onRetryLeaderboard={() => setLeaderboardRetry(n => n + 1)}
-          theme={theme}
-          onOpenScores={openScoresDrawer}
-        />
+        <>
+          <LiveView
+            show={show}
+            team={team}
+            powerupUsed={powerupUsed}
+            onInvokePowerup={handleInvokePowerup}
+            myScores={myScores}
+            leaderboard={leaderboard}
+            leaderboardStatus={leaderboardStatus}
+            onRetryLeaderboard={() => setLeaderboardRetry(n => n + 1)}
+            theme={theme}
+            onOpenScores={openScoresDrawer}
+          />
+          <LandscapePrompt />
+        </>
       )}
 
       {/* Global scores drawer — available in waiting + live phases */}

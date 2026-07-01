@@ -356,7 +356,7 @@ function SpinWheel({ initialPool, colors, onComplete, onClose }) {
             transition: spinning ? `transform ${SPIN_MS}ms cubic-bezier(0, 0, 0.2, 1)` : 'none',
             willChange: 'transform',
           }}>
-            <svg ref={svgRef} width={SIZE} height={SIZE} style={{ display: 'block' }}>
+            <svg width={SIZE} height={SIZE} style={{ display: 'block' }}>
               {pool.map((team, i) => {
                 const startDeg = i * sectorDeg
                 const endDeg   = (i + 1) * sectorDeg
@@ -451,6 +451,8 @@ export default function ScoreboardModal({ show, onClose }) {
   const [highlightIds, setHighlightIds] = useState(null)
   const [quickEntry,   setQuickEntry]   = useState(false)
   const [wheelOpen,    setWheelOpen]    = useState(false)
+  const [wheelPool,    setWheelPool]    = useState([])
+  const [confirmClear, setConfirmClear] = useState(false)
   const saveTimers = useRef({})
 
   const cols           = deriveRoundCols(show)
@@ -537,7 +539,12 @@ export default function ScoreboardModal({ show, onClose }) {
 
   function quickSave(teamId, colKey, score) { updateScore(teamId, colKey, score) }
 
-  const wheelPool = teamsWithStats
+  function openWheel() {
+    if (teamsWithStats.length < 2) return
+    const shuffled = [...teamsWithStats].sort(() => Math.random() - 0.5)
+    setWheelPool(teamsWithStats.length === 2 ? shuffled : shuffled.slice(0, 2))
+    setWheelOpen(true)
+  }
 
   const btnBase = 'text-sm font-medium px-3 py-1.5 rounded-lg host-button transition-colors'
 
@@ -561,11 +568,19 @@ export default function ScoreboardModal({ show, onClose }) {
             <button onClick={addTeam} className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200`}>+ Team</button>
             <button onClick={sortTeams} className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200`}>Sort</button>
             <button
-              onClick={() => teamsWithStats.length >= 2 && setWheelOpen(true)}
+              onClick={openWheel}
               disabled={teamsWithStats.length < 2}
               className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
             >🎡 PYL Wheel</button>
-            <button onClick={clearScores} className={`${btnBase} bg-red-50 text-red-500 hover:bg-red-100`}>Clear</button>
+            {confirmClear ? (
+              <div className="flex items-center gap-1.5 ml-1">
+                <span className="text-xs text-red-600 font-semibold">Clear all scores?</span>
+                <button onClick={() => { clearScores(); setConfirmClear(false) }} className={`${btnBase} bg-red-500 text-white hover:bg-red-600`}>Yes, clear</button>
+                <button onClick={() => setConfirmClear(false)} className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200`}>Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmClear(true)} className={`${btnBase} bg-red-50 text-red-500 hover:bg-red-100`}>Clear</button>
+            )}
             <button
               onClick={onClose}
               className="ml-1 w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 host-button"
