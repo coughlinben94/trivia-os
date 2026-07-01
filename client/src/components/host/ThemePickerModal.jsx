@@ -13,6 +13,7 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
   const [previewId, setPreviewId] = useState(show.theme)
   const [overrides, setOverrides] = useState(show.themeOverrides ?? {})
   const activeRef = useRef(null)
+  const overrideDebounceRef = useRef(null)
 
   useEffect(() => {
     activeRef.current?.scrollIntoView({ block: 'center', behavior: 'instant' })
@@ -39,7 +40,9 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
   function setTextColor(field, color) {
     const next = { ...overrides, colors: { ...overrides.colors, [field]: color } }
     setOverrides(next)
-    onUpdateOverrides(next)
+    // <input type="color"> fires onChange continuously while dragging, so debounce the write
+    clearTimeout(overrideDebounceRef.current)
+    overrideDebounceRef.current = setTimeout(() => onUpdateOverrides(next), 600)
   }
 
   return (
