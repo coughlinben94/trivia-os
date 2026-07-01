@@ -86,7 +86,7 @@ export default function PYLWizard({ activeRoundId, onAdd, onClose }) {
                 value={themeCount}
                 onChange={e => setThemeCount(Math.max(1, parseInt(e.target.value) || 1))}
                 onKeyDown={e => { if (e.key === 'Enter') startThemes() }}
-                className="w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
             {!activeRoundId && (
