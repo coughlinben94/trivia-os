@@ -176,7 +176,7 @@ function HostInner({ showApi }) {
 // ─── Go Live picker ────────────────────────────────────────────────────────
 
 const SLIDE_ICON = {
-  'title': '📺', 'round-intro': '🎬', 'swing-round-intro': '🎷',
+  'title': '🇺🇸', 'round-intro': '🎬', 'swing-round-intro': '🎷',
   'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆',
   'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
 }

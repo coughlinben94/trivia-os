@@ -263,7 +263,7 @@ export default function RoundSidebar({
               {/* Round header */}
               <div
                 className="flex items-center gap-1.5 px-3 py-2 group"
-                style={viewingRoundId === round.id
+                style={viewingRoundId === round.id && !selectedSlideId
                   ? { background: 'linear-gradient(to right, rgba(34,197,94,0.12), transparent)', borderLeft: '2px solid #1a6b4a' }
                   : { borderLeft: '2px solid transparent' }
                 }

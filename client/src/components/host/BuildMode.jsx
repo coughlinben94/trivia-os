@@ -17,7 +17,7 @@ import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 const BTN = 'host-button'
 
 const SLIDE_ICON = {
-  'title': '📺', 'round-intro': '🎬', 'swing-round-intro': '🎷',
+  'title': '🇺🇸', 'round-intro': '🎬', 'swing-round-intro': '🎷',
   'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆',
   'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
   'winner-reveal': '🥇',
@@ -62,7 +62,7 @@ function getSlidePreview(slide) {
 }
 
 const CARD_STYLE = {
-  'title':         'bg-gradient-to-br from-amber-50  to-orange-100  border-amber-200  hover:border-amber-400',
+  'title':         'bg-[linear-gradient(135deg,#fecaca,#f9fafb,#bfdbfe)] border-blue-200 hover:border-blue-400',
   'round-intro':   'bg-gradient-to-br from-red-50    to-rose-100    border-red-200    hover:border-red-400',
   'question':      'bg-gradient-to-br from-blue-50   to-indigo-100  border-blue-200   hover:border-blue-400',
   'grading-break': 'bg-gradient-to-br from-violet-50 to-purple-100  border-violet-200 hover:border-violet-400',
