@@ -44,8 +44,9 @@ Full-screen interstitial between rounds.
 - Custom message (default: "Ben is grading papers")
 - Animated subtle looping background
 - **Back button:** "↩ Back to Q1" — jumps host to first question of that round (`backLinkSlideId` in data)
+- **Final Break toggle** (`isFinalBreak` in data, shipped 2026-06-30): a checkbox in `SlideEditor.jsx`'s grading-break editor. Set on the LAST grading break of the show — see Jukebox handoff below for what it does.
 - Ben photo shown (thumbnail, lower-left corner)
-- **Jukebox handoff (nav mechanism):** full-page navigation, NOT iframe and NOT postMessage (Spotify refuses iframe embedding; theme can't cross origins). After the phase-1 message (~10s; Space/ArrowRight skips it, which is what the Stream Deck Next key sends), `transitionToJukebox` runs `window.location.href = 'https://trivia-jukebox.vercel.app'`. Return is manual: the Jukebox's `b` keydown handler navigates to `trivia-os.vercel.app/display?from=jukebox`; Display.jsx detects `from=jukebox`, advances `current_slide_index` past the grading break in Supabase (clamped, next>cur guard), then strips the param via `history.replaceState`.
+- **Jukebox handoff (nav mechanism):** full-page navigation, NOT iframe and NOT postMessage (Spotify refuses iframe embedding; theme can't cross origins). After the phase-1 message (~10s; Space/ArrowRight skips it, which is what the Stream Deck Next key sends), `transitionToJukebox` runs `window.location.href = 'https://trivia-jukebox.vercel.app'`. Return is manual: the Jukebox's `b` keydown handler navigates to `trivia-os.vercel.app/display?from=jukebox`; Display.jsx detects `from=jukebox`, reads `isFinalBreak` off the current slide — if true, jumps `current_slide_index` straight to `sorted.length - 1` (the last slide, meant to be a `winner-reveal`); otherwise advances by 1 as before (clamped, `next>cur` guard) — then strips the param via `history.replaceState`.
 - Implemented: `GradingBreakSlide.jsx`
 
 ### `scoreboard-reveal`
@@ -67,6 +68,18 @@ A single question spanning multiple slides, each showing a progressively clearer
 
 ### `pyl-reveal`
 Press Your Luck answer reveal. Shows a list with some items filled in, some blank, plus a running point value. Each host advance fills in the next item. Needs "reveal stages" support. Implemented: `PylRevealSlide.jsx`
+
+### `winner-reveal`
+Shipped 2026-06-30. The automated show-closer — no editable data fields, computes everything live on mount.
+- "And the winner is…" fades in (0.55s ease-out)
+- 3s synthesized Web Audio drum roll: exponentially-decaying snare noise hits, gap tightens from 0.20s down toward 0.03s as it accelerates, then one big final hit at full volume. `useReducedMotion` skips straight to reveal after 1.2s instead.
+- Queries `teams` + `team_scores` for `show.id`, sums scores per team, picks the highest total as winner
+- Winner name pops in at full size (`clamp(4rem, 11vw, 10rem)`, theme highlight color, text-shadow glow) with canvas confetti (220 particles, physics-based fall + rotation, fades after 2.5s)
+- Points subtitle fades in 350ms after the name
+- Uses `theme.fonts.display`/`theme.colors.highlight`/`theme.colors.accent` — respects per-show theme overrides like every other slide
+- Meant to be the literal last slide in the show, paired with the **Final Break** toggle on the last grading break (see above) so the whole close is hands-off — no host button press needed
+- `Host.jsx` auto-fires `saveResults()` (writes `final_scores` + `player_count` to the show row) the instant this slide becomes the live slide
+- Implemented: `WinnerRevealSlide.jsx`
 
 ---
 

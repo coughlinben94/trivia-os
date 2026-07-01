@@ -1,6 +1,6 @@
 ---
 name: trivia-os
-description: Trivia OS — real-time trivia-night platform for Baynes Apple Valley (React + Vite + Supabase Realtime; 21 ambient themes, 10 slide types). Use this skill whenever working on Trivia OS or anything under ~/Projects/trivia-os — the host build/live control surface, the /display TV renderer, /join phones, slides, rounds, scoring, powerups, the ambient ParticleBackground themes, or display transitions/animations. Read this plus its references before any display/theme/animation work, even on casual asks.
+description: Trivia OS — real-time trivia-night platform for Baynes Apple Valley (React + Vite + Supabase Realtime; 21 ambient themes with per-show font/color overrides, 12 slide types including automated Winner Reveal). Use this skill whenever working on Trivia OS or anything under ~/Projects/trivia-os — the host build/live control surface, the /display TV renderer, /join phones, slides, rounds, scoring, powerups, the ambient ParticleBackground themes, theme overrides, or display transitions/animations. Read this plus its references before any display/theme/animation work, even on casual asks.
 ---
 
 # Trivia OS — Developer Skill
@@ -13,12 +13,16 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 **Live:** https://trivia-os.vercel.app  
 **Project skill:** `.claude/skills/trivia-os/` (symlinks to repo root SKILL.md + references/)
 
+**Shipped 2026-06-30:** per-show theme font/color overrides + custom font upload (see Theme System), Winner Reveal slide + Final Break auto-close (see Slide Types), Go Live picker (jump to any slide, not just +1), answer-reveal overlay (Stream Deck A key), shiny-question sidebar/series improvements. See each section below for details.
+
+**Multiple sessions on this repo:** Ben sometimes runs more than one Claude Code session against this same working directory (not separate worktrees) at once. If you see unexpected commits, a branch pointer that moved, or files staged that you didn't touch — that's very likely the other session, not corruption. Check `git log`/`git status`/`git stash list` before assuming something broke, and don't force a branch switch or destructive git op without confirming with Ben first. Nothing has been lost doing this so far because every agent that hit ambiguous state stopped and asked rather than guessed — keep doing that.
+
 ---
 
 ## Read Order (mandatory before any display/theme/animation work)
 
 1. `SKILL.md` (this file)
-2. `references/slides.md` — all 10 slide types + data schemas
+2. `references/slides.md` — all 12 slide types + data schemas
 3. `references/build-state.md` — BuildMode state machine
 4. `references/brand.md` — visual identity, typography, colors
 5. `references/themes.md` — 21 ambient themes, theme object shape
@@ -64,33 +68,47 @@ is_live && current_slide_id !== null → DisplayInner (full slide renderer)
 ```
 client/src/
   views/
-    Host.jsx              — switches between BuildMode and LiveMode
-    Display.jsx           — routing logic + PreShowScreen
+    Host.jsx              — switches between BuildMode and LiveMode; owns the curated
+                             `actions = { ...showApi }` object passed to both
+    Display.jsx           — routing logic + PreShowScreen; jukebox-return Final Break jump
     Join.jsx              — team phone phase machine (loading→register→waiting→live)
   components/
     host/
       BuildMode.jsx       — slide builder UI (wizard + editor modes)
       LiveMode.jsx        — control surface during show (text-only, no preview)
-      AddSlideWizard.jsx  — 4-step guided slide creation
-      AddRoundWizard.jsx  — NEW: 3-type round picker (Normal/Swing/PYL) before round creation
-      SlideEditor.jsx     — per-slide editing panel
-      RoundSidebar.jsx    — round/slide navigation tree
+      AddSlideWizard.jsx  — guided slide creation (TYPE_CARDS icons must match
+                             RoundSidebar/SlideEditor's SLIDE_TYPE_META — this drifted
+                             once already, e.g. 'title' vs 'round-intro' emoji swap)
+      AddRoundWizard.jsx  — 3-type round picker (Normal/Swing/PYL) before round creation
+      SlideEditor.jsx     — per-slide editing panel; GradingBreakEditor has "Final Break" toggle
+      RoundSidebar.jsx    — round/slide navigation tree; shows shinyFormatName, groups series
       ScorePanel.jsx      — fuzzy search + score input + reveal toggle
       ShowManager.jsx     — show CRUD (list, create, load, duplicate, export, import)
-      ThemePicker.jsx     — theme selection
+      ThemePickerModal.jsx — theme selection + live preview; THIS is the real one (a
+                             legacy unused `ThemePicker.jsx` also exists, don't build on it)
+      ThemeCustomizeControls.jsx — font dropdown/upload + 2 color pickers, extracted
+                             from ThemePickerModal.jsx for size
       FormatLibrary.jsx   — 8 shiny format seeds
+    shared/
+      ThemeProvider.jsx   — theme context; SINGLE merge chokepoint for per-show
+                             theme_overrides (applyOverrides()); also registers
+                             uploaded custom fonts at runtime via the CSS Font
+                             Loading API, with cleanup on font change/unmount
     display/
       ParticleBackground.jsx  — 21 GPU-only ambient themes (NEVER re-mounts)
       SlideRenderer.jsx       — routes slide.type → component + manages transitions
       TitleSlide.jsx, RoundIntroSlide.jsx, QuestionSlide.jsx, GradingBreakSlide.jsx
       ScoreboardRevealSlide.jsx, CustomSlide.jsx, MultiQuestionSlide.jsx
       PixelateSeriesSlide.jsx, PylRevealSlide.jsx, StateOfUnionSlide.jsx
+      WinnerRevealSlide.jsx   — drum roll (Web Audio) → confetti (canvas) → winner pop-in
       QuestionCounter.jsx, BaynesWatermark.jsx, WaveformBars.jsx
   hooks/
     useShow.js            — ALL show state, Supabase Realtime, CRUD actions (master hook)
   themes/
     index.js              — THEMES array (21), getTheme(id), DEFAULT_THEME_ID
 ```
+
+**Every headline/display-font string in `client/src/components/display/slides/*.jsx` reads `theme.fonts.display`, not a hardcoded `'Boogaloo'`** (fixed 2026-06-30 — this is what makes per-show font overrides actually work on slide content). `Display.jsx`'s `PreShowScreen` title also reads it. If you add a new slide component with headline text, use `theme.fonts.display` from the start — don't hardcode a font family.
 
 ---
 
@@ -110,22 +128,28 @@ Round object stamped: `{ roundType, roundNumber?, subtitle, title }`
 
 ## Slide Types
 
-10 types in `SlideRenderer.SLIDE_COMPONENTS`:
+12 types in `SlideRenderer.SLIDE_COMPONENTS`:
 
 | Type | Component | Key data fields |
 |---|---|---|
 | `title` | TitleSlide | title, subtitle |
 | `state-of-union` | StateOfUnionSlide | text, hostPhotoUrl |
 | `round-intro` | RoundIntroSlide | roundNumber, roundTitle, subtitle, roundType, hostPhotoUrl |
-| `question` | QuestionSlide | questionNumber, text, isShiny, shinyType, mediaUrl, mediaType, audioGainDb |
-| `grading-break` | GradingBreakSlide | message, jukeboxLib, backLinkSlideId |
+| `swing-round-intro` | RoundIntroSlide | same component as round-intro, swing variant |
+| `question` | QuestionSlide | questionNumber, text, isShiny, shinyType, shinyFormatName, mediaUrl, mediaType, audioGainDb |
+| `grading-break` | GradingBreakSlide | message, jukeboxLib, backLinkSlideId, **isFinalBreak** (jukebox return jumps to last slide instead of +1) |
 | `scoreboard-reveal` | ScoreboardRevealSlide | auto-computed from team_scores |
 | `custom` | CustomSlide | title, body, imageUrl, layout |
 | `multi-question` | MultiQuestionSlide | questions: [{number, text}] |
 | `pixelate-series` | PixelateSeriesSlide | stages: [{imageUrl, opacity}] |
 | `pyl-reveal` | PylRevealSlide | answers: [{text, revealed}], points |
+| `winner-reveal` | WinnerRevealSlide | none — computes winner live from `teams`/`team_scores` on mount |
 
-**Shiny subtypes:** `shinyType: 'visual'` (image full-bleed or split) | `shinyType: 'audio'` (waveform bars, PLAY button, Web Audio gain)
+**Shiny subtypes:** `shinyType: 'visual'` (image full-bleed or split) | `shinyType: 'audio'` (waveform bars, PLAY button, Web Audio gain). Series-type shiny questions (`isSeries: true`) group as one lead slide + hidden `slotIndex`-ordered siblings in RoundSidebar; drag-reorder carries the whole group as one atomic unit.
+
+**Winner Reveal** (shipped 2026-06-30) — add via the 🏆/🥇 card in AddSlideWizard, put it as the literal last slide. On mount: 3s synthesized Web Audio drum roll (accelerating snare hits → finale, or a `useReducedMotion`-gated instant skip) → winner name pops in full-size with canvas confetti raining from the top → points subtitle fades in 350ms later. Combine with the **Final Break** toggle (below) for a fully hands-off show close.
+
+**Final Break** — a checkbox on a `grading-break` slide's editor (`isFinalBreak` in slide data). When the host is live and the Jukebox sends them back from THAT specific grading break, `Display.jsx` reads `isFinalBreak` and jumps straight to `sorted.length - 1` (the last slide) instead of the normal `current + 1`. Every other grading break without the toggle still does +1. `Host.jsx` auto-fires `saveResults()` the instant the winner-reveal slide becomes live — no manual "Save Results" button anymore (it was removed from HostHeader).
 
 ---
 
@@ -133,20 +157,24 @@ Round object stamped: `{ roundType, roundNumber?, subtitle, title }`
 
 ```js
 const { show, loading } = useShow()
-const actions = { ... }
+```
 
+`Host.jsx` passes `actions = { ...showApi }` (a full spread, not a hand-curated list — fixed 2026-06-30 after `uploadFont` went missing from a manually-maintained object and crashed on click; don't reintroduce a curated list here) to `BuildMode`/`LiveMode`.
+
+```js
 // Show CRUD
 actions.createShow(title, date, themeId)
 actions.loadShow(id)
 actions.listShows()       // → [{ id, title, date, updatedAt, slideCount, roundCount }]
-actions.exportShow()      // → downloads JSON
+actions.exportShow() / actions.exportShowById(id)
 actions.importShow(json)  // → new show from JSON
 actions.duplicateShow(id)
-actions.deleteShow(id)
-actions.updateShowMeta({ title, date, theme })
+actions.deleteShow(id) / actions.unloadShow()
+actions.updateShowMeta({ title, date, theme, themeOverrides })
 
 // Slide CRUD
 actions.addSlide(type, data)
+actions.addSiblingSlides(...)   // shiny series
 actions.updateSlide(id, patch)
 actions.deleteSlide(id)
 actions.reorderSlides(newOrder)
@@ -155,13 +183,25 @@ actions.reorderSlides(newOrder)
 actions.addRound(data)      // data = { roundType, roundNumber?, subtitle, title }
 actions.updateRound(id, patch)
 actions.deleteRound(id)     // also deletes all slides in the round
+actions.reorderRounds(newOrder)
+
+// Powerups / ticker
+actions.addPowerup(...) / actions.deletePowerup(id)
+actions.updateTickerMessages(msgs)
+
+// Media / fonts (Supabase Storage — see Storage Buckets below)
+actions.uploadMedia(file, isHostPhoto?)
+actions.uploadFont(file)   // .woff2/.woff/.ttf/.otf, 5MB cap → { familyName, url }
+actions.getHostPhotos()
 
 // Live control
-actions.setLive(true/false)
-actions.advanceSlide()
-actions.previousSlide()
-actions.toggleScoreboard()
-actions.toggleScoresRevealed()
+actions.goLive() / actions.goLiveFrom(slideId)   // Go Live picker — jump straight to any slide
+actions.nextSlide() / actions.prevSlide()
+actions.setScoreboardVisible(bool)
+actions.setAnswerReveal(bool)      // Stream Deck A key — answer overlay on QuestionSlide
+actions.updateRoundScore(...)
+actions.saveResults()              // aggregates team_scores → final_scores + player_count;
+                                    // auto-fires once when winner-reveal slide goes live
 ```
 
 **Realtime:** subscribes to `shows` table, `id=eq.${showId}` — all display/join surfaces auto-update.
@@ -170,10 +210,16 @@ actions.toggleScoresRevealed()
 
 ## Supabase Schema
 
+Project: **Baynes Trivia**, id `qwtbgusqfoypvehnungr`.
+
 ```sql
 shows { id, title, date, theme_id, slides jsonb, rounds jsonb, powerups jsonb,
         current_slide_id, current_slide_index, is_live, scoreboard_visible,
-        scores_revealed, ticker_messages jsonb, audio_playing jsonb }
+        scores_revealed, ticker_messages jsonb, audio_playing jsonb,
+        special_event jsonb,
+        theme_overrides jsonb NOT NULL DEFAULT '{}',   -- per-show font/color, see Theme System
+        answer_reveal boolean,                          -- Stream Deck A key overlay state
+        player_count integer, final_scores jsonb }       -- written by saveResults()
 
 teams { id, show_id, name, color, registered_at, powerup_used, powerup_used_on,
         is_connected, last_action, last_action_at }
@@ -181,7 +227,16 @@ teams { id, show_id, name, color, registered_at, powerup_used, powerup_used_on,
 team_scores { id, show_id, team_id, round_index, score, unique(team_id, round_index) }
 
 questions { id, text, answer, category, round_type, is_shiny, shiny_type, used_on date[] }
+
+shiny_formats { ... }  -- 6 seeded formats
 ```
+
+**Storage buckets** (all `public: true`, "public read" SELECT + "anon insert" INSERT policies on `storage.objects` scoped per `bucket_id` — this is the precedent pattern, copy it for any new bucket):
+- `trivia-show-media` — question/slide images, audio
+- `trivia-host-photos` — Ben photos (`/public/ben/` API route also exists, separate from Storage)
+- `trivia-fonts` — custom uploaded display fonts (see Theme System)
+
+**Note:** all 3 buckets did not exist at all until 2026-06-30 (zero buckets, zero RLS policies existed in this project before then, despite `uploadMedia`/`getHostPhotos` code referencing them) — they were created as a byproduct of building the font-upload feature. If Storage uploads ever 404 again, check `storage.buckets` first before assuming a code bug.
 
 ---
 
@@ -229,6 +284,16 @@ EASE_CUBIC = [0.33, 1, 0.68, 1]  // gentle
 }
 ```
 
-`getTheme(id)` falls back to `midnight-galaxy` if not found.
+`getTheme(id)` falls back to `midnight-galaxy` if not found. (Three slightly different fallback theme IDs exist across the codebase — `getTheme`'s own fallback, `DEFAULT_THEME_ID`, and `normalizeShow`'s fallback — currently all resolve to compatible values but haven't been unified; worth knowing if a "wrong default theme" bug ever shows up.)
 
-21 themes: pure-michigan, midnight-galaxy, autumn-harvest, northern-lights, medieval-tavern, sunset-boulevard, retro-arcade, sand-dune-chill, halloween, jazz-club, dive-bar, rooftop-party, christmas-eve, drive-in-movie, western-showdown, under-the-sea, neon-tokyo, firefly-summer, wine-cellar, meteor-shower, eighties-night
+21 themes: pure-michigan ★, midnight-galaxy, autumn-harvest ★, northern-lights, medieval-tavern, sunset-boulevard ✓, retro-arcade, sand-dune-chill ✓, halloween, jazz-club ⟳, dive-bar, rooftop-party, christmas-eve, drive-in-movie ✓, western-showdown, under-the-sea, neon-tokyo, firefly-summer ★, wine-cellar, meteor-shower, eighties-night. (★ = confirmed-good exemplar, ✓ = bland-pass rework shipped, ⟳ = in progress, unmarked = still on the bland-pass queue. See `references/themes.md` for the full law/recipe. **Verify this list against `git log` per-theme before trusting it** — it drifted out of sync with reality once already this project.)
+
+### Per-show theme overrides (shipped 2026-06-30)
+
+A host can customize one specific show's display font and text colors from `ThemePickerModal.jsx`'s "Customize" row — **without touching the shared theme definition** other shows using that theme still see the unmodified original.
+
+- **Storage:** `shows.theme_overrides jsonb`, shape `{ fonts: { display, displayUrl? }, colors: { text, textMuted } }`. Empty `{}` for every show that's never touched this (the default, verified no-observable-side-effect for existing shows).
+- **Merge chokepoint:** `ThemeProvider.jsx`'s `applyOverrides(baseTheme, overrides)` — spreads `overrides.fonts`/`overrides.colors` on top of the base theme's. Every `<ThemeProvider showThemeId={...} overrides={show.themeOverrides}>` call site that has a REAL show (not the `/display?demo=1` synthetic one) must pass `overrides` — currently that's `Host.jsx` and 2 of `Display.jsx`'s 3 call sites (the demo one intentionally doesn't).
+- **Font presets:** Boogaloo, Handters, Roquen, DM Sans (the 4 fonts actually registered — 2 via `@font-face` in `index.css`, 1 Google-Fonts-loaded, 1 build default). Picking a preset explicitly clears any leftover `displayUrl` from an earlier custom upload (`displayUrl: undefined`) — don't drop that clear, it prevents a preset font silently rendering with a stale custom font file.
+- **Custom font upload:** `useShow.js`'s `uploadFont(file)` → `trivia-fonts` bucket → `{ familyName: 'Custom-${nanoid(8)}', url }`. `ThemeProvider.jsx` registers it at runtime via the CSS Font Loading API (`new FontFace(...).load().then(loaded => document.fonts.add(loaded))`), with a `useRef`-tracked cleanup (`document.fonts.delete()`) on font change/unmount so switching shows in one browser tab doesn't leak `FontFace` objects forever. Failed loads `console.warn` rather than throw — a bad upload must never crash the live TV display.
+- **Where it's wired:** every slide's headline text already reads `theme.fonts.display` (not hardcoded — see Key Components above), so a font override just works on slide content, the pre-show title, and Build Mode's own preview once `ThemeProvider` gets `overrides`.

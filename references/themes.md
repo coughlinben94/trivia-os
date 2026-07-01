@@ -189,7 +189,7 @@ Defined in `themes/index.js`, in this order:
 | `dive-bar` | Neon bar | Red + blue neon buzz + haze |
 | `rooftop-party` | City rooftop | String-light bulbs + warm city glow |
 | `christmas-eve` | Christmas night | Red/green edges + gold candle + snow |
-| `drive-in-movie` | Movie screen | Screen glow + projector dust |
+| `drive-in-movie` ✓ | Drive-in theater | Huge dominant screen (bright edges, dark flat center for text), 2 support poles, moths wandering in the glow, 2 car-roof silhouettes cresting the bottom |
 | `western-showdown` | Desert dusk | Sun-on-horizon + dust haze |
 | `under-the-sea` | Bioluminescent deep | Teal pulse dots + bubble rise |
 | `neon-tokyo` | Tokyo alley | Pink/cyan neon buzz + rain streaks |
