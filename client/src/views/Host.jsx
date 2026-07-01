@@ -197,6 +197,32 @@ function slidePickerLabel(slide) {
 
 function GoLivePicker({ show, onFromBeginning, onFromSlide, onClose }) {
   const slides = sortedSlides(show)
+  const [collapsedRounds, setCollapsedRounds] = useState(() => new Set(show?.rounds?.map(r => r.id) ?? []))
+
+  // Build same segment structure as sidebar
+  const segments = []
+  let currentRoundId = Symbol('init')
+  for (const slide of slides) {
+    if (slide.roundId !== currentRoundId) {
+      currentRoundId = slide.roundId
+      if (slide.roundId) {
+        const round = show.rounds?.find(r => r.id === slide.roundId)
+        segments.push({ type: 'round', round, slides: [slide] })
+      } else {
+        segments.push({ type: 'general', slides: [slide] })
+      }
+    } else {
+      segments[segments.length - 1].slides.push(slide)
+    }
+  }
+
+  function toggleRound(roundId) {
+    setCollapsedRounds(prev => {
+      const next = new Set(prev)
+      next.has(roundId) ? next.delete(roundId) : next.add(roundId)
+      return next
+    })
+  }
 
   return (
     <div
@@ -223,25 +249,70 @@ function GoLivePicker({ show, onFromBeginning, onFromSlide, onClose }) {
         </div>
 
         {/* Slide picker */}
-        <div className="overflow-y-auto flex-1 px-3 py-3">
-          <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 px-3 pb-2">Or jump to a slide</p>
-          {slides.map((slide, index) => {
-            const round = show.rounds?.find(r => r.id === slide.roundId)
-            const isSubSlide = slide.data?.isSeries && (slide.data?.slotIndex ?? 1) > 1
-            if (isSubSlide) return null
+        <div className="overflow-y-auto flex-1 py-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 px-5 pb-2">Or jump to a slide</p>
+
+          {segments.map((seg, i) => {
+            const borderClass = i > 0 ? 'border-t border-gray-100' : ''
+
+            if (seg.type === 'general') {
+              return (
+                <div key={`g-${i}`} className={borderClass}>
+                  {seg.slides.map((slide, si) => {
+                    const index = slides.findIndex(s => s.id === slide.id)
+                    const isSubSlide = slide.data?.isSeries && (slide.data?.slotIndex ?? 1) > 1
+                    if (isSubSlide) return null
+                    return (
+                      <div key={slide.id} className={si > 0 ? 'border-t border-gray-100' : ''}>
+                        <button
+                          onClick={() => onFromSlide(index)}
+                          className="w-full flex items-center gap-3 px-5 py-2.5 hover:bg-gray-50 text-left host-button transition-colors group"
+                        >
+                          <span className="text-base shrink-0 w-6 text-center">{SLIDE_ICON[slide.type] ?? '📄'}</span>
+                          <span className="flex-1 text-sm font-medium text-gray-800 truncate">{slidePickerLabel(slide)}</span>
+                          <span className="text-xs text-gray-300 group-hover:text-gray-500 shrink-0">#{index + 1}</span>
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            }
+
+            const { round, slides: roundSlides } = seg
+            if (!round) return null
+            const collapsed = collapsedRounds.has(round.id)
+
             return (
-              <button
-                key={slide.id}
-                onClick={() => onFromSlide(index)}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 text-left host-button transition-colors group"
-              >
-                <span className="text-base shrink-0 w-6 text-center">{SLIDE_ICON[slide.type] ?? '📄'}</span>
-                <span className="flex-1 min-w-0">
-                  <span className="text-sm font-medium text-gray-800 truncate block">{slidePickerLabel(slide)}</span>
-                  {round && <span className="text-xs text-gray-400">{round.title}</span>}
-                </span>
-                <span className="text-xs text-gray-300 group-hover:text-gray-500 shrink-0">#{index + 1}</span>
-              </button>
+              <div key={round.id} className={borderClass}>
+                {/* Round header */}
+                <button
+                  onClick={() => toggleRound(round.id)}
+                  className="w-full flex items-center gap-2 px-5 py-2.5 hover:bg-gray-50 host-button transition-colors text-left"
+                >
+                  <span className="text-[9px] text-gray-400 w-4 shrink-0">{collapsed ? '▶' : '▼'}</span>
+                  <span className="flex-1 text-sm font-semibold text-gray-700 truncate">R{round.number} · {round.title}</span>
+                  <span className="text-xs text-gray-400">{roundSlides.length}</span>
+                </button>
+
+                {/* Round slides */}
+                {!collapsed && roundSlides.map(slide => {
+                  const index = slides.findIndex(s => s.id === slide.id)
+                  const isSubSlide = slide.data?.isSeries && (slide.data?.slotIndex ?? 1) > 1
+                  if (isSubSlide) return null
+                  return (
+                    <button
+                      key={slide.id}
+                      onClick={() => onFromSlide(index)}
+                      className="w-full flex items-center gap-3 pl-10 pr-5 py-2 hover:bg-gray-50 text-left host-button transition-colors group border-t border-gray-50"
+                    >
+                      <span className="text-sm shrink-0 w-5 text-center">{SLIDE_ICON[slide.type] ?? '📄'}</span>
+                      <span className="flex-1 text-sm text-gray-700 truncate">{slidePickerLabel(slide)}</span>
+                      <span className="text-xs text-gray-300 group-hover:text-gray-500 shrink-0">#{index + 1}</span>
+                    </button>
+                  )
+                })}
+              </div>
             )
           })}
         </div>
