@@ -274,7 +274,7 @@ function AnswerRevealOverlay({ show, currentSlide }) {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
             transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-            className="px-16 py-12 rounded-3xl text-center max-w-4xl mx-8"
+            className="px-16 py-12 rounded-3xl text-center w-full mx-16"
             style={{
               background: theme.colors.bg,
               boxShadow: '0 32px 80px rgba(0,0,0,0.6)',
