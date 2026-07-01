@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import QRCode from 'qrcode'
 import { supabase } from '../lib/supabase.js'
 import { ThemeProvider, useTheme } from '../components/shared/ThemeProvider.jsx'
@@ -236,8 +236,11 @@ function PreviewSlide() {
 
 // ─── Answer reveal overlay ─────────────────────────────────────────────────
 
+const EASE_OUT = [0.23, 1, 0.32, 1]
+
 function AnswerRevealOverlay({ show, currentSlide }) {
   const { theme } = useTheme()
+  const reduce = useReducedMotion()
   const visible = show.answer_reveal ?? show.showState?.answerReveal ?? false
 
   // Walk back to series lead to find the answer for shiny sub-slides
@@ -265,15 +268,14 @@ function AnswerRevealOverlay({ show, currentSlide }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.22, ease: EASE_OUT }}
           className="absolute inset-0 flex items-center justify-center z-50"
           style={{ backdropFilter: 'blur(18px)', backgroundColor: 'rgba(0,0,0,0.55)' }}
         >
           <motion.div
-            initial={{ scale: 0.92, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+            initial={{ scale: reduce ? 1 : 0.92, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1, transition: { duration: 0.22, delay: 0.04, ease: EASE_OUT } }}
+            exit={{ scale: reduce ? 1 : 0.95, opacity: 0, transition: { duration: 0.15, ease: EASE_OUT } }}
             className="px-16 py-12 rounded-3xl text-center w-full mx-16"
             style={{
               background: theme.colors.bg,
