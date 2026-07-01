@@ -27,7 +27,7 @@ export const ROUND_TYPES = [
 ]
 
 export default function AddSlideWizard({ show, onAddSlide, onClose, initialData = {} }) {
-  const type     = initialData.type
+  const [type, setType] = useState(initialData.type ?? null)
   const typeCard = TYPE_CARDS.find(c => c.type === type)
 
   // Shared
@@ -162,15 +162,56 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
   const isShinyDetails = isQuestion && shinyStep === 'details' && !!selectedShinyFmt
 
 
+  // ── Type picker (when opened without a pre-selected type, e.g. from round view) ──
+  if (!type) {
+    return (
+      <div className="bg-white rounded-2xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+          <h2 className="text-base font-semibold text-gray-900">Add a slide</h2>
+          <button
+            onClick={onClose}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 text-lg ${BTN}`}
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex flex-wrap gap-3">
+            {TYPE_CARDS.map(card => (
+              <button
+                key={card.type}
+                onClick={() => setType(card.type)}
+                className={`w-[calc(50%-6px)] flex flex-col gap-2 p-4 rounded-xl border-2 border-gray-100 hover:border-gray-300 bg-white hover:bg-gray-50 text-left transition-colors ${BTN}`}
+              >
+                <span className="text-2xl leading-none">{card.icon}</span>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{card.name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{card.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="bg-white rounded-2xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
 
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
         <div className="flex items-center gap-2">
-          {isShinyDetails && (
+          {isShinyDetails ? (
             <button
               onClick={() => setShinyStep('pick')}
+              className={`text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100 ${BTN}`}
+            >
+              ←
+            </button>
+          ) : !initialData.type && (
+            <button
+              onClick={() => setType(null)}
               className={`text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100 ${BTN}`}
             >
               ←

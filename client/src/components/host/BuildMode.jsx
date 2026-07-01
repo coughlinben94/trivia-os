@@ -332,7 +332,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
           ) : (
             /* Dashboard rest state — type picker grid */
             <div className="h-full flex flex-col items-center justify-center p-8 overflow-y-auto">
-              <div className="w-full max-w-5xl -translate-y-[6%]">
+              <div className="w-full max-w-5xl -translate-y-[9%]">
 
                 {/* Round context filter */}
                 {show.rounds.length > 0 && (
