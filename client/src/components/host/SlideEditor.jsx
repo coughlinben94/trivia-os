@@ -107,7 +107,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   async function handleMediaUpload(file) {
     const result = await uploadMedia(file)
     if (result?.url) {
-      const updates = { mediaUrl: result.url, mediaType: result.mimetype }
+      const updates = { mediaUrl: result.url, mediaType: result.type }
       if (file.type.startsWith('audio/')) {
         updates.audioGainDb = await analyzeAudioGain(file)
       }
@@ -441,7 +441,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
     if (result?.url) {
       const next = [...mediaSlots]
       while (next.length <= i) next.push({})
-      next[i] = { url: result.url, type: result.mimetype }
+      next[i] = { url: result.url, type: result.type }
       onChange('mediaSlots', next)
     }
   }
