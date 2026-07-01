@@ -179,11 +179,16 @@ export default function RoundSidebar({
     document.addEventListener('mouseup', onUp)
   }
 
-  function toggleCollapse(roundId) {
+  function openRound(roundId) {
     setCollapsedRounds(prev => {
-      const next = new Set(prev)
-      next.has(roundId) ? next.delete(roundId) : next.add(roundId)
-      return next
+      const allClosed = new Set(show.rounds.map(r => r.id))
+      if (prev.has(roundId)) {
+        // Collapsed → open it, collapse everything else
+        allClosed.delete(roundId)
+        return allClosed
+      }
+      // Already open → collapse it
+      return allClosed
     })
   }
 
@@ -271,7 +276,7 @@ export default function RoundSidebar({
                   ⠿
                 </span>
                 <button
-                  onClick={() => toggleCollapse(round.id)}
+                  onClick={() => openRound(round.id)}
                   className="text-gray-400 hover:text-gray-600 w-5 h-5 flex items-center justify-center text-[9px] shrink-0 rounded hover:bg-gray-200 host-button"
                 >
                   {collapsed ? '▶' : '▼'}
@@ -288,7 +293,7 @@ export default function RoundSidebar({
                   />
                 ) : (
                   <button
-                    onClick={() => onSelectRound?.(round.id)}
+                    onClick={() => { openRound(round.id); onSelectRound?.(round.id) }}
                     onDoubleClick={() => startRename(round)}
                     className={`flex-1 text-[13px] font-semibold text-left truncate transition-colors ${
                       viewingRoundId === round.id ? 'text-[#1a6b4a]' : 'text-gray-700 hover:text-[#1a6b4a]'
