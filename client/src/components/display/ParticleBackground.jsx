@@ -1419,7 +1419,8 @@ function DbJukebox() {
         animation:'dbRadiate 4.1s ease-in-out -1.2s infinite',
         filter:'blur(16px)', pointerEvents:'none',
       }}/>
-      {/* floor glow directly under */}
+      {/* floor glow directly under — part of DbJukebox's own self-contained palette
+          (like its dome/body colors above), not accent/highlight-derived, left literal */}
       <div style={{
         position:'absolute', bottom:'-10%', left:'-25%', right:'-25%', height:'18%',
         background:`radial-gradient(ellipse, ${dbRgba(DB.floor,0.65)} 0%, transparent 70%)`,
