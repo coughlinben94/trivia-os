@@ -1926,11 +1926,11 @@ const NT_STYLE = `
 @media (prefers-reduced-motion: reduce){ .nt-anim{ animation:none !important } }
 `;
 
-function NeonTokyoAmbient() {
+function NeonTokyoAmbient({ tint }) {
   const pops = useMemo(() => {
     const cols = 6, rows = 4, arr = [];
     const kfs = ["ntPop", "ntPopB", "ntPopC"];
-    const cols5 = [NT.magenta, NT.magenta, NT.cyan, NT.cyan, NT.purple, NT.pink];
+    const cols5 = [tint(NT.magenta), tint(NT.magenta), tint(NT.cyan), tint(NT.cyan), tint(NT.purple), tint(NT.pink)];
     const push = (left, top) => {
       arr.push({
         color: cols5[Math.floor(Math.random() * cols5.length)],
@@ -1948,23 +1948,26 @@ function NeonTokyoAmbient() {
       for (let c = 0; c < cols; c++)
         push((c + 0.1 + Math.random() * 0.8) / cols * 100, (r + 0.1 + Math.random() * 0.8) / rows * 100);
     return arr;
-  }, []);
+  }, [tint]);
 
-  const rain = useMemo(() => Array.from({ length: 24 }, () => {
-    const c = Math.random();
-    return {
-      left: (Math.random() * 100).toFixed(1) + "%",
-      height: (Math.random() * 50 + 55).toFixed(0),
-      hi: (Math.random() * 0.3 + 0.45).toFixed(2),
-      dur: (Math.random() * 1.0 + 1.7).toFixed(2),
-      delay: (-Math.random() * 3).toFixed(2),
-      color: c < 0.34 ? NT.rain : c < 0.67 ? "#dcf6ff" : ntRgba(NT.cyan, 0.9),
-    };
-  }), []);
+  const rain = useMemo(() => {
+    const rainColors = [tint(NT.rain), tint("#dcf6ff"), tint(ntRgba(NT.cyan, 0.9))];
+    return Array.from({ length: 24 }, () => {
+      const c = Math.random();
+      return {
+        left: (Math.random() * 100).toFixed(1) + "%",
+        height: (Math.random() * 50 + 55).toFixed(0),
+        hi: (Math.random() * 0.3 + 0.45).toFixed(2),
+        dur: (Math.random() * 1.0 + 1.7).toFixed(2),
+        delay: (-Math.random() * 3).toFixed(2),
+        color: c < 0.34 ? rainColors[0] : c < 0.67 ? rainColors[1] : rainColors[2],
+      };
+    });
+  }, [tint]);
 
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden",
-      background: `radial-gradient(ellipse 120% 90% at 50% 34%, ${ntRgba(NT.accent, 0.4)}, ${NT.bg} 62%, ${NT.bgDeep} 94%)` }}>
+      background: `radial-gradient(ellipse 120% 90% at 50% 34%, ${tint(ntRgba(NT.accent, 0.4))}, ${tint(NT.bg)} 62%, ${tint(NT.bgDeep)} 94%)` }}>
 
       <style>{NT_STYLE}</style>
 
@@ -1983,7 +1986,7 @@ function NeonTokyoAmbient() {
       {rain.map((r, i) => (
         <div key={i} className="nt-anim" style={{ position: "absolute", left: r.left, top: "-6%",
           width: 1.4, height: r.height + "px", background: r.color, ["--hi"]: r.hi,
-          boxShadow: `0 0 4px ${ntRgba(NT.cyan, 0.5)}`,
+          boxShadow: `0 0 4px ${tint(ntRgba(NT.cyan, 0.5))}`,
           animation: `ntRain ${r.dur}s ${r.delay}s linear infinite`, willChange: "transform, opacity" }} />
       ))}
     </div>
@@ -1992,7 +1995,7 @@ function NeonTokyoAmbient() {
 
 
 // ─── 23. FIREFLY SUMMER ──────────────────────────────────────────────────
-function FireflySummerAmbient() {
+function FireflySummerAmbient({ tint }) {
   const fireflies = useMemo(() => Array.from({ length: 19 }, (_, i) => ({
     left:   `${(i * 53) % 100}%`,
     top:    `${35 + (i * 43 + i % 4 * 13) % 55}%`,
@@ -2006,19 +2009,19 @@ function FireflySummerAmbient() {
   return <>
     <GlowLayer lo={0.15} hi={0.35} duration="25s" style={{
       top: 0, left: 0, right: 0, height: '30%',
-      background: 'linear-gradient(to bottom, rgba(180,110,35,0.32), transparent)',
+      background: `linear-gradient(to bottom, ${tint('rgba(180,110,35,0.32)')}, transparent)`,
     }}/>
     <GlowLayer lo={0.18} hi={0.45} duration="30s" delay="8s" style={{
       inset: 0,
-      background: 'radial-gradient(ellipse 80% 60% at 50% 60%, rgba(0,75,20,0.35), transparent)',
+      background: `radial-gradient(ellipse 80% 60% at 50% 60%, ${tint('rgba(0,75,20,0.35)')}, transparent)`,
     }}/>
     <div aria-hidden style={{
       position: 'absolute', bottom: 0, left: 0, right: 0, height: '20%',
-      background: 'linear-gradient(to top, rgba(80,60,10,0.18), transparent)', pointerEvents: 'none',
+      background: `linear-gradient(to top, ${tint('rgba(80,60,10,0.18)')}, transparent)`, pointerEvents: 'none',
     }}/>
     {fireflies.map((f, i) => (
       <PulseDot key={i} left={f.left} top={f.top} size={f.size}
-        color="rgba(185,255,85,0.95)" glowColor="rgba(145,255,45,0.40)"
+        color={tint('rgba(185,255,85,0.95)')} glowColor={tint('rgba(145,255,45,0.40)')}
         duration={f.dur} delay={f.delay}
         lo={0.15} wander={true} wanderDur={f.wDur} wanderDelay={f.wDelay}
       />
@@ -2029,32 +2032,32 @@ function FireflySummerAmbient() {
 
 // ─── 25. WINE CELLAR ─────────────────────────────────────────────────────
 // Deep stone cellar — burgundy walls closing in, one small candle center
-function WineCellarAmbient() {
+function WineCellarAmbient({ tint }) {
   return <>
     {/* Burgundy stone walls — dominant edge treatment */}
     <GlowLayer lo={0.25} hi={0.62} duration="9s" style={{
       inset: 0,
-      background: 'radial-gradient(ellipse 75% 75% at 50% 50%, transparent 38%, rgba(120,0,25,0.70) 100%)',
+      background: `radial-gradient(ellipse 75% 75% at 50% 50%, transparent 38%, ${tint('rgba(120,0,25,0.70)')} 100%)`,
     }}/>
     {/* Deep wine-red overlay — left wall */}
     <GlowLayer lo={0.18} hi={0.45} duration="12s" style={{
       inset: 0,
-      background: 'radial-gradient(ellipse 40% 100% at 0% 50%, rgba(100,0,20,0.52), transparent)',
+      background: `radial-gradient(ellipse 40% 100% at 0% 50%, ${tint('rgba(100,0,20,0.52)')}, transparent)`,
     }}/>
     {/* Deep wine-red overlay — right wall */}
     <GlowLayer lo={0.14} hi={0.38} duration="15s" delay="5s" style={{
       inset: 0,
-      background: 'radial-gradient(ellipse 40% 100% at 100% 50%, rgba(100,0,20,0.45), transparent)',
+      background: `radial-gradient(ellipse 40% 100% at 100% 50%, ${tint('rgba(100,0,20,0.45)')}, transparent)`,
     }}/>
     {/* Single candle — center, small and warm */}
     <GlowLayer lo={0.26} hi={0.68} duration="2.4s" flicker style={{
       inset: 0,
-      background: 'radial-gradient(ellipse 30% 45% at 50% 60%, rgba(240,170,60,0.62), transparent)',
+      background: `radial-gradient(ellipse 30% 45% at 50% 60%, ${tint('rgba(240,170,60,0.62)')}, transparent)`,
     }}/>
     {/* Faint warm floor glow */}
     <GlowLayer lo={0.12} hi={0.30} duration="6s" delay="3s" style={{
       bottom: 0, left: 0, right: 0, height: '20%',
-      background: 'linear-gradient(to top, rgba(160,60,10,0.30), transparent)',
+      background: `linear-gradient(to top, ${tint('rgba(160,60,10,0.30)')}, transparent)`,
     }}/>
   </>
 }
@@ -2071,14 +2074,16 @@ const DIPPER = [
   { x: 35.0, y: 11.5, d: 2.9 }, // Alkaid
 ]
 
-function BigDipper() {
+function BigDipper({ tint }) {
   return <>
     {DIPPER.map((s, i) => (
       <div key={i} aria-hidden style={{
         position: 'absolute', left: `${s.x}%`, top: `${s.y}%`, transform: 'translate(-50%,-50%)',
         width: `${s.d}px`, height: `${s.d}px`, borderRadius: '50%', pointerEvents: 'none',
+        // star point itself is achromatic near-white (0 saturation), sanctioned exception;
+        // the soft blue halo carries the theme hue (S=100), so it's tinted
         background: 'rgba(255,255,255,1)',
-        boxShadow: '0 0 5px rgba(220,240,255,0.95), 0 0 12px rgba(195,224,255,0.45)',
+        boxShadow: `0 0 5px ${tint('rgba(220,240,255,0.95)')}, 0 0 12px ${tint('rgba(195,224,255,0.45)')}`,
         willChange: 'opacity', '--lo': 0.92, '--hi': 1,
         animation: `ambientBreathe ${6 + (i % 4)}s -${i}s ease-in-out infinite`,
       }}/>
@@ -2099,7 +2104,7 @@ function rollMeteorShower() {
   }
 }
 
-function MeteorShowerStreak() {
+function MeteorShowerStreak({ tint }) {
   const [shot, setShot] = useState(null)
   useEffect(() => {
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
@@ -2125,21 +2130,23 @@ function MeteorShowerStreak() {
       }}>
         <div style={{
           position: 'absolute', inset: 0,
-          background: 'linear-gradient(to right, rgba(200,228,255,0) 0%, rgba(208,232,255,0.22) 50%, rgba(228,244,255,0.72) 86%, rgba(248,252,255,1) 100%)',
+          // near-white leading tip (100% stop) is a sanctioned hot-core exception; body stops are in-family blue-white
+          background: `linear-gradient(to right, ${tint('rgba(200,228,255,0)')} 0%, ${tint('rgba(208,232,255,0.22)')} 50%, ${tint('rgba(228,244,255,0.72)')} 86%, rgba(248,252,255,1) 100%)`,
           clipPath: 'polygon(0 50%, 100% 0, 100% 100%)',
         }}/>
         <div style={{
           position: 'absolute', right: '-3px', top: '50%', transform: 'translateY(-50%)',
           width: '7px', height: '7px', borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(250,253,255,1), rgba(208,232,255,0.5) 45%, transparent 70%)',
-          boxShadow: '0 0 7px rgba(200,228,255,0.7)',
+          // near-white core, in-family blue-white falloff
+          background: `radial-gradient(circle, rgba(250,253,255,1), ${tint('rgba(208,232,255,0.5)')} 45%, transparent 70%)`,
+          boxShadow: `0 0 7px ${tint('rgba(200,228,255,0.7)')}`,
         }}/>
       </div>
     </div>
   )
 }
 
-function MeteorShowerAmbient() {
+function MeteorShowerAmbient({ tint }) {
   const stars = useMemo(() => Array.from({ length: 200 }, () => {
     const op = 0.22 + Math.random() * 0.5
     return {
@@ -2156,13 +2163,14 @@ function MeteorShowerAmbient() {
   return <>
     {/* Deep blue night sky wash */}
     <GlowLayer lo={0.22} hi={0.42} duration="30s" style={{
-      inset: 0, background: 'radial-gradient(ellipse 100% 82% at 50% 28%, rgba(20,32,96,0.42), transparent)',
+      inset: 0, background: `radial-gradient(ellipse 100% 82% at 50% 28%, ${tint('rgba(20,32,96,0.42)')}, transparent)`,
     }}/>
     {/* Faint milky-way band */}
     <GlowLayer lo={0.10} hi={0.26} duration="40s" delay="12s" style={{
-      inset: 0, background: 'radial-gradient(ellipse 62% 24% at 48% 46%, rgba(70,80,170,0.24), transparent)',
+      inset: 0, background: `radial-gradient(ellipse 62% 24% at 48% 46%, ${tint('rgba(70,80,170,0.24)')}, transparent)`,
     }}/>
-    {/* True-random twinkle field */}
+    {/* True-random twinkle field — pure achromatic white (0 saturation), sanctioned
+        near-white exception, same as Midnight Galaxy's star field */}
     {stars.map((s, i) => (
       <div key={i} aria-hidden style={{
         position: 'absolute', left: s.left, top: s.top, pointerEvents: 'none',
@@ -2173,46 +2181,63 @@ function MeteorShowerAmbient() {
       }}/>
     ))}
     {/* Big Dipper anchor */}
-    <BigDipper/>
+    <BigDipper tint={tint}/>
     {/* Parallel meteors */}
-    <MeteorShowerStreak/><MeteorShowerStreak/><MeteorShowerStreak/><MeteorShowerStreak/>
+    <MeteorShowerStreak tint={tint}/><MeteorShowerStreak tint={tint}/><MeteorShowerStreak tint={tint}/><MeteorShowerStreak tint={tint}/>
   </>
 }
 
 
 // ─── 29. 80S NIGHT ───────────────────────────────────────────────────────
-function EightiesNightAmbient() {
-  const neon = useMemo(() => [
-    { bg: 'radial-gradient(ellipse 72% 49% at 50% 100%, rgba(255,16,200,0.58) 0%, rgba(255,16,200,0.24) 42%, transparent 76%), radial-gradient(ellipse 135% 32% at 50% 105%, rgba(255,16,200,0.40) 0%, rgba(255,16,200,0.15) 46%, transparent 78%)', delay: '0s'   },
-    { bg: 'radial-gradient(ellipse 72% 49% at 50% 100%, rgba(0,208,255,0.54) 0%, rgba(0,208,255,0.22) 42%, transparent 76%), radial-gradient(ellipse 135% 32% at 50% 105%, rgba(0,208,255,0.38) 0%, rgba(0,208,255,0.14) 46%, transparent 78%)',   delay: '-4s'  },
-    { bg: 'radial-gradient(ellipse 72% 49% at 50% 100%, rgba(160,32,255,0.56) 0%, rgba(160,32,255,0.22) 42%, transparent 76%), radial-gradient(ellipse 135% 32% at 50% 105%, rgba(160,32,255,0.38) 0%, rgba(160,32,255,0.14) 46%, transparent 78%)', delay: '-8s'  },
-    { bg: 'radial-gradient(ellipse 72% 49% at 50% 100%, rgba(255,80,160,0.54) 0%, rgba(255,80,160,0.22) 42%, transparent 76%), radial-gradient(ellipse 135% 32% at 50% 105%, rgba(255,80,160,0.38) 0%, rgba(255,80,160,0.14) 46%, transparent 78%)', delay: '-12s' },
-  ], [])
+function EightiesNightAmbient({ tint }) {
+  const neon = useMemo(() => {
+    // each neon-glow band uses one solid hue repeated at multiple stops/alphas —
+    // tint the base hex once per band, reapply original alphas
+    const bands = [
+      { hex: '#ff10c8', delay: '0s'   },
+      { hex: '#00d0ff', delay: '-4s'  },
+      { hex: '#a020ff', delay: '-8s'  },
+      { hex: '#ff50a0', delay: '-12s' },
+    ]
+    return bands.map(({ hex, delay }) => {
+      const c = tint(hex)
+      const rgba = (a) => {
+        const n = parseInt(c.slice(1), 16)
+        return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
+      }
+      return {
+        bg: `radial-gradient(ellipse 72% 49% at 50% 100%, ${rgba(0.58)} 0%, ${rgba(0.24)} 42%, transparent 76%), radial-gradient(ellipse 135% 32% at 50% 105%, ${rgba(0.40)} 0%, ${rgba(0.15)} 46%, transparent 78%)`,
+        delay,
+      }
+    })
+  }, [tint])
   const dots = useMemo(() => [
-    { left: '6%',  top: '9%',  size: 5,   color: 'rgba(255,80,200,0.95)',  dur: '2.2s', delay: '0s'    },
-    { left: '14%', top: '18%', size: 3.5, color: 'rgba(0,210,255,0.95)',   dur: '2.7s', delay: '-0.7s' },
-    { left: '22%', top: '7%',  size: 4,   color: 'rgba(180,90,255,0.9)',   dur: '1.9s', delay: '-1.3s' },
+    { left: '6%',  top: '9%',  size: 5,   color: tint('rgba(255,80,200,0.95)'),  dur: '2.2s', delay: '0s'    },
+    { left: '14%', top: '18%', size: 3.5, color: tint('rgba(0,210,255,0.95)'),   dur: '2.7s', delay: '-0.7s' },
+    { left: '22%', top: '7%',  size: 4,   color: tint('rgba(180,90,255,0.9)'),   dur: '1.9s', delay: '-1.3s' },
     { left: '30%', top: '16%', size: 4,   color: 'rgba(255,255,255,0.95)', dur: '2.4s', delay: '-0.4s' },
-    { left: '40%', top: '15%', size: 3.5, color: 'rgba(255,120,220,0.9)',  dur: '2.5s', delay: '-1.5s' },
-    { left: '48%', top: '21%', size: 5,   color: 'rgba(0,210,255,0.9)',    dur: '2.1s', delay: '-1.1s' },
-    { left: '56%', top: '15%', size: 4,   color: 'rgba(180,90,255,0.9)',   dur: '2.9s', delay: '-1.8s' },
+    { left: '40%', top: '15%', size: 3.5, color: tint('rgba(255,120,220,0.9)'),  dur: '2.5s', delay: '-1.5s' },
+    { left: '48%', top: '21%', size: 5,   color: tint('rgba(0,210,255,0.9)'),    dur: '2.1s', delay: '-1.1s' },
+    { left: '56%', top: '15%', size: 4,   color: tint('rgba(180,90,255,0.9)'),   dur: '2.9s', delay: '-1.8s' },
     { left: '66%', top: '17%', size: 3.5, color: 'rgba(255,255,255,0.9)',  dur: '2.0s', delay: '-0.9s' },
-    { left: '72%', top: '7%',  size: 4,   color: 'rgba(255,80,200,0.9)',   dur: '3.0s', delay: '-1.7s' },
-    { left: '80%', top: '15%', size: 4,   color: 'rgba(0,210,255,0.9)',    dur: '2.3s', delay: '-1.0s' },
-    { left: '88%', top: '9%',  size: 3,   color: 'rgba(180,90,255,0.9)',   dur: '2.8s', delay: '-2.0s' },
+    { left: '72%', top: '7%',  size: 4,   color: tint('rgba(255,80,200,0.9)'),   dur: '3.0s', delay: '-1.7s' },
+    { left: '80%', top: '15%', size: 4,   color: tint('rgba(0,210,255,0.9)'),    dur: '2.3s', delay: '-1.0s' },
+    { left: '88%', top: '9%',  size: 3,   color: tint('rgba(180,90,255,0.9)'),   dur: '2.8s', delay: '-2.0s' },
     { left: '12%', top: '26%', size: 3,   color: 'rgba(255,255,255,0.9)',  dur: '3.1s', delay: '-2.2s' },
-    { left: '36%', top: '25%', size: 3,   color: 'rgba(0,210,255,0.85)',   dur: '3.2s', delay: '-1.4s' },
-    { left: '62%', top: '26%', size: 3.5, color: 'rgba(255,120,220,0.9)',  dur: '2.4s', delay: '-0.8s' },
-    { left: '86%', top: '24%', size: 3,   color: 'rgba(180,90,255,0.85)',  dur: '2.7s', delay: '-2.3s' },
-  ], [])
+    { left: '36%', top: '25%', size: 3,   color: tint('rgba(0,210,255,0.85)'),   dur: '3.2s', delay: '-1.4s' },
+    { left: '62%', top: '26%', size: 3.5, color: tint('rgba(255,120,220,0.9)'),  dur: '2.4s', delay: '-0.8s' },
+    { left: '86%', top: '24%', size: 3,   color: tint('rgba(180,90,255,0.85)'),  dur: '2.7s', delay: '-2.3s' },
+  ], [tint])
   return <>
     <GlowLayer lo={0.16} hi={0.34} duration="20s" style={{ inset: 0,
-      background: 'radial-gradient(ellipse 90% 70% at 50% 24%, rgba(60,10,90,0.42), transparent 75%)' }}/>
+      background: `radial-gradient(ellipse 90% 70% at 50% 24%, ${tint('rgba(60,10,90,0.42)')}, transparent 75%)` }}/>
     {neon.map((n, i) => (
       <div key={i} aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
         background: n.bg, willChange: 'opacity', '--lo': 0, '--hi': 0.9,
         animation: `ambientBreathe 16s ${n.delay} ease-in-out infinite` }}/>
     ))}
+    {/* 3 of the 15 dots (30%/66%/12% left) are pure achromatic white (0 saturation),
+        sanctioned near-white exception — left untinted; the rest carry the neon hues, tinted */}
     {dots.map((d, i) => (
       <div key={i} aria-hidden style={{ position: 'absolute', left: d.left, top: d.top, width: d.size, height: d.size,
         borderRadius: '50%', background: d.color, boxShadow: `0 0 ${d.size * 2.2}px ${d.color}`, pointerEvents: 'none',
