@@ -1,4 +1,4 @@
-const DISPLAY_FONTS = ['Boogaloo', 'Handters', 'Roquen', 'DM Sans']
+export const DISPLAY_FONTS = ['Boogaloo', 'Handters', 'Roquen', 'DM Sans']
 
 export default function ThemeCustomizeControls({ overrides, baseTheme, onSetDisplayFont, onUploadFont, onSetTextColor, onDone }) {
   return (
