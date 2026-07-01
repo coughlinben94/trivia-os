@@ -53,14 +53,14 @@ function ElementRow({ el, onChange, onDelete, onUpload }) {
 
           <div className="flex items-center gap-2">
             <select
-              value={el.position}
+              value={el.position ?? 'center'}
               onChange={e => onChange({ ...el, position: e.target.value })}
               className="text-xs border border-gray-200 rounded-md px-2 py-1 flex-1"
             >
               {POSITIONS.map(p => <option key={p} value={p}>{ELEMENT_POSITION_LABELS[p]}</option>)}
             </select>
             <select
-              value={el.size}
+              value={el.size ?? 'md'}
               onChange={e => onChange({ ...el, size: e.target.value })}
               className="text-xs border border-gray-200 rounded-md px-2 py-1"
             >

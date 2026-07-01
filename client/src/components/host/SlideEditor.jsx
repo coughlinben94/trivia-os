@@ -4,6 +4,7 @@ import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import MediaUpload from './MediaUpload.jsx'
 import HostPhotoLibrary from './HostPhotoLibrary.jsx'
+import ElementsEditor from './ElementsEditor.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
 import SlideRenderer from '../display/SlideRenderer.jsx'
 
@@ -811,6 +812,12 @@ function CustomEditor({ data, onChange, onMediaUpload }) {
         currentType={data.mediaType}
         onUpload={onMediaUpload}
         onRemove={() => { onChange('mediaUrl', null); onChange('mediaType', null) }}
+      />
+      <Divider label="Elements" />
+      <ElementsEditor
+        elements={data.elements}
+        onChange={next => onChange('elements', next)}
+        onUpload={onMediaUpload}
       />
     </>
   )
