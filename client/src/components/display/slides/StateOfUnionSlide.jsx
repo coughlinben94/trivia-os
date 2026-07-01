@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import BaynesWatermark from '../BaynesWatermark.jsx'
+import SlideElements from '../SlideElements.jsx'
 
 const CHARS_PER_SECOND = 28
 
@@ -63,6 +64,8 @@ export default function StateOfUnionSlide({ slide }) {
       </p>
 
       <BaynesWatermark />
+
+      <SlideElements elements={slide.data?.elements} theme={theme} />
     </div>
   )
 }

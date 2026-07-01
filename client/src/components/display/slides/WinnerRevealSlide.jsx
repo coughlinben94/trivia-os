@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
+import SlideElements from '../SlideElements.jsx'
 
 // ─── Drum roll (Web Audio) ─────────────────────────────────────────────────
 
@@ -121,7 +122,7 @@ function Confetti({ active }) {
 
 const EASE_OUT = [0.23, 1, 0.32, 1]
 
-export default function WinnerRevealSlide({ show }) {
+export default function WinnerRevealSlide({ slide, show }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const [winner, setWinner] = useState(null)
@@ -219,6 +220,10 @@ export default function WinnerRevealSlide({ show }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <div className="absolute inset-0" style={{ zIndex: 40 }}>
+        <SlideElements elements={slide?.data?.elements} theme={theme} />
+      </div>
     </div>
   )
 }

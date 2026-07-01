@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
+import SlideElements from '../SlideElements.jsx'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
@@ -108,6 +109,10 @@ export default function PixelateSeriesSlide({ slide, show }) {
         >
           {data.questionNumber}
         </span>
+      </div>
+
+      <div className="absolute inset-0" style={{ zIndex: 25 }}>
+        <SlideElements elements={data.elements} theme={theme} />
       </div>
     </div>
   )

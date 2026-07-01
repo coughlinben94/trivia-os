@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
+import SlideElements from '../SlideElements.jsx'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 const EASE_ASSEMBLE = [0.22, 1, 0.36, 1]
@@ -125,6 +126,10 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
           />
         </motion.div>
       )}
+
+      <div className="absolute inset-0" style={{ zIndex: 35 }}>
+        <SlideElements elements={data.elements} theme={theme} />
+      </div>
     </div>
   )
 }
@@ -246,6 +251,10 @@ function ShinyVisualQuestion({ slide, theme }) {
         style={{ filter: `drop-shadow(0 0 8px ${theme.colors.shinyAccent})` }}
       >
         ✨
+      </div>
+
+      <div className="absolute inset-0" style={{ zIndex: 25 }}>
+        <SlideElements elements={data.elements} theme={theme} />
       </div>
     </div>
   )
@@ -393,6 +402,10 @@ function ShinyAudioQuestion({ slide, show, theme }) {
           </motion.div>
         </>
       )}
+
+      <div className="absolute inset-0" style={{ zIndex: 25 }}>
+        <SlideElements elements={data.elements} theme={theme} />
+      </div>
     </div>
   )
 }

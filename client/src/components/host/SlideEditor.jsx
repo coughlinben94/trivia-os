@@ -162,38 +162,38 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
       {viewMode === 'edit' && (
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
           {slide.type === 'title' && (
-            <TitleEditor data={data} onChange={change} />
+            <TitleEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
           )}
           {(slide.type === 'round-intro' || slide.type === 'swing-round-intro') && (
             <RoundIntroEditor data={data} onChange={change} isSwing={slide.type === 'swing-round-intro'}
-              uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
+              uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} onMediaUpload={handleMediaUpload} />
           )}
           {slide.type === 'question' && (
             <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia}
-              slideId={slide.id} slideRoundId={slide.roundId} addSiblingSlides={addSiblingSlides} />
+              slideId={slide.id} slideRoundId={slide.roundId} addSiblingSlides={addSiblingSlides} onMediaUpload={handleMediaUpload} />
           )}
           {slide.type === 'grading-break' && (
             <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
-              uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} />
+              uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} onMediaUpload={handleMediaUpload} />
           )}
           {slide.type === 'scoreboard-reveal' && (
-            <ScoreboardRevealEditor data={data} onChange={change} show={show} />
+            <ScoreboardRevealEditor data={data} onChange={change} show={show} onMediaUpload={handleMediaUpload} />
           )}
           {slide.type === 'custom' && (
             <CustomEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
           )}
           {slide.type === 'pixelate-series' && (
             <PixelateSeriesEditor data={data} onChange={change}
-              onStageUpload={handleStageUpload} />
+              onStageUpload={handleStageUpload} onMediaUpload={handleMediaUpload} />
           )}
           {slide.type === 'multi-question' && (
-            <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
+            <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload} />
           )}
           {slide.type === 'pyl-reveal' && (
-            <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
+            <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload} />
           )}
           {slide.type === 'winner-reveal' && (
-            <WinnerRevealEditor />
+            <WinnerRevealEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
           )}
         </div>
       )}
@@ -378,16 +378,22 @@ function Divider({ label }) {
 
 // ─── Slide type editors ──────────────────────────────────────────────────────
 
-function TitleEditor({ data, onChange }) {
+function TitleEditor({ data, onChange, onMediaUpload }) {
   return (
     <>
       <Field label="Title"><TextInput value={data.title} onChange={v => onChange('title', v)} placeholder="Baynes Apple Valley" /></Field>
       <Field label="Subtitle"><TextInput value={data.subtitle} onChange={v => onChange('subtitle', v)} placeholder="Trivia Night" /></Field>
+      <Divider label="Elements" />
+      <ElementsEditor
+        elements={data.elements}
+        onChange={next => onChange('elements', next)}
+        onUpload={onMediaUpload}
+      />
     </>
   )
 }
 
-function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos }) {
+function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos, onMediaUpload }) {
   return (
     <>
       <div className="grid grid-cols-2 gap-4">
@@ -409,11 +415,17 @@ function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos 
         currentPhotoUrl={data.hostPhotoUrl}
         onSelectPhoto={url => onChange('hostPhotoUrl', url)}
       />
+      <Divider label="Elements" />
+      <ElementsEditor
+        elements={data.elements}
+        onChange={next => onChange('elements', next)}
+        onUpload={onMediaUpload}
+      />
     </>
   )
 }
 
-function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, slideRoundId, addSiblingSlides }) {
+function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, slideRoundId, addSiblingSlides, onMediaUpload }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
 
   const mode = data.questionMode
@@ -474,6 +486,12 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
         <Field label="Answer">
           <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="The answer…" />
         </Field>
+        <Divider label="Elements" />
+        <ElementsEditor
+          elements={data.elements}
+          onChange={next => onChange('elements', next)}
+          onUpload={onMediaUpload}
+        />
       </>
     )
   }
@@ -606,6 +624,13 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
               )}
             </>
           )}
+
+          <Divider label="Elements" />
+          <ElementsEditor
+            elements={data.elements}
+            onChange={next => onChange('elements', next)}
+            onUpload={onMediaUpload}
+          />
         </>
       )}
 
@@ -713,7 +738,7 @@ function ShinyListBuilder({ items, hasPoints, onChange }) {
   )
 }
 
-function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostPhotos, jukeboxLibs }) {
+function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostPhotos, jukeboxLibs, onMediaUpload }) {
   return (
     <>
       <Field label="Message">
@@ -761,11 +786,18 @@ function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostP
         currentPhotoUrl={data.hostPhotoUrl}
         onSelectPhoto={url => onChange('hostPhotoUrl', url)}
       />
+
+      <Divider label="Elements" />
+      <ElementsEditor
+        elements={data.elements}
+        onChange={next => onChange('elements', next)}
+        onUpload={onMediaUpload}
+      />
     </>
   )
 }
 
-function WinnerRevealEditor() {
+function WinnerRevealEditor({ data, onChange, onMediaUpload }) {
   return (
     <div className="flex flex-col gap-3 py-2">
       <p className="text-sm text-gray-500 leading-relaxed">
@@ -774,11 +806,17 @@ function WinnerRevealEditor() {
       <p className="text-xs text-gray-400 leading-relaxed">
         The winner is calculated live from team scores at the time the slide appears. No configuration needed — just place it last in your show order.
       </p>
+      <Divider label="Elements" />
+      <ElementsEditor
+        elements={data.elements}
+        onChange={next => onChange('elements', next)}
+        onUpload={onMediaUpload}
+      />
     </div>
   )
 }
 
-function ScoreboardRevealEditor({ data, onChange, show }) {
+function ScoreboardRevealEditor({ data, onChange, show, onMediaUpload }) {
   return (
     <>
       <Field label="Title" hint='e.g. "After Round 1"'>
@@ -796,6 +834,12 @@ function ScoreboardRevealEditor({ data, onChange, show }) {
           ))}
         </select>
       </Field>
+      <Divider label="Elements" />
+      <ElementsEditor
+        elements={data.elements}
+        onChange={next => onChange('elements', next)}
+        onUpload={onMediaUpload}
+      />
     </>
   )
 }
@@ -823,7 +867,7 @@ function CustomEditor({ data, onChange, onMediaUpload }) {
   )
 }
 
-function PixelateSeriesEditor({ data, onChange, onStageUpload }) {
+function PixelateSeriesEditor({ data, onChange, onStageUpload, onMediaUpload }) {
   const stages = data.stages || [{}, {}, {}]
 
   return (
@@ -851,11 +895,17 @@ function PixelateSeriesEditor({ data, onChange, onStageUpload }) {
           }}
         />
       ))}
+      <Divider label="Elements" />
+      <ElementsEditor
+        elements={data.elements}
+        onChange={next => onChange('elements', next)}
+        onUpload={onMediaUpload}
+      />
     </>
   )
 }
 
-function MultiQuestionEditor({ data, onChange, setData, scheduleSave }) {
+function MultiQuestionEditor({ data, onChange, setData, scheduleSave, onMediaUpload }) {
   const questions = data.questions || [{ text: '' }]
 
   function addQuestion() {
@@ -905,11 +955,17 @@ function MultiQuestionEditor({ data, onChange, setData, scheduleSave }) {
       >
         + Add question
       </button>
+      <Divider label="Elements" />
+      <ElementsEditor
+        elements={data.elements}
+        onChange={next => onChange('elements', next)}
+        onUpload={onMediaUpload}
+      />
     </>
   )
 }
 
-function PylRevealEditor({ data, onChange, setData, scheduleSave }) {
+function PylRevealEditor({ data, onChange, setData, scheduleSave, onMediaUpload }) {
   const stages = data.stages || [{ text: '', points: 40, revealed: false }]
 
   function addStage() {
@@ -963,6 +1019,12 @@ function PylRevealEditor({ data, onChange, setData, scheduleSave }) {
       <button onClick={addStage} className="text-xs text-baynes-forest hover:text-green-800 font-medium transition-colors">
         + Add reveal stage
       </button>
+      <Divider label="Elements" />
+      <ElementsEditor
+        elements={data.elements}
+        onChange={next => onChange('elements', next)}
+        onUpload={onMediaUpload}
+      />
     </>
   )
 }

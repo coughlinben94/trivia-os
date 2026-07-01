@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
+import SlideElements from '../SlideElements.jsx'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
@@ -86,6 +87,8 @@ export default function GradingBreakSlide({ slide }) {
           {message}
         </motion.p>
       </div>
+
+      <SlideElements elements={data.elements} theme={theme} />
     </div>
   )
 }
