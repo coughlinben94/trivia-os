@@ -6,8 +6,8 @@ import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 import { archiveQuestion } from '../../lib/archiveQuestion.js'
 
 export const TYPE_CARDS = [
-  { type: 'title',         icon: '🎬', name: 'State of the Union', desc: 'Opening address to the crowd' },
-  { type: 'round-intro',   icon: '🥊', name: 'Round Intro',         desc: 'Dramatic round opener' },
+  { type: 'title',         icon: '📺', name: 'State of the Union', desc: 'Opening address to the crowd' },
+  { type: 'round-intro',   icon: '🎬', name: 'Round Intro',         desc: 'Dramatic round opener' },
   { type: 'question',      icon: '❓', name: 'Question',            desc: 'Regular or shiny question' },
   { type: 'grading-break', icon: '⏸️', name: 'Grading Break',       desc: 'While Ben grades papers' },
   { type: 'custom',        icon: '✏️', name: 'Custom',              desc: 'Freeform slide' },
@@ -26,7 +26,7 @@ export const ROUND_TYPES = [
   { id: 'pyl',    label: 'Press Your Luck!', needsNumber: false, title: 'Press Your Luck!' },
 ]
 
-export default function AddSlideWizard({ show, onAddSlide, onClose, initialData = {} }) {
+export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange, initialData = {} }) {
   const [type, setType] = useState(initialData.type ?? null)
   const typeCard = TYPE_CARDS.find(c => c.type === type)
 
@@ -177,10 +177,10 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, initialData 
         </div>
         <div className="flex-1 overflow-y-auto p-6">
           <div className="flex flex-wrap gap-3">
-            {TYPE_CARDS.map(card => (
+            {TYPE_CARDS.filter(card => !(initialData.roundId && card.type === 'title')).map(card => (
               <button
                 key={card.type}
-                onClick={() => setType(card.type)}
+                onClick={() => { setType(card.type); onTypeChange?.(card.type) }}
                 className={`w-[calc(50%-6px)] flex flex-col gap-2 p-4 rounded-xl border-2 border-gray-100 hover:border-gray-300 bg-white hover:bg-gray-50 text-left transition-colors ${BTN}`}
               >
                 <span className="text-2xl leading-none">{card.icon}</span>

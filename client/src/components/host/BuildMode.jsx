@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import HostHeader from './HostHeader.jsx'
 import RoundSidebar from './RoundSidebar.jsx'
@@ -59,6 +59,120 @@ const CARD_STYLE = {
   'data':          'bg-gradient-to-br from-purple-50 to-violet-100  border-purple-200 hover:border-purple-400',
 }
 
+function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReorder, onBack }) {
+  const [draggedId, setDraggedId] = useState(null)
+  const [dragOverId, setDragOverId] = useState(null)
+  const draggedRef = useRef(null)
+  const dragOverRef = useRef(null)
+
+  function handleGripDown(e, id) {
+    e.preventDefault()
+    e.stopPropagation()
+    draggedRef.current = id
+    dragOverRef.current = null
+    setDraggedId(id)
+    setDragOverId(null)
+
+    function onMove(ev) {
+      let el = document.elementFromPoint(ev.clientX, ev.clientY)
+      while (el && el !== document.body) {
+        if (el.dataset?.slideId) {
+          dragOverRef.current = el.dataset.slideId
+          setDragOverId(el.dataset.slideId)
+          return
+        }
+        el = el.parentElement
+      }
+      dragOverRef.current = null
+      setDragOverId(null)
+    }
+
+    function onUp() {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      const from = draggedRef.current
+      const to = dragOverRef.current
+      if (from && to && from !== to) {
+        const roundIds = slides.map(s => s.id)
+        const fromIdx = roundIds.indexOf(from)
+        const toIdx = roundIds.indexOf(to)
+        if (fromIdx !== -1 && toIdx !== -1) {
+          const newRoundIds = [...roundIds]
+          newRoundIds.splice(fromIdx, 1)
+          newRoundIds.splice(toIdx, 0, from)
+          // Build full slide order: replace this round's slots with new order
+          const allSorted = sortedSlides(show)
+          const roundSet = new Set(roundIds)
+          let ri = 0
+          const fullOrder = allSorted.map(s => roundSet.has(s.id) ? newRoundIds[ri++] : s.id)
+          onReorder(fullOrder)
+        }
+      }
+      draggedRef.current = null
+      dragOverRef.current = null
+      setDraggedId(null)
+      setDragOverId(null)
+    }
+
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="flex items-center gap-3 h-11 px-5 border-b border-gray-100 shrink-0">
+        <button onClick={onBack} className="text-sm text-gray-400 hover:text-gray-700 transition-colors">
+          ← Dashboard
+        </button>
+        <span className="text-sm font-semibold text-gray-700">R{round.number} · {round.title}</span>
+        <span className="text-xs text-gray-400 ml-auto">{slides.length} slide{slides.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex flex-wrap gap-3 justify-start">
+          {slides.map(slide => {
+            const preview = getSlidePreview(slide)
+            const isDragging = draggedId === slide.id
+            const isOver = dragOverId === slide.id && draggedId !== slide.id
+            return (
+              <div
+                key={slide.id}
+                data-slide-id={slide.id}
+                className={`relative w-[calc(25%-9px)] min-h-[120px] rounded-xl ${isDragging ? 'opacity-30' : ''} ${isOver ? 'ring-2 ring-blue-400' : ''}`}
+              >
+                <button
+                  onClick={() => !draggedId && onSelectSlide(slide)}
+                  className={`w-full h-full flex flex-col gap-2 p-4 rounded-xl border text-left ${BTN} ${CARD_STYLE[slide.type] ?? 'bg-white border-gray-200 hover:border-gray-400'}`}
+                >
+                  <div className="flex items-center gap-2 pr-4">
+                    <span className="text-xl leading-none">{SLIDE_ICON[slide.type] ?? '📄'}</span>
+                    <span className="text-sm font-semibold text-gray-800 truncate">{getSlideLabel(slide)}</span>
+                  </div>
+                  {preview && (
+                    <p className="text-xs text-gray-500 leading-snug line-clamp-3">{preview}</p>
+                  )}
+                </button>
+                <span
+                  className="absolute top-2 right-2 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing text-sm leading-none select-none"
+                  onPointerDown={e => handleGripDown(e, slide.id)}
+                >
+                  ⠿
+                </span>
+              </div>
+            )
+          })}
+          <button
+            onClick={onOpenAddModal}
+            className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-gray-200 text-center min-h-[120px] ${BTN} bg-white hover:border-gray-400 hover:bg-gray-50`}
+          >
+            <span className="text-2xl text-gray-300">+</span>
+            <span className="text-sm font-medium text-gray-400">Add slide</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
   const [showTickerManager, setShowTickerManager] = useState(false)
@@ -67,6 +181,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   const [selectedSlide, setSelectedSlide] = useState(null)
   const [viewingRoundId, setViewingRoundId] = useState(null)  // round view mode
   const [addModalData, setAddModalData] = useState(null)  // null = modal closed
+  const [wizardPickedType, setWizardPickedType] = useState(null)
   const [addRoundWizardOpen, setAddRoundWizardOpen] = useState(false)
   const [activeRoundId, setActiveRoundId] = useState(null)
   const [showSwingWizard, setShowSwingWizard] = useState(false)
@@ -152,6 +267,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
 
   function closeAddModal() {
     setAddModalData(null)
+    setWizardPickedType(null)
   }
 
   function enterEditing(slide) {
@@ -232,8 +348,9 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
 
   if (!show) return null
 
-  const isQuestionModal   = addModalData?.type === 'question'
-  const isRoundIntroModal = addModalData?.type === 'round-intro'
+  const effectiveModalType = addModalData?.type ?? wizardPickedType
+  const isQuestionModal   = effectiveModalType === 'question'
+  const isRoundIntroModal = effectiveModalType === 'round-intro'
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden">
@@ -280,53 +397,21 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
               addSiblingSlides={actions.addSiblingSlides}
             />
           ) : mode === 'round' && viewingRoundId ? (
-            /* Round view — slide preview grid for a single round */
             (() => {
               const viewingRound = show.rounds.find(r => r.id === viewingRoundId)
               const roundSlides  = sortedSlides(show).filter(s => s.roundId === viewingRoundId)
               if (!viewingRound) return null
               return (
-                <div className="h-full flex flex-col">
-                  <div className="flex items-center gap-3 h-11 px-5 border-b border-gray-100 shrink-0">
-                    <button
-                      onClick={() => { setViewingRoundId(null); setMode('wizard') }}
-                      className="text-sm text-gray-400 hover:text-gray-700 transition-colors"
-                    >
-                      ← Dashboard
-                    </button>
-                    <span className="text-sm font-semibold text-gray-700">R{viewingRound.number} · {viewingRound.title}</span>
-                    <span className="text-xs text-gray-400 ml-auto">{roundSlides.length} slide{roundSlides.length !== 1 ? 's' : ''}</span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-8">
-                    <div className="flex flex-wrap gap-3 justify-start">
-                      {roundSlides.map(slide => {
-                        const preview = getSlidePreview(slide)
-                        return (
-                          <button
-                            key={slide.id}
-                            onClick={() => enterEditing(slide)}
-                            className={`w-[calc(25%-9px)] flex flex-col gap-2 p-4 rounded-xl border text-left min-h-[120px] ${BTN} ${CARD_STYLE[slide.type] ?? 'bg-white border-gray-200 hover:border-gray-400'}`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="text-xl leading-none">{SLIDE_ICON[slide.type] ?? '📄'}</span>
-                              <span className="text-sm font-semibold text-gray-800 truncate">{getSlideLabel(slide)}</span>
-                            </div>
-                            {preview && (
-                              <p className="text-xs text-gray-500 leading-snug line-clamp-3">{preview}</p>
-                            )}
-                          </button>
-                        )
-                      })}
-                      <button
-                        onClick={() => openAddModal({ roundId: viewingRoundId })}
-                        className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-gray-200 text-center min-h-[120px] ${BTN} bg-white hover:border-gray-400 hover:bg-gray-50`}
-                      >
-                        <span className="text-2xl text-gray-300">+</span>
-                        <span className="text-sm font-medium text-gray-400">Add slide</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <RoundView
+                  key={viewingRoundId}
+                  show={show}
+                  round={viewingRound}
+                  slides={roundSlides}
+                  onSelectSlide={enterEditing}
+                  onOpenAddModal={() => openAddModal({ roundId: viewingRoundId })}
+                  onReorder={actions.reorderSlides}
+                  onBack={() => { setViewingRoundId(null); setMode('wizard') }}
+                />
               )
             })()
           ) : (
@@ -451,9 +536,10 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
               onClick={e => e.stopPropagation()}
             >
               <AddSlideWizard
-                key={addModalData.type + (addModalData.roundId ?? '')}
+                key={(addModalData.type ?? 'picker') + (addModalData.roundId ?? '')}
                 show={show}
                 initialData={addModalData}
+                onTypeChange={setWizardPickedType}
                 onAddSlide={async (slideData) => {
                   const slide = await actions.addSlide(slideData)
                   if (slide) {
