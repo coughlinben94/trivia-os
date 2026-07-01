@@ -3,6 +3,7 @@ import { sortedSlides } from '../../hooks/useShow.js'
 
 const SLIDE_TYPE_META = {
   'title':             { label: 'Title Slide',      icon: '🇺🇸' },
+  'state-of-union':    { label: 'State of the Union', icon: '🇺🇸' },
   'round-intro':       { label: 'Round Intro',       icon: '🎬' },
   'swing-round-intro': { label: 'Swing Intro',       icon: '🎷' },
   'question':          { label: 'Question',          icon: '❓' },
