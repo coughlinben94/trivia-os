@@ -7,20 +7,39 @@ const INNER_H = 720
 const PREVIEW_W = 680
 const PREVIEW_H = Math.round(PREVIEW_W * (9 / 16))
 const SCALE = PREVIEW_W / INNER_W
+const DISPLAY_FONTS = ['Boogaloo', 'Handters', 'Roquen', 'DM Sans']
 
-export default function ThemePickerModal({ show, onClose, onSelectTheme }) {
+export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdateOverrides }) {
   const [previewId, setPreviewId] = useState(show.theme)
+  const [overrides, setOverrides] = useState(show.themeOverrides ?? {})
   const activeRef = useRef(null)
 
   useEffect(() => {
     activeRef.current?.scrollIntoView({ block: 'center', behavior: 'instant' })
   }, [])
 
-  const previewTheme = getTheme(previewId)
+  const baseTheme = getTheme(previewId)
+  const previewTheme = {
+    ...baseTheme,
+    fonts: { ...baseTheme.fonts, ...(overrides.fonts ?? {}) },
+    colors: { ...baseTheme.colors, ...(overrides.colors ?? {}) },
+  }
 
   function handlePick(id) {
     setPreviewId(id)
     onSelectTheme(id)
+  }
+
+  function setDisplayFont(font) {
+    const next = { ...overrides, fonts: { ...overrides.fonts, display: font } }
+    setOverrides(next)
+    onUpdateOverrides(next)
+  }
+
+  function setTextColor(field, color) {
+    const next = { ...overrides, colors: { ...overrides.colors, [field]: color } }
+    setOverrides(next)
+    onUpdateOverrides(next)
   }
 
   return (
@@ -162,6 +181,38 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme }) {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Customize */}
+        <div className="flex items-center gap-4 px-5 py-3 border-t border-gray-100 shrink-0 flex-wrap">
+          <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
+            Display font
+            <select
+              value={overrides.fonts?.display ?? baseTheme.fonts.display}
+              onChange={e => setDisplayFont(e.target.value)}
+              className="text-xs border border-gray-200 rounded-md px-2 py-1"
+            >
+              {DISPLAY_FONTS.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
+            Text color
+            <input
+              type="color"
+              value={overrides.colors?.text ?? baseTheme.colors.text}
+              onChange={e => setTextColor('text', e.target.value)}
+              className="w-7 h-7 border border-gray-200 rounded-md cursor-pointer"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
+            Muted text color
+            <input
+              type="color"
+              value={overrides.colors?.textMuted ?? baseTheme.colors.textMuted}
+              onChange={e => setTextColor('textMuted', e.target.value)}
+              className="w-7 h-7 border border-gray-200 rounded-md cursor-pointer"
+            />
+          </label>
         </div>
 
         {/* Footer */}

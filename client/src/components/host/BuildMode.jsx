@@ -599,6 +599,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
           show={show}
           onClose={() => setShowThemePicker(false)}
           onSelectTheme={themeId => actions.updateShowMeta({ theme: themeId })}
+          onUpdateOverrides={themeOverrides => actions.updateShowMeta({ themeOverrides })}
         />
       )}
 
