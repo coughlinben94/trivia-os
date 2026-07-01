@@ -133,44 +133,6 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
         <div className="w-20" />
       </div>
 
-      {/* Transition row */}
-      <div className="flex items-center gap-3 px-5 pt-4 pb-4 border-b border-gray-100 shrink-0">
-        {!data.isShiny && (
-          <div>
-            <label htmlFor="slide-transition" className="block text-xs font-medium text-gray-500 mb-1.5">Transition</label>
-            <select
-              id="slide-transition"
-              value={data.transition ?? ''}
-              onChange={e => change('transition', e.target.value === '' ? null : e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-baynes-forest"
-            >
-              <option value="">Default</option>
-              <option value="random">✦ Random</option>
-              <optgroup label="Fade from back">
-                <option value="dissolve">Dissolve</option>
-                <option value="emerge">Emerge</option>
-                <option value="zoom">Zoom</option>
-                <option value="punch">Punch</option>
-              </optgroup>
-              <optgroup label="Down from top">
-                <option value="drop">Drop</option>
-                <option value="descend">Descend</option>
-              </optgroup>
-              <optgroup label="Compound">
-                <option value="sink">Sink</option>
-              </optgroup>
-              <optgroup label="Push from front">
-                <option value="settle">Settle</option>
-                <option value="loom">Loom</option>
-              </optgroup>
-              <optgroup label="Construct">
-                <option value="assemble">Assemble</option>
-              </optgroup>
-            </select>
-          </div>
-        )}
-      </div>
-
       {/* Type-specific editor */}
       <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
         {slide.type === 'title' && (
@@ -206,8 +168,40 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
         )}
       </div>
 
-      {/* Footer — delete */}
-      <div className="shrink-0 px-5 py-3 border-t border-gray-100 flex justify-end">
+      {/* Footer — transition + delete */}
+      <div className="shrink-0 px-5 py-3 border-t border-gray-100 flex items-center justify-between">
+        {!data.isShiny ? (
+          <select
+            value={data.transition ?? ''}
+            onChange={e => change('transition', e.target.value === '' ? null : e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-baynes-forest"
+          >
+            <option value="">Default transition</option>
+            <option value="random">✦ Random</option>
+            <optgroup label="Fade from back">
+              <option value="dissolve">Dissolve</option>
+              <option value="emerge">Emerge</option>
+              <option value="zoom">Zoom</option>
+              <option value="punch">Punch</option>
+            </optgroup>
+            <optgroup label="Down from top">
+              <option value="drop">Drop</option>
+              <option value="descend">Descend</option>
+            </optgroup>
+            <optgroup label="Compound">
+              <option value="sink">Sink</option>
+            </optgroup>
+            <optgroup label="Push from front">
+              <option value="settle">Settle</option>
+              <option value="loom">Loom</option>
+            </optgroup>
+            <optgroup label="Construct">
+              <option value="assemble">Assemble</option>
+            </optgroup>
+          </select>
+        ) : (
+          <div />
+        )}
         {confirmingDelete ? (
           <div className="flex items-center gap-3">
             <span className="text-xs text-red-600">Delete slide?</span>
