@@ -34,7 +34,10 @@ const SLIDE_NAV_META = {
 
 function getNavLabel(slide) {
   const { data, type } = slide
-  if (type === 'question' || type === 'pixelate-series') return data.questionLabel || `Q${data.questionNumber || '?'}`
+  if (type === 'question' || type === 'pixelate-series') {
+    if (data.isShiny) return data.shinyFormatName || '✨ Shiny'
+    return data.questionLabel || `Q${data.questionNumber || '?'}`
+  }
   if (type === 'round-intro' || type === 'swing-round-intro') return data.roundTitle || 'Round Intro'
   if (type === 'grading-break') return 'Grading Break'
   if (type === 'scoreboard-reveal') return data.title || 'Scoreboard'
@@ -437,19 +440,9 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
 
       {data.shinyFormatId && (
         <>
-          {/* Label + number */}
-          <div className="flex gap-4">
-            <Field label='Label' hint='e.g. "Q1" or "6a"'>
-              <TextInput value={data.questionLabel} onChange={v => onChange('questionLabel', v)} placeholder="Q1" className="w-20" />
-            </Field>
-            <Field label="Number">
-              <NumberInput value={data.questionNumber} onChange={v => onChange('questionNumber', v)} />
-            </Field>
-          </div>
-
           {/* Image slots — side by side */}
           {schema.type === 'image' && slots > 0 && (
-            <div className={slots === 1 ? '' : 'grid grid-cols-2 gap-3'}>
+            <div className={slots > 1 ? 'grid grid-cols-2 gap-3' : ''}>
               {Array.from({ length: slots }).map((_, i) => (
                 <MediaUpload
                   key={i}
@@ -531,6 +524,11 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
               <TextArea value={data.text} onChange={v => onChange('text', v)} placeholder="Write the question here…" rows={3} />
             </Field>
           )}
+
+          {/* Answer — all shiny types */}
+          <Field label="Answer">
+            <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="The answer…" />
+          </Field>
 
           {/* Series settings — only if schema.seriesEnabled */}
           {schema.seriesEnabled && (

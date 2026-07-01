@@ -17,9 +17,8 @@ const SLIDE_TYPE_META = {
 function slideLabel(slide) {
   const { data, type } = slide
   if (type === 'question' || type === 'pixelate-series') {
-    const label = data.questionLabel || `Q${data.questionNumber || '?'}`
-    const shinyIcon = data.isShiny ? (data.shinyType === 'audio' ? ' 🎵' : ' ✨') : ''
-    return label + shinyIcon
+    if (data.isShiny) return data.shinyFormatName || '✨ Shiny'
+    return data.questionLabel || `Q${data.questionNumber || '?'}`
   }
   if (type === 'round-intro' || type === 'swing-round-intro') return data.roundTitle || 'Round Intro'
   if (type === 'grading-break') return 'Grading Break'
