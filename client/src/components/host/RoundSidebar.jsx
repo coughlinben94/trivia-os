@@ -33,7 +33,9 @@ function slideLabel(slide) {
 export default function RoundSidebar({
   show,
   selectedSlideId,
+  viewingRoundId,
   onSelectSlide,
+  onSelectRound,
   onAddRound,
   onUpdateRound,
   onDeleteRound,
@@ -281,9 +283,12 @@ export default function RoundSidebar({
                   />
                 ) : (
                   <button
+                    onClick={() => onSelectRound?.(round.id)}
                     onDoubleClick={() => startRename(round)}
-                    className="flex-1 text-[13px] font-semibold text-gray-700 text-left truncate"
-                    title="Double-click to rename"
+                    className={`flex-1 text-[13px] font-semibold text-left truncate transition-colors ${
+                      viewingRoundId === round.id ? 'text-[#1a6b4a]' : 'text-gray-700 hover:text-[#1a6b4a]'
+                    }`}
+                    title="Click to view round — double-click to rename"
                   >
                     R{round.number} · {round.title}
                   </button>

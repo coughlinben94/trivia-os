@@ -11,8 +11,38 @@ import ThemePickerModal from './ThemePickerModal.jsx'
 import SwingRoundWizard from './SwingRoundWizard.jsx'
 import PYLWizard from './PYLWizard.jsx'
 import { archiveQuestions } from '../../lib/archiveQuestion.js'
+import { sortedSlides } from '../../hooks/useShow.js'
 
 const BTN = 'host-button'
+
+const SLIDE_ICON = {
+  'title': '📺', 'round-intro': '🎬', 'swing-round-intro': '🎷',
+  'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆',
+  'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
+}
+
+function getSlideLabel(slide) {
+  const { data, type } = slide
+  if (type === 'question' || type === 'pixelate-series') return data.questionLabel || `Q${data.questionNumber || '?'}`
+  if (type === 'round-intro' || type === 'swing-round-intro') return data.roundTitle || 'Round Intro'
+  if (type === 'grading-break') return 'Grading Break'
+  if (type === 'scoreboard-reveal') return data.title || 'Scoreboard'
+  if (type === 'title') return data.title || 'Title'
+  if (type === 'multi-question') return data.seriesTitle || 'Multi-Q'
+  if (type === 'pyl-reveal') return 'PYL Reveal'
+  return type
+}
+
+function getSlidePreview(slide) {
+  const { data, type } = slide
+  if (type === 'question') {
+    if (data.questionMode === 'shiny') return data.shinyFormatName ? `✨ ${data.shinyFormatName}` : '✨ Shiny'
+    return data.text || null
+  }
+  if (type === 'title' || type === 'round-intro' || type === 'swing-round-intro') return data.subtitle || null
+  if (type === 'custom') return data.text || null
+  return null
+}
 
 const CARD_STYLE = {
   'title':         'bg-gradient-to-br from-amber-50  to-orange-100  border-amber-200  hover:border-amber-400',
@@ -35,18 +65,22 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
   const [showThemePicker, setShowThemePicker] = useState(false)
   const [mode, setMode] = useState('wizard')
   const [selectedSlide, setSelectedSlide] = useState(null)
+  const [viewingRoundId, setViewingRoundId] = useState(null)  // round view mode
   const [addModalData, setAddModalData] = useState(null)  // null = modal closed
   const [addRoundWizardOpen, setAddRoundWizardOpen] = useState(false)
   const [activeRoundId, setActiveRoundId] = useState(null)
   const [showSwingWizard, setShowSwingWizard] = useState(false)
   const [showPylWizard,   setShowPylWizard]   = useState(false)
 
-  // Reset active round if it gets deleted
+  // Reset active/viewing round if it gets deleted
   useEffect(() => {
-    if (activeRoundId && !show?.rounds?.find(r => r.id === activeRoundId)) {
-      setActiveRoundId(null)
+    const rounds = show?.rounds ?? []
+    if (activeRoundId && !rounds.find(r => r.id === activeRoundId)) setActiveRoundId(null)
+    if (viewingRoundId && !rounds.find(r => r.id === viewingRoundId)) {
+      setViewingRoundId(null)
+      setMode('wizard')
     }
-  }, [show?.rounds, activeRoundId])
+  }, [show?.rounds, activeRoundId, viewingRoundId])
 
   async function handleSwingAdd(questions, roundId) {
     setShowSwingWizard(false)
@@ -125,9 +159,21 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
     setMode('editing')
   }
 
+  function enterRoundView(roundId) {
+    setViewingRoundId(roundId)
+    setMode('round')
+    setSelectedSlide(null)
+  }
+
   function returnToDashboard() {
     setSelectedSlide(null)
-    setMode('wizard')
+    // Go back to round view if that's where we came from
+    if (viewingRoundId && mode === 'editing') {
+      setMode('round')
+    } else {
+      setViewingRoundId(null)
+      setMode('wizard')
+    }
   }
 
   // Unified Esc handler: modal close takes priority over editing escape
@@ -143,13 +189,15 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
       } else if (addModalData !== null) {
         setAddModalData(null)
       } else if (mode === 'editing') {
-        setSelectedSlide(null)
+        returnToDashboard()
+      } else if (mode === 'round') {
+        setViewingRoundId(null)
         setMode('wizard')
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [showSwingWizard, showPylWizard, addRoundWizardOpen, addModalData, mode])
+  }, [showSwingWizard, showPylWizard, addRoundWizardOpen, addModalData, mode, viewingRoundId])
 
   function handleAddRound() {
     setAddRoundWizardOpen(true)
@@ -201,7 +249,9 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
         <RoundSidebar
           show={show}
           selectedSlideId={syncedSelectedSlide?.id ?? null}
+          viewingRoundId={viewingRoundId}
           onSelectSlide={slide => enterEditing(slide)}
+          onSelectRound={enterRoundView}
           onAddRound={handleAddRound}
           onUpdateRound={actions.updateRound}
           onDeleteRound={actions.deleteRound}
@@ -229,6 +279,56 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
               getHostPhotos={actions.getHostPhotos}
               addSiblingSlides={actions.addSiblingSlides}
             />
+          ) : mode === 'round' && viewingRoundId ? (
+            /* Round view — slide preview grid for a single round */
+            (() => {
+              const viewingRound = show.rounds.find(r => r.id === viewingRoundId)
+              const roundSlides  = sortedSlides(show).filter(s => s.roundId === viewingRoundId)
+              if (!viewingRound) return null
+              return (
+                <div className="h-full flex flex-col">
+                  <div className="flex items-center gap-3 h-11 px-5 border-b border-gray-100 shrink-0">
+                    <button
+                      onClick={() => { setViewingRoundId(null); setMode('wizard') }}
+                      className="text-sm text-gray-400 hover:text-gray-700 transition-colors"
+                    >
+                      ← Dashboard
+                    </button>
+                    <span className="text-sm font-semibold text-gray-700">R{viewingRound.number} · {viewingRound.title}</span>
+                    <span className="text-xs text-gray-400 ml-auto">{roundSlides.length} slide{roundSlides.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-8">
+                    <div className="flex flex-wrap gap-3 justify-start">
+                      {roundSlides.map(slide => {
+                        const preview = getSlidePreview(slide)
+                        return (
+                          <button
+                            key={slide.id}
+                            onClick={() => enterEditing(slide)}
+                            className={`w-[calc(25%-9px)] flex flex-col gap-2 p-4 rounded-xl border text-left min-h-[120px] ${BTN} ${CARD_STYLE[slide.type] ?? 'bg-white border-gray-200 hover:border-gray-400'}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl leading-none">{SLIDE_ICON[slide.type] ?? '📄'}</span>
+                              <span className="text-sm font-semibold text-gray-800 truncate">{getSlideLabel(slide)}</span>
+                            </div>
+                            {preview && (
+                              <p className="text-xs text-gray-500 leading-snug line-clamp-3">{preview}</p>
+                            )}
+                          </button>
+                        )
+                      })}
+                      <button
+                        onClick={() => openAddModal({ roundId: viewingRoundId })}
+                        className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-gray-200 text-center min-h-[120px] ${BTN} bg-white hover:border-gray-400 hover:bg-gray-50`}
+                      >
+                        <span className="text-2xl text-gray-300">+</span>
+                        <span className="text-sm font-medium text-gray-400">Add slide</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()
           ) : (
             /* Dashboard rest state — type picker grid */
             <div className="h-full flex flex-col items-center justify-center p-8 overflow-y-auto">
