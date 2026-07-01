@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onOpenLibrary }) {
+export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onOpenLibrary, onOpenScoreboard }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [copied, setCopied] = useState(false)
@@ -86,6 +86,13 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
 
         {/* Actions */}
         <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={onOpenScoreboard}
+            title="Open scoreboard"
+            className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
+          >
+            Score
+          </button>
           <button
             onClick={() => window.open(`/display?show=${show.id}&preview=true`, '_blank')}
             title="Preview display on current theme"

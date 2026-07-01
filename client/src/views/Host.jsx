@@ -8,6 +8,7 @@ import ShowManager from '../components/host/ShowManager.jsx'
 import ShowLibrary from '../components/host/ShowLibrary.jsx'
 import BuildMode from '../components/host/BuildMode.jsx'
 import LiveMode from '../components/host/LiveMode.jsx'
+import ScoreboardModal from '../components/host/ScoreboardModal.jsx'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
@@ -52,6 +53,7 @@ function HostInner({ showApi }) {
   const [isLiveMode, setIsLiveMode] = useState(false)
   const [showLibrary, setShowLibrary] = useState(false)
   const [goLivePicker, setGoLivePicker] = useState(false)
+  const [showScoreboard, setShowScoreboard] = useState(false)
   const savedResultsRef = useRef(false)
   const [connStatus, setConnStatus] = useState('SUBSCRIBED')
   const disconnected = connStatus === 'CHANNEL_ERROR' || connStatus === 'TIMED_OUT' || connStatus === 'CLOSED'
@@ -157,6 +159,7 @@ function HostInner({ showApi }) {
           onGoLive={handleGoLive}
           onThemeChange={handleThemeChange}
           onOpenLibrary={() => setShowLibrary(true)}
+          onOpenScoreboard={() => setShowScoreboard(true)}
         />
       )}
       {goLivePicker && (
@@ -166,6 +169,9 @@ function HostInner({ showApi }) {
           onFromSlide={handleGoLiveFrom}
           onClose={() => setGoLivePicker(false)}
         />
+      )}
+      {showScoreboard && (
+        <ScoreboardModal show={show} onClose={() => setShowScoreboard(false)} />
       )}
       <HostReconnectingBanner visible={disconnected} />
       <ToastStack toasts={toasts} onDismiss={dismissToast} />

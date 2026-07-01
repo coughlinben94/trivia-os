@@ -196,7 +196,7 @@ function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReord
   )
 }
 
-export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
+export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOpenScoreboard }) {
   // Preloaded on dashboard mount (not on modal open) so FormatLibrary and
   // AddSlideWizard never show a blank-then-pop-in flash, and both share one
   // fetch instead of each running its own.
@@ -387,6 +387,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary }) {
         onGoLive={onGoLive}
         onExport={actions.exportShow}
         onOpenLibrary={onOpenLibrary}
+        onOpenScoreboard={onOpenScoreboard}
       />
 
       <div className="flex flex-1 min-h-0">
