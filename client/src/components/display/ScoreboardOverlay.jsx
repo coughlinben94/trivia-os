@@ -223,7 +223,7 @@ function ScoreboardContent({ show }) {
               rank={i + 1}
               cols={cols}
               delay={itemDelay(i)}
-              isTop={i === 0 && !useTwo}
+              isTop={i === 0}
               reduce={reduce}
             />
           ))}
