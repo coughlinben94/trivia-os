@@ -28,17 +28,17 @@ Every ambient hue lives inside the theme's `accent → highlight` range. Sanctio
 near-white core at the anchor, and dark silhouette drifters.
 
 **Updated 2026-07-01:** ambients no longer hand-hardcode dead hex values. Each `AmbientComponent`
-receives a `tint(originalColorStr, anchor = 'highlight')` function as a prop from `ParticleBackground.jsx`
-(`client/src/lib/colorTint.js`'s `deriveTint`). Call `tint('#f5a623')` (or with an `rgba(...)` string,
-alpha preserved) on every in-family hue color in the component — this reproduces the original hand-tuned
-color exactly when no per-show override is active, and shifts the whole family cohesively (same hue
-delta, same saturation/lightness scale) when a host overrides the show's accent/highlight color from
-`ThemePickerModal.jsx`'s Customize row. **Do not wrap sanctioned exceptions** (hot near-white cores,
-dark silhouette drifters) in `tint()` — those are intentionally hue-agnostic and must stay literal.
-Anchor on `'highlight'` by default; `'accent'` is available but is numerically unstable for colors
-whose lightness is far from the accent's own (accent is often a very dark wash, so the lightness-scale
-ratio can blow up) — prefer `'highlight'` unless you've verified the specific accent-anchored math looks
-right at both extremes.
+receives a `tint(originalColorStr)` function as a prop from `ParticleBackground.jsx`
+(`client/src/lib/colorTint.js`'s `deriveTint`, anchored on the theme's `highlight` color). Call
+`tint('#f5a623')` (or with an `rgba(...)` string, alpha preserved) on every in-family hue color in the
+component — this reproduces the original hand-tuned color exactly when no per-show override is active,
+and shifts the whole family cohesively (same hue delta, same saturation/lightness scale) when a host
+overrides the show's highlight color from `ThemePickerModal.jsx`'s Customize row. **Do not wrap
+sanctioned exceptions** (hot near-white cores, dark silhouette drifters) in `tint()` — those are
+intentionally hue-agnostic and must stay literal. There is no `accent`-anchor option — an earlier
+version exposed one, but it was numerically unstable (accent colors are usually very dark washes, so
+the lightness-scale ratio blows up) and every one of the 21 themes anchored on highlight anyway, so it
+was removed.
 
 ## GPU rule (replaces "never filter / never box-shadow")
 

@@ -2,13 +2,11 @@ import { useState, useEffect } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
-import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, MEDALS } from '../../lib/scoreboardMath.js'
 
 // ─── Easing ────────────────────────────────────────────────────────────────
 const EASE_OUT   = [0.22, 1, 0.36, 1]
 const EASE_QUART = [0.25, 1, 0.25, 1]
-
-const MEDALS = ['🥇', '🥈', '🥉']
 
 // ─── Single team row ───────────────────────────────────────────────────────
 function TeamRow({ team, rank, cols, delay, isTop, reduce }) {

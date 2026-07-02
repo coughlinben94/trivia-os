@@ -9,6 +9,15 @@ function clamp01(n) {
   return Math.min(1, Math.max(0, n))
 }
 
+// Shared by every ambient theme's own prefixed `xxRgba` helper (see
+// ambient-design-law.md's "Port pattern" — each theme keeps its own locally
+// named wrapper for self-containment, but they all delegate the actual
+// hex-to-rgba math here instead of re-implementing it 6+ times).
+export function hexToRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
+}
+
 function parseColor(str) {
   if (!str) return null
   const hex = str.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)

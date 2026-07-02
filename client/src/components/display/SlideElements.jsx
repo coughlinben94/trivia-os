@@ -17,13 +17,6 @@ export const ELEMENT_POSITIONS = {
   'full-bleed':    { inset: 0 },
 }
 
-export const ELEMENT_POSITION_LABELS = {
-  'top-left': 'Top left', 'top-center': 'Top center', 'top-right': 'Top right',
-  'center-left': 'Center left', 'center': 'Center', 'center-right': 'Center right',
-  'bottom-left': 'Bottom left', 'bottom-center': 'Bottom center', 'bottom-right': 'Bottom right',
-  'full-bleed': 'Full bleed',
-}
-
 // Image sizes are a percentage of the slide's width (height auto via object-fit).
 export const IMAGE_SIZES = { sm: '18%', md: '32%', lg: '50%', xl: '72%', full: '100%' }
 

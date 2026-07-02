@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { THEMES } from '../themes/index.js'
-
-const MEDAL = ['🥇', '🥈', '🥉']
+import { MEDALS } from '../lib/scoreboardMath.js'
 
 function getThemeName(id) {
   return THEMES.find(t => t.id === id)?.name ?? id ?? '—'
@@ -249,7 +248,7 @@ export default function Shows() {
                           {scores.map((team, i) => (
                             <div key={team.teamId ?? i} className="flex items-center gap-3 px-4 py-2.5">
                               <span className="text-base w-6 shrink-0 text-center">
-                                {MEDAL[i] ?? <span className="text-xs text-gray-400 font-bold">#{i + 1}</span>}
+                                {MEDALS[i] ?? <span className="text-xs text-gray-400 font-bold">#{i + 1}</span>}
                               </span>
                               {team.color && (
                                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: team.color }} />

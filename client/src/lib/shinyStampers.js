@@ -1,6 +1,6 @@
 // Stampers: pure functions (format, filledSlots) => slideObject[]
 //
-// Each returned slide object matches the addSlide() shape from useShow.js:
+// Each returned slide object matches addSiblingSlides()'s slide shape from useShow.js:
 //   { type, roundId, order, data }
 // roundId and order are null/0 — the caller MUST overwrite them at insert time.
 // questionNumber / questionLabel are 0 / 'Q0' — caller sets real values.

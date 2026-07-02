@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
-import { deriveRoundCols, computeTotal } from '../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
 
@@ -567,7 +567,7 @@ function ScoreboardSheet({ leaderboard, leaderboardStatus, onRetryLeaderboard, m
             ? <p style={{ color: `${text}30`, textAlign: 'center', fontSize: '0.875rem', paddingTop: '2rem' }}>No scores yet</p>
             : (leaderboard ?? []).map((team, i) => {
                 const isMe    = team.id === myTeamId
-                const medal   = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
+                const medal   = MEDALS[i] ?? null
                 const barPct  = maxScore > 0 ? Math.max(4, (team.total / maxScore) * 100) : 4
 
                 return (
@@ -715,7 +715,7 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
             )
             : teams.map((t, i) => {
                 const isMe   = t.name.trim().toLowerCase() === myNameNorm
-                const medal  = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
+                const medal  = MEDALS[i] ?? null
 
                 return (
                   <motion.div

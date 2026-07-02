@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import { getTheme } from '../../themes/index.js'
-import { deriveTint } from '../../lib/colorTint.js'
+import { deriveTint, hexToRgba } from '../../lib/colorTint.js'
 
 // ─── Keyframes ────────────────────────────────────────────────────────────
 const KEYFRAMES = `
@@ -664,10 +664,7 @@ const MT_STYLE = `
 @media (prefers-reduced-motion: reduce){ .mt-anim{ animation:none !important } }
 `
 
-function mtRgba(hex, a) {
-  const n = parseInt(hex.slice(1), 16)
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
-}
+function mtRgba(hex, a) { return hexToRgba(hex, a) }
 
 function MtTorch({ id, dir, x, top, w = "13%", h = "36%", dur = 2.0, delay = "0s", tint }) {
   const mx = (v) => (dir === 1 ? v : 100 - v)
@@ -907,10 +904,7 @@ const RA_C = {
   bg: "#040010", bgDeep: "#020008", accent: "#3a0880",
   violet: "#a020ff", green: "#20ff80", amber: "#ffb020",
 };
-function raRgba(hex, a) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
-}
+function raRgba(hex, a) { return hexToRgba(hex, a) }
 function raShuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0;[a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 const RA_APPLE = [
@@ -1107,10 +1101,7 @@ const HW_STYLE = `
 @media (prefers-reduced-motion: reduce){ .hw-anim{ animation:none !important } }
 `
 
-function hwRgba(hex, a) {
-  const n = parseInt(hex.slice(1), 16)
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
-}
+function hwRgba(hex, a) { return hexToRgba(hex, a) }
 
 function HwHeadstone({ left, w, h, round, bottom = "6%" }) {
   return <div style={{ position: "absolute", left, bottom, width: w, height: h, background: HW.ink, borderRadius: round }} />
@@ -1648,10 +1639,7 @@ const DM_STYLE = `
 @media (prefers-reduced-motion: reduce) { .dm-anim { animation: none !important } }
 `
 
-function dmRgba(hex, a) {
-  const n = parseInt(hex.slice(1), 16)
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
-}
+function dmRgba(hex, a) { return hexToRgba(hex, a) }
 
 // A car roof, cropped by the frame — only the top crests into view, like
 // looking over the dash at the car parked ahead of us. DM.car fill is a
@@ -1807,10 +1795,7 @@ const US = {
   muted: "#207870", core: "#eafff9", mid: "#00222e",
 };
 
-function usRgba(hex, a) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
-}
+function usRgba(hex, a) { return hexToRgba(hex, a) }
 
 const US_STYLE = `
 @keyframes usGodray {
@@ -1911,10 +1896,7 @@ const NT = {
   text: "#f8d0ff", rain: "#bfeaff",
 };
 
-function ntRgba(hex, a) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
-}
+function ntRgba(hex, a) { return hexToRgba(hex, a) }
 
 const NT_STYLE = `
 @keyframes ntPop  { 0%,100%{ opacity:0; transform:translate(-50%,-50%) scale(.65) } 50%{ opacity:var(--hi,.7); transform:translate(-50%,-50%) scale(1.05) } }
@@ -2204,10 +2186,7 @@ function EightiesNightAmbient({ tint }) {
     ]
     return bands.map(({ hex, delay }) => {
       const c = tint(hex)
-      const rgba = (a) => {
-        const n = parseInt(c.slice(1), 16)
-        return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
-      }
+      const rgba = (a) => hexToRgba(c, a)
       return {
         bg: `radial-gradient(ellipse 72% 49% at 50% 100%, ${rgba(0.58)} 0%, ${rgba(0.24)} 42%, transparent 76%), radial-gradient(ellipse 135% 32% at 50% 105%, ${rgba(0.40)} 0%, ${rgba(0.15)} 46%, transparent 78%)`,
         delay,
@@ -2281,12 +2260,15 @@ export default function ParticleBackground({ theme }) {
   const v = theme.vignette ?? {}
   const baseTheme = getTheme(theme.id)
 
-  // Retints a theme's hand-tuned color the same way its accent/highlight
-  // has shifted relative to the theme's own default — a no-op until a host
+  // Retints a theme's hand-tuned color the same way its highlight has
+  // shifted relative to the theme's own default — a no-op until a host
   // actually overrides a color, so every theme renders unchanged by default.
-  const tint = useCallback((originalColorStr, anchor = 'highlight') =>
-    deriveTint(baseTheme.colors[anchor], theme.colors[anchor], originalColorStr),
-    [baseTheme.colors.accent, baseTheme.colors.highlight, theme.colors.accent, theme.colors.highlight]
+  // Anchored on 'highlight' only: 'accent' is numerically unstable (accent
+  // colors are usually very dark washes, so the lightness-scale ratio blows
+  // up) and every one of the 21 themes already anchors on highlight anyway.
+  const tint = useCallback((originalColorStr) =>
+    deriveTint(baseTheme.colors.highlight, theme.colors.highlight, originalColorStr),
+    [baseTheme.colors.highlight, theme.colors.highlight]
   )
 
   return (

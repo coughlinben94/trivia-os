@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
-import { deriveRoundCols, computeTotal } from '../lib/scoreboardMath.js'
-
-const MEDAL = ['🥇', '🥈', '🥉']
+import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
 
 function getRoundLabel(round, slides) {
   const roundSlides = slides.filter(s => s.roundId === round.id)
@@ -163,8 +161,8 @@ export default function ShowDetail() {
                       className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}
                     >
                       <td className="px-4 py-2.5 text-center">
-                        {MEDAL[i]
-                          ? <span className="text-base">{MEDAL[i]}</span>
+                        {MEDALS[i]
+                          ? <span className="text-base">{MEDALS[i]}</span>
                           : <span className="text-xs text-gray-400 font-bold">#{i + 1}</span>
                         }
                       </td>
@@ -204,7 +202,7 @@ export default function ShowDetail() {
               {scores.map((team, i) => (
                 <div key={team.teamId ?? i} className="flex items-center gap-3 px-5 py-3">
                   <span className="text-lg w-7 shrink-0 text-center">
-                    {MEDAL[i] ?? <span className="text-xs text-gray-400 font-bold">#{i + 1}</span>}
+                    {MEDALS[i] ?? <span className="text-xs text-gray-400 font-bold">#{i + 1}</span>}
                   </span>
                   {team.color && (
                     <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: team.color }} />

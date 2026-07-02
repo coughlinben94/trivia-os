@@ -1,6 +1,9 @@
-// Single source of truth for the scoreboard's round columns and team totals —
-// used by ScoreboardModal (host), ScoreboardOverlay (TV), Join's scores drawer
-// (phone), and ShowDetail (post-show history) so all four surfaces agree.
+// Single source of truth for the scoreboard's round columns, team totals, and
+// medal emoji — used by ScoreboardModal (host), ScoreboardOverlay (TV), Join's
+// scores drawer (phone), and ShowDetail (post-show history) so all four
+// surfaces agree.
+
+export const MEDALS = ['🥇', '🥈', '🥉']
 
 export function deriveRoundCols(show) {
   const sorted = (show.rounds ?? []).slice().sort((a, b) => (a.number ?? 0) - (b.number ?? 0))

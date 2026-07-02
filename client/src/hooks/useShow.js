@@ -262,49 +262,6 @@ export function useShow() {
 
   // --- Slides ---
 
-  async function addSlide(slideData) {
-    if (!show) return
-    const slide = {
-      id: `slide_${nanoid(8)}`,
-      type: slideData.type ?? 'question',
-      roundId: slideData.roundId ?? null,
-      order: slideData.order ?? show.slides.length,
-      data: slideData.data ?? {},
-    }
-    const newSlides = [...show.slides, slide]
-    if (import.meta.env.DEV) console.log('[addSlide] newSlides before write:', JSON.stringify(newSlides.map(s => s.id)))
-    setShow(prev => ({ ...prev, slides: newSlides }))
-    const { data: _d, error, status, count } = await supabase
-      .from('shows')
-      .update({ slides: newSlides })
-      .eq('id', show.id)
-      .select()
-    if (import.meta.env.DEV) console.log('[addSlide] write result:', { status, count, error, newCount: newSlides.length, showId: show.id })
-
-    if (slideData.type === 'question') {
-      const round = show.rounds.find(r => r.id === (slideData.roundId ?? null))
-      const d = slideData.data ?? {}
-      supabase.from('questions').insert({
-        show_id: show.id,
-        show_date: show.date ?? null,
-        show_title: show.title ?? null,
-        type: d.isShiny ? 'shiny' : 'regular',
-        text: d.text ?? null,
-        answer: d.answer ?? null,
-        is_bonus: d.isBonus ?? false,
-        is_shiny: d.isShiny ?? false,
-        shiny_type: d.shinyType ?? d.shinyInputSchema?.type ?? null,
-        media_url: d.mediaUrl ?? null,
-        round_number: round?.roundNumber ?? round?.number ?? null,
-        question_number: d.questionNumber ?? null,
-      }).then(({ error: qErr }) => {
-        if (qErr && import.meta.env.DEV) console.warn('[addSlide] question archive write failed:', qErr)
-      })
-    }
-
-    return slide
-  }
-
   async function addSiblingSlides(afterSlideId, slidesData) {
     if (!show || !slidesData.length) return []
     const afterSlide = show.slides.find(s => s.id === afterSlideId)
@@ -610,7 +567,6 @@ export function useShow() {
     addRound,
     updateRound,
     deleteRound,
-    addSlide,
     addSiblingSlides,
     updateSlide,
     deleteSlide,
