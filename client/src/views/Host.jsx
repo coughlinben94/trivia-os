@@ -63,9 +63,7 @@ function HostInner({ showApi }) {
           const team = payload.new
           const action = team.last_action
           if (!action) return
-          if (action === 'tried_to_advance') {
-            addToast({ id: `${team.id}-${Date.now()}`, type: 'error', message: `⚠️ ${team.name} tried to skip ahead` })
-          } else if (action === 'went_back') {
+          if (action === 'went_back') {
             addToast({ id: `${team.id}-${Date.now()}`, type: 'warning', message: `↩ ${team.name} went back`, autoDismiss: 6000 })
           } else if (action === 'left_app') {
             addToast({ id: `${team.id}-${Date.now()}`, type: 'info', message: `📵 ${team.name} left the app`, autoDismiss: 6000 })
