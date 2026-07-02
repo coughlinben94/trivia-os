@@ -72,11 +72,21 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   const saveTimer = useRef(null)
   const overlayRef = useRef(null)
   const dragStateRef = useRef(null)
+  const leftPanelRef = useRef(null)
+  const [panelW, setPanelW] = useState(800)
 
   useEffect(() => {
     let alive = true
     fetchJukeboxLibraries().then(libs => { if (alive && libs) setJukeboxLibs(libs) })
     return () => { alive = false }
+  }, [])
+
+  useEffect(() => {
+    const el = leftPanelRef.current
+    if (!el) return
+    const obs = new ResizeObserver(([entry]) => setPanelW(Math.round(entry.contentRect.width)))
+    obs.observe(el)
+    return () => obs.disconnect()
   }, [])
 
   // Sync local data when selected slide changes
@@ -283,20 +293,25 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
       {viewMode === 'preview' && (() => {
         const elements = data.elements ?? []
         const selectedEl = elements.find(el => el.id === selectedElId) ?? null
+        const dynScale = panelW / INNER_W
+        const dynH = Math.round(panelW * 9 / 16)
         return (
-          <div className="flex-1 bg-[#050505] flex flex-col items-center justify-center gap-4 p-5 overflow-y-auto">
-            {/* Slide + drag overlay */}
-            <div style={{ width: PREVIEW_W, height: PREVIEW_H, position: 'relative', borderRadius: 12, overflow: 'hidden', flexShrink: 0 }}>
-              <div style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${SCALE})`, transformOrigin: 'top left', overflow: 'hidden', background: theme.colors.bg }}>
-                <ParticleBackground theme={theme} />
-                <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} />
-              </div>
-              {/* Interactive overlay */}
-              <div
-                ref={overlayRef}
-                style={{ position: 'absolute', inset: 0, zIndex: 50 }}
-                onPointerDown={() => setSelectedElId(null)}
-              >
+          <div className="flex flex-1 min-h-0">
+
+            {/* ── LEFT: slide canvas ── */}
+            <div ref={leftPanelRef} className="flex-1 bg-[#0a0a0a] flex flex-col overflow-hidden">
+              {/* Slide fills full panel width, exact 16:9 */}
+              <div style={{ width: panelW, height: dynH, position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${dynScale})`, transformOrigin: 'top left', overflow: 'hidden', background: theme.colors.bg }}>
+                  <ParticleBackground theme={theme} />
+                  <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} />
+                </div>
+                {/* Interactive element overlay */}
+                <div
+                  ref={overlayRef}
+                  style={{ position: 'absolute', inset: 0, zIndex: 50 }}
+                  onPointerDown={() => setSelectedElId(null)}
+                >
                 {elements.map(el => {
                   const isSel = el.id === selectedElId
                   const elX = el.x ?? 50
@@ -332,26 +347,47 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     </div>
                   )
                 })}
+                </div>
               </div>
+
+              {/* Layer chips — remaining space below slide */}
+              {elements.length > 0 && (
+                <div className="px-3 pt-2 flex flex-wrap gap-1.5">
+                  {elements.map(el => (
+                    <button
+                      key={el.id}
+                      onClick={() => setSelectedElId(prev => prev === el.id ? null : el.id)}
+                      className={`text-[11px] px-2.5 py-0.5 rounded-full border transition-colors ${
+                        el.id === selectedElId
+                          ? 'bg-blue-500 border-blue-500 text-white'
+                          : 'text-white/40 border-white/15 hover:text-white/70 hover:border-white/30'
+                      }`}
+                    >
+                      {el.type === 'text' ? (el.content?.slice(0, 18) || '(empty text)') : '🖼 Image'}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Controls panel */}
-            <div style={{ width: PREVIEW_W }} className="bg-white/[0.06] rounded-xl p-3 space-y-3">
-              {/* Add buttons */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => addElement('text')}
-                  className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium text-white/60 border border-dashed border-white/20 rounded-lg py-2 hover:border-white/50 hover:text-white transition-colors"
-                >
-                  <span className="font-bold text-base leading-none">T</span> Add text box
-                </button>
-                <button
-                  onClick={() => addElement('image')}
-                  className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium text-white/60 border border-dashed border-white/20 rounded-lg py-2 hover:border-white/50 hover:text-white transition-colors"
-                >
-                  🖼 Add image
-                </button>
-              </div>
+            {/* ── RIGHT: editing sidebar ── */}
+            <div className="w-72 bg-[#111111] border-l border-white/[0.07] flex flex-col overflow-hidden shrink-0">
+              <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+                {/* Add element buttons */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => addElement('text')}
+                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-white/60 border border-dashed border-white/20 rounded-lg py-2 hover:border-white/50 hover:text-white transition-colors"
+                  >
+                    <span className="font-bold text-sm leading-none">T</span> Add text
+                  </button>
+                  <button
+                    onClick={() => addElement('image')}
+                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-white/60 border border-dashed border-white/20 rounded-lg py-2 hover:border-white/50 hover:text-white transition-colors"
+                  >
+                    🖼 Add image
+                  </button>
+                </div>
 
               {/* ── Text element properties ────────────────────── */}
               {selectedEl?.type === 'text' && (
@@ -822,73 +858,111 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                 </div>
               )}
 
-              {elements.length > 0 && !selectedEl && (
-                <p className="text-xs text-white/25 text-center pt-1">Click an element on the slide to edit it</p>
-              )}
+                {elements.length > 0 && !selectedEl && (
+                  <p className="text-xs text-white/25 text-center pt-1">Click an element on the slide to edit it</p>
+                )}
+              </div>
+
+              {/* Bottom: transition + delete */}
+              <div className="shrink-0 px-3 py-3 border-t border-white/[0.07] space-y-2">
+                {!data.isShiny && (
+                  <select
+                    value={data.transition ?? ''}
+                    onChange={e => change('transition', e.target.value === '' ? null : e.target.value)}
+                    className="w-full text-xs bg-white/10 text-white/70 border border-white/10 rounded-lg px-2 py-1.5 focus:outline-none"
+                  >
+                    <option value="">Default transition</option>
+                    <option value="random">✦ Random</option>
+                    <optgroup label="Fade from back">
+                      <option value="dissolve">Dissolve</option>
+                      <option value="emerge">Emerge</option>
+                      <option value="zoom">Zoom</option>
+                      <option value="punch">Punch</option>
+                    </optgroup>
+                    <optgroup label="Down from top">
+                      <option value="drop">Drop</option>
+                      <option value="descend">Descend</option>
+                    </optgroup>
+                    <optgroup label="Compound">
+                      <option value="sink">Sink</option>
+                    </optgroup>
+                    <optgroup label="Push from front">
+                      <option value="settle">Settle</option>
+                      <option value="loom">Loom</option>
+                    </optgroup>
+                    <optgroup label="Construct">
+                      <option value="assemble">Assemble</option>
+                    </optgroup>
+                  </select>
+                )}
+                {confirmingDelete ? (
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-xs text-red-400">Delete this slide?</span>
+                    <div className="flex gap-3">
+                      <button onClick={() => onDeleteSlide(slide.id)} className="text-xs font-semibold text-red-400 hover:text-red-300 transition-colors">Yes</button>
+                      <button onClick={() => setConfirmingDelete(false)} className="text-xs text-white/30 hover:text-white/60 transition-colors">No</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmingDelete(true)}
+                    className="w-full text-xs text-red-500/50 hover:text-red-400 transition-colors py-0.5"
+                  >
+                    Delete slide
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )
       })()}
 
-      {/* Footer — transition + delete */}
-      <div className="shrink-0 px-5 py-3 border-t border-gray-100 flex items-center justify-between">
-        {!data.isShiny ? (
-          <select
-            value={data.transition ?? ''}
-            onChange={e => change('transition', e.target.value === '' ? null : e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-baynes-forest"
-          >
-            <option value="">Default transition</option>
-            <option value="random">✦ Random</option>
-            <optgroup label="Fade from back">
-              <option value="dissolve">Dissolve</option>
-              <option value="emerge">Emerge</option>
-              <option value="zoom">Zoom</option>
-              <option value="punch">Punch</option>
-            </optgroup>
-            <optgroup label="Down from top">
-              <option value="drop">Drop</option>
-              <option value="descend">Descend</option>
-            </optgroup>
-            <optgroup label="Compound">
-              <option value="sink">Sink</option>
-            </optgroup>
-            <optgroup label="Push from front">
-              <option value="settle">Settle</option>
-              <option value="loom">Loom</option>
-            </optgroup>
-            <optgroup label="Construct">
-              <option value="assemble">Assemble</option>
-            </optgroup>
-          </select>
-        ) : (
-          <div />
-        )}
-        {confirmingDelete ? (
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-red-600">Delete slide?</span>
-            <button
-              onClick={() => onDeleteSlide(slide.id)}
-              className="text-xs font-semibold text-red-600 hover:text-red-700 transition-colors"
+      {/* Footer — only in edit mode */}
+      {viewMode === 'edit' && (
+        <div className="shrink-0 px-5 py-3 border-t border-gray-100 flex items-center justify-between">
+          {!data.isShiny ? (
+            <select
+              value={data.transition ?? ''}
+              onChange={e => change('transition', e.target.value === '' ? null : e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-baynes-forest"
             >
-              Yes
-            </button>
-            <button
-              onClick={() => setConfirmingDelete(false)}
-              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              No
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setConfirmingDelete(true)}
-            className="text-sm font-medium text-red-500 hover:text-red-700 transition-colors"
-          >
-            Delete
-          </button>
-        )}
-      </div>
+              <option value="">Default transition</option>
+              <option value="random">✦ Random</option>
+              <optgroup label="Fade from back">
+                <option value="dissolve">Dissolve</option>
+                <option value="emerge">Emerge</option>
+                <option value="zoom">Zoom</option>
+                <option value="punch">Punch</option>
+              </optgroup>
+              <optgroup label="Down from top">
+                <option value="drop">Drop</option>
+                <option value="descend">Descend</option>
+              </optgroup>
+              <optgroup label="Compound">
+                <option value="sink">Sink</option>
+              </optgroup>
+              <optgroup label="Push from front">
+                <option value="settle">Settle</option>
+                <option value="loom">Loom</option>
+              </optgroup>
+              <optgroup label="Construct">
+                <option value="assemble">Assemble</option>
+              </optgroup>
+            </select>
+          ) : (
+            <div />
+          )}
+          {confirmingDelete ? (
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-red-600">Delete slide?</span>
+              <button onClick={() => onDeleteSlide(slide.id)} className="text-xs font-semibold text-red-600 hover:text-red-700 transition-colors">Yes</button>
+              <button onClick={() => setConfirmingDelete(false)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">No</button>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmingDelete(true)} className="text-sm font-medium text-red-500 hover:text-red-700 transition-colors">Delete</button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
