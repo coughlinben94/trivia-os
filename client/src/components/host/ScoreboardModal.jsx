@@ -569,6 +569,18 @@ export default function ScoreboardModal({ show, onClose }) {
 
   const btnBase = 'text-sm font-medium px-3 py-1.5 rounded-lg host-button transition-colors'
 
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape') return
+      if (e.target.closest?.('input, textarea, select, [contenteditable]')) return
+      // Let sub-modals (wheel, quick entry) handle Escape first via bubbling
+      if (wheelOpen || quickEntry) return
+      onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [wheelOpen, quickEntry, onClose])
+
   return (
     <>
       <div

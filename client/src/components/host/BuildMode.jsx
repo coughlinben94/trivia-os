@@ -323,6 +323,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
   useEffect(() => {
     function onKeyDown(e) {
       if (e.key !== 'Escape') return
+      if (e.target.closest?.('input, textarea, select, [contenteditable]')) return
       if (showSwingWizard) {
         setShowSwingWizard(false)
       } else if (showPylWizard) {

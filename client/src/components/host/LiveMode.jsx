@@ -178,7 +178,7 @@ function UpNextCard({ slide, offset }) {
 
 // ─── LiveMode ──────────────────────────────────────────────────────────────
 
-export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
+export default function LiveMode({ show, actions, onExitLive, onThemeChange, onOpenScoreboard }) {
   const [scorePanelOpen, setScorePanelOpen] = useState(false)
   const [themePickerOpen, setThemePickerOpen] = useState(false)
   const [pylPickerBusy, setPylPickerBusy] = useState(false)
@@ -223,6 +223,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
   }
 
   const handleKeyDown = useCallback((e) => {
+    if (e.target.closest?.('input, textarea, select, [contenteditable]')) return
     if (scorePanelOpen || themePickerOpen) return
     if (e.code === 'ArrowRight') {
       e.preventDefault()
@@ -331,6 +332,14 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
             <span style={{ fontSize: '0.85em' }}>📊</span>
             Score
           </button>
+          {onOpenScoreboard && (
+            <button
+              onClick={onOpenScoreboard}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-sm font-semibold hover:bg-gray-200 transition-colors ml-1"
+            >
+              📊 Scores
+            </button>
+          )}
           <button
             onClick={() => setScorePanelOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-baynes-forest text-white text-sm font-semibold hover:bg-green-900 transition-colors"
