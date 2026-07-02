@@ -164,7 +164,7 @@ export default function WinnerRevealSlide({ slide, show }) {
         style={{
           color: theme.colors.text,
           fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-          fontSize: 'clamp(1.8rem, 3.5vw, 3rem)',
+          fontSize: 'clamp(1.8rem, 3.5cqw, 3rem)',
           fontWeight: 600,
           letterSpacing: '0.02em',
           marginBottom: '2.5rem',
@@ -186,7 +186,7 @@ export default function WinnerRevealSlide({ slide, show }) {
             <p style={{
               color: theme.colors.highlight,
               fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
-              fontSize: 'clamp(4rem, 11vw, 10rem)',
+              fontSize: 'clamp(4rem, 11cqw, 10rem)',
               lineHeight: 1,
               textShadow: `0 0 80px ${theme.colors.highlight}55`,
             }}>
@@ -198,7 +198,7 @@ export default function WinnerRevealSlide({ slide, show }) {
               style={{
                 color: theme.colors.accent,
                 fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-                fontSize: 'clamp(1.4rem, 2.5vw, 2.2rem)',
+                fontSize: 'clamp(1.4rem, 2.5cqw, 2.2rem)',
                 fontWeight: 700,
                 marginTop: '1rem',
               }}
