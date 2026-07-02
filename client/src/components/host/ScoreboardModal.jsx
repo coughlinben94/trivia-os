@@ -225,10 +225,14 @@ function SpinWheel({ initialPool, colors, onComplete, onClose }) {
   const [spinning,  setSpinning]  = useState(false)
   const [landed,    setLanded]    = useState(null)
   const [advancing, setAdvancing] = useState(false)
+  const [showPopup, setShowPopup] = useState(false)
   const timerRef        = useRef(null)
   const tlRef           = useRef(null)
   const sectorGroupRefs = useRef({})
-  const flyNameRef      = useRef(null)
+  const winnerRef       = useRef(null)
+  const popupRef        = useRef(null)
+  const wheelWrapRef    = useRef(null)
+  const overlayRef      = useRef(null)
 
   const n         = pool.length
   const sectorDeg = n > 0 ? 360 / n : 360
@@ -237,6 +241,34 @@ function SpinWheel({ initialPool, colors, onComplete, onClose }) {
     clearTimeout(timerRef.current)
     tlRef.current?.kill()
   }, [])
+
+  // Drives the full popup → poof → wheel poof → fade sequence
+  useEffect(() => {
+    if (!showPopup || !popupRef.current) return
+    const winner = winnerRef.current
+    const tl = gsap.timeline()
+    tlRef.current = tl
+
+    // Popup slams in with a bounce
+    gsap.set(popupRef.current, { scale: 0.55, opacity: 0 })
+    tl.to(popupRef.current, { scale: 1.07, opacity: 1, duration: 0.22, ease: 'power3.out' })
+      .to(popupRef.current, { scale: 1,    duration: 0.16, ease: 'power2.inOut' })
+
+    // Hold for a beat, then popup poofs off
+    tl.to(popupRef.current, { scale: 1.40, opacity: 0, duration: 0.30, ease: 'power2.in' }, '+=0.90')
+
+    // Wheel poofs off overlapping the popup exit
+    if (wheelWrapRef.current) {
+      tl.to(wheelWrapRef.current, { scale: 1.22, opacity: 0, duration: 0.28, ease: 'power2.in' }, '-=0.12')
+    }
+
+    // Fade overlay to black before unmount
+    if (overlayRef.current) {
+      tl.to(overlayRef.current, { opacity: 0, duration: 0.22, ease: 'power1.in' }, '-=0.10')
+    }
+
+    tl.call(() => onComplete(winner.id))
+  }, [showPopup]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function spin() {
     if (spinning || n < 1) return
@@ -260,41 +292,28 @@ function SpinWheel({ initialPool, colors, onComplete, onClose }) {
   function advance() {
     if (!landed || advancing) return
     setAdvancing(true)
-    const winner = landed
-    const winnerG = sectorGroupRefs.current[winner.id]
-
-    const tl = gsap.timeline({
-      id: 'spin-exit',
-      onComplete: () => onComplete(winner.id),
-    })
-    tlRef.current = tl
-
-    if (flyNameRef.current) {
-      gsap.set(flyNameRef.current, { opacity: 0, y: 0, scale: 1 })
-      tl.to(flyNameRef.current, { opacity: 1, y: -22, scale: 1.4,  duration: 0.14, ease: 'power3.out' }, 0)
-        .to(flyNameRef.current, { opacity: 0, y: -130, scale: 0.4, duration: 0.44, ease: 'back.in(1.7)' }, 0.14)
-    }
-
-    if (winnerG) {
-      tl.to(winnerG, { opacity: 0, duration: 0.20, ease: 'power3.in' }, 0.06)
-    }
+    winnerRef.current = landed
+    setShowPopup(true)
   }
 
   return (
     <div
+      ref={overlayRef}
       className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-5 select-none"
       style={{ background: 'rgba(0,0,0,0.90)', backdropFilter: 'blur(14px)' }}
     >
-      {/* Header */}
-      <div className="text-center">
-        <p className="text-white/40 text-xs font-semibold uppercase tracking-widest mb-1.5">Press Your Luck</p>
-        <p className="text-white/80 text-xl font-bold" style={{ fontFamily: 'Boogaloo, sans-serif' }}>
-          Who picks the category?
-        </p>
-      </div>
+      {/* Header — hidden once exit sequence starts */}
+      {!advancing && (
+        <div className="text-center">
+          <p className="text-white/40 text-xs font-semibold uppercase tracking-widest mb-1.5">Press Your Luck</p>
+          <p className="text-white/80 text-xl font-bold" style={{ fontFamily: 'Boogaloo, sans-serif' }}>
+            Who picks the category?
+          </p>
+        </div>
+      )}
 
       {/* Wheel + pointer */}
-      <div className="relative flex flex-col items-center" style={{ width: SIZE }}>
+      <div ref={wheelWrapRef} className="relative flex flex-col items-center" style={{ width: SIZE }}>
         {/* Downward pointer at 12 o'clock */}
         <div style={{
           width: 0, height: 0, position: 'relative', zIndex: 2,
@@ -306,24 +325,6 @@ function SpinWheel({ initialPool, colors, onComplete, onClose }) {
 
         {/* Spinning wheel */}
         <div style={{ position: 'relative', width: SIZE, height: SIZE }}>
-          {/* Name fly-off overlay — lives at 12 o'clock, animated by GSAP on advance */}
-          {landed && !spinning && (
-            <div
-              ref={flyNameRef}
-              style={{
-                position: 'absolute', top: 16, left: '50%',
-                transform: 'translateX(-50%)',
-                color: 'white', fontFamily: 'Boogaloo, sans-serif',
-                fontSize: 26, fontWeight: 700,
-                pointerEvents: 'none', zIndex: 10,
-                whiteSpace: 'nowrap', opacity: 0,
-                textShadow: '0 2px 10px rgba(0,0,0,0.9)',
-              }}
-            >
-              {landed.name}
-            </div>
-          )}
-
           <div style={{
             width: SIZE, height: SIZE,
             transform: `rotate(${rotation}deg)`,
@@ -371,47 +372,90 @@ function SpinWheel({ initialPool, colors, onComplete, onClose }) {
         </div>
       </div>
 
-      {/* Result */}
-      <div className="h-12 flex items-center justify-center">
-        {landed && !spinning && (
-          <p
-            className="text-3xl font-bold text-yellow-400"
+      {/* Result + buttons — hidden once exit sequence starts */}
+      {!advancing && (
+        <>
+          <div className="h-12 flex items-center justify-center">
+            {landed && !spinning && (
+              <p
+                className="text-3xl font-bold text-yellow-400"
+                style={{
+                  fontFamily: 'Boogaloo, sans-serif',
+                  animation: 'fadeSlideUp 0.32s cubic-bezier(0.23,1,0.32,1) both',
+                }}
+              >
+                {landed.name}!
+              </p>
+            )}
+            {spinning && (
+              <p className="text-white/30 text-sm uppercase tracking-widest">Spinning…</p>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            {!spinning && !landed && (
+              <button
+                onClick={spin}
+                className="bg-[#1a6b4a] text-white font-bold text-lg px-10 py-3.5 rounded-2xl host-button hover:bg-green-900 shadow-xl"
+              >
+                🎡 Spin!
+              </button>
+            )}
+            {!spinning && landed && (
+              <button
+                onClick={advance}
+                className="bg-[#1a6b4a] text-white font-bold text-lg px-10 py-3.5 rounded-2xl host-button hover:bg-green-900 shadow-xl"
+              >
+                They choose! →
+              </button>
+            )}
+            <button onClick={onClose} className="text-white/30 hover:text-white/60 text-sm px-4 py-3 host-button">
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Winner popup — bounces in, holds, then poofs off before wheel exits */}
+      {showPopup && landed && (
+        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <div
+            ref={popupRef}
+            className="rounded-3xl flex flex-col items-center gap-3 text-center"
             style={{
-              fontFamily: 'Boogaloo, sans-serif',
-              animation: 'fadeSlideUp 0.32s cubic-bezier(0.23,1,0.32,1) both',
+              opacity: 0,
+              padding: '3.5rem 5rem',
+              minWidth: 340,
+              background: 'rgba(12,8,4,0.97)',
+              border: '2px solid rgba(250,204,21,0.60)',
+              boxShadow: '0 0 80px rgba(250,204,21,0.18), 0 30px 80px rgba(0,0,0,0.75)',
             }}
           >
-            {landed.name}!
-          </p>
-        )}
-        {spinning && (
-          <p className="text-white/30 text-sm uppercase tracking-widest">Spinning…</p>
-        )}
-      </div>
-
-      {/* Buttons */}
-      <div className="flex items-center gap-3">
-        {!spinning && !landed && (
-          <button
-            onClick={spin}
-            className="bg-[#1a6b4a] text-white font-bold text-lg px-10 py-3.5 rounded-2xl host-button hover:bg-green-900 shadow-xl"
-          >
-            🎡 Spin!
-          </button>
-        )}
-        {!spinning && landed && (
-          <button
-            onClick={advance}
-            disabled={advancing}
-            className="bg-[#1a6b4a] text-white font-bold text-lg px-10 py-3.5 rounded-2xl host-button hover:bg-green-900 shadow-xl disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {advancing ? '✨' : 'They choose! →'}
-          </button>
-        )}
-        <button onClick={onClose} className="text-white/30 hover:text-white/60 text-sm px-4 py-3 host-button">
-          Cancel
-        </button>
-      </div>
+            <div style={{ fontSize: 36, lineHeight: 1 }}>🎉</div>
+            <p style={{
+              fontFamily: 'Boogaloo, sans-serif',
+              fontSize: '4.5rem',
+              fontWeight: 700,
+              color: 'white',
+              lineHeight: 1.05,
+              margin: 0,
+            }}>
+              {landed.name}!
+            </p>
+            <p style={{
+              fontFamily: 'DM Sans, sans-serif',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              color: 'rgba(250,204,21,0.65)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.12em',
+              margin: 0,
+            }}>
+              Picks the category
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -543,7 +587,6 @@ export default function ScoreboardModal({ show, onClose }) {
               className={`${btnBase} ${quickEntry ? 'bg-[#1a6b4a] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
             >⚡ Quick Entry</button>
             <button onClick={addTeam} className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200`}>+ Team</button>
-            <button onClick={sortTeams} className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200`}>Sort</button>
             <button
               onClick={openWheel}
               disabled={teamsWithStats.length < 2}
@@ -566,7 +609,7 @@ export default function ScoreboardModal({ show, onClose }) {
 
           {/* Quick Entry */}
           {quickEntry && (
-            <QuickEntry teams={teams} cols={cols} onSave={quickSave} onClose={() => setQuickEntry(false)} />
+            <QuickEntry teams={teams} cols={cols} onSave={quickSave} onClose={() => { sortTeams(); setQuickEntry(false) }} />
           )}
 
           {/* Body */}
