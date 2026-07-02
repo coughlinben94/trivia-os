@@ -90,7 +90,13 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   }, [])
 
   // Sync local data when selected slide changes
-  useEffect(() => { setData(slide.data); setConfirmingDelete(false); setSelectedElId(null) }, [slide.id])
+  useEffect(() => {
+    setData(slide.data); setConfirmingDelete(false); setSelectedElId(null)
+    // If a drag got interrupted (see startDrag's pointercancel comment) and
+    // its listeners are still attached, this stops onMove from writing
+    // element-position updates to the slide we just navigated away from.
+    dragStateRef.current = null
+  }, [slide.id])
 
   function change(key, value) {
     const next = { ...data, [key]: value }
@@ -187,9 +193,15 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
       dragStateRef.current = null
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onUp)
     }
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
+    // Browsers fire pointercancel (not pointerup) when a drag gets interrupted —
+    // released outside the window, an OS-level focus steal, etc. Without this,
+    // the listeners never get removed and onMove keeps writing to this element
+    // via a stale closure even after the host has moved on to a different slide.
+    document.addEventListener('pointercancel', onUp)
   }
 
   // Media upload helpers
@@ -251,41 +263,41 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
       {viewMode === 'edit' && (
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
           {slide.type === 'title' && (
-            <TitleEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
+            <TitleEditor data={data} onChange={change} />
           )}
           {(slide.type === 'round-intro' || slide.type === 'swing-round-intro') && (
             <RoundIntroEditor data={data} onChange={change} isSwing={slide.type === 'swing-round-intro'}
-              uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} onMediaUpload={handleMediaUpload} />
+              uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
           )}
           {slide.type === 'question' && (
             <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia}
-              slideId={slide.id} slideRoundId={slide.roundId} addSiblingSlides={addSiblingSlides} onMediaUpload={handleMediaUpload} />
+              slideId={slide.id} slideRoundId={slide.roundId} addSiblingSlides={addSiblingSlides} />
           )}
           {slide.type === 'grading-break' && (
             <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
-              uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} onMediaUpload={handleMediaUpload} />
+              uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} />
           )}
           {slide.type === 'scoreboard-reveal' && (
-            <ScoreboardRevealEditor data={data} onChange={change} show={show} onMediaUpload={handleMediaUpload} />
+            <ScoreboardRevealEditor data={data} onChange={change} show={show} />
           )}
           {slide.type === 'custom' && (
             <CustomEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
           )}
           {slide.type === 'pixelate-series' && (
             <PixelateSeriesEditor data={data} onChange={change}
-              onStageUpload={handleStageUpload} onMediaUpload={handleMediaUpload} />
+              onStageUpload={handleStageUpload} />
           )}
           {slide.type === 'multi-question' && (
-            <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload} />
+            <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
           )}
           {slide.type === 'pyl-reveal' && (
-            <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload} />
+            <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
           )}
           {slide.type === 'winner-reveal' && (
-            <WinnerRevealEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
+            <WinnerRevealEditor data={data} onChange={change} />
           )}
           {slide.type === 'state-of-union' && (
-            <StateOfUnionEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
+            <StateOfUnionEditor data={data} onChange={change} />
           )}
         </div>
       )}
@@ -371,19 +383,19 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
             </div>
 
             {/* ── RIGHT: editing sidebar ── */}
-            <div className="w-72 bg-[#111111] border-l border-white/[0.07] flex flex-col overflow-hidden shrink-0">
+            <div className="w-72 bg-white border-l border-gray-200 flex flex-col overflow-hidden shrink-0">
               <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
                 {/* Add element buttons */}
                 <div className="flex gap-2">
                   <button
                     onClick={() => addElement('text')}
-                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-white/60 border border-dashed border-white/20 rounded-lg py-2 hover:border-white/50 hover:text-white transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-gray-500 border border-dashed border-gray-300 rounded-lg py-2 hover:border-gray-400 hover:text-gray-700 transition-colors"
                   >
                     <span className="font-bold text-sm leading-none">T</span> Add text
                   </button>
                   <button
                     onClick={() => addElement('image')}
-                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-white/60 border border-dashed border-white/20 rounded-lg py-2 hover:border-white/50 hover:text-white transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-gray-500 border border-dashed border-gray-300 rounded-lg py-2 hover:border-gray-400 hover:text-gray-700 transition-colors"
                   >
                     🖼 Add image
                   </button>
@@ -391,7 +403,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
 
               {/* ── Text element properties ────────────────────── */}
               {selectedEl?.type === 'text' && (
-                <div className="space-y-2.5 pt-2 border-t border-white/10">
+                <div className="space-y-2.5 pt-2 border-t border-gray-100">
                   {/* Content */}
                   <textarea
                     autoFocus
@@ -399,13 +411,13 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     onChange={e => updateElement(selectedElId, { content: e.target.value })}
                     rows={2}
                     placeholder="Type your text…"
-                    className="w-full text-sm bg-white/10 text-white rounded-lg px-3 py-2 border border-white/10 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none placeholder:text-white/30"
+                    className="w-full text-sm bg-gray-50 text-gray-900 rounded-lg px-3 py-2 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none placeholder:text-gray-400"
                   />
                   {/* Font */}
                   <select
                     value={selectedEl.font ?? 'Boogaloo'}
                     onChange={e => updateElement(selectedElId, { font: e.target.value })}
-                    className="w-full text-xs bg-white/10 text-white border border-white/10 rounded-md px-2 py-1 focus:outline-none"
+                    className="w-full text-xs bg-gray-50 text-gray-900 border border-gray-200 rounded-md px-2 py-1 focus:outline-none"
                   >
                     {DISPLAY_FONTS.map(f => <option key={f} value={f}>{f}</option>)}
                   </select>
@@ -419,7 +431,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     ].map(([key, label]) => (
                       <button key={key}
                         onClick={() => updateElement(selectedElId, { [key]: !selectedEl[key] })}
-                        className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl[key] ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                        className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl[key] ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
                       >{label}</button>
                     ))}
                     {/* Text transform */}
@@ -431,7 +443,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     ].map(([val, label]) => (
                       <button key={val}
                         onClick={() => updateElement(selectedElId, { textTransform: val })}
-                        className={`text-xs px-2 py-1 rounded border transition-colors ${(selectedEl.textTransform ?? 'none') === val ? 'bg-violet-500 border-violet-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                        className={`text-xs px-2 py-1 rounded border transition-colors ${(selectedEl.textTransform ?? 'none') === val ? 'bg-violet-500 border-violet-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
                       >{label}</button>
                     ))}
                   </div>
@@ -445,7 +457,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     ].map(([a, icon]) => (
                       <button key={a}
                         onClick={() => updateElement(selectedElId, { align: a })}
-                        className={`text-[11px] px-1.5 py-1 rounded border transition-colors ${(selectedEl.align ?? 'center') === a ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                        className={`text-[11px] px-1.5 py-1 rounded border transition-colors ${(selectedEl.align ?? 'center') === a ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
                       >{icon}</button>
                     ))}
                     <input type="color" value={selectedEl.color ?? '#ffffff'}
@@ -453,7 +465,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                       className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0" title="Text color"
                     />
                     {selectedEl.color && (
-                      <button onClick={() => updateElement(selectedElId, { color: null })} className="text-[10px] text-white/30 hover:text-white/60">↺</button>
+                      <button onClick={() => updateElement(selectedElId, { color: null })} className="text-[10px] text-gray-400 hover:text-gray-600">↺</button>
                     )}
                   </div>
                   {/* Size + width */}
@@ -462,26 +474,26 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     ['Width', 'width',        10, 100, 1,   60, '%'],
                   ].map(([label, key, min, max, step, def, unit]) => (
                     <div key={key} className="flex items-center gap-2">
-                      <span className="text-xs text-white/40 w-9 shrink-0">{label}</span>
+                      <span className="text-xs text-gray-400 w-9 shrink-0">{label}</span>
                       <input type="range" min={min} max={max} step={step}
                         value={selectedEl[key] ?? def}
                         onChange={e => updateElement(selectedElId, { [key]: Number(e.target.value) })}
                         className="flex-1"
                       />
-                      <span className="text-xs text-white/40 w-12 text-right">{selectedEl[key] ?? def}{unit}</span>
+                      <span className="text-xs text-gray-400 w-12 text-right">{selectedEl[key] ?? def}{unit}</span>
                     </div>
                   ))}
                   {/* Curve + Spacing */}
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-white/40 w-9 shrink-0">Curve</span>
+                    <span className="text-xs text-gray-400 w-9 shrink-0">Curve</span>
                     <input type="range" min="-100" max="100"
                       value={selectedEl.curve ?? 0}
                       onChange={e => updateElement(selectedElId, { curve: Number(e.target.value) })}
                       className="flex-1"
                     />
-                    <span className="text-xs text-white/40 w-8 text-right">{selectedEl.curve ?? 0}</span>
+                    <span className="text-xs text-gray-400 w-8 text-right">{selectedEl.curve ?? 0}</span>
                     {(selectedEl.curve ?? 0) !== 0 && (
-                      <button onClick={() => updateElement(selectedElId, { curve: 0 })} className="text-[10px] text-white/30 hover:text-white/60">↺</button>
+                      <button onClick={() => updateElement(selectedElId, { curve: 0 })} className="text-[10px] text-gray-400 hover:text-gray-600">↺</button>
                     )}
                   </div>
                   {[
@@ -489,13 +501,13 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     ['Line ht', 'lineHeight',    0.8,  3, 0.1, 1.2, '×'],
                   ].map(([label, key, min, max, step, def, unit]) => (
                     <div key={key} className="flex items-center gap-2">
-                      <span className="text-xs text-white/40 w-9 shrink-0">{label}</span>
+                      <span className="text-xs text-gray-400 w-9 shrink-0">{label}</span>
                       <input type="range" min={min} max={max} step={step}
                         value={selectedEl[key] ?? def}
                         onChange={e => updateElement(selectedElId, { [key]: Number(e.target.value) })}
                         className="flex-1"
                       />
-                      <span className="text-xs text-white/40 w-12 text-right">{(selectedEl[key] ?? def)}{unit}</span>
+                      <span className="text-xs text-gray-400 w-12 text-right">{(selectedEl[key] ?? def)}{unit}</span>
                     </div>
                   ))}
                   {/* Shadow */}
@@ -503,17 +515,17 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => updateElement(selectedElId, { shadow: !selectedEl.shadow })}
-                        className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.shadow ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                        className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.shadow ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
                       >Shadow</button>
                       {selectedEl.shadow && (
                         <>
-                          <span className="text-[10px] text-white/30">blur</span>
+                          <span className="text-[10px] text-gray-400">blur</span>
                           <input type="range" min="0" max="40"
                             value={selectedEl.shadowBlur ?? 8}
                             onChange={e => updateElement(selectedElId, { shadowBlur: Number(e.target.value) })}
                             className="flex-1"
                           />
-                          <span className="text-xs text-white/40 w-5">{selectedEl.shadowBlur ?? 8}</span>
+                          <span className="text-xs text-gray-400 w-5">{selectedEl.shadowBlur ?? 8}</span>
                           <input type="color" value={selectedEl.shadowColor?.startsWith('#') ? selectedEl.shadowColor : '#000000'}
                             onChange={e => updateElement(selectedElId, { shadowColor: e.target.value })}
                             className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Shadow color"
@@ -523,20 +535,20 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     </div>
                     {selectedEl.shadow && (
                       <div className="flex items-center gap-2 pl-1">
-                        <span className="text-[10px] text-white/30 w-6">X</span>
+                        <span className="text-[10px] text-gray-400 w-6">X</span>
                         <input type="range" min="-30" max="30"
                           value={selectedEl.shadowX ?? 2}
                           onChange={e => updateElement(selectedElId, { shadowX: Number(e.target.value) })}
                           className="flex-1"
                         />
-                        <span className="text-xs text-white/40 w-8 text-right">{selectedEl.shadowX ?? 2}px</span>
-                        <span className="text-[10px] text-white/30 w-4">Y</span>
+                        <span className="text-xs text-gray-400 w-8 text-right">{selectedEl.shadowX ?? 2}px</span>
+                        <span className="text-[10px] text-gray-400 w-4">Y</span>
                         <input type="range" min="-30" max="30"
                           value={selectedEl.shadowY ?? 2}
                           onChange={e => updateElement(selectedElId, { shadowY: Number(e.target.value) })}
                           className="flex-1"
                         />
-                        <span className="text-xs text-white/40 w-8 text-right">{selectedEl.shadowY ?? 2}px</span>
+                        <span className="text-xs text-gray-400 w-8 text-right">{selectedEl.shadowY ?? 2}px</span>
                       </div>
                     )}
                   </div>
@@ -544,7 +556,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => updateElement(selectedElId, { stroke: !selectedEl.stroke })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.stroke ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.stroke ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
                     >Outline</button>
                     {selectedEl.stroke && (
                       <>
@@ -553,7 +565,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                           onChange={e => updateElement(selectedElId, { strokeWidth: Number(e.target.value) })}
                           className="flex-1"
                         />
-                        <span className="text-xs text-white/40 w-7">{selectedEl.strokeWidth ?? 2}px</span>
+                        <span className="text-xs text-gray-400 w-7">{selectedEl.strokeWidth ?? 2}px</span>
                         <input type="color" value={selectedEl.strokeColor ?? '#000000'}
                           onChange={e => updateElement(selectedElId, { strokeColor: e.target.value })}
                           className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Outline color"
@@ -565,7 +577,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => updateElement(selectedElId, { glow: !selectedEl.glow })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.glow ? 'bg-yellow-500 border-yellow-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.glow ? 'bg-yellow-500 border-yellow-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
                     >Glow</button>
                     {selectedEl.glow && (
                       <>
@@ -574,7 +586,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                           onChange={e => updateElement(selectedElId, { glowRadius: Number(e.target.value) })}
                           className="flex-1"
                         />
-                        <span className="text-xs text-white/40 w-7">{selectedEl.glowRadius ?? 20}</span>
+                        <span className="text-xs text-gray-400 w-7">{selectedEl.glowRadius ?? 20}</span>
                         <input type="color" value={selectedEl.glowColor ?? '#ffffff'}
                           onChange={e => updateElement(selectedElId, { glowColor: e.target.value })}
                           className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Glow color"
@@ -587,7 +599,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => updateElement(selectedElId, { bgFill: !selectedEl.bgFill })}
-                        className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.bgFill ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                        className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.bgFill ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
                       >BG Fill</button>
                       {selectedEl.bgFill && (
                         <>
@@ -595,75 +607,75 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                             onChange={e => updateElement(selectedElId, { bgColor: e.target.value })}
                             className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Fill color"
                           />
-                          <span className="text-[10px] text-white/30">opacity</span>
+                          <span className="text-[10px] text-gray-400">opacity</span>
                           <input type="range" min="0" max="1" step="0.05"
                             value={selectedEl.bgOpacity ?? 0.6}
                             onChange={e => updateElement(selectedElId, { bgOpacity: Number(e.target.value) })}
                             className="flex-1"
                           />
-                          <span className="text-xs text-white/40 w-7">{Math.round((selectedEl.bgOpacity ?? 0.6) * 100)}%</span>
+                          <span className="text-xs text-gray-400 w-7">{Math.round((selectedEl.bgOpacity ?? 0.6) * 100)}%</span>
                         </>
                       )}
                     </div>
                     {selectedEl.bgFill && (
                       <div className="flex items-center gap-2 pl-1">
-                        <span className="text-[10px] text-white/30 w-8">Pad</span>
+                        <span className="text-[10px] text-gray-400 w-8">Pad</span>
                         <input type="range" min="0" max="40"
                           value={selectedEl.bgPadding ?? 12}
                           onChange={e => updateElement(selectedElId, { bgPadding: Number(e.target.value) })}
                           className="flex-1"
                         />
-                        <span className="text-xs text-white/40 w-7">{selectedEl.bgPadding ?? 12}px</span>
-                        <span className="text-[10px] text-white/30 w-8">R</span>
+                        <span className="text-xs text-gray-400 w-7">{selectedEl.bgPadding ?? 12}px</span>
+                        <span className="text-[10px] text-gray-400 w-8">R</span>
                         <input type="range" min="0" max="40"
                           value={selectedEl.bgRadius ?? 8}
                           onChange={e => updateElement(selectedElId, { bgRadius: Number(e.target.value) })}
                           className="flex-1"
                         />
-                        <span className="text-xs text-white/40 w-7">{selectedEl.bgRadius ?? 8}px</span>
+                        <span className="text-xs text-gray-400 w-7">{selectedEl.bgRadius ?? 8}px</span>
                       </div>
                     )}
                   </div>
                   {/* Opacity */}
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-white/40 w-9 shrink-0">Opacity</span>
+                    <span className="text-xs text-gray-400 w-9 shrink-0">Opacity</span>
                     <input type="range" min="0" max="1" step="0.05"
                       value={selectedEl.opacity ?? 1}
                       onChange={e => updateElement(selectedElId, { opacity: Number(e.target.value) })}
                       className="flex-1"
                     />
-                    <span className="text-xs text-white/40 w-12 text-right">{Math.round((selectedEl.opacity ?? 1) * 100)}%</span>
+                    <span className="text-xs text-gray-400 w-12 text-right">{Math.round((selectedEl.opacity ?? 1) * 100)}%</span>
                   </div>
                   {/* Transform */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-white/40 shrink-0">Rotate</span>
-                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) - 90 + 360) % 360 })} className="text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white px-2 py-1 rounded transition-colors">↺ 90°</button>
-                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) + 90) % 360 })} className="text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white px-2 py-1 rounded transition-colors">↻ 90°</button>
+                    <span className="text-xs text-gray-400 shrink-0">Rotate</span>
+                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) - 90 + 360) % 360 })} className="text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 px-2 py-1 rounded transition-colors">↺ 90°</button>
+                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) + 90) % 360 })} className="text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 px-2 py-1 rounded transition-colors">↻ 90°</button>
                     <input type="range" min="-180" max="180"
                       value={selectedEl.rotation ?? 0}
                       onChange={e => updateElement(selectedElId, { rotation: Number(e.target.value) })}
                       className="flex-1"
                     />
-                    <span className="text-xs text-white/40 w-10 text-right">{selectedEl.rotation ?? 0}°</span>
+                    <span className="text-xs text-gray-400 w-10 text-right">{selectedEl.rotation ?? 0}°</span>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <button onClick={() => updateElement(selectedElId, { flipH: !selectedEl.flipH })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipH ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipH ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
                     >↔ Flip H</button>
                     <button onClick={() => updateElement(selectedElId, { flipV: !selectedEl.flipV })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipV ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipV ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
                     >↕ Flip V</button>
                     {((selectedEl.rotation ?? 0) !== 0 || selectedEl.flipH || selectedEl.flipV) && (
-                      <button onClick={() => updateElement(selectedElId, { rotation: 0, flipH: false, flipV: false })} className="text-[10px] text-white/30 hover:text-white/60">↺ reset</button>
+                      <button onClick={() => updateElement(selectedElId, { rotation: 0, flipH: false, flipV: false })} className="text-[10px] text-gray-400 hover:text-gray-600">↺ reset</button>
                     )}
                   </div>
                   {/* Align to slide */}
                   <div className="space-y-1">
-                    <span className="text-xs text-white/40">Align to slide</span>
+                    <span className="text-xs text-gray-400">Align to slide</span>
                     <div className="flex gap-1">
                       {[['⬅', 10], ['↔', 50], ['➡', 90]].map(([icon, x]) => (
                         <button key={x} onClick={() => updateElement(selectedElId, { x })}
-                          className="flex-1 text-sm bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors"
+                          className="flex-1 text-sm bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors"
                           title={x === 10 ? 'Align left' : x === 50 ? 'Center' : 'Align right'}
                         >{icon}</button>
                       ))}
@@ -671,7 +683,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     <div className="flex gap-1">
                       {[['⬆', 10], ['⬛', 50], ['⬇', 90]].map(([icon, y]) => (
                         <button key={y} onClick={() => updateElement(selectedElId, { y })}
-                          className="flex-1 text-sm bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors"
+                          className="flex-1 text-sm bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors"
                           title={y === 10 ? 'Align top' : y === 50 ? 'Middle' : 'Align bottom'}
                         >{icon}</button>
                       ))}
@@ -679,18 +691,18 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                   </div>
                   {/* Z-order + duplicate */}
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-white/40 shrink-0">Layer</span>
-                    <button onClick={() => bringForward(selectedElId)} className="flex-1 text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors">▲ Forward</button>
-                    <button onClick={() => sendBackward(selectedElId)} className="flex-1 text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors">▼ Back</button>
-                    <button onClick={() => duplicateElement(selectedElId)} className="flex-1 text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors">⧉ Dupe</button>
+                    <span className="text-xs text-gray-400 shrink-0">Layer</span>
+                    <button onClick={() => bringForward(selectedElId)} className="flex-1 text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors">▲ Forward</button>
+                    <button onClick={() => sendBackward(selectedElId)} className="flex-1 text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors">▼ Back</button>
+                    <button onClick={() => duplicateElement(selectedElId)} className="flex-1 text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors">⧉ Dupe</button>
                   </div>
                 </div>
               )}
 
               {/* ── Image element properties ───────────────────── */}
               {selectedEl?.type === 'image' && (
-                <div className="space-y-2.5 pt-2 border-t border-white/10">
-                  <div className="bg-white/10 rounded-lg p-3">
+                <div className="space-y-2.5 pt-2 border-t border-gray-100">
+                  <div className="bg-gray-50 rounded-lg p-3">
                     <MediaUpload
                       accept="image"
                       label="Image"
@@ -709,32 +721,32 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     ['Radius', 'borderRadius', 0,  50, 1,   0, '%'],
                   ].map(([label, key, min, max, step, def, unit]) => (
                     <div key={key} className="flex items-center gap-2">
-                      <span className="text-xs text-white/40 w-9 shrink-0">{label}</span>
+                      <span className="text-xs text-gray-400 w-9 shrink-0">{label}</span>
                       <input type="range" min={min} max={max} step={step}
                         value={selectedEl[key] ?? def}
                         onChange={e => updateElement(selectedElId, { [key]: Number(e.target.value) })}
                         className="flex-1"
                       />
-                      <span className="text-xs text-white/40 w-12 text-right">{selectedEl[key] ?? def}{unit}</span>
+                      <span className="text-xs text-gray-400 w-12 text-right">{selectedEl[key] ?? def}{unit}</span>
                     </div>
                   ))}
                   {/* Opacity */}
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-white/40 w-9 shrink-0">Opacity</span>
+                    <span className="text-xs text-gray-400 w-9 shrink-0">Opacity</span>
                     <input type="range" min="0" max="1" step="0.05"
                       value={selectedEl.opacity ?? 1}
                       onChange={e => updateElement(selectedElId, { opacity: Number(e.target.value) })}
                       className="flex-1"
                     />
-                    <span className="text-xs text-white/40 w-12 text-right">{Math.round((selectedEl.opacity ?? 1) * 100)}%</span>
+                    <span className="text-xs text-gray-400 w-12 text-right">{Math.round((selectedEl.opacity ?? 1) * 100)}%</span>
                   </div>
                   {/* Blend mode */}
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-white/40 w-9 shrink-0">Blend</span>
+                    <span className="text-xs text-gray-400 w-9 shrink-0">Blend</span>
                     <select
                       value={selectedEl.blendMode ?? 'normal'}
                       onChange={e => updateElement(selectedElId, { blendMode: e.target.value })}
-                      className="flex-1 text-xs bg-white/10 text-white border border-white/10 rounded-md px-2 py-1 focus:outline-none"
+                      className="flex-1 text-xs bg-gray-50 text-gray-900 border border-gray-200 rounded-md px-2 py-1 focus:outline-none"
                     >
                       {['normal','multiply','screen','overlay','darken','lighten','color-dodge','color-burn','hard-light','soft-light','difference','exclusion','hue','saturation','color','luminosity'].map(m => (
                         <option key={m} value={m}>{m}</option>
@@ -751,15 +763,15 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     ['Gray',   'filterGrayscale',  0, 100, 1,   0, '%'],
                   ].map(([label, key, min, max, step, def, unit]) => (
                     <div key={key} className="flex items-center gap-2">
-                      <span className="text-xs text-white/40 w-9 shrink-0">{label}</span>
+                      <span className="text-xs text-gray-400 w-9 shrink-0">{label}</span>
                       <input type="range" min={min} max={max} step={step}
                         value={selectedEl[key] ?? def}
                         onChange={e => updateElement(selectedElId, { [key]: Number(e.target.value) })}
                         className="flex-1"
                       />
-                      <span className="text-xs text-white/40 w-12 text-right">{selectedEl[key] ?? def}{unit}</span>
+                      <span className="text-xs text-gray-400 w-12 text-right">{selectedEl[key] ?? def}{unit}</span>
                       {(selectedEl[key] ?? def) !== def && (
-                        <button onClick={() => updateElement(selectedElId, { [key]: def })} className="text-[10px] text-white/30 hover:text-white/60">↺</button>
+                        <button onClick={() => updateElement(selectedElId, { [key]: def })} className="text-[10px] text-gray-400 hover:text-gray-600">↺</button>
                       )}
                     </div>
                   ))}
@@ -767,7 +779,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => updateElement(selectedElId, { imgGlow: !selectedEl.imgGlow })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.imgGlow ? 'bg-yellow-500 border-yellow-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.imgGlow ? 'bg-yellow-500 border-yellow-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
                     >Glow</button>
                     {selectedEl.imgGlow && (
                       <>
@@ -776,7 +788,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                           onChange={e => updateElement(selectedElId, { imgGlowRadius: Number(e.target.value) })}
                           className="flex-1"
                         />
-                        <span className="text-xs text-white/40 w-7">{selectedEl.imgGlowRadius ?? 20}</span>
+                        <span className="text-xs text-gray-400 w-7">{selectedEl.imgGlowRadius ?? 20}</span>
                         <input type="color" value={selectedEl.imgGlowColor ?? '#3b82f6'}
                           onChange={e => updateElement(selectedElId, { imgGlowColor: e.target.value })}
                           className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Glow color"
@@ -788,7 +800,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => updateElement(selectedElId, { imgBorder: !selectedEl.imgBorder })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.imgBorder ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.imgBorder ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
                     >Border</button>
                     {selectedEl.imgBorder && (
                       <>
@@ -797,7 +809,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                           onChange={e => updateElement(selectedElId, { imgBorderWidth: Number(e.target.value) })}
                           className="flex-1"
                         />
-                        <span className="text-xs text-white/40 w-7">{selectedEl.imgBorderWidth ?? 3}px</span>
+                        <span className="text-xs text-gray-400 w-7">{selectedEl.imgBorderWidth ?? 3}px</span>
                         <input type="color" value={selectedEl.imgBorderColor ?? '#ffffff'}
                           onChange={e => updateElement(selectedElId, { imgBorderColor: e.target.value })}
                           className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Border color"
@@ -807,34 +819,34 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                   </div>
                   {/* Transform */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-white/40 shrink-0">Rotate</span>
-                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) - 90 + 360) % 360 })} className="text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white px-2 py-1 rounded transition-colors">↺ 90°</button>
-                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) + 90) % 360 })} className="text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white px-2 py-1 rounded transition-colors">↻ 90°</button>
+                    <span className="text-xs text-gray-400 shrink-0">Rotate</span>
+                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) - 90 + 360) % 360 })} className="text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 px-2 py-1 rounded transition-colors">↺ 90°</button>
+                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) + 90) % 360 })} className="text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 px-2 py-1 rounded transition-colors">↻ 90°</button>
                     <input type="range" min="-180" max="180"
                       value={selectedEl.rotation ?? 0}
                       onChange={e => updateElement(selectedElId, { rotation: Number(e.target.value) })}
                       className="flex-1"
                     />
-                    <span className="text-xs text-white/40 w-10 text-right">{selectedEl.rotation ?? 0}°</span>
+                    <span className="text-xs text-gray-400 w-10 text-right">{selectedEl.rotation ?? 0}°</span>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <button onClick={() => updateElement(selectedElId, { flipH: !selectedEl.flipH })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipH ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipH ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
                     >↔ Flip H</button>
                     <button onClick={() => updateElement(selectedElId, { flipV: !selectedEl.flipV })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipV ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/10 border-white/10 text-white/50 hover:text-white'}`}
+                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipV ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
                     >↕ Flip V</button>
                     {((selectedEl.rotation ?? 0) !== 0 || selectedEl.flipH || selectedEl.flipV) && (
-                      <button onClick={() => updateElement(selectedElId, { rotation: 0, flipH: false, flipV: false })} className="text-[10px] text-white/30 hover:text-white/60">↺ reset</button>
+                      <button onClick={() => updateElement(selectedElId, { rotation: 0, flipH: false, flipV: false })} className="text-[10px] text-gray-400 hover:text-gray-600">↺ reset</button>
                     )}
                   </div>
                   {/* Align to slide */}
                   <div className="space-y-1">
-                    <span className="text-xs text-white/40">Align to slide</span>
+                    <span className="text-xs text-gray-400">Align to slide</span>
                     <div className="flex gap-1">
                       {[['⬅', 10], ['↔', 50], ['➡', 90]].map(([icon, x]) => (
                         <button key={x} onClick={() => updateElement(selectedElId, { x })}
-                          className="flex-1 text-sm bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors"
+                          className="flex-1 text-sm bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors"
                           title={x === 10 ? 'Align left' : x === 50 ? 'Center' : 'Align right'}
                         >{icon}</button>
                       ))}
@@ -842,7 +854,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     <div className="flex gap-1">
                       {[['⬆', 10], ['⬛', 50], ['⬇', 90]].map(([icon, y]) => (
                         <button key={y} onClick={() => updateElement(selectedElId, { y })}
-                          className="flex-1 text-sm bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors"
+                          className="flex-1 text-sm bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors"
                           title={y === 10 ? 'Align top' : y === 50 ? 'Middle' : 'Align bottom'}
                         >{icon}</button>
                       ))}
@@ -850,26 +862,26 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                   </div>
                   {/* Z-order + duplicate */}
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-white/40 shrink-0">Layer</span>
-                    <button onClick={() => bringForward(selectedElId)} className="flex-1 text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors">▲ Forward</button>
-                    <button onClick={() => sendBackward(selectedElId)} className="flex-1 text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors">▼ Back</button>
-                    <button onClick={() => duplicateElement(selectedElId)} className="flex-1 text-xs bg-white/10 border border-white/10 text-white/60 hover:text-white py-1 rounded transition-colors">⧉ Dupe</button>
+                    <span className="text-xs text-gray-400 shrink-0">Layer</span>
+                    <button onClick={() => bringForward(selectedElId)} className="flex-1 text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors">▲ Forward</button>
+                    <button onClick={() => sendBackward(selectedElId)} className="flex-1 text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors">▼ Back</button>
+                    <button onClick={() => duplicateElement(selectedElId)} className="flex-1 text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors">⧉ Dupe</button>
                   </div>
                 </div>
               )}
 
                 {elements.length > 0 && !selectedEl && (
-                  <p className="text-xs text-white/25 text-center pt-1">Click an element on the slide to edit it</p>
+                  <p className="text-xs text-gray-300 text-center pt-1">Click an element on the slide to edit it</p>
                 )}
               </div>
 
               {/* Bottom: transition + delete */}
-              <div className="shrink-0 px-3 py-3 border-t border-white/[0.07] space-y-2">
+              <div className="shrink-0 px-3 py-3 border-t border-gray-200 space-y-2">
                 {!data.isShiny && (
                   <select
                     value={data.transition ?? ''}
                     onChange={e => change('transition', e.target.value === '' ? null : e.target.value)}
-                    className="w-full text-xs bg-white/10 text-white/70 border border-white/10 rounded-lg px-2 py-1.5 focus:outline-none"
+                    className="w-full text-xs bg-gray-50 text-gray-700 border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none"
                   >
                     <option value="">Default transition</option>
                     <option value="random">✦ Random</option>
@@ -900,7 +912,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     <span className="text-xs text-red-400">Delete this slide?</span>
                     <div className="flex gap-3">
                       <button onClick={() => onDeleteSlide(slide.id)} className="text-xs font-semibold text-red-400 hover:text-red-300 transition-colors">Yes</button>
-                      <button onClick={() => setConfirmingDelete(false)} className="text-xs text-white/30 hover:text-white/60 transition-colors">No</button>
+                      <button onClick={() => setConfirmingDelete(false)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">No</button>
                     </div>
                   </div>
                 ) : (
@@ -1054,7 +1066,7 @@ function Divider({ label }) {
 
 // ─── Slide type editors ──────────────────────────────────────────────────────
 
-function TitleEditor({ data, onChange, onMediaUpload }) {
+function TitleEditor({ data, onChange }) {
   return (
     <>
       <Field label="Title"><TextInput value={data.title} onChange={v => onChange('title', v)} placeholder="Baynes Apple Valley" /></Field>
@@ -1063,7 +1075,7 @@ function TitleEditor({ data, onChange, onMediaUpload }) {
   )
 }
 
-function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos, onMediaUpload }) {
+function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos }) {
   return (
     <>
       <div className="grid grid-cols-2 gap-4">
@@ -1089,7 +1101,7 @@ function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos,
   )
 }
 
-function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, slideRoundId, addSiblingSlides, onMediaUpload }) {
+function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, slideRoundId, addSiblingSlides }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
 
   const mode = data.questionMode
@@ -1390,7 +1402,7 @@ function ShinyListBuilder({ items, hasPoints, onChange }) {
   )
 }
 
-function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostPhotos, jukeboxLibs, onMediaUpload }) {
+function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostPhotos, jukeboxLibs }) {
   return (
     <>
       <Field label="Message">
@@ -1442,7 +1454,7 @@ function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostP
   )
 }
 
-function WinnerRevealEditor({ data, onChange, onMediaUpload }) {
+function WinnerRevealEditor({ data, onChange }) {
   return (
     <div className="flex flex-col gap-3 py-2">
       <p className="text-sm text-gray-500 leading-relaxed">
@@ -1455,7 +1467,7 @@ function WinnerRevealEditor({ data, onChange, onMediaUpload }) {
   )
 }
 
-function StateOfUnionEditor({ data, onChange, onMediaUpload }) {
+function StateOfUnionEditor({ data, onChange }) {
   return (
     <div className="flex flex-col gap-3 py-2">
       <p className="text-sm text-gray-500 leading-relaxed">
@@ -1465,7 +1477,7 @@ function StateOfUnionEditor({ data, onChange, onMediaUpload }) {
   )
 }
 
-function ScoreboardRevealEditor({ data, onChange, show, onMediaUpload }) {
+function ScoreboardRevealEditor({ data, onChange, show }) {
   return (
     <>
       <Field label="Title" hint='e.g. "After Round 1"'>
@@ -1504,7 +1516,7 @@ function CustomEditor({ data, onChange, onMediaUpload }) {
   )
 }
 
-function PixelateSeriesEditor({ data, onChange, onStageUpload, onMediaUpload }) {
+function PixelateSeriesEditor({ data, onChange, onStageUpload }) {
   const stages = data.stages || [{}, {}, {}]
 
   return (
@@ -1536,7 +1548,7 @@ function PixelateSeriesEditor({ data, onChange, onStageUpload, onMediaUpload }) 
   )
 }
 
-function MultiQuestionEditor({ data, onChange, setData, scheduleSave, onMediaUpload }) {
+function MultiQuestionEditor({ data, onChange, setData, scheduleSave }) {
   const questions = data.questions || [{ text: '' }]
 
   function addQuestion() {
@@ -1590,7 +1602,7 @@ function MultiQuestionEditor({ data, onChange, setData, scheduleSave, onMediaUpl
   )
 }
 
-function PylRevealEditor({ data, onChange, setData, scheduleSave, onMediaUpload }) {
+function PylRevealEditor({ data, onChange, setData, scheduleSave }) {
   const stages = data.stages || [{ text: '', points: 40, revealed: false }]
 
   function addStage() {
