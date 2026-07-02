@@ -4,53 +4,16 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
 import SlideElements from '../SlideElements.jsx'
 
-// ─── Drum roll (Web Audio) ─────────────────────────────────────────────────
-
-function makeSnareHit(ctx, t, vol) {
-  const bufLen = Math.floor(ctx.sampleRate * 0.1)
-  const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate)
-  const data = buf.getChannelData(0)
-  for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1
-
-  const noise = ctx.createBufferSource()
-  noise.buffer = buf
-
-  const filter = ctx.createBiquadFilter()
-  filter.type = 'bandpass'
-  filter.frequency.value = 1400
-  filter.Q.value = 0.7
-
-  const gain = ctx.createGain()
-  gain.gain.setValueAtTime(vol, t)
-  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08)
-
-  noise.connect(filter)
-  filter.connect(gain)
-  gain.connect(ctx.destination)
-  noise.start(t)
-  noise.stop(t + 0.1)
-}
+// ─── Drum roll (MP3) ──────────────────────────────────────────────────────
 
 function playDrumRoll(onReveal, reduced) {
   if (reduced) { setTimeout(onReveal, 1200); return null }
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)()
-    const now = ctx.currentTime
-    const rollDuration = 3.0
-
-    let t = 0
-    let gap = 0.20
-    while (t < rollDuration - 0.08) {
-      const vol = 0.25 + (t / rollDuration) * 0.55
-      makeSnareHit(ctx, now + t, vol)
-      t += gap
-      gap = Math.max(0.03, gap * 0.91)
-    }
-    // Final big hit
-    makeSnareHit(ctx, now + rollDuration, 0.95)
-
-    setTimeout(onReveal, (rollDuration + 0.12) * 1000)
-    return ctx
+    const audio = new Audio('/drum-roll.mp3')
+    audio.onended = onReveal
+    audio.onerror = () => setTimeout(onReveal, 2000)
+    audio.play().catch(() => setTimeout(onReveal, 2000))
+    return audio
   } catch (_) {
     setTimeout(onReveal, 2000)
     return null
@@ -145,7 +108,7 @@ export default function WinnerRevealSlide({ slide, show }) {
 
   useEffect(() => {
     audioCtxRef.current = playDrumRoll(() => setPhase('reveal'), reduce)
-    return () => audioCtxRef.current?.close?.()
+    return () => { audioCtxRef.current?.pause?.(); audioCtxRef.current = null }
   }, [])
 
   return (
