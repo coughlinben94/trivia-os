@@ -862,10 +862,9 @@ function GradingPopup({ visible, onDismiss }) {
             display: 'flex', alignItems: 'center', gap: '1.25rem',
           }}
         >
-          <span style={{ fontSize: '2.5rem', display: 'block', lineHeight: 1 }}>😤</span>
           <div>
             <p style={{ fontFamily: 'Boogaloo, sans-serif', fontSize: '1.2rem', color: '#fff', margin: 0, lineHeight: 1.2 }}>
-              Ben is grading right now — calm your pants
+              Ben is grading right now — calm your pants 👖
             </p>
             <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.82rem', margin: '0.25rem 0 0', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.4 }}>
               Scores will be back up once grading wraps
