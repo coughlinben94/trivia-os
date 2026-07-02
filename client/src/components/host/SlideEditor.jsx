@@ -291,7 +291,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                         uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
                     )}
                     {slide.type === 'question' && (
-                      <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} />
+                      <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
                     )}
                     {slide.type === 'grading-break' && (
                       <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
@@ -985,7 +985,7 @@ function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos 
   )
 }
 
-function QuestionEditor({ data, onChange, onBatchChange, uploadMedia }) {
+function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPhotos }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
   const { formats: shinyFormats, loading: shinyFormatsLoading } = useShinyFormats()
 
@@ -1124,6 +1124,61 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia }) {
           <span>✨</span>
           <span className="text-sm">Choose Format from Library</span>
         </button>
+      )}
+
+      {/* Previewing — which beat the live canvas on the left shows.
+          Every shiny question gets a standalone intro beat before its
+          content, so this control exists whether or not it's a series. */}
+      {data.shinyFormatId && (
+        <>
+          <Divider label="Previewing" />
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              onClick={() => onChange('introDone', false)}
+              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                !data.introDone
+                  ? 'bg-blue-500 border-blue-500 text-white'
+                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              🎬 Intro
+            </button>
+            {isSeriesMode ? (
+              data.parts.map((p, i) => (
+                <button
+                  key={i}
+                  onClick={() => onBatchChange({ introDone: true, currentPart: i })}
+                  className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                    !!data.introDone && (data.currentPart ?? 0) === i
+                      ? 'bg-blue-500 border-blue-500 text-white'
+                      : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  {i + 1}{p.label ? ` · ${p.label}` : ''}
+                </button>
+              ))
+            ) : (
+              <button
+                onClick={() => onChange('introDone', true)}
+                className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                  !!data.introDone
+                    ? 'bg-blue-500 border-blue-500 text-white'
+                    : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                Content
+              </button>
+            )}
+          </div>
+
+          <Divider label="Intro Screen" />
+          <HostPhotoLibrary
+            getHostPhotos={getHostPhotos}
+            uploadMedia={uploadMedia}
+            currentPhotoUrl={data.hostPhotoUrl}
+            onSelectPhoto={url => onChange('hostPhotoUrl', url)}
+          />
+        </>
       )}
 
       {data.shinyFormatId && !isSeriesMode && (

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
 import SlideElements from '../SlideElements.jsx'
@@ -463,11 +463,94 @@ function ShinyAudioQuestion({ slide, show, theme }) {
   )
 }
 
+// ─── Shiny intro screen ────────────────────────────────────────────────────────
+//
+// Every shiny question gets a standalone beat before its content — a pure
+// announcement, no question/answer/media yet, giving the host room to set
+// up what's coming. Modeled on the deck's yellow "shiny round title card"
+// slides (tilted handwritten-style title, Ben photo lower-left, format icon
+// lower-right) but reworked to fit the app's per-show theme system instead
+// of a hardcoded color, and to stay ambient rather than full-bleed — the
+// ParticleBackground mounted behind every slide (Display.jsx) should still
+// read through around the edges, not get covered by a flat color block.
+
+function ShinyIntroScreen({ slide, theme }) {
+  const { data } = slide
+  const reduce = useReducedMotion()
+  const title = data.seriesTheme || data.shinyFormatName || 'Shiny Question'
+  const icon = data.shinyFormatIcon || '✨'
+
+  return (
+    <div className="w-full h-full relative overflow-hidden flex items-center justify-center">
+      {/* Sunrise glow — theme-colored wash, not a full-screen fill, so the
+          ambient background still shows through around the edges. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `radial-gradient(ellipse 85% 65% at 50% 62%, ${theme.colors.highlight}4d 0%, ${theme.colors.highlight}22 38%, transparent 72%)`,
+        }}
+      />
+
+      {/* Host photo — lower-left */}
+      {data.hostPhotoUrl && (
+        <motion.img
+          src={data.hostPhotoUrl}
+          alt=""
+          initial={{ opacity: 0, x: reduce ? 0 : -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.15, duration: 0.4, ease: EASE_SNAP }}
+          className="absolute bottom-0 left-0 z-10 pointer-events-none"
+          style={{ height: '56%', objectFit: 'contain', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.4))' }}
+        />
+      )}
+
+      {/* Format icon badge — lower-right */}
+      <motion.div
+        initial={{ opacity: 0, scale: reduce ? 1 : 0.7, rotate: reduce ? 0 : -8 }}
+        animate={{ opacity: 1, scale: 1, rotate: 0 }}
+        transition={{ delay: 0.3, duration: 0.4, ease: EASE_SNAP }}
+        className="absolute bottom-10 right-10 z-10 flex items-center justify-center rounded-3xl"
+        style={{
+          width: 128, height: 128,
+          background: theme.colors.bgDeep,
+          boxShadow: `0 10px 30px rgba(0,0,0,0.4), 0 0 0 2px ${theme.colors.highlight}55`,
+        }}
+      >
+        <span style={{ fontSize: '3.5rem' }}>{icon}</span>
+      </motion.div>
+
+      {/* Title — big, tilted, marker-style */}
+      <motion.p
+        initial={{ opacity: 0, scale: reduce ? 1 : 0.85, rotate: reduce ? -6 : -14 }}
+        animate={{ opacity: 1, scale: 1, rotate: -6 }}
+        transition={reduce ? { duration: 0.3, ease: EASE_SNAP } : { type: 'spring', duration: 0.5, bounce: 0.25 }}
+        className="relative z-10 text-center px-20"
+        style={{
+          fontFamily: `'${theme.fonts.display}', sans-serif`,
+          color: theme.colors.text,
+          fontSize: 'clamp(2.75rem, 6.5vw, 6rem)',
+          fontWeight: 700,
+          lineHeight: 1.08,
+          textShadow: `0 3px 0 rgba(0,0,0,0.25), 0 2px 24px ${theme.colors.highlight}80`,
+        }}
+      >
+        {title}
+      </motion.p>
+    </div>
+  )
+}
+
 // ─── Main dispatcher ──────────────────────────────────────────────────────────
 
 export default function QuestionSlide({ slide, show, transitionKey }) {
   const { theme } = useTheme()
   const { data } = slide
+
+  if (data.isShiny && !data.introDone) {
+    return <ShinyIntroScreen slide={slide} theme={theme} />
+  }
+
   const part = resolveShinyPart(data)
 
   if (data.isShiny && isVisualShiny(data) && part.mediaUrl) {

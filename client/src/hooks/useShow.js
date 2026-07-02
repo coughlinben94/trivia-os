@@ -413,13 +413,24 @@ export function useShow() {
 
   // --- Live Mode navigation ---
 
-  // Multi-part shiny series (data.parts.length > 1) live in a single slide —
-  // entering one always resets to a specific part rather than resuming
-  // wherever a previous visit left off, so jumping to a slide is predictable.
-  function withPartReset(slides, slide, partIndex) {
-    if (!slide || (slide.data?.parts?.length ?? 0) <= 1) return slides
-    if ((slide.data.currentPart ?? 0) === partIndex) return slides
-    return slides.map(s => s.id === slide.id ? { ...s, data: { ...s.data, currentPart: partIndex } } : s)
+  // Every shiny question gets a standalone intro beat (data.introDone: false)
+  // before its content — image/audio/parts — is revealed. Multi-part shiny
+  // series (data.parts.length > 1) additionally step through their parts
+  // once revealed. Entering a slide fresh (goLive/goLiveFrom, or crossing
+  // into it from an adjacent slide) always resets to a specific state
+  // rather than resuming wherever a previous visit left off, so jumping to
+  // a slide is predictable.
+  function withEntryState(slides, slide, { currentPart, introDone } = {}) {
+    if (!slide) return slides
+    const patch = {}
+    if (currentPart !== undefined && (slide.data?.parts?.length ?? 0) > 1 && (slide.data.currentPart ?? 0) !== currentPart) {
+      patch.currentPart = currentPart
+    }
+    if (introDone !== undefined && slide.data?.isShiny && !!slide.data.introDone !== introDone) {
+      patch.introDone = introDone
+    }
+    if (Object.keys(patch).length === 0) return slides
+    return slides.map(s => s.id === slide.id ? { ...s, data: { ...s.data, ...patch } } : s)
   }
 
   async function goLive() {
@@ -427,7 +438,7 @@ export function useShow() {
     const sorted = sortedSlides(show)
     const first = sorted[0] ?? null
     const now = new Date().toISOString()
-    const newSlides = withPartReset(show.slides, first, 0)
+    const newSlides = withEntryState(show.slides, first, { currentPart: 0, introDone: false })
     setShow(s => ({
       ...s,
       slides: newSlides,
@@ -449,7 +460,7 @@ export function useShow() {
     const target = Math.max(0, Math.min(index, sorted.length - 1))
     const slide = sorted[target] ?? null
     const now = new Date().toISOString()
-    const newSlides = withPartReset(show.slides, slide, 0)
+    const newSlides = withEntryState(show.slides, slide, { currentPart: 0, introDone: false })
     setShow(s => ({
       ...s,
       slides: newSlides,
@@ -470,10 +481,22 @@ export function useShow() {
     const sorted = sortedSlides(show)
     const cur = show.showState.currentSlideIndex ?? 0
     const curSlide = sorted[cur]
-    const parts = curSlide?.data?.parts
+    const data = curSlide?.data
+
+    // Reveal the intro's content before doing anything else.
+    if (data?.isShiny && !data.introDone) {
+      const newSlides = show.slides.map(s =>
+        s.id === curSlide.id ? { ...s, data: { ...s.data, introDone: true } } : s
+      )
+      setShow(s => ({ ...s, slides: newSlides, showState: { ...s.showState, answerReveal: false } }))
+      await supabase.from('shows').update({ slides: newSlides, answer_reveal: false }).eq('id', show.id)
+      return
+    }
+
     // Step through this slide's parts before moving to the next slide.
+    const parts = data?.parts
     if (Array.isArray(parts) && parts.length > 1) {
-      const curPart = curSlide.data.currentPart ?? 0
+      const curPart = data.currentPart ?? 0
       if (curPart < parts.length - 1) {
         const newSlides = show.slides.map(s =>
           s.id === curSlide.id ? { ...s, data: { ...s.data, currentPart: curPart + 1 } } : s
@@ -483,10 +506,11 @@ export function useShow() {
         return
       }
     }
+
     const target = Math.min(cur + 1, sorted.length - 1)
     if (target === cur) return
     const targetSlide = sorted[target]
-    const newSlides = withPartReset(show.slides, targetSlide, 0)
+    const newSlides = withEntryState(show.slides, targetSlide, { currentPart: 0, introDone: false })
     setShow(s => ({
       ...s,
       slides: newSlides,
@@ -505,10 +529,12 @@ export function useShow() {
     const sorted = sortedSlides(show)
     const cur = show.showState.currentSlideIndex ?? 0
     const curSlide = sorted[cur]
-    const parts = curSlide?.data?.parts
-    // Step back through this slide's parts before moving to the previous slide.
-    if (Array.isArray(parts) && parts.length > 1) {
-      const curPart = curSlide.data.currentPart ?? 0
+    const data = curSlide?.data
+    const parts = data?.parts
+
+    // Step back through this slide's parts before un-revealing its intro.
+    if (data?.isShiny && data.introDone && Array.isArray(parts) && parts.length > 1) {
+      const curPart = data.currentPart ?? 0
       if (curPart > 0) {
         const newSlides = show.slides.map(s =>
           s.id === curSlide.id ? { ...s, data: { ...s.data, currentPart: curPart - 1 } } : s
@@ -518,12 +544,24 @@ export function useShow() {
         return
       }
     }
+
+    // Back to the intro beat before moving to the previous slide.
+    if (data?.isShiny && data.introDone) {
+      const newSlides = show.slides.map(s =>
+        s.id === curSlide.id ? { ...s, data: { ...s.data, introDone: false } } : s
+      )
+      setShow(s => ({ ...s, slides: newSlides, showState: { ...s.showState, answerReveal: false } }))
+      await supabase.from('shows').update({ slides: newSlides, answer_reveal: false }).eq('id', show.id)
+      return
+    }
+
     const target = Math.max(cur - 1, 0)
     if (target === cur) return
     const targetSlide = sorted[target]
-    // Backing into a series lands on its last part — the natural "undo" of advancing forward.
+    // Backing into a shiny slide lands on its last revealed state — the
+    // natural "undo" of advancing forward through it.
     const lastPartIdx = Math.max((targetSlide?.data?.parts?.length ?? 1) - 1, 0)
-    const newSlides = withPartReset(show.slides, targetSlide, lastPartIdx)
+    const newSlides = withEntryState(show.slides, targetSlide, { currentPart: lastPartIdx, introDone: true })
     setShow(s => ({
       ...s,
       slides: newSlides,
