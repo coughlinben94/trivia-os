@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import { useShow, sortedSlides } from '../hooks/useShow.js'
 import { supabase } from '../lib/supabase.js'
 import { ThemeProvider, useTheme } from '../components/shared/ThemeProvider.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
-import ShowManager from '../components/host/ShowManager.jsx'
 import ShowLibrary from '../components/host/ShowLibrary.jsx'
 import BuildMode from '../components/host/BuildMode.jsx'
 import LiveMode from '../components/host/LiveMode.jsx'
@@ -15,6 +15,7 @@ const EASE_SNAP = [0.23, 1, 0.32, 1]
 export default function Host() {
   const showApi = useShow()
   const { show, loading } = showApi
+  const navigate = useNavigate()
 
   if (loading) {
     return (
@@ -25,16 +26,8 @@ export default function Host() {
   }
 
   if (!show) {
-    return (
-      <ShowManager
-        onShowReady={() => showApi.refresh()}
-        listShows={showApi.listShows}
-        createShow={showApi.createShow}
-        loadShow={showApi.loadShow}
-        deleteShow={showApi.deleteShow}
-        duplicateShow={showApi.duplicateShow}
-      />
-    )
+    navigate('/dashboard', { replace: true })
+    return null
   }
 
   return (
