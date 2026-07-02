@@ -385,6 +385,41 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
             {/* ── RIGHT: editing sidebar ── */}
             <div className="w-72 bg-white border-l border-gray-200 flex flex-col overflow-hidden shrink-0">
               <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+                {/* ── Slide content ── */}
+                {!['winner-reveal', 'state-of-union'].includes(slide.type) && (
+                  <div className="space-y-3 pb-3 border-b border-gray-100">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Slide Content</p>
+                    {slide.type === 'title' && <TitleEditor data={data} onChange={change} />}
+                    {(slide.type === 'round-intro' || slide.type === 'swing-round-intro') && (
+                      <RoundIntroEditor data={data} onChange={change} isSwing={slide.type === 'swing-round-intro'}
+                        uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
+                    )}
+                    {slide.type === 'question' && (
+                      <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia}
+                        slideId={slide.id} slideRoundId={slide.roundId} addSiblingSlides={addSiblingSlides} />
+                    )}
+                    {slide.type === 'grading-break' && (
+                      <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
+                        uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} />
+                    )}
+                    {slide.type === 'scoreboard-reveal' && (
+                      <ScoreboardRevealEditor data={data} onChange={change} show={show} />
+                    )}
+                    {slide.type === 'custom' && (
+                      <CustomEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
+                    )}
+                    {slide.type === 'pixelate-series' && (
+                      <PixelateSeriesEditor data={data} onChange={change} onStageUpload={handleStageUpload} />
+                    )}
+                    {slide.type === 'multi-question' && (
+                      <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
+                    )}
+                    {slide.type === 'pyl-reveal' && (
+                      <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
+                    )}
+                  </div>
+                )}
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Overlay Elements</p>
                 {/* Add element buttons */}
                 <div className="flex gap-2">
                   <button
