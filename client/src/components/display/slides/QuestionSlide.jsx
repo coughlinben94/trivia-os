@@ -12,15 +12,11 @@ const EASE_ASSEMBLE = [0.22, 1, 0.36, 1]
 function StandardQuestion({ slide, show, theme, transitionKey }) {
   const { data } = slide
   const hasSeries = data.isSeries && data.seriesTheme
-  const badgeTop = hasSeries ? 72 : 40
   const isAssemble = transitionKey === 'assemble'
 
   const banner = isAssemble
     ? { initial: { opacity: 0, y: -40 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.42, delay: 0.04, ease: EASE_ASSEMBLE } }
     : { initial: { opacity: 0, y: -12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: EASE_SNAP } }
-  const badge = isAssemble
-    ? { initial: { opacity: 0, x: -64, scale: 0.8 }, animate: { opacity: 1, x: 0, scale: 1 }, transition: { duration: 0.4, delay: 0.13, ease: EASE_ASSEMBLE } }
-    : { initial: { scale: 0.6, opacity: 0, y: 8 }, animate: { scale: 1, opacity: 1, y: 0 }, transition: { type: 'spring', stiffness: 340, damping: 22, delay: 0.05 } }
   const question = isAssemble
     ? { initial: { opacity: 0, y: 30, scale: 0.97 }, animate: { opacity: 1, y: 0, scale: 1 }, transition: { duration: 0.46, delay: 0.22, ease: EASE_ASSEMBLE } }
     : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.22, ease: [0.23, 1, 0.32, 1], delay: 0.18 } }
@@ -62,32 +58,6 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
           </span>
         </motion.div>
       )}
-
-      {/* Question number badge — top-left — spring bounce — Section 20 */}
-      <motion.div
-        initial={badge.initial}
-        animate={badge.animate}
-        transition={badge.transition}
-        className="absolute left-12 z-[30] flex items-center justify-center rounded-full"
-        style={{
-          top: badgeTop,
-          width: 96,
-          height: 96,
-          background: theme.colors.accent,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: `'${theme.fonts.display}', sans-serif`,
-            color: theme.colors.highlight,
-            fontSize: data.seriesLabel ? '2rem' : '2.25rem',
-            fontWeight: 700,
-            lineHeight: 1,
-          }}
-        >
-          {data.seriesLabel ?? data.questionNumber}
-        </span>
-      </motion.div>
 
       {/* Question text — large, centered — Section 23 */}
       <motion.div
