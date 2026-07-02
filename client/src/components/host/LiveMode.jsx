@@ -19,6 +19,7 @@ const SLIDE_META = {
   'multi-question':    { label: 'Multi-Q',     color: 'bg-orange-100 text-orange-700' },
   'pyl-reveal':        { label: 'PYL',         color: 'bg-red-100 text-red-700' },
   'winner-reveal':     { label: 'Winner',      color: 'bg-yellow-100 text-yellow-800' },
+  'state-of-union':    { label: 'State of Union', color: 'bg-slate-100 text-slate-700' },
 }
 
 function typeMeta(type) {
