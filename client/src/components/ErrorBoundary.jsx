@@ -11,11 +11,12 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    console.error('[ErrorBoundary] Host editor crash:', error, info.componentStack)
+    console.error('[ErrorBoundary] crash:', error, info.componentStack)
   }
 
   render() {
     if (this.state.hasError) {
+      if (this.props.fallback) return this.props.fallback
       return (
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',

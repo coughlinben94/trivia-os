@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
 import { resolveShinyPart } from '../lib/shinySeries.js'
+import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
 
 // ─── localStorage ─────────────────────────────────────────────────────────────
@@ -1020,7 +1021,16 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, myScores, leaderbo
 
       {/* SCROLLABLE CONTENT */}
       <div style={{ flex: 1, padding: 'calc(4.5rem + env(safe-area-inset-top, 0px)) 1.25rem 5.75rem', overflowY: 'auto' }}>
-        <SlideContent slide={currentSlide} show={show} theme={theme} />
+        <ErrorBoundary
+          key={currentSlide?.id}
+          fallback={
+            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.9rem', textAlign: 'center', padding: '2rem 0' }}>
+              Content unavailable
+            </p>
+          }
+        >
+          <SlideContent slide={currentSlide} show={show} theme={theme} />
+        </ErrorBoundary>
 
         {/* Back navigation */}
         {canGoBack && (

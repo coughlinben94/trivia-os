@@ -9,6 +9,7 @@ import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import BaynesWatermark from '../components/display/BaynesWatermark.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
+import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
 import { resolveShinyPart } from '../lib/shinySeries.js'
 
@@ -301,23 +302,46 @@ function DisplayInner({ show, direction }) {
   const sortedSlides = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
   const currentSlide = sortedSlides[show.current_slide_index ?? 0] ?? null
 
+  const slideFallback = (
+    <div style={{
+      position: 'absolute', inset: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: theme.colors.bgDeep,
+    }}>
+      <p style={{
+        color: `${theme.colors.text}55`,
+        fontFamily: "'DM Sans', sans-serif",
+        fontSize: '1rem',
+        letterSpacing: '0.12em',
+        textTransform: 'uppercase',
+      }}>
+        Slide unavailable
+      </p>
+    </div>
+  )
+
   return (
     <div
       className="w-screen h-screen overflow-hidden relative select-none"
       style={{ background: theme.colors.bg }}
     >
+      {/* ParticleBackground lives OUTSIDE the ErrorBoundary — it must never re-mount */}
       <ParticleBackground theme={theme} />
 
-      <AnimatePresence mode="wait" custom={direction}>
-        {currentSlide && (
-          <SlideRenderer
-            key={currentSlide.id}
-            slide={currentSlide}
-            show={show}
-            direction={direction}
-          />
-        )}
-      </AnimatePresence>
+      {/* key resets the boundary on every slide change so a crash on one slide
+          doesn't permanently block the display for subsequent slides */}
+      <ErrorBoundary key={currentSlide?.id} fallback={slideFallback}>
+        <AnimatePresence mode="wait" custom={direction}>
+          {currentSlide && (
+            <SlideRenderer
+              key={currentSlide.id}
+              slide={currentSlide}
+              show={show}
+              direction={direction}
+            />
+          )}
+        </AnimatePresence>
+      </ErrorBoundary>
 
       {/* z-50: persistent overlays — always on top */}
       <QuestionCounter slide={currentSlide} show={show} />
