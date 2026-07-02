@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { DEFAULT_THEME_ID } from '../themes/index.js'
+import { deriveRoundCols, computeTotal } from '../lib/scoreboardMath.js'
 
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 const SHOW_MEDIA_BUCKET = 'trivia-show-media'
@@ -665,20 +666,39 @@ export function useShow() {
 
   async function saveResults() {
     if (!show) return
-    const [{ data: teamData }, { data: scoreData }] = await Promise.all([
-      supabase.from('teams').select('id, name, color').eq('show_id', show.id),
-      supabase.from('team_scores').select('team_id, round_index, score').eq('show_id', show.id),
-    ])
-    const teams = teamData ?? []
-    const scores = scoreData ?? []
-    const finalScores = teams.map(t => {
-      const rounds = scores
-        .filter(s => s.team_id === t.id)
-        .sort((a, b) => a.round_index - b.round_index)
-        .map(s => s.score ?? 0)
-      return { teamId: t.id, name: t.name, color: t.color, total: rounds.reduce((n, s) => n + s, 0), rounds }
-    }).sort((a, b) => b.total - a.total)
-    await supabase.from('shows').update({ player_count: teams.length, final_scores: finalScores }).eq('id', show.id)
+    const { data: sbTeams } = await supabase
+      .from('scoreboard_teams').select('id, name, scores').eq('show_id', show.id)
+
+    let finalScores
+    if (sbTeams?.length) {
+      const cols = deriveRoundCols(show)
+      finalScores = sbTeams.map(t => ({
+        teamId: t.id,
+        name: t.name,
+        total: computeTotal(t.scores, cols),
+        rounds: cols.map(c => Number(t.scores?.[c.key] ?? 0)),
+      })).sort((a, b) => b.total - a.total)
+    } else {
+      // Fallback: legacy team_scores
+      const [{ data: teamData }, { data: scoreData }] = await Promise.all([
+        supabase.from('teams').select('id, name, color').eq('show_id', show.id),
+        supabase.from('team_scores').select('team_id, round_index, score').eq('show_id', show.id),
+      ])
+      const teams = teamData ?? []
+      const scores = scoreData ?? []
+      finalScores = teams.map(t => {
+        const rounds = scores
+          .filter(s => s.team_id === t.id)
+          .sort((a, b) => a.round_index - b.round_index)
+          .map(s => s.score ?? 0)
+        return { teamId: t.id, name: t.name, color: t.color, total: rounds.reduce((n, s) => n + s, 0), rounds }
+      }).sort((a, b) => b.total - a.total)
+    }
+
+    await supabase.from('shows').update({
+      player_count: (sbTeams ?? []).length || finalScores.length,
+      final_scores: finalScores,
+    }).eq('id', show.id)
   }
 
   async function updateTickerMessages(messages) {

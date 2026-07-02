@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
+import { deriveRoundCols, computeTotal } from '../../../lib/scoreboardMath.js'
 import SlideElements from '../SlideElements.jsx'
 
 // ─── Drum roll (MP3) ──────────────────────────────────────────────────────
@@ -93,17 +94,41 @@ export default function WinnerRevealSlide({ slide, show }) {
   const audioCtxRef = useRef(null)
 
   useEffect(() => {
-    supabase.from('teams').select('id, name, color').eq('show_id', show.id)
-      .then(({ data: teams }) => {
-        supabase.from('team_scores').select('team_id, score').eq('show_id', show.id)
-          .then(({ data: scores }) => {
-            const t = (teams ?? []).map(team => ({
-              ...team,
-              total: (scores ?? []).filter(s => s.team_id === team.id).reduce((n, s) => n + (s.score ?? 0), 0),
-            })).sort((a, b) => b.total - a.total)
-            if (t[0]) setWinner(t[0])
-          })
-      })
+    async function load() {
+      const cols = deriveRoundCols(show)
+
+      // Primary: scoreboard_teams (the live grading source)
+      const { data: sbTeams } = await supabase
+        .from('scoreboard_teams').select('id, name, scores').eq('show_id', show.id)
+      if (sbTeams?.length) {
+        const ranked = sbTeams
+          .map(t => ({ id: t.id, name: t.name, total: computeTotal(t.scores, cols) }))
+          .sort((a, b) => b.total - a.total)
+        const max = ranked[0]?.total ?? 0
+        const tied = ranked.filter(t => t.total === max)
+        setWinner({
+          name: tied.map(t => t.name).join(' & '),
+          total: max,
+          isTie: tied.length > 1,
+        })
+        return
+      }
+
+      // Fallback: legacy team_scores
+      const [{ data: teams }, { data: scores }] = await Promise.all([
+        supabase.from('teams').select('id, name').eq('show_id', show.id),
+        supabase.from('team_scores').select('team_id, score').eq('show_id', show.id),
+      ])
+      const ranked = (teams ?? [])
+        .map(t => ({ id: t.id, name: t.name, total: (scores ?? []).filter(s => s.team_id === t.id).reduce((n, s) => n + (s.score ?? 0), 0) }))
+        .sort((a, b) => b.total - a.total)
+      const max = ranked[0]?.total ?? 0
+      const tied = ranked.filter(t => t.total === max)
+      if (ranked.length) {
+        setWinner({ name: tied.map(t => t.name).join(' & '), total: max, isTie: tied.length > 1 })
+      }
+    }
+    load()
   }, [show.id])
 
   useEffect(() => {
@@ -148,7 +173,7 @@ export default function WinnerRevealSlide({ slide, show }) {
           textAlign: 'center',
         }}
       >
-        And the winner is…
+        {winner?.isTie ? "It's a tie!" : 'And the winner is…'}
       </motion.p>
 
       <AnimatePresence>

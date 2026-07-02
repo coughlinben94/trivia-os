@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
+import { deriveRoundCols, computeTotal } from '../../../lib/scoreboardMath.js'
 import SlideElements from '../SlideElements.jsx'
 
 const EASE_SNAP   = [0.23, 1, 0.32, 1]
@@ -117,14 +118,26 @@ export default function ScoreboardRevealSlide({ slide, show }) {
 
   useEffect(() => {
     async function load() {
+      const cols = deriveRoundCols(show)
+
+      // Primary: scoreboard_teams (the live grading source)
+      const { data: sbTeams } = await supabase
+        .from('scoreboard_teams').select('id, name, scores').eq('show_id', show.id)
+      if (sbTeams?.length) {
+        const sorted = sbTeams
+          .map(t => ({ ...t, total: computeTotal(t.scores, cols) }))
+          .sort((a, b) => b.total - a.total)
+        setRanked(sorted)
+        return
+      }
+
+      // Fallback: legacy team_scores
       const [{ data: teamsData }, { data: scoresData }] = await Promise.all([
         supabase.from('teams').select('*').eq('show_id', show.id),
         supabase.from('team_scores').select('*').eq('show_id', show.id),
       ])
       const totals = {}
-      ;(scoresData ?? []).forEach(s => {
-        totals[s.team_id] = (totals[s.team_id] ?? 0) + s.score
-      })
+      ;(scoresData ?? []).forEach(s => { totals[s.team_id] = (totals[s.team_id] ?? 0) + s.score })
       const sorted = (teamsData ?? [])
         .map(t => ({ ...t, total: totals[t.id] ?? 0 }))
         .sort((a, b) => b.total - a.total)
