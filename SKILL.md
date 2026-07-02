@@ -1,11 +1,11 @@
 ---
 name: trivia-os
-description: Trivia OS — real-time trivia-night platform for Baynes Apple Valley (React + Vite + Supabase Realtime; 21 ambient themes with per-show font/color overrides, 12 slide types including automated Winner Reveal). Use this skill whenever working on Trivia OS or anything under ~/Projects/trivia-os — the host build/live control surface, the /display TV renderer, /join phones, slides, rounds, scoring, powerups, the ambient ParticleBackground themes, theme overrides, or display transitions/animations. Read this plus its references before any display/theme/animation work, even on casual asks.
+description: Trivia OS — real-time trivia-night platform for Baynes Apple Valley (React + Vite + Supabase Realtime; 21 ambient themes with per-show font/color overrides, 12 slide types including automated Winner Reveal, full scoreboard system). Use this skill whenever working on Trivia OS or anything under ~/Projects/trivia-os — the host build/live control surface, the /display TV renderer, /join phones, slides, rounds, scoring, powerups, the ambient ParticleBackground themes, theme overrides, or display transitions/animations. Read this plus its references before any display/theme/animation work, even on casual asks.
 ---
 
 # Trivia OS — Developer Skill
 
-> Real-time trivia night management platform. Replaces PowerPoint + Excel entirely. Four views: /host (build + control), /display (TV), /join (phones), /scores (optional scoreboard). Read this + all references before building anything display-facing.
+> Real-time trivia night management platform. Replaces PowerPoint + Excel entirely. Four views: /host (build + control), /display (TV), /join (phones), /shows (dashboard + scoreboard history). Read this + all references before building anything display-facing.
 
 **Repo:** `~/Projects/trivia-os`  
 **Stack:** React 18, Vite, Tailwind, Framer Motion 10, Supabase JS, Fuse.js, nanoid  
@@ -13,7 +13,7 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 **Live:** https://trivia-os.vercel.app  
 **Project skill:** `.claude/skills/trivia-os/` (symlinks to repo root SKILL.md + references/)
 
-**Shipped 2026-06-30:** per-show theme font/color overrides + custom font upload (see Theme System), Winner Reveal slide + Final Break auto-close (see Slide Types), Go Live picker (jump to any slide, not just +1), answer-reveal overlay (Stream Deck A key), shiny-question sidebar/series improvements. See each section below for details.
+**Shipped 2026-06-30:** per-show theme font/color overrides + custom font upload (see Theme System), Winner Reveal slide + Final Break auto-close (see Slide Types), Go Live picker (jump to any slide accordion), answer-reveal overlay (Stream Deck A key), shiny-question sidebar/series improvements, full scoreboard system (admin modal, Quick Entry, TV overlay, phone drawer, ShowDetail history). See each section below for details.
 
 **Multiple sessions on this repo:** Ben sometimes runs more than one Claude Code session against this same working directory (not separate worktrees) at once. If you see unexpected commits, a branch pointer that moved, or files staged that you didn't touch — that's very likely the other session, not corruption. Check `git log`/`git status`/`git stash list` before assuming something broke, and don't force a branch switch or destructive git op without confirming with Ben first. Nothing has been lost doing this so far because every agent that hit ambiguous state stopped and asked rather than guessed — keep doing that.
 
@@ -40,6 +40,7 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 4. **No Socket.io, no Express** — Supabase Realtime only. All sync via `supabase.channel().on('postgres_changes', ...)`.
 5. **Design is not optional** — `/display` is a performance on TVs in a dark bar. Generic UI = failure. The display must feel like a custom venue experience.
 6. **Center safe-area:** keep the middle 60% width × 45% height of the display clear for question text. Ambient elements live in corners and edges.
+7. **Supabase project:** always confirm you're using `qwtbgusqfoypvehnungr` (Baynes Trivia), NOT `dreggwinegtirxxanntv` (Baynes Business Suite). Wrong project caused a `scoreboard_teams` 404 in production — verify `.env.local` before running any migrations.
 
 ---
 
@@ -50,6 +51,7 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 | `/host` | Build Mode (pre-show) → Live Mode (during show) |
 | `/display` | TV fullscreen — PreShowScreen or slide renderer |
 | `/join` | Team phones — register, follow show, scoreboard, powerups |
+| `/shows` | Show library + ShowDetail (scoreboard history) |
 | `/scores` | Optional secondary scoreboard display |
 | `/ambient` | Dev-only theme previewer (not in prod routing) |
 
@@ -69,21 +71,33 @@ is_live && current_slide_id !== null → DisplayInner (full slide renderer)
 client/src/
   views/
     Host.jsx              — switches between BuildMode and LiveMode; owns the curated
-                             `actions = { ...showApi }` object passed to both
-    Display.jsx           — routing logic + PreShowScreen; jukebox-return Final Break jump
-    Join.jsx              — team phone phase machine (loading→register→waiting→live)
+                             `actions = { ...showApi }` object passed to both;
+                             also owns GoLivePicker accordion + ScoreboardModal state
+    Display.jsx           — routing logic + PreShowScreen; jukebox-return Final Break jump;
+                             renders ScoreboardOverlay at z-[60] when scoreboardVisible
+    Join.jsx              — team phone phase machine (loading→register→waiting→live);
+                             has ScoresDrawer bottom sheet (📊 button)
+    ShowDetail.jsx        — per-show history page; renders "📊 Final Scoreboard" section
+                             from scoreboard_teams, falls back to final_scores JSONB
   components/
     host/
       BuildMode.jsx       — slide builder UI (wizard + editor modes)
-      LiveMode.jsx        — control surface during show (text-only, no preview)
+      LiveMode.jsx        — control surface during show; S hotkey toggles scoreboard overlay;
+                             "📊 Score" button in nav turns green when overlay is active
       AddSlideWizard.jsx  — guided slide creation (TYPE_CARDS icons must match
                              RoundSidebar/SlideEditor's SLIDE_TYPE_META — this drifted
                              once already, e.g. 'title' vs 'round-intro' emoji swap)
       AddRoundWizard.jsx  — 3-type round picker (Normal/Swing/PYL) before round creation
       SlideEditor.jsx     — per-slide editing panel; GradingBreakEditor has "Final Break" toggle
-      RoundSidebar.jsx    — round/slide navigation tree; shows shinyFormatName, groups series
+      RoundSidebar.jsx    — round/slide navigation tree; shows shinyFormatName, groups series;
+                             divider lines between every section (i > 0 segment-level +
+                             slideIdx > 0 within general segments for multi-slide sections)
       ScorePanel.jsx      — fuzzy search + score input + reveal toggle
+      ScoreboardModal.jsx — admin scoreboard popup (Score button in HostHeader);
+                             TeamTable + QuickEntry components; debounced Supabase upsert
       ShowManager.jsx     — show CRUD (list, create, load, duplicate, export, import)
+      HostHeader.jsx      — "Score" button → opens ScoreboardModal; "Preview", "Export",
+                             "Go Live →" buttons
       ThemePickerModal.jsx — theme selection + live preview; THIS is the real one (a
                              legacy unused `ThemePicker.jsx` also exists, don't build on it)
       ThemeCustomizeControls.jsx — font dropdown/upload + 2 color pickers, extracted
@@ -97,6 +111,10 @@ client/src/
     display/
       ParticleBackground.jsx  — 21 GPU-only ambient themes (NEVER re-mounts)
       SlideRenderer.jsx       — routes slide.type → component + manages transitions
+      ScoreboardOverlay.jsx   — full-screen dark overlay (rgba 0,0,0,0.92) + dual radial
+                                 gradient glow; Boogaloo font; gold/silver/bronze medals;
+                                 staggered Framer Motion rows (60ms intervals); two-column
+                                 layout for >8 teams; triggered by showState.scoreboardVisible
       TitleSlide.jsx, RoundIntroSlide.jsx, QuestionSlide.jsx, GradingBreakSlide.jsx
       ScoreboardRevealSlide.jsx, CustomSlide.jsx, MultiQuestionSlide.jsx
       PixelateSeriesSlide.jsx, PylRevealSlide.jsx, StateOfUnionSlide.jsx
@@ -153,6 +171,58 @@ Round object stamped: `{ roundType, roundNumber?, subtitle, title }`
 
 ---
 
+## Scoreboard System (shipped 2026-06-30)
+
+The scoreboard system replaces the Excel scoreboard. Four surfaces:
+
+### 1. Admin Modal (ScoreboardModal.jsx)
+- Opened by "Score" button in HostHeader (BuildMode and LiveMode)
+- `deriveRoundCols(show)` — reads `show.slides`: `swing-round-intro` slide → "SW", `pyl-reveal` → "PYL", else `R${round.number}`. Always adds `bonus` → "?"
+- `computeTotal(scores, cols)` — sums all JSONB score values for a team
+- `addStats(teams, cols)` — adds `_total` and `_place` with tie-aware ranking
+- Score cells are editable in-place; debounced 500ms Supabase upsert
+- Add team, delete team (group-hover delete button), Sort by total, Random 2 (highlights 2 random teams yellow), Clear all
+
+**Quick Entry mode (⚡ button):** replicates the Excel VBA macro flow
+1. **Team step:** type partial name → substring/case-insensitive match → auto-advance if 1 match, disambiguation buttons if multiple
+2. **Round step:** type 1–5 (R1–R5), SW, PYL, M or ? (→ bonus column). Also accepts nth-column numeric fallback
+3. **Score step:** type number → Enter → saves → flashes confirmation → loops back to team step
+- Input is focus-trapped at each step; Enter advances; real-time display of matched team/round
+
+### 2. TV Overlay (ScoreboardOverlay.jsx)
+- `S` hotkey in LiveMode → `actions.setScoreboardVisible(!show.showState.scoreboardVisible)`
+- "📊 Score" button in LiveMode nav bar turns green when overlay is active
+- `Display.jsx` renders `<ScoreboardOverlay>` at `z-[60]` (above slide content) when `scoreboardVisible` is true
+- Visual: full-screen `rgba(0,0,0,0.92)` + dual radial gradient glow, Boogaloo font header, gold/silver/bronze medal emojis, Framer Motion staggered row entrance (60ms per row), two-column layout auto-triggers for >8 teams
+
+### 3. Phone Scoreboard (Join.jsx — ScoresDrawer)
+- 📊 button on both WaitingScreen and LiveView on `/join`
+- Bottom sheet drawer, slides up; fetches `scoreboard_teams` fresh on each open
+- Player's own team row highlighted in gold (`#f5c842` border) via case-insensitive name match against team registration name
+
+### 4. ShowDetail History (ShowDetail.jsx)
+- `/shows/:id` page includes "📊 Final Scoreboard" section
+- Fetches `scoreboard_teams` for that show from Supabase
+- Renders ranked list with gold/silver/bronze medals, per-round scores, total
+- Falls back to legacy `final_scores` JSONB if no `scoreboard_teams` rows exist (backward-compat for pre-scoreboard shows)
+
+### scoreboard_teams table
+```sql
+scoreboard_teams {
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  show_id     text NOT NULL,
+  name        text NOT NULL,
+  scores      jsonb NOT NULL DEFAULT '{}',  -- keys: "r_${round.id}", "bonus"
+  sort_order  integer,
+  created_at  timestamptz DEFAULT now()
+}
+-- RLS: allow_all policy (anon read+write)
+```
+
+Score key format: `r_${round.id}` for each round, `"bonus"` for the "?" mystery column. Values are numbers.
+
+---
+
 ## useShow.js — Key Actions
 
 ```js
@@ -197,11 +267,11 @@ actions.getHostPhotos()
 // Live control
 actions.goLive() / actions.goLiveFrom(slideId)   // Go Live picker — jump straight to any slide
 actions.nextSlide() / actions.prevSlide()
-actions.setScoreboardVisible(bool)
-actions.setAnswerReveal(bool)      // Stream Deck A key — answer overlay on QuestionSlide
+actions.setScoreboardVisible(bool)  // S hotkey in LiveMode; triggers ScoreboardOverlay on /display
+actions.setAnswerReveal(bool)       // Stream Deck A key — answer overlay on QuestionSlide
 actions.updateRoundScore(...)
-actions.saveResults()              // aggregates team_scores → final_scores + player_count;
-                                    // auto-fires once when winner-reveal slide goes live
+actions.saveResults()               // aggregates team_scores → final_scores + player_count;
+                                     // auto-fires once when winner-reveal slide goes live
 ```
 
 **Realtime:** subscribes to `shows` table, `id=eq.${showId}` — all display/join surfaces auto-update.
@@ -210,7 +280,7 @@ actions.saveResults()              // aggregates team_scores → final_scores + 
 
 ## Supabase Schema
 
-Project: **Baynes Trivia**, id `qwtbgusqfoypvehnungr`.
+Project: **Baynes Trivia**, id `qwtbgusqfoypvehnungr`. **Do not confuse with `dreggwinegtirxxanntv` (Baynes Business Suite)** — this mistake caused a scoreboard 404 in production.
 
 ```sql
 shows { id, title, date, theme_id, slides jsonb, rounds jsonb, powerups jsonb,
@@ -229,6 +299,11 @@ team_scores { id, show_id, team_id, round_index, score, unique(team_id, round_in
 questions { id, text, answer, category, round_type, is_shiny, shiny_type, used_on date[] }
 
 shiny_formats { ... }  -- 6 seeded formats
+
+scoreboard_teams { id uuid PK, show_id text, name text, scores jsonb DEFAULT '{}',
+                   sort_order int, created_at timestamptz }
+  -- scores keys: "r_${round.id}" per round, "bonus" for mystery column
+  -- RLS: allow_all policy (anon read+write)
 ```
 
 **Storage buckets** (all `public: true`, "public read" SELECT + "anon insert" INSERT policies on `storage.objects` scoped per `bucket_id` — this is the precedent pattern, copy it for any new bucket):
@@ -266,7 +341,7 @@ EASE_CUBIC = [0.33, 1, 0.68, 1]  // gentle
 - **MacBook (host):** `/host` on laptop screen (light mode, 1920px)
 - **TV(s):** `/display` fullscreen on HDMI output (OREI HD18-EX165-K 1×8 splitter → 3 TVs)
 - **macOS:** Extended display mode — laptop ≠ TV
-- **Stream Deck:** ArrowRight/Left (advance/back), Space (audio play), S (scoreboard), R (reveal scores)
+- **Stream Deck:** ArrowRight/Left (advance/back), Space (audio play), A (answer reveal), S (scoreboard overlay toggle), R (reveal scores)
 - **Phones:** `/join?show=${showId}` via QR code on PreShowScreen
 
 ---

@@ -4,101 +4,106 @@
 
 ---
 
-## Completed (as of June 27, 2026)
+## Completed (as of June 30, 2026)
 
-**Steps 1–9 of build order — all complete.**
+**All original build steps complete + significant new features shipped.**
 
 ### Infrastructure
 - Vite + React + Tailwind scaffold, Supabase client, env vars wired, vercel.json SPA rewrite
-- Supabase schema: `shows`, `teams`, `team_scores`, `questions` tables, Realtime enabled
-- `ticker_messages jsonb` column added to `shows` (run `ALTER TABLE shows ADD COLUMN IF NOT EXISTS ticker_messages jsonb DEFAULT '[]'::jsonb;` if missing)
+- Supabase schema: `shows`, `teams`, `team_scores`, `questions`, `scoreboard_teams` tables, Realtime enabled
+- `ticker_messages jsonb` column, `theme_overrides jsonb`, `answer_reveal boolean` added to `shows`
+- Storage buckets created: `trivia-show-media`, `trivia-host-photos`, `trivia-fonts` (all public, anon insert)
+- `questions` table RLS: public SELECT, anon INSERT, service_role ALL
 
 ### `/host` Build Mode
-- `useShow.js` — full show CRUD, normalizeShow, Realtime subscription, all actions
+- `useShow.js` — full show CRUD, normalizeShow, Realtime subscription, all actions (spread pattern — never a hand-curated object)
 - `ShowManager.jsx` — show list, create/load/duplicate/delete
-- `BuildMode.jsx` — slide builder layout, mode switching (wizard/editing)
-- `RoundSidebar.jsx` — round list, slide list per round, add round
-- `SlideEditor.jsx` — per-slide editing panel; semantic `label`/`htmlFor` on all fields (a11y)
-- `AddSlideWizard.jsx` — 4-step guided slide creation
+- `BuildMode.jsx` — slide builder layout, mode switching (wizard/editing); onOpenScoreboard prop
+- `RoundSidebar.jsx` — accordion sidebar (all rounds start collapsed); drag-and-drop rewrite; direction-based reorder; divider lines between all sections (i > 0 segment-level + slideIdx > 0 within multi-slide general segments)
+- `SlideEditor.jsx` — per-slide editing panel; GradingBreakEditor has "Final Break" toggle
+- `AddSlideWizard.jsx` — 4-step guided slide creation + shiny 3-step wizard
 - `FormatLibrary.jsx` + `useShinyFormats.js` — shiny format manager, 8 seed formats
-- `HostHeader.jsx` — title edit, theme picker trigger, copy join link, Ticker button, Formats button, Go Live
-- `TickerMessageManager.jsx` — modal editor for pre-show ticker messages (one per line, live preview, save to Supabase)
-- `ThemePicker.jsx` / `ThemePickerModal.jsx` — theme selection, syncs to Supabase
-- `MediaUpload.jsx`, `HostPhotoLibrary.jsx` — media upload UI
+- `HostHeader.jsx` — title edit, copy join link, Score button, Preview, Export, Go Live
+- `TickerMessageManager.jsx` — modal editor for pre-show ticker messages
+- `ThemePickerModal.jsx` + `ThemeCustomizeControls.jsx` — theme selection + per-show font/color customization
+- `ScoreboardModal.jsx` — admin scoreboard (TeamTable + QuickEntry), backed by `scoreboard_teams`
 
 ### `/host` Live Mode
-- `LiveMode.jsx` — pure control surface: prev/next, slide counter, scoreboard toggle
+- `LiveMode.jsx` — control surface: prev/next, slide counter, scoreboard toggle (📊 Score button, green when active), S hotkey, A hotkey
 - `ScorePanel.jsx` — fuzzy search (Fuse.js), score input, hold-to-confirm, reveal toggle
 - Host → Display sync via Supabase Realtime
-- **Live theme swap during show** (Step 11 ✓): `theme_id` Realtime propagation + LiveMode picker — theme changes during a show update all surfaces instantly
-- **Connection-loss banner**: `HostReconnectingBanner` at HostInner level — operator sees "Connection lost — your changes may not be saving. Reconnecting…" on `CHANNEL_ERROR` / `TIMED_OUT` / `CLOSED`; mirrors Join's pattern
+- **Live theme swap during show:** `theme_id` Realtime propagation — theme changes during a show update all surfaces instantly
+- **Connection-loss banner:** `HostReconnectingBanner` at HostInner level
+
+### GoLivePicker (Host.jsx)
+- Accordion structure matching the left sidebar
+- Rounds collapsed by default; click header to expand
+- "Start from beginning" button + jump-to-any-slide picker
 
 ### `/display`
-- `Display.jsx` — full routing waterfall (loading → null → preview → live → pre-show)
-- `PreShowScreen` — QR code, team ticker (always visible), ambient, Baynes watermark, Ben photo (bottom-left)
-- `SlideRenderer.jsx` — routes to per-type slide components; houses full transition system (9 named transitions + Random + reduced-motion crossfade fallback; `assemble` defined but NOT in picker — see Remaining)
-- All 10 slide types implemented: `TitleSlide`, `RoundIntroSlide`, `QuestionSlide`, `GradingBreakSlide`, `ScoreboardRevealSlide`, `CustomSlide`, `StateOfUnionSlide`, `MultiQuestionSlide`, `PixelateSeriesSlide`, `PylRevealSlide`
-- `ParticleBackground.jsx` — 21 GPU-accelerated ambient components, 3-layer architecture, full audit June 2026
-- `BaynesWatermark.jsx`, `QuestionCounter.jsx`, `WaveformBars.jsx`
-- `FrameRegistry.js` (`TransitionRegistry.js` removed — dead code)
-- `ThemeCanvas.jsx`, `ThemeForeground.jsx` — wired, scene: null (future use)
-- Display routing fix: PreShowScreen shows when `is_live && current_slide_id === null`
+- `Display.jsx` — full routing waterfall; jukebox-return Final Break jump; renders `ScoreboardOverlay` at `z-[60]` when `scoreboardVisible` true
+- `PreShowScreen` — QR code, team ticker, ambient, Baynes watermark, Ben photo
+- `SlideRenderer.jsx` — routes to per-type components; 9 named transitions + Random + reduced-motion crossfade
+- All 12 slide types: TitleSlide, RoundIntroSlide, QuestionSlide, GradingBreakSlide, ScoreboardRevealSlide, CustomSlide, StateOfUnionSlide, MultiQuestionSlide, PixelateSeriesSlide, PylRevealSlide, **WinnerRevealSlide** (new), **ScoreboardOverlay** (new)
+- `ParticleBackground.jsx` — 21 GPU-only ambient themes, 3-layer architecture, full audit June 2026
+- Answer reveal overlay on QuestionSlide (A key / `answer_reveal` flag)
+
+### Winner Reveal + Final Break (shipped 2026-06-30)
+- `WinnerRevealSlide.jsx` — Web Audio drum roll → canvas confetti → winner name pop-in
+- `isFinalBreak` checkbox on GradingBreakSlide editor — Jukebox return jumps to last slide
+- `Host.jsx` auto-fires `saveResults()` when winner-reveal slide goes live
+
+### Per-show Theme Overrides (shipped 2026-06-30)
+- `ThemeCustomizeControls.jsx` — font dropdown (4 presets), custom font upload (.woff2/.woff/.ttf/.otf, 5MB), 2 color pickers (text, textMuted)
+- `ThemeProvider.jsx` merge chokepoint — `applyOverrides(baseTheme, overrides)` covers all slides automatically
+- Storage: `shows.theme_overrides jsonb`, custom fonts in `trivia-fonts` bucket
+- CSS Font Loading API (`new FontFace(...).load()`) with useRef cleanup on unmount
+
+### Scoreboard System (shipped 2026-06-30)
+- `ScoreboardModal.jsx` — admin modal, Quick Entry (3-step VBA macro replica), debounced upsert
+- `ScoreboardOverlay.jsx` — TV full-screen overlay, staggered Framer Motion rows, medals
+- `Join.jsx` ScoresDrawer — phone bottom sheet, player's own team highlighted gold
+- `ShowDetail.jsx` — final standings section with medals + round breakdown
 
 ### `/join`
-- `Join.jsx` — complete rewrite with full phase machine: `loading → register → waiting → live → no-show`
-- Session recovery via localStorage (`trivia-os:team:${showId}`)
-- Scoreboard bottom sheet: 72dvh, `--ease-drawer`, staggered rows, animated score bars
-- Reconnecting banner on `CHANNEL_ERROR` / `TIMED_OUT` / `CLOSED`
+- `Join.jsx` — complete phase machine: `loading → register → waiting → live → no-show`
+- Session recovery via localStorage
+- ScoresDrawer bottom sheet (📊 button, fetches `scoreboard_teams`)
+- Reconnecting banner on CHANNEL_ERROR / TIMED_OUT / CLOSED
 - No forward button — teams are followers only
-- BenPhoto at top of registration screen (100px)
-- Connection status tracked; forward-attempt, back-nav, and app-exit alerts to host panel
-- All three alert types implemented as toasts in `Host.jsx`
-- **Powerup hardened**: double-tap guard + full error handling; honest init/leaderboard error+loading states
-- **Cross-theme contrast floor**: top-bar labels use `highlight` (not `accent`) — 4 dark-accent themes were invisible; team-name opacity raised to 95% (`f2`); score opacity floor at 55% (`8c`)
+- All host-alert toasts (tried_to_advance, went_back, left_app, used_powerup)
+- Cross-theme contrast floor on top-bar labels
+
+### `/shows` Show Library + ShowDetail
+- `ShowManager.jsx` / Show library route — list, create/load/duplicate/delete/export/import
+- `ShowDetail.jsx` — per-show history, "📊 Final Scoreboard" section from `scoreboard_teams`
 
 ### Powerup System
-- Host definition in Build Mode via powerups array
-- Phone invocation on /join with confirmation dialog
-- `powerup_used` written to teams table; host panel red alert toast
+- Host definition in Build Mode
+- Phone invocation on /join with confirmation dialog + double-tap guard
+- Host panel red alert toast
 
-### Transition System (Step 13 ✓)
-- 9 named per-slide transitions live: dissolve, emerge, zoom, punch, drop, descend, sink, settle, loom — plus Random
-- Assignable per-slide via SlideEditor picker (`<optgroup>` grouped select)
-- Resolved in `SlideRenderer.jsx`; reduced-motion collapses all to `dissolve` crossfade
-- `assemble` (10th) defined in SlideRenderer but NOT in picker — needs slide children wired as `motion` children for child-stagger to function
+### Transition System
+- 9 named per-slide transitions: dissolve, emerge, zoom, punch, drop, descend, sink, settle, loom + Random
+- Assignable per-slide via SlideEditor picker
+- Reduced-motion collapses all to `dissolve` crossfade
+- `assemble` defined in SlideRenderer but NOT in picker (needs child-stagger wiring)
 
-### Animation, A11y & Polish (Impeccable audit closed June 27, 2026)
-- **NN#1 fully closed**: inner `ParticleBackground` removed from both `QuestionSlide` and `TitleSlide`; PB lives exclusively at DisplayInner level, outside `AnimatePresence` — never remounts during slide transitions
-- **DM Sans 600/700 loaded**: Google Fonts URL updated to include real weights; browser was synthesizing bold from 500, causing stroke artifacts on Android
-- **Reduced-motion coverage complete** (raw CSS animations now suppressed):
-  - `ParticleBackground.jsx`: `ambientFlicker`, `ambientNeonBuzz` (highest epilepsy risk), `ambientBreathe` frozen to `--lo` resting opacity
-  - `index.css`: `gradingGlow`, `playPulse`, `waveformBar`, `waveformIdle` all frozen
-  - `Join.jsx` WaitingScreen: `breathePulse` dot gated on `pref` variable
-- **RoundIntro slam gated**: `scale: 3.5 → 1` spring (`bounce: 0.25`) falls back to opacity dissolve when `useReducedMotion()` is true
-- **PreShow text**: "Scan to join" 0.75rem → 1.1rem; "teams in" 1rem → 1.25rem (TV legibility at 10ft)
-- **GPU cleanup**: dead `TransitionRegistry.js` + `EASE_OVERSHOOT` removed; PixelateSeries stage-dots are opacity-based; ScoreboardReveal leader glow already GPU-safe (static `boxShadow` on opacity-animated layer — no change needed)
+### Animation, A11y & Polish
+- Reduced-motion coverage on all animated elements
+- GPU-only animations everywhere in ParticleBackground
+- DM Sans 600/700 properly loaded
+- PreShow text legibility pass for TV at 10ft
 
-### Pre-Show Ticker
-- Always visible on PreShowScreen (never conditional)
-- Custom messages via `TickerMessageManager` (stored in `shows.ticker_messages`)
-- Switches to team names when `teams.length >= 5`
-- Falls back to hardcoded copy when no custom messages set
-- Repeat formula ensures full 1920px width fill at all message lengths
+### Shiny Question System
+- 3-step shiny wizard in AddSlideWizard (pick format → details form → SlideEditor)
+- 10 shiny formats in `shinyFormatDictionary.js`
+- `shinyStampers.js`, `useShinyFormats.js`
+- Series-type shiny questions grouped atomically in RoundSidebar
 
-### Ben Photo System
-- `/public/ben/` — 21 photos loaded (removebg PNGs + design exports)
-- `api/ben-photos.js` — Vercel serverless, reads `/public/ben/`, returns URL array; `includeFiles` configured
-- `useBenPhotos.js` — fetches on mount, stable `randomPhoto` (won't re-roll on re-render)
-- `BenPhoto.jsx` — circle img, size prop, returns null while loading/if no photos
-- `vite.config.js` — `publicDir: '../public'` so images copy to `dist/ben/` on build
-
-### 21 Themes
-- Full ambient audit completed June 23, 2026 — all themes rewritten or validated
-- 3-layer architecture enforced: base + mid + accent
-- Opacity recalibrated for TV at bar distance (no layer below rgba 0.25)
-- Tinted vignette system on all 21 themes
-- All GPU-only (transform + opacity only)
-- `AmbientAudit.jsx` — dev tool for cycling themes with screenshots
+### 21 Ambient Themes
+- Full bland-pass audit: all 21 themes have real drifters + named anchors (see project memory for current status per theme)
+- 3-layer architecture enforced; GPU-only; tinted vignette system
 
 ---
 
@@ -106,33 +111,33 @@
 
 | # | Step | Notes |
 |---|------|-------|
-| 10 | **Show library** | My shows screen, JSON export/import, duplicate, delete. ShowManager.jsx exists but may need enhancement. |
-| 12 | **Jukebox integration** | Stream Deck KeyJ → fetch to trivia-jukebox.vercel.app play/pause API |
 | — | **`assemble` transition** | 10th transition — defined in SlideRenderer but NOT in the picker. Needs slide child-elements wired as `motion` children for child-stagger to work. |
-| — | **Cross-repo: pre-show library handoff** | Trivia OS appends `?lib=<name>` to Jukebox handoff nav; Jukebox reads it, auto-selects + shuffles that named library, default-safe when absent. Jukebox-side first. |
-| — | **Profiling-dependent P2s** | MeteorShower 200-node DOM field + `/join` `backdrop-filter: blur()` on cheap Androids — both need real-hardware profiling before deciding if there's a problem. NOT blind-fix items. |
+| — | **Data tab integration** | User mentioned: "data needs to be fed to the data tab so i can keep track of the variables we decided on" — `scoreboard_teams` data → Data slide type. Not yet designed or built. |
+| — | **Ambient bland-pass: Drive-In Movie** | Screen glow + projector beams + dust motes (PulseDot, opacity-only — no real drifter). Needs real translate drifter. |
+| — | **Ambient bland-pass: Wine Cellar** | Pure breathing-gradient GlowLayers, zero anchor, zero drifter. Textbook bland failure. |
+| — | **Northern Lights status unclear** | Has motion pass commit (035e2ec) but not git-confirmed as a full bland-pass rework — re-check code before assuming done. |
+| — | **Profiling-dependent P2s** | MeteorShower 200-node DOM field + /join `backdrop-filter: blur()` on cheap Androids — both need real-hardware profiling before deciding if there's a problem. NOT blind-fix items. |
+| — | **Scoreboard TV overlay + phone drawer Playwright verification** | Built by subagents 2026-06-30 but not yet Playwright-tested (only ScoreboardModal was verified). |
 
 ---
 
 ## Known Issues
 
-- **`baynes-ops` skill** — referenced in `CLAUDE.md` but not yet written. Not blocking anything.
-- **Scheduler Vercel DATABASE_URL broken** — as of June 23, 2026. Fix before any scheduler prod deploy. Not blocking trivia-os.
-- **`StateOfUnionSlide.jsx`** — slide type exists in the file tree but may not be fully spec'd in SlideEditor or AddSlideWizard. Check before using.
-- **`ThemeCanvas.jsx` / `ThemeForeground.jsx`** — wired but `scene: null` on all 21 themes. Future use. Do not add ambient logic here.
-- **Handters + Roquen fonts** — `.woff2` files exist in `/public/fonts/` but `@font-face` declarations may not be in `index.css`. Brand typography is currently Boogaloo + DM Sans as fallbacks.
-- **`baynes-logo.svg`** — referenced in `NoShowScreen` and some components but the file doesn't exist in `dist/`. Broken img renders as nothing (acceptable for now).
-- **`AmbientAudit.jsx`** — dev tool, not routed in prod. Verify it's excluded from main bundle or gated.
-- **SKILL.md** — refactored from 1,634 lines into this structure on June 24, 2026.
+- **`ThemeCanvas.jsx` / `ThemeForeground.jsx`** — wired but `scene: null` on all 21 themes. Future use.
+- **`assemble` transition** — defined but not picker-selectable.
+- **Three fallback theme IDs** — `getTheme`'s own fallback, `DEFAULT_THEME_ID`, and `normalizeShow`'s fallback all exist independently. Currently compatible. If a "wrong default theme" bug appears, unify them.
+- **`baynes-logo.svg`** — referenced in `NoShowScreen` but file doesn't exist in `dist/`. Renders as nothing (acceptable for now).
+- **`AmbientAudit.jsx`** — dev tool, not routed in prod. Verify excluded from main bundle or gated.
 
 ---
 
 ## Next Session Starting Point
 
 1. Read this file
-2. Decide: Step 10 (show library) or Step 12 (Jukebox integration) — both are independent
-3. For Step 10: Start in `ShowManager.jsx` — show list + CRUD exists; verify JSON export/import in `useShow.js`
-4. For Step 12: Wire Stream Deck KeyJ to `trivia-jukebox.vercel.app` play/pause API — check Jukebox API surface first
-5. Cross-repo handoff (whenever ready): implement `?lib=<name>` param on Jukebox side — reads URL param on mount, auto-selects + shuffles that named library, default-safe when absent
+2. Pick from Remaining table above
+3. Before building: read the relevant reference file for the feature
+4. Before any animation work: read `emilkowal-animations` + `emil-design-eng` skills
 
-Before building: read `references/build-state.md` (this file) + the relevant reference file for the feature. Always.
+**For ambient work:** use `git log --oneline --all -- ParticleBackground.jsx` per-theme to confirm status before assuming any theme is done or undone. Memory can drift.
+
+**For scoreboard work:** Supabase project is `qwtbgusqfoypvehnungr`. Verify `.env.local` before any migrations.
