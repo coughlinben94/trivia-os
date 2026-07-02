@@ -262,10 +262,6 @@ function SpinWheel({ initialPool, colors, onComplete, onClose }) {
     setAdvancing(true)
     const winner = landed
     const winnerG = sectorGroupRefs.current[winner.id]
-    const remainingGs = pool
-      .filter(t => t.id !== winner.id)
-      .map(t => sectorGroupRefs.current[t.id])
-      .filter(Boolean)
 
     const tl = gsap.timeline({
       id: 'spin-exit',
@@ -280,14 +276,7 @@ function SpinWheel({ initialPool, colors, onComplete, onClose }) {
     }
 
     if (winnerG) {
-      tl.to(winnerG, { opacity: 0, duration: 0.14, ease: 'power3.in' }, 0.06)
-    }
-
-    tl.call(() => setPool(prev => prev.filter(t => t.id !== winner.id)), [], 0.22)
-
-    if (remainingGs.length) {
-      tl.to(remainingGs, { scale: 1.10, svgOrigin: `${CX} ${CY}`, duration: 0.28, ease: 'power2.out' }, 0.26)
-        .to(remainingGs, { scale: 1,    svgOrigin: `${CX} ${CY}`, duration: 0.42, ease: 'power3.inOut' }, 0.56)
+      tl.to(winnerG, { opacity: 0, duration: 0.20, ease: 'power3.in' }, 0.06)
     }
   }
 
@@ -338,7 +327,7 @@ function SpinWheel({ initialPool, colors, onComplete, onClose }) {
           <div style={{
             width: SIZE, height: SIZE,
             transform: `rotate(${rotation}deg)`,
-            transition: spinning ? `transform ${SPIN_MS}ms cubic-bezier(0, 0, 0.2, 1)` : 'none',
+            transition: spinning ? `transform ${SPIN_MS}ms cubic-bezier(0.22, 1, 0.36, 1)` : 'none',
             willChange: 'transform',
           }}>
             <svg width={SIZE} height={SIZE} style={{ display: 'block' }}>
