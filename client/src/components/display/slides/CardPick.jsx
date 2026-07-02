@@ -51,7 +51,7 @@ export default function CardPick({ candidates, winnerId, theme, onDone }) {
   const [fit, setFit] = useState(1);
   useEffect(() => {
     const el = wrapRef.current; if (!el) return;
-    const ro = new ResizeObserver(() => setFit(Math.min(1, el.clientWidth / AREA_W)));
+    const ro = new ResizeObserver(() => setFit(Math.min(el.clientWidth / AREA_W, el.clientHeight / AREA_H)));
     ro.observe(el); return () => ro.disconnect();
   }, []);
 
@@ -131,8 +131,8 @@ export default function CardPick({ candidates, winnerId, theme, onDone }) {
   const corner = { position: "absolute", fontWeight: 900, fontSize: 22, lineHeight: 1 };
 
   return (
-    <div ref={wrapRef} style={{ width: "100%", height: AREA_H * fit }}>
-      <div style={{ width: AREA_W, height: AREA_H, transformOrigin: "top left", transform: `scale(${fit})` }}>
+    <div ref={wrapRef} style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }}>
+      <div style={{ width: AREA_W, height: AREA_H, position: "absolute", top: "50%", left: "50%", transformOrigin: "center", transform: `translate(-50%, -50%) scale(${fit})` }}>
         <div style={{ width: AREA_W, height: AREA_H, position: "relative", overflow: "hidden", borderRadius: 20, border: `2px solid ${C.accent}44`, background: stageBg, animation: "popStage 420ms cubic-bezier(.2,1.2,.3,1)" }}>
           {cards.map((card, i) => {
             const L = layout(card, i);
