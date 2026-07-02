@@ -1361,8 +1361,11 @@ export default function Join() {
   // ── Register ──────────────────────────────────────────────────────────
   async function handleRegister(name) {
     const actualShowId = show.id
-    const { data: existing } = await supabase.from('teams').select('id').eq('show_id', actualShowId).ilike('name', name).single()
-    if (existing) throw new Error("That name's taken — try another")
+    // Fetch all names and compare case-insensitively in JS to avoid ILIKE
+    // metachar injection (% or _ in a team name would wildcard-match everything).
+    const { data: allTeams } = await supabase.from('teams').select('name').eq('show_id', actualShowId)
+    const taken = (allTeams ?? []).some(t => t.name.toLowerCase() === name.toLowerCase())
+    if (taken) throw new Error("That name's taken — try another")
 
     const color  = TEAM_COLORS[Math.floor(Math.random() * TEAM_COLORS.length)]
     const teamId = `team_${nanoid(8)}`
