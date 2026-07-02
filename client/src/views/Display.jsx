@@ -10,6 +10,7 @@ import BaynesWatermark from '../components/display/BaynesWatermark.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
+import StageFrame from '../display/StageFrame.jsx'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
 import { resolveShinyPart } from '../lib/shinySeries.js'
 
@@ -328,20 +329,24 @@ function DisplayInner({ show, direction }) {
       {/* ParticleBackground lives OUTSIDE the ErrorBoundary — it must never re-mount */}
       <ParticleBackground theme={theme} />
 
-      {/* key resets the boundary on every slide change so a crash on one slide
-          doesn't permanently block the display for subsequent slides */}
-      <ErrorBoundary key={currentSlide?.id} fallback={slideFallback}>
-        <AnimatePresence mode="wait" custom={direction}>
-          {currentSlide && (
-            <SlideRenderer
-              key={currentSlide.id}
-              slide={currentSlide}
-              show={show}
-              direction={direction}
-            />
-          )}
-        </AnimatePresence>
-      </ErrorBoundary>
+      {/* StageFrame: 85% viewport, centered, overflow:hidden — all slide content clips here.
+          ParticleBackground stays OUTSIDE (full-viewport behind the stage). */}
+      <StageFrame>
+        {/* key resets the boundary on every slide change so a crash on one slide
+            doesn't permanently block the display for subsequent slides */}
+        <ErrorBoundary key={currentSlide?.id} fallback={slideFallback}>
+          <AnimatePresence mode="wait" custom={direction}>
+            {currentSlide && (
+              <SlideRenderer
+                key={currentSlide.id}
+                slide={currentSlide}
+                show={show}
+                direction={direction}
+              />
+            )}
+          </AnimatePresence>
+        </ErrorBoundary>
+      </StageFrame>
 
       {/* z-50: persistent overlays — always on top */}
       <QuestionCounter slide={currentSlide} show={show} />

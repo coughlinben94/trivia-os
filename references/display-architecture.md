@@ -91,6 +91,34 @@ EASE_CUBIC = [0.33, 1, 0.68, 1]  // gentle entry
 - `audioGainDb` from slide data → Web Audio GainNode applied on playback
 - Gain computed at upload by `audioNormalize.js` (target RMS: −20dBFS, peak: −1dBFS, clamp ±12dB)
 
+## Stage Boundary
+
+**Source:** `client/src/display/stage.js` + `client/src/display/StageFrame.jsx`
+
+```js
+STAGE_SCALE = 0.85
+STAGE.width  = 1632   // Math.round(1920 * 0.85)
+STAGE.height = 918    // Math.round(1080 * 0.85)
+```
+
+StageFrame is a centered, clipped box mounted in `DisplayInner` between ParticleBackground and the slide content. Every foreground surface — questions, shiny cards, scoreboard pullout, PYL popup, winner reveal, powerup callouts, media — renders inside it. Nothing may overflow this box.
+
+**CSS contract:**
+- `position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%)`
+- `width: calc(100vw * var(--stage-scale)); height: calc(100vh * var(--stage-scale))`
+- `overflow: hidden` — the enforcement; transitions clip at the wall
+- `container-type: size` — children may use `cqw`/`cqh` relative to the stage
+- `pointer-events: none` on the outer frame; inner wrapper restores `auto`
+- `z-index: 2` — above ParticleBackground (z:1), below viewport overlays (z-50)
+
+**What stays full-viewport (outside StageFrame):**
+- `ParticleBackground` — never re-mounts, always full-viewport behind the stage
+- `QuestionCounter`, `AnswerRevealOverlay`, `ScoreboardOverlay`, `BaynesWatermark` — viewport-level overlays (migrated to StageFrame in later commits)
+- `PreShowScreen` ticker bar — intentionally bleeds to screen edges
+
+**Relationship to the ambient safe-area rule:**
+The center 60% width × 45% height safe area is a separate, unchanged ambient-design law. The stage boundary and the safe area are independent constraints: the stage clips foreground content at 85% viewport, the safe area reserves the inner region of the stage for question text (ambient elements stay outside that inner region).
+
 ## Realtime Sync Pattern
 All display surfaces subscribe to the show row and react to:
 - `current_slide_id` change → advance/rewind
