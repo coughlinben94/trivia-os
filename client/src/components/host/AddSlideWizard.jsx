@@ -107,6 +107,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           shinyFormatName:  selectedShinyFmt.name,
           shinyFormatIcon:  selectedShinyFmt.icon,
           shinyInputSchema: selectedShinyFmt.input_schema ?? null,
+          shinyType:        selectedShinyFmt.input_schema?.type ?? null,
           text:             shinyQuestion.trim(),
           answer:           shinyAnswer.trim(),
           mediaSlots:       [],

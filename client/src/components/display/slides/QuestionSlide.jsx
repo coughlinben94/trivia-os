@@ -56,6 +56,21 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
           >
             {data.seriesTheme}
           </span>
+          {data.subtitle && (
+            <span
+              style={{
+                display: 'block',
+                fontFamily: `'${theme.fonts.ui}', 'Inter', sans-serif`,
+                color: theme.colors.text,
+                fontSize: '0.7rem',
+                fontWeight: 500,
+                letterSpacing: '0.08em',
+                marginTop: 2,
+              }}
+            >
+              {data.subtitle}
+            </span>
+          )}
         </motion.div>
       )}
 
@@ -139,6 +154,43 @@ function ShinyVisualQuestion({ slide, theme }) {
           animation: 'shinyGlow 0.7s ease-out forwards',
         }}
       />
+
+      {/* Series theme + subtitle — top overlay */}
+      {data.isSeries && data.seriesTheme && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.08, duration: 0.22, ease: EASE_SNAP }}
+          className="absolute top-0 left-0 right-0 py-3 px-10 text-center z-30"
+          style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)' }}
+        >
+          <p
+            style={{
+              color: '#f5f0e8',
+              fontFamily: `'${theme.fonts.ui}', 'Inter', system-ui, sans-serif`,
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+            }}
+          >
+            {data.seriesTheme}
+          </p>
+          {data.subtitle && (
+            <p
+              style={{
+                color: '#f5f0e8',
+                fontFamily: `'${theme.fonts.ui}', 'Inter', sans-serif`,
+                fontSize: '1rem',
+                fontWeight: 600,
+                marginTop: 2,
+              }}
+            >
+              {data.subtitle}
+            </p>
+          )}
+        </motion.div>
+      )}
 
       {isPortrait ? (
         /* Portrait: image left 50%, text right 50% — Section 14 */
@@ -284,21 +336,38 @@ function ShinyAudioQuestion({ slide, show, theme }) {
 
       {/* Series theme label */}
       {data.isSeries && data.seriesTheme && (
-        <motion.p
+        <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.22, ease: EASE_SNAP }}
-          style={{
-            color: theme.colors.textMuted,
-            fontFamily: `'${theme.fonts.ui}', 'Inter', system-ui, sans-serif`,
-            fontSize: '0.85rem',
-            fontWeight: 700,
-            letterSpacing: '0.2em',
-            textTransform: 'uppercase',
-          }}
+          className="text-center"
         >
-          {data.seriesTheme}
-        </motion.p>
+          <p
+            style={{
+              color: theme.colors.textMuted,
+              fontFamily: `'${theme.fonts.ui}', 'Inter', system-ui, sans-serif`,
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+            }}
+          >
+            {data.seriesTheme}
+          </p>
+          {data.subtitle && (
+            <p
+              style={{
+                color: theme.colors.text,
+                fontFamily: `'${theme.fonts.ui}', 'Inter', sans-serif`,
+                fontSize: '1rem',
+                fontWeight: 600,
+                marginTop: 4,
+              }}
+            >
+              {data.subtitle}
+            </p>
+          )}
+        </motion.div>
       )}
 
       {/* Track number / label */}

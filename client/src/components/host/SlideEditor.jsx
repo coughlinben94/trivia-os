@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { nanoid } from 'nanoid'
 import { analyzeAudioGain } from '../../lib/audioNormalize.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
@@ -1169,14 +1170,19 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
                 description="Groups questions (6a, 6b, 6c) under a shared theme banner"
               />
               {data.isSeries && (
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Series Label" hint='e.g. "6a"'>
-                    <TextInput value={data.seriesLabel} onChange={v => onChange('seriesLabel', v)} placeholder="6a" />
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="Series Label" hint='e.g. "6a"'>
+                      <TextInput value={data.seriesLabel} onChange={v => onChange('seriesLabel', v)} placeholder="6a" />
+                    </Field>
+                    <Field label="Series Theme" hint='e.g. "Name That Tune"'>
+                      <TextInput value={data.seriesTheme} onChange={v => onChange('seriesTheme', v)} placeholder="Name That Tune" />
+                    </Field>
+                  </div>
+                  <Field label="Subtitle" hint='This part only, e.g. "Villain Laughs" — shown in the sidebar and on screen'>
+                    <TextInput value={data.subtitle} onChange={v => onChange('subtitle', v)} placeholder="Optional subtitle for this part" />
                   </Field>
-                  <Field label="Series Theme" hint='e.g. "Name That Tune"'>
-                    <TextInput value={data.seriesTheme} onChange={v => onChange('seriesTheme', v)} placeholder="Name That Tune" />
-                  </Field>
-                </div>
+                </>
               )}
             </>
           )}
@@ -1193,12 +1199,15 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
             const totalSlots = fmt.input_schema?.slots ?? 1
             if (totalSlots > 1 && addSiblingSlides) {
               const singleSchema = { ...fmt.input_schema, slots: 1 }
+              const seriesId = `series_${nanoid(8)}`
               onBatchChange({
                 shinyFormatId: fmt.id,
                 shinyFormatName: fmt.name,
                 shinyFormatIcon: fmt.icon,
                 shinyInputSchema: singleSchema,
+                shinyType: fmt.input_schema.type,
                 isSeries: true,
+                seriesId,
                 seriesLabel: `1 of ${totalSlots}`,
                 seriesTheme: fmt.name,
                 slotIndex: 1,
@@ -1219,6 +1228,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
                   shinyFormatIcon: fmt.icon,
                   shinyInputSchema: singleSchema,
                   isSeries: true,
+                  seriesId,
                   seriesLabel: `${i + 2} of ${totalSlots}`,
                   seriesTheme: fmt.name,
                   slotIndex: i + 2,
@@ -1233,6 +1243,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
                 shinyFormatName: fmt.name,
                 shinyFormatIcon: fmt.icon,
                 shinyInputSchema: fmt.input_schema,
+                shinyType: fmt.input_schema?.type ?? null,
               })
             }
             setShowFormatLibrary(false)

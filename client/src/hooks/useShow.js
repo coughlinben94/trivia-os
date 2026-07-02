@@ -37,6 +37,44 @@ export function sortedSlides(show) {
   return [...show.slides].sort((a, b) => a.order - b.order)
 }
 
+// Shiny-series siblings are grouped either by a shared data.seriesId (slides
+// auto-created together from a multi-slot format) or, lacking that, by
+// matching data.seriesTheme within the same round (slides a host built one
+// at a time and linked by hand, e.g. via the "Part of a Series" toggle —
+// there's no shared id for that path today).
+function seriesGroupKey(slide) {
+  if (!slide?.data?.isSeries) return null
+  if (slide.data.seriesId) return `id:${slide.data.seriesId}`
+  if (slide.data.seriesTheme) return `theme:${slide.roundId ?? ''}:${slide.data.seriesTheme}`
+  return null
+}
+
+// Keeps shiny-series siblings contiguous and in slotIndex order after a
+// drag-reorder, so dragging any one part relocates the whole group instead
+// of silently splitting it apart.
+function normalizeSeriesGroups(orderedIds, slidesById) {
+  const seen = new Set()
+  const result = []
+  for (const id of orderedIds) {
+    if (seen.has(id)) continue
+    const key = seriesGroupKey(slidesById.get(id))
+    if (!key) {
+      result.push(id)
+      seen.add(id)
+      continue
+    }
+    const group = orderedIds
+      .map(gid => slidesById.get(gid))
+      .filter(s => seriesGroupKey(s) === key)
+      .sort((a, b) => (a.data.slotIndex ?? 0) - (b.data.slotIndex ?? 0))
+    for (const s of group) {
+      result.push(s.id)
+      seen.add(s.id)
+    }
+  }
+  return result
+}
+
 export function useShow() {
   const [show, setShow] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -310,9 +348,11 @@ export function useShow() {
 
   async function reorderSlides(orderedIds) {
     if (!show) return
-    const newSlides = orderedIds
+    const slidesById = new Map(show.slides.map(s => [s.id, s]))
+    const normalizedIds = normalizeSeriesGroups(orderedIds, slidesById)
+    const newSlides = normalizedIds
       .map((id, index) => {
-        const slide = show.slides.find(s => s.id === id)
+        const slide = slidesById.get(id)
         return slide ? { ...slide, order: index } : null
       })
       .filter(Boolean)
