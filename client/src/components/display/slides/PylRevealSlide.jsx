@@ -1,13 +1,44 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
+import ErrorBoundary from '../../ErrorBoundary.jsx'
+import { getSelectionAnimation } from './selectionAnimations.js'
+import { supabase } from '../../../lib/supabase.js'
 
 const EASE_SNAP   = [0.23, 1, 0.32, 1]
 const EASE_SMOOTH = [0.4, 0, 0.2, 1]
 
-export default function PylRevealSlide({ slide, show }) {
+export default function PylRevealSlide({ slide, show, isPreview = false }) {
   const { theme } = useTheme()
   const { data } = slide
+
+  const showAnimation = !isPreview && data.animationId && data.winnerId
+
+  async function advancePYL() {
+    const sorted = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
+    const cur = show.current_slide_index ?? 0
+    const next = Math.min(cur + 1, sorted.length - 1)
+    await supabase.from('shows').update({
+      current_slide_index: next,
+      current_slide_id: sorted[next]?.id ?? null,
+    }).eq('id', show.id)
+  }
+
+  if (showAnimation) {
+    const Anim = getSelectionAnimation(data.animationId)
+    return (
+      <div className="w-full h-full relative">
+        <ErrorBoundary>
+          <Anim
+            candidates={data.pool ?? []}
+            winnerId={data.winnerId}
+            theme={theme}
+            onDone={advancePYL}
+          />
+        </ErrorBoundary>
+      </div>
+    )
+  }
 
   const items = data.items ?? []
   // currentReveal: how many items are revealed (0 = none, items.length = all)
