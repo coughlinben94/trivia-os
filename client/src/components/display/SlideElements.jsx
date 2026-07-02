@@ -211,6 +211,8 @@ function ImageElement({ el }) {
         position: 'absolute',
         ...posStyle,
         height: 'auto',
+        maxWidth: '100%',
+        maxHeight: '100%',
         objectFit: 'contain',
         opacity: el.opacity ?? 1,
         borderRadius: el.borderRadius ? `${el.borderRadius}%` : undefined,

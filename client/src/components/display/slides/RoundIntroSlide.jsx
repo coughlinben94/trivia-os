@@ -34,7 +34,7 @@ export default function RoundIntroSlide({ slide, show }) {
         <img
           src="/baynes-logo.svg"
           alt=""
-          style={{ height: 56, filter: 'brightness(0) invert(1)' }}
+          style={{ height: 56, maxWidth: '100%', filter: 'brightness(0) invert(1)' }}
         />
       </motion.div>
 
@@ -106,6 +106,7 @@ export default function RoundIntroSlide({ slide, show }) {
             alt=""
             style={{
               height: isSwing ? 220 : 160,
+              maxWidth: '100%',
               objectFit: 'contain',
               filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.6))',
             }}

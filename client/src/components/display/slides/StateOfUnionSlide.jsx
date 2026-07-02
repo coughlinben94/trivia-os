@@ -33,7 +33,7 @@ export default function StateOfUnionSlide({ slide }) {
           src={slide.data.photoUrl}
           alt="Host"
           className="mb-10 rounded-2xl object-cover"
-          style={{ height: '28vh', width: 'auto', opacity: 0.85 }}
+          style={{ height: '28vh', width: 'auto', maxWidth: '100%', opacity: 0.85 }}
           initial={{ opacity: 0, scale: 1.06 }}
           animate={{ opacity: 0.85, scale: 1 }}
           transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}

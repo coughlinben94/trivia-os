@@ -39,7 +39,7 @@ export default function TitleSlide({ slide, show }) {
           src="/baynes-logo.svg"
           alt="Baynes Apple Valley"
           className="object-contain"
-          style={{ height: 120, filter: 'brightness(0) invert(1)' }}
+          style={{ height: 120, maxWidth: '100%', filter: 'brightness(0) invert(1)' }}
         />
       </motion.div>
 

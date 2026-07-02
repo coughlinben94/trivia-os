@@ -109,7 +109,7 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
           <img
             src={data.hostPhotoUrl}
             alt=""
-            style={{ height: 160, objectFit: 'contain', filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.5))' }}
+            style={{ height: 160, maxWidth: '100%', objectFit: 'contain', filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.5))' }}
           />
         </motion.div>
       )}
@@ -501,7 +501,7 @@ function ShinyIntroScreen({ slide, theme }) {
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.15, duration: 0.4, ease: EASE_SNAP }}
           className="absolute bottom-0 left-0 z-10 pointer-events-none"
-          style={{ height: '56%', objectFit: 'contain', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.4))' }}
+          style={{ height: '56%', maxWidth: '100%', objectFit: 'contain', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.4))' }}
         />
       )}
 

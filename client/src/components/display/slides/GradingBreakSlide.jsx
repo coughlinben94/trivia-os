@@ -66,6 +66,7 @@ export default function GradingBreakSlide({ slide, isPreview = false }) {
               alt="Ben"
               style={{
                 height: 220,
+                maxWidth: '100%',
                 objectFit: 'contain',
                 borderRadius: 16,
                 filter: 'drop-shadow(0 12px 40px rgba(0,0,0,0.6))',
