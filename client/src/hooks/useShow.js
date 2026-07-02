@@ -197,15 +197,19 @@ export function useShow() {
       title: json.title ?? 'Imported Show',
       date: json.date ?? now.split('T')[0],
       theme_id: json.theme_id ?? json.theme ?? DEFAULT_THEME_ID,
+      theme_overrides: json.themeOverrides ?? json.theme_overrides ?? {},
       slides: json.slides ?? [],
       rounds: json.rounds ?? [],
       powerups: json.powerups ?? [],
       is_live: false,
       scoreboard_visible: false,
       scores_revealed: false,
+      answer_reveal: false,
       ticker_messages: json.tickerMessages ?? json.ticker_messages ?? [],
       current_slide_id: null,
       current_slide_index: 0,
+      final_scores: null,
+      player_count: null,
       created_at: now,
       updated_at: now,
     })
@@ -235,6 +239,11 @@ export function useShow() {
       id: newId,
       title: `${original.title} (copy)`,
       is_live: false,
+      scoreboard_visible: false,
+      scores_revealed: false,
+      answer_reveal: false,
+      final_scores: null,
+      player_count: null,
       current_slide_id: null,
       current_slide_index: 0,
       created_at: now,
@@ -258,7 +267,8 @@ export function useShow() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${show.title.replace(/\s+/g, '-')}.json`
+    const safeName = (show.title ?? 'show').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '')
+    a.download = `${safeName}-${show.date ?? 'export'}.json`
     a.click()
     URL.revokeObjectURL(url)
   }
