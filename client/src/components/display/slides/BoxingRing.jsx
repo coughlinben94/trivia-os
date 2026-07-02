@@ -45,6 +45,8 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
     ro.observe(el); return () => ro.disconnect();
   }, []);
 
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   const N = candidates.length;
   const pScale = clamp(6 / Math.min(N, 8), 0.72, 1);
   const ROPE_IN = 24;
@@ -136,6 +138,11 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
       marks.current.dying.delete(victim.id);
       if (isSword) startSword(victim.id); else victim.doomed = true;
     };
+
+    if (reducedMotion) {
+      const t = setTimeout(() => onDone?.(), 1500);
+      return () => clearTimeout(t);
+    }
 
     startMatch(0);
 
@@ -292,6 +299,17 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
     raf = requestAnimationFrame(step);
     return () => { cancelAnimationFrame(raf); };
   }, []);
+
+  if (reducedMotion) {
+    const winner = candidates.find(c => c.id === winnerId);
+    return (
+      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: C.bgDeep }}>
+        <div style={{ padding: "28px 56px", borderRadius: 20, background: C.accent, fontWeight: 900, fontSize: 52, color: C.bgDeep, textAlign: "center" }}>
+          {winner?.name ?? "Winner"}
+        </div>
+      </div>
+    );
+  }
 
   const now = performance.now();
   const cm = cmRef.current, P = phase.current, m = matchesRef.current[cm] || { label: "" };

@@ -77,7 +77,13 @@ export default function CardPick({ candidates, winnerId, theme, onDone }) {
     )
   ), [cards]);
 
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   useEffect(() => {
+    if (reducedMotion) {
+      const t = setTimeout(() => onDone?.(), 1500);
+      return () => clearTimeout(t);
+    }
     const timers = [];
     const at = (t, fn) => timers.push(setTimeout(fn, t));
     let clk = 380 * SP;
@@ -90,6 +96,17 @@ export default function CardPick({ candidates, winnerId, theme, onDone }) {
     at(clk, () => onDone && onDone());
     return () => timers.forEach(clearTimeout);
   }, []);
+
+  if (reducedMotion) {
+    const winner = candidates.find(c => c.id === winnerId);
+    return (
+      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: C.bgDeep }}>
+        <div style={{ padding: "28px 56px", borderRadius: 20, background: C.accent, fontWeight: 900, fontSize: 52, color: C.bgDeep, textAlign: "center" }}>
+          {winner?.name ?? "Winner"}
+        </div>
+      </div>
+    );
+  }
 
   const deck = (i) => ({ x: CX + (i - (n - 1) / 2) * 0.7, y: CY - i * 0.5, rot: i % 2 ? -1.5 : 1.5, ry: 180, scale: grid.s, z: i, dur: 480, delay: 0, op: 1 });
 
