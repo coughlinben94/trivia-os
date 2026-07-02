@@ -109,10 +109,10 @@ textarea {
   50%       { transform: scaleY(0.28); }
 }
 
-/* ─── Display: play button pulse ─── */
+/* ─── Display: play button pulse — GPU-only (transform + opacity) ─── */
 @keyframes playPulse {
-  0%, 100% { box-shadow: 0 0 0 0 currentColor; }
-  50%       { box-shadow: 0 0 0 16px transparent; }
+  0%, 100% { opacity: 1;    transform: scale(1);    }
+  50%       { opacity: 0.78; transform: scale(1.04); }
 }
 
 /* ─── Display: ambient particle float ─── */
@@ -164,7 +164,7 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   .ticker-track { animation: none; }
   @keyframes gradingGlow  { 0%, 100% { opacity: 0.4;  transform: scale(1); } }
-  @keyframes playPulse    { 0%, 100% { box-shadow: none; } }
+  @keyframes playPulse    { 0%, 100% { opacity: 1; transform: scale(1); } }
   @keyframes waveformBar  { 0%, 100% { transform: scaleY(0.5); } }
   @keyframes waveformIdle { 0%, 100% { transform: scaleY(0.15); } }
 }
