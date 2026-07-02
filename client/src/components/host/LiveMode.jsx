@@ -3,6 +3,9 @@ import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
 import { resolveShinyPart } from '../../lib/shinySeries.js'
 import ScorePanel from './ScorePanel.jsx'
+import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
+import { supabase } from '../../lib/supabase.js'
+import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
 
 const SLIDE_META = {
   'title':             { label: 'Title',       color: 'bg-purple-100 text-purple-700' },
@@ -68,8 +71,14 @@ function CurrentSlideCard({ slide, show }) {
         const part = resolveShinyPart(data)
         const parts = data.parts
         const partIdx = Array.isArray(parts) && parts.length > 1 ? (data.currentPart ?? 0) : null
+        const introActive = data.isShiny && !data.introDone
         return (
           <div className="flex flex-col gap-3">
+            {introActive && (
+              <p className="text-xs font-bold uppercase tracking-wider text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1 w-fit">
+                🎬 Intro showing — press Next to reveal
+              </p>
+            )}
             {data.questionNumber != null && (
               <p className="text-lg font-semibold text-gray-400">
                 {data.questionLabel || `Q${data.questionNumber}`}
@@ -172,6 +181,7 @@ function UpNextCard({ slide, offset }) {
 export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
   const [scorePanelOpen, setScorePanelOpen] = useState(false)
   const [themePickerOpen, setThemePickerOpen] = useState(false)
+  const [pylPickerBusy, setPylPickerBusy] = useState(false)
 
   const slides = sortedSlides(show)
   const currentIndex = show.showState.currentSlideIndex ?? 0
@@ -187,6 +197,30 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
     const lastRoundSlide = roundSlides[roundSlides.length - 1]
     return lastRoundSlide ? slides.indexOf(lastRoundSlide) < currentIndex : false
   }).length
+
+  async function handlePickAnimation(animId) {
+    if (pylPickerBusy || !currentSlide) return
+    setPylPickerBusy(true)
+    try {
+      const { data: teams, error } = await supabase
+        .from('scoreboard_teams')
+        .select('*')
+        .eq('show_id', show.id)
+      if (error || !teams?.length) return
+      const cols = deriveRoundCols(show)
+      const sorted = [...teams].sort(
+        (a, b) => computeTotal(a.scores, cols) - computeTotal(b.scores, cols)
+      )
+      const poolCount = Math.ceil(sorted.length / 2)
+      const pool = sorted.slice(0, poolCount).map(t => ({ id: t.id, name: t.name }))
+      const winnerId = pool[Math.floor(Math.random() * pool.length)].id
+      actions.updateSlide(currentSlide.id, {
+        data: { ...currentSlide.data, animationId: animId, winnerId, pool },
+      })
+    } finally {
+      setPylPickerBusy(false)
+    }
+  }
 
   const handleKeyDown = useCallback((e) => {
     if (scorePanelOpen || themePickerOpen) return
@@ -312,6 +346,29 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
         {/* Left column — 60% */}
         <div className="flex flex-col gap-3" style={{ flex: '0 0 60%' }}>
           <CurrentSlideCard slide={currentSlide} show={show} />
+
+          {currentSlide?.type === 'pyl-reveal' && !currentSlide?.data?.animationId && (
+            <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
+              <p className="text-xs text-gray-400 mb-3">Pick animation</p>
+              <div className="flex gap-3">
+                {SELECTION_ANIMATIONS.map(anim => (
+                  <button
+                    key={anim.id}
+                    onClick={() => handlePickAnimation(anim.id)}
+                    disabled={pylPickerBusy}
+                    className={`flex-1 flex flex-col items-center gap-2 py-4 rounded-xl border-2 transition-[colors,transform] duration-[120ms] active:scale-[0.97] ${
+                      pylPickerBusy
+                        ? 'border-gray-100 text-gray-300 cursor-not-allowed'
+                        : 'border-gray-200 hover:border-gray-400 text-gray-700'
+                    }`}
+                  >
+                    <span className="text-3xl">{anim.emoji}</span>
+                    <span className="text-sm font-semibold">{anim.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {nextSlides.length > 0 && (
             <div className="shrink-0">
