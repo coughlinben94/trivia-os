@@ -514,6 +514,9 @@ export default function ScoreboardModal({ show, onClose }) {
   }
 
   async function clearScores() {
+    // Cancel any pending debounced saves so they don't overwrite after the clear
+    Object.values(saveTimers.current).forEach(clearTimeout)
+    saveTimers.current = {}
     const cleared = teams.map(t => ({ ...t, scores: {} }))
     setTeams(cleared)
     setHighlightIds(null)
