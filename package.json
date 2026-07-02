@@ -1,6 +1,7 @@
 {
   "name": "trivia-os",
   "version": "1.0.0",
+  "type": "module",
   "description": "Real-time trivia night management system for Baynes Apple Valley",
   "scripts": {
     "dev": "vite",

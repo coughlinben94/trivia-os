@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import { useShow, sortedSlides } from '../hooks/useShow.js'
 import { supabase } from '../lib/supabase.js'
-import { ThemeProvider, useTheme } from '../components/shared/ThemeProvider.jsx'
+import { ThemeProvider } from '../components/shared/ThemeProvider.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import ShowLibrary from '../components/host/ShowLibrary.jsx'
 import BuildMode from '../components/host/BuildMode.jsx'
@@ -15,7 +15,6 @@ const EASE_SNAP = [0.23, 1, 0.32, 1]
 export default function Host() {
   const showApi = useShow()
   const { show, loading } = showApi
-  const navigate = useNavigate()
 
   if (loading) {
     return (
@@ -25,10 +24,7 @@ export default function Host() {
     )
   }
 
-  if (!show) {
-    navigate('/dashboard', { replace: true })
-    return null
-  }
+  if (!show) return <Navigate to="/dashboard" replace />
 
   return (
     <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
@@ -41,13 +37,13 @@ export default function Host() {
 
 function HostInner({ showApi }) {
   const { show } = showApi
-  const { setThemeId } = useTheme()
   const [toasts, setToasts] = useState([])
   const [isLiveMode, setIsLiveMode] = useState(false)
   const [showLibrary, setShowLibrary] = useState(false)
   const [goLivePicker, setGoLivePicker] = useState(false)
   const [showScoreboard, setShowScoreboard] = useState(false)
   const savedResultsRef = useRef(false)
+  const leftAppDebounceRef = useRef({})
   const [connStatus, setConnStatus] = useState('SUBSCRIBED')
   const disconnected = connStatus === 'CHANNEL_ERROR' || connStatus === 'TIMED_OUT' || connStatus === 'CLOSED'
 
@@ -66,7 +62,9 @@ function HostInner({ showApi }) {
           if (action === 'went_back') {
             addToast({ id: `${team.id}-${Date.now()}`, type: 'warning', message: `↩ ${team.name} went back`, autoDismiss: 6000 })
           } else if (action === 'left_app') {
-            addToast({ id: `${team.id}-${Date.now()}`, type: 'info', message: `📵 ${team.name} left the app`, autoDismiss: 6000 })
+            if (leftAppDebounceRef.current[team.id]) return
+            leftAppDebounceRef.current[team.id] = setTimeout(() => { delete leftAppDebounceRef.current[team.id] }, 8000)
+            addToast({ id: `${team.id}-left`, type: 'info', message: `📵 ${team.name} left the app`, autoDismiss: 6000 })
           } else if (action === 'used_powerup') {
             addToast({ id: `${team.id}-${Date.now()}`, type: 'error', message: `⚡ ${team.name} used their powerup!` })
           }
@@ -79,9 +77,8 @@ function HostInner({ showApi }) {
   function addToast(toast) { setToasts(prev => [toast, ...prev]) }
   function dismissToast(id) { setToasts(prev => prev.filter(t => t.id !== id)) }
 
-  async function handleThemeChange(newThemeId) {
-    setThemeId(newThemeId)
-    await supabase.from('shows').update({ theme_id: newThemeId }).eq('id', show.id)
+  function handleThemeChange(newThemeId) {
+    actions.updateShowMeta({ theme: newThemeId })
   }
 
   const actions = { ...showApi }

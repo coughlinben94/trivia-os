@@ -290,8 +290,8 @@ export function useShow() {
     if (!show) return
     const round = {
       id: `round_${nanoid(8)}`,
-      number: show.rounds.length + 1,
-      title: data.title ?? `Round ${show.rounds.length + 1}`,
+      number: Math.max(0, ...show.rounds.map(r => r.number ?? 0)) + 1,
+      title: data.title ?? `Round ${Math.max(0, ...show.rounds.map(r => r.number ?? 0)) + 1}`,
       subtitle: data.subtitle ?? '',
       type: data.type ?? 'standard',
       roundType: data.roundType ?? 'normal',
