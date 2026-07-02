@@ -568,8 +568,9 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                 show={show}
                 initialData={addModalData}
                 onTypeChange={setWizardPickedType}
-                onAddSlide={async (slideData) => {
-                  const slide = await actions.addSlide(slideData)
+                onAddSlide={async ({ afterSlideId, ...rest }) => {
+                  const newSlides = await actions.addSiblingSlides(afterSlideId, [rest])
+                  const slide = newSlides?.[0]
                   if (slide) {
                     closeAddModal()
                     enterEditing(slide)

@@ -135,7 +135,13 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
       data = { title: '', body: '', mediaUrl: null, mediaType: null }
     }
 
-    await onAddSlide({ type, roundId: roundId ?? null, order: sorted.length, data })
+    // Insert right after this round's last existing slide (not the absolute end of
+    // the show) — otherwise a slide added to an earlier round lands after Winner
+    // Reveal/later rounds, splitting the round into two non-contiguous sidebar groups.
+    const afterSlideId = roundSlides.length > 0
+      ? roundSlides[roundSlides.length - 1].id
+      : (sorted.length > 0 ? sorted[sorted.length - 1].id : null)
+    await onAddSlide({ type, roundId: roundId ?? null, afterSlideId, data })
 
     if (type === 'question') {
       const isShiny = !!data.isShiny
