@@ -497,11 +497,16 @@ export default function ScoreboardModal({ show, onClose }) {
 
   function save(team) {
     clearTimeout(saveTimers.current[team.id])
-    saveTimers.current[team.id] = setTimeout(() => {
-      supabase.from('scoreboard_teams').upsert({
+    saveTimers.current[team.id] = setTimeout(async () => {
+      // Supabase's query builder is a lazy thenable — without awaiting (or
+      // otherwise consuming) it, the request is built but never actually
+      // sent. Every other write in this file awaits; this one silently
+      // didn't, so name/score edits typed into the table never persisted.
+      const { error } = await supabase.from('scoreboard_teams').upsert({
         id: team.id, show_id: show.id,
         name: team.name, scores: team.scores, sort_order: team.sort_order,
       })
+      if (error) console.error('scoreboard_teams save failed:', error)
     }, 500)
   }
 
