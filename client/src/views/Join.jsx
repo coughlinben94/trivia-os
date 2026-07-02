@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
+import { resolveShinyPart } from '../lib/shinySeries.js'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
 
 // ─── localStorage ─────────────────────────────────────────────────────────────
@@ -356,7 +357,27 @@ function SlideContent({ slide, show, theme }) {
   const round     = show?.rounds?.find(r => r.id === slide.roundId) ?? null
 
   switch (slide.type) {
-    case 'question':
+    case 'question': {
+      const d = slide.data
+      // Shiny intro beat — host is showing the teaser title, not the question yet.
+      if (d.isShiny && !d.introDone) {
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              {round?.title && (
+                <span style={{ color: `${text}55`, fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  {round.title}
+                </span>
+              )}
+              <span style={{ color: '#f5c842', fontSize: '0.8rem' }}>✨</span>
+            </div>
+            <p style={{ color: `${text}70`, fontSize: 'clamp(1rem, 4vw, 1.2rem)', lineHeight: 1.5, margin: 0, fontStyle: 'italic' }}>
+              {d.isSeries && d.seriesTheme ? d.seriesTheme : 'Next question incoming…'}
+            </p>
+          </div>
+        )
+      }
+      const part = resolveShinyPart(d)
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -365,23 +386,25 @@ function SlideContent({ slide, show, theme }) {
                 {round.title}
               </span>
             )}
-            {slide.data.questionLabel && (
+            {d.questionLabel && (
               <span style={{ background: accent, color: '#fff', fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.55rem', borderRadius: 6, letterSpacing: '0.03em' }}>
-                {slide.data.questionLabel}
+                {d.questionLabel}
               </span>
             )}
-            {slide.data.isShiny && (
+            {d.isShiny && (
               <span style={{ color: '#f5c842', fontSize: '0.8rem' }}>✨</span>
             )}
           </div>
 
-          {slide.data.isSeries && slide.data.seriesTheme && (
+          {d.isSeries && (part.subtitle || d.seriesTheme) && (
             <div style={{
               background: `${accent}2a`, border: `1px solid ${accent}44`,
               borderRadius: 8, padding: '0.3rem 0.65rem',
               display: 'inline-flex', alignSelf: 'flex-start',
             }}>
-              <span style={{ color: highlight, fontSize: '0.8rem', fontWeight: 600 }}>{slide.data.seriesTheme}</span>
+              <span style={{ color: highlight, fontSize: '0.8rem', fontWeight: 600 }}>
+                {part.subtitle || d.seriesTheme}
+              </span>
             </div>
           )}
 
@@ -389,20 +412,21 @@ function SlideContent({ slide, show, theme }) {
             color: text, fontSize: 'clamp(1.15rem, 4.5vw, 1.35rem)',
             lineHeight: 1.55, margin: 0, fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
           }}>
-            {slide.data.text || <span style={{ opacity: 0.3, fontStyle: 'italic' }}>No question text</span>}
+            {part.text || <span style={{ opacity: 0.3, fontStyle: 'italic' }}>No question text</span>}
           </p>
 
-          {slide.data.mediaUrl && slide.data.mediaType?.startsWith('image/') && (
-            <img src={slide.data.mediaUrl} alt="Question media"
+          {part.mediaUrl && part.mediaType?.startsWith('image/') && (
+            <img src={part.mediaUrl} alt="Question media"
               style={{ width: '100%', borderRadius: 10, objectFit: 'cover', maxHeight: 220 }} />
           )}
-          {slide.data.mediaUrl && slide.data.mediaType?.startsWith('audio/') && (
+          {part.mediaUrl && part.mediaType?.startsWith('audio/') && (
             <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: '0.75rem 1rem', textAlign: 'center' }}>
               <p style={{ color: `${text}55`, fontSize: '0.875rem', margin: 0 }}>🎵 Listen on the main screen</p>
             </div>
           )}
         </div>
       )
+    }
 
     case 'round-intro':
       return (
