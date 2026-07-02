@@ -146,10 +146,10 @@ function ScoreboardContent({ show }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: reduce ? 1 : 0.97, y: reduce ? 0 : 30 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: reduce ? 1 : 0.98, y: reduce ? 0 : -16 }}
-      transition={{ duration: 0.4, ease: EASE_OUT }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25, ease: EASE_OUT }}
       className="absolute inset-0 flex flex-col"
       style={{
         background: 'rgba(0,0,0,0.92)',
@@ -169,7 +169,7 @@ function ScoreboardContent({ show }) {
         <h1
           style={{
             fontFamily: "'Boogaloo', sans-serif",
-            fontSize: 'clamp(2.5rem, 5vw, 4.5rem)',
+            fontSize: 'clamp(2.5rem, 5cqw, 4.5rem)',
             color: '#fbbf24',
             letterSpacing: '0.02em',
             lineHeight: 1,
@@ -234,20 +234,28 @@ function ScoreboardContent({ show }) {
   )
 }
 
-// ─── Export — wraps in AnimatePresence for enter/exit ─────────────────────
+// ─── Export — right-side panel that slides from the stage edge ────────────
 export default function ScoreboardOverlay({ show }) {
   const visible = show.scoreboard_visible ?? show.showState?.scoreboardVisible ?? false
+  const reduce = useReducedMotion()
 
   return (
     <AnimatePresence>
       {visible && (
-        <div
+        <motion.div
           key="scoreboard-overlay"
-          className="absolute inset-0 z-[60]"
-          style={{ isolation: 'isolate' }}
+          initial={reduce ? { opacity: 0 } : { x: '100%' }}
+          animate={reduce ? { opacity: 1 } : { x: 0 }}
+          exit={reduce ? { opacity: 0 } : { x: '100%' }}
+          transition={{ duration: 0.38, ease: EASE_OUT }}
+          className="absolute top-0 right-0 bottom-0 z-[60]"
+          style={{
+            width: '52%',
+            boxShadow: '-24px 0 48px rgba(0,0,0,0.6)',
+          }}
         >
           <ScoreboardContent show={show} />
-        </div>
+        </motion.div>
       )}
     </AnimatePresence>
   )

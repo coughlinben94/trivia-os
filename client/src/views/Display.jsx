@@ -346,12 +346,13 @@ function DisplayInner({ show, direction }) {
             )}
           </AnimatePresence>
         </ErrorBoundary>
+        {/* Scoreboard lives inside the stage — clips at the stage wall */}
+        <ScoreboardOverlay show={show} />
       </StageFrame>
 
       {/* z-50: persistent overlays — always on top */}
       <QuestionCounter slide={currentSlide} show={show} />
       <AnswerRevealOverlay show={show} currentSlide={currentSlide} />
-      <ScoreboardOverlay show={show} />
       <BaynesWatermark />
     </div>
   )
