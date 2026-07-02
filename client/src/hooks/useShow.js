@@ -46,6 +46,16 @@ export function useShow() {
   const showIdRef = useRef(null)
   const debounceTimers = useRef({})
 
+  // Guards realtime echo from clobbering optimistic slide-index updates. Set for
+  // 1.5s after any local navigation action — long enough to outlast the echo.
+  const localNavRef = useRef(false)
+  const localNavTimerRef = useRef(null)
+  function markLocalNav() {
+    localNavRef.current = true
+    clearTimeout(localNavTimerRef.current)
+    localNavTimerRef.current = setTimeout(() => { localNavRef.current = false }, 1500)
+  }
+
   useEffect(() => {
     slidesRef.current = show?.slides ?? []
     showIdRef.current = show?.id ?? null
@@ -66,6 +76,44 @@ export function useShow() {
     }
     return () => { cancelled = true }
   }, [])
+
+  // Subscribe to shows row changes so Display.jsx slide advances (e.g. PYL onDone)
+  // and scoreboard/answer-reveal toggles propagate back to the Host in real time.
+  // Only merges showState fields — never touches slides/rounds to avoid optimistic clobber.
+  useEffect(() => {
+    if (!show?.id) return
+    const showId = show.id
+    const ch = supabase
+      .channel(`show-state:${showId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'shows', filter: `id=eq.${showId}` },
+        (payload) => {
+          const row = payload.new
+          setShow(prev => {
+            if (!prev || prev.id !== row.id) return prev
+            return {
+              ...prev,
+              showState: {
+                // Skip nav fields during the 1.5s window after a local action to
+                // prevent our own echo from overwriting an already-updated index.
+                ...(localNavRef.current ? prev.showState : {
+                  ...prev.showState,
+                  currentSlideIndex: row.current_slide_index ?? prev.showState.currentSlideIndex,
+                  currentSlideId: row.current_slide_id ?? prev.showState.currentSlideId,
+                }),
+                isLive: row.is_live ?? prev.showState.isLive,
+                scoreboardVisible: row.scoreboard_visible ?? prev.showState.scoreboardVisible,
+                scoresRevealed: row.scores_revealed ?? prev.showState.scoresRevealed,
+                answerReveal: row.answer_reveal ?? prev.showState.answerReveal,
+              },
+            }
+          })
+        }
+      )
+      .subscribe()
+    return () => supabase.removeChannel(ch)
+  }, [show?.id])
 
   async function fetchShow(id, isCancelled = () => false) {
     const { data, error } = await supabase
@@ -435,6 +483,7 @@ export function useShow() {
 
   async function goLive() {
     if (!show) return
+    markLocalNav()
     const sorted = sortedSlides(show)
     const first = sorted[0] ?? null
     const now = new Date().toISOString()
@@ -456,6 +505,7 @@ export function useShow() {
 
   async function goLiveFrom(index) {
     if (!show) return
+    markLocalNav()
     const sorted = sortedSlides(show)
     const target = Math.max(0, Math.min(index, sorted.length - 1))
     const slide = sorted[target] ?? null
@@ -478,6 +528,7 @@ export function useShow() {
 
   async function nextSlide() {
     if (!show) return
+    markLocalNav()
     const sorted = sortedSlides(show)
     const cur = show.showState.currentSlideIndex ?? 0
     const curSlide = sorted[cur]
@@ -526,6 +577,7 @@ export function useShow() {
 
   async function prevSlide() {
     if (!show) return
+    markLocalNav()
     const sorted = sortedSlides(show)
     const cur = show.showState.currentSlideIndex ?? 0
     const curSlide = sorted[cur]
