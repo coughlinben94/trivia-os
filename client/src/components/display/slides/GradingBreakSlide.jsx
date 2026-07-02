@@ -5,7 +5,7 @@ import SlideElements from '../SlideElements.jsx'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
-export default function GradingBreakSlide({ slide }) {
+export default function GradingBreakSlide({ slide, isPreview = false }) {
   const { theme } = useTheme()
   const { data } = slide
 
@@ -21,14 +21,16 @@ export default function GradingBreakSlide({ slide }) {
     window.location.href = `https://trivia-jukebox.vercel.app?lib=${encodeURIComponent(lib)}`
   }
 
-  // 10s auto-advance to Jukebox
+  // 10s auto-advance to Jukebox — disabled in editor preview
   useEffect(() => {
+    if (isPreview) return
     autoTimerRef.current = setTimeout(transitionToJukebox, 10000)
     return () => clearTimeout(autoTimerRef.current)
-  }, [])
+  }, [isPreview])
 
-  // Space / ArrowRight — skip the wait
+  // Space / ArrowRight — skip the wait — disabled in editor preview
   useEffect(() => {
+    if (isPreview) return
     const handler = (e) => {
       if (e.code === 'Space' || e.code === 'ArrowRight') {
         e.preventDefault()
@@ -37,7 +39,7 @@ export default function GradingBreakSlide({ slide }) {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [])
+  }, [isPreview])
 
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.bg }}>

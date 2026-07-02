@@ -106,7 +106,7 @@ const SLIDE_COMPONENTS = {
   'winner-reveal':     WinnerRevealSlide,
 }
 
-export default function SlideRenderer({ slide, show, direction }) {
+export default function SlideRenderer({ slide, show, direction, isPreview = false }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const isShiny = slide?.data?.isShiny
@@ -147,7 +147,7 @@ export default function SlideRenderer({ slide, show, direction }) {
         animate="animate"
         exit="exit"
       >
-        <SlideComponent slide={slide} show={show} transitionKey={transitionKey} />
+        <SlideComponent slide={slide} show={show} transitionKey={transitionKey} isPreview={isPreview} />
       </motion.div>
     </>
   )

@@ -213,7 +213,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
               <div style={{ width: panelW, height: dynH, position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${dynScale})`, transformOrigin: 'top left', overflow: 'hidden', background: theme.colors.bg }}>
                   <ParticleBackground theme={theme} />
-                  <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} />
+                  <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} isPreview />
                 </div>
                 {/* Interactive element overlay */}
                 <div
