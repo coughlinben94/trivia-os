@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate, useNavigationType } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useShow, sortedSlides } from '../hooks/useShow.js'
 import { supabase } from '../lib/supabase.js'
 import { ThemeProvider, useTheme } from '../components/shared/ThemeProvider.jsx'
@@ -16,14 +16,6 @@ export default function Host() {
   const showApi = useShow()
   const { show, loading } = showApi
   const navigate = useNavigate()
-  const navType = useNavigationType()
-
-  // 'POP' = fresh page load, hard refresh, or browser back — go to dashboard.
-  // 'PUSH' / 'REPLACE' = navigated here intentionally via the app — stay.
-  if (!loading && navType === 'POP') {
-    navigate('/dashboard', { replace: true })
-    return null
-  }
 
   if (loading) {
     return (
