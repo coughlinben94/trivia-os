@@ -159,6 +159,12 @@ const KEYFRAMES = `
     0%,100% { transform: translateX(0); }
     50%     { transform: translateX(var(--fx,10vw)); }
   }
+  @keyframes ambientBloom {
+    0%   { opacity: 0; transform: translate(0,0); }
+    18%  { opacity: var(--hi,.55); }
+    78%  { opacity: calc(var(--hi,.55)*.72); }
+    100% { opacity: 0; transform: translate(var(--bx,5vw), var(--by,-3vh)); }
+  }
   @media (prefers-reduced-motion: reduce) {
     @keyframes ambientFallSlow    { 0%, 100% { opacity: 0; } 8%, 92%  { opacity: var(--hi, 0.8); } }
     @keyframes ambientLeafFall    { 0%, 100% { opacity: 0; } 10%, 90% { opacity: var(--hi, 0.8); } }
@@ -182,6 +188,7 @@ const KEYFRAMES = `
     @keyframes streakOnce { 0%,100% { opacity: 0; } }
     @keyframes ambientFloatY { 0%,100% { transform: none; } }
     @keyframes ambientFloatX { 0%,100% { transform: none; } }
+    @keyframes ambientBloom  { 0%,100% { opacity: var(--hi,.55); } }
     .jc-anim { animation: none !important; }
   }
 `
@@ -403,112 +410,199 @@ function PureMichiganAmbient({ tint }) {
 }
 
 // ─── 2. MIDNIGHT GALAXY ───────────────────────────────────────────────────
-function GalaxyDriftGlow({ driftDur, driftDelay = '0s', driftDir = 'normal', lo, hi, breatheDur, breatheDelay = '0s', style }) {
-  return (
-    <div aria-hidden style={{
-      position: 'absolute', inset: 0, pointerEvents: 'none', willChange: 'transform',
-      animation: `orbit ${driftDur} ease-in-out ${driftDelay} infinite ${driftDir}`,
-    }}>
-      <GlowLayer lo={lo} hi={hi} duration={breatheDur} delay={breatheDelay} style={style}/>
-    </div>
-  )
-}
 
-function galaxyRollStar() {
-  const rightward = Math.random() < 0.5
-  const dist = 45 + Math.random() * 28
-  const ang = rightward ? 35 + Math.random() * 23 : 122 + Math.random() * 23
-  const rad = ang * Math.PI / 180
-  const sx = rightward ? -10 + Math.random() * 60 : 50 + Math.random() * 60
-  const sy = -6 + Math.random() * 10
+// Nebula bloomers re-roll their position/travel/duration on every
+// animationiteration — the CSS loop boundary, which for ambientBloom always
+// lands at opacity 0, so the reposition is invisible. Same per-cycle
+// re-roll philosophy as rollMeteorShower, just event-driven instead of
+// timer-driven since this is a continuous loop, not a fire-then-wait burst.
+// Center is rejected out of the core's home quadrant (upper-right) so blooms
+// never compete with the anchor.
+function rollBloomCenter() {
+  let x = 0, y = 0, tries = 0
+  do {
+    x = Math.random() * 100
+    y = Math.random() * 100
+    tries++
+  } while (x > 50 && y < 42 && tries < 30)
   return {
-    sx: `${sx.toFixed(1)}%`, sy: `${sy.toFixed(1)}%`, ang: `${ang.toFixed(1)}deg`,
-    dx: `${(dist * Math.cos(rad)).toFixed(1)}%`, dy: `${(dist * Math.sin(rad)).toFixed(1)}%`,
-    speed: (0.5 + Math.random() * 0.9).toFixed(2),
+    x, y,
+    bx: `${(-6 + Math.random() * 12).toFixed(1)}vw`,
+    by: `${(-4 + Math.random() * 8).toFixed(1)}vh`,
+    dur: `${(14 + Math.random() * 12).toFixed(1)}s`,
   }
 }
 
-function GalaxyShootingStar({ tint }) {
-  const [shot, setShot] = useState(null)
-  useEffect(() => {
+function NebulaBloomer({ color, w, h, blur, initialDur, initialDelay }) {
+  // First mount uses the prescribed clock + stagger; every reroll after that
+  // gets a fresh random duration and delay:'0s' so the restart lands exactly
+  // on the keyframe's 0% (opacity 0) instead of skipping ahead into
+  // visibility — keeping every reposition invisible, not just the first.
+  const [roll, setRoll] = useState(() => ({ ...rollBloomCenter(), dur: initialDur, delay: initialDelay }))
+  // The reduced-motion override only freezes opacity — the animation still
+  // loops and still fires animationiteration, which would otherwise keep
+  // silently teleporting the bloom while it's fully (not invisibly) visible.
+  // Stop rerolling once reduced motion is on, so it holds one place for good.
+  const reroll = () => {
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    let alive = true, k = 0, timer
-    const fire = () => {
-      if (!alive) return
-      setShot({ key: ++k, ...galaxyRollStar() })
-      timer = setTimeout(fire, 7000 + Math.random() * 5000)
-    }
-    timer = setTimeout(fire, 700 + Math.random() * 1500)
-    return () => { alive = false; clearTimeout(timer) }
-  }, [])
-  if (!shot) return null
+    setRoll({ ...rollBloomCenter(), delay: '0s' })
+  }
   return (
-    <div key={shot.key} aria-hidden style={{
-      position: 'absolute', inset: 0, pointerEvents: 'none', willChange: 'transform,opacity', opacity: 0,
-      '--dx': shot.dx, '--dy': shot.dy,
-      animation: `streakOnce ${shot.speed}s linear forwards`,
-    }}>
-      <div style={{
-        position: 'absolute', left: shot.sx, top: shot.sy, width: '14%', height: '3px',
-        transform: `rotate(${shot.ang})`, transformOrigin: 'left center',
-      }}>
-        <div style={{
-          position: 'absolute', inset: 0,
-          // near-white leading tip (100% stop) is a sanctioned hot-core exception; body stops are in-family purple
-          background: `linear-gradient(to right, ${tint('rgba(210,160,255,0)')} 0%, ${tint('rgba(214,164,255,0.22)')} 50%, ${tint('rgba(236,212,255,0.72)')} 86%, rgba(250,244,255,1) 100%)`,
-          clipPath: 'polygon(0 50%, 100% 0, 100% 100%)',
-        }}/>
-        <div style={{
-          position: 'absolute', right: '-3px', top: '50%', transform: 'translateY(-50%)',
-          width: '7px', height: '7px', borderRadius: '50%',
-          // near-white core, in-family purple falloff
-          background: `radial-gradient(circle, rgba(252,246,255,1), ${tint('rgba(214,164,255,0.5)')} 45%, transparent 70%)`,
-          boxShadow: `0 0 7px ${tint('rgba(220,170,255,0.7)')}`,
-        }}/>
-      </div>
+    <div aria-hidden
+      onAnimationIteration={reroll}
+      style={{
+        position: 'absolute', left: `${roll.x}%`, top: `${roll.y}%`,
+        width: w, height: h,
+        // Centered via margin, not transform — ambientBloom's own keyframe
+        // drives transform (0,0 → bx,by) and would wipe out a competing
+        // static translate() the instant the animation starts.
+        marginLeft: `calc(${w} / -2)`, marginTop: `calc(${h} / -2)`,
+        pointerEvents: 'none', willChange: 'opacity,transform', borderRadius: '50%',
+        filter: `blur(${blur}px)`,
+        background: `radial-gradient(ellipse, ${color}, transparent 70%)`,
+        '--hi': 0.55, '--bx': roll.bx, '--by': roll.by,
+        animation: `ambientBloom ${roll.dur} ease-in-out ${roll.delay} infinite`,
+      }}
+    />
+  )
+}
+
+function midnightRollSatellite() {
+  return {
+    top: `${(6 + Math.random() * 72).toFixed(1)}%`,
+    rot: `${(-12 + Math.random() * 24).toFixed(1)}deg`,
+    reverse: Math.random() < 0.5,
+    dur: `${(38 + Math.random() * 25).toFixed(1)}s`,
+  }
+}
+
+function GalaxySatellite({ tint }) {
+  const [roll, setRoll] = useState(midnightRollSatellite)
+  // Same reasoning as NebulaBloomer: ambientDriftAcross's reduced-motion
+  // override only freezes opacity, so without this guard the dot would keep
+  // re-pathing to a new row/angle in full view instead of holding still.
+  const reroll = () => {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    setRoll(midnightRollSatellite())
+  }
+  return (
+    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', transform: `rotate(${roll.rot})` }}>
+      <div
+        aria-hidden
+        onAnimationIteration={reroll}
+        style={{
+          position: 'absolute', top: roll.top, left: 0, width: 3, height: 3, borderRadius: '50%',
+          pointerEvents: 'none', willChange: 'transform,opacity',
+          // pure-white dot is the satellite's sanctioned exception (spec: heart + satellite only);
+          // its glow is a static box-shadow, no tail — directional streaks belong to meteor-shower
+          background: 'rgba(255,255,255,1)',
+          boxShadow: `0 0 5px rgba(255,255,255,0.95), 0 0 10px ${tint('rgba(192,96,255,0.6)')}`,
+          '--hi': 0.85,
+          animation: `ambientDriftAcross ${roll.dur} linear infinite ${roll.reverse ? 'reverse' : 'normal'}`,
+        }}
+      />
     </div>
   )
 }
 
 function MidnightGalaxyAmbient({ tint }) {
-  const stars = useMemo(() => Array.from({ length: 120 }, (_, i) => ({
-    left:    `${(i * 97 + i % 7 * 31) % 100}%`,
-    top:     `${(i * 83 + i % 5 * 43) % 100}%`,
-    size:    0.8 + (i % 4) * 0.5,
-    opacity: 0.35 + (i % 5) * 0.10,
-    dur:     `${12 + (i % 7) * 4}s`,
-    delay:   `-${((i / 120) * (12 + (i % 7) * 4)).toFixed(1)}s`,
-  })), [])
+  // Base star field — min-distance placement (aspect-corrected for 16:9,
+  // since raw % distance is axis-relative and would let stars clump on the
+  // wider axis) so the scatter never bunches up. Up to 40 tries per star
+  // before just accepting the last roll.
+  const stars = useMemo(() => {
+    const placed = []
+    for (let i = 0; i < 85; i++) {
+      let x = 0, y = 0, tries = 0, ok = false
+      while (tries < 40) {
+        x = Math.random() * 100
+        y = Math.random() * 100
+        ok = placed.every(p => {
+          const dx = (x - p.x) * 1.78
+          const dy = y - p.y
+          return dx * dx + dy * dy > 49
+        })
+        tries++
+        if (ok) break
+      }
+      const hi = 0.35 + Math.random() * 0.5
+      const dur = 3 + Math.random() * 5
+      placed.push({
+        x, y, size: 1 + Math.random() * 1.6,
+        highlightColored: Math.random() < 0.20,
+        hi, lo: hi * 0.25,
+        dur: `${dur.toFixed(1)}s`, delay: `-${(Math.random() * dur).toFixed(1)}s`,
+      })
+    }
+    return placed
+  }, [])
+
+  // Star-cluster band — dense dust lane along the core's tilted axis.
+  // Deliberately clustered, not min-distance: jitter around a straight line
+  // from (62%,-6%) to (106%,30%).
+  const clusterStars = useMemo(() => Array.from({ length: 61 }, () => {
+    const t = Math.random()
+    const bx = 62 + t * 44
+    const by = -6 + t * 36
+    const hi = 0.35 + Math.random() * 0.5
+    const dur = 2.5 + Math.random() * 4.5
+    return {
+      left: `${(bx + (Math.random() * 10 - 5)).toFixed(2)}%`,
+      top: `${(by + (Math.random() * 10 - 5)).toFixed(2)}%`,
+      size: 1 + Math.random() * 1.4,
+      highlightColored: Math.random() < 0.20,
+      hi, lo: hi * 0.25,
+      dur: `${dur.toFixed(1)}s`, delay: `-${(Math.random() * dur).toFixed(1)}s`,
+    }
+  }), [])
 
   return <>
-    {/* GLOW 1 — home upper-right, slow orbit */}
-    <GalaxyDriftGlow driftDur="74s" lo={0.30} hi={0.56} breatheDur="22s" style={{
-      top: '-4%', right: '-8%', width: '54%', height: '54%',
-      background: `radial-gradient(ellipse, ${tint('rgba(150,80,225,0.50)')}, transparent 70%)`,
+    {/* 1. Base wash — deep space, lifting slightly indigo toward the bottom */}
+    <div aria-hidden style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none',
+      background: `linear-gradient(180deg, ${tint('rgba(4,0,16,1)')} 0%, ${tint('rgba(8,0,26,1)')} 55%, ${tint('rgba(48,28,92,0.55)')} 100%)`,
     }}/>
-    {/* GLOW 2 — home far-left-mid, reverse orbit */}
-    <GalaxyDriftGlow driftDur="88s" driftDir="reverse" driftDelay="-30s" lo={0.22} hi={0.48} breatheDur="26s" breatheDelay="5s" style={{
-      top: '24%', left: '-16%', width: '50%', height: '50%',
-      background: `radial-gradient(ellipse, ${tint('rgba(138,66,208,0.48)')}, transparent 70%)`,
+    {/* 2. Corner accent wash */}
+    <GlowLayer lo={0.4} hi={0.62} duration="19s" style={{
+      inset: 0, background: `radial-gradient(ellipse 95% 62% at 12% 88%, ${tint('rgba(74,26,143,0.5)')}, transparent)`,
     }}/>
-    {/* GLOW 3 — home bottom-center, slow orbit */}
-    <GalaxyDriftGlow driftDur="66s" driftDelay="-22s" lo={0.24} hi={0.44} breatheDur="19s" breatheDelay="3s" style={{
-      bottom: '-4%', left: '18%', right: '18%', height: '46%',
-      background: `radial-gradient(ellipse, ${tint('rgba(96,66,205,0.42)')}, transparent 72%)`,
-    }}/>
-    {/* Random-speed shooting stars (scheduled, one in flight) */}
-    <GalaxyShootingStar tint={tint}/>
-    {/* Stars — near-white twinkle field, sanctioned exception (not in-family hue) */}
+    {/* 3. Nebula bloomers — reposition each cycle, always rejected out of the core's quadrant */}
+    <NebulaBloomer color={tint('rgba(74,26,143,0.42)')}  w="37vw" h="17vh" blur={14} initialDur="15s" initialDelay="-3s"/>
+    <NebulaBloomer color={tint('rgba(74,26,143,0.38)')}  w="29vw" h="21vh" blur={16} initialDur="17s" initialDelay="-9s"/>
+    <NebulaBloomer color={tint('rgba(36,16,78,0.44)')}   w="32vw" h="13vh" blur={18} initialDur="20s" initialDelay="-13s"/>
+    <NebulaBloomer color={tint('rgba(192,96,255,0.30)')} w="23vw" h="19vh" blur={15} initialDur="24s" initialDelay="-5s"/>
+    {/* 4. Base star field — pure-white twinkle, ~20% highlight-tinted (sanctioned near-white exception) */}
     {stars.map((s, i) => (
       <div key={i} aria-hidden style={{
-        position: 'absolute', left: s.left, top: s.top, pointerEvents: 'none',
-        width: s.size, height: s.size, borderRadius: '50%',
-        background: `rgba(255,255,255,${s.opacity})`,
-        willChange: 'opacity',
-        '--lo': s.opacity * 0.3, '--hi': s.opacity,
+        position: 'absolute', left: `${s.x.toFixed(2)}%`, top: `${s.y.toFixed(2)}%`, pointerEvents: 'none',
+        width: s.size, height: s.size, borderRadius: '50%', willChange: 'opacity',
+        background: s.highlightColored ? tint('rgba(192,96,255,0.9)') : `rgba(255,255,255,${s.hi})`,
+        '--lo': s.lo, '--hi': s.hi,
         animation: `ambientBreathe ${s.dur} ${s.delay} ease infinite`,
       }}/>
     ))}
+    {/* 5. Anchor — galactic core, top-right */}
+    <div aria-hidden style={{
+      position: 'absolute', top: '-8%', right: '-10%', width: '48vw', height: '36vh',
+      transform: 'rotate(-19deg)', pointerEvents: 'none', willChange: 'opacity', borderRadius: '50%',
+      filter: 'blur(2px)',
+      // near-white heart is the sanctioned hot-core exception; the rest is in-family highlight
+      background: `radial-gradient(ellipse, rgba(255,255,255,0.95) 0%, ${tint('rgba(192,96,255,0.65)')} 13%, ${tint('rgba(192,96,255,0.24)')} 34%, transparent 72%)`,
+      '--lo': 0.78, '--hi': 1,
+      animation: 'ambientBreathe 13s ease-in-out infinite',
+    }}/>
+    {/* 6. Star-cluster band — dust lane along the core's axis, sits in front of it */}
+    {clusterStars.map((s, i) => (
+      <div key={i} aria-hidden style={{
+        position: 'absolute', left: s.left, top: s.top, pointerEvents: 'none',
+        width: s.size, height: s.size, borderRadius: '50%', willChange: 'opacity',
+        background: s.highlightColored ? tint('rgba(192,96,255,0.9)') : `rgba(255,255,255,${s.hi})`,
+        '--lo': s.lo, '--hi': s.hi,
+        animation: `ambientBreathe ${s.dur} ${s.delay} ease infinite`,
+      }}/>
+    ))}
+    {/* 7. Satellite — single dot, no tail, re-paths every crossing */}
+    <GalaxySatellite tint={tint}/>
   </>
 }
 
