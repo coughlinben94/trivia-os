@@ -87,14 +87,9 @@ function HostInner({ showApi }) {
   }
 
   const actions = { ...showApi }
-
-  const liveActions = {
-    nextSlide:            showApi.nextSlide,
-    prevSlide:            showApi.prevSlide,
-    setScoreboardVisible: showApi.setScoreboardVisible,
-    setAnswerReveal:      showApi.setAnswerReveal,
-    updateRoundScore:     showApi.updateRoundScore,
-  }
+  // Do NOT narrow this to a curated subset for LiveMode — any missing method silently
+  // breaks LiveMode features (e.g. updateSlide crashed handlePickAnimation). Pass the
+  // full spread to both BuildMode and LiveMode.
 
   useEffect(() => {
     if (!isLiveMode || !show) return
@@ -138,7 +133,7 @@ function HostInner({ showApi }) {
       ) : isLiveMode ? (
         <LiveMode
           show={show}
-          actions={liveActions}
+          actions={actions}
           onExitLive={() => setIsLiveMode(false)}
           onThemeChange={handleThemeChange}
         />
