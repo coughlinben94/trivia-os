@@ -2274,7 +2274,7 @@ export default function ParticleBackground({ theme }) {
   return (
     <>
       <style>{KEYFRAMES}</style>
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 1 }} aria-hidden>
         {AmbientComponent && <AmbientComponent tint={tint} />}
         <Vignette
           r={v.r ?? 0}

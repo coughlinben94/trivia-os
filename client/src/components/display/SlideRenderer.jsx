@@ -141,7 +141,7 @@ export default function SlideRenderer({ slide, show, direction }) {
       <motion.div
         key={slide.id}
         className="absolute inset-0"
-        style={{ zIndex: 1 }}
+        style={{ zIndex: 2 }}
         variants={variants}
         initial="initial"
         animate="animate"
