@@ -388,6 +388,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
         onExport={actions.exportShow}
         onOpenLibrary={onOpenLibrary}
         onOpenScoreboard={onOpenScoreboard}
+        onDashboard={mode !== 'wizard' ? returnToDashboard : undefined}
       />
 
       <div className="flex flex-1 min-h-0">
@@ -419,7 +420,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                 await actions.deleteSlide(id)
                 returnToDashboard()
               }}
-              onClose={() => returnToDashboard()}
               uploadMedia={actions.uploadMedia}
               getHostPhotos={actions.getHostPhotos}
               addSiblingSlides={actions.addSiblingSlides}

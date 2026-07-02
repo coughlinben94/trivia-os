@@ -32,42 +32,11 @@ const SLIDE_TYPES = [
   { value: 'winner-reveal',     label: 'Winner Reveal' },
 ]
 
-const SLIDE_NAV_META = {
-  'title':             { icon: '🇺🇸' },
-  'state-of-union':    { icon: '🇺🇸' },
-  'round-intro':       { icon: '🎬' },
-  'swing-round-intro': { icon: '🎷' },
-  'question':          { icon: '❓' },
-  'grading-break':     { icon: '⏸️' },
-  'scoreboard-reveal': { icon: '🏆' },
-  'custom':            { icon: '✏️' },
-  'pixelate-series':   { icon: '🎨' },
-  'multi-question':    { icon: '📋' },
-  'pyl-reveal':        { icon: '🎰' },
-  'winner-reveal':     { icon: '🥇' },
-}
 
-function getNavLabel(slide) {
-  const { data, type } = slide
-  if (type === 'question' || type === 'pixelate-series') {
-    if (data.isShiny) return data.shinyFormatName || '✨ Shiny'
-    return data.questionLabel || `Q${data.questionNumber || '?'}`
-  }
-  if (type === 'round-intro' || type === 'swing-round-intro') return data.roundTitle || 'Round Intro'
-  if (type === 'grading-break') return 'Grading Break'
-  if (type === 'scoreboard-reveal') return data.title || 'Scoreboard'
-  if (type === 'title') return data.title || 'Title'
-  if (type === 'multi-question') return data.seriesTitle || 'Multi-Q'
-  if (type === 'pyl-reveal') return 'PYL Reveal'
-  if (type === 'winner-reveal') return 'Winner Reveal'
-  return type
-}
-
-export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide, onClose, uploadMedia, getHostPhotos, addSiblingSlides }) {
+export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos, addSiblingSlides }) {
   const { theme } = useTheme()
   const [data, setData] = useState(slide.data)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  const [viewMode, setViewMode] = useState('preview') // 'edit' | 'preview'
   const [jukeboxLibs, setJukeboxLibs] = useState(JUKEBOX_LIBRARIES)
   const [selectedElId, setSelectedElId] = useState(null)
   const saveTimer = useRef(null)
@@ -92,7 +61,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
 
   // Sync local data when selected slide changes
   useEffect(() => {
-    setData(slide.data); setConfirmingDelete(false); setSelectedElId(null); setViewMode('preview')
+    setData(slide.data); setConfirmingDelete(false); setSelectedElId(null)
     // If a drag got interrupted (see startDrag's pointercancel comment) and
     // its listeners are still attached, this stops onMove from writing
     // element-position updates to the slide we just navigated away from.
@@ -227,83 +196,9 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   // Questions in same round (for grading-break back link)
   const roundSlides = show.slides.filter(s => s.roundId === slide.roundId && s.type === 'question')
 
-  const navMeta = SLIDE_NAV_META[slide.type] ?? { icon: '📄' }
-  const navLabel = getNavLabel(slide)
-
   return (
     <div className="flex flex-col h-full">
-      {/* Slim nav bar */}
-      <div className="flex items-center justify-between h-11 px-4 border-b border-gray-100 shrink-0">
-        <button
-          onClick={onClose}
-          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 transition-colors"
-        >
-          ← Dashboard
-        </button>
-        <div className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
-          <span className="leading-none">{navMeta.icon}</span>
-          <span>{navLabel}</span>
-        </div>
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-          <button
-            onClick={() => setViewMode('edit')}
-            className={`text-xs font-medium px-2.5 py-1 rounded-md transition-colors ${viewMode === 'edit' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
-          >
-            Edit
-          </button>
-          <button
-            onClick={() => setViewMode('preview')}
-            className={`text-xs font-medium px-2.5 py-1 rounded-md transition-colors ${viewMode === 'preview' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
-          >
-            Preview
-          </button>
-        </div>
-      </div>
-
-      {/* Type-specific editor */}
-      {viewMode === 'edit' && (
-        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
-          {slide.type === 'title' && (
-            <TitleEditor data={data} onChange={change} />
-          )}
-          {(slide.type === 'round-intro' || slide.type === 'swing-round-intro') && (
-            <RoundIntroEditor data={data} onChange={change} isSwing={slide.type === 'swing-round-intro'}
-              uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
-          )}
-          {slide.type === 'question' && (
-            <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia}
-              slideId={slide.id} slideRoundId={slide.roundId} addSiblingSlides={addSiblingSlides} />
-          )}
-          {slide.type === 'grading-break' && (
-            <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
-              uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} />
-          )}
-          {slide.type === 'scoreboard-reveal' && (
-            <ScoreboardRevealEditor data={data} onChange={change} show={show} />
-          )}
-          {slide.type === 'custom' && (
-            <CustomEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
-          )}
-          {slide.type === 'pixelate-series' && (
-            <PixelateSeriesEditor data={data} onChange={change}
-              onStageUpload={handleStageUpload} />
-          )}
-          {slide.type === 'multi-question' && (
-            <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
-          )}
-          {slide.type === 'pyl-reveal' && (
-            <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
-          )}
-          {slide.type === 'winner-reveal' && (
-            <WinnerRevealEditor data={data} onChange={change} />
-          )}
-          {slide.type === 'state-of-union' && (
-            <StateOfUnionEditor data={data} onChange={change} />
-          )}
-        </div>
-      )}
-
-      {viewMode === 'preview' && (() => {
+      {(() => {
         const elements = data.elements ?? []
         const selectedEl = elements.find(el => el.id === selectedElId) ?? null
         const dynScale = panelW / INNER_W
@@ -965,52 +860,6 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
         )
       })()}
 
-      {/* Footer — only in edit mode */}
-      {viewMode === 'edit' && (
-        <div className="shrink-0 px-5 py-3 border-t border-gray-100 flex items-center justify-between">
-          {!data.isShiny ? (
-            <select
-              value={data.transition ?? ''}
-              onChange={e => change('transition', e.target.value === '' ? null : e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-baynes-forest"
-            >
-              <option value="">Default transition</option>
-              <option value="random">✦ Random</option>
-              <optgroup label="Fade from back">
-                <option value="dissolve">Dissolve</option>
-                <option value="emerge">Emerge</option>
-                <option value="zoom">Zoom</option>
-                <option value="punch">Punch</option>
-              </optgroup>
-              <optgroup label="Down from top">
-                <option value="drop">Drop</option>
-                <option value="descend">Descend</option>
-              </optgroup>
-              <optgroup label="Compound">
-                <option value="sink">Sink</option>
-              </optgroup>
-              <optgroup label="Push from front">
-                <option value="settle">Settle</option>
-                <option value="loom">Loom</option>
-              </optgroup>
-              <optgroup label="Construct">
-                <option value="assemble">Assemble</option>
-              </optgroup>
-            </select>
-          ) : (
-            <div />
-          )}
-          {confirmingDelete ? (
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-red-600">Delete slide?</span>
-              <button onClick={() => onDeleteSlide(slide.id)} className="text-xs font-semibold text-red-600 hover:text-red-700 transition-colors">Yes</button>
-              <button onClick={() => setConfirmingDelete(false)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">No</button>
-            </div>
-          ) : (
-            <button onClick={() => setConfirmingDelete(true)} className="text-sm font-medium text-red-500 hover:text-red-700 transition-colors">Delete</button>
-          )}
-        </div>
-      )}
     </div>
   )
 }

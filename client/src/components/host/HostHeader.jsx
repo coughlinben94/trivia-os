@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onOpenLibrary, onOpenScoreboard }) {
+export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onOpenLibrary, onOpenScoreboard, onDashboard }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [copied, setCopied] = useState(false)
@@ -47,6 +47,14 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
           >
             My Shows
           </a>
+          {onDashboard && (
+            <button
+              onClick={onDashboard}
+              className="text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
+            >
+              ← Dashboard
+            </button>
+          )}
         </div>
 
         {/* Divider */}
