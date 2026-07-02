@@ -256,5 +256,7 @@ export const THEMES = [
 export const DEFAULT_THEME_ID = 'pure-michigan'
 
 export function getTheme(id) {
-  return THEMES.find(t => t.id === id) ?? THEMES[0]
+  return THEMES.find(t => t.id === id)
+    ?? THEMES.find(t => t.id === DEFAULT_THEME_ID)
+    ?? THEMES[0]
 }

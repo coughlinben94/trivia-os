@@ -14,7 +14,7 @@ function normalizeShow(row) {
     id: row.id,
     title: row.title,
     date: row.date,
-    theme: row.theme_id ?? 'midnight-galaxy',
+    theme: row.theme_id ?? DEFAULT_THEME_ID,
     themeOverrides: row.theme_overrides ?? {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
