@@ -150,6 +150,15 @@ const KEYFRAMES = `
     40%  { opacity: var(--gop, 0.75); }
     100% { opacity: 0; }
   }
+  @keyframes ambientFloatY {
+    0%,100% { transform: translateY(0); }
+    25%     { transform: translateY(var(--fy1,-5vh)); }
+    75%     { transform: translateY(var(--fy2,5vh)); }
+  }
+  @keyframes ambientFloatX {
+    0%,100% { transform: translateX(0); }
+    50%     { transform: translateX(var(--fx,10vw)); }
+  }
   @media (prefers-reduced-motion: reduce) {
     @keyframes ambientFallSlow    { 0%, 100% { opacity: 0; } 8%, 92%  { opacity: var(--hi, 0.8); } }
     @keyframes ambientLeafFall    { 0%, 100% { opacity: 0; } 10%, 90% { opacity: var(--hi, 0.8); } }
@@ -171,6 +180,8 @@ const KEYFRAMES = `
     @keyframes ambientSpin { from,to { transform: rotate(0deg); } }
     @keyframes orbit { 0%,100% { transform: none; } }
     @keyframes streakOnce { 0%,100% { opacity: 0; } }
+    @keyframes ambientFloatY { 0%,100% { transform: none; } }
+    @keyframes ambientFloatX { 0%,100% { transform: none; } }
     .jc-anim { animation: none !important; }
   }
 `
@@ -2077,15 +2088,18 @@ function BigDipper({ tint }) {
 }
 
 function rollMeteorShower() {
-  const theta = 135 + (Math.random() * 10 - 5)
+  // Constrained to read as one shower radiating from the upper-left anchor:
+  // shallow down-right angle, origin clustered near the radiant, vw-based
+  // travel so the streak angle stays true regardless of aspect ratio.
+  const theta = 29 + (Math.random() * 10 - 5)
   const rad = theta * Math.PI / 180
-  const dist = 30 + Math.random() * 34
-  const sx = 20 + Math.random() * 88
-  const sy = -10 + Math.random() * 52
+  const dist = 42 + Math.random() * 16
+  const sx = 8 + Math.random() * 22
+  const sy = 6 + Math.random() * 22
   return {
     sx: `${sx.toFixed(1)}%`, sy: `${sy.toFixed(1)}%`, ang: `${theta.toFixed(1)}deg`,
-    dx: `${(dist * Math.cos(rad)).toFixed(1)}%`, dy: `${(dist * Math.sin(rad)).toFixed(1)}%`,
-    speed: (0.4 + Math.random() * 0.7).toFixed(2),
+    dx: `${(dist * Math.cos(rad)).toFixed(1)}vw`, dy: `${(dist * Math.sin(rad)).toFixed(1)}vw`,
+    speed: (8 + Math.random() * 10).toFixed(2),
   }
 }
 
@@ -2110,7 +2124,7 @@ function MeteorShowerStreak({ tint }) {
       animation: `streakOnce ${shot.speed}s linear forwards`,
     }}>
       <div style={{
-        position: 'absolute', left: shot.sx, top: shot.sy, width: '13%', height: '3px',
+        position: 'absolute', left: shot.sx, top: shot.sy, width: '15%', height: '3px',
         transform: `rotate(${shot.ang})`, transformOrigin: 'left center',
       }}>
         <div style={{
@@ -2154,6 +2168,28 @@ function MeteorShowerAmbient({ tint }) {
     <GlowLayer lo={0.10} hi={0.26} duration="40s" delay="12s" style={{
       inset: 0, background: `radial-gradient(ellipse 62% 24% at 48% 46%, ${tint('rgba(70,80,170,0.24)')}, transparent)`,
     }}/>
+    {/* Living milky-way band — three independent, never-synced clocks (X drift,
+        Y float, breathe) stacked so the whole band drifts, floats, and pulses
+        without ever repeating the same combined position. Rendered behind the
+        star field and streaks. */}
+    <div aria-hidden style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none',
+      animation: 'ambientFloatX 44s ease-in-out infinite',
+    }}>
+      <div style={{
+        position: 'absolute', inset: 0,
+        animation: 'ambientFloatY 27s -7s ease-in-out infinite',
+      }}>
+        <div style={{
+          position: 'absolute', left: '-10%', top: '20%', width: '120%', height: '34%',
+          transform: 'rotate(-14deg)', willChange: 'opacity',
+          background: `linear-gradient(to bottom, transparent, ${tint('rgba(140,160,220,0.30)')} 25%, transparent)`,
+          filter: 'blur(10px)',
+          '--lo': 0.5, '--hi': 0.9,
+          animation: 'ambientBreathe 18s -4s ease-in-out infinite',
+        }}/>
+      </div>
+    </div>
     {/* True-random twinkle field — pure achromatic white (0 saturation), sanctioned
         near-white exception, same as Midnight Galaxy's star field */}
     {stars.map((s, i) => (
@@ -2167,6 +2203,31 @@ function MeteorShowerAmbient({ tint }) {
     ))}
     {/* Big Dipper anchor */}
     <BigDipper tint={tint}/>
+    {/* Radiant — bright anchor point in the upper-left the meteors read as
+        falling away from (rollMeteorShower's origin box sits just inside it) */}
+    <div aria-hidden style={{
+      position: 'absolute', left: '6vw', top: '5vh', width: '12vw', height: '12vw',
+      transform: 'translate(-50%,-50%)', pointerEvents: 'none', willChange: 'opacity',
+      '--lo': 0.75, '--hi': 1,
+      animation: 'ambientBreathe 12s ease-in-out infinite',
+    }}>
+      <div style={{
+        position: 'absolute', inset: 0, borderRadius: '50%',
+        // near-white hot core (sanctioned exception), in-family blue-white falloff
+        background: `radial-gradient(circle, rgba(255,255,255,0.95) 0%, ${tint('rgba(210,230,255,0.55)')} 35%, ${tint('rgba(180,210,255,0.15)')} 65%, transparent 78%)`,
+      }}/>
+      {/* Static cross-glints — no animation of their own, ride the parent's breathe */}
+      <div style={{
+        position: 'absolute', top: '50%', left: 0, right: 0, height: '1px', transform: 'translateY(-50%)',
+        background: `linear-gradient(to right, transparent, ${tint('rgba(220,240,255,0.8)')}, transparent)`,
+        filter: 'blur(1px)',
+      }}/>
+      <div style={{
+        position: 'absolute', left: '50%', top: 0, bottom: 0, width: '1px', transform: 'translateX(-50%)',
+        background: `linear-gradient(to bottom, transparent, ${tint('rgba(220,240,255,0.8)')}, transparent)`,
+        filter: 'blur(1px)',
+      }}/>
+    </div>
     {/* Parallel meteors */}
     <MeteorShowerStreak tint={tint}/><MeteorShowerStreak tint={tint}/><MeteorShowerStreak tint={tint}/><MeteorShowerStreak tint={tint}/>
   </>
