@@ -1,5 +1,18 @@
 import React, { useRef, useState, useEffect } from "react";
 
+/**
+ * Trivia OS — "BOXING RING" selection animation
+ * Contract: { candidates, winnerId, theme, onDone }
+ * Stage 1344x756 (70% of 1080p), theme-aware. Winner predetermined upstream.
+ *
+ * ≤8 teams: one brawl → final two DANCE → FINISH.
+ * >8 teams: two SEMIFINAL brawls back-to-back (each to one survivor, with the
+ *   sword spectacle) → weapon-free 1v1 FINAL (dance → finish). Only one match on
+ *   screen at a time. The predetermined winner wins its semi, then the final.
+ * Combat: boxing exchanges (punch or two → knock back → re-engage). Deaths are
+ *   scripted; chip damage never kills.
+ */
+
 const CREAM = "#f5f0e8", APPLE = "#e02020";
 const AREA_W = 1344, AREA_H = 756, CX = AREA_W / 2, CY = AREA_H / 2;
 const RING_HX = 527, RING_HY = 275;
@@ -94,7 +107,7 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
       const swIdx = (m.sword && dying.length >= 2) ? 1 : (m.sword && dying.length === 1 ? 0 : -1);
       const beats = []; let t = FIRST_KO_DOOM;
       for (let k = 0; k < dying.length; k++) { const isS = k === swIdx; beats.push({ t, sword: isS }); t += isS ? SWORD_MS + 700 : KO_SPACING; }
-      marks.current.beats = beats; marks.current.beatIdx = 0; marks.current.dying = new Set(dying); marks.current.meleeStart = performance.now();
+      marks.current.beats = beats; marks.current.beatIdx = 0; marks.current.dying = new Set(dying); marks.current.meleeStart = performance.now(); marks.current.swordPending = swIdx >= 0;
     };
 
     const startSword = (victimId) => {
@@ -114,7 +127,8 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
     const runBeat = (isSword) => {
       const cm = cmRef.current, m = matches[cm];
       const living = F.current.filter((f) => f.alive && f.match === cm);
-      const pend = living.filter((f) => marks.current.dying.has(f.id) && !(isSword && f.id === m.bearerId));
+      const pend = living.filter((f) => marks.current.dying.has(f.id) && !((isSword || marks.current.swordPending) && f.id === m.bearerId));
+      if (isSword) marks.current.swordPending = false;
       if (!pend.length) return;
       const victim = isSword
         ? pend.reduce((a, c) => nnDist(c, living) > nnDist(a, living) ? c : a)
@@ -212,7 +226,7 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
           fx.current.push({ id: Math.random(), x: v.x, y: v.y, born: now, slash: true, color: C.highlight });
           fx.current.push({ id: Math.random(), x: v.x, y: v.y, born: now, shock: true, color: C.highlight });
           fx.current.push({ id: Math.random(), x: v.x, y: v.y, born: now, flash: true, color: C.highlight });
-          fx.current.push({ id: Math.random(), x: v.x, y: v.y - 78, born: now, txt: "\u2694 SLICED!", big: true, color: C.highlight });
+          fx.current.push({ id: Math.random(), x: v.x, y: v.y - 78, born: now, txt: "⚔ SLICED!", big: true, color: C.highlight });
           for (let q = 0; q < 16; q++) fx.current.push({ id: Math.random(), x: v.x, y: v.y, born: now, shard: true, vx: rand(-14, 14), vy: rand(-16, 4), color: q % 2 ? v.color : C.highlight });
           setTimeout(() => { if (b) { b.hasSword = false; b.state = "brawl"; } sword.current.active = false; }, 450);
         }
