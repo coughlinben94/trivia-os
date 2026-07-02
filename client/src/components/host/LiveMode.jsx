@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useState } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
+import { resolveShinyPart } from '../../lib/shinySeries.js'
 import ScorePanel from './ScorePanel.jsx'
 
 const SLIDE_META = {
@@ -63,21 +64,33 @@ function CurrentSlideCard({ slide, show }) {
       </div>
 
       {/* Main content by type */}
-      {type === 'question' && (
-        <div className="flex flex-col gap-3">
-          {data.questionNumber != null && (
-            <p className="text-lg font-semibold text-gray-400">
-              {data.questionLabel || `Q${data.questionNumber}`}
+      {type === 'question' && (() => {
+        const part = resolveShinyPart(data)
+        const parts = data.parts
+        const partIdx = Array.isArray(parts) && parts.length > 1 ? (data.currentPart ?? 0) : null
+        return (
+          <div className="flex flex-col gap-3">
+            {data.questionNumber != null && (
+              <p className="text-lg font-semibold text-gray-400">
+                {data.questionLabel || `Q${data.questionNumber}`}
+                {partIdx !== null && String.fromCharCode(97 + partIdx)}
+                {partIdx !== null && ` — part ${partIdx + 1} of ${parts.length}`}
+              </p>
+            )}
+            <p className="text-2xl font-semibold text-gray-900 leading-snug">
+              {part.text || <span className="text-gray-300">No question text</span>}
             </p>
-          )}
-          <p className="text-2xl font-semibold text-gray-900 leading-snug">
-            {data.text || <span className="text-gray-300">No question text</span>}
-          </p>
-          {data.isSeries && data.seriesTheme && (
-            <p className="text-sm text-gray-400">Series: {data.seriesTheme}</p>
-          )}
-        </div>
-      )}
+            {part.answer && (
+              <p className="text-sm text-gray-500">Answer: {part.answer}</p>
+            )}
+            {data.isSeries && data.seriesTheme && (
+              <p className="text-sm text-gray-400">
+                Series: {data.seriesTheme}{part.subtitle && ` — ${part.subtitle}`}
+              </p>
+            )}
+          </div>
+        )
+      })()}
 
       {type === 'multi-question' && (
         <div className="flex flex-col gap-3">

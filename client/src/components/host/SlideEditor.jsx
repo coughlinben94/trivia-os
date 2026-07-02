@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { nanoid } from 'nanoid'
 import { analyzeAudioGain } from '../../lib/audioNormalize.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
@@ -34,7 +33,7 @@ const SLIDE_TYPES = [
 ]
 
 
-export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos, addSiblingSlides }) {
+export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos }) {
   const { theme } = useTheme()
   const [data, setData] = useState(slide.data)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -292,8 +291,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                         uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
                     )}
                     {slide.type === 'question' && (
-                      <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia}
-                        slideId={slide.id} slideRoundId={slide.roundId} addSiblingSlides={addSiblingSlides} />
+                      <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} />
                     )}
                     {slide.type === 'grading-break' && (
                       <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
@@ -987,7 +985,7 @@ function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos 
   )
 }
 
-function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, slideRoundId, addSiblingSlides }) {
+function QuestionEditor({ data, onChange, onBatchChange, uploadMedia }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
   const { formats: shinyFormats, loading: shinyFormatsLoading } = useShinyFormats()
 
@@ -995,6 +993,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
   const schema = data.shinyInputSchema ?? {}
   const slots = typeof schema.slots === 'number' ? schema.slots : 0
   const mediaSlots = data.mediaSlots ?? []
+  const isSeriesMode = !!data.isSeries && Array.isArray(data.parts)
 
   async function uploadSlot(i, file) {
     const result = await uploadMedia(file)
@@ -1010,6 +1009,66 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
     const next = [...mediaSlots]
     if (next[i]) next[i] = { url: null, type: null }
     onChange('mediaSlots', next)
+  }
+
+  // Toggling series mode migrates content between the top-level fields
+  // (single-part shape) and data.parts (multi-part shape) so nothing typed
+  // in gets lost when the host flips it.
+  function toggleSeries(on) {
+    if (on) {
+      if (Array.isArray(data.parts) && data.parts.length > 0) {
+        onChange('isSeries', true)
+        return
+      }
+      onBatchChange({
+        isSeries: true,
+        seriesTheme: data.seriesTheme || data.shinyFormatName || '',
+        parts: [{ label: '', text: data.text ?? '', answer: data.answer ?? '', mediaSlots: data.mediaSlots ?? [] }],
+        currentPart: 0,
+        // Clear the flat fields now that they live on the part, so the
+        // "Shared Answer" field doesn't show a stale leftover value.
+        text: undefined,
+        answer: undefined,
+        mediaSlots: undefined,
+      })
+    } else {
+      const idx = data.currentPart ?? 0
+      const p = data.parts?.[idx] ?? {}
+      onBatchChange({
+        isSeries: false,
+        text: p.text ?? data.text ?? '',
+        answer: p.answer ?? data.answer ?? '',
+        mediaSlots: p.mediaSlots ?? data.mediaSlots ?? [],
+        parts: undefined,
+        currentPart: undefined,
+      })
+    }
+  }
+
+  function updatePart(i, nextPart) {
+    const parts = [...(data.parts ?? [])]
+    parts[i] = nextPart
+    onChange('parts', parts)
+  }
+
+  function addPart() {
+    const parts = [...(data.parts ?? []), { label: '', text: '', answer: '', mediaSlots: [] }]
+    onBatchChange({ parts, currentPart: parts.length - 1 })
+  }
+
+  function removePart(i) {
+    const parts = (data.parts ?? []).filter((_, idx) => idx !== i)
+    const currentPart = Math.min(data.currentPart ?? 0, Math.max(parts.length - 1, 0))
+    onBatchChange({ parts, currentPart })
+  }
+
+  async function uploadPartMedia(i, file) {
+    const result = await uploadMedia(file)
+    if (result?.url) {
+      const part = data.parts[i]
+      updatePart(i, { ...part, mediaSlots: [{ url: result.url, type: result.type }] })
+    }
+    return result
   }
 
   // ── Mode selector ──────────────────────────────────────────────────────
@@ -1067,7 +1126,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
         </button>
       )}
 
-      {data.shinyFormatId && (
+      {data.shinyFormatId && !isSeriesMode && (
         <>
           {/* Image slots — side by side */}
           {schema.type === 'image' && slots > 0 && (
@@ -1158,35 +1217,70 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
           <Field label="Answer">
             <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="The answer…" />
           </Field>
+        </>
+      )}
 
-          {/* Series settings — only if schema.seriesEnabled */}
-          {schema.seriesEnabled && (
-            <>
-              <Divider label="Series" />
-              <Toggle
-                label="Part of a Series"
-                checked={!!data.isSeries}
-                onChange={v => onChange('isSeries', v)}
-                description="Groups questions (6a, 6b, 6c) under a shared theme banner"
+      {/* Series settings — only if schema.seriesEnabled (multi-slot formats
+          auto-enter series mode from selection and don't offer a toggle) */}
+      {data.shinyFormatId && schema.seriesEnabled && (
+        <>
+          <Divider label="Series" />
+          <Toggle
+            label="Part of a Series"
+            checked={!!data.isSeries}
+            onChange={toggleSeries}
+            description="Groups variations (Villain Laughs, Monster Roars…) under one shared question"
+          />
+        </>
+      )}
+
+      {/* Parts editor — the merged series content: one question, N variations */}
+      {isSeriesMode && (
+        <>
+          <Field label="Series Theme" hint='Shared across every part, e.g. "Hear Me Roar"'>
+            <TextInput value={data.seriesTheme} onChange={v => onChange('seriesTheme', v)} placeholder="Hear Me Roar" />
+          </Field>
+          <Field label="Shared Answer" hint="Only needed if every part has the SAME answer — leave blank if each part below has its own">
+            <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="Optional — used when a part has no answer of its own" />
+          </Field>
+
+          <Divider label="Previewing part" />
+          <div className="flex flex-wrap gap-1.5">
+            {data.parts.map((p, i) => (
+              <button
+                key={i}
+                onClick={() => onChange('currentPart', i)}
+                className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                  (data.currentPart ?? 0) === i
+                    ? 'bg-blue-500 border-blue-500 text-white'
+                    : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                {i + 1}{p.label ? ` · ${p.label}` : ''}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-3">
+            {data.parts.map((part, i) => (
+              <ShinyPartEditor
+                key={i}
+                part={part}
+                index={i}
+                schemaType={schema.type}
+                onChange={next => updatePart(i, next)}
+                onRemove={() => removePart(i)}
+                onUploadMedia={file => uploadPartMedia(i, file)}
+                canRemove={data.parts.length > 1}
               />
-              {data.isSeries && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label="Series Label" hint='e.g. "6a"'>
-                      <TextInput value={data.seriesLabel} onChange={v => onChange('seriesLabel', v)} placeholder="6a" />
-                    </Field>
-                    <Field label="Series Theme" hint='e.g. "Name That Tune"'>
-                      <TextInput value={data.seriesTheme} onChange={v => onChange('seriesTheme', v)} placeholder="Name That Tune" />
-                    </Field>
-                  </div>
-                  <Field label="Subtitle" hint='This part only, e.g. "Villain Laughs" — shown in the sidebar and on screen'>
-                    <TextInput value={data.subtitle} onChange={v => onChange('subtitle', v)} placeholder="Optional subtitle for this part" />
-                  </Field>
-                </>
-              )}
-            </>
-          )}
-
+            ))}
+          </div>
+          <button
+            onClick={addPart}
+            className="text-xs text-baynes-forest hover:text-green-800 font-medium transition-colors"
+          >
+            + Add part
+          </button>
         </>
       )}
 
@@ -1197,9 +1291,10 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
           onClose={() => setShowFormatLibrary(false)}
           onSelectFormat={fmt => {
             const totalSlots = fmt.input_schema?.slots ?? 1
-            if (totalSlots > 1 && addSiblingSlides) {
+            if (totalSlots > 1) {
+              // Multi-slot format (e.g. 4 images that are secretly the same
+              // answer) — one slide, N parts, host fills each in below.
               const singleSchema = { ...fmt.input_schema, slots: 1 }
-              const seriesId = `series_${nanoid(8)}`
               onBatchChange({
                 shinyFormatId: fmt.id,
                 shinyFormatName: fmt.name,
@@ -1207,36 +1302,10 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
                 shinyInputSchema: singleSchema,
                 shinyType: fmt.input_schema.type,
                 isSeries: true,
-                seriesId,
-                seriesLabel: `1 of ${totalSlots}`,
                 seriesTheme: fmt.name,
-                slotIndex: 1,
-                slotTotal: totalSlots,
-                mediaSlots: [],
+                currentPart: 0,
+                parts: Array.from({ length: totalSlots }, () => ({ label: '', text: '', answer: '', mediaSlots: [] })),
               })
-              addSiblingSlides(slideId, Array.from({ length: totalSlots - 1 }, (_, i) => ({
-                type: 'question',
-                roundId: slideRoundId,
-                data: {
-                  questionNumber: data.questionNumber,
-                  questionLabel: data.questionLabel,
-                  questionMode: 'shiny',
-                  isShiny: true,
-                  shinyType: fmt.input_schema.type,
-                  shinyFormatId: fmt.id,
-                  shinyFormatName: fmt.name,
-                  shinyFormatIcon: fmt.icon,
-                  shinyInputSchema: singleSchema,
-                  isSeries: true,
-                  seriesId,
-                  seriesLabel: `${i + 2} of ${totalSlots}`,
-                  seriesTheme: fmt.name,
-                  slotIndex: i + 2,
-                  slotTotal: totalSlots,
-                  text: '',
-                  mediaSlots: [],
-                },
-              })))
             } else {
               onBatchChange({
                 shinyFormatId: fmt.id,
@@ -1251,6 +1320,42 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
         />
       )}
     </>
+  )
+}
+
+function ShinyPartEditor({ part, index, schemaType, onChange, onRemove, onUploadMedia, canRemove }) {
+  const media = part.mediaSlots?.[0]
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-3 space-y-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Part {index + 1}</span>
+        {canRemove && (
+          <button onClick={onRemove} className="text-xs text-gray-300 hover:text-red-500 transition-colors">✕</button>
+        )}
+      </div>
+      <Field label="Subtitle" hint='e.g. "Villain Laughs"'>
+        <TextInput value={part.label} onChange={v => onChange({ ...part, label: v })} placeholder="Optional label for this part" />
+      </Field>
+      {(schemaType === 'image' || schemaType === 'audio' || schemaType === 'video') && (
+        <MediaUpload
+          accept={schemaType}
+          label={schemaType === 'image' ? 'Image' : schemaType === 'audio' ? 'Audio File' : 'Video File'}
+          currentUrl={media?.url}
+          currentType={media?.type}
+          onUpload={onUploadMedia}
+          onRemove={() => onChange({ ...part, mediaSlots: [] })}
+        />
+      )}
+      {schemaType !== 'list' && (
+        <Field label="Question Text">
+          <TextArea value={part.text} onChange={v => onChange({ ...part, text: v })} placeholder="Write the question here…" rows={2} />
+        </Field>
+      )}
+      <Field label="Answer">
+        <TextInput value={part.answer ?? ''} onChange={v => onChange({ ...part, answer: v })} placeholder="The answer…" />
+      </Field>
+    </div>
   )
 }
 

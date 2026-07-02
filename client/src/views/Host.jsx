@@ -181,7 +181,7 @@ const SLIDE_ICON = {
 function slidePickerLabel(slide) {
   const { data, type } = slide
   if (type === 'question' || type === 'pixelate-series') {
-    if (data.isShiny) return data.shinyFormatName || '✨ Shiny'
+    if (data.isShiny) return data.seriesTheme || data.shinyFormatName || '✨ Shiny'
     return data.questionLabel || `Q${data.questionNumber || '?'}`
   }
   if (type === 'round-intro' || type === 'swing-round-intro') return data.roundTitle || 'Round Intro'

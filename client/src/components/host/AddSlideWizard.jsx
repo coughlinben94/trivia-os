@@ -98,6 +98,8 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
     } else if (type === 'question') {
       const num = isBonus ? bNum : qNum
       if (selectedShinyFmt && shinyStep === 'details') {
+        const totalSlots = selectedShinyFmt.input_schema?.slots ?? 1
+        const isMultiSlot = totalSlots > 1
         data = {
           questionNumber:   qNum,
           questionLabel:    `Q${qNum}`,
@@ -106,11 +108,21 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           shinyFormatId:    selectedShinyFmt.id,
           shinyFormatName:  selectedShinyFmt.name,
           shinyFormatIcon:  selectedShinyFmt.icon,
-          shinyInputSchema: selectedShinyFmt.input_schema ?? null,
+          // Multi-slot formats (e.g. 4 images, same secret answer) collapse to
+          // a single slide with N parts — one part pre-filled here, the host
+          // adds the rest in the editor. Single-slot formats keep the flat shape.
+          shinyInputSchema: isMultiSlot ? { ...selectedShinyFmt.input_schema, slots: 1 } : (selectedShinyFmt.input_schema ?? null),
           shinyType:        selectedShinyFmt.input_schema?.type ?? null,
-          text:             shinyQuestion.trim(),
-          answer:           shinyAnswer.trim(),
-          mediaSlots:       [],
+          ...(isMultiSlot ? {
+            isSeries:    true,
+            seriesTheme: selectedShinyFmt.name,
+            currentPart: 0,
+            parts:       [{ label: '', text: shinyQuestion.trim(), answer: shinyAnswer.trim(), mediaSlots: [] }],
+          } : {
+            text:       shinyQuestion.trim(),
+            answer:     shinyAnswer.trim(),
+            mediaSlots: [],
+          }),
         }
       } else {
         data = {
@@ -146,10 +158,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
 
     if (type === 'question') {
       const isShiny = !!data.isShiny
+      const shinyText = data.parts?.[0]?.text ?? data.text
+      const shinyAnswerVal = data.parts?.[0]?.answer ?? data.answer
       archiveQuestion({
         type:       isShiny ? 'shiny' : (isBonus ? 'regular' : 'regular'),
-        text:       isShiny ? data.text : questionText.trim(),
-        answer:     isShiny ? data.answer : questionAnswer.trim(),
+        text:       isShiny ? shinyText : questionText.trim(),
+        answer:     isShiny ? shinyAnswerVal : questionAnswer.trim(),
         is_bonus:   isBonus,
         is_shiny:   isShiny,
         shiny_type: isShiny ? (selectedShinyFmt?.media_type ?? null) : null,

@@ -422,7 +422,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
               }}
               uploadMedia={actions.uploadMedia}
               getHostPhotos={actions.getHostPhotos}
-              addSiblingSlides={actions.addSiblingSlides}
             />
           ) : mode === 'round' && viewingRoundId ? (
             (() => {

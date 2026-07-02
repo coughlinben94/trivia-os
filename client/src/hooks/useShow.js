@@ -37,44 +37,6 @@ export function sortedSlides(show) {
   return [...show.slides].sort((a, b) => a.order - b.order)
 }
 
-// Shiny-series siblings are grouped either by a shared data.seriesId (slides
-// auto-created together from a multi-slot format) or, lacking that, by
-// matching data.seriesTheme within the same round (slides a host built one
-// at a time and linked by hand, e.g. via the "Part of a Series" toggle —
-// there's no shared id for that path today).
-function seriesGroupKey(slide) {
-  if (!slide?.data?.isSeries) return null
-  if (slide.data.seriesId) return `id:${slide.data.seriesId}`
-  if (slide.data.seriesTheme) return `theme:${slide.roundId ?? ''}:${slide.data.seriesTheme}`
-  return null
-}
-
-// Keeps shiny-series siblings contiguous and in slotIndex order after a
-// drag-reorder, so dragging any one part relocates the whole group instead
-// of silently splitting it apart.
-function normalizeSeriesGroups(orderedIds, slidesById) {
-  const seen = new Set()
-  const result = []
-  for (const id of orderedIds) {
-    if (seen.has(id)) continue
-    const key = seriesGroupKey(slidesById.get(id))
-    if (!key) {
-      result.push(id)
-      seen.add(id)
-      continue
-    }
-    const group = orderedIds
-      .map(gid => slidesById.get(gid))
-      .filter(s => seriesGroupKey(s) === key)
-      .sort((a, b) => (a.data.slotIndex ?? 0) - (b.data.slotIndex ?? 0))
-    for (const s of group) {
-      result.push(s.id)
-      seen.add(s.id)
-    }
-  }
-  return result
-}
-
 export function useShow() {
   const [show, setShow] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -348,11 +310,9 @@ export function useShow() {
 
   async function reorderSlides(orderedIds) {
     if (!show) return
-    const slidesById = new Map(show.slides.map(s => [s.id, s]))
-    const normalizedIds = normalizeSeriesGroups(orderedIds, slidesById)
-    const newSlides = normalizedIds
+    const newSlides = orderedIds
       .map((id, index) => {
-        const slide = slidesById.get(id)
+        const slide = show.slides.find(s => s.id === id)
         return slide ? { ...slide, order: index } : null
       })
       .filter(Boolean)
@@ -453,17 +413,29 @@ export function useShow() {
 
   // --- Live Mode navigation ---
 
+  // Multi-part shiny series (data.parts.length > 1) live in a single slide —
+  // entering one always resets to a specific part rather than resuming
+  // wherever a previous visit left off, so jumping to a slide is predictable.
+  function withPartReset(slides, slide, partIndex) {
+    if (!slide || (slide.data?.parts?.length ?? 0) <= 1) return slides
+    if ((slide.data.currentPart ?? 0) === partIndex) return slides
+    return slides.map(s => s.id === slide.id ? { ...s, data: { ...s.data, currentPart: partIndex } } : s)
+  }
+
   async function goLive() {
     if (!show) return
     const sorted = sortedSlides(show)
     const first = sorted[0] ?? null
     const now = new Date().toISOString()
+    const newSlides = withPartReset(show.slides, first, 0)
     setShow(s => ({
       ...s,
+      slides: newSlides,
       updatedAt: now,
       showState: { ...s.showState, isLive: true, currentSlideIndex: 0, currentSlideId: first?.id ?? null },
     }))
     await supabase.from('shows').update({
+      slides: newSlides,
       is_live: true,
       current_slide_index: 0,
       current_slide_id: first?.id ?? null,
@@ -477,12 +449,15 @@ export function useShow() {
     const target = Math.max(0, Math.min(index, sorted.length - 1))
     const slide = sorted[target] ?? null
     const now = new Date().toISOString()
+    const newSlides = withPartReset(show.slides, slide, 0)
     setShow(s => ({
       ...s,
+      slides: newSlides,
       updatedAt: now,
       showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: slide?.id ?? null },
     }))
     await supabase.from('shows').update({
+      slides: newSlides,
       is_live: true,
       current_slide_index: target,
       current_slide_id: slide?.id ?? null,
@@ -494,16 +469,33 @@ export function useShow() {
     if (!show) return
     const sorted = sortedSlides(show)
     const cur = show.showState.currentSlideIndex ?? 0
+    const curSlide = sorted[cur]
+    const parts = curSlide?.data?.parts
+    // Step through this slide's parts before moving to the next slide.
+    if (Array.isArray(parts) && parts.length > 1) {
+      const curPart = curSlide.data.currentPart ?? 0
+      if (curPart < parts.length - 1) {
+        const newSlides = show.slides.map(s =>
+          s.id === curSlide.id ? { ...s, data: { ...s.data, currentPart: curPart + 1 } } : s
+        )
+        setShow(s => ({ ...s, slides: newSlides, showState: { ...s.showState, answerReveal: false } }))
+        await supabase.from('shows').update({ slides: newSlides, answer_reveal: false }).eq('id', show.id)
+        return
+      }
+    }
     const target = Math.min(cur + 1, sorted.length - 1)
     if (target === cur) return
-    const slide = sorted[target]
+    const targetSlide = sorted[target]
+    const newSlides = withPartReset(show.slides, targetSlide, 0)
     setShow(s => ({
       ...s,
-      showState: { ...s.showState, currentSlideIndex: target, currentSlideId: slide?.id ?? null, answerReveal: false },
+      slides: newSlides,
+      showState: { ...s.showState, currentSlideIndex: target, currentSlideId: targetSlide?.id ?? null, answerReveal: false },
     }))
     await supabase.from('shows').update({
+      slides: newSlides,
       current_slide_index: target,
-      current_slide_id: slide?.id ?? null,
+      current_slide_id: targetSlide?.id ?? null,
       answer_reveal: false,
     }).eq('id', show.id)
   }
@@ -512,16 +504,35 @@ export function useShow() {
     if (!show) return
     const sorted = sortedSlides(show)
     const cur = show.showState.currentSlideIndex ?? 0
+    const curSlide = sorted[cur]
+    const parts = curSlide?.data?.parts
+    // Step back through this slide's parts before moving to the previous slide.
+    if (Array.isArray(parts) && parts.length > 1) {
+      const curPart = curSlide.data.currentPart ?? 0
+      if (curPart > 0) {
+        const newSlides = show.slides.map(s =>
+          s.id === curSlide.id ? { ...s, data: { ...s.data, currentPart: curPart - 1 } } : s
+        )
+        setShow(s => ({ ...s, slides: newSlides, showState: { ...s.showState, answerReveal: false } }))
+        await supabase.from('shows').update({ slides: newSlides, answer_reveal: false }).eq('id', show.id)
+        return
+      }
+    }
     const target = Math.max(cur - 1, 0)
     if (target === cur) return
-    const slide = sorted[target]
+    const targetSlide = sorted[target]
+    // Backing into a series lands on its last part — the natural "undo" of advancing forward.
+    const lastPartIdx = Math.max((targetSlide?.data?.parts?.length ?? 1) - 1, 0)
+    const newSlides = withPartReset(show.slides, targetSlide, lastPartIdx)
     setShow(s => ({
       ...s,
-      showState: { ...s.showState, currentSlideIndex: target, currentSlideId: slide?.id ?? null, answerReveal: false },
+      slides: newSlides,
+      showState: { ...s.showState, currentSlideIndex: target, currentSlideId: targetSlide?.id ?? null, answerReveal: false },
     }))
     await supabase.from('shows').update({
+      slides: newSlides,
       current_slide_index: target,
-      current_slide_id: slide?.id ?? null,
+      current_slide_id: targetSlide?.id ?? null,
       answer_reveal: false,
     }).eq('id', show.id)
   }

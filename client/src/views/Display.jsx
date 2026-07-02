@@ -10,6 +10,7 @@ import BaynesWatermark from '../components/display/BaynesWatermark.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
+import { resolveShinyPart } from '../lib/shinySeries.js'
 
 // ─── Pre-show waiting screen ───────────────────────────────────────────────
 
@@ -244,22 +245,9 @@ function AnswerRevealOverlay({ show, currentSlide }) {
   const reduce = useReducedMotion()
   const visible = show.answer_reveal ?? show.showState?.answerReveal ?? false
 
-  // Walk back to series lead to find the answer for shiny sub-slides
-  const answer = (() => {
-    if (!currentSlide) return null
-    const d = currentSlide.data
-    if (d?.answer) return d.answer
-    if (d?.isSeries && (d.slotIndex ?? 1) > 1) {
-      const lead = (show.slides ?? []).find(s =>
-        s.data?.isSeries &&
-        s.data?.slotIndex === 1 &&
-        s.data?.shinyFormatId === d.shinyFormatId &&
-        s.data?.questionLabel === d.questionLabel
-      )
-      return lead?.data?.answer ?? null
-    }
-    return null
-  })()
+  // Multi-part series slides fall back to the shared answer (if any) when
+  // this specific part doesn't have its own — see resolveShinyPart.
+  const answer = currentSlide ? resolveShinyPart(currentSlide.data).answer : null
 
   return (
     <AnimatePresence>

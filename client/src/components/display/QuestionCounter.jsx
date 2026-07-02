@@ -7,7 +7,12 @@ export default function QuestionCounter({ slide, show }) {
 
   const roundIdx = (show?.rounds ?? []).findIndex(r => r.id === slide.roundId)
   const roundNum = roundIdx >= 0 ? roundIdx + 1 : null
-  const label = slide.data?.questionLabel ?? `Q${slide.data?.questionNumber ?? ''}`
+  const baseLabel = slide.data?.questionLabel ?? `Q${slide.data?.questionNumber ?? ''}`
+  const parts = slide.data?.parts
+  // Multi-part series: Q6a/Q6b/Q6c instead of one static label for the whole slide.
+  const label = Array.isArray(parts) && parts.length > 1
+    ? `${baseLabel}${String.fromCharCode(97 + Math.min(Math.max(slide.data.currentPart ?? 0, 0), parts.length - 1))}`
+    : baseLabel
   const counter = roundNum ? `${label} · R${roundNum}` : label
 
   return (

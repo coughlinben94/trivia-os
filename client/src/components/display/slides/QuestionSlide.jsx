@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
 import SlideElements from '../SlideElements.jsx'
+import { resolveShinyPart, isVisualShiny, isAudioShiny } from '../../../lib/shinySeries.js'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 const EASE_ASSEMBLE = [0.22, 1, 0.36, 1]
@@ -11,6 +12,7 @@ const EASE_ASSEMBLE = [0.22, 1, 0.36, 1]
 
 function StandardQuestion({ slide, show, theme, transitionKey }) {
   const { data } = slide
+  const part = resolveShinyPart(data)
   const hasSeries = data.isSeries && data.seriesTheme
   const isAssemble = transitionKey === 'assemble'
 
@@ -56,7 +58,7 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
           >
             {data.seriesTheme}
           </span>
-          {data.subtitle && (
+          {part.subtitle && (
             <span
               style={{
                 display: 'block',
@@ -68,7 +70,7 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
                 marginTop: 2,
               }}
             >
-              {data.subtitle}
+              {part.subtitle}
             </span>
           )}
         </motion.div>
@@ -92,7 +94,7 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
             textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
           }}
         >
-          {data.text}
+          {part.text}
         </p>
       </motion.div>
 
@@ -123,14 +125,18 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
 
 function ShinyVisualQuestion({ slide, theme }) {
   const { data } = slide
+  const part = resolveShinyPart(data)
   const [aspect, setAspect] = useState(null) // 'landscape' | 'portrait' | 'square'
   const [flashVisible, setFlashVisible] = useState(true)
 
   useEffect(() => {
-    // Flash clears after the CSS animation completes — Section 20
+    // Flash clears after the CSS animation completes — Section 20.
+    // Re-fires on currentPart too: a multi-part series keeps the same
+    // slide.id across parts, only currentPart changes as the host advances.
+    setFlashVisible(true)
     const t = setTimeout(() => setFlashVisible(false), 250)
     return () => clearTimeout(t)
-  }, [slide.id])
+  }, [slide.id, data.currentPart])
 
   function handleImageLoad(e) {
     const { naturalWidth: w, naturalHeight: h } = e.target
@@ -176,7 +182,7 @@ function ShinyVisualQuestion({ slide, theme }) {
           >
             {data.seriesTheme}
           </p>
-          {data.subtitle && (
+          {part.subtitle && (
             <p
               style={{
                 color: '#f5f0e8',
@@ -186,7 +192,7 @@ function ShinyVisualQuestion({ slide, theme }) {
                 marginTop: 2,
               }}
             >
-              {data.subtitle}
+              {part.subtitle}
             </p>
           )}
         </motion.div>
@@ -202,7 +208,7 @@ function ShinyVisualQuestion({ slide, theme }) {
             transition={{ delay: 0.05, duration: 0.28, ease: EASE_SNAP }}
           >
             <img
-              src={data.mediaUrl}
+              src={part.mediaUrl}
               onLoad={handleImageLoad}
               alt=""
               className="w-full h-full object-cover"
@@ -223,7 +229,7 @@ function ShinyVisualQuestion({ slide, theme }) {
                 fontWeight: 500,
               }}
             >
-              {data.text}
+              {part.text}
             </p>
           </motion.div>
         </div>
@@ -231,7 +237,7 @@ function ShinyVisualQuestion({ slide, theme }) {
         /* Landscape / square: full bleed + gradient scrim — Section 14 */
         <>
           <motion.img
-            src={data.mediaUrl}
+            src={part.mediaUrl}
             onLoad={handleImageLoad}
             alt=""
             className="w-full h-full object-cover"
@@ -261,7 +267,7 @@ function ShinyVisualQuestion({ slide, theme }) {
                 fontWeight: 500,
               }}
             >
-              {data.text}
+              {part.text}
             </p>
           </motion.div>
         </>
@@ -286,6 +292,7 @@ function ShinyVisualQuestion({ slide, theme }) {
 
 function ShinyAudioQuestion({ slide, show, theme }) {
   const { data } = slide
+  const part = resolveShinyPart(data)
   const [playing, setPlaying] = useState(false)
   const audioRef = useRef(null)
   const audioCtxRef = useRef(null)
@@ -293,6 +300,13 @@ function ShinyAudioQuestion({ slide, show, theme }) {
   useEffect(() => {
     return () => { audioCtxRef.current?.close() }
   }, [])
+
+  // A multi-part series keeps the same slide.id across parts — reset
+  // playback state when the host advances to a different clip.
+  useEffect(() => {
+    setPlaying(false)
+    audioRef.current?.pause()
+  }, [slide.id, data.currentPart])
 
   function ensureAudioGraph() {
     if (!audioRef.current || audioCtxRef.current) return audioCtxRef.current
@@ -354,7 +368,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
           >
             {data.seriesTheme}
           </p>
-          {data.subtitle && (
+          {part.subtitle && (
             <p
               style={{
                 color: theme.colors.text,
@@ -364,13 +378,13 @@ function ShinyAudioQuestion({ slide, show, theme }) {
                 marginTop: 4,
               }}
             >
-              {data.subtitle}
+              {part.subtitle}
             </p>
           )}
         </motion.div>
       )}
 
-      {/* Track number / label */}
+      {/* Question number/label */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -386,11 +400,11 @@ function ShinyAudioQuestion({ slide, show, theme }) {
             lineHeight: 1,
           }}
         >
-          {data.seriesLabel ?? data.questionNumber}
+          {data.questionLabel ?? data.questionNumber}
         </p>
-        {data.text && (
+        {part.text && (
           <p className="mt-3" style={{ color: theme.colors.textMuted, fontSize: '1.5rem' }}>
-            {data.text}
+            {part.text}
           </p>
         )}
       </motion.div>
@@ -405,11 +419,11 @@ function ShinyAudioQuestion({ slide, show, theme }) {
       </motion.div>
 
       {/* Play button — shown but host controls audio via Live Mode */}
-      {data.mediaUrl && (
+      {part.mediaUrl && (
         <>
           <audio
             ref={audioRef}
-            src={data.mediaUrl}
+            src={part.mediaUrl}
             onEnded={() => setPlaying(false)}
             preload="auto"
           />
@@ -454,11 +468,12 @@ function ShinyAudioQuestion({ slide, show, theme }) {
 export default function QuestionSlide({ slide, show, transitionKey }) {
   const { theme } = useTheme()
   const { data } = slide
+  const part = resolveShinyPart(data)
 
-  if (data.isShiny && data.shinyType === 'visual' && data.mediaUrl) {
+  if (data.isShiny && isVisualShiny(data) && part.mediaUrl) {
     return <ShinyVisualQuestion slide={slide} theme={theme} show={show} />
   }
-  if (data.isShiny && data.shinyType === 'audio') {
+  if (data.isShiny && isAudioShiny(data)) {
     return <ShinyAudioQuestion slide={slide} theme={theme} show={show} />
   }
   return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} />
