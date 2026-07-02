@@ -832,6 +832,51 @@ function LandscapePrompt() {
   )
 }
 
+// ─── Grading popup ────────────────────────────────────────────────────────────
+// Shown instead of the scores drawer when a team tries to peek at the
+// scoreboard while the host is mid-grading-break — auto-dismisses, no button.
+function GradingPopup({ visible, onDismiss }) {
+  const pref = useReducedMotion()
+
+  useEffect(() => {
+    if (!visible) return
+    const t = setTimeout(onDismiss, 2600)
+    return () => clearTimeout(t)
+  }, [visible, onDismiss])
+
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          initial={pref ? { opacity: 0 } : { y: '100%', opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={pref ? { opacity: 0 } : { y: '100%', opacity: 0 }}
+          transition={pref ? { duration: 0.2 } : { ease: EASE_DRAWER, duration: 0.35 }}
+          style={{
+            position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 600,
+            background: 'rgba(5,5,5,0.96)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+            borderTop: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '20px 20px 0 0',
+            padding: 'clamp(1.25rem,4vw,1.75rem) 1.5rem',
+            paddingBottom: 'calc(clamp(1.25rem,4vw,1.75rem) + env(safe-area-inset-bottom, 0px))',
+            display: 'flex', alignItems: 'center', gap: '1.25rem',
+          }}
+        >
+          <span style={{ fontSize: '2.5rem', display: 'block', lineHeight: 1 }}>😤</span>
+          <div>
+            <p style={{ fontFamily: 'Boogaloo, sans-serif', fontSize: '1.2rem', color: '#fff', margin: 0, lineHeight: 1.2 }}>
+              Ben is grading right now — calm your pants
+            </p>
+            <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.82rem', margin: '0.25rem 0 0', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.4 }}>
+              Scores will be back up once grading wraps
+            </p>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 // ─── Reconnecting banner ──────────────────────────────────────────────────────
 function ReconnectingBanner({ visible }) {
   return (
@@ -1142,6 +1187,7 @@ export default function Join() {
   const [scoresDrawerOpen, setScoresDrawerOpen]   = useState(false)
   const [scoresDrawerTeams, setScoresDrawerTeams] = useState([])
   const [scoresDrawerLoading, setScoresDrawerLoading] = useState(false)
+  const [gradingPopup, setGradingPopup]           = useState(false)
 
   const theme = useMemo(() => show?.theme_id ? getTheme(show.theme_id) : null, [show?.theme_id])
 
@@ -1312,6 +1358,11 @@ export default function Join() {
 
   // ── Scores drawer ─────────────────────────────────────────────────────
   async function openScoresDrawer() {
+    const currentSlide = show?.slides?.find(s => s.id === show.current_slide_id)
+    if (currentSlide?.type === 'grading-break') {
+      setGradingPopup(true)
+      return
+    }
     setScoresDrawerOpen(true)
     setScoresDrawerLoading(true)
     try {
@@ -1353,6 +1404,7 @@ export default function Join() {
   return (
     <>
       <ReconnectingBanner visible={disconnected} />
+      <GradingPopup visible={gradingPopup} onDismiss={() => setGradingPopup(false)} />
       {phase === 'register' && <RegistrationScreen onRegister={handleRegister} show={show} theme={theme} />}
       {phase === 'waiting'  && (
         <>
