@@ -236,7 +236,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
     if (e.code === 'ArrowLeft')  { e.preventDefault(); actions.prevSlide() }
     if (e.code === 'KeyS')       actions.setScoreboardVisible(!show.showState.scoreboardVisible)
     if (e.code === 'KeyA')       actions.setAnswerReveal(!show.showState.answerReveal)
-  }, [scorePanelOpen, themePickerOpen, actions, show.showState.answerReveal])
+    if (e.code === 'KeyR')       actions.setScoresRevealed?.(!show.showState.scoresRevealed)
+  }, [scorePanelOpen, themePickerOpen, actions, show.showState.answerReveal, show.showState.scoresRevealed])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -278,6 +279,11 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
           {!show.showState.answerReveal && currentSlide?.type === 'grading-break' && (
             <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 animate-pulse">
               Jukebox Live
+            </span>
+          )}
+          {show.showState.scoresRevealed && (
+            <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 animate-pulse">
+              Scores Live
             </span>
           )}
         </div>
@@ -421,6 +427,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange }) {
                 ['← →', 'Navigate slides'],
                 ['A', 'Toggle answer'],
                 ['S', 'TV scoreboard'],
+                ['R', 'Scores live (Join)'],
               ].map(([key, label]) => (
                 <div key={key} className="flex items-center justify-between">
                   <code className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">{key}</code>

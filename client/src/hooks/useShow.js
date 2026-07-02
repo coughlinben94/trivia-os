@@ -640,6 +640,12 @@ export function useShow() {
     await supabase.from('shows').update({ answer_reveal: visible }).eq('id', show.id)
   }
 
+  async function setScoresRevealed(revealed) {
+    if (!show) return
+    setShow(s => ({ ...s, showState: { ...s.showState, scoresRevealed: revealed } }))
+    await supabase.from('shows').update({ scores_revealed: revealed }).eq('id', show.id)
+  }
+
   async function updateRoundScore(teamId, roundIndex, score) {
     if (!show) return
     const { data: existing } = await supabase
@@ -744,6 +750,7 @@ export function useShow() {
     prevSlide,
     setScoreboardVisible,
     setAnswerReveal,
+    setScoresRevealed,
     updateRoundScore,
     saveResults,
     updateTickerMessages,
