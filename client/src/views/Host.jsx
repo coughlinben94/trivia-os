@@ -51,9 +51,6 @@ function HostInner({ showApi }) {
   const [connStatus, setConnStatus] = useState('SUBSCRIBED')
   const disconnected = connStatus === 'CHANNEL_ERROR' || connStatus === 'TIMED_OUT' || connStatus === 'CLOSED'
 
-  useEffect(() => {
-    if (show?.showState?.isLive) setIsLiveMode(true)
-  }, [show?.id])
 
   useEffect(() => {
     if (!show?.id) return
