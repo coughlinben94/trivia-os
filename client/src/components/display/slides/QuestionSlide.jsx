@@ -88,7 +88,7 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
           style={{
             color: theme.colors.text,
             fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-            fontSize: 'clamp(2rem, 4.5vw, 4.5rem)',
+            fontSize: 'clamp(2rem, 4.5cqw, 4.5rem)',
             fontWeight: 500,
             maxWidth: '80ch',
             textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
@@ -225,7 +225,7 @@ function ShinyVisualQuestion({ slide, theme }) {
               style={{
                 color: theme.colors.text,
                 fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-                fontSize: 'clamp(1.75rem, 3.5vw, 3.5rem)',
+                fontSize: 'clamp(1.75rem, 3.5cqw, 3.5rem)',
                 fontWeight: 500,
               }}
             >
@@ -263,7 +263,7 @@ function ShinyVisualQuestion({ slide, theme }) {
               style={{
                 color: '#f5f0e8',
                 fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-                fontSize: 'clamp(1.75rem, 3.5vw, 3.5rem)',
+                fontSize: 'clamp(1.75rem, 3.5cqw, 3.5rem)',
                 fontWeight: 500,
               }}
             >
@@ -395,7 +395,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
             color: theme.colors.text,
-            fontSize: 'clamp(3rem, 8vw, 6rem)',
+            fontSize: 'clamp(3rem, 8cqw, 6rem)',
             fontWeight: 700,
             lineHeight: 1,
           }}
@@ -529,7 +529,7 @@ function ShinyIntroScreen({ slide, theme }) {
         style={{
           fontFamily: `'${theme.fonts.display}', sans-serif`,
           color: theme.colors.text,
-          fontSize: 'clamp(2.75rem, 6.5vw, 6rem)',
+          fontSize: 'clamp(2.75rem, 6.5cqw, 6rem)',
           fontWeight: 700,
           lineHeight: 1.08,
           textShadow: `0 3px 0 rgba(0,0,0,0.25), 0 2px 24px ${theme.colors.highlight}80`,
