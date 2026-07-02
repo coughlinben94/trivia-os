@@ -10,6 +10,7 @@ import ParticleBackground from '../display/ParticleBackground.jsx'
 import { makeElement } from '../display/SlideElements.jsx'
 import { DISPLAY_FONTS } from './ThemeCustomizeControls.jsx'
 import { useTheme } from '../shared/ThemeProvider.jsx'
+import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 
 const INNER_W = 1280
 const INNER_H = 720
@@ -91,7 +92,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
 
   // Sync local data when selected slide changes
   useEffect(() => {
-    setData(slide.data); setConfirmingDelete(false); setSelectedElId(null)
+    setData(slide.data); setConfirmingDelete(false); setSelectedElId(null); setViewMode('preview')
     // If a drag got interrupted (see startDrag's pointercancel comment) and
     // its listeners are still attached, this stops onMove from writing
     // element-position updates to the slide we just navigated away from.
@@ -1138,6 +1139,7 @@ function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos 
 
 function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, slideRoundId, addSiblingSlides }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
+  const { formats: shinyFormats, loading: shinyFormatsLoading } = useShinyFormats()
 
   const mode = data.questionMode
   const schema = data.shinyInputSchema ?? {}
@@ -1335,6 +1337,8 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, slideId, s
 
       {showFormatLibrary && (
         <FormatLibrary
+          formats={shinyFormats}
+          loading={shinyFormatsLoading}
           onClose={() => setShowFormatLibrary(false)}
           onSelectFormat={fmt => {
             const totalSlots = fmt.input_schema?.slots ?? 1
