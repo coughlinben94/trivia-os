@@ -75,6 +75,7 @@ const CARD_STYLE = {
   'swing':         'bg-gradient-to-br from-orange-50 to-red-100     border-orange-200 hover:border-orange-400',
   'pyl':           'bg-gradient-to-br from-teal-50   to-blue-100    border-teal-200   hover:border-teal-400',
   'data':          'bg-gradient-to-br from-purple-50 to-violet-100  border-purple-200 hover:border-purple-400',
+  'shows':         'bg-gradient-to-br from-slate-50  to-blue-100    border-slate-200  hover:border-blue-400',
 }
 
 function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReorder, onBack }) {
@@ -538,7 +539,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                   </button>
                   <button
                     onClick={() => window.open('/shows', '_blank')}
-                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} bg-white border-gray-200 hover:border-gray-400`}
+                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['shows']}`}
                   >
                     <span className="text-3xl leading-none">📋</span>
                     <span className="text-sm font-semibold text-gray-800 leading-tight">My Shows</span>
