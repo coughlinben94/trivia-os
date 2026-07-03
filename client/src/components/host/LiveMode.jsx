@@ -372,7 +372,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                     key={anim.id}
                     onClick={() => handlePickAnimation(anim.id)}
                     disabled={pylPickerBusy}
-                    className={`flex-1 flex flex-col items-center gap-2 py-4 rounded-xl border-2 transition-[colors,transform] duration-[120ms] active:scale-[0.97] ${
+                    className={`flex-1 flex flex-col items-center gap-2 py-4 rounded-xl border-2 transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
                       pylPickerBusy
                         ? 'border-gray-100 text-gray-300 cursor-not-allowed'
                         : 'border-gray-200 hover:border-gray-400 text-gray-700'
@@ -466,7 +466,7 @@ function NavButton({ onClick, disabled, label, title, primary }) {
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-[colors,transform] duration-[120ms] active:scale-[0.97] ${
+      className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
         disabled
           ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
           : primary
