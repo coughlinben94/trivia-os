@@ -103,23 +103,51 @@ export default function RoundSidebar({
   // adjusted = targetBlockIdx handles both cases correctly — no top/bottom half needed.
   function computeNewOrder(draggedSpec, targetKey, targetType) {
     const b = blocksRef.current
-    const draggedBlockIdx = b.findIndex(bl =>
-      draggedSpec.type === 'round' ? bl.roundId === draggedSpec.id : bl.slides.some(s => s.id === draggedSpec.id)
-    )
-    const targetBlockIdx = targetType === 'round'
+
+    if (draggedSpec.type === 'slide') {
+      const draggedBlock = b.find(bl => bl.slides.some(s => s.id === draggedSpec.id))
+      const targetBlock  = targetType === 'round'
+        ? b.find(bl => bl.roundId === targetKey)
+        : b.find(bl => bl.slides.some(s => s.id === targetKey))
+      if (!draggedBlock || !targetBlock) return null
+
+      const draggedBlockIdx = b.indexOf(draggedBlock)
+      const targetBlockIdx  = b.indexOf(targetBlock)
+
+      // Within-round reorder: both slides in the same round block
+      if (draggedBlockIdx === targetBlockIdx && draggedBlock.type === 'round') {
+        const slides = [...draggedBlock.slides]
+        const fromIdx = slides.findIndex(s => s.id === draggedSpec.id)
+        const toIdx   = slides.findIndex(s => s.id === targetKey)
+        if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return null
+        const [moved] = slides.splice(fromIdx, 1)
+        slides.splice(toIdx, 0, moved)
+        const ids = b.flatMap(bl =>
+          bl === draggedBlock ? slides.map(s => s.id) : bl.slides.map(s => s.id)
+        )
+        return { kind: 'slides', ids }
+      }
+
+      if (draggedBlockIdx === targetBlockIdx) return null
+
+      // Cross-block slide drag
+      const next = [...b]
+      const [removed] = next.splice(draggedBlockIdx, 1)
+      next.splice(targetBlockIdx, 0, removed)
+      return { kind: 'slides', ids: next.flatMap(bl => bl.slides.map(s => s.id)) }
+    }
+
+    // Round drag
+    const draggedBlockIdx = b.findIndex(bl => bl.roundId === draggedSpec.id)
+    const targetBlockIdx  = targetType === 'round'
       ? b.findIndex(bl => bl.roundId === targetKey)
       : b.findIndex(bl => bl.slides.some(s => s.id === targetKey))
-
     if (draggedBlockIdx === -1 || targetBlockIdx === -1 || draggedBlockIdx === targetBlockIdx) return null
 
     const next = [...b]
     const [removed] = next.splice(draggedBlockIdx, 1)
     next.splice(targetBlockIdx, 0, removed)
-
-    if (draggedSpec.type === 'round') {
-      return { kind: 'rounds', ids: next.filter(bl => bl.type === 'round').map(bl => bl.roundId) }
-    }
-    return { kind: 'slides', ids: next.flatMap(bl => bl.slides.map(s => s.id)) }
+    return { kind: 'rounds', ids: next.filter(bl => bl.type === 'round').map(bl => bl.roundId) }
   }
 
   function findDropTarget(el) {
