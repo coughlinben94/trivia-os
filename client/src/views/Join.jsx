@@ -197,6 +197,7 @@ function RegistrationScreen({ onRegister, show, theme }) {
               width: '100%', height: 56, borderRadius: 12,
               background: submitting ? `${accent}cc` : accent,
               color: '#fff', fontSize: '1.1rem', fontWeight: 700,
+              transition: 'transform 120ms cubic-bezier(0.23,1,0.32,1)',
               border: 'none', cursor: submitting ? 'default' : 'pointer',
               opacity: !name.trim() ? 0.45 : 1,
               transition: 'opacity 120ms ease, transform 120ms ease',
@@ -327,6 +328,7 @@ function WaitingScreen({ teamName, theme, onOpenScores }) {
           style={{
             flex: 1, height: 44, padding: '0 1rem', borderRadius: 10,
             background: 'rgba(255,255,255,0.09)',
+            transition: 'transform 120ms cubic-bezier(0.23,1,0.32,1)',
             border: '1px solid rgba(255,255,255,0.14)',
             color: `${text}90`, fontSize: '0.85rem', fontWeight: 600,
             cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
@@ -861,7 +863,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
                   cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
                   minHeight: 44, WebkitTapHighlightColor: 'transparent',
                   fontFamily: 'DM Sans, sans-serif',
-                  transition: 'transform 120ms ease',
+                  transition: 'transform 120ms cubic-bezier(0.23,1,0.32,1)',
                 }}
               >
                 Current Slide →
@@ -880,7 +882,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
                   cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
                   minHeight: 44, WebkitTapHighlightColor: 'transparent',
                   fontFamily: 'DM Sans, sans-serif',
-                  transition: 'transform 120ms ease',
+                  transition: 'transform 120ms cubic-bezier(0.23,1,0.32,1)',
                 }}
               >
                 ← Back
@@ -910,6 +912,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
             background: 'rgba(255,255,255,0.07)',
             border: '1px solid rgba(255,255,255,0.1)',
             color: `${text}70`, fontSize: '0.8rem', fontWeight: 600,
+            transition: 'transform 120ms cubic-bezier(0.23,1,0.32,1)',
             cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
             WebkitTapHighlightColor: 'transparent',
             transition: 'transform 120ms ease',
