@@ -1120,6 +1120,11 @@ export default function Join() {
     const actualShowId = show.id
     // Fetch all names and compare case-insensitively in JS to avoid ILIKE
     // metachar injection (% or _ in a team name would wildcard-match everything).
+    // This pre-check is just a fast path for the common case — it's a
+    // TOCTOU race (two phones registering the same name within the same
+    // ~100ms window could both pass it), so the actual enforcement is the
+    // teams_show_id_lower_name_key unique index (show_id, lower(name));
+    // the 23505 catch below is what closes the race for real.
     const { data: allTeams } = await supabase.from('teams').select('name').eq('show_id', actualShowId)
     const taken = (allTeams ?? []).some(t => t.name.toLowerCase() === name.toLowerCase())
     if (taken) throw new Error("That name's taken — try another")
@@ -1127,7 +1132,10 @@ export default function Join() {
     const color  = TEAM_COLORS[Math.floor(Math.random() * TEAM_COLORS.length)]
     const teamId = `team_${nanoid(8)}`
     const { error } = await supabase.from('teams').insert({ id: teamId, show_id: actualShowId, name, color, is_connected: true, powerup_used: false })
-    if (error) throw new Error(error.message)
+    if (error) {
+      if (error.code === '23505') throw new Error("That name's taken — try another")
+      throw new Error(error.message)
+    }
 
     const newTeam = { id: teamId, name, color, showId: actualShowId }
     setTeam(newTeam)
