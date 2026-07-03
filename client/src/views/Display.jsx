@@ -346,7 +346,7 @@ function DisplayInner({ show, direction }) {
         {/* key resets the boundary on every slide change so a crash on one slide
             doesn't permanently block the display for subsequent slides */}
         <ErrorBoundary key={currentSlide?.id} fallback={slideFallback}>
-          <AnimatePresence mode="wait" custom={direction}>
+          <AnimatePresence mode="wait">
             {currentSlide && (
               <SlideRenderer
                 key={currentSlide.id}
