@@ -451,29 +451,25 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
               <div className="w-full max-w-5xl -translate-y-[6%]">
 
                 {/* Round context filter */}
-                <div className="mb-5">
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    {show.rounds.map(r => (
-                      <button
-                        key={r.id}
-                        onClick={() => setActiveRoundId(prev => prev === r.id ? null : r.id)}
-                        className={`px-3 py-1.5 rounded-lg border text-sm font-semibold ${BTN} ${
-                          activeRoundId === r.id
-                            ? 'bg-[#1a6b4a] text-white border-[#1a6b4a]'
-                            : 'bg-white text-gray-600 border-gray-200 hover:border-[#1a6b4a] hover:text-[#1a6b4a]'
-                        }`}
-                      >
-                        R{r.number} · {r.title}
-                      </button>
-                    ))}
-                    <button
-                      onClick={handleAddRound}
-                      className={`px-3 py-1.5 rounded-lg border text-sm font-semibold ${BTN} bg-white text-gray-400 border-dashed border-gray-300 hover:border-[#1a6b4a] hover:text-[#1a6b4a]`}
-                    >
-                      + Add Round
-                    </button>
+                {show.rounds.length > 0 && (
+                  <div className="mb-5">
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {show.rounds.map(r => (
+                        <button
+                          key={r.id}
+                          onClick={() => setActiveRoundId(prev => prev === r.id ? null : r.id)}
+                          className={`px-3 py-1.5 rounded-lg border text-sm font-semibold ${BTN} ${
+                            activeRoundId === r.id
+                              ? 'bg-[#1a6b4a] text-white border-[#1a6b4a]'
+                              : 'bg-white text-gray-600 border-gray-200 hover:border-[#1a6b4a] hover:text-[#1a6b4a]'
+                          }`}
+                        >
+                          R{r.number} · {r.title}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* 4-4-4-1 grid: all 13 cards flat */}
                 <div className="flex flex-wrap gap-3 justify-center">
