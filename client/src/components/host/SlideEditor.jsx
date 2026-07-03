@@ -18,21 +18,6 @@ const PREVIEW_W = 680
 const PREVIEW_H = Math.round(PREVIEW_W * (9 / 16))
 const SCALE = PREVIEW_W / INNER_W
 
-const SLIDE_TYPES = [
-  { value: 'title',             label: 'Title' },
-  { value: 'round-intro',       label: 'Round Intro' },
-  { value: 'swing-round-intro', label: 'Swing Round Intro' },
-  { value: 'question',          label: 'Question' },
-  { value: 'grading-break',     label: 'Grading Break' },
-  { value: 'scoreboard-reveal', label: 'Scoreboard Reveal' },
-  { value: 'custom',            label: 'Custom' },
-  { value: 'pixelate-series',   label: 'Pixelate Series' },
-  { value: 'multi-question',    label: 'Multi-Question' },
-  { value: 'pyl-reveal',        label: 'PYL Reveal' },
-  { value: 'winner-reveal',     label: 'Winner Reveal' },
-]
-
-
 export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos }) {
   const { theme } = useTheme()
   const [data, setData] = useState(slide.data)
@@ -84,10 +69,6 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
     const next = { ...data, [key]: arr }
     setData(next)
     scheduleSave({ data: next })
-  }
-
-  function changeType(newType) {
-    onUpdateSlide(slide.id, { type: newType })
   }
 
   function scheduleSave(updates) {
@@ -328,7 +309,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                       <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
                     )}
                     {slide.type === 'state-of-union' && (
-                      <StateOfUnionEditor data={data} onChange={change} />
+                      <StateOfUnionEditor data={data} onChange={change} getHostPhotos={getHostPhotos} uploadMedia={uploadMedia} />
                     )}
                     {slide.type === 'team-picker' && (
                       <TeamPickerEditor data={data} onChange={change} />
@@ -1126,6 +1107,23 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
   if (mode === 'regular') {
     return (
       <>
+        <div className="flex gap-3 items-end">
+          <Field label="Label">
+            <TextInput value={data.questionLabel ?? ''} onChange={v => onChange('questionLabel', v)} placeholder="Q5" />
+          </Field>
+          <Field label="#">
+            <NumberInput value={data.questionNumber} onChange={v => onChange('questionNumber', v)} />
+          </Field>
+          <label className="flex items-center gap-1.5 pb-2 cursor-pointer select-none shrink-0">
+            <input
+              type="checkbox"
+              checked={!!data.isBonus}
+              onChange={e => onChange('isBonus', e.target.checked)}
+              className="w-4 h-4 accent-baynes-forest"
+            />
+            <span className="text-xs font-medium text-gray-600">Bonus</span>
+          </label>
+        </div>
         <Field label="Question Text">
           <TextArea value={data.text} onChange={v => onChange('text', v)} placeholder="Write the full question here…" rows={4} />
         </Field>
@@ -1550,16 +1548,25 @@ function WinnerRevealEditor({ data, onChange }) {
   )
 }
 
-function StateOfUnionEditor({ data, onChange }) {
+function StateOfUnionEditor({ data, onChange, getHostPhotos, uploadMedia }) {
   return (
-    <Field label="Message">
-      <textarea
-        value={data.message ?? "Welcome to Trivia Night at Baynes Apple Valley. Let's get into it."}
-        onChange={e => onChange('message', e.target.value)}
-        rows={3}
-        className="w-full text-sm bg-gray-50 text-gray-900 rounded-lg px-3 py-2 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-baynes-forest resize-none"
+    <>
+      <Field label="Message">
+        <textarea
+          value={data.message ?? "Welcome to Trivia Night at Baynes Apple Valley. Let's get into it."}
+          onChange={e => onChange('message', e.target.value)}
+          rows={3}
+          className="w-full text-sm bg-gray-50 text-gray-900 rounded-lg px-3 py-2 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-baynes-forest resize-none"
+        />
+      </Field>
+      <Divider label="Ben Photo" />
+      <HostPhotoLibrary
+        getHostPhotos={getHostPhotos}
+        uploadMedia={uploadMedia}
+        currentPhotoUrl={data.photoUrl}
+        onSelectPhoto={url => onChange('photoUrl', url)}
       />
-    </Field>
+    </>
   )
 }
 

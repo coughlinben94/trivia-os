@@ -115,7 +115,7 @@ export default function RoundIntroSlide({ slide, show }) {
       )}
 
       {/* Swing round: extra theatrical theme label */}
-      {isSwing && data.theme && (
+      {isSwing && (data.themeDescription || data.theme) && (
         <motion.div
           initial={{ opacity: 0, scale: 0.85 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -124,7 +124,7 @@ export default function RoundIntroSlide({ slide, show }) {
           style={{ background: theme.colors.shinyAccent + '22', border: `2px solid ${theme.colors.shinyAccent}66` }}
         >
           <span style={{ color: theme.colors.shinyAccent, fontFamily: `'${theme.fonts.display}', sans-serif`, fontSize: '1.5rem' }}>
-            {data.theme}
+            {data.themeDescription || data.theme}
           </span>
         </motion.div>
       )}

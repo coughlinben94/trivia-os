@@ -53,7 +53,7 @@ export default function MultiQuestionSlide({ slide, show }) {
             letterSpacing: '-0.01em',
           }}
         >
-          {data.title || 'Questions'}
+          {data.seriesTitle || data.title || 'Questions'}
         </h2>
       </motion.div>
 

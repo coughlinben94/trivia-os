@@ -40,7 +40,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
     )
   }
 
-  const items = data.items ?? []
+  const items = data.stages ?? data.items ?? []
   // currentReveal: how many items are revealed (0 = none, items.length = all)
   const revealed = data.currentReveal ?? 0
 
