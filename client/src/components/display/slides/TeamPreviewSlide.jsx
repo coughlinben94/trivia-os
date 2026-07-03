@@ -18,18 +18,6 @@ export default function TeamPreviewSlide({ slide, show }) {
       .eq('show_id', show.id)
       .order('registered_at', { ascending: true })
       .then(({ data }) => { if (data) setTeams(data) })
-
-    const channel = supabase
-      .channel(`team-preview:${show.id}`)
-      .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'teams',
-        filter: `show_id=eq.${show.id}`,
-      }, (payload) => {
-        setTeams(prev => prev.some(t => t.id === payload.new.id) ? prev : [...prev, payload.new])
-      })
-      .subscribe()
-
-    return () => supabase.removeChannel(channel)
   }, [show?.id])
 
   return (

@@ -25,7 +25,9 @@ export default function StateOfUnionSlide({ slide }) {
   return (
     <div
       className="absolute inset-0 flex flex-col items-center justify-center px-24"
-      style={{ background: 'transparent' }}
+      style={{
+        background: 'linear-gradient(135deg, #b22234 0%, #b22234 30%, #f5f5f5 48%, #f5f5f5 52%, #3c3b6e 70%, #3c3b6e 100%)',
+      }}
     >
       {/* Optional Ben photo */}
       {slide.data?.photoUrl && (
@@ -45,7 +47,8 @@ export default function StateOfUnionSlide({ slide }) {
         style={{
           fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
           fontSize: 'clamp(1.6rem, 3vw, 3rem)',
-          color: theme.colors.text,
+          color: '#fff',
+          textShadow: '0 2px 12px rgba(0,0,0,0.55)',
           lineHeight: 1.55,
           textAlign: 'center',
           maxWidth: '72ch',
@@ -57,7 +60,7 @@ export default function StateOfUnionSlide({ slide }) {
         <motion.span
           animate={{ opacity: [1, 0] }}
           transition={{ duration: 0.6, repeat: Infinity, repeatType: 'reverse' }}
-          style={{ color: theme.colors.highlight, marginLeft: 2 }}
+          style={{ color: '#fff', marginLeft: 2 }}
         >
           |
         </motion.span>
