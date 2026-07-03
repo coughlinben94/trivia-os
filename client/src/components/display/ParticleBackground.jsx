@@ -667,6 +667,68 @@ function AutumnHarvestAmbient({ tint }) {
 }
 
 // ─── 4. NORTHERN LIGHTS ───────────────────────────────────────────────────
+// 2-hour loop audit (2026-07-02): ice glints and the sweeping band drifter
+// were static forever-identical paths — every glint and the band replayed
+// the same left/top/duration on every single loop for the full 2-hour show.
+// Re-roll philosophy matches rollMeteorShower/rollBloomCenter: reroll on
+// onAnimationIteration, gated off once reduced-motion is on so state stops
+// changing (the loop still fires the event under RM, just without transform).
+function rollIceGlint() {
+  const left = Math.random() < 0.5 ? Math.random() * 20 : 80 + Math.random() * 20
+  const dur = 16 + Math.random() * 10
+  return {
+    left: `${left.toFixed(2)}%`,
+    size: 1 + Math.random() * 1.5,
+    drift: `${(Math.random() * 10 - 5).toFixed(1)}px`,
+    dur: `${dur.toFixed(1)}s`,
+  }
+}
+
+function IceGlint({ initialDelay }) {
+  const [roll, setRoll] = useState(() => ({ ...rollIceGlint(), delay: initialDelay }))
+  const reroll = () => {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    setRoll({ ...rollIceGlint(), delay: '0s' })
+  }
+  return (
+    <div aria-hidden
+      onAnimationIteration={reroll}
+      style={{
+        position: 'absolute', left: roll.left, top: '-3%', width: roll.size, height: roll.size, borderRadius: '50%',
+        pointerEvents: 'none', background: 'rgba(255,255,255,0.9)',
+        willChange: 'transform,opacity', '--hi': 0.75, '--drift': roll.drift,
+        animation: `ambientFallSlow ${roll.dur} ${roll.delay} linear infinite`,
+      }}
+    />
+  )
+}
+
+function rollAuroraSweepBand() {
+  return {
+    top: `${(Math.random() * 22).toFixed(1)}%`,
+    dur: `${(38 + Math.random() * 20).toFixed(1)}s`,
+  }
+}
+
+function AuroraSweepBand({ tint }) {
+  const [roll, setRoll] = useState({ top: '4%', dur: '48s' })
+  const reroll = () => {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    setRoll(rollAuroraSweepBand())
+  }
+  return (
+    <div aria-hidden
+      onAnimationIteration={reroll}
+      style={{
+        position: 'absolute', top: roll.top, left: 0, width: '38%', height: '46%', pointerEvents: 'none',
+        background: `radial-gradient(ellipse, ${tint('rgba(13,80,64,0.35)')}, transparent 70%)`,
+        willChange: 'transform,opacity', '--hi': 0.4,
+        animation: `ambientDriftAcross ${roll.dur} linear infinite`,
+      }}
+    />
+  )
+}
+
 function NorthernLightsAmbient({ tint }) {
   const stars = useMemo(() => Array.from({ length: 40 }, () => {
     const hi = 0.4 + Math.random() * 0.4
@@ -693,15 +755,11 @@ function NorthernLightsAmbient({ tint }) {
 
   // Ice glints only fall at the flanks (outside x 20-80%) — the center stays
   // clear for question content, per the ambient design law's safe-area rule.
-  const iceGlints = useMemo(() => Array.from({ length: 26 }, () => {
-    const left = Math.random() < 0.5 ? Math.random() * 20 : 80 + Math.random() * 20
+  // Only the initial stagger delay is seeded here; each glint re-rolls its
+  // own left/size/drift/dur every cycle (see IceGlint above).
+  const iceGlintSeeds = useMemo(() => Array.from({ length: 26 }, () => {
     const dur = 16 + Math.random() * 10
-    return {
-      left: `${left.toFixed(2)}%`,
-      size: 1 + Math.random() * 1.5,
-      drift: `${(Math.random() * 10 - 5).toFixed(1)}px`,
-      dur: `${dur.toFixed(1)}s`, delay: `-${(Math.random() * dur).toFixed(1)}s`,
-    }
+    return { initialDelay: `-${(Math.random() * dur).toFixed(1)}s` }
   }), [])
 
   const pines = useMemo(() => {
@@ -832,21 +890,13 @@ function NorthernLightsAmbient({ tint }) {
         animation: `ambientBreathe ${c.dur} ${c.delay} ease infinite`,
       }}/>
     ))}
-    {/* 7. Sweeping band drifter — soft glow crossing the full sky */}
-    <div aria-hidden style={{
-      position: 'absolute', top: '4%', left: 0, width: '38%', height: '46%', pointerEvents: 'none',
-      background: `radial-gradient(ellipse, ${tint('rgba(13,80,64,0.35)')}, transparent 70%)`,
-      willChange: 'transform,opacity', '--hi': 0.4,
-      animation: 'ambientDriftAcross 48s linear infinite',
-    }}/>
-    {/* 8. Ice glints — falling only at the flanks, near-white sanctioned exception */}
-    {iceGlints.map((g, i) => (
-      <div key={i} aria-hidden style={{
-        position: 'absolute', left: g.left, top: '-3%', width: g.size, height: g.size, borderRadius: '50%',
-        pointerEvents: 'none', background: 'rgba(255,255,255,0.9)',
-        willChange: 'transform,opacity', '--hi': 0.75, '--drift': g.drift,
-        animation: `ambientFallSlow ${g.dur} ${g.delay} linear infinite`,
-      }}/>
+    {/* 7. Sweeping band drifter — soft glow crossing the full sky; re-rolls
+        its vertical position + duration every cycle (2-hour loop audit) */}
+    <AuroraSweepBand tint={tint}/>
+    {/* 8. Ice glints — falling only at the flanks, near-white sanctioned
+        exception; each one re-rolls its own path every cycle (2-hour loop audit) */}
+    {iceGlintSeeds.map((seed, i) => (
+      <IceGlint key={i} initialDelay={seed.initialDelay}/>
     ))}
     {/* 9. Pine treeline — static silhouette, does not animate */}
     <svg aria-hidden viewBox="0 0 1600 220" preserveAspectRatio="none" style={{
