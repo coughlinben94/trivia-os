@@ -37,7 +37,7 @@ function getSlideLabel(slide) {
   if (type === 'multi-question') return data.seriesTitle || 'Multi-Q'
   if (type === 'pyl-reveal') return 'PYL Reveal'
   if (type === 'team-preview') return 'Team Preview'
-  if (type === 'team-picker') return 'Team Picker'
+  if (type === 'team-picker') return 'Team Intro'
   if (type === 'winner-reveal') return '🥇 Winner Reveal'
   return type
 }

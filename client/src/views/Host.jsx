@@ -9,6 +9,7 @@ import ShowLibrary from '../components/host/ShowLibrary.jsx'
 import BuildMode from '../components/host/BuildMode.jsx'
 import LiveMode from '../components/host/LiveMode.jsx'
 import ScoreboardModal from '../components/host/ScoreboardModal.jsx'
+import HostPinGate from '../components/host/HostPinGate.jsx'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
@@ -27,11 +28,13 @@ export default function Host() {
   if (!show) return <Navigate to="/dashboard" replace />
 
   return (
-    <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
-      <ErrorBoundary>
-        <HostInner showApi={showApi} />
-      </ErrorBoundary>
-    </ThemeProvider>
+    <HostPinGate>
+      <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
+        <ErrorBoundary>
+          <HostInner showApi={showApi} />
+        </ErrorBoundary>
+      </ThemeProvider>
+    </HostPinGate>
   )
 }
 
@@ -180,6 +183,7 @@ function slidePickerLabel(slide) {
   if (type === 'scoreboard-reveal') return data.title || 'Scoreboard'
   if (type === 'title') return data.title || 'Title'
   if (type === 'multi-question') return data.seriesTitle || 'Multi-Q'
+  if (type === 'team-picker') return 'Team Intro'
   return type
 }
 

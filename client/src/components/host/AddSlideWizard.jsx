@@ -6,7 +6,7 @@ import { archiveQuestion } from '../../lib/archiveQuestion.js'
 
 export const TYPE_CARDS = [
   { type: 'state-of-union', icon: '🇺🇸', name: 'State of the Union', desc: 'Opening address to the crowd' },
-  { type: 'team-picker',    icon: '🚀', name: 'Team Picker',          desc: 'Cinematic one-by-one team intro' },
+  { type: 'team-picker',    icon: '🚀', name: 'Team Intro',            desc: 'Cinematic one-by-one team intro' },
   { type: 'round-intro',    icon: '🎬', name: 'Round Intro',          desc: 'Dramatic round opener' },
   { type: 'question',       icon: '❓', name: 'Question',             desc: 'Regular or shiny question' },
   { type: 'grading-break',  icon: '⏸️', name: 'Grading Break',       desc: 'While Ben grades papers' },
