@@ -84,6 +84,32 @@ const CARD_STYLE = {
   'shows':         'bg-gradient-to-br from-slate-50  to-blue-100    border-slate-200  hover:border-blue-400',
 }
 
+// Rest-state grid box order — this is a personal workspace layout preference,
+// not show data, so it lives in localStorage rather than the show record.
+const REST_STATE_BOX_ORDER_KEY = 'trivia-os:rest-state-box-order'
+
+function defaultRestStateBoxOrder() {
+  return [
+    ...TYPE_CARDS.filter(c => !c.hidden).map(c => c.type),
+    'theme', 'swing', 'pyl', 'shiny', 'database', 'ticker', 'data', 'shows',
+  ]
+}
+
+function loadRestStateBoxOrder() {
+  const fallback = defaultRestStateBoxOrder()
+  try {
+    const stored = JSON.parse(localStorage.getItem(REST_STATE_BOX_ORDER_KEY))
+    if (!Array.isArray(stored)) return fallback
+    // Merge with fallback so a box added later (new slide type, new shortcut)
+    // never silently disappears because it's missing from a saved order.
+    const known = stored.filter(id => fallback.includes(id))
+    const missing = fallback.filter(id => !known.includes(id))
+    return [...known, ...missing]
+  } catch {
+    return fallback
+  }
+}
+
 function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReorder, onBack }) {
   const { theme } = useTheme()
   const [draggedId, setDraggedId] = useState(null)
@@ -222,6 +248,73 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
   const [activeRoundId, setActiveRoundId] = useState(null)
   const [showSwingWizard, setShowSwingWizard] = useState(false)
   const [showPylWizard,   setShowPylWizard]   = useState(false)
+
+  // Rest-state grid reorder — same pointer-events drag pattern as
+  // RoundSidebar/RoundView's slide reorder (grip mousedown -> pointermove
+  // tracking -> elementFromPoint drop-target detection -> commit on pointerup).
+  const [restBoxOrder, setRestBoxOrder] = useState(loadRestStateBoxOrder)
+  const [restDragOverId, setRestDragOverId] = useState(null)
+  const restDraggedRef = useRef(null)
+  const restDragOverRef = useRef(null)
+
+  function handleRestGripDown(e, id) {
+    e.preventDefault()
+    e.stopPropagation()
+    restDraggedRef.current = id
+    restDragOverRef.current = null
+    setRestDragOverId(null)
+
+    function onMove(ev) {
+      let node = document.elementFromPoint(ev.clientX, ev.clientY)
+      while (node && node !== document.body) {
+        if (node.dataset?.restBoxId) {
+          restDragOverRef.current = node.dataset.restBoxId
+          setRestDragOverId(node.dataset.restBoxId)
+          return
+        }
+        node = node.parentElement
+      }
+      restDragOverRef.current = null
+      setRestDragOverId(null)
+    }
+
+    function onUp() {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      const dragged = restDraggedRef.current
+      const over = restDragOverRef.current
+      if (dragged && over && dragged !== over) {
+        setRestBoxOrder(prev => {
+          const fromIdx = prev.indexOf(dragged)
+          const toIdx = prev.indexOf(over)
+          if (fromIdx === -1 || toIdx === -1) return prev
+          const next = [...prev]
+          next.splice(fromIdx, 1)
+          next.splice(toIdx, 0, dragged)
+          localStorage.setItem(REST_STATE_BOX_ORDER_KEY, JSON.stringify(next))
+          return next
+        })
+      }
+      restDraggedRef.current  = null
+      restDragOverRef.current = null
+      setRestDragOverId(null)
+    }
+
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+  }
+
+  function RestGripHandle({ id }) {
+    return (
+      <span
+        onMouseDown={e => handleRestGripDown(e, id)}
+        title="Drag to reorder"
+        className="absolute top-1.5 left-1.5 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing text-xs leading-none select-none z-10"
+      >
+        ⠿
+      </span>
+    )
+  }
 
   // Reset active/viewing round if it gets deleted
   useEffect(() => {
@@ -476,83 +569,45 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                   </div>
                 )}
 
-                {/* 4-4-4-1 grid: all 13 cards flat */}
+                {/* 4-4-4-1 grid: all 15 boxes flat, drag the ⠿ grip to reorder */}
                 <div className="flex flex-wrap gap-3 justify-center">
-                  {TYPE_CARDS.filter(card => !card.hidden).map(card => (
-                    <button
-                      key={card.type}
-                      onClick={() => openAddModal({ type: card.type, roundId: activeRoundId })}
-                      className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE[card.type] ?? 'bg-white border-gray-200 hover:border-gray-400'}`}
-                    >
-                      <span className="text-3xl leading-none">{card.icon}</span>
-                      <span className="text-sm font-semibold text-gray-800 leading-tight">{card.name}</span>
-                      <span className="text-xs text-gray-500 leading-snug">{card.desc}</span>
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setShowThemePicker(true)}
-                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['theme']}`}
-                  >
-                    <span className="text-3xl leading-none">🎨</span>
-                    <span className="text-sm font-semibold text-gray-800 leading-tight">Theme</span>
-                    <span className="text-xs text-gray-500 leading-snug">Change the display look</span>
-                  </button>
-                  <button
-                    onClick={() => setShowSwingWizard(true)}
-                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['swing']}`}
-                  >
-                    <span className="text-3xl leading-none">🎷</span>
-                    <span className="text-sm font-semibold text-gray-800 leading-tight">Swing Round</span>
-                    <span className="text-xs text-gray-500 leading-snug">Bulk-add all swing questions at once</span>
-                  </button>
-                  <button
-                    onClick={() => setShowPylWizard(true)}
-                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['pyl']}`}
-                  >
-                    <span className="text-3xl leading-none">🎰</span>
-                    <span className="text-sm font-semibold text-gray-800 leading-tight">Press Your Luck!</span>
-                    <span className="text-xs text-gray-500 leading-snug">Set up PYL themes and slides</span>
-                  </button>
-                  <button
-                    onClick={() => setShowFormatLibrary(true)}
-                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['shiny']}`}
-                  >
-                    <span className="text-3xl leading-none">✨</span>
-                    <span className="text-sm font-semibold text-gray-800 leading-tight">Shiny Formats</span>
-                    <span className="text-xs text-gray-500 leading-snug">Add or edit shiny question styles</span>
-                  </button>
-                  <button
-                    onClick={() => window.open('/questions', '_blank')}
-                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['database']}`}
-                  >
-                    <span className="text-3xl leading-none">🗃️</span>
-                    <span className="text-sm font-semibold text-gray-800 leading-tight">Question Database</span>
-                    <span className="text-xs text-gray-500 leading-snug">Browse and search your archive</span>
-                  </button>
-                  <button
-                    onClick={() => openAddModal({ type: 'team-preview', roundId: activeRoundId })}
-                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['ticker']}`}
-                  >
-                    <span className="text-3xl leading-none">👥</span>
-                    <span className="text-sm font-semibold text-gray-800 leading-tight">Team List</span>
-                    <span className="text-xs text-gray-500 leading-snug">Show all team names on screen</span>
-                  </button>
-                  <button
-                    onClick={() => window.open('/dashboard', '_blank')}
-                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['data']}`}
-                  >
-                    <span className="text-3xl leading-none">📊</span>
-                    <span className="text-sm font-semibold text-gray-800 leading-tight">Data</span>
-                    <span className="text-xs text-gray-500 leading-snug">Shows history & analytics</span>
-                  </button>
-                  <button
-                    onClick={() => window.open('/shows', '_blank')}
-                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['shows']}`}
-                  >
-                    <span className="text-3xl leading-none">📋</span>
-                    <span className="text-sm font-semibold text-gray-800 leading-tight">My Shows</span>
-                    <span className="text-xs text-gray-500 leading-snug">Browse past shows</span>
-                  </button>
+                  {(() => {
+                    const restBoxContent = {
+                      ...Object.fromEntries(TYPE_CARDS.filter(c => !c.hidden).map(card => [card.type, {
+                        icon: card.icon, name: card.name, desc: card.desc, styleKey: card.type,
+                        onClick: () => openAddModal({ type: card.type, roundId: activeRoundId }),
+                      }])),
+                      theme:    { icon: '🎨', name: 'Theme', desc: 'Change the display look', styleKey: 'theme', onClick: () => setShowThemePicker(true) },
+                      swing:    { icon: '🎷', name: 'Swing Round', desc: 'Bulk-add all swing questions at once', styleKey: 'swing', onClick: () => setShowSwingWizard(true) },
+                      pyl:      { icon: '🎰', name: 'Press Your Luck!', desc: 'Set up PYL themes and slides', styleKey: 'pyl', onClick: () => setShowPylWizard(true) },
+                      shiny:    { icon: '✨', name: 'Shiny Formats', desc: 'Add or edit shiny question styles', styleKey: 'shiny', onClick: () => setShowFormatLibrary(true) },
+                      database: { icon: '🗃️', name: 'Question Database', desc: 'Browse and search your archive', styleKey: 'database', onClick: () => window.open('/questions', '_blank') },
+                      ticker:   { icon: '👥', name: 'Team List', desc: 'Show all team names on screen', styleKey: 'ticker', onClick: () => openAddModal({ type: 'team-preview', roundId: activeRoundId }) },
+                      data:     { icon: '📊', name: 'Data', desc: 'Shows history & analytics', styleKey: 'data', onClick: () => window.open('/dashboard', '_blank') },
+                      shows:    { icon: '📋', name: 'My Shows', desc: 'Browse past shows', styleKey: 'shows', onClick: () => window.open('/shows', '_blank') },
+                    }
+
+                    return restBoxOrder.map(id => {
+                      const box = restBoxContent[id]
+                      if (!box) return null
+                      const dropTarget = restDragOverId === id
+                      return (
+                        <button
+                          key={id}
+                          data-rest-box-id={id}
+                          onClick={box.onClick}
+                          className={`relative w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${
+                            CARD_STYLE[box.styleKey] ?? 'bg-white border-gray-200 hover:border-gray-400'
+                          } ${dropTarget ? 'ring-2 ring-[#1a6b4a] ring-offset-1' : ''}`}
+                        >
+                          <RestGripHandle id={id} />
+                          <span className="text-3xl leading-none">{box.icon}</span>
+                          <span className="text-sm font-semibold text-gray-800 leading-tight">{box.name}</span>
+                          <span className="text-xs text-gray-500 leading-snug">{box.desc}</span>
+                        </button>
+                      )
+                    })
+                  })()}
                 </div>
               </div>
             </div>
