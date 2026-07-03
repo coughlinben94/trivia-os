@@ -413,7 +413,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
         <main className="flex-1 overflow-hidden bg-white">
           {mode === 'editing' && syncedSelectedSlide ? (
             <SlideEditor
-              key={syncedSelectedSlide.id}
               slide={syncedSelectedSlide}
               show={show}
               onUpdateSlide={actions.updateSlide}
@@ -536,6 +535,14 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                     <span className="text-3xl leading-none">📊</span>
                     <span className="text-sm font-semibold text-gray-800 leading-tight">Data</span>
                     <span className="text-xs text-gray-500 leading-snug">Shows history & analytics</span>
+                  </button>
+                  <button
+                    onClick={() => window.open('/shows', '_blank')}
+                    className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} bg-white border-gray-200 hover:border-gray-400`}
+                  >
+                    <span className="text-3xl leading-none">📋</span>
+                    <span className="text-sm font-semibold text-gray-800 leading-tight">My Shows</span>
+                    <span className="text-xs text-gray-500 leading-snug">Browse past shows</span>
                   </button>
                 </div>
               </div>
