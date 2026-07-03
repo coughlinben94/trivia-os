@@ -36,11 +36,17 @@
  *   Backdrop click: page.mouse.click(10,10) — viewport corner assumed to be backdrop
  */
 
-const { test, expect } = require('@playwright/test')
-const { createClient } = require('@supabase/supabase-js')
-const { readFileSync } = require('fs')
-const { join }         = require('path')
-const { nanoid }       = require('nanoid')
+import { test, expect } from '@playwright/test'
+import { createClient } from '@supabase/supabase-js'
+import { readFileSync } from 'fs'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
+import { nanoid } from 'nanoid'
+
+// require()'s __dirname has no ESM equivalent built in — this project has
+// "type": "module" in package.json, so this file loads as real ESM (that's
+// what broke the require() calls above too).
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // ── Env guard (hard-fail at load time) ──────────────────────────────────────
 
