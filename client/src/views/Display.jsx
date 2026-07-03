@@ -379,6 +379,7 @@ export default function Display() {
   const [show, setShow] = useState(null)
   const [loading, setLoading] = useState(true)
   const prevIndexRef = useRef(0)
+  const showRef = useRef(null)
   const [direction, setDirection] = useState(1)
   const installPromptRef = useRef(null)
   const [canInstall, setCanInstall] = useState(false)
@@ -409,15 +410,32 @@ export default function Display() {
     return () => { if (document.head.contains(link)) document.head.removeChild(link) }
   }, [])
 
-  // First interaction → fullscreen. F key toggles anytime.
+  // Keep showRef current so the stale onKey closure can always read latest show.
+  useEffect(() => { showRef.current = show }, [show])
+
+  // First interaction → fullscreen. F key toggles. Arrow/Space advance slides.
   useEffect(() => {
     function enter() {
       if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {})
+    }
+    function advance(delta) {
+      const s = showRef.current
+      if (!s?.id) return
+      const sorted = [...(s.slides ?? [])].sort((a, b) => a.order - b.order)
+      const cur = s.current_slide_index ?? 0
+      const next = Math.max(0, Math.min(cur + delta, sorted.length - 1))
+      if (next === cur) return
+      supabase.from('shows').update({
+        current_slide_index: next,
+        current_slide_id: sorted[next]?.id ?? null,
+      }).eq('id', s.id)
     }
     function onKey(e) {
       if (e.key === 'f' || e.key === 'F') {
         document.fullscreenElement ? document.exitFullscreen() : enter()
       }
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); advance(1) }
+      if (e.key === 'ArrowLeft') advance(-1)
     }
     function onFirstInteraction() {
       enter()
