@@ -108,14 +108,9 @@ export default function Dashboard() {
             <h1 className="text-lg font-bold text-gray-900">Dashboard</h1>
             <p className="text-xs text-gray-400 mt-0.5">{shows.length} shows · {questions.length} questions archived</p>
           </div>
-          <div className="flex items-center gap-3">
-            <a href="/shows" className="text-xs text-gray-400 hover:text-gray-700 transition-colors duration-[120ms]">
-              My Shows
-            </a>
-            <a href="/host" className="text-xs text-gray-400 hover:text-gray-700 transition-colors duration-[120ms]">
-              ← Back to host
-            </a>
-          </div>
+          <a href="/host" className="text-xs text-gray-400 hover:text-gray-700 transition-colors duration-[120ms]">
+            ← Back to host
+          </a>
         </div>
       </div>
 
@@ -123,6 +118,13 @@ export default function Dashboard() {
         <p className="text-sm text-gray-400 text-center py-16">Loading…</p>
       ) : (
         <div className="max-w-4xl mx-auto px-6 py-6 space-y-8">
+
+          {/* My Shows button */}
+          <div className="fade-up">
+            <a href="/shows" className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-gray-200 shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors duration-[120ms]">
+              📋 My Shows
+            </a>
+          </div>
 
           {/* Stat cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 fade-up">
