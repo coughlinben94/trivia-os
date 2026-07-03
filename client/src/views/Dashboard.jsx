@@ -1,5 +1,22 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase.js'
+
+const BOX_ORDER_KEY = 'trivia-os:dashboard-box-order'
+const DEFAULT_BOX_ORDER = ['winning-scores', 'weekly-players', 'question-breakdown']
+
+function loadBoxOrder() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(BOX_ORDER_KEY))
+    if (!Array.isArray(stored)) return DEFAULT_BOX_ORDER
+    // Merge stored order with any ids it's missing (new box added later, or
+    // corrupt/stale entry) so a box never silently disappears from the page.
+    const known = stored.filter(id => DEFAULT_BOX_ORDER.includes(id))
+    const missing = DEFAULT_BOX_ORDER.filter(id => !known.includes(id))
+    return [...known, ...missing]
+  } catch {
+    return DEFAULT_BOX_ORDER
+  }
+}
 
 function avg(arr) {
   if (!arr.length) return 0
@@ -19,6 +36,10 @@ export default function Dashboard() {
   const [shows, setShows] = useState([])
   const [questions, setQuestions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [boxOrder, setBoxOrder] = useState(loadBoxOrder)
+  const [dragOverId, setDragOverId] = useState(null)
+  const draggedRef  = useRef(null)
+  const dragOverRef = useRef(null)
 
   useEffect(() => {
     Promise.all([
@@ -30,6 +51,17 @@ export default function Dashboard() {
       setLoading(false)
     })
   }, [])
+
+  // fade-up is a mount-only entrance animation. Without gating it, dragging a
+  // box to a new sibling position restarts its CSS animation (browsers can
+  // retrigger `animation` on DOM reinsertion even with a stable React key),
+  // flashing it to opacity:0 for the ~200ms it takes to fade back in.
+  const [entranceDone, setEntranceDone] = useState(false)
+  useEffect(() => {
+    if (loading) return
+    const t = setTimeout(() => setEntranceDone(true), 500)
+    return () => clearTimeout(t)
+  }, [loading])
 
   // Shows with actual score data
   const scoredShows = shows.filter(s => (s.final_scores ?? []).length > 0)
@@ -91,6 +123,68 @@ export default function Dashboard() {
     </div>
   )
 
+  // Pointer-events drag, same mechanism as RoundSidebar's slide/round reorder:
+  // grip mousedown starts tracking, elementFromPoint on pointermove finds the
+  // box underneath via its data-box-id, pointerup commits the new order.
+  function handleGripDown(e, id) {
+    e.preventDefault()
+    e.stopPropagation()
+    draggedRef.current = id
+    dragOverRef.current = null
+    setDragOverId(null)
+
+    function onMove(ev) {
+      let node = document.elementFromPoint(ev.clientX, ev.clientY)
+      while (node && node !== document.body) {
+        if (node.dataset?.boxId) {
+          dragOverRef.current = node.dataset.boxId
+          setDragOverId(node.dataset.boxId)
+          return
+        }
+        node = node.parentElement
+      }
+      dragOverRef.current = null
+      setDragOverId(null)
+    }
+
+    function onUp() {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      const dragged = draggedRef.current
+      const over = dragOverRef.current
+      if (dragged && over && dragged !== over) {
+        setBoxOrder(prev => {
+          const fromIdx = prev.indexOf(dragged)
+          const toIdx = prev.indexOf(over)
+          if (fromIdx === -1 || toIdx === -1) return prev
+          const next = [...prev]
+          next.splice(fromIdx, 1)
+          next.splice(toIdx, 0, dragged)
+          localStorage.setItem(BOX_ORDER_KEY, JSON.stringify(next))
+          return next
+        })
+      }
+      draggedRef.current  = null
+      dragOverRef.current = null
+      setDragOverId(null)
+    }
+
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+  }
+
+  function GripHandle({ id }) {
+    return (
+      <span
+        className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 text-sm leading-none mr-1.5 select-none"
+        title="Drag to reorder"
+        onMouseDown={e => handleGripDown(e, id)}
+      >
+        ⠿
+      </span>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
       <style>{`
@@ -132,82 +226,107 @@ export default function Dashboard() {
             {statCard('Record score', bestScore || '—', bestShow ? `${bestShow.winner} · ${bestShow.label}` : 'no data yet')}
           </div>
 
-          {/* Winning scores over time */}
-          {winningScores.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 fade-up" style={{ animationDelay: '60ms' }}>
-              <h2 className="text-sm font-semibold text-gray-700 mb-4">Winning score per show</h2>
-              <div className="space-y-2">
-                {winningScores.map((w, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400 w-16 shrink-0 text-right">{w.label}</span>
-                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="h-2 rounded-full bg-[#1a6b4a]"
-                        style={{ width: `${(w.score / maxWin) * 100}%`, transition: 'width 500ms cubic-bezier(0.23,1,0.32,1)' }}
-                      />
-                    </div>
-                    <div className="shrink-0 text-right w-24">
-                      <span className="text-xs font-bold text-gray-700">{w.score}</span>
-                      <span className="text-[10px] text-gray-400 ml-1">{w.winner}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {avgWin > 0 && (
-                <p className="text-xs text-gray-400 mt-4 text-right">
-                  Avg team score: <span className="font-semibold text-gray-600">{avgTeamScore}</span>
-                </p>
-              )}
-            </div>
-          )}
+          {/* Reorderable boxes — drag the ⠿ handle to change which chart leads.
+              Order persists in localStorage since this dashboard isn't tied
+              to one show (no natural show-scoped place to store it). */}
+          {boxOrder.map((id, i) => {
+            const dropTarget = dragOverId === id
+            const wrapperClass = `bg-white rounded-2xl border shadow-sm p-5 transition-colors ${entranceDone ? '' : 'fade-up'} ${
+              dropTarget ? 'border-[#1a6b4a] ring-2 ring-[#1a6b4a]/30' : 'border-gray-200'
+            }`
+            const wrapperStyle = entranceDone ? undefined : { animationDelay: `${60 + i * 40}ms` }
 
-          {/* Weekly players */}
-          {weeklyPlayers.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 fade-up" style={{ animationDelay: '100ms' }}>
-              <h2 className="text-sm font-semibold text-gray-700 mb-4">Players per week</h2>
-              <div className="space-y-2">
-                {weeklyPlayers.map((w, i) => {
-                  const d = new Date(w.week + 'T12:00:00')
-                  const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                  return (
-                    <div key={w.week} className="flex items-center gap-3">
-                      <span className="text-xs text-gray-400 w-14 shrink-0 text-right">{label}</span>
-                      <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="h-2 rounded-full bg-blue-400"
-                          style={{ width: `${(w.players / maxWeekPlayers) * 100}%`, transition: 'width 500ms cubic-bezier(0.23,1,0.32,1)' }}
-                        />
+            if (id === 'winning-scores' && winningScores.length > 0) {
+              return (
+                <div key={id} data-box-id={id} className={wrapperClass} style={wrapperStyle}>
+                  <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center">
+                    <GripHandle id={id} />
+                    Winning score per show
+                  </h2>
+                  <div className="space-y-2">
+                    {winningScores.map((w, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <span className="text-xs text-gray-400 w-16 shrink-0 text-right">{w.label}</span>
+                        <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="h-2 rounded-full bg-[#1a6b4a]"
+                            style={{ width: `${(w.score / maxWin) * 100}%`, transition: 'width 500ms cubic-bezier(0.23,1,0.32,1)' }}
+                          />
+                        </div>
+                        <div className="shrink-0 text-right w-24">
+                          <span className="text-xs font-bold text-gray-700">{w.score}</span>
+                          <span className="text-[10px] text-gray-400 ml-1">{w.winner}</span>
+                        </div>
                       </div>
-                      <span className="text-xs font-bold text-gray-700 w-6 shrink-0">{w.players}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Question archive breakdown */}
-          {questions.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 fade-up" style={{ animationDelay: '140ms' }}>
-              <h2 className="text-sm font-semibold text-gray-700 mb-4">Question archive breakdown</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { label: 'Regular', count: qByType.regular, color: 'bg-gray-100 text-gray-600' },
-                  { label: 'Bonus', count: qByType.bonus, color: 'bg-red-100 text-red-700' },
-                  { label: 'Shiny', count: qByType.shiny, color: 'bg-yellow-100 text-yellow-700' },
-                  { label: 'Shiny Visual', count: qByType.visual, color: 'bg-emerald-100 text-emerald-700' },
-                  { label: 'Shiny Audio', count: qByType.audio, color: 'bg-sky-100 text-sky-700' },
-                  { label: 'Swing', count: qByType.swing, color: 'bg-blue-100 text-blue-700' },
-                  { label: 'PYL', count: qByType.pyl, color: 'bg-purple-100 text-purple-700' },
-                ].map(({ label, count, color }) => (
-                  <div key={label} className={`rounded-xl px-4 py-3 ${color}`}>
-                    <p className="text-xs font-semibold uppercase tracking-wide opacity-70">{label}</p>
-                    <p className="text-2xl font-bold mt-0.5">{count}</p>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                  {avgWin > 0 && (
+                    <p className="text-xs text-gray-400 mt-4 text-right">
+                      Avg team score: <span className="font-semibold text-gray-600">{avgTeamScore}</span>
+                    </p>
+                  )}
+                </div>
+              )
+            }
+
+            if (id === 'weekly-players' && weeklyPlayers.length > 0) {
+              return (
+                <div key={id} data-box-id={id} className={wrapperClass} style={wrapperStyle}>
+                  <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center">
+                    <GripHandle id={id} />
+                    Players per week
+                  </h2>
+                  <div className="space-y-2">
+                    {weeklyPlayers.map((w, i) => {
+                      const d = new Date(w.week + 'T12:00:00')
+                      const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                      return (
+                        <div key={w.week} className="flex items-center gap-3">
+                          <span className="text-xs text-gray-400 w-14 shrink-0 text-right">{label}</span>
+                          <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                            <div
+                              className="h-2 rounded-full bg-blue-400"
+                              style={{ width: `${(w.players / maxWeekPlayers) * 100}%`, transition: 'width 500ms cubic-bezier(0.23,1,0.32,1)' }}
+                            />
+                          </div>
+                          <span className="text-xs font-bold text-gray-700 w-6 shrink-0">{w.players}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            }
+
+            if (id === 'question-breakdown' && questions.length > 0) {
+              return (
+                <div key={id} data-box-id={id} className={wrapperClass} style={wrapperStyle}>
+                  <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center">
+                    <GripHandle id={id} />
+                    Question archive breakdown
+                  </h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      { label: 'Regular', count: qByType.regular, color: 'bg-gray-100 text-gray-600' },
+                      { label: 'Bonus', count: qByType.bonus, color: 'bg-red-100 text-red-700' },
+                      { label: 'Shiny', count: qByType.shiny, color: 'bg-yellow-100 text-yellow-700' },
+                      { label: 'Shiny Visual', count: qByType.visual, color: 'bg-emerald-100 text-emerald-700' },
+                      { label: 'Shiny Audio', count: qByType.audio, color: 'bg-sky-100 text-sky-700' },
+                      { label: 'Swing', count: qByType.swing, color: 'bg-blue-100 text-blue-700' },
+                      { label: 'PYL', count: qByType.pyl, color: 'bg-purple-100 text-purple-700' },
+                    ].map(({ label, count, color }) => (
+                      <div key={label} className={`rounded-xl px-4 py-3 ${color}`}>
+                        <p className="text-xs font-semibold uppercase tracking-wide opacity-70">{label}</p>
+                        <p className="text-2xl font-bold mt-0.5">{count}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            }
+
+            return null
+          })}
 
           {shows.length > 0 && scoredShows.length === 0 && (
             <p className="text-xs text-gray-400 text-center py-4">
