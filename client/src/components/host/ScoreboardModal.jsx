@@ -273,11 +273,22 @@ export default function ScoreboardModal({ show, onClose }) {
   }
 
   async function deleteTeam(id) {
+    // A pending debounced save() for this team (from an edit moments ago)
+    // would otherwise fire ~500ms later and re-insert the row we just deleted.
+    clearTimeout(saveTimers.current[id])
+    delete saveTimers.current[id]
     setTeams(prev => prev.filter(t => t.id !== id))
     await supabase.from('scoreboard_teams').delete().eq('id', id)
   }
 
   async function sortTeams() {
+    // Any pending debounced save() holds a pre-sort snapshot (stale sort_order,
+    // and for whichever team is mid-edit, stale name/score too) — letting it
+    // fire after this upsert would silently revert that team's row. teams
+    // (React state) already reflects every edit synchronously by this point,
+    // so this upsert alone carries everything those pending saves would have.
+    Object.values(saveTimers.current).forEach(clearTimeout)
+    saveTimers.current = {}
     const sorted    = [...teams].sort((a, b) => computeTotal(b.scores, cols) - computeTotal(a.scores, cols))
     const reordered = sorted.map((t, i) => ({ ...t, sort_order: i }))
     setTeams(reordered)

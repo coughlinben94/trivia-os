@@ -38,6 +38,19 @@ export function sortedSlides(show) {
   return [...show.slides].sort((a, b) => a.order - b.order)
 }
 
+// Every mutating action here optimistically updates local React state first,
+// then fires this write — it used to do so with no error check at all, so a
+// failed write (network blip, RLS denial, oversized payload) left the host's
+// UI showing a change that was never actually persisted, with no signal that
+// anything went wrong until a reload silently reverted it. This doesn't retry
+// or roll back the optimistic update (that's a bigger behavior change), but
+// it at least surfaces the failure instead of swallowing it completely.
+async function updateShowRow(id, patch) {
+  const { error } = await supabase.from('shows').update(patch).eq('id', id)
+  if (error) console.error(`[useShow] shows update failed (${Object.keys(patch).join(', ')}):`, error)
+  return !error
+}
+
 export function useShow() {
   const [show, setShow] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -281,7 +294,7 @@ export function useShow() {
     if (meta.theme !== undefined) row.theme_id = meta.theme
     if (meta.themeOverrides !== undefined) row.theme_overrides = meta.themeOverrides
     setShow(prev => ({ ...prev, ...meta, updatedAt: row.updated_at }))
-    await supabase.from('shows').update(row).eq('id', show.id)
+    await updateShowRow(show.id, row)
   }
 
   // --- Rounds ---
@@ -300,7 +313,7 @@ export function useShow() {
     }
     const newRounds = [...show.rounds, round]
     setShow(prev => ({ ...prev, rounds: newRounds }))
-    await supabase.from('shows').update({ rounds: newRounds }).eq('id', show.id)
+    await updateShowRow(show.id, { rounds: newRounds })
     return round
   }
 
@@ -308,7 +321,7 @@ export function useShow() {
     if (!show) return
     const newRounds = show.rounds.map(r => r.id === id ? { ...r, ...patch } : r)
     setShow(prev => ({ ...prev, rounds: newRounds }))
-    await supabase.from('shows').update({ rounds: newRounds }).eq('id', show.id)
+    await updateShowRow(show.id, { rounds: newRounds })
   }
 
   async function deleteRound(roundId) {
@@ -316,7 +329,7 @@ export function useShow() {
     const newRounds = show.rounds.filter(r => r.id !== roundId)
     const newSlides = show.slides.filter(s => s.roundId !== roundId)
     setShow(prev => ({ ...prev, rounds: newRounds, slides: newSlides }))
-    await supabase.from('shows').update({ rounds: newRounds, slides: newSlides }).eq('id', show.id)
+    await updateShowRow(show.id, { rounds: newRounds, slides: newSlides })
   }
 
   // --- Slides ---
@@ -338,7 +351,7 @@ export function useShow() {
     }))
     const allSlides = [...shifted, ...newSlides]
     setShow(prev => ({ ...prev, slides: allSlides }))
-    await supabase.from('shows').update({ slides: allSlides }).eq('id', show.id)
+    await updateShowRow(show.id, { slides: allSlides })
     return newSlides
   }
 
@@ -353,10 +366,7 @@ export function useShow() {
     })
     clearTimeout(debounceTimers.current['slides'])
     debounceTimers.current['slides'] = setTimeout(async () => {
-      await supabase
-        .from('shows')
-        .update({ slides: slidesRef.current })
-        .eq('id', showIdRef.current)
+      await updateShowRow(showIdRef.current, { slides: slidesRef.current })
     }, 600)
   }
 
@@ -364,7 +374,7 @@ export function useShow() {
     if (!show) return
     const newSlides = show.slides.filter(s => s.id !== id)
     setShow(prev => ({ ...prev, slides: newSlides }))
-    await supabase.from('shows').update({ slides: newSlides }).eq('id', show.id)
+    await updateShowRow(show.id, { slides: newSlides })
   }
 
   async function reorderSlides(orderedIds) {
@@ -376,7 +386,7 @@ export function useShow() {
       })
       .filter(Boolean)
     setShow(prev => ({ ...prev, slides: newSlides }))
-    await supabase.from('shows').update({ slides: newSlides }).eq('id', show.id)
+    await updateShowRow(show.id, { slides: newSlides })
   }
 
   async function reorderRounds(orderedRoundIds) {
@@ -391,7 +401,7 @@ export function useShow() {
     const roundedSlides = orderedRoundIds.flatMap(id => allSorted.filter(s => s.roundId === id))
     const newSlides = [...generalSlides, ...roundedSlides].map((s, i) => ({ ...s, order: i }))
     setShow(prev => ({ ...prev, rounds: newRounds, slides: newSlides }))
-    await supabase.from('shows').update({ rounds: newRounds, slides: newSlides }).eq('id', show.id)
+    await updateShowRow(show.id, { rounds: newRounds, slides: newSlides })
   }
 
   // --- Powerups ---
@@ -407,7 +417,7 @@ export function useShow() {
     }
     const newPowerups = [...show.powerups, powerup]
     setShow(prev => ({ ...prev, powerups: newPowerups }))
-    await supabase.from('shows').update({ powerups: newPowerups }).eq('id', show.id)
+    await updateShowRow(show.id, { powerups: newPowerups })
     return powerup
   }
 
@@ -415,7 +425,7 @@ export function useShow() {
     if (!show) return
     const newPowerups = show.powerups.filter(p => p.id !== id)
     setShow(prev => ({ ...prev, powerups: newPowerups }))
-    await supabase.from('shows').update({ powerups: newPowerups }).eq('id', show.id)
+    await updateShowRow(show.id, { powerups: newPowerups })
   }
 
   // --- Media (Supabase Storage) ---
@@ -505,13 +515,13 @@ export function useShow() {
       updatedAt: now,
       showState: { ...s.showState, isLive: true, currentSlideIndex: 0, currentSlideId: null },
     }))
-    await supabase.from('shows').update({
+    await updateShowRow(show.id, {
       slides: newSlides,
       is_live: true,
       current_slide_index: 0,
       current_slide_id: null,
       updated_at: now,
-    }).eq('id', show.id)
+    })
   }
 
   async function goLiveFrom(index) {
@@ -528,13 +538,13 @@ export function useShow() {
       updatedAt: now,
       showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: null },
     }))
-    await supabase.from('shows').update({
+    await updateShowRow(show.id, {
       slides: newSlides,
       is_live: true,
       current_slide_index: target,
       current_slide_id: null,
       updated_at: now,
-    }).eq('id', show.id)
+    })
   }
 
   async function nextSlide() {
@@ -553,11 +563,11 @@ export function useShow() {
         slides: newSlides,
         showState: { ...s.showState, currentSlideId: targetSlide.id, answerReveal: false },
       }))
-      await supabase.from('shows').update({
+      await updateShowRow(show.id, {
         slides: newSlides,
         current_slide_id: targetSlide.id,
         answer_reveal: false,
-      }).eq('id', show.id)
+      })
       return
     }
 
@@ -570,7 +580,7 @@ export function useShow() {
         s.id === curSlide.id ? { ...s, data: { ...s.data, introDone: true } } : s
       )
       setShow(s => ({ ...s, slides: newSlides, showState: { ...s.showState, answerReveal: false } }))
-      await supabase.from('shows').update({ slides: newSlides, answer_reveal: false }).eq('id', show.id)
+      await updateShowRow(show.id, { slides: newSlides, answer_reveal: false })
       return
     }
 
@@ -583,7 +593,7 @@ export function useShow() {
           s.id === curSlide.id ? { ...s, data: { ...s.data, currentPart: curPart + 1 } } : s
         )
         setShow(s => ({ ...s, slides: newSlides, showState: { ...s.showState, answerReveal: false } }))
-        await supabase.from('shows').update({ slides: newSlides, answer_reveal: false }).eq('id', show.id)
+        await updateShowRow(show.id, { slides: newSlides, answer_reveal: false })
         return
       }
     }
@@ -597,12 +607,12 @@ export function useShow() {
       slides: newSlides,
       showState: { ...s.showState, currentSlideIndex: target, currentSlideId: targetSlide?.id ?? null, answerReveal: false },
     }))
-    await supabase.from('shows').update({
+    await updateShowRow(show.id, {
       slides: newSlides,
       current_slide_index: target,
       current_slide_id: targetSlide?.id ?? null,
       answer_reveal: false,
-    }).eq('id', show.id)
+    })
   }
 
   async function prevSlide() {
@@ -622,7 +632,7 @@ export function useShow() {
           s.id === curSlide.id ? { ...s, data: { ...s.data, currentPart: curPart - 1 } } : s
         )
         setShow(s => ({ ...s, slides: newSlides, showState: { ...s.showState, answerReveal: false } }))
-        await supabase.from('shows').update({ slides: newSlides, answer_reveal: false }).eq('id', show.id)
+        await updateShowRow(show.id, { slides: newSlides, answer_reveal: false })
         return
       }
     }
@@ -633,7 +643,7 @@ export function useShow() {
         s.id === curSlide.id ? { ...s, data: { ...s.data, introDone: false } } : s
       )
       setShow(s => ({ ...s, slides: newSlides, showState: { ...s.showState, answerReveal: false } }))
-      await supabase.from('shows').update({ slides: newSlides, answer_reveal: false }).eq('id', show.id)
+      await updateShowRow(show.id, { slides: newSlides, answer_reveal: false })
       return
     }
 
@@ -649,54 +659,46 @@ export function useShow() {
       slides: newSlides,
       showState: { ...s.showState, currentSlideIndex: target, currentSlideId: targetSlide?.id ?? null, answerReveal: false },
     }))
-    await supabase.from('shows').update({
+    await updateShowRow(show.id, {
       slides: newSlides,
       current_slide_index: target,
       current_slide_id: targetSlide?.id ?? null,
       answer_reveal: false,
-    }).eq('id', show.id)
+    })
   }
 
   async function setScoreboardVisible(visible) {
     if (!show) return
     setShow(s => ({ ...s, showState: { ...s.showState, scoreboardVisible: visible } }))
-    await supabase.from('shows').update({ scoreboard_visible: visible }).eq('id', show.id)
+    await updateShowRow(show.id, { scoreboard_visible: visible })
   }
 
   async function setAnswerReveal(visible) {
     if (!show) return
     setShow(s => ({ ...s, showState: { ...s.showState, answerReveal: visible } }))
-    await supabase.from('shows').update({ answer_reveal: visible }).eq('id', show.id)
+    await updateShowRow(show.id, { answer_reveal: visible })
   }
 
   async function setScoresRevealed(revealed) {
     if (!show) return
     setShow(s => ({ ...s, showState: { ...s.showState, scoresRevealed: revealed } }))
-    await supabase.from('shows').update({ scores_revealed: revealed }).eq('id', show.id)
+    await updateShowRow(show.id, { scores_revealed: revealed })
   }
 
   async function updateRoundScore(teamId, roundIndex, score) {
     if (!show) return
-    const { data: existing } = await supabase
-      .from('team_scores')
-      .select('id')
-      .eq('team_id', teamId)
-      .eq('round_index', roundIndex)
-      .maybeSingle()
-    if (existing?.id) {
-      await supabase
-        .from('team_scores')
-        .update({ score, updated_at: new Date().toISOString() })
-        .eq('id', existing.id)
-    } else {
-      await supabase.from('team_scores').insert({
-        id: `sc_${nanoid(10)}`,
-        show_id: show.id,
-        team_id: teamId,
-        round_index: roundIndex,
-        score,
-      })
-    }
+    // Atomic upsert on the (team_id, round_index) unique constraint — the
+    // previous select-then-insert-or-update had a race: two rapid calls for
+    // the same team/round could both see no existing row and both attempt
+    // an insert, and the loser's unique-constraint violation was never
+    // caught, silently dropping that score update. `id` is deterministic
+    // (not a fresh nanoid per call) so a same-row upsert-on-conflict doesn't
+    // churn the primary key on every edit.
+    const { error } = await supabase.from('team_scores').upsert(
+      { id: `sc_${teamId}_${roundIndex}`, show_id: show.id, team_id: teamId, round_index: roundIndex, score, updated_at: new Date().toISOString() },
+      { onConflict: 'team_id,round_index' }
+    )
+    if (error) console.error('[useShow] updateRoundScore failed:', error)
   }
 
   async function saveResults() {
@@ -730,16 +732,16 @@ export function useShow() {
       }).sort((a, b) => b.total - a.total)
     }
 
-    await supabase.from('shows').update({
+    await updateShowRow(show.id, {
       player_count: (sbTeams ?? []).length || finalScores.length,
       final_scores: finalScores,
-    }).eq('id', show.id)
+    })
   }
 
   async function updateTickerMessages(messages) {
     if (!show) return
     setShow(prev => ({ ...prev, tickerMessages: messages }))
-    await supabase.from('shows').update({ ticker_messages: messages }).eq('id', show.id)
+    await updateShowRow(show.id, { ticker_messages: messages })
   }
 
   const refresh = useCallback(() => {
