@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { DEFAULT_THEME_ID } from '../themes/index.js'
@@ -772,14 +772,9 @@ export function useShow() {
     await updateShowRow(show.id, { ticker_messages: messages })
   }
 
-  const refresh = useCallback(() => {
-    if (show?.id) return fetchShow(show.id)
-  }, [show?.id])
-
   return {
     show,
     loading,
-    refresh,
     createShow,
     loadShow,
     listShows,

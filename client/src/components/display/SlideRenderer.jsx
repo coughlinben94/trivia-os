@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import TitleSlide from './slides/TitleSlide.jsx'
 import RoundIntroSlide from './slides/RoundIntroSlide.jsx'

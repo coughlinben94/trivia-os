@@ -176,7 +176,9 @@ function RegistrationScreen({ onRegister, show, theme }) {
           <AnimatePresence>
             {error && (
               <motion.p
-                initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                initial={pref ? { opacity: 0 } : { opacity: 0, y: -4 }}
+                animate={pref ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
                 style={{ color: '#ff6b6b', fontSize: '0.875rem', margin: 0, lineHeight: 1.4 }}
               >
