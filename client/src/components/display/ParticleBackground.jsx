@@ -1948,7 +1948,7 @@ const SB_STYLE = `
 @keyframes sbSway { 0%,100% { transform: rotate(-2.4deg); } 50% { transform: rotate(2.4deg); } }
 @keyframes sbWave {
   0%,100% { transform: translateX(-3.6vw) scaleY(.74); opacity: .34; }
-  50%     { transform: translateX(3.6vw)  scaleY(1.22); opacity: .62; }
+  50%     { transform: translateX(3.6vw)  scaleY(1.27); opacity: .62; }
 }
 @keyframes sbDrift {
   0%   { transform: translate(0,0); opacity: 0; }
