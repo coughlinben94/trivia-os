@@ -221,9 +221,13 @@ async function gotoEditor(page) {
   await seedShowId(page)
   await page.goto('/host', { waitUntil: 'networkidle' })
   await page.locator('aside').waitFor({ state: 'visible', timeout: 15_000 })
-  // Confirm we are in dashboard (wizard) mode, not editing mode
-  // CONFIRMED: BuildMode.jsx:120 — this paragraph only renders in wizard mode
-  await expect(page.getByText('What are we adding?')).toBeVisible({ timeout: 5_000 })
+  // Confirm we are in dashboard (wizard/grid) mode, not editing mode.
+  // "What are we adding?" no longer exists anywhere in BuildMode.jsx (the
+  // flat 12-card grid replaced whatever older layout had that heading) —
+  // a State of the Union grid card in <main> is a live, current substitute.
+  // selectedSlide always inits to null on a fresh page load regardless, so
+  // this is really just confirming <main> rendered at all.
+  await expect(page.locator('main').getByRole('button', { name: /State of the Union/ })).toBeVisible({ timeout: 5_000 })
 }
 
 /**
@@ -349,7 +353,7 @@ test.describe('A. Modal mechanics — open / close (no create)', () => {
     await page.keyboard.press('Escape')
     await expect(page.getByRole('heading', { level: 2 })).not.toBeVisible({ timeout: 3_000 })
     // Dashboard restored
-    await expect(page.getByText('What are we adding?')).toBeVisible()
+    await expect(page.locator('main').getByRole('button', { name: /State of the Union/ })).toBeVisible()
   })
 
   test('A3: click-outside (backdrop) closes the modal', async ({ page }) => {
@@ -367,7 +371,7 @@ test.describe('A. Modal mechanics — open / close (no create)', () => {
     await gotoEditor(page)
     await openModal(page, 'State of the Union')
     await closeWithX(page)
-    await expect(page.getByText('What are we adding?')).toBeVisible()
+    await expect(page.locator('main').getByRole('button', { name: /State of the Union/ })).toBeVisible()
   })
 
 })
@@ -378,14 +382,14 @@ test.describe('A. Modal mechanics — open / close (no create)', () => {
 
 test.describe('B. Title slide — create and verify', () => {
 
-  test('B1: no round select; "Add Slide →" immediately enabled; creates with hardcoded Baynes data', async ({ page }) => {
+  test('B1: no round select; "Add Slide →" immediately enabled; creates with empty data (StateOfUnionSlide supplies its own default message at render time)', async ({ page }) => {
     await gotoEditor(page)
     const countBefore = (await getSlides()).length
 
     await openModal(page, 'State of the Union')
 
-    // title NOT in NEEDS_ROUND — no round select
-    // CONFIRMED: NEEDS_ROUND.has('title') === false (AddSlideWizard.jsx:14)
+    // state-of-union NOT in NEEDS_ROUND — no round select
+    // CONFIRMED: NEEDS_ROUND.has('state-of-union') === false (AddSlideWizard.jsx:19)
     await expect(page.locator('#add-round-select')).not.toBeVisible()
 
     const addBtn = page.getByRole('button', { name: 'Add Slide →' })
@@ -396,17 +400,26 @@ test.describe('B. Title slide — create and verify', () => {
     // ── Supabase verify: poll until write lands, then confirm editor is still alive ──
     await assertEditorAlive(page)
     const newSlide = await waitForSlideCount(countBefore + 1)
-    expect(newSlide.type).toBe('title')
+    // The "State of the Union" card creates type 'state-of-union', not 'title'
+    // (that migration predates this session — confirmed by StateOfUnionSlide.jsx
+    // reading slide.data?.message, not data.title/subtitle). AddSlideWizard's
+    // handleCreate has no branch for this type, so data stays the default {} —
+    // the hardcoded 'Baynes Apple Valley' / 'Trivia Night' values only ever
+    // applied to the old 'title' type, which this card no longer creates.
+    expect(newSlide.type).toBe('state-of-union')
     expect(newSlide.roundId).toBeNull()
-    expect(newSlide.data.title).toBe('Baynes Apple Valley')     // CONFIRMED AddSlideWizard.jsx:71
-    expect(newSlide.data.subtitle).toBe('Trivia Night')          // CONFIRMED AddSlideWizard.jsx:71
+    expect(newSlide.data).toEqual({})
 
     // ── UI: editing mode entered ──
-    // CONFIRMED: BuildMode calls enterEditing(slide) after addSlide; wizard mode exits
-    await expect(page.getByText('What are we adding?')).not.toBeVisible()
+    // CONFIRMED: BuildMode calls enterEditing(slide) after addSlide; wizard mode exits.
+    // "What are we adding?" doesn't exist anywhere anymore, so a .not.toBeVisible()
+    // check against it would vacuously pass in any state — replaced with a positive
+    // check for SlideEditor's own "← Dashboard" nav button instead.
+    await expect(page.getByRole('button', { name: '← Dashboard' })).toBeVisible()
 
-    // ── Sidebar: label = data.title (RoundSidebar.jsx:27) ──
-    await expect(page.locator('aside').getByText('Baynes Apple Valley').first()).toBeVisible()
+    // ── Sidebar: slideLabel() has no 'state-of-union' branch, falls through to
+    // SLIDE_TYPE_META['state-of-union'].label = 'State of the Union' ──
+    await expect(page.locator('aside').getByText('State of the Union').first()).toBeVisible()
   })
 
 })
@@ -609,7 +622,7 @@ test.describe('F. Question / plain — create and verify', () => {
     expect(Array.isArray(newSlide.data.mediaSlots)).toBe(true)
 
     // ── UI: editing mode entered (SlideEditor rendered) ──
-    await expect(page.getByText('What are we adding?')).not.toBeVisible()
+    await expect(page.getByRole('button', { name: '← Dashboard' })).toBeVisible()
 
     // ── Sidebar: question label visible ──
     // CONFIRMED: slideLabel() returns data.questionLabel for type 'question' (RoundSidebar.jsx:20)

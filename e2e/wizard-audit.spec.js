@@ -91,7 +91,11 @@ test.describe('1. Grid card inventory', () => {
     const errors = attachErrors(page)
     await gotoEditor(page)
 
-    for (const name of ['Theme', 'Swing Round', 'Press Your Luck', 'Shiny Formats', 'Question Database', 'Ticker', 'Data']) {
+    // "Ticker" was renamed "Team List" and repurposed to open the
+    // team-preview add-modal — the old TickerMessageManager trigger no
+    // longer exists in this grid (BuildMode.jsx's showTickerManager state
+    // is now dead code, nothing sets it true anymore).
+    for (const name of ['Theme', 'Swing Round', 'Press Your Luck', 'Shiny Formats', 'Question Database', 'Team List', 'Data']) {
       await expect(
         page.locator('main').getByRole('button', { name: new RegExp(name) }).first(),
         `Tool card "${name}" must be visible in the grid`,
@@ -232,9 +236,13 @@ test.describe('3. Question modal', () => {
     const firstFmt = page.locator('div.fixed.inset-0').locator('button[type="button"]').first()
     await firstFmt.click()
 
-    // "Add {name} →" proceed button appears
+    // "Add {name} →" proceed button appears in the shiny panel. The split-
+    // screen layout keeps the plain-question column's "Add question →"
+    // button visible at the same time (it doesn't hide when a shiny tile
+    // is picked), so the generic pattern now matches both — exclude the
+    // literal plain-question label to isolate the shiny one specifically.
     await expect(
-      page.locator('div.fixed').getByRole('button', { name: /^Add .+ →$/ }),
+      page.locator('div.fixed').getByRole('button', { name: /^Add (?!question →).+ →$/ }),
     ).toBeVisible()
 
     await closeModal(page)
