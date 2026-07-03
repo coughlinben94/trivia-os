@@ -245,7 +245,11 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                         width: `${elW}%`,
                         transform: `translate(-50%, -50%) rotate(${rot}deg) scaleX(${fH}) scaleY(${fV})`,
                         border: isSel ? '2px solid #3b82f6' : '1px dashed rgba(255,255,255,0.35)',
-                        borderRadius: 4, minHeight: 24, cursor: 'move',
+                        borderRadius: 4,
+                        minHeight: el.type === 'text'
+                          ? Math.max(36, Math.round((el.fontSize ?? 60) * dynScale * (el.lineHeight ?? 1.2)))
+                          : Math.max(36, Math.round(elW / 100 * scaledW * (INNER_H / INNER_W))),
+                        cursor: 'move',
                         background: isSel ? 'rgba(59,130,246,0.07)' : 'transparent',
                         boxSizing: 'border-box',
                       }}
@@ -290,7 +294,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
             <div className="w-72 bg-white border-l border-gray-200 flex flex-col overflow-hidden shrink-0">
               <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
                 {/* ── Slide content ── */}
-                {!['winner-reveal', 'state-of-union'].includes(slide.type) && (
+                {(
                   <div className="space-y-3 pb-3 border-b border-gray-100">
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Slide Content</p>
                     {slide.type === 'title' && <TitleEditor data={data} onChange={change} />}
@@ -319,6 +323,12 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     )}
                     {slide.type === 'pyl-reveal' && (
                       <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
+                    )}
+                    {slide.type === 'state-of-union' && (
+                      <StateOfUnionEditor data={data} onChange={change} />
+                    )}
+                    {slide.type === 'winner-reveal' && (
+                      <WinnerRevealEditor data={data} onChange={change} />
                     )}
                   </div>
                 )}
@@ -1536,11 +1546,14 @@ function WinnerRevealEditor({ data, onChange }) {
 
 function StateOfUnionEditor({ data, onChange }) {
   return (
-    <div className="flex flex-col gap-3 py-2">
-      <p className="text-sm text-gray-500 leading-relaxed">
-        This slide is generated automatically from live standings. No configuration needed.
-      </p>
-    </div>
+    <Field label="Message">
+      <textarea
+        value={data.message ?? "Welcome to Trivia Night at Baynes Apple Valley. Let's get into it."}
+        onChange={e => onChange('message', e.target.value)}
+        rows={3}
+        className="w-full text-sm bg-gray-50 text-gray-900 rounded-lg px-3 py-2 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-baynes-forest resize-none"
+      />
+    </Field>
   )
 }
 
