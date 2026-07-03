@@ -34,28 +34,17 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
           <span className="text-sm font-semibold text-gray-900 hidden sm:block">Trivia OS</span>
         </div>
 
-        {/* Divider */}
-        <div className="w-px h-6 bg-gray-200 shrink-0" />
-
-        {/* My Shows */}
-        <div className="flex items-center gap-1 shrink-0">
-          <a
-            href="/shows"
-            target="_blank"
-            rel="noreferrer"
-            className="text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
-          >
-            My Shows
-          </a>
-          {onDashboard && (
+        {onDashboard && (
+          <>
+            <div className="w-px h-6 bg-gray-200 shrink-0" />
             <button
               onClick={onDashboard}
-              className="text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
+              className="text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button shrink-0"
             >
               ← Dashboard
             </button>
-          )}
-        </div>
+          </>
+        )}
 
         {/* Divider */}
         <div className="w-px h-6 bg-gray-200 shrink-0" />
