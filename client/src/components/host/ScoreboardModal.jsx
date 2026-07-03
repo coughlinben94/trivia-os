@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
-import gsap from 'gsap'
+import BoxingRing from '../display/slides/BoxingRing.jsx'
+import ChestDuel from '../display/slides/ChestDuel.jsx'
+import CardPick from '../display/slides/CardPick.jsx'
 
 // ─── Quick Entry ──────────────────────────────────────────────────────────────
 function QuickEntry({ teams, cols, onSave, onClose }) {
@@ -199,267 +201,6 @@ function TeamTable({ teams, cols, onUpdateName, onUpdateScore, onDelete, highlig
   )
 }
 
-// ─── Spin Wheel ──────────────────────────────────────────────────────────────
-
-const SPIN_MS = 4000
-
-function arcPath(cx, cy, r, startDeg, endDeg) {
-  const rad = d => (d - 90) * Math.PI / 180
-  const sx = cx + r * Math.cos(rad(startDeg))
-  const sy = cy + r * Math.sin(rad(startDeg))
-  const ex = cx + r * Math.cos(rad(endDeg))
-  const ey = cy + r * Math.sin(rad(endDeg))
-  const large = endDeg - startDeg > 180 ? 1 : 0
-  return `M${cx},${cy} L${sx},${sy} A${r},${r},0,${large},1,${ex},${ey} Z`
-}
-
-function SpinWheel({ initialPool, colors, onComplete, onClose }) {
-  const SIZE = 320
-  const R    = 148
-  const CX   = SIZE / 2
-  const CY   = SIZE / 2
-  const toRad = d => (d - 90) * Math.PI / 180
-
-  const [pool,      setPool]      = useState(initialPool)
-  const [rotation,  setRotation]  = useState(0)
-  const [spinning,  setSpinning]  = useState(false)
-  const [landed,    setLanded]    = useState(null)
-  const [advancing, setAdvancing] = useState(false)
-  const [showPopup, setShowPopup] = useState(false)
-  const timerRef        = useRef(null)
-  const tlRef           = useRef(null)
-  const sectorGroupRefs = useRef({})
-  const winnerRef       = useRef(null)
-  const popupRef        = useRef(null)
-  const wheelWrapRef    = useRef(null)
-  const overlayRef      = useRef(null)
-
-  const n         = pool.length
-  const sectorDeg = n > 0 ? 360 / n : 360
-
-  useEffect(() => () => {
-    clearTimeout(timerRef.current)
-    tlRef.current?.kill()
-  }, [])
-
-  // Drives the full popup → poof → wheel poof → fade sequence
-  useEffect(() => {
-    if (!showPopup || !popupRef.current) return
-    const winner = winnerRef.current
-    const tl = gsap.timeline()
-    tlRef.current = tl
-
-    // Popup slams in with a bounce
-    gsap.set(popupRef.current, { scale: 0.55, opacity: 0 })
-    tl.to(popupRef.current, { scale: 1.07, opacity: 1, duration: 0.22, ease: 'power3.out' })
-      .to(popupRef.current, { scale: 1,    duration: 0.16, ease: 'power2.inOut' })
-
-    // Hold for a beat, then popup poofs off
-    tl.to(popupRef.current, { scale: 1.40, opacity: 0, duration: 0.30, ease: 'power2.in' }, '+=0.90')
-
-    // Wheel poofs off overlapping the popup exit
-    if (wheelWrapRef.current) {
-      tl.to(wheelWrapRef.current, { scale: 1.22, opacity: 0, duration: 0.28, ease: 'power2.in' }, '-=0.12')
-    }
-
-    // Fade overlay to black before unmount
-    if (overlayRef.current) {
-      tl.to(overlayRef.current, { opacity: 0, duration: 0.22, ease: 'power1.in' }, '-=0.10')
-    }
-
-    tl.call(() => onComplete(winner.id))
-  }, [showPopup]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  function spin() {
-    if (spinning || n < 1) return
-    const winnerIdx  = Math.floor(Math.random() * n)
-    const sectorMid  = winnerIdx * sectorDeg + sectorDeg / 2
-    const want       = (360 - sectorMid % 360 + 360) % 360
-    const currentMod = ((rotation % 360) + 360) % 360
-    let   delta      = (want - currentMod + 360) % 360
-    if (delta < 45) delta += 360
-    const target = rotation + (5 + Math.floor(Math.random() * 4)) * 360 + delta
-
-    setSpinning(true)
-    setRotation(target)
-    clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => {
-      setSpinning(false)
-      setLanded(pool[winnerIdx])
-    }, SPIN_MS + 120)
-  }
-
-  function advance() {
-    if (!landed || advancing) return
-    setAdvancing(true)
-    winnerRef.current = landed
-    setShowPopup(true)
-  }
-
-  return (
-    <div
-      ref={overlayRef}
-      className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-5 select-none"
-      style={{ background: 'rgba(0,0,0,0.90)', backdropFilter: 'blur(14px)' }}
-    >
-      {/* Header — hidden once exit sequence starts */}
-      {!advancing && (
-        <div className="text-center">
-          <p className="text-white/40 text-xs font-semibold uppercase tracking-widest mb-1.5">Press Your Luck</p>
-          <p className="text-white/80 text-xl font-bold" style={{ fontFamily: 'Boogaloo, sans-serif' }}>
-            Who picks the category?
-          </p>
-        </div>
-      )}
-
-      {/* Wheel + pointer */}
-      <div ref={wheelWrapRef} className="relative flex flex-col items-center" style={{ width: SIZE }}>
-        {/* Downward pointer at 12 o'clock */}
-        <div style={{
-          width: 0, height: 0, position: 'relative', zIndex: 2,
-          borderLeft: '13px solid transparent',
-          borderRight: '13px solid transparent',
-          borderTop: '28px solid white',
-          filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.5))',
-        }} />
-
-        {/* Spinning wheel */}
-        <div style={{ position: 'relative', width: SIZE, height: SIZE }}>
-          <div style={{
-            width: SIZE, height: SIZE,
-            transform: `rotate(${rotation}deg)`,
-            transition: spinning ? `transform ${SPIN_MS}ms cubic-bezier(0.22, 1, 0.36, 1)` : 'none',
-            willChange: 'transform',
-          }}>
-            <svg width={SIZE} height={SIZE} style={{ display: 'block' }}>
-              {pool.map((team, i) => {
-                const startDeg = i * sectorDeg
-                const endDeg   = (i + 1) * sectorDeg
-                const midDeg   = startDeg + sectorDeg / 2
-                const tx = CX + R * 0.58 * Math.cos(toRad(midDeg))
-                const ty = CY + R * 0.58 * Math.sin(toRad(midDeg))
-                const label = (team.name || '?').length > 10
-                  ? (team.name || '?').slice(0, 9) + '…'
-                  : (team.name || '?')
-                return (
-                  <g key={team.id} ref={el => { sectorGroupRefs.current[team.id] = el }}>
-                    <path
-                      d={arcPath(CX, CY, R, startDeg, endDeg)}
-                      fill={colors[i % colors.length]}
-                      stroke="rgba(255,255,255,0.20)"
-                      strokeWidth="2"
-                    />
-                    <text
-                      x={tx} y={ty}
-                      textAnchor="middle" dominantBaseline="middle"
-                      transform={`rotate(${midDeg - 90}, ${tx}, ${ty})`}
-                      fill="white"
-                      fontSize={sectorDeg > 50 ? '13' : '11'}
-                      fontWeight="700"
-                      fontFamily="DM Sans, sans-serif"
-                      style={{ userSelect: 'none', pointerEvents: 'none' }}
-                    >
-                      {label}
-                    </text>
-                  </g>
-                )
-              })}
-              {/* Center hub */}
-              <circle cx={CX} cy={CY} r={24} fill="white" />
-              <text x={CX} y={CY} textAnchor="middle" dominantBaseline="middle" fontSize="20">🎰</text>
-            </svg>
-          </div>
-        </div>
-      </div>
-
-      {/* Result + buttons — hidden once exit sequence starts */}
-      {!advancing && (
-        <>
-          <div className="h-12 flex items-center justify-center">
-            {landed && !spinning && (
-              <p
-                className="text-3xl font-bold text-yellow-400"
-                style={{
-                  fontFamily: 'Boogaloo, sans-serif',
-                  animation: 'fadeSlideUp 0.32s cubic-bezier(0.23,1,0.32,1) both',
-                }}
-              >
-                {landed.name}!
-              </p>
-            )}
-            {spinning && (
-              <p className="text-white/30 text-sm uppercase tracking-widest">Spinning…</p>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3">
-            {!spinning && !landed && (
-              <button
-                onClick={spin}
-                className="bg-[#1a6b4a] text-white font-bold text-lg px-10 py-3.5 rounded-2xl host-button hover:bg-green-900 shadow-xl"
-              >
-                🎡 Spin!
-              </button>
-            )}
-            {!spinning && landed && (
-              <button
-                onClick={advance}
-                className="bg-[#1a6b4a] text-white font-bold text-lg px-10 py-3.5 rounded-2xl host-button hover:bg-green-900 shadow-xl"
-              >
-                They choose! →
-              </button>
-            )}
-            <button onClick={onClose} className="text-white/30 hover:text-white/60 text-sm px-4 py-3 host-button">
-              Cancel
-            </button>
-          </div>
-        </>
-      )}
-
-      {/* Winner popup — bounces in, holds, then poofs off before wheel exits */}
-      {showPopup && landed && (
-        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-          <div
-            ref={popupRef}
-            className="rounded-3xl flex flex-col items-center gap-3 text-center"
-            style={{
-              opacity: 0,
-              padding: '3.5rem 5rem',
-              minWidth: 340,
-              background: 'rgba(12,8,4,0.97)',
-              border: '2px solid rgba(250,204,21,0.60)',
-              boxShadow: '0 0 80px rgba(250,204,21,0.18), 0 30px 80px rgba(0,0,0,0.75)',
-            }}
-          >
-            <div style={{ fontSize: 36, lineHeight: 1 }}>🎉</div>
-            <p style={{
-              fontFamily: 'Boogaloo, sans-serif',
-              fontSize: '4.5rem',
-              fontWeight: 700,
-              color: 'white',
-              lineHeight: 1.05,
-              margin: 0,
-            }}>
-              {landed.name}!
-            </p>
-            <p style={{
-              fontFamily: 'DM Sans, sans-serif',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              color: 'rgba(250,204,21,0.65)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
-              margin: 0,
-            }}>
-              Picks the category
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ─── ScoreboardModal ──────────────────────────────────────────────────────────
 
 export default function ScoreboardModal({ show, onClose }) {
@@ -468,8 +209,8 @@ export default function ScoreboardModal({ show, onClose }) {
   const [loading,      setLoading]      = useState(true)
   const [highlightIds, setHighlightIds] = useState(null)
   const [quickEntry,   setQuickEntry]   = useState(false)
-  const [wheelOpen,    setWheelOpen]    = useState(false)
-  const [wheelPool,    setWheelPool]    = useState([])
+  const [activeAnim,   setActiveAnim]   = useState(null)
+  const [animWinnerId, setAnimWinnerId] = useState(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const saveTimers = useRef({})
 
@@ -479,12 +220,6 @@ export default function ScoreboardModal({ show, onClose }) {
   const leftTeams      = teamsWithStats.slice(0, half)
   const rightTeams     = teamsWithStats.slice(half)
 
-  // Wheel sector colors drawn from the current theme
-  const wheelColors = [
-    theme.colors.accent,
-    theme.colors.highlight,
-    theme.colors.shinyAccent || theme.colors.bgDeep || '#334155',
-  ]
 
   useEffect(() => {
     supabase
@@ -564,11 +299,11 @@ export default function ScoreboardModal({ show, onClose }) {
 
   function quickSave(teamId, colKey, score) { updateScore(teamId, colKey, score) }
 
-  function openWheel() {
+  function openAnim(type) {
     if (teamsWithStats.length < 2) return
-    const shuffled = [...teamsWithStats].sort(() => Math.random() - 0.5)
-    setWheelPool(teamsWithStats.length === 2 ? shuffled : shuffled.slice(0, 2))
-    setWheelOpen(true)
+    const winner = teamsWithStats[Math.floor(Math.random() * teamsWithStats.length)]
+    setAnimWinnerId(winner.id)
+    setActiveAnim(type)
   }
 
   const btnBase = 'text-sm font-medium px-3 py-1.5 rounded-lg host-button transition-colors'
@@ -577,13 +312,13 @@ export default function ScoreboardModal({ show, onClose }) {
     function onKey(e) {
       if (e.key !== 'Escape') return
       if (e.target.closest?.('input, textarea, select, [contenteditable]')) return
-      // Let sub-modals (wheel, quick entry) handle Escape first via bubbling
-      if (wheelOpen || quickEntry) return
+      // Let sub-modals (anim, quick entry) handle Escape first via bubbling
+      if (activeAnim || quickEntry) return
       onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [wheelOpen, quickEntry, onClose])
+  }, [activeAnim, quickEntry, onClose])
 
   return (
     <>
@@ -604,10 +339,20 @@ export default function ScoreboardModal({ show, onClose }) {
             >⚡ Quick Entry</button>
             <button onClick={addTeam} className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200`}>+ Team</button>
             <button
-              onClick={openWheel}
+              onClick={() => openAnim('cards')}
               disabled={teamsWithStats.length < 2}
               className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
-            >🎡 PYL Wheel</button>
+            >🎴 Cards</button>
+            <button
+              onClick={() => openAnim('boxing')}
+              disabled={teamsWithStats.length < 2}
+              className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
+            >🥊 Boxing</button>
+            <button
+              onClick={() => openAnim('chest')}
+              disabled={teamsWithStats.length < 2}
+              className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
+            >📦 Chest</button>
             {confirmClear ? (
               <div className="flex items-center gap-1.5 ml-1">
                 <span className="text-xs text-red-600 font-semibold">Remove all teams?</span>
@@ -670,16 +415,42 @@ export default function ScoreboardModal({ show, onClose }) {
         </div>
       </div>
 
-      {wheelOpen && (
-        <SpinWheel
-          initialPool={wheelPool}
-          colors={wheelColors}
-          onComplete={(id) => {
-            setHighlightIds([id])
-            setWheelOpen(false)
-          }}
-          onClose={() => setWheelOpen(false)}
-        />
+      {activeAnim && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.85)' }}
+          onClick={() => setActiveAnim(null)}
+        >
+          <div
+            style={{ position: 'relative', width: '100%', height: '100%' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {activeAnim === 'boxing' && (
+              <BoxingRing
+                candidates={teamsWithStats}
+                winnerId={animWinnerId}
+                theme={theme}
+                onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}
+              />
+            )}
+            {activeAnim === 'chest' && (
+              <ChestDuel
+                candidates={teamsWithStats}
+                winnerId={animWinnerId}
+                theme={theme}
+                onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}
+              />
+            )}
+            {activeAnim === 'cards' && (
+              <CardPick
+                candidates={teamsWithStats}
+                winnerId={animWinnerId}
+                theme={theme}
+                onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}
+              />
+            )}
+          </div>
+        </div>
       )}
     </>
   )
