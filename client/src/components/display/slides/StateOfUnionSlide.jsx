@@ -7,12 +7,6 @@ import SlideElements from '../SlideElements.jsx'
 const CHARS_PER_SECOND = 28
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
-// Softened, true-gradient reprise of the flag joke: three plain color stops
-// (no pinned/duplicated stops) blend continuously instead of the old hard
-// red/white/blue bands. Each anchor is lifted toward pastel so the whole
-// scene reads as a soft dawn wash rather than a flag graphic.
-const BG = 'linear-gradient(135deg, #e2717a 0%, #faf3e6 50%, #8d92d6 100%)'
-
 export default function StateOfUnionSlide({ slide }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
@@ -30,39 +24,43 @@ export default function StateOfUnionSlide({ slide }) {
     return () => clearInterval(interval)
   }, [message])
 
+  const c = theme.colors
+
+  // Same fixed angle on both gradient layers, always — only their opacity
+  // crosses over, never their direction. That crossfade is the "stop-shift":
+  // as A fades under B, the effective color distribution drifts smoothly
+  // with zero rotation and nothing but opacity animating (GPU-only, matches
+  // ambient-design-law). Built from this show's own theme.colors so the
+  // background belongs to the same family as every ambient wash instead of
+  // a one-off hardcoded palette.
+  const gradA = `linear-gradient(135deg, ${c.bgDeep} 0%, ${c.bg} 55%, ${c.accent} 100%)`
+  const gradB = `linear-gradient(135deg, ${c.bg} 0%, ${c.accent} 50%, ${c.highlight} 100%)`
+
   return (
-    <div
-      className="absolute inset-0 flex flex-col items-center justify-center px-24 overflow-hidden"
-      style={{ background: BG }}
-    >
-      {/* Slow breathing glow — kept clear of the reading well below (upper
-          third only) so it adds ambient life without cutting into the
-          contrast pool the text depends on. Opacity-only, GPU-safe. */}
+    <div className="absolute inset-0 flex flex-col items-center justify-center px-24 overflow-hidden">
+      {/* Base gradient — locked, no animation, always visible under the
+          crossfading layer below. */}
+      <div aria-hidden className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, background: gradA }} />
+
+      {/* Stop-shift — same angle as gradA, only opacity crosses over. */}
+      <motion.div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{ zIndex: 0, background: gradB }}
+        animate={reduce ? { opacity: 0.35 } : { opacity: [0.15, 0.55, 0.15] }}
+        transition={reduce ? undefined : { duration: 14, repeat: Infinity, ease: 'easeInOut' }}
+      />
+
+      {/* Faint intensity pulse — theme highlight, opacity-only breathe. */}
       <motion.div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
         style={{
-          zIndex: 0,
-          background: 'radial-gradient(ellipse 55% 30% at 50% 14%, rgba(255,255,255,0.45) 0%, transparent 70%)',
-        }}
-        animate={reduce ? { opacity: 0.45 } : { opacity: [0.3, 0.5, 0.3] }}
-        transition={reduce ? undefined : { duration: 7, repeat: Infinity, ease: 'easeInOut' }}
-      />
-
-      {/* Reading well — tinted plum instead of flat black so the pool reads
-          as the gradient deepening rather than a stain sitting on top of
-          it; four stops taper it out gradually instead of a hard 2-stop
-          cutoff. The light wash needs real darkening (not the subtle dose
-          that works over QuestionSlide's near-black ambient bg) to get
-          white text to AA contrast — verified 10.9:1 at the pool's center
-          against the cream gradient stop. */}
-      <div
-        aria-hidden
-        className="absolute inset-0 pointer-events-none"
-        style={{
           zIndex: 1,
-          background: 'radial-gradient(ellipse 58% 46% at 50% 58%, rgba(38,20,36,0.78) 0%, rgba(38,20,36,0.55) 32%, rgba(38,20,36,0.26) 58%, transparent 88%)',
+          background: `radial-gradient(ellipse 70% 60% at 50% 45%, ${c.highlight} 0%, transparent 70%)`,
         }}
+        animate={reduce ? { opacity: 0.1 } : { opacity: [0.05, 0.15, 0.05] }}
+        transition={reduce ? undefined : { duration: 7, repeat: Infinity, ease: 'easeInOut' }}
       />
 
       <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
@@ -79,18 +77,20 @@ export default function StateOfUnionSlide({ slide }) {
           />
         )}
 
-        {/* Typewriter text */}
+        {/* Typewriter text — plain, centered, no gold/tilt (not a shiny beat) */}
         <motion.p
-          initial={{ opacity: 0, y: reduce ? 0 : 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: EASE_SNAP }}
+          initial={{ opacity: 0, scale: reduce ? 1 : 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6, ease: EASE_SNAP }}
           style={{
-            fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-            fontSize: 'clamp(1.6rem, 3vw, 3rem)',
-            color: '#fff',
-            textShadow: '0 2px 12px rgba(0,0,0,0.55)',
-            lineHeight: 1.55,
+            fontFamily: `'${theme.fonts.display}', sans-serif`,
+            fontWeight: 700,
+            color: c.text,
+            textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
+            fontSize: 'clamp(1.9rem, 3.6cqw, 3.4rem)',
+            lineHeight: 1.35,
             textAlign: 'center',
+            textWrap: 'balance',
             maxWidth: '72ch',
             minHeight: '8rem',
           }}
@@ -100,7 +100,7 @@ export default function StateOfUnionSlide({ slide }) {
           <motion.span
             animate={{ opacity: [1, 0] }}
             transition={{ duration: 0.6, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
-            style={{ color: '#fff', marginLeft: 2 }}
+            style={{ color: c.text, marginLeft: 2 }}
           >
             |
           </motion.span>
