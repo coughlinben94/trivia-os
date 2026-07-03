@@ -8,6 +8,10 @@ import { resolveShinyPart, isVisualShiny, isAudioShiny } from '../../../lib/shin
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 const EASE_ASSEMBLE = [0.22, 1, 0.36, 1]
 
+// Fixed gold for shiny intro screens — constant signal across all themes.
+const SHINY_GOLD      = '#f0d890' // pale cream-gold fill (Jazz Club–approved)
+const SHINY_GOLD_GLOW = '#d4820c' // amber glow for shadows and radial wash
+
 // ─── Standard question ────────────────────────────────────────────────────────
 
 function StandardQuestion({ slide, show, theme, transitionKey }) {
@@ -488,7 +492,7 @@ function ShinyIntroScreen({ slide, theme }) {
         aria-hidden
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: `radial-gradient(ellipse 85% 65% at 50% 62%, ${theme.colors.highlight}4d 0%, ${theme.colors.highlight}22 38%, transparent 72%)`,
+          background: `radial-gradient(ellipse 85% 65% at 50% 62%, ${SHINY_GOLD_GLOW}4d 0%, ${SHINY_GOLD_GLOW}22 38%, transparent 72%)`,
         }}
       />
 
@@ -528,11 +532,11 @@ function ShinyIntroScreen({ slide, theme }) {
         className="relative z-10 text-center px-20"
         style={{
           fontFamily: `'${theme.fonts.display}', sans-serif`,
-          color: theme.colors.text,
+          color: SHINY_GOLD,
           fontSize: 'clamp(2.75rem, 6.5cqw, 6rem)',
           fontWeight: 700,
           lineHeight: 1.08,
-          textShadow: `0 3px 0 rgba(0,0,0,0.25), 0 2px 24px ${theme.colors.highlight}80`,
+          textShadow: `0 3px 0 rgba(0,0,0,0.25), 0 2px 24px ${SHINY_GOLD_GLOW}80`,
         }}
       >
         {title}
