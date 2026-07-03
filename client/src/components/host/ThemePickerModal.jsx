@@ -4,8 +4,13 @@ import { THEMES, getTheme } from '../../themes/index.js'
 import ParticleBackground from '../display/ParticleBackground.jsx'
 import ThemeCustomizeControls from './ThemeCustomizeControls.jsx'
 
-const INNER_W = 1280
-const INNER_H = 720
+// Matches the real /display TV output (see Display.jsx's ticker comment:
+// "always fills the full 1920px width") — fixed-px ambient details (stars,
+// motes, glints, blur radii) need this to be the true reference resolution,
+// not just any 16:9 box, or they'll render as a larger fraction of the
+// preview canvas than they actually are on the real display.
+const INNER_W = 1920
+const INNER_H = 1080
 const PREVIEW_W = 680
 const PREVIEW_H = Math.round(PREVIEW_W * (9 / 16))
 const SCALE = PREVIEW_W / INNER_W
