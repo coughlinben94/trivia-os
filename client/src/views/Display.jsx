@@ -16,7 +16,7 @@ import { resolveShinyPart } from '../lib/shinySeries.js'
 
 // ─── Pre-show waiting screen ───────────────────────────────────────────────
 
-function PreShowScreen({ show }) {
+function PreShowScreen({ show, onInstall }) {
   const { theme } = useTheme()
   const [teams, setTeams] = useState([])
   const [qrDataUrl, setQrDataUrl] = useState(null)
@@ -178,6 +178,30 @@ function PreShowScreen({ show }) {
       }}>
         <BenPhoto size={120} />
       </div>
+
+      {onInstall && (
+        <button
+          onClick={onInstall}
+          style={{
+            position: 'absolute',
+            top: 20,
+            right: 24,
+            zIndex: 20,
+            background: 'rgba(255,255,255,0.07)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            color: 'rgba(255,255,255,0.55)',
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: '0.8rem',
+            fontWeight: 500,
+            letterSpacing: '0.06em',
+            padding: '6px 14px',
+            borderRadius: '999px',
+            cursor: 'pointer',
+          }}
+        >
+          + Add to Dock
+        </button>
+      )}
 
       <BaynesWatermark />
     </div>
@@ -369,6 +393,34 @@ export default function Display() {
   const [loading, setLoading] = useState(true)
   const prevIndexRef = useRef(0)
   const [direction, setDirection] = useState(1)
+  const installPromptRef = useRef(null)
+  const [canInstall, setCanInstall] = useState(false)
+
+  // Capture Chrome's install prompt — only fires when not already installed
+  useEffect(() => {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    if (isStandalone) return
+    function onPrompt(e) { e.preventDefault(); installPromptRef.current = e; setCanInstall(true) }
+    window.addEventListener('beforeinstallprompt', onPrompt)
+    return () => window.removeEventListener('beforeinstallprompt', onPrompt)
+  }, [])
+
+  function handleInstall() {
+    if (!installPromptRef.current) return
+    installPromptRef.current.prompt()
+    installPromptRef.current.userChoice.then(() => { installPromptRef.current = null; setCanInstall(false) })
+  }
+
+  // Inject PWA manifest scoped to /display so Chrome offers "Add to Dock"
+  useEffect(() => {
+    const existing = document.querySelector('link[rel="manifest"]')
+    if (existing) return
+    const link = document.createElement('link')
+    link.rel = 'manifest'
+    link.href = '/display-manifest.json'
+    document.head.appendChild(link)
+    return () => { if (document.head.contains(link)) document.head.removeChild(link) }
+  }, [])
 
   // First interaction → fullscreen. F key toggles anytime.
   useEffect(() => {
@@ -552,7 +604,7 @@ export default function Display() {
       {show.is_live && show.current_slide_id !== null ? (
         <DisplayInner show={show} direction={direction} />
       ) : (
-        <PreShowScreen show={show} />
+        <PreShowScreen show={show} onInstall={canInstall ? handleInstall : null} />
       )}
     </ThemeProvider>
   )
