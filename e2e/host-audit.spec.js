@@ -64,11 +64,12 @@ test.describe('A. Load + shell', () => {
     await expect(page.locator('aside')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Go Live →' })).toBeVisible()
 
-    // LiveMode elements must be ABSENT — these are the regression signals
+    // LiveMode-only elements must be ABSENT — these are the regression signals.
+    // "Score" used to be one of these, but HostHeader now shows it in both
+    // BuildMode and LiveMode (ScoreboardModal shipped 2026-06-30) — no longer
+    // a valid regression signal, dropped.
     await expect(page.getByRole('button', { name: /Next ▶/ })).not.toBeVisible()
     await expect(page.getByText('Up next')).not.toBeVisible()
-    // "Score" appears as a standalone button label only in LiveMode
-    await expect(page.locator('button', { hasText: /^Score$/ })).not.toBeVisible()
 
     assertNoErrors(errors)
   })
@@ -79,12 +80,12 @@ test.describe('A. Load + shell', () => {
 
     await gotoEditor(page)
 
-    // My Shows is an <a> link (opens /shows in new tab), not a button
-    await expect(page.getByRole('link', { name: 'My Shows' })).toBeVisible()
+    // My Shows link was removed from the header entirely (commit c905ac5).
+    // Save Results button was also removed — Host.jsx now auto-fires
+    // saveResults() when the winner-reveal slide goes live, no manual button.
     await expect(page.getByRole('button', { name: 'Copy Join Link' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Preview' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Export' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Save Results' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Go Live →' })).toBeVisible()
     // Ticker and Formats are grid cards in main, not header buttons
     // Theme picker is the "Theme" grid card in main, not a header button
@@ -278,9 +279,13 @@ test.describe('D. Header tools', () => {
     // FormatLibrary heading is "Add Shiny" (FormatLibrary.jsx:54)
     await expect(page.getByRole('heading', { name: 'Add Shiny' })).toBeVisible()
 
-    // Close via ✕ button inside the overlay
+    // Close via the header's ✕ button. FormatLibrary now also renders a
+    // per-row delete ✕ for each existing shiny format (FormatLibrary.jsx:77),
+    // so an unscoped '✕' lookup inside the overlay is no longer unique —
+    // the header's is always first in DOM order (header renders before the
+    // scrollable format list), same pattern as A3's round-header .first().
     const overlay = page.locator('div.fixed').filter({ has: page.getByRole('heading', { name: 'Add Shiny' }) })
-    await overlay.getByRole('button', { name: '✕' }).click()
+    await overlay.getByRole('button', { name: '✕' }).first().click()
 
     await expect(page.getByRole('heading', { name: 'Add Shiny' })).not.toBeVisible()
 

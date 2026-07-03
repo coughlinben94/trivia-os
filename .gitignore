@@ -11,6 +11,7 @@ client/dist/
 test-results/
 /playwright-report
 .playwright/
+e2e/.auth/
 
 # Theme screenshots
 theme-screenshots/
