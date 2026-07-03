@@ -473,7 +473,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
 
                 {/* 4-4-4-1 grid: all 13 cards flat */}
                 <div className="flex flex-wrap gap-3 justify-center">
-                  {TYPE_CARDS.map(card => (
+                  {TYPE_CARDS.filter(card => !card.hidden).map(card => (
                     <button
                       key={card.type}
                       onClick={() => openAddModal({ type: card.type, roundId: activeRoundId })}
