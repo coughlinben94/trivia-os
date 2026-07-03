@@ -52,6 +52,14 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
     onUpdateOverrides(next)
   }
 
+  function resetToPreset() {
+    const next = { ...overrides }
+    delete next.colors
+    delete next.fonts
+    setOverrides(next)
+    onUpdateOverrides(next)
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6"
@@ -200,6 +208,7 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
           onSetDisplayFont={setDisplayFont}
           onUploadFont={handleUploadFont}
           onSetTextColor={setTextColor}
+          onReset={resetToPreset}
           onDone={onClose}
         />
       </div>

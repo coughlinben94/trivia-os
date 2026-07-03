@@ -1,6 +1,8 @@
 export const DISPLAY_FONTS = ['Boogaloo', 'Handters', 'Roquen', 'DM Sans']
 
-export default function ThemeCustomizeControls({ overrides, baseTheme, onSetDisplayFont, onUploadFont, onSetTextColor, onDone }) {
+export default function ThemeCustomizeControls({ overrides, baseTheme, onSetDisplayFont, onUploadFont, onSetTextColor, onReset, onDone }) {
+  const hasOverrides = !!(overrides.colors && Object.keys(overrides.colors).length > 0) ||
+    !!(overrides.fonts && Object.keys(overrides.fonts).length > 0)
   return (
     <div className="flex items-center gap-4 px-5 py-3 border-t border-gray-100 shrink-0 flex-wrap">
       <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
@@ -66,12 +68,21 @@ export default function ThemeCustomizeControls({ overrides, baseTheme, onSetDisp
           className="w-7 h-7 border border-gray-200 rounded-md cursor-pointer"
         />
       </label>
-      <button
-        onClick={onDone}
-        className="ml-auto bg-gray-900 text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-gray-700 transition-colors shrink-0"
-      >
-        Done
-      </button>
+      <div className="ml-auto flex items-center gap-2 shrink-0">
+        <button
+          onClick={onReset}
+          disabled={!hasOverrides}
+          className="text-sm font-medium px-4 py-2 rounded-lg border border-gray-200 text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+        >
+          Presets
+        </button>
+        <button
+          onClick={onDone}
+          className="bg-gray-900 text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+        >
+          Done
+        </button>
+      </div>
     </div>
   )
 }
