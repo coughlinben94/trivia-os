@@ -20,7 +20,7 @@ const SLIDE_ICON = {
   'title': '🇺🇸', 'state-of-union': '🇺🇸', 'round-intro': '🎬', 'swing-round-intro': '🎷',
   'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆',
   'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
-  'winner-reveal': '🥇',
+  'winner-reveal': '🥇', 'team-preview': '👥',
 }
 
 function getSlideLabel(slide) {
@@ -63,8 +63,10 @@ function getSlidePreview(slide) {
 }
 
 const CARD_STYLE = {
-  'title':         'bg-[linear-gradient(135deg,#fecaca,#f9fafb,#bfdbfe)] border-blue-200 hover:border-blue-400',
-  'round-intro':   'bg-gradient-to-br from-red-50    to-rose-100    border-red-200    hover:border-red-400',
+  'title':          'bg-[linear-gradient(135deg,#fecaca,#f9fafb,#bfdbfe)] border-blue-200 hover:border-blue-400',
+  'state-of-union': 'bg-[linear-gradient(135deg,#fecaca,#f9fafb,#bfdbfe)] border-blue-200 hover:border-blue-400',
+  'team-preview':   'bg-gradient-to-br from-indigo-50 to-violet-100 border-indigo-200 hover:border-indigo-400',
+  'round-intro':    'bg-gradient-to-br from-red-50    to-rose-100    border-red-200    hover:border-red-400',
   'question':      'bg-gradient-to-br from-blue-50   to-indigo-100  border-blue-200   hover:border-blue-400',
   'grading-break': 'bg-gradient-to-br from-violet-50 to-purple-100  border-violet-200 hover:border-violet-400',
   'winner-reveal': 'bg-[linear-gradient(135deg,#fecaca,#fed7aa,#fef08a,#bbf7d0,#bfdbfe,#ddd6fe)] border-purple-200 hover:border-purple-400',

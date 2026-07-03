@@ -6,11 +6,13 @@ import { archiveQuestion } from '../../lib/archiveQuestion.js'
 
 export const TYPE_CARDS = [
   { type: 'state-of-union', icon: '🇺🇸', name: 'State of the Union', desc: 'Opening address to the crowd' },
-  { type: 'round-intro',   icon: '🎬', name: 'Round Intro',         desc: 'Dramatic round opener' },
-  { type: 'question',      icon: '❓', name: 'Question',            desc: 'Regular or shiny question' },
-  { type: 'grading-break',  icon: '⏸️', name: 'Grading Break',    desc: 'While Ben grades papers' },
-  { type: 'winner-reveal',  icon: '🥇', name: 'Winner Reveal',    desc: 'Drum roll → winner + confetti' },
-  { type: 'custom',         icon: '✏️', name: 'Custom',           desc: 'Freeform slide' },
+  { type: 'round-intro',    icon: '🎬', name: 'Round Intro',          desc: 'Dramatic round opener' },
+  { type: 'question',       icon: '❓', name: 'Question',             desc: 'Regular or shiny question' },
+  { type: 'grading-break',  icon: '⏸️', name: 'Grading Break',       desc: 'While Ben grades papers' },
+  { type: 'winner-reveal',  icon: '🥇', name: 'Winner Reveal',       desc: 'Drum roll → winner + confetti' },
+  { type: 'custom',         icon: '✏️', name: 'Custom',              desc: 'Freeform slide' },
+  // utility-only — not shown in the picker grid, but provides icon/name metadata for header + sidebar
+  { type: 'team-preview',   icon: '👥', name: 'Team Preview',        desc: 'Show all team names on screen', hidden: true },
 ]
 
 const NEEDS_ROUND = new Set(['swing-round-intro', 'question', 'grading-break', 'pixelate-series', 'multi-question', 'pyl-reveal'])
@@ -197,7 +199,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
         </div>
         <div className="flex-1 overflow-y-auto p-6">
           <div className="flex flex-wrap gap-3">
-            {TYPE_CARDS.filter(card => !(initialData.roundId && card.type === 'title')).map(card => (
+            {TYPE_CARDS.filter(card => !card.hidden && !(initialData.roundId && card.type === 'title')).map(card => (
               <button
                 key={card.type}
                 onClick={() => { setType(card.type); onTypeChange?.(card.type) }}
