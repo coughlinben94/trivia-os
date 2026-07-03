@@ -5,7 +5,7 @@ import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import { archiveQuestion } from '../../lib/archiveQuestion.js'
 
 export const TYPE_CARDS = [
-  { type: 'title',         icon: '🇺🇸', name: 'State of the Union', desc: 'Opening address to the crowd' },
+  { type: 'state-of-union', icon: '🇺🇸', name: 'State of the Union', desc: 'Opening address to the crowd' },
   { type: 'round-intro',   icon: '🎬', name: 'Round Intro',         desc: 'Dramatic round opener' },
   { type: 'question',      icon: '❓', name: 'Question',            desc: 'Regular or shiny question' },
   { type: 'grading-break',  icon: '⏸️', name: 'Grading Break',    desc: 'While Ben grades papers' },
