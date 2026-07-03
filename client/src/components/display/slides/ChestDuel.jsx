@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 /**
  * Trivia OS — "CHEST DUEL" selection animation (bottom-half royale)
  * Contract: { candidates, winnerId, theme, onDone }
- * Stage: fixed 1344x756 (70% of 1080p), scales to fit. Theme lights the stage.
+ * Stage: fills StageFrame (85% of viewport). Theme lights the stage.
  *
  * THREE chests are ALWAYS on screen. Each round: two teams walk up, each randomly
  * opens one of the three (third stays shut) → they return to the corner closest to
@@ -39,7 +39,12 @@ const KILL = [
 const WHIFF = [
   { id: "duck", emoji: "🦆", label: "RUBBER DUCK", verb: "boink.", spin: true },
   { id: "pie", emoji: "🥧", label: "CREAM PIE", verb: "splat.", spin: true },
-  { id: "confetti", emoji: "🎉", label: "CONFETTI", verb: "pop!" },
+  { id: "tp", emoji: "🧻", label: "TOILET PAPER", verb: "unraveled.", spin: true },
+  { id: "fish", emoji: "🐟", label: "WET FISH", verb: "slap!", spin: true },
+  { id: "apple", emoji: "🍎", label: "APPLE", verb: "crunch.", spin: true },
+  { id: "teddy", emoji: "🧸", label: "TEDDY BEAR", verb: "aww." },
+  { id: "pickle", emoji: "🥒", label: "PICKLE", verb: "dill with it.", spin: true },
+  { id: "eggplant", emoji: "🍆", label: "EGGPLANT", verb: "egged.", spin: true },
 ];
 
 const pk = (a) => a[(Math.random() * a.length) | 0];
@@ -93,11 +98,6 @@ export default function ChestDuel({ candidates, winnerId, theme, onDone }) {
     const quickVictims = nonW.slice(0, -1);
     const alive = new Set(candidates.map((c) => c.id));
 
-    /**
-     * One duel round, shared by quick rounds and the final.
-     * aId throws FIRST (always the non-lethal). In lethal rounds aId is the victim.
-     * dud=true → bId also throws a non-lethal, nobody dies, both back in the pool.
-     */
     const runDuel = ({ aId, bId, dud, isFinal }, next) => {
       const [cA, cB] = shuffle([0, 1, 2]);
       const aCorner = cA < cB ? 0 : 1, bCorner = 1 - aCorner;
@@ -169,7 +169,6 @@ export default function ChestDuel({ candidates, winnerId, theme, onDone }) {
     return () => T.current.forEach(clearTimeout);
   }, []);
 
-  // fx motion
   useEffect(() => {
     let raf;
     const tick = () => {
@@ -181,6 +180,7 @@ export default function ChestDuel({ candidates, winnerId, theme, onDone }) {
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  // Stage-fill: scale canvas to fill StageFrame (accounts for both dimensions, no max-1 cap)
   const wrapRef = useRef(null); const [fit, setFit] = useState(1);
   useEffect(() => { const el = wrapRef.current; if (!el) return; const ro = new ResizeObserver(() => setFit(Math.min(el.clientWidth / AREA_W, el.clientHeight / AREA_H))); ro.observe(el); return () => ro.disconnect(); }, []);
 
@@ -188,7 +188,6 @@ export default function ChestDuel({ candidates, winnerId, theme, onDone }) {
   const win = byId(winnerId) || candidates[0];
   const survivors = candidates.filter((c) => !dead.has(c.id));
 
-  // roster
   const nL = Math.ceil(candidates.length / 2);
   const rosterTop = 120, rosterH = AREA_H - 240;
   const rosterPos = (i) => {
@@ -202,7 +201,7 @@ export default function ChestDuel({ candidates, winnerId, theme, onDone }) {
   const duel = d && (() => {
     const atChest = ["walk", "open", "reveal"].includes(d.step);
     const revealed = ["reveal", "corner", "throw1", "fly1", "land1", "throw2", "fly2", "dead", "land2"].includes(d.step);
-    const open = d.step !== "enter" && d.step !== "walk";
+    const open = !["enter", "line", "walk"].includes(d.step);
     const pos = (who) => {
       const chest = who === "a" ? d.cA : d.cB, corner = who === "a" ? d.aCorner : d.bCorner;
       if (d.step === "enter") return { x: corner === 0 ? -120 : AREA_W + 120, y: FLOOR };
@@ -217,7 +216,7 @@ export default function ChestDuel({ candidates, winnerId, theme, onDone }) {
 
   return (
     <div ref={wrapRef} style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }}>
-      <div style={{ width: AREA_W, height: AREA_H, position: "absolute", top: "50%", left: "50%", transformOrigin: "center", transform: `translate(-50%, -50%) scale(${fit})` }}>
+      <div style={{ width: AREA_W, height: AREA_H, position: "absolute", top: "50%", left: "50%", transformOrigin: "center", transform: `translate(-50%,-50%) scale(${fit})` }}>
         <div style={{ width: AREA_W, height: AREA_H, position: "relative", overflow: "hidden", borderRadius: 20, border: `2px solid ${C.accent}44`, background: stageBg, animation: "popStage 420ms cubic-bezier(.2,1.2,.3,1)" }}>
           <div style={{ position: "absolute", left: 170, right: 170, top: FLOOR + 44, height: 3, background: `linear-gradient(90deg, transparent, ${C.accent}66, transparent)` }} />
 
