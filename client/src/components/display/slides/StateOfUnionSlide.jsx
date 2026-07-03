@@ -59,30 +59,37 @@ export default function StateOfUnionSlide({ slide }) {
           />
         )}
 
-        {/* Typewriter text — plain, centered, no gold/tilt (not a shiny beat) */}
+        {/* Typewriter text — RWB gradient fill, same spring + tilt as ShinyIntroScreen. */}
         <motion.p
-          initial={{ opacity: 0, scale: reduce ? 1 : 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.6, ease: EASE_SNAP }}
+          initial={{ opacity: 0, scale: reduce ? 1 : 0.85, rotate: reduce ? -6 : -14 }}
+          animate={{ opacity: 1, scale: 1, rotate: -6 }}
+          transition={reduce ? { duration: 0.3, ease: EASE_SNAP } : { type: 'spring', duration: 0.5, bounce: 0.25 }}
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
             fontWeight: 700,
-            color: RWB_WHITE,
-            textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
             fontSize: 'clamp(1.9rem, 3.6cqw, 3.4rem)',
             lineHeight: 1.35,
             textAlign: 'center',
             textWrap: 'balance',
             maxWidth: '72ch',
             minHeight: '8rem',
+            filter: 'drop-shadow(0 3px 0 rgba(0,0,0,0.4)) drop-shadow(0 0 24px rgba(178,34,52,0.55))',
           }}
         >
-          {displayed}
-          {/* Blinking cursor */}
+          {/* Gradient spans the text block; backgroundClip clips it to letter shapes. */}
+          <span style={{
+            background: `linear-gradient(135deg, ${RWB_RED} 0%, ${RWB_WHITE} 50%, #3a6fcf 100%)`,
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+          }}>
+            {displayed}
+          </span>
+          {/* Blinking cursor — explicit fill so it isn't clipped by the gradient span. */}
           <motion.span
             animate={{ opacity: [1, 0] }}
             transition={{ duration: 0.6, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
-            style={{ color: RWB_WHITE, marginLeft: 2 }}
+            style={{ WebkitTextFillColor: RWB_WHITE, color: RWB_WHITE, marginLeft: 2 }}
           >
             |
           </motion.span>
