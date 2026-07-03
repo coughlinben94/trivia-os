@@ -165,6 +165,14 @@ const KEYFRAMES = `
     78%  { opacity: calc(var(--hi,.55)*.72); }
     100% { opacity: 0; transform: translate(var(--bx,5vw), var(--by,-3vh)); }
   }
+  @keyframes ambientStretchY {
+    0%,100% { transform: scaleY(1); }
+    50%     { transform: scaleY(var(--sy,1.05)); }
+  }
+  @keyframes ambientSway {
+    0%,100% { transform: rotate(calc(var(--sway,1.2deg) * -1)); }
+    50%     { transform: rotate(var(--sway,1.2deg)); }
+  }
   @media (prefers-reduced-motion: reduce) {
     @keyframes ambientFallSlow    { 0%, 100% { opacity: 0; } 8%, 92%  { opacity: var(--hi, 0.8); } }
     @keyframes ambientLeafFall    { 0%, 100% { opacity: 0; } 10%, 90% { opacity: var(--hi, 0.8); } }
@@ -189,6 +197,8 @@ const KEYFRAMES = `
     @keyframes ambientFloatY { 0%,100% { transform: none; } }
     @keyframes ambientFloatX { 0%,100% { transform: none; } }
     @keyframes ambientBloom  { 0%,100% { opacity: var(--hi,.55); } }
+    @keyframes ambientStretchY { 0%,100% { transform: none; } }
+    @keyframes ambientSway     { 0%,100% { transform: none; } }
     .jc-anim { animation: none !important; }
   }
 `
@@ -658,74 +668,198 @@ function AutumnHarvestAmbient({ tint }) {
 
 // ─── 4. NORTHERN LIGHTS ───────────────────────────────────────────────────
 function NorthernLightsAmbient({ tint }) {
+  const stars = useMemo(() => Array.from({ length: 40 }, () => {
+    const hi = 0.4 + Math.random() * 0.4
+    const dur = 4 + Math.random() * 5
+    return {
+      left: `${(Math.random() * 100).toFixed(2)}%`,
+      top: `${(Math.random() * 58).toFixed(2)}%`,
+      size: 1 + Math.random() * 1.2,
+      hi, dur: `${dur.toFixed(1)}s`, delay: `-${(Math.random() * dur).toFixed(1)}s`,
+    }
+  }), [])
+
+  const shimmerColumns = useMemo(() => Array.from({ length: 9 }, () => {
+    const hi = 0.3 + Math.random() * 0.2
+    const dur = 3.5 + Math.random() * 4.5
+    return {
+      left: `${(Math.random() * 100).toFixed(2)}%`,
+      top: `${(Math.random() * 6).toFixed(2)}vh`,
+      w: `${(1.6 + Math.random() * 2).toFixed(2)}vw`,
+      h: `${(20 + Math.random() * 12).toFixed(2)}vh`,
+      hi, dur: `${dur.toFixed(1)}s`, delay: `-${(Math.random() * dur).toFixed(1)}s`,
+    }
+  }), [])
+
+  // Ice glints only fall at the flanks (outside x 20-80%) — the center stays
+  // clear for question content, per the ambient design law's safe-area rule.
+  const iceGlints = useMemo(() => Array.from({ length: 26 }, () => {
+    const left = Math.random() < 0.5 ? Math.random() * 20 : 80 + Math.random() * 20
+    const dur = 16 + Math.random() * 10
+    return {
+      left: `${left.toFixed(2)}%`,
+      size: 1 + Math.random() * 1.5,
+      drift: `${(Math.random() * 10 - 5).toFixed(1)}px`,
+      dur: `${dur.toFixed(1)}s`, delay: `-${(Math.random() * dur).toFixed(1)}s`,
+    }
+  }), [])
+
+  const pines = useMemo(() => {
+    const n = 20
+    return Array.from({ length: n }, (_, i) => ({
+      x: (i + 0.5) * (1600 / n) + (Math.random() * 30 - 15),
+      h: 46 + Math.random() * 80,
+      w: 34 + Math.random() * 20,
+    }))
+  }, [])
+
   return <>
-    {/* SVG wavy aurora curtains — zero straight edges */}
-    <svg
-      aria-hidden
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      style={{
-        position: 'absolute', inset: 0,
-        width: '100%', height: '100%',
-        pointerEvents: 'none',
-        filter: 'blur(6px)',
-      }}
-    >
-      <defs>
-        <linearGradient id="nlAur1" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor={tint('rgb(30,220,130)')}  stopOpacity="0" />
-          <stop offset="50%"  stopColor={tint('rgb(30,220,130)')}  stopOpacity="0.65" />
-          <stop offset="100%" stopColor={tint('rgb(30,220,130)')}  stopOpacity="0" />
-        </linearGradient>
-        <linearGradient id="nlAur2" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor={tint('rgb(100,40,240)')}  stopOpacity="0" />
-          <stop offset="50%"  stopColor={tint('rgb(100,40,240)')}  stopOpacity="0.55" />
-          <stop offset="100%" stopColor={tint('rgb(100,40,240)')}  stopOpacity="0" />
-        </linearGradient>
-        <linearGradient id="nlAur3" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor={tint('rgb(30,220,130)')}  stopOpacity="0" />
-          <stop offset="50%"  stopColor={tint('rgb(30,220,130)')}  stopOpacity="0.42" />
-          <stop offset="100%" stopColor={tint('rgb(30,220,130)')}  stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      {/* Curtain 1 — teal primary, wavy band y ≈ 8–22 */}
-      <path
-        d="M -2 10 C 20 4,40 16,60 9 C 80 3,95 14,102 10 L 102 22 C 95 28,80 17,60 22 C 40 28,20 16,-2 22 Z"
-        fill="url(#nlAur1)"
-        style={{ willChange: 'opacity', '--hi': 0.90, animation: 'ambientAuroraFade 22s 0s ease infinite' }}
-      />
-      {/* Curtain 2 — purple, wavy band y ≈ 16–28, overlapping */}
-      <path
-        d="M -2 16 C 15 10,35 22,55 14 C 75 6,92 20,102 16 L 102 28 C 90 35,70 20,50 27 C 30 34,12 18,-2 28 Z"
-        fill="url(#nlAur2)"
-        style={{ willChange: 'opacity', '--hi': 0.80, animation: 'ambientAuroraFade 30s 8s ease infinite' }}
-      />
-      {/* Curtain 3 — teal faint, wavy band y ≈ 22–34 */}
-      <path
-        d="M -2 22 C 18 16,38 28,58 21 C 78 14,96 26,102 22 L 102 34 C 96 40,76 26,55 33 C 34 40,16 26,-2 34 Z"
-        fill="url(#nlAur3)"
-        style={{ willChange: 'opacity', '--hi': 0.70, animation: 'ambientAuroraFade 26s 14s ease infinite' }}
-      />
+    {/* 1. Base wash — deep polar sky, lifting slightly teal toward the ground */}
+    <div aria-hidden style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none',
+      background: `linear-gradient(180deg, ${tint('rgba(1,8,16,1)')} 0%, ${tint('rgba(2,12,24,1)')} 58%, ${tint('rgba(10,60,50,0.55)')} 100%)`,
+    }}/>
+    {/* 2. Snowfield glow — hugs the bottom edge */}
+    <GlowLayer lo={0.5} hi={0.8} duration="17s" style={{
+      position: 'absolute', bottom: 0, left: 0, right: 0, height: '42%',
+      background: `radial-gradient(ellipse 92% 62% at 50% 100%, ${tint('rgba(64,255,204,0.16)')}, transparent 72%)`,
+    }}/>
+    <GlowLayer lo={0.5} hi={0.8} duration="17s" style={{
+      position: 'absolute', bottom: 0, left: 0, right: 0, height: '26%',
+      background: `radial-gradient(ellipse 70% 46% at 50% 100%, ${tint('rgba(13,80,64,0.35)')}, transparent 70%)`,
+    }}/>
+    {/* 3. Star field — pure-white twinkle, sanctioned near-white exception */}
+    {stars.map((s, i) => (
+      <div key={i} aria-hidden style={{
+        position: 'absolute', left: s.left, top: s.top, pointerEvents: 'none',
+        width: s.size, height: s.size, borderRadius: '50%',
+        background: `rgba(255,255,255,${s.hi})`, willChange: 'opacity',
+        '--lo': s.hi * 0.25, '--hi': s.hi,
+        animation: `ambientBreathe ${s.dur} ${s.delay} ease infinite`,
+      }}/>
+    ))}
+    {/* 4. SWAY GROUP A — curtain 1, the ribbon, curtain 2 */}
+    <div aria-hidden style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none',
+      transformOrigin: '50% -20%', '--sway': '1.2deg',
+      animation: 'ambientSway 21s ease-in-out infinite',
+    }}>
+      <div style={{
+        position: 'absolute', inset: 0, transformOrigin: 'top', '--sy': 1.06,
+        animation: 'ambientStretchY 13s ease-in-out infinite',
+      }}>
+        <svg aria-hidden viewBox="0 0 1600 900" preserveAspectRatio="none" style={{
+          position: 'absolute', inset: 0, width: '100%', height: '100%',
+        }}>
+          <defs>
+            <linearGradient id="nlCurtainGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor={tint('rgb(64,255,204)')} stopOpacity="0.75" />
+              <stop offset="45%" stopColor={tint('rgb(13,80,64)')}   stopOpacity="0.55" />
+              <stop offset="100%" stopColor={tint('rgb(13,80,64)')}  stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {/* 4a. Curtain 1 — big, arcing the upper sky */}
+          <path
+            d="M -50 180 C 250 80,550 260,850 140 C 1150 40,1400 200,1650 130 L 1650 460 C 1400 420,1150 260,850 360 C 550 460,250 300,-50 380 Z"
+            fill="url(#nlCurtainGrad)"
+            style={{ filter: 'blur(15px)', willChange: 'opacity', '--lo': 0.55, '--hi': 0.85,
+              animation: 'ambientBreathe 14s ease-in-out infinite' }}
+          />
+          {/* 4b. The ribbon — three floating strands, cross-fading past each other */}
+          <g style={{ '--fy1': '-18px', '--fy2': '18px', animation: 'ambientFloatY 6.5s ease-in-out infinite' }}>
+            <path
+              d="M -50 420 C 200 380,400 460,650 400 C 900 340,1150 440,1400 390 C 1500 375,1600 400,1650 395"
+              fill="none" stroke={tint('rgb(64,255,204)')} strokeWidth="6" strokeLinecap="round"
+              style={{ filter: 'blur(3px)', willChange: 'opacity', '--lo': 0.12, '--hi': 0.65,
+                animation: 'ambientBreathe 10s 0s ease-in-out infinite' }}
+            />
+          </g>
+          <g style={{ '--fy1': '16px', '--fy2': '-16px', animation: 'ambientFloatY 8s -2.7s ease-in-out infinite' }}>
+            <path
+              d="M -50 450 C 220 500,430 410,680 470 C 930 530,1160 420,1420 480 C 1520 500,1600 470,1650 485"
+              fill="none" stroke={tint('rgb(64,255,204)')} strokeWidth="5" strokeLinecap="round"
+              style={{ filter: 'blur(3.5px)', willChange: 'opacity', '--lo': 0.12, '--hi': 0.5,
+                animation: 'ambientBreathe 10s -3.33s ease-in-out infinite' }}
+            />
+          </g>
+          <g style={{ '--fy1': '-14px', '--fy2': '20px', animation: 'ambientFloatY 9.5s -5.1s ease-in-out infinite' }}>
+            <path
+              d="M -50 480 C 240 430,470 520,700 460 C 950 400,1180 500,1440 440 C 1530 420,1600 450,1650 435"
+              fill="none" stroke={tint('rgb(64,255,204)')} strokeWidth="5" strokeLinecap="round"
+              style={{ filter: 'blur(4px)', willChange: 'opacity', '--lo': 0.12, '--hi': 0.45,
+                animation: 'ambientBreathe 10s -6.67s ease-in-out infinite' }}
+            />
+          </g>
+          {/* 4c. Curtain 2 — lower, dimmer */}
+          <path
+            d="M -50 520 C 260 460,520 600,780 510 C 1040 420,1320 560,1650 500 L 1650 780 C 1320 850,1040 700,780 800 C 520 900,260 760,-50 810 Z"
+            fill="url(#nlCurtainGrad)"
+            style={{ filter: 'blur(22px)', willChange: 'opacity', '--lo': 0.4, '--hi': 0.7,
+              animation: 'ambientBreathe 19s ease-in-out infinite' }}
+          />
+        </svg>
+      </div>
+    </div>
+    {/* 5. SWAY GROUP B — curtain 3, a broad soft accent band underneath */}
+    <div aria-hidden style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none',
+      transformOrigin: '50% -30%', '--sway': '0.9deg',
+      animation: 'ambientSway 26s -9s ease-in-out infinite',
+    }}>
+      <div style={{
+        position: 'absolute', inset: 0, transformOrigin: 'top', '--sy': 1.08,
+        animation: 'ambientStretchY 17s -5s ease-in-out infinite',
+      }}>
+        <svg aria-hidden viewBox="0 0 1600 900" preserveAspectRatio="none" style={{
+          position: 'absolute', inset: 0, width: '100%', height: '100%',
+        }}>
+          <path
+            d="M -80 260 C 300 160,700 340,1080 220 C 1350 140,1550 240,1680 200 L 1680 620 C 1550 680,1350 560,1080 640 C 700 760,300 580,-80 660 Z"
+            fill={tint('rgba(13,80,64,0.55)')}
+            style={{ filter: 'blur(26px)', willChange: 'opacity', '--lo': 0.25, '--hi': 0.5,
+              animation: 'ambientBreathe 23s ease-in-out infinite' }}
+          />
+        </svg>
+      </div>
+    </div>
+    {/* 6. Shimmer columns — thin dancing-light shafts */}
+    {shimmerColumns.map((c, i) => (
+      <div key={i} aria-hidden style={{
+        position: 'absolute', left: c.left, top: c.top, width: c.w, height: c.h, pointerEvents: 'none',
+        background: `linear-gradient(to bottom, ${tint('rgba(64,255,204,0.9)')}, ${tint('rgba(13,80,64,0.3)')} 55%, transparent 100%)`,
+        filter: 'blur(6px)', willChange: 'opacity',
+        '--lo': 0.04, '--hi': c.hi,
+        animation: `ambientBreathe ${c.dur} ${c.delay} ease infinite`,
+      }}/>
+    ))}
+    {/* 7. Sweeping band drifter — soft glow crossing the full sky */}
+    <div aria-hidden style={{
+      position: 'absolute', top: '4%', left: 0, width: '38%', height: '46%', pointerEvents: 'none',
+      background: `radial-gradient(ellipse, ${tint('rgba(13,80,64,0.35)')}, transparent 70%)`,
+      willChange: 'transform,opacity', '--hi': 0.4,
+      animation: 'ambientDriftAcross 48s linear infinite',
+    }}/>
+    {/* 8. Ice glints — falling only at the flanks, near-white sanctioned exception */}
+    {iceGlints.map((g, i) => (
+      <div key={i} aria-hidden style={{
+        position: 'absolute', left: g.left, top: '-3%', width: g.size, height: g.size, borderRadius: '50%',
+        pointerEvents: 'none', background: 'rgba(255,255,255,0.9)',
+        willChange: 'transform,opacity', '--hi': 0.75, '--drift': g.drift,
+        animation: `ambientFallSlow ${g.dur} ${g.delay} linear infinite`,
+      }}/>
+    ))}
+    {/* 9. Pine treeline — static silhouette, does not animate */}
+    <svg aria-hidden viewBox="0 0 1600 220" preserveAspectRatio="none" style={{
+      position: 'absolute', bottom: 0, left: 0, width: '100%', height: '15vh', pointerEvents: 'none',
+    }}>
+      <rect x="0" y="180" width="1600" height="40" fill={tint('rgba(2,14,12,0.95)')} />
+      {pines.map((p, i) => (
+        <polygon key={i}
+          points={`${p.x - p.w / 2},180 ${p.x + p.w / 2},180 ${p.x},${180 - p.h}`}
+          fill={tint('rgba(2,18,15,0.92)')}
+        />
+      ))}
     </svg>
-    {/* Star field */}
-    {Array.from({ length: 30 }, (_, i) => {
-      const op = 0.40 + (i % 4) * 0.10
-      const dur = 8 + (i % 5) * 4
-      return (
-        <div key={i} aria-hidden style={{
-          position: 'absolute',
-          left: `${(i * 97 + i % 7 * 31) % 100}%`,
-          top:  `${(i * 83 + i % 5 * 43) % 65}%`,
-          width: 1.2 + (i % 3) * 0.4, height: 1.2 + (i % 3) * 0.4,
-          borderRadius: '50%',
-          background: tint(`rgba(200,240,220,${op})`),
-          pointerEvents: 'none',
-          willChange: 'opacity',
-          '--lo': op * 0.25, '--hi': op,
-          animation: `ambientBreathe ${dur}s -${((i / 30) * dur).toFixed(1)}s ease infinite`,
-        }}/>
-      )
-    })}
   </>
 }
 
