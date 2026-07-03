@@ -42,7 +42,7 @@ export default function GradingBreakSlide({ slide, isPreview = false }) {
   }, [isPreview])
 
   return (
-    <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.bg }}>
+    <div className="w-full h-full relative overflow-hidden" style={{ background: 'transparent' }}>
 
       {/* Pulsing ambient glow */}
       <div
@@ -52,6 +52,12 @@ export default function GradingBreakSlide({ slide, isPreview = false }) {
           animation: 'gradingGlow 4s ease-in-out infinite',
         }}
       />
+
+      {/* Reading-well — soft radial darken behind text center, matches QuestionSlide legibility treatment */}
+      <div aria-hidden style={{
+        position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
+        background: 'radial-gradient(ellipse 60% 55% at 50% 55%, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.22) 45%, transparent 72%)',
+      }} />
 
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         {data.hostPhotoUrl && (
