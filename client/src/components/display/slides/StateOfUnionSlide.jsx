@@ -24,21 +24,28 @@ export default function StateOfUnionSlide({ slide }) {
     return () => clearInterval(interval)
   }, [message])
 
-  const c = theme.colors
+  // Fixed RWB palette — deliberately NOT theme.colors, anywhere in this
+  // component. "State of the Union" is patriotic by identity; it must read
+  // the same red-white-blue on every one of the 21 themes, the same way a
+  // shiny question's gold doesn't shift with the ambient theme either.
+  // RWB_BLUE_DEEP is ~50% luminance of RWB_BLUE, for the wash's dark end.
+  const RWB_RED = '#b22234'
+  const RWB_WHITE = '#f5f5f0'
+  const RWB_BLUE = '#1a2a6c'
+  const RWB_BLUE_DEEP = '#0d1536'
 
-  // Same fixed angle on both gradient layers, always — only their opacity
-  // crosses over, never their direction. That crossfade is the "stop-shift":
-  // as A fades under B, the effective color distribution drifts smoothly
-  // with zero rotation and nothing but opacity animating (GPU-only, matches
-  // ambient-design-law). Built from this show's own theme.colors so the
-  // background belongs to the same family as every ambient wash instead of
-  // a one-off hardcoded palette.
-  const gradA = `linear-gradient(135deg, ${c.bgDeep} 0%, ${c.bg} 55%, ${c.accent} 100%)`
-  const gradB = `linear-gradient(135deg, ${c.bg} 0%, ${c.accent} 50%, ${c.highlight} 100%)`
+  // Breathing-gradient engine, fed the RWB palette instead of theme.colors.
+  // Base wash + crossfade layer are both blue-family, same fixed angle
+  // always — only their opacity crosses over (the "stop-shift"), never
+  // their direction. Red and white never enter the linear gradient itself;
+  // they're the two radial glow pulses below, so the result reads as a
+  // deep blue field breathing red/white light, never a flag-stripe block.
+  const gradA = `linear-gradient(135deg, ${RWB_BLUE_DEEP} 0%, ${RWB_BLUE} 100%)`
+  const gradB = `linear-gradient(135deg, ${RWB_BLUE} 0%, ${RWB_BLUE_DEEP} 100%)`
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center px-24 overflow-hidden">
-      {/* Base gradient — locked, no animation, always visible under the
+      {/* Base wash — locked, no animation, always visible under the
           crossfading layer below. */}
       <div aria-hidden className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, background: gradA }} />
 
@@ -51,16 +58,30 @@ export default function StateOfUnionSlide({ slide }) {
         transition={reduce ? undefined : { duration: 14, repeat: Infinity, ease: 'easeInOut' }}
       />
 
-      {/* Faint intensity pulse — theme highlight, opacity-only breathe. */}
+      {/* Red accent glow — off-center, breathing on its own faint cycle. */}
       <motion.div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
         style={{
           zIndex: 1,
-          background: `radial-gradient(ellipse 70% 60% at 50% 45%, ${c.highlight} 0%, transparent 70%)`,
+          background: `radial-gradient(ellipse 65% 55% at 28% 32%, ${RWB_RED} 0%, transparent 70%)`,
         }}
-        animate={reduce ? { opacity: 0.1 } : { opacity: [0.05, 0.15, 0.05] }}
-        transition={reduce ? undefined : { duration: 7, repeat: Infinity, ease: 'easeInOut' }}
+        animate={reduce ? { opacity: 0.12 } : { opacity: [0.05, 0.18, 0.05] }}
+        transition={reduce ? undefined : { duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+      />
+
+      {/* White highlight glow — offset from the red so the two never fully
+          overlap into a blend; different period so they drift in and out
+          of phase instead of pulsing in lockstep. */}
+      <motion.div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          zIndex: 1,
+          background: `radial-gradient(ellipse 70% 60% at 62% 60%, ${RWB_WHITE} 0%, transparent 70%)`,
+        }}
+        animate={reduce ? { opacity: 0.09 } : { opacity: [0.04, 0.14, 0.04] }}
+        transition={reduce ? undefined : { duration: 9.5, repeat: Infinity, ease: 'easeInOut' }}
       />
 
       <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
@@ -85,7 +106,7 @@ export default function StateOfUnionSlide({ slide }) {
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
             fontWeight: 700,
-            color: c.text,
+            color: RWB_WHITE,
             textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
             fontSize: 'clamp(1.9rem, 3.6cqw, 3.4rem)',
             lineHeight: 1.35,
@@ -100,7 +121,7 @@ export default function StateOfUnionSlide({ slide }) {
           <motion.span
             animate={{ opacity: [1, 0] }}
             transition={{ duration: 0.6, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
-            style={{ color: c.text, marginLeft: 2 }}
+            style={{ color: RWB_WHITE, marginLeft: 2 }}
           >
             |
           </motion.span>
