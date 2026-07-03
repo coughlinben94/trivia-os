@@ -370,6 +370,31 @@ export default function Display() {
   const prevIndexRef = useRef(0)
   const [direction, setDirection] = useState(1)
 
+  // First interaction → fullscreen. F key toggles anytime.
+  useEffect(() => {
+    function enter() {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {})
+    }
+    function onKey(e) {
+      if (e.key === 'f' || e.key === 'F') {
+        document.fullscreenElement ? document.exitFullscreen() : enter()
+      }
+    }
+    function onFirstInteraction() {
+      enter()
+      window.removeEventListener('click', onFirstInteraction)
+      window.removeEventListener('keydown', onFirstInteraction)
+    }
+    window.addEventListener('click', onFirstInteraction)
+    window.addEventListener('keydown', onFirstInteraction)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('click', onFirstInteraction)
+      window.removeEventListener('keydown', onFirstInteraction)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [])
+
   useEffect(() => {
     if (isDemo) return
     async function load() {
