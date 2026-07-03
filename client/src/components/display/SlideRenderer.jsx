@@ -75,7 +75,9 @@ const TRANSITIONS = {
 // team-picker and state-of-union both default to the zoom burst-from-center
 // instead of a plain fade — they're the show's ceremonial pre-round beats
 // (patriotic address / team intro) and deserve a deliberate entrance, not
-// the same bland fade a generic 'title' slide gets.
+// the same bland fade a generic 'title' slide gets. (Their opacity gets
+// neutralized to a constant 1 further down, regardless of this or any
+// other transition assigned to them — see the comment there for why.)
 SLIDE_ANIMATIONS['team-picker'] = TRANSITIONS.zoom
 SLIDE_ANIMATIONS['state-of-union'] = TRANSITIONS.zoom
 
@@ -130,6 +132,23 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
       variants = resolved.variants
     } else {
       variants = SLIDE_ANIMATIONS[slide?.type] ?? SLIDE_ANIMATIONS['question']
+    }
+  }
+
+  // team-picker and state-of-union are fixed, theme-independent designs
+  // sitting on top of this component's permanently-opaque locked background
+  // (theme.colors.bgDeep, rendered below). ANY transition that fades this
+  // content's own opacity from/to 0 — the default zoom, a transition
+  // manually picked from the editor's dropdown, even the reduced-motion
+  // dissolve fallback above — briefly exposes that real theme color through
+  // the semi-transparent content, reading as "shows the theme, then snaps
+  // to the fixed design." Neutralize opacity here regardless of which
+  // branch produced `variants`, keeping whatever scale/y/timing it chose.
+  if (slide?.type === 'team-picker' || slide?.type === 'state-of-union') {
+    variants = {
+      initial: { ...variants.initial, opacity: 1 },
+      animate: { ...variants.animate, opacity: 1 },
+      exit:    { ...variants.exit,    opacity: 1 },
     }
   }
 
