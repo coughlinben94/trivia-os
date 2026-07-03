@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import BaynesWatermark from '../BaynesWatermark.jsx'
 import SlideElements from '../SlideElements.jsx'
+import BreathingGradient from '../BreathingGradient.jsx'
 
 const CHARS_PER_SECOND = 28
 const EASE_SNAP = [0.23, 1, 0.32, 1]
@@ -34,59 +35,14 @@ export default function StateOfUnionSlide({ slide }) {
   const RWB_BLUE = '#1a2a6c'
   const RWB_BLUE_DEEP = '#0d1536'
 
-  // Breathing-gradient engine, fed the RWB palette instead of theme.colors.
-  // Base wash + crossfade layer are both blue-family, same fixed angle
-  // always — only their opacity crosses over (the "stop-shift"), never
-  // their direction. Red and white never enter the linear gradient itself;
-  // they're the two radial glow pulses below, so the result reads as a
-  // deep blue field breathing red/white light, never a flag-stripe block.
-  const gradA = `linear-gradient(135deg, ${RWB_BLUE_DEEP} 0%, ${RWB_BLUE} 100%)`
-  const gradB = `linear-gradient(135deg, ${RWB_BLUE} 0%, ${RWB_BLUE_DEEP} 100%)`
-
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center px-24 overflow-hidden">
-      {/* Base wash — locked, no animation, always visible under the
-          crossfading layer below. */}
-      <div aria-hidden className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, background: gradA }} />
-
-      {/* Stop-shift — same angle as gradA, only opacity crosses over. */}
-      <motion.div
-        aria-hidden
-        className="absolute inset-0 pointer-events-none"
-        style={{ zIndex: 0, background: gradB }}
-        animate={reduce ? { opacity: 0.35 } : { opacity: [0.15, 0.55, 0.15] }}
-        transition={reduce ? undefined : { duration: 14, repeat: Infinity, ease: 'easeInOut' }}
-      />
-
-      {/* Red glow-pool — lower-left, breathing bright enough to actually
-          read from 10ft (0.14→0.42 peak; the earlier 0.05→0.18 pass washed
-          out against the navy — verified via document.getAnimations() that
-          the engine was running all along, this was a contrast problem,
-          not a wiring one). ~24s period. */}
-      <motion.div
-        aria-hidden
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          zIndex: 1,
-          background: `radial-gradient(ellipse 75% 65% at 22% 78%, ${RWB_RED} 0%, transparent 72%)`,
-        }}
-        animate={reduce ? { opacity: 0.3 } : { opacity: [0.14, 0.42, 0.14] }}
-        transition={reduce ? undefined : { duration: 24, repeat: Infinity, ease: 'easeInOut' }}
-      />
-
-      {/* White/cream glow — upper area, offset from the red so the two
-          never fully overlap into a blend; ~31s period (not a clean
-          multiple of the red's 24s or the base wash's 14s, so all three
-          drift in and out of phase instead of ever syncing up). */}
-      <motion.div
-        aria-hidden
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          zIndex: 1,
-          background: `radial-gradient(ellipse 80% 62% at 55% 16%, ${RWB_WHITE} 0%, transparent 72%)`,
-        }}
-        animate={reduce ? { opacity: 0.24 } : { opacity: [0.1, 0.36, 0.1] }}
-        transition={reduce ? undefined : { duration: 31, repeat: Infinity, ease: 'easeInOut' }}
+      {/* BreathingGradient wired to the fixed RWB palette — same WAAPI engine
+          as every other theme collapse target, just hardcoded colors instead
+          of theme.colors. bg/bgDeep = navy base, accent = red, highlight = white. */}
+      <BreathingGradient
+        palette={{ bg: RWB_BLUE, bgDeep: RWB_BLUE_DEEP, accent: RWB_RED, highlight: RWB_WHITE }}
+        mood="calm"
       />
 
       <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
