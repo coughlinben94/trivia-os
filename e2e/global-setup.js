@@ -4,17 +4,21 @@
 // every spec that needs /host can reuse it via playwright.config.js's
 // `use.storageState`, instead of re-running the PIN flow per test.
 //
-// HostPinGate only renders once a show is "loaded" (Host.jsx redirects to
-// /dashboard before the gate otherwise), so this seeds the same Test show
-// (show_WLBM5jvb) every other spec in this suite already defaults to.
+// HostPinGate only renders once a show is "loaded" — Host.jsx shows an
+// in-page ShowPicker otherwise, not a redirect — so this seeds the same
+// Test show (show_WLBM5jvb) every other spec in this suite already defaults to.
 
 import { chromium } from '@playwright/test'
 
-const PIN = '1969'
 const SHOW_ID = 'show_WLBM5jvb'
 const STORAGE_STATE_PATH = 'e2e/.auth/host.json'
 
 export default async function globalSetup(config) {
+  const PIN = process.env.PLAYWRIGHT_HOST_PIN
+  if (!PIN) {
+    throw new Error('PLAYWRIGHT_HOST_PIN env var not set — add it to .env.local (gitignored, never commit the real PIN)')
+  }
+
   const baseURL = config.projects[0].use.baseURL
   const browser = await chromium.launch()
   const page = await browser.newPage()
