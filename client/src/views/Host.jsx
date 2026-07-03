@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Navigate } from 'react-router-dom'
 import { useShow, sortedSlides } from '../hooks/useShow.js'
 import { supabase } from '../lib/supabase.js'
 import { ThemeProvider } from '../components/shared/ThemeProvider.jsx'
@@ -25,7 +24,30 @@ export default function Host() {
     )
   }
 
-  if (!show) return <Navigate to="/dashboard" replace />
+  // No active show — this used to hard-redirect to /dashboard, dead-ending
+  // anyone who lost trivia-os:activeShowId (cleared site data, new device,
+  // incognito) with no way back into the builder short of guessing /shows.
+  // Render the picker directly instead. onClose is a no-op: on a successful
+  // load/import, loadShow/importShow's state update makes `show` truthy and
+  // this branch stops rendering on its own; on an explicit "← Back" with
+  // nothing picked, there's nowhere more correct to send you than right back
+  // here — you can't use the builder without a show either way.
+  if (!show) {
+    return (
+      <ShowLibrary
+        currentShowId={null}
+        listShows={showApi.listShows}
+        loadShow={showApi.loadShow}
+        duplicateShow={showApi.duplicateShow}
+        deleteShow={showApi.deleteShow}
+        exportShowById={showApi.exportShowById}
+        importShow={showApi.importShow}
+        onNewShow={showApi.unloadShow}
+        onClose={() => {}}
+        onShowReady={() => {}}
+      />
+    )
+  }
 
   return (
     <HostPinGate>
