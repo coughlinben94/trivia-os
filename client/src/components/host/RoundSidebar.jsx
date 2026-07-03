@@ -363,17 +363,22 @@ export default function RoundSidebar({
               {/* Slides */}
               {!collapsed && (
                 <div className="pb-1">
-                  {slides.map(slide => {
+                  {slides.map((slide, slideIdx) => {
                     const tIdx = blocks.findIndex(bl => bl.slides.some(s => s.id === slide.id))
                     const over = dragOverId === slide.id && dragOverType === 'slide'
+                    // Within-round: block indices are equal, compare position inside the round instead
+                    const draggedSlideIdx = dragged ? slides.findIndex(s => s.id === dragged.id) : -1
+                    const withinRound = draggedBIdx === tIdx && draggedSlideIdx !== -1
+                    const before = over && (withinRound ? draggedSlideIdx > slideIdx : draggedBIdx > tIdx)
+                    const after  = over && (withinRound ? draggedSlideIdx < slideIdx : draggedBIdx < tIdx)
                     return (
                       <SlideRow
                         key={slide.id}
                         slide={slide}
                         selected={slide.id === selectedSlideId}
                         dragging={dragged?.id === slide.id}
-                        dragBefore={over && draggedBIdx > tIdx}
-                        dragAfter={over && draggedBIdx < tIdx}
+                        dragBefore={before}
+                        dragAfter={after}
                         onSelect={() => onSelectSlide(slide)}
                         onDelete={() => onDeleteSlide(slide.id)}
                         onGripDown={e => handleGripDown(e, slide.id, 'slide')}
