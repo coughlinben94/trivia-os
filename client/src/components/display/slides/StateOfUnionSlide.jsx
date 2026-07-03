@@ -58,30 +58,35 @@ export default function StateOfUnionSlide({ slide }) {
         transition={reduce ? undefined : { duration: 14, repeat: Infinity, ease: 'easeInOut' }}
       />
 
-      {/* Red accent glow — off-center, breathing on its own faint cycle. */}
+      {/* Red glow-pool — lower-left, breathing bright enough to actually
+          read from 10ft (0.14→0.42 peak; the earlier 0.05→0.18 pass washed
+          out against the navy — verified via document.getAnimations() that
+          the engine was running all along, this was a contrast problem,
+          not a wiring one). ~24s period. */}
       <motion.div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
         style={{
           zIndex: 1,
-          background: `radial-gradient(ellipse 65% 55% at 28% 32%, ${RWB_RED} 0%, transparent 70%)`,
+          background: `radial-gradient(ellipse 75% 65% at 22% 78%, ${RWB_RED} 0%, transparent 72%)`,
         }}
-        animate={reduce ? { opacity: 0.12 } : { opacity: [0.05, 0.18, 0.05] }}
-        transition={reduce ? undefined : { duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+        animate={reduce ? { opacity: 0.3 } : { opacity: [0.14, 0.42, 0.14] }}
+        transition={reduce ? undefined : { duration: 24, repeat: Infinity, ease: 'easeInOut' }}
       />
 
-      {/* White highlight glow — offset from the red so the two never fully
-          overlap into a blend; different period so they drift in and out
-          of phase instead of pulsing in lockstep. */}
+      {/* White/cream glow — upper area, offset from the red so the two
+          never fully overlap into a blend; ~31s period (not a clean
+          multiple of the red's 24s or the base wash's 14s, so all three
+          drift in and out of phase instead of ever syncing up). */}
       <motion.div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
         style={{
           zIndex: 1,
-          background: `radial-gradient(ellipse 70% 60% at 62% 60%, ${RWB_WHITE} 0%, transparent 70%)`,
+          background: `radial-gradient(ellipse 80% 62% at 55% 16%, ${RWB_WHITE} 0%, transparent 72%)`,
         }}
-        animate={reduce ? { opacity: 0.09 } : { opacity: [0.04, 0.14, 0.04] }}
-        transition={reduce ? undefined : { duration: 9.5, repeat: Infinity, ease: 'easeInOut' }}
+        animate={reduce ? { opacity: 0.24 } : { opacity: [0.1, 0.36, 0.1] }}
+        transition={reduce ? undefined : { duration: 31, repeat: Infinity, ease: 'easeInOut' }}
       />
 
       <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
