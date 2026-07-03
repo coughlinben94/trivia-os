@@ -18,7 +18,7 @@ const PY_SCRIPT = path.join(OUT_DIR, '_make_gif.py')
 const THEMES = [
   'pure-michigan', 'midnight-galaxy', 'autumn-harvest', 'northern-lights',
   'medieval-tavern', 'sunset-boulevard', 'retro-arcade', 'sand-dune-chill',
-  'halloween', 'jazz-club', 'dive-bar', 'rooftop-party', 'christmas-eve',
+  'halloween', 'jazz-club', 'dive-bar', 'sonora-balloons', 'christmas-eve',
   'drive-in-movie', 'western-showdown', 'under-the-sea', 'neon-tokyo',
   'firefly-summer', 'wine-cellar', 'meteor-shower', 'eighties-night',
 ]

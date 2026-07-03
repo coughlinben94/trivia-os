@@ -361,7 +361,7 @@ EASE_CUBIC = [0.33, 1, 0.68, 1]  // gentle
 
 `getTheme(id)` falls back to `midnight-galaxy` if not found. (Three slightly different fallback theme IDs exist across the codebase — `getTheme`'s own fallback, `DEFAULT_THEME_ID`, and `normalizeShow`'s fallback — currently all resolve to compatible values but haven't been unified; worth knowing if a "wrong default theme" bug ever shows up.)
 
-21 themes: pure-michigan ★, midnight-galaxy, autumn-harvest ★, northern-lights, medieval-tavern, sunset-boulevard ✓, retro-arcade, sand-dune-chill ✓, halloween, jazz-club ⟳, dive-bar, rooftop-party, christmas-eve, drive-in-movie ✓, western-showdown, under-the-sea, neon-tokyo, firefly-summer ★, wine-cellar, meteor-shower, eighties-night. (★ = confirmed-good exemplar, ✓ = bland-pass rework shipped, ⟳ = in progress, unmarked = still on the bland-pass queue. See `references/themes.md` for the full law/recipe. **Verify this list against `git log` per-theme before trusting it** — it drifted out of sync with reality once already this project.)
+21 themes: pure-michigan ★, midnight-galaxy, autumn-harvest ★, northern-lights, medieval-tavern, sunset-boulevard ✓, retro-arcade, sand-dune-chill ✓, halloween, jazz-club ✓, dive-bar, sonora-balloons ✓ (renamed from rooftop-party), christmas-eve, drive-in-movie ✓, western-showdown, under-the-sea, neon-tokyo, firefly-summer ★, wine-cellar, meteor-shower, eighties-night. (★ = confirmed-good exemplar, ✓ = bland-pass rework shipped, ⟳ = in progress, unmarked = still on the bland-pass queue. See `references/themes.md` for the full law/recipe. **Verify this list against `git log` per-theme before trusting it** — it drifted out of sync with reality once already this project.)
 
 ### Per-show theme overrides (shipped 2026-06-30)
 

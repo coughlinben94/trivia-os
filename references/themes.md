@@ -185,9 +185,9 @@ Defined in `themes/index.js`, in this order:
 | `retro-arcade` | CRT arcade | Neon side-glows + scanlines + pixel static |
 | `sand-dune-chill` ✓ | Early-AM Lake Michigan | Right-side pale dawn sun + soaring gull silhouettes + warm dune |
 | `halloween` | Jack-o-lantern | Orange edge flicker + purple fog + embers |
-| `jazz-club` ⟳ | Smoky stage | Sweeping amber spotlight pools + twinkling gold glints |
+| `jazz-club` ✓ | Smoky stage | 3 sweeping warm-white spotlights over a stage platform + amber glints + smoke/motes |
 | `dive-bar` | Neon bar | Red + blue neon buzz + haze |
-| `rooftop-party` | City rooftop | String-light bulbs + warm city glow |
+| `sonora-balloons` ✓ | Sunset balloon festival | 5 hot-air balloons drifting over a dusk sky + water horizon + gold dust motes (renamed from Rooftop Party) |
 | `christmas-eve` | Christmas night | Red/green edges + gold candle + snow |
 | `drive-in-movie` ✓ | Drive-in theater | Huge dominant screen (bright edges, dark flat center for text), 2 support poles, moths wandering in the glow, 2 car-roof silhouettes cresting the bottom |
 | `western-showdown` | Desert dusk | Sun-on-horizon + dust haze |

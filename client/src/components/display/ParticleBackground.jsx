@@ -1937,40 +1937,249 @@ function DiveBarAmbient({ tint }) {
   )
 }
 
-// ─── 13. ROOFTOP PARTY ───────────────────────────────────────────────────
-function RooftopPartyAmbient({ tint }) {
-  const N = 14
-  const bulbs = useMemo(() => Array.from({ length: N }, (_, i) => {
-    const sag = 7 * Math.sin(Math.PI * i / (N - 1))
-    const dur = 3.5 + (i % 4) * 0.6
+// ─── 13. SONORA BALLOONS ─────────────────────────────────────────────────
+// v9 port (2026-07-03), renamed from "Rooftop Party" per Ben — the design had
+// moved on from a city-rooftop concept to a hot-air-balloon sunset scene, so
+// the theme itself (id + name + palette in themes/index.js) was renamed to
+// match what it actually became, rather than keeping the old city-rooftop id.
+const SB_STYLE = `
+@keyframes sbGoreSlide { to { transform: translateX(calc(-1 * var(--rep, 120px))); } }
+@keyframes sbBalloonDrift { from { transform: translate(0, 0); } to { transform: translate(var(--dx,50vw), var(--dy,0)); } }
+@keyframes sbSway { 0%,100% { transform: rotate(-2.4deg); } 50% { transform: rotate(2.4deg); } }
+@keyframes sbWave {
+  0%,100% { transform: translateX(-3.6vw) scaleY(.74); opacity: .34; }
+  50%     { transform: translateX(3.6vw)  scaleY(1.22); opacity: .62; }
+}
+@keyframes sbDrift {
+  0%   { transform: translate(0,0); opacity: 0; }
+  10%  { opacity: .9; }
+  88%  { opacity: .6; }
+  100% { transform: translate(var(--tx,0), var(--ty,-6vh)); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce){ .sb-anim{ animation:none !important } }
+`
+
+const SB_STRIPE_W = 20
+const SB_PALETTES = {
+  RAINBOW: ['#e04028', '#ff8830', '#ffd028', '#38b048', '#3080e0', '#9038e0'],
+  SUNSET:  ['#c81f4a', '#ff7a30', '#ffb040', '#e05028'],
+  OCEAN:   ['#38b0a0', '#3080e0', '#5060d0', '#8040c8'],
+  BERRY:   ['#d84090', '#8c3068', '#ff6090', '#c05480'],
+  FOREST:  ['#c86028', '#d8a838', '#6b8020', '#3d5c2a'],
+}
+// idx, cols, goreDur, sizeVw, cy, sx, ex, dy, dur, swayDur — 5 lanes with
+// >5vh y-gaps so no two balloons can ever occupy the same neighborhood.
+const SB_BALLOONS = [
+  { idx: 0, cols: SB_PALETTES.RAINBOW, goreDur: 15, sizeVw: 4.97, cy: 10, sx: 8,  ex: 78, dy: 1.4,  dur: 62, swayDur: 8.0 },
+  { idx: 1, cols: SB_PALETTES.SUNSET,  goreDur: 11, sizeVw: 4.19, cy: 22, sx: 82, ex: 14, dy: -1.6, dur: 72, swayDur: 6.5 },
+  { idx: 2, cols: SB_PALETTES.OCEAN,   goreDur: 13, sizeVw: 4.41, cy: 34, sx: 20, ex: 88, dy: 1.2,  dur: 55, swayDur: 9.0 },
+  { idx: 3, cols: SB_PALETTES.BERRY,   goreDur: 12, sizeVw: 3.97, cy: 46, sx: 78, ex: 8,  dy: -1.8, dur: 68, swayDur: 7.0 },
+  { idx: 4, cols: SB_PALETTES.FOREST,  goreDur: 14, sizeVw: 3.75, cy: 58, sx: 6,  ex: 92, dy: 1.0,  dur: 80, swayDur: 7.5 },
+]
+const SB_WAVES = [
+  { bottom: '10vh',  dur: '13s', delay: '-2s' },
+  { bottom: '7vh',   dur: '17s', delay: '-8s' },
+  { bottom: '4vh',   dur: '15s', delay: '-5s' },
+  { bottom: '1.5vh', dur: '19s', delay: '-11s' },
+]
+
+// ANCHOR — 5 hot-air balloons. Each balloon's 4-color stripe set is a fixed,
+// deliberately varied off-family palette (not derived from accent/highlight) —
+// same sanctioned-exception treatment as Christmas Eve's garland green / Dive
+// Bar's jukebox dome colors. Only the balloon's warm envelope wash + highlight
+// (in-family with accent/highlight) are tinted; stripe colors, shading
+// gradient, outline, and basket rigging stay literal dark/neutral structure.
+// No re-roll, no CSS-var mutation: each balloon has a fixed start/end and
+// animation-direction:alternate for a smooth pendulum — only the one-time
+// speed jitter (+/-18%) and phase delay are randomized, at mount.
+function SbBalloon({ idx, cols, goreDur, sizeVw, cy, sx, ex, dy, dur, swayDur, tint }) {
+  const rep = cols.length * SB_STRIPE_W
+  const stripes = useMemo(() => {
+    const startX = -rep, endX = 120 + rep
+    const arr = []
+    let k = 0
+    for (let x = startX; x < endX; x += SB_STRIPE_W, k++) {
+      arr.push({ x, color: cols[((k % cols.length) + cols.length) % cols.length] })
+    }
+    return arr
+  }, [cols, rep])
+
+  const driftDur = useMemo(() => (dur * (0.82 + Math.random() * 0.36)).toFixed(2), [dur])
+  const driftDelay = useMemo(() => `${(-Math.random() * driftDur).toFixed(2)}s`, [driftDur])
+  const swayDelay = useMemo(() => `${(-Math.random() * swayDur).toFixed(2)}s`, [swayDur])
+
+  return (
+    <div aria-hidden className="sb-anim" style={{
+      position: 'absolute', left: `${sx}vw`, top: `${cy}vh`,
+      width: `${sizeVw}vw`, height: `${sizeVw * 1.6}vw`, pointerEvents: 'none',
+      willChange: 'transform',
+      '--dx': `${ex - sx}vw`, '--dy': `${dy}vh`,
+      animation: `sbBalloonDrift ${driftDur}s ease-in-out infinite alternate ${driftDelay}`,
+    }}>
+      <div className="sb-anim" style={{
+        position: 'absolute', inset: 0, transformOrigin: '50% 10%', willChange: 'transform',
+        animation: `sbSway ${swayDur}s ease-in-out infinite ${swayDelay}`,
+      }}>
+        <svg viewBox="0 0 120 192" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }}>
+          <defs>
+            <clipPath id={`sbEnvClip${idx}`}>
+              <path d="M60 6 C 24 6 6 40 6 74 C 6 106 28 132 48 144 L 72 144 C 92 132 114 106 114 74 C 114 40 96 6 60 6 Z"/>
+            </clipPath>
+            <linearGradient id={`sbRound${idx}`} x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stopColor="#1a0812" stopOpacity="0.28"/>
+              <stop offset="0.22" stopColor="#1a0812" stopOpacity="0"/>
+              <stop offset="0.76" stopColor="#1a0812" stopOpacity="0"/>
+              <stop offset="1" stopColor="#1a0812" stopOpacity="0.48"/>
+            </linearGradient>
+          </defs>
+          <g clipPath={`url(#sbEnvClip${idx})`}>
+            <g className="sb-anim" style={{ animation: `sbGoreSlide ${goreDur}s linear infinite`, '--rep': `${rep}px` }}>
+              {stripes.map((s, i) => (
+                <g key={i}>
+                  <rect x={s.x} y="0" width={SB_STRIPE_W} height="152" fill={s.color} />
+                  <line x1={s.x} y1="0" x2={s.x} y2="152" stroke="#3a1020" strokeWidth="0.8" opacity="0.3" />
+                </g>
+              ))}
+            </g>
+            <rect x="0" y="0" width="120" height="152" fill={tint('rgba(232,134,58,0.10)')} />
+            <rect x="0" y="0" width="120" height="152" fill={`url(#sbRound${idx})`} />
+            <ellipse cx="40" cy="92" rx="26" ry="22" fill={tint('rgba(255,223,174,0.12)')} />
+          </g>
+          <path d="M60 6 C 24 6 6 40 6 74 C 6 106 28 132 48 144 L 72 144 C 92 132 114 106 114 74 C 114 40 96 6 60 6 Z" fill="none" stroke="#2a1020" strokeWidth="1.4" opacity="0.85"/>
+          <rect x="46" y="141" width="28" height="8" rx="1.5" fill="#8c2020"/>
+          <line x1="48" y1="149" x2="52" y2="170" stroke="#241016" strokeWidth="1.4"/>
+          <line x1="72" y1="149" x2="68" y2="170" stroke="#241016" strokeWidth="1.4"/>
+          <rect x="48" y="170" width="24" height="16" rx="2" fill="#6b4a26"/>
+          <rect x="48" y="170" width="24" height="4.5" rx="2" fill="#4a3018"/>
+        </svg>
+      </div>
+    </div>
+  )
+}
+
+function SbWave({ bottom, dur, delay }) {
+  return (
+    <div aria-hidden className="sb-anim" style={{
+      position: 'absolute', left: '-14vw', right: '-14vw', bottom, height: '2.4vh',
+      borderRadius: '50%', filter: 'blur(5px)', pointerEvents: 'none', willChange: 'transform,opacity',
+      // blue-gray water-surface tone — part of the same off-family atmosphere
+      // wash as the backdrop/water below, left literal
+      background: 'linear-gradient(90deg, rgba(120,160,200,0) 0%, rgba(120,160,200,.30) 30%, rgba(150,185,215,.34) 55%, rgba(120,160,200,.28) 75%, rgba(120,160,200,0) 100%)',
+      animation: `sbWave ${dur} ease-in-out ${delay} infinite`,
+    }}/>
+  )
+}
+
+// PER-CYCLE RE-ROLL (rollMeteorShower precedent, matches JcSmoke/JcMote):
+// mutates its own DOM node on 'animationiteration' instead of a React
+// re-render; sbDrift holds opacity at 0 at both loop ends so the jump is
+// invisible. Reduced-motion gates the reroll itself, not just the CSS.
+function rollSbMote() {
+  return {
+    left: `${(6 + Math.random() * 88).toFixed(2)}vw`,
+    top: `${(16 + Math.random() * 52).toFixed(2)}vh`,
+    ty: `${-(1.5 + Math.random() * 3.5).toFixed(2)}vh`,
+    tx: `${((Math.random() < 0.5 ? -1 : 1) * (0.8 + Math.random() * 1.8)).toFixed(2)}vw`,
+  }
+}
+
+function SbMote({ initialDelay, tint }) {
+  const elRef = useRef(null)
+  const size = useMemo(() => 1.6 + Math.random() * 1.8, [])
+  const dur = useMemo(() => `${(6 + Math.random() * 5).toFixed(2)}s`, [])
+  const initial = useMemo(() => rollSbMote(), [])
+
+  useEffect(() => {
+    const el = elRef.current
+    if (!el) return
+    const reroll = () => {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const r = rollSbMote()
+      el.style.left = r.left
+      el.style.top = r.top
+      el.style.setProperty('--ty', r.ty)
+      el.style.setProperty('--tx', r.tx)
+    }
+    el.addEventListener('animationiteration', reroll)
+    return () => el.removeEventListener('animationiteration', reroll)
+  }, [])
+
+  return (
+    <div ref={elRef} aria-hidden className="sb-anim" style={{
+      position: 'absolute', left: initial.left, top: initial.top,
+      width: `${size}px`, height: `${size}px`, borderRadius: '50%',
+      background: tint('rgba(255,217,138,0.6)'), pointerEvents: 'none', willChange: 'transform,opacity',
+      '--ty': initial.ty, '--tx': initial.tx,
+      animation: `sbDrift ${dur} linear ${initialDelay} infinite`,
+    }}/>
+  )
+}
+
+// Stars — static random-once field (no reroll, matches the artifact). Near-white
+// lavender is the sanctioned near-white exception, left literal.
+function SbStars() {
+  const stars = useMemo(() => Array.from({ length: 22 }, () => {
+    const dur = 5 + Math.random() * 8
     return {
-      left:  `${5 + (i / (N - 1)) * 90}%`,
-      top:   `${12 + sag}%`,
-      size:  12 + (i % 3) * 2,
-      dur:   `${dur}s`,
-      delay: `-${((i / N) * dur).toFixed(1)}s`,
+      left: `${(2 + Math.random() * 96).toFixed(2)}vw`,
+      top: `${(1.5 + Math.random() * 25).toFixed(2)}vh`,
+      size: 1 + Math.random() * 1.6,
+      dur: `${dur.toFixed(2)}s`,
+      delay: `-${(Math.random() * 10).toFixed(2)}s`,
     }
   }), [])
+  return stars.map((s, i) => (
+    <div key={i} aria-hidden style={{
+      position: 'absolute', left: s.left, top: s.top, width: s.size, height: s.size,
+      borderRadius: '50%', background: '#f6e6ff', pointerEvents: 'none', willChange: 'opacity',
+      '--lo': 0.25, '--hi': 0.85,
+      animation: `ambientBreathe ${s.dur} ${s.delay} ease-in-out infinite`,
+    }}/>
+  ))
+}
+
+function SonoraBalloonsAmbient({ tint }) {
+  const moteDelays = useMemo(() => Array.from({ length: 14 }, () => `${-(Math.random() * 11).toFixed(2)}s`), [])
 
   return <>
-    {/* Twilight sky — deep blue upper drench */}
-    <GlowLayer lo={0.55} hi={0.82} duration="30s" style={{
-      top: 0, left: 0, right: 0, height: '65%',
-      background: `linear-gradient(to bottom, ${tint('rgba(12,20,75,0.80)')} 0%, ${tint('rgba(30,55,130,0.50)')} 60%, ${tint('rgba(30,55,130,0)')} 100%)`,
+    <style>{SB_STYLE}</style>
+    {/* Base: dusk-to-water sky gradient — a full atmospheric wash, off-family in
+        several of its own stops (purple dusk, mauve mid, blue horizon/water);
+        left literal as a single documented exception, same treatment as
+        jazz-club's backdrop wash. Only the warm accents layered on top (haze.a,
+        waterGlow, motes, balloon highlight) are tinted. */}
+    <div aria-hidden style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none',
+      background: 'linear-gradient(180deg, #180a28 0%, #22103a 20%, #341444 40%, #6a2a3c 57%, #b0442a 71%, #e8863a 82%, #d0663a 87%, #6a5570 89%, #2a4a72 92%, #163a63 96%, #0e2c50 100%)',
     }}/>
-    {/* City glow — warm amber rising from below */}
-    <GlowLayer lo={0.38} hi={0.68} duration="22s" delay="5s" style={{
-      bottom: 0, left: 0, right: 0, height: '50%',
-      background: `linear-gradient(to top, ${tint('rgba(255,110,15,0.55)')} 0%, ${tint('rgba(255,155,50,0.28)')} 55%, ${tint('rgba(255,155,50,0)')} 100%)`,
+    {/* Haze washes */}
+    <GlowLayer lo={0.55} hi={0.85} duration="19s" style={{
+      left: '-8vw', top: '-8vh', width: '44vw', height: '34vh', borderRadius: '50%',
+      filter: 'blur(32px)',
+      background: 'radial-gradient(circle, rgba(180,90,120,.08) 0%, rgba(180,90,120,0) 70%)',
     }}/>
-    {/* String light bulbs — catenary sag across upper third */}
-    {bulbs.map((b, i) => (
-      <PulseDot key={i} left={b.left} top={b.top} size={b.size}
-        color={tint('rgba(255,210,138,0.95)')} glowColor={tint('rgba(255,179,71,0.50)')}
-        duration={b.dur} delay={b.delay}
-        anim="ambientBreathe" ease={EASE.twinkle} lo={0.65}
-      />
-    ))}
+    <GlowLayer lo={0.55} hi={0.85} duration="16s" delay="-7s" style={{
+      left: '20vw', top: '14vh', width: '60vw', height: '36vh', borderRadius: '50%',
+      filter: 'blur(32px)',
+      background: `radial-gradient(circle, ${tint('rgba(255,150,70,.10)')} 0%, ${tint('rgba(255,150,70,0)')} 70%)`,
+    }}/>
+    {/* Water surface + sunset reflection */}
+    <div aria-hidden style={{
+      position: 'absolute', left: 0, right: 0, bottom: 0, height: '13vh', pointerEvents: 'none',
+      background: 'linear-gradient(180deg, rgba(120,90,120,0) 0%, rgba(42,74,114,.35) 8%, rgba(22,58,99,.75) 22%, #123453 55%, #0c2848 100%)',
+    }}/>
+    <GlowLayer lo={0.55} hi={0.85} duration="10s" style={{
+      left: '12vw', right: '12vw', bottom: '8vh', height: '6vh',
+      filter: 'blur(6px)',
+      background: `radial-gradient(ellipse at 50% 0%, ${tint('rgba(232,134,58,.34)')} 0%, ${tint('rgba(208,102,58,.12)')} 45%, ${tint('rgba(208,102,58,0)')} 80%)`,
+    }}/>
+    {SB_WAVES.map((w, i) => <SbWave key={i} {...w} />)}
+    {/* Golden dust motes — per-cycle re-roll */}
+    {moteDelays.map((d, i) => <SbMote key={i} initialDelay={d} tint={tint} />)}
+    {/* 5 hot-air balloons — the anchor */}
+    {SB_BALLOONS.map((b) => <SbBalloon key={b.idx} {...b} tint={tint} />)}
+    {/* Stars in the purple upper sky */}
+    <SbStars/>
   </>
 }
 
@@ -2738,7 +2947,7 @@ const AMBIENT_MAP = {
   'halloween':          HalloweenAmbient,
   'jazz-club':          JazzClubAmbient,
   'dive-bar':           DiveBarAmbient,
-  'rooftop-party':      RooftopPartyAmbient,
+  'sonora-balloons':    SonoraBalloonsAmbient,
   'christmas-eve':      ChristmasEveAmbient,
   'drive-in-movie':     DriveInMovieAmbient,
   'western-showdown':   WesternShowdownAmbient,
