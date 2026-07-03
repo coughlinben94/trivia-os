@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useLayoutEffect } from 'react'
 
 // ─── Mood table ────────────────────────────────────────────────────────────
 // p1-p4 = layer periods (seconds, prime-adjacent so nothing phase-locks):
@@ -32,7 +32,18 @@ export default function BreathingGradient({ palette, mood = 'calm' }) {
   const atmosRef     = useRef(null)
   const animsRef     = useRef([])
 
-  useEffect(() => {
+  // useLayoutEffect, not useEffect: these custom properties gate what every
+  // gradient stop below resolves to, and none of the var() calls carry a
+  // fallback. useEffect runs after the browser paints, so on mount (e.g.
+  // clicking between slides in the editor's instant, non-cross-fading
+  // preview) there's a guaranteed first frame where --accent-c etc. are
+  // unset — an unresolvable var() with no fallback invalidates the whole
+  // `background` declaration, so every layer paints fully transparent and
+  // whatever sits behind the preview (the show's actual theme) shows through
+  // for a frame before this fires and the real RWB palette snaps in.
+  // useLayoutEffect runs synchronously after DOM mutation but before paint,
+  // closing that gap.
+  useLayoutEffect(() => {
     const root = rootRef.current
     if (!root) return
 
