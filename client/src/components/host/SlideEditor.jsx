@@ -212,67 +212,70 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
           <div className="flex flex-1 min-h-0">
 
             {/* ── LEFT: slide canvas ── */}
-            <div ref={leftPanelRef} className="flex-1 bg-white flex flex-col items-center justify-center overflow-hidden">
-              {/* Wrapper: canvas is clipped; overlay is NOT, so handles near edges stay clickable */}
-              <div style={{ width: scaledW, height: scaledH, position: 'relative', flexShrink: 0 }}>
-                {/* Clipped canvas */}
-                <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-                  <div style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${dynScale})`, transformOrigin: 'top left', overflow: 'hidden', background: theme.colors.bg }}>
-                    <ParticleBackground theme={theme} />
-                    <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} isPreview />
-                  </div>
-                </div>
-                {/* Interactive element overlay — overflow visible so handles aren't clipped */}
-                <div
-                  ref={overlayRef}
-                  style={{ position: 'absolute', inset: 0, zIndex: 50, overflow: 'visible' }}
-                  onPointerDown={() => setSelectedElId(null)}
-                >
-                {elements.map(el => {
-                  const isSel = el.id === selectedElId
-                  const elX = el.x ?? 50
-                  const elY = el.y ?? 50
-                  const elW = el.width ?? (el.type === 'image' ? 40 : 60)
-                  const rot = el.rotation ?? 0
-                  const fH  = el.flipH ? -1 : 1
-                  const fV  = el.flipV ? -1 : 1
-                  return (
-                    <div
-                      key={el.id}
-                      style={{
-                        position: 'absolute',
-                        left: `${elX}%`, top: `${elY}%`,
-                        width: `${elW}%`,
-                        transform: `translate(-50%, -50%) rotate(${rot}deg) scaleX(${fH}) scaleY(${fV})`,
-                        border: isSel ? '2px solid #3b82f6' : '1px dashed rgba(255,255,255,0.35)',
-                        borderRadius: 4,
-                        minHeight: el.type === 'text'
-                          ? Math.max(36, Math.round((el.fontSize ?? 60) * dynScale * (el.lineHeight ?? 1.2)))
-                          : Math.max(36, Math.round(elW / 100 * scaledW * (INNER_H / INNER_W))),
-                        cursor: 'move',
-                        background: isSel ? 'rgba(59,130,246,0.07)' : 'transparent',
-                        boxSizing: 'border-box',
-                      }}
-                      onPointerDown={e => { e.stopPropagation(); startDrag(e, el.id, el) }}
-                    >
-                      {isSel && (
-                        <button
-                          style={{ position: 'absolute', top: -9, right: -9, background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: 18, height: 18, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}
-                          onPointerDown={e => { e.stopPropagation(); deleteElement(el.id) }}
-                        >×</button>
-                      )}
-                      <span style={{ position: 'absolute', top: -16, left: 0, fontSize: 10, color: isSel ? '#60a5fa' : 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
-                        {el.type === 'text' ? (el.content?.slice(0, 22) || 'Text box') : 'Image'}
-                      </span>
+            <div className="flex-1 bg-white flex flex-col overflow-hidden">
+              {/* Slide viewport — ref here so panelH excludes the chips strip below */}
+              <div ref={leftPanelRef} className="flex-1 flex items-center justify-center min-h-0 overflow-hidden">
+                {/* Wrapper: canvas is clipped; overlay is NOT, so handles near edges stay clickable */}
+                <div style={{ width: scaledW, height: scaledH, position: 'relative', flexShrink: 0 }}>
+                  {/* Clipped canvas */}
+                  <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${dynScale})`, transformOrigin: 'top left', overflow: 'hidden', background: theme.colors.bg }}>
+                      <ParticleBackground theme={theme} />
+                      <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} isPreview />
                     </div>
-                  )
-                })}
+                  </div>
+                  {/* Interactive element overlay — overflow visible so handles aren't clipped */}
+                  <div
+                    ref={overlayRef}
+                    style={{ position: 'absolute', inset: 0, zIndex: 50, overflow: 'visible' }}
+                    onPointerDown={() => setSelectedElId(null)}
+                  >
+                  {elements.map(el => {
+                    const isSel = el.id === selectedElId
+                    const elX = el.x ?? 50
+                    const elY = el.y ?? 50
+                    const elW = el.width ?? (el.type === 'image' ? 40 : 60)
+                    const rot = el.rotation ?? 0
+                    const fH  = el.flipH ? -1 : 1
+                    const fV  = el.flipV ? -1 : 1
+                    return (
+                      <div
+                        key={el.id}
+                        style={{
+                          position: 'absolute',
+                          left: `${elX}%`, top: `${elY}%`,
+                          width: `${elW}%`,
+                          transform: `translate(-50%, -50%) rotate(${rot}deg) scaleX(${fH}) scaleY(${fV})`,
+                          border: isSel ? '2px solid #3b82f6' : '1px dashed rgba(255,255,255,0.35)',
+                          borderRadius: 4,
+                          minHeight: el.type === 'text'
+                            ? Math.max(36, Math.round((el.fontSize ?? 60) * dynScale * (el.lineHeight ?? 1.2)))
+                            : Math.max(36, Math.round(elW / 100 * scaledW * (INNER_H / INNER_W))),
+                          cursor: 'move',
+                          background: isSel ? 'rgba(59,130,246,0.07)' : 'transparent',
+                          boxSizing: 'border-box',
+                        }}
+                        onPointerDown={e => { e.stopPropagation(); startDrag(e, el.id, el) }}
+                      >
+                        {isSel && (
+                          <button
+                            style={{ position: 'absolute', top: -9, right: -9, background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: 18, height: 18, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}
+                            onPointerDown={e => { e.stopPropagation(); deleteElement(el.id) }}
+                          >×</button>
+                        )}
+                        <span style={{ position: 'absolute', top: -16, left: 0, fontSize: 10, color: isSel ? '#60a5fa' : 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+                          {el.type === 'text' ? (el.content?.slice(0, 22) || 'Text box') : 'Image'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                  </div>
                 </div>
               </div>
 
-              {/* Layer chips — below centered slide */}
+              {/* Layer chips — anchored at the bottom, outside the centered viewport */}
               {elements.length > 0 && (
-                <div className="px-3 pt-2 flex flex-wrap gap-1.5 justify-center">
+                <div className="shrink-0 px-3 py-2 flex flex-wrap gap-1.5 justify-center border-t border-gray-100">
                   {elements.map(el => (
                     <button
                       key={el.id}
