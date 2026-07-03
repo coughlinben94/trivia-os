@@ -28,21 +28,6 @@ export default function TitleSlide({ slide, show }) {
         }}
       />
 
-      {/* Baynes logo — centered, prominent */}
-      <motion.div
-        initial={{ opacity: 0, y: -24 }}
-        animate={{ opacity: 0.9, y: 0 }}
-        transition={{ duration: 0.6, ease: EASE_SNAP }}
-        className="relative z-10 mb-10"
-      >
-        <img
-          src="/baynes-logo.svg"
-          alt="Baynes Apple Valley"
-          className="object-contain"
-          style={{ height: 120, maxWidth: '100%', filter: 'brightness(0) invert(1)' }}
-        />
-      </motion.div>
-
       {/* Title */}
       <motion.h1
         initial={{ opacity: 0, y: 24 }}

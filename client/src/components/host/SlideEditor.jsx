@@ -213,15 +213,19 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
 
             {/* ── LEFT: slide canvas ── */}
             <div ref={leftPanelRef} className="flex-1 bg-white flex flex-col items-center justify-center overflow-hidden">
-              <div style={{ width: scaledW, height: scaledH, position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${dynScale})`, transformOrigin: 'top left', overflow: 'hidden', background: theme.colors.bg }}>
-                  <ParticleBackground theme={theme} />
-                  <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} isPreview />
+              {/* Wrapper: canvas is clipped; overlay is NOT, so handles near edges stay clickable */}
+              <div style={{ width: scaledW, height: scaledH, position: 'relative', flexShrink: 0 }}>
+                {/* Clipped canvas */}
+                <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${dynScale})`, transformOrigin: 'top left', overflow: 'hidden', background: theme.colors.bg }}>
+                    <ParticleBackground theme={theme} />
+                    <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} isPreview />
+                  </div>
                 </div>
-                {/* Interactive element overlay */}
+                {/* Interactive element overlay — overflow visible so handles aren't clipped */}
                 <div
                   ref={overlayRef}
-                  style={{ position: 'absolute', inset: 0, zIndex: 50 }}
+                  style={{ position: 'absolute', inset: 0, zIndex: 50, overflow: 'visible' }}
                   onPointerDown={() => setSelectedElId(null)}
                 >
                 {elements.map(el => {
