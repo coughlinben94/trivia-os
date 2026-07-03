@@ -1,12 +1,52 @@
 /**
  * wizard-create-verify.spec.js
  *
+ * ╔═══════════════════════════════════════════════════════════════════════╗
+ * ║ QUARANTINED — 2026-07-03. DO NOT REMOVE THIS GUARD WITHOUT READING IT. ║
+ * ╚═══════════════════════════════════════════════════════════════════════╝
+ *
+ * beforeAll/afterAll below write via a bare anon-key Supabase client (`sb`,
+ * created straight from VITE_SUPABASE_ANON_KEY — NOT the authenticated
+ * session global-setup.js mints via HostPinGate). RLS policies now require
+ * that authenticated/host_verified session for writes to `shows`. A blocked
+ * UPDATE against a table the anon key can no longer write returns 0 rows
+ * affected with NO error — Supabase's client doesn't treat "matched nothing"
+ * as a failure — so this file's own "[RESTORE FAILED]" guard (in afterAll)
+ * never fires. Cleanup just silently no-ops.
+ *
+ * Net effect: any test failure after the first successful create leaves a
+ * permanent stray slide in the shared PRODUCTION Test show (show_WLBM5jvb),
+ * because afterAll's restore-to-snapshot write silently does nothing.
+ * Confirmed 3x in one session (2026-07-03) — each time required manually
+ * deleting the stray slide through the real host UI (PIN-gated, so even that
+ * cleanup path needs the authenticated session, not the anon key).
+ *
+ * Guarded by test.skip(!process.env.ALLOW_WIZARD_CREATE, ...) inside
+ * beforeAll itself (not just the individual test bodies) — Playwright's
+ * beforeAll runs once before any test in the file regardless of what
+ * individual tests decide to do, so guarding only the test bodies would
+ * still let the seeding write in beforeAll fire. See the guard below and
+ * the matching one in afterAll for the exact mechanism.
+ *
+ * EXIT CRITERIA — safe to remove this guard once:
+ *   Both `sb` (module scope, ~line 91) and its uses in beforeAll/afterAll
+ *   are switched to an authenticated client — reuse the same storageState/
+ *   token session global-setup.js already mints for the browser context,
+ *   rather than a fresh anon-key `createClient()`. Once writes there
+ *   actually succeed against RLS, this guard (and the big comment above it)
+ *   can come out.
+ *
+ * To run anyway (e.g. once the fix above lands and you're verifying it):
+ *   ALLOW_WIZARD_CREATE=1 PLAYWRIGHT_SHOW_ID=show_WLBM5jvb npm run test:wizard-create
+ *
+ * ───────────────────────────────────────────────────────────────────────
+ *
  * CREATE-AND-VERIFY Playwright spec for the AddSlideWizard modal.
  * Targets show_WLBM5jvb (the Test show) ONLY.
  * Hard-fails at module load if PLAYWRIGHT_SHOW_ID is missing or wrong.
  *
  * SAFETY: beforeAll snapshots show.slides + show.rounds; afterAll restores verbatim.
- * Safe to re-run; each run leaves the show exactly as it was.
+ * Safe to re-run when the client below is authenticated — see QUARANTINED notice above.
  *
  * ── CONFIRMED SELECTORS (from source grep) ──────────────────────────────────
  *   Dashboard squares: getByRole('button',{name:/CardName/}) — button has icon+name+desc spans
@@ -128,6 +168,19 @@ test.use({ viewport: { width: 1280, height: 720 } })
 // ── beforeAll: snapshot + ensure ≥ 2 rounds ─────────────────────────────────
 
 test.beforeAll(async () => {
+  // QUARANTINE GUARD — see the file-header comment for why. Must be the
+  // first statement in this hook: beforeAll runs once before any test in
+  // the file regardless of individual test.skip() calls in test bodies, so
+  // guarding only the tests would still let the seeding write below fire.
+  test.skip(
+    !process.env.ALLOW_WIZARD_CREATE,
+    'quarantined: beforeAll/afterAll cleanup uses the anon key against ' +
+    'RLS-blocked tables — silently corrupts the shared Test show on any ' +
+    'failure (confirmed 3x 2026-07-03). Fix cleanup to use the ' +
+    'authenticated session (storageState/token, same as global-setup.js) ' +
+    'before removing this guard. Set ALLOW_WIZARD_CREATE=1 to bypass.'
+  )
+
   // Ensure the show is not live — LiveMode renders no <aside> and the test would fail
   await sb.from('shows').update({ is_live: false, current_slide_id: null }).eq('id', TEST_SHOW_ID)
 
@@ -168,6 +221,13 @@ test.beforeAll(async () => {
 // poll makes that scenario unreachable in practice.
 
 test.afterAll(async () => {
+  // Defense in depth alongside the beforeAll guard — if beforeAll skipped,
+  // snapshotSlides/snapshotRounds never got assigned (still their []
+  // module-scope defaults), so this restore write must not fire regardless
+  // of whatever RLS does with it. Same quarantine condition, checked again
+  // rather than trusted to have propagated some other way.
+  if (!process.env.ALLOW_WIZARD_CREATE) return
+
   const { error } = await sb
     .from('shows')
     .update({ slides: snapshotSlides, rounds: snapshotRounds })
