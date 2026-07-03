@@ -552,15 +552,14 @@ export default function ScoreboardModal({ show, onClose }) {
   }
 
   async function clearScores() {
-    // Cancel any pending debounced saves so they don't overwrite after the clear
     Object.values(saveTimers.current).forEach(clearTimeout)
     saveTimers.current = {}
-    const cleared = teams.map(t => ({ ...t, scores: {} }))
-    setTeams(cleared)
+    const ids = teams.map(t => t.id)
+    setTeams([])
     setHighlightIds(null)
-    await supabase.from('scoreboard_teams').upsert(
-      cleared.map(t => ({ id: t.id, show_id: t.show_id, name: t.name, scores: {}, sort_order: t.sort_order }))
-    )
+    if (ids.length > 0) {
+      await supabase.from('scoreboard_teams').delete().in('id', ids)
+    }
   }
 
   function quickSave(teamId, colKey, score) { updateScore(teamId, colKey, score) }
@@ -611,8 +610,8 @@ export default function ScoreboardModal({ show, onClose }) {
             >🎡 PYL Wheel</button>
             {confirmClear ? (
               <div className="flex items-center gap-1.5 ml-1">
-                <span className="text-xs text-red-600 font-semibold">Clear all scores?</span>
-                <button onClick={() => { clearScores(); setConfirmClear(false) }} className={`${btnBase} bg-red-500 text-white hover:bg-red-600`}>Yes, clear</button>
+                <span className="text-xs text-red-600 font-semibold">Remove all teams?</span>
+                <button onClick={() => { clearScores(); setConfirmClear(false) }} className={`${btnBase} bg-red-500 text-white hover:bg-red-600`}>Yes, remove</button>
                 <button onClick={() => setConfirmClear(false)} className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200`}>Cancel</button>
               </div>
             ) : (
