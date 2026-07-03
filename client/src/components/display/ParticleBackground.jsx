@@ -141,8 +141,6 @@ const KEYFRAMES = `
     90%  { transform: translate(calc(var(--dx,40%)*0.97), calc(var(--dy,40%)*0.97)); opacity: 0.16; }
     100% { transform: translate(var(--dx,40%), var(--dy,40%)); opacity: 0; }
   }
-  @keyframes jcSpinCW  { to { transform: rotate(360deg); } }
-  @keyframes jcSpinCCW { to { transform: rotate(-360deg); } }
   @keyframes jcGlintPop {
     0%   { opacity: 0; }
     14%  { opacity: var(--gop, 0.75); }
@@ -1513,20 +1511,153 @@ function HalloweenAmbient({ tint }) {
 // ─── 10. JAZZ CLUB ───────────────────────────────────────────────────────
 // accent #4a2808 = rgba(74,40,8), highlight #d4820c = rgba(212,130,12)
 // bg #080608, bgDeep #040404
-function JcSpotlight({ fx, fy, w, alpha, dur, dir, phase, tint }) {
+// v3 (2026-07-02 port from jazz-club.html): real stage platform, browner
+// backdrop, 3 sweeping warm-white spotlights replace the old rotating cones.
+const JC2_STYLE = `
+@keyframes jcSweep { 0%,100% { transform: rotate(var(--a1,-6deg)); } 50% { transform: rotate(var(--a2,6deg)); } }
+@keyframes jcDrift {
+  0%   { transform: translate(0,0); opacity: 0; }
+  10%  { opacity: .9; }
+  88%  { opacity: .65; }
+  100% { transform: translate(var(--tx,0), var(--ty,-8vh)); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce){ .jc2-anim{ animation:none !important } }
+`
+
+const JC_FOLDS = [
+  { left: '10vw', top: '-6vh',  fx: '1.4vw',  dur: '17s', delay: '0s' },
+  { left: '42vw', top: '-12vh', fx: '-1.1vw', dur: '13s', delay: '-6s' },
+  { left: '72vw', top: '-6vh',  fx: '1.2vw',  dur: '21s', delay: '-11s' },
+]
+
+const JC_BEAMS = [
+  { left: '8vw',    width: '20vw', a1: '-6deg', a2: '6deg',  sweepDur: '11s', sweepDelay: '0s',  breatheDur: '8s',  breatheDelay: '0s',  cone: [0.26, 0.10], pool: 1 },
+  { left: '41.5vw', width: '17vw', a1: '4deg',  a2: '-4deg', sweepDur: '14s', sweepDelay: '-5s', breatheDur: '12s', breatheDelay: '-3s', cone: [0.16, 0.06], pool: 0.9 },
+  { left: '72vw',   width: '20vw', a1: '-6deg', a2: '6deg',  sweepDur: '9.5s', sweepDelay: '-3s', breatheDur: '10s', breatheDelay: '-1s', cone: [0.24, 0.09], pool: 1 },
+]
+
+// ANCHOR — 3 sweeping warm-white spotlights: paired with the backdrop wash
+// below as this theme's two documented off-family colors. Warm-white here is
+// the sanctioned near-white exception, left literal. Pool is a CHILD of its
+// beam (not a sibling) so sweep and pool sync is guaranteed by construction.
+function JcBeam({ left, width, a1, a2, sweepDur, sweepDelay, breatheDur, breatheDelay, cone, pool }) {
   return (
-    <div aria-hidden className="jc-anim" style={{
-      position: 'absolute', inset: 0, pointerEvents: 'none',
-      transformOrigin: '50% 50%',
-      animation: `${dir === 'cw' ? 'jcSpinCW' : 'jcSpinCCW'} ${dur}s linear ${phase}s infinite`,
+    <div aria-hidden className="jc2-anim" style={{
+      position: 'absolute', top: '-6vh', left, width, height: '95vh',
+      filter: 'blur(14px)', transformOrigin: '50% 0', pointerEvents: 'none',
+      willChange: 'transform,opacity',
+      '--a1': a1, '--a2': a2, '--lo': 0.55, '--hi': 0.85,
+      animation: `jcSweep ${sweepDur} ease-in-out ${sweepDelay} infinite, ambientBreathe ${breatheDur} ease-in-out ${breatheDelay} infinite`,
     }}>
       <div style={{
-        position: 'absolute', left: fx, top: fy,
-        transform: 'translate(-50%,-50%)',
-        width: w, aspectRatio: '1',
-        background: `radial-gradient(circle at center, ${tint(`rgba(255,240,220,${alpha})`)} 0%, ${tint(`rgba(255,240,220,${(alpha * 0.5).toFixed(2)})`)} 46%, transparent 70%)`,
+        position: 'absolute', inset: 0,
+        clipPath: 'polygon(40% 0, 60% 0, 100% 100%, 0 100%)',
+        background: `linear-gradient(180deg, rgba(255,246,230,${cone[0]}) 0%, rgba(255,246,230,${cone[1]}) 55%, rgba(255,246,230,0) 96%)`,
+      }}/>
+      <div style={{
+        position: 'absolute', left: '50%', top: '-1vh', width: '4vw', height: '4vw',
+        transform: 'translateX(-50%)', borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(255,250,238,.9) 0%, rgba(255,243,220,.3) 40%, rgba(255,243,220,0) 70%)',
+      }}/>
+      <div style={{
+        position: 'absolute', left: '50%', bottom: '-3vh', transform: 'translateX(-50%)',
+        width: '80%', height: '7.5vh', borderRadius: '50%', opacity: pool,
+        background: 'radial-gradient(ellipse, rgba(255,246,228,.62) 0%, rgba(255,243,220,.20) 45%, rgba(255,243,220,0) 70%)',
       }}/>
     </div>
+  )
+}
+
+// PER-CYCLE RE-ROLL (rollMeteorShower precedent, artifact JS is the direct
+// reference): smoke/motes mutate their own DOM node on 'animationiteration'
+// instead of triggering a React re-render — jcDrift holds opacity at 0 at
+// both loop ends, so the jump is invisible. Reduced-motion gates the reroll
+// itself (mirrors rollIceGlint/rollAuroraSweepBand above), not just the CSS.
+function rollJcSmoke(side) {
+  const xMin = side === 0 ? 2 : 80
+  const xMax = side === 0 ? 18 : 94
+  const driftX = side === 0 ? 2.5 : -2
+  return {
+    left: `${(xMin + Math.random() * (xMax - xMin)).toFixed(2)}vw`,
+    top: `${(55 + Math.random() * 26).toFixed(2)}vh`,
+    ty: `${-(2.5 + Math.random() * 8.5).toFixed(2)}vh`,
+    tx: `${(driftX * (0.8 + Math.random()) + Math.random() * 3).toFixed(2)}vw`,
+  }
+}
+
+function JcSmoke({ side, initialDelay }) {
+  const elRef = useRef(null)
+  const size = useMemo(() => 2.8 + Math.random() * 4, [])
+  const dur = useMemo(() => `${(18 + Math.random() * 12).toFixed(2)}s`, [])
+  const initial = useMemo(() => rollJcSmoke(side), [side])
+
+  useEffect(() => {
+    const el = elRef.current
+    if (!el) return
+    const reroll = () => {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const r = rollJcSmoke(side)
+      el.style.left = r.left
+      el.style.top = r.top
+      el.style.setProperty('--ty', r.ty)
+      el.style.setProperty('--tx', r.tx)
+    }
+    el.addEventListener('animationiteration', reroll)
+    return () => el.removeEventListener('animationiteration', reroll)
+  }, [side])
+
+  return (
+    <div ref={elRef} aria-hidden className="jc2-anim" style={{
+      position: 'absolute', left: initial.left, top: initial.top,
+      width: `${size}vw`, height: `${size * 0.8}vw`, borderRadius: '50%',
+      background: 'radial-gradient(circle, rgba(235,210,175,.34) 0%, rgba(235,210,175,0) 70%)',
+      filter: 'blur(6px)', pointerEvents: 'none', willChange: 'transform,opacity',
+      '--ty': initial.ty, '--tx': initial.tx,
+      animation: `jcDrift ${dur} linear ${initialDelay} infinite`,
+    }}/>
+  )
+}
+
+const JC_MOTE_ZONES = [[8, 24], [44, 56], [72, 88]]
+function rollJcMote() {
+  const z = JC_MOTE_ZONES[Math.floor(Math.random() * 3)]
+  return {
+    left: `${(z[0] + Math.random() * (z[1] - z[0])).toFixed(2)}vw`,
+    top: `${(16 + Math.random() * 58).toFixed(2)}vh`,
+    ty: `${-(0.8 + Math.random() * 1.4).toFixed(2)}vh`,
+    tx: `${((Math.random() < 0.5 ? -1 : 1) * (1 + Math.random() * 1.5)).toFixed(2)}vw`,
+  }
+}
+
+function JcMote({ initialDelay }) {
+  const elRef = useRef(null)
+  const size = useMemo(() => 1.8 + Math.random() * 1.8, [])
+  const dur = useMemo(() => `${(6 + Math.random() * 5).toFixed(2)}s`, [])
+  const initial = useMemo(() => rollJcMote(), [])
+
+  useEffect(() => {
+    const el = elRef.current
+    if (!el) return
+    const reroll = () => {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const r = rollJcMote()
+      el.style.left = r.left
+      el.style.top = r.top
+      el.style.setProperty('--ty', r.ty)
+      el.style.setProperty('--tx', r.tx)
+    }
+    el.addEventListener('animationiteration', reroll)
+    return () => el.removeEventListener('animationiteration', reroll)
+  }, [])
+
+  return (
+    <div ref={elRef} aria-hidden className="jc2-anim" style={{
+      position: 'absolute', left: initial.left, top: initial.top,
+      width: `${size}px`, height: `${size}px`, borderRadius: '50%',
+      background: 'rgba(238,217,176,.7)', pointerEvents: 'none', willChange: 'transform,opacity',
+      '--ty': initial.ty, '--tx': initial.tx,
+      animation: `jcDrift ${dur} linear ${initialDelay} infinite`,
+    }}/>
   )
 }
 
@@ -1557,27 +1688,53 @@ function JcGlint({ tint }) {
 }
 
 function JazzClubAmbient({ tint }) {
+  const smokeSides = useMemo(() => [0, 0, 0, 0, 1, 1, 1], [])
+  const smokeDelays = useMemo(() => smokeSides.map(() => `${-(Math.random() * 24).toFixed(2)}s`), [smokeSides])
+  const moteDelays = useMemo(() => Array.from({ length: 18 }, () => `${-(Math.random() * 11).toFixed(2)}s`), [])
+
   return <>
-    {/* Base: deep stage red — an intentional off-family curtain/backdrop wash, not derived from
-        accent/highlight (hue 0 vs theme's amber ~30); left literal, same treatment as a sanctioned
-        atmospheric exception since there's no principled accent/highlight anchor relationship to derive it from */}
+    <style>{JC2_STYLE}</style>
+    {/* Base: deep stage red-brown — an intentional off-family curtain/backdrop wash, not derived
+        from accent/highlight (hue ~15 vs theme's amber ~30); left literal, sanctioned atmospheric
+        exception. Browner cut (#3a1408 -> #1e0b04 -> #0c0502) approved by Ben 2026-07-02, replacing
+        the original redder values — still the same documented exception, just a browner cut of it. */}
     <div aria-hidden style={{
       position: 'absolute', inset: 0, pointerEvents: 'none',
-      background: 'radial-gradient(ellipse 130% 110% at 50% 60%, #3a0808, #1a0404 65%, #0a0202)',
+      background: 'radial-gradient(ellipse at 50% 36%, #3a1408 0%, #1e0b04 62%, #0c0502 100%)',
     }}/>
-    {/* Stage spotlights — pale but hue-locked to highlight's amber (H~30-34, S=100%), not a true
-        achromatic near-white (fails the low-saturation half of the near-white test) — tinted */}
-    <JcSpotlight fx="32%" fy="24%" w="26.4%" alpha={0.72} dur={40} dir="cw"  phase={0} tint={tint}/>
-    <JcSpotlight fx="69%" fy="21%" w="25.3%" alpha={0.66} dur={43} dir="ccw" phase={-11} tint={tint}/>
-    <JcSpotlight fx="50%" fy="89%" w="28.6%" alpha={0.68} dur={40} dir="cw"  phase={0} tint={tint}/>
-    {/* Twinkling glints — same amber-hued pale tone as spotlights, tinted */}
+    {/* Curtain fold shadows + stage platform: same off-family brown wash as the backdrop above,
+        left literal — not derived from accent/highlight. */}
+    {JC_FOLDS.map((f, i) => (
+      <div key={i} aria-hidden style={{
+        position: 'absolute', top: f.top, bottom: '16vh', left: f.left, width: '26vw',
+        filter: 'blur(30px)', pointerEvents: 'none',
+        background: 'radial-gradient(ellipse at 50% 40%, rgba(8,3,1,.45) 0%, rgba(8,3,1,0) 70%)',
+        willChange: 'transform',
+        '--fx': f.fx,
+        animation: `ambientFloatX ${f.dur} ease-in-out ${f.delay} infinite`,
+      }}/>
+    ))}
+    <div aria-hidden style={{
+      position: 'absolute', left: 0, right: 0, bottom: '16vh', height: '9vh', pointerEvents: 'none',
+      background: 'linear-gradient(180deg, rgba(6,2,1,0), rgba(6,2,1,.6))',
+    }}/>
+    <div aria-hidden style={{
+      position: 'absolute', left: 0, right: 0, bottom: '11vh', height: '6vh', pointerEvents: 'none',
+      background: 'linear-gradient(180deg, #43270f 0%, #2e1808 60%, #1e0e04 100%)',
+      borderTop: '.4vh solid rgba(122,83,38,.55)',
+    }}/>
+    <div aria-hidden style={{
+      position: 'absolute', left: 0, right: 0, bottom: 0, height: '11.2vh', pointerEvents: 'none',
+      background: 'linear-gradient(180deg, #241203 0%, #150902 60%, #0a0401 100%)',
+    }}/>
+    {/* Beams paint OVER the stage so the cones visibly land on it */}
+    {JC_BEAMS.map((b, i) => <JcBeam key={i} {...b} />)}
+    {/* Amber glints — brass, tinted via theme highlight */}
     <JcGlint tint={tint}/><JcGlint tint={tint}/><JcGlint tint={tint}/><JcGlint tint={tint}/><JcGlint tint={tint}/>
     <JcGlint tint={tint}/><JcGlint tint={tint}/><JcGlint tint={tint}/><JcGlint tint={tint}/>
-    {/* Edge vignette */}
-    <div aria-hidden style={{
-      position: 'absolute', inset: 0, pointerEvents: 'none',
-      background: 'radial-gradient(ellipse at center, transparent 30%, rgba(4,0,0,0.7) 100%)',
-    }}/>
+    {/* Smoke + dust motes — per-cycle re-roll */}
+    {smokeSides.map((side, i) => <JcSmoke key={i} side={side} initialDelay={smokeDelays[i]} />)}
+    {moteDelays.map((d, i) => <JcMote key={i} initialDelay={d} />)}
   </>
 }
 
