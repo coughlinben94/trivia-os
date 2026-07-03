@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Navigate } from 'react-router-dom'
 import { useShow, sortedSlides } from '../hooks/useShow.js'
 import { supabase } from '../lib/supabase.js'
 import { ThemeProvider } from '../components/shared/ThemeProvider.jsx'
@@ -12,6 +11,78 @@ import ScoreboardModal from '../components/host/ScoreboardModal.jsx'
 import HostPinGate from '../components/host/HostPinGate.jsx'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
+
+// ─── Show Picker ─────────────────────────────────────────────────────────────
+// Shown when no show is loaded. Clean list — pick one and you're in the builder.
+
+function ShowPicker({ loadShow, listShows, createShow }) {
+  const [shows, setShows] = useState(null)
+  const [working, setWorking] = useState(null)
+
+  useEffect(() => {
+    listShows().then(setShows)
+  }, [])
+
+  async function handleLoad(id) {
+    setWorking(id)
+    await loadShow(id)
+    // useShow reacts to the load — Host re-renders into BuildMode automatically
+  }
+
+  async function handleNew() {
+    setWorking('new')
+    const today = new Date().toISOString().slice(0, 10)
+    await createShow('New Show', today, null)
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 font-sans">
+      <div className="w-full max-w-md">
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">Pick a show</h1>
+        <p className="text-sm text-gray-400 mb-6">Load one to start building or go live.</p>
+
+        {shows === null ? (
+          <p className="text-sm text-gray-400">Loading…</p>
+        ) : shows.length === 0 ? (
+          <p className="text-sm text-gray-400 mb-4">No shows yet.</p>
+        ) : (
+          <div className="space-y-2 mb-4">
+            {shows.map(s => {
+              const dateLabel = s.date
+                ? new Date(s.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                : null
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => handleLoad(s.id)}
+                  disabled={!!working}
+                  className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 flex items-center justify-between text-left hover:border-gray-400 hover:shadow-sm transition-all duration-[120ms] disabled:opacity-50"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{s.title || 'Untitled'}</p>
+                    {dateLabel && <p className="text-xs text-gray-400 mt-0.5">{dateLabel}</p>}
+                  </div>
+                  {working === s.id
+                    ? <span className="text-xs text-gray-400">Loading…</span>
+                    : <span className="text-gray-300">›</span>
+                  }
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        <button
+          onClick={handleNew}
+          disabled={!!working}
+          className="w-full bg-gray-900 text-white text-sm font-bold py-3 rounded-xl hover:bg-gray-700 transition-colors duration-[120ms] disabled:opacity-50"
+        >
+          {working === 'new' ? 'Creating…' : '+ New show'}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function Host() {
   const showApi = useShow()
@@ -25,7 +96,7 @@ export default function Host() {
     )
   }
 
-  if (!show) return <Navigate to="/dashboard" replace />
+  if (!show) return <ShowPicker loadShow={showApi.loadShow} listShows={showApi.listShows} createShow={showApi.createShow} />
 
   return (
     <HostPinGate>
