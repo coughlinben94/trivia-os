@@ -100,7 +100,7 @@ export default function Shows() {
                       <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                         <div
                           className="h-2 rounded-full bg-[#1a6b4a]"
-                          style={{ width: `${(w.players / maxPlayers) * 100}%`, transition: 'width 400ms cubic-bezier(0.23,1,0.32,1)' }}
+                          style={{ width: '100%', transform: `scaleX(${w.players / maxPlayers})`, transformOrigin: 'left center', transition: 'transform 400ms cubic-bezier(0.23,1,0.32,1)' }}
                         />
                       </div>
                       <span className="text-xs font-semibold text-gray-700 w-8 shrink-0">{w.players}</span>

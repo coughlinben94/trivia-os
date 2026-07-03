@@ -286,7 +286,7 @@ export default function Dashboard() {
                         <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                           <div
                             className="h-2 rounded-full bg-[#1a6b4a]"
-                            style={{ width: `${(w.score / maxWin) * 100}%`, transition: 'width 500ms cubic-bezier(0.23,1,0.32,1)' }}
+                            style={{ width: '100%', transform: `scaleX(${w.score / maxWin})`, transformOrigin: 'left center', transition: 'transform 500ms cubic-bezier(0.23,1,0.32,1)' }}
                           />
                         </div>
                         <div className="shrink-0 text-right w-24">
@@ -322,7 +322,7 @@ export default function Dashboard() {
                           <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                             <div
                               className="h-2 rounded-full bg-blue-400"
-                              style={{ width: `${(w.players / maxWeekPlayers) * 100}%`, transition: 'width 500ms cubic-bezier(0.23,1,0.32,1)' }}
+                              style={{ width: '100%', transform: `scaleX(${w.players / maxWeekPlayers})`, transformOrigin: 'left center', transition: 'transform 500ms cubic-bezier(0.23,1,0.32,1)' }}
                             />
                           </div>
                           <span className="text-xs font-bold text-gray-700 w-6 shrink-0">{w.players}</span>
