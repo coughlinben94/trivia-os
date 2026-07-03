@@ -35,7 +35,7 @@ export default function App() {
           <Route path="/shows" element={<Shows />} />
           <Route path="/shows/:showId" element={<ShowDetail />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/host" replace />} />
         </Routes>
       </RouteShell>
     </BrowserRouter>
