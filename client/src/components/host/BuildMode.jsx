@@ -13,6 +13,7 @@ import PYLWizard from './PYLWizard.jsx'
 import { archiveQuestions } from '../../lib/archiveQuestion.js'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
+import { useTheme } from '../shared/ThemeProvider.jsx'
 
 const BTN = 'host-button'
 
@@ -82,6 +83,7 @@ const CARD_STYLE = {
 }
 
 function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReorder, onBack }) {
+  const { theme } = useTheme()
   const [draggedId, setDraggedId] = useState(null)
   const [dragOverId, setDragOverId] = useState(null)
   const draggedRef = useRef(null)
@@ -170,12 +172,13 @@ function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReord
               >
                 <button
                   onClick={() => !draggedId && onSelectSlide(slide)}
-                  className={`w-full h-full flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center ${BTN} ${CARD_STYLE[slide.type] ?? 'bg-white border-gray-200 hover:border-gray-400'}`}
+                  className={`w-full h-full flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center ${BTN} transition-colors`}
+                  style={{ background: theme.colors.bgDeep, borderColor: theme.colors.accent + '60' }}
                 >
                   <span className="text-2xl leading-none">{SLIDE_ICON[slide.type] ?? '📄'}</span>
-                  <span className="text-sm font-semibold text-gray-800 leading-tight">{getSlideLabel(slide)}</span>
+                  <span className="text-sm font-semibold leading-tight" style={{ color: theme.colors.text }}>{getSlideLabel(slide)}</span>
                   {preview && (
-                    <p className="text-xs text-gray-500 leading-snug line-clamp-2">{preview}</p>
+                    <p className="text-xs leading-snug line-clamp-2" style={{ color: theme.colors.textMuted }}>{preview}</p>
                   )}
                 </button>
                 <span
