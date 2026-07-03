@@ -503,13 +503,13 @@ export function useShow() {
       ...s,
       slides: newSlides,
       updatedAt: now,
-      showState: { ...s.showState, isLive: true, currentSlideIndex: 0, currentSlideId: first?.id ?? null },
+      showState: { ...s.showState, isLive: true, currentSlideIndex: 0, currentSlideId: null },
     }))
     await supabase.from('shows').update({
       slides: newSlides,
       is_live: true,
       current_slide_index: 0,
-      current_slide_id: first?.id ?? null,
+      current_slide_id: null,
       updated_at: now,
     }).eq('id', show.id)
   }
@@ -526,13 +526,13 @@ export function useShow() {
       ...s,
       slides: newSlides,
       updatedAt: now,
-      showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: slide?.id ?? null },
+      showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: null },
     }))
     await supabase.from('shows').update({
       slides: newSlides,
       is_live: true,
       current_slide_index: target,
-      current_slide_id: slide?.id ?? null,
+      current_slide_id: null,
       updated_at: now,
     }).eq('id', show.id)
   }
@@ -542,6 +542,25 @@ export function useShow() {
     markLocalNav()
     const sorted = sortedSlides(show)
     const cur = show.showState.currentSlideIndex ?? 0
+
+    // First advance after going live — reveal the queued slide without stepping past it.
+    if (show.showState.currentSlideId === null) {
+      const targetSlide = sorted[cur]
+      if (!targetSlide) return
+      const newSlides = withEntryState(show.slides, targetSlide, { currentPart: 0, introDone: false })
+      setShow(s => ({
+        ...s,
+        slides: newSlides,
+        showState: { ...s.showState, currentSlideId: targetSlide.id, answerReveal: false },
+      }))
+      await supabase.from('shows').update({
+        slides: newSlides,
+        current_slide_id: targetSlide.id,
+        answer_reveal: false,
+      }).eq('id', show.id)
+      return
+    }
+
     const curSlide = sorted[cur]
     const data = curSlide?.data
 
