@@ -26,7 +26,7 @@ export default function Shows() {
   useEffect(() => {
     supabase
       .from('shows')
-      .select('id, title, date, player_count, final_scores, theme')
+      .select('id, title, date, player_count, final_scores, theme:theme_id')
       .order('date', { ascending: false })
       .then(({ data }) => {
         setShows(data ?? [])
@@ -39,7 +39,7 @@ export default function Shows() {
     setLoadingDetail(true)
     supabase
       .from('shows')
-      .select('id, title, date, player_count, final_scores, slides, rounds, theme')
+      .select('id, title, date, player_count, final_scores, slides, rounds, theme:theme_id')
       .eq('id', selectedId)
       .single()
       .then(({ data }) => {

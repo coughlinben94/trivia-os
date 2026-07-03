@@ -1347,12 +1347,13 @@ export default function Join() {
   // ── visibilitychange ──────────────────────────────────────────────────
   useEffect(() => {
     if (!team?.id) return
-    function handleVisibility() {
-      supabase.from('teams').update({
+    async function handleVisibility() {
+      const { error } = await supabase.from('teams').update({
         is_connected: !document.hidden,
         last_action: document.hidden ? 'left_app' : null,
         last_action_at: new Date().toISOString(),
       }).eq('id', team.id)
+      if (error) console.error('teams presence update failed:', error)
     }
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)

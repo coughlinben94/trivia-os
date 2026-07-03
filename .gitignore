@@ -19,3 +19,6 @@ theme-screenshots-v2/
 
 .env.local
 .env*.local
+
+.DS_Store
+*.zip
