@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import { getTheme } from '../../themes/index.js'
+import BreathingGradient from './BreathingGradient'
 import { deriveTint, hexToRgba } from '../../lib/colorTint.js'
 
 // ─── Keyframes ────────────────────────────────────────────────────────────
@@ -2958,9 +2959,30 @@ const AMBIENT_MAP = {
   'eighties-night':     EightiesNightAmbient,
 }
 
+// ─── Gradient-collapse routing ──────────────────────────────────────────
+// These 12 themes retired their bespoke ambient scene in favor of the shared
+// BreathingGradient (fed theme.colors + a mood). Their *Ambient functions
+// still exist above (dead, delete later) but are no longer routed. The other
+// 9 themes keep their bespoke ambient via AMBIENT_MAP.
+const GRADIENT_MOODS = {
+  'wine-cellar':      'calm',
+  'drive-in-movie':   'calm',
+  'medieval-tavern':  'calm',
+  'western-showdown': 'calm',
+  'firefly-summer':   'calm',
+  'dive-bar':         'warm',
+  'jazz-club':        'warm',
+  'christmas-eve':    'warm',
+  'retro-arcade':     'electric',
+  'eighties-night':   'electric',
+  'neon-tokyo':       'electric',
+  'northern-lights':  'electric',
+}
+
 // ─── Main Export ──────────────────────────────────────────────────────────
 export default function ParticleBackground({ theme }) {
-  const AmbientComponent = AMBIENT_MAP[theme.id]
+  const gradientMood = GRADIENT_MOODS[theme.id]
+  const AmbientComponent = gradientMood ? null : AMBIENT_MAP[theme.id]
   const v = theme.vignette ?? {}
   const baseTheme = getTheme(theme.id)
 
@@ -2979,7 +3001,9 @@ export default function ParticleBackground({ theme }) {
     <>
       <style>{KEYFRAMES}</style>
       <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 1 }} aria-hidden>
-        {AmbientComponent && <AmbientComponent tint={tint} />}
+        {gradientMood
+          ? <BreathingGradient palette={theme.colors} mood={gradientMood} />
+          : AmbientComponent && <AmbientComponent tint={tint} />}
         <Vignette
           r={v.r ?? 0}
           g={v.g ?? 0}
