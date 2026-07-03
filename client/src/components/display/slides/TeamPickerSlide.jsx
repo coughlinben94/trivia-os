@@ -6,6 +6,16 @@ import BaynesWatermark from '../BaynesWatermark.jsx';
 const DISP_CAP = 150, SS = 1.6;
 const CAP = DISP_CAP * SS, MAXW = 1520 * SS;
 
+// Background + starfield are fixed regardless of show theme — this slide is
+// meant to read as a consistent, always-the-same ceremony moment (same
+// register as QuestionSlide's SHINY_GOLD: a fixed treatment independent of
+// whatever theme the host picked for the night), not a jazz-club show
+// getting an amber warp and a neon-tokyo show getting a pink one. Text
+// (intro/team/outro) stays theme-linked, per this app's usual convention.
+const BG_FIXED = '#05070f'
+const STAR_ACCENT_FIXED = '#4a2f10'
+const STAR_HIGHLIGHT_FIXED = '#f0b040'
+
 function hexToRgb(hex) {
   const n = parseInt(String(hex).replace('#', ''), 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
@@ -44,7 +54,6 @@ export default function TeamPickerSlide({ slide, show }) {
   const { theme } = useTheme();
   const reduce = useMemo(() =>
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches, []);
-  const NAME_CREAM = '#f6f1e8';
   const font = theme?.fonts?.display || 'Boogaloo, system-ui, sans-serif';
   const openingText = slide?.data?.openingText?.trim() || "Now, let's meet our teams";
   const closingText = slide?.data?.closingText?.trim() || "Now, let's do this shit";
@@ -108,7 +117,7 @@ export default function TeamPickerSlide({ slide, show }) {
 
   const getSprite = (it) => {
     const th = ctl.current.theme;
-    const c = th.colors, color = it.kind === 'intro' ? c.highlight : NAME_CREAM;
+    const c = th.colors, color = c.highlight;
     const key = `${it.text}|${color}|${c.highlight}|${c.accent}|${font}`;
     let s = spriteCache.current.get(key);
     if (!s) { s = makeSprite(it.text, color, c.highlight, c.accent, font); spriteCache.current.set(key, s); }
@@ -139,8 +148,7 @@ export default function TeamPickerSlide({ slide, show }) {
     const draw = (now) => {
       const dt = Math.min(26, now - last); last = now;
       const dtn = dt / 16.6667;
-      const col = c.theme.colors;
-      const acc = hexToRgb(col.accent), hi = hexToRgb(col.highlight), bg = hexToRgb(col.bg || col.bgDeep || '#05070f');
+      const acc = hexToRgb(STAR_ACCENT_FIXED), hi = hexToRgb(STAR_HIGHLIGHT_FIXED), bg = hexToRgb(BG_FIXED);
       // A Supabase-driven target change (either direction) interrupts
       // whatever's currently showing — exit it, then approach the new one.
       // 'landed' has no sprite/exit of its own (nothing drawn once done),
