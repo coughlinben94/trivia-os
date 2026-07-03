@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase.js'
 import { THEMES } from '../themes/index.js'
 import { MEDALS } from '../lib/scoreboardMath.js'
 
+const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
+
 function getThemeName(id) {
   return THEMES.find(t => t.id === id)?.name ?? id ?? '—'
 }
@@ -120,38 +122,53 @@ export default function Shows() {
                   ? new Date(show.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })
                   : 'No date'
                 return (
-                  <button
+                  <div
                     key={show.id}
-                    onClick={() => setSelectedId(show.id)}
-                    className="w-full bg-white rounded-xl border border-gray-200 px-5 py-4 flex items-center gap-4 text-left hover:border-[#1a6b4a]/40 hover:shadow-sm host-button fade-up"
+                    className="w-full bg-white rounded-xl border border-gray-200 px-5 py-4 flex items-center gap-4 hover:border-[#1a6b4a]/40 hover:shadow-sm fade-up"
                     style={{ animationDelay: `${i * 30}ms` }}
                   >
-                    <div className="shrink-0 w-10 text-center">
-                      <p className="text-lg font-bold text-gray-900 leading-none">
-                        {show.date ? new Date(show.date + 'T12:00:00').getDate() : '—'}
-                      </p>
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wide mt-0.5">
-                        {show.date ? new Date(show.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' }) : ''}
-                      </p>
-                    </div>
-                    <div className="w-px h-8 bg-gray-100 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{show.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{dateLabel}</p>
-                    </div>
-                    {winner && (
-                      <div className="shrink-0 text-right hidden sm:block">
-                        <p className="text-[10px] text-gray-400 uppercase tracking-wide">Winner</p>
-                        <p className="text-sm font-semibold text-gray-800 mt-0.5">{winner.name}</p>
-                        <p className="text-xs text-[#1a6b4a] font-semibold">{winner.total} pts</p>
+                    {/* Clickable detail area */}
+                    <button
+                      onClick={() => setSelectedId(show.id)}
+                      className="flex items-center gap-4 flex-1 min-w-0 text-left"
+                    >
+                      <div className="shrink-0 w-10 text-center">
+                        <p className="text-lg font-bold text-gray-900 leading-none">
+                          {show.date ? new Date(show.date + 'T12:00:00').getDate() : '—'}
+                        </p>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide mt-0.5">
+                          {show.date ? new Date(show.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' }) : ''}
+                        </p>
                       </div>
-                    )}
-                    <div className="shrink-0 text-right">
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wide">Teams</p>
-                      <p className="text-sm font-bold text-gray-700 mt-0.5">{show.player_count ?? 0}</p>
-                    </div>
-                    <span className="text-gray-300 shrink-0">›</span>
-                  </button>
+                      <div className="w-px h-8 bg-gray-100 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{show.title}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{dateLabel}</p>
+                      </div>
+                      {winner && (
+                        <div className="shrink-0 text-right hidden sm:block">
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wide">Winner</p>
+                          <p className="text-sm font-semibold text-gray-800 mt-0.5">{winner.name}</p>
+                          <p className="text-xs text-[#1a6b4a] font-semibold">{winner.total} pts</p>
+                        </div>
+                      )}
+                      <div className="shrink-0 text-right">
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide">Teams</p>
+                        <p className="text-sm font-bold text-gray-700 mt-0.5">{show.player_count ?? 0}</p>
+                      </div>
+                    </button>
+
+                    {/* Present Tonight */}
+                    <button
+                      onClick={() => {
+                        localStorage.setItem(ACTIVE_SHOW_KEY, show.id)
+                        window.location.href = '/host'
+                      }}
+                      className="shrink-0 bg-gray-900 text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-gray-700 transition-colors duration-[120ms]"
+                    >
+                      Present →
+                    </button>
+                  </div>
                 )
               })}
             </div>

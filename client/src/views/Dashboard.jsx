@@ -32,12 +32,15 @@ function getMondayLabel(dateStr) {
   return monday.toISOString().slice(0, 10)
 }
 
+const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
+
 export default function Dashboard() {
   const [shows, setShows] = useState([])
   const [questions, setQuestions] = useState([])
   const [loading, setLoading] = useState(true)
   const [boxOrder, setBoxOrder] = useState(loadBoxOrder)
   const [dragOverId, setDragOverId] = useState(null)
+  const [activeShowId] = useState(() => localStorage.getItem(ACTIVE_SHOW_KEY))
   const draggedRef  = useRef(null)
   const dragOverRef = useRef(null)
 
@@ -202,16 +205,49 @@ export default function Dashboard() {
             <h1 className="text-lg font-bold text-gray-900">Dashboard</h1>
             <p className="text-xs text-gray-400 mt-0.5">{shows.length} shows · {questions.length} questions archived</p>
           </div>
-          <div className="flex items-center gap-3">
-            <a href="/shows" className="text-xs text-gray-400 hover:text-gray-700 transition-colors duration-[120ms]">
-              My Shows
-            </a>
-            <a href="/host" className="text-xs text-gray-400 hover:text-gray-700 transition-colors duration-[120ms]">
-              ← Back to host
-            </a>
-          </div>
+          <a href="/shows" className="text-xs text-gray-400 hover:text-gray-700 transition-colors duration-[120ms]">
+            My Shows
+          </a>
         </div>
       </div>
+
+      {/* Go Live banner */}
+      {(() => {
+        const activeShow = shows.find(s => s.id === activeShowId)
+        if (activeShow) {
+          return (
+            <div className="bg-gray-900 border-b border-gray-800">
+              <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold">Tonight's show</p>
+                  <p className="text-sm font-semibold text-white mt-0.5">{activeShow.title || 'Untitled'}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <a href="/shows" className="text-xs text-gray-400 hover:text-gray-200 transition-colors duration-[120ms]">
+                    Change
+                  </a>
+                  <a
+                    href="/host"
+                    className="bg-white text-gray-900 text-sm font-bold px-5 py-2 rounded-full hover:bg-gray-100 transition-colors duration-[120ms]"
+                  >
+                    Go Live →
+                  </a>
+                </div>
+              </div>
+            </div>
+          )
+        }
+        return (
+          <div className="bg-gray-50 border-b border-gray-200">
+            <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between">
+              <p className="text-sm text-gray-400">No show loaded for tonight.</p>
+              <a href="/shows" className="text-sm font-semibold text-gray-700 hover:text-gray-900 transition-colors duration-[120ms]">
+                Pick a show →
+              </a>
+            </div>
+          </div>
+        )
+      })()}
 
       {loading ? (
         <p className="text-sm text-gray-400 text-center py-16">Loading…</p>
