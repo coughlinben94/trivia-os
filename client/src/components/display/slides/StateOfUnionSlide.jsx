@@ -1,29 +1,15 @@
-import { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import BaynesWatermark from '../BaynesWatermark.jsx'
 import SlideElements from '../SlideElements.jsx'
 import BreathingGradient from '../BreathingGradient.jsx'
 
-const CHARS_PER_SECOND = 28
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
 export default function StateOfUnionSlide({ slide }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const message = slide.data?.message ?? "Welcome to Trivia Night at Baynes Apple Valley. Let's get into it."
-  const [displayed, setDisplayed] = useState('')
-
-  useEffect(() => {
-    setDisplayed('')
-    let i = 0
-    const interval = setInterval(() => {
-      i++
-      setDisplayed(message.slice(0, i))
-      if (i >= message.length) clearInterval(interval)
-    }, 1000 / CHARS_PER_SECOND)
-    return () => clearInterval(interval)
-  }, [message])
 
   // Fixed RWB palette — deliberately NOT theme.colors, anywhere in this
   // component. "State of the Union" is patriotic by identity; it must read
@@ -67,32 +53,22 @@ export default function StateOfUnionSlide({ slide }) {
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
             fontWeight: 700,
-            fontSize: 'clamp(1.9rem, 3.6cqw, 3.4rem)',
-            lineHeight: 1.35,
+            fontSize: 'clamp(2.4rem, 5.5cqw, 5.2rem)',
+            lineHeight: 1.15,
             textAlign: 'center',
             textWrap: 'balance',
-            maxWidth: '72ch',
-            minHeight: '8rem',
+            maxWidth: '22ch',
             filter: 'drop-shadow(0 3px 0 rgba(0,0,0,0.4)) drop-shadow(0 0 24px rgba(178,34,52,0.55))',
           }}
         >
-          {/* Gradient spans the text block; backgroundClip clips it to letter shapes. */}
           <span style={{
             background: `linear-gradient(135deg, ${RWB_RED} 0%, ${RWB_WHITE} 50%, #3a6fcf 100%)`,
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
           }}>
-            {displayed}
+            {message}
           </span>
-          {/* Blinking cursor — explicit fill so it isn't clipped by the gradient span. */}
-          <motion.span
-            animate={{ opacity: [1, 0] }}
-            transition={{ duration: 0.6, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
-            style={{ WebkitTextFillColor: RWB_WHITE, color: RWB_WHITE, marginLeft: 2 }}
-          >
-            |
-          </motion.span>
         </motion.p>
       </div>
 
