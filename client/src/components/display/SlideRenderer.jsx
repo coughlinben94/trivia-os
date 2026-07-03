@@ -50,11 +50,6 @@ const SLIDE_ANIMATIONS = {
     animate: { opacity: 1, transition: { duration: 0.5, ease: EASE_QUINT } },
     exit:    { opacity: 0, transition: { duration: 0.3, ease: EASE_CUBIC } },
   },
-  'state-of-union': {
-    initial: { opacity: 0 },
-    animate: { opacity: 1, transition: { duration: 0.5, ease: EASE_QUINT } },
-    exit:    { opacity: 0, transition: { duration: 0.3, ease: EASE_CUBIC } },
-  },
   'shiny': {
     initial: { opacity: 0, scale: 1.06 },
     animate: { opacity: 1, scale: 1, transition: { delay: 0.05, duration: 0.28, ease: EASE_QUINT } },
@@ -77,9 +72,12 @@ const TRANSITIONS = {
   'assemble': { initial: { opacity: 1 }, animate: { opacity: 1, transition: { duration: 0 } }, exit: { opacity: 0, transition: { duration: 0.16, ease: EASE_CUBIC } } },
 }
 
-// team-picker defaults to the same zoom burst-from-center used by the
-// round-intro family, so entering the slide bursts straight into the warp.
+// team-picker and state-of-union both default to the zoom burst-from-center
+// instead of a plain fade — they're the show's ceremonial pre-round beats
+// (patriotic address / team intro) and deserve a deliberate entrance, not
+// the same bland fade a generic 'title' slide gets.
 SLIDE_ANIMATIONS['team-picker'] = TRANSITIONS.zoom
+SLIDE_ANIMATIONS['state-of-union'] = TRANSITIONS.zoom
 
 const TRANSITION_KEYS = Object.keys(TRANSITIONS).filter(k => k !== 'assemble')
 let lastRandomKey = null
