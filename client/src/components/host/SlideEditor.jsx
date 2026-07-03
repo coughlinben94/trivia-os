@@ -44,6 +44,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   const dragStateRef = useRef(null)
   const leftPanelRef = useRef(null)
   const [panelW, setPanelW] = useState(800)
+  const [panelH, setPanelH] = useState(600)
 
   useEffect(() => {
     let alive = true
@@ -54,7 +55,10 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   useEffect(() => {
     const el = leftPanelRef.current
     if (!el) return
-    const obs = new ResizeObserver(([entry]) => setPanelW(Math.round(entry.contentRect.width)))
+    const obs = new ResizeObserver(([entry]) => {
+      setPanelW(Math.round(entry.contentRect.width))
+      setPanelH(Math.round(entry.contentRect.height))
+    })
     obs.observe(el)
     return () => obs.disconnect()
   }, [])
@@ -201,15 +205,15 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
       {(() => {
         const elements = data.elements ?? []
         const selectedEl = elements.find(el => el.id === selectedElId) ?? null
-        const dynScale = panelW / INNER_W
-        const dynH = Math.round(panelW * 9 / 16)
+        const dynScale = Math.min(panelW / INNER_W, panelH / INNER_H)
+        const scaledW  = Math.round(INNER_W * dynScale)
+        const scaledH  = Math.round(INNER_H * dynScale)
         return (
           <div className="flex flex-1 min-h-0">
 
             {/* ── LEFT: slide canvas ── */}
-            <div ref={leftPanelRef} className="flex-1 bg-[#0a0a0a] flex flex-col overflow-hidden">
-              {/* Slide fills full panel width, exact 16:9 */}
-              <div style={{ width: panelW, height: dynH, position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
+            <div ref={leftPanelRef} className="flex-1 bg-white flex flex-col items-center justify-center overflow-hidden">
+              <div style={{ width: scaledW, height: scaledH, position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${dynScale})`, transformOrigin: 'top left', overflow: 'hidden', background: theme.colors.bg }}>
                   <ParticleBackground theme={theme} />
                   <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} isPreview />
@@ -258,9 +262,9 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                 </div>
               </div>
 
-              {/* Layer chips — remaining space below slide */}
+              {/* Layer chips — below centered slide */}
               {elements.length > 0 && (
-                <div className="px-3 pt-2 flex flex-wrap gap-1.5">
+                <div className="px-3 pt-2 flex flex-wrap gap-1.5 justify-center">
                   {elements.map(el => (
                     <button
                       key={el.id}
@@ -268,7 +272,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                       className={`text-[11px] px-2.5 py-0.5 rounded-full border transition-colors ${
                         el.id === selectedElId
                           ? 'bg-blue-500 border-blue-500 text-white'
-                          : 'text-white/40 border-white/15 hover:text-white/70 hover:border-white/30'
+                          : 'text-gray-400 border-gray-200 hover:text-gray-700 hover:border-gray-400'
                       }`}
                     >
                       {el.type === 'text' ? (el.content?.slice(0, 18) || '(empty text)') : '🖼 Image'}
