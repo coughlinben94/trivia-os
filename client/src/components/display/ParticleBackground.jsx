@@ -2043,7 +2043,6 @@ function SbBalloon({ idx, cols, goreDur, sizeVw, cy, sx, ex, dy, dur, swayDur, t
             </g>
             <rect x="0" y="0" width="120" height="152" fill={tint('rgba(232,134,58,0.10)')} />
             <rect x="0" y="0" width="120" height="152" fill={`url(#sbRound${idx})`} />
-            <ellipse cx="40" cy="92" rx="26" ry="22" fill={tint('rgba(255,223,174,0.12)')} />
           </g>
           <path d="M60 6 C 24 6 6 40 6 74 C 6 106 28 132 48 144 L 72 144 C 92 132 114 106 114 74 C 114 40 96 6 60 6 Z" fill="none" stroke="#2a1020" strokeWidth="1.4" opacity="0.85"/>
           <rect x="46" y="141" width="28" height="8" rx="1.5" fill="#8c2020"/>
