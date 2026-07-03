@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { THEMES, getTheme } from '../../themes/index.js'
 import ParticleBackground from '../display/ParticleBackground.jsx'
 import ThemeCustomizeControls from './ThemeCustomizeControls.jsx'
@@ -8,6 +9,62 @@ const INNER_H = 720
 const PREVIEW_W = 680
 const PREVIEW_H = Math.round(PREVIEW_W * (9 / 16))
 const SCALE = PREVIEW_W / INNER_W
+
+// Every ambient theme positions elements in vw/vh, which always resolve
+// against the real document viewport — never against an ancestor's CSS
+// transform:scale(). Without a genuinely separate browsing context here,
+// anything anchored low/wide on the canvas (water lines, stage floors, low
+// balloon lanes) renders at the wrong size/position, and on a large monitor
+// can be pushed entirely past the 720px box and clipped. An iframe gives
+// vw/vh a real 1280x720 viewport to resolve against, independent of the
+// host page's actual window size. The only Tailwind class ParticleBackground
+// itself depends on (its own top-level wrapper) is hand-written below since
+// Tailwind isn't loaded inside the iframe's own document; every ambient
+// sub-component past that point uses inline styles + self-contained
+// prefixed <style> blocks that travel with the portaled tree.
+function PreviewFrame({ background, children }) {
+  const iframeRef = useRef(null)
+  const [frameBody, setFrameBody] = useState(null)
+
+  useEffect(() => {
+    const iframe = iframeRef.current
+    if (!iframe) return
+    const doc = iframe.contentDocument
+    doc.open()
+    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+      <style>
+        *{margin:0;padding:0;box-sizing:border-box;}
+        html,body{width:100%;height:100%;overflow:hidden;background:#000;}
+        .absolute{position:absolute;} .inset-0{inset:0;}
+        .overflow-hidden{overflow:hidden;} .pointer-events-none{pointer-events:none;}
+      </style>
+    </head><body></body></html>`)
+    doc.close()
+    setFrameBody(doc.body)
+  }, [])
+
+  return (
+    <>
+      <iframe
+        ref={iframeRef}
+        title="theme-preview"
+        style={{
+          position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H,
+          border: 0, transform: `scale(${SCALE})`, transformOrigin: 'top left',
+        }}
+      />
+      {frameBody && createPortal(
+        <div style={{ position: 'absolute', inset: 0, background, overflow: 'hidden' }}>
+          {children}
+        </div>,
+        frameBody,
+      )}
+    </>
+  )
+}
 
 export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdateOverrides, onUploadFont }) {
   const [previewId, setPreviewId] = useState(show.theme)
@@ -124,19 +181,7 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
                 flexShrink: 0,
               }}
             >
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: INNER_W,
-                  height: INNER_H,
-                  transform: `scale(${SCALE})`,
-                  transformOrigin: 'top left',
-                  background: previewTheme.colors.bgDeep,
-                  overflow: 'hidden',
-                }}
-              >
+              <PreviewFrame background={previewTheme.colors.bgDeep}>
                 <ParticleBackground theme={previewTheme} />
 
                 {/* Ambient glow */}
@@ -196,7 +241,7 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
                     {previewTheme.name}
                   </span>
                 </div>
-              </div>
+              </PreviewFrame>
             </div>
           </div>
         </div>
