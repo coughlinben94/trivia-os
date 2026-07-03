@@ -6,15 +6,15 @@ import BaynesWatermark from '../BaynesWatermark.jsx';
 const DISP_CAP = 150, SS = 1.6;
 const CAP = DISP_CAP * SS, MAXW = 1520 * SS;
 
-// Background + starfield are fixed regardless of show theme — this slide is
-// meant to read as a consistent, always-the-same ceremony moment (same
-// register as QuestionSlide's SHINY_GOLD: a fixed treatment independent of
-// whatever theme the host picked for the night), not a jazz-club show
+// Background + starfield are fixed regardless of show theme — black
+// background, grayscale-to-white stars — so the warp intro reads as a
+// consistent, always-the-same ceremony moment instead of a jazz-club show
 // getting an amber warp and a neon-tokyo show getting a pink one. Text
-// (intro/team/outro) stays theme-linked, per this app's usual convention.
-const BG_FIXED = '#05070f'
-const STAR_ACCENT_FIXED = '#4a2f10'
-const STAR_HIGHLIGHT_FIXED = '#f0b040'
+// (intro/team/outro) is the one thing that stays theme-linked, per this
+// app's usual convention.
+const BG_FIXED = '#000000'
+const STAR_ACCENT_FIXED = '#3a3a3a'
+const STAR_HIGHLIGHT_FIXED = '#e8e8e8'
 
 function hexToRgb(hex) {
   const n = parseInt(String(hex).replace('#', ''), 16);
