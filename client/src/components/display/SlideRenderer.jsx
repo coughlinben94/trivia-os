@@ -12,6 +12,7 @@ import PylRevealSlide from './slides/PylRevealSlide.jsx'
 import StateOfUnionSlide from './slides/StateOfUnionSlide.jsx'
 import WinnerRevealSlide from './slides/WinnerRevealSlide.jsx'
 import TeamPreviewSlide from './slides/TeamPreviewSlide.jsx'
+import TeamPickerSlide from './slides/TeamPickerSlide.jsx'
 
 const EASE_QUINT     = [0.22, 1, 0.36, 1]   // standard ease-out
 const EASE_QUART     = [0.25, 1, 0.25, 1]   // weighted hard land (drop)
@@ -76,6 +77,10 @@ const TRANSITIONS = {
   'assemble': { initial: { opacity: 1 }, animate: { opacity: 1, transition: { duration: 0 } }, exit: { opacity: 0, transition: { duration: 0.16, ease: EASE_CUBIC } } },
 }
 
+// team-picker defaults to the same zoom burst-from-center used by the
+// round-intro family, so entering the slide bursts straight into the warp.
+SLIDE_ANIMATIONS['team-picker'] = TRANSITIONS.zoom
+
 const TRANSITION_KEYS = Object.keys(TRANSITIONS).filter(k => k !== 'assemble')
 let lastRandomKey = null
 
@@ -106,6 +111,7 @@ const SLIDE_COMPONENTS = {
   'state-of-union':    StateOfUnionSlide,
   'winner-reveal':     WinnerRevealSlide,
   'team-preview':      TeamPreviewSlide,
+  'team-picker':       TeamPickerSlide,
 }
 
 export default function SlideRenderer({ slide, show, direction, isPreview = false }) {

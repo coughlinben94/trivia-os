@@ -166,7 +166,7 @@ const SLIDE_ICON = {
   'title': '🇺🇸', 'state-of-union': '🇺🇸', 'round-intro': '🎬', 'swing-round-intro': '🎷',
   'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆',
   'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
-  'winner-reveal': '🥇', 'team-preview': '👥',
+  'winner-reveal': '🥇', 'team-preview': '👥', 'team-picker': '🚀',
 }
 
 function slidePickerLabel(slide) {

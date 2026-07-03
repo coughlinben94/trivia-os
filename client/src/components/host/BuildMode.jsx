@@ -21,7 +21,7 @@ const SLIDE_ICON = {
   'title': '🇺🇸', 'state-of-union': '🇺🇸', 'round-intro': '🎬', 'swing-round-intro': '🎷',
   'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆',
   'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
-  'winner-reveal': '🥇', 'team-preview': '👥',
+  'winner-reveal': '🥇', 'team-preview': '👥', 'team-picker': '🚀',
 }
 
 function getSlideLabel(slide) {
@@ -37,6 +37,7 @@ function getSlideLabel(slide) {
   if (type === 'multi-question') return data.seriesTitle || 'Multi-Q'
   if (type === 'pyl-reveal') return 'PYL Reveal'
   if (type === 'team-preview') return 'Team Preview'
+  if (type === 'team-picker') return 'Team Picker'
   if (type === 'winner-reveal') return '🥇 Winner Reveal'
   return type
 }
@@ -67,6 +68,7 @@ const CARD_STYLE = {
   'title':          'bg-[linear-gradient(135deg,#fecaca,#f9fafb,#bfdbfe)] border-blue-200 hover:border-blue-400',
   'state-of-union': 'bg-[linear-gradient(135deg,#fecaca,#f9fafb,#bfdbfe)] border-blue-200 hover:border-blue-400',
   'team-preview':   'bg-gradient-to-br from-indigo-50 to-violet-100 border-indigo-200 hover:border-indigo-400',
+  'team-picker':    'bg-gradient-to-br from-indigo-50   to-blue-100    border-indigo-200 hover:border-indigo-400',
   'round-intro':    'bg-gradient-to-br from-red-50    to-rose-100    border-red-200    hover:border-red-400',
   'question':      'bg-gradient-to-br from-blue-50   to-indigo-100  border-blue-200   hover:border-blue-400',
   'grading-break': 'bg-gradient-to-br from-violet-50 to-purple-100  border-violet-200 hover:border-violet-400',

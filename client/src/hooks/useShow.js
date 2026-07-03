@@ -502,13 +502,33 @@ export function useShow() {
     return slides.map(s => s.id === slide.id ? { ...s, data: { ...s.data, ...patch } } : s)
   }
 
+  // team-picker slides step through [intro, ...teams, outro, landed] using the
+  // exact same data.currentPart mechanism as shiny series (withEntryState above
+  // and the parts-stepping branches in nextSlide/prevSlide already handle any
+  // slide with an array in data.parts — no changes needed there). The only
+  // team-picker-specific piece is baking data.parts to the right LENGTH once,
+  // the first time the slide is entered fresh, from a live count of the teams
+  // table — after that it's just a plain step counter (TeamPickerSlide fetches
+  // the actual names itself). Baking only once (not on every entry) means a
+  // team registering mid-reveal can't resize the sequence out from under an
+  // in-progress Stream Deck advance.
+  async function bakeTeamPickerParts(slides, slide) {
+    if (!slide || slide.type !== 'team-picker' || Array.isArray(slide.data?.parts)) return slides
+    const { data, error } = await supabase.from('teams').select('id').eq('show_id', show.id)
+    if (error) console.error('[useShow] bakeTeamPickerParts failed:', error)
+    const count = data?.length ?? 0
+    const parts = new Array(count + 3).fill(null) // intro + teams + outro + landed
+    return slides.map(s => s.id === slide.id ? { ...s, data: { ...s.data, parts } } : s)
+  }
+
   async function goLive() {
     if (!show) return
     markLocalNav()
     const sorted = sortedSlides(show)
     const first = sorted[0] ?? null
     const now = new Date().toISOString()
-    const newSlides = withEntryState(show.slides, first, { currentPart: 0, introDone: false })
+    const bakedSlides = await bakeTeamPickerParts(show.slides, first)
+    const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === first?.id) ?? first, { currentPart: 0, introDone: false })
     setShow(s => ({
       ...s,
       slides: newSlides,
@@ -531,7 +551,8 @@ export function useShow() {
     const target = Math.max(0, Math.min(index, sorted.length - 1))
     const slide = sorted[target] ?? null
     const now = new Date().toISOString()
-    const newSlides = withEntryState(show.slides, slide, { currentPart: 0, introDone: false })
+    const bakedSlides = await bakeTeamPickerParts(show.slides, slide)
+    const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === slide?.id) ?? slide, { currentPart: 0, introDone: false })
     setShow(s => ({
       ...s,
       slides: newSlides,
@@ -557,7 +578,8 @@ export function useShow() {
     if (show.showState.currentSlideId === null) {
       const targetSlide = sorted[cur]
       if (!targetSlide) return
-      const newSlides = withEntryState(show.slides, targetSlide, { currentPart: 0, introDone: false })
+      const bakedSlides = await bakeTeamPickerParts(show.slides, targetSlide)
+      const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === targetSlide.id) ?? targetSlide, { currentPart: 0, introDone: false })
       setShow(s => ({
         ...s,
         slides: newSlides,
@@ -601,7 +623,8 @@ export function useShow() {
     const target = Math.min(cur + 1, sorted.length - 1)
     if (target === cur) return
     const targetSlide = sorted[target]
-    const newSlides = withEntryState(show.slides, targetSlide, { currentPart: 0, introDone: false })
+    const bakedSlides = await bakeTeamPickerParts(show.slides, targetSlide)
+    const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === targetSlide?.id) ?? targetSlide, { currentPart: 0, introDone: false })
     setShow(s => ({
       ...s,
       slides: newSlides,
@@ -625,7 +648,10 @@ export function useShow() {
     const parts = data?.parts
 
     // Step back through this slide's parts before un-revealing its intro.
-    if (data?.isShiny && data.introDone && Array.isArray(parts) && parts.length > 1) {
+    // Generic on purpose (matches the forward branch in nextSlide) — not
+    // gated to isShiny/introDone, since team-picker uses this same
+    // data.parts/currentPart mechanism without either of those fields.
+    if (Array.isArray(parts) && parts.length > 1) {
       const curPart = data.currentPart ?? 0
       if (curPart > 0) {
         const newSlides = show.slides.map(s =>
@@ -650,10 +676,12 @@ export function useShow() {
     const target = Math.max(cur - 1, 0)
     if (target === cur) return
     const targetSlide = sorted[target]
-    // Backing into a shiny slide lands on its last revealed state — the
-    // natural "undo" of advancing forward through it.
-    const lastPartIdx = Math.max((targetSlide?.data?.parts?.length ?? 1) - 1, 0)
-    const newSlides = withEntryState(show.slides, targetSlide, { currentPart: lastPartIdx, introDone: true })
+    const bakedSlides = await bakeTeamPickerParts(show.slides, targetSlide)
+    const resolvedTarget = bakedSlides.find(s => s.id === targetSlide?.id) ?? targetSlide
+    // Backing into a shiny or team-picker slide lands on its last revealed
+    // state — the natural "undo" of advancing forward through it.
+    const lastPartIdx = Math.max((resolvedTarget?.data?.parts?.length ?? 1) - 1, 0)
+    const newSlides = withEntryState(bakedSlides, resolvedTarget, { currentPart: lastPartIdx, introDone: true })
     setShow(s => ({
       ...s,
       slides: newSlides,

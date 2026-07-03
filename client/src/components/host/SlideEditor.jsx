@@ -330,6 +330,9 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     {slide.type === 'state-of-union' && (
                       <StateOfUnionEditor data={data} onChange={change} />
                     )}
+                    {slide.type === 'team-picker' && (
+                      <TeamPickerEditor data={data} onChange={change} />
+                    )}
                     {slide.type === 'winner-reveal' && (
                       <WinnerRevealEditor data={data} onChange={change} />
                     )}
@@ -1557,6 +1560,15 @@ function StateOfUnionEditor({ data, onChange }) {
         className="w-full text-sm bg-gray-50 text-gray-900 rounded-lg px-3 py-2 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-baynes-forest resize-none"
       />
     </Field>
+  )
+}
+
+function TeamPickerEditor({ data, onChange }) {
+  return (
+    <>
+      <Field label="Opening Line"><TextInput value={data.openingText} onChange={v => onChange('openingText', v)} placeholder="Now, let's meet our teams" /></Field>
+      <Field label="Closing Line"><TextInput value={data.closingText} onChange={v => onChange('closingText', v)} placeholder="Now, let's do this shit" /></Field>
+    </>
   )
 }
 
