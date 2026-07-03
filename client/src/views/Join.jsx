@@ -481,7 +481,7 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
+      transition={{ duration: 0.18, ease: EASE_SNAP }}
       style={{
         position: 'fixed', inset: 0,
         background: 'rgba(0,0,0,0.6)', zIndex: 450,

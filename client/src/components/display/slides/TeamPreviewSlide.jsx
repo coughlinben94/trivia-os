@@ -86,7 +86,7 @@ export default function TeamPreviewSlide({ slide, show }) {
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.4 }}
-            transition={{ delay: 0.5, duration: 0.4 }}
+            transition={{ delay: 0.5, duration: 0.4, ease: EASE_SNAP }}
             style={{
               color: theme.colors.text,
               fontFamily: "'DM Sans', sans-serif",
@@ -105,7 +105,7 @@ export default function TeamPreviewSlide({ slide, show }) {
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 0.45 }}
-          transition={{ delay: 0.4, duration: 0.4 }}
+          transition={{ delay: 0.4, duration: 0.4, ease: EASE_SNAP }}
           style={{
             marginTop: '2rem',
             fontFamily: "'DM Sans', sans-serif",

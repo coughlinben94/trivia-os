@@ -67,7 +67,7 @@ export default function TitleSlide({ slide, show }) {
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 0.4 }}
-          transition={{ delay: 0.5, duration: 0.3 }}
+          transition={{ delay: 0.5, duration: 0.3, ease: EASE_SNAP }}
           className="relative z-10 mt-2 text-center text-xl"
           style={{ color: theme.colors.textMuted }}
         >
