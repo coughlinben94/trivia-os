@@ -95,28 +95,6 @@ function PreShowScreen({ show, onInstall }) {
     }).then(url => setQrDataUrl(url))
   }, [joinUrl])
 
-  // Ticker — always visible, always fills the full 1920px width.
-  // Uses custom messages from show.ticker_messages when teams < 5.
-  // Switches to scrolling team names once 5+ teams have joined.
-  const TEAM_THRESHOLD = 5
-  const customMessages = show.ticker_messages ?? []
-  const defaultMessages = [
-    "No teams in yet — get off your booty and scan that code 📱",
-    "Don't make Ben do this by himself, he gets lonely 🥺",
-    "Scan the QR code to join tonight's trivia — yes, you",
-    "First team to join gets bragging rights. Go.",
-  ]
-
-  const rawTickerText = teams.length >= TEAM_THRESHOLD
-    ? teams.map(t => t.name).join('  ·  ') + '  ·  '
-    : (customMessages.length > 0 ? customMessages : defaultMessages).join('  ·  ') + '  ·  '
-
-  const AVG_CHAR_PX = 10
-  const MIN_COPY_PX = 2400
-  const repeatCount = Math.max(1, Math.ceil(MIN_COPY_PX / (rawTickerText.length * AVG_CHAR_PX)))
-  const tickerText = rawTickerText.repeat(repeatCount)
-  const tickerDuration = Math.max((tickerText.length * AVG_CHAR_PX) / 55, 20)
-
   return (
     <div className="w-screen h-screen overflow-hidden relative select-none"
       style={{ background: theme.colors.bg }}>
@@ -177,37 +155,10 @@ function PreShowScreen({ show, onInstall }) {
         </div>
       </div>
 
-      {/* Ticker — pinned to bottom, always visible */}
-      <div style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: '3rem',
-        background: theme.colors.bgDeep,
-        borderTop: `1px solid ${theme.colors.accent}50`,
-        overflow: 'hidden',
-        zIndex: 10,
-      }}>
-        <div className="flex items-center h-full">
-          <div className="ticker-track" style={{ animationDuration: `${tickerDuration}s` }}>
-            <span style={{
-              fontFamily: "'DM Sans', sans-serif",
-              fontSize: '1.1rem',
-              fontWeight: 500,
-              letterSpacing: '0.04em',
-              color: `${theme.colors.text}cc`,
-              whiteSpace: 'nowrap',
-              padding: '0 2rem',
-            }}>{tickerText}{tickerText}</span>
-          </div>
-        </div>
-      </div>
-
       {/* Ben photo — bottom-left corner */}
       <div style={{
         position: 'absolute',
-        bottom: 80,
+        bottom: 40,
         left: 40,
         zIndex: 10,
         opacity: 0.7,
