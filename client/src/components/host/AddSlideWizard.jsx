@@ -11,6 +11,7 @@ export const TYPE_CARDS = [
   { type: 'grading-break',  icon: '⏸️', name: 'Grading Break',    desc: 'While Ben grades papers' },
   { type: 'winner-reveal',  icon: '🥇', name: 'Winner Reveal',    desc: 'Drum roll → winner + confetti' },
   { type: 'custom',         icon: '✏️', name: 'Custom',           desc: 'Freeform slide' },
+  { type: 'team-preview',  icon: '👥', name: 'Team Preview',      desc: 'Show all team names on screen' },
 ]
 
 const NEEDS_ROUND = new Set(['swing-round-intro', 'question', 'grading-break', 'pixelate-series', 'multi-question', 'pyl-reveal'])

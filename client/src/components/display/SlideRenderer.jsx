@@ -11,6 +11,7 @@ import MultiQuestionSlide from './slides/MultiQuestionSlide.jsx'
 import PylRevealSlide from './slides/PylRevealSlide.jsx'
 import StateOfUnionSlide from './slides/StateOfUnionSlide.jsx'
 import WinnerRevealSlide from './slides/WinnerRevealSlide.jsx'
+import TeamPreviewSlide from './slides/TeamPreviewSlide.jsx'
 
 const EASE_QUINT     = [0.22, 1, 0.36, 1]   // standard ease-out
 const EASE_QUART     = [0.25, 1, 0.25, 1]   // weighted hard land (drop)
@@ -104,6 +105,7 @@ const SLIDE_COMPONENTS = {
   'pyl-reveal':        PylRevealSlide,
   'state-of-union':    StateOfUnionSlide,
   'winner-reveal':     WinnerRevealSlide,
+  'team-preview':      TeamPreviewSlide,
 }
 
 export default function SlideRenderer({ slide, show, direction, isPreview = false }) {
