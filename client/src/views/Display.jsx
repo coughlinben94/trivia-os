@@ -14,6 +14,42 @@ import StageFrame from '../display/StageFrame.jsx'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
 import { resolveShinyPart } from '../lib/shinySeries.js'
 
+// ─── No-show holding screen (before any show goes live) ────────────────────
+
+function WaitingScreen() {
+  const { theme } = useTheme()
+  return (
+    <div className="w-screen h-screen overflow-hidden relative select-none"
+      style={{ background: theme.colors.bg }}>
+      <ParticleBackground theme={theme} />
+      <div style={{
+        position: 'absolute', inset: 0,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        gap: '1rem',
+      }}>
+        <h1 style={{
+          fontFamily: `'${theme.fonts.display}', sans-serif`,
+          fontSize: 'clamp(3rem, 6vw, 5.5rem)',
+          color: theme.colors.text,
+          letterSpacing: '-0.02em',
+          margin: 0,
+          lineHeight: 1,
+        }}>Trivia Night</h1>
+        <p style={{
+          fontFamily: "'DM Sans', sans-serif",
+          fontSize: '1.2rem',
+          color: `${theme.colors.text}55`,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          margin: 0,
+        }}>Starting soon</p>
+      </div>
+      <BaynesWatermark />
+    </div>
+  )
+}
+
 // ─── Pre-show waiting screen ───────────────────────────────────────────────
 
 function PreShowScreen({ show, onInstall }) {
@@ -575,19 +611,11 @@ export default function Display() {
     )
   }
 
-  if (loading) {
+  if (loading || !show) {
     return (
-      <div className="w-screen h-screen bg-black flex items-center justify-center">
-        <div className="text-white/20 text-sm tracking-widest uppercase">Loading</div>
-      </div>
-    )
-  }
-
-  if (!show) {
-    return (
-      <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2b1e3e' }}>
-        <p style={{ color: '#e6e6fa', fontSize: '1.5rem' }}>No show found</p>
-      </div>
+      <ThemeProvider showThemeId={null}>
+        <WaitingScreen />
+      </ThemeProvider>
     )
   }
 
