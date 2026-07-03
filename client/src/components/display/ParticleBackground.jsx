@@ -152,12 +152,12 @@ const KEYFRAMES = `
   }
   @keyframes ambientFloatY {
     0%,100% { transform: translateY(0); }
-    25%     { transform: translateY(var(--fy1,-4.25vh)); }
-    75%     { transform: translateY(var(--fy2,4.25vh)); }
+    25%     { transform: translateY(var(--fy1,-5vh)); }
+    75%     { transform: translateY(var(--fy2,5vh)); }
   }
   @keyframes ambientFloatX {
     0%,100% { transform: translateX(0); }
-    50%     { transform: translateX(var(--fx,8.5vw)); }
+    50%     { transform: translateX(var(--fx,10vw)); }
   }
   @keyframes ambientBloom {
     0%   { opacity: 0; transform: translate(0,0); }
