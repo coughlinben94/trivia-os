@@ -13,7 +13,7 @@ export const TYPE_CARDS = [
   { type: 'winner-reveal',  icon: '🥇', name: 'Winner Reveal',       desc: 'Drum roll → winner + confetti' },
   { type: 'custom',         icon: '✏️', name: 'Custom',              desc: 'Freeform slide' },
   // utility-only — not shown in the picker grid, but provides icon/name metadata for header + sidebar
-  { type: 'team-preview',   icon: '👥', name: 'Team Preview',        desc: 'Show all team names on screen', hidden: true },
+  { type: 'team-preview',   icon: '👥', name: 'Team List',           desc: 'Show all team names on screen', hidden: true },
 ]
 
 const NEEDS_ROUND = new Set(['swing-round-intro', 'question', 'grading-break', 'pixelate-series', 'multi-question', 'pyl-reveal'])

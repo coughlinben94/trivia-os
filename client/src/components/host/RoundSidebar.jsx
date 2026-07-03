@@ -15,7 +15,7 @@ const SLIDE_TYPE_META = {
   'multi-question':    { label: 'Multi-Question',    icon: '📋' },
   'pyl-reveal':        { label: 'PYL Reveal',        icon: '🎰' },
   'winner-reveal':     { label: 'Winner Reveal',     icon: '🥇' },
-  'team-preview':      { label: 'Team Preview',      icon: '👥' },
+  'team-preview':      { label: 'Team List',         icon: '👥' },
 }
 
 function slideLabel(slide) {

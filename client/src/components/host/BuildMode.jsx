@@ -36,7 +36,7 @@ function getSlideLabel(slide) {
   if (type === 'title') return data.title || 'Title'
   if (type === 'multi-question') return data.seriesTitle || 'Multi-Q'
   if (type === 'pyl-reveal') return 'PYL Reveal'
-  if (type === 'team-preview') return 'Team Preview'
+  if (type === 'team-preview') return 'Team List'
   if (type === 'team-picker') return 'Team Intro'
   if (type === 'winner-reveal') return '🥇 Winner Reveal'
   return type
@@ -534,7 +534,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                     className={`w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${CARD_STYLE['ticker']}`}
                   >
                     <span className="text-3xl leading-none">👥</span>
-                    <span className="text-sm font-semibold text-gray-800 leading-tight">Team Preview</span>
+                    <span className="text-sm font-semibold text-gray-800 leading-tight">Team List</span>
                     <span className="text-xs text-gray-500 leading-snug">Show all team names on screen</span>
                   </button>
                   <button
