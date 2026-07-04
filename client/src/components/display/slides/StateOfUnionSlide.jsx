@@ -16,13 +16,11 @@ const RWB_BLUE      = '#1a2a6c'
 const RWB_BLUE_DEEP = '#0d1536'
 
 // ─── Billowing gradient background ───────────────────────────────────────────
-// Canvas RAF animation. Each column gets a 2H-tall gradient (red→white→blue)
-// but each column's sampling window is offset so:
-//   left  columns (x≈0) see the red portion  → top-left is red
-//   right columns (x≈W) see the blue portion → bottom-right is blue
-//   white lives on the anti-diagonal between them, not as a horizontal band
-// A sine wave with zero amplitude at the left (pole) and growing amplitude at
-// the right (free end) makes the whole color field billow like a flag.
+// Per-pixel ImageData at quarter resolution (320×180) — CSS scaling blurs it
+// smooth. Each pixel's color is determined by its diagonal position
+// (x/W + ey/H)/2 where ey is y shifted by the wave. This gives all three
+// bands (red / white / blue) simultaneously at the correct diagonal angle,
+// with the wave making the whole field billow from the anchored left edge.
 function WavingGradient({ reduce }) {
   const ref = useRef(null)
 
@@ -31,40 +29,57 @@ function WavingGradient({ reduce }) {
     if (!canvas) return
     const ctx = canvas.getContext('2d')
 
-    canvas.width  = canvas.offsetWidth  || 1280
-    canvas.height = canvas.offsetHeight || 720
+    const W = 320, H = 180
+    canvas.width = W
+    canvas.height = H
 
-    const W      = canvas.width
-    const H      = canvas.height
-    const maxAmp = reduce ? 8 : H * 0.13
-    const k      = (2 * Math.PI) / (W * 0.55)
-    const sliceW = Math.max(2, Math.floor(W / 280))
+    const maxAmp = reduce ? 3 : Math.round(H * 0.15)
+    const k = (2 * Math.PI) / (W * 0.55)
+
+    // Precompute 512-entry RGB LUT: red → white → blue along the diagonal
+    const N = 512
+    const lut = new Uint8Array(N * 3)
+    const stops = [
+      [0.00, 178,  34,  52],
+      [0.20, 184,  60,  72],
+      [0.35, 208, 148, 148],
+      [0.50, 224, 210, 204],
+      [0.65, 148, 160, 190],
+      [0.80,  50,  72, 128],
+      [1.00,  26,  42, 108],
+    ]
+    for (let i = 0; i < N; i++) {
+      const d = i / (N - 1)
+      let s = 0
+      while (s < stops.length - 2 && d > stops[s + 1][0]) s++
+      const p = (d - stops[s][0]) / (stops[s + 1][0] - stops[s][0])
+      lut[i * 3]     = Math.round(stops[s][1] + (stops[s + 1][1] - stops[s][1]) * p)
+      lut[i * 3 + 1] = Math.round(stops[s][2] + (stops[s + 1][2] - stops[s][2]) * p)
+      lut[i * 3 + 2] = Math.round(stops[s][3] + (stops[s + 1][3] - stops[s][3]) * p)
+    }
+
+    const imgData = ctx.createImageData(W, H)
+    const data = imgData.data
 
     let t = 0
     const spd = reduce ? 0.25 : 1.0
     let rafId
 
     function draw() {
-      for (let x = 0; x <= W; x += sliceW) {
-        // baseDy slides the sampling window: 0 at the left (red fills top),
-        // -H at the right (blue fills bottom). Combined they cascade from
-        // the top-left corner rather than banding horizontally.
-        const baseDy  = -H * (x / W)
-        const waveAmp = maxAmp * Math.pow(x / W, 0.7)
-        const dy      = baseDy + Math.sin(k * x - t) * waveAmp
-
-        // 2H gradient — each column only sees half of it
-        const grad = ctx.createLinearGradient(x, dy, x, dy + 2 * H)
-        grad.addColorStop(0,    RWB_RED)
-        grad.addColorStop(0.35, '#bf3c52')
-        grad.addColorStop(0.5,  RWB_WHITE)
-        grad.addColorStop(0.65, '#4a70a0')
-        grad.addColorStop(1,    RWB_BLUE)
-
-        ctx.fillStyle = grad
-        ctx.fillRect(x, 0, sliceW + 1, H)
+      for (let x = 0; x < W; x++) {
+        const waveShift = Math.sin(k * x - t) * maxAmp * Math.pow(x / W, 0.7)
+        for (let y = 0; y < H; y++) {
+          const ey   = y - waveShift
+          const diag = Math.max(0, Math.min(1, (x / W + ey / H) / 2))
+          const li   = Math.round(diag * (N - 1)) * 3
+          const px   = (y * W + x) * 4
+          data[px]     = lut[li]
+          data[px + 1] = lut[li + 1]
+          data[px + 2] = lut[li + 2]
+          data[px + 3] = 255
+        }
       }
-
+      ctx.putImageData(imgData, 0, 0)
       t += 0.05 * spd
       rafId = requestAnimationFrame(draw)
     }
