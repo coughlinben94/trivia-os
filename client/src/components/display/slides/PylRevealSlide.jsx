@@ -1,10 +1,11 @@
+import { useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
 import ErrorBoundary from '../../ErrorBoundary.jsx'
 import { getSelectionAnimation } from './selectionAnimations.js'
 import { supabase } from '../../../lib/supabase.js'
-import { autoFitClamp, LIST_ITEM_TIERS, LIST_ITEM_FLOOR, LIST_ITEM_CEIL } from '../../../lib/autoFitText.js'
+import { useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function PylRevealSlide({ slide, show, isPreview = false }) {
@@ -13,6 +14,19 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
   const reduce = useReducedMotion()
 
   const showAnimation = !isPreview && data.animationId && data.winnerId
+
+  // Hoisted above the showAnimation early return below — hooks can't be called
+  // conditionally, and items.map() feeds the useFitListToBox call right here.
+  const items = data.stages ?? data.items ?? []
+  const listBoxRef = useRef(null)
+  const rowSize = useFitListToBox(listBoxRef, items.map(x => x.text), {
+    family: 'system-ui',
+    floorPx: LIST_ITEM_FLOOR * 16,
+    ceilPx: LIST_ITEM_CEIL * 16,
+    gapPx: 12,
+    rowInset: 300,
+    maxLinesPerRow: 2,
+  })
 
   async function advancePYL() {
     const sorted = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
@@ -40,7 +54,6 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
     )
   }
 
-  const items = data.stages ?? data.items ?? []
   // currentReveal: how many items are revealed (0 = none, items.length = all)
   const revealed = data.currentReveal ?? 0
 
@@ -95,7 +108,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
       </motion.div>
 
       {/* Items */}
-      <div className="relative z-10 flex-1 overflow-y-auto px-16 pb-10 space-y-3">
+      <div ref={listBoxRef} className="relative z-10 flex-1 overflow-y-auto px-16 pb-10 space-y-3">
         <AnimatePresence>
           {visibleItems.map((item, i) => (
             <motion.div
@@ -123,7 +136,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
                 className="flex-1"
                 style={{
                   color: theme.colors.text,
-                  fontSize: autoFitClamp(item.text, LIST_ITEM_TIERS, LIST_ITEM_FLOOR, LIST_ITEM_CEIL),
+                  fontSize: `${rowSize}px`,
                   fontWeight: 500,
                 }}
               >
