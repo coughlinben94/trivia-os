@@ -1,7 +1,8 @@
+import { useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
-import { autoFitClamp, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
+import { useFitToBox, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function PixelateSeriesSlide({ slide, show }) {
@@ -16,6 +17,14 @@ export default function PixelateSeriesSlide({ slide, show }) {
 
   const totalStages = stages.length
   const stageLabel = `${activeStage + 1} / ${totalStages}`
+
+  const captionBoxRef = useRef(null)
+  const captionSize = useFitToBox(captionBoxRef, data.text, {
+    family: theme.fonts.body,
+    floorPx: VISUAL_CAPTION_FLOOR * 16,
+    ceilPx: VISUAL_CAPTION_CEIL * 16,
+    maxLines: 3, lineHeight: 1.15,
+  })
 
   return (
     <div
@@ -52,17 +61,19 @@ export default function PixelateSeriesSlide({ slide, show }) {
       {/* Question text + stage indicator — bottom overlay */}
       <div className="absolute bottom-0 left-0 right-0 pb-14 px-16 z-10">
         <div className="flex items-end justify-between gap-6">
-          <p
-            className="leading-snug flex-1"
-            style={{
-              color: '#f5f0e8',
-              fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-              fontSize: autoFitClamp(data.text, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL),
-              fontWeight: 500,
-            }}
-          >
-            {data.text}
-          </p>
+          <div ref={captionBoxRef} className="flex-1">
+            <p
+              className="leading-snug"
+              style={{
+                color: '#f5f0e8',
+                fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+                fontSize: `${captionSize}px`,
+                fontWeight: 500,
+              }}
+            >
+              {data.text}
+            </p>
+          </div>
 
           {/* Stage badge */}
           <div className="shrink-0 flex flex-col items-center gap-1">
