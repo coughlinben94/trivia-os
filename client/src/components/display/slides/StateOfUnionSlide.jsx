@@ -11,16 +11,16 @@ import { EASE_OUT } from '../../../lib/easings.js'
 // the same red-white-blue on every one of the 21 themes, the same way a
 // shiny question's gold doesn't shift with the ambient theme either.
 const RWB_RED       = '#b22234'
-const RWB_WHITE     = '#f0ece0'
+const RWB_WHITE     = '#e8e0d8'
 const RWB_BLUE      = '#1a2a6c'
 const RWB_BLUE_DEEP = '#0d1536'
 
-// ─── Waving flag background ───────────────────────────────────────────────────
-// Canvas-based RAF animation. Pole is pinned at the left edge (zero amplitude);
-// amplitude grows toward the right free end via a power curve so the billowing
-// feels anchored, not oscillating uniformly. Renders all 13 stripes, the blue
-// canton, and all 50 stars (9 rows alternating 6 and 5).
-function WavingFlag({ reduce }) {
+// ─── Billowing gradient background ───────────────────────────────────────────
+// Canvas RAF animation: each vertical column gets a linear gradient running
+// from red → white → blue, shifted up or down by a sine wave. Amplitude is
+// zero at the left edge (pole) and grows toward the right (free end), so the
+// gradient billows exactly like a flag in wind — no stripes, pure gradient.
+function WavingGradient({ reduce }) {
   const ref = useRef(null)
 
   useEffect(() => {
@@ -31,63 +31,34 @@ function WavingFlag({ reduce }) {
     canvas.width  = canvas.offsetWidth  || 1280
     canvas.height = canvas.offsetHeight || 720
 
-    const W         = canvas.width
-    const H         = canvas.height
-    const STRIPES   = 13
-    const stripeH   = H / STRIPES
-    const cantonW   = W * 0.38
-    const cantonH   = stripeH * 7
-    const maxAmp    = reduce ? 5 : H * 0.034
-    const k         = (2 * Math.PI) / (W * 0.45) // ~2.2 full waves across the flag
-    const sliceW    = Math.max(1, Math.floor(W / 300))
+    const W      = canvas.width
+    const H      = canvas.height
+    const maxAmp = reduce ? 8 : H * 0.15  // how far the gradient bands shift
+    const k      = (2 * Math.PI) / (W * 0.55)
+    const sliceW = Math.max(2, Math.floor(W / 250))
 
-    // 50 stars: 9 rows alternating 6 and 5
-    const starRows  = [6, 5, 6, 5, 6, 5, 6, 5, 6]
-    const starR     = Math.max(2, H * 0.009)
-    const sPadX     = cantonW * 0.1
-    const sPadY     = cantonH * 0.1
-    const sSpcX     = (cantonW - 2 * sPadX) / 5.5
-    const sSpcY     = (cantonH - 2 * sPadY) / 8
-
-    let t     = 0
+    let t = 0
     const spd = reduce ? 0.25 : 1.0
     let rafId
 
     function draw() {
-      ctx.fillStyle = RWB_BLUE_DEEP
-      ctx.fillRect(0, 0, W, H)
-
       for (let x = 0; x <= W; x += sliceW) {
-        // Amplitude grows from 0 at the pole (left) to maxAmp at the free end (right)
+        // Amplitude: zero at pole (left), full at free end (right)
         const amp = maxAmp * Math.pow(x / W, 0.7)
         const dy  = Math.sin(k * x - t) * amp
-        const sw  = sliceW + 1 // +1 closes gaps between slices
 
-        for (let s = 0; s < STRIPES; s++) {
-          ctx.fillStyle = s % 2 === 0 ? RWB_RED : RWB_WHITE
-          ctx.fillRect(x, Math.round(s * stripeH + dy), sw, Math.ceil(stripeH) + 1)
-        }
+        // Gradient runs from (x, dy) to (x, H+dy) — shifting the color bands
+        // vertically for this column creates the billowing wave illusion
+        const grad = ctx.createLinearGradient(x, dy, x, H + dy)
+        grad.addColorStop(0,    RWB_RED)
+        grad.addColorStop(0.42, '#c83248')
+        grad.addColorStop(0.5,  RWB_WHITE)
+        grad.addColorStop(0.58, '#5878a8')
+        grad.addColorStop(1,    RWB_BLUE)
 
-        if (x < cantonW) {
-          ctx.fillStyle = RWB_BLUE
-          ctx.fillRect(x, Math.round(dy), sw, Math.ceil(cantonH) + 1)
-        }
+        ctx.fillStyle = grad
+        ctx.fillRect(x, 0, sliceW + 1, H)
       }
-
-      // Stars — each gets its own wave offset at its x-position
-      ctx.fillStyle = RWB_WHITE
-      starRows.forEach((count, row) => {
-        const offsetX = count === 6 ? 0 : sSpcX / 2
-        const yBase   = sPadY + row * sSpcY
-        for (let col = 0; col < count; col++) {
-          const sx  = sPadX + offsetX + col * sSpcX
-          const amp = maxAmp * Math.pow(sx / W, 0.7)
-          const dy  = Math.sin(k * sx - t) * amp
-          ctx.beginPath()
-          ctx.arc(sx, yBase + dy, starR, 0, Math.PI * 2)
-          ctx.fill()
-        }
-      })
 
       t += 0.05 * spd
       rafId = requestAnimationFrame(draw)
@@ -118,12 +89,12 @@ export default function StateOfUnionSlide({ slide }) {
     <div className="absolute inset-0 flex flex-col items-center justify-center px-24 overflow-hidden"
       style={{ background: RWB_BLUE_DEEP }}>
 
-      <WavingFlag reduce={reduce} />
+      <WavingGradient reduce={reduce} />
 
-      {/* Dark center vignette — keeps the tilted text readable against the flag */}
+      {/* Dark center vignette — keeps the tilted text readable */}
       <div aria-hidden style={{
         position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
-        background: 'radial-gradient(ellipse 72% 62% at 50% 55%, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0.28) 55%, rgba(0,0,0,0.05) 100%)',
+        background: 'radial-gradient(ellipse 72% 62% at 50% 55%, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.25) 55%, rgba(0,0,0,0.05) 100%)',
       }} />
 
       <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
