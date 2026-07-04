@@ -28,6 +28,14 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   const overlayRef = useRef(null)
   const dragStateRef = useRef(null)
   const leftPanelRef = useRef(null)
+  const rightPanelRef = useRef(null)
+
+  function focusFirstField() {
+    const panel = rightPanelRef.current
+    if (!panel) return
+    panel.scrollTo({ top: 0, behavior: 'instant' })
+    panel.querySelector('input[type="text"], input:not([type]), textarea')?.focus()
+  }
   const [panelW, setPanelW] = useState(800)
   const [panelH, setPanelH] = useState(600)
 
@@ -209,7 +217,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                   <div
                     ref={overlayRef}
                     style={{ position: 'absolute', inset: 0, zIndex: 50, overflow: 'visible' }}
-                    onPointerDown={() => setSelectedElId(null)}
+                    onPointerDown={() => { setSelectedElId(null); focusFirstField() }}
                   >
                   {elements.map(el => {
                     const isSel = el.id === selectedElId
@@ -276,7 +284,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
 
             {/* ── RIGHT: editing sidebar ── */}
             <div className="w-72 bg-white border-l border-gray-200 flex flex-col overflow-hidden shrink-0">
-              <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+              <div ref={rightPanelRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
                 {/* ── Slide content ── */}
                 {(
                   <div className="space-y-3 pb-3 border-b border-gray-100">

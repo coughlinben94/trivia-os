@@ -1,13 +1,21 @@
+import { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
-import { autoFitClamp, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL } from '../../../lib/autoFitText.js'
+import { fitToBox, CUSTOM_BODY_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function CustomSlide({ slide }) {
   const { theme } = useTheme()
   const { data } = slide
   const reduce = useReducedMotion()
+
+  // fitToBox measures via canvas — a first paint before web fonts load
+  // measures fallback-font metrics. This flips once fonts are ready purely
+  // to force the re-render that re-runs the inline fitToBox call below with
+  // real glyph metrics; the value itself is never read.
+  const [fontsReady, setFontsReady] = useState(false)
+  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
 
   return (
     <div
@@ -64,7 +72,7 @@ export default function CustomSlide({ slide }) {
           className="relative z-10 text-center leading-relaxed max-w-4xl"
           style={{
             color: theme.colors.text,
-            fontSize: autoFitClamp(data.body, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL),
+            fontSize: fitToBox(data.body, { ...CUSTOM_BODY_BOX, family: 'system-ui' }),
             fontWeight: 400,
           }}
         >

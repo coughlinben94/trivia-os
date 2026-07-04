@@ -116,3 +116,116 @@ export const VISUAL_CAPTION_TIERS = [
 ]
 export const VISUAL_CAPTION_FLOOR = 1.5
 export const VISUAL_CAPTION_CEIL  = 3.5
+
+/* ── font-agnostic measure-to-fit ──────────────────────────────────────────
+   Measures real glyph width instead of counting chars, so it snaps correctly
+   for ANY display font. Retires the per-surface *_TIERS tables. */
+
+let _measureCtx = null
+function _ctx() {
+  if (!_measureCtx) _measureCtx = document.createElement('canvas').getContext('2d')
+  return _measureCtx
+}
+
+// greedy word-wrap at a given px size → array of line strings
+function wrapToWidth(text, family, sizePx, maxW, letterSpacing = 0) {
+  const c = _ctx()
+  c.font = `${sizePx}px "${family}"`
+  const measure = s => c.measureText(s).width + Math.max(0, s.length - 1) * letterSpacing
+  const words = String(text).split(/\s+/).filter(Boolean)
+  if (!words.length) return ['']
+  const lines = []
+  let line = words[0]
+  for (let i = 1; i < words.length; i++) {
+    const test = line + ' ' + words[i]
+    if (measure(test) <= maxW) line = test
+    else { lines.push(line); line = words[i] }
+  }
+  lines.push(line)
+  return lines
+}
+
+function _fits(text, family, sizePx, boxW, boxH, maxLines, lineHeight, letterSpacing) {
+  const lines = wrapToWidth(text, family, sizePx, boxW, letterSpacing)
+  if (lines.length > maxLines) return false
+  const c = _ctx()
+  c.font = `${sizePx}px "${family}"`
+  for (const ln of lines) {
+    const w = c.measureText(ln).width + Math.max(0, ln.length - 1) * letterSpacing
+    if (w > boxW) return false            // a single word wider than the box
+  }
+  return lines.length * sizePx * lineHeight <= boxH
+}
+
+/**
+ * Largest px size in [floorPx, ceilPx] at which `text` fits the box.
+ * Font-agnostic by construction. Sync — safe as a drop-in for autoFitClamp.
+ */
+export function fitToBox(text, {
+  family, boxW, boxH,
+  floorPx, ceilPx,
+  maxLines = 4,
+  lineHeight = 1.12,
+  letterSpacing = 0,
+}) {
+  if (!String(text).trim()) return ceilPx
+  if (_fits(text, family, ceilPx, boxW, boxH, maxLines, lineHeight, letterSpacing)) return ceilPx
+  let lo = floorPx, hi = ceilPx
+  for (let i = 0; i < 8; i++) {
+    const mid = (lo + hi) / 2
+    if (_fits(text, family, mid, boxW, boxH, maxLines, lineHeight, letterSpacing)) lo = mid
+    else hi = mid
+  }
+  return Math.max(floorPx, lo)
+}
+
+// Title-card box (State of the Union). Fixed area — adjust the two dims if the
+// real region differs. rem→px at 16px root, matching the shipped TITLE_CARD floor/ceil.
+export const TITLE_CARD_BOX = {
+  boxW: 1728,       // 1920 stage − px-24 (96px) each side
+  boxH: 560,        // vertically-centered band
+  floorPx: 2.4 * 16,
+  ceilPx:  5.2 * 16,
+  maxLines: 4,
+  lineHeight: 1.12,
+}
+
+// ── per-surface fit boxes (font-agnostic fitToBox) ──────────────────────────
+// Each reuses the surface's EXISTING floor/ceil — bounds unchanged from the tier era.
+// Only boxW/boxH/maxLines are new; tune boxH/maxLines live if shrink engages too early/late.
+
+// Grading break: full-screen relaxed multi-sentence message. Wants to breathe, wrap freely.
+export const GRADING_BREAK_BOX = {
+  boxW: 1728, boxH: 620, floorPx: PARAGRAPH_FLOOR * 16, ceilPx: PARAGRAPH_CEIL * 16,
+  maxLines: 6, lineHeight: 1.2,
+}
+
+// Custom slide body: prose under a title (title eats the top band → shorter box).
+export const CUSTOM_BODY_BOX = {
+  boxW: 1728, boxH: 480, floorPx: PARAGRAPH_FLOOR * 16, ceilPx: PARAGRAPH_CEIL * 16,
+  maxLines: 6, lineHeight: 1.2,
+}
+
+// Question text: the prompt line(s), above the answer area. Full width, tighter line budget.
+export const QUESTION_BOX = {
+  boxW: 1728, boxH: 400, floorPx: PARAGRAPH_FLOOR * 16, ceilPx: PARAGRAPH_CEIL * 16,
+  maxLines: 4, lineHeight: 1.18,
+}
+
+// Visual caption: short label under an image. Narrow region, 1–2 lines.
+export const VISUAL_CAPTION_BOX = {
+  boxW: 1280, boxH: 140, floorPx: VISUAL_CAPTION_FLOOR * 16, ceilPx: VISUAL_CAPTION_CEIL * 16,
+  maxLines: 2, lineHeight: 1.15,
+}
+
+// Round-intro subtitle: one wide line under the round title. Full width, 1–2 lines.
+export const LINE_BOX = {
+  boxW: 1728, boxH: 160, floorPx: LINE_FLOOR * 16, ceilPx: LINE_CEIL * 16,
+  maxLines: 2, lineHeight: 1.12,
+}
+
+// Winner name: short team name, centered, huge. Snaps only if a team picked a long name.
+export const REVEAL_BOX = {
+  boxW: 1600, boxH: 320, floorPx: REVEAL_FLOOR * 16, ceilPx: REVEAL_CEIL * 16,
+  maxLines: 2, lineHeight: 1.1,
+}

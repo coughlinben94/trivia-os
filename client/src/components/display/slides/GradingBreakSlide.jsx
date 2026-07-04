@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
-import { autoFitClamp, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL } from '../../../lib/autoFitText.js'
+import { fitToBox, GRADING_BREAK_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function GradingBreakSlide({ slide, isPreview = false }) {
@@ -13,6 +13,13 @@ export default function GradingBreakSlide({ slide, isPreview = false }) {
   const message =
     data.message ||
     "Now, please sit back, relax, and enjoy each other's company as Ben grades papers 😊"
+
+  // fitToBox measures via canvas — a first paint before the body font loads
+  // measures fallback-font metrics. This flips once web fonts are ready purely
+  // to force the re-render that re-runs the inline fitToBox call below with
+  // real glyph metrics; the value itself is never read.
+  const [fontsReady, setFontsReady] = useState(false)
+  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
 
   const autoTimerRef = useRef(null)
 
@@ -90,7 +97,7 @@ export default function GradingBreakSlide({ slide, isPreview = false }) {
           style={{
             color: theme.colors.text,
             fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-            fontSize: autoFitClamp(message, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL),
+            fontSize: fitToBox(message, { ...GRADING_BREAK_BOX, family: theme.fonts.body }),
             fontWeight: 400,
           }}
         >
