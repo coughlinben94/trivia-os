@@ -4,6 +4,27 @@
 
 ---
 
+## ⚠️ Two ambient systems now (July 2026 rework)
+
+The 21 themes split into two rendering paths:
+- **9 BESPOKE** (keep their hand-built ambient scene, governed by The Law / Recipe / gate below): `pure-michigan`, `midnight-galaxy`, `autumn-harvest`, `sunset-boulevard`, `sand-dune-chill`, `halloween`, `sonora-balloons`, `under-the-sea`, `meteor-shower`.
+- **12 GRADIENT** (bespoke scene retired, render the shared `BreathingGradient` engine): `medieval-tavern`, `dive-bar`, `drive-in-movie`, `wine-cellar`, `eighties-night`, `retro-arcade`, `firefly-summer`, `jazz-club`, `neon-tokyo`, `western-showdown`, `northern-lights`, `christmas-eve`.
+
+**The Law / Recipe / Acceptance Gate / motion vocabulary in this doc apply to the 9 bespoke themes only.** The 12 gradient themes have no scene to build — they get their identity from the breathing gradient + question styling + hero animations (team intro, PYL).
+
+### BreathingGradient engine
+`client/src/components/display/BreathingGradient.jsx` — WAAPI 5-layer breathing gradient. Draws from `theme.colors` (bg/bgDeep = base wash, accent = mid glow bodies, highlight = highlight glow). One `mood` prop (`calm`/`warm`/`electric`) sets breath speed + spread. NO angle rotation — stop-shift + intensity pulse only. Always-present, the only continuous layer. Per-keyframe `ease-in-out` (NOT options-level — options-level puts peak velocity at the opacity crest and throbs). Test route: `/gradient`.
+
+Routing lives in `ParticleBackground.jsx`: a `GRADIENT_MOODS` map keys the 12 theme ids → mood. Render is `const gradientMood = GRADIENT_MOODS[theme.id]; gradientMood ? <BreathingGradient palette={theme.colors} mood={gradientMood}/> : AMBIENT_MAP[theme.id]`. Moods: calm = wine-cellar/drive-in-movie/medieval-tavern/western-showdown/firefly-summer; warm = dive-bar/jazz-club/christmas-eve; electric = retro-arcade/eighties-night/neon-tokyo/northern-lights.
+
+### Fixed-gold shiny signal
+Shiny question/title = **FIXED GOLD** `#f0d890` fill / `#d4820c` glow, constant across ALL themes (gold IS the shiny signal — not per-theme `shinyAccent` anymore). Plain question = theme text color. State of the Union = **fixed red-white-blue**, ignores `theme.colors`. The `grid` slide (Color Schemes) uses this fixed gold for its glow / ✨ badge / column-number chips.
+
+### Gotcha — opacity flash
+Gradient themes + the grid slide carry `isShiny`/fixed-design, so they need `SlideRenderer`'s opacity-neutralize special-case (joined `team-picker`/`state-of-union`) or the entrance transition fades them from opacity 0 and flashes the real theme color through for a frame.
+
+---
+
 ## The Law (the governing spine)
 
 **Anchor + drifter + atmosphere — center kept open.**
@@ -121,6 +142,8 @@ Timing floors: ambient breathe never < 8s (loop seam shows); use prime-number st
 
 **GlowLayer / Vignette / keyframes** — primitives unchanged. Available keyframes in `ParticleBackground.jsx` today (15): `ambientBreathe`, `ambientFlicker`, `ambientNeonBuzz`, `ambientFallSlow`, `ambientLeafFall`, `ambientRiseUp`, `ambientBubbleRise`, `ambientPulseIn`, `ambientFireflyWander`, `ambientDriftAcross`, `ambientAuroraFade`, `ambientMeteor`, `ambientScanline`, `ambientWave` (soft drifting water-light, shipped with `sunset-boulevard`), `ambientGullBob` (vertical soar for silhouette drifters, shipped with `sand-dune-chill`). All animate **only** `transform` / `opacity`; every keyframe has a `prefers-reduced-motion` branch that wins.
 
+The 12 retired bespoke scenes deleted ~1596 lines from `ParticleBackground.jsx` (commit `40decb7`) — some keyframes above may now be unused by any theme; grep before assuming a keyframe is live.
+
 ---
 
 ## Acceptance Gate
@@ -166,45 +189,47 @@ Adapted from gestalt + isolation for TV-at-bar-distance:
      - **Carry color to the edges:** a lone centered dome fades the corners to black (rejected). Layer a wide low base ellipse under it — `radial-gradient(ellipse 135% 32% at 50% 105%, …)` — so color still reaches the corners while the center rises.
      - **Curve the light, keep the ground flat:** dome a glow / light pool (dance floor, horizon bloom); keep literal terrain (sand, ground) a flat gradient — a raised terrain mound reads as a weird hill (rejected on the sunset beach).
 
-`ParticleBackground` takes `{ theme }` and looks up `AMBIENT_MAP[theme.id]`. Components render under one `absolute inset-0` wrapper, so they tile cleanly in any container.
+`ParticleBackground` takes `{ theme }`. For the 12 gradient themes it renders `<BreathingGradient>` (see the rework section at top); for the 9 bespoke themes it looks up `AMBIENT_MAP[theme.id]`. Components render under one `absolute inset-0` wrapper.
 
 ---
 
-## The 21 Themes
+## The Themes (9 bespoke + 12 gradient)
 
 Defined in `themes/index.js`, in this order:
 
-| Theme ID | Character | Signature anchor |
-|----------|-----------|------------------|
-| `pure-michigan` ★ | Dark lake night | Green firefly pulse dots over lake glow |
-| `midnight-galaxy` | Deep space | Purple + magenta nebula clouds + star field |
-| `autumn-harvest` ★ | Forest fire evening | Falling leaves + embers + hearth flicker |
-| `northern-lights` | Arctic sky | Wavy SVG aurora curtains |
-| `medieval-tavern` | Stone tavern | Torch side-glows + hearth flicker |
-| `sunset-boulevard` ✓ | Sunset beach | Low-left sun on the sea + drifting underlit clouds + warm sand beach |
-| `retro-arcade` | CRT arcade | Neon side-glows + scanlines + pixel static |
-| `sand-dune-chill` ✓ | Early-AM Lake Michigan | Right-side pale dawn sun + soaring gull silhouettes + warm dune |
-| `halloween` | Jack-o-lantern | Orange edge flicker + purple fog + embers |
-| `jazz-club` ✓ | Smoky stage | 3 sweeping warm-white spotlights over a stage platform + amber glints + smoke/motes |
-| `dive-bar` | Neon bar | Red + blue neon buzz + haze |
-| `sonora-balloons` ✓ | Sunset balloon festival | 5 hot-air balloons drifting over a dusk sky + water horizon + gold dust motes (renamed from Rooftop Party) |
-| `christmas-eve` | Christmas night | Red/green edges + gold candle + snow |
-| `drive-in-movie` ✓ | Drive-in theater | Huge dominant screen (bright edges, dark flat center for text), 2 support poles, moths wandering in the glow, 2 car-roof silhouettes cresting the bottom |
-| `western-showdown` | Desert dusk | Sun-on-horizon + dust haze |
-| `under-the-sea` | Bioluminescent deep | Teal pulse dots + bubble rise |
-| `neon-tokyo` | Tokyo alley | Pink/cyan neon buzz + rain streaks |
-| `firefly-summer` ★ | Summer night | Yellow-green firefly wander dots |
-| `wine-cellar` | Stone cellar | Burgundy edge closing in + candle |
-| `meteor-shower` | Clear night sky | Star field + meteor streaks |
-| `eighties-night` | Retrowave | Pink top + teal bottom + grid lines |
+| Theme ID | Path | Character | Signature anchor |
+|----------|------|-----------|------------------|
+| `pure-michigan` ★ | Bespoke | Dark lake night | Green firefly pulse dots over lake glow |
+| `midnight-galaxy` | Bespoke | Deep space | Purple + magenta nebula clouds + star field |
+| `autumn-harvest` ★ | Bespoke | Forest fire evening | Falling leaves + embers + hearth flicker |
+| `northern-lights` | Gradient | Arctic sky | Wavy SVG aurora curtains |
+| `medieval-tavern` | Gradient | Stone tavern | Torch side-glows + hearth flicker |
+| `sunset-boulevard` ✓ | Bespoke | Sunset beach | Low-left sun on the sea + drifting underlit clouds + warm sand beach |
+| `retro-arcade` | Gradient | CRT arcade | Neon side-glows + scanlines + pixel static |
+| `sand-dune-chill` ✓ | Bespoke | Early-AM Lake Michigan | Right-side pale dawn sun + soaring gull silhouettes + warm dune |
+| `halloween` | Bespoke | Jack-o-lantern | Orange edge flicker + purple fog + embers |
+| `jazz-club` | Gradient | Smoky stage | 3 sweeping warm-white spotlights over a stage platform + amber glints + smoke/motes |
+| `dive-bar` | Gradient | Neon bar | Red + blue neon buzz + haze |
+| `sonora-balloons` ✓ | Bespoke | Sunset balloon festival | 5 hot-air balloons drifting over a dusk sky + water horizon + gold dust motes (renamed from Rooftop Party) |
+| `christmas-eve` | Gradient | Christmas night | Red/green edges + gold candle + snow |
+| `drive-in-movie` | Gradient | Drive-in theater | Huge dominant screen (bright edges, dark flat center for text), 2 support poles, moths wandering in the glow, 2 car-roof silhouettes cresting the bottom |
+| `western-showdown` | Gradient | Desert dusk | Sun-on-horizon + dust haze |
+| `under-the-sea` | Bespoke | Bioluminescent deep | Teal pulse dots + bubble rise |
+| `neon-tokyo` | Gradient | Tokyo alley | Pink/cyan neon buzz + rain streaks |
+| `firefly-summer` | Gradient | Summer night | Yellow-green firefly wander dots |
+| `wine-cellar` | Gradient | Stone cellar | Burgundy edge closing in + candle |
+| `meteor-shower` | Bespoke | Clear night sky | Star field + meteor streaks |
+| `eighties-night` | Gradient | Retrowave | Pink top + teal bottom + grid lines |
 
-★ = confirmed-good, leave alone. ✓ = bland-pass rework shipped. ⟳ = rework in progress. Unmarked = bland-pass queue.
+★ = confirmed-good, leave alone. ✓ = bland-pass rework shipped. ⟳ = rework in progress. Unmarked = bland-pass queue. **These markers apply to the 9 BESPOKE themes only** — the 12 GRADIENT themes retired their bespoke scene in the July 2026 rework and carry no rework status; see the Path column.
 
 > **Count note:** the pre-audit "29" was wrong — eight themes (`speakeasy`, `solar-flare`, `nebula-dreams`, `vinyl-night`, `haunted-mansion`, `karaoke-night`, `aurora-borealis`, `oktoberfest`) were **merged** into neighbors, not cut. The real count is **21**, sourced from `themes/index.js`.
 
 ---
 
 ## Rework workflow (bland-pass)
+
+**Applies only to the 9 remaining BESPOKE themes** — the 12 gradient themes are done; no per-theme scene work remains for them.
 
 1. Prototype in a side-by-side **CURRENT vs REWORKED** artifact on a 16:9 stage. (An in-app single-theme preview already exists: `AmbientAudit.jsx` at `/ambient?theme=<id>`, indexed at `/ambient`.)
 2. Ben annotates; iterate against the gate.

@@ -146,7 +146,7 @@ Round object stamped: `{ roundType, roundNumber?, subtitle, title }`
 
 ## Slide Types
 
-12 types in `SlideRenderer.SLIDE_COMPONENTS`:
+13 types in `SlideRenderer.SLIDE_COMPONENTS`:
 
 | Type | Component | Key data fields |
 |---|---|---|
@@ -161,6 +161,7 @@ Round object stamped: `{ roundType, roundNumber?, subtitle, title }`
 | `multi-question` | MultiQuestionSlide | questions: [{number, text}] |
 | `pixelate-series` | PixelateSeriesSlide | stages: [{imageUrl, opacity}] |
 | `pyl-reveal` | PylRevealSlide | answers: [{text, revealed}], points |
+| `grid` | GridSlide | columns [[{color?,mediaUrl?}]], intraGap, interGap, columnLabels, text — shiny "Color Schemes"; host picks columns/rows in AddSlideWizard, tiles filled in SlideEditor GridEditor; carries isShiny (fixed-gold), needs SlideRenderer opacity-neutralize |
 | `winner-reveal` | WinnerRevealSlide | none — computes winner live from `teams`/`team_scores` on mount |
 
 **Shiny subtypes:** `shinyType: 'visual'` (image full-bleed or split) | `shinyType: 'audio'` (waveform bars, PLAY button, Web Audio gain). Series-type shiny questions (`isSeries: true`) group as one lead slide + hidden `slotIndex`-ordered siblings in RoundSidebar; drag-reorder carries the whole group as one atomic unit.
@@ -342,6 +343,23 @@ Old names `EASE_SNAP`/`EASE_QUINT`/`EASE_QUART`/`EASE_CUBIC`/`EASE_DRAWER` are r
 Score/progress bars animate `transform: scaleX()` with `transformOrigin: 'left center'` inside a clipping wrapper — never animate `width` (also covered by Critical Rule 2, GPU-only animations).
 
 Slide components with spatial motion (x/y/scale/rotate) must gate the offsets behind `useReducedMotion()`.
+
+---
+
+## Text Sizing (measure-to-fit)
+
+All host-typed text on `/display` auto-sizes by MEASURING rendered glyph width, not counting characters. One system, `client/src/lib/autoFitText.js`:
+
+- `fitToBox(text, {family, boxW, boxH, floorPx, ceilPx, maxLines, lineHeight})` — binary-searches the largest px size that fits a FIXED region. Used by the 6 fixed-region slides (StateOfUnion, GradingBreak, Custom, Question:94, RoundIntro, WinnerReveal) via per-surface `*_BOX` consts.
+- `useFitToBox(ref, text, opts)` — same, but ResizeObserves a container whose width comes from layout. Used by caption sites (Pixelate, Grid, Question:231/269).
+- `useFitListToBox(ref, items, {...rowInset})` — UNIFORM size across all rows of a list so the whole list fits its container; sizes the longest item to the per-row height budget. Used by MultiQuestion + PylReveal. `rowInset` subtracts the number-column/badge/padding width per row.
+
+Per-surface intent lives in `*_FLOOR`/`*_CEIL` (rem) + `*_BOX` consts. There are NO tier tables — char-count sizing (`autoFitClamp`/`*_TIERS`) was deleted 2026-07-03.
+
+**Gotchas:**
+- `family` passed to any fit fn MUST match what the element actually renders, or it measures the wrong glyphs. Three surfaces (Custom, RoundIntro, PylReveal) render `system-ui` (no inline font, inherits global `body{}`), NOT a theme font. If you ever give them a theme font, update the fit-call `family` in the same edit.
+- Fit measures via canvas BEFORE web fonts load → fallback metrics. Every consumer guards with `document.fonts.ready` (fixed-region: a `fontsReady` state; hooks: built in). Don't remove it.
+- All 21 themes currently ship the same fonts (Boogaloo display / DM Sans body). The per-theme font override exists but is unused.
 
 ---
 
