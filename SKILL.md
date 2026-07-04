@@ -109,7 +109,10 @@ client/src/
                              uploaded custom fonts at runtime via the CSS Font
                              Loading API, with cleanup on font change/unmount
     display/
-      ParticleBackground.jsx  — 21 GPU-only ambient themes (NEVER re-mounts)
+      ParticleBackground.jsx  — 21 GPU-only ambient themes: 9 keep a bespoke
+                                 scene, 12 render the shared BreathingGradient
+                                 engine instead (July 2026 rework; see
+                                 references/themes.md). NEVER re-mounts
       SlideRenderer.jsx       — routes slide.type → component + manages transitions
       ScoreboardOverlay.jsx   — full-screen dark overlay (rgba 0,0,0,0.92) + dual radial
                                  gradient glow; Boogaloo font; gold/silver/bronze medals;
@@ -161,7 +164,7 @@ Round object stamped: `{ roundType, roundNumber?, subtitle, title }`
 | `multi-question` | MultiQuestionSlide | questions: [{number, text}] |
 | `pixelate-series` | PixelateSeriesSlide | stages: [{imageUrl, opacity}] |
 | `pyl-reveal` | PylRevealSlide | answers: [{text, revealed}], points |
-| `grid` | GridSlide | columns [[{color?,mediaUrl?}]], intraGap, interGap, columnLabels, text — shiny "Color Schemes"; host picks columns/rows in AddSlideWizard, tiles filled in SlideEditor GridEditor; carries isShiny (fixed-gold), needs SlideRenderer opacity-neutralize |
+| `grid` | GridSlide | columns [[{color?,mediaUrl?}]], intraGap, interGap, columnLabels, text — shiny "Color Schemes"; host picks columns/rows in AddSlideWizard, tiles filled in SlideEditor GridEditor; image wins over color; carries isShiny (fixed-gold), needs SlideRenderer opacity-neutralize |
 | `winner-reveal` | WinnerRevealSlide | none — computes winner live from `teams`/`team_scores` on mount |
 
 **Shiny subtypes:** `shinyType: 'visual'` (image full-bleed or split) | `shinyType: 'audio'` (waveform bars, PLAY button, Web Audio gain). Series-type shiny questions (`isSeries: true`) group as one lead slide + hidden `slotIndex`-ordered siblings in RoundSidebar; drag-reorder carries the whole group as one atomic unit.
