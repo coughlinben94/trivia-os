@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
+import { autoFitClamp, LIST_ITEM_TIERS, LIST_ITEM_FLOOR, LIST_ITEM_CEIL } from '../../../lib/autoFitText.js'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
@@ -87,7 +88,7 @@ export default function MultiQuestionSlide({ slide, show }) {
                 style={{
                   color: theme.colors.text,
                   fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-                  fontSize: 'clamp(1.25rem, 2.5vw, 2.25rem)',
+                  fontSize: autoFitClamp(q.text, LIST_ITEM_TIERS, LIST_ITEM_FLOOR, LIST_ITEM_CEIL),
                   fontWeight: 400,
                   lineHeight: 1.4,
                 }}

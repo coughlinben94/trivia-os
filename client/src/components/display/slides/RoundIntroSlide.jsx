@@ -1,6 +1,7 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
+import { autoFitClamp, LINE_TIERS, LINE_FLOOR, LINE_CEIL } from '../../../lib/autoFitText.js'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
@@ -84,7 +85,7 @@ export default function RoundIntroSlide({ slide, show }) {
           className="relative z-10 mt-4 text-center italic"
           style={{
             color: theme.roundIntro.titleColor,
-            fontSize: 'clamp(1.5rem, 3vw, 3rem)',
+            fontSize: autoFitClamp(data.subtitle, LINE_TIERS, LINE_FLOOR, LINE_CEIL),
             fontWeight: 300,
           }}
         >

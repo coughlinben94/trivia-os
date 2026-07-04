@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
+import { autoFitClamp, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL } from '../../../lib/autoFitText.js'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
@@ -63,7 +64,7 @@ export default function CustomSlide({ slide }) {
           className="relative z-10 text-center leading-relaxed max-w-4xl"
           style={{
             color: theme.colors.text,
-            fontSize: 'clamp(1.5rem, 3vw, 3rem)',
+            fontSize: autoFitClamp(data.body, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL),
             fontWeight: 400,
           }}
         >

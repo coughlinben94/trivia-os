@@ -4,6 +4,7 @@ import SlideElements from '../SlideElements.jsx'
 import ErrorBoundary from '../../ErrorBoundary.jsx'
 import { getSelectionAnimation } from './selectionAnimations.js'
 import { supabase } from '../../../lib/supabase.js'
+import { autoFitClamp, LIST_ITEM_TIERS, LIST_ITEM_FLOOR, LIST_ITEM_CEIL } from '../../../lib/autoFitText.js'
 
 const EASE_SNAP   = [0.23, 1, 0.32, 1]
 const EASE_SMOOTH = [0.4, 0, 0.2, 1]
@@ -123,7 +124,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
                 className="flex-1"
                 style={{
                   color: theme.colors.text,
-                  fontSize: 'clamp(1.25rem, 2.5vw, 2.5rem)',
+                  fontSize: autoFitClamp(item.text, LIST_ITEM_TIERS, LIST_ITEM_FLOOR, LIST_ITEM_CEIL),
                   fontWeight: 500,
                 }}
               >

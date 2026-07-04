@@ -3,6 +3,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import BaynesWatermark from '../BaynesWatermark.jsx'
 import SlideElements from '../SlideElements.jsx'
 import BreathingGradient from '../BreathingGradient.jsx'
+import { autoFitClamp, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL } from '../../../lib/autoFitText.js'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
@@ -53,7 +54,7 @@ export default function StateOfUnionSlide({ slide }) {
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
             fontWeight: 700,
-            fontSize: 'clamp(2.4rem, 5.5cqw, 5.2rem)',
+            fontSize: autoFitClamp(message, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL),
             lineHeight: 1.15,
             textAlign: 'center',
             textWrap: 'balance',

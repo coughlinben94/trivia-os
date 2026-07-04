@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
+import { autoFitClamp, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
@@ -56,7 +57,7 @@ export default function PixelateSeriesSlide({ slide, show }) {
             style={{
               color: '#f5f0e8',
               fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-              fontSize: 'clamp(1.75rem, 3.5vw, 3.5rem)',
+              fontSize: autoFitClamp(data.text, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL),
               fontWeight: 500,
             }}
           >

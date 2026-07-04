@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
+import { autoFitClamp, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL } from '../../../lib/autoFitText.js'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 
@@ -89,7 +90,7 @@ export default function GradingBreakSlide({ slide, isPreview = false }) {
           style={{
             color: theme.colors.text,
             fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-            fontSize: 'clamp(1.5rem, 3.5vw, 3.2rem)',
+            fontSize: autoFitClamp(message, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL),
             fontWeight: 400,
           }}
         >

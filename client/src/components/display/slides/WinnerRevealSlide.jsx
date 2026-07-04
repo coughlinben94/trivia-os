@@ -4,6 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../../lib/scoreboardMath.js'
 import SlideElements from '../SlideElements.jsx'
+import { autoFitClamp, REVEAL_TIERS, REVEAL_FLOOR, REVEAL_CEIL } from '../../../lib/autoFitText.js'
 
 // ─── Drum roll (MP3) ──────────────────────────────────────────────────────
 
@@ -186,7 +187,7 @@ export default function WinnerRevealSlide({ slide, show }) {
             <p style={{
               color: theme.colors.highlight,
               fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
-              fontSize: 'clamp(4rem, 11cqw, 10rem)',
+              fontSize: autoFitClamp(winner.name, REVEAL_TIERS, REVEAL_FLOOR, REVEAL_CEIL),
               lineHeight: 1,
               textShadow: `0 0 80px ${theme.colors.highlight}55`,
             }}>
