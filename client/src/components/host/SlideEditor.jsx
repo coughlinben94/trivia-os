@@ -29,15 +29,15 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   const dragStateRef = useRef(null)
   const leftPanelRef = useRef(null)
   const rightPanelRef = useRef(null)
-
-  function focusFirstField() {
-    const panel = rightPanelRef.current
-    if (!panel) return
-    panel.scrollTo({ top: 0, behavior: 'instant' })
-    panel.querySelector('input[type="text"], input:not([type]), textarea')?.focus()
-  }
+  const canvasRef = useRef(null)
   const [panelW, setPanelW] = useState(800)
   const [panelH, setPanelH] = useState(600)
+  const [regions, setRegions] = useState([])
+  const [selectedRegionId, setSelectedRegionId] = useState(null)
+  const [editingRegionId, setEditingRegionId] = useState(null)
+  const [editStyles, setEditStyles] = useState(null)
+  const editOverlayRef = useRef(null)
+  const detectTimerRef = useRef(null)
 
   useEffect(() => {
     let alive = true
@@ -189,15 +189,117 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   // Questions in same round (for grading-break back link)
   const roundSlides = show.slides.filter(s => s.roundId === slide.roundId && s.type === 'question')
 
+  // dynScale lives outside the render IIFE so region functions can close over it
+  const dynScale = Math.min(panelW / INNER_W, panelH / INNER_H)
+  const scaledW  = Math.round(INNER_W * dynScale)
+  const scaledH  = Math.round(INNER_H * dynScale)
+
+  function detectRegions() {
+    if (!canvasRef.current || !overlayRef.current) return
+    const oRect = overlayRef.current.getBoundingClientRect()
+    const els = canvasRef.current.querySelectorAll('[data-slide-region]')
+    setRegions(Array.from(els).map(el => {
+      const r = el.getBoundingClientRect()
+      const id = el.dataset.slideRegion
+      const rt = (data._regionTransforms ?? {})[id] ?? {}
+      return { id, field: el.dataset.slideField, x: r.left - oRect.left, y: r.top - oRect.top, w: r.width, h: r.height, baselineDx: rt.dx ?? 0, baselineDy: rt.dy ?? 0, baselineRotate: rt.rotate ?? 0 }
+    }))
+  }
+
+  function startRegionMove(e, region) {
+    const rt = data._regionTransforms ?? {}
+    const startDx = rt[region.id]?.dx ?? 0
+    const startDy = rt[region.id]?.dy ?? 0
+    const sX = e.clientX, sY = e.clientY
+    function onMove(ev) {
+      const ndx = startDx + (ev.clientX - sX) / dynScale
+      const ndy = startDy + (ev.clientY - sY) / dynScale
+      setData(d => { const c = d._regionTransforms ?? {}; const n = { ...d, _regionTransforms: { ...c, [region.id]: { ...c[region.id], dx: ndx, dy: ndy } } }; scheduleSave({ data: n }); return n })
+    }
+    function onUp() {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onUp)
+      setTimeout(detectRegions, 50)
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onUp)
+  }
+
+  function startRegionRotate(e, region) {
+    e.stopPropagation()
+    const oRect = overlayRef.current.getBoundingClientRect()
+    const rt = data._regionTransforms ?? {}
+    const curDx = rt[region.id]?.dx ?? 0
+    const curDy = rt[region.id]?.dy ?? 0
+    const extraX = (curDx - region.baselineDx) * dynScale
+    const extraY = (curDy - region.baselineDy) * dynScale
+    const cx = oRect.left + region.x + extraX + region.w / 2
+    const cy = oRect.top + region.y + extraY + region.h / 2
+    const startR = rt[region.id]?.rotate ?? 0
+    const startA = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI
+    function onMove(ev) {
+      const a = Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180 / Math.PI
+      const nr = startR + (a - startA)
+      setData(d => { const c = d._regionTransforms ?? {}; const n = { ...d, _regionTransforms: { ...c, [region.id]: { ...c[region.id], rotate: nr } } }; scheduleSave({ data: n }); return n })
+    }
+    function onUp() {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onUp)
+      setTimeout(detectRegions, 50)
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onUp)
+  }
+
+  function enterEditMode(region) {
+    const el = canvasRef.current?.querySelector(`[data-slide-region="${region.id}"]`)
+    if (!el) return
+    const inner = el.querySelector('p,h1,h2,h3,h4,h5,span') ?? el
+    const cs = window.getComputedStyle(inner)
+    const px = parseFloat(cs.fontSize)
+    setEditStyles({
+      fontFamily: cs.fontFamily,
+      fontSize: (px * dynScale) + 'px',
+      fontWeight: cs.fontWeight,
+      color: cs.color === 'rgba(0, 0, 0, 0)' ? '#ffffff' : cs.color,
+      textAlign: cs.textAlign,
+      letterSpacing: cs.letterSpacing,
+    })
+    setEditingRegionId(region.id)
+  }
+
+  // Trigger region detection after slide/panel changes (350ms lets animations settle)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    clearTimeout(detectTimerRef.current)
+    detectTimerRef.current = setTimeout(detectRegions, 350)
+    return () => clearTimeout(detectTimerRef.current)
+  }, [slide.id, slide.type, panelW, panelH])
+
+  // Auto-focus + cursor-to-end when edit overlay mounts
+  useEffect(() => {
+    const el = editOverlayRef.current
+    if (!el) return
+    el.focus()
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    range.collapse(false)
+    const sel = window.getSelection()
+    sel?.removeAllRanges()
+    sel?.addRange(range)
+  }, [editingRegionId])
+
   return (
     <div className="flex flex-col h-full">
       {(() => {
         const elements = data.elements ?? []
         const selectedEl = elements.find(el => el.id === selectedElId) ?? null
-        const dynScale = Math.min(panelW / INNER_W, panelH / INNER_H)
-        const scaledW  = Math.round(INNER_W * dynScale)
-        const scaledH  = Math.round(INNER_H * dynScale)
         return (
+
           <div className="flex flex-1 min-h-0">
 
             {/* ── LEFT: slide canvas ── */}
@@ -208,7 +310,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                 <div style={{ width: scaledW, height: scaledH, position: 'relative', flexShrink: 0 }}>
                   {/* Clipped canvas */}
                   <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-                    <div style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${dynScale})`, transformOrigin: 'top left', overflow: 'hidden', background: theme.colors.bg }}>
+                    <div ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${dynScale})`, transformOrigin: 'top left', overflow: 'hidden', background: theme.colors.bg }}>
                       <ParticleBackground theme={theme} />
                       <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} isPreview />
                     </div>
@@ -217,8 +319,73 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                   <div
                     ref={overlayRef}
                     style={{ position: 'absolute', inset: 0, zIndex: 50, overflow: 'visible' }}
-                    onPointerDown={() => { setSelectedElId(null); focusFirstField() }}
+                    onPointerDown={() => { setSelectedElId(null); setSelectedRegionId(null); setEditingRegionId(null); setEditStyles(null) }}
                   >
+                  {/* ── WYSIWYG region handles ── */}
+                  {regions.map(region => {
+                    const isSelReg = selectedRegionId === region.id
+                    const isEditReg = editingRegionId === region.id
+                    if (isEditReg) return null
+                    const rt = data._regionTransforms ?? {}
+                    const curDx = rt[region.id]?.dx ?? 0
+                    const curDy = rt[region.id]?.dy ?? 0
+                    const curRot = rt[region.id]?.rotate ?? 0
+                    const extraX = (curDx - region.baselineDx) * dynScale
+                    const extraY = (curDy - region.baselineDy) * dynScale
+                    const hasTransform = !!(rt[region.id]?.dx || rt[region.id]?.dy || rt[region.id]?.rotate)
+                    return (
+                      <div
+                        key={region.id}
+                        style={{ position: 'absolute', left: region.x + extraX, top: region.y + extraY, width: region.w, height: region.h, transform: `rotate(${curRot}deg)`, transformOrigin: 'center', zIndex: 48 }}
+                      >
+                        <div
+                          style={{ position: 'absolute', inset: 0, border: isSelReg ? '2px solid rgba(99,102,241,0.9)' : '1px dashed transparent', borderRadius: 2, cursor: isSelReg ? 'move' : 'default', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
+                          onPointerEnter={e => { if (!isSelReg) e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)' }}
+                          onPointerLeave={e => { if (!isSelReg) e.currentTarget.style.borderColor = 'transparent' }}
+                          onPointerDown={e => {
+                            e.stopPropagation()
+                            if (selectedRegionId !== region.id) {
+                              setSelectedRegionId(region.id); setSelectedElId(null)
+                            } else {
+                              enterEditMode(region); return
+                            }
+                            startRegionMove(e, region)
+                          }}
+                        />
+                        {isSelReg && (
+                          <div title="Rotate" style={{ position: 'absolute', top: -20, right: -20, width: 16, height: 16, borderRadius: '50%', background: '#6366f1', border: '2px solid white', cursor: 'grab', zIndex: 1 }}
+                            onPointerDown={e => startRegionRotate(e, region)} />
+                        )}
+                        {isSelReg && hasTransform && (
+                          <div title="Reset" style={{ position: 'absolute', top: -20, left: -20, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', border: '2px solid white', cursor: 'pointer', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'white', fontWeight: 700 }}
+                            onPointerDown={e => { e.stopPropagation(); const c = data._regionTransforms ?? {}; const { [region.id]: _, ...rest } = c; change('_regionTransforms', rest); setTimeout(detectRegions, 50) }}>×</div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {/* Contenteditable overlay (replaces the region handle while editing) */}
+                  {editingRegionId && (() => {
+                    const region = regions.find(r => r.id === editingRegionId)
+                    if (!region || !editStyles) return null
+                    const rt = data._regionTransforms ?? {}
+                    const curDx = rt[editingRegionId]?.dx ?? 0
+                    const curDy = rt[editingRegionId]?.dy ?? 0
+                    const curRot = rt[editingRegionId]?.rotate ?? 0
+                    const extraX = (curDx - region.baselineDx) * dynScale
+                    const extraY = (curDy - region.baselineDy) * dynScale
+                    return (
+                      <div
+                        ref={editOverlayRef}
+                        key={editingRegionId}
+                        contentEditable
+                        suppressContentEditableWarning
+                        style={{ position: 'absolute', left: region.x + extraX, top: region.y + extraY, width: region.w, minHeight: region.h, transform: `rotate(${curRot}deg)`, transformOrigin: 'center', zIndex: 55, outline: '2px solid #6366f1', background: 'rgba(20,20,50,0.6)', padding: '4px 8px', boxSizing: 'border-box', whiteSpace: 'pre-wrap', wordBreak: 'break-word', cursor: 'text', ...editStyles }}
+                        onBlur={e => { const val = e.currentTarget.innerText.trim(); if (val) change(region.field, val); setEditingRegionId(null); setEditStyles(null); setTimeout(detectRegions, 50) }}
+                        onKeyDown={e => { if (e.key === 'Escape') { setEditingRegionId(null); setEditStyles(null) } }}
+                        dangerouslySetInnerHTML={{ __html: data[region.field] ?? '' }}
+                      />
+                    )
+                  })()}
                   {elements.map(el => {
                     const isSel = el.id === selectedElId
                     const elX = el.x ?? 50

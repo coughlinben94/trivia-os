@@ -16,6 +16,8 @@ const SHINY_GOLD_GLOW = '#d4820c' // amber glow for shadows and radial wash
 function StandardQuestion({ slide, show, theme, transitionKey }) {
   const { data } = slide
   const part = resolveShinyPart(data)
+  const rt = data._regionTransforms ?? {}
+  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
   const hasSeries = data.isSeries && data.seriesTheme
   const isAssemble = transitionKey === 'assemble'
 
@@ -93,19 +95,21 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
         transition={question.transition}
         className="absolute inset-0 flex items-center justify-center px-24 py-20 z-[30]"
       >
-        <p
-          className="text-center leading-relaxed"
-          style={{
-            color: theme.colors.text,
-            fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-            fontSize: fitToBox(part.text, { ...QUESTION_BOX, family: theme.fonts.body }),
-            fontWeight: 500,
-            maxWidth: '80ch',
-            textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
-          }}
-        >
-          {part.text}
-        </p>
+        <span data-slide-region="text" data-slide-field="text" style={xf('text')}>
+          <p
+            className="text-center leading-relaxed"
+            style={{
+              color: theme.colors.text,
+              fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+              fontSize: fitToBox(part.text, { ...QUESTION_BOX, family: theme.fonts.body }),
+              fontWeight: 500,
+              maxWidth: '80ch',
+              textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
+            }}
+          >
+            {part.text}
+          </p>
+        </span>
       </motion.div>
 
       {/* Host photo — bottom-right, subtle */}

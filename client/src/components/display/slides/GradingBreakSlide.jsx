@@ -9,6 +9,8 @@ export default function GradingBreakSlide({ slide, isPreview = false }) {
   const { theme } = useTheme()
   const { data } = slide
   const reduce = useReducedMotion()
+  const rt = data._regionTransforms ?? {}
+  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
 
   const message =
     data.message ||
@@ -89,20 +91,22 @@ export default function GradingBreakSlide({ slide, isPreview = false }) {
           </motion.div>
         )}
 
-        <motion.p
-          initial={{ opacity: 0, y: reduce ? 0 : 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.28, ease: EASE_OUT }}
-          className="relative z-10 text-center px-24 leading-relaxed max-w-4xl"
-          style={{
-            color: theme.colors.text,
-            fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-            fontSize: fitToBox(message, { ...GRADING_BREAK_BOX, family: theme.fonts.body }),
-            fontWeight: 400,
-          }}
-        >
-          {message}
-        </motion.p>
+        <span data-slide-region="message" data-slide-field="message" style={xf('message')}>
+          <motion.p
+            initial={{ opacity: 0, y: reduce ? 0 : 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1, duration: 0.28, ease: EASE_OUT }}
+            className="relative z-10 text-center px-24 leading-relaxed max-w-4xl"
+            style={{
+              color: theme.colors.text,
+              fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+              fontSize: fitToBox(message, { ...GRADING_BREAK_BOX, family: theme.fonts.body }),
+              fontWeight: 400,
+            }}
+          >
+            {message}
+          </motion.p>
+        </span>
       </div>
 
       <SlideElements elements={data.elements} theme={theme} />

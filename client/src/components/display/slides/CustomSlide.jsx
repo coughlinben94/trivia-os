@@ -16,6 +16,8 @@ export default function CustomSlide({ slide }) {
   // real glyph metrics; the value itself is never read.
   const [fontsReady, setFontsReady] = useState(false)
   useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+  const rt = data._regionTransforms ?? {}
+  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
 
   return (
     <div
@@ -47,37 +49,41 @@ export default function CustomSlide({ slide }) {
       )}
 
       {data.title && (
-        <motion.h2
-          initial={{ opacity: 0, y: reduce ? 0 : 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: data.mediaUrl ? 0.1 : 0, duration: 0.28, ease: EASE_OUT }}
-          className="relative z-10 text-center mb-6"
-          style={{
-            fontFamily: `'${theme.fonts.display}', sans-serif`,
-            color: theme.colors.highlight,
-            fontSize: 'clamp(2.5rem, 6vw, 6rem)',
-            fontWeight: 700,
-            letterSpacing: '-0.01em',
-          }}
-        >
-          {data.title}
-        </motion.h2>
+        <span data-slide-region="title" data-slide-field="title" style={xf('title')}>
+          <motion.h2
+            initial={{ opacity: 0, y: reduce ? 0 : 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: data.mediaUrl ? 0.1 : 0, duration: 0.28, ease: EASE_OUT }}
+            className="relative z-10 text-center mb-6"
+            style={{
+              fontFamily: `'${theme.fonts.display}', sans-serif`,
+              color: theme.colors.highlight,
+              fontSize: 'clamp(2.5rem, 6vw, 6rem)',
+              fontWeight: 700,
+              letterSpacing: '-0.01em',
+            }}
+          >
+            {data.title}
+          </motion.h2>
+        </span>
       )}
 
       {data.body && (
-        <motion.p
-          initial={{ opacity: 0, y: reduce ? 0 : 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15, duration: 0.25, ease: EASE_OUT }}
-          className="relative z-10 text-center leading-relaxed max-w-4xl"
-          style={{
-            color: theme.colors.text,
-            fontSize: fitToBox(data.body, { ...CUSTOM_BODY_BOX, family: 'system-ui' }),
-            fontWeight: 400,
-          }}
-        >
-          {data.body}
-        </motion.p>
+        <span data-slide-region="body" data-slide-field="body" style={xf('body')}>
+          <motion.p
+            initial={{ opacity: 0, y: reduce ? 0 : 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15, duration: 0.25, ease: EASE_OUT }}
+            className="relative z-10 text-center leading-relaxed max-w-4xl"
+            style={{
+              color: theme.colors.text,
+              fontSize: fitToBox(data.body, { ...CUSTOM_BODY_BOX, family: 'system-ui' }),
+              fontWeight: 400,
+            }}
+          >
+            {data.body}
+          </motion.p>
+        </span>
       )}
 
       <SlideElements elements={data.elements} theme={theme} />

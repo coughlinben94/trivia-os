@@ -11,6 +11,8 @@ export default function StateOfUnionSlide({ slide }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const message = slide.data?.message ?? "Welcome to Trivia Night at Baynes Apple Valley. Let's get into it."
+  const rt = slide.data?._regionTransforms ?? {}
+  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
 
   // fitToBox measures via canvas — a first paint before the display font
   // loads measures fallback-font metrics. This flips once web fonts are
@@ -54,30 +56,32 @@ export default function StateOfUnionSlide({ slide }) {
         )}
 
         {/* Typewriter text — RWB gradient fill, same spring + tilt as ShinyIntroScreen. */}
-        <motion.p
-          initial={{ opacity: 0, scale: reduce ? 1 : 0.85, rotate: reduce ? -6 : -14 }}
-          animate={{ opacity: 1, scale: 1, rotate: -6 }}
-          transition={reduce ? { duration: 0.3, ease: EASE_OUT } : { type: 'spring', duration: 0.5, bounce: 0.25 }}
-          style={{
-            fontFamily: `'${theme.fonts.display}', sans-serif`,
-            fontWeight: 700,
-            fontSize: fitToBox(message, { ...TITLE_CARD_BOX, family: theme.fonts.display }),
-            lineHeight: 1.15,
-            textAlign: 'center',
-            textWrap: 'balance',
-            maxWidth: '22ch',
-            filter: 'drop-shadow(0 3px 0 rgba(0,0,0,0.4)) drop-shadow(0 0 24px rgba(178,34,52,0.55))',
-          }}
-        >
-          <span style={{
-            background: `linear-gradient(135deg, ${RWB_RED} 0%, ${RWB_WHITE} 50%, #3a6fcf 100%)`,
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}>
-            {message}
-          </span>
-        </motion.p>
+        <span data-slide-region="message" data-slide-field="message" style={xf('message')}>
+          <motion.p
+            initial={{ opacity: 0, scale: reduce ? 1 : 0.85, rotate: reduce ? -6 : -14 }}
+            animate={{ opacity: 1, scale: 1, rotate: -6 }}
+            transition={reduce ? { duration: 0.3, ease: EASE_OUT } : { type: 'spring', duration: 0.5, bounce: 0.25 }}
+            style={{
+              fontFamily: `'${theme.fonts.display}', sans-serif`,
+              fontWeight: 700,
+              fontSize: fitToBox(message, { ...TITLE_CARD_BOX, family: theme.fonts.display }),
+              lineHeight: 1.15,
+              textAlign: 'center',
+              textWrap: 'balance',
+              maxWidth: '22ch',
+              filter: 'drop-shadow(0 3px 0 rgba(0,0,0,0.4)) drop-shadow(0 0 24px rgba(178,34,52,0.55))',
+            }}
+          >
+            <span style={{
+              background: `linear-gradient(135deg, ${RWB_RED} 0%, ${RWB_WHITE} 50%, #3a6fcf 100%)`,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}>
+              {message}
+            </span>
+          </motion.p>
+        </span>
       </div>
 
       <BaynesWatermark />

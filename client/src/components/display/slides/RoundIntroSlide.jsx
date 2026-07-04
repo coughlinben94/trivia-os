@@ -10,6 +10,8 @@ export default function RoundIntroSlide({ slide, show }) {
   const reduce = useReducedMotion()
   const { data } = slide
   const isSwing = slide.type === 'swing-round-intro'
+  const rt = data._regionTransforms ?? {}
+  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
 
   // fitToBox measures via canvas — a first paint before web fonts load
   // measures fallback-font metrics. This flips once fonts are ready purely
@@ -67,37 +69,41 @@ export default function RoundIntroSlide({ slide, show }) {
       </motion.div>
 
       {/* Round title — slides up — Section 5: delay 0.2s, 0.25s duration */}
-      <motion.div
-        initial={{ y: 60, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.25, duration: 0.25, ease: EASE_OUT }}
-        className="relative z-10 text-center mt-2"
-        style={{
-          fontFamily: `'${theme.fonts.display}', sans-serif`,
-          color: theme.roundIntro.titleColor,
-          fontSize: 'clamp(2.5rem, 5vw, 5rem)',
-          fontWeight: 700,
-          letterSpacing: '-0.01em',
-        }}
-      >
-        {data.roundTitle}
-      </motion.div>
+      <span data-slide-region="roundTitle" data-slide-field="roundTitle" style={xf('roundTitle')}>
+        <motion.div
+          initial={{ y: 60, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.25, duration: 0.25, ease: EASE_OUT }}
+          className="relative z-10 text-center mt-2"
+          style={{
+            fontFamily: `'${theme.fonts.display}', sans-serif`,
+            color: theme.roundIntro.titleColor,
+            fontSize: 'clamp(2.5rem, 5vw, 5rem)',
+            fontWeight: 700,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          {data.roundTitle}
+        </motion.div>
+      </span>
 
       {/* Subtitle — fades in — Section 5: 0.1s after title, 0.2s duration */}
       {data.subtitle && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.7 }}
-          transition={{ delay: 0.55, duration: 0.2 }}
-          className="relative z-10 mt-4 text-center italic"
-          style={{
-            color: theme.roundIntro.titleColor,
-            fontSize: fitToBox(data.subtitle, { ...LINE_BOX, family: 'system-ui' }),
-            fontWeight: 300,
-          }}
-        >
-          {data.subtitle}
-        </motion.div>
+        <span data-slide-region="subtitle" data-slide-field="subtitle" style={xf('subtitle')}>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.7 }}
+            transition={{ delay: 0.55, duration: 0.2 }}
+            className="relative z-10 mt-4 text-center italic"
+            style={{
+              color: theme.roundIntro.titleColor,
+              fontSize: fitToBox(data.subtitle, { ...LINE_BOX, family: 'system-ui' }),
+              fontWeight: 300,
+            }}
+          >
+            {data.subtitle}
+          </motion.div>
+        </span>
       )}
 
       {/* Ben photo — swing rounds get it more prominently */}
