@@ -1,15 +1,23 @@
+import { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import BaynesWatermark from '../BaynesWatermark.jsx'
 import SlideElements from '../SlideElements.jsx'
 import BreathingGradient from '../BreathingGradient.jsx'
-import { autoFitClamp, TITLE_CARD_TIERS, TITLE_CARD_FLOOR, TITLE_CARD_CEIL } from '../../../lib/autoFitText.js'
+import { fitToBox, TITLE_CARD_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function StateOfUnionSlide({ slide }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const message = slide.data?.message ?? "Welcome to Trivia Night at Baynes Apple Valley. Let's get into it."
+
+  // fitToBox measures via canvas — a first paint before the display font
+  // loads measures fallback-font metrics. This flips once web fonts are
+  // ready purely to force the re-render that re-runs the inline fitToBox
+  // call below with real glyph metrics; the value itself is never read.
+  const [fontsReady, setFontsReady] = useState(false)
+  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
 
   // Fixed RWB palette — deliberately NOT theme.colors, anywhere in this
   // component. "State of the Union" is patriotic by identity; it must read
@@ -53,7 +61,7 @@ export default function StateOfUnionSlide({ slide }) {
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
             fontWeight: 700,
-            fontSize: autoFitClamp(message, TITLE_CARD_TIERS, TITLE_CARD_FLOOR, TITLE_CARD_CEIL),
+            fontSize: fitToBox(message, { ...TITLE_CARD_BOX, family: theme.fonts.display }),
             lineHeight: 1.15,
             textAlign: 'center',
             textWrap: 'balance',
