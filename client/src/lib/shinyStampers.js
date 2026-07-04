@@ -10,7 +10,7 @@
 //   single-image:          [{ mediaUrl, text? }]
 //   sequential-audio:      [{ mediaUrl, text?, startMs?,
 //                             stopMs?, audioGainDb? }, ...]    one per clip
-//   grid-images-one-slide: [{ mediaUrl }, ...]                 STUBBED
+//   grid-images-one-slide: [{ color } | { mediaUrl }, ...]     column-major (cols×rows)
 //   text-one-slide / custom:
 //     tri-bond              [{ clue1, clue2, clue3, answer }]
 //     did-you-tape-…        [{ text }]
@@ -116,14 +116,38 @@ function stampSequentialAudio(format, filledSlots) {
   return withTitleCard(format, slides)
 }
 
-// TODO: 'grid-images-one-slide' — no existing slide type renders a grid of N
-// images (QuestionSlide, CustomSlide, MultiQuestionSlide, PixelateSeriesSlide
-// all checked). Implement stampGridImagesOneSlide once GridSlide is built.
-function stampGridImagesOneSlide(_format, _filledSlots) {
-  throw new Error(
-    'grid-images-one-slide stamper not yet implemented — ' +
-    'requires a GridSlide component and a new slide type first.'
-  )
+function stampGridImagesOneSlide(format, filledSlots) {
+  const cols = format._meta?.columns ?? 1
+  const rows = format._meta?.rows ?? filledSlots.length
+  // filledSlots is a flat array of tiles in column-major order:
+  // [c0r0, c0r1, c0r2, c1r0, c1r1, c1r2, ...]. Each tile = { color } | { mediaUrl }.
+  const columns = []
+  for (let c = 0; c < cols; c++) {
+    columns.push(filledSlots.slice(c * rows, c * rows + rows).map(t => ({
+      color:    t?.color    ?? null,
+      mediaUrl: t?.mediaUrl ?? null,
+    })))
+  }
+  const slide = {
+    type:    'grid',
+    roundId: null,
+    order:   0,
+    data: {
+      questionNumber:  0,
+      questionLabel:   'Q0',
+      questionMode:    'shiny',
+      isShiny:         true,
+      shinyFormatId:   format.id,
+      shinyFormatName: format.name,
+      shinyFormatIcon: format.icon,
+      columns,
+      intraGap:     0,
+      interGap:     84,
+      columnLabels: true,
+      text:         '',
+    },
+  }
+  return withTitleCard(format, [slide])
 }
 
 // text-one-slide dispatches on format.slideType ('custom' | 'multi-question')

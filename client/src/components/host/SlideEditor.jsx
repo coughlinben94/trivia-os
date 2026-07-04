@@ -314,6 +314,9 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                     {slide.type === 'team-picker' && (
                       <TeamPickerEditor data={data} onChange={change} />
                     )}
+                    {slide.type === 'grid' && (
+                      <GridEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload} />
+                    )}
                     {slide.type === 'winner-reveal' && (
                       <WinnerRevealEditor data={data} onChange={change} />
                     )}
@@ -1701,6 +1704,96 @@ function MultiQuestionEditor({ data, onChange, setData, scheduleSave }) {
         + Add question
       </button>
     </>
+  )
+}
+
+function GridEditor({ data, onChange, setData, scheduleSave, onMediaUpload }) {
+  const columns = Array.isArray(data.columns) ? data.columns : []
+
+  function writeTile(ci, ri, patch) {
+    const next = { ...data, columns: columns.map((col, c) =>
+      c === ci ? col.map((tile, r) => r === ri ? { ...tile, ...patch } : tile) : col
+    ) }
+    setData(next)
+    scheduleSave({ data: next })
+  }
+
+  async function uploadTileImage(ci, ri, file) {
+    if (!file) return
+    const url = await onMediaUpload(file)
+    if (url) writeTile(ci, ri, { mediaUrl: url })
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Question text */}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1.5">Question text (optional)</label>
+        <textarea
+          value={data.text ?? ''}
+          onChange={e => onChange('text', e.target.value)}
+          rows={2}
+          placeholder="e.g. Name the color scheme in each column."
+          className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+        />
+      </div>
+
+      {/* Layout controls */}
+      <div className="flex gap-4 items-center">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-gray-500">Column gap</label>
+          <button
+            onClick={() => onChange('interGap', (data.interGap ?? 84) > 0 ? 0 : 84)}
+            className={`text-xs px-2.5 py-1 rounded border transition-colors ${(data.interGap ?? 84) > 0 ? 'bg-gray-900 text-white border-gray-900' : 'bg-gray-100 border-gray-200 text-gray-600'}`}
+          >{(data.interGap ?? 84) > 0 ? 'Broken' : 'Butted'}</button>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-gray-500">Column numbers</label>
+          <button
+            onClick={() => onChange('columnLabels', data.columnLabels === false ? true : false)}
+            className={`text-xs px-2.5 py-1 rounded border transition-colors ${data.columnLabels !== false ? 'bg-gray-900 text-white border-gray-900' : 'bg-gray-100 border-gray-200 text-gray-600'}`}
+          >{data.columnLabels !== false ? 'On' : 'Off'}</button>
+        </div>
+      </div>
+
+      {/* Tile grid — columns left→right, tiles top→bottom */}
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {columns.map((col, ci) => (
+          <div key={ci} className="flex flex-col gap-2">
+            <p className="text-[11px] text-gray-400 text-center font-medium">Col {ci + 1}</p>
+            {col.map((tile, ri) => (
+              <div key={ri} className="flex items-center gap-1.5 border border-gray-200 rounded-lg p-1.5">
+                {tile.mediaUrl ? (
+                  <img src={tile.mediaUrl} alt="" className="w-10 h-10 rounded object-cover" />
+                ) : (
+                  <input
+                    type="color"
+                    value={tile.color ?? '#888888'}
+                    onChange={e => writeTile(ci, ri, { color: e.target.value })}
+                    className="w-10 h-10 rounded cursor-pointer border-0 bg-transparent p-0"
+                    title={`Column ${ci + 1}, square ${ri + 1}`}
+                  />
+                )}
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-700">
+                    🖼
+                    <input type="file" accept="image/*" className="hidden"
+                      onChange={e => uploadTileImage(ci, ri, e.target.files?.[0])} />
+                  </label>
+                  {(tile.mediaUrl || tile.color) && (
+                    <button
+                      onClick={() => writeTile(ci, ri, { color: null, mediaUrl: null })}
+                      className="text-[10px] text-gray-400 hover:text-gray-600"
+                      title="Clear"
+                    >↺</button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 

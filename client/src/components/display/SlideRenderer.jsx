@@ -13,6 +13,7 @@ import StateOfUnionSlide from './slides/StateOfUnionSlide.jsx'
 import WinnerRevealSlide from './slides/WinnerRevealSlide.jsx'
 import TeamPreviewSlide from './slides/TeamPreviewSlide.jsx'
 import TeamPickerSlide from './slides/TeamPickerSlide.jsx'
+import GridSlide from './slides/GridSlide.jsx'
 import { EASE_OUT, EASE_DROP, EASE_EXIT } from '../../lib/easings.js'
 
 // Per-slide content animation config — tune these without touching component logic
@@ -109,6 +110,7 @@ const SLIDE_COMPONENTS = {
   'winner-reveal':     WinnerRevealSlide,
   'team-preview':      TeamPreviewSlide,
   'team-picker':       TeamPickerSlide,
+  'grid':              GridSlide,
 }
 
 export default function SlideRenderer({ slide, show, direction, isPreview = false }) {
@@ -141,7 +143,7 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
   // the semi-transparent content, reading as "shows the theme, then snaps
   // to the fixed design." Neutralize opacity here regardless of which
   // branch produced `variants`, keeping whatever scale/y/timing it chose.
-  if (slide?.type === 'team-picker' || slide?.type === 'state-of-union') {
+  if (slide?.type === 'team-picker' || slide?.type === 'state-of-union' || slide?.type === 'grid') {
     variants = {
       initial: { ...variants.initial, opacity: 1 },
       animate: { ...variants.animate, opacity: 1 },

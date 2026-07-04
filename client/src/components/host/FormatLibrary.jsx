@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-const INPUT_TYPES = ['image', 'audio', 'video', 'text', 'list']
+const INPUT_TYPES = ['image', 'audio', 'video', 'text', 'list', 'grid']
 
 const EMPTY_FORMAT = {
   name: '',
@@ -207,6 +207,22 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                       className={`w-11 h-6 rounded-full transition-colors ${schema.hasPoints ? 'bg-gray-900' : 'bg-gray-200'}`}
                     >
                       <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.hasPoints ? 'translate-x-5' : 'translate-x-0'}`}/>
+                    </button>
+                  </div>
+                )}
+
+                {/* Grid — column count chosen per-slide in the wizard */}
+                {schema.type === 'grid' && (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Show column numbers</p>
+                      <p className="text-xs text-gray-400">Number each column 1–N (columns/rows are set per slide)</p>
+                    </div>
+                    <button
+                      onClick={() => updateSchema('columnLabels', schema.columnLabels === false ? true : false)}
+                      className={`w-11 h-6 rounded-full transition-colors ${schema.columnLabels !== false ? 'bg-gray-900' : 'bg-gray-200'}`}
+                    >
+                      <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.columnLabels !== false ? 'translate-x-5' : 'translate-x-0'}`}/>
                     </button>
                   </div>
                 )}

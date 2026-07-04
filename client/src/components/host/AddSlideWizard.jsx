@@ -46,6 +46,8 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const [shinyStep,         setShinyStep]        = useState('pick') // 'pick' | 'details'
   const [shinyQuestion,     setShinyQuestion]    = useState('')
   const [shinyAnswer,       setShinyAnswer]      = useState('')
+  const [gridCols, setGridCols] = useState(4)
+  const [gridRows, setGridRows] = useState(3)
 
   // Round-intro — pre-filled from AddRoundWizard or from round filter; also derived from selected round
   const _preRound = initialData.roundId ? show.rounds.find(r => r.id === initialData.roundId) : null
@@ -101,6 +103,32 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
     } else if (type === 'question') {
       const num = isBonus ? bNum : qNum
       if (selectedShinyFmt && shinyStep === 'details') {
+        const isGrid = selectedShinyFmt.input_schema?.type === 'grid'
+        if (isGrid) {
+          const columns = Array.from({ length: gridCols }, () =>
+            Array.from({ length: gridRows }, () => ({ color: null, mediaUrl: null }))
+          )
+          const gridData = {
+            questionNumber:  qNum,
+            questionLabel:   `Q${qNum}`,
+            questionMode:    'shiny',
+            isShiny:         true,
+            shinyFormatId:   selectedShinyFmt.id,
+            shinyFormatName: selectedShinyFmt.name,
+            shinyFormatIcon: selectedShinyFmt.icon,
+            columns,
+            intraGap:     0,
+            interGap:     84,
+            columnLabels: selectedShinyFmt.input_schema?.columnLabels !== false,
+            text:         shinyQuestion.trim(),
+            answer:       shinyAnswer.trim(),
+          }
+          const afterId = roundSlides.length > 0
+            ? roundSlides[roundSlides.length - 1].id
+            : (sorted.length > 0 ? sorted[sorted.length - 1].id : null)
+          await onAddSlide({ type: 'grid', roundId: roundId ?? null, afterSlideId: afterId, data: gridData })
+          return
+        }
         const totalSlots = selectedShinyFmt.input_schema?.slots ?? 1
         const isMultiSlot = totalSlots > 1
         data = {
@@ -295,6 +323,29 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
               />
             </div>
+
+            {selectedShinyFmt.input_schema?.type === 'grid' && (
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Columns</label>
+                  <div className="flex gap-2">
+                    {[1,2,3,4,5,6].map(n => (
+                      <button key={n} onClick={() => setGridCols(n)}
+                        className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${gridCols === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Rows</label>
+                  <div className="flex gap-2">
+                    {[1,2,3,4,5].map(n => (
+                      <button key={n} onClick={() => setGridRows(n)}
+                        className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${gridRows === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Answer</label>
