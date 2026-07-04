@@ -73,6 +73,7 @@ const CARD_STYLE = {
   'question':      'bg-gradient-to-br from-blue-50   to-indigo-100  border-blue-200   hover:border-blue-400',
   'pixelate-series': 'bg-gradient-to-br from-blue-50 to-indigo-100  border-blue-200   hover:border-blue-400',
   'multi-question': 'bg-gradient-to-br from-blue-50  to-indigo-100  border-blue-200   hover:border-blue-400',
+  'shiny-question': 'bg-[linear-gradient(135deg,#bfdbfe,#fef9c3,#fde047)] border-yellow-300 hover:border-blue-400',
   'swing-round-intro': 'bg-gradient-to-br from-red-50 to-rose-100  border-red-200    hover:border-red-400',
   'scoreboard-reveal': 'bg-gradient-to-br from-violet-50 to-purple-100 border-violet-200 hover:border-violet-400',
   'pyl-reveal':    'bg-gradient-to-br from-teal-50   to-blue-100    border-teal-200   hover:border-blue-400',
@@ -87,6 +88,17 @@ const CARD_STYLE = {
   'pyl':           'bg-gradient-to-br from-teal-50   to-blue-100    border-teal-200   hover:border-teal-400',
   'data':          'bg-gradient-to-br from-purple-50 to-violet-100  border-purple-200 hover:border-purple-400',
   'shows':         'bg-gradient-to-br from-slate-50  to-blue-100    border-slate-200  hover:border-blue-400',
+}
+
+// Shiny questions get a distinct blue/yellow card so they stand out from
+// regular questions in every round's grid, not just a fixed card style keyed
+// off slide.type — applies wherever a question/pixelate-series slide has
+// isShiny set, current round or future.
+function getCardStyleKey(slide) {
+  if (slide.data?.isShiny && (slide.type === 'question' || slide.type === 'pixelate-series')) {
+    return 'shiny-question'
+  }
+  return slide.type
 }
 
 // Rest-state grid box order — this is a personal workspace layout preference,
@@ -205,7 +217,7 @@ function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReord
                 <button
                   onClick={() => !draggedId && onSelectSlide(slide)}
                   className={`w-full h-full flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center ${BTN} transition-colors ${
-                    CARD_STYLE[slide.type] ?? 'bg-white border-gray-200 hover:border-gray-400'
+                    CARD_STYLE[getCardStyleKey(slide)] ?? 'bg-white border-gray-200 hover:border-gray-400'
                   }`}
                 >
                   <span className="text-2xl leading-none">{SLIDE_ICON[slide.type] ?? '📄'}</span>
