@@ -3,7 +3,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import BaynesWatermark from '../BaynesWatermark.jsx'
 import SlideElements from '../SlideElements.jsx'
 import BreathingGradient from '../BreathingGradient.jsx'
-import { autoFitClamp, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL } from '../../../lib/autoFitText.js'
+import { autoFitClamp, TITLE_CARD_TIERS, TITLE_CARD_FLOOR, TITLE_CARD_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function StateOfUnionSlide({ slide }) {
@@ -53,7 +53,7 @@ export default function StateOfUnionSlide({ slide }) {
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
             fontWeight: 700,
-            fontSize: autoFitClamp(message, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL),
+            fontSize: autoFitClamp(message, TITLE_CARD_TIERS, TITLE_CARD_FLOOR, TITLE_CARD_CEIL),
             lineHeight: 1.15,
             textAlign: 'center',
             textWrap: 'balance',

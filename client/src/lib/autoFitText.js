@@ -35,11 +35,11 @@ export function autoFitClamp(text, tiers, floorRem, ceilRem) {
 
 // ─── Shared tier tables ─────────────────────────────────────────────────────
 
-// Single block of prose filling most of the slide: questions, State of the
-// Union, Grading Break, Custom body, Pixelate Series hint. Ceiling anchored
-// to the existing QuestionSlide max (4.5rem ≈ 54pt) — already matched Ben's
-// 55pt reference before this pass, so it's the anchor everything else now
-// aligns to instead of each file inventing its own range.
+// Single block of prose filling most of the slide: questions, Grading Break,
+// Custom body, Pixelate Series hint. Ceiling anchored to the existing
+// QuestionSlide max (4.5rem ≈ 54pt) — already matched Ben's 55pt reference
+// before this pass, so it's the anchor everything else now aligns to instead
+// of each file inventing its own range.
 export const PARAGRAPH_TIERS = [
   { maxChars: 60,       cqw: 4.5 },  // one-liner — "What is the capital of France?"
   { maxChars: 110,      cqw: 3.8 },  // ~Ben's old 48pt step-down
@@ -49,6 +49,22 @@ export const PARAGRAPH_TIERS = [
 ]
 export const PARAGRAPH_FLOOR = 1.8
 export const PARAGRAPH_CEIL  = 4.5
+
+// Short, dramatic title-card line — State of the Union's patriotic tagline.
+// NOT paragraph prose: this is a one-line announcement meant to dominate the
+// screen like a title slide, so it keeps its own bigger range rather than
+// PARAGRAPH_TIERS's. Floor/ceiling match this slide's original hardcoded
+// clamp(2.4rem, 5.5cqw, 5.2rem) — that was a single fixed value with no
+// length-based step-down at all; these tiers keep the same top-end size for
+// a short line but still shrink gracefully if a host types something long.
+export const TITLE_CARD_TIERS = [
+  { maxChars: 30,       cqw: 5.5 },
+  { maxChars: 60,       cqw: 4.6 },
+  { maxChars: 90,       cqw: 3.8 },
+  { maxChars: Infinity, cqw: 3.0 },
+]
+export const TITLE_CARD_FLOOR = 2.4
+export const TITLE_CARD_CEIL  = 5.2
 
 // Multiple items sharing one screen (Multi-Question, PYL Reveal answer
 // list) — inherently smaller than a single dominant question since several
