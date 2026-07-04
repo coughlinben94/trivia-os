@@ -4,6 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
 import SlideElements from '../SlideElements.jsx'
 import { resolveShinyPart, isVisualShiny, isAudioShiny } from '../../../lib/shinySeries.js'
+import { autoFitClamp, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 
 const EASE_SNAP = [0.23, 1, 0.32, 1]
 const EASE_ASSEMBLE = [0.22, 1, 0.36, 1]
@@ -92,7 +93,7 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
           style={{
             color: theme.colors.text,
             fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-            fontSize: 'clamp(2rem, 4.5cqw, 4.5rem)',
+            fontSize: autoFitClamp(part.text, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL),
             fontWeight: 500,
             maxWidth: '80ch',
             textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
@@ -229,7 +230,7 @@ function ShinyVisualQuestion({ slide, theme }) {
               style={{
                 color: theme.colors.text,
                 fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-                fontSize: 'clamp(1.75rem, 3.5cqw, 3.5rem)',
+                fontSize: autoFitClamp(part.text, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL),
                 fontWeight: 500,
               }}
             >
@@ -267,7 +268,7 @@ function ShinyVisualQuestion({ slide, theme }) {
               style={{
                 color: '#f5f0e8',
                 fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-                fontSize: 'clamp(1.75rem, 3.5cqw, 3.5rem)',
+                fontSize: autoFitClamp(part.text, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL),
                 fontWeight: 500,
               }}
             >
