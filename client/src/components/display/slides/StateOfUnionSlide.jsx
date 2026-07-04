@@ -16,10 +16,13 @@ const RWB_BLUE      = '#1a2a6c'
 const RWB_BLUE_DEEP = '#0d1536'
 
 // ─── Billowing gradient background ───────────────────────────────────────────
-// Canvas RAF animation: each vertical column gets a linear gradient running
-// from red → white → blue, shifted up or down by a sine wave. Amplitude is
-// zero at the left edge (pole) and grows toward the right (free end), so the
-// gradient billows exactly like a flag in wind — no stripes, pure gradient.
+// Canvas RAF animation. Each column gets a 2H-tall gradient (red→white→blue)
+// but each column's sampling window is offset so:
+//   left  columns (x≈0) see the red portion  → top-left is red
+//   right columns (x≈W) see the blue portion → bottom-right is blue
+//   white lives on the anti-diagonal between them, not as a horizontal band
+// A sine wave with zero amplitude at the left (pole) and growing amplitude at
+// the right (free end) makes the whole color field billow like a flag.
 function WavingGradient({ reduce }) {
   const ref = useRef(null)
 
@@ -33,9 +36,9 @@ function WavingGradient({ reduce }) {
 
     const W      = canvas.width
     const H      = canvas.height
-    const maxAmp = reduce ? 8 : H * 0.15  // how far the gradient bands shift
+    const maxAmp = reduce ? 8 : H * 0.13
     const k      = (2 * Math.PI) / (W * 0.55)
-    const sliceW = Math.max(2, Math.floor(W / 250))
+    const sliceW = Math.max(2, Math.floor(W / 280))
 
     let t = 0
     const spd = reduce ? 0.25 : 1.0
@@ -43,17 +46,19 @@ function WavingGradient({ reduce }) {
 
     function draw() {
       for (let x = 0; x <= W; x += sliceW) {
-        // Amplitude: zero at pole (left), full at free end (right)
-        const amp = maxAmp * Math.pow(x / W, 0.7)
-        const dy  = Math.sin(k * x - t) * amp
+        // baseDy slides the sampling window: 0 at the left (red fills top),
+        // -H at the right (blue fills bottom). Combined they cascade from
+        // the top-left corner rather than banding horizontally.
+        const baseDy  = -H * (x / W)
+        const waveAmp = maxAmp * Math.pow(x / W, 0.7)
+        const dy      = baseDy + Math.sin(k * x - t) * waveAmp
 
-        // Gradient runs from (x, dy) to (x, H+dy) — shifting the color bands
-        // vertically for this column creates the billowing wave illusion
-        const grad = ctx.createLinearGradient(x, dy, x, H + dy)
+        // 2H gradient — each column only sees half of it
+        const grad = ctx.createLinearGradient(x, dy, x, dy + 2 * H)
         grad.addColorStop(0,    RWB_RED)
-        grad.addColorStop(0.42, '#c83248')
+        grad.addColorStop(0.35, '#bf3c52')
         grad.addColorStop(0.5,  RWB_WHITE)
-        grad.addColorStop(0.58, '#5878a8')
+        grad.addColorStop(0.65, '#4a70a0')
         grad.addColorStop(1,    RWB_BLUE)
 
         ctx.fillStyle = grad
