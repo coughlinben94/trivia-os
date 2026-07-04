@@ -1,7 +1,8 @@
+import { useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
-import { autoFitClamp, LIST_ITEM_TIERS, LIST_ITEM_FLOOR, LIST_ITEM_CEIL } from '../../../lib/autoFitText.js'
+import { useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function MultiQuestionSlide({ slide, show }) {
@@ -10,6 +11,17 @@ export default function MultiQuestionSlide({ slide, show }) {
   const reduce = useReducedMotion()
   const questions = data.questions ?? []
   const round = (show?.rounds ?? []).find(r => r.id === slide.roundId)
+
+  const listBoxRef = useRef(null)
+  const rowSize = useFitListToBox(listBoxRef, questions.map(q => q.text), {
+    family: theme.fonts.body,
+    floorPx: LIST_ITEM_FLOOR * 16,
+    ceilPx: LIST_ITEM_CEIL * 16,
+    gapPx: 20,
+    rowInset: 192,
+    maxLinesPerRow: 2,
+    lineHeight: 1.4,
+  })
 
   return (
     <div
@@ -59,7 +71,7 @@ export default function MultiQuestionSlide({ slide, show }) {
       </motion.div>
 
       {/* Question list */}
-      <div className="relative z-10 flex-1 overflow-y-auto px-16 pb-14">
+      <div ref={listBoxRef} className="relative z-10 flex-1 overflow-y-auto px-16 pb-14">
         <ol className="space-y-5">
           {questions.map((q, i) => (
             <motion.li
@@ -88,7 +100,7 @@ export default function MultiQuestionSlide({ slide, show }) {
                 style={{
                   color: theme.colors.text,
                   fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-                  fontSize: autoFitClamp(q.text, LIST_ITEM_TIERS, LIST_ITEM_FLOOR, LIST_ITEM_CEIL),
+                  fontSize: `${rowSize}px`,
                   fontWeight: 400,
                   lineHeight: 1.4,
                 }}

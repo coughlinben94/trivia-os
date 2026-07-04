@@ -258,3 +258,35 @@ export function useFitToBox(boxRef, text, { family, floorPx, ceilPx, maxLines = 
   }, [boxRef, text, family, floorPx, ceilPx, maxLines, lineHeight, letterSpacing])
   return size
 }
+
+/**
+ * Uniform fit for a vertical list of rows sharing one container. Sizes ALL rows
+ * to a single px value so the whole list fits: fits the longest item to the
+ * per-row height budget (containerH / itemCount) and the container width.
+ * listRef → the element bounding all rows. items → array of row strings.
+ */
+export function useFitListToBox(listRef, items, { family, floorPx, ceilPx, gapPx = 0, rowInset = 0, maxLinesPerRow = 2, lineHeight = 1.3, letterSpacing = 0 }) {
+  const [size, setSize] = useState(ceilPx)
+  useLayoutEffect(() => {
+    const el = listRef.current
+    if (!el || !items || items.length === 0) return
+    let cancelled = false
+    const recompute = () => {
+      const w = el.clientWidth, h = el.clientHeight
+      if (!w || !h) return
+      const n = items.length
+      const perRowH = (h - gapPx * (n - 1)) / n
+      // longest item drives the shared size (worst case must fit its row box)
+      let best = floorPx
+      const longest = items.reduce((a, b) => (String(b).length > String(a).length ? b : a), items[0] ?? '')
+      best = fitToBox(longest, { family, boxW: Math.max(0, w - rowInset), boxH: perRowH, floorPx, ceilPx, maxLines: maxLinesPerRow, lineHeight, letterSpacing })
+      if (!cancelled) setSize(best)
+    }
+    document.fonts.ready.then(() => { if (!cancelled) recompute() })
+    recompute()
+    const ro = new ResizeObserver(recompute)
+    ro.observe(el)
+    return () => { cancelled = true; ro.disconnect() }
+  }, [listRef, items, family, floorPx, ceilPx, gapPx, rowInset, maxLinesPerRow, lineHeight, letterSpacing])
+  return size
+}
