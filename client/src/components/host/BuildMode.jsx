@@ -13,7 +13,6 @@ import PYLWizard from './PYLWizard.jsx'
 import { archiveQuestions } from '../../lib/archiveQuestion.js'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
-import { useTheme } from '../shared/ThemeProvider.jsx'
 import { EASE_OUT } from '../../lib/easings.js'
 
 const BTN = 'host-button'
@@ -72,6 +71,11 @@ const CARD_STYLE = {
   'team-picker':    'bg-gradient-to-br from-indigo-50   to-blue-100    border-indigo-200 hover:border-indigo-400',
   'round-intro':    'bg-gradient-to-br from-red-50    to-rose-100    border-red-200    hover:border-red-400',
   'question':      'bg-gradient-to-br from-blue-50   to-indigo-100  border-blue-200   hover:border-blue-400',
+  'pixelate-series': 'bg-gradient-to-br from-blue-50 to-indigo-100  border-blue-200   hover:border-blue-400',
+  'multi-question': 'bg-gradient-to-br from-blue-50  to-indigo-100  border-blue-200   hover:border-blue-400',
+  'swing-round-intro': 'bg-gradient-to-br from-red-50 to-rose-100  border-red-200    hover:border-red-400',
+  'scoreboard-reveal': 'bg-gradient-to-br from-violet-50 to-purple-100 border-violet-200 hover:border-violet-400',
+  'pyl-reveal':    'bg-gradient-to-br from-teal-50   to-blue-100    border-teal-200   hover:border-blue-400',
   'grading-break': 'bg-gradient-to-br from-violet-50 to-purple-100  border-violet-200 hover:border-violet-400',
   'winner-reveal': 'bg-[linear-gradient(135deg,#fecaca,#fed7aa,#fef08a,#bbf7d0,#bfdbfe,#ddd6fe)] border-purple-200 hover:border-purple-400',
   'custom':        'bg-gradient-to-br from-teal-50   to-cyan-100    border-teal-200   hover:border-teal-400',
@@ -112,7 +116,6 @@ function loadRestStateBoxOrder() {
 }
 
 function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReorder, onBack }) {
-  const { theme } = useTheme()
   const [draggedId, setDraggedId] = useState(null)
   const [dragOverId, setDragOverId] = useState(null)
   const draggedRef = useRef(null)
@@ -201,13 +204,14 @@ function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReord
               >
                 <button
                   onClick={() => !draggedId && onSelectSlide(slide)}
-                  className={`w-full h-full flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center ${BTN} transition-colors`}
-                  style={{ background: theme.colors.bgDeep, borderColor: theme.colors.accent + '60' }}
+                  className={`w-full h-full flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center ${BTN} transition-colors ${
+                    CARD_STYLE[slide.type] ?? 'bg-white border-gray-200 hover:border-gray-400'
+                  }`}
                 >
                   <span className="text-2xl leading-none">{SLIDE_ICON[slide.type] ?? '📄'}</span>
-                  <span className="text-sm font-semibold leading-tight" style={{ color: theme.colors.text }}>{getSlideLabel(slide)}</span>
+                  <span className="text-sm font-semibold leading-tight text-gray-800">{getSlideLabel(slide)}</span>
                   {preview && (
-                    <p className="text-xs leading-snug line-clamp-2" style={{ color: theme.colors.textMuted }}>{preview}</p>
+                    <p className="text-xs leading-snug line-clamp-2 text-gray-500">{preview}</p>
                   )}
                 </button>
                 <span
