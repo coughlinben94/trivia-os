@@ -1,7 +1,8 @@
+import { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
-import { autoFitClamp, LINE_TIERS, LINE_FLOOR, LINE_CEIL } from '../../../lib/autoFitText.js'
+import { fitToBox, LINE_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function RoundIntroSlide({ slide, show }) {
@@ -9,6 +10,13 @@ export default function RoundIntroSlide({ slide, show }) {
   const reduce = useReducedMotion()
   const { data } = slide
   const isSwing = slide.type === 'swing-round-intro'
+
+  // fitToBox measures via canvas — a first paint before web fonts load
+  // measures fallback-font metrics. This flips once fonts are ready purely
+  // to force the re-render that re-runs the inline fitToBox call below with
+  // real glyph metrics; the value itself is never read.
+  const [fontsReady, setFontsReady] = useState(false)
+  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
 
   return (
     <div
@@ -84,7 +92,7 @@ export default function RoundIntroSlide({ slide, show }) {
           className="relative z-10 mt-4 text-center italic"
           style={{
             color: theme.roundIntro.titleColor,
-            fontSize: autoFitClamp(data.subtitle, LINE_TIERS, LINE_FLOOR, LINE_CEIL),
+            fontSize: fitToBox(data.subtitle, { ...LINE_BOX, family: 'system-ui' }),
             fontWeight: 300,
           }}
         >

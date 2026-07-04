@@ -1,3 +1,5 @@
+import { useState, useLayoutEffect } from 'react'
+
 // PowerPoint-style discrete-tier text autofit.
 //
 // Ben's own mental model from the old deck: 55pt for a normal-length
@@ -228,4 +230,31 @@ export const LINE_BOX = {
 export const REVEAL_BOX = {
   boxW: 1600, boxH: 320, floorPx: REVEAL_FLOOR * 16, ceilPx: REVEAL_CEIL * 16,
   maxLines: 2, lineHeight: 1.1,
+}
+
+/**
+ * Container-relative fit. Measures the referenced box at runtime (ResizeObserver)
+ * and returns the fitToBox px size. For captions/cells/rows whose width isn't fixed.
+ * boxRef → the element whose clientWidth/Height bounds the text.
+ */
+export function useFitToBox(boxRef, text, { family, floorPx, ceilPx, maxLines = 2, lineHeight = 1.15, letterSpacing = 0 }) {
+  const [size, setSize] = useState(ceilPx)
+  useLayoutEffect(() => {
+    const el = boxRef.current
+    if (!el) return
+    let cancelled = false
+    const recompute = () => {
+      const w = el.clientWidth, h = el.clientHeight
+      if (!w || !h) return
+      const px = fitToBox(text, { family, boxW: w, boxH: h, floorPx, ceilPx, maxLines, lineHeight, letterSpacing })
+      if (!cancelled) setSize(px)
+    }
+    // measure after fonts load so glyph metrics are real, not fallback
+    document.fonts.ready.then(() => { if (!cancelled) recompute() })
+    recompute()
+    const ro = new ResizeObserver(recompute)
+    ro.observe(el)
+    return () => { cancelled = true; ro.disconnect() }
+  }, [boxRef, text, family, floorPx, ceilPx, maxLines, lineHeight, letterSpacing])
+  return size
 }

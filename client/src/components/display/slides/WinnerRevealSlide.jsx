@@ -4,7 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../../lib/scoreboardMath.js'
 import SlideElements from '../SlideElements.jsx'
-import { autoFitClamp, REVEAL_TIERS, REVEAL_FLOOR, REVEAL_CEIL } from '../../../lib/autoFitText.js'
+import { fitToBox, REVEAL_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
 // ─── Drum roll (MP3) ──────────────────────────────────────────────────────
@@ -92,6 +92,13 @@ export default function WinnerRevealSlide({ slide, show }) {
   const [winner, setWinner] = useState(null)
   const [phase,  setPhase]  = useState('drumroll')
   const audioCtxRef = useRef(null)
+
+  // fitToBox measures via canvas — a first paint before the display font
+  // loads measures fallback-font metrics. This flips once web fonts are
+  // ready purely to force the re-render that re-runs the inline fitToBox
+  // call below with real glyph metrics; the value itself is never read.
+  const [fontsReady, setFontsReady] = useState(false)
+  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
 
   useEffect(() => {
     async function load() {
@@ -186,7 +193,7 @@ export default function WinnerRevealSlide({ slide, show }) {
             <p style={{
               color: theme.colors.highlight,
               fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
-              fontSize: autoFitClamp(winner.name, REVEAL_TIERS, REVEAL_FLOOR, REVEAL_CEIL),
+              fontSize: fitToBox(winner.name, { ...REVEAL_BOX, family: theme.fonts.display }),
               lineHeight: 1,
               textShadow: `0 0 80px ${theme.colors.highlight}55`,
             }}>

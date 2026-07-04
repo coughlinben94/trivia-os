@@ -4,7 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
 import SlideElements from '../SlideElements.jsx'
 import { resolveShinyPart, isVisualShiny, isAudioShiny } from '../../../lib/shinySeries.js'
-import { autoFitClamp, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
+import { autoFitClamp, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL, fitToBox, QUESTION_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
 // Fixed gold for shiny intro screens — constant signal across all themes.
@@ -18,6 +18,13 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
   const part = resolveShinyPart(data)
   const hasSeries = data.isSeries && data.seriesTheme
   const isAssemble = transitionKey === 'assemble'
+
+  // fitToBox measures via canvas — a first paint before the body font loads
+  // measures fallback-font metrics. This flips once web fonts are ready purely
+  // to force the re-render that re-runs the inline fitToBox call below with
+  // real glyph metrics; the value itself is never read.
+  const [fontsReady, setFontsReady] = useState(false)
+  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
 
   const banner = isAssemble
     ? { initial: { opacity: 0, y: -40 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.42, delay: 0.04, ease: EASE_OUT } }
@@ -91,7 +98,7 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
           style={{
             color: theme.colors.text,
             fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-            fontSize: autoFitClamp(part.text, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL),
+            fontSize: fitToBox(part.text, { ...QUESTION_BOX, family: theme.fonts.body }),
             fontWeight: 500,
             maxWidth: '80ch',
             textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
