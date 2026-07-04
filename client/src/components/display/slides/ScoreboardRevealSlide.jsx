@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../../lib/scoreboardMath.js'
@@ -11,6 +11,7 @@ const EASE_SMOOTH = [0.4, 0, 0.2, 1]
 function ScoreRow({ team, rank, isLeader, maxScore, theme, delay }) {
   const pct = maxScore > 0 ? Math.round((team.total / maxScore) * 100) : 0
   const [barScale, setBarScale] = useState(0)
+  const reduce = useReducedMotion()
 
   useEffect(() => {
     // Bar expands 120ms after row appears — Section 5 / Section 20
@@ -20,7 +21,7 @@ function ScoreRow({ team, rank, isLeader, maxScore, theme, delay }) {
 
   return (
     <motion.div
-      initial={{ y: 24, opacity: 0 }}
+      initial={{ y: reduce ? 0 : 24, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ delay, duration: 0.22, ease: EASE_SNAP }}
       className="relative flex items-center gap-5 px-6 py-4 rounded-2xl overflow-hidden"
@@ -47,7 +48,7 @@ function ScoreRow({ team, rank, isLeader, maxScore, theme, delay }) {
       <div className="w-12 shrink-0 flex items-center justify-center">
         {isLeader ? (
           <motion.span
-            initial={{ y: -28, opacity: 0, scale: 0.4 }}
+            initial={{ y: reduce ? 0 : -28, opacity: 0, scale: reduce ? 1 : 0.4 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             transition={{ delay: delay + 0.72, type: 'spring', duration: 0.5, bounce: 0.3 }}
             style={{ fontSize: '2rem' }}

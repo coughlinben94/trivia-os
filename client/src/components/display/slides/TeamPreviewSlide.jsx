@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
 import SlideElements from '../SlideElements.jsx'
@@ -9,6 +9,7 @@ const EASE_SNAP = [0.23, 1, 0.32, 1]
 export default function TeamPreviewSlide({ slide, show }) {
   const { theme } = useTheme()
   const [teams, setTeams] = useState([])
+  const reduce = useReducedMotion()
 
   useEffect(() => {
     if (!show?.id) return
@@ -35,7 +36,7 @@ export default function TeamPreviewSlide({ slide, show }) {
 
       {/* Heading */}
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
+        initial={{ opacity: 0, y: reduce ? 0 : -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: EASE_SNAP }}
         style={{
@@ -63,7 +64,7 @@ export default function TeamPreviewSlide({ slide, show }) {
         {teams.map((team, i) => (
           <motion.div
             key={team.id}
-            initial={{ opacity: 0, scale: 0.85, y: 16 }}
+            initial={{ opacity: 0, scale: reduce ? 1 : 0.85, y: reduce ? 0 : 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ delay: i * 0.06, duration: 0.3, ease: EASE_SNAP }}
             style={{

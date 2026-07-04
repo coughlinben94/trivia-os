@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
 
@@ -7,6 +7,7 @@ const EASE_SNAP = [0.23, 1, 0.32, 1]
 export default function TitleSlide({ slide, show }) {
   const { theme } = useTheme()
   const { data } = slide
+  const reduce = useReducedMotion()
 
   const dateStr = show?.date
     ? new Date(show.date + 'T12:00:00').toLocaleDateString('en-US', {
@@ -30,7 +31,7 @@ export default function TitleSlide({ slide, show }) {
 
       {/* Title */}
       <motion.h1
-        initial={{ opacity: 0, y: 24 }}
+        initial={{ opacity: 0, y: reduce ? 0 : 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.18, duration: 0.5, ease: EASE_SNAP }}
         className="relative z-10 text-center font-bold"

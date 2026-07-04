@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
 import { autoFitClamp, LIST_ITEM_TIERS, LIST_ITEM_FLOOR, LIST_ITEM_CEIL } from '../../../lib/autoFitText.js'
@@ -8,6 +8,7 @@ const EASE_SNAP = [0.23, 1, 0.32, 1]
 export default function MultiQuestionSlide({ slide, show }) {
   const { theme } = useTheme()
   const { data } = slide
+  const reduce = useReducedMotion()
   const questions = data.questions ?? []
   const round = (show?.rounds ?? []).find(r => r.id === slide.roundId)
 
@@ -26,7 +27,7 @@ export default function MultiQuestionSlide({ slide, show }) {
 
       {/* Header */}
       <motion.div
-        initial={{ opacity: 0, y: -12 }}
+        initial={{ opacity: 0, y: reduce ? 0 : -12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: EASE_SNAP }}
         className="relative z-10 px-16 pt-14 pb-8 shrink-0"
@@ -64,7 +65,7 @@ export default function MultiQuestionSlide({ slide, show }) {
           {questions.map((q, i) => (
             <motion.li
               key={i}
-              initial={{ opacity: 0, x: -16 }}
+              initial={{ opacity: 0, x: reduce ? 0 : -16 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.08 + i * 0.05, duration: 0.22, ease: EASE_SNAP }}
               className="flex gap-5 items-start"

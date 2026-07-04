@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
 import ErrorBoundary from '../../ErrorBoundary.jsx'
@@ -12,6 +12,7 @@ const EASE_SMOOTH = [0.4, 0, 0.2, 1]
 export default function PylRevealSlide({ slide, show, isPreview = false }) {
   const { theme } = useTheme()
   const { data } = slide
+  const reduce = useReducedMotion()
 
   const showAnimation = !isPreview && data.animationId && data.winnerId
 
@@ -65,7 +66,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
 
       {/* Header */}
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
+        initial={{ opacity: 0, y: reduce ? 0 : -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: EASE_SNAP }}
         className="relative z-10 px-16 pt-14 pb-6 shrink-0"
@@ -101,7 +102,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
           {visibleItems.map((item, i) => (
             <motion.div
               key={i}
-              initial={{ opacity: 0, y: 18, scale: 0.97 }}
+              initial={{ opacity: 0, y: reduce ? 0 : 18, scale: reduce ? 1 : 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.28, ease: EASE_SNAP }}
               className="flex items-center gap-5 px-6 py-4 rounded-2xl"
@@ -174,7 +175,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
       {/* Running total — bottom */}
       {revealed > 0 && (
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: reduce ? 0 : 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25, ease: EASE_SNAP }}
           className="relative z-10 shrink-0 px-16 py-5 flex items-center justify-end gap-3 border-t"

@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
 import { autoFitClamp, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
@@ -8,6 +8,7 @@ const EASE_SNAP = [0.23, 1, 0.32, 1]
 export default function PixelateSeriesSlide({ slide, show }) {
   const { theme } = useTheme()
   const { data } = slide
+  const reduce = useReducedMotion()
 
   const stages = data.stages ?? []
   // currentStage updated by host in Live Mode (step 6) — stored in slide.data
@@ -30,7 +31,7 @@ export default function PixelateSeriesSlide({ slide, show }) {
             src={stageData.mediaUrl}
             alt=""
             className="absolute inset-0 w-full h-full object-contain"
-            initial={{ opacity: 0, scale: 1.06 }}
+            initial={{ opacity: 0, scale: reduce ? 1 : 1.06 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25, ease: EASE_SNAP }}
