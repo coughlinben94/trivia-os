@@ -4,7 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
 import SlideElements from '../SlideElements.jsx'
 import { resolveShinyPart, isVisualShiny, isAudioShiny } from '../../../lib/shinySeries.js'
-import { autoFitClamp, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL, fitToBox, QUESTION_BOX } from '../../../lib/autoFitText.js'
+import { fitToBox, QUESTION_BOX, useFitToBox, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
 // Fixed gold for shiny intro screens — constant signal across all themes.
@@ -161,6 +161,21 @@ function ShinyVisualQuestion({ slide, theme }) {
 
   const isPortrait = aspect === 'portrait'
 
+  const captionBoxRef1 = useRef(null)
+  const captionSize1 = useFitToBox(captionBoxRef1, part.text, {
+    family: theme.fonts.body,
+    floorPx: VISUAL_CAPTION_FLOOR * 16,
+    ceilPx: VISUAL_CAPTION_CEIL * 16,
+    maxLines: 3, lineHeight: 1.15,
+  })
+  const captionBoxRef2 = useRef(null)
+  const captionSize2 = useFitToBox(captionBoxRef2, part.text, {
+    family: theme.fonts.body,
+    floorPx: VISUAL_CAPTION_FLOOR * 16,
+    ceilPx: VISUAL_CAPTION_CEIL * 16,
+    maxLines: 3, lineHeight: 1.15,
+  })
+
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
       {/* White flash — Section 20: 1 frame, CSS not JS */}
@@ -234,17 +249,19 @@ function ShinyVisualQuestion({ slide, theme }) {
             animate={{ x: 0, opacity: 1 }}
             transition={{ delay: 0.18, duration: 0.28, ease: EASE_OUT }}
           >
-            <p
-              className="text-center leading-relaxed"
-              style={{
-                color: theme.colors.text,
-                fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-                fontSize: autoFitClamp(part.text, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL),
-                fontWeight: 500,
-              }}
-            >
-              {part.text}
-            </p>
+            <div ref={captionBoxRef1} className="w-full">
+              <p
+                className="text-center leading-relaxed"
+                style={{
+                  color: theme.colors.text,
+                  fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+                  fontSize: `${captionSize1}px`,
+                  fontWeight: 500,
+                }}
+              >
+                {part.text}
+              </p>
+            </div>
           </motion.div>
         </div>
       ) : (
@@ -272,17 +289,19 @@ function ShinyVisualQuestion({ slide, theme }) {
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.15, duration: 0.22, ease: EASE_OUT }}
           >
-            <p
-              className="text-center leading-snug"
-              style={{
-                color: '#f5f0e8',
-                fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-                fontSize: autoFitClamp(part.text, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL),
-                fontWeight: 500,
-              }}
-            >
-              {part.text}
-            </p>
+            <div ref={captionBoxRef2} className="w-full">
+              <p
+                className="text-center leading-snug"
+                style={{
+                  color: '#f5f0e8',
+                  fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+                  fontSize: `${captionSize2}px`,
+                  fontWeight: 500,
+                }}
+              >
+                {part.text}
+              </p>
+            </div>
           </motion.div>
         </>
       )}
