@@ -5,6 +5,7 @@ import { supabase } from '../../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../../lib/scoreboardMath.js'
 import SlideElements from '../SlideElements.jsx'
 import { autoFitClamp, REVEAL_TIERS, REVEAL_FLOOR, REVEAL_CEIL } from '../../../lib/autoFitText.js'
+import { EASE_OUT } from '../../../lib/easings.js'
 
 // ─── Drum roll (MP3) ──────────────────────────────────────────────────────
 
@@ -84,8 +85,6 @@ function Confetti({ active }) {
 }
 
 // ─── WinnerRevealSlide ─────────────────────────────────────────────────────
-
-const EASE_OUT = [0.23, 1, 0.32, 1]
 
 export default function WinnerRevealSlide({ slide, show }) {
   const { theme } = useTheme()

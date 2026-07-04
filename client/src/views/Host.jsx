@@ -9,8 +9,7 @@ import BuildMode from '../components/host/BuildMode.jsx'
 import LiveMode from '../components/host/LiveMode.jsx'
 import ScoreboardModal from '../components/host/ScoreboardModal.jsx'
 import HostPinGate from '../components/host/HostPinGate.jsx'
-
-const EASE_SNAP = [0.23, 1, 0.32, 1]
+import { EASE_OUT } from '../lib/easings.js'
 
 // ─── Show Picker ─────────────────────────────────────────────────────────────
 // Shown when no show is loaded. Clean list — pick one and you're in the builder.
@@ -392,7 +391,7 @@ function HostReconnectingBanner({ visible }) {
           initial={{ y: -44, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: -44, opacity: 0 }}
-          transition={{ duration: 0.2, ease: EASE_SNAP }}
+          transition={{ duration: 0.2, ease: EASE_OUT }}
           style={{
             position: 'fixed', top: 0, left: 0, right: 0, zIndex: 500,
             background: 'rgba(255,195,50,0.93)', color: '#1a1000',

@@ -5,9 +5,7 @@ import WaveformBars from '../WaveformBars.jsx'
 import SlideElements from '../SlideElements.jsx'
 import { resolveShinyPart, isVisualShiny, isAudioShiny } from '../../../lib/shinySeries.js'
 import { autoFitClamp, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
-
-const EASE_SNAP = [0.23, 1, 0.32, 1]
-const EASE_ASSEMBLE = [0.22, 1, 0.36, 1]
+import { EASE_OUT } from '../../../lib/easings.js'
 
 // Fixed gold for shiny intro screens — constant signal across all themes.
 const SHINY_GOLD      = '#f0d890' // pale cream-gold fill (Jazz Club–approved)
@@ -22,13 +20,13 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
   const isAssemble = transitionKey === 'assemble'
 
   const banner = isAssemble
-    ? { initial: { opacity: 0, y: -40 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.42, delay: 0.04, ease: EASE_ASSEMBLE } }
-    : { initial: { opacity: 0, y: -12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: EASE_SNAP } }
+    ? { initial: { opacity: 0, y: -40 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.42, delay: 0.04, ease: EASE_OUT } }
+    : { initial: { opacity: 0, y: -12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: EASE_OUT } }
   const question = isAssemble
-    ? { initial: { opacity: 0, y: 30, scale: 0.97 }, animate: { opacity: 1, y: 0, scale: 1 }, transition: { duration: 0.46, delay: 0.22, ease: EASE_ASSEMBLE } }
-    : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.22, ease: [0.23, 1, 0.32, 1], delay: 0.18 } }
+    ? { initial: { opacity: 0, y: 30, scale: 0.97 }, animate: { opacity: 1, y: 0, scale: 1 }, transition: { duration: 0.46, delay: 0.22, ease: EASE_OUT } }
+    : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.22, ease: EASE_OUT, delay: 0.18 } }
   const photo = isAssemble
-    ? { initial: { opacity: 0, scale: 0.8 }, animate: { opacity: 0.7, scale: 1 }, transition: { duration: 0.4, delay: 0.31, ease: EASE_ASSEMBLE } }
+    ? { initial: { opacity: 0, scale: 0.8 }, animate: { opacity: 0.7, scale: 1 }, transition: { duration: 0.4, delay: 0.31, ease: EASE_OUT } }
     : { initial: { opacity: 0 }, animate: { opacity: 0.7 }, transition: { delay: 0.2, duration: 0.4 } }
 
   return (
@@ -171,7 +169,7 @@ function ShinyVisualQuestion({ slide, theme }) {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08, duration: 0.22, ease: EASE_SNAP }}
+          transition={{ delay: 0.08, duration: 0.22, ease: EASE_OUT }}
           className="absolute top-0 left-0 right-0 py-3 px-10 text-center z-30"
           style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)' }}
         >
@@ -210,7 +208,7 @@ function ShinyVisualQuestion({ slide, theme }) {
             className="w-1/2 h-full overflow-hidden"
             initial={{ scale: 1.08, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.05, duration: 0.28, ease: EASE_SNAP }}
+            transition={{ delay: 0.05, duration: 0.28, ease: EASE_OUT }}
           >
             <img
               src={part.mediaUrl}
@@ -223,7 +221,7 @@ function ShinyVisualQuestion({ slide, theme }) {
             className="w-1/2 h-full flex items-center justify-center px-12"
             initial={{ x: 24, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            transition={{ delay: 0.18, duration: 0.28, ease: EASE_SNAP }}
+            transition={{ delay: 0.18, duration: 0.28, ease: EASE_OUT }}
           >
             <p
               className="text-center leading-relaxed"
@@ -248,7 +246,7 @@ function ShinyVisualQuestion({ slide, theme }) {
             className="w-full h-full object-cover"
             initial={{ scale: 1.08, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.05, duration: 0.28, ease: EASE_SNAP }}
+            transition={{ delay: 0.05, duration: 0.28, ease: EASE_OUT }}
           />
           <motion.div
             className="absolute bottom-0 left-0 right-0"
@@ -261,7 +259,7 @@ function ShinyVisualQuestion({ slide, theme }) {
             }}
             initial={{ y: 32, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.15, duration: 0.22, ease: EASE_SNAP }}
+            transition={{ delay: 0.15, duration: 0.22, ease: EASE_OUT }}
           >
             <p
               className="text-center leading-snug"
@@ -358,7 +356,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08, duration: 0.22, ease: EASE_SNAP }}
+          transition={{ delay: 0.08, duration: 0.22, ease: EASE_OUT }}
           className="text-center"
         >
           <p
@@ -393,7 +391,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.06, duration: 0.22, ease: EASE_SNAP }}
+        transition={{ delay: 0.06, duration: 0.22, ease: EASE_OUT }}
         className="relative z-10 text-center"
       >
         <p
@@ -435,7 +433,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
           <motion.div
             initial={{ scale: 0.85, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.3, duration: 0.25, ease: EASE_SNAP }}
+            transition={{ delay: 0.3, duration: 0.25, ease: EASE_OUT }}
             className="relative z-10"
           >
             <div
@@ -504,7 +502,7 @@ function ShinyIntroScreen({ slide, theme }) {
           alt=""
           initial={{ opacity: 0, x: reduce ? 0 : -20 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.15, duration: 0.4, ease: EASE_SNAP }}
+          transition={{ delay: 0.15, duration: 0.4, ease: EASE_OUT }}
           className="absolute bottom-0 left-0 z-10 pointer-events-none"
           style={{ height: '56%', maxWidth: '100%', objectFit: 'contain', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.4))' }}
         />
@@ -514,7 +512,7 @@ function ShinyIntroScreen({ slide, theme }) {
       <motion.div
         initial={{ opacity: 0, scale: reduce ? 1 : 0.7, rotate: reduce ? 0 : -8 }}
         animate={{ opacity: 1, scale: 1, rotate: 0 }}
-        transition={{ delay: 0.3, duration: 0.4, ease: EASE_SNAP }}
+        transition={{ delay: 0.3, duration: 0.4, ease: EASE_OUT }}
         className="absolute bottom-10 right-10 z-10 flex items-center justify-center rounded-3xl"
         style={{
           width: 128, height: 128,
@@ -529,7 +527,7 @@ function ShinyIntroScreen({ slide, theme }) {
       <motion.p
         initial={{ opacity: 0, scale: reduce ? 1 : 0.85, rotate: reduce ? -6 : -14 }}
         animate={{ opacity: 1, scale: 1, rotate: -6 }}
-        transition={reduce ? { duration: 0.3, ease: EASE_SNAP } : { type: 'spring', duration: 0.5, bounce: 0.25 }}
+        transition={reduce ? { duration: 0.3, ease: EASE_OUT } : { type: 'spring', duration: 0.5, bounce: 0.25 }}
         className="relative z-10 text-center px-20"
         style={{
           fontFamily: `'${theme.fonts.display}', sans-serif`,

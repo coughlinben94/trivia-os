@@ -5,9 +5,7 @@ import ErrorBoundary from '../../ErrorBoundary.jsx'
 import { getSelectionAnimation } from './selectionAnimations.js'
 import { supabase } from '../../../lib/supabase.js'
 import { autoFitClamp, LIST_ITEM_TIERS, LIST_ITEM_FLOOR, LIST_ITEM_CEIL } from '../../../lib/autoFitText.js'
-
-const EASE_SNAP   = [0.23, 1, 0.32, 1]
-const EASE_SMOOTH = [0.4, 0, 0.2, 1]
+import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function PylRevealSlide({ slide, show, isPreview = false }) {
   const { theme } = useTheme()
@@ -68,7 +66,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
       <motion.div
         initial={{ opacity: 0, y: reduce ? 0 : -10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, ease: EASE_SNAP }}
+        transition={{ duration: 0.25, ease: EASE_OUT }}
         className="relative z-10 px-16 pt-14 pb-6 shrink-0"
       >
         <p
@@ -104,7 +102,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
               key={i}
               initial={{ opacity: 0, y: reduce ? 0 : 18, scale: reduce ? 1 : 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.28, ease: EASE_SNAP }}
+              transition={{ duration: 0.28, ease: EASE_OUT }}
               className="flex items-center gap-5 px-6 py-4 rounded-2xl"
               style={{ background: `${theme.colors.accent}35` }}
             >
@@ -177,7 +175,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
         <motion.div
           initial={{ opacity: 0, y: reduce ? 0 : 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25, ease: EASE_SNAP }}
+          transition={{ duration: 0.25, ease: EASE_OUT }}
           className="relative z-10 shrink-0 px-16 py-5 flex items-center justify-end gap-3 border-t"
           style={{ borderColor: `${theme.colors.accent}40` }}
         >

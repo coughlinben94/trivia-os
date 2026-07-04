@@ -2,9 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Fuse from 'fuse.js'
 import { supabase } from '../../lib/supabase.js'
-
-// ease-drawer per Section 20
-const EASE_DRAWER = [0.32, 0.72, 0, 1]
+import { EASE_PANEL } from '../../lib/easings.js'
 
 // ─── Hold-to-confirm button ────────────────────────────────────────────────
 function HoldConfirmButton({ onConfirm, children, disabled }) {
@@ -200,7 +198,7 @@ export default function ScorePanel({ open, onClose, show, actions }) {
             exit={{ x: '100%' }}
             transition={{
               duration: open ? 0.22 : 0.16,
-              ease: EASE_DRAWER,
+              ease: EASE_PANEL,
             }}
             className="fixed right-0 top-0 bottom-0 w-[400px] bg-white shadow-2xl z-50 flex flex-col"
           >

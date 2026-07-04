@@ -1,8 +1,7 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
-
-const EASE_SNAP = [0.23, 1, 0.32, 1]
+import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function TitleSlide({ slide, show }) {
   const { theme } = useTheme()
@@ -33,7 +32,7 @@ export default function TitleSlide({ slide, show }) {
       <motion.h1
         initial={{ opacity: 0, y: reduce ? 0 : 24 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.18, duration: 0.5, ease: EASE_SNAP }}
+        transition={{ delay: 0.18, duration: 0.5, ease: EASE_OUT }}
         className="relative z-10 text-center font-bold"
         style={{
           fontFamily: `'${theme.fonts.display}', sans-serif`,
@@ -51,7 +50,7 @@ export default function TitleSlide({ slide, show }) {
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 0.65 }}
-          transition={{ delay: 0.38, duration: 0.4, ease: EASE_SNAP }}
+          transition={{ delay: 0.38, duration: 0.4, ease: EASE_OUT }}
           className="relative z-10 mt-5 text-center"
           style={{
             color: theme.roundIntro.titleColor,
@@ -68,7 +67,7 @@ export default function TitleSlide({ slide, show }) {
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 0.4 }}
-          transition={{ delay: 0.5, duration: 0.3, ease: EASE_SNAP }}
+          transition={{ delay: 0.5, duration: 0.3, ease: EASE_OUT }}
           className="relative z-10 mt-2 text-center text-xl"
           style={{ color: theme.colors.textMuted }}
         >

@@ -13,63 +13,60 @@ import StateOfUnionSlide from './slides/StateOfUnionSlide.jsx'
 import WinnerRevealSlide from './slides/WinnerRevealSlide.jsx'
 import TeamPreviewSlide from './slides/TeamPreviewSlide.jsx'
 import TeamPickerSlide from './slides/TeamPickerSlide.jsx'
-
-const EASE_QUINT     = [0.22, 1, 0.36, 1]   // standard ease-out
-const EASE_QUART     = [0.25, 1, 0.25, 1]   // weighted hard land (drop)
-const EASE_CUBIC     = [0.33, 1, 0.68, 1]   // gentle
+import { EASE_OUT, EASE_DROP, EASE_EXIT } from '../../lib/easings.js'
 
 // Per-slide content animation config — tune these without touching component logic
 const SLIDE_ANIMATIONS = {
   'question': {
     initial: { opacity: 0, y: 18 },
-    animate: { opacity: 1, y: 0,  transition: { duration: 0.22, ease: EASE_QUINT } },
-    exit:    { opacity: 0, y: -12, transition: { duration: 0.14, ease: EASE_CUBIC } },
+    animate: { opacity: 1, y: 0,  transition: { duration: 0.22, ease: EASE_OUT } },
+    exit:    { opacity: 0, y: -12, transition: { duration: 0.14, ease: EASE_EXIT } },
   },
   'round-intro': {
     initial: { opacity: 0, scale: 0.92 },
     animate: { opacity: 1, scale: 1, transition: { duration: 0.04 } },
-    exit:    { opacity: 0, scale: 0.94, transition: { duration: 0.3, ease: EASE_CUBIC } },
+    exit:    { opacity: 0, scale: 0.94, transition: { duration: 0.3, ease: EASE_EXIT } },
   },
   'grading-break': {
     initial: { opacity: 0 },
-    animate: { opacity: 1, transition: { duration: 0.4, ease: EASE_QUINT } },
-    exit:    { opacity: 0, transition: { duration: 0.28, ease: EASE_CUBIC } },
+    animate: { opacity: 1, transition: { duration: 0.4, ease: EASE_OUT } },
+    exit:    { opacity: 0, transition: { duration: 0.28, ease: EASE_EXIT } },
   },
   'scoreboard-reveal': {
     initial: { opacity: 0 },
-    animate: { opacity: 1, transition: { duration: 0.3, ease: EASE_QUINT } },
-    exit:    { opacity: 0, scale: 0.98, transition: { duration: 0.25, ease: EASE_CUBIC } },
+    animate: { opacity: 1, transition: { duration: 0.3, ease: EASE_OUT } },
+    exit:    { opacity: 0, scale: 0.98, transition: { duration: 0.25, ease: EASE_EXIT } },
   },
   'winner-reveal': {
     initial: { opacity: 0 },
-    animate: { opacity: 1, transition: { duration: 0.6, ease: EASE_QUINT } },
-    exit:    { opacity: 0, transition: { duration: 0.3, ease: EASE_CUBIC } },
+    animate: { opacity: 1, transition: { duration: 0.6, ease: EASE_OUT } },
+    exit:    { opacity: 0, transition: { duration: 0.3, ease: EASE_EXIT } },
   },
   'title': {
     initial: { opacity: 0 },
-    animate: { opacity: 1, transition: { duration: 0.5, ease: EASE_QUINT } },
-    exit:    { opacity: 0, transition: { duration: 0.3, ease: EASE_CUBIC } },
+    animate: { opacity: 1, transition: { duration: 0.5, ease: EASE_OUT } },
+    exit:    { opacity: 0, transition: { duration: 0.3, ease: EASE_EXIT } },
   },
   'shiny': {
     initial: { opacity: 0, scale: 1.06 },
-    animate: { opacity: 1, scale: 1, transition: { delay: 0.05, duration: 0.28, ease: EASE_QUINT } },
-    exit:    { opacity: 0, scale: 0.96, transition: { duration: 0.2, ease: EASE_CUBIC } },
+    animate: { opacity: 1, scale: 1, transition: { delay: 0.05, duration: 0.28, ease: EASE_OUT } },
+    exit:    { opacity: 0, scale: 0.96, transition: { duration: 0.2, ease: EASE_EXIT } },
   },
 }
 
 // ─── Named entrance library ────────────────────────────────────────────────────
 // GPU-only (opacity, y, scale). Exits always faster than enters.
 const TRANSITIONS = {
-  'dissolve': { initial: { opacity: 0 },             animate: { opacity: 1,           transition: { duration: 0.28, ease: EASE_CUBIC } }, exit: { opacity: 0,            transition: { duration: 0.16, ease: EASE_CUBIC } } },
-  'emerge':   { initial: { opacity: 0, scale: 0.92 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.44, ease: EASE_CUBIC } }, exit: { opacity: 0, scale: 0.98, transition: { duration: 0.16, ease: EASE_CUBIC } } },
-  'zoom':     { initial: { opacity: 0, scale: 0.82 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.30, ease: EASE_QUINT } }, exit: { opacity: 0, scale: 0.97, transition: { duration: 0.16, ease: EASE_CUBIC } } },
-  'punch':    { initial: { opacity: 0, scale: 0.62 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.24, ease: EASE_QUINT } }, exit: { opacity: 0, scale: 0.90, transition: { duration: 0.14, ease: EASE_CUBIC } } },
-  'drop':     { initial: { opacity: 0, y: -260 },    animate: { opacity: 1, y: 0,     transition: { duration: 0.36, ease: EASE_QUART } }, exit: { opacity: 0, y: -16,      transition: { duration: 0.16, ease: EASE_CUBIC } } },
-  'descend':  { initial: { opacity: 0, y: -140 },    animate: { opacity: 1, y: 0,     transition: { duration: 0.52, ease: EASE_CUBIC } }, exit: { opacity: 0, y: -12,      transition: { duration: 0.16, ease: EASE_CUBIC } } },
-  'sink':     { initial: { opacity: 0, y: -60, scale: 1.06 }, animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.38, ease: EASE_QUINT } }, exit: { opacity: 0, y: -10, transition: { duration: 0.16, ease: EASE_CUBIC } } },
-  'settle':   { initial: { opacity: 0, scale: 1.07 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.32, ease: EASE_CUBIC } }, exit: { opacity: 0, scale: 0.99, transition: { duration: 0.16, ease: EASE_CUBIC } } },
-  'loom':     { initial: { opacity: 0, scale: 1.14 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.34, ease: EASE_QUINT } }, exit: { opacity: 0, scale: 0.98, transition: { duration: 0.16, ease: EASE_CUBIC } } },
-  'assemble': { initial: { opacity: 1 }, animate: { opacity: 1, transition: { duration: 0 } }, exit: { opacity: 0, transition: { duration: 0.16, ease: EASE_CUBIC } } },
+  'dissolve': { initial: { opacity: 0 },             animate: { opacity: 1,           transition: { duration: 0.28, ease: EASE_EXIT } }, exit: { opacity: 0,            transition: { duration: 0.16, ease: EASE_EXIT } } },
+  'emerge':   { initial: { opacity: 0, scale: 0.92 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.44, ease: EASE_EXIT } }, exit: { opacity: 0, scale: 0.98, transition: { duration: 0.16, ease: EASE_EXIT } } },
+  'zoom':     { initial: { opacity: 0, scale: 0.82 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.30, ease: EASE_OUT } }, exit: { opacity: 0, scale: 0.97, transition: { duration: 0.16, ease: EASE_EXIT } } },
+  'punch':    { initial: { opacity: 0, scale: 0.62 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.24, ease: EASE_OUT } }, exit: { opacity: 0, scale: 0.90, transition: { duration: 0.14, ease: EASE_EXIT } } },
+  'drop':     { initial: { opacity: 0, y: -260 },    animate: { opacity: 1, y: 0,     transition: { duration: 0.36, ease: EASE_DROP } }, exit: { opacity: 0, y: -16,      transition: { duration: 0.16, ease: EASE_EXIT } } },
+  'descend':  { initial: { opacity: 0, y: -140 },    animate: { opacity: 1, y: 0,     transition: { duration: 0.52, ease: EASE_EXIT } }, exit: { opacity: 0, y: -12,      transition: { duration: 0.16, ease: EASE_EXIT } } },
+  'sink':     { initial: { opacity: 0, y: -60, scale: 1.06 }, animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.38, ease: EASE_OUT } }, exit: { opacity: 0, y: -10, transition: { duration: 0.16, ease: EASE_EXIT } } },
+  'settle':   { initial: { opacity: 0, scale: 1.07 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.32, ease: EASE_EXIT } }, exit: { opacity: 0, scale: 0.99, transition: { duration: 0.16, ease: EASE_EXIT } } },
+  'loom':     { initial: { opacity: 0, scale: 1.14 }, animate: { opacity: 1, scale: 1, transition: { duration: 0.34, ease: EASE_OUT } }, exit: { opacity: 0, scale: 0.98, transition: { duration: 0.16, ease: EASE_EXIT } } },
+  'assemble': { initial: { opacity: 1 }, animate: { opacity: 1, transition: { duration: 0 } }, exit: { opacity: 0, transition: { duration: 0.16, ease: EASE_EXIT } } },
 }
 
 // team-picker and state-of-union both default to the zoom burst-from-center

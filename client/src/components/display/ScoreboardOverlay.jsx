@@ -3,10 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { deriveRoundCols, computeTotal, MEDALS } from '../../lib/scoreboardMath.js'
-
-// ─── Easing ────────────────────────────────────────────────────────────────
-const EASE_OUT   = [0.22, 1, 0.36, 1]
-const EASE_QUART = [0.25, 1, 0.25, 1]
+import { EASE_OUT, EASE_DROP } from '../../lib/easings.js'
 
 // ─── Single team row ───────────────────────────────────────────────────────
 function TeamRow({ team, rank, cols, delay, isTop, reduce }) {
@@ -163,7 +160,7 @@ function ScoreboardContent({ show }) {
       <motion.div
         initial={{ opacity: 0, y: reduce ? 0 : -16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: EASE_QUART, delay: 0.05 }}
+        transition={{ duration: 0.35, ease: EASE_DROP, delay: 0.05 }}
         className="shrink-0 flex items-center justify-center pt-10 pb-6 px-16"
       >
         <h1

@@ -14,6 +14,7 @@ import { archiveQuestions } from '../../lib/archiveQuestion.js'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
+import { EASE_OUT } from '../../lib/easings.js'
 
 const BTN = 'host-button'
 
@@ -623,15 +624,15 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.1 } }}
-            transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+            transition={{ duration: 0.15, ease: EASE_OUT }}
             onClick={closeAddModal}
           >
             <motion.div
               className={`w-full ${isQuestionModal ? 'max-w-3xl' : isRoundIntroModal ? 'max-w-lg' : 'max-w-md'}`}
               initial={{ opacity: 0, scale: reducedMotion ? 1 : 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96, transition: { duration: 0.1, ease: [0.23, 1, 0.32, 1] } }}
-              transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+              exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96, transition: { duration: 0.1, ease: EASE_OUT } }}
+              transition={{ duration: 0.15, ease: EASE_OUT }}
               onClick={e => e.stopPropagation()}
             >
               <AddSlideWizard
@@ -663,15 +664,15 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.1 } }}
-            transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+            transition={{ duration: 0.15, ease: EASE_OUT }}
             onClick={() => setAddRoundWizardOpen(false)}
           >
             <motion.div
               className="w-full max-w-sm"
               initial={{ opacity: 0, scale: reducedMotion ? 1 : 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96, transition: { duration: 0.1, ease: [0.23, 1, 0.32, 1] } }}
-              transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+              exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96, transition: { duration: 0.1, ease: EASE_OUT } }}
+              transition={{ duration: 0.15, ease: EASE_OUT }}
               onClick={e => e.stopPropagation()}
             >
               <AddRoundWizard
@@ -720,15 +721,15 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.1 } }}
-            transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+            transition={{ duration: 0.15, ease: EASE_OUT }}
             onClick={() => setShowSwingWizard(false)}
           >
             <motion.div
               className="w-full"
               initial={{ opacity: 0, scale: reducedMotion ? 1 : 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96, transition: { duration: 0.1, ease: [0.23, 1, 0.32, 1] } }}
-              transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+              exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96, transition: { duration: 0.1, ease: EASE_OUT } }}
+              transition={{ duration: 0.15, ease: EASE_OUT }}
               onClick={e => e.stopPropagation()}
             >
               <SwingRoundWizard
@@ -748,15 +749,15 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.1 } }}
-            transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+            transition={{ duration: 0.15, ease: EASE_OUT }}
             onClick={() => setShowPylWizard(false)}
           >
             <motion.div
               className="w-full max-w-sm"
               initial={{ opacity: 0, scale: reducedMotion ? 1 : 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96, transition: { duration: 0.1, ease: [0.23, 1, 0.32, 1] } }}
-              transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+              exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96, transition: { duration: 0.1, ease: EASE_OUT } }}
+              transition={{ duration: 0.15, ease: EASE_OUT }}
               onClick={e => e.stopPropagation()}
             >
               <PYLWizard

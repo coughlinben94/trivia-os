@@ -13,6 +13,7 @@ import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import StageFrame from '../display/StageFrame.jsx'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
 import { resolveShinyPart } from '../lib/shinySeries.js'
+import { EASE_OUT } from '../lib/easings.js'
 
 // ─── No-show holding screen (before any show goes live) ────────────────────
 
@@ -250,8 +251,6 @@ function PreviewSlide() {
 }
 
 // ─── Answer reveal overlay ─────────────────────────────────────────────────
-
-const EASE_OUT = [0.23, 1, 0.32, 1]
 
 function AnswerRevealOverlay({ show, currentSlide }) {
   const { theme } = useTheme()

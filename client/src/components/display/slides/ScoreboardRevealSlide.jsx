@@ -4,9 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../../lib/scoreboardMath.js'
 import SlideElements from '../SlideElements.jsx'
-
-const EASE_SNAP   = [0.23, 1, 0.32, 1]
-const EASE_SMOOTH = [0.4, 0, 0.2, 1]
+import { EASE_OUT, EASE_BAR } from '../../../lib/easings.js'
 
 function ScoreRow({ team, rank, isLeader, maxScore, theme, delay }) {
   const pct = maxScore > 0 ? Math.round((team.total / maxScore) * 100) : 0
@@ -23,7 +21,7 @@ function ScoreRow({ team, rank, isLeader, maxScore, theme, delay }) {
     <motion.div
       initial={{ y: reduce ? 0 : 24, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      transition={{ delay, duration: 0.22, ease: EASE_SNAP }}
+      transition={{ delay, duration: 0.22, ease: EASE_OUT }}
       className="relative flex items-center gap-5 px-6 py-4 rounded-2xl overflow-hidden"
       style={{
         background: isLeader
@@ -78,7 +76,7 @@ function ScoreRow({ team, rank, isLeader, maxScore, theme, delay }) {
           {team.name}
         </p>
 
-        {/* Score bar — scaleX animates via CSS transition (GPU-composited), EASE_SMOOTH 600ms — Section 5 */}
+        {/* Score bar — scaleX animates via CSS transition (GPU-composited), EASE_BAR 600ms — Section 5 */}
         <div
           className="mt-2 rounded-full overflow-hidden"
           style={{ height: 8, background: 'rgba(255,255,255,0.08)' }}
@@ -88,7 +86,7 @@ function ScoreRow({ team, rank, isLeader, maxScore, theme, delay }) {
             style={{
               transform: `scaleX(${barScale})`,
               transformOrigin: 'left center',
-              transition: `transform 600ms cubic-bezier(${EASE_SMOOTH.join(',')})`,
+              transition: `transform 600ms cubic-bezier(${EASE_BAR.join(',')})`,
               background: isLeader ? theme.colors.shinyAccent : theme.colors.accent,
               willChange: 'transform',
             }}
@@ -164,7 +162,7 @@ export default function ScoreboardRevealSlide({ slide, show }) {
       <motion.h2
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.3, ease: EASE_SNAP }}
+        transition={{ duration: 0.3, ease: EASE_OUT }}
         className="mb-10 text-center shrink-0"
         style={{
           fontFamily: `'${theme.fonts.display}', sans-serif`,

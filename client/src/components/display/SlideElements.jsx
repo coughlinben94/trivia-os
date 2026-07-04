@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { nanoid } from 'nanoid'
+import { EASE_OUT } from '../../lib/easings.js'
 
 // Preset positions — a 3x3 grid plus full-bleed. Values are CSS placement,
 // not raw coordinates, so elements always land somewhere sane regardless
@@ -143,7 +144,7 @@ function TextElement({ el, theme }) {
     return (
       <motion.div
         initial={{ opacity: 0 }}
-        animate={{ opacity: 1, transition: { duration: 0.4, ease: [0.23, 1, 0.32, 1] } }}
+        animate={{ opacity: 1, transition: { duration: 0.4, ease: EASE_OUT } }}
         style={sharedStyle}
       >
         <CurvedText text={el.content} el={el} color={textColor} />
@@ -161,7 +162,7 @@ function TextElement({ el, theme }) {
   return (
     <motion.p
       initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.23, 1, 0.32, 1] } }}
+      animate={{ opacity: 1, y: 0, transition: { duration: 0.4, ease: EASE_OUT } }}
       style={{
         ...sharedStyle,
         ...bgStyle,
@@ -206,7 +207,7 @@ function ImageElement({ el }) {
       src={el.url}
       alt=""
       initial={{ opacity: 0, scale: 0.96 }}
-      animate={{ opacity: 1, scale: 1, transition: { duration: 0.4, ease: [0.23, 1, 0.32, 1] } }}
+      animate={{ opacity: 1, scale: 1, transition: { duration: 0.4, ease: EASE_OUT } }}
       style={{
         position: 'absolute',
         ...posStyle,

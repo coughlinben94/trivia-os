@@ -2,8 +2,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
 import { autoFitClamp, LINE_TIERS, LINE_FLOOR, LINE_CEIL } from '../../../lib/autoFitText.js'
-
-const EASE_SNAP = [0.23, 1, 0.32, 1]
+import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function RoundIntroSlide({ slide, show }) {
   const { theme } = useTheme()
@@ -28,7 +27,7 @@ export default function RoundIntroSlide({ slide, show }) {
       <motion.div
         initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 0.35, y: 0 }}
-        transition={{ duration: 0.5, ease: EASE_SNAP }}
+        transition={{ duration: 0.5, ease: EASE_OUT }}
         className="absolute pointer-events-none"
         style={{ top: 48 }}
       >
@@ -44,7 +43,7 @@ export default function RoundIntroSlide({ slide, show }) {
         initial={reduce ? { opacity: 0 } : { scale: 3.5, opacity: 0 }}
         animate={reduce ? { opacity: 1 } : { scale: 1, opacity: 1 }}
         transition={reduce
-          ? { duration: 0.3, ease: EASE_SNAP }
+          ? { duration: 0.3, ease: EASE_OUT }
           : { type: 'spring', duration: 0.4, bounce: 0.25 }}
         className="relative z-10"
         style={{
@@ -63,7 +62,7 @@ export default function RoundIntroSlide({ slide, show }) {
       <motion.div
         initial={{ y: 60, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.25, duration: 0.25, ease: EASE_SNAP }}
+        transition={{ delay: 0.25, duration: 0.25, ease: EASE_OUT }}
         className="relative z-10 text-center mt-2"
         style={{
           fontFamily: `'${theme.fonts.display}', sans-serif`,
@@ -98,7 +97,7 @@ export default function RoundIntroSlide({ slide, show }) {
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: isSwing ? 0.75 : 0.55, scale: 1 }}
-          transition={{ delay: 0.35, duration: 0.4, ease: EASE_SNAP }}
+          transition={{ delay: 0.35, duration: 0.4, ease: EASE_OUT }}
           className="absolute pointer-events-none"
           style={{ bottom: 32, right: 48 }}
         >

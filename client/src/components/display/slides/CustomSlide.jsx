@@ -2,8 +2,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
 import { autoFitClamp, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL } from '../../../lib/autoFitText.js'
-
-const EASE_SNAP = [0.23, 1, 0.32, 1]
+import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function CustomSlide({ slide }) {
   const { theme } = useTheme()
@@ -27,7 +26,7 @@ export default function CustomSlide({ slide }) {
         <motion.div
           initial={{ opacity: 0, scale: reduce ? 1 : 1.05 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.35, ease: EASE_SNAP }}
+          transition={{ duration: 0.35, ease: EASE_OUT }}
           className="relative z-10 mb-10 max-w-2xl"
         >
           <img
@@ -43,7 +42,7 @@ export default function CustomSlide({ slide }) {
         <motion.h2
           initial={{ opacity: 0, y: reduce ? 0 : 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: data.mediaUrl ? 0.1 : 0, duration: 0.28, ease: EASE_SNAP }}
+          transition={{ delay: data.mediaUrl ? 0.1 : 0, duration: 0.28, ease: EASE_OUT }}
           className="relative z-10 text-center mb-6"
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
@@ -61,7 +60,7 @@ export default function CustomSlide({ slide }) {
         <motion.p
           initial={{ opacity: 0, y: reduce ? 0 : 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15, duration: 0.25, ease: EASE_SNAP }}
+          transition={{ delay: 0.15, duration: 0.25, ease: EASE_OUT }}
           className="relative z-10 text-center leading-relaxed max-w-4xl"
           style={{
             color: theme.colors.text,

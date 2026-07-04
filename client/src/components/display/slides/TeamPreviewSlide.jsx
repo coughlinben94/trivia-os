@@ -3,8 +3,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
 import SlideElements from '../SlideElements.jsx'
-
-const EASE_SNAP = [0.23, 1, 0.32, 1]
+import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function TeamPreviewSlide({ slide, show }) {
   const { theme } = useTheme()
@@ -38,7 +37,7 @@ export default function TeamPreviewSlide({ slide, show }) {
       <motion.div
         initial={{ opacity: 0, y: reduce ? 0 : -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: EASE_SNAP }}
+        transition={{ duration: 0.4, ease: EASE_OUT }}
         style={{
           fontFamily: `'${theme.fonts.display}', sans-serif`,
           fontSize: 'clamp(2rem, 4vw, 3.5rem)',
@@ -66,7 +65,7 @@ export default function TeamPreviewSlide({ slide, show }) {
             key={team.id}
             initial={{ opacity: 0, scale: reduce ? 1 : 0.85, y: reduce ? 0 : 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ delay: i * 0.06, duration: 0.3, ease: EASE_SNAP }}
+            transition={{ delay: i * 0.06, duration: 0.3, ease: EASE_OUT }}
             style={{
               background: `${theme.colors.accent}18`,
               border: `1.5px solid ${theme.colors.accent}50`,
@@ -87,7 +86,7 @@ export default function TeamPreviewSlide({ slide, show }) {
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.4 }}
-            transition={{ delay: 0.5, duration: 0.4, ease: EASE_SNAP }}
+            transition={{ delay: 0.5, duration: 0.4, ease: EASE_OUT }}
             style={{
               color: theme.colors.text,
               fontFamily: "'DM Sans', sans-serif",
@@ -106,7 +105,7 @@ export default function TeamPreviewSlide({ slide, show }) {
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 0.45 }}
-          transition={{ delay: 0.4, duration: 0.4, ease: EASE_SNAP }}
+          transition={{ delay: 0.4, duration: 0.4, ease: EASE_OUT }}
           style={{
             marginTop: '2rem',
             fontFamily: "'DM Sans', sans-serif",

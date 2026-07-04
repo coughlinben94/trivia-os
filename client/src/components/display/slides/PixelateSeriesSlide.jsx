@@ -2,8 +2,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
 import { autoFitClamp, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
-
-const EASE_SNAP = [0.23, 1, 0.32, 1]
+import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function PixelateSeriesSlide({ slide, show }) {
   const { theme } = useTheme()
@@ -34,7 +33,7 @@ export default function PixelateSeriesSlide({ slide, show }) {
             initial={{ opacity: 0, scale: reduce ? 1 : 1.06 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25, ease: EASE_SNAP }}
+            transition={{ duration: 0.25, ease: EASE_OUT }}
             style={{ background: theme.colors.bgDeep }}
           />
         )}

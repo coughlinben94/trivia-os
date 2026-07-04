@@ -2,8 +2,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
 import { autoFitClamp, LIST_ITEM_TIERS, LIST_ITEM_FLOOR, LIST_ITEM_CEIL } from '../../../lib/autoFitText.js'
-
-const EASE_SNAP = [0.23, 1, 0.32, 1]
+import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function MultiQuestionSlide({ slide, show }) {
   const { theme } = useTheme()
@@ -29,7 +28,7 @@ export default function MultiQuestionSlide({ slide, show }) {
       <motion.div
         initial={{ opacity: 0, y: reduce ? 0 : -12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, ease: EASE_SNAP }}
+        transition={{ duration: 0.25, ease: EASE_OUT }}
         className="relative z-10 px-16 pt-14 pb-8 shrink-0"
       >
         {round && (
@@ -67,7 +66,7 @@ export default function MultiQuestionSlide({ slide, show }) {
               key={i}
               initial={{ opacity: 0, x: reduce ? 0 : -16 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.08 + i * 0.05, duration: 0.22, ease: EASE_SNAP }}
+              transition={{ delay: 0.08 + i * 0.05, duration: 0.22, ease: EASE_OUT }}
               className="flex gap-5 items-start"
             >
               <span

@@ -4,8 +4,7 @@ import BaynesWatermark from '../BaynesWatermark.jsx'
 import SlideElements from '../SlideElements.jsx'
 import BreathingGradient from '../BreathingGradient.jsx'
 import { autoFitClamp, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL } from '../../../lib/autoFitText.js'
-
-const EASE_SNAP = [0.23, 1, 0.32, 1]
+import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function StateOfUnionSlide({ slide }) {
   const { theme } = useTheme()
@@ -42,7 +41,7 @@ export default function StateOfUnionSlide({ slide }) {
             style={{ height: '28vh', width: 'auto', maxWidth: '100%', opacity: 0.85 }}
             initial={{ opacity: 0, scale: 1.06 }}
             animate={{ opacity: 0.85, scale: 1 }}
-            transition={{ duration: 0.4, ease: EASE_SNAP }}
+            transition={{ duration: 0.4, ease: EASE_OUT }}
           />
         )}
 
@@ -50,7 +49,7 @@ export default function StateOfUnionSlide({ slide }) {
         <motion.p
           initial={{ opacity: 0, scale: reduce ? 1 : 0.85, rotate: reduce ? -6 : -14 }}
           animate={{ opacity: 1, scale: 1, rotate: -6 }}
-          transition={reduce ? { duration: 0.3, ease: EASE_SNAP } : { type: 'spring', duration: 0.5, bounce: 0.25 }}
+          transition={reduce ? { duration: 0.3, ease: EASE_OUT } : { type: 'spring', duration: 0.5, bounce: 0.25 }}
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
             fontWeight: 700,

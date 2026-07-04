@@ -8,6 +8,7 @@ import { getTheme } from '../themes/index.js'
 import { resolveShinyPart } from '../lib/shinySeries.js'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
+import { EASE_OUT, EASE_PANEL } from '../lib/easings.js'
 
 // ─── localStorage ─────────────────────────────────────────────────────────────
 function getTeamKey(showId) { return `trivia-os:team:${showId}` }
@@ -23,10 +24,6 @@ const TEAM_COLORS = [
   '#f5c842','#e02020','#60c000','#4a90d9','#c96fff',
   '#ff8c00','#00bcd4','#e91e8c','#8bc34a','#ff5722',
 ]
-
-// ─── Easing constants ─────────────────────────────────────────────────────────
-const EASE_DRAWER = [0.32, 0.72, 0, 1]
-const EASE_SNAP   = [0.23, 1, 0.32, 1]
 
 // ─── Loading ──────────────────────────────────────────────────────────────────
 function LoadingScreen() {
@@ -271,7 +268,7 @@ function WaitingScreen({ teamName, theme, onOpenScores }) {
         <motion.div
           initial={pref ? { opacity: 0 } : { y: 10, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: pref ? 0 : 0.18, duration: 0.28, ease: EASE_SNAP }}
+          transition={{ delay: pref ? 0 : 0.18, duration: 0.28, ease: EASE_OUT }}
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}
         >
           <p style={{ color: `${text}55`, fontSize: '0.7rem', margin: 0, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
@@ -483,7 +480,7 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.18, ease: EASE_SNAP }}
+      transition={{ duration: 0.18, ease: EASE_OUT }}
       style={{
         position: 'fixed', inset: 0,
         background: 'rgba(0,0,0,0.6)', zIndex: 450,
@@ -497,7 +494,7 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
         exit={pref ? { opacity: 0 } : { y: '100%' }}
         transition={pref
           ? { duration: 0.22 }
-          : { ease: EASE_DRAWER, duration: 0.32 }}
+          : { ease: EASE_PANEL, duration: 0.32 }}
         drag={pref ? false : 'y'}
         dragConstraints={{ top: 0 }}
         dragElastic={{ top: 0.05, bottom: 0.4 }}
@@ -564,7 +561,7 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
                     key={t.id}
                     initial={pref ? { opacity: 0 } : { y: 12, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: pref ? 0 : 0.055 * i, duration: 0.22, ease: EASE_SNAP }}
+                    transition={{ delay: pref ? 0 : 0.055 * i, duration: 0.22, ease: EASE_OUT }}
                     style={{
                       borderRadius: 10, padding: '0.75rem 0.875rem',
                       background: isMe ? `${accent}25` : 'rgba(255,255,255,0.05)',
@@ -630,7 +627,7 @@ function LandscapePrompt() {
           initial={pref ? { opacity: 0 } : { y: '100%', opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={pref ? { opacity: 0 } : { y: '100%', opacity: 0 }}
-          transition={pref ? { duration: 0.2 } : { ease: EASE_DRAWER, duration: 0.35 }}
+          transition={pref ? { duration: 0.2 } : { ease: EASE_PANEL, duration: 0.35 }}
           style={{
             position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 600,
             background: 'rgba(5,5,5,0.96)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
@@ -693,7 +690,7 @@ function GradingPopup({ visible, onDismiss }) {
           initial={pref ? { opacity: 0 } : { y: '100%', opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={pref ? { opacity: 0 } : { y: '100%', opacity: 0 }}
-          transition={pref ? { duration: 0.2 } : { ease: EASE_DRAWER, duration: 0.35 }}
+          transition={pref ? { duration: 0.2 } : { ease: EASE_PANEL, duration: 0.35 }}
           style={{
             position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 600,
             background: 'rgba(5,5,5,0.96)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
@@ -727,7 +724,7 @@ function ReconnectingBanner({ visible }) {
           initial={{ y: -44, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: -44, opacity: 0 }}
-          transition={{ duration: 0.2, ease: EASE_SNAP }}
+          transition={{ duration: 0.2, ease: EASE_OUT }}
           style={{
             position: 'fixed', top: 0, left: 0, right: 0, zIndex: 500,
             background: 'rgba(255,195,50,0.93)', color: '#1a1000',
@@ -933,7 +930,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
                   initial={{ opacity: 0, y: 8, scale: 0.97 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.97 }}
-                  transition={{ duration: 0.16, ease: EASE_SNAP }}
+                  transition={{ duration: 0.16, ease: EASE_OUT }}
                   style={{
                     position: 'absolute', bottom: 52, right: 0, width: 224,
                     background: `color-mix(in srgb, ${bg} 95%, #fff 5%)`,

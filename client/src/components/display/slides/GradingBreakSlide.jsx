@@ -3,8 +3,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
 import { autoFitClamp, PARAGRAPH_TIERS, PARAGRAPH_FLOOR, PARAGRAPH_CEIL } from '../../../lib/autoFitText.js'
-
-const EASE_SNAP = [0.23, 1, 0.32, 1]
+import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function GradingBreakSlide({ slide, isPreview = false }) {
   const { theme } = useTheme()
@@ -66,7 +65,7 @@ export default function GradingBreakSlide({ slide, isPreview = false }) {
           <motion.div
             initial={{ opacity: 0, scale: reduce ? 1 : 0.92 }}
             animate={{ opacity: 0.88, scale: 1 }}
-            transition={{ duration: 0.5, ease: EASE_SNAP }}
+            transition={{ duration: 0.5, ease: EASE_OUT }}
             className="relative z-10 mb-10"
           >
             <img
@@ -86,7 +85,7 @@ export default function GradingBreakSlide({ slide, isPreview = false }) {
         <motion.p
           initial={{ opacity: 0, y: reduce ? 0 : 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.28, ease: EASE_SNAP }}
+          transition={{ delay: 0.1, duration: 0.28, ease: EASE_OUT }}
           className="relative z-10 text-center px-24 leading-relaxed max-w-4xl"
           style={{
             color: theme.colors.text,
