@@ -1,7 +1,8 @@
+import { useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import SlideElements from '../SlideElements.jsx'
-import { autoFitClamp, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
+import { useFitToBox, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
 const SHINY_GOLD      = '#f0d890'
@@ -34,6 +35,14 @@ export default function GridSlide({ slide }) {
   const tIn = (i) => reduce
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2 } }
     : { initial: { opacity: 0, scale: 0.94 }, animate: { opacity: 1, scale: 1 }, transition: { duration: 0.4, delay: 0.06 * i, ease: EASE_OUT } }
+
+  const captionBoxRef = useRef(null)
+  const captionSize = useFitToBox(captionBoxRef, data.text, {
+    family: theme.fonts.body,
+    floorPx: VISUAL_CAPTION_FLOOR * 16,
+    ceilPx: VISUAL_CAPTION_CEIL * 16,
+    maxLines: 3, lineHeight: 1.15,
+  })
 
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
@@ -85,12 +94,14 @@ export default function GridSlide({ slide }) {
             paddingBottom: 42, paddingTop: 110, paddingInline: 80,
           }}
         >
-          <p style={{
-            textAlign: 'center', color: theme.colors.text, lineHeight: 1.15,
-            fontFamily: `'${theme.fonts.body}', sans-serif`,
-            fontSize: autoFitClamp(data.text, VISUAL_CAPTION_TIERS, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL),
-            fontWeight: 500, textShadow: '0 2px 16px rgba(0,0,0,0.9)',
-          }}>{data.text}</p>
+          <div ref={captionBoxRef} className="w-full">
+            <p style={{
+              textAlign: 'center', color: theme.colors.text, lineHeight: 1.15,
+              fontFamily: `'${theme.fonts.body}', sans-serif`,
+              fontSize: `${captionSize}px`,
+              fontWeight: 500, textShadow: '0 2px 16px rgba(0,0,0,0.9)',
+            }}>{data.text}</p>
+          </div>
         </motion.div>
       )}
 
