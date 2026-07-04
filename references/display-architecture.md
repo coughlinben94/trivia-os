@@ -67,12 +67,15 @@ Routes `slide.type` → component. Also manages transitions.
 `'random'` picks randomly (no immediate repeat).  
 Reduced-motion collapses all to dissolve (opacity crossfade only).
 
-**Easing constants:**
+**Easing curves (canonical):** all imports come from `client/src/lib/easings.js` — never redeclare locally. Full table in `SKILL.md`'s "Easing curves (canonical)".
 ```js
-EASE_QUINT = [0.22, 1, 0.36, 1]  // standard ease-out (most common)
-EASE_QUART = [0.25, 1, 0.25, 1]  // weighted hard land
-EASE_CUBIC = [0.33, 1, 0.68, 1]  // gentle entry
+EASE_OUT   = [0.23, 1, 0.32, 1]  // standard enters (most common)
+EASE_EXIT  = [0.33, 1, 0.68, 1]  // exits
+EASE_DROP  = [0.25, 1, 0.25, 1]  // weighted lands
+EASE_BAR   = [0.4, 0, 0.2, 1]    // score/progress bars
+EASE_PANEL = [0.32, 0.72, 0, 1]  // drawers/sheets
 ```
+Old names `EASE_SNAP`/`EASE_QUINT`/`EASE_QUART`/`EASE_CUBIC`/`EASE_DRAWER` are retired.
 
 ## QuestionCounter
 - Shows on `question` type slides only

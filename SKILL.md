@@ -327,12 +327,21 @@ scoreboard_teams { id uuid PK, show_id text, name text, scores jsonb DEFAULT '{}
 
 **Transitions (9 named + random):** dissolve, emerge, zoom, punch, drop, descend, sink, settle, loom (assemble is planned)
 
-**Easing constants:**
-```js
-EASE_QUINT = [0.22, 1, 0.36, 1]  // standard ease-out
-EASE_QUART = [0.25, 1, 0.25, 1]  // hard land
-EASE_CUBIC = [0.33, 1, 0.68, 1]  // gentle
-```
+**Easing curves (canonical):** all Framer Motion easing imports come from `client/src/lib/easings.js` — never redeclare curves locally.
+
+| Export | Value | Use |
+|---|---|---|
+| `EASE_OUT` | `[0.23, 1, 0.32, 1]` | standard enters |
+| `EASE_EXIT` | `[0.33, 1, 0.68, 1]` | exits |
+| `EASE_DROP` | `[0.25, 1, 0.25, 1]` | weighted lands |
+| `EASE_BAR` | `[0.4, 0, 0.2, 1]` | score/progress bars |
+| `EASE_PANEL` | `[0.32, 0.72, 0, 1]` | drawers/sheets |
+
+Old names `EASE_SNAP`/`EASE_QUINT`/`EASE_QUART`/`EASE_CUBIC`/`EASE_DRAWER` are retired — don't reintroduce them. Tailwind arbitrary-value className strings still hardcode the raw cubic-bezier literal (a className string can't import JS).
+
+Score/progress bars animate `transform: scaleX()` with `transformOrigin: 'left center'` inside a clipping wrapper — never animate `width` (also covered by Critical Rule 2, GPU-only animations).
+
+Slide components with spatial motion (x/y/scale/rotate) must gate the offsets behind `useReducedMotion()`.
 
 ---
 

@@ -144,7 +144,7 @@ const TRANSITION_SCOREBOARD = 0.4   // scoreboard reveal
 
 ```
 1. Flash frame (white, 1 frame, CSS animation — off main thread)
-2. Image: scale 110% → 100%, 0.3s, EASE_SNAP
+2. Image: scale 110% → 100%, 0.3s, EASE_OUT
 3. Gold particle burst (CSS animation, 0.5s, fades out)
 4. Question text: slides up from bottom, 0.15s delay, 0.2s
 ```
@@ -191,7 +191,7 @@ transition: { delay: 0.05, duration: 0.28, ease: [0.23, 1, 0.32, 1] }
 ```
 1. Title "🏆 Leaderboard" fades in (0.3s)
 2. Rows animate up from below, staggered 80ms each (bottom rank first)
-3. Score bars expand 0 → value (600ms, EASE_SMOOTH, 120ms delay after row)
+3. Score bars expand 0 → value (600ms, EASE_BAR, 120ms delay after row)
 4. Leader row: gold glow pulses in (200ms delay after bar completes)
 5. Crown emoji: spring drop from above, bounce: 0.3
 ```
