@@ -71,6 +71,14 @@ export function useShow() {
   const slidesRef = useRef([])
   const showIdRef = useRef(null)
   const debounceTimers = useRef({})
+  // Serializes the actual `slides` network writes. The 600ms debounce below only
+  // coalesces calls that land within the same window — edits spaced further apart
+  // (drag, pause, rotate, pause, recolor — completely normal overlay-editor use)
+  // each schedule their own write. Without this chain, those writes fire as
+  // separate concurrent requests, and if an earlier one resolves after a later
+  // one (ordinary network jitter), it silently overwrites newer data with older.
+  // Chaining onto the prior write guarantees they complete in schedule order.
+  const slidesSaveChainRef = useRef(Promise.resolve())
 
   // Guards realtime echo from clobbering optimistic slide-index updates. Set for
   // 1.5s after any local navigation action — long enough to outlast the echo.
@@ -383,8 +391,13 @@ export function useShow() {
       return { ...prev, slides: newSlides }
     })
     clearTimeout(debounceTimers.current['slides'])
-    debounceTimers.current['slides'] = setTimeout(async () => {
-      await updateShowRow(showIdRef.current, { slides: slidesRef.current })
+    debounceTimers.current['slides'] = setTimeout(() => {
+      // Read slidesRef.current inside the chained callback (not here) so a write
+      // that had to wait its turn still sends whatever is truly latest at send
+      // time, not a stale snapshot from when its timer fired.
+      slidesSaveChainRef.current = slidesSaveChainRef.current.then(() =>
+        updateShowRow(showIdRef.current, { slides: slidesRef.current })
+      )
     }, 600)
   }
 
