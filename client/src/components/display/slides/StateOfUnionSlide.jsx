@@ -35,27 +35,26 @@ function WavingGradient({ reduce }) {
     const k  = (2 * Math.PI) / (W * 0.55)
     const k2 = k * 1.65  // secondary harmonic — higher freq, different phase speed
 
-    // Wide solid red and blue bands with a narrow crisp white stripe between them.
-    // Transitions are kept tight (8–12% of the LUT) so the bands read as distinct
-    // colors rather than a muddy pastels blend.
+    // Continuous flowing gradient — no flat zones, all three colors always visible.
+    // Smooth-step within each segment makes colors linger near their peaks and
+    // ease gently through transitions, producing organic "smoosh" rather than bands.
     const N = 512
     const lut = new Uint8Array(N * 3)
     const stops = [
-      [0.00, 176,  32,  50],  // american red
-      [0.26, 178,  34,  52],  // pure red — wide band
-      [0.38, 212, 130, 134],  // red → rose (fast 12%)
-      [0.45, 240, 228, 222],  // rose → white
-      [0.50, 244, 236, 230],  // warm white center
-      [0.55, 218, 222, 240],  // white → blue
-      [0.62, 106, 126, 184],  // blue-ish (fast 12%)
-      [0.74,  30,  50, 116],  // pure blue — wide band
-      [1.00,  18,  34,  94],  // deep navy
+      [0.00, 178,  34,  52],
+      [0.30, 196,  58,  72],
+      [0.42, 228, 164, 162],
+      [0.50, 242, 234, 228],
+      [0.58, 162, 175, 228],
+      [0.70,  44,  64, 162],
+      [1.00,  20,  36,  98],
     ]
     for (let i = 0; i < N; i++) {
       const d = i / (N - 1)
       let s = 0
       while (s < stops.length - 2 && d > stops[s + 1][0]) s++
-      const p = (d - stops[s][0]) / (stops[s + 1][0] - stops[s][0])
+      let p = (d - stops[s][0]) / (stops[s + 1][0] - stops[s][0])
+      p = p * p * (3 - 2 * p)  // smoothstep — organic ease in/out of every stop
       lut[i * 3]     = Math.round(stops[s][1] + (stops[s + 1][1] - stops[s][1]) * p)
       lut[i * 3 + 1] = Math.round(stops[s][2] + (stops[s + 1][2] - stops[s][2]) * p)
       lut[i * 3 + 2] = Math.round(stops[s][3] + (stops[s + 1][3] - stops[s][3]) * p)
