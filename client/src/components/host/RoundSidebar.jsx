@@ -441,7 +441,7 @@ function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, 
   return (
     <div
       data-slide-id={slide.id}
-      className={`group flex items-center gap-2 px-3 cursor-pointer transition-colors select-none ${
+      className={`group flex items-center gap-2 px-3 cursor-grab active:cursor-grabbing transition-colors select-none ${
         selected ? '' : 'hover:bg-gray-100'
       } ${indent ? 'ml-4' : ''} ${dragging ? 'opacity-40' : ''} ${dragBefore ? 'border-t-2 border-t-blue-400' : ''} ${dragAfter ? 'border-b-2 border-b-blue-400' : ''}`}
       style={{
@@ -449,11 +449,14 @@ function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, 
         ...(selected && { background: 'linear-gradient(to right, rgba(34,197,94,0.16), transparent)' }),
       }}
       onClick={onSelect}
+      onMouseDown={e => {
+        if (e.target.closest('button')) return
+        onGripDown(e)
+      }}
     >
       <span
-        className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 text-xs leading-none"
-        title="Drag to reorder"
-        onMouseDown={onGripDown}
+        className="text-gray-300 group-hover:text-gray-400 shrink-0 text-xs leading-none pointer-events-none"
+        aria-hidden
       >
         ⠿
       </span>
