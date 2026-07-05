@@ -55,7 +55,8 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 | `/display` | TV fullscreen — PreShowScreen or slide renderer |
 | `/join` | Team phones — register, follow show, scoreboard, powerups |
 | `/shows` | Show library + ShowDetail (scoreboard history) |
-| `/questions` | Question Archive (Question Database) — cross-show browse/search/edit/delete + bulk "Add to database" input, behind `<HostPinGate>` |
+| `/questions` | Question Archive (Question Database) — cross-show browse/search/edit/delete, behind `<HostPinGate>` |
+| `/questions/add` | Bulk "Add Questions" input (Question/Swing Round/PYL tiles), behind `<HostPinGate>` |
 | `/scores` | Optional secondary scoreboard display |
 | `/ambient` | Dev-only theme previewer (not in prod routing) |
 
@@ -85,11 +86,19 @@ client/src/
                              from scoreboard_teams, falls back to final_scores JSONB
     Questions.jsx         — Question Archive (/questions); wrapped in <HostPinGate>; 3-across
                              card grid (question truncates >200 chars with Show more/less,
-                             answer always visible below), search/type/show filters, inline
-                             edit + two-step Delete (mirrors SlideEditor's confirm pattern),
-                             "Add to database" tile row at top rendering
-                             DatabaseAddPanels.jsx's 3 panels — writes straight to `questions`
-                             with show_id/show_title/show_date null, no slide/show involved
+                             answer always visible below), search/type/show/**Regular**
+                             (type==='regular' && !is_bonus — the only filter with no matching
+                             per-card badge until 2026-07-05) filters, inline edit + two-step
+                             Delete (mirrors SlideEditor's confirm pattern). A single "+ Add
+                             Questions" banner links out to /questions/add — the bulk-input
+                             tiles used to live inline here, moved to their own page.
+    AddQuestions.jsx      — /questions/add; wrapped in <HostPinGate>; 3 gradient tiles
+                             (centered icon/title/desc, reusing BuildMode's CARD_STYLE
+                             classes for 'question'/'swing'/'pyl' so it reads as the same
+                             visual system as the dashboard) that reveal
+                             DatabaseAddPanels.jsx's matching panel — writes straight to
+                             `questions` with show_id/show_title/show_date null, no
+                             slide/show involved
   components/
     host/
       DatabaseAddPanels.jsx — QuestionInputPanel/SwingInputPanel/PylInputPanel; same 3 input
@@ -364,8 +373,8 @@ questions { id, type, text, answer, is_bonus, is_shiny, shiny_type, shiny_format
   -- Written by: `archiveQuestion(s)` (client/src/lib/archiveQuestion.js), called from
   -- AddSlideWizard.jsx's real show-creation path (regular/shiny/grid) and from
   -- BuildMode.jsx's handleSwingAdd/handlePYLAdd. Also written directly, with no show
-  -- attached (show_id/show_title/show_date null), by the "Add to database" panels on
-  -- /questions (client/src/components/host/DatabaseAddPanels.jsx) — same 3 flows
+  -- attached (show_id/show_title/show_date null), by the "Add Questions" panels on
+  -- /questions/add (client/src/components/host/DatabaseAddPanels.jsx) — same 3 flows
   -- (Question/Swing/PYL) as the host dashboard, minus all round/show plumbing, for
   -- bulk-uploading past-show trivia without creating a slide.
 
