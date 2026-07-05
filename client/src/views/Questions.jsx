@@ -16,6 +16,7 @@ const SHINY_COLOR = {
 
 const FILTERS = [
   { id: 'all',          label: 'All' },
+  { id: 'regular',      label: 'Regular' },
   { id: 'bonus',        label: 'Bonus' },
   { id: 'shiny-visual', label: 'Shiny Visual' },
   { id: 'shiny-audio',  label: 'Shiny Audio' },
@@ -27,6 +28,7 @@ const TRUNCATE_AT = 200
 
 function matchesFilter(q, filter) {
   if (filter === 'all')          return true
+  if (filter === 'regular')      return q.type === 'regular' && !q.is_bonus
   if (filter === 'bonus')        return q.is_bonus
   if (filter === 'shiny-visual') return q.is_shiny && q.shiny_type === 'visual'
   if (filter === 'shiny-audio')  return q.is_shiny && q.shiny_type === 'audio'
