@@ -99,6 +99,7 @@ actions.nextSlide()
 actions.prevSlide()
 actions.setScoreboardVisible(bool)  // S hotkey in LiveMode → ScoreboardOverlay on /display
 actions.setAnswerReveal(bool)       // A hotkey in LiveMode → answer overlay on QuestionSlide
+actions.setScoresRevealed(bool)     // R hotkey in LiveMode → per-round scores revealed on /join
 actions.updateRoundScore(...)       // per-round score update (ScorePanel old flow)
 ```
 

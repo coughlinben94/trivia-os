@@ -26,25 +26,9 @@ Every surface of Trivia OS carries the Baynes Apple Valley identity. This is not
 
 **Supporting font: Roquen** — the Baynes secondary font. Used for question text body, round subtitles, grading break messages, team names on scoreboard, score labels.
 
-**Current active fonts:** Boogaloo (display) + DM Sans (body/UI). These are the only fonts in use until Handters/Roquen font files are loaded.
+**Current default fonts:** Boogaloo (display) + DM Sans (body/UI) — every theme still ships these as its base `fonts.display`/`fonts.body`; the per-theme font field exists but is unused.
 
-**Font loading** — drop files into `/public/fonts/`:
-```css
-@font-face {
-  font-family: 'Handters';
-  src: url('/fonts/Handters.woff2') format('woff2'),
-       url('/fonts/Handters.woff') format('woff');
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Roquen';
-  src: url('/fonts/Roquen.woff2') format('woff2'),
-       url('/fonts/Roquen.woff') format('woff');
-  font-display: swap;
-}
-```
-
-Files already exist at `/public/fonts/` — they just need @font-face declarations in `index.css`.
+**Handters + Roquen are loaded and selectable, just not the default.** Files live at repo-root `public/fonts/` (Vite's `publicDir` points there, not `client/public/`), `@font-face` declarations already exist in `index.css`, and both are in `ThemeCustomizeControls.jsx`'s `DISPLAY_FONTS` preset list alongside Boogaloo/DM Sans — a host can pick either as a per-show override from `ThemePickerModal`'s Customize row. No theme uses them by default yet.
 
 **Never use thin or geometric serifs on the display view.** The crowd is in a dark bar, often drinking. Legibility at 20 feet beats elegance every time.
 
@@ -162,11 +146,14 @@ Stream Deck button presses on the host panel: **no animation**. The host presses
 
 **2. What easing?**
 
-```css
---ease-snap:      cubic-bezier(0.23, 1, 0.32, 1);     /* slide transitions, snappy entries */
---ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);  /* round intro slam, badge bounce */
---ease-drawer:    cubic-bezier(0.32, 0.72, 0, 1);      /* score panel, /join sheet */
---ease-smooth:    cubic-bezier(0.4, 0, 0.2, 1);        /* scoreboard bar expansion */
+Canonical source: `client/src/lib/easings.js` (JS array exports, not CSS custom properties — the old `--ease-*` vars below don't exist in the codebase anymore):
+
+```js
+EASE_OUT   = [0.23, 1, 0.32, 1]   // slide transitions, snappy entries
+EASE_DROP  = [0.25, 1, 0.25, 1]   // round intro slam, badge bounce (weighted land)
+EASE_PANEL = [0.32, 0.72, 0, 1]   // score panel, /join sheet (drawers)
+EASE_BAR   = [0.4, 0, 0.2, 1]     // scoreboard bar expansion
+EASE_EXIT  = [0.33, 1, 0.68, 1]   // exits
 ```
 
 **Never use `ease-in` for UI animations.** It starts slow — the exact moment the user is watching most closely. `ease-out` at 180ms feels faster than `ease-in` at 180ms.

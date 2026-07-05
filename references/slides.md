@@ -69,6 +69,15 @@ A single question spanning multiple slides, each showing a progressively clearer
 ### `pyl-reveal`
 Press Your Luck answer reveal. Shows a list with some items filled in, some blank, plus a running point value. Each host advance fills in the next item. Needs "reveal stages" support. Implemented: `PylRevealSlide.jsx`
 
+### `grid`
+Shiny "Color Schemes" format. Host picks column/row count in AddSlideWizard; tiles (color and/or image, image wins) filled in `SlideEditor`'s GridEditor. `data`: `columns` (array of column arrays of `{color?, mediaUrl?}`), `intraGap`, `interGap`, `columnLabels`, `text`. Carries `isShiny` (fixed-gold treatment); `SlideRenderer` neutralizes its transition opacity to a constant 1 (same as `team-picker`/`state-of-union`) so the fixed layout never flashes the raw theme color. Implemented: `GridSlide.jsx`.
+
+### `team-picker`
+"Team Intro" — cinematic warp-speed one-by-one team name reveal (fixed black/starfield background regardless of show theme; text stays theme-linked). Steps through `[intro, ...teams, outro, landed]` via `data.parts`, baked once by `useShow.js`'s `bakeTeamPickerParts`. No host-editable content fields — teams come from the `teams` table. Like `grid`/`state-of-union`, its transition opacity is neutralized in `SlideRenderer` so the fixed design never shows the theme through it. Implemented: `TeamPickerSlide.jsx`.
+
+### `team-preview`
+"Team List" — shows all registered team names on screen at once, queried live from `teams` for `show.id`. No editable data fields. Hidden from the main AddSlideWizard type grid (`hidden: true` in TYPE_CARDS) — added via other flows. Implemented: `TeamPreviewSlide.jsx`.
+
 ### `winner-reveal`
 Shipped 2026-06-30. The automated show-closer — no editable data fields, computes everything live on mount.
 - "And the winner is…" fades in (0.55s ease-out)
@@ -96,6 +105,12 @@ The wizard remembers `roundId` context when opened from RoundSidebar so step 2 i
 
 ---
 
+## WYSIWYG Canvas Elements (all slide types)
+
+`client/src/components/display/SlideElements.jsx` — free-positioned overlay elements (text/image) any slide can carry in `data.elements`, edited directly in the SlideEditor preview canvas. `makeElement(type)` seeds `{ id, type, x, y, width, rotation, flipH, flipV, opacity }`. Presets: `ELEMENT_POSITIONS` (3x3 grid + full-bleed), `IMAGE_SIZES` (sm–full), `TEXT_SIZES` (sm–xl, clamp()-based). Renders via `<SlideElements elements={data.elements} theme={theme} />` — used by `GridSlide` and others.
+
+---
+
 ## Slide Transitions
 
 All transitions use Framer Motion. Transitions are snappy and punchy — not slow fades. See `TransitionRegistry.js` for the routing table.
@@ -111,12 +126,15 @@ const TRANSITION_SCOREBOARD = 0.4   // scoreboard reveal
 
 ### Easing Curves
 
-```css
---ease-snap:      cubic-bezier(0.23, 1, 0.32, 1);      /* slide transitions, snappy entries */
---ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);   /* round intro slam, badge bounce */
---ease-drawer:    cubic-bezier(0.32, 0.72, 0, 1);       /* score panel slide-out */
---ease-smooth:    cubic-bezier(0.4, 0, 0.2, 1);         /* scoreboard bar expansion */
+**Canonical source:** `client/src/lib/easings.js` — never redeclare curves locally. Full table in `SKILL.md`.
+```js
+EASE_OUT   = [0.23, 1, 0.32, 1]   // standard enters
+EASE_EXIT  = [0.33, 1, 0.68, 1]   // exits
+EASE_DROP  = [0.25, 1, 0.25, 1]   // weighted lands (round intro slam, badge bounce)
+EASE_BAR   = [0.4, 0, 0.2, 1]     // score/progress bars, scoreboard bar expansion
+EASE_PANEL = [0.32, 0.72, 0, 1]   // drawers/sheets, score panel slide-out
 ```
+Old CSS custom-property names (`--ease-snap`, `--ease-overshoot`, `--ease-drawer`, `--ease-smooth`) are retired — they don't exist in the codebase anymore.
 
 ### Per Slide-Type Transitions
 

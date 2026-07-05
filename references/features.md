@@ -42,7 +42,7 @@ Live Mode is a **pure control surface** — no slide preview rendered. Focus on 
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  ◀ PREV    Q3 · R1 · Slide 8/42    NEXT ▶   [📊 Score] [End Live]│
+│  ← Edit    ◀ PREV    Q3 · R1 · Slide 8/42    NEXT ▶   [📊 Score]│
 ├─────────────────────────────────────────────────────┤
 │  [current slide info — text only, no renderer]      │
 │  UPCOMING: Q4 preview...  Q5 preview...             │
@@ -68,25 +68,19 @@ Live Mode is a **pure control surface** — no slide preview rendered. Focus on 
 
 ## Stream Deck Integration
 
-The iPad Stream Deck app sends keyboard shortcuts. `/host` listens globally via `useKeyboardShortcuts` hook.
+The iPad Stream Deck app sends keyboard shortcuts. Actually implemented as an inline `handleKeyDown` in `LiveMode.jsx` (no separate `useKeyboardShortcuts` hook, no config-object indirection):
 
 ```js
-const STREAM_DECK_SHORTCUTS = {
-  'ArrowRight': 'NEXT_SLIDE',
-  'ArrowLeft':  'PREV_SLIDE',
-  'ArrowUp':    'VOLUME_UP',         // system volume via host
-  'ArrowDown':  'VOLUME_DOWN',
-  'Space':      'PLAY_AUDIO',        // plays audio on current shiny slide
-  'KeyA':       'TOGGLE_ANSWER',     // answer overlay on QuestionSlide (reveal/hide)
-  'KeyS':       'TOGGLE_SCOREBOARD', // TV scoreboard overlay (ScoreboardOverlay on /display)
-  'KeyR':       'REVEAL_SCORES',     // per-round scores revealed on /join
-  'KeyT':       'TRIGGER_SPECIAL',   // reserved
-  'KeyJ':       'TOGGLE_JUKEBOX',    // signal to Trivia Jukebox
-}
+ArrowRight → nextSlide()  // if answerReveal is on, hides it first then advances after 280ms
+ArrowLeft  → prevSlide()
+KeyS       → setScoreboardVisible(!scoreboardVisible)  // TV scoreboard overlay toggle
+KeyA       → setAnswerReveal(!answerReveal)            // answer overlay on QuestionSlide
+KeyR       → setScoresRevealed(!scoresRevealed)         // per-round scores revealed on /join
 ```
 
-- All shortcuts are configurable
-- Shortcuts only fire when host panel is focused — no accidental triggers
+- Ignored when a text input/textarea/select/contenteditable is focused, or the score panel / theme picker modal is open
+- Audio playback (shiny audio questions) and volume are NOT stream-deck-bound — audio has an on-display PLAY button (`QuestionSlide.jsx`), volume is system-level
+- No `KeyT`/`KeyJ`/arrow-up/arrow-down bindings exist in code — if planning to wire more Stream Deck keys, this is greenfield, not a fix
 - **No animation on the host panel when shortcuts fire.** The display responds with animation — the host panel updates instantly.
 
 ---
@@ -167,7 +161,8 @@ Opened via "Score" button in HostHeader (available in both BuildMode and LiveMod
 
 - `deriveRoundCols(show)` — auto-detects column labels from `show.slides`: `swing-round-intro` → "SW", `pyl-reveal` → "PYL", else `R${round.number}`. Always adds `bonus` → "?"
 - Team table: two-column layout, editable score cells, group-hover delete button
-- Add team, Sort by total, Random 2 (highlights 2 random teams yellow), Clear all
+- Add team, Sort by total, Clear all
+- **PYL Picker (🎴 Cards / 🥊 Boxing / 📦 Chest):** picks one random team from the current roster and plays a full-screen animated reveal (`CardPick.jsx` / `BoxingRing.jsx` / `ChestDuel.jsx`, shared with `display/slides/`), then highlights the winner row. Replaced the old "Random 2 — highlight 2 yellow" behavior.
 - Debounced 500ms Supabase upsert on score change
 - Score keys in `scores` JSONB: `r_${round.id}` per round, `"bonus"` for mystery column
 

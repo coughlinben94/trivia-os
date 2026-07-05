@@ -1,6 +1,6 @@
 ---
 name: trivia-os
-description: Trivia OS — real-time trivia-night platform for Baynes Apple Valley (React + Vite + Supabase Realtime; 21 ambient themes with per-show font/color overrides, 12 slide types including automated Winner Reveal, full scoreboard system). Use this skill whenever working on Trivia OS or anything under ~/Projects/trivia-os — the host build/live control surface, the /display TV renderer, /join phones, slides, rounds, scoring, powerups, the ambient ParticleBackground themes, theme overrides, or display transitions/animations. Read this plus its references before any display/theme/animation work, even on casual asks.
+description: Trivia OS — real-time trivia-night platform for Baynes Apple Valley (React + Vite + Supabase Realtime; 21 ambient themes with per-show font/color overrides, 15 slide types including automated Winner Reveal, full scoreboard system). Use this skill whenever working on Trivia OS or anything under ~/Projects/trivia-os — the host build/live control surface, the /display TV renderer, /join phones, slides, rounds, scoring, powerups, the ambient ParticleBackground themes, theme overrides, or display transitions/animations. Read this plus its references before any display/theme/animation work, even on casual asks.
 ---
 
 # Trivia OS — Developer Skill
@@ -22,7 +22,7 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 ## Read Order (mandatory before any display/theme/animation work)
 
 1. `SKILL.md` (this file)
-2. `references/slides.md` — all 12 slide types + data schemas
+2. `references/slides.md` — all slide types + data schemas
 3. `references/build-state.md` — BuildMode state machine
 4. `references/brand.md` — visual identity, typography, colors
 5. `references/themes.md` — 21 ambient themes, theme object shape
@@ -149,7 +149,7 @@ Round object stamped: `{ roundType, roundNumber?, subtitle, title }`
 
 ## Slide Types
 
-13 types in `SlideRenderer.SLIDE_COMPONENTS`:
+15 types in `SlideRenderer.SLIDE_COMPONENTS`:
 
 | Type | Component | Key data fields |
 |---|---|---|
@@ -165,6 +165,8 @@ Round object stamped: `{ roundType, roundNumber?, subtitle, title }`
 | `pixelate-series` | PixelateSeriesSlide | stages: [{imageUrl, opacity}] |
 | `pyl-reveal` | PylRevealSlide | answers: [{text, revealed}], points |
 | `grid` | GridSlide | columns [[{color?,mediaUrl?}]], intraGap, interGap, columnLabels, text — shiny "Color Schemes"; host picks columns/rows in AddSlideWizard, tiles filled in SlideEditor GridEditor; image wins over color; carries isShiny (fixed-gold), needs SlideRenderer opacity-neutralize |
+| `team-preview` | TeamPreviewSlide | none — live-queries `teams` for the show on mount ("Team List": scrolling display of registered team names) |
+| `team-picker` | TeamPickerSlide | openingText?, closingText?, parts, currentPart — "Team Intro": fixed black/starfield warp ceremony (background + stars always black/gray regardless of theme; only text stays theme-linked) |
 | `winner-reveal` | WinnerRevealSlide | none — computes winner live from `teams`/`team_scores` on mount |
 
 **Shiny subtypes:** `shinyType: 'visual'` (image full-bleed or split) | `shinyType: 'audio'` (waveform bars, PLAY button, Web Audio gain). Series-type shiny questions (`isSeries: true`) group as one lead slide + hidden `slotIndex`-ordered siblings in RoundSidebar; drag-reorder carries the whole group as one atomic unit.
@@ -185,7 +187,8 @@ The scoreboard system replaces the Excel scoreboard. Four surfaces:
 - `computeTotal(scores, cols)` — sums all JSONB score values for a team
 - `addStats(teams, cols)` — adds `_total` and `_place` with tie-aware ranking
 - Score cells are editable in-place; debounced 500ms Supabase upsert
-- Add team, delete team (group-hover delete button), Sort by total, Random 2 (highlights 2 random teams yellow), Clear all
+- Add team, delete team (group-hover delete button), Sort by total, Clear all
+- **PYL Picker:** 🎴 Cards / 🥊 Boxing / 📦 Chest buttons — full-screen animated random-team-picker (`CardPick.jsx`, `BoxingRing.jsx`, `ChestDuel.jsx` in `display/slides/`, reused here), picks one random team from `teamsWithStats`, shows a themed selection animation, then highlights the winner in the table. Replaced the old "Random 2 (highlight 2 yellow)" behavior.
 
 **Quick Entry mode (⚡ button):** replicates the Excel VBA macro flow
 1. **Team step:** type partial name → substring/case-insensitive match → auto-advance if 1 match, disambiguation buttons if multiple
@@ -269,10 +272,11 @@ actions.uploadFont(file)   // .woff2/.woff/.ttf/.otf, 5MB cap → { familyName, 
 actions.getHostPhotos()
 
 // Live control
-actions.goLive() / actions.goLiveFrom(slideId)   // Go Live picker — jump straight to any slide
+actions.goLive() / actions.goLiveFrom(slideIndex)   // Go Live picker — jump straight to any slide
 actions.nextSlide() / actions.prevSlide()
 actions.setScoreboardVisible(bool)  // S hotkey in LiveMode; triggers ScoreboardOverlay on /display
 actions.setAnswerReveal(bool)       // Stream Deck A key — answer overlay on QuestionSlide
+actions.setScoresRevealed(bool)     // Stream Deck R key — per-round scores revealed on /join
 actions.updateRoundScore(...)
 actions.saveResults()               // aggregates team_scores → final_scores + player_count;
                                      // auto-fires once when winner-reveal slide goes live
@@ -329,7 +333,7 @@ scoreboard_teams { id uuid PK, show_id text, name text, scores jsonb DEFAULT '{}
 - Center 60% × 45% kept clear for content
 - Colors from `theme.colors`; re-renders only on theme change
 
-**Transitions (9 named + random):** dissolve, emerge, zoom, punch, drop, descend, sink, settle, loom (assemble is planned)
+**Transitions (10 named + random):** dissolve, emerge, zoom, punch, drop, descend, sink, settle, loom, assemble — all selectable in `SlideEditor`'s transition picker. `assemble` is defined as a minimal instant-appear/fade-exit (no child-stagger yet — see build-state.md Remaining).
 
 **Easing curves (canonical):** all Framer Motion easing imports come from `client/src/lib/easings.js` — never redeclare curves locally.
 
@@ -371,7 +375,7 @@ Per-surface intent lives in `*_FLOOR`/`*_CEIL` (rem) + `*_BOX` consts. There are
 - **MacBook (host):** `/host` on laptop screen (light mode, 1920px)
 - **TV(s):** `/display` fullscreen on HDMI output (OREI HD18-EX165-K 1×8 splitter → 3 TVs)
 - **macOS:** Extended display mode — laptop ≠ TV
-- **Stream Deck:** ArrowRight/Left (advance/back), Space (audio play), A (answer reveal), S (scoreboard overlay toggle), R (reveal scores)
+- **Stream Deck:** ArrowRight/Left (advance/back), A (answer reveal), S (scoreboard overlay toggle), R (reveal scores) — all handled inline in `LiveMode.jsx`'s `handleKeyDown`, no separate hook. Audio play is NOT stream-deck-bound; it's an on-display PLAY button (`QuestionSlide.jsx`). Volume is system-level, not app-bound.
 - **Phones:** `/join?show=${showId}` via QR code on PreShowScreen
 
 ---

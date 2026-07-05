@@ -10,9 +10,7 @@ import { EASE_OUT } from '../../../lib/easings.js'
 // component. "State of the Union" is patriotic by identity; it must read
 // the same red-white-blue on every one of the 21 themes, the same way a
 // shiny question's gold doesn't shift with the ambient theme either.
-const RWB_RED       = '#b22234'
 const RWB_WHITE     = '#e8e0d8'
-const RWB_BLUE      = '#1a2a6c'
 const RWB_BLUE_DEEP = '#0d1536'
 
 // ─── Billowing gradient background ───────────────────────────────────────────
@@ -33,20 +31,25 @@ function WavingGradient({ reduce }) {
     canvas.width = W
     canvas.height = H
 
-    const maxAmp = reduce ? 3 : Math.round(H * 0.15)
-    const k = (2 * Math.PI) / (W * 0.55)
+    const maxAmp = reduce ? 3 : Math.round(H * 0.18)
+    const k  = (2 * Math.PI) / (W * 0.55)
+    const k2 = k * 1.65  // secondary harmonic — higher freq, different phase speed
 
-    // Precompute 512-entry RGB LUT: red → white → blue along the diagonal
+    // Wide solid red and blue bands with a narrow crisp white stripe between them.
+    // Transitions are kept tight (8–12% of the LUT) so the bands read as distinct
+    // colors rather than a muddy pastels blend.
     const N = 512
     const lut = new Uint8Array(N * 3)
     const stops = [
-      [0.00, 178,  34,  52],
-      [0.20, 184,  60,  72],
-      [0.35, 208, 148, 148],
-      [0.50, 224, 210, 204],
-      [0.65, 148, 160, 190],
-      [0.80,  50,  72, 128],
-      [1.00,  26,  42, 108],
+      [0.00, 176,  32,  50],  // american red
+      [0.26, 178,  34,  52],  // pure red — wide band
+      [0.38, 212, 130, 134],  // red → rose (fast 12%)
+      [0.45, 240, 228, 222],  // rose → white
+      [0.50, 244, 236, 230],  // warm white center
+      [0.55, 218, 222, 240],  // white → blue
+      [0.62, 106, 126, 184],  // blue-ish (fast 12%)
+      [0.74,  30,  50, 116],  // pure blue — wide band
+      [1.00,  18,  34,  94],  // deep navy
     ]
     for (let i = 0; i < N; i++) {
       const d = i / (N - 1)
@@ -62,12 +65,14 @@ function WavingGradient({ reduce }) {
     const data = imgData.data
 
     let t = 0
-    const spd = reduce ? 0.25 : 1.0
     let rafId
 
     function draw() {
       for (let x = 0; x < W; x++) {
-        const waveShift = Math.sin(k * x - t) * maxAmp * Math.pow(x / W, 0.7)
+        // Primary + secondary harmonic: organic turbulence, zero at pole, growing toward free end
+        const env = Math.pow(x / W, 0.7)
+        const wave = (Math.sin(k * x - t) + 0.22 * Math.sin(k2 * x - t * 1.38)) / 1.22
+        const waveShift = wave * maxAmp * env
         for (let y = 0; y < H; y++) {
           const ey   = y - waveShift
           const diag = Math.max(0, Math.min(1, (x / W + ey / H) / 2))
@@ -80,7 +85,7 @@ function WavingGradient({ reduce }) {
         }
       }
       ctx.putImageData(imgData, 0, 0)
-      t += 0.05 * spd
+      t += reduce ? 0.007 : 0.028  // ~3.8s full period — slow, majestic
       rafId = requestAnimationFrame(draw)
     }
 
@@ -114,7 +119,7 @@ export default function StateOfUnionSlide({ slide }) {
       {/* Dark center vignette — keeps the tilted text readable */}
       <div aria-hidden style={{
         position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
-        background: 'radial-gradient(ellipse 72% 62% at 50% 55%, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.25) 55%, rgba(0,0,0,0.05) 100%)',
+        background: 'radial-gradient(ellipse 72% 62% at 50% 55%, rgba(0,0,0,0.48) 0%, rgba(0,0,0,0.18) 55%, rgba(0,0,0,0.03) 100%)',
       }} />
 
       <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
@@ -131,7 +136,7 @@ export default function StateOfUnionSlide({ slide }) {
           />
         )}
 
-        {/* Typewriter text — RWB gradient fill, same spring + tilt as ShinyIntroScreen. */}
+        {/* Message — solid warm white, springs in tilted like a campaign sign */}
         <span data-slide-region="message" data-slide-field="message" style={xf('message')}>
           <motion.p
             initial={{ opacity: 0, scale: reduce ? 1 : 0.85, rotate: reduce ? -6 : -14 }}
@@ -145,17 +150,11 @@ export default function StateOfUnionSlide({ slide }) {
               textAlign: 'center',
               textWrap: 'balance',
               maxWidth: '22ch',
-              filter: 'drop-shadow(0 3px 0 rgba(0,0,0,0.5)) drop-shadow(0 0 32px rgba(0,0,0,0.7))',
+              color: RWB_WHITE,
+              filter: 'drop-shadow(0 2px 1px rgba(0,0,18,0.7)) drop-shadow(0 0 24px rgba(0,0,18,0.55))',
             }}
           >
-            <span style={{
-              background: `linear-gradient(135deg, ${RWB_RED} 0%, ${RWB_WHITE} 50%, #3a6fcf 100%)`,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}>
-              {message}
-            </span>
+            {message}
           </motion.p>
         </span>
       </div>

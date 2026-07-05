@@ -52,20 +52,25 @@ Routes `slide.type` → component. Also manages transitions.
 **SLIDE_COMPONENTS map:**
 ```js
 'title' → TitleSlide
-'state-of-union' → StateOfUnionSlide
 'round-intro' → RoundIntroSlide
+'swing-round-intro' → RoundIntroSlide  // same component, swing variant
 'question' → QuestionSlide
 'grading-break' → GradingBreakSlide
 'scoreboard-reveal' → ScoreboardRevealSlide
 'custom' → CustomSlide
-'multi-question' → MultiQuestionSlide
 'pixelate-series' → PixelateSeriesSlide
+'multi-question' → MultiQuestionSlide
 'pyl-reveal' → PylRevealSlide
+'state-of-union' → StateOfUnionSlide
+'winner-reveal' → WinnerRevealSlide
+'team-preview' → TeamPreviewSlide
+'team-picker' → TeamPickerSlide
+'grid' → GridSlide
 ```
 
-**9 transitions:** dissolve, emerge, zoom, punch, drop, descend, sink, settle, loom  
-`'random'` picks randomly (no immediate repeat).  
-Reduced-motion collapses all to dissolve (opacity crossfade only).
+**10 transitions:** dissolve, emerge, zoom, punch, drop, descend, sink, settle, loom, assemble — all selectable in SlideEditor's picker (`assemble` is a minimal instant-appear/fade-exit, no child-stagger yet).
+`'random'` picks randomly, excluding `assemble` and no immediate repeat.  
+Reduced-motion collapses all to dissolve (opacity crossfade only), except shiny slides (always use the shiny scale-in) and `team-picker`/`state-of-union`/`grid` (opacity forced to 1 throughout — see SlideRenderer comment — their fixed designs must never show the underlying theme color through a fade).
 
 **Easing curves (canonical):** all imports come from `client/src/lib/easings.js` — never redeclare locally. Full table in `SKILL.md`'s "Easing curves (canonical)".
 ```js

@@ -4,9 +4,9 @@
 
 ---
 
-## Completed (as of June 30, 2026)
+## Completed (as of June 30, 2026, + July 2026 additions noted inline below)
 
-**All original build steps complete + significant new features shipped.**
+**All original build steps complete + significant new features shipped.** July 2026 additions not yet folded into a fresh date stamp: `grid` slide (shiny Color Schemes), `team-picker`/`team-preview` slides, WYSIWYG `SlideElements` canvas overlay, PYL Picker (Cards/Boxing/Chest) replacing Random 2, measure-to-fit text sizing (`autoFitText.js`, retired the old tier tables), 9-bespoke/12-gradient theme split. See git log for exact commits — this file lags reality, cross-check before trusting a "not yet built" claim below.
 
 ### Infrastructure
 - Vite + React + Tailwind scaffold, Supabase client, env vars wired, vercel.json SPA rewrite
@@ -43,9 +43,10 @@
 ### `/display`
 - `Display.jsx` — full routing waterfall; jukebox-return Final Break jump; renders `ScoreboardOverlay` at `z-[60]` when `scoreboardVisible` true
 - `PreShowScreen` — QR code, team ticker, ambient, Baynes watermark, Ben photo
-- `SlideRenderer.jsx` — routes to per-type components; 9 named transitions + Random + reduced-motion crossfade
-- All 12 slide types: TitleSlide, RoundIntroSlide, QuestionSlide, GradingBreakSlide, ScoreboardRevealSlide, CustomSlide, StateOfUnionSlide, MultiQuestionSlide, PixelateSeriesSlide, PylRevealSlide, **WinnerRevealSlide** (new), **ScoreboardOverlay** (new)
-- `ParticleBackground.jsx` — 21 GPU-only ambient themes, 3-layer architecture, full audit June 2026
+- `SlideRenderer.jsx` — routes to per-type components; 10 named transitions (incl. `assemble`) + Random + reduced-motion crossfade
+- 15 slide types in `SLIDE_COMPONENTS`: TitleSlide, RoundIntroSlide (also `swing-round-intro`), QuestionSlide, GradingBreakSlide, ScoreboardRevealSlide, CustomSlide, StateOfUnionSlide, MultiQuestionSlide, PixelateSeriesSlide, PylRevealSlide, WinnerRevealSlide, GridSlide, TeamPreviewSlide, TeamPickerSlide — see `references/slides.md`
+- `SlideElements.jsx` — WYSIWYG canvas element overlay (`data.elements`), editable per-slide in SlideEditor's preview canvas; shipped across "Add WYSIWYG canvas editing to all slide types"
+- `ParticleBackground.jsx` — 9 bespoke ambient scenes + 12 shared BreathingGradient themes (July 2026 rework, see `references/themes.md`), 3-layer architecture
 - Answer reveal overlay on QuestionSlide (A key / `answer_reveal` flag)
 
 ### Winner Reveal + Final Break (shipped 2026-06-30)
@@ -102,7 +103,7 @@
 - Series-type shiny questions grouped atomically in RoundSidebar
 
 ### 21 Ambient Themes
-- Full bland-pass audit: all 21 themes have real drifters + named anchors (see project memory for current status per theme)
+- July 2026 rework split them into 9 bespoke (hand-built scene) + 12 shared BreathingGradient themes. Per-theme bland-pass status, anchors/drifters, and the bespoke/gradient split live in `references/themes.md` now — don't duplicate that tracking here, it drifts.
 - 3-layer architecture enforced; GPU-only; tinted vignette system
 
 ---
@@ -111,22 +112,19 @@
 
 | # | Step | Notes |
 |---|------|-------|
-| — | **`assemble` transition** | 10th transition — defined in SlideRenderer but NOT in the picker. Needs slide child-elements wired as `motion` children for child-stagger to work. |
 | — | **Data tab integration** | User mentioned: "data needs to be fed to the data tab so i can keep track of the variables we decided on" — `scoreboard_teams` data → Data slide type. Not yet designed or built. |
-| — | **Ambient bland-pass: Drive-In Movie** | Screen glow + projector beams + dust motes (PulseDot, opacity-only — no real drifter). Needs real translate drifter. |
-| — | **Ambient bland-pass: Wine Cellar** | Pure breathing-gradient GlowLayers, zero anchor, zero drifter. Textbook bland failure. |
-| — | **Northern Lights status unclear** | Has motion pass commit (035e2ec) but not git-confirmed as a full bland-pass rework — re-check code before assuming done. |
+| — | **`assemble` transition child-stagger** | Selectable in the picker now, but its definition is still a minimal instant-appear/fade-exit — no actual child-element stagger wired yet. |
+| — | **Ambient bland-pass tracking** | Moved to `references/themes.md` — check there per-theme, not here. |
 | — | **Profiling-dependent P2s** | MeteorShower 200-node DOM field + /join `backdrop-filter: blur()` on cheap Androids — both need real-hardware profiling before deciding if there's a problem. NOT blind-fix items. |
-| — | **Scoreboard TV overlay + phone drawer Playwright verification** | Built by subagents 2026-06-30 but not yet Playwright-tested (only ScoreboardModal was verified). |
+| — | **Scoreboard TV overlay + phone drawer Playwright verification** | Built by subagents 2026-06-30 — verify current status before assuming still untested; several commits have touched these surfaces since. |
 
 ---
 
 ## Known Issues
 
-- **`ThemeCanvas.jsx` / `ThemeForeground.jsx`** — wired but `scene: null` on all 21 themes. Future use.
-- **`assemble` transition** — defined but not picker-selectable.
+- **`ThemeCanvas.jsx` / `ThemeForeground.jsx`** — wired but `scene: null` (background/foreground) on all 21 themes; a `cssClass` field now also exists on `scene`. Future use.
 - **Three fallback theme IDs** — `getTheme`'s own fallback, `DEFAULT_THEME_ID`, and `normalizeShow`'s fallback all exist independently. Currently compatible. If a "wrong default theme" bug appears, unify them.
-- **`baynes-logo.svg`** — referenced in `NoShowScreen` but file doesn't exist in `dist/`. Renders as nothing (acceptable for now).
+- **`baynes-logo.svg`** — file doesn't exist anywhere in `client/public/`, not just `dist/`. Referenced in `BaynesWatermark.jsx` (every slide), `RoundIntroSlide.jsx`, and `Join.jsx` (top-of-form + NoShowScreen) — all render nothing/broken-img rather than the logo. Bigger surface area than previously noted; still acceptable-for-now per Ben, but worth knowing it's not just one screen.
 - **`AmbientAudit.jsx`** — dev tool, not routed in prod. Verify excluded from main bundle or gated.
 
 ---
