@@ -5,39 +5,20 @@ import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import MediaUpload from './MediaUpload.jsx'
 import HostPhotoLibrary from './HostPhotoLibrary.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
-import SlideRenderer from '../display/SlideRenderer.jsx'
-import ParticleBackground from '../display/ParticleBackground.jsx'
-import { makeElement } from '../display/SlideElements.jsx'
-import { DISPLAY_FONTS } from './ThemeCustomizeControls.jsx'
+import SlideCanvasEditor from './SlideCanvasEditor.jsx'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
-
-const INNER_W = 1280
-const INNER_H = 720
-const PREVIEW_W = 680
-const PREVIEW_H = Math.round(PREVIEW_W * (9 / 16))
-const SCALE = PREVIEW_W / INNER_W
 
 export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos }) {
   const { theme } = useTheme()
   const [data, setData] = useState(slide.data)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [jukeboxLibs, setJukeboxLibs] = useState(JUKEBOX_LIBRARIES)
-  const [selectedElId, setSelectedElId] = useState(null)
   const saveTimer = useRef(null)
-  const overlayRef = useRef(null)
-  const dragStateRef = useRef(null)
-  const leftPanelRef = useRef(null)
-  const rightPanelRef = useRef(null)
-  const canvasRef = useRef(null)
-  const [panelW, setPanelW] = useState(800)
-  const [panelH, setPanelH] = useState(600)
-  const [regions, setRegions] = useState([])
-  const [selectedRegionId, setSelectedRegionId] = useState(null)
-  const [editingRegionId, setEditingRegionId] = useState(null)
-  const [rotatingAngle, setRotatingAngle] = useState(null)
-  const activeEditRef = useRef(null)
-  const detectTimerRef = useRef(null)
+  // Holds the latest scheduled { id, updates } so flushSave() can persist it
+  // immediately (on slide-switch / overlay edit-mode toggle-off / unmount)
+  // instead of waiting out the debounce and risking a lost edit.
+  const pendingSaveRef = useRef(null)
 
   useEffect(() => {
     let alive = true
@@ -45,24 +26,13 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
     return () => { alive = false }
   }, [])
 
+  // Sync local data when the selected slide changes. Flush first so any pending
+  // edit to the slide we're leaving is persisted before its data is swapped out
+  // (scheduleSave captured that slide's id, so the write still targets it).
   useEffect(() => {
-    const el = leftPanelRef.current
-    if (!el) return
-    const obs = new ResizeObserver(([entry]) => {
-      setPanelW(Math.round(entry.contentRect.width))
-      setPanelH(Math.round(entry.contentRect.height))
-    })
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [])
-
-  // Sync local data when selected slide changes
-  useEffect(() => {
-    setData(slide.data); setConfirmingDelete(false); setSelectedElId(null)
-    // If a drag got interrupted (see startDrag's pointercancel comment) and
-    // its listeners are still attached, this stops onMove from writing
-    // element-position updates to the slide we just navigated away from.
-    dragStateRef.current = null
+    flushSave()
+    setData(slide.data); setConfirmingDelete(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slide.id])
 
   // questionLabel/questionNumber are auto-recomputed by renumberRoundQuestions
@@ -77,6 +47,13 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
     if (slide.data?.questionLabel === data.questionLabel && slide.data?.questionNumber === data.questionNumber) return
     setData(d => ({ ...d, questionLabel: slide.data?.questionLabel, questionNumber: slide.data?.questionNumber }))
   }, [slide.data?.questionLabel, slide.data?.questionNumber])
+
+  // Flush any pending debounced save on unmount so a last-second edit is never
+  // dropped when the editor closes.
+  useEffect(() => {
+    return () => { flushSave() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function change(key, value) {
     const next = { ...data, [key]: value }
@@ -93,91 +70,27 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   }
 
   function scheduleSave(updates) {
+    pendingSaveRef.current = { id: slide.id, updates }
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => onUpdateSlide(slide.id, updates), 600)
+    saveTimer.current = setTimeout(() => {
+      saveTimer.current = null
+      pendingSaveRef.current = null
+      onUpdateSlide(slide.id, updates)
+    }, 600)
+  }
+
+  // Write the pending edit right now instead of waiting out the debounce.
+  function flushSave() {
+    if (!saveTimer.current) return
+    clearTimeout(saveTimer.current); saveTimer.current = null
+    const p = pendingSaveRef.current; pendingSaveRef.current = null
+    if (p) onUpdateSlide(p.id, p.updates)
   }
 
   function batchChange(updates) {
     const next = { ...data, ...updates }
     setData(next)
     scheduleSave({ data: next })
-  }
-
-  // Element overlay helpers
-  function updateElement(id, updates) {
-    const next = (data.elements ?? []).map(el => el.id === id ? { ...el, ...updates } : el)
-    change('elements', next)
-  }
-
-  function addElement(type) {
-    const el = makeElement(type)
-    const next = [...(data.elements ?? []), el]
-    change('elements', next)
-    setSelectedElId(el.id)
-  }
-
-  function deleteElement(id) {
-    const next = (data.elements ?? []).filter(el => el.id !== id)
-    change('elements', next)
-    if (selectedElId === id) setSelectedElId(null)
-  }
-
-  function duplicateElement(id) {
-    const el = (data.elements ?? []).find(e => e.id === id)
-    if (!el) return
-    const dupe = { ...el, id: `el_${Math.random().toString(36).slice(2, 10)}`, x: (el.x ?? 50) + 4, y: (el.y ?? 50) + 4 }
-    const next = [...(data.elements ?? []), dupe]
-    change('elements', next)
-    setSelectedElId(dupe.id)
-  }
-
-  function bringForward(id) {
-    const els = [...(data.elements ?? [])]
-    const i = els.findIndex(e => e.id === id)
-    if (i < els.length - 1) { [els[i], els[i + 1]] = [els[i + 1], els[i]]; change('elements', els) }
-  }
-
-  function sendBackward(id) {
-    const els = [...(data.elements ?? [])]
-    const i = els.findIndex(e => e.id === id)
-    if (i > 0) { [els[i - 1], els[i]] = [els[i], els[i - 1]]; change('elements', els) }
-  }
-
-  function startDrag(e, elId, el) {
-    e.stopPropagation()
-    const overlay = overlayRef.current
-    if (!overlay) return
-    const rect = overlay.getBoundingClientRect()
-    dragStateRef.current = {
-      elId,
-      startMouseX: e.clientX, startMouseY: e.clientY,
-      startElX: el.x ?? 50, startElY: el.y ?? 50,
-      rectW: rect.width, rectH: rect.height,
-    }
-    setSelectedElId(elId)
-    function onMove(ev) {
-      const s = dragStateRef.current
-      if (!s) return
-      const dx = (ev.clientX - s.startMouseX) / s.rectW * 100
-      const dy = (ev.clientY - s.startMouseY) / s.rectH * 100
-      updateElement(s.elId, {
-        x: Math.max(2, Math.min(98, s.startElX + dx)),
-        y: Math.max(2, Math.min(98, s.startElY + dy)),
-      })
-    }
-    function onUp() {
-      dragStateRef.current = null
-      document.removeEventListener('pointermove', onMove)
-      document.removeEventListener('pointerup', onUp)
-      document.removeEventListener('pointercancel', onUp)
-    }
-    document.addEventListener('pointermove', onMove)
-    document.addEventListener('pointerup', onUp)
-    // Browsers fire pointercancel (not pointerup) when a drag gets interrupted —
-    // released outside the window, an OS-level focus steal, etc. Without this,
-    // the listeners never get removed and onMove keeps writing to this element
-    // via a stale closure even after the host has moved on to a different slide.
-    document.addEventListener('pointercancel', onUp)
   }
 
   // Media upload helpers
@@ -202,929 +115,123 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   // Questions in same round (for grading-break back link)
   const roundSlides = show.slides.filter(s => s.roundId === slide.roundId && s.type === 'question')
 
-  // dynScale lives outside the render IIFE so region functions can close over it
-  const dynScale = Math.min(panelW / INNER_W, panelH / INNER_H)
-  const scaledW  = Math.round(INNER_W * dynScale)
-  const scaledH  = Math.round(INNER_H * dynScale)
-
-  function detectRegions() {
-    if (!canvasRef.current || !overlayRef.current) return
-    const oRect = overlayRef.current.getBoundingClientRect()
-    const els = canvasRef.current.querySelectorAll('[data-slide-region]')
-    setRegions(Array.from(els).map(el => {
-      const r = el.getBoundingClientRect()
-      const id = el.dataset.slideRegion
-      const rt = (data._regionTransforms ?? {})[id] ?? {}
-      return { id, field: el.dataset.slideField, x: r.left - oRect.left, y: r.top - oRect.top, w: r.width, h: r.height, baselineDx: rt.dx ?? 0, baselineDy: rt.dy ?? 0, baselineRotate: rt.rotate ?? 0 }
-    }))
-  }
-
-  function startRegionMove(e, region) {
-    const rt = data._regionTransforms ?? {}
-    const startDx = rt[region.id]?.dx ?? 0
-    const startDy = rt[region.id]?.dy ?? 0
-    const sX = e.clientX, sY = e.clientY
-    function onMove(ev) {
-      const ndx = startDx + (ev.clientX - sX) / dynScale
-      const ndy = startDy + (ev.clientY - sY) / dynScale
-      setData(d => { const c = d._regionTransforms ?? {}; const n = { ...d, _regionTransforms: { ...c, [region.id]: { ...c[region.id], dx: ndx, dy: ndy } } }; scheduleSave({ data: n }); return n })
-    }
-    function onUp() {
-      document.removeEventListener('pointermove', onMove)
-      document.removeEventListener('pointerup', onUp)
-      document.removeEventListener('pointercancel', onUp)
-      setTimeout(detectRegions, 50)
-    }
-    document.addEventListener('pointermove', onMove)
-    document.addEventListener('pointerup', onUp)
-    document.addEventListener('pointercancel', onUp)
-  }
-
-  // Signed degrees in (-180, 180] — much easier to read than an unbounded
-  // accumulated drag angle ("6°" instead of "-354°" after a full spin).
-  function normalizeAngleDisplay(deg) {
-    let d = ((deg % 360) + 360) % 360
-    if (d > 180) d -= 360
-    return Math.round(d)
-  }
-
-  function startRegionRotate(e, region) {
-    e.stopPropagation()
-    const oRect = overlayRef.current.getBoundingClientRect()
-    const rt = data._regionTransforms ?? {}
-    const curDx = rt[region.id]?.dx ?? 0
-    const curDy = rt[region.id]?.dy ?? 0
-    const extraX = (curDx - region.baselineDx) * dynScale
-    const extraY = (curDy - region.baselineDy) * dynScale
-    const cx = oRect.left + region.x + extraX + region.w / 2
-    const cy = oRect.top + region.y + extraY + region.h / 2
-    const startR = rt[region.id]?.rotate ?? 0
-    const startA = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI
-    function onMove(ev) {
-      let nr = startR + (Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180 / Math.PI - startA)
-      // Snap to flat/45°-family angles — the common case ("make this flat")
-      // is hard to land by eye on a freehand drag without this. Radius has
-      // to stay small: a wide dead zone (this was 4°) swallows the whole
-      // 1-5° range and makes slight intentional tilts unreachable. Hold
-      // Shift to disable snapping outright for fine control near a snap point.
-      const snapEnabled = !ev.shiftKey
-      const nearest45 = Math.round(nr / 45) * 45
-      const snapped = snapEnabled && Math.abs(nr - nearest45) <= 1.2
-      if (snapped) nr = nearest45
-      setData(d => { const c = d._regionTransforms ?? {}; const n = { ...d, _regionTransforms: { ...c, [region.id]: { ...c[region.id], rotate: nr } } }; scheduleSave({ data: n }); return n })
-      setRotatingAngle({ id: region.id, deg: normalizeAngleDisplay(nr), snapped, x: cx - oRect.left, y: cy - oRect.top - region.h / 2 - 40 })
-    }
-    function onUp() {
-      document.removeEventListener('pointermove', onMove)
-      document.removeEventListener('pointerup', onUp)
-      document.removeEventListener('pointercancel', onUp)
-      setRotatingAngle(null)
-      setTimeout(detectRegions, 50)
-    }
-    document.addEventListener('pointermove', onMove)
-    document.addEventListener('pointerup', onUp)
-    document.addEventListener('pointercancel', onUp)
-  }
-
-  // Edits the REAL rendered slide element in place — not a copy with
-  // guessed-at styles — so gradient-clipped text, custom fonts, drop
-  // shadows etc. all just work because it IS that element. Imperative
-  // (not React state) since we don't want a re-render per keystroke.
-  function enterEditMode(region) {
-    const el = canvasRef.current?.querySelector(`[data-slide-region="${region.id}"]`)
-    if (!el) return
-    const canvasEl = canvasRef.current
-    const originalOutline = el.style.outline
-    const originalOffset = el.style.outlineOffset
-    const originalCursor = el.style.cursor
-    const originalElPE = el.style.pointerEvents
-    const originalCanvasPE = canvasEl.style.pointerEvents
-    let finished = false
-
-    function finish(save) {
-      if (finished) return
-      finished = true
-      el.removeEventListener('blur', onBlur)
-      el.removeEventListener('keydown', onKeyDown)
-      el.contentEditable = 'false'
-      el.style.outline = originalOutline
-      el.style.outlineOffset = originalOffset
-      el.style.cursor = originalCursor
-      el.style.pointerEvents = originalElPE
-      canvasEl.style.pointerEvents = originalCanvasPE
-      if (save) {
-        const val = el.textContent.trim()
-        if (val) change(region.field, val)
-      } else {
-        el.textContent = data[region.field] ?? ''
-      }
-      // Also clears selection, not just editing: the overlay's own
-      // click-outside-to-deselect handler is disabled (pointerEvents:none)
-      // for the whole time we're editing, so a click that exits via native
-      // blur never reaches it — without this, selectedRegionId is left
-      // stuck pointing at this region and the very next click on it jumps
-      // straight back into edit mode instead of just selecting it.
-      setEditingRegionId(null)
-      setSelectedRegionId(null)
-      setTimeout(detectRegions, 50)
-    }
-    function onBlur() { finish(true) }
-    function onKeyDown(ev) {
-      if (ev.key === 'Escape') { ev.preventDefault(); finish(false); el.blur() }
-      else if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); el.blur() }
-    }
-
-    // Slide components render a full-bleed SlideElements overlay (for user
-    // text/image annotations) that sits at the same z-index as text regions
-    // and comes later in DOM order, so it silently blankets the whole slide
-    // regardless of any z-index set on the region itself. Rather than fight
-    // stacking order per slide type, disable hit-testing on the whole canvas
-    // and opt just this one element back in — pointer-events:none removes an
-    // element from hit-testing entirely, independent of paint order.
-    canvasEl.style.pointerEvents = 'none'
-    el.style.pointerEvents = 'auto'
-    el.contentEditable = 'true'
-    el.style.outline = '2px solid #6366f1'
-    el.style.outlineOffset = '4px'
-    el.style.cursor = 'text'
-    el.addEventListener('blur', onBlur)
-    el.addEventListener('keydown', onKeyDown)
-    activeEditRef.current = el
-    el.focus()
-    const range = document.createRange()
-    range.selectNodeContents(el)
-    range.collapse(false)
-    const sel = window.getSelection()
-    sel?.removeAllRanges()
-    sel?.addRange(range)
-
-    setEditingRegionId(region.id)
-  }
-
-  // Trigger region detection after slide/panel changes (350ms lets animations settle)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    clearTimeout(detectTimerRef.current)
-    detectTimerRef.current = setTimeout(detectRegions, 350)
-    return () => clearTimeout(detectTimerRef.current)
-  }, [slide.id, slide.type, panelW, panelH])
-
-  // If the slide switches out from under an in-progress edit (e.g. Ben
-  // clicks a different slide in the sidebar while a text box is focused),
-  // there's no more region/canvas to save into — just drop the edit state
-  // without touching the DOM node we no longer own.
-  useEffect(() => {
-    return () => { activeEditRef.current = null }
-  }, [slide.id])
-
   return (
     <div className="flex flex-col h-full">
-      {(() => {
-        const elements = data.elements ?? []
-        const selectedEl = elements.find(el => el.id === selectedElId) ?? null
-        return (
+      <div className="flex flex-1 min-h-0">
 
-          <div className="flex flex-1 min-h-0">
+        {/* ── LEFT: slide canvas (scaled live preview + region & overlay editing) ── */}
+        <div className="flex-1 min-w-0">
+          <SlideCanvasEditor
+            slide={slide}
+            show={show}
+            theme={theme}
+            data={data}
+            setData={setData}
+            scheduleSave={scheduleSave}
+            change={change}
+            flushSave={flushSave}
+            uploadMedia={uploadMedia}
+          />
+        </div>
 
-            {/* ── LEFT: slide canvas ── */}
-            <div className="flex-1 bg-white flex flex-col overflow-hidden">
-              {/* Slide viewport — ref here so panelH excludes the chips strip below */}
-              <div ref={leftPanelRef} className="flex-1 flex items-center justify-center min-h-0 overflow-hidden">
-                {/* Wrapper: canvas is clipped; overlay is NOT, so handles near edges stay clickable */}
-                <div style={{ width: scaledW, height: scaledH, position: 'relative', flexShrink: 0 }}>
-                  {/* Clipped canvas */}
-                  <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-                    <div ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${dynScale})`, transformOrigin: 'top left', overflow: 'hidden', background: theme.colors.bg }}>
-                      <ParticleBackground theme={theme} />
-                      <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} isPreview />
-                    </div>
-                  </div>
-                  {/* Interactive element overlay — overflow visible so handles aren't clipped.
-                      pointerEvents:none while editing a region: the real slide text being
-                      edited lives BELOW this blanket overlay, so clicks/typing need to pass
-                      through to it. Individual handles below opt back in with pointerEvents:auto. */}
-                  <div
-                    ref={overlayRef}
-                    style={{ position: 'absolute', inset: 0, zIndex: 50, overflow: 'visible', pointerEvents: editingRegionId ? 'none' : 'auto' }}
-                    onPointerDown={() => { setSelectedElId(null); setSelectedRegionId(null) }}
-                  >
-                  {/* ── WYSIWYG region handles ── */}
-                  {regions.map(region => {
-                    const isSelReg = selectedRegionId === region.id
-                    const isEditReg = editingRegionId === region.id
-                    if (isEditReg) return null
-                    const rt = data._regionTransforms ?? {}
-                    const curDx = rt[region.id]?.dx ?? 0
-                    const curDy = rt[region.id]?.dy ?? 0
-                    const curRot = rt[region.id]?.rotate ?? 0
-                    const extraX = (curDx - region.baselineDx) * dynScale
-                    const extraY = (curDy - region.baselineDy) * dynScale
-                    const hasTransform = !!(rt[region.id]?.dx || rt[region.id]?.dy || rt[region.id]?.rotate)
-                    return (
-                      <div
-                        key={region.id}
-                        style={{ position: 'absolute', left: region.x + extraX, top: region.y + extraY, width: region.w, height: region.h, transform: `rotate(${curRot}deg)`, transformOrigin: 'center', zIndex: 48 }}
-                      >
-                        <div
-                          style={{ position: 'absolute', inset: 0, border: isSelReg ? '2px solid rgba(99,102,241,0.9)' : '1px dashed transparent', borderRadius: 2, cursor: isSelReg ? 'move' : 'default', boxSizing: 'border-box', transition: 'border-color 0.15s', pointerEvents: 'auto' }}
-                          onPointerEnter={e => { if (!isSelReg) e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)' }}
-                          onPointerLeave={e => { if (!isSelReg) e.currentTarget.style.borderColor = 'transparent' }}
-                          onPointerDown={e => {
-                            e.stopPropagation()
-                            if (selectedRegionId !== region.id) {
-                              setSelectedRegionId(region.id); setSelectedElId(null)
-                            } else {
-                              // preventDefault matters here: enterEditMode focuses the real
-                              // element synchronously, but the browser's delayed compat
-                              // 'mousedown' can still land on a stale target a few ms later
-                              // (this div, before React removes it) and blur what we just
-                              // focused — closing the box before it's even visible.
-                              e.preventDefault()
-                              enterEditMode(region); return
-                            }
-                            startRegionMove(e, region)
-                          }}
-                        />
-                        {isSelReg && (
-                          <div title="Rotate — drag; snaps near flat/45° angles (hold Shift to disable)" style={{ position: 'absolute', top: -20, right: -20, width: 16, height: 16, borderRadius: '50%', background: '#6366f1', border: '2px solid white', cursor: 'grab', zIndex: 1, pointerEvents: 'auto' }}
-                            onPointerDown={e => startRegionRotate(e, region)} />
-                        )}
-                        {isSelReg && hasTransform && (
-                          <div title="Reset position & rotation" style={{ position: 'absolute', top: -20, left: -20, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', border: '2px solid white', cursor: 'pointer', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'white', fontWeight: 700, pointerEvents: 'auto' }}
-                            onPointerDown={e => { e.stopPropagation(); const c = data._regionTransforms ?? {}; const { [region.id]: _, ...rest } = c; change('_regionTransforms', rest); setTimeout(detectRegions, 50) }}>×</div>
-                        )}
-                      </div>
-                    )
-                  })}
-                  {/* Live angle readout while dragging the rotate handle — turns green
-                      and shows "flat" once snapped to a 45°-family angle (0/45/90/...). */}
-                  {rotatingAngle && (
-                    <div style={{
-                      position: 'absolute', left: rotatingAngle.x, top: rotatingAngle.y, transform: 'translateX(-50%)',
-                      zIndex: 60, pointerEvents: 'none', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700,
-                      color: 'white', padding: '3px 9px', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
-                      background: rotatingAngle.snapped ? '#16a34a' : '#1e1b4b',
-                    }}>
-                      {rotatingAngle.deg}°{rotatingAngle.snapped ? ' · flat' : ''}
-                    </div>
-                  )}
-                  {elements.map(el => {
-                    const isSel = el.id === selectedElId
-                    const elX = el.x ?? 50
-                    const elY = el.y ?? 50
-                    const elW = el.width ?? (el.type === 'image' ? 40 : 60)
-                    const rot = el.rotation ?? 0
-                    const fH  = el.flipH ? -1 : 1
-                    const fV  = el.flipV ? -1 : 1
-                    return (
-                      <div
-                        key={el.id}
-                        style={{
-                          position: 'absolute',
-                          left: `${elX}%`, top: `${elY}%`,
-                          width: `${elW}%`,
-                          transform: `translate(-50%, -50%) rotate(${rot}deg) scaleX(${fH}) scaleY(${fV})`,
-                          border: isSel ? '2px solid #3b82f6' : '1px dashed rgba(255,255,255,0.35)',
-                          borderRadius: 4,
-                          minHeight: el.type === 'text'
-                            ? Math.max(36, Math.round((el.fontSize ?? 60) * dynScale * (el.lineHeight ?? 1.2)))
-                            : Math.max(36, Math.round(elW / 100 * scaledW * (INNER_H / INNER_W))),
-                          cursor: 'move',
-                          background: isSel ? 'rgba(59,130,246,0.07)' : 'transparent',
-                          boxSizing: 'border-box',
-                          pointerEvents: 'auto',
-                        }}
-                        onPointerDown={e => { e.stopPropagation(); startDrag(e, el.id, el) }}
-                      >
-                        {isSel && (
-                          <button
-                            style={{ position: 'absolute', top: -9, right: -9, background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: 18, height: 18, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1, pointerEvents: 'auto' }}
-                            onPointerDown={e => { e.stopPropagation(); deleteElement(el.id) }}
-                          >×</button>
-                        )}
-                        <span style={{ position: 'absolute', top: -16, left: 0, fontSize: 10, color: isSel ? '#60a5fa' : 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
-                          {el.type === 'text' ? (el.content?.slice(0, 22) || 'Text box') : 'Image'}
-                        </span>
-                      </div>
-                    )
-                  })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Layer chips — anchored at the bottom, outside the centered viewport */}
-              {elements.length > 0 && (
-                <div className="shrink-0 px-3 py-2 flex flex-wrap gap-1.5 justify-center border-t border-gray-100">
-                  {elements.map(el => (
-                    <button
-                      key={el.id}
-                      onClick={() => setSelectedElId(prev => prev === el.id ? null : el.id)}
-                      className={`text-[11px] px-2.5 py-0.5 rounded-full border transition-colors ${
-                        el.id === selectedElId
-                          ? 'bg-blue-500 border-blue-500 text-white'
-                          : 'text-gray-400 border-gray-200 hover:text-gray-700 hover:border-gray-400'
-                      }`}
-                    >
-                      {el.type === 'text' ? (el.content?.slice(0, 18) || '(empty text)') : '🖼 Image'}
-                    </button>
-                  ))}
-                </div>
+        {/* ── RIGHT: editing sidebar ── */}
+        <div className="w-72 bg-white border-l border-gray-200 flex flex-col overflow-hidden shrink-0">
+          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+            <div className="space-y-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Slide Content</p>
+              {slide.type === 'title' && <TitleEditor data={data} onChange={change} />}
+              {(slide.type === 'round-intro' || slide.type === 'swing-round-intro') && (
+                <RoundIntroEditor data={data} onChange={change} isSwing={slide.type === 'swing-round-intro'}
+                  uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
               )}
-            </div>
-
-            {/* ── RIGHT: editing sidebar ── */}
-            <div className="w-72 bg-white border-l border-gray-200 flex flex-col overflow-hidden shrink-0">
-              <div ref={rightPanelRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
-                {/* ── Slide content ── */}
-                {(
-                  <div className="space-y-3 pb-3 border-b border-gray-100">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Slide Content</p>
-                    {slide.type === 'title' && <TitleEditor data={data} onChange={change} />}
-                    {(slide.type === 'round-intro' || slide.type === 'swing-round-intro') && (
-                      <RoundIntroEditor data={data} onChange={change} isSwing={slide.type === 'swing-round-intro'}
-                        uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
-                    )}
-                    {slide.type === 'question' && (
-                      <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
-                    )}
-                    {slide.type === 'grading-break' && (
-                      <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
-                        uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} />
-                    )}
-                    {slide.type === 'scoreboard-reveal' && (
-                      <ScoreboardRevealEditor data={data} onChange={change} show={show} />
-                    )}
-                    {slide.type === 'custom' && (
-                      <CustomEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
-                    )}
-                    {slide.type === 'pixelate-series' && (
-                      <PixelateSeriesEditor data={data} onChange={change} onStageUpload={handleStageUpload} />
-                    )}
-                    {slide.type === 'multi-question' && (
-                      <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
-                    )}
-                    {slide.type === 'pyl-reveal' && (
-                      <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
-                    )}
-                    {slide.type === 'state-of-union' && (
-                      <StateOfUnionEditor data={data} onChange={change} getHostPhotos={getHostPhotos} uploadMedia={uploadMedia} />
-                    )}
-                    {slide.type === 'team-picker' && (
-                      <TeamPickerEditor data={data} onChange={change} />
-                    )}
-                    {slide.type === 'grid' && (
-                      <GridEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload} />
-                    )}
-                    {slide.type === 'winner-reveal' && (
-                      <WinnerRevealEditor data={data} onChange={change} />
-                    )}
-                  </div>
-                )}
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Overlay Elements</p>
-                {/* Add element buttons */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => addElement('text')}
-                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-gray-500 border border-dashed border-gray-300 rounded-lg py-2 hover:border-gray-400 hover:text-gray-700 transition-colors"
-                  >
-                    <span className="font-bold text-sm leading-none">T</span> Add text
-                  </button>
-                  <button
-                    onClick={() => addElement('image')}
-                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-gray-500 border border-dashed border-gray-300 rounded-lg py-2 hover:border-gray-400 hover:text-gray-700 transition-colors"
-                  >
-                    🖼 Add image
-                  </button>
-                </div>
-
-              {/* ── Text element properties ────────────────────── */}
-              {selectedEl?.type === 'text' && (
-                <div className="space-y-2.5 pt-2 border-t border-gray-100">
-                  {/* Content */}
-                  <textarea
-                    autoFocus
-                    value={selectedEl.content ?? ''}
-                    onChange={e => updateElement(selectedElId, { content: e.target.value })}
-                    rows={2}
-                    placeholder="Type your text…"
-                    className="w-full text-sm bg-gray-50 text-gray-900 rounded-lg px-3 py-2 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none placeholder:text-gray-400"
-                  />
-                  {/* Font */}
-                  <select
-                    value={selectedEl.font ?? 'Boogaloo'}
-                    onChange={e => updateElement(selectedElId, { font: e.target.value })}
-                    className="w-full text-xs bg-gray-50 text-gray-900 border border-gray-200 rounded-md px-2 py-1 focus:outline-none"
-                  >
-                    {DISPLAY_FONTS.map(f => <option key={f} value={f}>{f}</option>)}
-                  </select>
-                  {/* Style: B I U S̶ */}
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {[
-                      ['bold',          'B'],
-                      ['italic',        'I'],
-                      ['underline',     'U'],
-                      ['strikethrough', 'S̶'],
-                    ].map(([key, label]) => (
-                      <button key={key}
-                        onClick={() => updateElement(selectedElId, { [key]: !selectedEl[key] })}
-                        className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl[key] ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
-                      >{label}</button>
-                    ))}
-                    {/* Text transform */}
-                    {[
-                      ['none',       'Aa'],
-                      ['uppercase',  'AA'],
-                      ['lowercase',  'aa'],
-                      ['capitalize', 'Abc'],
-                    ].map(([val, label]) => (
-                      <button key={val}
-                        onClick={() => updateElement(selectedElId, { textTransform: val })}
-                        className={`text-xs px-2 py-1 rounded border transition-colors ${(selectedEl.textTransform ?? 'none') === val ? 'bg-violet-500 border-violet-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
-                      >{label}</button>
-                    ))}
-                  </div>
-                  {/* Align + color */}
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {[
-                      ['left',    '▤'],
-                      ['center',  '☰'],
-                      ['right',   '▥'],
-                      ['justify', '▦'],
-                    ].map(([a, icon]) => (
-                      <button key={a}
-                        onClick={() => updateElement(selectedElId, { align: a })}
-                        className={`text-[11px] px-1.5 py-1 rounded border transition-colors ${(selectedEl.align ?? 'center') === a ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
-                      >{icon}</button>
-                    ))}
-                    <input type="color" value={selectedEl.color ?? '#ffffff'}
-                      onChange={e => updateElement(selectedElId, { color: e.target.value })}
-                      className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0" title="Text color"
-                    />
-                    {selectedEl.color && (
-                      <button onClick={() => updateElement(selectedElId, { color: null })} className="text-[10px] text-gray-400 hover:text-gray-600">↺</button>
-                    )}
-                  </div>
-                  {/* Size + width */}
-                  {[
-                    ['Size',  'fontSize',     16, 200, 2,   60, 'px'],
-                    ['Width', 'width',        10, 100, 1,   60, '%'],
-                  ].map(([label, key, min, max, step, def, unit]) => (
-                    <div key={key} className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400 w-9 shrink-0">{label}</span>
-                      <input type="range" min={min} max={max} step={step}
-                        value={selectedEl[key] ?? def}
-                        onChange={e => updateElement(selectedElId, { [key]: Number(e.target.value) })}
-                        className="flex-1"
-                      />
-                      <span className="text-xs text-gray-400 w-12 text-right">{selectedEl[key] ?? def}{unit}</span>
-                    </div>
-                  ))}
-                  {/* Curve + Spacing */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-9 shrink-0">Curve</span>
-                    <input type="range" min="-100" max="100"
-                      value={selectedEl.curve ?? 0}
-                      onChange={e => updateElement(selectedElId, { curve: Number(e.target.value) })}
-                      className="flex-1"
-                    />
-                    <span className="text-xs text-gray-400 w-8 text-right">{selectedEl.curve ?? 0}</span>
-                    {(selectedEl.curve ?? 0) !== 0 && (
-                      <button onClick={() => updateElement(selectedElId, { curve: 0 })} className="text-[10px] text-gray-400 hover:text-gray-600">↺</button>
-                    )}
-                  </div>
-                  {[
-                    ['Spacing', 'letterSpacing', -5, 30, 0.5, 0,   'px'],
-                    ['Line ht', 'lineHeight',    0.8,  3, 0.1, 1.2, '×'],
-                  ].map(([label, key, min, max, step, def, unit]) => (
-                    <div key={key} className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400 w-9 shrink-0">{label}</span>
-                      <input type="range" min={min} max={max} step={step}
-                        value={selectedEl[key] ?? def}
-                        onChange={e => updateElement(selectedElId, { [key]: Number(e.target.value) })}
-                        className="flex-1"
-                      />
-                      <span className="text-xs text-gray-400 w-12 text-right">{(selectedEl[key] ?? def)}{unit}</span>
-                    </div>
-                  ))}
-                  {/* Shadow */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => updateElement(selectedElId, { shadow: !selectedEl.shadow })}
-                        className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.shadow ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
-                      >Shadow</button>
-                      {selectedEl.shadow && (
-                        <>
-                          <span className="text-[10px] text-gray-400">blur</span>
-                          <input type="range" min="0" max="40"
-                            value={selectedEl.shadowBlur ?? 8}
-                            onChange={e => updateElement(selectedElId, { shadowBlur: Number(e.target.value) })}
-                            className="flex-1"
-                          />
-                          <span className="text-xs text-gray-400 w-5">{selectedEl.shadowBlur ?? 8}</span>
-                          <input type="color" value={selectedEl.shadowColor?.startsWith('#') ? selectedEl.shadowColor : '#000000'}
-                            onChange={e => updateElement(selectedElId, { shadowColor: e.target.value })}
-                            className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Shadow color"
-                          />
-                        </>
-                      )}
-                    </div>
-                    {selectedEl.shadow && (
-                      <div className="flex items-center gap-2 pl-1">
-                        <span className="text-[10px] text-gray-400 w-6">X</span>
-                        <input type="range" min="-30" max="30"
-                          value={selectedEl.shadowX ?? 2}
-                          onChange={e => updateElement(selectedElId, { shadowX: Number(e.target.value) })}
-                          className="flex-1"
-                        />
-                        <span className="text-xs text-gray-400 w-8 text-right">{selectedEl.shadowX ?? 2}px</span>
-                        <span className="text-[10px] text-gray-400 w-4">Y</span>
-                        <input type="range" min="-30" max="30"
-                          value={selectedEl.shadowY ?? 2}
-                          onChange={e => updateElement(selectedElId, { shadowY: Number(e.target.value) })}
-                          className="flex-1"
-                        />
-                        <span className="text-xs text-gray-400 w-8 text-right">{selectedEl.shadowY ?? 2}px</span>
-                      </div>
-                    )}
-                  </div>
-                  {/* Outline/stroke */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => updateElement(selectedElId, { stroke: !selectedEl.stroke })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.stroke ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
-                    >Outline</button>
-                    {selectedEl.stroke && (
-                      <>
-                        <input type="range" min="1" max="12"
-                          value={selectedEl.strokeWidth ?? 2}
-                          onChange={e => updateElement(selectedElId, { strokeWidth: Number(e.target.value) })}
-                          className="flex-1"
-                        />
-                        <span className="text-xs text-gray-400 w-7">{selectedEl.strokeWidth ?? 2}px</span>
-                        <input type="color" value={selectedEl.strokeColor ?? '#000000'}
-                          onChange={e => updateElement(selectedElId, { strokeColor: e.target.value })}
-                          className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Outline color"
-                        />
-                      </>
-                    )}
-                  </div>
-                  {/* Glow */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => updateElement(selectedElId, { glow: !selectedEl.glow })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.glow ? 'bg-yellow-500 border-yellow-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
-                    >Glow</button>
-                    {selectedEl.glow && (
-                      <>
-                        <input type="range" min="2" max="60"
-                          value={selectedEl.glowRadius ?? 20}
-                          onChange={e => updateElement(selectedElId, { glowRadius: Number(e.target.value) })}
-                          className="flex-1"
-                        />
-                        <span className="text-xs text-gray-400 w-7">{selectedEl.glowRadius ?? 20}</span>
-                        <input type="color" value={selectedEl.glowColor ?? '#ffffff'}
-                          onChange={e => updateElement(selectedElId, { glowColor: e.target.value })}
-                          className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Glow color"
-                        />
-                      </>
-                    )}
-                  </div>
-                  {/* Background fill */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => updateElement(selectedElId, { bgFill: !selectedEl.bgFill })}
-                        className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.bgFill ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
-                      >BG Fill</button>
-                      {selectedEl.bgFill && (
-                        <>
-                          <input type="color" value={selectedEl.bgColor ?? '#000000'}
-                            onChange={e => updateElement(selectedElId, { bgColor: e.target.value })}
-                            className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Fill color"
-                          />
-                          <span className="text-[10px] text-gray-400">opacity</span>
-                          <input type="range" min="0" max="1" step="0.05"
-                            value={selectedEl.bgOpacity ?? 0.6}
-                            onChange={e => updateElement(selectedElId, { bgOpacity: Number(e.target.value) })}
-                            className="flex-1"
-                          />
-                          <span className="text-xs text-gray-400 w-7">{Math.round((selectedEl.bgOpacity ?? 0.6) * 100)}%</span>
-                        </>
-                      )}
-                    </div>
-                    {selectedEl.bgFill && (
-                      <div className="flex items-center gap-2 pl-1">
-                        <span className="text-[10px] text-gray-400 w-8">Pad</span>
-                        <input type="range" min="0" max="40"
-                          value={selectedEl.bgPadding ?? 12}
-                          onChange={e => updateElement(selectedElId, { bgPadding: Number(e.target.value) })}
-                          className="flex-1"
-                        />
-                        <span className="text-xs text-gray-400 w-7">{selectedEl.bgPadding ?? 12}px</span>
-                        <span className="text-[10px] text-gray-400 w-8">R</span>
-                        <input type="range" min="0" max="40"
-                          value={selectedEl.bgRadius ?? 8}
-                          onChange={e => updateElement(selectedElId, { bgRadius: Number(e.target.value) })}
-                          className="flex-1"
-                        />
-                        <span className="text-xs text-gray-400 w-7">{selectedEl.bgRadius ?? 8}px</span>
-                      </div>
-                    )}
-                  </div>
-                  {/* Opacity */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-9 shrink-0">Opacity</span>
-                    <input type="range" min="0" max="1" step="0.05"
-                      value={selectedEl.opacity ?? 1}
-                      onChange={e => updateElement(selectedElId, { opacity: Number(e.target.value) })}
-                      className="flex-1"
-                    />
-                    <span className="text-xs text-gray-400 w-12 text-right">{Math.round((selectedEl.opacity ?? 1) * 100)}%</span>
-                  </div>
-                  {/* Transform */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-gray-400 shrink-0">Rotate</span>
-                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) - 90 + 360) % 360 })} className="text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 px-2 py-1 rounded transition-colors">↺ 90°</button>
-                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) + 90) % 360 })} className="text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 px-2 py-1 rounded transition-colors">↻ 90°</button>
-                    <input type="range" min="-180" max="180"
-                      value={selectedEl.rotation ?? 0}
-                      onChange={e => updateElement(selectedElId, { rotation: Number(e.target.value) })}
-                      className="flex-1"
-                    />
-                    <span className="text-xs text-gray-400 w-10 text-right">{selectedEl.rotation ?? 0}°</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button onClick={() => updateElement(selectedElId, { flipH: !selectedEl.flipH })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipH ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
-                    >↔ Flip H</button>
-                    <button onClick={() => updateElement(selectedElId, { flipV: !selectedEl.flipV })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipV ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
-                    >↕ Flip V</button>
-                    {((selectedEl.rotation ?? 0) !== 0 || selectedEl.flipH || selectedEl.flipV) && (
-                      <button onClick={() => updateElement(selectedElId, { rotation: 0, flipH: false, flipV: false })} className="text-[10px] text-gray-400 hover:text-gray-600">↺ reset</button>
-                    )}
-                  </div>
-                  {/* Align to slide */}
-                  <div className="space-y-1">
-                    <span className="text-xs text-gray-400">Align to slide</span>
-                    <div className="flex gap-1">
-                      {[['⬅', 10], ['↔', 50], ['➡', 90]].map(([icon, x]) => (
-                        <button key={x} onClick={() => updateElement(selectedElId, { x })}
-                          className="flex-1 text-sm bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors"
-                          title={x === 10 ? 'Align left' : x === 50 ? 'Center' : 'Align right'}
-                        >{icon}</button>
-                      ))}
-                    </div>
-                    <div className="flex gap-1">
-                      {[['⬆', 10], ['⬛', 50], ['⬇', 90]].map(([icon, y]) => (
-                        <button key={y} onClick={() => updateElement(selectedElId, { y })}
-                          className="flex-1 text-sm bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors"
-                          title={y === 10 ? 'Align top' : y === 50 ? 'Middle' : 'Align bottom'}
-                        >{icon}</button>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Z-order + duplicate */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-gray-400 shrink-0">Layer</span>
-                    <button onClick={() => bringForward(selectedElId)} className="flex-1 text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors">▲ Forward</button>
-                    <button onClick={() => sendBackward(selectedElId)} className="flex-1 text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors">▼ Back</button>
-                    <button onClick={() => duplicateElement(selectedElId)} className="flex-1 text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors">⧉ Dupe</button>
-                  </div>
-                </div>
+              {slide.type === 'question' && (
+                <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
               )}
-
-              {/* ── Image element properties ───────────────────── */}
-              {selectedEl?.type === 'image' && (
-                <div className="space-y-2.5 pt-2 border-t border-gray-100">
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <MediaUpload
-                      accept="image"
-                      label="Image"
-                      currentUrl={selectedEl.url}
-                      onUpload={async file => {
-                        const result = await uploadMedia(file)
-                        if (result?.url) updateElement(selectedElId, { url: result.url })
-                        return result
-                      }}
-                      onRemove={() => updateElement(selectedElId, { url: null })}
-                    />
-                  </div>
-                  {/* Width + Radius */}
-                  {[
-                    ['Width',  'width',        5, 100, 1,  40, '%'],
-                    ['Radius', 'borderRadius', 0,  50, 1,   0, '%'],
-                  ].map(([label, key, min, max, step, def, unit]) => (
-                    <div key={key} className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400 w-9 shrink-0">{label}</span>
-                      <input type="range" min={min} max={max} step={step}
-                        value={selectedEl[key] ?? def}
-                        onChange={e => updateElement(selectedElId, { [key]: Number(e.target.value) })}
-                        className="flex-1"
-                      />
-                      <span className="text-xs text-gray-400 w-12 text-right">{selectedEl[key] ?? def}{unit}</span>
-                    </div>
-                  ))}
-                  {/* Opacity */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-9 shrink-0">Opacity</span>
-                    <input type="range" min="0" max="1" step="0.05"
-                      value={selectedEl.opacity ?? 1}
-                      onChange={e => updateElement(selectedElId, { opacity: Number(e.target.value) })}
-                      className="flex-1"
-                    />
-                    <span className="text-xs text-gray-400 w-12 text-right">{Math.round((selectedEl.opacity ?? 1) * 100)}%</span>
-                  </div>
-                  {/* Blend mode */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-9 shrink-0">Blend</span>
-                    <select
-                      value={selectedEl.blendMode ?? 'normal'}
-                      onChange={e => updateElement(selectedElId, { blendMode: e.target.value })}
-                      className="flex-1 text-xs bg-gray-50 text-gray-900 border border-gray-200 rounded-md px-2 py-1 focus:outline-none"
-                    >
-                      {['normal','multiply','screen','overlay','darken','lighten','color-dodge','color-burn','hard-light','soft-light','difference','exclusion','hue','saturation','color','luminosity'].map(m => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {/* CSS Filters */}
-                  {[
-                    ['Bright', 'filterBrightness', 0, 200, 1, 100, '%'],
-                    ['Contrast','filterContrast',  0, 200, 1, 100, '%'],
-                    ['Saturat','filterSaturate',   0, 200, 1, 100, '%'],
-                    ['Hue',    'filterHue',        0, 360, 1,   0, '°'],
-                    ['Blur',   'filterBlur',       0,  20, 0.5, 0, 'px'],
-                    ['Gray',   'filterGrayscale',  0, 100, 1,   0, '%'],
-                  ].map(([label, key, min, max, step, def, unit]) => (
-                    <div key={key} className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400 w-9 shrink-0">{label}</span>
-                      <input type="range" min={min} max={max} step={step}
-                        value={selectedEl[key] ?? def}
-                        onChange={e => updateElement(selectedElId, { [key]: Number(e.target.value) })}
-                        className="flex-1"
-                      />
-                      <span className="text-xs text-gray-400 w-12 text-right">{selectedEl[key] ?? def}{unit}</span>
-                      {(selectedEl[key] ?? def) !== def && (
-                        <button onClick={() => updateElement(selectedElId, { [key]: def })} className="text-[10px] text-gray-400 hover:text-gray-600">↺</button>
-                      )}
-                    </div>
-                  ))}
-                  {/* Image glow */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => updateElement(selectedElId, { imgGlow: !selectedEl.imgGlow })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.imgGlow ? 'bg-yellow-500 border-yellow-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
-                    >Glow</button>
-                    {selectedEl.imgGlow && (
-                      <>
-                        <input type="range" min="2" max="60"
-                          value={selectedEl.imgGlowRadius ?? 20}
-                          onChange={e => updateElement(selectedElId, { imgGlowRadius: Number(e.target.value) })}
-                          className="flex-1"
-                        />
-                        <span className="text-xs text-gray-400 w-7">{selectedEl.imgGlowRadius ?? 20}</span>
-                        <input type="color" value={selectedEl.imgGlowColor ?? '#3b82f6'}
-                          onChange={e => updateElement(selectedElId, { imgGlowColor: e.target.value })}
-                          className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Glow color"
-                        />
-                      </>
-                    )}
-                  </div>
-                  {/* Image border */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => updateElement(selectedElId, { imgBorder: !selectedEl.imgBorder })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${selectedEl.imgBorder ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
-                    >Border</button>
-                    {selectedEl.imgBorder && (
-                      <>
-                        <input type="range" min="1" max="20"
-                          value={selectedEl.imgBorderWidth ?? 3}
-                          onChange={e => updateElement(selectedElId, { imgBorderWidth: Number(e.target.value) })}
-                          className="flex-1"
-                        />
-                        <span className="text-xs text-gray-400 w-7">{selectedEl.imgBorderWidth ?? 3}px</span>
-                        <input type="color" value={selectedEl.imgBorderColor ?? '#ffffff'}
-                          onChange={e => updateElement(selectedElId, { imgBorderColor: e.target.value })}
-                          className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" title="Border color"
-                        />
-                      </>
-                    )}
-                  </div>
-                  {/* Transform */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-gray-400 shrink-0">Rotate</span>
-                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) - 90 + 360) % 360 })} className="text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 px-2 py-1 rounded transition-colors">↺ 90°</button>
-                    <button onClick={() => updateElement(selectedElId, { rotation: ((selectedEl.rotation ?? 0) + 90) % 360 })} className="text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 px-2 py-1 rounded transition-colors">↻ 90°</button>
-                    <input type="range" min="-180" max="180"
-                      value={selectedEl.rotation ?? 0}
-                      onChange={e => updateElement(selectedElId, { rotation: Number(e.target.value) })}
-                      className="flex-1"
-                    />
-                    <span className="text-xs text-gray-400 w-10 text-right">{selectedEl.rotation ?? 0}°</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button onClick={() => updateElement(selectedElId, { flipH: !selectedEl.flipH })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipH ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
-                    >↔ Flip H</button>
-                    <button onClick={() => updateElement(selectedElId, { flipV: !selectedEl.flipV })}
-                      className={`text-xs px-2 py-1 rounded border transition-colors ${selectedEl.flipV ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}
-                    >↕ Flip V</button>
-                    {((selectedEl.rotation ?? 0) !== 0 || selectedEl.flipH || selectedEl.flipV) && (
-                      <button onClick={() => updateElement(selectedElId, { rotation: 0, flipH: false, flipV: false })} className="text-[10px] text-gray-400 hover:text-gray-600">↺ reset</button>
-                    )}
-                  </div>
-                  {/* Align to slide */}
-                  <div className="space-y-1">
-                    <span className="text-xs text-gray-400">Align to slide</span>
-                    <div className="flex gap-1">
-                      {[['⬅', 10], ['↔', 50], ['➡', 90]].map(([icon, x]) => (
-                        <button key={x} onClick={() => updateElement(selectedElId, { x })}
-                          className="flex-1 text-sm bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors"
-                          title={x === 10 ? 'Align left' : x === 50 ? 'Center' : 'Align right'}
-                        >{icon}</button>
-                      ))}
-                    </div>
-                    <div className="flex gap-1">
-                      {[['⬆', 10], ['⬛', 50], ['⬇', 90]].map(([icon, y]) => (
-                        <button key={y} onClick={() => updateElement(selectedElId, { y })}
-                          className="flex-1 text-sm bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors"
-                          title={y === 10 ? 'Align top' : y === 50 ? 'Middle' : 'Align bottom'}
-                        >{icon}</button>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Z-order + duplicate */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-gray-400 shrink-0">Layer</span>
-                    <button onClick={() => bringForward(selectedElId)} className="flex-1 text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors">▲ Forward</button>
-                    <button onClick={() => sendBackward(selectedElId)} className="flex-1 text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors">▼ Back</button>
-                    <button onClick={() => duplicateElement(selectedElId)} className="flex-1 text-xs bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-900 py-1 rounded transition-colors">⧉ Dupe</button>
-                  </div>
-                </div>
+              {slide.type === 'grading-break' && (
+                <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
+                  uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} />
               )}
-
-                {elements.length > 0 && !selectedEl && (
-                  <p className="text-xs text-gray-300 text-center pt-1">Click an element on the slide to edit it</p>
-                )}
-              </div>
-
-              {/* Bottom: transition + delete */}
-              <div className="shrink-0 px-3 py-3 border-t border-gray-200 space-y-2">
-                {!data.isShiny && (
-                  <select
-                    value={data.transition ?? ''}
-                    onChange={e => change('transition', e.target.value === '' ? null : e.target.value)}
-                    className="w-full text-xs bg-gray-50 text-gray-700 border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none"
-                  >
-                    <option value="">Default transition</option>
-                    <option value="random">✦ Random</option>
-                    <optgroup label="Fade from back">
-                      <option value="dissolve">Dissolve</option>
-                      <option value="emerge">Emerge</option>
-                      <option value="zoom">Zoom</option>
-                      <option value="punch">Punch</option>
-                    </optgroup>
-                    <optgroup label="Down from top">
-                      <option value="drop">Drop</option>
-                      <option value="descend">Descend</option>
-                    </optgroup>
-                    <optgroup label="Compound">
-                      <option value="sink">Sink</option>
-                    </optgroup>
-                    <optgroup label="Push from front">
-                      <option value="settle">Settle</option>
-                      <option value="loom">Loom</option>
-                    </optgroup>
-                    <optgroup label="Construct">
-                      <option value="assemble">Assemble</option>
-                    </optgroup>
-                  </select>
-                )}
-                {confirmingDelete ? (
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-xs text-red-400">Delete this slide?</span>
-                    <div className="flex gap-3">
-                      <button onClick={() => onDeleteSlide(slide.id)} className="text-xs font-semibold text-red-400 hover:text-red-300 transition-colors">Yes</button>
-                      <button onClick={() => setConfirmingDelete(false)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">No</button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setConfirmingDelete(true)}
-                    className="w-full text-xs text-red-500/50 hover:text-red-400 transition-colors py-0.5"
-                  >
-                    Delete slide
-                  </button>
-                )}
-              </div>
+              {slide.type === 'scoreboard-reveal' && (
+                <ScoreboardRevealEditor data={data} onChange={change} show={show} />
+              )}
+              {slide.type === 'custom' && (
+                <CustomEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
+              )}
+              {slide.type === 'pixelate-series' && (
+                <PixelateSeriesEditor data={data} onChange={change} onStageUpload={handleStageUpload} />
+              )}
+              {slide.type === 'multi-question' && (
+                <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
+              )}
+              {slide.type === 'pyl-reveal' && (
+                <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
+              )}
+              {slide.type === 'state-of-union' && (
+                <StateOfUnionEditor data={data} onChange={change} getHostPhotos={getHostPhotos} uploadMedia={uploadMedia} />
+              )}
+              {slide.type === 'team-picker' && (
+                <TeamPickerEditor data={data} onChange={change} />
+              )}
+              {slide.type === 'grid' && (
+                <GridEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload} />
+              )}
+              {slide.type === 'winner-reveal' && (
+                <WinnerRevealEditor data={data} onChange={change} />
+              )}
             </div>
           </div>
-        )
-      })()}
 
+          {/* Bottom: transition + delete */}
+          <div className="shrink-0 px-3 py-3 border-t border-gray-200 space-y-2">
+            {!data.isShiny && (
+              <select
+                value={data.transition ?? ''}
+                onChange={e => change('transition', e.target.value === '' ? null : e.target.value)}
+                className="w-full text-xs bg-gray-50 text-gray-700 border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none"
+              >
+                <option value="">Default transition</option>
+                <option value="random">✦ Random</option>
+                <optgroup label="Fade from back">
+                  <option value="dissolve">Dissolve</option>
+                  <option value="emerge">Emerge</option>
+                  <option value="zoom">Zoom</option>
+                  <option value="punch">Punch</option>
+                </optgroup>
+                <optgroup label="Down from top">
+                  <option value="drop">Drop</option>
+                  <option value="descend">Descend</option>
+                </optgroup>
+                <optgroup label="Compound">
+                  <option value="sink">Sink</option>
+                </optgroup>
+                <optgroup label="Push from front">
+                  <option value="settle">Settle</option>
+                  <option value="loom">Loom</option>
+                </optgroup>
+                <optgroup label="Construct">
+                  <option value="assemble">Assemble</option>
+                </optgroup>
+              </select>
+            )}
+            {confirmingDelete ? (
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs text-red-400">Delete this slide?</span>
+                <div className="flex gap-3">
+                  <button onClick={() => onDeleteSlide(slide.id)} className="text-xs font-semibold text-red-400 hover:text-red-300 transition-colors">Yes</button>
+                  <button onClick={() => setConfirmingDelete(false)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">No</button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                className="w-full text-xs text-red-500/50 hover:text-red-400 transition-colors py-0.5"
+              >
+                Delete slide
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
