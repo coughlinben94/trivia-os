@@ -200,25 +200,25 @@ Defined in `themes/index.js`, in this order:
 | Theme ID | Path | Character | Signature anchor |
 |----------|------|-----------|------------------|
 | `pure-michigan` ★ | Bespoke | Dark lake night | Green firefly pulse dots over lake glow |
-| `midnight-galaxy` | Bespoke | Deep space | Purple + magenta nebula clouds + star field |
+| `midnight-galaxy` ✓ | Bespoke | Deep space | Purple + magenta nebula clouds + star field |
 | `autumn-harvest` ★ | Bespoke | Forest fire evening | Falling leaves + embers + hearth flicker |
 | `northern-lights` | Gradient | Arctic sky | Wavy SVG aurora curtains |
 | `medieval-tavern` | Gradient | Stone tavern | Torch side-glows + hearth flicker |
 | `sunset-boulevard` ✓ | Bespoke | Sunset beach | Low-left sun on the sea + drifting underlit clouds + warm sand beach |
 | `retro-arcade` | Gradient | CRT arcade | Neon side-glows + scanlines + pixel static |
 | `sand-dune-chill` ✓ | Bespoke | Early-AM Lake Michigan | Right-side pale dawn sun + soaring gull silhouettes + warm dune |
-| `halloween` | Bespoke | Jack-o-lantern | Orange edge flicker + purple fog + embers |
+| `halloween` ✓ | Bespoke | Jack-o-lantern | Orange edge flicker + purple fog + embers |
 | `jazz-club` | Gradient | Smoky stage | 3 sweeping warm-white spotlights over a stage platform + amber glints + smoke/motes |
 | `dive-bar` | Gradient | Neon bar | Red + blue neon buzz + haze |
 | `sonora-balloons` ✓ | Bespoke | Sunset balloon festival | 5 hot-air balloons drifting over a dusk sky + water horizon + gold dust motes (renamed from Rooftop Party) |
 | `christmas-eve` | Gradient | Christmas night | Red/green edges + gold candle + snow |
 | `drive-in-movie` | Gradient | Drive-in theater | Huge dominant screen (bright edges, dark flat center for text), 2 support poles, moths wandering in the glow, 2 car-roof silhouettes cresting the bottom |
 | `western-showdown` | Gradient | Desert dusk | Sun-on-horizon + dust haze |
-| `under-the-sea` | Bespoke | Bioluminescent deep | Teal pulse dots + bubble rise |
+| `under-the-sea` ✓ | Bespoke | Bioluminescent deep | Teal pulse dots + bubble rise |
 | `neon-tokyo` | Gradient | Tokyo alley | Pink/cyan neon buzz + rain streaks |
 | `firefly-summer` | Gradient | Summer night | Yellow-green firefly wander dots |
 | `wine-cellar` | Gradient | Stone cellar | Burgundy edge closing in + candle |
-| `meteor-shower` | Bespoke | Clear night sky | Star field + meteor streaks |
+| `meteor-shower` ✓ | Bespoke | Clear night sky | Star field + meteor streaks |
 | `eighties-night` | Gradient | Retrowave | Pink top + teal bottom + grid lines |
 
 ★ = confirmed-good, leave alone. ✓ = bland-pass rework shipped. ⟳ = rework in progress. Unmarked = bland-pass queue. **These markers apply to the 9 BESPOKE themes only** — the 12 GRADIENT themes retired their bespoke scene in the July 2026 rework and carry no rework status; see the Path column.
