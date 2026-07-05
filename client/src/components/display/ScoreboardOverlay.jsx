@@ -56,7 +56,7 @@ function TeamRow({ team, rank, cols, delay, isTop, reduce }) {
         <p
           className="truncate"
           style={{
-            fontFamily: "'Boogaloo', sans-serif",
+            fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
             fontSize: isTop ? '1.5rem' : '1.2rem',
             color: isTop ? '#fbbf24' : 'rgba(255,255,255,0.9)',
             lineHeight: 1.2,
@@ -96,7 +96,7 @@ function TeamRow({ team, rank, cols, delay, isTop, reduce }) {
       <div className="shrink-0 text-right" style={{ minWidth: '3.5rem' }}>
         <span
           style={{
-            fontFamily: "'Boogaloo', sans-serif",
+            fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
             fontSize: isTop ? '1.9rem' : '1.5rem',
             color: isTop ? '#fbbf24' : '#f59e0b',
             fontWeight: 700,
@@ -165,7 +165,7 @@ function ScoreboardContent({ show }) {
       >
         <h1
           style={{
-            fontFamily: "'Boogaloo', sans-serif",
+            fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
             fontSize: 'clamp(2.5rem, 5cqw, 4.5rem)',
             color: '#fbbf24',
             letterSpacing: '0.02em',
