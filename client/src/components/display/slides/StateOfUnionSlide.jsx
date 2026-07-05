@@ -10,7 +10,9 @@ import { EASE_OUT } from '../../../lib/easings.js'
 // component. "State of the Union" is patriotic by identity; it must read
 // the same red-white-blue on every one of the 21 themes, the same way a
 // shiny question's gold doesn't shift with the ambient theme either.
+const RWB_RED       = '#b22234'
 const RWB_WHITE     = '#e8e0d8'
+const RWB_BLUE      = '#2a50c0'
 const RWB_BLUE_DEEP = '#0d1536'
 
 // ─── Billowing gradient background ───────────────────────────────────────────
@@ -35,26 +37,27 @@ function WavingGradient({ reduce }) {
     const k  = (2 * Math.PI) / (W * 0.55)
     const k2 = k * 1.65  // secondary harmonic — higher freq, different phase speed
 
-    // Continuous flowing gradient — no flat zones, all three colors always visible.
-    // Smooth-step within each segment makes colors linger near their peaks and
-    // ease gently through transitions, producing organic "smoosh" rather than bands.
+    // 5 evenly-spaced stops spanning the full diagonal — no flat zones.
+    // With maxAmp at 18% of H, the wave shifts any pixel ≈ ±9% of the LUT range,
+    // which is only ~36% of each 0.25-wide segment. That gives gentle shimmer
+    // rather than a visible band jumping across the screen.
+    // Smoothstep within each segment keeps colors lingering near their peaks;
+    // the vivid rose and cobalt intermediates prevent muddy RGB blending.
     const N = 512
     const lut = new Uint8Array(N * 3)
     const stops = [
       [0.00, 178,  34,  52],
-      [0.30, 196,  58,  72],
-      [0.42, 228, 164, 162],
+      [0.25, 224,  68,  86],
       [0.50, 242, 234, 228],
-      [0.58, 162, 175, 228],
-      [0.70,  44,  64, 162],
-      [1.00,  20,  36,  98],
+      [0.75,  52,  78, 195],
+      [1.00,  18,  32,  94],
     ]
     for (let i = 0; i < N; i++) {
       const d = i / (N - 1)
       let s = 0
       while (s < stops.length - 2 && d > stops[s + 1][0]) s++
       let p = (d - stops[s][0]) / (stops[s + 1][0] - stops[s][0])
-      p = p * p * (3 - 2 * p)  // smoothstep — organic ease in/out of every stop
+      p = p * p * (3 - 2 * p)
       lut[i * 3]     = Math.round(stops[s][1] + (stops[s + 1][1] - stops[s][1]) * p)
       lut[i * 3 + 1] = Math.round(stops[s][2] + (stops[s + 1][2] - stops[s][2]) * p)
       lut[i * 3 + 2] = Math.round(stops[s][3] + (stops[s + 1][3] - stops[s][3]) * p)
@@ -135,7 +138,7 @@ export default function StateOfUnionSlide({ slide }) {
           />
         )}
 
-        {/* Message — solid warm white, springs in tilted like a campaign sign */}
+        {/* Message — RWB gradient text, springs in tilted like a campaign sign */}
         <span data-slide-region="message" data-slide-field="message" style={xf('message')}>
           <motion.p
             initial={{ opacity: 0, scale: reduce ? 1 : 0.85, rotate: reduce ? -6 : -14 }}
@@ -149,11 +152,17 @@ export default function StateOfUnionSlide({ slide }) {
               textAlign: 'center',
               textWrap: 'balance',
               maxWidth: '22ch',
-              color: RWB_WHITE,
-              filter: 'drop-shadow(0 2px 1px rgba(0,0,18,0.7)) drop-shadow(0 0 24px rgba(0,0,18,0.55))',
+              filter: 'drop-shadow(0 2px 1px rgba(0,0,20,0.75)) drop-shadow(0 0 28px rgba(0,0,20,0.6))',
             }}
           >
-            {message}
+            <span style={{
+              background: `linear-gradient(135deg, ${RWB_RED} 0%, ${RWB_WHITE} 48%, ${RWB_BLUE} 100%)`,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}>
+              {message}
+            </span>
           </motion.p>
         </span>
       </div>
