@@ -51,6 +51,34 @@ function WaitingScreen() {
   )
 }
 
+// ─── Nav-denied banner (RLS-D-1 guard) ─────────────────────────────────────
+// Shown when a display-side nav write (jukebox-return jump) is denied or
+// errors — the show did NOT advance and the host needs to drive from /host.
+// Static render, no animation: nothing to gate behind reduced-motion.
+
+function NavDeniedBanner({ visible }) {
+  const { theme } = useTheme()
+  if (!visible) return null
+  return (
+    <div
+      style={{
+        position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+        zIndex: 200, pointerEvents: 'none',
+        background: `${theme.colors.bgDeep}f2`,
+        border: `1px solid ${theme.colors.highlight}66`,
+        color: theme.colors.text,
+        fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
+        fontSize: '0.95rem', fontWeight: 600, letterSpacing: '0.02em',
+        padding: '8px 18px', borderRadius: 999,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      ⚠ Display can’t advance the show — use the host controls
+    </div>
+  )
+}
+
 // ─── Pre-show waiting screen ───────────────────────────────────────────────
 
 function PreShowScreen({ show, onInstall }) {
@@ -378,10 +406,14 @@ export default function Display() {
   const [show, setShow] = useState(null)
   const [loading, setLoading] = useState(true)
   const prevIndexRef = useRef(0)
-  const showRef = useRef(null)
   const [direction, setDirection] = useState(1)
   const installPromptRef = useRef(null)
   const [canInstall, setCanInstall] = useState(false)
+  // A display nav write was denied (RLS, network, anything) — the host must
+  // advance from /host. Cleared when any show update lands (someone advanced
+  // successfully) or a later nav write succeeds. Guard the RESULT, not the
+  // cause: any 0-row/error outcome must surface, including unknown future ones.
+  const [navDenied, setNavDenied] = useState(false)
 
   // Capture Chrome's install prompt — only fires when not already installed
   useEffect(() => {
@@ -409,32 +441,24 @@ export default function Display() {
     return () => { if (document.head.contains(link)) document.head.removeChild(link) }
   }, [])
 
-  // Keep showRef current so the stale onKey closure can always read latest show.
-  useEffect(() => { showRef.current = show }, [show])
 
-  // First interaction → fullscreen. F key toggles. Arrow/Space advance slides.
+  // First interaction → fullscreen. F key toggles.
+  // The Arrow/Space slide-advance that used to live here is REMOVED
+  // (RLS-D-1 / DK-1): it was fully redundant with the host's controls
+  // (Stream Deck keys go to the /host window), it double-fired with
+  // GradingBreakSlide's own Space/ArrowRight jukebox-skip handler (racing a
+  // nav write against the page navigating away), and a stray keyboard near
+  // the TV silently advancing the show is a liability with no owner.
+  // Navigation authority on /display is now exactly one path: the
+  // jukebox-return jump below, via the advance_show RPC.
   useEffect(() => {
     function enter() {
       if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {})
-    }
-    function advance(delta) {
-      const s = showRef.current
-      if (!s?.id) return
-      const sorted = [...(s.slides ?? [])].sort((a, b) => a.order - b.order)
-      const cur = s.current_slide_index ?? 0
-      const next = Math.max(0, Math.min(cur + delta, sorted.length - 1))
-      if (next === cur) return
-      supabase.from('shows').update({
-        current_slide_index: next,
-        current_slide_id: sorted[next]?.id ?? null,
-      }).eq('id', s.id)
     }
     function onKey(e) {
       if (e.key === 'f' || e.key === 'F') {
         document.fullscreenElement ? document.exitFullscreen() : enter()
       }
-      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); advance(1) }
-      if (e.key === 'ArrowLeft') advance(-1)
     }
     function onFirstInteraction() {
       enter()
@@ -495,11 +519,23 @@ export default function Display() {
             : Math.min(cur + 1, sorted.length - 1)
           if (next > cur) {
             const nextSlide = sorted[next]
-            await supabase.from('shows').update({
-              current_slide_index: next,
-              current_slide_id: nextSlide?.id ?? null,
-            }).eq('id', data.id)
-            data = { ...data, current_slide_index: next, current_slide_id: nextSlide?.id ?? null }
+            // advance_show is a SECURITY DEFINER RPC (see supabase/migrations/
+            // 20260706001000) — the TV browser has no PIN session, so a raw
+            // shows UPDATE gets silently RLS-denied (0 rows). The RPC is the
+            // one nav write anon may perform, and it reports success
+            // explicitly so a denial can't be silent again.
+            const { data: advanced, error } = await supabase.rpc('advance_show', {
+              p_show_id: data.id,
+              p_slide_id: nextSlide?.id ?? null,
+              p_slide_index: next,
+            })
+            if (error || advanced !== true) {
+              console.error('[Display] jukebox-return advance denied:', error ?? '0 rows')
+              setNavDenied(true)
+            } else {
+              setNavDenied(false)
+              data = { ...data, current_slide_index: next, current_slide_id: nextSlide?.id ?? null }
+            }
           }
           const url = new URL(window.location.href)
           url.searchParams.delete('from')
@@ -536,6 +572,8 @@ export default function Display() {
             const merged = prev && prev.id === next.id ? { ...prev, ...next } : next
             return { ...merged, theme: merged.theme_id ?? merged.theme, themeOverrides: merged.theme_overrides ?? merged.themeOverrides }
           })
+          // Any successful show update means navigation is flowing again.
+          setNavDenied(false)
         }
       )
       .subscribe()
@@ -618,6 +656,7 @@ export default function Display() {
       ) : (
         <PreShowScreen show={show} onInstall={canInstall ? handleInstall : null} />
       )}
+      <NavDeniedBanner visible={navDenied} />
     </ThemeProvider>
   )
 }
