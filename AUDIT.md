@@ -202,6 +202,55 @@ All 10 named transitions (`dissolve`, `emerge`, `zoom`, `punch`, `drop`, `descen
 | 4 | Swap `RoundSidebar`'s side-stripe selection indicator for a background tint | S | Impeccable's absolute-bans list |
 | 5 | Gate the shiny-slide transition's scale delta behind `useReducedMotion` | S | Emil's reduced-motion completeness principle |
 
+---
+
+## Polish Fix Pass (2026-07-05)
+
+Five scoped fixes from the two audits above, plus one live bug found and fixed along the way. One commit per fix, `npm run build` clean after each, nothing pushed.
+
+**DOC-1** — Verified in code that only `CustomSlide.jsx`/`RoundIntroSlide.jsx` still pass `family:'system-ui'` to `fitToBox`; `PylRevealSlide.jsx` has zero system-ui references (already migrated to `theme.fonts.body` in `4b07415`). SKILL.md's Text Sizing section corrected from three exempt surfaces to two.
+
+**UX-1** — Added `client/src/lib/contrast.js` (WCAG ratio + a lightness-only nudge preserving hue/saturation) and wired it into `ThemeProvider.jsx`'s `applyOverrides()`, run on the *final* merged colors so a host-picked `textMuted` override gets the same safety net as the shipped default. 3:1 floor (large-text/TV threshold, not the stricter 4.5:1 body minimum) — verified against the real module and real theme data:
+
+| Theme | Original (vs bg / bgDeep) | Floored? | New (vs bg / bgDeep) |
+|---|---|---|---|
+| pure-michigan | 8.97 / 9.19 | No — already ≥3:1 | unchanged |
+| midnight-galaxy | 3.60 / 3.65 | No | unchanged |
+| autumn-harvest | 3.42 / 3.56 | No | unchanged |
+| northern-lights | 4.25 / 4.35 | No | unchanged |
+| medieval-tavern | 4.35 / 4.45 | No | unchanged |
+| sunset-boulevard | 5.11 / 5.28 | No | unchanged |
+| **retro-arcade** | **2.51 / 2.53** | **Yes → `#6f4a94`** | 3.04 / 3.06 |
+| sand-dune-chill | 7.95 / 8.19 | No | unchanged |
+| **halloween** | **2.51 / 2.53** | **Yes → `#6f4a94`** | 3.05 / 3.06 |
+| jazz-club | 3.52 / 3.58 | No | unchanged |
+| **dive-bar** | **2.62 / 2.65** | **Yes → `#a33649`** | 3.10 / 3.14 |
+| sonora-balloons | 3.72 / 4.15 | No | unchanged |
+| christmas-eve | 3.71 / 3.73 | No | unchanged |
+| drive-in-movie | 3.54 / 3.60 | No | unchanged |
+| western-showdown | 3.19 / 3.29 | No | unchanged |
+| under-the-sea | 3.74 / 3.82 | No | unchanged |
+| **neon-tokyo** | **2.63 / 2.64** | **Yes → `#8f368f`** | 3.07 / 3.08 |
+| firefly-summer | 3.64 / 3.71 | No | unchanged |
+| **wine-cellar** | **2.72 / 2.73** | **Yes → `#8a4556`** | 3.01 / 3.03 |
+| meteor-shower | 3.13 / 3.15 | No | unchanged |
+| **eighties-night** | **2.83 / 2.86** | **Yes → `#874376`** | 3.04 / 3.07 |
+
+6 of 21 changed; 15 pass through byte-identical. These 6 (plus jazz-club/midnight-galaxy/autumn-harvest/sonora-balloons/christmas-eve/drive-in-movie/western-showdown/under-the-sea/firefly-summer at 3.1–4.5:1) still sit below the stricter 4.5:1 body-text standard — the floor guarantees "readable from a TV at distance," not full WCAG AA. Worth manual palette attention later, particularly the 6 that were floored, if 4.5:1 ever becomes the bar.
+
+**UX-2** — `useShow.js`'s `updateShowRow` (the chokepoint for slide/round CRUD, `updateShowMeta`, and every other shows-row write) now sets a `writeError` state on failure, cleared the instant the next write succeeds; `Host.jsx` bridges it into the existing `ToastStack`/`addToast` system (previously only fed by team-behavior alerts). `ScoreboardModal`'s debounced upsert, plus `addTeam`/`deleteTeam`/`sortTeams`/`clearScores` (the last three had zero error handling before this), report through the same callback. The debounced upsert additionally marks the specific at-risk cell (team name or one score field) with a subtle amber underline until that team's next save succeeds. Confirmed `/display` and `/join` cannot render any of this — neither imports `useShow`, `ScoreboardModal`, or `ToastStack` (verified by grep and by unchanged bundle sizes for those two chunks in the build output).
+
+**UX-3** — Found the banned side-stripe pattern in *two* places, not just the one the audit cited: the round-header selection state (`RoundSidebar.jsx`) and, identically, every per-slide row (`SlideRow`). Fixed both — dropped the `border-left`/`border-l-2` entirely, selection now reads from the existing background-gradient tint (bumped 0.12→0.16 opacity) plus each row's pre-existing text color/weight shift. Divider lines and shiny-series grouping untouched.
+
+**ANIM-1** — `SlideRenderer.jsx` checked `isShiny` before ever considering `reduce`, so shiny slides always played their 6% scale-in regardless of `prefers-reduced-motion`. Added a `shiny-reduced` variant (same timing, opacity-only) and branch on `reduce` within the `isShiny` case. Also deleted two fully-orphaned keyframes in `ParticleBackground.jsx` (`ambientAuroraFade`, `jcGlintPop` + its `.jc-anim` guard — zero consumers, leftovers from northern-lights/jazz-club's retired bespoke scenes) and corrected a stale comment claiming those retired themes' components still existed.
+
+**Live bug, found and fixed mid-pass** — Ben reported a newly auto-created PYL round wouldn't reorder in the sidebar ("won't reorder either," referring to the Swing Round auto-creation fix just before it). Root cause: `RoundSidebar.jsx`'s segment-building derives a round's display position entirely from where its slides fall in `show.slides`' sort order — a round with zero slides has no such anchor and was unconditionally appended after every other segment, regardless of what `reorderRounds` (which already persisted the drag correctly in `show.rounds`' array order) said its new position should be. Fixed by walking `show.rounds` in its own order and inserting each empty round's segment right after its nearest preceding round that already has one. Verified live via Playwright against the shared Test show: dragged the empty Swing Round from position 2 to the end, reloaded, position held.
+
+**Not touched, out of scope:**
+- Jump-to-slide inside Live Mode (explicitly deferred per the task).
+- The 15 themes still between 3:1 and 4.5:1 `textMuted` contrast (floor is intentionally 3:1, not 4.5:1).
+- `actions.addSlide` is documented in SKILL.md/useshow.md as a real action but doesn't exist anywhere in `useShow.js`, and nothing calls it either — pure stale documentation, not a live bug, noticed while reading the hook's return object for UX-2. Worth a doc correction in a future pass.
+
 ### Task 3 — WINNER-1 Fix
 
 Applied and committed (`86038fc`). The two effects (data fetch, drumroll trigger) were restructured into one coordinated flow: the drumroll now only starts once a real winner is confirmed, so a zero-score show skips the suspenseful build-up and confetti entirely and shows a themed "Check the scoreboard!" fallback instead, using the same entrance animation (and the same `useReducedMotion` gating) as the normal reveal. Tie handling (co-winners joined with "&", "It's a tie!" copy) was already correct in the pre-fix code and is preserved unchanged — confirmed by re-reading the file fresh in this session, since another concurrent session had touched it (a `fitToBox` migration) since the original audit. Build verified clean after the change.
