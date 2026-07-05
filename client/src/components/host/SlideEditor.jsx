@@ -289,9 +289,12 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   function enterEditMode(region) {
     const el = canvasRef.current?.querySelector(`[data-slide-region="${region.id}"]`)
     if (!el) return
+    const canvasEl = canvasRef.current
     const originalOutline = el.style.outline
     const originalOffset = el.style.outlineOffset
     const originalCursor = el.style.cursor
+    const originalElPE = el.style.pointerEvents
+    const originalCanvasPE = canvasEl.style.pointerEvents
     let finished = false
 
     function finish(save) {
@@ -303,6 +306,8 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
       el.style.outline = originalOutline
       el.style.outlineOffset = originalOffset
       el.style.cursor = originalCursor
+      el.style.pointerEvents = originalElPE
+      canvasEl.style.pointerEvents = originalCanvasPE
       if (save) {
         const val = el.textContent.trim()
         if (val) change(region.field, val)
@@ -318,6 +323,15 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
       else if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); el.blur() }
     }
 
+    // Slide components render a full-bleed SlideElements overlay (for user
+    // text/image annotations) that sits at the same z-index as text regions
+    // and comes later in DOM order, so it silently blankets the whole slide
+    // regardless of any z-index set on the region itself. Rather than fight
+    // stacking order per slide type, disable hit-testing on the whole canvas
+    // and opt just this one element back in — pointer-events:none removes an
+    // element from hit-testing entirely, independent of paint order.
+    canvasEl.style.pointerEvents = 'none'
+    el.style.pointerEvents = 'auto'
     el.contentEditable = 'true'
     el.style.outline = '2px solid #6366f1'
     el.style.outlineOffset = '4px'
