@@ -365,7 +365,7 @@ All host-typed text on `/display` auto-sizes by MEASURING rendered glyph width, 
 Per-surface intent lives in `*_FLOOR`/`*_CEIL` (rem) + `*_BOX` consts. There are NO tier tables — char-count sizing (`autoFitClamp`/`*_TIERS`) was deleted 2026-07-03.
 
 **Gotchas:**
-- `family` passed to any fit fn MUST match what the element actually renders, or it measures the wrong glyphs. Three surfaces (Custom, RoundIntro, PylReveal) render `system-ui` (no inline font, inherits global `body{}`), NOT a theme font. If you ever give them a theme font, update the fit-call `family` in the same edit.
+- `family` passed to any fit fn MUST match what the element actually renders, or it measures the wrong glyphs. Two surfaces (Custom, RoundIntro) render `system-ui` (no inline font, inherits global `body{}`), NOT a theme font. `PylReveal` migrated to `theme.fonts.body` in commit `4b07415` (2026-07-05) and is no longer on this list — confirm no other surface has silently drifted before trusting this count again. If you ever give Custom/RoundIntro a theme font, update the fit-call `family` in the same edit.
 - Fit measures via canvas BEFORE web fonts load → fallback metrics. Every consumer guards with `document.fonts.ready` (fixed-region: a `fontsReady` state; hooks: built in). Don't remove it.
 - All 21 themes currently ship the same fonts (Boogaloo display / DM Sans body). The per-theme font override exists but is unused.
 
