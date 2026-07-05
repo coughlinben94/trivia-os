@@ -403,12 +403,33 @@ export function useShow() {
     const newRounds = orderedRoundIds
       .map(id => show.rounds.find(r => r.id === id))
       .filter(Boolean)
-    // Reorder slides: general (no-round) slides keep their relative positions at the top,
-    // then each round's slides in the new round order
+    // Build a sequence of "segments" (general or round) in the current order, then
+    // replace round segments with the new round order while leaving general-slide
+    // segments in their current positions. This preserves e.g. a winner-reveal that
+    // was dragged to the bottom — a round reorder must not snap it back to the top.
     const allSorted = sortedSlides(show)
-    const generalSlides = allSorted.filter(s => !s.roundId)
-    const roundedSlides = orderedRoundIds.flatMap(id => allSorted.filter(s => s.roundId === id))
-    const newSlides = [...generalSlides, ...roundedSlides].map((s, i) => ({ ...s, order: i }))
+    const segs = []
+    let lastKey = null
+    for (const s of allSorted) {
+      const key = s.roundId ?? '__general__'
+      if (key !== lastKey) {
+        lastKey = key
+        segs.push(s.roundId
+          ? { isRound: true, roundId: s.roundId, slides: [s] }
+          : { isRound: false, slides: [s] })
+      } else {
+        segs[segs.length - 1].slides.push(s)
+      }
+    }
+    const newRoundOrder = new Map(orderedRoundIds.map((id, i) => [id, i]))
+    const roundSegs = segs.filter(sg => sg.isRound).sort((a, b) =>
+      (newRoundOrder.get(a.roundId) ?? 0) - (newRoundOrder.get(b.roundId) ?? 0)
+    )
+    let ri = 0
+    const newSlides = segs
+      .map(sg => sg.isRound ? roundSegs[ri++] : sg)
+      .flatMap(sg => sg.slides)
+      .map((s, i) => ({ ...s, order: i }))
     setShow(prev => ({ ...prev, rounds: newRounds, slides: newSlides }))
     await updateShowRow(show.id, { rounds: newRounds, slides: newSlides })
   }

@@ -105,6 +105,24 @@ export default function RoundSidebar({
   function computeNewOrder(draggedSpec, targetKey, targetType) {
     const b = blocksRef.current
 
+    // Sentinel: drop at the very end of the list
+    if (targetType === 'sentinel') {
+      if (draggedSpec.type === 'slide') {
+        const draggedBlock = b.find(bl => bl.slides.some(s => s.id === draggedSpec.id))
+        if (!draggedBlock) return null
+        const next = b.filter(bl => bl !== draggedBlock)
+        next.push(draggedBlock)
+        return { kind: 'slides', ids: next.flatMap(bl => bl.slides.map(s => s.id)) }
+      } else {
+        const next = [...b]
+        const idx = next.findIndex(bl => bl.roundId === draggedSpec.id)
+        if (idx === -1) return null
+        const [removed] = next.splice(idx, 1)
+        next.push(removed)
+        return { kind: 'rounds', ids: next.filter(bl => bl.type === 'round').map(bl => bl.roundId) }
+      }
+    }
+
     if (draggedSpec.type === 'slide') {
       const draggedBlock = b.find(bl => bl.slides.some(s => s.id === draggedSpec.id))
       const targetBlock  = targetType === 'round'
@@ -155,6 +173,7 @@ export default function RoundSidebar({
     while (el && el !== document.body) {
       if (el.dataset?.slideId) return { id: el.dataset.slideId, type: 'slide' }
       if (el.dataset?.roundId) return { id: el.dataset.roundId, type: 'round' }
+      if (el.dataset?.sentinel) return { id: '__bottom__', type: 'sentinel' }
       el = el.parentElement
     }
     return null
@@ -392,6 +411,13 @@ export default function RoundSidebar({
             </div>
           )
         })}
+
+        {/* Drop zone at the very bottom — catches drags that land below all blocks */}
+        <div
+          data-sentinel="bottom"
+          style={{ height: 32 }}
+          className={dragOverType === 'sentinel' ? 'border-t-2 border-t-blue-400' : ''}
+        />
 
       </div>
 
