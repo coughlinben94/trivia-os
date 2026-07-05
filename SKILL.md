@@ -88,7 +88,8 @@ client/src/
                              RoundSidebar/SlideEditor's SLIDE_TYPE_META — this drifted
                              once already, e.g. 'title' vs 'round-intro' emoji swap)
       AddRoundWizard.jsx  — 3-type round picker (Normal/Swing/PYL) before round creation
-      SlideEditor.jsx     — per-slide editing panel; GradingBreakEditor has "Final Break" toggle
+      SlideEditor.jsx     — per-slide editing panel (no manual "Final Break" control —
+                             the jukebox-return jump is fully automatic, see Final Break below)
       RoundSidebar.jsx    — round/slide navigation tree; shows shinyFormatName, groups series;
                              divider lines between every section (i > 0 segment-level +
                              slideIdx > 0 within general segments for multi-slide sections)
@@ -158,7 +159,7 @@ Round object stamped: `{ roundType, roundNumber?, subtitle, title }`
 | `round-intro` | RoundIntroSlide | roundNumber, roundTitle, subtitle, roundType, hostPhotoUrl |
 | `swing-round-intro` | RoundIntroSlide | same component as round-intro, swing variant |
 | `question` | QuestionSlide | questionNumber, text, isShiny, shinyType, shinyFormatName, mediaUrl, mediaType, audioGainDb |
-| `grading-break` | GradingBreakSlide | message, jukeboxLib, backLinkSlideId, **isFinalBreak** (jukebox return jumps to last slide instead of +1) |
+| `grading-break` | GradingBreakSlide | message, jukeboxLib, backLinkSlideId (jukebox return auto-detects the show's final grading break — see Final Break) |
 | `scoreboard-reveal` | ScoreboardRevealSlide | auto-computed from team_scores |
 | `custom` | CustomSlide | title, body, imageUrl, layout |
 | `multi-question` | MultiQuestionSlide | questions: [{number, text}] |
@@ -171,9 +172,9 @@ Round object stamped: `{ roundType, roundNumber?, subtitle, title }`
 
 **Shiny subtypes:** `shinyType: 'visual'` (image full-bleed or split) | `shinyType: 'audio'` (waveform bars, PLAY button, Web Audio gain). Series-type shiny questions (`isSeries: true`) group as one lead slide + hidden `slotIndex`-ordered siblings in RoundSidebar; drag-reorder carries the whole group as one atomic unit.
 
-**Winner Reveal** (shipped 2026-06-30) — add via the 🏆/🥇 card in AddSlideWizard, put it as the literal last slide. On mount: 3s synthesized Web Audio drum roll (accelerating snare hits → finale, or a `useReducedMotion`-gated instant skip) → winner name pops in full-size with canvas confetti raining from the top → points subtitle fades in 350ms later. Combine with the **Final Break** toggle (below) for a fully hands-off show close.
+**Winner Reveal** (shipped 2026-06-30) — add via the 🏆/🥇 card in AddSlideWizard, put it as the literal last slide. On mount: 3s synthesized Web Audio drum roll (accelerating snare hits → finale, or a `useReducedMotion`-gated instant skip) → winner name pops in full-size with canvas confetti raining from the top → points subtitle fades in 350ms later. Combine with the automatic **Final Break** detection (below) for a fully hands-off show close.
 
-**Final Break** — a checkbox on a `grading-break` slide's editor (`isFinalBreak` in slide data). When the host is live and the Jukebox sends them back from THAT specific grading break, `Display.jsx` reads `isFinalBreak` and jumps straight to `sorted.length - 1` (the last slide) instead of the normal `current + 1`. Every other grading break without the toggle still does +1. `Host.jsx` auto-fires `saveResults()` the instant the winner-reveal slide becomes live — no manual "Save Results" button anymore (it was removed from HostHeader).
+**Final Break** — fully automatic, no per-slide toggle exists (an earlier design used a manual `isFinalBreak` checkbox; it was replaced with auto-detection and this doc wasn't updated until the 2026-07-05 audit). On jukebox return, `Display.jsx` checks two things: is the show's literal last slide a `winner-reveal`, and are there no more `grading-break` slides remaining after the current position? If both are true, it jumps straight to `sorted.length - 1` (the last slide); otherwise it does the normal `current + 1` (clamped). This means the *last* grading break in a show automatically closes it out — nothing to remember to check on a specific slide. One consequence worth knowing: any non-grading-break slide placed between the last grading break and the winner-reveal slide gets silently skipped by the jump, since only "any grading breaks left?" is checked, not "is winner-reveal the very next slide." `Host.jsx` auto-fires `saveResults()` the instant the winner-reveal slide becomes live — no manual "Save Results" button anymore (it was removed from HostHeader).
 
 ---
 

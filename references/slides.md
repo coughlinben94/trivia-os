@@ -44,9 +44,9 @@ Full-screen interstitial between rounds.
 - Custom message (default: "Ben is grading papers")
 - Animated subtle looping background
 - **Back button:** "↩ Back to Q1" — jumps host to first question of that round (`backLinkSlideId` in data)
-- **Final Break toggle** (`isFinalBreak` in data, shipped 2026-06-30): a checkbox in `SlideEditor.jsx`'s grading-break editor. Set on the LAST grading break of the show — see Jukebox handoff below for what it does.
+- **Final Break** (fully automatic, no per-slide field or checkbox — an earlier manual `isFinalBreak` design was replaced with auto-detection; see Jukebox handoff below for the real logic).
 - Ben photo shown (thumbnail, lower-left corner)
-- **Jukebox handoff (nav mechanism):** full-page navigation, NOT iframe and NOT postMessage (Spotify refuses iframe embedding; theme can't cross origins). After the phase-1 message (~10s; Space/ArrowRight skips it, which is what the Stream Deck Next key sends), `transitionToJukebox` runs `window.location.href = 'https://trivia-jukebox.vercel.app'`. Return is manual: the Jukebox's `b` keydown handler navigates to `trivia-os.vercel.app/display?from=jukebox`; Display.jsx detects `from=jukebox`, reads `isFinalBreak` off the current slide — if true, jumps `current_slide_index` straight to `sorted.length - 1` (the last slide, meant to be a `winner-reveal`); otherwise advances by 1 as before (clamped, `next>cur` guard) — then strips the param via `history.replaceState`.
+- **Jukebox handoff (nav mechanism):** full-page navigation, NOT iframe and NOT postMessage (Spotify refuses iframe embedding; theme can't cross origins). After the phase-1 message (~10s; Space/ArrowRight skips it, which is what the Stream Deck Next key sends), `transitionToJukebox` runs `window.location.href = 'https://trivia-jukebox.vercel.app'`. Return is manual: the Jukebox's `b` keydown handler navigates to `trivia-os.vercel.app/display?from=jukebox`; Display.jsx detects `from=jukebox` and auto-detects whether this is the show's final grading break — if the show's last slide is type `winner-reveal` AND no `grading-break` slides remain after the current position, it jumps `current_slide_index` straight to `sorted.length - 1`; otherwise advances by 1 as before (clamped, `next>cur` guard) — then strips the param via `history.replaceState`. (No per-slide flag is involved — this is structural detection off the slide list, not a stored field.)
 - Implemented: `GradingBreakSlide.jsx`
 
 ### `scoreboard-reveal`
@@ -86,7 +86,7 @@ Shipped 2026-06-30. The automated show-closer — no editable data fields, compu
 - Winner name pops in at full size (`clamp(4rem, 11vw, 10rem)`, theme highlight color, text-shadow glow) with canvas confetti (220 particles, physics-based fall + rotation, fades after 2.5s)
 - Points subtitle fades in 350ms after the name
 - Uses `theme.fonts.display`/`theme.colors.highlight`/`theme.colors.accent` — respects per-show theme overrides like every other slide
-- Meant to be the literal last slide in the show, paired with the **Final Break** toggle on the last grading break (see above) so the whole close is hands-off — no host button press needed
+- Meant to be the literal last slide in the show — paired with the automatic **Final Break** detection on the last grading break (see above), the whole close is hands-off with no host button press needed
 - `Host.jsx` auto-fires `saveResults()` (writes `final_scores` + `player_count` to the show row) the instant this slide becomes the live slide
 - Implemented: `WinnerRevealSlide.jsx`
 

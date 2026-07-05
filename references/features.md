@@ -284,7 +284,7 @@ Trivia Jukebox is a separate React/Vite/Spotify app at `https://trivia-jukebox.v
 
 **Grading break → Jukebox:** After ~10s on the grading break slide (Space/ArrowRight skips), `transitionToJukebox` runs `window.location.href = 'https://trivia-jukebox.vercel.app'`.
 
-**Jukebox → back:** Jukebox's `b` keydown handler navigates to `trivia-os.vercel.app/display?from=jukebox`. Display.jsx detects `from=jukebox`, reads `isFinalBreak` off the current slide — if true, jumps `current_slide_index` to `sorted.length - 1` (last slide = winner-reveal); otherwise advances by 1. Param stripped via `history.replaceState`.
+**Jukebox → back:** Jukebox's `b` keydown handler navigates to `trivia-os.vercel.app/display?from=jukebox`. Display.jsx detects `from=jukebox` and auto-detects the show's final grading break structurally — if the show's last slide is a `winner-reveal` AND no `grading-break` slides remain after the current position, it jumps `current_slide_index` to `sorted.length - 1`; otherwise advances by 1. Param stripped via `history.replaceState`. (No per-slide flag involved — there is no manual toggle for this.)
 
 **No iframe.** Spotify refuses iframe embedding. Full-page navigation is the only integration path.
 
