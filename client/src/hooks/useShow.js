@@ -602,13 +602,13 @@ export function useShow() {
       ...s,
       slides: newSlides,
       updatedAt: now,
-      showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: null },
+      showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: slide?.id ?? null },
     }))
     await updateShowRow(show.id, {
       slides: newSlides,
       is_live: true,
       current_slide_index: target,
-      current_slide_id: null,
+      current_slide_id: slide?.id ?? null,
       updated_at: now,
     })
   }
