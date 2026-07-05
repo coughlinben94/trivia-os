@@ -137,7 +137,11 @@ export default function RoundSidebar({
         if (idx === -1) return null
         const [removed] = next.splice(idx, 1)
         next.push(removed)
-        return { kind: 'rounds', ids: next.filter(bl => bl.type === 'round').map(bl => bl.roundId) }
+        return {
+          kind: 'rounds',
+          ids: next.filter(bl => bl.type === 'round').map(bl => bl.roundId),
+          slideIds: next.flatMap(bl => bl.slides.map(s => s.id)),
+        }
       }
     }
 
@@ -184,7 +188,11 @@ export default function RoundSidebar({
     const next = [...b]
     const [removed] = next.splice(draggedBlockIdx, 1)
     next.splice(targetBlockIdx, 0, removed)
-    return { kind: 'rounds', ids: next.filter(bl => bl.type === 'round').map(bl => bl.roundId) }
+    return {
+      kind: 'rounds',
+      ids: next.filter(bl => bl.type === 'round').map(bl => bl.roundId),
+      slideIds: next.flatMap(bl => bl.slides.map(s => s.id)),
+    }
   }
 
   function findDropTarget(el) {
@@ -256,7 +264,7 @@ export default function RoundSidebar({
         const newOrder = computeNewOrder(d, over.id, over.type)
         if (newOrder) {
           if (newOrder.kind === 'rounds') {
-            onReorderRounds?.(newOrder.ids)
+            onReorderRounds?.(newOrder.ids, newOrder.slideIds)
           } else {
             onReorderSlides?.(newOrder.ids)
           }

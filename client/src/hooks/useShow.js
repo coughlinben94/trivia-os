@@ -409,38 +409,29 @@ export function useShow() {
     await updateShowRow(show.id, { slides: newSlides })
   }
 
-  async function reorderRounds(orderedRoundIds) {
+  // orderedSlideIds is RoundSidebar's own recomputed flat block order (the same
+  // structure reorderSlides trusts) rather than something rebuilt from scratch
+  // here. The previous implementation rebuilt slide order from segments derived
+  // from the *current* slide order — since that segment shape (which "slot" each
+  // round occupies relative to general-slide runs like winner-reveal) never
+  // changes, dragging a round past a general slide silently no-opped: the round
+  // order (`rounds` array) updated, but its actual slides never moved. Trusting
+  // the caller's full slide order (already correct for the empty-round case too,
+  // since an empty round contributes no slides either way) fixes this by
+  // construction instead of reconstructing it from a fixed segment shape.
+  async function reorderRounds(orderedRoundIds, orderedSlideIds) {
     if (!show) return
     const newRounds = orderedRoundIds
       .map(id => show.rounds.find(r => r.id === id))
       .filter(Boolean)
-    // Build a sequence of "segments" (general or round) in the current order, then
-    // replace round segments with the new round order while leaving general-slide
-    // segments in their current positions. This preserves e.g. a winner-reveal that
-    // was dragged to the bottom — a round reorder must not snap it back to the top.
-    const allSorted = sortedSlides(show)
-    const segs = []
-    let lastKey = null
-    for (const s of allSorted) {
-      const key = s.roundId ?? '__general__'
-      if (key !== lastKey) {
-        lastKey = key
-        segs.push(s.roundId
-          ? { isRound: true, roundId: s.roundId, slides: [s] }
-          : { isRound: false, slides: [s] })
-      } else {
-        segs[segs.length - 1].slides.push(s)
-      }
-    }
-    const newRoundOrder = new Map(orderedRoundIds.map((id, i) => [id, i]))
-    const roundSegs = segs.filter(sg => sg.isRound).sort((a, b) =>
-      (newRoundOrder.get(a.roundId) ?? 0) - (newRoundOrder.get(b.roundId) ?? 0)
+    const newSlides = renumberRoundQuestions(
+      orderedSlideIds
+        .map((id, index) => {
+          const slide = show.slides.find(s => s.id === id)
+          return slide ? { ...slide, order: index } : null
+        })
+        .filter(Boolean)
     )
-    let ri = 0
-    const newSlides = segs
-      .map(sg => sg.isRound ? roundSegs[ri++] : sg)
-      .flatMap(sg => sg.slides)
-      .map((s, i) => ({ ...s, order: i }))
     setShow(prev => ({ ...prev, rounds: newRounds, slides: newSlides }))
     await updateShowRow(show.id, { rounds: newRounds, slides: newSlides })
   }
