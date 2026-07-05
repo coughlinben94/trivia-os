@@ -79,7 +79,7 @@ function WavingGradient({ reduce }) {
         const waveShift = wave * maxAmp * env
         for (let y = 0; y < H; y++) {
           const ey   = y - waveShift
-          const diag = ((x / W * 1.18 + ey / H * 0.44 - scrollT) % 1.0 + 1.0) % 1.0
+          const diag = ((x / W * 1.39 + ey / H * 0.62 - scrollT) % 1.0 + 1.0) % 1.0
           const li   = Math.round(diag * (N - 1)) * 3
           const px   = (y * W + x) * 4
           data[px]     = lut[li]
