@@ -81,10 +81,26 @@ export default function RoundSidebar({
       segments[segments.length - 1].slides.push(slide)
     }
   }
-  for (const round of show.rounds) {
-    if (!segments.some(s => s.roundId === round.id)) {
-      segments.push({ type: 'round', roundId: round.id, round, slides: [] })
+  // Empty rounds (no slides yet) have no natural position in slide order, so
+  // they can't just get a segment pushed in the loop above. But blindly
+  // appending them at the very end (the old behavior) pins them there
+  // permanently — reorderRounds (useShow.js) DOES correctly persist a
+  // dragged empty round's new position in show.rounds' array order, but
+  // this component never consulted that order for slide-less rounds, so the
+  // drag always looked like a no-op. Walk show.rounds in its own order and
+  // insert each empty round's segment right after its nearest preceding
+  // round that already has one (0 if none precedes it) — this reads
+  // show.rounds' order for the one case that actually needs it, and leaves
+  // every round with real slides exactly where slide order already puts it.
+  for (let i = 0; i < show.rounds.length; i++) {
+    const round = show.rounds[i]
+    if (segments.some(s => s.roundId === round.id)) continue
+    let insertAt = 0
+    for (let j = i - 1; j >= 0; j--) {
+      const idx = segments.findIndex(s => s.roundId === show.rounds[j].id)
+      if (idx !== -1) { insertAt = idx + 1; break }
     }
+    segments.splice(insertAt, 0, { type: 'round', roundId: round.id, round, slides: [] })
   }
 
   // Build flat blocks

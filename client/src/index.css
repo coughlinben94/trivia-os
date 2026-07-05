@@ -158,4 +158,5 @@ textarea {
   @keyframes playPulse    { 0%, 100% { opacity: 1; transform: scale(1); } }
   @keyframes waveformBar  { 0%, 100% { transform: scaleY(0.5); } }
   @keyframes waveformIdle { 0%, 100% { transform: scaleY(0.15); } }
+  @keyframes slideInRight { 0%, 100% { transform: translateX(0); opacity: 1; } }
 }
