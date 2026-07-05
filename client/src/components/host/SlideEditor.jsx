@@ -296,7 +296,6 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   // Auto-focus + cursor-to-end when edit overlay mounts
   useEffect(() => {
     const el = editOverlayRef.current
-    console.log('[DEBUG] autofocus effect fired, editingRegionId=', editingRegionId, 'el found?', !!el)
     if (!el) return
     el.focus()
     const range = document.createRange()
@@ -333,7 +332,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                   <div
                     ref={overlayRef}
                     style={{ position: 'absolute', inset: 0, zIndex: 50, overflow: 'visible' }}
-                    onPointerDown={() => { console.log('[DEBUG] PARENT overlay pointerdown - clearing all'); setSelectedElId(null); setSelectedRegionId(null); setEditingRegionId(null); setEditStyles(null) }}
+                    onPointerDown={() => { setSelectedElId(null); setSelectedRegionId(null); setEditingRegionId(null); setEditStyles(null) }}
                   >
                   {/* ── WYSIWYG region handles ── */}
                   {regions.map(region => {
@@ -357,12 +356,18 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                           onPointerEnter={e => { if (!isSelReg) e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)' }}
                           onPointerLeave={e => { if (!isSelReg) e.currentTarget.style.borderColor = 'transparent' }}
                           onPointerDown={e => {
-                            console.log('[DEBUG] pointerdown region.id=', region.id, 'selectedRegionId=', selectedRegionId, 'equal?', selectedRegionId === region.id)
                             e.stopPropagation()
                             if (selectedRegionId !== region.id) {
                               setSelectedRegionId(region.id); setSelectedElId(null)
                             } else {
-                              console.log('[DEBUG] entering edit mode')
+                              // preventDefault matters here: entering edit mode swaps this
+                              // div for the contentEditable synchronously (React commits
+                              // before the browser dispatches its compat 'mousedown'), and
+                              // without this, Chromium re-hit-tests that compat event against
+                              // the NEW dom, lands on whatever's now underneath, and its
+                              // default mousedown behavior immediately blurs the contentEditable
+                              // we just focused — closing the box before it's even visible.
+                              e.preventDefault()
                               enterEditMode(region); return
                             }
                             startRegionMove(e, region)
@@ -396,7 +401,12 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                         contentEditable
                         suppressContentEditableWarning
                         style={{ position: 'absolute', left: region.x + extraX, top: region.y + extraY, width: region.w, minHeight: region.h, transform: `rotate(${curRot}deg)`, transformOrigin: 'center', zIndex: 55, outline: '2px solid #6366f1', background: 'rgba(20,20,50,0.6)', padding: '4px 8px', boxSizing: 'border-box', whiteSpace: 'pre-wrap', wordBreak: 'break-word', cursor: 'text', ...editStyles }}
-                        onBlur={e => { console.log('[DEBUG] contentEditable onBlur firing, relatedTarget=', e.relatedTarget); const val = e.currentTarget.innerText.trim(); if (val) change(region.field, val); setEditingRegionId(null); setEditStyles(null); setTimeout(detectRegions, 50) }}
+                        // Without this, a click INSIDE the open box to reposition the
+                        // caret bubbles to the parent overlay's onPointerDown (which
+                        // unconditionally clears selection/editing state) and closes
+                        // the box before the native caret-placement default action lands.
+                        onPointerDown={e => e.stopPropagation()}
+                        onBlur={e => { const val = e.currentTarget.innerText.trim(); if (val) change(region.field, val); setEditingRegionId(null); setEditStyles(null); setTimeout(detectRegions, 50) }}
                         onKeyDown={e => { if (e.key === 'Escape') { setEditingRegionId(null); setEditStyles(null) } }}
                         dangerouslySetInnerHTML={{ __html: data[region.field] ?? '' }}
                       />
