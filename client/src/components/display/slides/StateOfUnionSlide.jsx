@@ -37,20 +37,22 @@ function WavingGradient({ reduce }) {
     const k  = (2 * Math.PI) / (W * 0.55)
     const k2 = k * 1.65  // secondary harmonic — higher freq, different phase speed
 
-    // 5 evenly-spaced stops spanning the full diagonal — no flat zones.
-    // With maxAmp at 18% of H, the wave shifts any pixel ≈ ±9% of the LUT range,
-    // which is only ~36% of each 0.25-wide segment. That gives gentle shimmer
-    // rather than a visible band jumping across the screen.
-    // Smoothstep within each segment keeps colors lingering near their peaks;
-    // the vivid rose and cobalt intermediates prevent muddy RGB blending.
+    // Cyclic LUT: red → white → blue → white → red (seamless loop).
+    // Going back through white avoids a purple seam at the loop boundary.
+    // Vivid rose + periwinkle intermediates keep transitions saturated.
+    // Smoothstep within each segment makes colors linger near their vivid peaks.
     const N = 512
     const lut = new Uint8Array(N * 3)
     const stops = [
-      [0.00, 178,  34,  52],
-      [0.25, 224,  68,  86],
-      [0.50, 242, 234, 228],
-      [0.75,  52,  78, 195],
-      [1.00,  18,  32,  94],
+      [0.000, 178,  34,  52],
+      [0.125, 224,  68,  86],
+      [0.250, 242, 234, 228],
+      [0.375, 100, 120, 210],
+      [0.500,  52,  78, 195],
+      [0.625, 100, 120, 210],
+      [0.750, 242, 234, 228],
+      [0.875, 224,  68,  86],
+      [1.000, 178,  34,  52],
     ]
     for (let i = 0; i < N; i++) {
       const d = i / (N - 1)
@@ -66,18 +68,18 @@ function WavingGradient({ reduce }) {
     const imgData = ctx.createImageData(W, H)
     const data = imgData.data
 
-    let t = 0
+    let t = 0        // wave phase
+    let scrollT = 0  // color scroll — independent of wave, loops via modulo
     let rafId
 
     function draw() {
       for (let x = 0; x < W; x++) {
-        // Primary + secondary harmonic: organic turbulence, zero at pole, growing toward free end
         const env = Math.pow(x / W, 0.7)
         const wave = (Math.sin(k * x - t) + 0.22 * Math.sin(k2 * x - t * 1.38)) / 1.22
         const waveShift = wave * maxAmp * env
         for (let y = 0; y < H; y++) {
           const ey   = y - waveShift
-          const diag = Math.max(0, Math.min(1, (x / W + ey / H) / 2))
+          const diag = (((x / W + ey / H) / 2 + scrollT) % 1.0 + 1.0) % 1.0
           const li   = Math.round(diag * (N - 1)) * 3
           const px   = (y * W + x) * 4
           data[px]     = lut[li]
@@ -87,7 +89,8 @@ function WavingGradient({ reduce }) {
         }
       }
       ctx.putImageData(imgData, 0, 0)
-      t += reduce ? 0.007 : 0.028  // ~3.8s full period — slow, majestic
+      t       += reduce ? 0.007  : 0.028   // wave: ~3.8s period
+      scrollT += reduce ? 0.0003 : 0.0014  // scroll: one full RWB cycle ≈ 12s
       rafId = requestAnimationFrame(draw)
     }
 
