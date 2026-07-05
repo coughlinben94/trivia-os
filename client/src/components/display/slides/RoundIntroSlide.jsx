@@ -23,7 +23,7 @@ export default function RoundIntroSlide({ slide, show }) {
   return (
     <div
       className="w-full h-full relative flex flex-col items-center justify-center overflow-hidden"
-      style={{ background: theme.roundIntro.bgColor }}
+      style={{ background: theme.colors.bg }}
     >
       {/* Ambient backdrop glow */}
       <div
@@ -58,7 +58,7 @@ export default function RoundIntroSlide({ slide, show }) {
         className="relative z-10"
         style={{
           fontFamily: `'${theme.fonts.display}', sans-serif`,
-          color: theme.roundIntro.numberColor,
+          color: theme.colors.highlight,
           fontSize: 'clamp(6rem, 20vw, 18rem)',
           lineHeight: 0.9,
           fontWeight: 700,
@@ -77,7 +77,7 @@ export default function RoundIntroSlide({ slide, show }) {
           className="relative z-10 text-center mt-2"
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
-            color: theme.roundIntro.titleColor,
+            color: theme.colors.text,
             fontSize: 'clamp(2.5rem, 5vw, 5rem)',
             fontWeight: 700,
             letterSpacing: '-0.01em',
@@ -96,7 +96,7 @@ export default function RoundIntroSlide({ slide, show }) {
             transition={{ delay: 0.55, duration: 0.2 }}
             className="relative z-10 mt-4 text-center italic"
             style={{
-              color: theme.roundIntro.titleColor,
+              color: theme.colors.text,
               fontSize: fitToBox(data.subtitle, { ...LINE_BOX, family: 'system-ui' }),
               fontWeight: 300,
             }}

@@ -8,7 +8,6 @@ export const THEMES = [
     vignette: { r: 0, g: 2, b: 5, strength: 0.52 },
     scene: { background: null, foreground: null, cssClass: 'theme-pure-michigan' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#4dffc3', titleColor: '#e8f5f0', bgColor: '#020d12' },
   },
   {
     id: 'midnight-galaxy',
@@ -19,7 +18,6 @@ export const THEMES = [
     vignette: { r: 0, g: 0, b: 3, strength: 0.60 },
     scene: { background: null, foreground: null, cssClass: 'theme-midnight-galaxy' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#c060ff', titleColor: '#e8d0ff', bgColor: '#08001a' },
   },
   {
     id: 'autumn-harvest',
@@ -30,7 +28,6 @@ export const THEMES = [
     vignette: { r: 8, g: 2, b: 0, strength: 0.55 },
     scene: { background: null, foreground: null, cssClass: 'theme-autumn-harvest' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#ff6820', titleColor: '#f8d8b0', bgColor: '#1a0800' },
   },
   {
     id: 'northern-lights',
@@ -41,7 +38,6 @@ export const THEMES = [
     vignette: { r: 0, g: 2, b: 8, strength: 0.58 },
     scene: { background: null, foreground: null, cssClass: 'theme-northern-lights' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#40ffcc', titleColor: '#c0f0e8', bgColor: '#020c18' },
   },
   {
     id: 'medieval-tavern',
@@ -52,7 +48,6 @@ export const THEMES = [
     vignette: { r: 3, g: 1, b: 0, strength: 0.60 },
     scene: { background: null, foreground: null, cssClass: 'theme-medieval-tavern' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#e08020', titleColor: '#f0d8a0', bgColor: '#0e0800' },
   },
   {
     id: 'sunset-boulevard',
@@ -63,7 +58,6 @@ export const THEMES = [
     vignette: { r: 10, g: 2, b: 0, strength: 0.48 },
     scene: { background: null, foreground: null, cssClass: 'theme-sunset-boulevard' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#ff4080', titleColor: '#f8e0f0', bgColor: '#100818' },
   },
   {
     id: 'retro-arcade',
@@ -74,7 +68,6 @@ export const THEMES = [
     vignette: { r: 2, g: 0, b: 5, strength: 0.58 },
     scene: { background: null, foreground: null, cssClass: 'theme-retro-arcade' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#a020ff', titleColor: '#e0c0ff', bgColor: '#040010' },
   },
   {
     id: 'sand-dune-chill',
@@ -85,7 +78,6 @@ export const THEMES = [
     vignette: { r: 2, g: 4, b: 8, strength: 0.44 },
     scene: { background: null, foreground: null, cssClass: 'theme-sand-dune-chill' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#e8c060', titleColor: '#f0e8c8', bgColor: '#100d05' },
   },
   {
     id: 'halloween',
@@ -96,7 +88,6 @@ export const THEMES = [
     vignette: { r: 3, g: 0, b: 5, strength: 0.65 },
     scene: { background: null, foreground: null, cssClass: 'theme-halloween' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#a000ff', titleColor: '#e0c0f8', bgColor: '#060008' },
   },
   {
     id: 'jazz-club',
@@ -107,7 +98,6 @@ export const THEMES = [
     vignette: { r: 4, g: 2, b: 0, strength: 0.58 },
     scene: { background: null, foreground: null, cssClass: 'theme-jazz-club' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#d4820c', titleColor: '#f0d890', bgColor: '#080608' },
   },
   {
     id: 'dive-bar',
@@ -118,7 +108,6 @@ export const THEMES = [
     vignette: { r: 5, g: 0, b: 1, strength: 0.60 },
     scene: { background: null, foreground: null, cssClass: 'theme-dive-bar' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#ff2040', titleColor: '#f8d0d8', bgColor: '#100008' },
   },
   {
     id: 'sonora-balloons',
@@ -129,7 +118,6 @@ export const THEMES = [
     vignette: { r: 20, g: 8, b: 30, strength: 0.55 },
     scene: { background: null, foreground: null, cssClass: 'theme-sonora-balloons' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#ffb84d', titleColor: '#ffeeda', bgColor: '#2a1238' },
   },
   {
     id: 'christmas-eve',
@@ -140,7 +128,6 @@ export const THEMES = [
     vignette: { r: 8, g: 0, b: 2, strength: 0.55 },
     scene: { background: null, foreground: null, cssClass: 'theme-christmas-eve' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#ff4040', titleColor: '#f8f0f0', bgColor: '#030204' },
   },
   {
     id: 'drive-in-movie',
@@ -151,7 +138,6 @@ export const THEMES = [
     vignette: { r: 2, g: 0, b: 4, strength: 0.55 },
     scene: { background: null, foreground: null, cssClass: 'theme-drive-in-movie' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#e0a000', titleColor: '#f8f0d0', bgColor: '#080410' },
   },
   {
     id: 'western-showdown',
@@ -162,7 +148,6 @@ export const THEMES = [
     vignette: { r: 20, g: 18, b: 14, strength: 0.30 },
     scene: { background: null, foreground: null, cssClass: 'theme-western-showdown' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#e06010', titleColor: '#f8e0b0', bgColor: '#100800' },
   },
   {
     id: 'under-the-sea',
@@ -173,7 +158,6 @@ export const THEMES = [
     vignette: { r: 0, g: 1, b: 6, strength: 0.70 },
     scene: { background: null, foreground: null, cssClass: 'theme-under-the-sea' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#00d8c0', titleColor: '#b0f0f0', bgColor: '#000c18' },
   },
   {
     id: 'neon-tokyo',
@@ -184,7 +168,6 @@ export const THEMES = [
     vignette: { r: 0, g: 0, b: 2, strength: 0.65 },
     scene: { background: null, foreground: null, cssClass: 'theme-neon-tokyo' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#ff00c0', titleColor: '#f8d0ff', bgColor: '#040008' },
   },
   {
     id: 'firefly-summer',
@@ -195,7 +178,6 @@ export const THEMES = [
     vignette: { r: 0, g: 3, b: 0, strength: 0.55 },
     scene: { background: null, foreground: null, cssClass: 'theme-firefly-summer' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#d4a020', titleColor: '#e8f0c0', bgColor: '#040e04' },
   },
   {
     id: 'wine-cellar',
@@ -206,7 +188,6 @@ export const THEMES = [
     vignette: { r: 3, g: 0, b: 1, strength: 0.65 },
     scene: { background: null, foreground: null, cssClass: 'theme-wine-cellar' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#c02040', titleColor: '#f0d0d8', bgColor: '#0c0006' },
   },
   {
     id: 'meteor-shower',
@@ -217,7 +198,6 @@ export const THEMES = [
     vignette: { r: 0, g: 0, b: 2, strength: 0.62 },
     scene: { background: null, foreground: null, cssClass: 'theme-meteor-shower' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#e0f0ff', titleColor: '#f0f8ff', bgColor: '#020408' },
   },
   {
     id: 'eighties-night',
@@ -228,7 +208,6 @@ export const THEMES = [
     vignette: { r: 2, g: 0, b: 5, strength: 0.60 },
     scene: { background: null, foreground: null, cssClass: 'theme-eighties-night' },
     cutawayFrame: 'none',
-    roundIntro: { variant: 'default', numberColor: '#ff1090', titleColor: '#f8d0ff', bgColor: '#080010' },
   },
 ]
 

@@ -39,7 +39,7 @@ export default function TitleSlide({ slide, show }) {
           className="relative z-10 text-center font-bold"
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
-            color: theme.roundIntro.titleColor,
+            color: theme.colors.text,
             fontSize: 'clamp(3rem, 7vw, 6rem)',
             lineHeight: 1,
             letterSpacing: '-0.02em',
@@ -58,7 +58,7 @@ export default function TitleSlide({ slide, show }) {
             transition={{ delay: 0.38, duration: 0.4, ease: EASE_OUT }}
             className="relative z-10 mt-5 text-center"
             style={{
-              color: theme.roundIntro.titleColor,
+              color: theme.colors.text,
               fontSize: 'clamp(1.25rem, 2.5vw, 2.5rem)',
               fontWeight: 300,
             }}
