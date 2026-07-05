@@ -98,9 +98,9 @@
 
 ### Shiny Question System
 - 3-step shiny wizard in AddSlideWizard (pick format → details form → SlideEditor)
-- 10 shiny formats in `shinyFormatDictionary.js`
-- `shinyStampers.js`, `useShinyFormats.js`
+- Formats live in the Supabase `shiny_formats` table, created/edited entirely in-app via "✨ Add Shiny" (`FormatLibrary.jsx` + `useShinyFormats.js`). `shinyFormatDictionary.js`/`shinyStampers.js` are DEAD CODE (superseded 2026-06-30) — don't read or extend them, see SKILL.md's Shiny Format System section.
 - Series-type shiny questions grouped atomically in RoundSidebar
+- Every shiny slide (question AND grid) gets a shared `ShinyIntroScreen` beat before content, gated on `data.introDone`, with an optional per-instance `data.introSubtitle` line (2026-07-05)
 
 ### 21 Ambient Themes
 - July 2026 rework split them into 9 bespoke (hand-built scene) + 12 shared BreathingGradient themes. Per-theme bland-pass status, anchors/drifters, and the bespoke/gradient split live in `references/themes.md` now — don't duplicate that tracking here, it drifts.

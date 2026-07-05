@@ -55,6 +55,7 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 | `/display` | TV fullscreen — PreShowScreen or slide renderer |
 | `/join` | Team phones — register, follow show, scoreboard, powerups |
 | `/shows` | Show library + ShowDetail (scoreboard history) |
+| `/questions` | Question Archive (Question Database) — cross-show browse/search/edit/delete + bulk "Add to database" input, behind `<HostPinGate>` |
 | `/scores` | Optional secondary scoreboard display |
 | `/ambient` | Dev-only theme previewer (not in prod routing) |
 
@@ -82,8 +83,21 @@ client/src/
                              has ScoresDrawer bottom sheet (📊 button)
     ShowDetail.jsx        — per-show history page; renders "📊 Final Scoreboard" section
                              from scoreboard_teams, falls back to final_scores JSONB
+    Questions.jsx         — Question Archive (/questions); wrapped in <HostPinGate>; 3-across
+                             card grid (question truncates >200 chars with Show more/less,
+                             answer always visible below), search/type/show filters, inline
+                             edit + two-step Delete (mirrors SlideEditor's confirm pattern),
+                             "Add to database" tile row at top rendering
+                             DatabaseAddPanels.jsx's 3 panels — writes straight to `questions`
+                             with show_id/show_title/show_date null, no slide/show involved
   components/
     host/
+      DatabaseAddPanels.jsx — QuestionInputPanel/SwingInputPanel/PylInputPanel; same 3 input
+                             flows as the host dashboard (AddSlideWizard's Question split-view,
+                             SwingRoundWizard, PYLWizard) but stripped of all round/show
+                             plumbing — archives directly via archiveQuestion(s), no slide
+                             created. Kept visually identical (same tile styling, same
+                             step flow) for consistency, per product-register affordance rules.
       BuildMode.jsx       — slide builder UI (wizard + editor modes)
       LiveMode.jsx        — control surface during show; S hotkey toggles scoreboard overlay;
                              "📊 Score" button in nav turns green when overlay is active
@@ -133,6 +147,15 @@ client/src/
                                  overlays (data.overlays). Zero interactivity under every
                                  condition — this is the WYSIWYG ground truth SlideCanvasEditor's
                                  preview also renders. See references/slides.md.
+      ShinyIntroScreen.jsx    — shared standalone announce beat ("✨ Format Name" + optional
+                                 host photo + optional data.introSubtitle line, e.g. "Dog
+                                 Edition") shown before ANY isShiny slide's content, gated on
+                                 `data.introDone`. Used by both QuestionSlide.jsx (question type)
+                                 and GridSlide.jsx (grid type) — extracted 2026-07-05 so grid
+                                 slides get the same intro beat questions already had. GridSlide
+                                 had to split into a thin dispatcher + GridContent child to gate
+                                 on introDone without violating rules-of-hooks (the intro
+                                 early-return can't precede hooks used later in the render).
       ScoreboardOverlay.jsx   — full-screen dark overlay (rgba 0,0,0,0.92) + dual radial
                                  gradient glow; Boogaloo font; gold/silver/bronze medals;
                                  staggered Framer Motion rows (60ms intervals); two-column
@@ -183,12 +206,14 @@ Round object stamped: `{ roundType, roundNumber?, subtitle, title }`
 | `multi-question` | MultiQuestionSlide | questions: [{number, text}] |
 | `pixelate-series` | PixelateSeriesSlide | stages: [{imageUrl, opacity}] |
 | `pyl-reveal` | PylRevealSlide | answers: [{text, revealed}], points |
-| `grid` | GridSlide | columns [[{color?,mediaUrl?}]], intraGap, interGap, columnLabels, text — shiny "Color Schemes"; host picks columns/rows in AddSlideWizard, tiles filled in SlideEditor GridEditor; image wins over color; carries isShiny (fixed-gold), needs SlideRenderer opacity-neutralize |
+| `grid` | GridSlide | columns [[{color?,mediaUrl?}]], intraGap, interGap, columnLabels, text, answer, introDone, introSubtitle — shiny "Color Schemes"/concurrent-image formats; host picks columns/rows in AddSlideWizard, tiles + answer filled in SlideEditor GridEditor; image wins over color; carries isShiny (fixed-gold), needs SlideRenderer opacity-neutralize; gets the same ShinyIntroScreen beat as `question` (2026-07-05) |
 | `team-preview` | TeamPreviewSlide | none — live-queries `teams` for the show on mount ("Team List": scrolling display of registered team names) |
 | `team-picker` | TeamPickerSlide | openingText?, closingText?, parts, currentPart — "Team Intro": fixed black/starfield warp ceremony (background + stars always black/gray regardless of theme; only text stays theme-linked) |
 | `winner-reveal` | WinnerRevealSlide | none — computes winner live from `teams`/`team_scores` on mount |
 
-**Shiny subtypes:** `shinyType: 'visual'` (image full-bleed or split) | `shinyType: 'audio'` (waveform bars, PLAY button, Web Audio gain). Series-type shiny questions (`isSeries: true`) group as one lead slide + hidden `slotIndex`-ordered siblings in RoundSidebar; drag-reorder carries the whole group as one atomic unit.
+**Shiny subtypes:** `shinyType: 'visual'` (image full-bleed or split) | `shinyType: 'audio'` (waveform bars, PLAY button, Web Audio gain) | `shinyInputSchema.type === 'list'` → `ShinyListQuestion` (bulleted list from `data.listItems: [{text, points}]`, optional point badges — added 2026-07-05; the host editor's `ShinyListBuilder` had existed for a while but nothing ever rendered `listItems` on `/display` until this fix, via new `isListShiny()` in `shinySeries.js`). Anything isShiny that's none of the above falls through to plain `StandardQuestion` (e.g. text-based formats like "First, Second, or Third"). Series-type shiny questions (`isSeries: true`) group as one lead slide + hidden `slotIndex`-ordered siblings in RoundSidebar; drag-reorder carries the whole group as one atomic unit.
+
+**`seriesEnabled` vs `slots` — two independent knobs on a shiny format's `input_schema`.** `slots` (set once, at format-creation time in FormatLibrary) controls a FIXED multi-part shape assigned automatically when the host picks that format in AddSlideWizard (`isMultiSlot = totalSlots > 1`). `seriesEnabled: true` is a separate, orthogonal flag that unlocks a "Part of a Series" toggle in SlideEditor AFTER creation — flipping it converts a flat single-slot question into `data.parts[]` and reveals "+ Add part" for an unbounded number of parts. This is the actual mechanism behind "ask however many you want" formats (pre-existing "Hear! Me! Roar!"; "First, Second, or Third" reuses it for text). `FormatLibrary.jsx`'s create/edit UI only exposes the `seriesEnabled` toggle when `type === 'audio'` — for other types it currently has to be set directly in the DB (a latent UI gap, not fixed).
 
 **Winner Reveal** (shipped 2026-06-30) — add via the 🏆/🥇 card in AddSlideWizard, put it as the literal last slide. On mount: 3s synthesized Web Audio drum roll (accelerating snare hits → finale, or a `useReducedMotion`-gated instant skip) → winner name pops in full-size with canvas confetti raining from the top → points subtitle fades in 350ms later. Combine with the automatic **Final Break** detection (below) for a fully hands-off show close.
 
@@ -325,9 +350,32 @@ teams { id, show_id, name, color, registered_at, powerup_used, powerup_used_on,
 
 team_scores { id, show_id, team_id, round_index, score, unique(team_id, round_index) }
 
-questions { id, text, answer, category, round_type, is_shiny, shiny_type, used_on date[] }
+questions { id, type, text, answer, is_bonus, is_shiny, shiny_type, shiny_format_name,
+            questions_data jsonb, display_order, show_id, show_title, show_date, created_at }
+  -- the cross-show question ARCHIVE (Question Database, /questions) — text/answer only,
+  -- no media_url column exists, so image/audio shiny content is never preserved here,
+  -- only its text+answer. type: 'regular' | 'shiny' | 'pyl' | 'swing'. questions_data
+  -- (swing only) is an array of {text, answer}. shiny_style_id is a dead legacy int
+  -- column, unrelated to the current text-id shiny_formats scheme — ignore it.
+  -- RLS (2026-07-05): SELECT is public; INSERT/UPDATE/DELETE all require
+  -- auth.jwt() -> 'app_metadata' ->> 'host_verified' = true (see HostPinGate.jsx) —
+  -- any page that writes here MUST be wrapped in <HostPinGate>, including /questions
+  -- itself (it wasn't, until the RLS gap below was found).
+  -- Written by: `archiveQuestion(s)` (client/src/lib/archiveQuestion.js), called from
+  -- AddSlideWizard.jsx's real show-creation path (regular/shiny/grid) and from
+  -- BuildMode.jsx's handleSwingAdd/handlePYLAdd. Also written directly, with no show
+  -- attached (show_id/show_title/show_date null), by the "Add to database" panels on
+  -- /questions (client/src/components/host/DatabaseAddPanels.jsx) — same 3 flows
+  -- (Question/Swing/PYL) as the host dashboard, minus all round/show plumbing, for
+  -- bulk-uploading past-show trivia without creating a slide.
 
-shiny_formats { ... }  -- 6 seeded formats
+shiny_formats { id text PK ('fmt_'+nanoid8), name, icon, description,
+                input_schema jsonb: { type, slots, sequential, seriesEnabled, hasPoints, labels, columnLabels } }
+  -- the REAL shiny-format system — created/edited entirely in-app via "✨ Add Shiny"
+  -- (FormatLibrary.jsx + useShinyFormats.js). shinyFormatDictionary.js/shinyStampers.js
+  -- (SHINY_FORMATS/LAYOUTS/stampSlides) are DEAD CODE from an earlier design,
+  -- superseded 2026-06-30 — grep confirms zero call sites outside those two files.
+  -- Don't read or extend them for new formats.
 
 scoreboard_teams { id uuid PK, show_id text, name text, scores jsonb DEFAULT '{}',
                    sort_order int, created_at timestamptz }

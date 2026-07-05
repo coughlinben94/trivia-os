@@ -127,6 +127,18 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             ? roundSlides[roundSlides.length - 1].id
             : (sorted.length > 0 ? sorted[sorted.length - 1].id : null)
           await onAddSlide({ type: 'grid', roundId: roundId ?? null, afterSlideId: afterId, data: gridData })
+          archiveQuestion({
+            type:               'shiny',
+            text:                gridData.text,
+            answer:              gridData.answer,
+            is_bonus:            false,
+            is_shiny:            true,
+            shiny_type:          selectedShinyFmt.input_schema?.type ?? null,
+            shiny_format_name:   selectedShinyFmt.name,
+            show_id:             show?.id ?? null,
+            show_title:          show?.title ?? null,
+            show_date:           show?.date ?? null,
+          })
           return
         }
         const totalSlots = selectedShinyFmt.input_schema?.slots ?? 1
@@ -192,15 +204,16 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
       const shinyText = data.parts?.[0]?.text ?? data.text
       const shinyAnswerVal = data.parts?.[0]?.answer ?? data.answer
       archiveQuestion({
-        type:       isShiny ? 'shiny' : (isBonus ? 'regular' : 'regular'),
-        text:       isShiny ? shinyText : questionText.trim(),
-        answer:     isShiny ? shinyAnswerVal : questionAnswer.trim(),
-        is_bonus:   isBonus,
-        is_shiny:   isShiny,
-        shiny_type: isShiny ? (selectedShinyFmt?.media_type ?? null) : null,
-        show_id:    show?.id ?? null,
-        show_title: show?.title ?? null,
-        show_date:  show?.date ?? null,
+        type:              isShiny ? 'shiny' : (isBonus ? 'regular' : 'regular'),
+        text:              isShiny ? shinyText : questionText.trim(),
+        answer:            isShiny ? shinyAnswerVal : questionAnswer.trim(),
+        is_bonus:          isBonus,
+        is_shiny:          isShiny,
+        shiny_type:        isShiny ? (selectedShinyFmt?.input_schema?.type ?? null) : null,
+        shiny_format_name: isShiny ? (selectedShinyFmt?.name ?? null) : null,
+        show_id:           show?.id ?? null,
+        show_title:        show?.title ?? null,
+        show_date:         show?.date ?? null,
       })
     }
   }
