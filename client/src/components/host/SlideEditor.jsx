@@ -263,9 +263,13 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
     function onMove(ev) {
       let nr = startR + (Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180 / Math.PI - startA)
       // Snap to flat/45°-family angles — the common case ("make this flat")
-      // is hard to land by eye on a freehand drag without this.
+      // is hard to land by eye on a freehand drag without this. Radius has
+      // to stay small: a wide dead zone (this was 4°) swallows the whole
+      // 1-5° range and makes slight intentional tilts unreachable. Hold
+      // Shift to disable snapping outright for fine control near a snap point.
+      const snapEnabled = !ev.shiftKey
       const nearest45 = Math.round(nr / 45) * 45
-      const snapped = Math.abs(nr - nearest45) <= 4
+      const snapped = snapEnabled && Math.abs(nr - nearest45) <= 1.2
       if (snapped) nr = nearest45
       setData(d => { const c = d._regionTransforms ?? {}; const n = { ...d, _regionTransforms: { ...c, [region.id]: { ...c[region.id], rotate: nr } } }; scheduleSave({ data: n }); return n })
       setRotatingAngle({ id: region.id, deg: normalizeAngleDisplay(nr), snapped, x: cx - oRect.left, y: cy - oRect.top - region.h / 2 - 40 })
@@ -314,7 +318,14 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
       } else {
         el.textContent = data[region.field] ?? ''
       }
+      // Also clears selection, not just editing: the overlay's own
+      // click-outside-to-deselect handler is disabled (pointerEvents:none)
+      // for the whole time we're editing, so a click that exits via native
+      // blur never reaches it — without this, selectedRegionId is left
+      // stuck pointing at this region and the very next click on it jumps
+      // straight back into edit mode instead of just selecting it.
       setEditingRegionId(null)
+      setSelectedRegionId(null)
       setTimeout(detectRegions, 50)
     }
     function onBlur() { finish(true) }
@@ -435,7 +446,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                           }}
                         />
                         {isSelReg && (
-                          <div title="Rotate — drag; snaps near flat/45° angles" style={{ position: 'absolute', top: -20, right: -20, width: 16, height: 16, borderRadius: '50%', background: '#6366f1', border: '2px solid white', cursor: 'grab', zIndex: 1, pointerEvents: 'auto' }}
+                          <div title="Rotate — drag; snaps near flat/45° angles (hold Shift to disable)" style={{ position: 'absolute', top: -20, right: -20, width: 16, height: 16, borderRadius: '50%', background: '#6366f1', border: '2px solid white', cursor: 'grab', zIndex: 1, pointerEvents: 'auto' }}
                             onPointerDown={e => startRegionRotate(e, region)} />
                         )}
                         {isSelReg && hasTransform && (
