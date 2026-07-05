@@ -14,6 +14,7 @@ import WinnerRevealSlide from './slides/WinnerRevealSlide.jsx'
 import TeamPreviewSlide from './slides/TeamPreviewSlide.jsx'
 import TeamPickerSlide from './slides/TeamPickerSlide.jsx'
 import GridSlide from './slides/GridSlide.jsx'
+import OverlayLayer from './OverlayLayer.jsx'
 import { EASE_OUT, EASE_DROP, EASE_EXIT } from '../../lib/easings.js'
 
 // Per-slide content animation config — tune these without touching component logic
@@ -180,6 +181,9 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
         exit="exit"
       >
         <SlideComponent slide={slide} show={show} transitionKey={transitionKey} isPreview={isPreview} />
+        {/* Type-agnostic — every slide type gets this, no per-type branch.
+            Rides this motion.div's enter/exit transition for free. */}
+        <OverlayLayer overlays={slide.data?.overlays} theme={theme} />
       </motion.div>
     </>
   )

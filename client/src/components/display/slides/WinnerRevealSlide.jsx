@@ -3,7 +3,6 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../../lib/scoreboardMath.js'
-import SlideElements from '../SlideElements.jsx'
 import { fitToBox, REVEAL_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
@@ -235,10 +234,6 @@ export default function WinnerRevealSlide({ slide, show }) {
           </motion.div>
         )}
       </AnimatePresence>
-
-      <div className="absolute inset-0" style={{ zIndex: 40 }}>
-        <SlideElements elements={slide?.data?.elements} theme={theme} />
-      </div>
     </div>
   )
 }

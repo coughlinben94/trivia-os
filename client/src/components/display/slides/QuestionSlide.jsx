@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
-import SlideElements from '../SlideElements.jsx'
 import { resolveShinyPart, isVisualShiny, isAudioShiny } from '../../../lib/shinySeries.js'
 import { fitToBox, QUESTION_BOX, useFitToBox, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
@@ -127,10 +126,6 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
           />
         </motion.div>
       )}
-
-      <div className="absolute inset-0" style={{ zIndex: 35 }}>
-        <SlideElements elements={data.elements} theme={theme} />
-      </div>
     </div>
   )
 }
@@ -313,10 +308,6 @@ function ShinyVisualQuestion({ slide, theme }) {
       >
         ✨
       </div>
-
-      <div className="absolute inset-0" style={{ zIndex: 25 }}>
-        <SlideElements elements={data.elements} theme={theme} />
-      </div>
     </div>
   )
 }
@@ -488,10 +479,6 @@ function ShinyAudioQuestion({ slide, show, theme }) {
           </motion.div>
         </>
       )}
-
-      <div className="absolute inset-0" style={{ zIndex: 25 }}>
-        <SlideElements elements={data.elements} theme={theme} />
-      </div>
     </div>
   )
 }

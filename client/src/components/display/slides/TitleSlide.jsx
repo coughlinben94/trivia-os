@@ -1,6 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
-import SlideElements from '../SlideElements.jsx'
 import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function TitleSlide({ slide, show }) {
@@ -80,8 +79,6 @@ export default function TitleSlide({ slide, show }) {
           {dateStr}
         </motion.p>
       )}
-
-      <SlideElements elements={data.elements} theme={theme} />
     </div>
   )
 }

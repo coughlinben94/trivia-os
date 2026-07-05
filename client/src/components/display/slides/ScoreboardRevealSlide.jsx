@@ -3,7 +3,6 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../../lib/scoreboardMath.js'
-import SlideElements from '../SlideElements.jsx'
 import { EASE_OUT, EASE_BAR } from '../../../lib/easings.js'
 
 function ScoreRow({ team, rank, isLeader, maxScore, theme, delay }) {
@@ -192,8 +191,6 @@ export default function ScoreboardRevealSlide({ slide, show }) {
           )
         })}
       </div>
-
-      <SlideElements elements={slide.data?.elements} theme={theme} />
     </div>
   )
 }

@@ -1,7 +1,6 @@
 import { useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
-import SlideElements from '../SlideElements.jsx'
 import { useFitToBox, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
@@ -104,10 +103,6 @@ export default function GridSlide({ slide }) {
           </div>
         </motion.div>
       )}
-
-      <div className="absolute inset-0" style={{ zIndex: 25 }}>
-        <SlideElements elements={data.elements} theme={theme} />
-      </div>
     </div>
   )
 }

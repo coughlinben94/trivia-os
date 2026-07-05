@@ -1,7 +1,6 @@
 import { useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
-import SlideElements from '../SlideElements.jsx'
 import { useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
@@ -111,8 +110,6 @@ export default function MultiQuestionSlide({ slide, show }) {
           ))}
         </ol>
       </div>
-
-      <SlideElements elements={data.elements} theme={theme} />
     </div>
   )
 }

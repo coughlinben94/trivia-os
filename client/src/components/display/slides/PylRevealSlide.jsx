@@ -1,7 +1,6 @@
 import { useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
-import SlideElements from '../SlideElements.jsx'
 import ErrorBoundary from '../../ErrorBoundary.jsx'
 import { getSelectionAnimation } from './selectionAnimations.js'
 import { supabase } from '../../../lib/supabase.js'
@@ -210,8 +209,6 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
           </span>
         </motion.div>
       )}
-
-      <SlideElements elements={data.elements} theme={theme} />
     </div>
   )
 }

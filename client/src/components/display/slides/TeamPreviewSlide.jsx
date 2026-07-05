@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
-import SlideElements from '../SlideElements.jsx'
 import { EASE_OUT } from '../../../lib/easings.js'
 
 export default function TeamPreviewSlide({ slide, show }) {
@@ -119,8 +118,6 @@ export default function TeamPreviewSlide({ slide, show }) {
           {teams.length} {teams.length === 1 ? 'team' : 'teams'} competing tonight
         </motion.p>
       )}
-
-      <SlideElements elements={slide.data?.elements} theme={theme} />
     </div>
   )
 }

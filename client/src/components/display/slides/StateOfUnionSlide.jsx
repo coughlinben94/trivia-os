@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import BaynesWatermark from '../BaynesWatermark.jsx'
-import SlideElements from '../SlideElements.jsx'
 import { fitToBox, TITLE_CARD_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
@@ -171,10 +170,6 @@ export default function StateOfUnionSlide({ slide }) {
       </div>
 
       <BaynesWatermark />
-
-      <div className="absolute inset-0" style={{ zIndex: 2 }}>
-        <SlideElements elements={slide.data?.elements} theme={theme} />
-      </div>
     </div>
   )
 }

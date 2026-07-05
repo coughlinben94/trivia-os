@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
-import SlideElements from '../SlideElements.jsx'
 import { fitToBox, GRADING_BREAK_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
@@ -108,8 +107,6 @@ export default function GradingBreakSlide({ slide, isPreview = false }) {
           </motion.p>
         </span>
       </div>
-
-      <SlideElements elements={data.elements} theme={theme} />
     </div>
   )
 }

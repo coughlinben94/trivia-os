@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
-import SlideElements from '../SlideElements.jsx'
 import { fitToBox, CUSTOM_BODY_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
@@ -85,8 +84,6 @@ export default function CustomSlide({ slide }) {
           </motion.p>
         </span>
       )}
-
-      <SlideElements elements={data.elements} theme={theme} />
     </div>
   )
 }

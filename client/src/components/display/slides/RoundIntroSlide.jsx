@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
-import SlideElements from '../SlideElements.jsx'
 import { fitToBox, LINE_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
@@ -142,8 +141,6 @@ export default function RoundIntroSlide({ slide, show }) {
           </span>
         </motion.div>
       )}
-
-      <SlideElements elements={data.elements} theme={theme} />
     </div>
   )
 }
