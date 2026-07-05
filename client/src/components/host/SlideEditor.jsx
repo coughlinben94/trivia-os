@@ -65,6 +65,19 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
     dragStateRef.current = null
   }, [slide.id])
 
+  // questionLabel/questionNumber are auto-recomputed by renumberRoundQuestions
+  // (useShow.js) whenever this round's question order or bonus-status changes
+  // — including as a side effect of an edit made right here (e.g. toggling
+  // Bonus on this very slide). That recompute lands on the incoming `slide`
+  // prop only after the debounced save round-trips, so without this, the
+  // editor's own local copy of these two fields goes stale while the slide
+  // stays open. Resyncs only these two fields — never the rest of `data`,
+  // which would clobber any other in-progress unsaved local edit.
+  useEffect(() => {
+    if (slide.data?.questionLabel === data.questionLabel && slide.data?.questionNumber === data.questionNumber) return
+    setData(d => ({ ...d, questionLabel: slide.data?.questionLabel, questionNumber: slide.data?.questionNumber }))
+  }, [slide.data?.questionLabel, slide.data?.questionNumber])
+
   function change(key, value) {
     const next = { ...data, [key]: value }
     setData(next)
@@ -283,6 +296,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   // Auto-focus + cursor-to-end when edit overlay mounts
   useEffect(() => {
     const el = editOverlayRef.current
+    console.log('[DEBUG] autofocus effect fired, editingRegionId=', editingRegionId, 'el found?', !!el)
     if (!el) return
     el.focus()
     const range = document.createRange()
@@ -319,7 +333,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                   <div
                     ref={overlayRef}
                     style={{ position: 'absolute', inset: 0, zIndex: 50, overflow: 'visible' }}
-                    onPointerDown={() => { setSelectedElId(null); setSelectedRegionId(null); setEditingRegionId(null); setEditStyles(null) }}
+                    onPointerDown={() => { console.log('[DEBUG] PARENT overlay pointerdown - clearing all'); setSelectedElId(null); setSelectedRegionId(null); setEditingRegionId(null); setEditStyles(null) }}
                   >
                   {/* ── WYSIWYG region handles ── */}
                   {regions.map(region => {
@@ -343,10 +357,12 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                           onPointerEnter={e => { if (!isSelReg) e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)' }}
                           onPointerLeave={e => { if (!isSelReg) e.currentTarget.style.borderColor = 'transparent' }}
                           onPointerDown={e => {
+                            console.log('[DEBUG] pointerdown region.id=', region.id, 'selectedRegionId=', selectedRegionId, 'equal?', selectedRegionId === region.id)
                             e.stopPropagation()
                             if (selectedRegionId !== region.id) {
                               setSelectedRegionId(region.id); setSelectedElId(null)
                             } else {
+                              console.log('[DEBUG] entering edit mode')
                               enterEditMode(region); return
                             }
                             startRegionMove(e, region)
@@ -380,7 +396,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                         contentEditable
                         suppressContentEditableWarning
                         style={{ position: 'absolute', left: region.x + extraX, top: region.y + extraY, width: region.w, minHeight: region.h, transform: `rotate(${curRot}deg)`, transformOrigin: 'center', zIndex: 55, outline: '2px solid #6366f1', background: 'rgba(20,20,50,0.6)', padding: '4px 8px', boxSizing: 'border-box', whiteSpace: 'pre-wrap', wordBreak: 'break-word', cursor: 'text', ...editStyles }}
-                        onBlur={e => { const val = e.currentTarget.innerText.trim(); if (val) change(region.field, val); setEditingRegionId(null); setEditStyles(null); setTimeout(detectRegions, 50) }}
+                        onBlur={e => { console.log('[DEBUG] contentEditable onBlur firing, relatedTarget=', e.relatedTarget); const val = e.currentTarget.innerText.trim(); if (val) change(region.field, val); setEditingRegionId(null); setEditStyles(null); setTimeout(detectRegions, 50) }}
                         onKeyDown={e => { if (e.key === 'Escape') { setEditingRegionId(null); setEditStyles(null) } }}
                         dangerouslySetInnerHTML={{ __html: data[region.field] ?? '' }}
                       />
@@ -1286,11 +1302,10 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
     return (
       <>
         <div className="flex gap-3 items-end">
-          <Field label="Label">
-            <TextInput value={data.questionLabel ?? ''} onChange={v => onChange('questionLabel', v)} placeholder="Q5" />
-          </Field>
-          <Field label="#">
-            <NumberInput value={data.questionNumber} onChange={v => onChange('questionNumber', v)} />
+          <Field label="Label" hint="Auto-numbered from this slide's position — reorder or add/delete questions to change it.">
+            <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-600 select-none">
+              {data.questionLabel || '—'}
+            </div>
           </Field>
           <label className="flex items-center gap-1.5 pb-2 cursor-pointer select-none shrink-0">
             <input
@@ -1802,8 +1817,11 @@ function PixelateSeriesEditor({ data, onChange, onStageUpload }) {
   return (
     <>
       <div className="flex gap-4">
-        <Field label="Label"><TextInput value={data.questionLabel} onChange={v => onChange('questionLabel', v)} placeholder="Q5" className="w-20" /></Field>
-        <Field label="Number"><NumberInput value={data.questionNumber} onChange={v => onChange('questionNumber', v)} /></Field>
+        <Field label="Label" hint="Auto-numbered from this slide's position.">
+          <div className="w-20 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-600 select-none">
+            {data.questionLabel || '—'}
+          </div>
+        </Field>
       </div>
       <Field label="Question Text">
         <TextArea value={data.text} onChange={v => onChange('text', v)} placeholder="What is this?" rows={3} />

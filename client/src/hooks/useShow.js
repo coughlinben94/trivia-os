@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { DEFAULT_THEME_ID } from '../themes/index.js'
 import { deriveRoundCols, computeTotal } from '../lib/scoreboardMath.js'
+import { renumberRoundQuestions } from '../lib/questionNumbering.js'
 
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 const SHOW_MEDIA_BUCKET = 'trivia-show-media'
@@ -349,18 +350,24 @@ export function useShow() {
       order: insertAfterOrder + 1 + i,
       data: d.data ?? {},
     }))
-    const allSlides = [...shifted, ...newSlides]
+    const allSlides = renumberRoundQuestions([...shifted, ...newSlides])
     setShow(prev => ({ ...prev, slides: allSlides }))
     await updateShowRow(show.id, { slides: allSlides })
-    return newSlides
+    // Return the freshly-renumbered versions, not the pre-renumber snapshot —
+    // callers (e.g. AddSlideWizard) open the editor on this returned slide.
+    const newIds = new Set(newSlides.map(s => s.id))
+    return allSlides.filter(s => newIds.has(s.id))
   }
 
   function updateSlide(id, patch) {
     if (!show) return
     setShow(prev => {
-      const newSlides = prev.slides.map(s =>
+      // Renumbered on every edit, not just when isBonus changes — cheap and
+      // covers any future patch shape that could move a slide between
+      // counting groups without going through reorder/delete.
+      const newSlides = renumberRoundQuestions(prev.slides.map(s =>
         s.id === id ? { ...s, ...patch } : s
-      )
+      ))
       slidesRef.current = newSlides
       return { ...prev, slides: newSlides }
     })
@@ -372,19 +379,21 @@ export function useShow() {
 
   async function deleteSlide(id) {
     if (!show) return
-    const newSlides = show.slides.filter(s => s.id !== id)
+    const newSlides = renumberRoundQuestions(show.slides.filter(s => s.id !== id))
     setShow(prev => ({ ...prev, slides: newSlides }))
     await updateShowRow(show.id, { slides: newSlides })
   }
 
   async function reorderSlides(orderedIds) {
     if (!show) return
-    const newSlides = orderedIds
-      .map((id, index) => {
-        const slide = show.slides.find(s => s.id === id)
-        return slide ? { ...slide, order: index } : null
-      })
-      .filter(Boolean)
+    const newSlides = renumberRoundQuestions(
+      orderedIds
+        .map((id, index) => {
+          const slide = show.slides.find(s => s.id === id)
+          return slide ? { ...slide, order: index } : null
+        })
+        .filter(Boolean)
+    )
     setShow(prev => ({ ...prev, slides: newSlides }))
     await updateShowRow(show.id, { slides: newSlides })
   }
