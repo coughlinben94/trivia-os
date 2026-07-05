@@ -179,7 +179,7 @@ function UpNextCard({ slide, offset }) {
 
 // ─── LiveMode ──────────────────────────────────────────────────────────────
 
-export default function LiveMode({ show, actions, onExitLive, onThemeChange, onOpenScoreboard }) {
+export default function LiveMode({ show, actions, onExitLive, onThemeChange, onOpenScoreboard, scoreboardModalOpen }) {
   const [scorePanelOpen, setScorePanelOpen] = useState(false)
   const [themePickerOpen, setThemePickerOpen] = useState(false)
   const [pylPickerBusy, setPylPickerBusy] = useState(false)
@@ -225,7 +225,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
 
   const handleKeyDown = useCallback((e) => {
     if (e.target.closest?.('input, textarea, select, [contenteditable]')) return
-    if (scorePanelOpen || themePickerOpen) return
+    if (scorePanelOpen || themePickerOpen || scoreboardModalOpen) return
     if (e.code === 'ArrowRight') {
       e.preventDefault()
       if (show.showState.answerReveal) {
@@ -239,7 +239,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     if (e.code === 'KeyS')       actions.setScoreboardVisible(!show.showState.scoreboardVisible)
     if (e.code === 'KeyA')       actions.setAnswerReveal(!show.showState.answerReveal)
     if (e.code === 'KeyR')       actions.setScoresRevealed?.(!show.showState.scoresRevealed)
-  }, [scorePanelOpen, themePickerOpen, actions, show.showState.answerReveal, show.showState.scoresRevealed])
+  }, [scorePanelOpen, themePickerOpen, scoreboardModalOpen, actions, show.showState.answerReveal, show.showState.scoresRevealed])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)

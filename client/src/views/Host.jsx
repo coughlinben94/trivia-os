@@ -205,6 +205,7 @@ function HostInner({ showApi }) {
           onExitLive={() => setIsLiveMode(false)}
           onThemeChange={handleThemeChange}
           onOpenScoreboard={() => setShowScoreboard(true)}
+          scoreboardModalOpen={showScoreboard}
         />
       ) : (
         <BuildMode
