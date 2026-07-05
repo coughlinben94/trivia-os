@@ -15,6 +15,8 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 
 **Shipped 2026-06-30:** per-show theme font/color overrides + custom font upload (see Theme System), Winner Reveal slide + Final Break auto-close (see Slide Types), Go Live picker (jump to any slide accordion), answer-reveal overlay (Stream Deck A key), shiny-question sidebar/series improvements, full scoreboard system (admin modal, Quick Entry, TV overlay, phone drawer, ShowDetail history). See each section below for details.
 
+**Shipped 2026-07-05:** freeform overlay editor — text/image boxes any slide can carry (`data.overlays`), placed/dragged/resized/rotated in Build Mode, rendered on `/display` by a universal `OverlayLayer.jsx`. Replaces the old `data.elements`/`SlideElements.jsx` system. See "Overlay System" in `references/slides.md` for the full model and the coordinate law — read it before touching `SlideCanvasEditor.jsx`, `OverlayLayer.jsx`, or `SlideRenderer.jsx`.
+
 **Multiple sessions on this repo:** Ben sometimes runs more than one Claude Code session against this same working directory (not separate worktrees) at once. If you see unexpected commits, a branch pointer that moved, or files staged that you didn't touch — that's very likely the other session, not corruption. Check `git log`/`git status`/`git stash list` before assuming something broke, and don't force a branch switch or destructive git op without confirming with Ben first. Nothing has been lost doing this so far because every agent that hit ambiguous state stopped and asked rather than guessed — keep doing that.
 
 ---
@@ -41,6 +43,7 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 5. **Design is not optional** — `/display` is a performance on TVs in a dark bar. Generic UI = failure. The display must feel like a custom venue experience.
 6. **Center safe-area:** keep the middle 60% width × 45% height of the display clear for question text. Ambient elements live in corners and edges.
 7. **Supabase project:** always confirm you're using `qwtbgusqfoypvehnungr` (Baynes Trivia), NOT `dreggwinegtirxxanntv` (Baynes Business Suite). Wrong project caused a `scoreboard_teams` 404 in production — verify `.env.local` before running any migrations.
+8. **Overlay layer is additive only** — the 15 slide renderers in `display/slides/` are never made editable and never gain a per-type overlay mount. `OverlayLayer.jsx` is mounted exactly once, generically, by `SlideRenderer.jsx`. Overlay position/size are always percent of canvas width/height (fontSize percent of height) — never pixels. See "Overlay System" in `references/slides.md`.
 
 ---
 
@@ -88,8 +91,17 @@ client/src/
                              RoundSidebar/SlideEditor's SLIDE_TYPE_META — this drifted
                              once already, e.g. 'title' vs 'round-intro' emoji swap)
       AddRoundWizard.jsx  — 3-type round picker (Normal/Swing/PYL) before round creation
-      SlideEditor.jsx     — per-slide editing panel (no manual "Final Break" control —
-                             the jukebox-return jump is fully automatic, see Final Break below)
+      SlideEditor.jsx     — per-slide editing panel; left side mounts SlideCanvasEditor,
+                             right side is the type-specific content sidebar (no manual
+                             "Final Break" control — the jukebox-return jump is fully
+                             automatic, see Final Break below)
+      SlideCanvasEditor.jsx — scaled live canvas (renders the real SlideRenderer/OverlayLayer
+                             tree at `transform: scale(k)` — WYSIWYG by construction, not a
+                             lookalike). Owns TWO independent systems on one DOM scaffold:
+                             region editing (pre-existing, drags a slide's own built-in text
+                             fields via `data._regionTransforms`) and overlay editing (this
+                             feature, freeform text/image boxes via `data.overlays`, gated
+                             behind the "✏️ Edit layout" toggle). See references/slides.md.
       RoundSidebar.jsx    — round/slide navigation tree; shows shinyFormatName, groups series;
                              divider lines between every section (i > 0 segment-level +
                              slideIdx > 0 within general segments for multi-slide sections)
@@ -114,7 +126,13 @@ client/src/
                                  scene, 12 render the shared BreathingGradient
                                  engine instead (July 2026 rework; see
                                  references/themes.md). NEVER re-mounts
-      SlideRenderer.jsx       — routes slide.type → component + manages transitions
+      SlideRenderer.jsx       — routes slide.type → component + manages transitions;
+                                 mounts OverlayLayer once, universally, after the slide
+                                 component, inside the same transition container
+      OverlayLayer.jsx        — dumb, type-agnostic renderer for freeform text/image
+                                 overlays (data.overlays). Zero interactivity under every
+                                 condition — this is the WYSIWYG ground truth SlideCanvasEditor's
+                                 preview also renders. See references/slides.md.
       ScoreboardOverlay.jsx   — full-screen dark overlay (rgba 0,0,0,0.92) + dual radial
                                  gradient glow; Boogaloo font; gold/silver/bronze medals;
                                  staggered Framer Motion rows (60ms intervals); two-column

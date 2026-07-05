@@ -105,9 +105,23 @@ The wizard remembers `roundId` context when opened from RoundSidebar so step 2 i
 
 ---
 
-## WYSIWYG Canvas Elements (all slide types)
+## Overlay System (freeform layer, all 15 slide types)
 
-`client/src/components/display/SlideElements.jsx` — free-positioned overlay elements (text/image) any slide can carry in `data.elements`, edited directly in the SlideEditor preview canvas. `makeElement(type)` seeds `{ id, type, x, y, width, rotation, flipH, flipV, opacity }`. Presets: `ELEMENT_POSITIONS` (3x3 grid + full-bleed), `IMAGE_SIZES` (sm–full), `TEXT_SIZES` (sm–xl, clamp()-based). Renders via `<SlideElements elements={data.elements} theme={theme} />` — used by `GridSlide` and others.
+Shipped 2026-07-05. Any slide's `data` may carry an `overlays` array — freeform text/image boxes the host places, drags, resizes, and rotates in Build Mode, composited on top of the normal slide content on `/display`. Replaces the earlier `data.elements`/`SlideElements.jsx` system (removed) — that system made per-slide-type mounts of an element renderer; this one is a single universal layer.
+
+**Two components, non-negotiable split:**
+- `display/OverlayLayer.jsx` — dumb, type-agnostic renderer. Props: `overlays`, `theme`. Zero interactivity, zero edit affordances, under every condition — this exact component's output is what `/display` shows, which is what makes the Build Mode preview a WYSIWYG guarantee rather than a lookalike.
+- `host/SlideCanvasEditor.jsx` — the Build Mode editing surface. Its preview renders the literal `SlideRenderer` (which mounts `OverlayLayer`) inside a `transform: scale(k)` wrapper sized to the panel — the small preview and the 1920×1080 `/display` render are the *same tree*, not two implementations kept in sync by hand.
+
+**Mount point:** `SlideRenderer.jsx` mounts `<OverlayLayer overlays={slide.data?.overlays} theme={theme} />` once, inside the slide's `motion.div` transition container, after `<SlideComponent>` — type-agnostic, no per-type branch. It rides that slide's enter/exit transition for free. **The 15 slide renderers themselves are never touched or made editable** — the overlay layer is strictly additive. Do not regress this by re-introducing per-slide-type overlay mounts.
+
+**Coordinate law (never store pixels):** `x`/`w` are percent of canvas *width*; `y` and `fontSize` are percent of canvas *height*. `OverlayLayer` renders `fontSize` in `cqh` (container query height units) against a `containerType: 'size'` wrapper, so the percent-of-height math holds identically at a 220px preview thumbnail or a fullscreen TV with no JS measurement. Any pixel value anywhere in an overlay object is a bug.
+
+**Data shape** (per overlay, in `slide.data.overlays[]`): `{ id, kind: 'text'|'image', x, y, w, rotation, z, ...kind-specific }`. Text carries `text, fontFamily ('display'|'body'|literal), fontSize, color (hex or 'text'/'accent'/'highlight' token), align, weight`. Image carries `mediaUrl`. `fontFamily`/`color` tokens resolve through the active theme; anything else passes through literally. Overlay text does NOT go through `autoFitText` — the host chose the size.
+
+**Persistence:** plain JSONB, no schema change. `overlays` is optional everywhere — absent/`[]` behaves exactly like a slide with no overlay key. `exportShow`/`importShow`/`duplicateShow` all pass `slides` through generically (no per-field allowlist in `useShow.js`), so overlays round-trip for free. Overlay `id`s are scoped per-slide (nanoid) — nothing keys on global uniqueness, so duplicated shows are safe.
+
+**Editor internals worth knowing before touching `SlideCanvasEditor.jsx`:** it also owns the pre-existing, separate *region* editing system (making a slide's own built-in fields like title/question text draggable — `data._regionTransforms`) verbatim, unchanged, on the same scaled canvas. Region editing and overlay editing are independent features sharing one DOM scaffold; don't conflate them. All overlay pointer-gesture math (drag/resize/rotate) divides screen-px deltas by the live scaled canvas size (`scaledW`/`scaledH`) to get back to percent — that division is the classic failure mode this file gets right once, in the gesture handlers, rather than per-caller.
 
 ---
 
