@@ -151,7 +151,7 @@ const TH = ({ children, className = '', style }) => (
   </th>
 )
 
-function TeamTable({ teams, cols, onUpdateName, onUpdateScore, onDelete, highlightIds }) {
+function TeamTable({ teams, cols, onUpdateName, onUpdateScore, onDelete, highlightIds, atRiskCells }) {
   return (
     <table className="w-full border-collapse text-sm">
       <thead>
@@ -175,13 +175,19 @@ function TeamTable({ teams, cols, onUpdateName, onUpdateScore, onDelete, highlig
               <td className="px-2 py-1">
                 <input type="text" value={team.name} placeholder="Team name…"
                   onChange={e => onUpdateName(team.id, e.target.value)}
-                  className="w-full text-sm text-gray-800 bg-transparent border-b border-transparent hover:border-gray-200 focus:border-[#1a6b4a] outline-none py-0.5 placeholder:text-gray-300" />
+                  title={atRiskCells?.[`${team.id}:name`] ? 'Didn’t save — check connection' : undefined}
+                  className={`w-full text-sm text-gray-800 bg-transparent border-b outline-none py-0.5 placeholder:text-gray-300 ${
+                    atRiskCells?.[`${team.id}:name`] ? 'border-amber-400' : 'border-transparent hover:border-gray-200 focus:border-[#1a6b4a]'
+                  }`} />
               </td>
               {cols.map(c => (
                 <td key={c.key} className="px-1 py-1 text-center">
                   <input type="number" value={team.scores[c.key] ?? ''} placeholder="—"
                     onChange={e => onUpdateScore(team.id, c.key, e.target.value)}
-                    className="w-full text-center text-sm text-gray-800 bg-transparent border-b border-transparent hover:border-gray-200 focus:border-[#1a6b4a] outline-none py-0.5 placeholder:text-gray-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                    title={atRiskCells?.[`${team.id}:${c.key}`] ? 'Didn’t save — check connection' : undefined}
+                    className={`w-full text-center text-sm text-gray-800 bg-transparent border-b outline-none py-0.5 placeholder:text-gray-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                      atRiskCells?.[`${team.id}:${c.key}`] ? 'border-amber-400' : 'border-transparent hover:border-gray-200 focus:border-[#1a6b4a]'
+                    }`} />
                 </td>
               ))}
               <td className="text-center text-sm font-bold text-gray-900 px-1 tabular-nums">
@@ -203,7 +209,7 @@ function TeamTable({ teams, cols, onUpdateName, onUpdateScore, onDelete, highlig
 
 // ─── ScoreboardModal ──────────────────────────────────────────────────────────
 
-export default function ScoreboardModal({ show, onClose }) {
+export default function ScoreboardModal({ show, onClose, onWriteError }) {
   const { theme } = useTheme()
   const [teams,        setTeams]        = useState([])
   const [loading,      setLoading]      = useState(true)
@@ -212,6 +218,11 @@ export default function ScoreboardModal({ show, onClose }) {
   const [activeAnim,   setActiveAnim]   = useState(null)
   const [animWinnerId, setAnimWinnerId] = useState(null)
   const [confirmClear, setConfirmClear] = useState(false)
+  // Keyed `${teamId}:${fieldKey}` — marks the specific cell a failed debounced
+  // save came from, cleared the instant that team's next save succeeds. Not a
+  // retry mechanism: the debounce itself already retries on the next edit;
+  // this is purely "which number is at risk" visibility for the host.
+  const [atRiskCells,  setAtRiskCells]  = useState({})
   const saveTimers = useRef({})
 
   const cols           = deriveRoundCols(show)
@@ -230,8 +241,9 @@ export default function ScoreboardModal({ show, onClose }) {
       .then(({ data }) => { setTeams(data ?? []); setLoading(false) })
   }, [show.id])
 
-  function save(team) {
+  function save(team, fieldKey) {
     clearTimeout(saveTimers.current[team.id])
+    const cellKey = `${team.id}:${fieldKey}`
     saveTimers.current[team.id] = setTimeout(async () => {
       // Supabase's query builder is a lazy thenable — without awaiting (or
       // otherwise consuming) it, the request is built but never actually
@@ -241,7 +253,18 @@ export default function ScoreboardModal({ show, onClose }) {
         id: team.id, show_id: show.id,
         name: team.name, scores: team.scores, sort_order: team.sort_order,
       })
-      if (error) console.error('scoreboard_teams save failed:', error)
+      if (error) {
+        console.error('scoreboard_teams save failed:', error)
+        setAtRiskCells(prev => ({ ...prev, [cellKey]: true }))
+        onWriteError?.('Score didn’t save — check connection')
+      } else {
+        setAtRiskCells(prev => {
+          if (!prev[cellKey]) return prev
+          const next = { ...prev }
+          delete next[cellKey]
+          return next
+        })
+      }
     }, 500)
   }
 
@@ -249,7 +272,7 @@ export default function ScoreboardModal({ show, onClose }) {
     setTeams(prev => prev.map(t => {
       if (t.id !== id) return t
       const updated = { ...t, name }
-      save(updated)
+      save(updated, 'name')
       return updated
     }))
   }
@@ -258,18 +281,19 @@ export default function ScoreboardModal({ show, onClose }) {
     setTeams(prev => prev.map(t => {
       if (t.id !== id) return t
       const updated = { ...t, scores: { ...t.scores, [key]: val === '' ? null : Number(val) } }
-      save(updated)
+      save(updated, key)
       return updated
     }))
   }
 
   async function addTeam() {
     const sort_order = teams.length
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('scoreboard_teams')
       .insert({ show_id: show.id, name: '', scores: {}, sort_order })
       .select().single()
     if (data) setTeams(prev => [...prev, data])
+    if (error) { console.error('scoreboard_teams add failed:', error); onWriteError?.('Couldn’t add team — check connection') }
   }
 
   async function deleteTeam(id) {
@@ -278,7 +302,8 @@ export default function ScoreboardModal({ show, onClose }) {
     clearTimeout(saveTimers.current[id])
     delete saveTimers.current[id]
     setTeams(prev => prev.filter(t => t.id !== id))
-    await supabase.from('scoreboard_teams').delete().eq('id', id)
+    const { error } = await supabase.from('scoreboard_teams').delete().eq('id', id)
+    if (error) { console.error('scoreboard_teams delete failed:', error); onWriteError?.('Delete didn’t save — check connection') }
   }
 
   async function sortTeams() {
@@ -292,9 +317,10 @@ export default function ScoreboardModal({ show, onClose }) {
     const sorted    = [...teams].sort((a, b) => computeTotal(b.scores, cols) - computeTotal(a.scores, cols))
     const reordered = sorted.map((t, i) => ({ ...t, sort_order: i }))
     setTeams(reordered)
-    await supabase.from('scoreboard_teams').upsert(
+    const { error } = await supabase.from('scoreboard_teams').upsert(
       reordered.map(t => ({ id: t.id, show_id: t.show_id, name: t.name, scores: t.scores, sort_order: t.sort_order }))
     )
+    if (error) { console.error('scoreboard_teams sort failed:', error); onWriteError?.('Sort didn’t save — check connection') }
   }
 
   async function clearScores() {
@@ -304,7 +330,8 @@ export default function ScoreboardModal({ show, onClose }) {
     setTeams([])
     setHighlightIds(null)
     if (ids.length > 0) {
-      await supabase.from('scoreboard_teams').delete().in('id', ids)
+      const { error } = await supabase.from('scoreboard_teams').delete().in('id', ids)
+      if (error) { console.error('scoreboard_teams clear failed:', error); onWriteError?.('Clear didn’t save — check connection') }
     }
   }
 
@@ -398,13 +425,13 @@ export default function ScoreboardModal({ show, onClose }) {
             ) : (
               <div className="flex gap-4 min-h-0">
                 <div className="flex-1 overflow-x-auto">
-                  <TeamTable teams={leftTeams} cols={cols} onUpdateName={updateName} onUpdateScore={updateScore} onDelete={deleteTeam} highlightIds={highlightIds} />
+                  <TeamTable teams={leftTeams} cols={cols} onUpdateName={updateName} onUpdateScore={updateScore} onDelete={deleteTeam} highlightIds={highlightIds} atRiskCells={atRiskCells} />
                 </div>
                 {rightTeams.length > 0 && (
                   <>
                     <div className="w-px bg-gray-100 shrink-0 self-stretch" />
                     <div className="flex-1 overflow-x-auto">
-                      <TeamTable teams={rightTeams} cols={cols} onUpdateName={updateName} onUpdateScore={updateScore} onDelete={deleteTeam} highlightIds={highlightIds} />
+                      <TeamTable teams={rightTeams} cols={cols} onUpdateName={updateName} onUpdateScore={updateScore} onDelete={deleteTeam} highlightIds={highlightIds} atRiskCells={atRiskCells} />
                     </div>
                   </>
                 )}

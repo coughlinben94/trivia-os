@@ -150,6 +150,23 @@ function HostInner({ showApi }) {
   function addToast(toast) { setToasts(prev => [toast, ...prev]) }
   function dismissToast(id) { setToasts(prev => prev.filter(t => t.id !== id)) }
 
+  // useShow.js sets writeError on any failed shows-row write and clears it
+  // the instant the next one succeeds — that success case doesn't go through
+  // addToast/dismissToast on its own, so this bridges it: show a toast on
+  // failure, and if writeError clears before the toast's own autoDismiss
+  // fires, dismiss it immediately rather than leaving a stale "failed" toast
+  // up after the save actually went through on retry.
+  const writeErrorToastIdRef = useRef(null)
+  useEffect(() => {
+    if (showApi.writeError) {
+      addToast({ id: showApi.writeError.id, type: 'error', message: showApi.writeError.message, autoDismiss: 8000 })
+      writeErrorToastIdRef.current = showApi.writeError.id
+    } else if (writeErrorToastIdRef.current) {
+      dismissToast(writeErrorToastIdRef.current)
+      writeErrorToastIdRef.current = null
+    }
+  }, [showApi.writeError])
+
   function handleThemeChange(newThemeId) {
     actions.updateShowMeta({ theme: newThemeId })
   }
@@ -226,7 +243,11 @@ function HostInner({ showApi }) {
         />
       )}
       {showScoreboard && (
-        <ScoreboardModal show={show} onClose={() => setShowScoreboard(false)} />
+        <ScoreboardModal
+          show={show}
+          onClose={() => setShowScoreboard(false)}
+          onWriteError={message => addToast({ id: `sb_we_${Date.now()}`, type: 'error', message, autoDismiss: 8000 })}
+        />
       )}
       <HostReconnectingBanner visible={disconnected} />
       <ToastStack toasts={toasts} onDismiss={dismissToast} />

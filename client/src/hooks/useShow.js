@@ -39,22 +39,33 @@ export function sortedSlides(show) {
   return [...show.slides].sort((a, b) => a.order - b.order)
 }
 
-// Every mutating action here optimistically updates local React state first,
-// then fires this write — it used to do so with no error check at all, so a
-// failed write (network blip, RLS denial, oversized payload) left the host's
-// UI showing a change that was never actually persisted, with no signal that
-// anything went wrong until a reload silently reverted it. This doesn't retry
-// or roll back the optimistic update (that's a bigger behavior change), but
-// it at least surfaces the failure instead of swallowing it completely.
-async function updateShowRow(id, patch) {
-  const { error } = await supabase.from('shows').update(patch).eq('id', id)
-  if (error) console.error(`[useShow] shows update failed (${Object.keys(patch).join(', ')}):`, error)
-  return !error
-}
-
 export function useShow() {
   const [show, setShow] = useState(null)
   const [loading, setLoading] = useState(true)
+  // Host-visible write-failure signal — set on any failed shows-row write,
+  // cleared the instant the next one succeeds. Visibility only: doesn't retry
+  // or roll back the optimistic update that already ran locally. Host.jsx
+  // watches this to surface a toast in both Build and Live Mode; /display
+  // and /join never read useShow()'s action surface, so this can't leak there.
+  const [writeError, setWriteError] = useState(null)
+
+  // Every mutating action here optimistically updates local React state first,
+  // then fires this write — it used to do so with no error check at all, so a
+  // failed write (network blip, RLS denial, oversized payload) left the host's
+  // UI showing a change that was never actually persisted, with no signal that
+  // anything went wrong until a reload silently reverted it. This doesn't retry
+  // or roll back the optimistic update (that's a bigger behavior change), but
+  // it at least surfaces the failure instead of swallowing it completely.
+  async function updateShowRow(id, patch) {
+    const { error } = await supabase.from('shows').update(patch).eq('id', id)
+    if (error) {
+      console.error(`[useShow] shows update failed (${Object.keys(patch).join(', ')}):`, error)
+      setWriteError({ id: `we_${Date.now()}`, message: 'Save failed — check connection' })
+    } else {
+      setWriteError(null)
+    }
+    return !error
+  }
 
   // Refs for debounced saves — always hold latest values without stale closure issues
   const slidesRef = useRef([])
@@ -805,6 +816,7 @@ export function useShow() {
   return {
     show,
     loading,
+    writeError,
     createShow,
     loadShow,
     listShows,
