@@ -57,9 +57,11 @@ export default function RoundSidebar({
   const [dragOverType, setDragOverType] = useState(null)
 
   // Refs so event-handler closures always see current values
-  const draggedRef  = useRef(null)
-  const dragOverRef = useRef(null)
-  const blocksRef   = useRef([])
+  const draggedRef     = useRef(null)
+  const dragOverRef    = useRef(null)
+  const blocksRef      = useRef([])
+  const scrollRef      = useRef(null)
+  const autoScrollRaf  = useRef(null)
 
   if (!show) return null
 
@@ -206,10 +208,35 @@ export default function RoundSidebar({
     setDragOverType(null)
 
     function onMove(ev) {
+      // Auto-scroll the sidebar when cursor is near the top or bottom edge
+      cancelAnimationFrame(autoScrollRaf.current)
+      const sc = scrollRef.current
+      if (sc) {
+        const rect = sc.getBoundingClientRect()
+        const ZONE = 48
+        const SPEED = 8
+        if (ev.clientY < rect.top + ZONE && sc.scrollTop > 0) {
+          const step = () => {
+            sc.scrollTop = Math.max(0, sc.scrollTop - SPEED)
+            if (sc.scrollTop > 0) autoScrollRaf.current = requestAnimationFrame(step)
+          }
+          autoScrollRaf.current = requestAnimationFrame(step)
+        } else if (ev.clientY > rect.bottom - ZONE && sc.scrollTop < sc.scrollHeight - sc.clientHeight) {
+          const step = () => {
+            sc.scrollTop = Math.min(sc.scrollHeight - sc.clientHeight, sc.scrollTop + SPEED)
+            if (sc.scrollTop < sc.scrollHeight - sc.clientHeight) autoScrollRaf.current = requestAnimationFrame(step)
+          }
+          autoScrollRaf.current = requestAnimationFrame(step)
+        }
+      }
+
       const el = document.elementFromPoint(ev.clientX, ev.clientY)
       const target = findDropTarget(el)
-      dragOverRef.current = target
+      // Sticky: only update dragOverRef when we land on a real target — if the
+      // cursor drifts off (sidebar edge, Add Round button, outside the window)
+      // we keep the last valid position so the release still fires the drop.
       if (target) {
+        dragOverRef.current = target
         setDragOverId(target.id)
         setDragOverType(target.type)
       } else {
@@ -219,6 +246,7 @@ export default function RoundSidebar({
     }
 
     function onUp() {
+      cancelAnimationFrame(autoScrollRaf.current)
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
 
@@ -280,7 +308,7 @@ export default function RoundSidebar({
       <div className="px-3 pt-3 pb-1 shrink-0">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Show Order</p>
       </div>
-      <div className="flex-1 overflow-y-auto py-1">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto py-1">
 
         {segments.map((seg, i) => {
           if (seg.type === 'general') {
