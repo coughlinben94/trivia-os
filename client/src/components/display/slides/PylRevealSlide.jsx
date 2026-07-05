@@ -20,11 +20,11 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
   const items = data.stages ?? data.items ?? []
   const listBoxRef = useRef(null)
   const rowSize = useFitListToBox(listBoxRef, items.map(x => x.text), {
-    family: 'system-ui',
+    family: theme.fonts.body,
     floorPx: LIST_ITEM_FLOOR * 16,
     ceilPx: LIST_ITEM_CEIL * 16,
     gapPx: 12,
-    rowInset: 300,
+    rowInset: 176,
     maxLinesPerRow: 2,
   })
 
@@ -80,7 +80,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
         initial={{ opacity: 0, y: reduce ? 0 : -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: EASE_OUT }}
-        className="relative z-10 px-16 pt-14 pb-6 shrink-0"
+        className="relative z-10 px-16 pt-14 pb-6 shrink-0 text-center"
       >
         <p
           style={{
@@ -107,80 +107,83 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
         </h2>
       </motion.div>
 
-      {/* Items */}
-      <div ref={listBoxRef} className="relative z-10 flex-1 overflow-y-auto px-16 pb-10 space-y-3">
-        <AnimatePresence>
-          {visibleItems.map((item, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: reduce ? 0 : 18, scale: reduce ? 1 : 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.28, ease: EASE_OUT }}
-              className="flex items-center gap-5 px-6 py-4 rounded-2xl"
-              style={{ background: `${theme.colors.accent}35` }}
-            >
-              <span
-                className="shrink-0"
-                style={{
-                  fontFamily: `'${theme.fonts.display}', sans-serif`,
-                  color: theme.colors.textMuted,
-                  fontSize: '1rem',
-                  fontWeight: 700,
-                  minWidth: 28,
-                  textAlign: 'right',
-                }}
+      {/* Items — centered as a block, not pinned to the top-left */}
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center overflow-y-auto px-16 pb-10">
+        <div ref={listBoxRef} className="w-full max-w-4xl flex flex-col gap-3">
+          <AnimatePresence>
+            {visibleItems.map((item, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: reduce ? 0 : 18, scale: reduce ? 1 : 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.28, ease: EASE_OUT }}
+                className="flex items-center gap-5 px-6 py-4 rounded-2xl"
+                style={{ background: `${theme.colors.accent}35` }}
               >
-                {i + 1}.
-              </span>
-              <p
-                className="flex-1"
-                style={{
-                  color: theme.colors.text,
-                  fontSize: `${rowSize}px`,
-                  fontWeight: 500,
-                }}
-              >
-                {item.text}
-              </p>
-              {item.points != null && (
                 <span
+                  className="shrink-0"
                   style={{
                     fontFamily: `'${theme.fonts.display}', sans-serif`,
-                    color: theme.colors.shinyAccent,
-                    fontSize: '1.5rem',
+                    color: theme.colors.textMuted,
+                    fontSize: '1rem',
                     fontWeight: 700,
+                    minWidth: 28,
+                    textAlign: 'right',
                   }}
                 >
-                  +{item.points}
+                  {i + 1}.
+                </span>
+                <p
+                  className="flex-1"
+                  style={{
+                    fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+                    color: theme.colors.text,
+                    fontSize: `${rowSize}px`,
+                    fontWeight: 500,
+                  }}
+                >
+                  {item.text}
+                </p>
+                {item.points != null && (
+                  <span
+                    style={{
+                      fontFamily: `'${theme.fonts.display}', sans-serif`,
+                      color: theme.colors.shinyAccent,
+                      fontSize: '1.5rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    +{item.points}
+                  </span>
+                )}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {/* Hidden placeholders */}
+          {Array.from({ length: hiddenCount }, (_, i) => (
+            <div
+              key={`hidden-${i}`}
+              className="flex items-center gap-5 px-6 py-4 rounded-2xl"
+              style={{ background: `${theme.colors.accent}18`, opacity: 0.5 }}
+            >
+              <span
+                style={{ color: theme.colors.textMuted, fontSize: '1rem', fontWeight: 700, minWidth: 28, textAlign: 'right' }}
+              >
+                {revealed + i + 1}.
+              </span>
+              <div
+                className="flex-1 rounded-full"
+                style={{ height: 10, background: `${theme.colors.accent}40` }}
+              />
+              {items[revealed + i]?.points != null && (
+                <span style={{ color: theme.colors.accent, fontSize: '1.5rem', fontWeight: 700 }}>
+                  +{items[revealed + i].points}
                 </span>
               )}
-            </motion.div>
+            </div>
           ))}
-        </AnimatePresence>
-
-        {/* Hidden placeholders */}
-        {Array.from({ length: hiddenCount }, (_, i) => (
-          <div
-            key={`hidden-${i}`}
-            className="flex items-center gap-5 px-6 py-4 rounded-2xl"
-            style={{ background: `${theme.colors.accent}18`, opacity: 0.5 }}
-          >
-            <span
-              style={{ color: theme.colors.textMuted, fontSize: '1rem', fontWeight: 700, minWidth: 28, textAlign: 'right' }}
-            >
-              {revealed + i + 1}.
-            </span>
-            <div
-              className="flex-1 rounded-full"
-              style={{ height: 10, background: `${theme.colors.accent}40` }}
-            />
-            {items[revealed + i]?.points != null && (
-              <span style={{ color: theme.colors.accent, fontSize: '1.5rem', fontWeight: 700 }}>
-                +{items[revealed + i].points}
-              </span>
-            )}
-          </div>
-        ))}
+        </div>
       </div>
 
       {/* Running total — bottom */}
@@ -189,7 +192,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
           initial={{ opacity: 0, y: reduce ? 0 : 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25, ease: EASE_OUT }}
-          className="relative z-10 shrink-0 px-16 py-5 flex items-center justify-end gap-3 border-t"
+          className="relative z-10 shrink-0 px-16 py-5 flex items-center justify-center gap-3 border-t"
           style={{ borderColor: `${theme.colors.accent}40` }}
         >
           <span style={{ color: theme.colors.textMuted, fontSize: '1rem', fontWeight: 600 }}>

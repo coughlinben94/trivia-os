@@ -380,14 +380,23 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
 
   async function handlePYLAdd(themes, roundId) {
     setShowPylWizard(false)
+    // PYL should always live in a real, collapsible round — same as Swing.
+    // Without this, slides created with no round active land as flat,
+    // unassigned items in the sidebar instead of a proper round group.
+    let targetRoundId = roundId
+    if (!targetRoundId) {
+      const round = await actions.addRound({ roundType: 'pyl', title: 'Press Your Luck!', subtitle: '' })
+      targetRoundId = round.id
+      setActiveRoundId(round.id)
+    }
     const sortedAll = [...(show?.slides ?? [])].sort((a, b) => a.order - b.order)
-    const roundSlides = roundId ? sortedAll.filter(s => s.roundId === roundId) : []
+    const roundSlides = sortedAll.filter(s => s.roundId === targetRoundId)
     const afterId = roundSlides.length > 0
       ? roundSlides[roundSlides.length - 1].id
       : sortedAll[sortedAll.length - 1]?.id ?? null
     const slidesData = themes.map((theme, i) => ({
       type: 'pyl-reveal',
-      roundId: roundId ?? null,
+      roundId: targetRoundId,
       data: { themeName: theme.name, themeType: theme.type, title: theme.name, themeIndex: i },
     }))
     if (slidesData.length) {
