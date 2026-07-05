@@ -625,6 +625,10 @@ export default function SlideCanvasEditor({
                   data-ov-box={ov.id}
                   style={{
                     ...overlayBoxStyle(ov),
+                    // Selected box (and its handles) jump above the floating
+                    // toolbar (z-70) so the rotate lollipop, which sits right
+                    // where the toolbar hovers, stays grabbable.
+                    zIndex: isSel ? 90 : 62 + (ov.z ?? 0),
                     outline: isSel ? '2px solid #6366f1' : '1px dashed rgba(99,102,241,0.45)',
                     outlineOffset: 0,
                     cursor: isEditing ? 'text' : 'move',
@@ -800,7 +804,8 @@ function OverlayToolbar({ ov, theme, fonts, leftPx, topPx, maxW, onPatch, onFron
       style={{
         position: 'absolute',
         left: clamp(leftPx, 130, maxW - 130),
-        top: Math.max(2, topPx - 46),
+        // Sit clear of the rotate lollipop (which reaches ~34px above the box).
+        top: Math.max(2, topPx - 60),
         transform: 'translateX(-50%)',
         zIndex: 70,
       }}
