@@ -315,8 +315,8 @@ export default function RoundSidebar({
               <div
                 className="flex items-center gap-1.5 px-3 py-2 group"
                 style={viewingRoundId === round.id && !selectedSlideId
-                  ? { background: 'linear-gradient(to right, rgba(34,197,94,0.12), transparent)', borderLeft: '2px solid #1a6b4a' }
-                  : { borderLeft: '2px solid transparent' }
+                  ? { background: 'linear-gradient(to right, rgba(34,197,94,0.16), transparent)' }
+                  : undefined
                 }
               >
                 <span
@@ -441,14 +441,12 @@ function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, 
   return (
     <div
       data-slide-id={slide.id}
-      className={`group flex items-center gap-2 px-3 cursor-pointer transition-colors select-none border-l-2 ${
-        selected
-          ? 'border-[#1a6b4a]'
-          : 'border-transparent hover:bg-gray-100'
+      className={`group flex items-center gap-2 px-3 cursor-pointer transition-colors select-none ${
+        selected ? '' : 'hover:bg-gray-100'
       } ${indent ? 'ml-4' : ''} ${dragging ? 'opacity-40' : ''} ${dragBefore ? 'border-t-2 border-t-blue-400' : ''} ${dragAfter ? 'border-b-2 border-b-blue-400' : ''}`}
       style={{
         height: 36,
-        ...(selected && { background: 'linear-gradient(to right, rgba(34,197,94,0.12), transparent)' }),
+        ...(selected && { background: 'linear-gradient(to right, rgba(34,197,94,0.16), transparent)' }),
       }}
       onClick={onSelect}
     >
