@@ -277,6 +277,12 @@ export default function SlideCanvasEditor({
     if (editingOverlayId) return // let the editable's blur commit first
     if (!editLayout) return
     if (selectedOverlayId) { setSelectedOverlayId(null); return }
+    // preventDefault is load-bearing: without it, this same click's default
+    // focus action fires AFTER addTextAt's effect focuses the new inline
+    // editable, blurring it immediately — and commitInlineEdit's empty-text
+    // prune then deletes the box in the same tick. Net effect was "click
+    // does nothing." Same bug class the region-select path already guards.
+    e.preventDefault()
     const oRect = overlayRef.current.getBoundingClientRect()
     const x = (e.clientX - oRect.left) / scaledW * 100
     const y = (e.clientY - oRect.top) / scaledH * 100
@@ -498,7 +504,12 @@ export default function SlideCanvasEditor({
         {editLayout && (
           <>
             <span className="w-px h-4 bg-gray-200" />
+            {/* onPointerDown preventDefault = same focus-steal guard as the
+                canvas click: the button's mousedown default action would focus
+                the button after the new box's editable grabs focus, blurring
+                it → empty-prune delete. */}
             <button
+              onPointerDown={e => e.preventDefault()}
               onClick={() => addTextAt(37, 42)}
               className="text-xs font-medium px-2.5 py-1 rounded-md border border-dashed border-gray-300 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-colors"
             >
@@ -646,8 +657,13 @@ export default function SlideCanvasEditor({
                             onInput={e => patchOverlay(ov.id, { text: e.currentTarget.textContent })}
                             onBlur={commitInlineEdit}
                             onKeyDown={e => {
-                              if (e.key === 'Escape') { e.preventDefault(); e.currentTarget.blur() }
-                              else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur() }
+                              // stopPropagation as well as preventDefault: the blur
+                              // unmounts this editable synchronously, so by the time
+                              // the event reaches window-level Escape handlers their
+                              // contenteditable guard can no longer see it — without
+                              // this, Escape here also closed the whole SlideEditor.
+                              if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); e.currentTarget.blur() }
+                              else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); e.currentTarget.blur() }
                             }}
                             onPointerDown={e => e.stopPropagation()}
                             style={{ ...textBoxTypography(ov), color: resolveColor(ov.color), outline: 'none', cursor: 'text' }}
