@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
+import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
 import { useFitToBox, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
@@ -17,6 +18,16 @@ function Tile({ tile, size, reduce }) {
 
 export default function GridSlide({ slide }) {
   const { theme } = useTheme()
+  const { data } = slide
+
+  if (data.isShiny && !data.introDone) {
+    return <ShinyIntroScreen slide={slide} theme={theme} />
+  }
+
+  return <GridContent slide={slide} theme={theme} />
+}
+
+function GridContent({ slide, theme }) {
   const reduce = useReducedMotion()
   const { data } = slide
   const columns = Array.isArray(data.columns) ? data.columns : []

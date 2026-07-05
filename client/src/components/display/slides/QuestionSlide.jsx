@@ -2,13 +2,10 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
-import { resolveShinyPart, isVisualShiny, isAudioShiny } from '../../../lib/shinySeries.js'
-import { fitToBox, QUESTION_BOX, useFitToBox, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
+import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
+import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny } from '../../../lib/shinySeries.js'
+import { fitToBox, QUESTION_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
-
-// Fixed gold for shiny intro screens — constant signal across all themes.
-const SHINY_GOLD      = '#f0d890' // pale cream-gold fill (Jazz Club–approved)
-const SHINY_GOLD_GLOW = '#d4820c' // amber glow for shadows and radial wash
 
 // ─── Standard question ────────────────────────────────────────────────────────
 
@@ -483,80 +480,104 @@ function ShinyAudioQuestion({ slide, show, theme }) {
   )
 }
 
-// ─── Shiny intro screen ────────────────────────────────────────────────────────
-//
-// Every shiny question gets a standalone beat before its content — a pure
-// announcement, no question/answer/media yet, giving the host room to set
-// up what's coming. Modeled on the deck's yellow "shiny round title card"
-// slides (tilted handwritten-style title, Ben photo lower-left, format icon
-// lower-right) but reworked to fit the app's per-show theme system instead
-// of a hardcoded color, and to stay ambient rather than full-bleed — the
-// ParticleBackground mounted behind every slide (Display.jsx) should still
-// read through around the edges, not get covered by a flat color block.
+// ─── Shiny list question ───────────────────────────────────────────────────────
 
-function ShinyIntroScreen({ slide, theme }) {
+function ShinyListQuestion({ slide, theme }) {
   const { data } = slide
   const reduce = useReducedMotion()
-  const title = data.seriesTheme || data.shinyFormatName || 'Shiny Question'
-  const icon = data.shinyFormatIcon || '✨'
+  const items = data.listItems ?? []
+  const hasPoints = !!data.shinyInputSchema?.hasPoints
+
+  const listBoxRef = useRef(null)
+  const rowSize = useFitListToBox(listBoxRef, items.map(it => it.text), {
+    family: theme.fonts.body,
+    floorPx: LIST_ITEM_FLOOR * 16,
+    ceilPx: LIST_ITEM_CEIL * 16,
+    gapPx: 18,
+    rowInset: hasPoints ? 160 : 96,
+    maxLinesPerRow: 2,
+    lineHeight: 1.35,
+  })
 
   return (
-    <div className="w-full h-full relative overflow-hidden flex items-center justify-center">
-      {/* Sunrise glow — theme-colored wash, not a full-screen fill, so the
-          ambient background still shows through around the edges. */}
+    <div className="w-full h-full relative overflow-hidden flex flex-col items-center justify-center px-24 py-16" style={{ background: theme.colors.shinyBg }}>
       <div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
-        style={{
-          background: `radial-gradient(ellipse 85% 65% at 50% 62%, ${SHINY_GOLD_GLOW}4d 0%, ${SHINY_GOLD_GLOW}22 38%, transparent 72%)`,
-        }}
+        style={{ background: `radial-gradient(ellipse 70% 55% at 50% 50%, ${theme.colors.shinyAccent}18 0%, transparent 65%)` }}
       />
 
-      {/* Host photo — lower-left */}
-      {data.hostPhotoUrl && (
-        <motion.img
-          src={data.hostPhotoUrl}
-          alt=""
-          initial={{ opacity: 0, x: reduce ? 0 : -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.15, duration: 0.4, ease: EASE_OUT }}
-          className="absolute bottom-0 left-0 z-10 pointer-events-none"
-          style={{ height: '56%', maxWidth: '100%', objectFit: 'contain', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.4))' }}
-        />
+      {data.text && (
+        <motion.p
+          initial={{ opacity: 0, y: reduce ? 0 : -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, ease: EASE_OUT }}
+          className="relative z-10 text-center mb-8"
+          style={{
+            color: theme.colors.text,
+            fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+            fontSize: 'clamp(1.3rem, 2.8vw, 2.1rem)',
+            fontWeight: 500,
+            maxWidth: '70ch',
+          }}
+        >
+          {data.text}
+        </motion.p>
       )}
 
-      {/* Format icon badge — lower-right */}
-      <motion.div
-        initial={{ opacity: 0, scale: reduce ? 1 : 0.7, rotate: reduce ? 0 : -8 }}
-        animate={{ opacity: 1, scale: 1, rotate: 0 }}
-        transition={{ delay: 0.3, duration: 0.4, ease: EASE_OUT }}
-        className="absolute bottom-10 right-10 z-10 flex items-center justify-center rounded-3xl"
-        style={{
-          width: 128, height: 128,
-          background: theme.colors.bgDeep,
-          boxShadow: `0 10px 30px rgba(0,0,0,0.4), 0 0 0 2px ${theme.colors.highlight}55`,
-        }}
-      >
-        <span style={{ fontSize: '3.5rem' }}>{icon}</span>
-      </motion.div>
+      <div ref={listBoxRef} className="relative z-10 w-full max-w-4xl">
+        <ol className="space-y-4">
+          {items.map((item, i) => (
+            <motion.li
+              key={i}
+              initial={{ opacity: 0, x: reduce ? 0 : -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.08 + i * 0.06, duration: 0.22, ease: EASE_OUT }}
+              className="flex gap-5 items-center justify-center"
+            >
+              <span
+                className="shrink-0 flex items-center justify-center rounded-full"
+                style={{
+                  width: 40, height: 40,
+                  background: theme.colors.accent,
+                  fontFamily: `'${theme.fonts.display}', sans-serif`,
+                  color: theme.colors.highlight,
+                  fontSize: '1rem', fontWeight: 700,
+                }}
+              >
+                {i + 1}
+              </span>
+              <p
+                style={{
+                  color: theme.colors.text,
+                  fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+                  fontSize: `${rowSize}px`,
+                  fontWeight: 500,
+                  lineHeight: 1.35,
+                }}
+              >
+                {item.text}
+              </p>
+              {hasPoints && (
+                <span
+                  className="shrink-0 rounded-full px-3 py-1"
+                  style={{
+                    background: theme.colors.bgDeep,
+                    color: theme.colors.highlight,
+                    fontFamily: `'${theme.fonts.display}', sans-serif`,
+                    fontSize: '0.95rem', fontWeight: 700,
+                    boxShadow: `0 0 0 1px ${theme.colors.highlight}55`,
+                  }}
+                >
+                  +{item.points ?? 0}
+                </span>
+              )}
+            </motion.li>
+          ))}
+        </ol>
+      </div>
 
-      {/* Title — big, tilted, marker-style */}
-      <motion.p
-        initial={{ opacity: 0, scale: reduce ? 1 : 0.85, rotate: reduce ? -6 : -14 }}
-        animate={{ opacity: 1, scale: 1, rotate: -6 }}
-        transition={reduce ? { duration: 0.3, ease: EASE_OUT } : { type: 'spring', duration: 0.5, bounce: 0.25 }}
-        className="relative z-10 text-center px-20"
-        style={{
-          fontFamily: `'${theme.fonts.display}', sans-serif`,
-          color: SHINY_GOLD,
-          fontSize: 'clamp(2.75rem, 6.5cqw, 6rem)',
-          fontWeight: 700,
-          lineHeight: 1.08,
-          textShadow: `0 3px 0 rgba(0,0,0,0.25), 0 2px 21.6px ${SHINY_GOLD_GLOW}80`,
-        }}
-      >
-        {title}
-      </motion.p>
+      <div className="absolute top-5 left-5 z-20 text-2xl" style={{ filter: `drop-shadow(0 0 8px ${theme.colors.shinyAccent})` }}>✨</div>
     </div>
   )
 }
@@ -578,6 +599,9 @@ export default function QuestionSlide({ slide, show, transitionKey }) {
   }
   if (data.isShiny && isAudioShiny(data)) {
     return <ShinyAudioQuestion slide={slide} theme={theme} show={show} />
+  }
+  if (data.isShiny && isListShiny(data)) {
+    return <ShinyListQuestion slide={slide} theme={theme} />
   }
   return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} />
 }

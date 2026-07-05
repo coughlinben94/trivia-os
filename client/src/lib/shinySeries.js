@@ -39,3 +39,7 @@ export function isVisualShiny(data) {
 export function isAudioShiny(data) {
   return data.shinyType === 'audio' || data.shinyInputSchema?.type === 'audio'
 }
+
+export function isListShiny(data) {
+  return data.shinyInputSchema?.type === 'list'
+}

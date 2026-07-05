@@ -173,7 +173,8 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                 <TeamPickerEditor data={data} onChange={change} />
               )}
               {slide.type === 'grid' && (
-                <GridEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload} />
+                <GridEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload}
+                  uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
               )}
               {slide.type === 'winner-reveal' && (
                 <WinnerRevealEditor data={data} onChange={change} />
@@ -561,6 +562,9 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
           </div>
 
           <Divider label="Intro Screen" />
+          <Field label="Subtitle" hint='Optional — e.g. "Dog Edition" or "Bluegrass Cover"'>
+            <TextInput value={data.introSubtitle ?? ''} onChange={v => onChange('introSubtitle', v)} placeholder="Optional subtitle…" />
+          </Field>
           <HostPhotoLibrary
             getHostPhotos={getHostPhotos}
             uploadMedia={uploadMedia}
@@ -1074,7 +1078,7 @@ function MultiQuestionEditor({ data, onChange, setData, scheduleSave }) {
   )
 }
 
-function GridEditor({ data, onChange, setData, scheduleSave, onMediaUpload }) {
+function GridEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uploadMedia, getHostPhotos }) {
   const columns = Array.isArray(data.columns) ? data.columns : []
 
   function writeTile(ci, ri, patch) {
@@ -1093,6 +1097,44 @@ function GridEditor({ data, onChange, setData, scheduleSave, onMediaUpload }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Previewing — matches QuestionEditor: every shiny slide gets a
+          standalone intro beat before its content. */}
+      {data.isShiny && (
+        <>
+          <Divider label="Previewing" />
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              onClick={() => onChange('introDone', false)}
+              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                !data.introDone ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              🎬 Intro
+            </button>
+            <button
+              onClick={() => onChange('introDone', true)}
+              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                !!data.introDone ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              Content
+            </button>
+          </div>
+
+          <Divider label="Intro Screen" />
+          <Field label="Subtitle" hint='Optional — e.g. "Dog Edition" or "Bird Edition"'>
+            <TextInput value={data.introSubtitle ?? ''} onChange={v => onChange('introSubtitle', v)} placeholder="Optional subtitle…" />
+          </Field>
+          <HostPhotoLibrary
+            getHostPhotos={getHostPhotos}
+            uploadMedia={uploadMedia}
+            currentPhotoUrl={data.hostPhotoUrl}
+            onSelectPhoto={url => onChange('hostPhotoUrl', url)}
+          />
+          <Divider label="Grid" />
+        </>
+      )}
+
       {/* Question text */}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1.5">Question text (optional)</label>
@@ -1160,6 +1202,10 @@ function GridEditor({ data, onChange, setData, scheduleSave, onMediaUpload }) {
           </div>
         ))}
       </div>
+
+      <Field label="Answer">
+        <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="The answer…" />
+      </Field>
     </div>
   )
 }
