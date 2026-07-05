@@ -1079,7 +1079,11 @@ export default function Join() {
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'shows', filter: `id=eq.${show.id}` },
         (payload) => {
-          setShow(payload.new)
+          // MERGE over the previous row — Realtime omits unchanged TOASTed
+          // columns (a real show's `slides` jsonb) from UPDATE payloads, so a
+          // flag-only write arrives without `slides` and a full replace wiped
+          // the phone's slide content (same bug as Display.jsx, same fix).
+          setShow(prev => prev && prev.id === payload.new.id ? { ...prev, ...payload.new } : payload.new)
           if (payload.new.is_live) setPhase(prev => prev === 'waiting' ? 'live' : prev)
         }
       )

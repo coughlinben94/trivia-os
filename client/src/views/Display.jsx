@@ -526,7 +526,16 @@ export default function Display() {
           const nextIndex = next.current_slide_index ?? 0
           setDirection(nextIndex >= prevIndexRef.current ? 1 : -1)
           prevIndexRef.current = nextIndex
-          setShow({ ...next, theme: next.theme_id ?? next.theme, themeOverrides: next.theme_overrides ?? next.themeOverrides })
+          // MERGE over the previous row — never replace it. Postgres logical
+          // replication omits unchanged TOASTed columns (any jsonb over ~2KB,
+          // i.e. every real show's `slides`) from UPDATE payloads, so a
+          // flag-only write (answer_reveal, scoreboard_visible) arrives here
+          // WITHOUT `slides`. A full replace blanked the TV on every A/S/R
+          // toggle and on the display's own jukebox-return jump.
+          setShow(prev => {
+            const merged = prev && prev.id === next.id ? { ...prev, ...next } : next
+            return { ...merged, theme: merged.theme_id ?? merged.theme, themeOverrides: merged.theme_overrides ?? merged.themeOverrides }
+          })
         }
       )
       .subscribe()
@@ -544,8 +553,15 @@ export default function Display() {
         (payload) => {
           const next = payload.new
           if (next.is_live && next.id !== show?.id) {
-            prevIndexRef.current = next.current_slide_index ?? 0
-            setShow({ ...next, theme: next.theme_id ?? next.theme, themeOverrides: next.theme_overrides ?? next.themeOverrides })
+            // Switching to a different show: there is no previous row to merge
+            // over, and this payload may be missing its TOASTed `slides`
+            // column (see the merge note above) — fetch the full row instead
+            // of trusting the payload.
+            supabase.from('shows').select('*').eq('id', next.id).single().then(({ data }) => {
+              if (!data || !data.is_live) return
+              prevIndexRef.current = data.current_slide_index ?? 0
+              setShow({ ...data, theme: data.theme_id ?? data.theme, themeOverrides: data.theme_overrides ?? data.themeOverrides })
+            })
           }
         }
       )
