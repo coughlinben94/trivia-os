@@ -5,10 +5,15 @@ import { archiveQuestion, archiveQuestions } from '../../lib/archiveQuestion.js'
 const BTN = 'host-button'
 const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber-400', video: 'bg-purple-400', list: 'bg-orange-400', grid: 'bg-pink-400' }
 
+// Same gradient family as BuildMode.jsx's CARD_STYLE (dashboard rest-grid) —
+// reused here by key so the launcher tiles read as the same visual system.
 export const INPUT_TILES = [
-  { id: 'question', icon: '❓', name: 'Question',   desc: 'Regular or shiny question' },
-  { id: 'swing',     icon: '🎷', name: 'Swing Round', desc: 'Bulk-add a batch of questions' },
-  { id: 'pyl',       icon: '🎰', name: 'Press Your Luck!', desc: 'Add themed categories' },
+  { id: 'question', icon: '❓', name: 'Question',   desc: 'Regular or shiny question',
+    gradient: 'bg-gradient-to-br from-blue-50 to-indigo-100 border-blue-200 hover:border-blue-400' },
+  { id: 'swing',     icon: '🎷', name: 'Swing Round', desc: 'Bulk-add a batch of questions',
+    gradient: 'bg-gradient-to-br from-orange-50 to-red-100 border-orange-200 hover:border-orange-400' },
+  { id: 'pyl',       icon: '🎰', name: 'Press Your Luck!', desc: 'Add themed categories',
+    gradient: 'bg-gradient-to-br from-teal-50 to-blue-100 border-teal-200 hover:border-blue-400' },
 ]
 
 function Toast({ show, label }) {

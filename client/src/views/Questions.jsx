@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
-import { INPUT_TILES, QuestionInputPanel, SwingInputPanel, PylInputPanel } from '../components/host/DatabaseAddPanels.jsx'
 import HostPinGate from '../components/host/HostPinGate.jsx'
 
 const TYPE_LABEL = { regular: 'Regular Question', shiny: 'Shiny', pyl: 'PYL', swing: 'Swing' }
@@ -232,7 +231,6 @@ export default function Questions() {
   const [editingId, setEditingId] = useState(null)
   const [editDraft, setEditDraft] = useState({ text: '', answer: '' })
   const [saving, setSaving]       = useState(false)
-  const [activeInput, setActiveInput] = useState(null) // 'question' | 'swing' | 'pyl' | null
 
   // Read ?show= param from URL on mount
   useEffect(() => {
@@ -335,48 +333,18 @@ export default function Questions() {
         </div>
       </div>
 
-      {/* Add to database — same input flows as the host dashboard, writes only to the archive */}
+      {/* Add Questions — links out to its own dedicated input page */}
       <div className="max-w-6xl mx-auto px-6 pt-6">
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          {activeInput ? (
-            <>
-              <div className="flex items-center gap-2 mb-5">
-                <button
-                  onClick={() => setActiveInput(null)}
-                  className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors duration-150 ease-out"
-                >
-                  ←
-                </button>
-                <h2 className="text-sm font-semibold text-gray-800">
-                  {INPUT_TILES.find(t => t.id === activeInput)?.icon} {INPUT_TILES.find(t => t.id === activeInput)?.name}
-                </h2>
-              </div>
-              {activeInput === 'question' && <QuestionInputPanel onAdded={fetchQuestions} />}
-              {activeInput === 'swing'    && <SwingInputPanel onAdded={fetchQuestions} />}
-              {activeInput === 'pyl'      && <PylInputPanel onAdded={fetchQuestions} />}
-            </>
-          ) : (
-            <>
-              <p className="text-sm font-semibold text-gray-800 mb-0.5">Add to database</p>
-              <p className="text-xs text-gray-500 mb-4">Upload trivia from past shows without attaching it to a show.</p>
-              <div className="flex flex-wrap gap-3">
-                {INPUT_TILES.map(tile => (
-                  <button
-                    key={tile.id}
-                    onClick={() => setActiveInput(tile.id)}
-                    className="flex-1 min-w-[180px] flex flex-col gap-2 p-4 rounded-xl border-2 border-gray-100 hover:border-gray-300 bg-white hover:bg-gray-50 text-left transition-colors duration-150 ease-out active:scale-[0.98]"
-                  >
-                    <span className="text-2xl leading-none">{tile.icon}</span>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">{tile.name}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{tile.desc}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        <a
+          href="/questions/add"
+          className="flex items-center justify-between gap-3 bg-gradient-to-br from-emerald-50 to-green-100 border border-green-200 rounded-2xl shadow-sm px-6 py-5 transition-colors duration-150 ease-out hover:border-green-400 active:scale-[0.99]"
+        >
+          <div>
+            <p className="text-sm font-semibold text-gray-800">＋ Add Questions</p>
+            <p className="text-xs text-gray-600 mt-0.5">Upload trivia from past shows without attaching it to a show</p>
+          </div>
+          <span className="text-xl text-green-700 shrink-0">→</span>
+        </a>
       </div>
 
       {/* Controls — centered */}

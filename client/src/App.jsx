@@ -8,6 +8,7 @@ const Scores      = lazy(() => import('./views/Scores.jsx'))
 const AmbientAudit  = lazy(() => import('./views/AmbientAudit.jsx'))
 const GradientAudit = lazy(() => import('./views/GradientAudit.jsx'))
 const Questions   = lazy(() => import('./views/Questions.jsx'))
+const AddQuestions = lazy(() => import('./views/AddQuestions.jsx'))
 const Shows       = lazy(() => import('./views/Shows.jsx'))
 const ShowDetail  = lazy(() => import('./views/ShowDetail.jsx'))
 const Dashboard   = lazy(() => import('./views/Dashboard.jsx'))
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/ambient" element={<AmbientAudit />} />
           <Route path="/gradient" element={<GradientAudit />} />
           <Route path="/questions" element={<Questions />} />
+          <Route path="/questions/add" element={<AddQuestions />} />
           <Route path="/shows" element={<Shows />} />
           <Route path="/shows/:showId" element={<ShowDetail />} />
           <Route path="/dashboard" element={<Dashboard />} />
