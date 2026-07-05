@@ -271,7 +271,7 @@ actions.updateShowMeta({ title, date, theme, themeOverrides })
 // Slide CRUD
 actions.addSlide(type, data)
 actions.addSiblingSlides(...)   // shiny series
-actions.updateSlide(id, patch)
+actions.updateSlide(id, patch)  // debounced 600ms — writes are SERIALIZED (see note below)
 actions.deleteSlide(id)
 actions.reorderSlides(newOrder)
 
@@ -300,6 +300,8 @@ actions.updateRoundScore(...)
 actions.saveResults()               // aggregates team_scores → final_scores + player_count;
                                      // auto-fires once when winner-reveal slide goes live
 ```
+
+**`updateSlide`'s debounced write is serialized, not just debounced — this matters for any new debounced-save path.** The 600ms `setTimeout` only coalesces calls that land inside the same window; calls spaced further apart (e.g. drag an overlay, pause, rotate it, pause, recolor it — completely normal host behavior) each schedule their own write. Early on this fired each as an independent, concurrent Supabase `UPDATE`, with no guarantee the one that *finishes* last is the one that was *scheduled* last — an earlier write resolving after a later one silently overwrote newer data with older, even though every request returned 204. Fixed (commit `84d0021`) by chaining each write onto a `slidesSaveChainRef` promise so they always complete in schedule order. If you add another debounced-save field to `useShow.js` beyond `slides`, give it the same chained-promise treatment, not a bare `clearTimeout`+`setTimeout`.
 
 **Realtime:** subscribes to `shows` table, `id=eq.${showId}` — all display/join surfaces auto-update.
 
