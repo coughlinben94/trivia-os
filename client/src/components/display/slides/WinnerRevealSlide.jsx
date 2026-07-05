@@ -100,48 +100,54 @@ export default function WinnerRevealSlide({ slide, show }) {
   const [fontsReady, setFontsReady] = useState(false)
   useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
 
+  // Drumroll only starts once we know a real winner exists — if we started it
+  // on mount in parallel with the fetch (the old behavior), a zero-team show
+  // would play the full suspenseful build-up toward nothing. Both queries are
+  // fast enough that gating on them first costs an imperceptible delay.
   useEffect(() => {
+    let cancelled = false
     async function load() {
       const cols = deriveRoundCols(show)
 
       // Primary: scoreboard_teams (the live grading source)
       const { data: sbTeams } = await supabase
         .from('scoreboard_teams').select('id, name, scores').eq('show_id', show.id)
-      if (sbTeams?.length) {
-        const ranked = sbTeams
-          .map(t => ({ id: t.id, name: t.name, total: computeTotal(t.scores, cols) }))
+      let ranked = sbTeams?.length
+        ? sbTeams
+            .map(t => ({ id: t.id, name: t.name, total: computeTotal(t.scores, cols) }))
+            .sort((a, b) => b.total - a.total)
+        : []
+
+      // Fallback: legacy team_scores
+      if (!ranked.length) {
+        const [{ data: teams }, { data: scores }] = await Promise.all([
+          supabase.from('teams').select('id, name').eq('show_id', show.id),
+          supabase.from('team_scores').select('team_id, score').eq('show_id', show.id),
+        ])
+        ranked = (teams ?? [])
+          .map(t => ({ id: t.id, name: t.name, total: (scores ?? []).filter(s => s.team_id === t.id).reduce((n, s) => n + (s.score ?? 0), 0) }))
           .sort((a, b) => b.total - a.total)
-        const max = ranked[0]?.total ?? 0
-        const tied = ranked.filter(t => t.total === max)
-        setWinner({
-          name: tied.map(t => t.name).join(' & '),
-          total: max,
-          isTie: tied.length > 1,
-        })
+      }
+
+      if (cancelled) return
+
+      // Zero teams ever scored (empty show, or both fetches came back empty) —
+      // skip the drumroll/confetti build-up and go straight to a graceful
+      // fallback instead of leaving three TVs on "And the winner is…" forever.
+      if (!ranked.length) {
+        setWinner({ noData: true })
+        setPhase('reveal')
         return
       }
 
-      // Fallback: legacy team_scores
-      const [{ data: teams }, { data: scores }] = await Promise.all([
-        supabase.from('teams').select('id, name').eq('show_id', show.id),
-        supabase.from('team_scores').select('team_id, score').eq('show_id', show.id),
-      ])
-      const ranked = (teams ?? [])
-        .map(t => ({ id: t.id, name: t.name, total: (scores ?? []).filter(s => s.team_id === t.id).reduce((n, s) => n + (s.score ?? 0), 0) }))
-        .sort((a, b) => b.total - a.total)
       const max = ranked[0]?.total ?? 0
       const tied = ranked.filter(t => t.total === max)
-      if (ranked.length) {
-        setWinner({ name: tied.map(t => t.name).join(' & '), total: max, isTie: tied.length > 1 })
-      }
+      setWinner({ name: tied.map(t => t.name).join(' & '), total: max, isTie: tied.length > 1 })
+      audioCtxRef.current = playDrumRoll(() => { if (!cancelled) setPhase('reveal') }, reduce)
     }
     load()
+    return () => { cancelled = true; audioCtxRef.current?.pause?.(); audioCtxRef.current = null }
   }, [show.id])
-
-  useEffect(() => {
-    audioCtxRef.current = playDrumRoll(() => setPhase('reveal'), reduce)
-    return () => { audioCtxRef.current?.pause?.(); audioCtxRef.current = null }
-  }, [])
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ zIndex: 1 }}>
@@ -163,7 +169,7 @@ export default function WinnerRevealSlide({ slide, show }) {
         }}
       />
 
-      <Confetti active={phase === 'reveal'} />
+      <Confetti active={phase === 'reveal' && !winner?.noData} />
 
       <motion.p
         initial={{ opacity: 0, y: 24 }}
@@ -180,7 +186,7 @@ export default function WinnerRevealSlide({ slide, show }) {
           textAlign: 'center',
         }}
       >
-        {winner?.isTie ? "It's a tie!" : 'And the winner is…'}
+        {winner?.noData ? 'Let’s see how everyone did…' : winner?.isTie ? "It's a tie!" : 'And the winner is…'}
       </motion.p>
 
       <AnimatePresence>
@@ -190,28 +196,42 @@ export default function WinnerRevealSlide({ slide, show }) {
             animate={{ opacity: 1, scale: 1, transition: { duration: 0.5, ease: EASE_OUT } }}
             style={{ position: 'relative', zIndex: 10, textAlign: 'center' }}
           >
-            <p style={{
-              color: theme.colors.highlight,
-              fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
-              fontSize: fitToBox(winner.name, { ...REVEAL_BOX, family: theme.fonts.display }),
-              lineHeight: 1,
-              textShadow: `0 0 80px ${theme.colors.highlight}55`,
-            }}>
-              {winner.name}
-            </p>
-            <motion.p
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0, transition: { delay: 0.35, duration: 0.4, ease: EASE_OUT } }}
-              style={{
-                color: theme.colors.accent,
-                fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-                fontSize: 'clamp(1.4rem, 2.5cqw, 2.2rem)',
-                fontWeight: 700,
-                marginTop: '1rem',
-              }}
-            >
-              {winner.total} points
-            </motion.p>
+            {winner.noData ? (
+              <p style={{
+                color: theme.colors.highlight,
+                fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
+                fontSize: 'clamp(2rem, 5cqw, 4rem)',
+                lineHeight: 1.2,
+                textShadow: `0 0 80px ${theme.colors.highlight}55`,
+              }}>
+                Check the scoreboard!
+              </p>
+            ) : (
+              <>
+                <p style={{
+                  color: theme.colors.highlight,
+                  fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
+                  fontSize: fitToBox(winner.name, { ...REVEAL_BOX, family: theme.fonts.display }),
+                  lineHeight: 1,
+                  textShadow: `0 0 80px ${theme.colors.highlight}55`,
+                }}>
+                  {winner.name}
+                </p>
+                <motion.p
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0, transition: { delay: 0.35, duration: 0.4, ease: EASE_OUT } }}
+                  style={{
+                    color: theme.colors.accent,
+                    fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
+                    fontSize: 'clamp(1.4rem, 2.5cqw, 2.2rem)',
+                    fontWeight: 700,
+                    marginTop: '1rem',
+                  }}
+                >
+                  {winner.total} points
+                </motion.p>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
