@@ -72,9 +72,10 @@ export default function ThemeCustomizeControls({ overrides, baseTheme, onSetDisp
         <button
           onClick={onReset}
           disabled={!hasOverrides}
-          className="text-sm font-medium px-4 py-2 rounded-lg border border-gray-200 text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+          title="Restore theme's default font and colors"
+          className="text-sm font-medium px-4 py-2 rounded-lg border border-gray-200 text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors disabled:opacity-40 disabled:cursor-default"
         >
-          Presets
+          Reset
         </button>
         <button
           onClick={onDone}

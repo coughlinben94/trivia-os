@@ -35,8 +35,8 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   const [regions, setRegions] = useState([])
   const [selectedRegionId, setSelectedRegionId] = useState(null)
   const [editingRegionId, setEditingRegionId] = useState(null)
-  const [editStyles, setEditStyles] = useState(null)
-  const editOverlayRef = useRef(null)
+  const [rotatingAngle, setRotatingAngle] = useState(null)
+  const activeEditRef = useRef(null)
   const detectTimerRef = useRef(null)
 
   useEffect(() => {
@@ -240,6 +240,14 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
     document.addEventListener('pointercancel', onUp)
   }
 
+  // Signed degrees in (-180, 180] — much easier to read than an unbounded
+  // accumulated drag angle ("6°" instead of "-354°" after a full spin).
+  function normalizeAngleDisplay(deg) {
+    let d = ((deg % 360) + 360) % 360
+    if (d > 180) d -= 360
+    return Math.round(d)
+  }
+
   function startRegionRotate(e, region) {
     e.stopPropagation()
     const oRect = overlayRef.current.getBoundingClientRect()
@@ -253,14 +261,20 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
     const startR = rt[region.id]?.rotate ?? 0
     const startA = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI
     function onMove(ev) {
-      const a = Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180 / Math.PI
-      const nr = startR + (a - startA)
+      let nr = startR + (Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180 / Math.PI - startA)
+      // Snap to flat/45°-family angles — the common case ("make this flat")
+      // is hard to land by eye on a freehand drag without this.
+      const nearest45 = Math.round(nr / 45) * 45
+      const snapped = Math.abs(nr - nearest45) <= 4
+      if (snapped) nr = nearest45
       setData(d => { const c = d._regionTransforms ?? {}; const n = { ...d, _regionTransforms: { ...c, [region.id]: { ...c[region.id], rotate: nr } } }; scheduleSave({ data: n }); return n })
+      setRotatingAngle({ id: region.id, deg: normalizeAngleDisplay(nr), snapped, x: cx - oRect.left, y: cy - oRect.top - region.h / 2 - 40 })
     }
     function onUp() {
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
       document.removeEventListener('pointercancel', onUp)
+      setRotatingAngle(null)
       setTimeout(detectRegions, 50)
     }
     document.addEventListener('pointermove', onMove)
@@ -268,20 +282,57 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
     document.addEventListener('pointercancel', onUp)
   }
 
+  // Edits the REAL rendered slide element in place — not a copy with
+  // guessed-at styles — so gradient-clipped text, custom fonts, drop
+  // shadows etc. all just work because it IS that element. Imperative
+  // (not React state) since we don't want a re-render per keystroke.
   function enterEditMode(region) {
     const el = canvasRef.current?.querySelector(`[data-slide-region="${region.id}"]`)
     if (!el) return
-    const inner = el.querySelector('p,h1,h2,h3,h4,h5,span') ?? el
-    const cs = window.getComputedStyle(inner)
-    const px = parseFloat(cs.fontSize)
-    setEditStyles({
-      fontFamily: cs.fontFamily,
-      fontSize: (px * dynScale) + 'px',
-      fontWeight: cs.fontWeight,
-      color: cs.color === 'rgba(0, 0, 0, 0)' ? '#ffffff' : cs.color,
-      textAlign: cs.textAlign,
-      letterSpacing: cs.letterSpacing,
-    })
+    const originalOutline = el.style.outline
+    const originalOffset = el.style.outlineOffset
+    const originalCursor = el.style.cursor
+    let finished = false
+
+    function finish(save) {
+      if (finished) return
+      finished = true
+      el.removeEventListener('blur', onBlur)
+      el.removeEventListener('keydown', onKeyDown)
+      el.contentEditable = 'false'
+      el.style.outline = originalOutline
+      el.style.outlineOffset = originalOffset
+      el.style.cursor = originalCursor
+      if (save) {
+        const val = el.textContent.trim()
+        if (val) change(region.field, val)
+      } else {
+        el.textContent = data[region.field] ?? ''
+      }
+      setEditingRegionId(null)
+      setTimeout(detectRegions, 50)
+    }
+    function onBlur() { finish(true) }
+    function onKeyDown(ev) {
+      if (ev.key === 'Escape') { ev.preventDefault(); finish(false); el.blur() }
+      else if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); el.blur() }
+    }
+
+    el.contentEditable = 'true'
+    el.style.outline = '2px solid #6366f1'
+    el.style.outlineOffset = '4px'
+    el.style.cursor = 'text'
+    el.addEventListener('blur', onBlur)
+    el.addEventListener('keydown', onKeyDown)
+    activeEditRef.current = el
+    el.focus()
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    range.collapse(false)
+    const sel = window.getSelection()
+    sel?.removeAllRanges()
+    sel?.addRange(range)
+
     setEditingRegionId(region.id)
   }
 
@@ -293,18 +344,13 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
     return () => clearTimeout(detectTimerRef.current)
   }, [slide.id, slide.type, panelW, panelH])
 
-  // Auto-focus + cursor-to-end when edit overlay mounts
+  // If the slide switches out from under an in-progress edit (e.g. Ben
+  // clicks a different slide in the sidebar while a text box is focused),
+  // there's no more region/canvas to save into — just drop the edit state
+  // without touching the DOM node we no longer own.
   useEffect(() => {
-    const el = editOverlayRef.current
-    if (!el) return
-    el.focus()
-    const range = document.createRange()
-    range.selectNodeContents(el)
-    range.collapse(false)
-    const sel = window.getSelection()
-    sel?.removeAllRanges()
-    sel?.addRange(range)
-  }, [editingRegionId])
+    return () => { activeEditRef.current = null }
+  }, [slide.id])
 
   return (
     <div className="flex flex-col h-full">
@@ -328,11 +374,14 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                       <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} isPreview />
                     </div>
                   </div>
-                  {/* Interactive element overlay — overflow visible so handles aren't clipped */}
+                  {/* Interactive element overlay — overflow visible so handles aren't clipped.
+                      pointerEvents:none while editing a region: the real slide text being
+                      edited lives BELOW this blanket overlay, so clicks/typing need to pass
+                      through to it. Individual handles below opt back in with pointerEvents:auto. */}
                   <div
                     ref={overlayRef}
-                    style={{ position: 'absolute', inset: 0, zIndex: 50, overflow: 'visible' }}
-                    onPointerDown={() => { setSelectedElId(null); setSelectedRegionId(null); setEditingRegionId(null); setEditStyles(null) }}
+                    style={{ position: 'absolute', inset: 0, zIndex: 50, overflow: 'visible', pointerEvents: editingRegionId ? 'none' : 'auto' }}
+                    onPointerDown={() => { setSelectedElId(null); setSelectedRegionId(null) }}
                   >
                   {/* ── WYSIWYG region handles ── */}
                   {regions.map(region => {
@@ -352,7 +401,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                         style={{ position: 'absolute', left: region.x + extraX, top: region.y + extraY, width: region.w, height: region.h, transform: `rotate(${curRot}deg)`, transformOrigin: 'center', zIndex: 48 }}
                       >
                         <div
-                          style={{ position: 'absolute', inset: 0, border: isSelReg ? '2px solid rgba(99,102,241,0.9)' : '1px dashed transparent', borderRadius: 2, cursor: isSelReg ? 'move' : 'default', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
+                          style={{ position: 'absolute', inset: 0, border: isSelReg ? '2px solid rgba(99,102,241,0.9)' : '1px dashed transparent', borderRadius: 2, cursor: isSelReg ? 'move' : 'default', boxSizing: 'border-box', transition: 'border-color 0.15s', pointerEvents: 'auto' }}
                           onPointerEnter={e => { if (!isSelReg) e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)' }}
                           onPointerLeave={e => { if (!isSelReg) e.currentTarget.style.borderColor = 'transparent' }}
                           onPointerDown={e => {
@@ -360,13 +409,11 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                             if (selectedRegionId !== region.id) {
                               setSelectedRegionId(region.id); setSelectedElId(null)
                             } else {
-                              // preventDefault matters here: entering edit mode swaps this
-                              // div for the contentEditable synchronously (React commits
-                              // before the browser dispatches its compat 'mousedown'), and
-                              // without this, Chromium re-hit-tests that compat event against
-                              // the NEW dom, lands on whatever's now underneath, and its
-                              // default mousedown behavior immediately blurs the contentEditable
-                              // we just focused — closing the box before it's even visible.
+                              // preventDefault matters here: enterEditMode focuses the real
+                              // element synchronously, but the browser's delayed compat
+                              // 'mousedown' can still land on a stale target a few ms later
+                              // (this div, before React removes it) and blur what we just
+                              // focused — closing the box before it's even visible.
                               e.preventDefault()
                               enterEditMode(region); return
                             }
@@ -374,44 +421,28 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                           }}
                         />
                         {isSelReg && (
-                          <div title="Rotate" style={{ position: 'absolute', top: -20, right: -20, width: 16, height: 16, borderRadius: '50%', background: '#6366f1', border: '2px solid white', cursor: 'grab', zIndex: 1 }}
+                          <div title="Rotate — drag; snaps near flat/45° angles" style={{ position: 'absolute', top: -20, right: -20, width: 16, height: 16, borderRadius: '50%', background: '#6366f1', border: '2px solid white', cursor: 'grab', zIndex: 1, pointerEvents: 'auto' }}
                             onPointerDown={e => startRegionRotate(e, region)} />
                         )}
                         {isSelReg && hasTransform && (
-                          <div title="Reset" style={{ position: 'absolute', top: -20, left: -20, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', border: '2px solid white', cursor: 'pointer', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'white', fontWeight: 700 }}
+                          <div title="Reset position & rotation" style={{ position: 'absolute', top: -20, left: -20, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', border: '2px solid white', cursor: 'pointer', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'white', fontWeight: 700, pointerEvents: 'auto' }}
                             onPointerDown={e => { e.stopPropagation(); const c = data._regionTransforms ?? {}; const { [region.id]: _, ...rest } = c; change('_regionTransforms', rest); setTimeout(detectRegions, 50) }}>×</div>
                         )}
                       </div>
                     )
                   })}
-                  {/* Contenteditable overlay (replaces the region handle while editing) */}
-                  {editingRegionId && (() => {
-                    const region = regions.find(r => r.id === editingRegionId)
-                    if (!region || !editStyles) return null
-                    const rt = data._regionTransforms ?? {}
-                    const curDx = rt[editingRegionId]?.dx ?? 0
-                    const curDy = rt[editingRegionId]?.dy ?? 0
-                    const curRot = rt[editingRegionId]?.rotate ?? 0
-                    const extraX = (curDx - region.baselineDx) * dynScale
-                    const extraY = (curDy - region.baselineDy) * dynScale
-                    return (
-                      <div
-                        ref={editOverlayRef}
-                        key={editingRegionId}
-                        contentEditable
-                        suppressContentEditableWarning
-                        style={{ position: 'absolute', left: region.x + extraX, top: region.y + extraY, width: region.w, minHeight: region.h, transform: `rotate(${curRot}deg)`, transformOrigin: 'center', zIndex: 55, outline: '2px solid #6366f1', background: 'rgba(20,20,50,0.6)', padding: '4px 8px', boxSizing: 'border-box', whiteSpace: 'pre-wrap', wordBreak: 'break-word', cursor: 'text', ...editStyles }}
-                        // Without this, a click INSIDE the open box to reposition the
-                        // caret bubbles to the parent overlay's onPointerDown (which
-                        // unconditionally clears selection/editing state) and closes
-                        // the box before the native caret-placement default action lands.
-                        onPointerDown={e => e.stopPropagation()}
-                        onBlur={e => { const val = e.currentTarget.innerText.trim(); if (val) change(region.field, val); setEditingRegionId(null); setEditStyles(null); setTimeout(detectRegions, 50) }}
-                        onKeyDown={e => { if (e.key === 'Escape') { setEditingRegionId(null); setEditStyles(null) } }}
-                        dangerouslySetInnerHTML={{ __html: data[region.field] ?? '' }}
-                      />
-                    )
-                  })()}
+                  {/* Live angle readout while dragging the rotate handle — turns green
+                      and shows "flat" once snapped to a 45°-family angle (0/45/90/...). */}
+                  {rotatingAngle && (
+                    <div style={{
+                      position: 'absolute', left: rotatingAngle.x, top: rotatingAngle.y, transform: 'translateX(-50%)',
+                      zIndex: 60, pointerEvents: 'none', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700,
+                      color: 'white', padding: '3px 9px', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+                      background: rotatingAngle.snapped ? '#16a34a' : '#1e1b4b',
+                    }}>
+                      {rotatingAngle.deg}°{rotatingAngle.snapped ? ' · flat' : ''}
+                    </div>
+                  )}
                   {elements.map(el => {
                     const isSel = el.id === selectedElId
                     const elX = el.x ?? 50
@@ -436,12 +467,13 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                           cursor: 'move',
                           background: isSel ? 'rgba(59,130,246,0.07)' : 'transparent',
                           boxSizing: 'border-box',
+                          pointerEvents: 'auto',
                         }}
                         onPointerDown={e => { e.stopPropagation(); startDrag(e, el.id, el) }}
                       >
                         {isSel && (
                           <button
-                            style={{ position: 'absolute', top: -9, right: -9, background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: 18, height: 18, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}
+                            style={{ position: 'absolute', top: -9, right: -9, background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: 18, height: 18, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1, pointerEvents: 'auto' }}
                             onPointerDown={e => { e.stopPropagation(); deleteElement(el.id) }}
                           >×</button>
                         )}

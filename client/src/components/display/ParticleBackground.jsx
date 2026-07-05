@@ -334,22 +334,25 @@ function PureMichiganAmbient({ tint }) {
   })), [])
 
   return <>
+    {/* Sky atmosphere — dark teal night sky above the lake horizon */}
     <GlowLayer lo={0.18} hi={0.42} duration="12s" style={{
       inset: 0, bottom: '60%',
-      background: `linear-gradient(to bottom, ${tint('rgba(0,25,80,0.32)')} 0%, ${tint('rgba(0,40,100,0.22)')} 70%, transparent 100%)`,
+      background: `linear-gradient(to bottom, ${tint('rgba(0,20,14,0.32)')} 0%, ${tint('rgba(0,30,20,0.22)')} 70%, transparent 100%)`,
     }}/>
+    {/* Lake glow — teal luminescence rising from the water */}
     <GlowLayer lo={0.22} hi={0.52} duration="18s" delay="3s" style={{
       bottom: 0, left: 0, right: 0, height: '30%',
-      background: `linear-gradient(to top, ${tint('rgba(0,70,140,0.40)')}, ${tint('rgba(0,50,100,0.20)')}, transparent)`,
+      background: `linear-gradient(to top, ${tint('rgba(0,55,38,0.45)')}, ${tint('rgba(0,40,28,0.22)')}, transparent)`,
     }}/>
-    {/* Water shimmer band — light on the lake surface */}
+    {/* Water shimmer band — bioluminescent surface light */}
     <GlowLayer lo={0.15} hi={0.35} duration="24s" delay="6s" style={{
       top: '55%', left: 0, right: 0, height: '20%',
-      background: `radial-gradient(ellipse 100% 50% at 50% 100%, ${tint('rgba(40,120,200,0.22)')}, transparent)`,
+      background: `radial-gradient(ellipse 100% 50% at 50% 100%, ${tint('rgba(30,100,72,0.26)')}, transparent)`,
     }}/>
+    {/* Firefly motes — cyan-green pulses over the dark lake */}
     {motes.map((f, i) => (
       <PulseDot key={i} left={f.left} top={f.top} size={f.size}
-        color={tint('rgba(210,240,255,0.90)')} glowColor={tint('rgba(150,210,255,0.40)')}
+        color={tint('rgba(77,255,195,0.90)')} glowColor={tint('rgba(26,107,74,0.42)')}
         duration={f.dur} delay={f.delay}
         lo={0.45} wander={true} wanderDur={f.wDur} wanderDelay={f.wDelay}
       />

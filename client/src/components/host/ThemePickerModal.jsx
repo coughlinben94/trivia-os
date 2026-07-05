@@ -89,6 +89,13 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
   }
 
   function handlePick(id) {
+    if (id === previewId) return
+    // Clear per-show overrides when switching themes. Overrides are tuned for
+    // one specific theme's palette; keeping them on a different theme produces
+    // wrong colors (e.g. Pure Michigan's green text bleeding onto Autumn Harvest).
+    const cleared = {}
+    setOverrides(cleared)
+    onUpdateOverrides(cleared)
     setPreviewId(id)
     onSelectTheme(id)
   }
