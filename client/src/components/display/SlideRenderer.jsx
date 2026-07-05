@@ -53,6 +53,14 @@ const SLIDE_ANIMATIONS = {
     animate: { opacity: 1, scale: 1, transition: { delay: 0.05, duration: 0.28, ease: EASE_OUT } },
     exit:    { opacity: 0, scale: 0.96, transition: { duration: 0.2, ease: EASE_EXIT } },
   },
+  // Same timing as 'shiny', scale delta dropped — shiny slides always used
+  // this variant regardless of reduce (checked before reduce was ever
+  // considered), so a reduced-motion viewer still got the 6% scale-in.
+  'shiny-reduced': {
+    initial: { opacity: 0 },
+    animate: { opacity: 1, transition: { delay: 0.05, duration: 0.28, ease: EASE_OUT } },
+    exit:    { opacity: 0, transition: { duration: 0.2, ease: EASE_EXIT } },
+  },
 }
 
 // ─── Named entrance library ────────────────────────────────────────────────────
@@ -120,10 +128,10 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
 
   let transitionKey = null
   let variants
-  if (reduce && !isShiny) {
+  if (isShiny) {
+    variants = reduce ? SLIDE_ANIMATIONS['shiny-reduced'] : SLIDE_ANIMATIONS['shiny']
+  } else if (reduce) {
     variants = TRANSITIONS.dissolve
-  } else if (isShiny) {
-    variants = SLIDE_ANIMATIONS['shiny']
   } else {
     const resolved = resolveTransition(slide)
     if (resolved) {

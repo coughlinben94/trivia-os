@@ -80,10 +80,6 @@ const KEYFRAMES = `
     85%  { opacity: var(--hi, 0.18); }
     100% { transform: translateX(112%); opacity: 0; }
   }
-  @keyframes ambientAuroraFade {
-    0%, 100% { opacity: 0; }
-    25%, 75% { opacity: var(--hi, 0.35); }
-  }
   @keyframes ambientMeteor {
     0%   { transform: translateX(0) translateY(0);        opacity: 0;  }
     4%   { opacity: 0.9; }
@@ -142,13 +138,6 @@ const KEYFRAMES = `
     90%  { transform: translate(calc(var(--dx,40%)*0.97), calc(var(--dy,40%)*0.97)); opacity: 0.16; }
     100% { transform: translate(var(--dx,40%), var(--dy,40%)); opacity: 0; }
   }
-  @keyframes jcGlintPop {
-    0%   { opacity: 0; }
-    14%  { opacity: var(--gop, 0.75); }
-    26%  { opacity: calc(var(--gop, 0.75) * 0.45); }
-    40%  { opacity: var(--gop, 0.75); }
-    100% { opacity: 0; }
-  }
   @keyframes ambientFloatY {
     0%,100% { transform: translateY(0); }
     25%     { transform: translateY(var(--fy1,-5vh)); }
@@ -198,7 +187,6 @@ const KEYFRAMES = `
     @keyframes ambientBloom  { 0%,100% { opacity: var(--hi,.55); } }
     @keyframes ambientStretchY { 0%,100% { transform: none; } }
     @keyframes ambientSway     { 0%,100% { transform: none; } }
-    .jc-anim { animation: none !important; }
   }
 `
 
@@ -1368,9 +1356,11 @@ const AMBIENT_MAP = {
 
 // ─── Gradient-collapse routing ──────────────────────────────────────────
 // These 12 themes retired their bespoke ambient scene in favor of the shared
-// BreathingGradient (fed theme.colors + a mood). Their *Ambient functions
-// still exist above (dead, delete later) but are no longer routed. The other
-// 9 themes keep their bespoke ambient via AMBIENT_MAP.
+// BreathingGradient (fed theme.colors + a mood) and are no longer routed
+// through AMBIENT_MAP. Their old *Ambient functions have already been
+// deleted (confirmed 2026-07-05 — AMBIENT_MAP above has exactly the 9
+// bespoke entries, no orphaned components remain). The other 9 themes keep
+// their bespoke ambient via AMBIENT_MAP.
 const GRADIENT_MOODS = {
   'wine-cellar':      'calm',
   'drive-in-movie':   'calm',
