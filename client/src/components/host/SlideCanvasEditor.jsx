@@ -95,10 +95,16 @@ export default function SlideCanvasEditor({
   }, [slide.id])
 
   // ── overlay persistence helpers ───────────────────────────────────────────
-  function commitOverlays(next) {
-    const nd = { ...data, overlays: next }
-    setData(nd)
-    scheduleSave({ data: nd })
+  // Functional, like patchOverlay below — a version that spread the closed-over
+  // `data` wrote stale snapshots under same-tick sequences (create → immediate
+  // delete resurrected the deleted box in the DB during the 2026-07-05 audit).
+  function commitOverlays(updater) {
+    setData(d => {
+      const cur = d.overlays ?? []
+      const nd = { ...d, overlays: typeof updater === 'function' ? updater(cur) : updater }
+      scheduleSave({ data: nd })
+      return nd
+    })
   }
   // Functional form — safe under rapid gesture updates (drag/resize/rotate)
   // where the closed-over `data` would be stale between pointermove frames.
@@ -109,7 +115,7 @@ export default function SlideCanvasEditor({
       return nd
     })
   }
-  const nextZ = () => Math.max(0, ...overlays.map(o => o.z ?? 0)) + 1
+  const nextZ = (list) => Math.max(0, ...list.map(o => o.z ?? 0)) + 1
 
   function resolveFont(f) {
     if (f === 'display') return theme.fonts.display
@@ -124,14 +130,13 @@ export default function SlideCanvasEditor({
   // ── overlay CRUD ──────────────────────────────────────────────────────────
   function addTextAt(xPct, yPct) {
     const id = nanoid()
-    const ov = {
+    commitOverlays(cur => [...cur, {
       id, kind: 'text',
       x: clamp(xPct, 0, 92), y: clamp(yPct, 0, 92),
-      w: 26, rotation: 0, z: nextZ(),
+      w: 26, rotation: 0, z: nextZ(cur),
       text: '', fontFamily: 'display', fontSize: 5,
       color: 'text', align: 'center', weight: 700,
-    }
-    commitOverlays([...overlays, ov])
+    }])
     setSelectedOverlayId(id)
     setEditingOverlayId(id)
   }
@@ -143,8 +148,7 @@ export default function SlideCanvasEditor({
       const res = await uploadMedia(file)
       if (res?.url) {
         const id = nanoid()
-        const ov = { id, kind: 'image', x: 35, y: 30, w: 30, rotation: 0, z: nextZ(), mediaUrl: res.url }
-        commitOverlays([...overlays, ov])
+        commitOverlays(cur => [...cur, { id, kind: 'image', x: 35, y: 30, w: 30, rotation: 0, z: nextZ(cur), mediaUrl: res.url }])
         setSelectedOverlayId(id)
       } else {
         setUploadError('Upload failed — no URL returned')
@@ -157,25 +161,30 @@ export default function SlideCanvasEditor({
   }
 
   function deleteOverlay(id) {
-    commitOverlays(overlays.filter(o => o.id !== id))
+    commitOverlays(cur => cur.filter(o => o.id !== id))
     if (selectedOverlayId === id) setSelectedOverlayId(null)
     if (editingOverlayId === id) setEditingOverlayId(null)
   }
   function duplicateOverlay(id) {
-    const o = overlays.find(x => x.id === id)
-    if (!o) return
     const nid = nanoid()
-    const dupe = { ...o, id: nid, x: clamp((o.x ?? 0) + 3, 0, 92), y: clamp((o.y ?? 0) + 3, 0, 92), z: nextZ() }
-    commitOverlays([...overlays, dupe])
+    commitOverlays(cur => {
+      const o = cur.find(x => x.id === id)
+      if (!o) return cur
+      return [...cur, { ...o, id: nid, x: clamp((o.x ?? 0) + 3, 0, 92), y: clamp((o.y ?? 0) + 3, 0, 92), z: nextZ(cur) }]
+    })
     setSelectedOverlayId(nid)
   }
   function patchDiscrete(id, patch) {
-    commitOverlays(overlays.map(o => o.id === id ? { ...o, ...patch } : o))
+    commitOverlays(cur => cur.map(o => o.id === id ? { ...o, ...patch } : o))
   }
-  function bringToFront(id) { patchDiscrete(id, { z: nextZ() }) }
+  function bringToFront(id) {
+    commitOverlays(cur => cur.map(o => o.id === id ? { ...o, z: nextZ(cur) } : o))
+  }
   function sendToBack(id) {
-    const minZ = Math.min(0, ...overlays.map(o => o.z ?? 0))
-    patchDiscrete(id, { z: minZ - 1 })
+    commitOverlays(cur => {
+      const minZ = Math.min(0, ...cur.map(o => o.z ?? 0))
+      return cur.map(o => o.id === id ? { ...o, z: minZ - 1 } : o)
+    })
   }
 
   // ── overlay gestures (all divide screen-px by scaled canvas size) ──────────
