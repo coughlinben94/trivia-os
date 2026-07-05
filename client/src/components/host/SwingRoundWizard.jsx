@@ -59,8 +59,8 @@ export default function SwingRoundWizard({ activeRoundId, onAdd, onClose }) {
               />
             </div>
             {!activeRoundId && (
-              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                No round selected — slides will be unassigned. Pick a round from the filter above first.
+              <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                This will create a new Swing Round.
               </p>
             )}
             <button

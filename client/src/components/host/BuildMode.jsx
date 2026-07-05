@@ -345,8 +345,17 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
 
   async function handleSwingAdd(questions, roundId) {
     setShowSwingWizard(false)
+    // Swing should always live in a real, collapsible round — same as PYL.
+    // Without this, slides created with no round active land as flat,
+    // unassigned items in the sidebar instead of a proper round group.
+    let targetRoundId = roundId
+    if (!targetRoundId) {
+      const round = await actions.addRound({ roundType: 'swing', title: 'Swing Round', subtitle: '' })
+      targetRoundId = round.id
+      setActiveRoundId(round.id)
+    }
     const sortedAll = [...(show?.slides ?? [])].sort((a, b) => a.order - b.order)
-    const roundSlides = roundId ? sortedAll.filter(s => s.roundId === roundId) : []
+    const roundSlides = sortedAll.filter(s => s.roundId === targetRoundId)
     const existingQCount = roundSlides.filter(s => s.type === 'question' && !s.data?.isBonus).length
     // Insert after last slide in the round, or end of show if no round selected / round empty
     const afterId = roundSlides.length > 0
@@ -355,7 +364,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
     const nonEmpty = questions.filter(q => q.text.trim() || q.answer.trim())
     const slidesData = nonEmpty.map((q, i) => ({
       type: 'question',
-      roundId: roundId ?? null,
+      roundId: targetRoundId,
       data: {
         questionNumber: existingQCount + i + 1,
         questionLabel:  `Q${existingQCount + i + 1}`,
