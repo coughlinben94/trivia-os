@@ -1,15 +1,32 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { getTheme, DEFAULT_THEME_ID } from '../../themes/index.js'
+import { floorContrast } from '../../lib/contrast.js'
 
 const ThemeContext = createContext(null)
 
+// textMuted carries real game text (PYL point values, question captions,
+// scoreboard labels), not just the watermark — see the audit's contrast
+// finding (19 of 21 themes fail 4.5:1). 3:1 is the deliberately looser
+// large-text/TV-at-distance floor, not the stricter 4.5:1 body-text minimum.
+// This runs on the FINAL merged colors, after a per-show override is
+// applied, not just the shipped theme default — a host picking their own
+// "muted text color" shouldn't be able to make it unreadable either.
+// Floors ONLY textMuted; text/accent/highlight are intentionally untouched.
+function floorTextMuted(colors) {
+  const floored = floorContrast(colors.textMuted, [colors.bg, colors.bgDeep])
+  return floored === colors.textMuted ? colors : { ...colors, textMuted: floored }
+}
+
 function applyOverrides(baseTheme, overrides) {
-  if (!overrides || Object.keys(overrides).length === 0) return baseTheme
-  return {
-    ...baseTheme,
-    fonts: { ...baseTheme.fonts, ...(overrides.fonts ?? {}) },
-    colors: { ...baseTheme.colors, ...(overrides.colors ?? {}) },
-  }
+  const merged = (!overrides || Object.keys(overrides).length === 0)
+    ? baseTheme
+    : {
+        ...baseTheme,
+        fonts: { ...baseTheme.fonts, ...(overrides.fonts ?? {}) },
+        colors: { ...baseTheme.colors, ...(overrides.colors ?? {}) },
+      }
+  const flooredColors = floorTextMuted(merged.colors)
+  return flooredColors === merged.colors ? merged : { ...merged, colors: flooredColors }
 }
 
 export function ThemeProvider({ showThemeId, overrides, children }) {
