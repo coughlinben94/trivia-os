@@ -85,7 +85,7 @@ function Confetti({ active }) {
 
 // ─── WinnerRevealSlide ─────────────────────────────────────────────────────
 
-export default function WinnerRevealSlide({ slide, show }) {
+export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const [winner, setWinner] = useState(null)
@@ -105,6 +105,15 @@ export default function WinnerRevealSlide({ slide, show }) {
   // fast enough that gating on them first costs an imperceptible delay.
   useEffect(() => {
     let cancelled = false
+    // Build Mode preview: never fetch live scores, never play the drum roll —
+    // this component mounts inside SlideCanvasEditor's real render tree, and
+    // an ungated mount played the MP3 aloud in the host's editor. Show the
+    // revealed layout with a sample winner instead.
+    if (isPreview) {
+      setWinner({ name: 'Winning Team', total: 42, isTie: false })
+      setPhase('reveal')
+      return
+    }
     async function load() {
       const cols = deriveRoundCols(show)
 
@@ -168,7 +177,7 @@ export default function WinnerRevealSlide({ slide, show }) {
         }}
       />
 
-      <Confetti active={phase === 'reveal' && !winner?.noData} />
+      <Confetti active={phase === 'reveal' && !winner?.noData && !isPreview} />
 
       <motion.p
         initial={{ opacity: 0, y: 24 }}
