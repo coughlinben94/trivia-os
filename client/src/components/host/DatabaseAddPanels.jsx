@@ -176,6 +176,7 @@ export function QuestionInputPanel({ onAdded }) {
   const [selectedShinyFmt, setSelectedShinyFmt] = useState(null)
   const [shinyStep,         setShinyStep]        = useState('pick')
   const [shinyQuestion,     setShinyQuestion]    = useState('')
+  const [shinySubtitle,     setShinySubtitle]    = useState('')
   const [shinyAnswer,       setShinyAnswer]      = useState('')
   const [gridCols, setGridCols] = useState(4)
   const [gridRows, setGridRows] = useState(3)
@@ -190,7 +191,7 @@ export function QuestionInputPanel({ onAdded }) {
   const canAddShiny     = shinyAnswer.trim().length > 0
   const isGrid = selectedShinyFmt?.input_schema?.type === 'grid'
 
-  useUnsavedGuard(!!(questionText.trim() || questionAnswer.trim() || shinyQuestion.trim() || shinyAnswer.trim()))
+  useUnsavedGuard(!!(questionText.trim() || questionAnswer.trim() || shinyQuestion.trim() || shinySubtitle.trim() || shinyAnswer.trim()))
 
   async function addPlain() {
     if (!canAddQuestion || !begin()) return
@@ -217,6 +218,7 @@ export function QuestionInputPanel({ onAdded }) {
     const ok = await archiveQuestion({
       type:              'shiny',
       text:              shinyQuestion.trim(),
+      subtitle:          shinySubtitle.trim() || null,
       answer:            shinyAnswer.trim(),
       is_bonus:          false,
       is_shiny:          true,
@@ -228,7 +230,7 @@ export function QuestionInputPanel({ onAdded }) {
     })
     end()
     if (!ok) { flashFailure(); return } // keep the typed text
-    setShinyQuestion(''); setShinyAnswer(''); setSelectedShinyFmt(null); setShinyStep('pick')
+    setShinyQuestion(''); setShinySubtitle(''); setShinyAnswer(''); setSelectedShinyFmt(null); setShinyStep('pick')
     flashSuccess()
     onAdded?.()
   }
@@ -305,6 +307,15 @@ export function QuestionInputPanel({ onAdded }) {
               placeholder="Question text (optional)…"
               rows={2}
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
+            />
+
+            <input
+              type="text"
+              value={shinySubtitle}
+              onChange={e => setShinySubtitle(e.target.value)}
+              onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') addShiny() }}
+              placeholder="Subtitle (optional) — e.g. reversed, mythical character…"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
             />
 
             {isGrid && (
@@ -415,6 +426,7 @@ export function SwingInputPanel({ onAdded, sticky, setSticky, categories, addCat
   const [count, setCount]         = useState(6)
   const [started, setStarted]     = useState(false)
   const [questions, setQuestions] = useState([])
+  const [roundTitle, setRoundTitle] = useState('')
   const { toast, failed, busy, begin, end, flashSuccess, flashFailure } = useSaveOutcome()
 
   useUnsavedGuard(questions.some(q => q.text.trim() || q.answer.trim()))
@@ -435,6 +447,7 @@ export function SwingInputPanel({ onAdded, sticky, setSticky, categories, addCat
     const ok = await archiveQuestions([{
       type:           'swing',
       questions_data: nonEmpty.map(q => ({ text: q.text.trim(), answer: q.answer.trim() })),
+      round_title:    roundTitle.trim() || null,
       show_id:        null,
       show_title:     null,
       show_date:      null,
@@ -444,7 +457,7 @@ export function SwingInputPanel({ onAdded, sticky, setSticky, categories, addCat
     end()
     if (!ok) { flashFailure(); return } // keep the whole typed batch
     const c = sticky.category.trim(); if (c) addCategory(c)
-    setStarted(false); setQuestions([])
+    setStarted(false); setQuestions([]); setRoundTitle('')
     flashSuccess()
     onAdded?.()
   }
@@ -485,6 +498,17 @@ export function SwingInputPanel({ onAdded, sticky, setSticky, categories, addCat
 
       {/* Round type is stamped 'swing' automatically for the whole batch. */}
       <StickyFields sticky={sticky} setSticky={setSticky} categories={categories} showRoundType={false} />
+
+      <div>
+        <label className="block text-[11px] font-medium text-gray-500 mb-1">Round title <span className="text-gray-400">(optional — to keep track of this batch)</span></label>
+        <input
+          type="text"
+          value={roundTitle}
+          onChange={e => setRoundTitle(e.target.value)}
+          placeholder="e.g. July 4th Swing"
+          className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+        />
+      </div>
 
       <div className="flex gap-2 items-center px-0.5">
         <span className="w-5 shrink-0" />
