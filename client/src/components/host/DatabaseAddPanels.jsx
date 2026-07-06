@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 import { archiveQuestion, archiveQuestions } from '../../lib/archiveQuestion.js'
 
@@ -16,11 +16,11 @@ export const INPUT_TILES = [
     gradient: 'bg-gradient-to-br from-teal-50 to-blue-100 border-teal-200 hover:border-blue-400' },
 ]
 
-function Toast({ show, label }) {
+function Toast({ show, label, fail = false }) {
   if (!show) return null
   return (
     <div
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg z-50 transition-[opacity,transform] duration-200 ease-out"
+      className={`fixed bottom-6 left-1/2 -translate-x-1/2 ${fail ? 'bg-red-600' : 'bg-gray-900'} text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg z-50 transition-[opacity,transform] duration-200 ease-out`}
       style={{ animation: 'toastIn 200ms cubic-bezier(0.23,1,0.32,1) both' }}
     >
       {label}
@@ -28,6 +28,38 @@ function Toast({ show, label }) {
     </div>
   )
 }
+
+// Shared save-outcome state for the three input panels: success flashes the
+// dark toast and clears the form; failure keeps EVERYTHING the host typed and
+// shows a red toast. A failed insert must never look like a save — this
+// surface is about to carry hundreds of hand-entered questions.
+//
+// The in-flight guard is a REF, not state: a double-click dispatches both
+// clicks before React re-renders, so a state-based `busy` check reads the
+// stale false both times and inserts twice (verified live — triple-click
+// produced three identical rows). begin() flips the ref synchronously; the
+// `busy` state exists only to disable the button visually.
+function useSaveOutcome() {
+  const [toast, setToast]   = useState(false)
+  const [failed, setFailed] = useState(false)
+  const [busy, setBusyState] = useState(false)
+  const busyRef = useRef(false)
+  function begin() {
+    if (busyRef.current) return false
+    busyRef.current = true
+    setBusyState(true)
+    return true
+  }
+  function end() {
+    busyRef.current = false
+    setBusyState(false)
+  }
+  function flashSuccess() { setToast(true); setTimeout(() => setToast(false), 1600) }
+  function flashFailure() { setFailed(true); setTimeout(() => setFailed(false), 3500) }
+  return { toast, failed, busy, begin, end, flashSuccess, flashFailure }
+}
+
+const FAIL_LABEL = 'Didn’t save — check connection (your text is kept)'
 
 // ─── Regular / Shiny question ──────────────────────────────────────────────
 
@@ -45,17 +77,16 @@ export function QuestionInputPanel({ onAdded }) {
   const [gridCols, setGridCols] = useState(4)
   const [gridRows, setGridRows] = useState(3)
 
-  const [toast, setToast] = useState(false)
-  function flashToast() { setToast(true); setTimeout(() => setToast(false), 1600) }
+  const { toast, failed, busy, begin, end, flashSuccess, flashFailure } = useSaveOutcome()
 
   const canAddQuestion = questionText.trim().length > 0 && questionAnswer.trim().length > 0
   const canAddShiny     = shinyAnswer.trim().length > 0
   const isGrid = selectedShinyFmt?.input_schema?.type === 'grid'
 
   async function addPlain() {
-    if (!canAddQuestion) return
-    await archiveQuestion({
-      type:       isBonus ? 'regular' : 'regular',
+    if (!canAddQuestion || !begin()) return
+    const ok = await archiveQuestion({
+      type:       'regular',
       text:       questionText.trim(),
       answer:     questionAnswer.trim(),
       is_bonus:   isBonus,
@@ -64,14 +95,16 @@ export function QuestionInputPanel({ onAdded }) {
       show_title: null,
       show_date:  null,
     })
+    end()
+    if (!ok) { flashFailure(); return } // keep the typed text
     setQuestionText(''); setQuestionAnswer(''); setIsBonus(false)
-    flashToast()
+    flashSuccess()
     onAdded?.()
   }
 
   async function addShiny() {
-    if (!canAddShiny) return
-    await archiveQuestion({
+    if (!canAddShiny || !begin()) return
+    const ok = await archiveQuestion({
       type:              'shiny',
       text:              shinyQuestion.trim(),
       answer:            shinyAnswer.trim(),
@@ -83,8 +116,10 @@ export function QuestionInputPanel({ onAdded }) {
       show_title:        null,
       show_date:         null,
     })
+    end()
+    if (!ok) { flashFailure(); return } // keep the typed text
     setShinyQuestion(''); setShinyAnswer(''); setSelectedShinyFmt(null); setShinyStep('pick')
-    flashToast()
+    flashSuccess()
     onAdded?.()
   }
 
@@ -122,7 +157,7 @@ export function QuestionInputPanel({ onAdded }) {
         <div className="mt-auto flex flex-col gap-1.5 pt-1">
           <button
             onClick={addPlain}
-            disabled={!canAddQuestion}
+            disabled={!canAddQuestion || busy}
             className={`w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed transition-[transform,opacity] duration-150 ease-out active:scale-[0.98]`}
           >
             Add to Database →
@@ -192,7 +227,7 @@ export function QuestionInputPanel({ onAdded }) {
             <div className="mt-auto flex flex-col gap-1.5 pt-1">
               <button
                 onClick={addShiny}
-                disabled={!canAddShiny}
+                disabled={!canAddShiny || busy}
                 className={`w-full bg-yellow-500 text-white text-sm font-semibold py-3 rounded-xl hover:bg-yellow-600 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed transition-[transform,opacity] duration-150 ease-out active:scale-[0.98]`}
               >
                 Add {selectedShinyFmt.name} →
@@ -254,6 +289,7 @@ export function QuestionInputPanel({ onAdded }) {
         )}
       </div>
       <Toast show={toast} label="Added to database" />
+      <Toast show={failed} fail label={FAIL_LABEL} />
     </div>
   )
 }
@@ -264,7 +300,7 @@ export function SwingInputPanel({ onAdded }) {
   const [count, setCount]         = useState(6)
   const [started, setStarted]     = useState(false)
   const [questions, setQuestions] = useState([])
-  const [toast, setToast]         = useState(false)
+  const { toast, failed, busy, begin, end, flashSuccess, flashFailure } = useSaveOutcome()
 
   function goToQuestions() {
     setQuestions(Array.from({ length: Math.max(1, count) }, () => ({ text: '', answer: '' })))
@@ -278,16 +314,18 @@ export function SwingInputPanel({ onAdded }) {
   const nonEmpty = questions.filter(q => q.text.trim() || q.answer.trim())
 
   async function submit() {
-    if (nonEmpty.length === 0) return
-    await archiveQuestions([{
+    if (nonEmpty.length === 0 || !begin()) return
+    const ok = await archiveQuestions([{
       type:           'swing',
       questions_data: nonEmpty.map(q => ({ text: q.text.trim(), answer: q.answer.trim() })),
       show_id:        null,
       show_title:     null,
       show_date:      null,
     }])
+    end()
+    if (!ok) { flashFailure(); return } // keep the whole typed batch
     setStarted(false); setQuestions([])
-    setToast(true); setTimeout(() => setToast(false), 1600)
+    flashSuccess()
     onAdded?.()
   }
 
@@ -356,7 +394,7 @@ export function SwingInputPanel({ onAdded }) {
       <div className="pt-2 flex flex-col gap-1.5">
         <button
           onClick={submit}
-          disabled={nonEmpty.length === 0}
+          disabled={nonEmpty.length === 0 || busy}
           className={`w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed transition-[transform,opacity] duration-150 ease-out active:scale-[0.98]`}
         >
           Add {nonEmpty.length || count} to Database →
@@ -364,6 +402,7 @@ export function SwingInputPanel({ onAdded }) {
         {nonEmpty.length === 0 && <p className="text-xs text-gray-500 text-center">Fill in at least one question to continue</p>}
       </div>
       <Toast show={toast} label="Added to database" />
+      <Toast show={failed} fail label={FAIL_LABEL} />
     </div>
   )
 }
@@ -383,20 +422,22 @@ export function PylInputPanel({ onAdded }) {
   const [collected, setCollected] = useState([])
   const [currentName, setCurrentName] = useState('')
   const [currentType, setCurrentType] = useState(null)
-  const [toast, setToast] = useState(false)
+  const { toast, failed, busy, begin, end, flashSuccess, flashFailure } = useSaveOutcome()
 
   function startThemes() {
     setCollected([]); setThemeIndex(0); setCurrentName(''); setCurrentType(null); setStarted(true)
   }
 
   async function commitTheme() {
+    if (busy) return
     const theme = { name: currentName.trim(), type: currentType }
     const next  = [...collected, theme]
     if (next.length < themeCount) {
       setCollected(next); setThemeIndex(i => i + 1); setCurrentName(''); setCurrentType(null)
       return
     }
-    await archiveQuestions(next.map(t => ({
+    if (!begin()) return
+    const ok = await archiveQuestions(next.map(t => ({
       type:       'pyl',
       text:       t.name,
       answer:     t.type,
@@ -404,8 +445,10 @@ export function PylInputPanel({ onAdded }) {
       show_title: null,
       show_date:  null,
     })))
+    end()
+    if (!ok) { flashFailure(); return } // keep the collected themes + current entry
     setStarted(false)
-    setToast(true); setTimeout(() => setToast(false), 1600)
+    flashSuccess()
     onAdded?.()
   }
 
@@ -504,7 +547,7 @@ export function PylInputPanel({ onAdded }) {
       <div className="w-full flex flex-col gap-1.5">
         <button
           onClick={commitTheme}
-          disabled={!canNext}
+          disabled={!canNext || busy}
           className={`w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed transition-[transform,opacity] duration-150 ease-out active:scale-[0.98]`}
         >
           {isLast ? `Add ${themeCount} to Database →` : 'Next Theme →'}
@@ -512,6 +555,7 @@ export function PylInputPanel({ onAdded }) {
         {!canNext && <p className="text-xs text-gray-500 text-center">{!currentName.trim() ? 'Enter a theme name' : 'Select a type'}</p>}
       </div>
       <Toast show={toast} label="Added to database" />
+      <Toast show={failed} fail label={FAIL_LABEL} />
     </div>
   )
 }

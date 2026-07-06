@@ -233,6 +233,9 @@ export default function Questions() {
   const [editingId, setEditingId] = useState(null)
   const [editDraft, setEditDraft] = useState({ text: '', answer: '' })
   const [saving, setSaving]       = useState(false)
+  // Save/delete failures were silent (the edit stayed open with the draft
+  // intact, but nothing said WHY) — surface them; cleared on the next attempt.
+  const [writeError, setWriteError] = useState(null)
 
   // Read ?show= param from URL on mount
   useEffect(() => {
@@ -277,6 +280,7 @@ export default function Questions() {
   async function commitEdit(id) {
     if (saving) return
     setSaving(true)
+    setWriteError(null)
     const { error } = await supabase
       .from('questions')
       .update({ text: editDraft.text, answer: editDraft.answer })
@@ -284,6 +288,8 @@ export default function Questions() {
     if (!error) {
       setQuestions(prev => prev.map(r => r.id === id ? { ...r, ...editDraft } : r))
       setEditingId(null)
+    } else {
+      setWriteError('Save failed — check connection (your edit is kept)')
     }
     setSaving(false)
   }
@@ -295,10 +301,13 @@ export default function Questions() {
   async function deleteQuestion(id) {
     if (saving) return
     setSaving(true)
+    setWriteError(null)
     const { error } = await supabase.from('questions').delete().eq('id', id)
     if (!error) {
       setQuestions(prev => prev.filter(r => r.id !== id))
       setEditingId(null)
+    } else {
+      setWriteError('Delete failed — check connection')
     }
     setSaving(false)
   }
@@ -386,6 +395,12 @@ export default function Questions() {
           ))}
         </div>
       </div>
+
+      {writeError && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-red-600 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg z-50">
+          {writeError}
+        </div>
+      )}
 
       {/* Card grid — centered, 3 across on desktop, 2 on tablet, 1 on mobile */}
       <div className="max-w-6xl mx-auto px-6 pb-16">
