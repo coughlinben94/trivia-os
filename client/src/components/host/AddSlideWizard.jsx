@@ -44,6 +44,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // Question (shiny)
   const [selectedShinyFmt, setSelectedShinyFmt] = useState(null)
   const [shinyStep,         setShinyStep]        = useState('pick') // 'pick' | 'details'
+  const [shinyFmtSearch,    setShinyFmtSearch]    = useState('')
   const [shinyQuestion,     setShinyQuestion]    = useState('')
   const [shinyAnswer,       setShinyAnswer]      = useState('')
   const [gridCols, setGridCols] = useState(4)
@@ -224,6 +225,13 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const canAddShiny    = !!roundId && shinyAnswer.trim().length > 0
   const isQuestion     = type === 'question'
   const isShinyDetails = isQuestion && shinyStep === 'details' && !!selectedShinyFmt
+
+  const visibleShinyFormats = shinyFmtSearch.trim()
+    ? shinyFormats.filter(fmt => {
+        const q = shinyFmtSearch.trim().toLowerCase()
+        return fmt.name?.toLowerCase().includes(q) || fmt.description?.toLowerCase().includes(q)
+      })
+    : shinyFormats
 
 
   // ── Type picker (when opened without a pre-selected type, e.g. from round view) ──
@@ -494,13 +502,30 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                 <p className="text-sm font-semibold text-gray-800">✨ Shiny formats</p>
                 <p className="text-xs text-gray-400 mt-0.5">Pick a format</p>
               </div>
+              {!shinyLoading && shinyFormats.length > 0 && (
+                <div className="relative shrink-0">
+                  <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" width="13" height="13" viewBox="0 0 14 14" fill="none">
+                    <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+                    <path d="M9.5 9.5L12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  <input
+                    type="text"
+                    value={shinyFmtSearch}
+                    onChange={e => setShinyFmtSearch(e.target.value)}
+                    placeholder="Search formats…"
+                    className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                  />
+                </div>
+              )}
               {shinyLoading ? (
                 <p className="text-xs text-gray-400">Loading…</p>
               ) : shinyFormats.length === 0 ? (
                 <p className="text-xs text-gray-400">No formats yet — add one via ✨ Add Shiny.</p>
+              ) : visibleShinyFormats.length === 0 ? (
+                <p className="text-xs text-gray-400">No formats match "{shinyFmtSearch.trim()}".</p>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
-                  {shinyFormats.map(fmt => {
+                  {visibleShinyFormats.map(fmt => {
                     const mediaType = fmt.input_schema?.type
                     const slots = fmt.input_schema?.slots
                     const isSel = selectedShinyFmt?.id === fmt.id
