@@ -100,6 +100,128 @@ function WavingGradient({ reduce }) {
   return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
 }
 
+// ─── Ambient star field — reads the background more explicitly as "USA" ─────
+// Purely additive: sits above the billow, below the title (z-index 1, same
+// tier as the vignette but painted after it so it's on top of that too).
+// Tunable dials below. "Count" isn't its own constant — it's
+// STAR_POSITIONS.length, so dialing the count means adding/removing an
+// edge-safe {x, y, sizeRatio} entry rather than two numbers going stale
+// against each other.
+const STAR_SIZE_MIN      = 10   // px, smallest star
+const STAR_SIZE_MAX      = 22   // px, largest star
+const STAR_OPACITY_MIN   = 0.35 // twinkle floor
+const STAR_OPACITY_MAX   = 0.85 // twinkle ceiling
+const STAR_DRIFT_PX      = 5    // max drift distance, any direction
+const STAR_TWINKLE_MIN_S = 2.6  // per-star twinkle period range — staggered
+const STAR_TWINKLE_MAX_S = 4.2  // below so nothing syncs up into a grid
+
+// Handpicked so every star sits in an edge/corner band (x<18% or x>82%, OR
+// y<24% or y>76%) — the title's center safe-area stays completely clear.
+// sizeRatio (0–1) picks where each star falls between STAR_SIZE_MIN/MAX.
+const STAR_POSITIONS = [
+  { x: 6,  y: 8,  sizeRatio: 0.35 },
+  { x: 13, y: 17, sizeRatio: 0.05 },
+  { x: 4,  y: 22, sizeRatio: 0.70 },
+  { x: 94, y: 7,  sizeRatio: 0.50 },
+  { x: 87, y: 15, sizeRatio: 0.10 },
+  { x: 96, y: 23, sizeRatio: 0.90 },
+  { x: 5,  y: 91, sizeRatio: 0.45 },
+  { x: 14, y: 84, sizeRatio: 0.20 },
+  { x: 8,  y: 96, sizeRatio: 0.80 },
+  { x: 95, y: 89, sizeRatio: 0.30 },
+  { x: 88, y: 95, sizeRatio: 0.65 },
+  { x: 92, y: 80, sizeRatio: 0.05 },
+  { x: 9,  y: 46, sizeRatio: 1.00 },
+  { x: 91, y: 52, sizeRatio: 0.40 },
+]
+
+// Deterministic per-star stagger (no Math.random, so the scatter is stable
+// and reviewable across renders) — spreads twinkle duration/delay evenly
+// across the tunable range, and gives each star its own drift direction via
+// golden-angle spacing (137.5°), which scatters directions evenly without
+// ever repeating a visible pattern.
+function starTiming(index, count) {
+  const frac = index / count
+  const duration = STAR_TWINKLE_MIN_S + frac * (STAR_TWINKLE_MAX_S - STAR_TWINKLE_MIN_S)
+  const delay = frac * STAR_TWINKLE_MAX_S
+  const angleRad = ((index * 137.5) % 360) * Math.PI / 180
+  return {
+    duration,
+    delay,
+    dx: +(STAR_DRIFT_PX * Math.cos(angleRad)).toFixed(1),
+    dy: +(STAR_DRIFT_PX * Math.sin(angleRad)).toFixed(1),
+  }
+}
+
+// One 5-point star polygon, generated once at module load — cleaner and far
+// less error-prone than hand-typing ten decimal coordinate pairs.
+const STAR_POLYGON_POINTS = (() => {
+  const cx = 50, cy = 50, outerR = 48, innerR = 48 * 0.382
+  const pts = []
+  for (let i = 0; i < 5; i++) {
+    const outerA = (-90 + i * 72) * Math.PI / 180
+    const innerA = (-90 + i * 72 + 36) * Math.PI / 180
+    pts.push(`${(cx + outerR * Math.cos(outerA)).toFixed(2)},${(cy + outerR * Math.sin(outerA)).toFixed(2)}`)
+    pts.push(`${(cx + innerR * Math.cos(innerA)).toFixed(2)},${(cy + innerR * Math.sin(innerA)).toFixed(2)}`)
+  }
+  return pts.join(' ')
+})()
+
+// GPU rule: only transform + opacity are ever animated. Reduced motion gets
+// two belt-and-suspenders guards — a plain CSS media query (for real OS
+// settings) and a class driven by this slide's own useReducedMotion() value
+// (reused, not reimplemented), so the stars go static under either signal.
+const SOTU_STAR_STYLE = `
+@keyframes sotu-star-twinkle {
+  0%, 100% { opacity: var(--sotu-op-lo); transform: translate(0, 0) scale(1); }
+  50%      { opacity: var(--sotu-op-hi); transform: translate(var(--sotu-dx), var(--sotu-dy)) scale(1.15); }
+}
+.sotu-star { animation: sotu-star-twinkle var(--sotu-dur) ease-in-out var(--sotu-delay) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .sotu-star { animation: none !important; opacity: var(--sotu-op-hi) !important; }
+}
+.sotu-stars-reduced .sotu-star { animation: none !important; opacity: var(--sotu-op-hi) !important; }
+`
+
+function StarField({ reduce }) {
+  const count = STAR_POSITIONS.length
+  return (
+    <div
+      aria-hidden
+      className={reduce ? 'sotu-stars-reduced' : undefined}
+      style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}
+    >
+      <style>{SOTU_STAR_STYLE}</style>
+      {STAR_POSITIONS.map((p, i) => {
+        const { duration, delay, dx, dy } = starTiming(i, count)
+        const size = STAR_SIZE_MIN + p.sizeRatio * (STAR_SIZE_MAX - STAR_SIZE_MIN)
+        return (
+          <svg
+            key={i}
+            className="sotu-star"
+            viewBox="0 0 100 100"
+            style={{
+              position: 'absolute',
+              left: `${p.x}%`,
+              top: `${p.y}%`,
+              width: size,
+              height: size,
+              '--sotu-op-lo': STAR_OPACITY_MIN,
+              '--sotu-op-hi': STAR_OPACITY_MAX,
+              '--sotu-dx': `${dx}px`,
+              '--sotu-dy': `${dy}px`,
+              '--sotu-dur': `${duration}s`,
+              '--sotu-delay': `${delay}s`,
+            }}
+          >
+            <polygon points={STAR_POLYGON_POINTS} fill="#ffffff" />
+          </svg>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function StateOfUnionSlide({ slide }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
@@ -125,6 +247,8 @@ export default function StateOfUnionSlide({ slide }) {
         position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
         background: 'radial-gradient(ellipse 72% 62% at 50% 55%, rgba(0,0,0,0.48) 0%, rgba(0,0,0,0.18) 55%, rgba(0,0,0,0.03) 100%)',
       }} />
+
+      <StarField reduce={reduce} />
 
       <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
         {/* Optional Ben photo */}
