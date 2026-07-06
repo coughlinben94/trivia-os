@@ -9,11 +9,6 @@ const TYPE_COLOR = {
   pyl:     'bg-purple-100 text-purple-700',
   swing:   'bg-blue-100 text-blue-700',
 }
-const SHINY_COLOR = {
-  visual: 'bg-emerald-100 text-emerald-700',
-  audio:  'bg-sky-100 text-sky-700',
-}
-
 const FILTERS = [
   { id: 'all',          label: 'All' },
   { id: 'regular',      label: 'Regular' },
@@ -72,7 +67,7 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
   return (
     <div
       className={`card-animate w-full sm:w-[calc(50%-0.5rem)] lg:w-[calc(33.333%-0.667rem)] bg-white rounded-2xl border p-4 flex flex-col gap-3 shadow-sm transition-[border-color] duration-150 ease-out hover:border-gray-300 ${
-        row.is_bonus ? 'border-red-100 bg-red-50/40' : 'border-gray-200'
+        row.is_bonus ? 'border-red-100 bg-red-50/40' : row.is_shiny ? 'border-yellow-300 bg-yellow-50/60' : 'border-gray-200'
       }`}
       style={style}
     >
@@ -83,21 +78,18 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
           <p className="text-[11px] text-gray-500 mt-0.5">{row.show_date ?? ''}</p>
         </div>
         <div className="flex flex-wrap gap-1 justify-end shrink-0">
-          <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold ${TYPE_COLOR[row.type] ?? TYPE_COLOR.regular}`}>
-            {TYPE_LABEL[row.type] ?? row.type}
-          </span>
+          {row.type !== 'shiny' && (
+            <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold ${TYPE_COLOR[row.type] ?? TYPE_COLOR.regular}`}>
+              {TYPE_LABEL[row.type] ?? row.type}
+            </span>
+          )}
           {row.is_bonus && (
             <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-red-100 text-red-700">
               Bonus
             </span>
           )}
-          {row.is_shiny && row.shiny_type && (
-            <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold ${SHINY_COLOR[row.shiny_type] ?? 'bg-gray-100 text-gray-600'}`}>
-              {row.shiny_type}
-            </span>
-          )}
           {row.is_shiny && row.shiny_format_name && (
-            <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-gray-50 text-gray-700 border border-gray-200">
+            <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200">
               {row.shiny_format_name}
             </span>
           )}
