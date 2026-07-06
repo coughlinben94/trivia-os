@@ -337,3 +337,34 @@ Of the 8 sampled claims: **5 HOLD, 3 PARTIAL, 0 FALSE.** The prior cycle's code-
 3. features.md: ScoreboardOverlay description (same panel correction); document /display's keyboard advance handler (or remove it — DK-1).
 4. Project memory: "RLS wide open on 5 tables" is stale — only `teams` remains allow-all.
 
+
+---
+
+## Questions Page Review (2026-07-05, pre-data-entry gate)
+
+**What it is:** `/questions` (Question Archive — card grid, search, type/show filters, inline edit with two-step delete) and `/questions/add` (three entry panels: plain/shiny Question, Swing batch, PYL themes), both behind `HostPinGate`, reached from BuildMode's "Question Database" tile via `window.open` (new tab). Writes are raw Supabase calls: on-submit inserts through `lib/archiveQuestion.js`, in-place `.update().eq(id)` edits — no debounce anywhere on this surface, so no debounce races.
+
+**RLS answer:** properly protected. `questions` = public SELECT; INSERT/UPDATE/DELETE require the PIN gate's `host_verified` JWT claim (verified live: anon-key insert → 42501). Both pages PIN-gated. Not the /ambient situation.
+
+**Schema answer (corrects SKILL.md):** the real columns are `id, type, shiny_style_id, text, answer, display_order, created_at, show_title, is_bonus, is_shiny, shiny_type, show_id, show_date, questions_data, shiny_format_name`. **There is no `category`, `round_type`, or `used_on` column** — SKILL.md's documented schema is stale. `used_on` verdict: nothing to set; the closest facility is `show_title`/`show_date` (text), which the entry panels always write as null. If Ben wants play-date backfill during entry, the smallest change is an optional "played on" date + show-title pair on the entry panel writing those two columns (P2 — decide before entry; retrofitting dates onto 200 rows later is the expensive path).
+
+**QA-1 verdict: closed, not reproducible.** On current code the full round-trip (host → /questions → back) preserves the loaded show, the localStorage key, and the PIN session — verified live twice. The audit-night sighting is attributable to the Playwright browser that crashed moments later (in-memory profile dying mid-session). No code change made.
+
+### Findings
+
+| ID | Sev | Where | Finding | Status |
+|---|---|---|---|---|
+| QP-1 | **P0** (for this workload) | `lib/archiveQuestion.js`, `DatabaseAddPanels.jsx` (all 3 panels), `Questions.jsx` edit/delete | Failed saves silently ate input: archive helpers swallowed errors, panels cleared the form and flashed the success toast regardless. Verified live — blocked insert → typed question gone, zero rows, UI implied success. A whole 20-question Swing batch could vanish the same way. Archive edit/delete failures were silent no-ops. | **Fixed** — helpers return success; failure keeps every typed field + red "your text is kept" toast; edit/delete failures surface too. Re-verified live. |
+| QP-2 | **P1** | `DatabaseAddPanels.jsx` | No in-flight guard on Add: double-click inserted duplicates (verified: 2 rows; a state-based guard still allowed 3 from same-tick clicks). | **Fixed** — synchronous ref guard (`begin()/end()`); triple-click yields exactly 1 row (verified). |
+| QP-3 | **P1-adjacent ergonomics** | `DatabaseAddPanels.jsx` QuestionInputPanel | No Enter-to-save, and focus stranded on the button after each save — 2 extra mouse trips per question × hundreds. | **Fixed** — Enter in the answer field saves (double-Enter safe via QP-2's guard), focus returns to the question box. Verified live. |
+| QP-4 | P2 | `Questions.jsx:244` | Archive list is a single unbounded `select *` + full render: PostgREST's default 1000-row cap will silently truncate the archive once the bank exceeds it, and 500+ cards render with no virtualization. Not an entry-time blocker; needs pagination/range fetch before the bank grows past ~1000. | Documented |
+| QP-5 | P2 | `DatabaseAddPanels.jsx` / `AddQuestions.jsx` | No unsaved-input guard: navigating away / closing the tab with a half-typed question loses it silently (`beforeunload` when fields are non-empty would cover it). | Punch list |
+| QP-6 | P3 | `Questions.jsx`, `AddQuestions.jsx` | Cross-page navs are full `<a href>` reloads (works, survives state via localStorage, but re-runs the PIN gate + full fetch each hop; react-router Links would be smoother). | Punch list |
+| QP-7 | P3 | `Questions.jsx` swing cards | Swing batch rows render read-only (no edit/delete on `questions_data` cards) — a typo in a swing batch can only be fixed in SQL. Fine for now; worth an editor eventually. | Punch list |
+
+**Field integrity:** verified clean — curly quotes, apostrophes, em-dashes round-trip byte-exact; leading/trailing whitespace trimmed by design; long text truncates at 200 chars with Show more (display-only). Edit updates in place (same id, no duplicate). Delete is two-step confirmed, only reachable from edit mode — misclick-safe.
+
+### Phase 3 verdict
+
+**(b) Ready for bulk entry after this session's fixes** — for the plain-question flow specifically, which is now: type question → Tab → type answer → Enter → focus back at question. Failures keep your text and say so; double-inputs can't duplicate. Remaining punch list (Ben's call, none blocking): QP-5 beforeunload guard (S), a "played on" date/show field if backfill matters (S, decide BEFORE entry), QP-4 pagination before the bank passes ~1000 rows (M), Cmd+Enter save from inside the textarea (S). The Swing/PYL panels are serviceable but keep their multi-step wizards — fine for their occasional batch use.
+
