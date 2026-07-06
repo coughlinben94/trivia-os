@@ -699,6 +699,7 @@ const BULK_ROUND_TYPE_OPTIONS = [
   { id: null,     label: 'Normal' },
   { id: 'swing',  label: 'Swing'  },
   { id: 'pyl',    label: 'PYL'    },
+  { id: 'shiny',  label: 'Shiny'  },
 ]
 
 const PYL_MEDIA_OPTIONS = [
@@ -712,9 +713,10 @@ export function BulkPasteInputPanel({ onAdded }) {
   const [detectedTitle, setDetectedTitle] = useState(null)
   const [boxes, setBoxes] = useState([]) // [{ id, title, mediaType, items:[{text,answer}] }]
   const [mode, setMode] = useState('boxes') // 'boxes' | 'one'
-  const [roundType, setRoundType] = useState(null) // null | 'swing' | 'pyl'
+  const [roundType, setRoundType] = useState(null) // null | 'swing' | 'pyl' | 'shiny'
   const [category, setCategory] = useState('')
   const [playedOn, setPlayedOn] = useState('')
+  const [shinyFormatName, setShinyFormatName] = useState('')
   const { categories, addCategory } = useLocalCategorySuggestions()
   const { toast, failed, busy, begin, end, flashSuccess, flashFailure } = useSaveOutcome()
 
@@ -758,39 +760,43 @@ export function BulkPasteInputPanel({ onAdded }) {
     .map(it => ({ text: it.text.trim(), answer: it.answer.trim() }))
     .filter(it => it.text || it.answer)
 
-  const extra = (forcedRoundType) => ({
+  // Always takes the EXACT round_type to write — no implicit fallback to
+  // the outer `roundType` state. That fallback used to be `forcedRoundType
+  // ?? roundType`, but `??` can't tell "explicitly null" from "not passed",
+  // so extra(null) (used to null out 'shiny', which isn't a valid round_type
+  // value) silently resolved back to roundType === 'shiny' and violated the
+  // DB check constraint. Every call site now passes its exact intended value.
+  const extra = (rt) => ({
     category:   category.trim() || null,
-    round_type: forcedRoundType ?? roundType,
+    round_type: rt,
     used_on:    playedOn ? [playedOn] : [],
   })
 
-  // A box with >1 item needs somewhere to put the list — pyl/swing rows
-  // already have that (questions_data); anything else needs the pending
-  // 'list' type. A single-item box always saves as a plain 'regular' row.
-  const needsListType = mode === 'one'
-    ? roundType !== 'swing'
-    : boxes.some(b => cleanItems(b.items).length > 1 && roundType !== 'pyl' && roundType !== 'swing')
 
   async function save() {
     if (boxes.length === 0 || !begin()) return
     let rows
     if (mode === 'one') {
       const combined = boxes.flatMap(b => cleanItems(b.items))
-      rows = roundType === 'swing'
-        ? [{ type: 'swing', questions_data: combined, round_title: detectedTitle || category.trim() || null, show_id: null, show_title: null, show_date: null, ...extra('swing') }]
-        : [{
-            type: roundType === 'pyl' ? 'pyl' : 'list',
-            text: detectedTitle || category.trim() || 'Bulk entry',
-            answer: roundType === 'pyl' ? 'word' : null,
-            questions_data: combined,
-            show_id: null, show_title: null, show_date: null,
-            ...extra(),
-          }]
+      if (roundType === 'swing') {
+        rows = [{ type: 'swing', questions_data: combined, round_title: detectedTitle || category.trim() || null, show_id: null, show_title: null, show_date: null, ...extra('swing') }]
+      } else if (roundType === 'shiny') {
+        rows = [{ type: 'shiny', is_shiny: true, text: detectedTitle || category.trim() || 'Bulk entry', shiny_format_name: shinyFormatName.trim() || null, questions_data: combined, show_id: null, show_title: null, show_date: null, ...extra(null) }]
+      } else {
+        rows = [{
+          type: roundType === 'pyl' ? 'pyl' : 'list',
+          text: detectedTitle || category.trim() || 'Bulk entry',
+          answer: roundType === 'pyl' ? 'word' : null,
+          questions_data: combined,
+          show_id: null, show_title: null, show_date: null,
+          ...extra(roundType),
+        }]
+      }
     } else {
       rows = boxes.map(b => {
         const items = cleanItems(b.items)
         if (items.length === 1) {
-          return { type: 'regular', text: items[0].text, answer: items[0].answer, is_bonus: false, is_shiny: false, show_id: null, show_title: null, show_date: null, ...extra() }
+          return { type: 'regular', text: items[0].text, answer: items[0].answer, is_bonus: false, is_shiny: false, show_id: null, show_title: null, show_date: null, ...extra(roundType === 'shiny' ? null : roundType) }
         }
         if (roundType === 'pyl') {
           return { type: 'pyl', text: b.title, answer: b.mediaType, questions_data: items, show_id: null, show_title: null, show_date: null, ...extra('pyl') }
@@ -798,7 +804,10 @@ export function BulkPasteInputPanel({ onAdded }) {
         if (roundType === 'swing') {
           return { type: 'swing', questions_data: items, round_title: b.title || null, show_id: null, show_title: null, show_date: null, ...extra('swing') }
         }
-        return { type: 'list', text: b.title, questions_data: items, show_id: null, show_title: null, show_date: null, ...extra() }
+        if (roundType === 'shiny') {
+          return { type: 'shiny', is_shiny: true, text: b.title, shiny_format_name: shinyFormatName.trim() || b.title || null, questions_data: items, show_id: null, show_title: null, show_date: null, ...extra(null) }
+        }
+        return { type: 'list', text: b.title, questions_data: items, show_id: null, show_title: null, show_date: null, ...extra(roundType) }
       })
     }
     const ok = await archiveQuestions(rows)
@@ -881,6 +890,19 @@ export function BulkPasteInputPanel({ onAdded }) {
                 className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
               />
             </div>
+            {roundType === 'shiny' && (
+              <div className="flex-1 min-w-[150px]">
+                <label className="block text-[11px] font-medium text-gray-500 mb-1">Shiny format <span className="text-gray-400">(optional)</span></label>
+                <input
+                  type="text"
+                  value={shinyFormatName}
+                  onChange={e => setShinyFormatName(e.target.value)}
+                  onPaste={makeCleanPasteHandler(setShinyFormatName)}
+                  placeholder="e.g. Kevin James, Zookeeper"
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between flex-wrap gap-2">
@@ -903,11 +925,6 @@ export function BulkPasteInputPanel({ onAdded }) {
             <button onClick={startOver} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors duration-150 ease-out">Start over</button>
           </div>
 
-          {needsListType && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              ⚠ This shape needs one small one-time database change that hasn't been turned on yet — select a Round type above (PYL or Swing) if this content fits one of those, or ask Claude to apply it.
-            </p>
-          )}
 
           <div className="flex flex-col gap-3 max-h-[28rem] overflow-y-auto pr-1">
             {boxes.map(box => {
@@ -975,7 +992,7 @@ export function BulkPasteInputPanel({ onAdded }) {
 
           <button
             onClick={save}
-            disabled={busy || needsListType || totalItems === 0}
+            disabled={busy || totalItems === 0}
             className={`w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed transition-[transform,opacity] duration-150 ease-out active:scale-[0.98]`}
           >
             {mode === 'one' ? `Add as 1 entry (${totalItems} items) →` : `Add ${boxes.length} entries →`}
