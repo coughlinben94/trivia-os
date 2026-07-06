@@ -11,8 +11,10 @@ const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber
 // Same gradient family as BuildMode.jsx's CARD_STYLE (dashboard rest-grid) —
 // reused here by key so the launcher tiles read as the same visual system.
 export const INPUT_TILES = [
-  { id: 'question', icon: '❓', name: 'Question',   desc: 'Regular or shiny question',
+  { id: 'question', icon: '❓', name: 'Question',   desc: 'Plain text question',
     gradient: 'bg-gradient-to-br from-blue-50 to-indigo-100 border-blue-200 hover:border-blue-400' },
+  { id: 'shiny-question', icon: '✨', name: 'Shiny Question', desc: 'Pick a format and fill it in',
+    gradient: 'bg-gradient-to-br from-yellow-50 to-amber-100 border-yellow-300 hover:border-yellow-400' },
   { id: 'swing',     icon: '🎷', name: 'Swing Round', desc: 'Bulk-add a batch of questions',
     gradient: 'bg-gradient-to-br from-orange-50 to-red-100 border-orange-200 hover:border-orange-400' },
   { id: 'pyl',       icon: '🎰', name: 'Press Your Luck!', desc: 'Add themed categories',
@@ -78,7 +80,7 @@ function useUnsavedGuard(dirty) {
 
 // ─── Regular / Shiny question ──────────────────────────────────────────────
 
-export function QuestionInputPanel({ onAdded }) {
+export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
   const { formats: shinyFormats, loading: shinyLoading } = useShinyFormats()
 
   const [questionText,   setQuestionText]   = useState('')
@@ -156,9 +158,10 @@ export function QuestionInputPanel({ onAdded }) {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-6">
-      {/* LEFT — plain question */}
-      <div className="flex flex-col gap-3 border-r border-gray-100 pr-6">
+    <div>
+      {mode === 'plain' ? (
+      /* ── PLAIN QUESTION ── */
+      <div className="flex flex-col gap-3">
         <div>
           <p className="text-sm font-semibold text-gray-800">📝 Plain question</p>
           <p className="text-xs text-gray-500 mt-0.5">Added straight to the archive — no show attached</p>
@@ -209,8 +212,8 @@ export function QuestionInputPanel({ onAdded }) {
           )}
         </div>
       </div>
-
-      {/* RIGHT — shiny formats */}
+      ) : (
+      /* ── SHINY FORMAT PICKER ── */
       <div className="flex flex-col gap-3">
         {shinyStep === 'details' && selectedShinyFmt ? (
           <>
@@ -357,6 +360,7 @@ export function QuestionInputPanel({ onAdded }) {
           </>
         )}
       </div>
+      )}
       <Toast show={toast} label="Added to database" />
       <Toast show={failed} fail label={FAIL_LABEL} />
     </div>

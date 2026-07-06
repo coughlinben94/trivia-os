@@ -51,7 +51,8 @@ export default function AddQuestions() {
                     {activeTile?.icon} {activeTile?.name}
                   </h2>
                 </div>
-                {activeInput === 'question' && <QuestionInputPanel onAdded={bumpCount} />}
+                {activeInput === 'question'       && <QuestionInputPanel onAdded={bumpCount} mode="plain" />}
+                {activeInput === 'shiny-question' && <QuestionInputPanel onAdded={bumpCount} mode="shiny" />}
                 {activeInput === 'swing'    && <SwingInputPanel onAdded={bumpCount} />}
                 {activeInput === 'pyl'      && <PylInputPanel onAdded={bumpCount} />}
                 {activeInput === 'bulk'     && <BulkPasteInputPanel onAdded={bumpCount} />}

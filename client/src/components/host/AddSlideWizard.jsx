@@ -8,7 +8,8 @@ export const TYPE_CARDS = [
   { type: 'state-of-union', icon: '🇺🇸', name: 'State of the Union', desc: 'Opening address to the crowd' },
   { type: 'team-picker',    icon: '🚀', name: 'Team Intro',            desc: 'Cinematic one-by-one team intro' },
   { type: 'round-intro',    icon: '🎬', name: 'Round Intro',          desc: 'Dramatic round opener' },
-  { type: 'question',       icon: '❓', name: 'Question',             desc: 'Regular or shiny question' },
+  { type: 'question',       icon: '❓', name: 'Question',             desc: 'Plain text question' },
+  { type: 'shiny-question', icon: '✨', name: 'Shiny Question',       desc: 'Pick a format and fill it in' },
   { type: 'grading-break',  icon: '⏸️', name: 'Grading Break',       desc: 'While Ben grades papers' },
   { type: 'winner-reveal',  icon: '🥇', name: 'Winner Reveal',       desc: 'Drum roll → winner + confetti' },
   { type: 'custom',         icon: '✏️', name: 'Custom',              desc: 'Freeform slide' },
@@ -16,7 +17,7 @@ export const TYPE_CARDS = [
   { type: 'team-preview',   icon: '👥', name: 'Team List',           desc: 'Show all team names on screen', hidden: true },
 ]
 
-const NEEDS_ROUND = new Set(['swing-round-intro', 'question', 'grading-break', 'pixelate-series', 'multi-question', 'pyl-reveal'])
+const NEEDS_ROUND = new Set(['swing-round-intro', 'question', 'shiny-question', 'grading-break', 'pixelate-series', 'multi-question', 'pyl-reveal'])
 
 const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber-400', video: 'bg-purple-400', list: 'bg-orange-400' }
 
@@ -49,6 +50,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const [shinyAnswer,       setShinyAnswer]      = useState('')
   const [gridCols, setGridCols] = useState(4)
   const [gridRows, setGridRows] = useState(3)
+  const [concurrentCount, setConcurrentCount] = useState(3)
 
   // Round-intro — pre-filled from AddRoundWizard or from round filter; also derived from selected round
   const _preRound = initialData.roundId ? show.rounds.find(r => r.id === initialData.roundId) : null
@@ -101,7 +103,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
         roundType,
       }
 
-    } else if (type === 'question') {
+    } else if (type === 'question' || type === 'shiny-question') {
       const num = isBonus ? bNum : qNum
       if (selectedShinyFmt && shinyStep === 'details') {
         const isGrid = selectedShinyFmt.input_schema?.type === 'grid'
@@ -142,6 +144,28 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           })
           return
         }
+        const isConcurrentFmt = selectedShinyFmt.input_schema?.concurrent === true
+        if (isConcurrentFmt) {
+          const count = Math.max(1, concurrentCount)
+          data = {
+            questionNumber:   qNum,
+            questionLabel:    `Q${qNum}`,
+            questionMode:     'shiny',
+            isShiny:          true,
+            shinyFormatId:    selectedShinyFmt.id,
+            shinyFormatName:  selectedShinyFmt.name,
+            shinyFormatIcon:  selectedShinyFmt.icon,
+            shinyInputSchema: { ...selectedShinyFmt.input_schema, slots: 1 },
+            shinyType:        selectedShinyFmt.input_schema?.type ?? null,
+            isSeries:    true,
+            seriesTheme: selectedShinyFmt.name,
+            currentPart: 0,
+            // Blank per-part answers, on purpose — a concurrent format's whole
+            // point is each item gets its own independent answer, filled in
+            // afterward via the slide editor's existing part-by-part editor.
+            parts: Array.from({ length: count }, () => ({ label: '', text: '', answer: '', mediaSlots: [] })),
+          }
+        } else {
         const totalSlots = selectedShinyFmt.input_schema?.slots ?? 1
         const isMultiSlot = totalSlots > 1
         data = {
@@ -167,6 +191,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             answer:     shinyAnswer.trim(),
             mediaSlots: [],
           }),
+        }
         }
       } else {
         data = {
@@ -198,9 +223,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
     const afterSlideId = roundSlides.length > 0
       ? roundSlides[roundSlides.length - 1].id
       : (sorted.length > 0 ? sorted[sorted.length - 1].id : null)
-    await onAddSlide({ type, roundId: roundId ?? null, afterSlideId, data })
+    // Both dashboard tiles ("Question" and "Shiny Question") persist as the
+    // same slide type — data.isShiny is what actually distinguishes them.
+    const slideType = (type === 'question' || type === 'shiny-question') ? 'question' : type
+    await onAddSlide({ type: slideType, roundId: roundId ?? null, afterSlideId, data })
 
-    if (type === 'question') {
+    if (slideType === 'question') {
       const isShiny = !!data.isShiny
       const shinyText = data.parts?.[0]?.text ?? data.text
       const shinyAnswerVal = data.parts?.[0]?.answer ?? data.answer
@@ -222,9 +250,14 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const needsRound     = NEEDS_ROUND.has(type)
   const canCreate      = !(needsRound && !roundId) && (type !== 'round-intro' || (roundNumValid && !!roundId))
   const canAddQuestion = !!roundId && questionText.trim().length > 0 && questionAnswer.trim().length > 0
-  const canAddShiny    = !!roundId && shinyAnswer.trim().length > 0
-  const isQuestion     = type === 'question'
-  const isShinyDetails = isQuestion && shinyStep === 'details' && !!selectedShinyFmt
+  const isConcurrentFmt = selectedShinyFmt?.input_schema?.concurrent === true
+  // Concurrent formats skip the shared-answer field entirely — each part gets
+  // its own independent answer, filled in afterward via the slide editor.
+  const canAddShiny    = !!roundId && (isConcurrentFmt || shinyAnswer.trim().length > 0)
+  const isPlainOnly    = type === 'question'
+  const isShinyOnly    = type === 'shiny-question'
+  const isQuestionType = isPlainOnly || isShinyOnly
+  const isShinyDetails = isQuestionType && shinyStep === 'details' && !!selectedShinyFmt
 
   const visibleShinyFormats = shinyFmtSearch.trim()
     ? shinyFormats.filter(fmt => {
@@ -332,53 +365,77 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               )}
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                Question text <span className="font-normal text-gray-400">(optional)</span>
-              </label>
-              <textarea
-                value={shinyQuestion}
-                onChange={e => setShinyQuestion(e.target.value)}
-                placeholder="e.g. What connects these four images?"
-                rows={3}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-              />
-            </div>
-
-            {selectedShinyFmt.input_schema?.type === 'grid' && (
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Columns</label>
-                  <div className="flex gap-2">
-                    {[1,2,3,4,5,6].map(n => (
-                      <button key={n} onClick={() => setGridCols(n)}
-                        className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${gridCols === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Rows</label>
-                  <div className="flex gap-2">
-                    {[1,2,3,4,5].map(n => (
-                      <button key={n} onClick={() => setGridRows(n)}
-                        className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${gridRows === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
-                    ))}
-                  </div>
-                </div>
+            {isConcurrentFmt ? (
+              /* Concurrent format — no shared question/answer here. The host
+                 picks how many back-to-back parts to create; each part's own
+                 media, text, and answer get filled in afterward via the slide
+                 editor's part-by-part editor. */
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">How many?</label>
+                <input
+                  autoFocus
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={concurrentCount}
+                  onChange={e => setConcurrentCount(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <p className="text-xs text-gray-400 mt-1.5">
+                  Creates {concurrentCount} back-to-back parts, each with its own answer — fill them in from the slide editor.
+                </p>
               </div>
-            )}
+            ) : (
+              <>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                    Question text <span className="font-normal text-gray-400">(optional)</span>
+                  </label>
+                  <textarea
+                    value={shinyQuestion}
+                    onChange={e => setShinyQuestion(e.target.value)}
+                    placeholder="e.g. What connects these four images?"
+                    rows={3}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Answer</label>
-              <input
-                type="text"
-                value={shinyAnswer}
-                onChange={e => setShinyAnswer(e.target.value)}
-                placeholder="The answer…"
-                autoFocus
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-              />
-            </div>
+                {selectedShinyFmt.input_schema?.type === 'grid' && (
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Columns</label>
+                      <div className="flex gap-2">
+                        {[1,2,3,4,5,6].map(n => (
+                          <button key={n} onClick={() => setGridCols(n)}
+                            className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${gridCols === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Rows</label>
+                      <div className="flex gap-2">
+                        {[1,2,3,4,5].map(n => (
+                          <button key={n} onClick={() => setGridRows(n)}
+                            className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${gridRows === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Answer</label>
+                  <input
+                    type="text"
+                    value={shinyAnswer}
+                    onChange={e => setShinyAnswer(e.target.value)}
+                    placeholder="The answer…"
+                    autoFocus
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                  />
+                </div>
+              </>
+            )}
 
             <div className="flex flex-col gap-1.5 pt-1">
               <button
@@ -396,183 +453,179 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             </div>
           </div>
 
-        ) : isQuestion ? (
-          /* ── SPLIT SCREEN: plain left / shiny right ── */
-          <div className="grid grid-cols-2 gap-6">
-
-            {/* LEFT — plain question */}
-            <div className="flex flex-col gap-4 border-r border-gray-100 pr-6">
-              <div>
-                <p className="text-sm font-semibold text-gray-800">📝 Plain question</p>
-                <p className="text-xs text-gray-400 mt-0.5">Text question added to a round</p>
-              </div>
-
-              <div>
-                <label htmlFor="add-question-text" className="block text-xs font-medium text-gray-500 mb-1.5">
-                  Question text
-                </label>
-                <textarea
-                  id="add-question-text"
-                  value={questionText}
-                  onChange={e => setQuestionText(e.target.value)}
-                  onPaste={e => {
-                    e.preventDefault()
-                    const plain = e.clipboardData.getData('text/plain')
-                    const el    = e.target
-                    const start = el.selectionStart ?? questionText.length
-                    const end   = el.selectionEnd   ?? questionText.length
-                    const next  = questionText.slice(0, start) + plain + questionText.slice(end)
-                    setQuestionText(next)
-                    requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + plain.length })
-                  }}
-                  placeholder="Type or paste your question…"
-                  rows={4}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="add-question-answer" className="block text-xs font-medium text-gray-500 mb-1.5">
-                  Answer
-                </label>
-                <input
-                  id="add-question-answer"
-                  type="text"
-                  value={questionAnswer}
-                  onChange={e => setQuestionAnswer(e.target.value)}
-                  placeholder="The answer…"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="add-question-round" className="block text-xs font-medium text-gray-500 mb-1.5">
-                  Round
-                </label>
-                {show.rounds.length === 0 ? (
-                  <p className="text-sm text-gray-400">No rounds yet — use "+ Add Round" first.</p>
-                ) : (
-                  <select
-                    id="add-question-round"
-                    value={roundId ?? ''}
-                    onChange={e => pickRound(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                  >
-                    <option value="">Select a round…</option>
-                    {show.rounds.map(r => (
-                      <option key={r.id} value={r.id}>R{r.number} — {r.title}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              {/* Bonus checkbox */}
-              <div className="flex items-center gap-2">
-                <input
-                  id="add-question-bonus"
-                  type="checkbox"
-                  checked={isBonus}
-                  onChange={e => setIsBonus(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 cursor-pointer accent-[#1a6b4a]"
-                />
-                <label htmlFor="add-question-bonus" className="text-sm text-gray-700 cursor-pointer select-none">
-                  Bonus question
-                </label>
-              </div>
-
-              <div className="mt-auto flex flex-col gap-1.5">
-                <button
-                  onClick={handleCreate}
-                  disabled={!canAddQuestion}
-                  className={`w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed`}
-                >
-                  Add question →
-                </button>
-                {!canAddQuestion && (
-                  <p className="text-xs text-gray-400 text-center">
-                    {!roundId ? 'Select a round to continue' : !questionText.trim() ? 'Add question text to continue' : 'Add an answer to continue'}
-                  </p>
-                )}
-              </div>
+        ) : isPlainOnly ? (
+          /* ── PLAIN QUESTION ── */
+          <div className="flex flex-col gap-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">📝 Plain question</p>
+              <p className="text-xs text-gray-400 mt-0.5">Text question added to a round</p>
             </div>
 
-            {/* RIGHT — shiny format tiles (pick step) */}
-            <div className="flex flex-col gap-3">
-              <div>
-                <p className="text-sm font-semibold text-gray-800">✨ Shiny formats</p>
-                <p className="text-xs text-gray-400 mt-0.5">Pick a format</p>
-              </div>
-              {!shinyLoading && shinyFormats.length > 0 && (
-                <div className="relative shrink-0">
-                  <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" width="13" height="13" viewBox="0 0 14 14" fill="none">
-                    <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
-                    <path d="M9.5 9.5L12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                  <input
-                    type="text"
-                    value={shinyFmtSearch}
-                    onChange={e => setShinyFmtSearch(e.target.value)}
-                    placeholder="Search formats…"
-                    className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                  />
-                </div>
-              )}
-              {shinyLoading ? (
-                <p className="text-xs text-gray-400">Loading…</p>
-              ) : shinyFormats.length === 0 ? (
-                <p className="text-xs text-gray-400">No formats yet — add one via ✨ Add Shiny.</p>
-              ) : visibleShinyFormats.length === 0 ? (
-                <p className="text-xs text-gray-400">No formats match "{shinyFmtSearch.trim()}".</p>
+            <div>
+              <label htmlFor="add-question-text" className="block text-xs font-medium text-gray-500 mb-1.5">
+                Question text
+              </label>
+              <textarea
+                id="add-question-text"
+                value={questionText}
+                onChange={e => setQuestionText(e.target.value)}
+                onPaste={e => {
+                  e.preventDefault()
+                  const plain = e.clipboardData.getData('text/plain')
+                  const el    = e.target
+                  const start = el.selectionStart ?? questionText.length
+                  const end   = el.selectionEnd   ?? questionText.length
+                  const next  = questionText.slice(0, start) + plain + questionText.slice(end)
+                  setQuestionText(next)
+                  requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + plain.length })
+                }}
+                placeholder="Type or paste your question…"
+                rows={4}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="add-question-answer" className="block text-xs font-medium text-gray-500 mb-1.5">
+                Answer
+              </label>
+              <input
+                id="add-question-answer"
+                type="text"
+                value={questionAnswer}
+                onChange={e => setQuestionAnswer(e.target.value)}
+                placeholder="The answer…"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="add-question-round" className="block text-xs font-medium text-gray-500 mb-1.5">
+                Round
+              </label>
+              {show.rounds.length === 0 ? (
+                <p className="text-sm text-gray-400">No rounds yet — use "+ Add Round" first.</p>
               ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {visibleShinyFormats.map(fmt => {
-                    const mediaType = fmt.input_schema?.type
-                    const slots = fmt.input_schema?.slots
-                    const isSel = selectedShinyFmt?.id === fmt.id
-                    return (
-                      <button
-                        key={fmt.id}
-                        type="button"
-                        onClick={() => setSelectedShinyFmt(isSel ? null : fmt)}
-                        title={fmt.description}
-                        className={`flex items-start gap-2 p-2.5 rounded-lg border text-left transition-[border-color,background-color,transform] duration-[120ms] [transition-timing-function:cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] ${
-                          isSel
-                            ? 'bg-yellow-50 border-yellow-400'
-                            : 'bg-gray-50 border-gray-100 hover:border-gray-300'
-                        }`}
-                      >
-                        <span className="text-base leading-none mt-0.5 shrink-0">{fmt.icon}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-xs font-semibold truncate leading-tight ${isSel ? 'text-yellow-700' : 'text-gray-600'}`}>{fmt.name}</p>
-                          {mediaType && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${MEDIA_DOT[mediaType] ?? 'bg-gray-300'}`} />
-                              <span className="text-[11px] text-gray-400 leading-none">{mediaType}</span>
-                            </div>
-                          )}
-                        </div>
-                        {slots != null && (
-                          <span className="text-[11px] text-gray-400 shrink-0 self-start mt-0.5">×{slots}</span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-
-              {/* Add button — appears once a format is selected */}
-              {selectedShinyFmt && (
-                <div className="mt-auto pt-2">
-                  <button
-                    onClick={() => setShinyStep('details')}
-                    className={`w-full bg-yellow-500 text-white text-sm font-semibold py-3 rounded-xl hover:bg-yellow-600 ${BTN}`}
-                  >
-                    Add {selectedShinyFmt.name} →
-                  </button>
-                </div>
+                <select
+                  id="add-question-round"
+                  value={roundId ?? ''}
+                  onChange={e => pickRound(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                >
+                  <option value="">Select a round…</option>
+                  {show.rounds.map(r => (
+                    <option key={r.id} value={r.id}>R{r.number} — {r.title}</option>
+                  ))}
+                </select>
               )}
             </div>
 
+            {/* Bonus checkbox */}
+            <div className="flex items-center gap-2">
+              <input
+                id="add-question-bonus"
+                type="checkbox"
+                checked={isBonus}
+                onChange={e => setIsBonus(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 cursor-pointer accent-[#1a6b4a]"
+              />
+              <label htmlFor="add-question-bonus" className="text-sm text-gray-700 cursor-pointer select-none">
+                Bonus question
+              </label>
+            </div>
+
+            <div className="mt-auto flex flex-col gap-1.5">
+              <button
+                onClick={handleCreate}
+                disabled={!canAddQuestion}
+                className={`w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed`}
+              >
+                Add question →
+              </button>
+              {!canAddQuestion && (
+                <p className="text-xs text-gray-400 text-center">
+                  {!roundId ? 'Select a round to continue' : !questionText.trim() ? 'Add question text to continue' : 'Add an answer to continue'}
+                </p>
+              )}
+            </div>
+          </div>
+
+        ) : isShinyOnly ? (
+          /* ── SHINY FORMAT PICKER ── */
+          <div className="flex flex-col gap-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">✨ Shiny formats</p>
+              <p className="text-xs text-gray-400 mt-0.5">Pick a format</p>
+            </div>
+            {!shinyLoading && shinyFormats.length > 0 && (
+              <div className="relative shrink-0">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" width="13" height="13" viewBox="0 0 14 14" fill="none">
+                  <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M9.5 9.5L12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+                <input
+                  type="text"
+                  value={shinyFmtSearch}
+                  onChange={e => setShinyFmtSearch(e.target.value)}
+                  placeholder="Search formats…"
+                  className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                />
+              </div>
+            )}
+            {shinyLoading ? (
+              <p className="text-xs text-gray-400">Loading…</p>
+            ) : shinyFormats.length === 0 ? (
+              <p className="text-xs text-gray-400">No formats yet — add one via ✨ Add Shiny.</p>
+            ) : visibleShinyFormats.length === 0 ? (
+              <p className="text-xs text-gray-400">No formats match "{shinyFmtSearch.trim()}".</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {visibleShinyFormats.map(fmt => {
+                  const mediaType = fmt.input_schema?.type
+                  const slots = fmt.input_schema?.slots
+                  const isSel = selectedShinyFmt?.id === fmt.id
+                  return (
+                    <button
+                      key={fmt.id}
+                      type="button"
+                      onClick={() => setSelectedShinyFmt(isSel ? null : fmt)}
+                      title={fmt.description}
+                      className={`flex items-start gap-2 p-2.5 rounded-lg border text-left transition-[border-color,background-color,transform] duration-[120ms] [transition-timing-function:cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] ${
+                        isSel
+                          ? 'bg-yellow-50 border-yellow-400'
+                          : 'bg-gray-50 border-gray-100 hover:border-gray-300'
+                      }`}
+                    >
+                      <span className="text-base leading-none mt-0.5 shrink-0">{fmt.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-semibold truncate leading-tight ${isSel ? 'text-yellow-700' : 'text-gray-600'}`}>{fmt.name}</p>
+                        {mediaType && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${MEDIA_DOT[mediaType] ?? 'bg-gray-300'}`} />
+                            <span className="text-[11px] text-gray-400 leading-none">{mediaType}</span>
+                          </div>
+                        )}
+                      </div>
+                      {slots != null && (
+                        <span className="text-[11px] text-gray-400 shrink-0 self-start mt-0.5">×{slots}</span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Add button — appears once a format is selected */}
+            {selectedShinyFmt && (
+              <div className="mt-auto pt-2">
+                <button
+                  onClick={() => setShinyStep('details')}
+                  className={`w-full bg-yellow-500 text-white text-sm font-semibold py-3 rounded-xl hover:bg-yellow-600 ${BTN}`}
+                >
+                  Add {selectedShinyFmt.name} →
+                </button>
+              </div>
+            )}
           </div>
 
         ) : (

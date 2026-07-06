@@ -143,8 +143,40 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                   </div>
                 </div>
 
-                {/* Slots — only for image/audio/video */}
+                {/* Concurrent slides — image/audio/video only. When on, the number of
+                    items is no longer fixed on the format; the host picks it each
+                    time this format is added (mirrors Swing Round's "how many?"
+                    prompt), and each item gets revealed back-to-back with its own
+                    independent answer by default. */}
                 {['image', 'audio', 'video'].includes(schema.type) && (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Concurrent slides?</p>
+                      <p className="text-xs text-gray-400">Back-to-back items, revealed one at a time — host picks how many each time it's used</p>
+                    </div>
+                    <button
+                      onClick={() => setDraft(d => ({
+                        ...d,
+                        input_schema: {
+                          ...d.input_schema,
+                          concurrent: !d.input_schema.concurrent,
+                          // Turning concurrent on retires the fixed slot count —
+                          // the host picks it per-use instead. Turning it back
+                          // off restores a sane default so the format isn't left
+                          // with no slot count at all.
+                          slots: d.input_schema.concurrent ? 1 : null,
+                        },
+                      }))}
+                      className={`w-11 h-6 rounded-full transition-colors ${schema.concurrent ? 'bg-gray-900' : 'bg-gray-200'}`}
+                    >
+                      <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.concurrent ? 'translate-x-5' : 'translate-x-0'}`}/>
+                    </button>
+                  </div>
+                )}
+
+                {/* Slots — only for image/audio/video, and only when NOT concurrent
+                    (concurrent formats choose their count per-use instead) */}
+                {['image', 'audio', 'video'].includes(schema.type) && !schema.concurrent && (
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-medium text-gray-500">
                       Number of {schema.type === 'image' ? 'Image' : schema.type === 'audio' ? 'Audio' : 'Video'} Slots
@@ -164,7 +196,7 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                 )}
 
                 {/* Sequential toggle — for multi-slot image */}
-                {schema.type === 'image' && schema.slots > 1 && (
+                {schema.type === 'image' && !schema.concurrent && schema.slots > 1 && (
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-700">Sequential reveal</p>
@@ -228,7 +260,7 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                 )}
 
                 {/* Slot labels — for sequential image */}
-                {schema.type === 'image' && schema.sequential && schema.slots > 1 && (
+                {schema.type === 'image' && !schema.concurrent && schema.sequential && schema.slots > 1 && (
                   <div className="flex flex-col gap-2">
                     <label className="text-xs font-medium text-gray-500">Stage Labels (optional)</label>
                     {Array.from({ length: schema.slots }).map((_, i) => (

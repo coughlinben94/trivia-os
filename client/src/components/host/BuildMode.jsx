@@ -514,8 +514,9 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
   if (!show) return null
 
   const effectiveModalType = addModalData?.type ?? wizardPickedType
-  const isQuestionModal   = effectiveModalType === 'question'
-  const isRoundIntroModal = effectiveModalType === 'round-intro'
+  const isQuestionModal      = effectiveModalType === 'question'
+  const isShinyQuestionModal = effectiveModalType === 'shiny-question'
+  const isRoundIntroModal    = effectiveModalType === 'round-intro'
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden">
@@ -662,7 +663,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
             onClick={closeAddModal}
           >
             <motion.div
-              className={`w-full ${isQuestionModal ? 'max-w-3xl' : isRoundIntroModal ? 'max-w-lg' : 'max-w-md'}`}
+              className={`w-full ${isQuestionModal ? 'max-w-md' : isShinyQuestionModal ? 'max-w-xl' : isRoundIntroModal ? 'max-w-lg' : 'max-w-md'}`}
               initial={{ opacity: 0, scale: reducedMotion ? 1 : 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96, transition: { duration: 0.1, ease: EASE_OUT } }}

@@ -688,8 +688,8 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
           <Field label="Series Theme" hint='Shared across every part, e.g. "Hear Me Roar"'>
             <TextInput value={data.seriesTheme} onChange={v => onChange('seriesTheme', v)} placeholder="Hear Me Roar" />
           </Field>
-          <Field label="Shared Answer" hint="Only needed if every part has the SAME answer — leave blank if each part below has its own">
-            <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="Optional — used when a part has no answer of its own" />
+          <Field label="Shared Answer (optional)" hint="Leave blank — each part below gets its own answer. Only fill this in if every part shares ONE answer.">
+            <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="Leave blank for per-part answers" />
           </Field>
 
           <Divider label="Previewing part" />
