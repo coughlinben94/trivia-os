@@ -101,6 +101,11 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
               {row.shiny_format_name}
             </span>
           )}
+          {row.category && (
+            <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-100">
+              {row.category}
+            </span>
+          )}
         </div>
       </div>
 
@@ -128,6 +133,14 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
             value={editDraft.answer}
             onChange={e => setEditDraft(d => ({ ...d, answer: e.target.value }))}
             placeholder="Answer…"
+            className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
+          />
+          <input
+            type="text"
+            list="qcat-archive-suggestions"
+            value={editDraft.category}
+            onChange={e => setEditDraft(d => ({ ...d, category: e.target.value }))}
+            placeholder="Category…"
             className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
           />
         </div>
@@ -231,7 +244,7 @@ export default function Questions() {
   const [filter, setFilter]       = useState('all')
   const [showFilter, setShowFilter] = useState(null) // show_id string or null
   const [editingId, setEditingId] = useState(null)
-  const [editDraft, setEditDraft] = useState({ text: '', answer: '' })
+  const [editDraft, setEditDraft] = useState({ text: '', answer: '', category: '' })
   const [saving, setSaving]       = useState(false)
   // Save/delete failures were silent (the edit stayed open with the draft
   // intact, but nothing said WHY) — surface them; cleared on the next attempt.
@@ -274,19 +287,20 @@ export default function Questions() {
 
   function startEdit(row) {
     setEditingId(row.id)
-    setEditDraft({ text: row.text ?? '', answer: row.answer ?? '' })
+    setEditDraft({ text: row.text ?? '', answer: row.answer ?? '', category: row.category ?? '' })
   }
 
   async function commitEdit(id) {
     if (saving) return
     setSaving(true)
     setWriteError(null)
+    const patch = { text: editDraft.text, answer: editDraft.answer, category: editDraft.category.trim() || null }
     const { error } = await supabase
       .from('questions')
-      .update({ text: editDraft.text, answer: editDraft.answer })
+      .update(patch)
       .eq('id', id)
     if (!error) {
-      setQuestions(prev => prev.map(r => r.id === id ? { ...r, ...editDraft } : r))
+      setQuestions(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r))
       setEditingId(null)
     } else {
       setWriteError('Save failed — check connection (your edit is kept)')
@@ -401,6 +415,11 @@ export default function Questions() {
           {writeError}
         </div>
       )}
+
+      {/* Category suggestions for the inline edit — drawn from what's already in the bank */}
+      <datalist id="qcat-archive-suggestions">
+        {[...new Set(questions.map(r => r.category).filter(Boolean))].sort().map(c => <option key={c} value={c} />)}
+      </datalist>
 
       {/* Card grid — centered, 3 across on desktop, 2 on tablet, 1 on mobile */}
       <div className="max-w-6xl mx-auto px-6 pb-16">

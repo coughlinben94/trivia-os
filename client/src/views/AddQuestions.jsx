@@ -1,10 +1,17 @@
 import { useState } from 'react'
 import HostPinGate from '../components/host/HostPinGate.jsx'
-import { INPUT_TILES, QuestionInputPanel, SwingInputPanel, PylInputPanel } from '../components/host/DatabaseAddPanels.jsx'
+import { INPUT_TILES, QuestionInputPanel, SwingInputPanel, PylInputPanel, useCategorySuggestions } from '../components/host/DatabaseAddPanels.jsx'
 
 export default function AddQuestions() {
   const [activeInput, setActiveInput] = useState(null) // 'question' | 'swing' | 'pyl' | null
   const activeTile = INPUT_TILES.find(t => t.id === activeInput)
+
+  // Sticky batch fields (category / round type / played-on) live HERE, not in
+  // the panels, so they survive both saves and panel switches — batch entry
+  // sets them once and every save carries them until changed.
+  const [sticky, setSticky] = useState({ category: '', roundType: null, playedOn: '' })
+  const { categories, addCategory } = useCategorySuggestions()
+  const panelProps = { sticky, setSticky, categories, addCategory }
 
   return (
     <HostPinGate>
@@ -39,9 +46,9 @@ export default function AddQuestions() {
                     {activeTile?.icon} {activeTile?.name}
                   </h2>
                 </div>
-                {activeInput === 'question' && <QuestionInputPanel onAdded={() => {}} />}
-                {activeInput === 'swing'    && <SwingInputPanel onAdded={() => {}} />}
-                {activeInput === 'pyl'      && <PylInputPanel onAdded={() => {}} />}
+                {activeInput === 'question' && <QuestionInputPanel onAdded={() => {}} {...panelProps} />}
+                {activeInput === 'swing'    && <SwingInputPanel onAdded={() => {}} {...panelProps} />}
+                {activeInput === 'pyl'      && <PylInputPanel onAdded={() => {}} {...panelProps} />}
               </>
             ) : (
               <div className="flex flex-wrap gap-3 justify-center">

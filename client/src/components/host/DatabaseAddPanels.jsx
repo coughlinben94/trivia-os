@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 import { archiveQuestion, archiveQuestions } from '../../lib/archiveQuestion.js'
+import { supabase } from '../../lib/supabase.js'
 
 const BTN = 'host-button'
 const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber-400', video: 'bg-purple-400', list: 'bg-orange-400', grid: 'bg-pink-400' }
@@ -61,9 +62,111 @@ function useSaveOutcome() {
 
 const FAIL_LABEL = 'Didn’t save — check connection (your text is kept)'
 
+// ─── Sticky batch fields (category / round type / played-on) ────────────────
+// Batch entry is clustered: same category, same round type, same historical
+// play date for a whole run of questions. These fields deliberately DON'T
+// clear on save — set once, then every save carries them until changed.
+// State lives in AddQuestions.jsx so it also survives switching panels.
+
+export function useCategorySuggestions() {
+  const [categories, setCategories] = useState([])
+  useEffect(() => {
+    supabase
+      .from('questions')
+      .select('category')
+      .not('category', 'is', null)
+      .then(({ data }) => {
+        if (data) setCategories([...new Set(data.map(r => r.category).filter(Boolean))].sort())
+      })
+  }, [])
+  // Session-new categories join the suggestions immediately so the taxonomy
+  // builds as Ben types it, without refetching.
+  function addCategory(c) {
+    setCategories(prev => (prev.includes(c) ? prev : [...prev, c].sort()))
+  }
+  return { categories, addCategory }
+}
+
+// Warn before closing/leaving the tab while typed entry text would be lost.
+function useUnsavedGuard(dirty) {
+  useEffect(() => {
+    if (!dirty) return
+    const h = e => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', h)
+    return () => window.removeEventListener('beforeunload', h)
+  }, [dirty])
+}
+
+const ROUND_TYPE_OPTIONS = [
+  { id: 'normal', label: 'Normal' },
+  { id: 'swing',  label: 'Swing'  },
+  { id: 'pyl',    label: 'PYL'    },
+]
+
+export function StickyFields({ sticky, setSticky, categories, showRoundType = true }) {
+  return (
+    <div className="flex flex-wrap gap-x-4 gap-y-2 items-end bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-2.5">
+      <div className="flex-1 min-w-[150px]">
+        <label className="block text-[11px] font-medium text-gray-500 mb-1">Category</label>
+        <input
+          type="text"
+          list="qcat-suggestions"
+          value={sticky.category}
+          onChange={e => setSticky(s => ({ ...s, category: e.target.value }))}
+          placeholder="e.g. Music"
+          className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+        />
+        <datalist id="qcat-suggestions">
+          {categories.map(c => <option key={c} value={c} />)}
+        </datalist>
+      </div>
+      {showRoundType && (
+        <div>
+          <label className="block text-[11px] font-medium text-gray-500 mb-1">Round type</label>
+          <div className="flex gap-1">
+            {ROUND_TYPE_OPTIONS.map(rt => (
+              <button
+                key={rt.id}
+                type="button"
+                onClick={() => setSticky(s => ({ ...s, roundType: s.roundType === rt.id ? null : rt.id }))}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors duration-150 ease-out ${
+                  sticky.roundType === rt.id
+                    ? 'bg-[#1a6b4a] text-white border-[#1a6b4a]'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-[#1a6b4a] hover:text-[#1a6b4a]'
+                }`}
+              >
+                {rt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div>
+        <label className="block text-[11px] font-medium text-gray-500 mb-1">Played on <span className="text-gray-400">(optional)</span></label>
+        <input
+          type="date"
+          value={sticky.playedOn}
+          onChange={e => setSticky(s => ({ ...s, playedOn: e.target.value }))}
+          className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+        />
+      </div>
+      <p className="w-full text-[11px] text-gray-400 -mt-0.5">These stay set between saves — set once per batch.</p>
+    </div>
+  )
+}
+
+// Payload fragment every entry write shares.
+function stickyPayload(sticky, forcedRoundType) {
+  return {
+    category:   sticky.category.trim() || null,
+    round_type: forcedRoundType ?? sticky.roundType,
+    used_on:    sticky.playedOn ? [sticky.playedOn] : [],
+  }
+}
+
 // ─── Regular / Shiny question ──────────────────────────────────────────────
 
-export function QuestionInputPanel({ onAdded }) {
+export function QuestionInputPanel({ onAdded, sticky, setSticky, categories, addCategory }) {
   const { formats: shinyFormats, loading: shinyLoading } = useShinyFormats()
 
   const [questionText,   setQuestionText]   = useState('')
@@ -87,6 +190,13 @@ export function QuestionInputPanel({ onAdded }) {
   const canAddShiny     = shinyAnswer.trim().length > 0
   const isGrid = selectedShinyFmt?.input_schema?.type === 'grid'
 
+  useUnsavedGuard(!!(questionText.trim() || questionAnswer.trim() || shinyQuestion.trim() || shinyAnswer.trim()))
+
+  function rememberCategory() {
+    const c = sticky.category.trim()
+    if (c) addCategory(c)
+  }
+
   async function addPlain() {
     if (!canAddQuestion || !begin()) return
     const ok = await archiveQuestion({
@@ -98,10 +208,12 @@ export function QuestionInputPanel({ onAdded }) {
       show_id:    null,
       show_title: null,
       show_date:  null,
+      ...stickyPayload(sticky),
     })
     end()
-    if (!ok) { flashFailure(); return } // keep the typed text
+    if (!ok) { flashFailure(); return } // keep the typed text (sticky fields never clear)
     setQuestionText(''); setQuestionAnswer(''); setIsBonus(false)
+    rememberCategory()
     flashSuccess()
     questionTextRef.current?.focus()
     onAdded?.()
@@ -120,16 +232,20 @@ export function QuestionInputPanel({ onAdded }) {
       show_id:           null,
       show_title:        null,
       show_date:         null,
+      ...stickyPayload(sticky),
     })
     end()
-    if (!ok) { flashFailure(); return } // keep the typed text
+    if (!ok) { flashFailure(); return } // keep the typed text (sticky fields never clear)
     setShinyQuestion(''); setShinyAnswer(''); setSelectedShinyFmt(null); setShinyStep('pick')
+    rememberCategory()
     flashSuccess()
     onAdded?.()
   }
 
   return (
-    <div className="grid grid-cols-2 gap-6">
+    <div className="flex flex-col gap-4">
+      <StickyFields sticky={sticky} setSticky={setSticky} categories={categories} />
+      <div className="grid grid-cols-2 gap-6">
       {/* LEFT — plain question */}
       <div className="flex flex-col gap-3 border-r border-gray-100 pr-6">
         <div>
@@ -140,6 +256,7 @@ export function QuestionInputPanel({ onAdded }) {
           ref={questionTextRef}
           value={questionText}
           onChange={e => setQuestionText(e.target.value)}
+          onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') addPlain() }}
           placeholder="Type or paste your question…"
           rows={3}
           className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
@@ -194,6 +311,7 @@ export function QuestionInputPanel({ onAdded }) {
             <textarea
               value={shinyQuestion}
               onChange={e => setShinyQuestion(e.target.value)}
+              onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') addShiny() }}
               placeholder="Question text (optional)…"
               rows={2}
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
@@ -295,6 +413,7 @@ export function QuestionInputPanel({ onAdded }) {
           </>
         )}
       </div>
+      </div>
       <Toast show={toast} label="Added to database" />
       <Toast show={failed} fail label={FAIL_LABEL} />
     </div>
@@ -303,11 +422,13 @@ export function QuestionInputPanel({ onAdded }) {
 
 // ─── Swing Round batch ──────────────────────────────────────────────────────
 
-export function SwingInputPanel({ onAdded }) {
+export function SwingInputPanel({ onAdded, sticky, setSticky, categories, addCategory }) {
   const [count, setCount]         = useState(6)
   const [started, setStarted]     = useState(false)
   const [questions, setQuestions] = useState([])
   const { toast, failed, busy, begin, end, flashSuccess, flashFailure } = useSaveOutcome()
+
+  useUnsavedGuard(questions.some(q => q.text.trim() || q.answer.trim()))
 
   function goToQuestions() {
     setQuestions(Array.from({ length: Math.max(1, count) }, () => ({ text: '', answer: '' })))
@@ -328,9 +449,12 @@ export function SwingInputPanel({ onAdded }) {
       show_id:        null,
       show_title:     null,
       show_date:      null,
+      // Swing batches are, definitionally, swing-round material.
+      ...stickyPayload(sticky, 'swing'),
     }])
     end()
     if (!ok) { flashFailure(); return } // keep the whole typed batch
+    const c = sticky.category.trim(); if (c) addCategory(c)
     setStarted(false); setQuestions([])
     flashSuccess()
     onAdded?.()
@@ -369,6 +493,9 @@ export function SwingInputPanel({ onAdded }) {
         <button onClick={() => setStarted(false)} className={`text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100 ${BTN}`}>←</button>
         <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest">{count} questions — paste or type each one</p>
       </div>
+
+      {/* Round type is stamped 'swing' automatically for the whole batch. */}
+      <StickyFields sticky={sticky} setSticky={setSticky} categories={categories} showRoundType={false} />
 
       <div className="flex gap-2 items-center px-0.5">
         <span className="w-5 shrink-0" />
@@ -422,7 +549,7 @@ const TYPE_OPTIONS = [
   { id: 'word',   icon: '🔤', label: 'Word'   },
 ]
 
-export function PylInputPanel({ onAdded }) {
+export function PylInputPanel({ onAdded, sticky, setSticky, categories, addCategory }) {
   const [started, setStarted]     = useState(false)
   const [themeCount, setThemeCount] = useState(3)
   const [themeIndex, setThemeIndex] = useState(0)
@@ -430,6 +557,8 @@ export function PylInputPanel({ onAdded }) {
   const [currentName, setCurrentName] = useState('')
   const [currentType, setCurrentType] = useState(null)
   const { toast, failed, busy, begin, end, flashSuccess, flashFailure } = useSaveOutcome()
+
+  useUnsavedGuard(started && (currentName.trim().length > 0 || collected.length > 0))
 
   function startThemes() {
     setCollected([]); setThemeIndex(0); setCurrentName(''); setCurrentType(null); setStarted(true)
@@ -451,9 +580,12 @@ export function PylInputPanel({ onAdded }) {
       show_id:    null,
       show_title: null,
       show_date:  null,
+      // PYL themes are, definitionally, PYL-round material.
+      ...stickyPayload(sticky, 'pyl'),
     })))
     end()
     if (!ok) { flashFailure(); return } // keep the collected themes + current entry
+    const c = sticky.category.trim(); if (c) addCategory(c)
     setStarted(false)
     flashSuccess()
     onAdded?.()
@@ -490,7 +622,9 @@ export function PylInputPanel({ onAdded }) {
   }
 
   return (
-    <div className="flex flex-col gap-5 items-center max-w-xs mx-auto">
+    <div className="flex flex-col gap-5 items-center max-w-sm mx-auto">
+      {/* Round type is stamped 'pyl' automatically for every theme. */}
+      <StickyFields sticky={sticky} setSticky={setSticky} categories={categories} showRoundType={false} />
       <div className="w-full flex items-center gap-2">
         <button
           onClick={() => {
