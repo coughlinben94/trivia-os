@@ -24,6 +24,11 @@
 import { cleanPastedText } from './cleanPaste.js'
 
 const INLINE_SPLIT_RE = /\s[–—-]\s/
+// "Redemption" is a section LABEL in Ben's list-format appendices, not a
+// real entry — the actual list item is whatever's underneath it. Any
+// header matching this (with exactly one child) gets dropped, promoting
+// its child to be the item directly, same shape as every other row.
+const REDEMPTION_RE = /^redempt/i
 
 function lineDepth(rawLine) {
   const leading = rawLine.match(/^[ \t]*/)[0]
@@ -61,7 +66,7 @@ function pairRuns(lines, depths, baseDepth) {
       const m = header.match(INLINE_SPLIT_RE)
       items.push(m ? { text: header.slice(0, m.index).trim(), answer: header.slice(m.index + m[0].length).trim() } : { text: header, answer: '' })
     } else if (children.length === 1) {
-      items.push({ text: header, answer: children[0] })
+      items.push(REDEMPTION_RE.test(header) ? { text: children[0], answer: '' } : { text: header, answer: children[0] })
     } else {
       for (const child of children) {
         const m = child.match(INLINE_SPLIT_RE)

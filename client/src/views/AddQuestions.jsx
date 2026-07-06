@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import HostPinGate from '../components/host/HostPinGate.jsx'
-import { INPUT_TILES, QuestionInputPanel, SwingInputPanel, PylInputPanel } from '../components/host/DatabaseAddPanels.jsx'
+import { INPUT_TILES, QuestionInputPanel, SwingInputPanel, PylInputPanel, BulkPasteInputPanel } from '../components/host/DatabaseAddPanels.jsx'
 
 export default function AddQuestions() {
   const [activeInput, setActiveInput] = useState(null) // 'question' | 'swing' | 'pyl' | null
@@ -54,6 +54,7 @@ export default function AddQuestions() {
                 {activeInput === 'question' && <QuestionInputPanel onAdded={bumpCount} />}
                 {activeInput === 'swing'    && <SwingInputPanel onAdded={bumpCount} />}
                 {activeInput === 'pyl'      && <PylInputPanel onAdded={bumpCount} />}
+                {activeInput === 'bulk'     && <BulkPasteInputPanel onAdded={bumpCount} />}
               </>
             ) : (
               <div className="flex flex-wrap gap-3 justify-center">

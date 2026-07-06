@@ -651,3 +651,339 @@ export function PylInputPanel({ onAdded }) {
     </div>
   )
 }
+
+// ─── Paste & Organize (generic bulk paste — PYL boards, appendices, any outline) ──
+//
+// Paste a whole Word-doc outline; parseOutlinePaste (indentation-based, not
+// bullet-glyph-based — see that file) breaks it into "boxes": a title plus
+// an ordered [{text, answer}] item list. Two save shapes, matching how Ben
+// described wanting to use this ("one box or multiple boxes... break up the
+// questions or keep them together"):
+//   - "N separate entries" — one archive row per box (a PYL round's 3
+//     categories become 3 rows; a headerless list of clue/answer pairs,
+//     which the parser already put one-per-box, becomes N 'regular' rows).
+//   - "Keep as one entry" — every box's items merged into a single row
+//     (an appendix/name-that-list stays one archive entry, per Ben's
+//     explicit ask: "this whole appendix needs to be associated with one
+//     question").
+// Category/Played-on are LOCAL to this panel only — Swing/PYL dropped the
+// shared sticky version of these (their round title/theme name already
+// label the batch), but a bulk-pasted historical round or appendix has no
+// other place to record its category or backfill an approximate play date,
+// so they're kept here, scoped to just this one panel.
+// A box with >1 item needs somewhere to put its list — pyl/swing rows
+// already have that (questions_data); anything else needs the 'list' type
+// (see supabase/migrations/20260706010000_questions_type_add_list.sql —
+// NOT YET APPLIED pending Ben's sign-off). Saves needing it are blocked
+// with an explanation rather than silently failing against the DB
+// constraint.
+
+function useLocalCategorySuggestions() {
+  const [categories, setCategories] = useState([])
+  useEffect(() => {
+    supabase
+      .from('questions')
+      .select('category')
+      .not('category', 'is', null)
+      .then(({ data }) => {
+        if (data) setCategories([...new Set(data.map(r => r.category).filter(Boolean))].sort())
+      })
+  }, [])
+  function addCategory(c) {
+    setCategories(prev => (prev.includes(c) ? prev : [...prev, c].sort()))
+  }
+  return { categories, addCategory }
+}
+
+const BULK_ROUND_TYPE_OPTIONS = [
+  { id: null,     label: 'Normal' },
+  { id: 'swing',  label: 'Swing'  },
+  { id: 'pyl',    label: 'PYL'    },
+]
+
+const PYL_MEDIA_OPTIONS = [
+  { id: 'word', label: 'Word' },
+  { id: 'visual', label: 'Visual' },
+  { id: 'audio', label: 'Audio' },
+]
+
+export function BulkPasteInputPanel({ onAdded }) {
+  const [raw, setRaw] = useState('')
+  const [detectedTitle, setDetectedTitle] = useState(null)
+  const [boxes, setBoxes] = useState([]) // [{ id, title, mediaType, items:[{text,answer}] }]
+  const [mode, setMode] = useState('boxes') // 'boxes' | 'one'
+  const [roundType, setRoundType] = useState(null) // null | 'swing' | 'pyl'
+  const [category, setCategory] = useState('')
+  const [playedOn, setPlayedOn] = useState('')
+  const { categories, addCategory } = useLocalCategorySuggestions()
+  const { toast, failed, busy, begin, end, flashSuccess, flashFailure } = useSaveOutcome()
+
+  useUnsavedGuard(boxes.length > 0)
+
+  function organize(text) {
+    const { title, groups } = parseOutlinePaste(text)
+    setDetectedTitle(title)
+    const withIds = groups.map((g, i) => ({ id: `b${Date.now()}_${i}`, title: g.title, mediaType: 'word', items: g.items }))
+    setBoxes(withIds)
+    setMode(withIds.length > 1 ? 'boxes' : 'one')
+    setRaw('')
+  }
+
+  function handlePaste(e) {
+    e.preventDefault()
+    organize(e.clipboardData.getData('text/plain'))
+  }
+
+  function updateBoxTitle(id, title) { setBoxes(prev => prev.map(b => b.id === id ? { ...b, title } : b)) }
+  function updateBoxMedia(id, mediaType) { setBoxes(prev => prev.map(b => b.id === id ? { ...b, mediaType } : b)) }
+  function updateItem(boxId, idx, field, val) {
+    setBoxes(prev => prev.map(b => b.id === boxId ? { ...b, items: b.items.map((it, i) => i === idx ? { ...it, [field]: val } : it) } : b))
+  }
+  function removeItem(boxId, idx) {
+    setBoxes(prev => prev.map(b => b.id === boxId ? { ...b, items: b.items.filter((_, i) => i !== idx) } : b).filter(b => b.items.length > 0))
+  }
+  function addItem(boxId) {
+    setBoxes(prev => prev.map(b => b.id === boxId ? { ...b, items: [...b.items, { text: '', answer: '' }] } : b))
+  }
+  function removeBox(id) { setBoxes(prev => prev.filter(b => b.id !== id)) }
+  function splitBox(id) {
+    setBoxes(prev => prev.flatMap(b => b.id === id
+      ? b.items.map((it, i) => ({ id: `${b.id}_${i}`, title: it.text || b.title, mediaType: 'word', items: [it] }))
+      : [b]
+    ))
+  }
+  function startOver() { setBoxes([]); setDetectedTitle(null); setRaw('') }
+
+  const cleanItems = (items) => items
+    .map(it => ({ text: it.text.trim(), answer: it.answer.trim() }))
+    .filter(it => it.text || it.answer)
+
+  const extra = (forcedRoundType) => ({
+    category:   category.trim() || null,
+    round_type: forcedRoundType ?? roundType,
+    used_on:    playedOn ? [playedOn] : [],
+  })
+
+  // A box with >1 item needs somewhere to put the list — pyl/swing rows
+  // already have that (questions_data); anything else needs the pending
+  // 'list' type. A single-item box always saves as a plain 'regular' row.
+  const needsListType = mode === 'one'
+    ? roundType !== 'swing'
+    : boxes.some(b => cleanItems(b.items).length > 1 && roundType !== 'pyl' && roundType !== 'swing')
+
+  async function save() {
+    if (boxes.length === 0 || !begin()) return
+    let rows
+    if (mode === 'one') {
+      const combined = boxes.flatMap(b => cleanItems(b.items))
+      rows = roundType === 'swing'
+        ? [{ type: 'swing', questions_data: combined, round_title: detectedTitle || category.trim() || null, show_id: null, show_title: null, show_date: null, ...extra('swing') }]
+        : [{
+            type: roundType === 'pyl' ? 'pyl' : 'list',
+            text: detectedTitle || category.trim() || 'Bulk entry',
+            answer: roundType === 'pyl' ? 'word' : null,
+            questions_data: combined,
+            show_id: null, show_title: null, show_date: null,
+            ...extra(),
+          }]
+    } else {
+      rows = boxes.map(b => {
+        const items = cleanItems(b.items)
+        if (items.length === 1) {
+          return { type: 'regular', text: items[0].text, answer: items[0].answer, is_bonus: false, is_shiny: false, show_id: null, show_title: null, show_date: null, ...extra() }
+        }
+        if (roundType === 'pyl') {
+          return { type: 'pyl', text: b.title, answer: b.mediaType, questions_data: items, show_id: null, show_title: null, show_date: null, ...extra('pyl') }
+        }
+        if (roundType === 'swing') {
+          return { type: 'swing', questions_data: items, round_title: b.title || null, show_id: null, show_title: null, show_date: null, ...extra('swing') }
+        }
+        return { type: 'list', text: b.title, questions_data: items, show_id: null, show_title: null, show_date: null, ...extra() }
+      })
+    }
+    const ok = await archiveQuestions(rows)
+    end()
+    if (!ok) { flashFailure(); return }
+    const c = category.trim(); if (c) addCategory(c)
+    flashSuccess()
+    startOver()
+    onAdded?.()
+  }
+
+  const totalItems = boxes.reduce((n, b) => n + cleanItems(b.items).length, 0)
+
+  return (
+    <div className="flex flex-col gap-4 max-w-3xl mx-auto">
+      {boxes.length === 0 ? (
+        <>
+          <p className="text-sm text-gray-500 text-center">
+            Paste a whole round, PYL board, or appendix list here — we'll strip the formatting and organize it into editable boxes below.
+          </p>
+          <textarea
+            autoFocus
+            value={raw}
+            onChange={e => setRaw(e.target.value)}
+            onPaste={handlePaste}
+            placeholder="Paste your outline here…"
+            rows={10}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
+          />
+          {raw.trim() && (
+            <button
+              onClick={() => organize(raw)}
+              className={`w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 ${BTN} transition-[transform] duration-150 ease-out active:scale-[0.98]`}
+            >
+              Organize →
+            </button>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-x-4 gap-y-2 items-end bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-2.5">
+            <div className="flex-1 min-w-[150px]">
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Category <span className="text-gray-400">(optional)</span></label>
+              <input
+                type="text"
+                list="bulk-cat-suggestions"
+                value={category}
+                onChange={e => setCategory(e.target.value)}
+                onPaste={makeCleanPasteHandler(setCategory)}
+                placeholder="e.g. Movies"
+                className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+              />
+              <datalist id="bulk-cat-suggestions">
+                {categories.map(c => <option key={c} value={c} />)}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Round type</label>
+              <div className="flex gap-1">
+                {BULK_ROUND_TYPE_OPTIONS.map(rt => (
+                  <button
+                    key={rt.label}
+                    type="button"
+                    onClick={() => setRoundType(rt.id)}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors duration-150 ease-out ${
+                      roundType === rt.id ? 'bg-[#1a6b4a] text-white border-[#1a6b4a]' : 'bg-white text-gray-600 border-gray-200 hover:border-[#1a6b4a] hover:text-[#1a6b4a]'
+                    }`}
+                  >
+                    {rt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Played on <span className="text-gray-400">(optional)</span></label>
+              <input
+                type="date"
+                value={playedOn}
+                onChange={e => setPlayedOn(e.target.value)}
+                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => setMode('one')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors duration-150 ease-out ${mode === 'one' ? 'bg-[#1a6b4a] text-white border-[#1a6b4a]' : 'bg-white text-gray-600 border-gray-200 hover:border-[#1a6b4a]'}`}
+              >
+                Keep as one entry
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('boxes')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors duration-150 ease-out ${mode === 'boxes' ? 'bg-[#1a6b4a] text-white border-[#1a6b4a]' : 'bg-white text-gray-600 border-gray-200 hover:border-[#1a6b4a]'}`}
+              >
+                {boxes.length} separate entries
+              </button>
+            </div>
+            <button onClick={startOver} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors duration-150 ease-out">Start over</button>
+          </div>
+
+          {needsListType && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              ⚠ This shape needs one small one-time database change that hasn't been turned on yet — select a Round type above (PYL or Swing) if this content fits one of those, or ask Claude to apply it.
+            </p>
+          )}
+
+          <div className="flex flex-col gap-3 max-h-[28rem] overflow-y-auto pr-1">
+            {boxes.map(box => {
+              const items = cleanItems(box.items)
+              return (
+                <div key={box.id} className="border border-gray-200 rounded-xl p-3 flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={box.title}
+                      onChange={e => updateBoxTitle(box.id, e.target.value)}
+                      onPaste={makeCleanPasteHandler(v => updateBoxTitle(box.id, v))}
+                      className="flex-1 border-b border-gray-200 text-sm font-semibold text-gray-800 px-1 py-1 focus:outline-none focus:border-[#1a6b4a]"
+                    />
+                    {items.length > 1 && roundType === 'pyl' && (
+                      <div className="flex gap-1 shrink-0">
+                        {PYL_MEDIA_OPTIONS.map(m => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => updateBoxMedia(box.id, m.id)}
+                            className={`px-2 py-1 rounded text-[11px] font-semibold border transition-colors duration-150 ease-out ${box.mediaType === m.id ? 'bg-[#1a6b4a] text-white border-[#1a6b4a]' : 'bg-white text-gray-500 border-gray-200 hover:border-[#1a6b4a]'}`}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <span className="text-[11px] text-gray-400 shrink-0">{items.length} item{items.length === 1 ? '' : 's'}</span>
+                    {items.length > 1 && (
+                      <button onClick={() => splitBox(box.id)} className="text-[11px] text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 shrink-0 transition-colors duration-150 ease-out">
+                        Split into separate rows
+                      </button>
+                    )}
+                    <button onClick={() => removeBox(box.id)} className="text-gray-300 hover:text-red-500 text-xs w-5 h-5 flex items-center justify-center shrink-0">✕</button>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    {box.items.map((it, i) => (
+                      <div key={i} className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          value={it.text}
+                          onChange={e => updateItem(box.id, i, 'text', e.target.value)}
+                          onPaste={makeCleanPasteHandler(v => updateItem(box.id, i, 'text', v))}
+                          placeholder="Clue / item…"
+                          className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
+                        />
+                        <input
+                          type="text"
+                          value={it.answer}
+                          onChange={e => updateItem(box.id, i, 'answer', e.target.value)}
+                          onPaste={makeCleanPasteHandler(v => updateItem(box.id, i, 'answer', v))}
+                          placeholder="Answer (optional)…"
+                          className="w-40 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
+                        />
+                        <button onClick={() => removeItem(box.id, i)} className="text-gray-300 hover:text-red-500 text-xs w-5 h-5 flex items-center justify-center shrink-0">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={() => addItem(box.id)} className="text-[11px] text-gray-500 hover:text-gray-700 self-start px-2 py-1 rounded hover:bg-gray-100 transition-colors duration-150 ease-out">+ Add item</button>
+                </div>
+              )
+            })}
+          </div>
+
+          <button
+            onClick={save}
+            disabled={busy || needsListType || totalItems === 0}
+            className={`w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed transition-[transform,opacity] duration-150 ease-out active:scale-[0.98]`}
+          >
+            {mode === 'one' ? `Add as 1 entry (${totalItems} items) →` : `Add ${boxes.length} entries →`}
+          </button>
+        </>
+      )}
+      <Toast show={toast} label="Added to database" />
+      <Toast show={failed} fail label={FAIL_LABEL} />
+    </div>
+  )
+}
