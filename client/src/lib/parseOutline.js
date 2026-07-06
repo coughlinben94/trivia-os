@@ -30,11 +30,48 @@ const INLINE_SPLIT_RE = /\s[–—-]\s/
 // its child to be the item directly, same shape as every other row.
 const REDEMPTION_RE = /^redempt/i
 
-function lineDepth(rawLine) {
+// Word's own clipboard plain-text export (confirmed against a real .docx,
+// copied via Word -> pbpaste) puts exactly ONE literal tab before every
+// list line, no matter its real outline level — "8-bit" (a question) and
+// "Hawaiian roller coaster ride" (its answer, one level deeper in Word)
+// both come through as "<glyph>\t<text>". Tab-counting on paste therefore
+// sees the SAME depth for every line and can't tell levels apart at all.
+// The one thing that DOES change per level is the bullet glyph itself
+// (Ben's list style uses a distinct symbol-font character per level, e.g.
+// a diamond for a round/category title, an arrow for a question, a small
+// square for its answer) — so depth has to be read from the SEQUENCE of
+// glyphs, not from whitespace. Tracked as a stack: a glyph not currently
+// on the stack is one level deeper than whatever's on top (push); a glyph
+// matching something already on the stack means we've returned to that
+// level (pop back to it); a glyph matching the current top is a sibling
+// at the same depth. Lines with no recognized bullet (typed text, or a
+// paste from something other than this Word list style) fall back to the
+// old tab/space counting so plain indented text still works.
+function fallbackTabDepth(rawLine) {
   const leading = rawLine.match(/^[ \t]*/)[0]
   const tabs = (leading.match(/\t/g) || []).length
   const spaces = leading.replace(/\t/g, '').length
   return tabs + Math.floor(spaces / 2)
+}
+
+function bulletGlyphOf(line) {
+  const m = line.match(/^(\S)\t/)
+  if (!m) return null
+  const ch = m[1]
+  if (/[\w"'"]/.test(ch)) return null // a real word/quote char here isn't a bullet
+  return ch
+}
+
+function assignDepths(lines) {
+  const stack = []
+  return lines.map(line => {
+    const glyph = bulletGlyphOf(line)
+    if (glyph == null) return fallbackTabDepth(line)
+    const existing = stack.indexOf(glyph)
+    if (existing === -1) { stack.push(glyph); return stack.length - 1 }
+    stack.length = existing + 1
+    return existing
+  })
 }
 
 function stripBullet(line) {
@@ -83,7 +120,7 @@ export function parseOutlinePaste(rawText) {
   if (rawLines.length === 0) return { title: null, groups: [] }
 
   let lines = rawLines
-  let depths = lines.map(lineDepth)
+  let depths = assignDepths(lines)
   let title = null
 
   const minDepth = Math.min(...depths)
@@ -91,7 +128,7 @@ export function parseOutlinePaste(rawText) {
   if (atMin === 1 && lines.length > 1) {
     title = stripBullet(lines[0])
     lines = lines.slice(1)
-    depths = lines.map(lineDepth)
+    depths = assignDepths(lines)
   }
 
   if (lines.length === 0) return { title, groups: [] }
