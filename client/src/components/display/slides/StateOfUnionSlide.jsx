@@ -14,6 +14,11 @@ const RWB_WHITE     = '#e8e0d8'
 const RWB_BLUE      = '#2a50c0'
 const RWB_BLUE_DEEP = '#0d1536'
 
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
 // ─── Billowing gradient background ───────────────────────────────────────────
 // Per-pixel ImageData at quarter resolution (320×180) — CSS scaling blurs it
 // smooth. Each pixel's color is determined by its diagonal position
@@ -36,22 +41,34 @@ function WavingGradient({ reduce }) {
     const k  = (2 * Math.PI) / (W * 0.55)
     const k2 = k * 1.65  // secondary harmonic — higher freq, different phase speed
 
-    // Cyclic LUT: red → white → blue → white → red (seamless loop).
-    // Going back through white avoids a purple seam at the loop boundary.
-    // Vivid rose + periwinkle intermediates keep transitions saturated.
-    // Smoothstep within each segment makes colors linger near their vivid peaks.
+    // Cyclic LUT: red → cream → blue → cream → red (seamless loop, red at
+    // both ends). Every stop is a flat HOLD in one of the three flag colors
+    // themselves (reused directly from RWB_RED/WHITE/BLUE above, so title
+    // and background can never drift apart) — no in-between "rose" or
+    // "periwinkle" tints. Those in-between tints were the actual source of
+    // the old muddy/purple read: cream already separated every red↔blue
+    // adjacency even before this change, but the desaturated intermediate
+    // stops themselves leaned purple and ate a large share of the cycle.
+    // Blue's hold (0.36–0.64) is deliberately the widest band so it stays
+    // the dominant field; red and cream are the flowing ribbons through it.
+    // Smoothstep within each transition (unchanged below) keeps it soft
+    // enough to still read as billowing fabric, not hard-edged stripes.
     const N = 512
     const lut = new Uint8Array(N * 3)
+    const [rr, rg, rb] = hexToRgb(RWB_RED)
+    const [wr, wg, wb] = hexToRgb(RWB_WHITE)
+    const [br, bg, bb] = hexToRgb(RWB_BLUE)
     const stops = [
-      [0.000, 178,  34,  52],
-      [0.125, 224,  68,  86],
-      [0.250, 242, 234, 228],
-      [0.375, 100, 120, 210],
-      [0.500,  52,  78, 195],
-      [0.625, 100, 120, 210],
-      [0.750, 242, 234, 228],
-      [0.875, 224,  68,  86],
-      [1.000, 178,  34,  52],
+      [0.00, rr, rg, rb],
+      [0.06, rr, rg, rb],
+      [0.16, wr, wg, wb],
+      [0.24, wr, wg, wb],
+      [0.36, br, bg, bb],
+      [0.64, br, bg, bb],
+      [0.76, wr, wg, wb],
+      [0.84, wr, wg, wb],
+      [0.94, rr, rg, rb],
+      [1.00, rr, rg, rb],
     ]
     for (let i = 0; i < N; i++) {
       const d = i / (N - 1)
