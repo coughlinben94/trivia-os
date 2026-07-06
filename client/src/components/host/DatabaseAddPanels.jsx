@@ -78,6 +78,10 @@ export function QuestionInputPanel({ onAdded }) {
   const [gridRows, setGridRows] = useState(3)
 
   const { toast, failed, busy, begin, end, flashSuccess, flashFailure } = useSaveOutcome()
+  // Rapid-entry loop: after a successful save, focus returns here so the
+  // next question starts with typing, not mousing (same lesson as the
+  // scoreboard's Quick Entry).
+  const questionTextRef = useRef(null)
 
   const canAddQuestion = questionText.trim().length > 0 && questionAnswer.trim().length > 0
   const canAddShiny     = shinyAnswer.trim().length > 0
@@ -99,6 +103,7 @@ export function QuestionInputPanel({ onAdded }) {
     if (!ok) { flashFailure(); return } // keep the typed text
     setQuestionText(''); setQuestionAnswer(''); setIsBonus(false)
     flashSuccess()
+    questionTextRef.current?.focus()
     onAdded?.()
   }
 
@@ -132,6 +137,7 @@ export function QuestionInputPanel({ onAdded }) {
           <p className="text-xs text-gray-500 mt-0.5">Added straight to the archive — no show attached</p>
         </div>
         <textarea
+          ref={questionTextRef}
           value={questionText}
           onChange={e => setQuestionText(e.target.value)}
           placeholder="Type or paste your question…"
@@ -142,7 +148,8 @@ export function QuestionInputPanel({ onAdded }) {
           type="text"
           value={questionAnswer}
           onChange={e => setQuestionAnswer(e.target.value)}
-          placeholder="The answer…"
+          onKeyDown={e => { if (e.key === 'Enter') addPlain() }}
+          placeholder="The answer… (Enter saves)"
           className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
         />
         <label className="flex items-center gap-2 cursor-pointer select-none">
