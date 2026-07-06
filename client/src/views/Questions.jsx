@@ -58,7 +58,14 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
     if (!isEditing) setConfirmingDelete(false)
   }, [isEditing])
 
-  const isSwing = row.type === 'swing' && row.questions_data
+  // Any bulk-entered row (swing, pyl, a plain 'list', or a multi-item shiny
+  // batch) archives its real content as questions_data — a card-level
+  // text/answer only exists as a label (round title / theme name), not the
+  // actual questions. Rendering the generic single-answer body for these
+  // showed the label and, for PYL, the media-type placeholder ("word")
+  // instead of the real items — the archived data was always correct, the
+  // card just never looked at questions_data unless type was 'swing'.
+  const hasItemList = Array.isArray(row.questions_data) && row.questions_data.length > 0
   const text = row.text ?? ''
   const isLong = !isEditing && text.length > TRUNCATE_AT
   const shownText = isLong && !expanded ? text.slice(0, TRUNCATE_AT).trimEnd() + '…' : text
@@ -101,15 +108,20 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
       </div>
 
       {/* Body */}
-      {isSwing ? (
-        <ol className="list-decimal list-inside space-y-1 text-xs text-gray-700">
-          {row.questions_data.map((q, qi) => (
-            <li key={qi}>
-              <span className="font-medium">{q.text}</span>
-              {q.answer && <span className="text-[#1a6b4a] font-medium"> — {q.answer}</span>}
-            </li>
-          ))}
-        </ol>
+      {hasItemList ? (
+        <div>
+          {(row.text || row.round_title) && (
+            <p className="text-sm font-semibold text-gray-800 mb-1.5">{row.text || row.round_title}</p>
+          )}
+          <ol className="list-decimal list-inside space-y-1 text-xs text-gray-700">
+            {row.questions_data.map((q, qi) => (
+              <li key={qi}>
+                <span className="font-medium">{q.text}</span>
+                {q.answer && <span className="text-[#1a6b4a] font-medium"> — {q.answer}</span>}
+              </li>
+            ))}
+          </ol>
+        </div>
       ) : isEditing ? (
         <div className="flex flex-col gap-2">
           <textarea
@@ -152,7 +164,7 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
       )}
 
       {/* Answer — always visible, own block */}
-      {!isSwing && !isEditing && (
+      {!hasItemList && !isEditing && (
         <div className="bg-gradient-to-br from-emerald-50 to-green-50 border border-emerald-100 rounded-lg px-3 py-2 mt-auto">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 mb-0.5">Answer</p>
           <div className="text-right">
@@ -170,7 +182,7 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
       )}
 
       {/* Actions */}
-      {!isSwing && (
+      {!hasItemList && (
         <div className="flex flex-col gap-1.5 pt-0.5">
           {isEditing && confirmingDelete ? (
             <div className="flex items-center justify-between">
