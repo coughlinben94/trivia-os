@@ -359,13 +359,26 @@ teams { id, show_id, name, color, registered_at, powerup_used, powerup_used_on,
 
 team_scores { id, show_id, team_id, round_index, score, unique(team_id, round_index) }
 
-questions { id, type, text, answer, is_bonus, is_shiny, shiny_type, shiny_format_name,
-            questions_data jsonb, display_order, show_id, show_title, show_date, created_at }
+questions { id serial PK, type NOT NULL CHECK ('regular'|'shiny'|'swing'|'pyl'|'bonus'),
+            text, answer, category, round_type CHECK ('normal'|'swing'|'pyl') NULL ok,
+            used_on date[] NOT NULL DEFAULT '{}', is_bonus bool DEFAULT false,
+            is_shiny bool DEFAULT false, shiny_type, shiny_format_name,
+            questions_data jsonb, display_order int DEFAULT 0, shiny_style_id (dead),
+            show_id, show_title, show_date, created_at timestamptz DEFAULT now() }
   -- the cross-show question ARCHIVE (Question Database, /questions) — text/answer only,
   -- no media_url column exists, so image/audio shiny content is never preserved here,
   -- only its text+answer. type: 'regular' | 'shiny' | 'pyl' | 'swing'. questions_data
   -- (swing only) is an array of {text, answer}. shiny_style_id is a dead legacy int
   -- column, unrelated to the current text-id shiny_formats scheme — ignore it.
+  -- category (free-text), round_type, and used_on[] (play-date history for reuse
+  -- analysis — an array; the single show_date pair is separate) were added 2026-07-06
+  -- (migration questions_category_roundtype_usedon) BEFORE bulk entry began. The
+  -- /questions/add panels set all three via STICKY fields (category combobox suggesting
+  -- existing values, Normal/Swing/PYL segmented picker, optional played-on date) that
+  -- survive saves and panel switches — state lives in AddQuestions.jsx. Swing/PYL
+  -- panels stamp their round_type automatically. Cmd/Ctrl+Enter saves from inside a
+  -- question textarea; Enter saves from the answer field; a beforeunload guard arms
+  -- while any entry text is unsaved. The archive's inline edit also covers category.
   -- RLS (2026-07-05): SELECT is public; INSERT/UPDATE/DELETE all require
   -- auth.jwt() -> 'app_metadata' ->> 'host_verified' = true (see HostPinGate.jsx) —
   -- any page that writes here MUST be wrapped in <HostPinGate>, including /questions

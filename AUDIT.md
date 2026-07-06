@@ -368,3 +368,7 @@ Of the 8 sampled claims: **5 HOLD, 3 PARTIAL, 0 FALSE.** The prior cycle's code-
 
 **(b) Ready for bulk entry after this session's fixes** — for the plain-question flow specifically, which is now: type question → Tab → type answer → Enter → focus back at question. Failures keep your text and say so; double-inputs can't duplicate. Remaining punch list (Ben's call, none blocking): QP-5 beforeunload guard (S), a "played on" date/show field if backfill matters (S, decide BEFORE entry), QP-4 pagination before the bank passes ~1000 rows (M), Cmd+Enter save from inside the textarea (S). The Swing/PYL panels are serviceable but keep their multi-step wizards — fine for their occasional batch use.
 
+
+### Questions punch-list follow-up (2026-07-06)
+
+Punch-list items 1–3 shipped before entry began: "played on" backfill (as `used_on date[]` + sticky optional date input — migration `questions_category_roundtype_usedon`, which also added `category` and CHECK-constrained `round_type`), the beforeunload unsaved-input guard (CDP-verified: arms only while entry text is non-empty), and Cmd/Ctrl+Enter save from the question textareas. Sticky category/round-type/date fields survive saves, panel switches, and failed saves. Batch-verified live: 5-question mixed batch → all columns exact in the DB (special characters byte-perfect), steady-state cost = Tab + Enter per question, archive category edit works. **QP-4 (pagination) remains open — revisit before the bank approaches 1000 rows (PostgREST default cap).**
