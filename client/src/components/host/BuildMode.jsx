@@ -759,7 +759,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
             onClick={() => setShowSwingWizard(false)}
           >
             <motion.div
-              className="w-full"
               initial={{ opacity: 0, scale: reducedMotion ? 1 : 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: reducedMotion ? 1 : 0.96, transition: { duration: 0.1, ease: EASE_OUT } }}
