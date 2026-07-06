@@ -115,7 +115,7 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
           {row.questions_data.map((q, qi) => (
             <li key={qi}>
               <span className="font-medium">{q.text}</span>
-              {q.answer && <span className="text-gray-500"> — {q.answer}</span>}
+              {q.answer && <span className="text-[#1a6b4a] font-medium"> — {q.answer}</span>}
             </li>
           ))}
         </ol>
@@ -169,8 +169,8 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
               {row.answer}
             </span>
           ) : (
-            <p className="text-sm text-gray-700">
-              {row.answer ?? <span className="text-gray-400 italic">No answer</span>}
+            <p className="text-sm font-medium text-[#1a6b4a]">
+              {row.answer ?? <span className="text-gray-400 italic font-normal">No answer</span>}
             </p>
           )}
         </div>
