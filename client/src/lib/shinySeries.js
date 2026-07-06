@@ -14,21 +14,29 @@ export function resolveShinyPart(data) {
     const idx = Math.min(Math.max(data.currentPart ?? 0, 0), data.parts.length - 1)
     const part = data.parts[idx] ?? {}
     const media = part.mediaSlots?.[0]
+    const isYoutube = media?.type === 'youtube'
     return {
       text: part.text ?? '',
       answer: part.answer || data.answer || null,
-      mediaUrl: media?.url ?? null,
+      mediaUrl: isYoutube ? null : (media?.url ?? null),
       mediaType: media?.type ?? null,
       subtitle: part.label || null,
+      youtubeId: isYoutube ? media.videoId : null,
+      youtubeStart: isYoutube ? (media.start ?? 0) : null,
+      youtubeEnd: isYoutube ? (media.end ?? null) : null,
     }
   }
   const media = data.mediaSlots?.[0]
+  const isYoutube = media?.type === 'youtube'
   return {
     text: data.text ?? '',
     answer: data.answer || null,
-    mediaUrl: media?.url ?? data.mediaUrl ?? null,
+    mediaUrl: isYoutube ? null : (media?.url ?? data.mediaUrl ?? null),
     mediaType: media?.type ?? data.mediaType ?? null,
     subtitle: data.subtitle ?? null,
+    youtubeId: isYoutube ? media.videoId : null,
+    youtubeStart: isYoutube ? (media.start ?? 0) : null,
+    youtubeEnd: isYoutube ? (media.end ?? null) : null,
   }
 }
 
@@ -42,4 +50,8 @@ export function isAudioShiny(data) {
 
 export function isListShiny(data) {
   return data.shinyInputSchema?.type === 'list'
+}
+
+export function isVideoShiny(data) {
+  return data.shinyInputSchema?.type === 'video'
 }

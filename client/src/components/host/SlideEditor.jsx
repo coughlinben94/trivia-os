@@ -3,6 +3,7 @@ import { analyzeAudioGain } from '../../lib/audioNormalize.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import MediaUpload from './MediaUpload.jsx'
+import YoutubeClipEditor from './YoutubeClipEditor.jsx'
 import HostPhotoLibrary from './HostPhotoLibrary.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
 import SlideCanvasEditor from './SlideCanvasEditor.jsx'
@@ -145,7 +146,11 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                   uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
               )}
               {slide.type === 'question' && (
-                <QuestionEditor data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
+                // Keyed by slide.id so per-slot local UI state (which audio
+                // slots are in "YouTube" mode, the format-library modal, etc.)
+                // resets when switching to a different question slide instead
+                // of leaking across slides that share this same component type.
+                <QuestionEditor key={slide.id} data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
               )}
               {slide.type === 'grading-break' && (
                 <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
@@ -369,6 +374,17 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
   const mediaSlots = data.mediaSlots ?? []
   const isSeriesMode = !!data.isSeries && Array.isArray(data.parts)
 
+  // Per-slot "Upload file" vs "YouTube URL" toggle for audio slots — not
+  // persisted to `data`, just derived once from whatever's already there
+  // (a slot already shaped like {type:'youtube',...} opens in YouTube mode).
+  // This component is remounted (via `key={slide.id}` at the call site)
+  // whenever the host switches slides, so this lazy init never goes stale.
+  const [audioModes, setAudioModes] = useState(() => {
+    const init = {}
+    mediaSlots.forEach((slot, i) => { if (slot?.type === 'youtube') init[i] = 'youtube' })
+    return init
+  })
+
   async function uploadSlot(i, file) {
     const result = await uploadMedia(file)
     if (result?.url) {
@@ -382,6 +398,15 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
   function removeSlot(i) {
     const next = [...mediaSlots]
     if (next[i]) next[i] = { url: null, type: null }
+    onChange('mediaSlots', next)
+  }
+
+  // Writes a YouTube clip directly into mediaSlots[i] — no upload involved,
+  // just metadata (mirrors uploadSlot/removeSlot's onChange('mediaSlots', ...) shape).
+  function setYoutubeSlot(i, clip) {
+    const next = [...mediaSlots]
+    while (next.length <= i) next.push({})
+    next[i] = clip ? { type: 'youtube', videoId: clip.videoId, start: clip.start, end: clip.end } : { url: null, type: null }
     onChange('mediaSlots', next)
   }
 
@@ -593,52 +618,82 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
             </div>
           )}
 
-          {/* Audio slots */}
+          {/* Audio slots — upload a file OR source from a YouTube clip */}
           {schema.type === 'audio' && slots > 0 && (
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">
                 {slots === 1 ? 'Audio' : `Audio (${slots} tracks)`}
               </label>
               <div className="space-y-3">
-                {Array.from({ length: slots }).map((_, i) => (
-                  <div key={i} className="flex flex-col gap-2">
-                    {slots > 1 && (
-                      <TextInput
-                        value={data[`trackLabel_${i}`] ?? ''}
-                        onChange={v => onChange(`trackLabel_${i}`, v)}
-                        placeholder={`Track ${i + 1} title…`}
-                      />
-                    )}
-                    <MediaUpload
-                      accept="audio"
-                      label={slots > 1 ? `Audio ${i + 1}` : 'Audio File'}
-                      currentUrl={mediaSlots[i]?.url}
-                      currentType={mediaSlots[i]?.type}
-                      onUpload={file => uploadSlot(i, file)}
-                      onRemove={() => removeSlot(i)}
-                    />
-                  </div>
-                ))}
+                {Array.from({ length: slots }).map((_, i) => {
+                  const slotMode = audioModes[i] ?? 'upload'
+                  return (
+                    <div key={i} className="flex flex-col gap-2">
+                      {slots > 1 && (
+                        <TextInput
+                          value={data[`trackLabel_${i}`] ?? ''}
+                          onChange={v => onChange(`trackLabel_${i}`, v)}
+                          placeholder={`Track ${i + 1} title…`}
+                        />
+                      )}
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setAudioModes(m => ({ ...m, [i]: 'upload' }))}
+                          className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                            slotMode === 'upload'
+                              ? 'bg-blue-500 border-blue-500 text-white'
+                              : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+                          }`}
+                        >
+                          📁 Upload
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAudioModes(m => ({ ...m, [i]: 'youtube' }))}
+                          className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                            slotMode === 'youtube'
+                              ? 'bg-blue-500 border-blue-500 text-white'
+                              : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+                          }`}
+                        >
+                          ▶️ YouTube
+                        </button>
+                      </div>
+                      {slotMode === 'youtube' ? (
+                        <YoutubeClipEditor
+                          value={mediaSlots[i]?.type === 'youtube' ? mediaSlots[i] : null}
+                          onChange={clip => setYoutubeSlot(i, clip)}
+                        />
+                      ) : (
+                        <MediaUpload
+                          accept="audio"
+                          label={slots > 1 ? `Audio ${i + 1}` : 'Audio File'}
+                          currentUrl={mediaSlots[i]?.url}
+                          currentType={mediaSlots[i]?.type}
+                          onUpload={file => uploadSlot(i, file)}
+                          onRemove={() => removeSlot(i)}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
 
-          {/* Video slots */}
+          {/* Video slots — YouTube clip only, no file upload */}
           {schema.type === 'video' && slots > 0 && (
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                {slots === 1 ? 'Video' : `Videos (${slots} slots)`}
+                {slots === 1 ? 'Video (YouTube)' : `Videos — YouTube (${slots} slots)`}
               </label>
               <div className="space-y-3">
                 {Array.from({ length: slots }).map((_, i) => (
-                  <MediaUpload
+                  <YoutubeClipEditor
                     key={i}
-                    accept="video"
-                    label={slots > 1 ? `Video ${i + 1}` : 'Video File'}
-                    currentUrl={mediaSlots[i]?.url}
-                    currentType={mediaSlots[i]?.type}
-                    onUpload={file => uploadSlot(i, file)}
-                    onRemove={() => removeSlot(i)}
+                    value={mediaSlots[i]?.type === 'youtube' ? mediaSlots[i] : null}
+                    onChange={clip => setYoutubeSlot(i, clip)}
                   />
                 ))}
               </div>
@@ -773,6 +828,15 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
 
 function ShinyPartEditor({ part, index, schemaType, onChange, onRemove, onUploadMedia, canRemove }) {
   const media = part.mediaSlots?.[0]
+  // Same upload-vs-YouTube toggle as the top-level Audio slots block, scoped
+  // to this part. Derived once from whatever's already on the part; this
+  // component is remounted whenever the parent QuestionEditor remounts
+  // (slide switch), so the lazy init never goes stale.
+  const [audioMode, setAudioMode] = useState(media?.type === 'youtube' ? 'youtube' : 'upload')
+
+  function setPartYoutube(clip) {
+    onChange({ ...part, mediaSlots: clip ? [{ type: 'youtube', videoId: clip.videoId, start: clip.start, end: clip.end }] : [] })
+  }
 
   return (
     <div className="border border-gray-200 rounded-lg p-3 space-y-2.5">
@@ -785,14 +849,63 @@ function ShinyPartEditor({ part, index, schemaType, onChange, onRemove, onUpload
       <Field label="Subtitle" hint='e.g. "Villain Laughs"'>
         <TextInput value={part.label} onChange={v => onChange({ ...part, label: v })} placeholder="Optional label for this part" />
       </Field>
-      {(schemaType === 'image' || schemaType === 'audio' || schemaType === 'video') && (
+      {schemaType === 'image' && (
         <MediaUpload
-          accept={schemaType}
-          label={schemaType === 'image' ? 'Image' : schemaType === 'audio' ? 'Audio File' : 'Video File'}
+          accept="image"
+          label="Image"
           currentUrl={media?.url}
           currentType={media?.type}
           onUpload={onUploadMedia}
           onRemove={() => onChange({ ...part, mediaSlots: [] })}
+        />
+      )}
+      {schemaType === 'audio' && (
+        <>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => setAudioMode('upload')}
+              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                audioMode === 'upload'
+                  ? 'bg-blue-500 border-blue-500 text-white'
+                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              📁 Upload
+            </button>
+            <button
+              type="button"
+              onClick={() => setAudioMode('youtube')}
+              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                audioMode === 'youtube'
+                  ? 'bg-blue-500 border-blue-500 text-white'
+                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              ▶️ YouTube
+            </button>
+          </div>
+          {audioMode === 'youtube' ? (
+            <YoutubeClipEditor
+              value={media?.type === 'youtube' ? media : null}
+              onChange={setPartYoutube}
+            />
+          ) : (
+            <MediaUpload
+              accept="audio"
+              label="Audio File"
+              currentUrl={media?.url}
+              currentType={media?.type}
+              onUpload={onUploadMedia}
+              onRemove={() => onChange({ ...part, mediaSlots: [] })}
+            />
+          )}
+        </>
+      )}
+      {schemaType === 'video' && (
+        <YoutubeClipEditor
+          value={media?.type === 'youtube' ? media : null}
+          onChange={setPartYoutube}
         />
       )}
       {schemaType !== 'list' && (

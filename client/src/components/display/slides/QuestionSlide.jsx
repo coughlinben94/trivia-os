@@ -3,9 +3,10 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
 import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
-import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny } from '../../../lib/shinySeries.js'
+import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny } from '../../../lib/shinySeries.js'
 import { fitToBox, QUESTION_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
+import { youtubeEmbedUrl } from '../../../lib/youtube.js'
 
 // ─── Standard question ────────────────────────────────────────────────────────
 
@@ -314,6 +315,7 @@ function ShinyVisualQuestion({ slide, theme }) {
 function ShinyAudioQuestion({ slide, show, theme }) {
   const { data } = slide
   const part = resolveShinyPart(data)
+  const isYoutubeSource = !!part.youtubeId
   const [playing, setPlaying] = useState(false)
   const audioRef = useRef(null)
   const audioCtxRef = useRef(null)
@@ -328,6 +330,18 @@ function ShinyAudioQuestion({ slide, show, theme }) {
     setPlaying(false)
     audioRef.current?.pause()
   }, [slide.id, data.currentPart])
+
+  // A YouTube-sourced clip has no <audio onEnded> equivalent — a plain
+  // embed gives us no ended event — so we time the auto-stop ourselves
+  // from the configured clip length, same effect the "Preview clip"
+  // button gets in the host editor via getCurrentTime() polling.
+  useEffect(() => {
+    if (!isYoutubeSource || !playing || !part.youtubeEnd) return
+    const ms = Math.max(0, (part.youtubeEnd - (part.youtubeStart || 0)) * 1000)
+    if (ms <= 0) return
+    const t = setTimeout(() => setPlaying(false), ms)
+    return () => clearTimeout(t)
+  }, [isYoutubeSource, playing, part.youtubeEnd, part.youtubeStart])
 
   function ensureAudioGraph() {
     if (!audioRef.current || audioCtxRef.current) return audioCtxRef.current
@@ -349,12 +363,15 @@ function ShinyAudioQuestion({ slide, show, theme }) {
   }
 
   // React to show.audio_playing from Supabase (wired in step 5 Live Mode)
+  // — only meaningful for the real <audio> element; a YouTube-sourced clip
+  // has no gain graph to hook into and is driven purely by the on-screen button.
   useEffect(() => {
+    if (isYoutubeSource) return
     const ap = show?.audio_playing
     if (ap?.slideId === slide.id && ap?.playing && audioRef.current) {
       playWithGain().catch(() => {})
     }
-  }, [show?.audio_playing, slide.id])
+  }, [show?.audio_playing, slide.id, isYoutubeSource])
 
   return (
     <div
@@ -439,15 +456,33 @@ function ShinyAudioQuestion({ slide, show, theme }) {
         <WaveformBars theme={theme} playing={playing} />
       </motion.div>
 
-      {/* Play button — shown but host controls audio via Live Mode */}
-      {part.mediaUrl && (
+      {/* Play button — shown but host controls audio via Live Mode.
+          Underlying playback mechanism branches on source: a real <audio>
+          tag for an uploaded file, or a visually-hidden YouTube iframe for
+          a clip sourced from a URL. Visible UI (waveform, button, colors)
+          is identical either way. */}
+      {(isYoutubeSource ? part.youtubeId : part.mediaUrl) && (
         <>
-          <audio
-            ref={audioRef}
-            src={part.mediaUrl}
-            onEnded={() => setPlaying(false)}
-            preload="auto"
-          />
+          {isYoutubeSource ? (
+            playing && (
+              <iframe
+                key={`${slide.id}:${data.currentPart ?? 0}`}
+                src={youtubeEmbedUrl(part.youtubeId, { start: part.youtubeStart, end: part.youtubeEnd, autoplay: true, controls: false })}
+                title="Shiny audio clip"
+                allow="autoplay; encrypted-media"
+                // Visually hidden but NOT display:none — some browsers pause
+                // iframes hidden that way, which would silently kill playback.
+                style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none', border: 0 }}
+              />
+            )
+          ) : (
+            <audio
+              ref={audioRef}
+              src={part.mediaUrl}
+              onEnded={() => setPlaying(false)}
+              preload="auto"
+            />
+          )}
           <motion.div
             initial={{ scale: 0.85, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -457,7 +492,9 @@ function ShinyAudioQuestion({ slide, show, theme }) {
             <div
               className="w-24 h-24 rounded-full flex items-center justify-center cursor-pointer"
               onClick={() => {
-                if (playing) {
+                if (isYoutubeSource) {
+                  setPlaying(p => !p)
+                } else if (playing) {
                   audioRef.current?.pause(); setPlaying(false)
                 } else {
                   playWithGain()
@@ -475,6 +512,173 @@ function ShinyAudioQuestion({ slide, show, theme }) {
             </div>
           </motion.div>
         </>
+      )}
+    </div>
+  )
+}
+
+// ─── Shiny video question ─────────────────────────────────────────────────────
+// Same visual scaffolding as ShinyAudioQuestion (series label, question
+// number/label, centered "visualization", ▶/⏸ button) — the waveform +
+// <audio> tag are swapped for a video box + YouTube iframe, only mounted
+// (and thus only playing) while `playing` is true.
+
+function ShinyVideoQuestion({ slide, theme }) {
+  const { data } = slide
+  const part = resolveShinyPart(data)
+  const reduce = useReducedMotion()
+  const [playing, setPlaying] = useState(false)
+
+  // A multi-part series keeps the same slide.id across parts — reset
+  // playback state when the host advances to a different clip.
+  useEffect(() => {
+    setPlaying(false)
+  }, [slide.id, data.currentPart])
+
+  // A plain embed has no onEnded event, so time the auto-stop ourselves
+  // from the configured clip length (mirrors the host editor's own
+  // getCurrentTime() >= end polling for "Preview clip").
+  useEffect(() => {
+    if (!playing || !part.youtubeEnd) return
+    const ms = Math.max(0, (part.youtubeEnd - (part.youtubeStart || 0)) * 1000)
+    if (ms <= 0) return
+    const t = setTimeout(() => setPlaying(false), ms)
+    return () => clearTimeout(t)
+  }, [playing, part.youtubeEnd, part.youtubeStart])
+
+  const embedSrc = part.youtubeId
+    ? youtubeEmbedUrl(part.youtubeId, { start: part.youtubeStart, end: part.youtubeEnd, autoplay: true, controls: false })
+    : null
+
+  return (
+    <div
+      className="w-full h-full relative flex flex-col items-center justify-center gap-10 overflow-hidden"
+      style={{ background: theme.colors.shinyBg }}
+    >
+      {/* Background glow */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `radial-gradient(ellipse 70% 60% at 50% 50%, ${theme.colors.shinyAccent}18 0%, transparent 65%)`,
+        }}
+      />
+
+      {/* Series theme label */}
+      {data.isSeries && data.seriesTheme && (
+        <motion.div
+          initial={{ opacity: 0, y: reduce ? 0 : -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.08, duration: 0.22, ease: EASE_OUT }}
+          className="text-center"
+        >
+          <p
+            style={{
+              color: theme.colors.textMuted,
+              fontFamily: `'${theme.fonts.ui}', 'Inter', system-ui, sans-serif`,
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+            }}
+          >
+            {data.seriesTheme}
+          </p>
+          {part.subtitle && (
+            <p
+              style={{
+                color: theme.colors.text,
+                fontFamily: `'${theme.fonts.ui}', 'Inter', sans-serif`,
+                fontSize: '1rem',
+                fontWeight: 600,
+                marginTop: 4,
+              }}
+            >
+              {part.subtitle}
+            </p>
+          )}
+        </motion.div>
+      )}
+
+      {/* Question number/label */}
+      <motion.div
+        initial={{ opacity: 0, y: reduce ? 0 : 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.06, duration: 0.22, ease: EASE_OUT }}
+        className="relative z-10 text-center"
+      >
+        <p
+          style={{
+            fontFamily: `'${theme.fonts.display}', sans-serif`,
+            color: theme.colors.text,
+            fontSize: 'clamp(3rem, 8cqw, 6rem)',
+            fontWeight: 700,
+            lineHeight: 1,
+          }}
+        >
+          {data.questionLabel ?? data.questionNumber}
+        </p>
+        {part.text && (
+          <p className="mt-3" style={{ color: theme.colors.textMuted, fontSize: '1.5rem' }}>
+            {part.text}
+          </p>
+        )}
+      </motion.div>
+
+      {/* Video box — replaces the waveform */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.15, duration: 0.3 }}
+        className="relative z-10 rounded-2xl overflow-hidden"
+        style={{
+          width: 'min(60vw, 980px)',
+          aspectRatio: '16 / 9',
+          background: theme.colors.bgDeep,
+          boxShadow: `0 0 0 1px ${theme.colors.shinyAccent}30`,
+        }}
+      >
+        {playing && embedSrc ? (
+          <iframe
+            key={`${slide.id}:${data.currentPart ?? 0}`}
+            src={embedSrc}
+            title="Shiny video clip"
+            className="w-full h-full"
+            style={{ border: 0, display: 'block' }}
+            allow="autoplay; encrypted-media; picture-in-picture"
+            allowFullScreen
+          />
+        ) : (
+          <div
+            className="w-full h-full flex items-center justify-center"
+            style={{ background: `linear-gradient(135deg, ${theme.colors.bgDeep}, ${theme.colors.bg})` }}
+          >
+            <span style={{ fontSize: '3.5rem', opacity: 0.3, filter: `drop-shadow(0 0 12px ${theme.colors.shinyAccent}60)` }}>🎬</span>
+          </div>
+        )}
+      </motion.div>
+
+      {/* Play button — same convention as ShinyAudioQuestion */}
+      {part.youtubeId && (
+        <motion.div
+          initial={{ scale: 0.85, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.3, duration: 0.25, ease: EASE_OUT }}
+          className="relative z-10"
+        >
+          <div
+            className="w-24 h-24 rounded-full flex items-center justify-center cursor-pointer"
+            onClick={() => setPlaying(p => !p)}
+            style={{
+              background: theme.colors.accent,
+              boxShadow: playing ? 'none' : `0 0 40px ${theme.colors.shinyAccent}50`,
+              animation: playing ? 'none' : 'playPulse 2.4s ease-in-out infinite',
+            }}
+          >
+            <span style={{ color: theme.colors.shinyAccent, fontSize: '2.5rem', marginLeft: playing ? 0 : 4 }}>
+              {playing ? '⏸' : '▶'}
+            </span>
+          </div>
+        </motion.div>
       )}
     </div>
   )
@@ -599,6 +803,9 @@ export default function QuestionSlide({ slide, show, transitionKey }) {
   }
   if (data.isShiny && isAudioShiny(data)) {
     return <ShinyAudioQuestion slide={slide} theme={theme} show={show} />
+  }
+  if (data.isShiny && isVideoShiny(data)) {
+    return <ShinyVideoQuestion slide={slide} theme={theme} />
   }
   if (data.isShiny && isListShiny(data)) {
     return <ShinyListQuestion slide={slide} theme={theme} />
