@@ -166,7 +166,7 @@ function stickyPayload(sticky, forcedRoundType) {
 
 // ─── Regular / Shiny question ──────────────────────────────────────────────
 
-export function QuestionInputPanel({ onAdded, sticky, setSticky, categories, addCategory }) {
+export function QuestionInputPanel({ onAdded }) {
   const { formats: shinyFormats, loading: shinyLoading } = useShinyFormats()
 
   const [questionText,   setQuestionText]   = useState('')
@@ -192,11 +192,6 @@ export function QuestionInputPanel({ onAdded, sticky, setSticky, categories, add
 
   useUnsavedGuard(!!(questionText.trim() || questionAnswer.trim() || shinyQuestion.trim() || shinyAnswer.trim()))
 
-  function rememberCategory() {
-    const c = sticky.category.trim()
-    if (c) addCategory(c)
-  }
-
   async function addPlain() {
     if (!canAddQuestion || !begin()) return
     const ok = await archiveQuestion({
@@ -208,12 +203,10 @@ export function QuestionInputPanel({ onAdded, sticky, setSticky, categories, add
       show_id:    null,
       show_title: null,
       show_date:  null,
-      ...stickyPayload(sticky),
     })
     end()
-    if (!ok) { flashFailure(); return } // keep the typed text (sticky fields never clear)
+    if (!ok) { flashFailure(); return } // keep the typed text
     setQuestionText(''); setQuestionAnswer(''); setIsBonus(false)
-    rememberCategory()
     flashSuccess()
     questionTextRef.current?.focus()
     onAdded?.()
@@ -232,20 +225,16 @@ export function QuestionInputPanel({ onAdded, sticky, setSticky, categories, add
       show_id:           null,
       show_title:        null,
       show_date:         null,
-      ...stickyPayload(sticky),
     })
     end()
-    if (!ok) { flashFailure(); return } // keep the typed text (sticky fields never clear)
+    if (!ok) { flashFailure(); return } // keep the typed text
     setShinyQuestion(''); setShinyAnswer(''); setSelectedShinyFmt(null); setShinyStep('pick')
-    rememberCategory()
     flashSuccess()
     onAdded?.()
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <StickyFields sticky={sticky} setSticky={setSticky} categories={categories} />
-      <div className="grid grid-cols-2 gap-6">
+    <div className="grid grid-cols-2 gap-6">
       {/* LEFT — plain question */}
       <div className="flex flex-col gap-3 border-r border-gray-100 pr-6">
         <div>
@@ -254,6 +243,7 @@ export function QuestionInputPanel({ onAdded, sticky, setSticky, categories, add
         </div>
         <textarea
           ref={questionTextRef}
+          autoFocus
           value={questionText}
           onChange={e => setQuestionText(e.target.value)}
           onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') addPlain() }}
@@ -412,7 +402,6 @@ export function QuestionInputPanel({ onAdded, sticky, setSticky, categories, add
             )}
           </>
         )}
-      </div>
       </div>
       <Toast show={toast} label="Added to database" />
       <Toast show={failed} fail label={FAIL_LABEL} />

@@ -434,7 +434,11 @@ export default function Questions() {
             {search ? 'No results.' : 'No questions yet — add a question slide in the host to get started.'}
           </p>
         ) : (
-          <div className="flex flex-wrap gap-4 justify-center items-start">
+          /* items-stretch (the flex default) lets cards in the same row equalize
+             height so each card's mt-auto answer block lines up at a common
+             bottom edge — items-start (previous) let every card sit at its own
+             natural height, reading as mismatched card sizes row to row. */
+          <div className="flex flex-wrap gap-4 justify-center items-stretch">
             {visible.map((row, i) => (
               <QuestionCard
                 key={row.id}

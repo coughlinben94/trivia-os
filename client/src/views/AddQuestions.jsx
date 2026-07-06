@@ -13,6 +13,11 @@ export default function AddQuestions() {
   const { categories, addCategory } = useCategorySuggestions()
   const panelProps = { sticky, setSticky, categories, addCategory }
 
+  // Live feedback for a long entry run — the only signal a host gets during
+  // marathon batch entry that saves are actually landing.
+  const [sessionCount, setSessionCount] = useState(0)
+  const bumpCount = () => setSessionCount(n => n + 1)
+
   return (
     <HostPinGate>
       <div className="min-h-screen bg-gray-50 font-sans">
@@ -22,12 +27,19 @@ export default function AddQuestions() {
               <h1 className="text-lg font-bold text-gray-900">Add Questions</h1>
               <p className="text-xs text-gray-500 mt-0.5">Upload trivia from past shows without attaching it to a show</p>
             </div>
-            <a
-              href="/questions"
-              className="text-xs text-gray-500 transition-colors duration-150 ease-out hover:text-gray-700"
-            >
-              ← Back to archive
-            </a>
+            <div className="flex items-center gap-4">
+              {sessionCount > 0 && (
+                <span className="text-xs font-semibold text-[#1a6b4a] bg-green-50 border border-green-200 rounded-full px-3 py-1">
+                  {sessionCount} saved this session
+                </span>
+              )}
+              <a
+                href="/questions"
+                className="text-xs text-gray-500 transition-colors duration-150 ease-out hover:text-gray-700"
+              >
+                ← Back to archive
+              </a>
+            </div>
           </div>
         </div>
 
@@ -38,17 +50,17 @@ export default function AddQuestions() {
                 <div className="flex items-center gap-2 mb-5">
                   <button
                     onClick={() => setActiveInput(null)}
-                    className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors duration-150 ease-out"
+                    className="text-xs font-medium text-gray-500 hover:text-gray-700 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors duration-150 ease-out"
                   >
-                    ←
+                    ← Back
                   </button>
                   <h2 className="text-sm font-semibold text-gray-800">
                     {activeTile?.icon} {activeTile?.name}
                   </h2>
                 </div>
-                {activeInput === 'question' && <QuestionInputPanel onAdded={() => {}} {...panelProps} />}
-                {activeInput === 'swing'    && <SwingInputPanel onAdded={() => {}} {...panelProps} />}
-                {activeInput === 'pyl'      && <PylInputPanel onAdded={() => {}} {...panelProps} />}
+                {activeInput === 'question' && <QuestionInputPanel onAdded={bumpCount} />}
+                {activeInput === 'swing'    && <SwingInputPanel onAdded={bumpCount} {...panelProps} />}
+                {activeInput === 'pyl'      && <PylInputPanel onAdded={bumpCount} {...panelProps} />}
               </>
             ) : (
               <div className="flex flex-wrap gap-3 justify-center">
