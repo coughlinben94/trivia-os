@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
 import HostPinGate from '../components/host/HostPinGate.jsx'
+import { useShinyFormats } from '../hooks/useShinyFormats.js'
 
 const TYPE_LABEL = { regular: 'Regular Question', shiny: 'Shiny', pyl: 'PYL', swing: 'Swing' }
 const TYPE_COLOR = {
@@ -10,25 +11,23 @@ const TYPE_COLOR = {
   swing:   'bg-blue-100 text-blue-700',
 }
 const FILTERS = [
-  { id: 'all',          label: 'All' },
-  { id: 'regular',      label: 'Regular' },
-  { id: 'bonus',        label: 'Bonus' },
-  { id: 'shiny-visual', label: 'Shiny Visual' },
-  { id: 'shiny-audio',  label: 'Shiny Audio' },
-  { id: 'pyl',          label: 'PYL' },
-  { id: 'swing',        label: 'Swing' },
+  { id: 'all',     label: 'All' },
+  { id: 'regular', label: 'Regular' },
+  { id: 'bonus',   label: 'Bonus' },
+  { id: 'shiny',   label: 'Shiny' },
+  { id: 'pyl',     label: 'PYL' },
+  { id: 'swing',   label: 'Swing' },
 ]
 
 const TRUNCATE_AT = 200
 
 function matchesFilter(q, filter) {
-  if (filter === 'all')          return true
-  if (filter === 'regular')      return q.type === 'regular' && !q.is_bonus
-  if (filter === 'bonus')        return q.is_bonus
-  if (filter === 'shiny-visual') return q.is_shiny && q.shiny_type === 'visual'
-  if (filter === 'shiny-audio')  return q.is_shiny && q.shiny_type === 'audio'
-  if (filter === 'pyl')          return q.type === 'pyl'
-  if (filter === 'swing')        return q.type === 'swing'
+  if (filter === 'all')     return true
+  if (filter === 'regular') return q.type === 'regular' && !q.is_bonus
+  if (filter === 'bonus')   return q.is_bonus
+  if (filter === 'shiny')   return !!q.is_shiny
+  if (filter === 'pyl')     return q.type === 'pyl'
+  if (filter === 'swing')   return q.type === 'swing'
   return true
 }
 
@@ -154,17 +153,19 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
 
       {/* Answer — always visible, own block */}
       {!isSwing && !isEditing && (
-        <div className="bg-gray-50 rounded-lg px-3 py-2 mt-auto">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-0.5">Answer</p>
-          {row.type === 'pyl' && row.answer ? (
-            <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-purple-100 text-purple-700 capitalize">
-              {row.answer}
-            </span>
-          ) : (
-            <p className="text-sm font-medium text-[#1a6b4a]">
-              {row.answer ?? <span className="text-gray-400 italic font-normal">No answer</span>}
-            </p>
-          )}
+        <div className="bg-gradient-to-br from-emerald-50 to-green-50 border border-emerald-100 rounded-lg px-3 py-2 mt-auto">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 mb-0.5">Answer</p>
+          <div className="text-right">
+            {row.type === 'pyl' && row.answer ? (
+              <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-purple-100 text-purple-700 capitalize">
+                {row.answer}
+              </span>
+            ) : (
+              <p className="text-sm font-medium text-[#1a6b4a]">
+                {row.answer ?? <span className="text-gray-400 italic font-normal">No answer</span>}
+              </p>
+            )}
+          </div>
         </div>
       )}
 
@@ -234,6 +235,8 @@ export default function Questions() {
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
   const [filter, setFilter]       = useState('all')
+  const [shinyFormatFilter, setShinyFormatFilter] = useState(null) // shiny_format_name string or null (= all shiny)
+  const { formats: shinyFormats } = useShinyFormats()
   const [showFilter, setShowFilter] = useState(null) // show_id string or null
   const [editingId, setEditingId] = useState(null)
   const [editDraft, setEditDraft] = useState({ text: '', answer: '', category: '' })
@@ -273,9 +276,17 @@ export default function Questions() {
   const visible = questions.filter(row => {
     if (showFilter && row.show_id !== showFilter) return false
     if (!matchesFilter(row, filter)) return false
+    if (filter === 'shiny' && shinyFormatFilter && row.shiny_format_name !== shinyFormatFilter) return false
     if (!q) return true
     return (row.text ?? '').toLowerCase().includes(q) || (row.answer ?? '').toLowerCase().includes(q)
   })
+
+  // Only offer formats that actually have questions archived under them —
+  // the full library (dashboard's Shiny Formats) is usually bigger than
+  // what's been uploaded so far.
+  const shinyFormatsInUse = shinyFormats.filter(fmt =>
+    questions.some(row => row.is_shiny && row.shiny_format_name === fmt.name)
+  )
 
   function startEdit(row) {
     setEditingId(row.id)
@@ -389,7 +400,7 @@ export default function Questions() {
           {FILTERS.map(f => (
             <button
               key={f.id}
-              onClick={() => setFilter(f.id)}
+              onClick={() => { setFilter(f.id); setShinyFormatFilter(null) }}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[transform,background-color,border-color,color] duration-150 ease-out active:scale-[0.97] ${
                 filter === f.id
                   ? 'bg-[#1a6b4a] text-white border border-[#1a6b4a]'
@@ -400,6 +411,35 @@ export default function Questions() {
             </button>
           ))}
         </div>
+
+        {filter === 'shiny' && shinyFormatsInUse.length > 0 && (
+          <div className="flex gap-1.5 flex-wrap justify-center">
+            <button
+              onClick={() => setShinyFormatFilter(null)}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-[transform,background-color,border-color,color] duration-150 ease-out active:scale-[0.97] ${
+                shinyFormatFilter === null
+                  ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                  : 'bg-white border border-gray-100 text-gray-500 hover:border-yellow-300 hover:text-yellow-800'
+              }`}
+            >
+              All shiny
+            </button>
+            {shinyFormatsInUse.map(fmt => (
+              <button
+                key={fmt.id}
+                onClick={() => setShinyFormatFilter(fmt.name)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-[transform,background-color,border-color,color] duration-150 ease-out active:scale-[0.97] ${
+                  shinyFormatFilter === fmt.name
+                    ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                    : 'bg-white border border-gray-100 text-gray-500 hover:border-yellow-300 hover:text-yellow-800'
+                }`}
+              >
+                <span>{fmt.icon}</span>
+                {fmt.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {writeError && (
