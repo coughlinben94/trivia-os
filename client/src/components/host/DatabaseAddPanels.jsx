@@ -363,6 +363,28 @@ export function QuestionInputPanel({ onAdded }) {
   )
 }
 
+// A paste into ANY item-row cell (Swing's question/answer, PYL's item/answer)
+// that looks like a multi-item block — more than one clue/answer pair —
+// replaces the WHOLE item list with the parsed result, instead of only
+// filling that one cell. This is the point of the guided flow: type the
+// round title / theme name once, then paste the entire block of
+// questions+answers in one shot rather than typing or pasting them one row
+// at a time. A plain single-line paste falls through to the normal
+// per-cell clean-paste behavior untouched.
+function makeBulkOrCleanPasteHandler(setItems, cellSetter) {
+  return (e) => {
+    const raw = e.clipboardData.getData('text/plain')
+    const { groups } = parseOutlinePaste(raw)
+    const flat = groups.flatMap(g => g.items).filter(it => it.text || it.answer)
+    if (flat.length > 1) {
+      e.preventDefault()
+      setItems(flat.map(it => ({ text: it.text, answer: it.answer })))
+      return
+    }
+    makeCleanPasteHandler(cellSetter)(e)
+  }
+}
+
 // ─── Swing Round batch ──────────────────────────────────────────────────────
 
 export function SwingInputPanel({ onAdded }) {
@@ -434,7 +456,7 @@ export function SwingInputPanel({ onAdded }) {
     <div className="flex flex-col gap-3 max-w-2xl mx-auto">
       <div className="flex items-center gap-2">
         <button onClick={() => setStarted(false)} className={`text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100 ${BTN}`}>←</button>
-        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest">{count} questions — paste or type each one</p>
+        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest">{questions.length} questions — paste the whole list into any row, or type each one</p>
       </div>
 
       <div>
@@ -464,7 +486,7 @@ export function SwingInputPanel({ onAdded }) {
               placeholder="Question text…"
               value={q.text}
               onChange={e => updateQ(i, 'text', e.target.value)}
-              onPaste={makeCleanPasteHandler(v => updateQ(i, 'text', v))}
+              onPaste={makeBulkOrCleanPasteHandler(setQuestions, v => updateQ(i, 'text', v))}
               className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
             />
             <input
@@ -472,7 +494,7 @@ export function SwingInputPanel({ onAdded }) {
               placeholder="Answer"
               value={q.answer}
               onChange={e => updateQ(i, 'answer', e.target.value)}
-              onPaste={makeCleanPasteHandler(v => updateQ(i, 'answer', v))}
+              onPaste={makeBulkOrCleanPasteHandler(setQuestions, v => updateQ(i, 'answer', v))}
               className="w-40 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
             />
           </div>
@@ -503,6 +525,12 @@ const TYPE_OPTIONS = [
   { id: 'word',   icon: '🔤', label: 'Word'   },
 ]
 
+const PYL_DEFAULT_ITEM_COUNT = 6 // matches Ben's "6-item complete list" PYL convention
+
+function blankPylItems() {
+  return Array.from({ length: PYL_DEFAULT_ITEM_COUNT }, () => ({ text: '', answer: '' }))
+}
+
 export function PylInputPanel({ onAdded }) {
   const [started, setStarted]     = useState(false)
   const [themeCount, setThemeCount] = useState(3)
@@ -510,31 +538,47 @@ export function PylInputPanel({ onAdded }) {
   const [collected, setCollected] = useState([])
   const [currentName, setCurrentName] = useState('')
   const [currentType, setCurrentType] = useState(null)
+  // The actual 6-item list for the theme being entered right now — this was
+  // missing entirely before: the panel only ever asked for a theme name +
+  // media type and archived that alone, with no way to enter the real
+  // questions/answers underneath it.
+  const [currentItems, setCurrentItems] = useState(blankPylItems)
   const { toast, failed, busy, begin, end, flashSuccess, flashFailure } = useSaveOutcome()
 
-  useUnsavedGuard(started && (currentName.trim().length > 0 || collected.length > 0))
+  useUnsavedGuard(started && (currentName.trim().length > 0 || collected.length > 0 || currentItems.some(it => it.text.trim() || it.answer.trim())))
 
   function startThemes() {
-    setCollected([]); setThemeIndex(0); setCurrentName(''); setCurrentType(null); setStarted(true)
+    setCollected([]); setThemeIndex(0); setCurrentName(''); setCurrentType(null); setCurrentItems(blankPylItems()); setStarted(true)
   }
+
+  function updateItem(idx, field, val) {
+    setCurrentItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: val } : it))
+  }
+  function addItem() { setCurrentItems(prev => [...prev, { text: '', answer: '' }]) }
+  function removeItem(idx) { setCurrentItems(prev => prev.filter((_, i) => i !== idx)) }
+
+  const cleanCurrentItems = () => currentItems
+    .map(it => ({ text: it.text.trim(), answer: it.answer.trim() }))
+    .filter(it => it.text || it.answer)
 
   async function commitTheme() {
     if (busy) return
-    const theme = { name: currentName.trim(), type: currentType }
+    const theme = { name: currentName.trim(), type: currentType, items: cleanCurrentItems() }
     const next  = [...collected, theme]
     if (next.length < themeCount) {
-      setCollected(next); setThemeIndex(i => i + 1); setCurrentName(''); setCurrentType(null)
+      setCollected(next); setThemeIndex(i => i + 1); setCurrentName(''); setCurrentType(null); setCurrentItems(blankPylItems())
       return
     }
     if (!begin()) return
     const ok = await archiveQuestions(next.map(t => ({
-      type:       'pyl',
-      text:       t.name,
-      answer:     t.type,
-      round_type: 'pyl',
-      show_id:    null,
-      show_title: null,
-      show_date:  null,
+      type:           'pyl',
+      text:           t.name,
+      answer:         t.type,
+      questions_data: t.items,
+      round_type:     'pyl',
+      show_id:        null,
+      show_title:     null,
+      show_date:      null,
     })))
     end()
     if (!ok) { flashFailure(); return } // keep the collected themes + current entry
@@ -574,7 +618,7 @@ export function PylInputPanel({ onAdded }) {
   }
 
   return (
-    <div className="flex flex-col gap-5 items-center max-w-sm mx-auto">
+    <div className="flex flex-col gap-5 items-center max-w-lg mx-auto">
       <div className="w-full flex items-center gap-2">
         <button
           onClick={() => {
@@ -582,7 +626,7 @@ export function PylInputPanel({ onAdded }) {
             setCollected(prev => prev.slice(0, -1))
             setThemeIndex(i => i - 1)
             const prev = collected[collected.length - 1]
-            setCurrentName(prev?.name ?? ''); setCurrentType(prev?.type ?? null)
+            setCurrentName(prev?.name ?? ''); setCurrentType(prev?.type ?? null); setCurrentItems(prev?.items?.length ? [...prev.items] : blankPylItems())
           }}
           className={`text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100 ${BTN}`}
         >
@@ -621,6 +665,37 @@ export function PylInputPanel({ onAdded }) {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="w-full">
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="text-xs font-medium text-gray-500">Items <span className="text-gray-400">(paste the whole 6-item list into any row, or type each one)</span></p>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {currentItems.map((it, i) => (
+            <div key={i} className="flex gap-2 items-center">
+              <span className="text-xs font-semibold text-gray-400 w-4 shrink-0 text-right">{i + 1}</span>
+              <input
+                type="text"
+                placeholder="Item…"
+                value={it.text}
+                onChange={e => updateItem(i, 'text', e.target.value)}
+                onPaste={makeBulkOrCleanPasteHandler(setCurrentItems, v => updateItem(i, 'text', v))}
+                className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
+              />
+              <input
+                type="text"
+                placeholder="Answer (optional)…"
+                value={it.answer}
+                onChange={e => updateItem(i, 'answer', e.target.value)}
+                onPaste={makeBulkOrCleanPasteHandler(setCurrentItems, v => updateItem(i, 'answer', v))}
+                className="w-36 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
+              />
+              <button onClick={() => removeItem(i)} className="text-gray-300 hover:text-red-500 text-xs w-5 h-5 flex items-center justify-center shrink-0">✕</button>
+            </div>
+          ))}
+        </div>
+        <button onClick={addItem} className="text-[11px] text-gray-500 hover:text-gray-700 mt-1.5 px-2 py-1 rounded hover:bg-gray-100 transition-colors duration-150 ease-out">+ Add item</button>
       </div>
 
       {themeCount > 1 && (

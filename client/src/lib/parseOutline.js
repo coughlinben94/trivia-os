@@ -98,8 +98,22 @@ export function parseOutlinePaste(rawText) {
 
   const groupDepth = Math.min(...depths)
   const headerIdx = depths.reduce((acc, d, i) => (d === groupDepth ? [...acc, i] : acc), [])
-  const withChildren = headerIdx.filter(i => depths[i + 1] > groupDepth).length
-  const mostlyHeaders = headerIdx.length > 0 && withChildren / headerIdx.length >= 0.5
+  // "Has a child" alone isn't enough to call something a category header —
+  // "8-bit" → (one child) "Hawaiian roller coaster ride" is structurally
+  // identical to "State nicknames" → (one child at a time, six times) at
+  // this check, but they mean opposite things: a header with exactly ONE
+  // child is a flat clue+answer PAIR (the header IS an item, its child is
+  // the answer — Swing rounds, and a PYL theme's item list pasted on its
+  // own), while a header with SEVERAL children is a real category grouping
+  // those into one archive entry. Only count >1 children as "this is a
+  // header," so a run of uniform 1-child pairs stays a single flat list.
+  const childCount = (i) => {
+    let j = i + 1, n = 0
+    while (j < depths.length && depths[j] > groupDepth) { n++; j++ }
+    return n
+  }
+  const withMultipleChildren = headerIdx.filter(i => childCount(i) > 1).length
+  const mostlyHeaders = headerIdx.length > 0 && withMultipleChildren / headerIdx.length >= 0.5
 
   if (!mostlyHeaders) {
     return { title, groups: [{ title: title ?? 'Untitled', items: pairRuns(lines, depths, groupDepth) }] }
