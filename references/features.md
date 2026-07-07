@@ -282,7 +282,7 @@ Managed via `HostPhotoLibrary.jsx`. Host can upload photos to a reusable library
 
 Trivia Jukebox is a separate React/Vite/Spotify app at `https://trivia-jukebox.vercel.app`. Plays music during grading breaks.
 
-**Grading break → Jukebox:** After ~10s on the grading break slide (Space/ArrowRight skips), `transitionToJukebox` runs `window.location.href = 'https://trivia-jukebox.vercel.app'`.
+**Grading break → Jukebox:** After ~10s on the grading break slide (Space/ArrowRight skips), `transitionToJukebox` runs `window.location.href = 'https://trivia-jukebox.vercel.app'`. This is GradingBreakSlide's own scoped keydown handler — /display has no OTHER, generic keyboard slide-advance handler. One used to exist (Space/ArrowRight/ArrowLeft, focus-window-to-advance) but was removed entirely in `db02b59` (RLS-D-1): it was redundant with the host's own controls and double-fired with this exact grading-break handler, racing a slide-advance write against the page navigating away (DK-1). Navigation authority on /display is now exactly one path — this jukebox-return handoff.
 
 **Jukebox → back:** Jukebox's `b` keydown handler navigates to `trivia-os.vercel.app/display?from=jukebox`. Display.jsx detects `from=jukebox` and auto-detects the show's final grading break structurally — if the show's last slide is a `winner-reveal` AND no `grading-break` slides remain after the current position, it jumps `current_slide_index` to `sorted.length - 1`; otherwise advances by 1. Param stripped via `history.replaceState`. (No per-slide flag involved — there is no manual toggle for this.)
 
