@@ -132,6 +132,7 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
             change={change}
             flushSave={flushSave}
             uploadMedia={uploadMedia}
+            getHostPhotos={getHostPhotos}
           />
         </div>
 

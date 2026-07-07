@@ -26,6 +26,7 @@
 // once, in the gesture handlers below.
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { nanoid } from 'nanoid'
 import SlideRenderer from '../display/SlideRenderer.jsx'
 import ParticleBackground from '../display/ParticleBackground.jsx'
@@ -35,11 +36,13 @@ const INNER_W = 1280
 const INNER_H = 720
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
-const THEME_COLOR_TOKENS = ['text', 'accent', 'highlight']
+const THEME_COLOR_TOKENS = ['text', 'textMuted', 'accent', 'highlight', 'shinyAccent']
+// Must match OverlayLayer's TEXT_SHADOW exactly (WYSIWYG). em-scaled.
+const TEXT_SHADOW = '0 0.05em 0.35em rgba(0,0,0,0.55)'
 
 export default function SlideCanvasEditor({
   slide, show, theme,
-  data, setData, scheduleSave, change, flushSave, uploadMedia,
+  data, setData, scheduleSave, change, flushSave, uploadMedia, getHostPhotos,
 }) {
   // ── scaled-canvas geometry ────────────────────────────────────────────────
   const leftPanelRef = useRef(null)
@@ -72,12 +75,20 @@ export default function SlideCanvasEditor({
   const detectTimerRef = useRef(null)
 
   // ── OVERLAY editing state ─────────────────────────────────────────────────
-  const [editLayout, setEditLayout] = useState(false)
+  // Layout mode is ON by default so the design toolbar above the canvas is live
+  // the moment the editor opens — the strip is never dead space. The toolbar
+  // itself houses the toggle to drop back to pure region editing if wanted.
+  const [editLayout, setEditLayout] = useState(true)
   const [selectedOverlayId, setSelectedOverlayId] = useState(null)
   const [editingOverlayId, setEditingOverlayId] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
   const [guides, setGuides] = useState({ x: false, y: false })
+  // Style applied to the NEXT inserted text box while nothing is selected — the
+  // top toolbar's text controls edit this when there's no text overlay to target.
+  const [textDefaults, setTextDefaults] = useState({
+    fontFamily: 'display', fontSize: 5, color: 'text', align: 'center', weight: 700, italic: false, shadow: false,
+  })
   const editableRef = useRef(null)
   const fileInputRef = useRef(null)
 
@@ -92,6 +103,9 @@ export default function SlideCanvasEditor({
     setSelectedOverlayId(null)
     setEditingOverlayId(null)
     setUploadError(null)
+    // Undo/redo history is scoped to editing THIS slide — reset it on switch.
+    setPast([])
+    setFuture([])
   }, [slide.id])
 
   // ── overlay persistence helpers ───────────────────────────────────────────
@@ -117,6 +131,51 @@ export default function SlideCanvasEditor({
   }
   const nextZ = (list) => Math.max(0, ...list.map(o => o.z ?? 0)) + 1
 
+  // ── undo / redo (in-memory, per-slide-editing session) ────────────────────
+  // Mirror the latest committed overlays in a ref so a history snapshot is
+  // never stale — correct even inside an async image insert or across a drag's
+  // per-frame re-renders (where the closed-over `data` would lag).
+  const overlaysRef = useRef(overlays)
+  useEffect(() => { overlaysRef.current = data.overlays ?? [] }, [data.overlays])
+
+  const MAX_HISTORY = 50
+  const [past, setPast] = useState([])
+  const [future, setFuture] = useState([])
+  const cloneOverlays = (list) => (list ?? []).map(o => ({ ...o }))
+  // Push the PRE-change overlays onto the undo stack and invalidate redo. The
+  // updater is pure (StrictMode-safe); setFuture is a separate plain call.
+  function pushHistorySnapshot(prevOverlays) {
+    setPast(p => {
+      const next = [...p, cloneOverlays(prevOverlays)]
+      return next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next
+    })
+    setFuture([])
+  }
+  // Snapshot before any discrete overlay edit (create/delete/duplicate/style/z).
+  function recordHistory() { pushHistorySnapshot(overlaysRef.current) }
+  // Restore a snapshot through the SAME scheduleSave → chained updateSlide path
+  // every other overlay edit uses, so the serialized write chain stays intact.
+  function applyOverlaysSnapshot(snap) {
+    const next = cloneOverlays(snap)
+    setData(d => { const nd = { ...d, overlays: next }; scheduleSave({ data: nd }); return nd })
+    setSelectedOverlayId(id => next.some(o => o.id === id) ? id : null)
+    setEditingOverlayId(null)
+  }
+  function undo() {
+    if (past.length === 0) return
+    const prev = past[past.length - 1]
+    setPast(past.slice(0, -1))
+    setFuture([...future, cloneOverlays(overlaysRef.current)])
+    applyOverlaysSnapshot(prev)
+  }
+  function redo() {
+    if (future.length === 0) return
+    const nextSnap = future[future.length - 1]
+    setFuture(future.slice(0, -1))
+    setPast([...past, cloneOverlays(overlaysRef.current)])
+    applyOverlaysSnapshot(nextSnap)
+  }
+
   function resolveFont(f) {
     if (f === 'display') return theme.fonts.display
     if (f === 'body') return theme.fonts.body
@@ -129,13 +188,13 @@ export default function SlideCanvasEditor({
 
   // ── overlay CRUD ──────────────────────────────────────────────────────────
   function addTextAt(xPct, yPct) {
+    recordHistory()
     const id = nanoid()
     commitOverlays(cur => [...cur, {
       id, kind: 'text',
       x: clamp(xPct, 0, 92), y: clamp(yPct, 0, 92),
       w: 26, rotation: 0, z: nextZ(cur),
-      text: '', fontFamily: 'display', fontSize: 5,
-      color: 'text', align: 'center', weight: 700,
+      text: '', ...textDefaults,
     }])
     setSelectedOverlayId(id)
     setEditingOverlayId(id)
@@ -147,6 +206,7 @@ export default function SlideCanvasEditor({
     try {
       const res = await uploadMedia(file)
       if (res?.url) {
+        recordHistory()
         const id = nanoid()
         commitOverlays(cur => [...cur, { id, kind: 'image', x: 35, y: 30, w: 30, rotation: 0, z: nextZ(cur), mediaUrl: res.url }])
         setSelectedOverlayId(id)
@@ -160,12 +220,26 @@ export default function SlideCanvasEditor({
     }
   }
 
-  function deleteOverlay(id) {
+  // Insert an image overlay from an already-hosted URL (Ben photo picker).
+  // Centered horizontally at a comfortable third-height; w=30 → x=(100-30)/2.
+  function addImageFromUrl(url) {
+    if (!url) return
+    recordHistory()
+    const id = nanoid()
+    commitOverlays(cur => [...cur, { id, kind: 'image', x: 35, y: 28, w: 30, rotation: 0, z: nextZ(cur), mediaUrl: url }])
+    setSelectedOverlayId(id)
+  }
+
+  // record=false for the empty-text auto-prune (the box's creation already made
+  // one history entry; a paired prune snapshot would add a no-op undo step).
+  function deleteOverlay(id, record = true) {
+    if (record) recordHistory()
     commitOverlays(cur => cur.filter(o => o.id !== id))
     if (selectedOverlayId === id) setSelectedOverlayId(null)
     if (editingOverlayId === id) setEditingOverlayId(null)
   }
   function duplicateOverlay(id) {
+    recordHistory()
     const nid = nanoid()
     commitOverlays(cur => {
       const o = cur.find(x => x.id === id)
@@ -177,10 +251,18 @@ export default function SlideCanvasEditor({
   function patchDiscrete(id, patch) {
     commitOverlays(cur => cur.map(o => o.id === id ? { ...o, ...patch } : o))
   }
+  // Text styling from the top toolbar: apply to the selected text overlay, or —
+  // when nothing is selected — update the defaults the next inserted box uses.
+  function applyTextStyle(patch) {
+    if (selectedOverlay?.kind === 'text') { recordHistory(); patchDiscrete(selectedOverlay.id, patch) }
+    else setTextDefaults(d => ({ ...d, ...patch }))
+  }
   function bringToFront(id) {
+    recordHistory()
     commitOverlays(cur => cur.map(o => o.id === id ? { ...o, z: nextZ(cur) } : o))
   }
   function sendToBack(id) {
+    recordHistory()
     commitOverlays(cur => {
       const minZ = Math.min(0, ...cur.map(o => o.z ?? 0))
       return cur.map(o => o.id === id ? { ...o, z: minZ - 1 } : o)
@@ -197,6 +279,9 @@ export default function SlideCanvasEditor({
     const oRect = overlayRef.current.getBoundingClientRect()
     const startX = e.clientX, startY = e.clientY
     const startOvX = ov.x ?? 0, startOvY = ov.y ?? 0
+    // Snapshot the pre-drag state; committed on pointerup only if it moved, so a
+    // plain click-to-select doesn't create a spurious undo step.
+    const before = cloneOverlays(overlaysRef.current)
     let moved = false
     function onMove(ev) {
       const dx = (ev.clientX - startX) / oRect.width * 100
@@ -214,6 +299,7 @@ export default function SlideCanvasEditor({
       document.removeEventListener('pointerup', onUp)
       document.removeEventListener('pointercancel', onUp)
       setGuides({ x: false, y: false })
+      if (moved) pushHistorySnapshot(before)
     }
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
@@ -224,9 +310,18 @@ export default function SlideCanvasEditor({
   useEffect(() => {
     if (!editLayout) return
     function onKey(e) {
+      // Bail while inline-editing a text box or with focus in any field, so
+      // Cmd/Ctrl+Z there runs the browser's NATIVE text undo, not overlay undo.
       if (editingOverlayId) return
       const ae = document.activeElement
       if (ae && (ae.isContentEditable || ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault()
+        if (e.shiftKey) redo(); else undo()
+        return
+      }
+      if (mod && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return }
       if (e.key === 'Escape') { setSelectedOverlayId(null); return }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedOverlayId) {
         e.preventDefault()
@@ -236,7 +331,7 @@ export default function SlideCanvasEditor({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editLayout, editingOverlayId, selectedOverlayId, overlays])
+  }, [editLayout, editingOverlayId, selectedOverlayId, overlays, past, future])
 
   // ── inline text edit: focus the editable & place caret on enter ───────────
   useEffect(() => {
@@ -263,7 +358,7 @@ export default function SlideCanvasEditor({
     // one render stale relative to the last keystroke) to decide pruning.
     const text = (editableRef.current?.textContent ?? '').trim()
     // Prune a text box left completely empty — matches "delete/re-add covers it".
-    if (!text) deleteOverlay(id)
+    if (!text) deleteOverlay(id, false)
   }
 
   function toggleEditLayout() {
@@ -279,23 +374,14 @@ export default function SlideCanvasEditor({
     })
   }
 
-  // Background click on the canvas: deselect, or (edit mode, nothing selected)
-  // add a text box at the click point.
+  // Background click on the canvas: deselect only. Text is inserted from the
+  // design toolbar's "Text" button (addTextAt), not by clicking bare canvas —
+  // with layout mode ON by default, a stray click-to-add would otherwise spawn
+  // a self-pruning empty box every time the host clicks to deselect or inspect.
   function onCanvasBackgroundPointerDown(e) {
     setSelectedRegionId(null)
     if (editingOverlayId) return // let the editable's blur commit first
-    if (!editLayout) return
-    if (selectedOverlayId) { setSelectedOverlayId(null); return }
-    // preventDefault is load-bearing: without it, this same click's default
-    // focus action fires AFTER addTextAt's effect focuses the new inline
-    // editable, blurring it immediately — and commitInlineEdit's empty-text
-    // prune then deletes the box in the same tick. Net effect was "click
-    // does nothing." Same bug class the region-select path already guards.
-    e.preventDefault()
-    const oRect = overlayRef.current.getBoundingClientRect()
-    const x = (e.clientX - oRect.left) / scaledW * 100
-    const y = (e.clientY - oRect.top) / scaledH * 100
-    addTextAt(x, y)
+    setSelectedOverlayId(null)
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -492,6 +578,8 @@ export default function SlideCanvasEditor({
     fontFamily: `'${resolveFont(ov.fontFamily)}', sans-serif`,
     fontSize: `${(ov.fontSize ?? 6) / 100 * scaledH}px`,
     fontWeight: ov.weight ?? 700,
+    fontStyle: ov.italic ? 'italic' : 'normal',
+    textShadow: ov.shadow ? TEXT_SHADOW : 'none',
     textAlign: ov.align ?? 'center',
     lineHeight: 1.15,
     whiteSpace: 'pre-wrap',
@@ -500,51 +588,39 @@ export default function SlideCanvasEditor({
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* ── canvas toolbar ── */}
-      <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-gray-100">
-        <button
-          onClick={toggleEditLayout}
-          className={`text-xs font-medium px-2.5 py-1 rounded-md border transition-colors ${
-            editLayout ? 'bg-indigo-500 border-indigo-500 text-white' : 'bg-gray-50 border-gray-200 text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          ✏️ Edit layout
-        </button>
-        {editLayout && (
-          <>
-            <span className="w-px h-4 bg-gray-200" />
-            {/* onPointerDown preventDefault = same focus-steal guard as the
-                canvas click: the button's mousedown default action would focus
-                the button after the new box's editable grabs focus, blurring
-                it → empty-prune delete. */}
-            <button
-              onPointerDown={e => e.preventDefault()}
-              onClick={() => addTextAt(37, 42)}
-              className="text-xs font-medium px-2.5 py-1 rounded-md border border-dashed border-gray-300 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-colors"
-            >
-              <span className="font-bold">T</span> Text
-            </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="text-xs font-medium px-2.5 py-1 rounded-md border border-dashed border-gray-300 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-colors"
-            >
-              🖼 Image
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={e => { addImageFromFile(e.target.files?.[0]); e.target.value = '' }}
-            />
-            {uploading && <span className="text-xs text-gray-400">Uploading…</span>}
-            {uploadError && <span className="text-xs text-red-500">{uploadError}</span>}
-            {!uploading && !uploadError && (
-              <span className="text-[11px] text-gray-300 ml-auto">Click empty canvas to add text · drag to move · Delete to remove</span>
-            )}
-          </>
-        )}
-      </div>
+      {/* ── design toolbar (fills the strip above the canvas) ── */}
+      <DesignToolbar
+        editLayout={editLayout}
+        onToggleLayout={toggleEditLayout}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={past.length > 0}
+        canRedo={future.length > 0}
+        onInsertText={() => addTextAt(37, 42)}
+        onInsertImage={() => fileInputRef.current?.click()}
+        getHostPhotos={getHostPhotos}
+        uploadMedia={uploadMedia}
+        onInsertPhoto={addImageFromUrl}
+        uploading={uploading}
+        uploadError={uploadError}
+        theme={theme}
+        fonts={fontOptions(show)}
+        textStyle={selectedOverlay?.kind === 'text' ? selectedOverlay : (selectedOverlay ? null : textDefaults)}
+        isDefaults={!selectedOverlay}
+        onTextStyle={applyTextStyle}
+        selectedOverlay={selectedOverlay}
+        onFront={() => selectedOverlay && bringToFront(selectedOverlay.id)}
+        onBack={() => selectedOverlay && sendToBack(selectedOverlay.id)}
+        onDuplicate={() => selectedOverlay && duplicateOverlay(selectedOverlay.id)}
+        onDelete={() => selectedOverlay && deleteOverlay(selectedOverlay.id)}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={e => { addImageFromFile(e.target.files?.[0]); e.target.value = '' }}
+      />
 
       {/* ── canvas viewport ── */}
       <div ref={leftPanelRef} className="flex-1 flex items-center justify-center min-h-0 overflow-hidden">
@@ -693,23 +769,11 @@ export default function SlideCanvasEditor({
               )
             })}
 
-            {/* ── floating toolbar ── */}
-            {editLayout && selectedOverlay && !editingOverlayId && (
-              <OverlayToolbar
-                ov={selectedOverlay}
-                theme={theme}
-                fonts={fontOptions(show)}
-                leftPx={(selectedOverlay.x ?? 0) / 100 * scaledW + (selectedOverlay.w ?? 20) / 100 * scaledW / 2}
-                topPx={(selectedOverlay.y ?? 0) / 100 * scaledH}
-                maxW={scaledW}
-                onPatch={patch => patchDiscrete(selectedOverlay.id, patch)}
-                onFront={() => bringToFront(selectedOverlay.id)}
-                onBack={() => sendToBack(selectedOverlay.id)}
-                onDuplicate={() => duplicateOverlay(selectedOverlay.id)}
-                onDelete={() => deleteOverlay(selectedOverlay.id)}
-                onEditText={() => setEditingOverlayId(selectedOverlay.id)}
-              />
-            )}
+            {/* Floating per-overlay toolbar removed: the persistent top design
+                toolbar now owns all styling + arrange for the selected box, and
+                the box keeps its on-canvas grammar (drag, corner-resize, rotate
+                lollipop, double-click text to edit, Delete key). One editing
+                grammar instead of two. */}
           </div>
         </div>
       </div>
@@ -731,7 +795,10 @@ export default function SlideCanvasEditor({
     const startHpct = bh / scaledH * 100
     const cxPct = (ov.x ?? 0) + startW / 2
     const cyPct = (ov.y ?? 0) + startHpct / 2
+    const before = cloneOverlays(overlaysRef.current)
+    let changed = false
     function onMove(ev) {
+      changed = true
       const ratio = clamp(Math.hypot(ev.clientX - cx, ev.clientY - cy) / startDist, 0.15, 8)
       const newW = clamp(startW * ratio, 3, 100)
       const newHpct = startHpct * ratio
@@ -743,6 +810,7 @@ export default function SlideCanvasEditor({
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
       document.removeEventListener('pointercancel', onUp)
+      if (changed) pushHistorySnapshot(before)
     }
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
@@ -760,7 +828,10 @@ export default function SlideCanvasEditor({
     const cy = oRect.top + (ov.y ?? 0) / 100 * scaledH + bh / 2
     const startRot = ov.rotation ?? 0
     const startA = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI
+    const before = cloneOverlays(overlaysRef.current)
+    let changed = false
     function onMove(ev) {
+      changed = true
       let nr = startRot + (Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180 / Math.PI - startA)
       if (ev.shiftKey) nr = Math.round(nr / 15) * 15
       patchOverlay(ov.id, { rotation: Math.round(nr) })
@@ -769,6 +840,7 @@ export default function SlideCanvasEditor({
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
       document.removeEventListener('pointercancel', onUp)
+      if (changed) pushHistorySnapshot(before)
     }
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
@@ -808,85 +880,345 @@ function OverlayHandles({ ov, onResize, onRotate }) {
   )
 }
 
-// Floating toolbar shown on selection — stays upright (not inside the rotated
-// box) and clamped inside the canvas.
-function OverlayToolbar({ ov, theme, fonts, leftPx, topPx, maxW, onPatch, onFront, onBack, onDuplicate, onDelete, onEditText }) {
-  const isText = ov.kind === 'text'
-  const btn = 'text-[11px] px-1.5 py-1 rounded border bg-gray-50 border-gray-200 text-gray-600 hover:text-gray-900 transition-colors'
-  const btnActive = 'text-[11px] px-1.5 py-1 rounded border bg-indigo-500 border-indigo-500 text-white'
+// ─────────────────────────────────────────────────────────────────────────────
+// DesignToolbar — the persistent PowerPoint-style design strip above the canvas.
+// It lives in this file (not SlideEditor) on purpose: every control it drives —
+// overlay CRUD, the serialized write chain (scheduleSave), selection state,
+// layout mode — is owned by SlideCanvasEditor. Lifting it up would mean lifting
+// all that state with it. The strip renders at the top of SlideEditor's left
+// column, so it's visually "above the canvas" while the state stays co-located.
+//
+// OV-1 rule: EVERY button preventDefaults on pointerdown, so clicking a toolbar
+// control while a text overlay is being inline-edited never steals focus from
+// the contenteditable (a blur there commits/empty-prunes the box mid-edit).
+// ─────────────────────────────────────────────────────────────────────────────
+function TbSep() {
+  return <span className="w-px h-5 bg-gray-200 shrink-0" aria-hidden />
+}
+function TbLabel({ children }) {
+  return <span className="text-[9px] font-semibold uppercase tracking-wider text-gray-300 select-none shrink-0">{children}</span>
+}
+// pointerdown focus-steal guard shared by every toolbar button (OV-1).
+const tbPD = e => e.preventDefault()
+function tbBtnClass(active) {
+  return `text-xs font-medium px-2 py-1 rounded-md border transition-colors shrink-0 leading-none ${
+    active
+      ? 'bg-indigo-500 border-indigo-500 text-white'
+      : 'bg-gray-50 border-gray-200 text-gray-600 hover:text-gray-900 hover:border-gray-300'
+  }`
+}
+const TB_BTN_DISABLED = 'text-xs font-medium px-2 py-1 rounded-md border bg-white border-gray-100 text-gray-300 cursor-not-allowed shrink-0 leading-none'
+
+function DesignToolbar({
+  editLayout, onToggleLayout,
+  onUndo, onRedo, canUndo, canRedo,
+  onInsertText, onInsertImage, getHostPhotos, uploadMedia, onInsertPhoto, uploading, uploadError,
+  theme, fonts, textStyle, isDefaults, onTextStyle,
+  selectedOverlay, onFront, onBack, onDuplicate, onDelete,
+}) {
+  return (
+    <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-100 bg-white overflow-x-auto">
+      {/* Layout toggle — always present so the strip is never dead space */}
+      <button
+        onPointerDown={tbPD}
+        onClick={onToggleLayout}
+        title={editLayout ? 'Design tools on — click to hide overlay editing' : 'Turn on overlay design tools'}
+        className={tbBtnClass(editLayout)}
+      >
+        ✏️ Design
+      </button>
+
+      {editLayout && (
+        <>
+          <TbSep />
+          {/* HISTORY */}
+          <TbLabel>History</TbLabel>
+          <button onPointerDown={tbPD} onClick={onUndo} disabled={!canUndo} title="Undo (⌘Z / Ctrl+Z)" className={canUndo ? tbBtnClass(false) : TB_BTN_DISABLED}>↶</button>
+          <button onPointerDown={tbPD} onClick={onRedo} disabled={!canRedo} title="Redo (⇧⌘Z / Ctrl+Shift+Z)" className={canRedo ? tbBtnClass(false) : TB_BTN_DISABLED}>↷</button>
+
+          <TbSep />
+          {/* INSERT */}
+          <TbLabel>Insert</TbLabel>
+          <button onPointerDown={tbPD} onClick={onInsertText} title="Add a text box" className={tbBtnClass(false)}>
+            <span className="font-bold">T</span> Text
+          </button>
+          <button onPointerDown={tbPD} onClick={onInsertImage} title="Upload an image" className={tbBtnClass(false)}>
+            🖼 Image
+          </button>
+          <BenPhotoInsert getHostPhotos={getHostPhotos} uploadMedia={uploadMedia} onInsert={onInsertPhoto} />
+          {uploading && <span className="text-[11px] text-gray-400 shrink-0">Uploading…</span>}
+          {uploadError && <span className="text-[11px] text-red-500 shrink-0">{uploadError}</span>}
+
+          {/* TEXT — edits the selected text overlay, or the next-box defaults */}
+          {textStyle && (
+            <TextStyleGroup theme={theme} fonts={fonts} style={textStyle} isDefaults={isDefaults} onStyle={onTextStyle} />
+          )}
+
+          {selectedOverlay && (
+            <>
+              <TbSep />
+              {/* ARRANGE */}
+              <TbLabel>Arrange</TbLabel>
+              <button onPointerDown={tbPD} onClick={onFront} title="Bring forward" className={tbBtnClass(false)}>⬆</button>
+              <button onPointerDown={tbPD} onClick={onBack} title="Send backward" className={tbBtnClass(false)}>⬇</button>
+              <button onPointerDown={tbPD} onClick={onDuplicate} title="Duplicate" className={tbBtnClass(false)}>⧉</button>
+              <button
+                onPointerDown={tbPD}
+                onClick={onDelete}
+                title="Delete (Del)"
+                className="text-xs font-medium px-2 py-1 rounded-md border bg-red-50 border-red-200 text-red-500 hover:bg-red-100 transition-colors shrink-0 leading-none"
+              >
+                🗑
+              </button>
+            </>
+          )}
+
+          <span className="ml-auto text-[11px] text-gray-300 shrink-0 pl-2 whitespace-nowrap">Drag to move · Del to remove</span>
+        </>
+      )}
+    </div>
+  )
+}
+
+// Ben Photo picker — the canonical home for dropping a host photo onto any
+// slide. Fetches the show's trivia-host-photos bucket on open, click a thumb to
+// insert it centered, or upload a new one (uploadMedia(file, true)). Rendered
+// in a portal so the toolbar's overflow-x can't clip it. Escape is caught in
+// the capture phase and stopped, so it closes the popover — never the whole
+// SlideEditor (OV-3). Every control preventDefaults on pointerdown (OV-1).
+function BenPhotoInsert({ getHostPhotos, uploadMedia, onInsert }) {
+  const [open, setOpen] = useState(false)
+  const [photos, setPhotos] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const btnRef = useRef(null)
+  const popRef = useRef(null)
+  const fileRef = useRef(null)
+
+  function openPopover() {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (r) setPos({ top: Math.round(r.bottom + 6), left: Math.round(r.left) })
+    setOpen(true); setErr(null); setLoading(true)
+    Promise.resolve(getHostPhotos?.())
+      .then(p => { setPhotos(Array.isArray(p) ? p : []); setLoading(false) })
+      .catch(() => { setPhotos([]); setLoading(false) })
+  }
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e) {
+      if (popRef.current?.contains(e.target) || btnRef.current?.contains(e.target)) return
+      setOpen(false)
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); setOpen(false) }
+    }
+    document.addEventListener('pointerdown', onDown)
+    // Capture phase so Escape is intercepted before SlideEditor/overlay handlers.
+    document.addEventListener('keydown', onKey, true)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onKey, true)
+    }
+  }, [open])
+
+  async function handleUpload(file) {
+    if (!file) return
+    setBusy(true); setErr(null)
+    try {
+      const res = await uploadMedia(file, true)
+      if (res?.url) { setPhotos(prev => [{ url: res.url, filename: res.filename }, ...prev]); onInsert(res.url); setOpen(false) }
+      else setErr('Upload failed — no URL returned')
+    } catch (e) { setErr(e?.message || 'Upload failed') }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onPointerDown={tbPD}
+        onClick={() => (open ? setOpen(false) : openPopover())}
+        title="Insert a Ben photo"
+        className={tbBtnClass(open)}
+      >
+        👤 Ben Photo
+      </button>
+      {open && createPortal(
+        <div
+          ref={popRef}
+          onPointerDown={e => e.stopPropagation()}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 200, width: 300 }}
+          className="bg-white rounded-lg shadow-xl border border-gray-200 p-3"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Ben Photos</span>
+            <button onPointerDown={tbPD} onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 text-sm leading-none">✕</button>
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden"
+            onChange={e => { handleUpload(e.target.files?.[0]); e.target.value = '' }} />
+          <button
+            onPointerDown={tbPD}
+            onClick={() => fileRef.current?.click()}
+            disabled={busy}
+            className="w-full text-xs font-medium px-2 py-1.5 mb-2 rounded-md border border-dashed border-gray-300 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-colors disabled:opacity-50"
+          >
+            {busy ? 'Uploading…' : '⬆ Upload new…'}
+          </button>
+          {err && <p className="text-[11px] text-red-500 mb-2">{err}</p>}
+          {loading ? (
+            <p className="text-[11px] text-gray-400 text-center py-6">Loading…</p>
+          ) : photos.length === 0 ? (
+            <p className="text-[11px] text-gray-400 text-center py-6">No Ben photos yet — upload one above.</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-1.5 max-h-56 overflow-y-auto">
+              {photos.map(p => (
+                <button
+                  key={p.url}
+                  onPointerDown={tbPD}
+                  onClick={() => { onInsert(p.url); setOpen(false) }}
+                  title="Insert this photo"
+                  className="aspect-square rounded-md overflow-hidden border border-gray-200 hover:border-indigo-400 transition-colors"
+                >
+                  <img src={p.url} alt="" className="w-full h-full object-cover" draggable={false} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>,
+        document.body,
+      )}
+    </>
+  )
+}
+
+// Text styling controls. Targets the selected text overlay, or (when nothing is
+// selected) the next-box defaults — signaled by the "defaults" pill. The theme
+// swatches and toggle buttons all preventDefault on pointerdown, so styling a
+// box mid-inline-edit never blurs the caret (OV-1). The free color <input> is
+// the one native (focus-taking) control — swatches cover the common case.
+function TextStyleGroup({ theme, fonts, style, isDefaults, onStyle }) {
+  const size = style.fontSize ?? 5
+  const weight = style.weight ?? 700
+  const align = style.align ?? 'center'
+  const step = (delta) => onStyle({ fontSize: clamp(+(size + delta).toFixed(1), 1, 40) })
   const swatch = (token) => (
     <button
       key={token}
+      onPointerDown={tbPD}
+      onClick={() => onStyle({ color: token })}
       title={token}
-      onClick={() => onPatch({ color: token })}
-      className="w-5 h-5 rounded-full border border-gray-300"
-      style={{ background: theme.colors[token], outline: ov.color === token ? '2px solid #6366f1' : 'none', outlineOffset: 1 }}
+      className="w-5 h-5 rounded-full border border-gray-300 shrink-0"
+      style={{ background: theme.colors[token], outline: style.color === token ? '2px solid #6366f1' : 'none', outlineOffset: 1 }}
     />
   )
   return (
-    <div
-      onPointerDown={e => e.stopPropagation()}
-      style={{
-        position: 'absolute',
-        left: clamp(leftPx, 130, maxW - 130),
-        // Sit clear of the rotate lollipop (which reaches ~34px above the box).
-        top: Math.max(2, topPx - 60),
-        transform: 'translateX(-50%)',
-        zIndex: 70,
-      }}
-      className="flex items-center gap-1.5 bg-white rounded-lg shadow-lg border border-gray-200 px-2 py-1.5"
-    >
-      {isText && (
-        <>
-          <select
-            value={ov.fontFamily ?? 'display'}
-            onChange={e => onPatch({ fontFamily: e.target.value })}
-            className="text-[11px] bg-gray-50 border border-gray-200 rounded px-1 py-0.5 max-w-[92px] focus:outline-none"
-            title="Font"
-          >
-            <option value="display">Display (theme)</option>
-            <option value="body">Body (theme)</option>
-            {fonts.map(f => <option key={f} value={f}>{f.startsWith('Custom-') ? 'Custom font' : f}</option>)}
-          </select>
-          <div className="flex items-center">
-            <button className={btn} title="Smaller" onClick={() => onPatch({ fontSize: Math.max(1, +( (ov.fontSize ?? 5) - 0.5).toFixed(1)) })}>A-</button>
-            <span className="text-[10px] text-gray-400 w-6 text-center">{(ov.fontSize ?? 5)}</span>
-            <button className={btn} title="Bigger" onClick={() => onPatch({ fontSize: Math.min(40, +((ov.fontSize ?? 5) + 0.5).toFixed(1)) })}>A+</button>
-          </div>
-          <button className={ov.weight >= 700 ? btnActive : btn} title="Bold" onClick={() => onPatch({ weight: ov.weight >= 700 ? 400 : 700 })}><b>B</b></button>
-          <div className="flex items-center gap-0.5">
-            {[['left', '▤'], ['center', '☰'], ['right', '▥']].map(([a, icon]) => (
-              <button key={a} className={(ov.align ?? 'center') === a ? btnActive : btn} onClick={() => onPatch({ align: a })}>{icon}</button>
-            ))}
-          </div>
-          <div className="flex items-center gap-0.5">
-            {THEME_COLOR_TOKENS.map(swatch)}
-            <input
-              type="color"
-              value={typeof ov.color === 'string' && ov.color.startsWith('#') ? ov.color : '#ffffff'}
-              onChange={e => onPatch({ color: e.target.value })}
-              className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0"
-              title="Custom color"
-            />
-          </div>
-          <button className={btn} title="Edit text" onClick={onEditText}>✎</button>
-          <span className="w-px h-4 bg-gray-200" />
-        </>
+    <>
+      <TbSep />
+      <TbLabel>Text</TbLabel>
+      {isDefaults && (
+        <span className="text-[9px] font-semibold uppercase tracking-wider text-indigo-400 bg-indigo-50 border border-indigo-100 rounded px-1 py-0.5 shrink-0" title="No box selected — these set the next text box's style">
+          defaults
+        </span>
       )}
-      {!isText && (
-        <>
-          <div className="flex items-center">
-            <button className={btn} title="Narrower" onClick={() => onPatch({ w: Math.max(3, (ov.w ?? 30) - 2) })}>−</button>
-            <span className="text-[10px] text-gray-400 w-8 text-center">{Math.round(ov.w ?? 30)}%</span>
-            <button className={btn} title="Wider" onClick={() => onPatch({ w: Math.min(100, (ov.w ?? 30) + 2) })}>+</button>
-          </div>
-          <span className="w-px h-4 bg-gray-200" />
-        </>
+      <FontDropdown value={style.fontFamily ?? 'display'} fonts={fonts} onChange={f => onStyle({ fontFamily: f })} />
+      {/* size */}
+      <div className="flex items-center shrink-0">
+        <button onPointerDown={tbPD} onClick={() => step(-0.5)} title="Smaller" className={tbBtnClass(false)}>A−</button>
+        <span className="text-[10px] text-gray-400 w-7 text-center tabular-nums">{size}</span>
+        <button onPointerDown={tbPD} onClick={() => step(0.5)} title="Bigger" className={tbBtnClass(false)}>A+</button>
+      </div>
+      {/* bold / italic */}
+      <button onPointerDown={tbPD} onClick={() => onStyle({ weight: weight >= 700 ? 400 : 700 })} title="Bold" className={tbBtnClass(weight >= 700)}><b>B</b></button>
+      <button onPointerDown={tbPD} onClick={() => onStyle({ italic: !style.italic })} title="Italic" className={tbBtnClass(!!style.italic)}><i>I</i></button>
+      {/* align */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        {[['left', '▤'], ['center', '☰'], ['right', '▥']].map(([a, icon]) => (
+          <button key={a} onPointerDown={tbPD} onClick={() => onStyle({ align: a })} title={`Align ${a}`} className={tbBtnClass(align === a)}>{icon}</button>
+        ))}
+      </div>
+      {/* shadow (TV readability) */}
+      <button onPointerDown={tbPD} onClick={() => onStyle({ shadow: !style.shadow })} title="Text shadow — pops text off busy backgrounds on TV" className={tbBtnClass(!!style.shadow)}>◍</button>
+      {/* color */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        {THEME_COLOR_TOKENS.map(swatch)}
+        <input
+          type="color"
+          value={typeof style.color === 'string' && style.color.startsWith('#') ? style.color : '#ffffff'}
+          onChange={e => onStyle({ color: e.target.value })}
+          className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0 shrink-0"
+          title="Custom color"
+        />
+      </div>
+    </>
+  )
+}
+
+// Focus-safe font picker (custom button popover, not a native <select> that
+// would blur an in-progress inline edit). Portal-rendered so the toolbar's
+// overflow-x can't clip it; Escape closes it, not the SlideEditor (OV-3).
+function FontDropdown({ value, fonts, onChange }) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const btnRef = useRef(null)
+  const popRef = useRef(null)
+  const options = [
+    { value: 'display', label: 'Theme font' },
+    { value: 'body', label: 'Theme body' },
+    ...fonts.map(f => ({ value: f, label: f.startsWith('Custom-') ? 'Custom font' : f })),
+  ]
+  const current = options.find(o => o.value === value)
+  const familyOf = (v) => (v && v !== 'display' && v !== 'body' ? `'${v}', sans-serif` : undefined)
+
+  function openPop() {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (r) setPos({ top: Math.round(r.bottom + 6), left: Math.round(r.left) })
+    setOpen(true)
+  }
+  useEffect(() => {
+    if (!open) return
+    function onDown(e) { if (popRef.current?.contains(e.target) || btnRef.current?.contains(e.target)) return; setOpen(false) }
+    function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); setOpen(false) } }
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onKey, true)
+    return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey, true) }
+  }, [open])
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onPointerDown={tbPD}
+        onClick={() => (open ? setOpen(false) : openPop())}
+        title="Font"
+        className={`${tbBtnClass(false)} max-w-[112px] truncate`}
+        style={{ fontFamily: familyOf(value) }}
+      >
+        {current?.label ?? 'Theme font'} ▾
+      </button>
+      {open && createPortal(
+        <div
+          ref={popRef}
+          onPointerDown={e => e.stopPropagation()}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 200, width: 150 }}
+          className="bg-white rounded-lg shadow-xl border border-gray-200 py-1 max-h-64 overflow-y-auto"
+        >
+          {options.map(o => (
+            <button
+              key={o.value}
+              onPointerDown={tbPD}
+              onClick={() => { onChange(o.value); setOpen(false) }}
+              className={`w-full text-left text-xs px-3 py-1.5 hover:bg-gray-50 ${o.value === value ? 'text-indigo-600 font-semibold' : 'text-gray-700'}`}
+              style={{ fontFamily: familyOf(o.value) }}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>,
+        document.body,
       )}
-      <button className={btn} title="Bring to front" onClick={onFront}>⬆</button>
-      <button className={btn} title="Send to back" onClick={onBack}>⬇</button>
-      <button className={btn} title="Duplicate" onClick={onDuplicate}>⧉</button>
-      <button className="text-[11px] px-1.5 py-1 rounded border bg-red-50 border-red-200 text-red-500 hover:bg-red-100 transition-colors" title="Delete" onClick={onDelete}>🗑</button>
-    </div>
+    </>
   )
 }
