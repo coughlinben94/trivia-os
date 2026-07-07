@@ -745,11 +745,10 @@ export function PylInputPanel({ onAdded }) {
 //     (an appendix/name-that-list stays one archive entry, per Ben's
 //     explicit ask: "this whole appendix needs to be associated with one
 //     question").
-// Category/Played-on are LOCAL to this panel only — Swing/PYL dropped the
-// shared sticky version of these (their round title/theme name already
-// label the batch), but a bulk-pasted historical round or appendix has no
-// other place to record its category or backfill an approximate play date,
-// so they're kept here, scoped to just this one panel.
+// Category is LOCAL to this panel only — Swing/PYL dropped the shared sticky
+// version (their round title/theme name already label the batch), but a
+// bulk-pasted historical round or appendix has no other place to record its
+// category, so it's kept here, scoped to just this one panel.
 // A box with >1 item needs somewhere to put its list — pyl/swing rows
 // already have that (questions_data); anything else needs the 'list' type
 // (see supabase/migrations/20260706010000_questions_type_add_list.sql —
@@ -794,10 +793,11 @@ export function BulkPasteInputPanel({ onAdded }) {
   const [mode, setMode] = useState('boxes') // 'boxes' | 'one'
   const [roundType, setRoundType] = useState(null) // null | 'swing' | 'pyl' | 'shiny'
   const [category, setCategory] = useState('')
-  const [playedOn, setPlayedOn] = useState('')
-  const [shinyFormatName, setShinyFormatName] = useState('')
+  const [shinyFmtId, setShinyFmtId] = useState('')
+  const { formats: shinyFormats, loading: shinyLoading } = useShinyFormats()
   const { categories, addCategory } = useLocalCategorySuggestions()
   const { toast, failed, busy, begin, end, flashSuccess, flashFailure } = useSaveOutcome()
+  const selectedShinyFmt = shinyFormats.find(f => f.id === shinyFmtId) || null
 
   useUnsavedGuard(boxes.length > 0)
 
@@ -848,7 +848,6 @@ export function BulkPasteInputPanel({ onAdded }) {
   const extra = (rt) => ({
     category:   category.trim() || null,
     round_type: rt,
-    used_on:    playedOn ? [playedOn] : [],
   })
 
 
@@ -860,7 +859,7 @@ export function BulkPasteInputPanel({ onAdded }) {
       if (roundType === 'swing') {
         rows = [{ type: 'swing', questions_data: combined, round_title: detectedTitle || category.trim() || null, show_id: null, show_title: null, show_date: null, ...extra('swing') }]
       } else if (roundType === 'shiny') {
-        rows = [{ type: 'shiny', is_shiny: true, text: detectedTitle || category.trim() || 'Bulk entry', shiny_format_name: shinyFormatName.trim() || null, questions_data: combined, show_id: null, show_title: null, show_date: null, ...extra(null) }]
+        rows = [{ type: 'shiny', is_shiny: true, text: detectedTitle || category.trim() || 'Bulk entry', shiny_format_name: selectedShinyFmt?.name || null, shiny_type: selectedShinyFmt?.input_schema?.type ?? null, questions_data: combined, show_id: null, show_title: null, show_date: null, ...extra(null) }]
       } else {
         rows = [{
           type: roundType === 'pyl' ? 'pyl' : 'list',
@@ -884,7 +883,7 @@ export function BulkPasteInputPanel({ onAdded }) {
           return { type: 'swing', questions_data: items, round_title: b.title || null, show_id: null, show_title: null, show_date: null, ...extra('swing') }
         }
         if (roundType === 'shiny') {
-          return { type: 'shiny', is_shiny: true, text: b.title, shiny_format_name: shinyFormatName.trim() || b.title || null, questions_data: items, show_id: null, show_title: null, show_date: null, ...extra(null) }
+          return { type: 'shiny', is_shiny: true, text: b.title, shiny_format_name: selectedShinyFmt?.name || b.title || null, shiny_type: selectedShinyFmt?.input_schema?.type ?? null, questions_data: items, show_id: null, show_title: null, show_date: null, ...extra(null) }
         }
         return { type: 'list', text: b.title, questions_data: items, show_id: null, show_title: null, show_date: null, ...extra(roundType) }
       })
@@ -960,26 +959,19 @@ export function BulkPasteInputPanel({ onAdded }) {
                 ))}
               </div>
             </div>
-            <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-1">Played on <span className="text-gray-400">(optional)</span></label>
-              <input
-                type="date"
-                value={playedOn}
-                onChange={e => setPlayedOn(e.target.value)}
-                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-              />
-            </div>
             {roundType === 'shiny' && (
-              <div className="flex-1 min-w-[150px]">
+              <div className="flex-1 min-w-[170px]">
                 <label className="block text-[11px] font-medium text-gray-500 mb-1">Shiny format <span className="text-gray-400">(optional)</span></label>
-                <input
-                  type="text"
-                  value={shinyFormatName}
-                  onChange={e => setShinyFormatName(e.target.value)}
-                  onPaste={makeCleanPasteHandler(setShinyFormatName)}
-                  placeholder="e.g. Kevin James, Zookeeper"
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                />
+                <select
+                  value={shinyFmtId}
+                  onChange={e => setShinyFmtId(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                >
+                  <option value="">{shinyLoading ? 'Loading…' : shinyFormats.length ? 'Pick a format…' : 'No formats yet'}</option>
+                  {shinyFormats.map(f => (
+                    <option key={f.id} value={f.id}>{f.icon ? `${f.icon} ` : ''}{f.name}</option>
+                  ))}
+                </select>
               </div>
             )}
           </div>
