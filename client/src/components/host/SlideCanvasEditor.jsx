@@ -1038,7 +1038,7 @@ function DesignToolbar({
             </>
           )}
 
-          <span className="ml-auto text-[11px] text-gray-300 shrink-0 pl-2 whitespace-nowrap">Drag to move · Del to remove</span>
+          <span className="ml-auto text-[11px] text-gray-300 shrink-0 pl-2 whitespace-nowrap">Drag snaps to center &amp; edges · hold ⌥ to disable · Del to remove</span>
         </>
       )}
     </div>
