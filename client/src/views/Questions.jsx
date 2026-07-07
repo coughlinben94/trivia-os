@@ -21,12 +21,12 @@ const FILTERS = [
 
 const TRUNCATE_AT = 200
 const ITEM_LIST_LINE_CAP = 8
-// Rough chars-per-rendered-line at this card's text-xs body width (desktop
+// Rough chars-per-rendered-line at this card's text-sm body width (desktop
 // 3-column card, ~430px content width) — used only to ESTIMATE how many
 // visual lines a long item will wrap to, so the cap tracks real line count
 // instead of raw item count. A card with six 3-line questions was blowing
-// way past 12 lines while sitting well under a 12-ITEM cap.
-const CHARS_PER_LINE = 60
+// way past the line budget while sitting well under an item-count cap.
+const CHARS_PER_LINE = 55
 
 function estimateLines(item) {
   const combined = `${item.text ?? ''}${item.answer ? ` — ${item.answer}` : ''}`
@@ -105,9 +105,9 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
 
   // Any item-list card (swing/pyl/list/multi-item shiny) rendered the WHOLE
   // list with no cap — a 6-item PYL board where every question wraps 2-3
-  // lines blew past 12 rendered lines while sitting well under a flat
+  // lines blew past the line budget while sitting well under a flat
   // item-count cap, so this estimates real wrapped-line count per item and
-  // cuts at the item boundary that keeps the whole card within ~12 lines —
+  // cuts at the item boundary that keeps the whole card within the cap —
   // same expand affordance as the plain-text truncation above, for every
   // question type, not just shiny.
   const itemCutoff = hasItemList ? itemCutoffForLineCap(row.questions_data, ITEM_LIST_LINE_CAP) : 0
@@ -118,13 +118,26 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
     <div
       className={`card-animate w-full sm:w-[calc(50%-0.5rem)] lg:w-[calc(33.333%-0.667rem)] bg-white rounded-2xl border p-4 flex flex-col gap-3 shadow-sm transition-[border-color] duration-150 ease-out hover:border-gray-300 ${
         row.is_bonus ? 'border-red-100 bg-red-50/40' : row.is_shiny ? 'border-yellow-300 bg-yellow-50/60' : 'border-gray-200'
-      } ${hasItemList ? 'self-start' : ''}`}
+      }`}
       style={style}
     >
       {/* Header — show + type badges */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-medium text-gray-700 truncate">{row.show_title ?? '—'}</p>
+          {/* Edit entry-point lives top-left now (was bottom-right in Actions).
+              The '—' placeholder only shows when nothing else fills this slot —
+              suppressed here since Edit already does, real show_title always wins. */}
+          {!hasItemList && !isEditing && (
+            <button
+              onClick={() => onStartEdit(row)}
+              className="text-xs font-semibold text-gray-500 rounded-lg -ml-1.5 mb-0.5 px-1.5 py-0.5 transition-colors duration-150 ease-out hover:text-gray-700 hover:bg-gray-100 active:scale-[0.97]"
+            >
+              Edit
+            </button>
+          )}
+          {(row.show_title || hasItemList || isEditing) && (
+            <p className="text-xs font-medium text-gray-700 truncate">{row.show_title ?? '—'}</p>
+          )}
           <p className="text-[11px] text-gray-500 mt-0.5">{row.show_date ?? ''}</p>
         </div>
         <div className="flex flex-wrap gap-1 justify-end shrink-0">
@@ -157,7 +170,7 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
           {(row.text || row.round_title) && (
             <p className="text-sm font-semibold text-gray-800 mb-1.5">{row.text || row.round_title}</p>
           )}
-          <ol className="list-decimal list-inside space-y-1 text-xs text-gray-700">
+          <ol className="list-decimal list-inside space-y-1 text-sm text-gray-700">
             {shownItems.map((q, qi) => (
               <li key={qi}>
                 <span className="font-medium">{q.text}</span>
@@ -215,28 +228,28 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
         </div>
       )}
 
-      {/* Answer — always visible, own block */}
+      {/* Answer — always visible, own row. Flattened from a bordered/gradient
+          nested-card box to a plain hairline-divided row: same label+value
+          hierarchy, half the chrome to parse scanning down a column of cards. */}
       {!hasItemList && !isEditing && (
-        <div className="bg-gradient-to-br from-emerald-50 to-green-50 border border-emerald-100 rounded-lg px-3 py-2 mt-auto">
+        <div className="border-t border-gray-100 pt-2 mt-auto">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 mb-0.5">Answer</p>
-          <div className="text-right">
-            {row.type === 'pyl' && row.answer ? (
-              <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-purple-100 text-purple-700 capitalize">
-                {row.answer}
-              </span>
-            ) : (
-              <p className="text-sm font-medium text-[#1a6b4a]">
-                {row.answer ? shownAnswer : <span className="text-gray-400 italic font-normal">No answer</span>}
-              </p>
-            )}
-          </div>
+          {row.type === 'pyl' && row.answer ? (
+            <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-purple-100 text-purple-700 capitalize">
+              {row.answer}
+            </span>
+          ) : (
+            <p className="text-sm font-semibold text-[#1a6b4a]">
+              {row.answer ? shownAnswer : <span className="text-gray-400 italic font-normal">No answer</span>}
+            </p>
+          )}
         </div>
       )}
 
-      {/* Actions */}
-      {!hasItemList && (
+      {/* Actions — edit-mode only now; the entry-point Edit button lives top-left (see header) */}
+      {!hasItemList && isEditing && (
         <div className="flex flex-col gap-1.5 pt-0.5">
-          {isEditing && confirmingDelete ? (
+          {confirmingDelete ? (
             <div className="flex items-center justify-between">
               <span className="text-xs text-red-500">Delete this question?</span>
               <div className="flex gap-3">
@@ -256,36 +269,25 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
             </div>
           ) : (
             <div className="flex justify-end gap-1.5">
-              {isEditing ? (
-                <>
-                  <button
-                    onClick={() => setConfirmingDelete(true)}
-                    className="mr-auto px-2.5 py-1 text-red-400 text-xs font-semibold rounded-lg transition-colors duration-150 ease-out hover:text-red-600 active:scale-[0.97]"
-                  >
-                    Delete
-                  </button>
-                  <button
-                    onClick={() => onCommit(row.id)}
-                    disabled={saving}
-                    className="px-2.5 py-1 bg-[#1a6b4a] text-white text-xs font-semibold rounded-lg transition-[transform,opacity] duration-150 ease-out active:scale-[0.97] hover:bg-green-900 disabled:opacity-40"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={onCancel}
-                    className="px-2.5 py-1 bg-white border border-gray-200 text-gray-600 text-xs font-semibold rounded-lg transition-[transform,border-color] duration-150 ease-out active:scale-[0.97] hover:border-gray-400"
-                  >
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => onStartEdit(row)}
-                  className="px-2.5 py-1 bg-white border border-gray-200 text-gray-500 text-xs font-semibold rounded-lg transition-[transform,border-color,color] duration-150 ease-out active:scale-[0.97] hover:border-gray-400 hover:text-gray-700"
-                >
-                  Edit
-                </button>
-              )}
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                className="mr-auto px-2.5 py-1 text-red-400 text-xs font-semibold rounded-lg transition-colors duration-150 ease-out hover:text-red-600 active:scale-[0.97]"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => onCommit(row.id)}
+                disabled={saving}
+                className="px-2.5 py-1 bg-[#1a6b4a] text-white text-xs font-semibold rounded-lg transition-[transform,opacity] duration-150 ease-out active:scale-[0.97] hover:bg-green-900 disabled:opacity-40"
+              >
+                Save
+              </button>
+              <button
+                onClick={onCancel}
+                className="px-2.5 py-1 bg-white border border-gray-200 text-gray-600 text-xs font-semibold rounded-lg transition-[transform,border-color] duration-150 ease-out active:scale-[0.97] hover:border-gray-400"
+              >
+                Cancel
+              </button>
             </div>
           )}
         </div>
@@ -531,12 +533,12 @@ export default function Questions() {
           </p>
         ) : (
           /* items-stretch (the flex default) lets cards in the same row equalize
-             height so each card's mt-auto answer block lines up at a common
-             bottom edge — items-start (previous) let every card sit at its own
-             natural height, reading as mismatched card sizes row to row.
-             Item-list cards opt out via self-start (see QuestionCard) — they
-             have no mt-auto anchor, so stretching them only left dead blank
-             space under a short list next to a taller sibling in the row. */
+             height — every card's box reads the same size across the whole
+             grid, whether it's a plain question, an untruncated short item
+             list, or a capped-and-truncated long one; a short card just
+             shows empty space rather than shrinking to its own content.
+             items-start (previous) let every card sit at its own natural
+             height, reading as mismatched card sizes row to row. */
           <div className="flex flex-wrap gap-4 justify-center items-stretch">
             {visible.map((row, i) => (
               <QuestionCard
