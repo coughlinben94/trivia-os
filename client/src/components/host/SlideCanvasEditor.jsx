@@ -72,7 +72,10 @@ export default function SlideCanvasEditor({
   const detectTimerRef = useRef(null)
 
   // ── OVERLAY editing state ─────────────────────────────────────────────────
-  const [editLayout, setEditLayout] = useState(false)
+  // Layout mode is ON by default so the design toolbar above the canvas is live
+  // the moment the editor opens — the strip is never dead space. The toolbar
+  // itself houses the toggle to drop back to pure region editing if wanted.
+  const [editLayout, setEditLayout] = useState(true)
   const [selectedOverlayId, setSelectedOverlayId] = useState(null)
   const [editingOverlayId, setEditingOverlayId] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -279,23 +282,14 @@ export default function SlideCanvasEditor({
     })
   }
 
-  // Background click on the canvas: deselect, or (edit mode, nothing selected)
-  // add a text box at the click point.
+  // Background click on the canvas: deselect only. Text is inserted from the
+  // design toolbar's "Text" button (addTextAt), not by clicking bare canvas —
+  // with layout mode ON by default, a stray click-to-add would otherwise spawn
+  // a self-pruning empty box every time the host clicks to deselect or inspect.
   function onCanvasBackgroundPointerDown(e) {
     setSelectedRegionId(null)
     if (editingOverlayId) return // let the editable's blur commit first
-    if (!editLayout) return
-    if (selectedOverlayId) { setSelectedOverlayId(null); return }
-    // preventDefault is load-bearing: without it, this same click's default
-    // focus action fires AFTER addTextAt's effect focuses the new inline
-    // editable, blurring it immediately — and commitInlineEdit's empty-text
-    // prune then deletes the box in the same tick. Net effect was "click
-    // does nothing." Same bug class the region-select path already guards.
-    e.preventDefault()
-    const oRect = overlayRef.current.getBoundingClientRect()
-    const x = (e.clientX - oRect.left) / scaledW * 100
-    const y = (e.clientY - oRect.top) / scaledH * 100
-    addTextAt(x, y)
+    setSelectedOverlayId(null)
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -500,51 +494,27 @@ export default function SlideCanvasEditor({
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* ── canvas toolbar ── */}
-      <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-gray-100">
-        <button
-          onClick={toggleEditLayout}
-          className={`text-xs font-medium px-2.5 py-1 rounded-md border transition-colors ${
-            editLayout ? 'bg-indigo-500 border-indigo-500 text-white' : 'bg-gray-50 border-gray-200 text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          ✏️ Edit layout
-        </button>
-        {editLayout && (
-          <>
-            <span className="w-px h-4 bg-gray-200" />
-            {/* onPointerDown preventDefault = same focus-steal guard as the
-                canvas click: the button's mousedown default action would focus
-                the button after the new box's editable grabs focus, blurring
-                it → empty-prune delete. */}
-            <button
-              onPointerDown={e => e.preventDefault()}
-              onClick={() => addTextAt(37, 42)}
-              className="text-xs font-medium px-2.5 py-1 rounded-md border border-dashed border-gray-300 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-colors"
-            >
-              <span className="font-bold">T</span> Text
-            </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="text-xs font-medium px-2.5 py-1 rounded-md border border-dashed border-gray-300 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-colors"
-            >
-              🖼 Image
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={e => { addImageFromFile(e.target.files?.[0]); e.target.value = '' }}
-            />
-            {uploading && <span className="text-xs text-gray-400">Uploading…</span>}
-            {uploadError && <span className="text-xs text-red-500">{uploadError}</span>}
-            {!uploading && !uploadError && (
-              <span className="text-[11px] text-gray-300 ml-auto">Click empty canvas to add text · drag to move · Delete to remove</span>
-            )}
-          </>
-        )}
-      </div>
+      {/* ── design toolbar (fills the strip above the canvas) ── */}
+      <DesignToolbar
+        editLayout={editLayout}
+        onToggleLayout={toggleEditLayout}
+        onInsertText={() => addTextAt(37, 42)}
+        onInsertImage={() => fileInputRef.current?.click()}
+        uploading={uploading}
+        uploadError={uploadError}
+        selectedOverlay={selectedOverlay}
+        onFront={() => selectedOverlay && bringToFront(selectedOverlay.id)}
+        onBack={() => selectedOverlay && sendToBack(selectedOverlay.id)}
+        onDuplicate={() => selectedOverlay && duplicateOverlay(selectedOverlay.id)}
+        onDelete={() => selectedOverlay && deleteOverlay(selectedOverlay.id)}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={e => { addImageFromFile(e.target.files?.[0]); e.target.value = '' }}
+      />
 
       {/* ── canvas viewport ── */}
       <div ref={leftPanelRef} className="flex-1 flex items-center justify-center min-h-0 overflow-hidden">
@@ -887,6 +857,91 @@ function OverlayToolbar({ ov, theme, fonts, leftPx, topPx, maxW, onPatch, onFron
       <button className={btn} title="Send to back" onClick={onBack}>⬇</button>
       <button className={btn} title="Duplicate" onClick={onDuplicate}>⧉</button>
       <button className="text-[11px] px-1.5 py-1 rounded border bg-red-50 border-red-200 text-red-500 hover:bg-red-100 transition-colors" title="Delete" onClick={onDelete}>🗑</button>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DesignToolbar — the persistent PowerPoint-style design strip above the canvas.
+// It lives in this file (not SlideEditor) on purpose: every control it drives —
+// overlay CRUD, the serialized write chain (scheduleSave), selection state,
+// layout mode — is owned by SlideCanvasEditor. Lifting it up would mean lifting
+// all that state with it. The strip renders at the top of SlideEditor's left
+// column, so it's visually "above the canvas" while the state stays co-located.
+//
+// OV-1 rule: EVERY button preventDefaults on pointerdown, so clicking a toolbar
+// control while a text overlay is being inline-edited never steals focus from
+// the contenteditable (a blur there commits/empty-prunes the box mid-edit).
+// ─────────────────────────────────────────────────────────────────────────────
+function TbSep() {
+  return <span className="w-px h-5 bg-gray-200 shrink-0" aria-hidden />
+}
+function TbLabel({ children }) {
+  return <span className="text-[9px] font-semibold uppercase tracking-wider text-gray-300 select-none shrink-0">{children}</span>
+}
+// pointerdown focus-steal guard shared by every toolbar button (OV-1).
+const tbPD = e => e.preventDefault()
+function tbBtnClass(active) {
+  return `text-xs font-medium px-2 py-1 rounded-md border transition-colors shrink-0 leading-none ${
+    active
+      ? 'bg-indigo-500 border-indigo-500 text-white'
+      : 'bg-gray-50 border-gray-200 text-gray-600 hover:text-gray-900 hover:border-gray-300'
+  }`
+}
+
+function DesignToolbar({
+  editLayout, onToggleLayout,
+  onInsertText, onInsertImage, uploading, uploadError,
+  selectedOverlay, onFront, onBack, onDuplicate, onDelete,
+}) {
+  return (
+    <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-100 bg-white overflow-x-auto">
+      {/* Layout toggle — always present so the strip is never dead space */}
+      <button
+        onPointerDown={tbPD}
+        onClick={onToggleLayout}
+        title={editLayout ? 'Design tools on — click to hide overlay editing' : 'Turn on overlay design tools'}
+        className={tbBtnClass(editLayout)}
+      >
+        ✏️ Design
+      </button>
+
+      {editLayout && (
+        <>
+          <TbSep />
+          {/* INSERT */}
+          <TbLabel>Insert</TbLabel>
+          <button onPointerDown={tbPD} onClick={onInsertText} title="Add a text box" className={tbBtnClass(false)}>
+            <span className="font-bold">T</span> Text
+          </button>
+          <button onPointerDown={tbPD} onClick={onInsertImage} title="Upload an image" className={tbBtnClass(false)}>
+            🖼 Image
+          </button>
+          {uploading && <span className="text-[11px] text-gray-400 shrink-0">Uploading…</span>}
+          {uploadError && <span className="text-[11px] text-red-500 shrink-0">{uploadError}</span>}
+
+          {selectedOverlay && (
+            <>
+              <TbSep />
+              {/* ARRANGE */}
+              <TbLabel>Arrange</TbLabel>
+              <button onPointerDown={tbPD} onClick={onFront} title="Bring forward" className={tbBtnClass(false)}>⬆</button>
+              <button onPointerDown={tbPD} onClick={onBack} title="Send backward" className={tbBtnClass(false)}>⬇</button>
+              <button onPointerDown={tbPD} onClick={onDuplicate} title="Duplicate" className={tbBtnClass(false)}>⧉</button>
+              <button
+                onPointerDown={tbPD}
+                onClick={onDelete}
+                title="Delete (Del)"
+                className="text-xs font-medium px-2 py-1 rounded-md border bg-red-50 border-red-200 text-red-500 hover:bg-red-100 transition-colors shrink-0 leading-none"
+              >
+                🗑
+              </button>
+            </>
+          )}
+
+          <span className="ml-auto text-[11px] text-gray-300 shrink-0 pl-2 whitespace-nowrap">Drag to move · Del to remove</span>
+        </>
+      )}
     </div>
   )
 }
