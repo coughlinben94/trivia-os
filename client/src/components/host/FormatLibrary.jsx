@@ -6,7 +6,7 @@ const EMPTY_FORMAT = {
   name: '',
   description: '',
   icon: '✨',
-  input_schema: { type: 'image', slots: 1, seriesEnabled: false, hasPoints: false, labels: [] },
+  input_schema: { type: 'image', slots: 1, seriesEnabled: false, labels: [] },
 }
 
 export default function FormatLibrary({ onClose, onSelectFormat, formats, loading, createFormat, updateFormat, deleteFormat }) {
@@ -230,22 +230,6 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                       className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.seriesEnabled ? 'bg-gray-900' : 'bg-gray-200'}`}
                     >
                       <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.seriesEnabled ? 'translate-x-5' : 'translate-x-0'}`}/>
-                    </button>
-                  </div>
-                )}
-
-                {/* Has points — for list type */}
-                {schema.type === 'list' && (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Point values</p>
-                      <p className="text-xs text-gray-400">Each list item has a point value (Press Your Luck)</p>
-                    </div>
-                    <button
-                      onClick={() => updateSchema('hasPoints', !schema.hasPoints)}
-                      className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.hasPoints ? 'bg-gray-900' : 'bg-gray-200'}`}
-                    >
-                      <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.hasPoints ? 'translate-x-5' : 'translate-x-0'}`}/>
                     </button>
                   </div>
                 )}
