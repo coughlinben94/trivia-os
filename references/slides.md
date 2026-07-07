@@ -81,7 +81,7 @@ Shiny "Color Schemes" format. Host picks column/row count in AddSlideWizard; til
 ### `winner-reveal`
 Shipped 2026-06-30. The automated show-closer — no editable data fields, computes everything live on mount.
 - "And the winner is…" fades in (0.55s ease-out)
-- 3s synthesized Web Audio drum roll: exponentially-decaying snare noise hits, gap tightens from 0.20s down toward 0.03s as it accelerates, then one big final hit at full volume. `useReducedMotion` skips straight to reveal after 1.2s instead.
+- Pre-recorded `/drum-roll.mp3` plays via an HTML5 `<audio>` element; reveal fires on `onended` (a failed load or blocked autoplay falls back to a 2s timeout so the reveal never hangs). `useReducedMotion` skips straight to reveal after 1.2s instead of playing it.
 - Queries `teams` + `team_scores` for `show.id`, sums scores per team, picks the highest total as winner
 - Winner name pops in at full size (`clamp(4rem, 11vw, 10rem)`, theme highlight color, text-shadow glow) with canvas confetti (220 particles, physics-based fall + rotation, fades after 2.5s)
 - Points subtitle fades in 350ms after the name
