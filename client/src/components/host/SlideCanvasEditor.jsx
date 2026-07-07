@@ -26,6 +26,7 @@
 // once, in the gesture handlers below.
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { nanoid } from 'nanoid'
 import SlideRenderer from '../display/SlideRenderer.jsx'
 import ParticleBackground from '../display/ParticleBackground.jsx'
@@ -39,7 +40,7 @@ const THEME_COLOR_TOKENS = ['text', 'accent', 'highlight']
 
 export default function SlideCanvasEditor({
   slide, show, theme,
-  data, setData, scheduleSave, change, flushSave, uploadMedia,
+  data, setData, scheduleSave, change, flushSave, uploadMedia, getHostPhotos,
 }) {
   // ── scaled-canvas geometry ────────────────────────────────────────────────
   const leftPanelRef = useRef(null)
@@ -161,6 +162,15 @@ export default function SlideCanvasEditor({
     } finally {
       setUploading(false)
     }
+  }
+
+  // Insert an image overlay from an already-hosted URL (Ben photo picker).
+  // Centered horizontally at a comfortable third-height; w=30 → x=(100-30)/2.
+  function addImageFromUrl(url) {
+    if (!url) return
+    const id = nanoid()
+    commitOverlays(cur => [...cur, { id, kind: 'image', x: 35, y: 28, w: 30, rotation: 0, z: nextZ(cur), mediaUrl: url }])
+    setSelectedOverlayId(id)
   }
 
   function deleteOverlay(id) {
@@ -500,6 +510,9 @@ export default function SlideCanvasEditor({
         onToggleLayout={toggleEditLayout}
         onInsertText={() => addTextAt(37, 42)}
         onInsertImage={() => fileInputRef.current?.click()}
+        getHostPhotos={getHostPhotos}
+        uploadMedia={uploadMedia}
+        onInsertPhoto={addImageFromUrl}
         uploading={uploading}
         uploadError={uploadError}
         selectedOverlay={selectedOverlay}
@@ -891,7 +904,7 @@ function tbBtnClass(active) {
 
 function DesignToolbar({
   editLayout, onToggleLayout,
-  onInsertText, onInsertImage, uploading, uploadError,
+  onInsertText, onInsertImage, getHostPhotos, uploadMedia, onInsertPhoto, uploading, uploadError,
   selectedOverlay, onFront, onBack, onDuplicate, onDelete,
 }) {
   return (
@@ -917,6 +930,7 @@ function DesignToolbar({
           <button onPointerDown={tbPD} onClick={onInsertImage} title="Upload an image" className={tbBtnClass(false)}>
             🖼 Image
           </button>
+          <BenPhotoInsert getHostPhotos={getHostPhotos} uploadMedia={uploadMedia} onInsert={onInsertPhoto} />
           {uploading && <span className="text-[11px] text-gray-400 shrink-0">Uploading…</span>}
           {uploadError && <span className="text-[11px] text-red-500 shrink-0">{uploadError}</span>}
 
@@ -943,5 +957,119 @@ function DesignToolbar({
         </>
       )}
     </div>
+  )
+}
+
+// Ben Photo picker — the canonical home for dropping a host photo onto any
+// slide. Fetches the show's trivia-host-photos bucket on open, click a thumb to
+// insert it centered, or upload a new one (uploadMedia(file, true)). Rendered
+// in a portal so the toolbar's overflow-x can't clip it. Escape is caught in
+// the capture phase and stopped, so it closes the popover — never the whole
+// SlideEditor (OV-3). Every control preventDefaults on pointerdown (OV-1).
+function BenPhotoInsert({ getHostPhotos, uploadMedia, onInsert }) {
+  const [open, setOpen] = useState(false)
+  const [photos, setPhotos] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const btnRef = useRef(null)
+  const popRef = useRef(null)
+  const fileRef = useRef(null)
+
+  function openPopover() {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (r) setPos({ top: Math.round(r.bottom + 6), left: Math.round(r.left) })
+    setOpen(true); setErr(null); setLoading(true)
+    Promise.resolve(getHostPhotos?.())
+      .then(p => { setPhotos(Array.isArray(p) ? p : []); setLoading(false) })
+      .catch(() => { setPhotos([]); setLoading(false) })
+  }
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e) {
+      if (popRef.current?.contains(e.target) || btnRef.current?.contains(e.target)) return
+      setOpen(false)
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); setOpen(false) }
+    }
+    document.addEventListener('pointerdown', onDown)
+    // Capture phase so Escape is intercepted before SlideEditor/overlay handlers.
+    document.addEventListener('keydown', onKey, true)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onKey, true)
+    }
+  }, [open])
+
+  async function handleUpload(file) {
+    if (!file) return
+    setBusy(true); setErr(null)
+    try {
+      const res = await uploadMedia(file, true)
+      if (res?.url) { setPhotos(prev => [{ url: res.url, filename: res.filename }, ...prev]); onInsert(res.url); setOpen(false) }
+      else setErr('Upload failed — no URL returned')
+    } catch (e) { setErr(e?.message || 'Upload failed') }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onPointerDown={tbPD}
+        onClick={() => (open ? setOpen(false) : openPopover())}
+        title="Insert a Ben photo"
+        className={tbBtnClass(open)}
+      >
+        👤 Ben Photo
+      </button>
+      {open && createPortal(
+        <div
+          ref={popRef}
+          onPointerDown={e => e.stopPropagation()}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 200, width: 300 }}
+          className="bg-white rounded-lg shadow-xl border border-gray-200 p-3"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Ben Photos</span>
+            <button onPointerDown={tbPD} onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 text-sm leading-none">✕</button>
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden"
+            onChange={e => { handleUpload(e.target.files?.[0]); e.target.value = '' }} />
+          <button
+            onPointerDown={tbPD}
+            onClick={() => fileRef.current?.click()}
+            disabled={busy}
+            className="w-full text-xs font-medium px-2 py-1.5 mb-2 rounded-md border border-dashed border-gray-300 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-colors disabled:opacity-50"
+          >
+            {busy ? 'Uploading…' : '⬆ Upload new…'}
+          </button>
+          {err && <p className="text-[11px] text-red-500 mb-2">{err}</p>}
+          {loading ? (
+            <p className="text-[11px] text-gray-400 text-center py-6">Loading…</p>
+          ) : photos.length === 0 ? (
+            <p className="text-[11px] text-gray-400 text-center py-6">No Ben photos yet — upload one above.</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-1.5 max-h-56 overflow-y-auto">
+              {photos.map(p => (
+                <button
+                  key={p.url}
+                  onPointerDown={tbPD}
+                  onClick={() => { onInsert(p.url); setOpen(false) }}
+                  title="Insert this photo"
+                  className="aspect-square rounded-md overflow-hidden border border-gray-200 hover:border-indigo-400 transition-colors"
+                >
+                  <img src={p.url} alt="" className="w-full h-full object-cover" draggable={false} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>,
+        document.body,
+      )}
+    </>
   )
 }
