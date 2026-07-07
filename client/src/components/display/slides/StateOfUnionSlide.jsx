@@ -14,17 +14,18 @@ const RWB_WHITE     = '#e8e0d8'
 const RWB_BLUE      = '#2a50c0'
 const RWB_BLUE_DEEP = '#0d1536'
 
-function hexToRgb(hex) {
-  const n = parseInt(hex.slice(1), 16)
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-}
-
 // ─── Billowing gradient background ───────────────────────────────────────────
 // Per-pixel ImageData at quarter resolution (320×180) — CSS scaling blurs it
-// smooth. Each pixel's color is determined by its diagonal position
-// (x/W + ey/H)/2 where ey is y shifted by the wave. This gives all three
-// bands (red / white / blue) simultaneously at the correct diagonal angle,
-// with the wave making the whole field billow from the anchored left edge.
+// smooth. Each pixel's color is its diagonal position through a cyclic
+// red→white→blue→white→red LUT, with a traveling wave billowing the whole
+// field from the anchored left edge. Two deliberate shape choices:
+//   • Diagonal weights (0.809, 1.251) sit the colour bands low — ≈20° off
+//     horizontal — and, at this 16:9 canvas, pack them ~25% tighter than the
+//     old 1.39/0.62 mapping, so more red/white/blue passes are on screen at
+//     once. Both weights scaled together, so the angle is set by their ratio.
+//   • A satin sheen sweeps across the field, HIGHLIGHT-ONLY: it brightens as
+//     it passes and never dips below full brightness. A two-sided sheen used
+//     to punch dark sweeping lines into the already-deep red and blue.
 function WavingGradient({ reduce }) {
   const ref = useRef(null)
 
@@ -41,34 +42,22 @@ function WavingGradient({ reduce }) {
     const k  = (2 * Math.PI) / (W * 0.55)
     const k2 = k * 1.65  // secondary harmonic — higher freq, different phase speed
 
-    // Cyclic LUT: red → cream → blue → cream → red (seamless loop, red at
-    // both ends). Every stop is a flat HOLD in one of the three flag colors
-    // themselves (reused directly from RWB_RED/WHITE/BLUE above, so title
-    // and background can never drift apart) — no in-between "rose" or
-    // "periwinkle" tints. Those in-between tints were the actual source of
-    // the old muddy/purple read: cream already separated every red↔blue
-    // adjacency even before this change, but the desaturated intermediate
-    // stops themselves leaned purple and ate a large share of the cycle.
-    // Blue's hold (0.36–0.64) is deliberately the widest band so it stays
-    // the dominant field; red and cream are the flowing ribbons through it.
-    // Smoothstep within each transition (unchanged below) keeps it soft
-    // enough to still read as billowing fabric, not hard-edged stripes.
+    // Cyclic LUT: red → white → blue → white → red (seamless loop, red at both
+    // ends). Vivid rose + periwinkle intermediates keep the transitions
+    // saturated; smoothstep within each segment makes colours linger near
+    // their peaks so it reads as billowing fabric, not a flat blend.
     const N = 512
     const lut = new Uint8Array(N * 3)
-    const [rr, rg, rb] = hexToRgb(RWB_RED)
-    const [wr, wg, wb] = hexToRgb(RWB_WHITE)
-    const [br, bg, bb] = hexToRgb(RWB_BLUE)
     const stops = [
-      [0.00, rr, rg, rb],
-      [0.06, rr, rg, rb],
-      [0.16, wr, wg, wb],
-      [0.24, wr, wg, wb],
-      [0.36, br, bg, bb],
-      [0.64, br, bg, bb],
-      [0.76, wr, wg, wb],
-      [0.84, wr, wg, wb],
-      [0.94, rr, rg, rb],
-      [1.00, rr, rg, rb],
+      [0.000, 178,  34,  52],
+      [0.125, 224,  68,  86],
+      [0.250, 242, 234, 228],
+      [0.375, 100, 120, 210],
+      [0.500,  52,  78, 195],
+      [0.625, 100, 120, 210],
+      [0.750, 242, 234, 228],
+      [0.875, 224,  68,  86],
+      [1.000, 178,  34,  52],
     ]
     for (let i = 0; i < N; i++) {
       const d = i / (N - 1)
@@ -93,14 +82,16 @@ function WavingGradient({ reduce }) {
         const env = Math.pow(x / W, 0.7)
         const wave = (Math.sin(k * x - t) + 0.22 * Math.sin(k2 * x - t * 1.38)) / 1.22
         const waveShift = wave * maxAmp * env
+        // Highlight-only satin sheen — brightens as it sweeps, never darkens.
+        const sh = 1 + 0.19 * (0.5 + 0.5 * Math.sin((x / W) * Math.PI * 2.4 - t * 1.3))
         for (let y = 0; y < H; y++) {
           const ey   = y - waveShift
-          const diag = ((x / W * 1.39 + ey / H * 0.62 - scrollT) % 1.0 + 1.0) % 1.0
+          const diag = ((x / W * 0.809 + ey / H * 1.251 - scrollT) % 1.0 + 1.0) % 1.0
           const li   = Math.round(diag * (N - 1)) * 3
           const px   = (y * W + x) * 4
-          data[px]     = lut[li]
-          data[px + 1] = lut[li + 1]
-          data[px + 2] = lut[li + 2]
+          data[px]     = Math.min(255, lut[li]     * sh)
+          data[px + 1] = Math.min(255, lut[li + 1] * sh)
+          data[px + 2] = Math.min(255, lut[li + 2] * sh)
           data[px + 3] = 255
         }
       }
@@ -115,128 +106,6 @@ function WavingGradient({ reduce }) {
   }, [reduce])
 
   return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
-}
-
-// ─── Ambient star field — reads the background more explicitly as "USA" ─────
-// Purely additive: sits above the billow, below the title (z-index 1, same
-// tier as the vignette but painted after it so it's on top of that too).
-// Tunable dials below. "Count" isn't its own constant — it's
-// STAR_POSITIONS.length, so dialing the count means adding/removing an
-// edge-safe {x, y, sizeRatio} entry rather than two numbers going stale
-// against each other.
-const STAR_SIZE_MIN      = 10   // px, smallest star
-const STAR_SIZE_MAX      = 22   // px, largest star
-const STAR_OPACITY_MIN   = 0.35 // twinkle floor
-const STAR_OPACITY_MAX   = 0.85 // twinkle ceiling
-const STAR_DRIFT_PX      = 5    // max drift distance, any direction
-const STAR_TWINKLE_MIN_S = 2.6  // per-star twinkle period range — staggered
-const STAR_TWINKLE_MAX_S = 4.2  // below so nothing syncs up into a grid
-
-// Handpicked so every star sits in an edge/corner band (x<18% or x>82%, OR
-// y<24% or y>76%) — the title's center safe-area stays completely clear.
-// sizeRatio (0–1) picks where each star falls between STAR_SIZE_MIN/MAX.
-const STAR_POSITIONS = [
-  { x: 6,  y: 8,  sizeRatio: 0.35 },
-  { x: 13, y: 17, sizeRatio: 0.05 },
-  { x: 4,  y: 22, sizeRatio: 0.70 },
-  { x: 94, y: 7,  sizeRatio: 0.50 },
-  { x: 87, y: 15, sizeRatio: 0.10 },
-  { x: 96, y: 23, sizeRatio: 0.90 },
-  { x: 5,  y: 91, sizeRatio: 0.45 },
-  { x: 14, y: 84, sizeRatio: 0.20 },
-  { x: 8,  y: 96, sizeRatio: 0.80 },
-  { x: 95, y: 89, sizeRatio: 0.30 },
-  { x: 88, y: 95, sizeRatio: 0.65 },
-  { x: 92, y: 80, sizeRatio: 0.05 },
-  { x: 9,  y: 46, sizeRatio: 1.00 },
-  { x: 91, y: 52, sizeRatio: 0.40 },
-]
-
-// Deterministic per-star stagger (no Math.random, so the scatter is stable
-// and reviewable across renders) — spreads twinkle duration/delay evenly
-// across the tunable range, and gives each star its own drift direction via
-// golden-angle spacing (137.5°), which scatters directions evenly without
-// ever repeating a visible pattern.
-function starTiming(index, count) {
-  const frac = index / count
-  const duration = STAR_TWINKLE_MIN_S + frac * (STAR_TWINKLE_MAX_S - STAR_TWINKLE_MIN_S)
-  const delay = frac * STAR_TWINKLE_MAX_S
-  const angleRad = ((index * 137.5) % 360) * Math.PI / 180
-  return {
-    duration,
-    delay,
-    dx: +(STAR_DRIFT_PX * Math.cos(angleRad)).toFixed(1),
-    dy: +(STAR_DRIFT_PX * Math.sin(angleRad)).toFixed(1),
-  }
-}
-
-// One 5-point star polygon, generated once at module load — cleaner and far
-// less error-prone than hand-typing ten decimal coordinate pairs.
-const STAR_POLYGON_POINTS = (() => {
-  const cx = 50, cy = 50, outerR = 48, innerR = 48 * 0.382
-  const pts = []
-  for (let i = 0; i < 5; i++) {
-    const outerA = (-90 + i * 72) * Math.PI / 180
-    const innerA = (-90 + i * 72 + 36) * Math.PI / 180
-    pts.push(`${(cx + outerR * Math.cos(outerA)).toFixed(2)},${(cy + outerR * Math.sin(outerA)).toFixed(2)}`)
-    pts.push(`${(cx + innerR * Math.cos(innerA)).toFixed(2)},${(cy + innerR * Math.sin(innerA)).toFixed(2)}`)
-  }
-  return pts.join(' ')
-})()
-
-// GPU rule: only transform + opacity are ever animated. Reduced motion gets
-// two belt-and-suspenders guards — a plain CSS media query (for real OS
-// settings) and a class driven by this slide's own useReducedMotion() value
-// (reused, not reimplemented), so the stars go static under either signal.
-const SOTU_STAR_STYLE = `
-@keyframes sotu-star-twinkle {
-  0%, 100% { opacity: var(--sotu-op-lo); transform: translate(0, 0) scale(1); }
-  50%      { opacity: var(--sotu-op-hi); transform: translate(var(--sotu-dx), var(--sotu-dy)) scale(1.15); }
-}
-.sotu-star { animation: sotu-star-twinkle var(--sotu-dur) ease-in-out var(--sotu-delay) infinite; }
-@media (prefers-reduced-motion: reduce) {
-  .sotu-star { animation: none !important; opacity: var(--sotu-op-hi) !important; }
-}
-.sotu-stars-reduced .sotu-star { animation: none !important; opacity: var(--sotu-op-hi) !important; }
-`
-
-function StarField({ reduce }) {
-  const count = STAR_POSITIONS.length
-  return (
-    <div
-      aria-hidden
-      className={reduce ? 'sotu-stars-reduced' : undefined}
-      style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}
-    >
-      <style>{SOTU_STAR_STYLE}</style>
-      {STAR_POSITIONS.map((p, i) => {
-        const { duration, delay, dx, dy } = starTiming(i, count)
-        const size = STAR_SIZE_MIN + p.sizeRatio * (STAR_SIZE_MAX - STAR_SIZE_MIN)
-        return (
-          <svg
-            key={i}
-            className="sotu-star"
-            viewBox="0 0 100 100"
-            style={{
-              position: 'absolute',
-              left: `${p.x}%`,
-              top: `${p.y}%`,
-              width: size,
-              height: size,
-              '--sotu-op-lo': STAR_OPACITY_MIN,
-              '--sotu-op-hi': STAR_OPACITY_MAX,
-              '--sotu-dx': `${dx}px`,
-              '--sotu-dy': `${dy}px`,
-              '--sotu-dur': `${duration}s`,
-              '--sotu-delay': `${delay}s`,
-            }}
-          >
-            <polygon points={STAR_POLYGON_POINTS} fill="#ffffff" />
-          </svg>
-        )
-      })}
-    </div>
-  )
 }
 
 export default function StateOfUnionSlide({ slide }) {
@@ -264,8 +133,6 @@ export default function StateOfUnionSlide({ slide }) {
         position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
         background: 'radial-gradient(ellipse 72% 62% at 50% 55%, rgba(0,0,0,0.48) 0%, rgba(0,0,0,0.18) 55%, rgba(0,0,0,0.03) 100%)',
       }} />
-
-      <StarField reduce={reduce} />
 
       <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
         {/* Optional Ben photo */}
