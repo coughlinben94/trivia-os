@@ -811,12 +811,6 @@ export function useShow() {
     })
   }
 
-  async function updateTickerMessages(messages) {
-    if (!show) return
-    setShow(prev => ({ ...prev, tickerMessages: messages }))
-    await updateShowRow(show.id, { ticker_messages: messages })
-  }
-
   return {
     show,
     loading,
@@ -853,6 +847,5 @@ export function useShow() {
     setScoresRevealed,
     updateRoundScore,
     saveResults,
-    updateTickerMessages,
   }
 }
