@@ -769,23 +769,11 @@ export default function SlideCanvasEditor({
               )
             })}
 
-            {/* ── floating toolbar ── */}
-            {editLayout && selectedOverlay && !editingOverlayId && (
-              <OverlayToolbar
-                ov={selectedOverlay}
-                theme={theme}
-                fonts={fontOptions(show)}
-                leftPx={(selectedOverlay.x ?? 0) / 100 * scaledW + (selectedOverlay.w ?? 20) / 100 * scaledW / 2}
-                topPx={(selectedOverlay.y ?? 0) / 100 * scaledH}
-                maxW={scaledW}
-                onPatch={patch => patchDiscrete(selectedOverlay.id, patch)}
-                onFront={() => bringToFront(selectedOverlay.id)}
-                onBack={() => sendToBack(selectedOverlay.id)}
-                onDuplicate={() => duplicateOverlay(selectedOverlay.id)}
-                onDelete={() => deleteOverlay(selectedOverlay.id)}
-                onEditText={() => setEditingOverlayId(selectedOverlay.id)}
-              />
-            )}
+            {/* Floating per-overlay toolbar removed: the persistent top design
+                toolbar now owns all styling + arrange for the selected box, and
+                the box keeps its on-canvas grammar (drag, corner-resize, rotate
+                lollipop, double-click text to edit, Delete key). One editing
+                grammar instead of two. */}
           </div>
         </div>
       </div>
@@ -889,89 +877,6 @@ function OverlayHandles({ ov, onResize, onRotate }) {
         onPointerDown={e => onRotate(e, ov)}
       />
     </>
-  )
-}
-
-// Floating toolbar shown on selection — stays upright (not inside the rotated
-// box) and clamped inside the canvas.
-function OverlayToolbar({ ov, theme, fonts, leftPx, topPx, maxW, onPatch, onFront, onBack, onDuplicate, onDelete, onEditText }) {
-  const isText = ov.kind === 'text'
-  const btn = 'text-[11px] px-1.5 py-1 rounded border bg-gray-50 border-gray-200 text-gray-600 hover:text-gray-900 transition-colors'
-  const btnActive = 'text-[11px] px-1.5 py-1 rounded border bg-indigo-500 border-indigo-500 text-white'
-  const swatch = (token) => (
-    <button
-      key={token}
-      title={token}
-      onClick={() => onPatch({ color: token })}
-      className="w-5 h-5 rounded-full border border-gray-300"
-      style={{ background: theme.colors[token], outline: ov.color === token ? '2px solid #6366f1' : 'none', outlineOffset: 1 }}
-    />
-  )
-  return (
-    <div
-      onPointerDown={e => e.stopPropagation()}
-      style={{
-        position: 'absolute',
-        left: clamp(leftPx, 130, maxW - 130),
-        // Sit clear of the rotate lollipop (which reaches ~34px above the box).
-        top: Math.max(2, topPx - 60),
-        transform: 'translateX(-50%)',
-        zIndex: 70,
-      }}
-      className="flex items-center gap-1.5 bg-white rounded-lg shadow-lg border border-gray-200 px-2 py-1.5"
-    >
-      {isText && (
-        <>
-          <select
-            value={ov.fontFamily ?? 'display'}
-            onChange={e => onPatch({ fontFamily: e.target.value })}
-            className="text-[11px] bg-gray-50 border border-gray-200 rounded px-1 py-0.5 max-w-[92px] focus:outline-none"
-            title="Font"
-          >
-            <option value="display">Display (theme)</option>
-            <option value="body">Body (theme)</option>
-            {fonts.map(f => <option key={f} value={f}>{f.startsWith('Custom-') ? 'Custom font' : f}</option>)}
-          </select>
-          <div className="flex items-center">
-            <button className={btn} title="Smaller" onClick={() => onPatch({ fontSize: Math.max(1, +( (ov.fontSize ?? 5) - 0.5).toFixed(1)) })}>A-</button>
-            <span className="text-[10px] text-gray-400 w-6 text-center">{(ov.fontSize ?? 5)}</span>
-            <button className={btn} title="Bigger" onClick={() => onPatch({ fontSize: Math.min(40, +((ov.fontSize ?? 5) + 0.5).toFixed(1)) })}>A+</button>
-          </div>
-          <button className={ov.weight >= 700 ? btnActive : btn} title="Bold" onClick={() => onPatch({ weight: ov.weight >= 700 ? 400 : 700 })}><b>B</b></button>
-          <div className="flex items-center gap-0.5">
-            {[['left', '▤'], ['center', '☰'], ['right', '▥']].map(([a, icon]) => (
-              <button key={a} className={(ov.align ?? 'center') === a ? btnActive : btn} onClick={() => onPatch({ align: a })}>{icon}</button>
-            ))}
-          </div>
-          <div className="flex items-center gap-0.5">
-            {THEME_COLOR_TOKENS.map(swatch)}
-            <input
-              type="color"
-              value={typeof ov.color === 'string' && ov.color.startsWith('#') ? ov.color : '#ffffff'}
-              onChange={e => onPatch({ color: e.target.value })}
-              className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0"
-              title="Custom color"
-            />
-          </div>
-          <button className={btn} title="Edit text" onClick={onEditText}>✎</button>
-          <span className="w-px h-4 bg-gray-200" />
-        </>
-      )}
-      {!isText && (
-        <>
-          <div className="flex items-center">
-            <button className={btn} title="Narrower" onClick={() => onPatch({ w: Math.max(3, (ov.w ?? 30) - 2) })}>−</button>
-            <span className="text-[10px] text-gray-400 w-8 text-center">{Math.round(ov.w ?? 30)}%</span>
-            <button className={btn} title="Wider" onClick={() => onPatch({ w: Math.min(100, (ov.w ?? 30) + 2) })}>+</button>
-          </div>
-          <span className="w-px h-4 bg-gray-200" />
-        </>
-      )}
-      <button className={btn} title="Bring to front" onClick={onFront}>⬆</button>
-      <button className={btn} title="Send to back" onClick={onBack}>⬇</button>
-      <button className={btn} title="Duplicate" onClick={onDuplicate}>⧉</button>
-      <button className="text-[11px] px-1.5 py-1 rounded border bg-red-50 border-red-200 text-red-500 hover:bg-red-100 transition-colors" title="Delete" onClick={onDelete}>🗑</button>
-    </div>
   )
 }
 
