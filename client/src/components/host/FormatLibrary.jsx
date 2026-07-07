@@ -143,12 +143,11 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                   </div>
                 </div>
 
-                {/* Concurrent slides — image/audio/video only. When on, the number of
+                {/* Concurrent slides — image/audio/video/text. When on, the number of
                     items is no longer fixed on the format; the host picks it each
                     time this format is added (mirrors Swing Round's "how many?"
-                    prompt), and each item gets revealed back-to-back with its own
-                    independent answer by default. */}
-                {['image', 'audio', 'video'].includes(schema.type) && (
+                    prompt), and each item gets revealed back-to-back. */}
+                {['image', 'audio', 'video', 'text'].includes(schema.type) && (
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-700">Concurrent slides?</p>
@@ -174,10 +173,33 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                   </div>
                 )}
 
+                {/* Question series — only meaningful once concurrent is on.
+                    Yes: each asset gets its own independent answer (Kevin James
+                    Zookeeper — 3 animals, 3 answers). No: all assets share ONE
+                    answer collected up front (We're not so different — 4 partial
+                    images of the same subject, 1 answer). Replaces the old
+                    standalone "Series enabled" toggle for concurrent formats —
+                    this is the same underlying choice, just made explicit at the
+                    point it actually matters instead of a separate switch. */}
+                {schema.concurrent && (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Question series?</p>
+                      <p className="text-xs text-gray-400">Yes — each asset is its own question with its own answer. No — one shared question/answer for all assets.</p>
+                    </div>
+                    <button
+                      onClick={() => updateSchema('questionSeries', !schema.questionSeries)}
+                      className={`w-11 h-6 rounded-full transition-colors ${schema.questionSeries ? 'bg-gray-900' : 'bg-gray-200'}`}
+                    >
+                      <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.questionSeries ? 'translate-x-5' : 'translate-x-0'}`}/>
+                    </button>
+                  </div>
+                )}
+
                 {/* Slots — only for audio/video, and only when NOT concurrent
                     (concurrent formats choose their count per-use instead).
-                    Image formats always prompt for an asset count per-use at
-                    add time, concurrent or not, so this field doesn't apply
+                    Image/text formats always prompt for an asset count per-use
+                    at add time, concurrent or not, so this field doesn't apply
                     to them at all — see AddSlideWizard's "How many assets?" */}
                 {['audio', 'video'].includes(schema.type) && !schema.concurrent && (
                   <div className="flex flex-col gap-1">
@@ -198,8 +220,10 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                   </div>
                 )}
 
-                {/* Series enabled — for audio */}
-                {schema.type === 'audio' && (
+                {/* Series enabled — non-concurrent audio only. Concurrent
+                    formats use "Question series?" above instead — showing both
+                    was two overlapping switches for the same underlying idea. */}
+                {schema.type === 'audio' && !schema.concurrent && (
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-700">Series enabled</p>

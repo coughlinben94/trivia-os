@@ -154,22 +154,30 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
 
         const isConcurrentFmt = selectedShinyFmt.input_schema?.concurrent === true
         const isImageFmt = selectedShinyFmt.input_schema?.type === 'image'
+        // Undefined/legacy concurrent formats default to true — the behavior
+        // concurrent formats have always had (each asset its own answer).
+        const isQuestionSeriesFmt = selectedShinyFmt.input_schema?.questionSeries !== false
 
-        if (isImageFmt) {
-          // Image formats always get "How many slides? / How many assets?"
-          // at add time, concurrent or not. Assets meaning branches:
-          //   concurrent    -> N back-to-back parts per slide (existing mechanism)
-          //   non-concurrent, N>1 -> N images together on ONE slide — reuses
-          //     the grid slide type/editor/renderer under the hood (N columns
-          //     x 1 row) instead of new rendering code
-          //   non-concurrent, N===1 -> today's flat single-slot shape
+        if (isImageFmt || isConcurrentFmt) {
+          // Image formats (any concurrent state) and any concurrent format
+          // (any type) get "How many slides? / How many assets?" at add
+          // time. Assets meaning branches:
+          //   concurrent, question series    -> N back-to-back parts per
+          //     slide, each with its own independent answer (Zookeeper)
+          //   concurrent, NOT question series -> N back-to-back parts per
+          //     slide sharing ONE answer, collected up front (We're not so
+          //     different)
+          //   non-concurrent image, N>1 -> N images together on ONE slide —
+          //     reuses the grid slide type/editor/renderer under the hood
+          //     (N columns x 1 row) instead of new rendering code
+          //   non-concurrent image, N===1 -> today's flat single-slot shape
           const assets = Math.max(1, assetCount)
           const numSlides = Math.max(1, parseInt(slideCount, 10) || 1)
           // A batch of >1 slides can't share one typed-in question/answer —
           // each slide needs its own distinct content — so batch-created
           // slides start blank and get filled in afterward via the slide
           // editor, same pattern already used for concurrent parts/grid tiles.
-          const useSharedFields = numSlides === 1
+          const collectShared = numSlides === 1 && (!isConcurrentFmt || !isQuestionSeriesFmt)
 
           const afterId = roundSlides.length > 0
             ? roundSlides[roundSlides.length - 1].id
@@ -185,7 +193,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               shinyFormatId:    selectedShinyFmt.id,
               shinyFormatName:  selectedShinyFmt.name,
               shinyFormatIcon:  selectedShinyFmt.icon,
-              shinyType:        'image',
+              shinyType:        selectedShinyFmt.input_schema?.type ?? null,
             }
             if (isConcurrentFmt) {
               return {
@@ -197,7 +205,10 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                   isSeries:    true,
                   seriesTheme: selectedShinyFmt.name,
                   currentPart: 0,
-                  parts: Array.from({ length: assets }, () => ({ label: '', text: '', answer: '', mediaSlots: [] })),
+                  ...(collectShared ? { answer: shinyAnswer.trim() } : {}),
+                  parts: Array.from({ length: assets }, () => ({
+                    label: '', text: collectShared ? shinyQuestion.trim() : '', answer: '', mediaSlots: [],
+                  })),
                 },
               }
             }
@@ -212,8 +223,8 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                   intraGap:     0,
                   interGap:     84,
                   columnLabels: false,
-                  text:   useSharedFields ? shinyQuestion.trim() : '',
-                  answer: useSharedFields ? shinyAnswer.trim() : '',
+                  text:   collectShared ? shinyQuestion.trim() : '',
+                  answer: collectShared ? shinyAnswer.trim() : '',
                 },
               }
             }
@@ -223,8 +234,8 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               data: {
                 ...base,
                 shinyInputSchema: selectedShinyFmt.input_schema ?? null,
-                text:       useSharedFields ? shinyQuestion.trim() : '',
-                answer:     useSharedFields ? shinyAnswer.trim() : '',
+                text:       collectShared ? shinyQuestion.trim() : '',
+                answer:     collectShared ? shinyAnswer.trim() : '',
                 mediaSlots: [],
               },
             }
@@ -232,7 +243,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
 
           await onAddSlide({ afterSlideId: afterId, slides: slidesData })
 
-          if (useSharedFields) {
+          if (collectShared) {
             const d = slidesData[0].data
             const text   = d.parts?.[0]?.text ?? d.text ?? ''
             const answer = d.parts?.[0]?.answer ?? d.answer ?? ''
@@ -241,7 +252,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               text, answer,
               is_bonus:          false,
               is_shiny:          true,
-              shiny_type:        'image',
+              shiny_type:        selectedShinyFmt.input_schema?.type ?? null,
               shiny_format_name: selectedShinyFmt.name,
               show_id:           show?.id ?? null,
               show_title:        show?.title ?? null,
@@ -251,27 +262,10 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           return
         }
 
-        if (isConcurrentFmt) {
-          const count = Math.max(1, assetCount)
-          data = {
-            questionNumber:   qNum,
-            questionLabel:    `Q${qNum}`,
-            questionMode:     'shiny',
-            isShiny:          true,
-            shinyFormatId:    selectedShinyFmt.id,
-            shinyFormatName:  selectedShinyFmt.name,
-            shinyFormatIcon:  selectedShinyFmt.icon,
-            shinyInputSchema: { ...selectedShinyFmt.input_schema, slots: 1 },
-            shinyType:        selectedShinyFmt.input_schema?.type ?? null,
-            isSeries:    true,
-            seriesTheme: selectedShinyFmt.name,
-            currentPart: 0,
-            // Blank per-part answers, on purpose — a concurrent format's whole
-            // point is each item gets its own independent answer, filled in
-            // afterward via the slide editor's existing part-by-part editor.
-            parts: Array.from({ length: count }, () => ({ label: '', text: '', answer: '', mediaSlots: [] })),
-          }
-        } else {
+        // Reaches here only for non-concurrent, non-image formats (audio,
+        // video, text, list) — plain flat shape, or the legacy fixed-slots
+        // multi-slot shape for audio/video formats that never got migrated
+        // to concurrent.
         const totalSlots = selectedShinyFmt.input_schema?.slots ?? 1
         const isMultiSlot = totalSlots > 1
         data = {
@@ -297,7 +291,6 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             answer:     shinyAnswer.trim(),
             mediaSlots: [],
           }),
-        }
         }
       } else {
         data = {
@@ -358,11 +351,17 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const canAddQuestion = !!roundId && questionText.trim().length > 0 && questionAnswer.trim().length > 0
   const isConcurrentFmt = selectedShinyFmt?.input_schema?.concurrent === true
   const isImageFmt      = selectedShinyFmt?.input_schema?.type === 'image'
+  // Undefined/legacy concurrent formats default to true (each asset its own
+  // independent answer) — the behavior concurrent formats have always had.
+  const isQuestionSeriesFmt = selectedShinyFmt?.input_schema?.questionSeries !== false
   const slideNum        = Math.max(1, parseInt(slideCount, 10) || 1)
-  // Concurrent formats, and image-format batches of >1 slide, skip the
-  // shared-answer field entirely — each part/slide gets its own answer,
-  // filled in afterward via the slide editor.
-  const skipSharedAnswer = isConcurrentFmt || (isImageFmt && slideNum > 1)
+  // Shared question/answer fields only make sense for a single slide (a
+  // batch of >1 can't share one typed-in answer across distinct slides) and,
+  // for concurrent formats specifically, only when it's NOT a question
+  // series — a question-series format's whole point is each asset gets its
+  // own independent answer, filled in afterward via the slide editor.
+  const showSharedFields = slideNum === 1 && (!isConcurrentFmt || !isQuestionSeriesFmt)
+  const skipSharedAnswer = !showSharedFields
   const canAddShiny    = !!roundId && (skipSharedAnswer || shinyAnswer.trim().length > 0)
   const isPlainOnly    = type === 'question'
   const isShinyOnly    = type === 'shiny-question'
@@ -475,11 +474,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               )}
             </div>
 
-            {isImageFmt ? (
-              /* Image formats — always prompt for slide count + asset count.
-                 Asset count's meaning branches on concurrent (back-to-back
-                 parts vs. all-at-once on one slide via the grid renderer),
-                 but the two inputs themselves are shared across both. */
+            {(isImageFmt || isConcurrentFmt) ? (
+              /* Image formats (any concurrent state), and any concurrent
+                 format regardless of type, always prompt for slide count +
+                 asset count. Asset count's meaning branches on concurrent
+                 (back-to-back parts vs. all-at-once on one slide via the
+                 grid renderer), but the two inputs themselves are shared. */
               <>
                 <div className="flex gap-4">
                   <div className="flex-1">
@@ -511,7 +511,9 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                 </div>
                 <p className="text-xs text-gray-400 -mt-2">
                   {isConcurrentFmt
-                    ? `${assetCount} back-to-back part${assetCount === 1 ? '' : 's'} per slide, each with its own answer — fill them in from the slide editor.`
+                    ? isQuestionSeriesFmt
+                      ? `${assetCount} back-to-back part${assetCount === 1 ? '' : 's'} per slide, each with its own answer — fill them in from the slide editor.`
+                      : `${assetCount} back-to-back part${assetCount === 1 ? '' : 's'} per slide, sharing one answer.`
                     : assetCount > 1
                       ? `${assetCount} images together on one slide, one shared answer.`
                       : 'A single image, one shared answer.'}
@@ -545,27 +547,8 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                   </>
                 )}
               </>
-            ) : isConcurrentFmt ? (
-              /* Concurrent audio/video format — no shared question/answer here.
-                 The host picks how many back-to-back parts to create; each
-                 part's own media, text, and answer get filled in afterward
-                 via the slide editor's part-by-part editor. */
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">How many?</label>
-                <input
-                  autoFocus
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={assetCount}
-                  onChange={e => setAssetCount(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-                <p className="text-xs text-gray-400 mt-1.5">
-                  Creates {assetCount} back-to-back parts, each with its own answer — fill them in from the slide editor.
-                </p>
-              </div>
             ) : (
+              /* Reaches here only for non-concurrent, non-image formats. */
               <>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1.5">

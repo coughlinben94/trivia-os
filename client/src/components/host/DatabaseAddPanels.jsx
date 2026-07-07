@@ -117,8 +117,17 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
   const canAddQuestion = questionText.trim().length > 0 && questionAnswer.trim().length > 0
   const isGrid = selectedShinyFmt?.input_schema?.type === 'grid'
   const isImageFmt = selectedShinyFmt?.input_schema?.type === 'image'
+  const isConcurrentFmt = selectedShinyFmt?.input_schema?.concurrent === true
+  // Undefined/legacy concurrent formats default to true — the behavior
+  // concurrent formats have always had (each asset its own answer).
+  const isQuestionSeriesFmt = selectedShinyFmt?.input_schema?.questionSeries !== false
   const numEntries = Math.max(1, parseInt(entryCount, 10) || 1)
-  const useItemList = isImageFmt && assetCount > 1
+  // Item list (one text/answer row per asset) only applies to a true
+  // question series — each asset really is its own independent mini-question.
+  // A shared-answer concurrent format (or a non-concurrent multi-asset image)
+  // has nothing distinct to catalog per asset here (this is a pure text
+  // archive, no image upload), so it's just one flat question/answer entry.
+  const useItemList = isConcurrentFmt && isQuestionSeriesFmt && assetCount > 1
   const cleanCurrentItems = () => currentItems.map(it => ({ text: it.text.trim(), answer: it.answer.trim() })).filter(it => it.text || it.answer)
   const canAddShiny = useItemList ? cleanCurrentItems().length > 0 : shinyAnswer.trim().length > 0
 
@@ -293,7 +302,7 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
               )}
             </div>
 
-            {isImageFmt && (
+            {(isImageFmt || isConcurrentFmt) && (
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-gray-500 mb-1.5">
