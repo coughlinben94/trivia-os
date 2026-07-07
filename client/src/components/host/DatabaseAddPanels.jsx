@@ -1058,6 +1058,11 @@ export function BulkPasteInputPanel({ onAdded }) {
   }
 
   const totalItems = boxes.reduce((n, b) => n + cleanItems(b.items).length, 0)
+  // When the parse collapsed standalone questions into ONE box (no header
+  // detected), "separate entries" means one row per ITEM — so the toggle reads
+  // "N separate entries" (not "1") and clicking it splits the box into rows.
+  const singleBoxItems = boxes.length === 1 ? cleanItems(boxes[0].items).length : 0
+  const separateCount = singleBoxItems > 1 ? singleBoxItems : boxes.length
 
   return (
     <div className="flex flex-col gap-4 max-w-3xl mx-auto">
@@ -1147,10 +1152,10 @@ export function BulkPasteInputPanel({ onAdded }) {
               </button>
               <button
                 type="button"
-                onClick={() => setMode('boxes')}
+                onClick={() => { if (singleBoxItems > 1) splitBox(boxes[0].id); setMode('boxes') }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors duration-150 ease-out ${mode === 'boxes' ? 'bg-[#1a6b4a] text-white border-[#1a6b4a]' : 'bg-white text-gray-600 border-gray-200 hover:border-[#1a6b4a]'}`}
               >
-                {boxes.length} separate entries
+                {separateCount} separate {separateCount === 1 ? 'entry' : 'entries'}
               </button>
             </div>
             <button onClick={startOver} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors duration-150 ease-out">Start over</button>
