@@ -24,7 +24,11 @@
 // drift. Overlay text intentionally does NOT go through autoFitText —
 // the host chose the size in the editor; render it as stored.
 
-const THEME_COLOR_TOKENS = ['text', 'accent', 'highlight']
+const THEME_COLOR_TOKENS = ['text', 'textMuted', 'accent', 'highlight', 'shinyAccent']
+
+// Text-shadow in em so it scales with the (cqh-sized) font — the preview and
+// /display stay pixel-identical. Absent `shadow` → no shadow (graceful default).
+const TEXT_SHADOW = '0 0.05em 0.35em rgba(0,0,0,0.55)'
 
 function resolveFont(fontFamily, theme) {
   if (fontFamily === 'display') return theme.fonts.display
@@ -54,6 +58,8 @@ function TextOverlay({ ov, theme }) {
         color: resolveColor(ov.color, theme),
         textAlign: ov.align ?? 'center',
         fontWeight: ov.weight ?? 700,
+        fontStyle: ov.italic ? 'italic' : 'normal',
+        textShadow: ov.shadow ? TEXT_SHADOW : 'none',
         lineHeight: 1.15,
         wordWrap: 'break-word',
         whiteSpace: 'pre-wrap',

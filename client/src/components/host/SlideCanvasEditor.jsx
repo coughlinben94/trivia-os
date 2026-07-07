@@ -36,7 +36,9 @@ const INNER_W = 1280
 const INNER_H = 720
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
-const THEME_COLOR_TOKENS = ['text', 'accent', 'highlight']
+const THEME_COLOR_TOKENS = ['text', 'textMuted', 'accent', 'highlight', 'shinyAccent']
+// Must match OverlayLayer's TEXT_SHADOW exactly (WYSIWYG). em-scaled.
+const TEXT_SHADOW = '0 0.05em 0.35em rgba(0,0,0,0.55)'
 
 export default function SlideCanvasEditor({
   slide, show, theme,
@@ -82,6 +84,11 @@ export default function SlideCanvasEditor({
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
   const [guides, setGuides] = useState({ x: false, y: false })
+  // Style applied to the NEXT inserted text box while nothing is selected — the
+  // top toolbar's text controls edit this when there's no text overlay to target.
+  const [textDefaults, setTextDefaults] = useState({
+    fontFamily: 'display', fontSize: 5, color: 'text', align: 'center', weight: 700, italic: false, shadow: false,
+  })
   const editableRef = useRef(null)
   const fileInputRef = useRef(null)
 
@@ -138,8 +145,7 @@ export default function SlideCanvasEditor({
       id, kind: 'text',
       x: clamp(xPct, 0, 92), y: clamp(yPct, 0, 92),
       w: 26, rotation: 0, z: nextZ(cur),
-      text: '', fontFamily: 'display', fontSize: 5,
-      color: 'text', align: 'center', weight: 700,
+      text: '', ...textDefaults,
     }])
     setSelectedOverlayId(id)
     setEditingOverlayId(id)
@@ -189,6 +195,12 @@ export default function SlideCanvasEditor({
   }
   function patchDiscrete(id, patch) {
     commitOverlays(cur => cur.map(o => o.id === id ? { ...o, ...patch } : o))
+  }
+  // Text styling from the top toolbar: apply to the selected text overlay, or —
+  // when nothing is selected — update the defaults the next inserted box uses.
+  function applyTextStyle(patch) {
+    if (selectedOverlay?.kind === 'text') patchDiscrete(selectedOverlay.id, patch)
+    else setTextDefaults(d => ({ ...d, ...patch }))
   }
   function bringToFront(id) {
     commitOverlays(cur => cur.map(o => o.id === id ? { ...o, z: nextZ(cur) } : o))
@@ -496,6 +508,8 @@ export default function SlideCanvasEditor({
     fontFamily: `'${resolveFont(ov.fontFamily)}', sans-serif`,
     fontSize: `${(ov.fontSize ?? 6) / 100 * scaledH}px`,
     fontWeight: ov.weight ?? 700,
+    fontStyle: ov.italic ? 'italic' : 'normal',
+    textShadow: ov.shadow ? TEXT_SHADOW : 'none',
     textAlign: ov.align ?? 'center',
     lineHeight: 1.15,
     whiteSpace: 'pre-wrap',
@@ -515,6 +529,11 @@ export default function SlideCanvasEditor({
         onInsertPhoto={addImageFromUrl}
         uploading={uploading}
         uploadError={uploadError}
+        theme={theme}
+        fonts={fontOptions(show)}
+        textStyle={selectedOverlay?.kind === 'text' ? selectedOverlay : (selectedOverlay ? null : textDefaults)}
+        isDefaults={!selectedOverlay}
+        onTextStyle={applyTextStyle}
         selectedOverlay={selectedOverlay}
         onFront={() => selectedOverlay && bringToFront(selectedOverlay.id)}
         onBack={() => selectedOverlay && sendToBack(selectedOverlay.id)}
@@ -905,6 +924,7 @@ function tbBtnClass(active) {
 function DesignToolbar({
   editLayout, onToggleLayout,
   onInsertText, onInsertImage, getHostPhotos, uploadMedia, onInsertPhoto, uploading, uploadError,
+  theme, fonts, textStyle, isDefaults, onTextStyle,
   selectedOverlay, onFront, onBack, onDuplicate, onDelete,
 }) {
   return (
@@ -933,6 +953,11 @@ function DesignToolbar({
           <BenPhotoInsert getHostPhotos={getHostPhotos} uploadMedia={uploadMedia} onInsert={onInsertPhoto} />
           {uploading && <span className="text-[11px] text-gray-400 shrink-0">Uploading…</span>}
           {uploadError && <span className="text-[11px] text-red-500 shrink-0">{uploadError}</span>}
+
+          {/* TEXT — edits the selected text overlay, or the next-box defaults */}
+          {textStyle && (
+            <TextStyleGroup theme={theme} fonts={fonts} style={textStyle} isDefaults={isDefaults} onStyle={onTextStyle} />
+          )}
 
           {selectedOverlay && (
             <>
@@ -1067,6 +1092,135 @@ function BenPhotoInsert({ getHostPhotos, uploadMedia, onInsert }) {
               ))}
             </div>
           )}
+        </div>,
+        document.body,
+      )}
+    </>
+  )
+}
+
+// Text styling controls. Targets the selected text overlay, or (when nothing is
+// selected) the next-box defaults — signaled by the "defaults" pill. The theme
+// swatches and toggle buttons all preventDefault on pointerdown, so styling a
+// box mid-inline-edit never blurs the caret (OV-1). The free color <input> is
+// the one native (focus-taking) control — swatches cover the common case.
+function TextStyleGroup({ theme, fonts, style, isDefaults, onStyle }) {
+  const size = style.fontSize ?? 5
+  const weight = style.weight ?? 700
+  const align = style.align ?? 'center'
+  const step = (delta) => onStyle({ fontSize: clamp(+(size + delta).toFixed(1), 1, 40) })
+  const swatch = (token) => (
+    <button
+      key={token}
+      onPointerDown={tbPD}
+      onClick={() => onStyle({ color: token })}
+      title={token}
+      className="w-5 h-5 rounded-full border border-gray-300 shrink-0"
+      style={{ background: theme.colors[token], outline: style.color === token ? '2px solid #6366f1' : 'none', outlineOffset: 1 }}
+    />
+  )
+  return (
+    <>
+      <TbSep />
+      <TbLabel>Text</TbLabel>
+      {isDefaults && (
+        <span className="text-[9px] font-semibold uppercase tracking-wider text-indigo-400 bg-indigo-50 border border-indigo-100 rounded px-1 py-0.5 shrink-0" title="No box selected — these set the next text box's style">
+          defaults
+        </span>
+      )}
+      <FontDropdown value={style.fontFamily ?? 'display'} fonts={fonts} onChange={f => onStyle({ fontFamily: f })} />
+      {/* size */}
+      <div className="flex items-center shrink-0">
+        <button onPointerDown={tbPD} onClick={() => step(-0.5)} title="Smaller" className={tbBtnClass(false)}>A−</button>
+        <span className="text-[10px] text-gray-400 w-7 text-center tabular-nums">{size}</span>
+        <button onPointerDown={tbPD} onClick={() => step(0.5)} title="Bigger" className={tbBtnClass(false)}>A+</button>
+      </div>
+      {/* bold / italic */}
+      <button onPointerDown={tbPD} onClick={() => onStyle({ weight: weight >= 700 ? 400 : 700 })} title="Bold" className={tbBtnClass(weight >= 700)}><b>B</b></button>
+      <button onPointerDown={tbPD} onClick={() => onStyle({ italic: !style.italic })} title="Italic" className={tbBtnClass(!!style.italic)}><i>I</i></button>
+      {/* align */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        {[['left', '▤'], ['center', '☰'], ['right', '▥']].map(([a, icon]) => (
+          <button key={a} onPointerDown={tbPD} onClick={() => onStyle({ align: a })} title={`Align ${a}`} className={tbBtnClass(align === a)}>{icon}</button>
+        ))}
+      </div>
+      {/* shadow (TV readability) */}
+      <button onPointerDown={tbPD} onClick={() => onStyle({ shadow: !style.shadow })} title="Text shadow — pops text off busy backgrounds on TV" className={tbBtnClass(!!style.shadow)}>◍</button>
+      {/* color */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        {THEME_COLOR_TOKENS.map(swatch)}
+        <input
+          type="color"
+          value={typeof style.color === 'string' && style.color.startsWith('#') ? style.color : '#ffffff'}
+          onChange={e => onStyle({ color: e.target.value })}
+          className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0 shrink-0"
+          title="Custom color"
+        />
+      </div>
+    </>
+  )
+}
+
+// Focus-safe font picker (custom button popover, not a native <select> that
+// would blur an in-progress inline edit). Portal-rendered so the toolbar's
+// overflow-x can't clip it; Escape closes it, not the SlideEditor (OV-3).
+function FontDropdown({ value, fonts, onChange }) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const btnRef = useRef(null)
+  const popRef = useRef(null)
+  const options = [
+    { value: 'display', label: 'Theme font' },
+    { value: 'body', label: 'Theme body' },
+    ...fonts.map(f => ({ value: f, label: f.startsWith('Custom-') ? 'Custom font' : f })),
+  ]
+  const current = options.find(o => o.value === value)
+  const familyOf = (v) => (v && v !== 'display' && v !== 'body' ? `'${v}', sans-serif` : undefined)
+
+  function openPop() {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (r) setPos({ top: Math.round(r.bottom + 6), left: Math.round(r.left) })
+    setOpen(true)
+  }
+  useEffect(() => {
+    if (!open) return
+    function onDown(e) { if (popRef.current?.contains(e.target) || btnRef.current?.contains(e.target)) return; setOpen(false) }
+    function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); setOpen(false) } }
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onKey, true)
+    return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey, true) }
+  }, [open])
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onPointerDown={tbPD}
+        onClick={() => (open ? setOpen(false) : openPop())}
+        title="Font"
+        className={`${tbBtnClass(false)} max-w-[112px] truncate`}
+        style={{ fontFamily: familyOf(value) }}
+      >
+        {current?.label ?? 'Theme font'} ▾
+      </button>
+      {open && createPortal(
+        <div
+          ref={popRef}
+          onPointerDown={e => e.stopPropagation()}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 200, width: 150 }}
+          className="bg-white rounded-lg shadow-xl border border-gray-200 py-1 max-h-64 overflow-y-auto"
+        >
+          {options.map(o => (
+            <button
+              key={o.value}
+              onPointerDown={tbPD}
+              onClick={() => { onChange(o.value); setOpen(false) }}
+              className={`w-full text-left text-xs px-3 py-1.5 hover:bg-gray-50 ${o.value === value ? 'text-indigo-600 font-semibold' : 'text-gray-700'}`}
+              style={{ fontFamily: familyOf(o.value) }}
+            >
+              {o.label}
+            </button>
+          ))}
         </div>,
         document.body,
       )}
