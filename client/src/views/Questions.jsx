@@ -127,7 +127,7 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
           {/* Edit entry-point lives top-left now (was bottom-right in Actions).
               The '—' placeholder only shows when nothing else fills this slot —
               suppressed here since Edit already does, real show_title always wins. */}
-          {!hasItemList && !isEditing && (
+          {!isEditing && (
             <button
               onClick={() => onStartEdit(row)}
               className="text-xs font-semibold text-gray-500 rounded-lg -ml-1.5 mb-0.5 px-1.5 py-0.5 transition-colors duration-150 ease-out hover:text-gray-700 hover:bg-gray-100 active:scale-[0.97]"
@@ -135,8 +135,8 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
               Edit
             </button>
           )}
-          {(row.show_title || hasItemList || isEditing) && (
-            <p className="text-xs font-medium text-gray-700 truncate">{row.show_title ?? '—'}</p>
+          {row.show_title && (
+            <p className="text-xs font-medium text-gray-700 truncate">{row.show_title}</p>
           )}
           <p className="text-[11px] text-gray-500 mt-0.5">{row.show_date ?? ''}</p>
         </div>
@@ -166,27 +166,71 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
 
       {/* Body */}
       {hasItemList ? (
-        <div>
-          {(row.text || row.round_title) && (
-            <p className="text-sm font-semibold text-gray-800 mb-1.5">{row.text || row.round_title}</p>
-          )}
-          <ol className="list-decimal list-inside space-y-1 text-sm text-gray-700">
-            {shownItems.map((q, qi) => (
-              <li key={qi}>
-                <span className="font-medium">{q.text}</span>
-                {q.answer && <span className="text-[#1a6b4a] font-medium"> — {q.answer}</span>}
-              </li>
+        isEditing ? (
+          <div className="flex flex-col gap-2">
+            <input
+              value={editDraft.text}
+              onChange={e => setEditDraft(d => ({ ...d, text: e.target.value }))}
+              placeholder="Title (optional)…"
+              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+            />
+            {(editDraft.items ?? []).map((it, i) => (
+              <div key={i} className="flex gap-1.5 items-center">
+                <span className="text-xs text-gray-400 w-4 text-right shrink-0">{i + 1}.</span>
+                <input
+                  value={it.text}
+                  onChange={e => setEditDraft(d => ({ ...d, items: d.items.map((x, xi) => xi === i ? { ...x, text: e.target.value } : x) }))}
+                  placeholder="Question / item…"
+                  className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-1 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                />
+                <input
+                  value={it.answer}
+                  onChange={e => setEditDraft(d => ({ ...d, items: d.items.map((x, xi) => xi === i ? { ...x, answer: e.target.value } : x) }))}
+                  placeholder="Answer…"
+                  className="w-28 shrink-0 border border-gray-200 rounded-lg px-2 py-1 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                />
+                <button
+                  onClick={() => setEditDraft(d => ({ ...d, items: d.items.filter((_, xi) => xi !== i) }))}
+                  className="text-gray-300 hover:text-red-500 text-xs w-5 h-5 flex items-center justify-center shrink-0"
+                >✕</button>
+              </div>
             ))}
-          </ol>
-          {itemsAreLong && (
             <button
-              onClick={() => setExpanded(e => !e)}
-              className="text-xs font-semibold text-[#1a6b4a] mt-1 transition-colors duration-150 ease-out hover:text-green-900 active:scale-[0.97]"
+              onClick={() => setEditDraft(d => ({ ...d, items: [...(d.items ?? []), { text: '', answer: '' }] }))}
+              className="text-[11px] text-gray-500 hover:text-gray-700 self-start px-2 py-1 rounded hover:bg-gray-100 transition-colors duration-150 ease-out"
             >
-              {expanded ? 'Show less' : 'Show more'}
+              + Add item
             </button>
-          )}
-        </div>
+            <input
+              value={editDraft.category}
+              onChange={e => setEditDraft(d => ({ ...d, category: e.target.value }))}
+              placeholder="Category (optional)…"
+              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+            />
+          </div>
+        ) : (
+          <div>
+            {(row.text || row.round_title) && (
+              <p className="text-sm font-semibold text-gray-800 mb-1.5">{row.text || row.round_title}</p>
+            )}
+            <ol className="list-decimal list-inside space-y-1 text-sm text-gray-700">
+              {shownItems.map((q, qi) => (
+                <li key={qi}>
+                  <span className="font-medium">{q.text}</span>
+                  {q.answer && <span className="text-[#1a6b4a] font-medium"> — {q.answer}</span>}
+                </li>
+              ))}
+            </ol>
+            {itemsAreLong && (
+              <button
+                onClick={() => setExpanded(e => !e)}
+                className="text-xs font-semibold text-[#1a6b4a] mt-1 transition-colors duration-150 ease-out hover:text-green-900 active:scale-[0.97]"
+              >
+                {expanded ? 'Show less' : 'Show more'}
+              </button>
+            )}
+          </div>
+        )
       ) : isEditing ? (
         <div className="flex flex-col gap-2">
           <textarea
@@ -246,12 +290,12 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
         </div>
       )}
 
-      {/* Actions — edit-mode only now; the entry-point Edit button lives top-left (see header) */}
-      {!hasItemList && isEditing && (
+      {/* Actions — edit-mode only; the entry-point Edit button lives top-left (see header) */}
+      {isEditing && (
         <div className="flex flex-col gap-1.5 pt-0.5">
           {confirmingDelete ? (
             <div className="flex items-center justify-between">
-              <span className="text-xs text-red-500">Delete this question?</span>
+              <span className="text-xs text-red-500">Delete this entry?</span>
               <div className="flex gap-3">
                 <button
                   onClick={() => onDelete(row.id)}
@@ -305,7 +349,7 @@ export default function Questions() {
   const { formats: shinyFormats } = useShinyFormats()
   const [showFilter, setShowFilter] = useState(null) // show_id string or null
   const [editingId, setEditingId] = useState(null)
-  const [editDraft, setEditDraft] = useState({ text: '', answer: '', category: '' })
+  const [editDraft, setEditDraft] = useState({ text: '', answer: '', category: '', items: null })
   const [saving, setSaving]       = useState(false)
   // Save/delete failures were silent (the edit stayed open with the draft
   // intact, but nothing said WHY) — surface them; cleared on the next attempt.
@@ -356,14 +400,28 @@ export default function Questions() {
 
   function startEdit(row) {
     setEditingId(row.id)
-    setEditDraft({ text: row.text ?? '', answer: row.answer ?? '', category: row.category ?? '' })
+    // Multi-item rows (swing/pyl/list — anything bulk-entered) carry their real
+    // content in questions_data; edit that as an item list. Single questions
+    // keep the plain text/answer path (items stays null).
+    const items = Array.isArray(row.questions_data) && row.questions_data.length > 0
+      ? row.questions_data.map(it => ({ text: it.text ?? '', answer: it.answer ?? '' }))
+      : null
+    setEditDraft({ text: row.text ?? '', answer: row.answer ?? '', category: row.category ?? '', items })
   }
 
   async function commitEdit(id) {
     if (saving) return
     setSaving(true)
     setWriteError(null)
-    const patch = { text: editDraft.text, answer: editDraft.answer, category: editDraft.category.trim() || null }
+    const patch = editDraft.items
+      ? {
+          text: editDraft.text.trim() || null,
+          category: editDraft.category.trim() || null,
+          questions_data: editDraft.items
+            .map(it => ({ text: (it.text ?? '').trim(), answer: (it.answer ?? '').trim() }))
+            .filter(it => it.text || it.answer),
+        }
+      : { text: editDraft.text, answer: editDraft.answer, category: editDraft.category.trim() || null }
     const { error } = await supabase
       .from('questions')
       .update(patch)
