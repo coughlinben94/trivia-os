@@ -34,6 +34,9 @@ import { DISPLAY_FONTS } from './ThemeCustomizeControls.jsx'
 
 const INNER_W = 1280
 const INNER_H = 720
+// Snap catch-radius, in PERCENT of canvas (width for x, height for y — the
+// overlay coordinate space, never pixels). ~1% per the PowerPoint-style feel.
+const SNAP_PCT = 1.2
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
 const THEME_COLOR_TOKENS = ['text', 'textMuted', 'accent', 'highlight', 'shinyAccent']
@@ -83,7 +86,9 @@ export default function SlideCanvasEditor({
   const [editingOverlayId, setEditingOverlayId] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
-  const [guides, setGuides] = useState({ x: false, y: false })
+  // Snap guide positions in percent (x = vertical line's left%, y = horizontal
+  // line's top%), or null when that axis isn't snapped. Editor-only chrome.
+  const [guides, setGuides] = useState({ x: null, y: null })
   // Style applied to the NEXT inserted text box while nothing is selected — the
   // top toolbar's text controls edit this when there's no text overlay to target.
   const [textDefaults, setTextDefaults] = useState({
@@ -268,6 +273,22 @@ export default function SlideCanvasEditor({
       return cur.map(o => o.id === id ? { ...o, z: minZ - 1 } : o)
     })
   }
+  // One-click centering: put the overlay's CENTER point on the canvas midline,
+  // accounting for its own width/height so the visual center lands at 50%.
+  // Discrete ops — one undo snapshot each, functional commit (OV-2), persisted
+  // through the same scheduleSave → chained updateSlide path.
+  function centerOverlayH(id) {
+    const o = overlaysRef.current.find(v => v.id === id)
+    if (!o) return
+    recordHistory()
+    patchDiscrete(id, { x: clamp(50 - (o.w ?? 0) / 2, 0, 100) })
+  }
+  function centerOverlayV(id) {
+    const el = overlayRef.current?.querySelector(`[data-ov-box="${id}"]`)
+    const hpct = el ? el.offsetHeight / scaledH * 100 : 0
+    recordHistory()
+    patchDiscrete(id, { y: clamp(50 - hpct / 2, 0, 100) })
+  }
 
   // ── overlay gestures (all divide screen-px by scaled canvas size) ──────────
   function startOverlayDrag(e, ov) {
@@ -279,26 +300,64 @@ export default function SlideCanvasEditor({
     const oRect = overlayRef.current.getBoundingClientRect()
     const startX = e.clientX, startY = e.clientY
     const startOvX = ov.x ?? 0, startOvY = ov.y ?? 0
+    const w = ov.w ?? 0
+    // Dragged box height in percent-of-canvas — measured ONCE, synchronously
+    // (e.currentTarget is reset after the event; can't read it inside onMove).
+    const draggedHpct = e.currentTarget.offsetHeight / scaledH * 100
+    // Precompute snap targets ONCE at drag start (per-move stays a handful of
+    // comparisons against a fixed list): canvas center on each axis, plus every
+    // OTHER overlay's left/center/right (x) and top/middle/bottom (y). All in
+    // percent space (never pixels — Critical Rule 8).
+    const xTargets = [50], yTargets = [50]
+    overlayRef.current.querySelectorAll('[data-ov-box]').forEach(el => {
+      const oid = el.dataset.ovBox
+      if (oid === ov.id) return
+      const o = overlaysRef.current.find(v => v.id === oid)
+      if (!o) return
+      const ohp = el.offsetHeight / scaledH * 100
+      const ox = o.x ?? 0, oy = o.y ?? 0, ow = o.w ?? 0
+      xTargets.push(ox, ox + ow / 2, ox + ow)
+      yTargets.push(oy, oy + ohp / 2, oy + ohp)
+    })
     // Snapshot the pre-drag state; committed on pointerup only if it moved, so a
     // plain click-to-select doesn't create a spurious undo step.
     const before = cloneOverlays(overlaysRef.current)
     let moved = false
+    // Snap one axis: try each of the box's anchors (offsets) against every
+    // target, return the closest within threshold + the guide line to draw.
+    function snapAxis(raw, offsets, targets) {
+      let best = SNAP_PCT, val = raw, guide = null
+      for (const off of offsets) {
+        for (const T of targets) {
+          const d = Math.abs((raw + off) - T)
+          if (d < best) { best = d; val = T - off; guide = T }
+        }
+      }
+      return { val, guide }
+    }
     function onMove(ev) {
       const dx = (ev.clientX - startX) / oRect.width * 100
       const dy = (ev.clientY - startY) / oRect.height * 100
       if (Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY) > 3) moved = true
-      const nx = clamp(startOvX + dx, 0, 95)
-      const ny = clamp(startOvY + dy, 0, 95)
-      // center-snap guides (within ~1% of canvas center)
-      const cx = nx + (ov.w ?? 0) / 2
-      setGuides({ x: Math.abs(cx - 50) < 1.2, y: false })
+      let nx = clamp(startOvX + dx, 0, 95)
+      let ny = clamp(startOvY + dy, 0, 95)
+      let gx = null, gy = null
+      // Alt/Option temporarily disables snapping (PowerPoint convention). x and
+      // y snap independently — a box can be snapped on one axis, free on the other.
+      if (!ev.altKey) {
+        const sx = snapAxis(nx, [0, w / 2, w], xTargets)                     // left / center / right
+        const sy = snapAxis(ny, [0, draggedHpct / 2, draggedHpct], yTargets) // top / middle / bottom
+        nx = clamp(sx.val, 0, 95); gx = sx.guide
+        ny = clamp(sy.val, 0, 95); gy = sy.guide
+      }
+      setGuides({ x: gx, y: gy })
       patchOverlay(ov.id, { x: nx, y: ny })
     }
     function onUp() {
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
       document.removeEventListener('pointercancel', onUp)
-      setGuides({ x: false, y: false })
+      setGuides({ x: null, y: null })
       if (moved) pushHistorySnapshot(before)
     }
     document.addEventListener('pointermove', onMove)
@@ -609,6 +668,8 @@ export default function SlideCanvasEditor({
         isDefaults={!selectedOverlay}
         onTextStyle={applyTextStyle}
         selectedOverlay={selectedOverlay}
+        onCenterH={() => selectedOverlay && centerOverlayH(selectedOverlay.id)}
+        onCenterV={() => selectedOverlay && centerOverlayV(selectedOverlay.id)}
         onFront={() => selectedOverlay && bringToFront(selectedOverlay.id)}
         onBack={() => selectedOverlay && sendToBack(selectedOverlay.id)}
         onDuplicate={() => selectedOverlay && duplicateOverlay(selectedOverlay.id)}
@@ -703,12 +764,14 @@ export default function SlideCanvasEditor({
               </div>
             )}
 
-            {/* ── center snap guides ── */}
-            {editLayout && guides.x && (
-              <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'rgba(99,102,241,0.7)', pointerEvents: 'none', zIndex: 55 }} />
+            {/* ── snap guides (editor-only chrome — never rendered by OverlayLayer
+                 or on /display; fixed high-contrast magenta + dark halo so it
+                 reads on every theme background, not a theme token) ── */}
+            {editLayout && guides.x != null && (
+              <div style={{ position: 'absolute', left: `${guides.x}%`, top: 0, bottom: 0, width: 0, borderLeft: '1.5px dashed #ff2d95', boxShadow: '0 0 2px rgba(0,0,0,0.55)', pointerEvents: 'none', zIndex: 55 }} />
             )}
-            {editLayout && guides.y && (
-              <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: 'rgba(99,102,241,0.7)', pointerEvents: 'none', zIndex: 55 }} />
+            {editLayout && guides.y != null && (
+              <div style={{ position: 'absolute', top: `${guides.y}%`, left: 0, right: 0, height: 0, borderTop: '1.5px dashed #ff2d95', boxShadow: '0 0 2px rgba(0,0,0,0.55)', pointerEvents: 'none', zIndex: 55 }} />
             )}
 
             {/* ── overlay interactive boxes (edit mode only) ── */}
@@ -914,7 +977,7 @@ function DesignToolbar({
   onUndo, onRedo, canUndo, canRedo,
   onInsertText, onInsertImage, getHostPhotos, uploadMedia, onInsertPhoto, uploading, uploadError,
   theme, fonts, textStyle, isDefaults, onTextStyle,
-  selectedOverlay, onFront, onBack, onDuplicate, onDelete,
+  selectedOverlay, onCenterH, onCenterV, onFront, onBack, onDuplicate, onDelete,
 }) {
   return (
     <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-100 bg-white overflow-x-auto">
@@ -959,6 +1022,8 @@ function DesignToolbar({
               <TbSep />
               {/* ARRANGE */}
               <TbLabel>Arrange</TbLabel>
+              <button onPointerDown={tbPD} onClick={onCenterH} title="Center on canvas — horizontal (⌥-drag disables snapping)" className={tbBtnClass(false)}>⇔</button>
+              <button onPointerDown={tbPD} onClick={onCenterV} title="Center on canvas — vertical (⌥-drag disables snapping)" className={tbBtnClass(false)}>⇕</button>
               <button onPointerDown={tbPD} onClick={onFront} title="Bring forward" className={tbBtnClass(false)}>⬆</button>
               <button onPointerDown={tbPD} onClick={onBack} title="Send backward" className={tbBtnClass(false)}>⬇</button>
               <button onPointerDown={tbPD} onClick={onDuplicate} title="Duplicate" className={tbBtnClass(false)}>⧉</button>
@@ -973,7 +1038,7 @@ function DesignToolbar({
             </>
           )}
 
-          <span className="ml-auto text-[11px] text-gray-300 shrink-0 pl-2 whitespace-nowrap">Drag to move · Del to remove</span>
+          <span className="ml-auto text-[11px] text-gray-300 shrink-0 pl-2 whitespace-nowrap">Drag snaps to center &amp; edges · hold ⌥ to disable · Del to remove</span>
         </>
       )}
     </div>
