@@ -20,7 +20,7 @@ const FILTERS = [
 ]
 
 const TRUNCATE_AT = 200
-const ITEM_LIST_TRUNCATE_AT = 3
+const ITEM_LIST_TRUNCATE_AT = 12
 
 function matchesFilter(q, filter) {
   if (filter === 'all')     return true
@@ -71,11 +71,12 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
   const isLong = !isEditing && text.length > TRUNCATE_AT
   const shownText = isLong && !expanded ? text.slice(0, TRUNCATE_AT).trimEnd() + '…' : text
 
-  // Shiny multi-item boxes (image/list/grid formats saved with questions_data)
-  // rendered the WHOLE list on the card with no cap — same expand affordance
-  // as the plain-text truncation above, just item-count-based instead of
-  // char-based since this body is a list, not a paragraph.
-  const itemsAreLong = hasItemList && row.is_shiny && row.questions_data.length > ITEM_LIST_TRUNCATE_AT
+  // Any item-list card (swing/pyl/list/multi-item shiny) rendered the WHOLE
+  // list with no cap — a 6+ item PYL board next to a 3-item shiny card made
+  // the row heights wildly uneven. Same expand affordance as the plain-text
+  // truncation above, capped at 12 lines (one line per item) for every type,
+  // not just shiny.
+  const itemsAreLong = hasItemList && row.questions_data.length > ITEM_LIST_TRUNCATE_AT
   const shownItems = itemsAreLong && !expanded ? row.questions_data.slice(0, ITEM_LIST_TRUNCATE_AT) : row.questions_data
 
   return (
