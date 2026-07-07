@@ -20,7 +20,30 @@ const FILTERS = [
 ]
 
 const TRUNCATE_AT = 200
-const ITEM_LIST_TRUNCATE_AT = 12
+const ITEM_LIST_LINE_CAP = 8
+// Rough chars-per-rendered-line at this card's text-xs body width (desktop
+// 3-column card, ~430px content width) — used only to ESTIMATE how many
+// visual lines a long item will wrap to, so the cap tracks real line count
+// instead of raw item count. A card with six 3-line questions was blowing
+// way past 12 lines while sitting well under a 12-ITEM cap.
+const CHARS_PER_LINE = 60
+
+function estimateLines(item) {
+  const combined = `${item.text ?? ''}${item.answer ? ` — ${item.answer}` : ''}`
+  return Math.max(1, Math.ceil(combined.length / CHARS_PER_LINE))
+}
+
+// How many whole items fit inside a 12-line budget — cuts on an item
+// boundary (never mid-item), so a truncated card never ends on a half
+// question with its answer missing.
+function itemCutoffForLineCap(items, cap) {
+  let used = 0
+  for (let i = 0; i < items.length; i++) {
+    used += estimateLines(items[i])
+    if (used > cap && i > 0) return i
+  }
+  return items.length
+}
 
 function matchesFilter(q, filter) {
   if (filter === 'all')     return true
@@ -71,19 +94,31 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
   const isLong = !isEditing && text.length > TRUNCATE_AT
   const shownText = isLong && !expanded ? text.slice(0, TRUNCATE_AT).trimEnd() + '…' : text
 
+  // Answer had NO cap at all — PYL's answer is just a short media-type badge
+  // (word/visual/audio), never long, but a regular/shiny row's real answer
+  // text was rendered fully unbounded. Shares the card's one `expanded`
+  // toggle with the question-text truncation above, so a single "Show more"
+  // reveals both.
+  const answer = row.answer ?? ''
+  const answerIsLong = !isEditing && row.type !== 'pyl' && answer.length > TRUNCATE_AT
+  const shownAnswer = answerIsLong && !expanded ? answer.slice(0, TRUNCATE_AT).trimEnd() + '…' : answer
+
   // Any item-list card (swing/pyl/list/multi-item shiny) rendered the WHOLE
-  // list with no cap — a 6+ item PYL board next to a 3-item shiny card made
-  // the row heights wildly uneven. Same expand affordance as the plain-text
-  // truncation above, capped at 12 lines (one line per item) for every type,
-  // not just shiny.
-  const itemsAreLong = hasItemList && row.questions_data.length > ITEM_LIST_TRUNCATE_AT
-  const shownItems = itemsAreLong && !expanded ? row.questions_data.slice(0, ITEM_LIST_TRUNCATE_AT) : row.questions_data
+  // list with no cap — a 6-item PYL board where every question wraps 2-3
+  // lines blew past 12 rendered lines while sitting well under a flat
+  // item-count cap, so this estimates real wrapped-line count per item and
+  // cuts at the item boundary that keeps the whole card within ~12 lines —
+  // same expand affordance as the plain-text truncation above, for every
+  // question type, not just shiny.
+  const itemCutoff = hasItemList ? itemCutoffForLineCap(row.questions_data, ITEM_LIST_LINE_CAP) : 0
+  const itemsAreLong = hasItemList && itemCutoff < row.questions_data.length
+  const shownItems = itemsAreLong && !expanded ? row.questions_data.slice(0, itemCutoff) : row.questions_data
 
   return (
     <div
       className={`card-animate w-full sm:w-[calc(50%-0.5rem)] lg:w-[calc(33.333%-0.667rem)] bg-white rounded-2xl border p-4 flex flex-col gap-3 shadow-sm transition-[border-color] duration-150 ease-out hover:border-gray-300 ${
         row.is_bonus ? 'border-red-100 bg-red-50/40' : row.is_shiny ? 'border-yellow-300 bg-yellow-50/60' : 'border-gray-200'
-      }`}
+      } ${hasItemList ? 'self-start' : ''}`}
       style={style}
     >
       {/* Header — show + type badges */}
@@ -169,7 +204,7 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
           <p className="text-sm text-gray-800 leading-relaxed">
             {text ? shownText : <span className="text-gray-400 italic">No question text</span>}
           </p>
-          {isLong && (
+          {(isLong || answerIsLong) && (
             <button
               onClick={() => setExpanded(e => !e)}
               className="text-xs font-semibold text-[#1a6b4a] mt-1 transition-colors duration-150 ease-out hover:text-green-900 active:scale-[0.97]"
@@ -191,7 +226,7 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
               </span>
             ) : (
               <p className="text-sm font-medium text-[#1a6b4a]">
-                {row.answer ?? <span className="text-gray-400 italic font-normal">No answer</span>}
+                {row.answer ? shownAnswer : <span className="text-gray-400 italic font-normal">No answer</span>}
               </p>
             )}
           </div>
@@ -498,7 +533,10 @@ export default function Questions() {
           /* items-stretch (the flex default) lets cards in the same row equalize
              height so each card's mt-auto answer block lines up at a common
              bottom edge — items-start (previous) let every card sit at its own
-             natural height, reading as mismatched card sizes row to row. */
+             natural height, reading as mismatched card sizes row to row.
+             Item-list cards opt out via self-start (see QuestionCard) — they
+             have no mt-auto anchor, so stretching them only left dead blank
+             space under a short list next to a taller sibling in the row. */
           <div className="flex flex-wrap gap-4 justify-center items-stretch">
             {visible.map((row, i) => (
               <QuestionCard
