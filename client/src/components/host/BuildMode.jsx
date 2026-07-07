@@ -675,8 +675,12 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                 show={show}
                 initialData={addModalData}
                 onTypeChange={setWizardPickedType}
-                onAddSlide={async ({ afterSlideId, ...rest }) => {
-                  const newSlides = await actions.addSiblingSlides(afterSlideId, [rest])
+                onAddSlide={async ({ afterSlideId, slides, ...rest }) => {
+                  // `slides` (an array) means a batch add — e.g. an image
+                  // shiny format's "how many slides to add?" — otherwise
+                  // it's the normal single-slide shape.
+                  const slidesData = slides ?? [rest]
+                  const newSlides = await actions.addSiblingSlides(afterSlideId, slidesData)
                   const slide = newSlides?.[0]
                   if (slide) {
                     closeAddModal()

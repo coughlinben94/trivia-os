@@ -50,7 +50,14 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const [shinyAnswer,       setShinyAnswer]      = useState('')
   const [gridCols, setGridCols] = useState(4)
   const [gridRows, setGridRows] = useState(3)
-  const [concurrentCount, setConcurrentCount] = useState(3)
+  // Shared "how many assets" count — used by any concurrent format
+  // (image/audio/video) and, for image formats specifically, also by the
+  // non-concurrent "N images together on one slide" path.
+  const [assetCount, setAssetCount] = useState(3)
+  // Image formats only: how many separate slides to batch-insert at once.
+  // Blank-able string state so the field can be empty; blank = 1 (the
+  // normal single-question case).
+  const [slideCount, setSlideCount] = useState('')
 
   // Round-intro — pre-filled from AddRoundWizard or from round filter; also derived from selected round
   const _preRound = initialData.roundId ? show.rounds.find(r => r.id === initialData.roundId) : null
@@ -84,7 +91,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
 
   async function handleCreate() {
     const roundSlides = sorted.filter(s => s.roundId === roundId)
-    const nonBonusQ   = roundSlides.filter(s => (s.type === 'question' || s.type === 'pixelate-series') && !s.data?.isBonus)
+    const nonBonusQ   = roundSlides.filter(s => (s.type === 'question' || s.type === 'pixelate-series' || s.type === 'grid') && !s.data?.isBonus)
     const bonusQ      = roundSlides.filter(s => s.type === 'question' && s.data?.isBonus)
     const qNum = nonBonusQ.length + 1
     const bNum = bonusQ.length + 1
@@ -144,9 +151,108 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           })
           return
         }
+
         const isConcurrentFmt = selectedShinyFmt.input_schema?.concurrent === true
+        const isImageFmt = selectedShinyFmt.input_schema?.type === 'image'
+
+        if (isImageFmt) {
+          // Image formats always get "How many slides? / How many assets?"
+          // at add time, concurrent or not. Assets meaning branches:
+          //   concurrent    -> N back-to-back parts per slide (existing mechanism)
+          //   non-concurrent, N>1 -> N images together on ONE slide — reuses
+          //     the grid slide type/editor/renderer under the hood (N columns
+          //     x 1 row) instead of new rendering code
+          //   non-concurrent, N===1 -> today's flat single-slot shape
+          const assets = Math.max(1, assetCount)
+          const numSlides = Math.max(1, parseInt(slideCount, 10) || 1)
+          // A batch of >1 slides can't share one typed-in question/answer —
+          // each slide needs its own distinct content — so batch-created
+          // slides start blank and get filled in afterward via the slide
+          // editor, same pattern already used for concurrent parts/grid tiles.
+          const useSharedFields = numSlides === 1
+
+          const afterId = roundSlides.length > 0
+            ? roundSlides[roundSlides.length - 1].id
+            : (sorted.length > 0 ? sorted[sorted.length - 1].id : null)
+
+          const slidesData = Array.from({ length: numSlides }, (_, i) => {
+            const n = qNum + i
+            const base = {
+              questionNumber:   n,
+              questionLabel:    `Q${n}`,
+              questionMode:     'shiny',
+              isShiny:          true,
+              shinyFormatId:    selectedShinyFmt.id,
+              shinyFormatName:  selectedShinyFmt.name,
+              shinyFormatIcon:  selectedShinyFmt.icon,
+              shinyType:        'image',
+            }
+            if (isConcurrentFmt) {
+              return {
+                type: 'question',
+                roundId: roundId ?? null,
+                data: {
+                  ...base,
+                  shinyInputSchema: { ...selectedShinyFmt.input_schema, slots: 1 },
+                  isSeries:    true,
+                  seriesTheme: selectedShinyFmt.name,
+                  currentPart: 0,
+                  parts: Array.from({ length: assets }, () => ({ label: '', text: '', answer: '', mediaSlots: [] })),
+                },
+              }
+            }
+            if (assets > 1) {
+              const columns = Array.from({ length: assets }, () => [{ color: null, mediaUrl: null }])
+              return {
+                type: 'grid',
+                roundId: roundId ?? null,
+                data: {
+                  ...base,
+                  columns,
+                  intraGap:     0,
+                  interGap:     84,
+                  columnLabels: false,
+                  text:   useSharedFields ? shinyQuestion.trim() : '',
+                  answer: useSharedFields ? shinyAnswer.trim() : '',
+                },
+              }
+            }
+            return {
+              type: 'question',
+              roundId: roundId ?? null,
+              data: {
+                ...base,
+                shinyInputSchema: selectedShinyFmt.input_schema ?? null,
+                text:       useSharedFields ? shinyQuestion.trim() : '',
+                answer:     useSharedFields ? shinyAnswer.trim() : '',
+                mediaSlots: [],
+              },
+            }
+          })
+
+          await onAddSlide({ afterSlideId: afterId, slides: slidesData })
+
+          if (useSharedFields) {
+            const d = slidesData[0].data
+            const text   = d.parts?.[0]?.text ?? d.text ?? ''
+            const answer = d.parts?.[0]?.answer ?? d.answer ?? ''
+            archiveQuestion({
+              type:              'shiny',
+              text, answer,
+              is_bonus:          false,
+              is_shiny:          true,
+              shiny_type:        'image',
+              shiny_format_name: selectedShinyFmt.name,
+              show_id:           show?.id ?? null,
+              show_title:        show?.title ?? null,
+              show_date:         show?.date ?? null,
+            })
+          }
+          return
+        }
+
         if (isConcurrentFmt) {
-          const count = Math.max(1, concurrentCount)
+          const count = Math.max(1, assetCount)
           data = {
             questionNumber:   qNum,
             questionLabel:    `Q${qNum}`,
@@ -251,9 +357,13 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const canCreate      = !(needsRound && !roundId) && (type !== 'round-intro' || (roundNumValid && !!roundId))
   const canAddQuestion = !!roundId && questionText.trim().length > 0 && questionAnswer.trim().length > 0
   const isConcurrentFmt = selectedShinyFmt?.input_schema?.concurrent === true
-  // Concurrent formats skip the shared-answer field entirely — each part gets
-  // its own independent answer, filled in afterward via the slide editor.
-  const canAddShiny    = !!roundId && (isConcurrentFmt || shinyAnswer.trim().length > 0)
+  const isImageFmt      = selectedShinyFmt?.input_schema?.type === 'image'
+  const slideNum        = Math.max(1, parseInt(slideCount, 10) || 1)
+  // Concurrent formats, and image-format batches of >1 slide, skip the
+  // shared-answer field entirely — each part/slide gets its own answer,
+  // filled in afterward via the slide editor.
+  const skipSharedAnswer = isConcurrentFmt || (isImageFmt && slideNum > 1)
+  const canAddShiny    = !!roundId && (skipSharedAnswer || shinyAnswer.trim().length > 0)
   const isPlainOnly    = type === 'question'
   const isShinyOnly    = type === 'shiny-question'
   const isQuestionType = isPlainOnly || isShinyOnly
@@ -365,11 +475,81 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               )}
             </div>
 
-            {isConcurrentFmt ? (
-              /* Concurrent format — no shared question/answer here. The host
-                 picks how many back-to-back parts to create; each part's own
-                 media, text, and answer get filled in afterward via the slide
-                 editor's part-by-part editor. */
+            {isImageFmt ? (
+              /* Image formats — always prompt for slide count + asset count.
+                 Asset count's meaning branches on concurrent (back-to-back
+                 parts vs. all-at-once on one slide via the grid renderer),
+                 but the two inputs themselves are shared across both. */
+              <>
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                      How many slides to add? <span className="font-normal text-gray-400">(optional)</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={slideCount}
+                      onChange={e => setSlideCount(e.target.value)}
+                      placeholder="1"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">How many assets?</label>
+                    <input
+                      autoFocus
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={assetCount}
+                      onChange={e => setAssetCount(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400 -mt-2">
+                  {isConcurrentFmt
+                    ? `${assetCount} back-to-back part${assetCount === 1 ? '' : 's'} per slide, each with its own answer — fill them in from the slide editor.`
+                    : assetCount > 1
+                      ? `${assetCount} images together on one slide, one shared answer.`
+                      : 'A single image, one shared answer.'}
+                  {slideNum > 1 ? ` Creates ${slideNum} separate slides — fill each in from the slide editor.` : ''}
+                </p>
+
+                {!skipSharedAnswer && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                        Question text <span className="font-normal text-gray-400">(optional)</span>
+                      </label>
+                      <textarea
+                        value={shinyQuestion}
+                        onChange={e => setShinyQuestion(e.target.value)}
+                        placeholder="e.g. What connects these four images?"
+                        rows={3}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Answer</label>
+                      <input
+                        type="text"
+                        value={shinyAnswer}
+                        onChange={e => setShinyAnswer(e.target.value)}
+                        placeholder="The answer…"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                      />
+                    </div>
+                  </>
+                )}
+              </>
+            ) : isConcurrentFmt ? (
+              /* Concurrent audio/video format — no shared question/answer here.
+                 The host picks how many back-to-back parts to create; each
+                 part's own media, text, and answer get filled in afterward
+                 via the slide editor's part-by-part editor. */
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">How many?</label>
                 <input
@@ -377,12 +557,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                   type="number"
                   min={1}
                   max={20}
-                  value={concurrentCount}
-                  onChange={e => setConcurrentCount(Math.max(1, parseInt(e.target.value) || 1))}
+                  value={assetCount}
+                  onChange={e => setAssetCount(Math.max(1, parseInt(e.target.value) || 1))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <p className="text-xs text-gray-400 mt-1.5">
-                  Creates {concurrentCount} back-to-back parts, each with its own answer — fill them in from the slide editor.
+                  Creates {assetCount} back-to-back parts, each with its own answer — fill them in from the slide editor.
                 </p>
               </div>
             ) : (
@@ -619,7 +799,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             {selectedShinyFmt && (
               <div className="mt-auto pt-2">
                 <button
-                  onClick={() => setShinyStep('details')}
+                  onClick={() => { setSlideCount(''); setShinyStep('details') }}
                   className={`w-full bg-yellow-500 text-white text-sm font-semibold py-3 rounded-xl hover:bg-yellow-600 ${BTN}`}
                 >
                   Add {selectedShinyFmt.name} →

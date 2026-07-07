@@ -6,7 +6,7 @@ const EMPTY_FORMAT = {
   name: '',
   description: '',
   icon: '✨',
-  input_schema: { type: 'image', slots: 1, sequential: false, seriesEnabled: false, hasPoints: false, labels: [] },
+  input_schema: { type: 'image', slots: 1, seriesEnabled: false, hasPoints: false, labels: [] },
 }
 
 export default function FormatLibrary({ onClose, onSelectFormat, formats, loading, createFormat, updateFormat, deleteFormat }) {
@@ -174,12 +174,15 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                   </div>
                 )}
 
-                {/* Slots — only for image/audio/video, and only when NOT concurrent
-                    (concurrent formats choose their count per-use instead) */}
-                {['image', 'audio', 'video'].includes(schema.type) && !schema.concurrent && (
+                {/* Slots — only for audio/video, and only when NOT concurrent
+                    (concurrent formats choose their count per-use instead).
+                    Image formats always prompt for an asset count per-use at
+                    add time, concurrent or not, so this field doesn't apply
+                    to them at all — see AddSlideWizard's "How many assets?" */}
+                {['audio', 'video'].includes(schema.type) && !schema.concurrent && (
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-medium text-gray-500">
-                      Number of {schema.type === 'image' ? 'Image' : schema.type === 'audio' ? 'Audio' : 'Video'} Slots
+                      Number of {schema.type === 'audio' ? 'Audio' : 'Video'} Slots
                     </label>
                     <div className="flex gap-2">
                       {[1,2,3,4,5,6].map(n => (
@@ -192,22 +195,6 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                         </button>
                       ))}
                     </div>
-                  </div>
-                )}
-
-                {/* Sequential toggle — for multi-slot image */}
-                {schema.type === 'image' && !schema.concurrent && schema.slots > 1 && (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Sequential reveal</p>
-                      <p className="text-xs text-gray-400">Images reveal in order, one per host advance</p>
-                    </div>
-                    <button
-                      onClick={() => updateSchema('sequential', !schema.sequential)}
-                      className={`w-11 h-6 rounded-full transition-colors ${schema.sequential ? 'bg-gray-900' : 'bg-gray-200'}`}
-                    >
-                      <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.sequential ? 'translate-x-5' : 'translate-x-0'}`}/>
-                    </button>
                   </div>
                 )}
 
@@ -256,26 +243,6 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                     >
                       <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.columnLabels !== false ? 'translate-x-5' : 'translate-x-0'}`}/>
                     </button>
-                  </div>
-                )}
-
-                {/* Slot labels — for sequential image */}
-                {schema.type === 'image' && !schema.concurrent && schema.sequential && schema.slots > 1 && (
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs font-medium text-gray-500">Stage Labels (optional)</label>
-                    {Array.from({ length: schema.slots }).map((_, i) => (
-                      <input
-                        key={i}
-                        value={schema.labels?.[i] ?? ''}
-                        onChange={e => {
-                          const labels = [...(schema.labels ?? [])]
-                          labels[i] = e.target.value
-                          updateSchema('labels', labels)
-                        }}
-                        placeholder={`Stage ${i + 1} label`}
-                        className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                      />
-                    ))}
                   </div>
                 )}
 
