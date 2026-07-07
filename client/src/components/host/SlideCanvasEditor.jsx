@@ -103,6 +103,9 @@ export default function SlideCanvasEditor({
     setSelectedOverlayId(null)
     setEditingOverlayId(null)
     setUploadError(null)
+    // Undo/redo history is scoped to editing THIS slide — reset it on switch.
+    setPast([])
+    setFuture([])
   }, [slide.id])
 
   // ── overlay persistence helpers ───────────────────────────────────────────
@@ -128,6 +131,51 @@ export default function SlideCanvasEditor({
   }
   const nextZ = (list) => Math.max(0, ...list.map(o => o.z ?? 0)) + 1
 
+  // ── undo / redo (in-memory, per-slide-editing session) ────────────────────
+  // Mirror the latest committed overlays in a ref so a history snapshot is
+  // never stale — correct even inside an async image insert or across a drag's
+  // per-frame re-renders (where the closed-over `data` would lag).
+  const overlaysRef = useRef(overlays)
+  useEffect(() => { overlaysRef.current = data.overlays ?? [] }, [data.overlays])
+
+  const MAX_HISTORY = 50
+  const [past, setPast] = useState([])
+  const [future, setFuture] = useState([])
+  const cloneOverlays = (list) => (list ?? []).map(o => ({ ...o }))
+  // Push the PRE-change overlays onto the undo stack and invalidate redo. The
+  // updater is pure (StrictMode-safe); setFuture is a separate plain call.
+  function pushHistorySnapshot(prevOverlays) {
+    setPast(p => {
+      const next = [...p, cloneOverlays(prevOverlays)]
+      return next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next
+    })
+    setFuture([])
+  }
+  // Snapshot before any discrete overlay edit (create/delete/duplicate/style/z).
+  function recordHistory() { pushHistorySnapshot(overlaysRef.current) }
+  // Restore a snapshot through the SAME scheduleSave → chained updateSlide path
+  // every other overlay edit uses, so the serialized write chain stays intact.
+  function applyOverlaysSnapshot(snap) {
+    const next = cloneOverlays(snap)
+    setData(d => { const nd = { ...d, overlays: next }; scheduleSave({ data: nd }); return nd })
+    setSelectedOverlayId(id => next.some(o => o.id === id) ? id : null)
+    setEditingOverlayId(null)
+  }
+  function undo() {
+    if (past.length === 0) return
+    const prev = past[past.length - 1]
+    setPast(past.slice(0, -1))
+    setFuture([...future, cloneOverlays(overlaysRef.current)])
+    applyOverlaysSnapshot(prev)
+  }
+  function redo() {
+    if (future.length === 0) return
+    const nextSnap = future[future.length - 1]
+    setFuture(future.slice(0, -1))
+    setPast([...past, cloneOverlays(overlaysRef.current)])
+    applyOverlaysSnapshot(nextSnap)
+  }
+
   function resolveFont(f) {
     if (f === 'display') return theme.fonts.display
     if (f === 'body') return theme.fonts.body
@@ -140,6 +188,7 @@ export default function SlideCanvasEditor({
 
   // ── overlay CRUD ──────────────────────────────────────────────────────────
   function addTextAt(xPct, yPct) {
+    recordHistory()
     const id = nanoid()
     commitOverlays(cur => [...cur, {
       id, kind: 'text',
@@ -157,6 +206,7 @@ export default function SlideCanvasEditor({
     try {
       const res = await uploadMedia(file)
       if (res?.url) {
+        recordHistory()
         const id = nanoid()
         commitOverlays(cur => [...cur, { id, kind: 'image', x: 35, y: 30, w: 30, rotation: 0, z: nextZ(cur), mediaUrl: res.url }])
         setSelectedOverlayId(id)
@@ -174,17 +224,22 @@ export default function SlideCanvasEditor({
   // Centered horizontally at a comfortable third-height; w=30 → x=(100-30)/2.
   function addImageFromUrl(url) {
     if (!url) return
+    recordHistory()
     const id = nanoid()
     commitOverlays(cur => [...cur, { id, kind: 'image', x: 35, y: 28, w: 30, rotation: 0, z: nextZ(cur), mediaUrl: url }])
     setSelectedOverlayId(id)
   }
 
-  function deleteOverlay(id) {
+  // record=false for the empty-text auto-prune (the box's creation already made
+  // one history entry; a paired prune snapshot would add a no-op undo step).
+  function deleteOverlay(id, record = true) {
+    if (record) recordHistory()
     commitOverlays(cur => cur.filter(o => o.id !== id))
     if (selectedOverlayId === id) setSelectedOverlayId(null)
     if (editingOverlayId === id) setEditingOverlayId(null)
   }
   function duplicateOverlay(id) {
+    recordHistory()
     const nid = nanoid()
     commitOverlays(cur => {
       const o = cur.find(x => x.id === id)
@@ -199,13 +254,15 @@ export default function SlideCanvasEditor({
   // Text styling from the top toolbar: apply to the selected text overlay, or —
   // when nothing is selected — update the defaults the next inserted box uses.
   function applyTextStyle(patch) {
-    if (selectedOverlay?.kind === 'text') patchDiscrete(selectedOverlay.id, patch)
+    if (selectedOverlay?.kind === 'text') { recordHistory(); patchDiscrete(selectedOverlay.id, patch) }
     else setTextDefaults(d => ({ ...d, ...patch }))
   }
   function bringToFront(id) {
+    recordHistory()
     commitOverlays(cur => cur.map(o => o.id === id ? { ...o, z: nextZ(cur) } : o))
   }
   function sendToBack(id) {
+    recordHistory()
     commitOverlays(cur => {
       const minZ = Math.min(0, ...cur.map(o => o.z ?? 0))
       return cur.map(o => o.id === id ? { ...o, z: minZ - 1 } : o)
@@ -222,6 +279,9 @@ export default function SlideCanvasEditor({
     const oRect = overlayRef.current.getBoundingClientRect()
     const startX = e.clientX, startY = e.clientY
     const startOvX = ov.x ?? 0, startOvY = ov.y ?? 0
+    // Snapshot the pre-drag state; committed on pointerup only if it moved, so a
+    // plain click-to-select doesn't create a spurious undo step.
+    const before = cloneOverlays(overlaysRef.current)
     let moved = false
     function onMove(ev) {
       const dx = (ev.clientX - startX) / oRect.width * 100
@@ -239,6 +299,7 @@ export default function SlideCanvasEditor({
       document.removeEventListener('pointerup', onUp)
       document.removeEventListener('pointercancel', onUp)
       setGuides({ x: false, y: false })
+      if (moved) pushHistorySnapshot(before)
     }
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
@@ -249,9 +310,18 @@ export default function SlideCanvasEditor({
   useEffect(() => {
     if (!editLayout) return
     function onKey(e) {
+      // Bail while inline-editing a text box or with focus in any field, so
+      // Cmd/Ctrl+Z there runs the browser's NATIVE text undo, not overlay undo.
       if (editingOverlayId) return
       const ae = document.activeElement
       if (ae && (ae.isContentEditable || ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault()
+        if (e.shiftKey) redo(); else undo()
+        return
+      }
+      if (mod && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return }
       if (e.key === 'Escape') { setSelectedOverlayId(null); return }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedOverlayId) {
         e.preventDefault()
@@ -261,7 +331,7 @@ export default function SlideCanvasEditor({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editLayout, editingOverlayId, selectedOverlayId, overlays])
+  }, [editLayout, editingOverlayId, selectedOverlayId, overlays, past, future])
 
   // ── inline text edit: focus the editable & place caret on enter ───────────
   useEffect(() => {
@@ -288,7 +358,7 @@ export default function SlideCanvasEditor({
     // one render stale relative to the last keystroke) to decide pruning.
     const text = (editableRef.current?.textContent ?? '').trim()
     // Prune a text box left completely empty — matches "delete/re-add covers it".
-    if (!text) deleteOverlay(id)
+    if (!text) deleteOverlay(id, false)
   }
 
   function toggleEditLayout() {
@@ -522,6 +592,10 @@ export default function SlideCanvasEditor({
       <DesignToolbar
         editLayout={editLayout}
         onToggleLayout={toggleEditLayout}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={past.length > 0}
+        canRedo={future.length > 0}
         onInsertText={() => addTextAt(37, 42)}
         onInsertImage={() => fileInputRef.current?.click()}
         getHostPhotos={getHostPhotos}
@@ -733,7 +807,10 @@ export default function SlideCanvasEditor({
     const startHpct = bh / scaledH * 100
     const cxPct = (ov.x ?? 0) + startW / 2
     const cyPct = (ov.y ?? 0) + startHpct / 2
+    const before = cloneOverlays(overlaysRef.current)
+    let changed = false
     function onMove(ev) {
+      changed = true
       const ratio = clamp(Math.hypot(ev.clientX - cx, ev.clientY - cy) / startDist, 0.15, 8)
       const newW = clamp(startW * ratio, 3, 100)
       const newHpct = startHpct * ratio
@@ -745,6 +822,7 @@ export default function SlideCanvasEditor({
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
       document.removeEventListener('pointercancel', onUp)
+      if (changed) pushHistorySnapshot(before)
     }
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
@@ -762,7 +840,10 @@ export default function SlideCanvasEditor({
     const cy = oRect.top + (ov.y ?? 0) / 100 * scaledH + bh / 2
     const startRot = ov.rotation ?? 0
     const startA = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI
+    const before = cloneOverlays(overlaysRef.current)
+    let changed = false
     function onMove(ev) {
+      changed = true
       let nr = startRot + (Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180 / Math.PI - startA)
       if (ev.shiftKey) nr = Math.round(nr / 15) * 15
       patchOverlay(ov.id, { rotation: Math.round(nr) })
@@ -771,6 +852,7 @@ export default function SlideCanvasEditor({
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
       document.removeEventListener('pointercancel', onUp)
+      if (changed) pushHistorySnapshot(before)
     }
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
@@ -920,9 +1002,11 @@ function tbBtnClass(active) {
       : 'bg-gray-50 border-gray-200 text-gray-600 hover:text-gray-900 hover:border-gray-300'
   }`
 }
+const TB_BTN_DISABLED = 'text-xs font-medium px-2 py-1 rounded-md border bg-white border-gray-100 text-gray-300 cursor-not-allowed shrink-0 leading-none'
 
 function DesignToolbar({
   editLayout, onToggleLayout,
+  onUndo, onRedo, canUndo, canRedo,
   onInsertText, onInsertImage, getHostPhotos, uploadMedia, onInsertPhoto, uploading, uploadError,
   theme, fonts, textStyle, isDefaults, onTextStyle,
   selectedOverlay, onFront, onBack, onDuplicate, onDelete,
@@ -941,6 +1025,12 @@ function DesignToolbar({
 
       {editLayout && (
         <>
+          <TbSep />
+          {/* HISTORY */}
+          <TbLabel>History</TbLabel>
+          <button onPointerDown={tbPD} onClick={onUndo} disabled={!canUndo} title="Undo (⌘Z / Ctrl+Z)" className={canUndo ? tbBtnClass(false) : TB_BTN_DISABLED}>↶</button>
+          <button onPointerDown={tbPD} onClick={onRedo} disabled={!canRedo} title="Redo (⇧⌘Z / Ctrl+Shift+Z)" className={canRedo ? tbBtnClass(false) : TB_BTN_DISABLED}>↷</button>
+
           <TbSep />
           {/* INSERT */}
           <TbLabel>Insert</TbLabel>
