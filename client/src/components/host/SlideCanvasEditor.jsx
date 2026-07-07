@@ -273,6 +273,22 @@ export default function SlideCanvasEditor({
       return cur.map(o => o.id === id ? { ...o, z: minZ - 1 } : o)
     })
   }
+  // One-click centering: put the overlay's CENTER point on the canvas midline,
+  // accounting for its own width/height so the visual center lands at 50%.
+  // Discrete ops — one undo snapshot each, functional commit (OV-2), persisted
+  // through the same scheduleSave → chained updateSlide path.
+  function centerOverlayH(id) {
+    const o = overlaysRef.current.find(v => v.id === id)
+    if (!o) return
+    recordHistory()
+    patchDiscrete(id, { x: clamp(50 - (o.w ?? 0) / 2, 0, 100) })
+  }
+  function centerOverlayV(id) {
+    const el = overlayRef.current?.querySelector(`[data-ov-box="${id}"]`)
+    const hpct = el ? el.offsetHeight / scaledH * 100 : 0
+    recordHistory()
+    patchDiscrete(id, { y: clamp(50 - hpct / 2, 0, 100) })
+  }
 
   // ── overlay gestures (all divide screen-px by scaled canvas size) ──────────
   function startOverlayDrag(e, ov) {
@@ -652,6 +668,8 @@ export default function SlideCanvasEditor({
         isDefaults={!selectedOverlay}
         onTextStyle={applyTextStyle}
         selectedOverlay={selectedOverlay}
+        onCenterH={() => selectedOverlay && centerOverlayH(selectedOverlay.id)}
+        onCenterV={() => selectedOverlay && centerOverlayV(selectedOverlay.id)}
         onFront={() => selectedOverlay && bringToFront(selectedOverlay.id)}
         onBack={() => selectedOverlay && sendToBack(selectedOverlay.id)}
         onDuplicate={() => selectedOverlay && duplicateOverlay(selectedOverlay.id)}
@@ -959,7 +977,7 @@ function DesignToolbar({
   onUndo, onRedo, canUndo, canRedo,
   onInsertText, onInsertImage, getHostPhotos, uploadMedia, onInsertPhoto, uploading, uploadError,
   theme, fonts, textStyle, isDefaults, onTextStyle,
-  selectedOverlay, onFront, onBack, onDuplicate, onDelete,
+  selectedOverlay, onCenterH, onCenterV, onFront, onBack, onDuplicate, onDelete,
 }) {
   return (
     <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-100 bg-white overflow-x-auto">
@@ -1004,6 +1022,8 @@ function DesignToolbar({
               <TbSep />
               {/* ARRANGE */}
               <TbLabel>Arrange</TbLabel>
+              <button onPointerDown={tbPD} onClick={onCenterH} title="Center on canvas — horizontal (⌥-drag disables snapping)" className={tbBtnClass(false)}>⇔</button>
+              <button onPointerDown={tbPD} onClick={onCenterV} title="Center on canvas — vertical (⌥-drag disables snapping)" className={tbBtnClass(false)}>⇕</button>
               <button onPointerDown={tbPD} onClick={onFront} title="Bring forward" className={tbBtnClass(false)}>⬆</button>
               <button onPointerDown={tbPD} onClick={onBack} title="Send backward" className={tbBtnClass(false)}>⬇</button>
               <button onPointerDown={tbPD} onClick={onDuplicate} title="Duplicate" className={tbBtnClass(false)}>⧉</button>
