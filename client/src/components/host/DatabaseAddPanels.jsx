@@ -96,6 +96,18 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
   const [gridCols, setGridCols] = useState(4)
   const [gridRows, setGridRows] = useState(3)
 
+  // Image formats: same "how many entries / how many assets" prompt as the
+  // live-show wizard's "how many slides / how many assets" — assets>1 means
+  // this archive row stores an item list (questions_data), the same shape
+  // Swing/PYL already use, instead of a single flat answer. Entries>1
+  // batches multiple separate rows, filled in one at a time (same
+  // pagination pattern as PylInputPanel's "Theme 1 of N").
+  const [entryCount, setEntryCount] = useState('')
+  const [assetCount, setAssetCount] = useState(3)
+  const [entryIndex, setEntryIndex] = useState(0)
+  const [collectedEntries, setCollectedEntries] = useState([])
+  const [currentItems, setCurrentItems] = useState(() => Array.from({ length: 3 }, () => ({ text: '', answer: '' })))
+
   const { toast, failed, busy, begin, end, flashSuccess, flashFailure } = useSaveOutcome()
   // Rapid-entry loop: after a successful save, focus returns here so the
   // next question starts with typing, not mousing (same lesson as the
@@ -103,8 +115,12 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
   const questionTextRef = useRef(null)
 
   const canAddQuestion = questionText.trim().length > 0 && questionAnswer.trim().length > 0
-  const canAddShiny     = shinyAnswer.trim().length > 0
   const isGrid = selectedShinyFmt?.input_schema?.type === 'grid'
+  const isImageFmt = selectedShinyFmt?.input_schema?.type === 'image'
+  const numEntries = Math.max(1, parseInt(entryCount, 10) || 1)
+  const useItemList = isImageFmt && assetCount > 1
+  const cleanCurrentItems = () => currentItems.map(it => ({ text: it.text.trim(), answer: it.answer.trim() })).filter(it => it.text || it.answer)
+  const canAddShiny = useItemList ? cleanCurrentItems().length > 0 : shinyAnswer.trim().length > 0
 
   const visibleShinyFormats = shinyFmtSearch.trim()
     ? shinyFormats.filter(fmt => {
@@ -113,7 +129,18 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
       })
     : shinyFormats
 
-  useUnsavedGuard(!!(questionText.trim() || questionAnswer.trim() || shinyQuestion.trim() || shinySubtitle.trim() || shinyAnswer.trim()))
+  useUnsavedGuard(!!(questionText.trim() || questionAnswer.trim() || shinyQuestion.trim() || shinySubtitle.trim() || shinyAnswer.trim() || currentItems.some(it => it.text.trim() || it.answer.trim())))
+
+  function updateCurrentItem(i, field, val) {
+    setCurrentItems(prev => prev.map((it, idx) => idx === i ? { ...it, [field]: val } : it))
+  }
+
+  function resetShinyForm() {
+    setShinyQuestion(''); setShinySubtitle(''); setShinyAnswer('')
+    setSelectedShinyFmt(null); setShinyStep('pick')
+    setEntryCount(''); setAssetCount(3); setEntryIndex(0); setCollectedEntries([])
+    setCurrentItems(Array.from({ length: 3 }, () => ({ text: '', answer: '' })))
+  }
 
   async function addPlain() {
     if (!canAddQuestion || !begin()) return
@@ -136,7 +163,43 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
   }
 
   async function addShiny() {
-    if (!canAddShiny || !begin()) return
+    if (!canAddShiny) return
+
+    if (useItemList) {
+      const entry = {
+        type:              'shiny',
+        text:              shinyQuestion.trim(),
+        subtitle:          shinySubtitle.trim() || null,
+        is_bonus:          false,
+        is_shiny:          true,
+        shiny_type:        selectedShinyFmt.input_schema?.type ?? null,
+        shiny_format_name: selectedShinyFmt.name,
+        questions_data:    cleanCurrentItems(),
+        show_id:           null,
+        show_title:        null,
+        show_date:         null,
+      }
+      // More entries to fill in this batch — stash this one locally and
+      // move on, same as PylInputPanel's per-theme pagination. Nothing
+      // hits the database until the last entry is committed.
+      if (entryIndex < numEntries - 1) {
+        setCollectedEntries(prev => [...prev, entry])
+        setEntryIndex(i => i + 1)
+        setShinyQuestion(''); setShinySubtitle('')
+        setCurrentItems(Array.from({ length: assetCount }, () => ({ text: '', answer: '' })))
+        return
+      }
+      if (!begin()) return
+      const ok = await archiveQuestions([...collectedEntries, entry])
+      end()
+      if (!ok) { flashFailure(); return } // keep everything typed across the whole batch
+      resetShinyForm()
+      flashSuccess()
+      onAdded?.()
+      return
+    }
+
+    if (!begin()) return
     const ok = await archiveQuestion({
       type:              'shiny',
       text:              shinyQuestion.trim(),
@@ -152,7 +215,7 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
     })
     end()
     if (!ok) { flashFailure(); return } // keep the typed text
-    setShinyQuestion(''); setShinySubtitle(''); setShinyAnswer(''); setSelectedShinyFmt(null); setShinyStep('pick')
+    resetShinyForm()
     flashSuccess()
     onAdded?.()
   }
@@ -219,19 +282,58 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
           <>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setShinyStep('pick')}
+                onClick={() => { setShinyStep('pick'); setSelectedShinyFmt(null); setEntryCount(''); setAssetCount(3); setEntryIndex(0); setCollectedEntries([]); setCurrentItems(Array.from({ length: 3 }, () => ({ text: '', answer: '' }))) }}
                 className={`text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100 ${BTN}`}
               >
                 ←
               </button>
               <p className="text-sm font-semibold text-gray-800">{selectedShinyFmt.icon} {selectedShinyFmt.name}</p>
+              {useItemList && numEntries > 1 && (
+                <span className="text-[11px] text-gray-400 ml-auto">Entry {entryIndex + 1} of {numEntries}</span>
+              )}
             </div>
+
+            {isImageFmt && (
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                    How many entries to add? <span className="font-normal text-gray-400">(optional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={entryCount}
+                    disabled={collectedEntries.length > 0}
+                    onChange={e => setEntryCount(e.target.value)}
+                    placeholder="1"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 text-center placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">How many assets?</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={assetCount}
+                    disabled={collectedEntries.length > 0}
+                    onChange={e => {
+                      const n = Math.max(1, parseInt(e.target.value) || 1)
+                      setAssetCount(n)
+                      setCurrentItems(prev => Array.from({ length: n }, (_, i) => prev[i] ?? { text: '', answer: '' }))
+                    }}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
+              </div>
+            )}
 
             <textarea
               value={shinyQuestion}
               onChange={e => setShinyQuestion(e.target.value)}
               onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') addShiny() }}
-              onPaste={makeQuestionPasteHandler(setShinyQuestion, setShinyAnswer)}
+              onPaste={useItemList ? undefined : makeQuestionPasteHandler(setShinyQuestion, setShinyAnswer)}
               placeholder="Question text (optional)…"
               rows={2}
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
@@ -269,15 +371,43 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
               </div>
             )}
 
-            <input
-              type="text"
-              value={shinyAnswer}
-              onChange={e => setShinyAnswer(e.target.value)}
-              onPaste={makeCleanPasteHandler(setShinyAnswer)}
-              placeholder="The answer…"
-              autoFocus
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
-            />
+            {useItemList ? (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-xs font-medium text-gray-500">{assetCount} items — paste the whole list into any row, or type each one</p>
+                {currentItems.map((it, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <span className="text-xs font-semibold text-gray-400 w-4 shrink-0 text-right">{i + 1}</span>
+                    <input
+                      type="text"
+                      placeholder="Item…"
+                      value={it.text}
+                      autoFocus={i === 0}
+                      onChange={e => updateCurrentItem(i, 'text', e.target.value)}
+                      onPaste={makeBulkOrCleanPasteHandler(setCurrentItems, v => updateCurrentItem(i, 'text', v))}
+                      className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Answer (optional)…"
+                      value={it.answer}
+                      onChange={e => updateCurrentItem(i, 'answer', e.target.value)}
+                      onPaste={makeBulkOrCleanPasteHandler(setCurrentItems, v => updateCurrentItem(i, 'answer', v))}
+                      className="w-36 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={shinyAnswer}
+                onChange={e => setShinyAnswer(e.target.value)}
+                onPaste={makeCleanPasteHandler(setShinyAnswer)}
+                placeholder="The answer…"
+                autoFocus
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] transition-[border-color,box-shadow] duration-150 ease-out"
+              />
+            )}
 
             <div className="mt-auto flex flex-col gap-1.5 pt-1">
               <button
@@ -285,9 +415,13 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
                 disabled={!canAddShiny || busy}
                 className={`w-full bg-yellow-500 text-white text-sm font-semibold py-3 rounded-xl hover:bg-yellow-600 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed transition-[transform,opacity] duration-150 ease-out active:scale-[0.98]`}
               >
-                Add {selectedShinyFmt.name} →
+                {useItemList && entryIndex < numEntries - 1
+                  ? 'Next Entry →'
+                  : useItemList && numEntries > 1
+                    ? `Add ${numEntries} ${selectedShinyFmt.name} →`
+                    : `Add ${selectedShinyFmt.name} →`}
               </button>
-              {!canAddShiny && <p className="text-xs text-gray-500 text-center">Add an answer to continue</p>}
+              {!canAddShiny && <p className="text-xs text-gray-500 text-center">{useItemList ? 'Add at least one item to continue' : 'Add an answer to continue'}</p>}
             </div>
           </>
         ) : (
@@ -859,11 +993,11 @@ export function BulkPasteInputPanel({ onAdded }) {
       if (roundType === 'swing') {
         rows = [{ type: 'swing', questions_data: combined, round_title: detectedTitle || category.trim() || null, show_id: null, show_title: null, show_date: null, ...extra('swing') }]
       } else if (roundType === 'shiny') {
-        rows = [{ type: 'shiny', is_shiny: true, text: detectedTitle || category.trim() || 'Bulk entry', shiny_format_name: selectedShinyFmt?.name || null, shiny_type: selectedShinyFmt?.input_schema?.type ?? null, questions_data: combined, show_id: null, show_title: null, show_date: null, ...extra(null) }]
+        rows = [{ type: 'shiny', is_shiny: true, text: detectedTitle || category.trim() || null, shiny_format_name: selectedShinyFmt?.name || null, shiny_type: selectedShinyFmt?.input_schema?.type ?? null, questions_data: combined, show_id: null, show_title: null, show_date: null, ...extra(null) }]
       } else {
         rows = [{
           type: roundType === 'pyl' ? 'pyl' : 'list',
-          text: detectedTitle || category.trim() || 'Bulk entry',
+          text: detectedTitle || category.trim() || null,
           answer: roundType === 'pyl' ? 'word' : null,
           questions_data: combined,
           show_id: null, show_title: null, show_date: null,

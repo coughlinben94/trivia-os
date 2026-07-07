@@ -20,6 +20,7 @@ const FILTERS = [
 ]
 
 const TRUNCATE_AT = 200
+const ITEM_LIST_TRUNCATE_AT = 3
 
 function matchesFilter(q, filter) {
   if (filter === 'all')     return true
@@ -70,6 +71,13 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
   const isLong = !isEditing && text.length > TRUNCATE_AT
   const shownText = isLong && !expanded ? text.slice(0, TRUNCATE_AT).trimEnd() + '…' : text
 
+  // Shiny multi-item boxes (image/list/grid formats saved with questions_data)
+  // rendered the WHOLE list on the card with no cap — same expand affordance
+  // as the plain-text truncation above, just item-count-based instead of
+  // char-based since this body is a list, not a paragraph.
+  const itemsAreLong = hasItemList && row.is_shiny && row.questions_data.length > ITEM_LIST_TRUNCATE_AT
+  const shownItems = itemsAreLong && !expanded ? row.questions_data.slice(0, ITEM_LIST_TRUNCATE_AT) : row.questions_data
+
   return (
     <div
       className={`card-animate w-full sm:w-[calc(50%-0.5rem)] lg:w-[calc(33.333%-0.667rem)] bg-white rounded-2xl border p-4 flex flex-col gap-3 shadow-sm transition-[border-color] duration-150 ease-out hover:border-gray-300 ${
@@ -114,13 +122,21 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
             <p className="text-sm font-semibold text-gray-800 mb-1.5">{row.text || row.round_title}</p>
           )}
           <ol className="list-decimal list-inside space-y-1 text-xs text-gray-700">
-            {row.questions_data.map((q, qi) => (
+            {shownItems.map((q, qi) => (
               <li key={qi}>
                 <span className="font-medium">{q.text}</span>
                 {q.answer && <span className="text-[#1a6b4a] font-medium"> — {q.answer}</span>}
               </li>
             ))}
           </ol>
+          {itemsAreLong && (
+            <button
+              onClick={() => setExpanded(e => !e)}
+              className="text-xs font-semibold text-[#1a6b4a] mt-1 transition-colors duration-150 ease-out hover:text-green-900 active:scale-[0.97]"
+            >
+              {expanded ? 'Show less' : 'Show more'}
+            </button>
+          )}
         </div>
       ) : isEditing ? (
         <div className="flex flex-col gap-2">
