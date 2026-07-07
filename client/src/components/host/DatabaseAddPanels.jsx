@@ -121,13 +121,18 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
   // Undefined/legacy concurrent formats default to true — the behavior
   // concurrent formats have always had (each asset its own answer).
   const isQuestionSeriesFmt = selectedShinyFmt?.input_schema?.questionSeries !== false
+  // A format can preset its asset count (slots). When it does, use that and
+  // hide this panel's own "How many assets?" input; when blank, prompt here.
+  const fmtAssetPreset = selectedShinyFmt?.input_schema?.slots
+  const hasAssetPreset = typeof fmtAssetPreset === 'number' && fmtAssetPreset > 0
+  const effectiveAssets = hasAssetPreset ? fmtAssetPreset : assetCount
   const numEntries = Math.max(1, parseInt(entryCount, 10) || 1)
   // Item list (one text/answer row per asset) only applies to a true
   // question series — each asset really is its own independent mini-question.
   // A shared-answer concurrent format (or a non-concurrent multi-asset image)
   // has nothing distinct to catalog per asset here (this is a pure text
   // archive, no image upload), so it's just one flat question/answer entry.
-  const useItemList = isConcurrentFmt && isQuestionSeriesFmt && assetCount > 1
+  const useItemList = isConcurrentFmt && isQuestionSeriesFmt && effectiveAssets > 1
   const cleanCurrentItems = () => currentItems.map(it => ({ text: it.text.trim(), answer: it.answer.trim() })).filter(it => it.text || it.answer)
   const canAddShiny = useItemList ? cleanCurrentItems().length > 0 : shinyAnswer.trim().length > 0
 
@@ -195,7 +200,7 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
         setCollectedEntries(prev => [...prev, entry])
         setEntryIndex(i => i + 1)
         setShinyQuestion(''); setShinySubtitle('')
-        setCurrentItems(Array.from({ length: assetCount }, () => ({ text: '', answer: '' })))
+        setCurrentItems(Array.from({ length: effectiveAssets }, () => ({ text: '', answer: '' })))
         return
       }
       if (!begin()) return
@@ -319,22 +324,25 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 text-center placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">How many assets?</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={assetCount}
-                    disabled={collectedEntries.length > 0}
-                    onChange={e => {
-                      const n = Math.max(1, parseInt(e.target.value) || 1)
-                      setAssetCount(n)
-                      setCurrentItems(prev => Array.from({ length: n }, (_, i) => prev[i] ?? { text: '', answer: '' }))
-                    }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                </div>
+                {/* Format presets its asset count — only prompt here when blank. */}
+                {!hasAssetPreset && (
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">How many assets?</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={assetCount}
+                      disabled={collectedEntries.length > 0}
+                      onChange={e => {
+                        const n = Math.max(1, parseInt(e.target.value) || 1)
+                        setAssetCount(n)
+                        setCurrentItems(prev => Array.from({ length: n }, (_, i) => prev[i] ?? { text: '', answer: '' }))
+                      }}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -382,7 +390,7 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
 
             {useItemList ? (
               <div className="flex flex-col gap-1.5">
-                <p className="text-xs font-medium text-gray-500">{assetCount} items — paste the whole list into any row, or type each one</p>
+                <p className="text-xs font-medium text-gray-500">{effectiveAssets} items — paste the whole list into any row, or type each one</p>
                 {currentItems.map((it, i) => (
                   <div key={i} className="flex gap-2 items-center">
                     <span className="text-xs font-semibold text-gray-400 w-4 shrink-0 text-right">{i + 1}</span>
@@ -493,7 +501,16 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
             {selectedShinyFmt && (
               <div className="mt-auto pt-2">
                 <button
-                  onClick={() => setShinyStep('details')}
+                  onClick={() => {
+                    // A format with a preset asset count seeds its item rows to
+                    // that count up front (the "How many assets?" input is
+                    // hidden for it).
+                    const preset = selectedShinyFmt.input_schema?.slots
+                    if (typeof preset === 'number' && preset > 0) {
+                      setCurrentItems(Array.from({ length: preset }, () => ({ text: '', answer: '' })))
+                    }
+                    setShinyStep('details')
+                  }}
                   className={`w-full bg-yellow-500 text-white text-sm font-semibold py-3 rounded-xl hover:bg-yellow-600 ${BTN} transition-[transform] duration-150 ease-out active:scale-[0.98]`}
                 >
                   Add {selectedShinyFmt.name} →

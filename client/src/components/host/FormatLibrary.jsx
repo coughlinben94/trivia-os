@@ -143,10 +143,30 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                   </div>
                 </div>
 
-                {/* Concurrent slides — image/audio/video/text. When on, the number of
-                    items is no longer fixed on the format; the host picks it each
-                    time this format is added (mirrors Swing Round's "how many?"
-                    prompt), and each item gets revealed back-to-back. */}
+                {/* Number of assets — on EVERY format. Preset the count for a
+                    format whose item count never changes (We're not so
+                    different is always 4 images). Leave blank and the host
+                    enters the count each time the format is added, in the add
+                    wizard. */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700">Number of assets</label>
+                  <p className="text-xs text-gray-400 -mt-0.5 mb-1">Preset the count (e.g. 4). Leave blank to choose the number each time you add this format.</p>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={schema.slots ?? ''}
+                    onChange={e => {
+                      const v = e.target.value
+                      updateSchema('slots', v === '' ? null : Math.max(1, parseInt(v, 10) || 1))
+                    }}
+                    placeholder="Choose each time"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
+
+                {/* Concurrent slides — image/audio/video/text. When on, each
+                    item gets revealed back-to-back. */}
                 {['image', 'audio', 'video', 'text'].includes(schema.type) && (
                   <div className="flex items-center justify-between">
                     <div>
@@ -166,7 +186,7 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                           slots: d.input_schema.concurrent ? 1 : null,
                         },
                       }))}
-                      className={`w-11 h-6 rounded-full transition-colors ${schema.concurrent ? 'bg-gray-900' : 'bg-gray-200'}`}
+                      className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.concurrent ? 'bg-gray-900' : 'bg-gray-200'}`}
                     >
                       <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.concurrent ? 'translate-x-5' : 'translate-x-0'}`}/>
                     </button>
@@ -189,34 +209,10 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                     </div>
                     <button
                       onClick={() => updateSchema('questionSeries', !schema.questionSeries)}
-                      className={`w-11 h-6 rounded-full transition-colors ${schema.questionSeries ? 'bg-gray-900' : 'bg-gray-200'}`}
+                      className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.questionSeries ? 'bg-gray-900' : 'bg-gray-200'}`}
                     >
                       <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.questionSeries ? 'translate-x-5' : 'translate-x-0'}`}/>
                     </button>
-                  </div>
-                )}
-
-                {/* Slots — only for audio/video, and only when NOT concurrent
-                    (concurrent formats choose their count per-use instead).
-                    Image/text formats always prompt for an asset count per-use
-                    at add time, concurrent or not, so this field doesn't apply
-                    to them at all — see AddSlideWizard's "How many assets?" */}
-                {['audio', 'video'].includes(schema.type) && !schema.concurrent && (
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-gray-500">
-                      Number of {schema.type === 'audio' ? 'Audio' : 'Video'} Slots
-                    </label>
-                    <div className="flex gap-2">
-                      {[1,2,3,4,5,6].map(n => (
-                        <button
-                          key={n}
-                          onClick={() => updateSchema('slots', n)}
-                          className={`w-10 h-10 rounded-lg text-sm font-semibold border transition-all ${schema.slots === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
-                        >
-                          {n}
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 )}
 
@@ -231,7 +227,7 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                     </div>
                     <button
                       onClick={() => updateSchema('seriesEnabled', !schema.seriesEnabled)}
-                      className={`w-11 h-6 rounded-full transition-colors ${schema.seriesEnabled ? 'bg-gray-900' : 'bg-gray-200'}`}
+                      className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.seriesEnabled ? 'bg-gray-900' : 'bg-gray-200'}`}
                     >
                       <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.seriesEnabled ? 'translate-x-5' : 'translate-x-0'}`}/>
                     </button>
@@ -247,7 +243,7 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                     </div>
                     <button
                       onClick={() => updateSchema('hasPoints', !schema.hasPoints)}
-                      className={`w-11 h-6 rounded-full transition-colors ${schema.hasPoints ? 'bg-gray-900' : 'bg-gray-200'}`}
+                      className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.hasPoints ? 'bg-gray-900' : 'bg-gray-200'}`}
                     >
                       <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.hasPoints ? 'translate-x-5' : 'translate-x-0'}`}/>
                     </button>
@@ -263,7 +259,7 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                     </div>
                     <button
                       onClick={() => updateSchema('columnLabels', schema.columnLabels === false ? true : false)}
-                      className={`w-11 h-6 rounded-full transition-colors ${schema.columnLabels !== false ? 'bg-gray-900' : 'bg-gray-200'}`}
+                      className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.columnLabels !== false ? 'bg-gray-900' : 'bg-gray-200'}`}
                     >
                       <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.columnLabels !== false ? 'translate-x-5' : 'translate-x-0'}`}/>
                     </button>

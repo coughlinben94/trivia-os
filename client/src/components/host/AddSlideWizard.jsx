@@ -171,7 +171,10 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           //     reuses the grid slide type/editor/renderer under the hood
           //     (N columns x 1 row) instead of new rendering code
           //   non-concurrent image, N===1 -> today's flat single-slot shape
-          const assets = Math.max(1, assetCount)
+          // Asset count comes from the format's preset when it has one
+          // (slots is a number), otherwise from the host's per-use input.
+          const fmtPreset = selectedShinyFmt.input_schema?.slots
+          const assets = (typeof fmtPreset === 'number' && fmtPreset > 0) ? fmtPreset : Math.max(1, assetCount)
           const numSlides = Math.max(1, parseInt(slideCount, 10) || 1)
           // A batch of >1 slides can't share one typed-in question/answer —
           // each slide needs its own distinct content — so batch-created
@@ -354,6 +357,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // Undefined/legacy concurrent formats default to true (each asset its own
   // independent answer) — the behavior concurrent formats have always had.
   const isQuestionSeriesFmt = selectedShinyFmt?.input_schema?.questionSeries !== false
+  // A format can preset its asset count (slots). When it does, the add
+  // wizard uses that number and hides its own "How many assets?" input;
+  // when blank, the host enters it here.
+  const fmtAssetPreset  = selectedShinyFmt?.input_schema?.slots
+  const hasAssetPreset  = typeof fmtAssetPreset === 'number' && fmtAssetPreset > 0
+  const effectiveAssets = hasAssetPreset ? fmtAssetPreset : Math.max(1, assetCount)
   const slideNum        = Math.max(1, parseInt(slideCount, 10) || 1)
   // Shared question/answer fields only make sense for a single slide (a
   // batch of >1 can't share one typed-in answer across distinct slides) and,
@@ -496,26 +505,30 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                       className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">How many assets?</label>
-                    <input
-                      autoFocus
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={assetCount}
-                      onChange={e => setAssetCount(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                  </div>
+                  {/* The format presets its asset count — only prompt here when
+                      it's left blank on the format. */}
+                  {!hasAssetPreset && (
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">How many assets?</label>
+                      <input
+                        autoFocus
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={assetCount}
+                        onChange={e => setAssetCount(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                    </div>
+                  )}
                 </div>
                 <p className="text-xs text-gray-400 -mt-2">
                   {isConcurrentFmt
                     ? isQuestionSeriesFmt
-                      ? `${assetCount} back-to-back part${assetCount === 1 ? '' : 's'} per slide, each with its own answer — fill them in from the slide editor.`
-                      : `${assetCount} back-to-back part${assetCount === 1 ? '' : 's'} per slide, sharing one answer.`
-                    : assetCount > 1
-                      ? `${assetCount} images together on one slide, one shared answer.`
+                      ? `${effectiveAssets} back-to-back part${effectiveAssets === 1 ? '' : 's'} per slide, each with its own answer — fill them in from the slide editor.`
+                      : `${effectiveAssets} back-to-back part${effectiveAssets === 1 ? '' : 's'} per slide, sharing one answer.`
+                    : effectiveAssets > 1
+                      ? `${effectiveAssets} images together on one slide, one shared answer.`
                       : 'A single image, one shared answer.'}
                   {slideNum > 1 ? ` Creates ${slideNum} separate slides — fill each in from the slide editor.` : ''}
                 </p>
