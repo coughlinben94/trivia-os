@@ -33,6 +33,7 @@ import SlideRenderer from '../display/SlideRenderer.jsx'
 import ParticleBackground from '../display/ParticleBackground.jsx'
 import { DISPLAY_FONTS } from './ThemeCustomizeControls.jsx'
 import { EASE_OUT } from '../../lib/easings.js'
+import { SHINY_GOLD } from '../../lib/shinyGold.js'
 
 const INNER_W = 1280
 const INNER_H = 720
@@ -41,7 +42,23 @@ const INNER_H = 720
 const SNAP_PCT = 1.2
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
+// Overlay color tokens — resolution MUST match OverlayLayer.jsx exactly
+// (WYSIWYG). Theme tokens read the active palette; fixed tokens are
+// theme-independent. `gold` is the shiny signal made host-reachable; the
+// per-theme `shinyAccent` stays for backward-compat and is relabelled
+// "Theme Pop" in the picker so it no longer reads as "shiny".
 const THEME_COLOR_TOKENS = ['text', 'textMuted', 'accent', 'highlight', 'shinyAccent']
+const FIXED_COLOR_TOKENS = { gold: SHINY_GOLD }
+const COLOR_SWATCHES = [
+  { token: 'text',        label: 'Text' },
+  { token: 'textMuted',   label: 'Muted' },
+  { token: 'accent',      label: 'Accent' },
+  { token: 'highlight',   label: 'Highlight' },
+  { token: 'shinyAccent', label: 'Theme Pop' },
+  { token: 'gold',        label: 'Gold — the shiny signal (same in every theme)' },
+]
+const tokenSwatchColor = (tok, theme) =>
+  tok in FIXED_COLOR_TOKENS ? FIXED_COLOR_TOKENS[tok] : theme.colors[tok]
 // Must match OverlayLayer's TEXT_SHADOW exactly (WYSIWYG). em-scaled.
 const TEXT_SHADOW = '0 0.05em 0.35em rgba(0,0,0,0.55)'
 
@@ -190,6 +207,7 @@ export default function SlideCanvasEditor({
   }
   function resolveColor(c) {
     if (!c) return theme.colors.text
+    if (c in FIXED_COLOR_TOKENS) return FIXED_COLOR_TOKENS[c]
     return THEME_COLOR_TOKENS.includes(c) ? theme.colors[c] : c
   }
 
@@ -1434,12 +1452,13 @@ function TextStyleGroup({ theme, fonts, style, isDefaults, onStyle }) {
 // <input type="color"> lives inside the popover — it's the one focus-taking
 // control, same accepted tradeoff as before, now out of the hot path.
 function ColorControl({ theme, value, onChange }) {
-  const swatchColor = THEME_COLOR_TOKENS.includes(value)
-    ? theme.colors[value]
+  const swatchColor =
+    value in FIXED_COLOR_TOKENS ? FIXED_COLOR_TOKENS[value]
+    : THEME_COLOR_TOKENS.includes(value) ? theme.colors[value]
     : (typeof value === 'string' && value.startsWith('#') ? value : theme.colors.text)
   return (
     <ToolbarPopover
-      width={172}
+      width={208}
       renderTrigger={({ innerRef, onClick, open }) => (
         <button
           ref={innerRef}
@@ -1458,17 +1477,23 @@ function ColorControl({ theme, value, onChange }) {
         <div className="p-2.5">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Text color</p>
           <div className="flex items-center gap-1.5 mb-2.5">
-            {THEME_COLOR_TOKENS.map((tok) => (
-              <button
-                key={tok}
-                type="button"
-                onPointerDown={tbPD}
-                onClick={() => onChange(tok)}
-                title={tok}
-                className="w-6 h-6 rounded-full border border-gray-200 shrink-0"
-                style={{ background: theme.colors[tok], outline: value === tok ? '2px solid #6366f1' : 'none', outlineOffset: 1 }}
-              />
-            ))}
+            {COLOR_SWATCHES.flatMap(({ token, label }) => {
+              const btn = (
+                <button
+                  key={token}
+                  type="button"
+                  onPointerDown={tbPD}
+                  onClick={() => onChange(token)}
+                  title={label}
+                  className="w-6 h-6 rounded-full border border-gray-200 shrink-0"
+                  style={{ background: tokenSwatchColor(token, theme), outline: value === token ? '2px solid #6366f1' : 'none', outlineOffset: 1 }}
+                />
+              )
+              // Hairline divider separating the per-theme tokens from fixed Gold.
+              return token === 'gold'
+                ? [<span key="gold-div" aria-hidden className="w-px h-6 bg-gray-200 mx-0.5 shrink-0" />, btn]
+                : [btn]
+            })}
           </div>
           <label className="flex items-center gap-2 text-[11px] text-gray-500 cursor-pointer">
             <input
