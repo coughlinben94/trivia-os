@@ -3,6 +3,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { useFitToBox, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
+import { SHINY_GOLD } from '../../../lib/shinyGold.js'
 
 export default function PixelateSeriesSlide({ slide, show }) {
   const { theme } = useTheme()
@@ -95,7 +96,12 @@ export default function PixelateSeriesSlide({ slide, show }) {
                   style={{
                     width: 10,
                     height: 10,
-                    background: theme.colors.shinyAccent,
+                    // Fixed gold — this is the Pixelate shiny-format progress
+                    // indicator (gold IS the shiny signal, per themes.md).
+                    // Not gated on data.isShiny: pixelate-series is inherently
+                    // the shiny image format, so the dots read gold whenever
+                    // this slide renders.
+                    background: SHINY_GOLD,
                     opacity: i <= activeStage ? 1 : 0.25,
                   }}
                 />
