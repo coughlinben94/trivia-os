@@ -147,6 +147,24 @@ client/src/
                              acting on the selected overlay or setting next-box defaults. The
                              right rail is content-only by hard rule — never add design controls
                              to it. See references/slides.md.
+                             Font-target boundary: the toolbar's font controls style OVERLAY text
+                             boxes only. A slide's own built-in text reads `theme.fonts.display`
+                             and is changed in Theme (the per-show font override), NOT the toolbar
+                             — never wire the toolbar to `theme.fonts.display`, or per-show
+                             overrides break. The target chip makes the active target visible:
+                             amber "New text box" = styling applies to the next box you insert
+                             (next-box defaults); indigo "Selected text" = it applies to the
+                             selected overlay.
+                             ToolbarPopover (inline in this file — NOT a separate
+                             ToolbarPopover.jsx) is the reusable popover primitive for the
+                             toolbar: portal-based, right-edge-clamped, pointerdown-safe (OV-1)
+                             and capture-Escape (OV-3) by construction. Reuse it for any new
+                             toolbar popover rather than rolling a new one — a hand-rolled popover
+                             re-opens both landmines.
+                             Known limit (documented, not a regression): below ~1300px window
+                             width the Text group's trailing controls clip inside their track
+                             rather than scrolling; the ⋯ overflow / Arrange / History controls
+                             stay reachable.
       RoundSidebar.jsx    — round/slide navigation tree; shows shinyFormatName, groups series;
                              divider lines between every section (i > 0 segment-level +
                              slideIdx > 0 within general segments for multi-slide sections)
