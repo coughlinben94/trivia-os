@@ -25,12 +25,14 @@
 // back to percent — that division is the classic failure this file gets right
 // once, in the gesture handlers below.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { motion, useReducedMotion } from 'framer-motion'
 import { nanoid } from 'nanoid'
 import SlideRenderer from '../display/SlideRenderer.jsx'
 import ParticleBackground from '../display/ParticleBackground.jsx'
 import { DISPLAY_FONTS } from './ThemeCustomizeControls.jsx'
+import { EASE_OUT } from '../../lib/easings.js'
 
 const INNER_W = 1280
 const INNER_H = 720
@@ -955,22 +957,166 @@ function OverlayHandles({ ov, onResize, onRotate }) {
 // control while a text overlay is being inline-edited never steals focus from
 // the contenteditable (a blur there commits/empty-prunes the box mid-edit).
 // ─────────────────────────────────────────────────────────────────────────────
-function TbSep() {
-  return <span className="w-px h-5 bg-gray-200 shrink-0" aria-hidden />
+// ── Icon set ──────────────────────────────────────────────────────────────
+// One coherent 16px stroke set (no emoji-as-icon), currentColor + 1.6 stroke,
+// round caps, drawn on a 20-unit grid. Replaces the old grab-bag of unicode
+// arrows and emoji so the strip reads as a single instrument. B / I stay as
+// typographic glyphs (the universal bold/italic controls, not emoji).
+function Icon({ name, size = 16 }) {
+  const s = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }
+  const dot = (cx) => <circle cx={cx} cy="10" r="1.35" fill="currentColor" stroke="none" />
+  const paths = {
+    undo:        <><path {...s} d="M4.5 8.5h6.5a3.75 3.75 0 0 1 0 7.5H8" /><path {...s} d="M7 5.5 4 8.5l3 3" /></>,
+    redo:        <><path {...s} d="M15.5 8.5H9a3.75 3.75 0 0 0 0 7.5h3" /><path {...s} d="M13 5.5l3 3-3 3" /></>,
+    text:        <><path {...s} d="M4.5 5.5h11" /><path {...s} d="M10 5.5v10.5" /></>,
+    image:       <><rect {...s} x="3.25" y="4.25" width="13.5" height="11.5" rx="2" /><circle {...s} cx="7.5" cy="8.25" r="1.25" /><path {...s} d="M4 13.5l3.4-3.1a1.5 1.5 0 0 1 2 0l6.4 5.3" /></>,
+    photo:       <><circle {...s} cx="10" cy="7" r="3" /><path {...s} d="M4.5 16.5a5.5 5.5 0 0 1 11 0" /></>,
+    alignLeft:   <><path {...s} d="M4 6h12M4 10h8M4 14h11" /></>,
+    alignCenter: <><path {...s} d="M4 6h12M6 10h8M5 14h10" /></>,
+    alignRight:  <><path {...s} d="M4 6h12M8 10h8M5 14h11" /></>,
+    shadow:      <><path {...s} d="M7.5 14 10.5 5l3 9" /><path {...s} d="M8.7 11.2h3.6" /><path d="M6 16.4h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeOpacity="0.35" /></>,
+    front:       <><path {...s} d="M4.25 12.25v-6.5a1.5 1.5 0 0 1 1.5-1.5h6.5" strokeOpacity="0.45" /><rect {...s} x="7.25" y="7.25" width="8.5" height="8.5" rx="1.75" /></>,
+    back:        <><rect {...s} x="4.25" y="4.25" width="8.5" height="8.5" rx="1.75" strokeOpacity="0.45" /><rect {...s} x="7.25" y="7.25" width="8.5" height="8.5" rx="1.75" /></>,
+    duplicate:   <><rect {...s} x="7.25" y="7.25" width="8.5" height="8.5" rx="1.75" /><path {...s} d="M12.75 7.25V5.75a1.5 1.5 0 0 0-1.5-1.5h-5.5a1.5 1.5 0 0 0-1.5 1.5v5.5a1.5 1.5 0 0 0 1.5 1.5H7.25" /></>,
+    trash:       <><path {...s} d="M4.75 6h10.5" /><path {...s} d="M8 6V4.6h4V6" /><path {...s} d="M6.1 6l.7 9.4A1.5 1.5 0 0 0 8.3 16.8h3.4a1.5 1.5 0 0 0 1.5-1.4L13.9 6" /></>,
+    centerH:     <><path {...s} d="M10 3.25v13.5" strokeDasharray="1.6 2.2" strokeOpacity="0.6" /><rect {...s} x="5" y="7.5" width="10" height="5" rx="1.25" /></>,
+    centerV:     <><path {...s} d="M3.25 10h13.5" strokeDasharray="1.6 2.2" strokeOpacity="0.6" /><rect {...s} x="7.5" y="5" width="5" height="10" rx="1.25" /></>,
+    box:         <rect x="5" y="5" width="10" height="10" rx="2.5" fill="currentColor" stroke="none" />,
+    more:        <>{dot(5)}{dot(10)}{dot(15)}</>,
+    chevron:     <path {...s} d="M6.5 8.5 10 12l3.5-3.5" />,
+    plus:        <path {...s} d="M10 5.25v9.5M5.25 10h9.5" />,
+    minus:       <path {...s} d="M5.25 10h9.5" />,
+    design:      <><path {...s} d="M4 16.25 5 12.5l7.25-7.25 2.5 2.5L7.5 15l-3.5 1.25Z" /><path {...s} d="M10.75 6.75 12.5 8.5" /></>,
+  }
+  return <svg width={size} height={size} viewBox="0 0 20 20" className="pointer-events-none block">{paths[name]}</svg>
 }
-function TbLabel({ children }) {
-  return <span className="text-[9px] font-semibold uppercase tracking-wider text-gray-300 select-none shrink-0">{children}</span>
-}
+
 // pointerdown focus-steal guard shared by every toolbar button (OV-1).
 const tbPD = e => e.preventDefault()
-function tbBtnClass(active) {
-  return `text-xs font-medium px-2 py-1 rounded-md border transition-colors shrink-0 leading-none ${
-    active
-      ? 'bg-indigo-500 border-indigo-500 text-white'
-      : 'bg-gray-50 border-gray-200 text-gray-600 hover:text-gray-900 hover:border-gray-300'
-  }`
+
+// Every control sits on the same 28px-tall grid so the strip height is
+// invariant across states — the scaled canvas below must never jump.
+function btnCls({ active, disabled, danger } = {}) {
+  const base = 'host-button inline-flex items-center justify-center h-7 rounded-md border text-[13px] font-medium leading-none shrink-0 select-none'
+  if (disabled) return `${base} bg-white border-gray-100 text-gray-300 cursor-not-allowed`
+  if (danger)   return `${base} bg-white border-gray-200 text-gray-500 hover:bg-red-50 hover:border-red-200 hover:text-red-600`
+  if (active)   return `${base} bg-indigo-500 border-indigo-500 text-white`
+  return `${base} bg-white border-gray-200 text-gray-600 hover:bg-gray-100 hover:border-gray-300 hover:text-gray-900`
 }
-const TB_BTN_DISABLED = 'text-xs font-medium px-2 py-1 rounded-md border bg-white border-gray-100 text-gray-300 cursor-not-allowed shrink-0 leading-none'
+// Square icon button (w-7), or a labeled button (wide) — one primitive so
+// heights/paddings/press-feedback stay identical everywhere.
+function TbBtn({ title, onClick, active, disabled, danger, wide, innerRef, children }) {
+  return (
+    <button
+      ref={innerRef}
+      type="button"
+      onPointerDown={tbPD}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      title={title}
+      aria-pressed={active ? true : undefined}
+      className={`${btnCls({ active, disabled, danger })} ${wide ? 'px-2.5 gap-1.5' : 'w-7'}`}
+    >
+      {children}
+    </button>
+  )
+}
+function TbSep() {
+  return <span className="mx-1 h-5 w-px bg-gray-200/90 shrink-0" aria-hidden />
+}
+
+// ── Shared portal popover ───────────────────────────────────────────────────
+// Home for every toolbar dropdown (font, color, Ben photo, overflow). Portal-
+// rendered so the strip's clipping can never cut it; the panel clamps to the
+// viewport's right edge so a far-right dropdown stays fully on-screen. Escape
+// closes it in the CAPTURE phase (stopped) so it never bubbles up to close the
+// whole SlideEditor (OV-3). The trigger preventDefaults on pointerdown and the
+// panel stops pointerdown propagation, so opening/using it never blurs an
+// in-progress inline edit (OV-1). Entrance is a 150ms origin-aware scale/fade,
+// dropped to a plain fade under reduced motion.
+function ToolbarPopover({ width = 180, renderTrigger, children, panelClass = '' }) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const btnRef = useRef(null)
+  const popRef = useRef(null)
+  const reduce = useReducedMotion()
+
+  function place() {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (!r) return
+    const left = Math.max(8, Math.min(Math.round(r.left), window.innerWidth - width - 8))
+    setPos({ top: Math.round(r.bottom + 6), left })
+  }
+  function toggle() { if (open) { setOpen(false); return } place(); setOpen(true) }
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e) => { if (popRef.current?.contains(e.target) || btnRef.current?.contains(e.target)) return; setOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); setOpen(false) } }
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onKey, true) // capture phase (OV-3)
+    window.addEventListener('resize', place)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [open])
+
+  return (
+    <>
+      {renderTrigger({ innerRef: btnRef, onClick: toggle, open })}
+      {open && createPortal(
+        <motion.div
+          ref={popRef}
+          onPointerDown={(e) => e.stopPropagation()}
+          initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.15, ease: EASE_OUT }}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 200, width, transformOrigin: 'top left' }}
+          className={`rounded-xl border border-gray-200 bg-white shadow-[0_16px_40px_-12px_rgba(15,23,42,0.28)] ${panelClass}`}
+        >
+          {children({ close: () => setOpen(false) })}
+        </motion.div>,
+        document.body,
+      )}
+    </>
+  )
+}
+
+// A labeled row inside a portal menu (overflow "⋯"). Icon + label + optional
+// shortcut hint; preventDefaults on pointerdown like every toolbar control.
+function MenuRow({ icon, label, hint, onClick, disabled, danger }) {
+  return (
+    <button
+      type="button"
+      onPointerDown={tbPD}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[12px] transition-colors ${
+        disabled ? 'text-gray-300 cursor-not-allowed' : danger ? 'text-red-600 hover:bg-red-50' : 'text-gray-700 hover:bg-gray-100'
+      }`}
+    >
+      <span className={disabled ? 'text-gray-300' : danger ? 'text-red-500' : 'text-gray-500'}><Icon name={icon} size={15} /></span>
+      <span className="flex-1 text-left">{label}</span>
+      {hint && <span className="text-[10px] text-gray-400 tabular-nums">{hint}</span>}
+    </button>
+  )
+}
+function MenuLabel({ children }) {
+  return <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-2 pt-1.5 pb-1">{children}</p>
+}
+
+// Deterministic overflow budget. Each control sits on a fixed grid, so the
+// width the strip NEEDS is a function of which groups are present (selection
+// state) — not of rendered content, which sidesteps the scrollWidth feedback
+// loop. When the measured strip is narrower than that, the lowest-priority
+// groups collapse into a portal "⋯" menu; the strip is overflow-hidden so a
+// slight mis-estimate can never surface a horizontal scrollbar cut.
+const TB_GROUP_W = { design: 96, history: 66, insert: 104, text: 566, arrange: 208 }
+const TB_SEP_W = 17
+const TB_MORE_W = 34
+const TB_COLLAPSE_ORDER = ['arrange', 'history'] // lowest priority collapses first
 
 function DesignToolbar({
   editLayout, onToggleLayout,
@@ -979,158 +1125,211 @@ function DesignToolbar({
   theme, fonts, textStyle, isDefaults, onTextStyle,
   selectedOverlay, onCenterH, onCenterV, onFront, onBack, onDuplicate, onDelete,
 }) {
+  const barRef = useRef(null)
+  const [availW, setAvailW] = useState(0)
+  useLayoutEffect(() => {
+    const el = barRef.current
+    if (!el) return
+    const ro = new ResizeObserver(([e]) => setAvailW(e.contentRect.width))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Which optional groups are present this render (drives the width budget).
+  const present = editLayout
+    ? ['design', 'history', 'insert', ...(textStyle ? ['text'] : []), ...(selectedOverlay ? ['arrange'] : [])]
+    : ['design']
+
+  // Collapse the lowest-priority present groups into the "⋯" menu until the
+  // needed width fits the measured strip. Purely a function of `present` +
+  // `availW`, so it can't feed back on its own rendered size.
+  const collapsed = new Set()
+  if (editLayout && availW > 0) {
+    let needed = present.reduce((sum, g) => sum + TB_GROUP_W[g], 0) + Math.max(0, present.length - 1) * TB_SEP_W
+    for (const g of TB_COLLAPSE_ORDER) {
+      if (needed <= availW - 8) break
+      if (!present.includes(g)) continue
+      collapsed.add(g)
+      needed -= TB_GROUP_W[g] + TB_SEP_W
+      if (collapsed.size === 1) needed += TB_MORE_W + TB_SEP_W // add the ⋯ button once
+    }
+  }
+  const inline = (g) => present.includes(g) && !collapsed.has(g)
+
   return (
-    <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-100 bg-white overflow-x-auto">
-      {/* Layout toggle — always present so the strip is never dead space */}
-      <button
-        onPointerDown={tbPD}
+    <div ref={barRef} className="shrink-0 flex items-center gap-1 px-3 py-1.5 border-b border-gray-100 bg-white overflow-hidden">
+      {/* Master toggle — always present (never clips), so the strip is never
+          dead space and design mode is always toggleable. */}
+      <TbBtn
+        wide
+        active={editLayout}
         onClick={onToggleLayout}
         title={editLayout ? 'Design tools on — click to hide overlay editing' : 'Turn on overlay design tools'}
-        className={tbBtnClass(editLayout)}
       >
-        ✏️ Design
-      </button>
+        <Icon name="design" /> Design
+      </TbBtn>
 
       {editLayout && (
         <>
-          <TbSep />
-          {/* HISTORY */}
-          <TbLabel>History</TbLabel>
-          <button onPointerDown={tbPD} onClick={onUndo} disabled={!canUndo} title="Undo (⌘Z / Ctrl+Z)" className={canUndo ? tbBtnClass(false) : TB_BTN_DISABLED}>↶</button>
-          <button onPointerDown={tbPD} onClick={onRedo} disabled={!canRedo} title="Redo (⇧⌘Z / Ctrl+Shift+Z)" className={canRedo ? tbBtnClass(false) : TB_BTN_DISABLED}>↷</button>
+          {/* Inline groups live in a min-w-0/clip track so that, at widths too
+              narrow even after collapsing, they clip their own trailing
+              controls INSTEAD of pushing the pinned "⋯" off-screen — the
+              collapsed groups therefore stay reachable at any width. */}
+          <div className="flex items-center gap-1 min-w-0 overflow-hidden">
+            {inline('history') && (
+              <>
+                <TbSep />
+                <TbBtn disabled={!canUndo} onClick={onUndo} title="Undo (⌘Z / Ctrl+Z)"><Icon name="undo" /></TbBtn>
+                <TbBtn disabled={!canRedo} onClick={onRedo} title="Redo (⇧⌘Z / Ctrl+Shift+Z)"><Icon name="redo" /></TbBtn>
+              </>
+            )}
 
-          <TbSep />
-          {/* INSERT */}
-          <TbLabel>Insert</TbLabel>
-          <button onPointerDown={tbPD} onClick={onInsertText} title="Add a text box" className={tbBtnClass(false)}>
-            <span className="font-bold">T</span> Text
-          </button>
-          <button onPointerDown={tbPD} onClick={onInsertImage} title="Upload an image" className={tbBtnClass(false)}>
-            🖼 Image
-          </button>
-          <BenPhotoInsert getHostPhotos={getHostPhotos} uploadMedia={uploadMedia} onInsert={onInsertPhoto} />
-          {uploading && <span className="text-[11px] text-gray-400 shrink-0">Uploading…</span>}
-          {uploadError && <span className="text-[11px] text-red-500 shrink-0">{uploadError}</span>}
+            {inline('insert') && (
+              <>
+                <TbSep />
+                <TbBtn onClick={onInsertText} title="Add a text box"><Icon name="text" /></TbBtn>
+                <TbBtn onClick={onInsertImage} title="Upload an image"><Icon name="image" /></TbBtn>
+                <BenPhotoInsert getHostPhotos={getHostPhotos} uploadMedia={uploadMedia} onInsert={onInsertPhoto} />
+              </>
+            )}
+            {uploading && <span className="text-[11px] text-gray-400 shrink-0 px-1">Uploading…</span>}
+            {uploadError && <span className="text-[11px] text-red-500 shrink-0 px-1 max-w-[140px] truncate" title={uploadError}>{uploadError}</span>}
 
-          {/* TEXT — edits the selected text overlay, or the next-box defaults */}
-          {textStyle && (
-            <TextStyleGroup theme={theme} fonts={fonts} style={textStyle} isDefaults={isDefaults} onStyle={onTextStyle} />
-          )}
+            {/* TEXT — styles the selected text overlay, or the next-box defaults */}
+            {textStyle && (
+              <>
+                <TbSep />
+                <TextStyleGroup theme={theme} fonts={fonts} style={textStyle} isDefaults={isDefaults} onStyle={onTextStyle} />
+              </>
+            )}
 
-          {selectedOverlay && (
+            {inline('arrange') && (
+              <>
+                <TbSep />
+                <TbBtn onClick={onCenterH} title="Center on canvas — horizontal (⌥-drag disables snapping)"><Icon name="centerH" /></TbBtn>
+                <TbBtn onClick={onCenterV} title="Center on canvas — vertical (⌥-drag disables snapping)"><Icon name="centerV" /></TbBtn>
+                <TbBtn onClick={onFront} title="Bring forward"><Icon name="front" /></TbBtn>
+                <TbBtn onClick={onBack} title="Send backward"><Icon name="back" /></TbBtn>
+                <TbBtn onClick={onDuplicate} title="Duplicate"><Icon name="duplicate" /></TbBtn>
+                <TbBtn danger onClick={onDelete} title="Delete (Del)"><Icon name="trash" /></TbBtn>
+              </>
+            )}
+          </div>
+
+          {/* Overflow "⋯" — pinned (shrink-0), never clipped */}
+          {collapsed.size > 0 && (
             <>
               <TbSep />
-              {/* ARRANGE */}
-              <TbLabel>Arrange</TbLabel>
-              <button onPointerDown={tbPD} onClick={onCenterH} title="Center on canvas — horizontal (⌥-drag disables snapping)" className={tbBtnClass(false)}>⇔</button>
-              <button onPointerDown={tbPD} onClick={onCenterV} title="Center on canvas — vertical (⌥-drag disables snapping)" className={tbBtnClass(false)}>⇕</button>
-              <button onPointerDown={tbPD} onClick={onFront} title="Bring forward" className={tbBtnClass(false)}>⬆</button>
-              <button onPointerDown={tbPD} onClick={onBack} title="Send backward" className={tbBtnClass(false)}>⬇</button>
-              <button onPointerDown={tbPD} onClick={onDuplicate} title="Duplicate" className={tbBtnClass(false)}>⧉</button>
-              <button
-                onPointerDown={tbPD}
-                onClick={onDelete}
-                title="Delete (Del)"
-                className="text-xs font-medium px-2 py-1 rounded-md border bg-red-50 border-red-200 text-red-500 hover:bg-red-100 transition-colors shrink-0 leading-none"
-              >
-                🗑
-              </button>
+              <OverflowMenu
+                collapsed={collapsed}
+                canUndo={canUndo} canRedo={canRedo} onUndo={onUndo} onRedo={onRedo}
+                onCenterH={onCenterH} onCenterV={onCenterV} onFront={onFront} onBack={onBack}
+                onDuplicate={onDuplicate} onDelete={onDelete}
+              />
             </>
           )}
-
-          <span className="ml-auto text-[11px] text-gray-300 shrink-0 pl-2 whitespace-nowrap">Drag snaps to center &amp; edges · hold ⌥ to disable · Del to remove</span>
         </>
       )}
     </div>
   )
 }
 
+// Overflow "⋯" — houses whichever low-priority groups didn't fit inline, as
+// labeled rows in a portal menu (never clipped, always reachable). Repeatable
+// actions (undo/redo/front/back) keep the menu open; one-shot actions close it.
+function OverflowMenu({ collapsed, canUndo, canRedo, onUndo, onRedo, onCenterH, onCenterV, onFront, onBack, onDuplicate, onDelete }) {
+  return (
+    <ToolbarPopover
+      width={196}
+      renderTrigger={({ innerRef, onClick, open }) => (
+        <TbBtn innerRef={innerRef} active={open} onClick={onClick} title="More tools"><Icon name="more" /></TbBtn>
+      )}
+    >
+      {({ close }) => (
+        <div className="p-1.5">
+          {collapsed.has('history') && (
+            <>
+              <MenuLabel>History</MenuLabel>
+              <MenuRow icon="undo" label="Undo" hint="⌘Z" disabled={!canUndo} onClick={onUndo} />
+              <MenuRow icon="redo" label="Redo" hint="⇧⌘Z" disabled={!canRedo} onClick={onRedo} />
+            </>
+          )}
+          {collapsed.has('arrange') && (
+            <>
+              {collapsed.has('history') && <div className="my-1 border-t border-gray-100" />}
+              <MenuLabel>Arrange</MenuLabel>
+              <MenuRow icon="centerH" label="Center horizontally" onClick={() => { onCenterH(); close() }} />
+              <MenuRow icon="centerV" label="Center vertically" onClick={() => { onCenterV(); close() }} />
+              <MenuRow icon="front" label="Bring forward" onClick={onFront} />
+              <MenuRow icon="back" label="Send backward" onClick={onBack} />
+              <MenuRow icon="duplicate" label="Duplicate" onClick={() => { onDuplicate(); close() }} />
+              <MenuRow icon="trash" label="Delete" hint="Del" danger onClick={() => { onDelete(); close() }} />
+            </>
+          )}
+        </div>
+      )}
+    </ToolbarPopover>
+  )
+}
+
 // Ben Photo picker — the canonical home for dropping a host photo onto any
 // slide. Fetches the show's trivia-host-photos bucket on open, click a thumb to
 // insert it centered, or upload a new one (uploadMedia(file, true)). Rendered
-// in a portal so the toolbar's overflow-x can't clip it. Escape is caught in
-// the capture phase and stopped, so it closes the popover — never the whole
-// SlideEditor (OV-3). Every control preventDefaults on pointerdown (OV-1).
+// through the shared ToolbarPopover (portal, viewport-clamped, capture-phase
+// Escape → OV-3, every control preventDefaults on pointerdown → OV-1).
 function BenPhotoInsert({ getHostPhotos, uploadMedia, onInsert }) {
-  const [open, setOpen] = useState(false)
   const [photos, setPhotos] = useState([])
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
-  const [pos, setPos] = useState({ top: 0, left: 0 })
-  const btnRef = useRef(null)
-  const popRef = useRef(null)
   const fileRef = useRef(null)
 
-  function openPopover() {
-    const r = btnRef.current?.getBoundingClientRect()
-    if (r) setPos({ top: Math.round(r.bottom + 6), left: Math.round(r.left) })
-    setOpen(true); setErr(null); setLoading(true)
+  function load() {
+    setErr(null); setLoading(true)
     Promise.resolve(getHostPhotos?.())
       .then(p => { setPhotos(Array.isArray(p) ? p : []); setLoading(false) })
       .catch(() => { setPhotos([]); setLoading(false) })
   }
-
-  useEffect(() => {
-    if (!open) return
-    function onDown(e) {
-      if (popRef.current?.contains(e.target) || btnRef.current?.contains(e.target)) return
-      setOpen(false)
-    }
-    function onKey(e) {
-      if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); setOpen(false) }
-    }
-    document.addEventListener('pointerdown', onDown)
-    // Capture phase so Escape is intercepted before SlideEditor/overlay handlers.
-    document.addEventListener('keydown', onKey, true)
-    return () => {
-      document.removeEventListener('pointerdown', onDown)
-      document.removeEventListener('keydown', onKey, true)
-    }
-  }, [open])
-
-  async function handleUpload(file) {
+  async function handleUpload(file, close) {
     if (!file) return
     setBusy(true); setErr(null)
     try {
       const res = await uploadMedia(file, true)
-      if (res?.url) { setPhotos(prev => [{ url: res.url, filename: res.filename }, ...prev]); onInsert(res.url); setOpen(false) }
+      if (res?.url) { setPhotos(prev => [{ url: res.url, filename: res.filename }, ...prev]); onInsert(res.url); close() }
       else setErr('Upload failed — no URL returned')
     } catch (e) { setErr(e?.message || 'Upload failed') }
     finally { setBusy(false) }
   }
 
   return (
-    <>
-      <button
-        ref={btnRef}
-        onPointerDown={tbPD}
-        onClick={() => (open ? setOpen(false) : openPopover())}
-        title="Insert a Ben photo"
-        className={tbBtnClass(open)}
-      >
-        👤 Ben Photo
-      </button>
-      {open && createPortal(
-        <div
-          ref={popRef}
-          onPointerDown={e => e.stopPropagation()}
-          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 200, width: 300 }}
-          className="bg-white rounded-lg shadow-xl border border-gray-200 p-3"
+    <ToolbarPopover
+      width={300}
+      renderTrigger={({ innerRef, onClick, open }) => (
+        <TbBtn
+          innerRef={innerRef}
+          active={open}
+          title="Insert a Ben photo"
+          onClick={() => { if (!open) load(); onClick() }}
         >
+          <Icon name="photo" />
+        </TbBtn>
+      )}
+    >
+      {({ close }) => (
+        <div className="p-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Ben Photos</span>
-            <button onPointerDown={tbPD} onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 text-sm leading-none">✕</button>
+            <button onPointerDown={tbPD} onClick={close} className="text-gray-400 hover:text-gray-600 text-sm leading-none">✕</button>
           </div>
           <input ref={fileRef} type="file" accept="image/*" className="hidden"
-            onChange={e => { handleUpload(e.target.files?.[0]); e.target.value = '' }} />
+            onChange={e => { handleUpload(e.target.files?.[0], close); e.target.value = '' }} />
           <button
             onPointerDown={tbPD}
             onClick={() => fileRef.current?.click()}
             disabled={busy}
             className="w-full text-xs font-medium px-2 py-1.5 mb-2 rounded-md border border-dashed border-gray-300 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-colors disabled:opacity-50"
           >
-            {busy ? 'Uploading…' : '⬆ Upload new…'}
+            {busy ? 'Uploading…' : 'Upload new…'}
           </button>
           {err && <p className="text-[11px] text-red-500 mb-2">{err}</p>}
           {loading ? (
@@ -1143,7 +1342,7 @@ function BenPhotoInsert({ getHostPhotos, uploadMedia, onInsert }) {
                 <button
                   key={p.url}
                   onPointerDown={tbPD}
-                  onClick={() => { onInsert(p.url); setOpen(false) }}
+                  onClick={() => { onInsert(p.url); close() }}
                   title="Insert this photo"
                   className="aspect-square rounded-md overflow-hidden border border-gray-200 hover:border-indigo-400 transition-colors"
                 >
@@ -1152,83 +1351,145 @@ function BenPhotoInsert({ getHostPhotos, uploadMedia, onInsert }) {
               ))}
             </div>
           )}
-        </div>,
-        document.body,
+        </div>
       )}
-    </>
+    </ToolbarPopover>
   )
 }
 
-// Text styling controls. Targets the selected text overlay, or (when nothing is
-// selected) the next-box defaults — signaled by the "defaults" pill. The theme
-// swatches and toggle buttons all preventDefault on pointerdown, so styling a
-// box mid-inline-edit never blurs the caret (OV-1). The free color <input> is
-// the one native (focus-taking) control — swatches cover the common case.
+// Text styling controls. Every control preventDefaults on pointerdown so
+// styling a box mid-inline-edit never blurs the caret (OV-1).
+//
+// The leading TARGET CHIP is the fix for the silent font-change bug: the text
+// controls always style EITHER the selected text overlay OR the next-box
+// defaults, and the chip states which — unmistakably — instead of the old
+// easy-to-miss "defaults" pill. Crucially, neither target is the slide's OWN
+// built-in headline (that reads theme.fonts.display, a per-show override this
+// toolbar must never touch), so the defaults chip's tooltip points the host at
+// Theme for that. Routing is unchanged (SlideCanvasEditor.applyTextStyle) —
+// only the signalling is made explicit.
 function TextStyleGroup({ theme, fonts, style, isDefaults, onStyle }) {
   const size = style.fontSize ?? 5
   const weight = style.weight ?? 700
   const align = style.align ?? 'center'
   const step = (delta) => onStyle({ fontSize: clamp(+(size + delta).toFixed(1), 1, 40) })
-  const swatch = (token) => (
-    <button
-      key={token}
-      onPointerDown={tbPD}
-      onClick={() => onStyle({ color: token })}
-      title={token}
-      className="w-5 h-5 rounded-full border border-gray-300 shrink-0"
-      style={{ background: theme.colors[token], outline: style.color === token ? '2px solid #6366f1' : 'none', outlineOffset: 1 }}
-    />
-  )
   return (
     <>
-      <TbSep />
-      <TbLabel>Text</TbLabel>
-      {isDefaults && (
-        <span className="text-[9px] font-semibold uppercase tracking-wider text-indigo-400 bg-indigo-50 border border-indigo-100 rounded px-1 py-0.5 shrink-0" title="No box selected — these set the next text box's style">
-          defaults
-        </span>
-      )}
+      {/* target chip — what these controls are styling */}
+      <span
+        title={isDefaults
+          ? 'Styling the NEXT text box you insert. The slide’s own text uses the show theme font — change that in Theme.'
+          : 'Styling the selected text box.'}
+        className={`inline-flex items-center gap-1 h-7 px-2 rounded-md border text-[11px] font-semibold shrink-0 select-none ${
+          isDefaults ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-indigo-50 border-indigo-200 text-indigo-700'
+        }`}
+      >
+        <Icon name={isDefaults ? 'text' : 'box'} size={13} />
+        <span className="max-w-[92px] truncate">{isDefaults ? 'New text box' : 'Selected text'}</span>
+      </span>
+
       <FontDropdown value={style.fontFamily ?? 'display'} fonts={fonts} onChange={f => onStyle({ fontFamily: f })} />
-      {/* size */}
-      <div className="flex items-center shrink-0">
-        <button onPointerDown={tbPD} onClick={() => step(-0.5)} title="Smaller" className={tbBtnClass(false)}>A−</button>
-        <span className="text-[10px] text-gray-400 w-7 text-center tabular-nums">{size}</span>
-        <button onPointerDown={tbPD} onClick={() => step(0.5)} title="Bigger" className={tbBtnClass(false)}>A+</button>
+
+      {/* size stepper — one bordered unit so it reads as a single control */}
+      <div className="inline-flex items-center h-7 rounded-md border border-gray-200 bg-white shrink-0 overflow-hidden">
+        <button type="button" onPointerDown={tbPD} onClick={() => step(-0.5)} title="Smaller" className="host-button h-full w-7 inline-flex items-center justify-center text-gray-600 hover:bg-gray-100"><Icon name="minus" size={14} /></button>
+        <span className="w-8 text-center text-[11px] tabular-nums text-gray-700 select-none border-x border-gray-200 leading-[26px]" title="Font size (% of canvas height)">{size}</span>
+        <button type="button" onPointerDown={tbPD} onClick={() => step(0.5)} title="Bigger" className="host-button h-full w-7 inline-flex items-center justify-center text-gray-600 hover:bg-gray-100"><Icon name="plus" size={14} /></button>
       </div>
+
       {/* bold / italic */}
-      <button onPointerDown={tbPD} onClick={() => onStyle({ weight: weight >= 700 ? 400 : 700 })} title="Bold" className={tbBtnClass(weight >= 700)}><b>B</b></button>
-      <button onPointerDown={tbPD} onClick={() => onStyle({ italic: !style.italic })} title="Italic" className={tbBtnClass(!!style.italic)}><i>I</i></button>
-      {/* align */}
-      <div className="flex items-center gap-0.5 shrink-0">
-        {[['left', '▤'], ['center', '☰'], ['right', '▥']].map(([a, icon]) => (
-          <button key={a} onPointerDown={tbPD} onClick={() => onStyle({ align: a })} title={`Align ${a}`} className={tbBtnClass(align === a)}>{icon}</button>
+      <TbBtn active={weight >= 700} onClick={() => onStyle({ weight: weight >= 700 ? 400 : 700 })} title="Bold"><span className="font-bold text-[13px] leading-none">B</span></TbBtn>
+      <TbBtn active={!!style.italic} onClick={() => onStyle({ italic: !style.italic })} title="Italic"><span className="italic font-serif text-[13px] leading-none">I</span></TbBtn>
+
+      {/* align — segmented control */}
+      <div className="inline-flex items-center h-7 rounded-md border border-gray-200 bg-white shrink-0 overflow-hidden">
+        {[['left', 'alignLeft'], ['center', 'alignCenter'], ['right', 'alignRight']].map(([a, ic], i) => (
+          <button
+            key={a}
+            type="button"
+            onPointerDown={tbPD}
+            onClick={() => onStyle({ align: a })}
+            title={`Align ${a}`}
+            aria-pressed={align === a}
+            className={`host-button h-full w-7 inline-flex items-center justify-center ${i > 0 ? 'border-l border-gray-200' : ''} ${align === a ? 'bg-indigo-500 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+          >
+            <Icon name={ic} />
+          </button>
         ))}
       </div>
+
       {/* shadow (TV readability) */}
-      <button onPointerDown={tbPD} onClick={() => onStyle({ shadow: !style.shadow })} title="Text shadow — pops text off busy backgrounds on TV" className={tbBtnClass(!!style.shadow)}>◍</button>
+      <TbBtn active={!!style.shadow} onClick={() => onStyle({ shadow: !style.shadow })} title="Text shadow — pops text off busy backgrounds on TV"><Icon name="shadow" /></TbBtn>
+
       {/* color */}
-      <div className="flex items-center gap-0.5 shrink-0">
-        {THEME_COLOR_TOKENS.map(swatch)}
-        <input
-          type="color"
-          value={typeof style.color === 'string' && style.color.startsWith('#') ? style.color : '#ffffff'}
-          onChange={e => onStyle({ color: e.target.value })}
-          className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0 shrink-0"
-          title="Custom color"
-        />
-      </div>
+      <ColorControl theme={theme} value={style.color} onChange={(c) => onStyle({ color: c })} />
     </>
   )
 }
 
+// Color control — a single swatch button that opens a portal popover of the
+// theme's color tokens plus a custom picker. Collapsing five inline swatches +
+// a native input into one button is the biggest single width saving in the
+// strip (a direct fix for the overflow defect) and reads cleaner. The native
+// <input type="color"> lives inside the popover — it's the one focus-taking
+// control, same accepted tradeoff as before, now out of the hot path.
+function ColorControl({ theme, value, onChange }) {
+  const swatchColor = THEME_COLOR_TOKENS.includes(value)
+    ? theme.colors[value]
+    : (typeof value === 'string' && value.startsWith('#') ? value : theme.colors.text)
+  return (
+    <ToolbarPopover
+      width={172}
+      renderTrigger={({ innerRef, onClick, open }) => (
+        <button
+          ref={innerRef}
+          type="button"
+          onPointerDown={tbPD}
+          onClick={onClick}
+          title="Text color"
+          aria-pressed={open}
+          className={`${btnCls({ active: open })} w-7`}
+        >
+          <span className="w-4 h-4 rounded-full border border-black/10" style={{ background: swatchColor, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.35)' }} />
+        </button>
+      )}
+    >
+      {() => (
+        <div className="p-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Text color</p>
+          <div className="flex items-center gap-1.5 mb-2.5">
+            {THEME_COLOR_TOKENS.map((tok) => (
+              <button
+                key={tok}
+                type="button"
+                onPointerDown={tbPD}
+                onClick={() => onChange(tok)}
+                title={tok}
+                className="w-6 h-6 rounded-full border border-gray-200 shrink-0"
+                style={{ background: theme.colors[tok], outline: value === tok ? '2px solid #6366f1' : 'none', outlineOffset: 1 }}
+              />
+            ))}
+          </div>
+          <label className="flex items-center gap-2 text-[11px] text-gray-500 cursor-pointer">
+            <input
+              type="color"
+              value={typeof value === 'string' && value.startsWith('#') ? value : '#ffffff'}
+              onChange={(e) => onChange(e.target.value)}
+              className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0"
+            />
+            Custom…
+          </label>
+        </div>
+      )}
+    </ToolbarPopover>
+  )
+}
+
 // Focus-safe font picker (custom button popover, not a native <select> that
-// would blur an in-progress inline edit). Portal-rendered so the toolbar's
-// overflow-x can't clip it; Escape closes it, not the SlideEditor (OV-3).
+// would blur an in-progress inline edit). Uses the shared ToolbarPopover
+// (portal, viewport-clamped, capture-phase Escape → OV-3, pointerdown-safe →
+// OV-1). Each option previews in its own family.
 function FontDropdown({ value, fonts, onChange }) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ top: 0, left: 0 })
-  const btnRef = useRef(null)
-  const popRef = useRef(null)
   const options = [
     { value: 'display', label: 'Theme font' },
     { value: 'body', label: 'Theme body' },
@@ -1236,54 +1497,41 @@ function FontDropdown({ value, fonts, onChange }) {
   ]
   const current = options.find(o => o.value === value)
   const familyOf = (v) => (v && v !== 'display' && v !== 'body' ? `'${v}', sans-serif` : undefined)
-
-  function openPop() {
-    const r = btnRef.current?.getBoundingClientRect()
-    if (r) setPos({ top: Math.round(r.bottom + 6), left: Math.round(r.left) })
-    setOpen(true)
-  }
-  useEffect(() => {
-    if (!open) return
-    function onDown(e) { if (popRef.current?.contains(e.target) || btnRef.current?.contains(e.target)) return; setOpen(false) }
-    function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); setOpen(false) } }
-    document.addEventListener('pointerdown', onDown)
-    document.addEventListener('keydown', onKey, true)
-    return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey, true) }
-  }, [open])
-
   return (
-    <>
-      <button
-        ref={btnRef}
-        onPointerDown={tbPD}
-        onClick={() => (open ? setOpen(false) : openPop())}
-        title="Font"
-        className={`${tbBtnClass(false)} max-w-[112px] truncate`}
-        style={{ fontFamily: familyOf(value) }}
-      >
-        {current?.label ?? 'Theme font'} ▾
-      </button>
-      {open && createPortal(
-        <div
-          ref={popRef}
-          onPointerDown={e => e.stopPropagation()}
-          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 200, width: 150 }}
-          className="bg-white rounded-lg shadow-xl border border-gray-200 py-1 max-h-64 overflow-y-auto"
+    <ToolbarPopover
+      width={168}
+      renderTrigger={({ innerRef, onClick, open }) => (
+        <button
+          ref={innerRef}
+          type="button"
+          onPointerDown={tbPD}
+          onClick={onClick}
+          title="Font"
+          aria-pressed={open}
+          className={`${btnCls({ active: open })} w-28 px-2 gap-1 justify-between`}
+          style={{ fontFamily: familyOf(value) }}
         >
-          {options.map(o => (
+          <span className="truncate text-left">{current?.label ?? 'Theme font'}</span>
+          <Icon name="chevron" size={14} />
+        </button>
+      )}
+    >
+      {({ close }) => (
+        <div className="py-1 max-h-64 overflow-y-auto">
+          {options.map((o) => (
             <button
               key={o.value}
+              type="button"
               onPointerDown={tbPD}
-              onClick={() => { onChange(o.value); setOpen(false) }}
+              onClick={() => { onChange(o.value); close() }}
               className={`w-full text-left text-xs px-3 py-1.5 hover:bg-gray-50 ${o.value === value ? 'text-indigo-600 font-semibold' : 'text-gray-700'}`}
               style={{ fontFamily: familyOf(o.value) }}
             >
               {o.label}
             </button>
           ))}
-        </div>,
-        document.body,
+        </div>
       )}
-    </>
+    </ToolbarPopover>
   )
 }
