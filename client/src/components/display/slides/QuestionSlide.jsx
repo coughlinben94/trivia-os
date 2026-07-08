@@ -6,6 +6,7 @@ import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
 import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny } from '../../../lib/shinySeries.js'
 import { fitToBox, QUESTION_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
+import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { youtubeEmbedUrl } from '../../../lib/youtube.js'
 
 // ─── Standard question ────────────────────────────────────────────────────────
@@ -178,7 +179,7 @@ function ShinyVisualQuestion({ slide, theme }) {
       <div
         className="absolute inset-0 pointer-events-none z-10"
         style={{
-          background: `radial-gradient(ellipse at center, ${theme.colors.shinyAccent}38 0%, transparent 55%)`,
+          background: `radial-gradient(ellipse at center, ${SHINY_GOLD_GLOW}38 0%, transparent 55%)`,
           animation: 'shinyGlow 0.7s ease-out forwards',
         }}
       />
@@ -302,7 +303,7 @@ function ShinyVisualQuestion({ slide, theme }) {
       {/* ✨ indicator badge — top-left */}
       <div
         className="absolute top-5 left-5 z-20 text-2xl"
-        style={{ filter: `drop-shadow(0 0 8px ${theme.colors.shinyAccent})` }}
+        style={{ filter: `drop-shadow(0 0 8px ${SHINY_GOLD_GLOW})` }}
       >
         ✨
       </div>
@@ -382,7 +383,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: `radial-gradient(ellipse 70% 60% at 50% 50%, ${theme.colors.shinyAccent}18 0%, transparent 65%)`,
+          background: `radial-gradient(ellipse 70% 60% at 50% 50%, ${SHINY_GOLD_GLOW}18 0%, transparent 65%)`,
         }}
       />
 
@@ -453,7 +454,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
         animate={{ opacity: 1 }}
         transition={{ delay: 0.15, duration: 0.3 }}
       >
-        <WaveformBars theme={theme} playing={playing} />
+        <WaveformBars playing={playing} />
       </motion.div>
 
       {/* Play button — shown but host controls audio via Live Mode.
@@ -502,11 +503,11 @@ function ShinyAudioQuestion({ slide, show, theme }) {
               }}
               style={{
                 background: theme.colors.accent,
-                boxShadow: playing ? 'none' : `0 0 40px ${theme.colors.shinyAccent}50`,
+                boxShadow: playing ? 'none' : `0 0 40px ${SHINY_GOLD_GLOW}50`,
                 animation: playing ? 'none' : 'playPulse 2.4s ease-in-out infinite',
               }}
             >
-              <span style={{ color: theme.colors.shinyAccent, fontSize: '2.5rem', marginLeft: playing ? 0 : 4 }}>
+              <span style={{ color: SHINY_GOLD, fontSize: '2.5rem', marginLeft: playing ? 0 : 4 }}>
                 {playing ? '⏸' : '▶'}
               </span>
             </div>
@@ -559,7 +560,7 @@ function ShinyVideoQuestion({ slide, theme }) {
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: `radial-gradient(ellipse 70% 60% at 50% 50%, ${theme.colors.shinyAccent}18 0%, transparent 65%)`,
+          background: `radial-gradient(ellipse 70% 60% at 50% 50%, ${SHINY_GOLD_GLOW}18 0%, transparent 65%)`,
         }}
       />
 
@@ -634,7 +635,7 @@ function ShinyVideoQuestion({ slide, theme }) {
           width: 'min(60vw, 980px)',
           aspectRatio: '16 / 9',
           background: theme.colors.bgDeep,
-          boxShadow: `0 0 0 1px ${theme.colors.shinyAccent}30`,
+          boxShadow: `0 0 0 1px ${SHINY_GOLD}30`,
         }}
       >
         {playing && embedSrc ? (
@@ -652,7 +653,7 @@ function ShinyVideoQuestion({ slide, theme }) {
             className="w-full h-full flex items-center justify-center"
             style={{ background: `linear-gradient(135deg, ${theme.colors.bgDeep}, ${theme.colors.bg})` }}
           >
-            <span style={{ fontSize: '3.5rem', opacity: 0.3, filter: `drop-shadow(0 0 12px ${theme.colors.shinyAccent}60)` }}>🎬</span>
+            <span style={{ fontSize: '3.5rem', opacity: 0.3, filter: `drop-shadow(0 0 12px ${SHINY_GOLD_GLOW}60)` }}>🎬</span>
           </div>
         )}
       </motion.div>
@@ -670,11 +671,11 @@ function ShinyVideoQuestion({ slide, theme }) {
             onClick={() => setPlaying(p => !p)}
             style={{
               background: theme.colors.accent,
-              boxShadow: playing ? 'none' : `0 0 40px ${theme.colors.shinyAccent}50`,
+              boxShadow: playing ? 'none' : `0 0 40px ${SHINY_GOLD_GLOW}50`,
               animation: playing ? 'none' : 'playPulse 2.4s ease-in-out infinite',
             }}
           >
-            <span style={{ color: theme.colors.shinyAccent, fontSize: '2.5rem', marginLeft: playing ? 0 : 4 }}>
+            <span style={{ color: SHINY_GOLD, fontSize: '2.5rem', marginLeft: playing ? 0 : 4 }}>
               {playing ? '⏸' : '▶'}
             </span>
           </div>
@@ -708,7 +709,7 @@ function ShinyListQuestion({ slide, theme }) {
       <div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
-        style={{ background: `radial-gradient(ellipse 70% 55% at 50% 50%, ${theme.colors.shinyAccent}18 0%, transparent 65%)` }}
+        style={{ background: `radial-gradient(ellipse 70% 55% at 50% 50%, ${SHINY_GOLD_GLOW}18 0%, transparent 65%)` }}
       />
 
       {data.text && (
@@ -781,7 +782,7 @@ function ShinyListQuestion({ slide, theme }) {
         </ol>
       </div>
 
-      <div className="absolute top-5 left-5 z-20 text-2xl" style={{ filter: `drop-shadow(0 0 8px ${theme.colors.shinyAccent})` }}>✨</div>
+      <div className="absolute top-5 left-5 z-20 text-2xl" style={{ filter: `drop-shadow(0 0 8px ${SHINY_GOLD_GLOW})` }}>✨</div>
     </div>
   )
 }

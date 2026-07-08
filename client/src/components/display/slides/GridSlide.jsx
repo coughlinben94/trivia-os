@@ -4,9 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
 import { useFitToBox, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
-
-const SHINY_GOLD      = '#f0d890'
-const SHINY_GOLD_GLOW = '#d4820c'
+import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 
 function Tile({ tile, size, reduce }) {
   const common = { width: size, height: size, borderRadius: 10, overflow: 'hidden', boxShadow: '0 6px 22px rgba(0,0,0,0.55)' }

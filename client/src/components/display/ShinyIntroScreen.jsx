@@ -1,5 +1,6 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { EASE_OUT } from '../../lib/easings.js'
+import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../lib/shinyGold.js'
 
 // Every shiny question/grid gets a standalone beat before its content — a pure
 // announcement, no question/answer/media yet, giving the host room to set
@@ -13,9 +14,6 @@ import { EASE_OUT } from '../../lib/easings.js'
 // Shared by QuestionSlide.jsx (question type) and GridSlide.jsx (grid type)
 // — any isShiny slide type can gate its content on `data.introDone` and
 // render this first.
-
-const SHINY_GOLD      = '#f0d890'
-const SHINY_GOLD_GLOW = '#d4820c'
 
 export default function ShinyIntroScreen({ slide, theme }) {
   const { data } = slide
