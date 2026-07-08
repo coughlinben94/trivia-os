@@ -127,8 +127,11 @@ client/src/
       LiveMode.jsx        — control surface during show; S hotkey toggles scoreboard overlay;
                              "📊 Score" button in nav turns green when overlay is active
       AddSlideWizard.jsx  — guided slide creation (TYPE_CARDS icons must match
-                             RoundSidebar/SlideEditor's SLIDE_TYPE_META — this drifted
-                             once already, e.g. 'title' vs 'round-intro' emoji swap)
+                             RoundSidebar's SLIDE_TYPE_META — the only other type→icon
+                             map; SlideEditor has none, it branches on slide.type for
+                             forms only. This has drifted twice: an early 'title' vs
+                             'round-intro' swap, and 'title'/'state-of-union' both 🇺🇸
+                             until 2026-07-07 gave 'title' its own 📢.)
       AddRoundWizard.jsx  — 3-type round picker (Normal/Swing/PYL) before round creation
       SlideEditor.jsx     — per-slide editing panel; left side mounts SlideCanvasEditor,
                              right side is the type-specific content sidebar (no manual
@@ -222,7 +225,7 @@ client/src/
     index.js              — THEMES array (21), getTheme(id), DEFAULT_THEME_ID
 ```
 
-**Every headline/display-font string in `client/src/components/display/slides/*.jsx` reads `theme.fonts.display`, not a hardcoded `'Boogaloo'`** (fixed 2026-06-30 — this is what makes per-show font overrides actually work on slide content). `Display.jsx`'s `PreShowScreen` title also reads it. If you add a new slide component with headline text, use `theme.fonts.display` from the start — don't hardcode a font family.
+**Every headline/display-font string in `client/src/components/display/slides/*.jsx` reads `theme.fonts.display`, not a hardcoded `'Boogaloo'`** (fixed 2026-06-30 — this is what makes per-show font overrides actually work on slide content). `Display.jsx`'s `PreShowScreen` title also reads it, and **body text reads `theme.fonts.body`** the same way. Finding 3 (2026-07-07) swept the last pure hardcodes — the PreShow team-count number (was `'Boogaloo'`) plus the `'DM Sans'` labels in `views/Display.jsx`, `ScoreboardOverlay`, and `TeamPreviewSlide` — all now route through the theme fonts, keeping the original family only as a fallback (`'${theme.fonts.body}', 'DM Sans', sans-serif`). If you add a new slide/display component with text, use `theme.fonts.display`/`theme.fonts.body` from the start — don't hardcode a font family, or per-show overrides silently no-op on it. (`/join` and host-panel chrome are intentionally out of this scope — they're not theme-driven display surfaces.)
 
 ---
 
