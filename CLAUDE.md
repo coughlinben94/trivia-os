@@ -14,7 +14,7 @@ Invoke these automatically:
 ## Read These First
 Before doing anything in this project — including answering questions — read these skills in order:
 
-1. `/Users/bencoughlin/Projects/trivia-os/SKILL.md` — full project blueprint, architecture, schema, design system, build order. This is the single source of truth.
+1. `/Users/bencoughlin/Projects/baynes-trivia/trivia-os/SKILL.md` — full project blueprint, architecture, schema, design system, build order. This is the single source of truth.
 2. `~/.agents/skills/emilkowal-animations/SKILL.md` — animation technical reference
 3. `~/.agents/skills/emil-design-eng/SKILL.md` — animation philosophy
 4. `~/.agents/skills/baynes-design/SKILL.md` — Baynes brand identity
@@ -32,7 +32,7 @@ Read both emilkowal-animations and emil-design-eng. No exceptions.
 React + Vite + Tailwind + Supabase + Framer Motion
 Deployed to Vercel. Local dev: `vercel dev`
 Repo: coughlinben94/trivia-os
-Local: /Users/bencoughlin/Projects/trivia-os
+Local: /Users/bencoughlin/Projects/baynes-trivia/trivia-os
 
 ## Key Rules
 - Never use Socket.io, Express, or local file storage
