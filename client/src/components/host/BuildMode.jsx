@@ -6,7 +6,6 @@ import SlideEditor from './SlideEditor.jsx'
 import AddSlideWizard, { TYPE_CARDS } from './AddSlideWizard.jsx'
 import AddRoundWizard from './AddRoundWizard.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
-import TickerMessageManager from './TickerMessageManager.jsx'
 import ThemePickerModal from './ThemePickerModal.jsx'
 import SwingRoundWizard from './SwingRoundWizard.jsx'
 import PYLWizard from './PYLWizard.jsx'
@@ -254,7 +253,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
   // fetch instead of each running its own.
   const { formats: shinyFormats, loading: shinyFormatsLoading, createFormat, updateFormat, deleteFormat } = useShinyFormats()
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
-  const [showTickerManager, setShowTickerManager] = useState(false)
   const [showThemePicker, setShowThemePicker] = useState(false)
   const [mode, setMode] = useState('wizard')
   const [selectedSlide, setSelectedSlide] = useState(null)
@@ -732,14 +730,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
           createFormat={createFormat}
           updateFormat={updateFormat}
           deleteFormat={deleteFormat}
-        />
-      )}
-
-      {showTickerManager && (
-        <TickerMessageManager
-          messages={show.tickerMessages ?? []}
-          onSave={actions.updateTickerMessages}
-          onClose={() => setShowTickerManager(false)}
         />
       )}
 
