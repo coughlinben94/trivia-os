@@ -64,9 +64,22 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 ```
 show=null            → purple fallback screen
 ?preview=true        → PreviewSlide (debug label)
-is_live && current_slide_id === null → PreShowScreen (QR + ticker + teams)
+is_live && current_slide_id === null → PreShowScreen (QR + teams)
 is_live && current_slide_id !== null → DisplayInner (full slide renderer)
 ```
+
+---
+
+## Host Access
+
+`HostPinGate.jsx` locks writes behind a 4-digit PIN. The PIN itself is never checked client-side:
+
+1. Host types the PIN; the client calls the `verify-host-pin` Supabase Edge Function with it.
+2. The function hashes and compares the PIN server-side, and on success elevates the current anonymous session's `app_metadata` (via the service-role key) to set `host_verified: true`.
+3. RLS policies on `shows`, `team_scores`, `scoreboard_teams`, `shiny_formats`, and `questions` check `auth.jwt() -> 'app_metadata' ->> 'host_verified' = true` on every write — the PIN never touches these tables directly, the JWT claim does.
+4. Supabase Auth persists the resulting session in localStorage, so the PIN is only needed once per browser until that session is cleared.
+
+**What's actually gated:** `/questions`, `/questions/add`, and — once a show is loaded — the inner BuildMode/LiveMode view at `/host`. The initial `/host` **ShowPicker** screen (before any show is loaded) renders *outside* `HostPinGate` — verified live: attempting to create a show from an unauthenticated session there fails with a 42501 RLS error rather than being blocked by a PIN prompt first, because `HostPinGate` only wraps the code path taken once `show` is non-null (`Host.jsx`). Authenticating via any gated route (e.g. `/questions`) satisfies the gate everywhere else too, since it's the same underlying Supabase Auth session for the origin, not a per-route check.
 
 ---
 
@@ -131,11 +144,13 @@ client/src/
       ScorePanel.jsx      — fuzzy search + score input + reveal toggle
       ScoreboardModal.jsx — admin scoreboard popup (Score button in HostHeader);
                              TeamTable + QuickEntry components; debounced Supabase upsert
-      ShowManager.jsx     — show CRUD (list, create, load, duplicate, export, import)
+      ShowLibrary.jsx     — show CRUD modal opened from HostHeader (list, load, duplicate,
+                             delete with two-step confirm, export, import); new-show creation
+                             happens on the separate pre-load ShowPicker screen, not here
+                             (`ShowManager.jsx` is dead — no import/render site anywhere)
       HostHeader.jsx      — "Score" button → opens ScoreboardModal; "Preview", "Export",
                              "Go Live →" buttons
-      ThemePickerModal.jsx — theme selection + live preview; THIS is the real one (a
-                             legacy unused `ThemePicker.jsx` also exists, don't build on it)
+      ThemePickerModal.jsx — theme selection + live preview
       ThemeCustomizeControls.jsx — font dropdown/upload + 2 color pickers, extracted
                              from ThemePickerModal.jsx for size
       FormatLibrary.jsx   — 8 shiny format seeds
@@ -172,7 +187,7 @@ client/src/
       TitleSlide.jsx, RoundIntroSlide.jsx, QuestionSlide.jsx, GradingBreakSlide.jsx
       ScoreboardRevealSlide.jsx, CustomSlide.jsx, MultiQuestionSlide.jsx
       PixelateSeriesSlide.jsx, PylRevealSlide.jsx, StateOfUnionSlide.jsx
-      WinnerRevealSlide.jsx   — drum roll (Web Audio) → confetti (canvas) → winner pop-in
+      WinnerRevealSlide.jsx   — drum roll (pre-recorded MP3) → confetti (canvas) → winner pop-in
       QuestionCounter.jsx, BaynesWatermark.jsx, WaveformBars.jsx
   hooks/
     useShow.js            — ALL show state, Supabase Realtime, CRUD actions (master hook)
@@ -224,7 +239,7 @@ Round object stamped: `{ roundType, roundNumber?, subtitle, title }`
 
 **`seriesEnabled` vs `slots` — two independent knobs on a shiny format's `input_schema`.** `slots` (set once, at format-creation time in FormatLibrary) controls a FIXED multi-part shape assigned automatically when the host picks that format in AddSlideWizard (`isMultiSlot = totalSlots > 1`). `seriesEnabled: true` is a separate, orthogonal flag that unlocks a "Part of a Series" toggle in SlideEditor AFTER creation — flipping it converts a flat single-slot question into `data.parts[]` and reveals "+ Add part" for an unbounded number of parts. This is the actual mechanism behind "ask however many you want" formats (pre-existing "Hear! Me! Roar!"; "First, Second, or Third" reuses it for text). `FormatLibrary.jsx`'s create/edit UI only exposes the `seriesEnabled` toggle when `type === 'audio'` — for other types it currently has to be set directly in the DB (a latent UI gap, not fixed).
 
-**Winner Reveal** (shipped 2026-06-30) — add via the 🏆/🥇 card in AddSlideWizard, put it as the literal last slide. On mount: 3s synthesized Web Audio drum roll (accelerating snare hits → finale, or a `useReducedMotion`-gated instant skip) → winner name pops in full-size with canvas confetti raining from the top → points subtitle fades in 350ms later. Combine with the automatic **Final Break** detection (below) for a fully hands-off show close.
+**Winner Reveal** (shipped 2026-06-30) — add via the 🏆/🥇 card in AddSlideWizard, put it as the literal last slide. On mount: plays a pre-recorded `/drum-roll.mp3` via an HTML5 `<audio>` element (reveal fires on `onended`; a failed load or blocked autoplay falls back to a 2s timeout so the reveal never hangs), or a `useReducedMotion`-gated 1.2s instant skip → winner name pops in full-size with canvas confetti raining from the top → points subtitle fades in 350ms later. Combine with the automatic **Final Break** detection (below) for a fully hands-off show close.
 
 **Final Break** — fully automatic, no per-slide toggle exists (an earlier design used a manual `isFinalBreak` checkbox; it was replaced with auto-detection and this doc wasn't updated until the 2026-07-05 audit). On jukebox return, `Display.jsx` checks two things: is the show's literal last slide a `winner-reveal`, and are there no more `grading-break` slides remaining after the current position? If both are true, it jumps straight to `sorted.length - 1` (the last slide); otherwise it does the normal `current + 1` (clamped). This means the *last* grading break in a show automatically closes it out — nothing to remember to check on a specific slide. One consequence worth knowing: any non-grading-break slide placed between the last grading break and the winner-reveal slide gets silently skipped by the jump, since only "any grading breaks left?" is checked, not "is winner-reveal the very next slide." `Host.jsx` auto-fires `saveResults()` the instant the winner-reveal slide becomes live — no manual "Save Results" button anymore (it was removed from HostHeader).
 
@@ -276,7 +291,9 @@ scoreboard_teams {
   sort_order  integer,
   created_at  timestamptz DEFAULT now()
 }
--- RLS: allow_all policy (anon read+write)
+-- RLS: SELECT is public; INSERT/UPDATE/DELETE require the host_verified JWT
+-- claim, same pattern as shows/team_scores/shiny_formats/questions (verified
+-- live against pg_policies — this table is NOT allow_all despite older notes)
 ```
 
 Score key format: `r_${round.id}` for each round, `"bonus"` for the "?" mystery column. Values are numbers.
@@ -303,8 +320,10 @@ actions.deleteShow(id) / actions.unloadShow()
 actions.updateShowMeta({ title, date, theme, themeOverrides })
 
 // Slide CRUD
-actions.addSlide(type, data)
-actions.addSiblingSlides(...)   // shiny series
+actions.addSiblingSlides(afterSlideId, slidesData)   // the only slide-creation primitive —
+                                                      // AddSlideWizard wraps even a single new
+                                                      // slide as a one-element array through this;
+                                                      // also how a shiny series adds its parts
 actions.updateSlide(id, patch)  // debounced 600ms — writes are SERIALIZED (see note below)
 actions.deleteSlide(id)
 actions.reorderSlides(newOrder)
@@ -315,9 +334,8 @@ actions.updateRound(id, patch)
 actions.deleteRound(id)     // also deletes all slides in the round
 actions.reorderRounds(newOrder)
 
-// Powerups / ticker
+// Powerups
 actions.addPowerup(...) / actions.deletePowerup(id)
-actions.updateTickerMessages(msgs)
 
 // Media / fonts (Supabase Storage — see Storage Buckets below)
 actions.uploadMedia(file, isHostPhoto?)
@@ -402,7 +420,9 @@ shiny_formats { id text PK ('fmt_'+nanoid8), name, icon, description,
 scoreboard_teams { id uuid PK, show_id text, name text, scores jsonb DEFAULT '{}',
                    sort_order int, created_at timestamptz }
   -- scores keys: "r_${round.id}" per round, "bonus" for mystery column
-  -- RLS: allow_all policy (anon read+write)
+  -- RLS: SELECT public; INSERT/UPDATE/DELETE require the host_verified JWT
+  -- claim (verified live against pg_policies) — same pattern as every other
+  -- write-gated table, NOT allow_all
 ```
 
 **Storage buckets** (all `public: true`, "public read" SELECT + "anon insert" INSERT policies on `storage.objects` scoped per `bucket_id` — this is the precedent pattern, copy it for any new bucket):
@@ -484,7 +504,7 @@ Per-surface intent lives in `*_FLOOR`/`*_CEIL` (rem) + `*_BOX` consts. There are
 }
 ```
 
-`getTheme(id)` falls back to `midnight-galaxy` if not found. (Three slightly different fallback theme IDs exist across the codebase — `getTheme`'s own fallback, `DEFAULT_THEME_ID`, and `normalizeShow`'s fallback — currently all resolve to compatible values but haven't been unified; worth knowing if a "wrong default theme" bug ever shows up.)
+`getTheme(id)` falls back to `DEFAULT_THEME_ID` (`'pure-michigan'`) if not found. All three fallback paths in the codebase — `getTheme`'s own fallback, `useShow.js`'s show-load default, and `normalizeShow`'s import default — resolve through this single constant, not three separate IDs.
 
 21 themes: pure-michigan ★, midnight-galaxy ✓, autumn-harvest ★, northern-lights, medieval-tavern, sunset-boulevard ✓, retro-arcade, sand-dune-chill ✓, halloween ✓, jazz-club, dive-bar, sonora-balloons ✓ (renamed from rooftop-party), christmas-eve, drive-in-movie, western-showdown, under-the-sea ✓, neon-tokyo, firefly-summer, wine-cellar, meteor-shower ✓, eighties-night. (★ = confirmed-good exemplar, ✓ = bland-pass rework shipped, ⟳ = in progress, unmarked = still on the bland-pass queue — **these markers apply only to the 9 BESPOKE themes**; `jazz-club`/`drive-in-movie`/`firefly-summer` lost their old ✓/★ status when their bespoke scene retired to the shared BreathingGradient in the July 2026 rework. See `references/themes.md` for the full law/recipe + the bespoke/gradient Path column. **Verify this list against `git log` per-theme before trusting it** — it drifted out of sync with reality once already this project.)
 

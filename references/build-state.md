@@ -6,7 +6,7 @@
 
 ## Completed (as of June 30, 2026, + July 2026 additions noted inline below)
 
-**All original build steps complete + significant new features shipped.** July 2026 additions not yet folded into a fresh date stamp: `grid` slide (shiny Color Schemes), `team-picker`/`team-preview` slides, WYSIWYG `SlideElements` canvas overlay, PYL Picker (Cards/Boxing/Chest) replacing Random 2, measure-to-fit text sizing (`autoFitText.js`, retired the old tier tables), 9-bespoke/12-gradient theme split. See git log for exact commits — this file lags reality, cross-check before trusting a "not yet built" claim below.
+**All original build steps complete + significant new features shipped.** July 2026 additions not yet folded into a fresh date stamp: `grid` slide (shiny Color Schemes), `team-picker`/`team-preview` slides, freeform `data.overlays` canvas system via `OverlayLayer.jsx` (superseded the earlier `SlideElements.jsx`/`data.elements`), PYL Picker (Cards/Boxing/Chest) replacing Random 2, measure-to-fit text sizing (`autoFitText.js`, retired the old tier tables), 9-bespoke/12-gradient theme split. See git log for exact commits — this file lags reality, cross-check before trusting a "not yet built" claim below.
 
 ### Infrastructure
 - Vite + React + Tailwind scaffold, Supabase client, env vars wired, vercel.json SPA rewrite
@@ -42,16 +42,15 @@
 
 ### `/display`
 - `Display.jsx` — full routing waterfall; jukebox-return Final Break jump; renders `ScoreboardOverlay` at `z-[60]` when `scoreboardVisible` true
-- `PreShowScreen` — QR code, team ticker, ambient, Baynes watermark, Ben photo
+- `PreShowScreen` — QR code, ambient, Baynes watermark, Ben photo (the ticker editor was removed as dead code — see TICK-1; no render site ever existed for it)
 - `SlideRenderer.jsx` — routes to per-type components; 10 named transitions (incl. `assemble`) + Random + reduced-motion crossfade
 - 15 slide types in `SLIDE_COMPONENTS`: TitleSlide, RoundIntroSlide (also `swing-round-intro`), QuestionSlide, GradingBreakSlide, ScoreboardRevealSlide, CustomSlide, StateOfUnionSlide, MultiQuestionSlide, PixelateSeriesSlide, PylRevealSlide, WinnerRevealSlide, GridSlide, TeamPreviewSlide, TeamPickerSlide — see `references/slides.md`
-- `SlideElements.jsx` — WYSIWYG canvas element overlay (`data.elements`), editable per-slide in SlideEditor's preview canvas; shipped across "Add WYSIWYG canvas editing to all slide types"
 - `ParticleBackground.jsx` — 9 bespoke ambient scenes + 12 shared BreathingGradient themes (July 2026 rework, see `references/themes.md`), 3-layer architecture
 - Answer reveal overlay on QuestionSlide (A key / `answer_reveal` flag)
 
 ### Winner Reveal + Final Break (shipped 2026-06-30)
-- `WinnerRevealSlide.jsx` — Web Audio drum roll → canvas confetti → winner name pop-in
-- `isFinalBreak` checkbox on GradingBreakSlide editor — Jukebox return jumps to last slide
+- `WinnerRevealSlide.jsx` — pre-recorded `/drum-roll.mp3` via `<audio>` → canvas confetti → winner name pop-in
+- Final Break is fully automatic (no editor checkbox): jukebox return jumps to the last slide when it's a `winner-reveal` type AND no `grading-break` slides remain after the current position — see SKILL.md's Final Break section for the exact rule and its one edge-case caveat
 - `Host.jsx` auto-fires `saveResults()` when winner-reveal slide goes live
 
 ### Per-show Theme Overrides (shipped 2026-06-30)
@@ -123,9 +122,8 @@
 ## Known Issues
 
 - **`ThemeCanvas.jsx` / `ThemeForeground.jsx`** — wired but `scene: null` (background/foreground) on all 21 themes; a `cssClass` field now also exists on `scene`. Future use.
-- **Three fallback theme IDs** — `getTheme`'s own fallback, `DEFAULT_THEME_ID`, and `normalizeShow`'s fallback all exist independently. Currently compatible. If a "wrong default theme" bug appears, unify them.
 - **`baynes-logo.svg`** — file doesn't exist anywhere in `client/public/`, not just `dist/`. Referenced in `BaynesWatermark.jsx` (every slide), `RoundIntroSlide.jsx`, and `Join.jsx` (top-of-form + NoShowScreen) — all render nothing/broken-img rather than the logo. Bigger surface area than previously noted; still acceptable-for-now per Ben, but worth knowing it's not just one screen.
-- **`AmbientAudit.jsx`** — dev tool, not routed in prod. Verify excluded from main bundle or gated.
+- **`AmbientAudit.jsx`** / **`GradientAudit.jsx`** — dev tools, routed at `/ambient` and `/gradient` respectively (`App.jsx`). They ARE reachable in prod — the safety net is that both are `lazy()`-imported, so neither ships in the main bundle.
 
 ---
 
