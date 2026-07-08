@@ -24,7 +24,15 @@
 // drift. Overlay text intentionally does NOT go through autoFitText —
 // the host chose the size in the editor; render it as stored.
 
+import { SHINY_GOLD } from '../../lib/shinyGold.js'
+
+// Theme tokens resolve through the active theme's palette; fixed tokens are
+// theme-independent. `gold` is the shiny signal made host-reachable (see
+// references/themes.md fixed-gold law) — constant in every theme, unlike the
+// per-theme `shinyAccent` (kept for backward-compat with overlays that already
+// reference it by name).
 const THEME_COLOR_TOKENS = ['text', 'textMuted', 'accent', 'highlight', 'shinyAccent']
+const FIXED_COLOR_TOKENS = { gold: SHINY_GOLD }
 
 // Text-shadow in em so it scales with the (cqh-sized) font — the preview and
 // /display stay pixel-identical. Absent `shadow` → no shadow (graceful default).
@@ -38,6 +46,7 @@ function resolveFont(fontFamily, theme) {
 
 function resolveColor(color, theme) {
   if (!color) return theme.colors.text
+  if (color in FIXED_COLOR_TOKENS) return FIXED_COLOR_TOKENS[color]
   return THEME_COLOR_TOKENS.includes(color) ? theme.colors[color] : color
 }
 
