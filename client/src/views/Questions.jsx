@@ -19,6 +19,16 @@ const FILTERS = [
   { id: 'swing',   label: 'Swing' },
 ]
 
+// PostgREST caps a single response at 1000 rows by default — a plain
+// `select('*')` silently drops everything past row 1000 once the bank grows
+// past it (no error, rows just don't come back). fetchQuestions below pages
+// through .range() in PAGE_SIZE chunks until a short page signals the end.
+// MAX_BATCHES is a hard ceiling (20k rows) so a pathological bank can't hang
+// the page in an unbounded fetch loop — unreachable for a bar-trivia archive
+// at any foreseeable scale, but cheap insurance.
+const PAGE_SIZE = 1000
+const MAX_BATCHES = 20
+
 const TRUNCATE_AT = 200
 const ITEM_LIST_LINE_CAP = 8
 // Rough chars-per-rendered-line at this card's text-sm body width (desktop
@@ -354,6 +364,10 @@ export default function Questions() {
   // Save/delete failures were silent (the edit stayed open with the draft
   // intact, but nothing said WHY) — surface them; cleared on the next attempt.
   const [writeError, setWriteError] = useState(null)
+  // Set only if the MAX_BATCHES hard ceiling is ever actually hit (~20k rows)
+  // — surfaces a "showing first N" notice instead of silently truncating
+  // the same way the unbounded select used to.
+  const [hitCeiling, setHitCeiling] = useState(false)
 
   // Read ?show= param from URL on mount
   useEffect(() => {
@@ -362,15 +376,33 @@ export default function Questions() {
     if (showId) setShowFilter(showId)
   }, [])
 
-  function fetchQuestions() {
-    return supabase
-      .from('questions')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .then(({ data, error }) => {
-        if (!error) setQuestions(data ?? [])
-        setLoading(false)
-      })
+  // Pages through the full archive in PAGE_SIZE chunks instead of one
+  // unbounded select — see the PAGE_SIZE comment above for why. Ordered by
+  // created_at + id (not created_at alone): bulk-entered rows (a Swing/PYL/
+  // Paste&Organize batch inserted in one call) can share the exact same
+  // created_at timestamp, and range() pagination needs a fully deterministic
+  // sort or a tied row can land on either side of a page boundary and get
+  // skipped or duplicated between fetches.
+  async function fetchQuestions() {
+    let all = []
+    let batch = 0
+    while (batch < MAX_BATCHES) {
+      const from = batch * PAGE_SIZE
+      const to = from + PAGE_SIZE - 1
+      const { data, error } = await supabase
+        .from('questions')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to)
+      if (error) break // keep whatever batches already succeeded rather than discarding them
+      all = all.concat(data ?? [])
+      batch++
+      if (!data || data.length < PAGE_SIZE) break // short page — this was the last one
+    }
+    setHitCeiling(batch >= MAX_BATCHES)
+    setQuestions(all)
+    setLoading(false)
   }
 
   useEffect(() => { fetchQuestions() }, [])
@@ -474,7 +506,9 @@ export default function Questions() {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-900">Question Archive</h1>
-            <p className="text-xs text-gray-500 mt-0.5">{questions.length} questions total</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {questions.length} questions {hitCeiling ? `loaded (showing first ${questions.length} — refine your search)` : 'total'}
+            </p>
           </div>
           <a
             href="/host"
@@ -484,6 +518,16 @@ export default function Questions() {
           </a>
         </div>
       </div>
+
+      {hitCeiling && (
+        <div className="bg-amber-50 border-b border-amber-200">
+          <div className="max-w-6xl mx-auto px-6 py-2">
+            <p className="text-xs text-amber-800">
+              The archive is huge — showing the first {questions.length} questions. Use search or filters to narrow it down.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Add Questions — links out to its own dedicated input page */}
       <div className="max-w-6xl mx-auto px-6 pt-6">
