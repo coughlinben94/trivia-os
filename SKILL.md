@@ -443,10 +443,10 @@ questions { id serial PK, type NOT NULL CHECK ('regular'|'shiny'|'swing'|'pyl'|'
 shiny_formats { id text PK ('fmt_'+nanoid8), name, icon, description,
                 input_schema jsonb: { type, slots, sequential, seriesEnabled, hasPoints, labels, columnLabels } }
   -- the REAL shiny-format system — created/edited entirely in-app via "✨ Add Shiny"
-  -- (FormatLibrary.jsx + useShinyFormats.js). shinyFormatDictionary.js/shinyStampers.js
-  -- (SHINY_FORMATS/LAYOUTS/stampSlides) are DEAD CODE from an earlier design,
-  -- superseded 2026-06-30 — grep confirms zero call sites outside those two files.
-  -- Don't read or extend them for new formats.
+  -- (FormatLibrary.jsx + useShinyFormats.js). The old shinyFormatDictionary.js/
+  -- shinyStampers.js (SHINY_FORMATS/LAYOUTS/stampSlides) were dead code from an
+  -- earlier design (superseded 2026-06-30) and were DELETED 2026-07-07 — don't
+  -- recreate that pattern for new formats.
 
 scoreboard_teams { id uuid PK, show_id text, name text, scores jsonb DEFAULT '{}',
                    sort_order int, created_at timestamptz }

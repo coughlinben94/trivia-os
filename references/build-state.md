@@ -97,7 +97,7 @@
 
 ### Shiny Question System
 - 3-step shiny wizard in AddSlideWizard (pick format → details form → SlideEditor)
-- Formats live in the Supabase `shiny_formats` table, created/edited entirely in-app via "✨ Add Shiny" (`FormatLibrary.jsx` + `useShinyFormats.js`). `shinyFormatDictionary.js`/`shinyStampers.js` are DEAD CODE (superseded 2026-06-30) — don't read or extend them, see SKILL.md's Shiny Format System section.
+- Formats live in the Supabase `shiny_formats` table, created/edited entirely in-app via "✨ Add Shiny" (`FormatLibrary.jsx` + `useShinyFormats.js`). `shinyFormatDictionary.js`/`shinyStampers.js` were dead code (superseded 2026-06-30) and were DELETED 2026-07-07 — don't recreate them; see SKILL.md's Shiny Format System section.
 - Series-type shiny questions grouped atomically in RoundSidebar
 - Every shiny slide (question AND grid) gets a shared `ShinyIntroScreen` beat before content, gated on `data.introDone`, with an optional per-instance `data.introSubtitle` line (2026-07-05)
 

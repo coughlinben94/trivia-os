@@ -20,6 +20,8 @@ Routing lives in `ParticleBackground.jsx`: a `GRADIENT_MOODS` map keys the 12 th
 ### Fixed-gold shiny signal
 Shiny question/title = **FIXED GOLD** `#f0d890` fill / `#d4820c` glow, constant across ALL themes (gold IS the shiny signal — not per-theme `shinyAccent` anymore). Plain question = theme text color. State of the Union = **fixed red-white-blue**, ignores `theme.colors`. The `grid` slide (Color Schemes) uses this fixed gold for its glow / ✨ badge / column-number chips.
 
+The gold constants live in **`client/src/lib/shinyGold.js`** (`SHINY_GOLD` fill / `SHINY_GOLD_GLOW` glow) — imported by every shiny-signal surface (ShinyIntroScreen, GridSlide, QuestionSlide, WaveformBars, PixelateSeriesSlide stage dots). Don't re-hardcode `#f0d890`/`#d4820c` or read `theme.colors.shinyAccent` for a shiny signal. `shinyAccent` still ships per-theme but is now a *semantic orphan for shiny purposes*: it survives only as the overlay picker's **"Theme Pop"** color (backward-compat for saved overlays that reference it by name) and as decorative flavor on non-shiny slides (scoreboard leader highlight, PYL reveal accents). The host-reachable shiny signal in overlays is the fixed **`gold`** token (also → `shinyGold.js`).
+
 ### Gotcha — opacity flash
 Gradient themes + the grid slide carry `isShiny`/fixed-design, so they need `SlideRenderer`'s opacity-neutralize special-case (joined `team-picker`/`state-of-union`) or the entrance transition fades them from opacity 0 and flashes the real theme color through for a frame.
 
