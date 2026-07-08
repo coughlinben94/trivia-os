@@ -8,6 +8,79 @@ import { parseOutlinePaste } from '../../lib/parseOutline.js'
 const BTN = 'host-button'
 const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber-400', video: 'bg-purple-400', list: 'bg-orange-400', grid: 'bg-pink-400' }
 
+// Searchable format-card grid — the one shiny-format picker, shared by the
+// Question panel and Paste & Organize (was a nice grid in one and a 34-row
+// native <select> in the other). Owns its own search state; onSelect gets the
+// full format object, or null when the selected tile is clicked again.
+function ShinyFormatPicker({ formats, loading, selectedId, onSelect, showHeading = true }) {
+  const [search, setSearch] = useState('')
+  const q = search.trim().toLowerCase()
+  const visible = q
+    ? formats.filter(f => f.name?.toLowerCase().includes(q) || f.description?.toLowerCase().includes(q))
+    : formats
+  return (
+    <>
+      {showHeading && (
+        <div>
+          <p className="text-sm font-semibold text-gray-800">✨ Shiny formats</p>
+          <p className="text-xs text-gray-500 mt-0.5">Pick a format</p>
+        </div>
+      )}
+      {!loading && formats.length > 0 && (
+        <div className="relative shrink-0">
+          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" width="13" height="13" viewBox="0 0 14 14" fill="none">
+            <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M9.5 9.5L12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search formats…"
+            className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+          />
+        </div>
+      )}
+      {loading ? (
+        <p className="text-xs text-gray-500">Loading…</p>
+      ) : formats.length === 0 ? (
+        <p className="text-xs text-gray-500">No formats yet — add one via ✨ Add Shiny in the host.</p>
+      ) : visible.length === 0 ? (
+        <p className="text-xs text-gray-500">No formats match "{search.trim()}".</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 overflow-y-auto max-h-72">
+          {visible.map(fmt => {
+            const mediaType = fmt.input_schema?.type
+            const isSel = selectedId === fmt.id
+            return (
+              <button
+                key={fmt.id}
+                type="button"
+                onClick={() => onSelect(isSel ? null : fmt)}
+                title={fmt.description}
+                className={`flex items-start gap-2 p-2.5 rounded-lg border text-left transition-[border-color,background-color,transform] duration-150 ease-out active:scale-[0.97] ${
+                  isSel ? 'bg-yellow-50 border-yellow-400' : 'bg-gray-50 border-gray-100 hover:border-gray-300'
+                }`}
+              >
+                <span className="text-base leading-none mt-0.5 shrink-0">{fmt.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-xs font-semibold truncate leading-tight ${isSel ? 'text-yellow-700' : 'text-gray-600'}`}>{fmt.name}</p>
+                  {mediaType && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${MEDIA_DOT[mediaType] ?? 'bg-gray-300'}`} />
+                      <span className="text-[11px] text-gray-500 leading-none">{mediaType}</span>
+                    </div>
+                  )}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </>
+  )
+}
+
 // Same gradient family as BuildMode.jsx's CARD_STYLE (dashboard rest-grid) —
 // reused here by key so the launcher tiles read as the same visual system.
 export const INPUT_TILES = [
@@ -89,7 +162,6 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
 
   const [selectedShinyFmt, setSelectedShinyFmt] = useState(null)
   const [shinyStep,         setShinyStep]        = useState('pick')
-  const [shinyFmtSearch,    setShinyFmtSearch]    = useState('')
   const [shinyQuestion,     setShinyQuestion]    = useState('')
   const [shinySubtitle,     setShinySubtitle]    = useState('')
   const [shinyAnswer,       setShinyAnswer]      = useState('')
@@ -135,13 +207,6 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
   const useItemList = isConcurrentFmt && isQuestionSeriesFmt && effectiveAssets > 1
   const cleanCurrentItems = () => currentItems.map(it => ({ text: it.text.trim(), answer: it.answer.trim() })).filter(it => it.text || it.answer)
   const canAddShiny = useItemList ? cleanCurrentItems().length > 0 : shinyAnswer.trim().length > 0
-
-  const visibleShinyFormats = shinyFmtSearch.trim()
-    ? shinyFormats.filter(fmt => {
-        const q = shinyFmtSearch.trim().toLowerCase()
-        return fmt.name?.toLowerCase().includes(q) || fmt.description?.toLowerCase().includes(q)
-      })
-    : shinyFormats
 
   useUnsavedGuard(!!(questionText.trim() || questionAnswer.trim() || shinyQuestion.trim() || shinySubtitle.trim() || shinyAnswer.trim() || currentItems.some(it => it.text.trim() || it.answer.trim())))
 
@@ -443,61 +508,12 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
           </>
         ) : (
           <>
-            <div>
-              <p className="text-sm font-semibold text-gray-800">✨ Shiny formats</p>
-              <p className="text-xs text-gray-500 mt-0.5">Pick a format</p>
-            </div>
-            {!shinyLoading && shinyFormats.length > 0 && (
-              <div className="relative shrink-0">
-                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" width="13" height="13" viewBox="0 0 14 14" fill="none">
-                  <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
-                  <path d="M9.5 9.5L12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-                <input
-                  type="text"
-                  value={shinyFmtSearch}
-                  onChange={e => setShinyFmtSearch(e.target.value)}
-                  placeholder="Search formats…"
-                  className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                />
-              </div>
-            )}
-            {shinyLoading ? (
-              <p className="text-xs text-gray-500">Loading…</p>
-            ) : shinyFormats.length === 0 ? (
-              <p className="text-xs text-gray-500">No formats yet — add one via ✨ Add Shiny in the host.</p>
-            ) : visibleShinyFormats.length === 0 ? (
-              <p className="text-xs text-gray-500">No formats match "{shinyFmtSearch.trim()}".</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 overflow-y-auto max-h-72">
-                {visibleShinyFormats.map(fmt => {
-                  const mediaType = fmt.input_schema?.type
-                  const isSel = selectedShinyFmt?.id === fmt.id
-                  return (
-                    <button
-                      key={fmt.id}
-                      type="button"
-                      onClick={() => setSelectedShinyFmt(isSel ? null : fmt)}
-                      title={fmt.description}
-                      className={`flex items-start gap-2 p-2.5 rounded-lg border text-left transition-[border-color,background-color,transform] duration-150 ease-out active:scale-[0.97] ${
-                        isSel ? 'bg-yellow-50 border-yellow-400' : 'bg-gray-50 border-gray-100 hover:border-gray-300'
-                      }`}
-                    >
-                      <span className="text-base leading-none mt-0.5 shrink-0">{fmt.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-xs font-semibold truncate leading-tight ${isSel ? 'text-yellow-700' : 'text-gray-600'}`}>{fmt.name}</p>
-                        {mediaType && (
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${MEDIA_DOT[mediaType] ?? 'bg-gray-300'}`} />
-                            <span className="text-[11px] text-gray-500 leading-none">{mediaType}</span>
-                          </div>
-                        )}
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
+            <ShinyFormatPicker
+              formats={shinyFormats}
+              loading={shinyLoading}
+              selectedId={selectedShinyFmt?.id}
+              onSelect={setSelectedShinyFmt}
+            />
             {selectedShinyFmt && (
               <div className="mt-auto pt-2">
                 <button
@@ -993,7 +1009,7 @@ export function BulkPasteInputPanel({ onAdded }) {
       : [b]
     ))
   }
-  function startOver() { setBoxes([]); setDetectedTitle(null); setRaw('') }
+  function startOver() { setBoxes([]); setDetectedTitle(null); setRaw(''); setCategory('') }
 
   const cleanItems = (items) => items
     .map(it => ({ text: it.text.trim(), answer: it.answer.trim() }))
@@ -1124,22 +1140,20 @@ export function BulkPasteInputPanel({ onAdded }) {
                 ))}
               </div>
             </div>
-            {roundType === 'shiny' && (
-              <div className="flex-1 min-w-[170px]">
-                <label className="block text-[11px] font-medium text-gray-500 mb-1">Shiny format <span className="text-gray-400">(optional)</span></label>
-                <select
-                  value={shinyFmtId}
-                  onChange={e => setShinyFmtId(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                >
-                  <option value="">{shinyLoading ? 'Loading…' : shinyFormats.length ? 'Pick a format…' : 'No formats yet'}</option>
-                  {shinyFormats.map(f => (
-                    <option key={f.id} value={f.id}>{f.icon ? `${f.icon} ` : ''}{f.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
+
+          {roundType === 'shiny' && (
+            <div className="flex flex-col gap-2 bg-gray-50 border border-gray-100 rounded-xl px-3.5 py-3">
+              <label className="text-[11px] font-medium text-gray-500">Shiny format <span className="text-gray-400">(optional)</span></label>
+              <ShinyFormatPicker
+                formats={shinyFormats}
+                loading={shinyLoading}
+                selectedId={shinyFmtId}
+                onSelect={fmt => setShinyFmtId(fmt?.id ?? '')}
+                showHeading={false}
+              />
+            </div>
+          )}
 
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex gap-1.5">
