@@ -40,7 +40,7 @@ function TeamRow({ team, rank, cols, delay, isTop, reduce }) {
         ) : (
           <span
             style={{
-              fontFamily: "'DM Sans', sans-serif",
+              fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
               color: 'rgba(255,255,255,0.35)',
               fontWeight: 700,
               fontSize: '1rem',
@@ -75,7 +75,7 @@ function TeamRow({ team, rank, cols, delay, isTop, reduce }) {
             <span
               key={col.key}
               style={{
-                fontFamily: "'DM Sans', sans-serif",
+                fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
                 fontSize: '0.7rem',
                 fontWeight: 600,
                 color: 'rgba(255,255,255,0.55)',

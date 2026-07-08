@@ -38,7 +38,7 @@ function WaitingScreen() {
           lineHeight: 1,
         }}>Trivia Night</h1>
         <p style={{
-          fontFamily: "'DM Sans', sans-serif",
+          fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
           fontSize: '1.2rem',
           color: `${theme.colors.text}55`,
           letterSpacing: '0.12em',
@@ -163,18 +163,18 @@ function PreShowScreen({ show, onInstall }) {
 
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
             <span style={{
-              fontFamily: "'Boogaloo', sans-serif",
+              fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
               fontSize: 'clamp(3rem, 5vw, 4.5rem)',
               color: theme.colors.highlight,
               lineHeight: 1,
             }}>{teams.length}</span>
             <span style={{
-              fontFamily: "'DM Sans', sans-serif",
+              fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
               fontSize: '1.25rem',
               color: `${theme.colors.text}88`,
             }}>{teams.length === 1 ? 'team in' : 'teams in'}</span>
             <span style={{
-              fontFamily: "'DM Sans', sans-serif",
+              fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
               fontSize: '1.1rem',
               color: theme.colors.textMuted,
               textAlign: 'center',
@@ -206,7 +206,7 @@ function PreShowScreen({ show, onInstall }) {
             background: 'rgba(255,255,255,0.07)',
             border: '1px solid rgba(255,255,255,0.15)',
             color: 'rgba(255,255,255,0.55)',
-            fontFamily: "'DM Sans', sans-serif",
+            fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
             fontSize: '0.8rem',
             fontWeight: 500,
             letterSpacing: '0.06em',
@@ -243,7 +243,7 @@ function PreviewSlide() {
       >
         <span
           className="text-xs font-bold tracking-widest uppercase"
-          style={{ color: theme.colors.text, fontFamily: "'DM Sans', sans-serif" }}
+          style={{ color: theme.colors.text, fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif` }}
         >
           PREVIEW MODE
         </span>
@@ -349,7 +349,7 @@ function DisplayInner({ show, direction }) {
     }}>
       <p style={{
         color: `${theme.colors.text}55`,
-        fontFamily: "'DM Sans', sans-serif",
+        fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
         fontSize: '1rem',
         letterSpacing: '0.12em',
         textTransform: 'uppercase',
