@@ -104,10 +104,6 @@ textarea {
   0%, 100% { transform: scaleY(0.15); }
   50%       { transform: scaleY(1);    }
 }
-@keyframes waveformIdle {
-  0%, 100% { transform: scaleY(0.08); }
-  50%       { transform: scaleY(0.28); }
-}
 
 /* ─── Display: play button pulse — GPU-only (transform + opacity) ─── */
 @keyframes playPulse {
@@ -157,6 +153,5 @@ textarea {
   @keyframes gradingGlow  { 0%, 100% { opacity: 0.4;  transform: scale(1); } }
   @keyframes playPulse    { 0%, 100% { opacity: 1; transform: scale(1); } }
   @keyframes waveformBar  { 0%, 100% { transform: scaleY(0.5); } }
-  @keyframes waveformIdle { 0%, 100% { transform: scaleY(0.15); } }
   @keyframes slideInRight { 0%, 100% { transform: translateX(0); opacity: 1; } }
 }
