@@ -51,7 +51,7 @@ export default function ShinyIntroScreen({ slide, theme }) {
         initial={{ opacity: 0, scale: reduce ? 1 : 0.7, rotate: reduce ? 0 : -8 }}
         animate={{ opacity: 1, scale: 1, rotate: 0 }}
         transition={{ delay: 0.3, duration: 0.4, ease: EASE_OUT }}
-        className="absolute bottom-10 right-10 z-10 flex items-center justify-center rounded-3xl"
+        className="absolute bottom-10 right-10 z-10 flex items-center justify-center rounded-2xl"
         style={{
           width: 128, height: 128,
           background: theme.colors.bgDeep,

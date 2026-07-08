@@ -88,7 +88,7 @@ export default function TeamPreviewSlide({ slide, show }) {
             transition={{ delay: 0.5, duration: 0.4, ease: EASE_OUT }}
             style={{
               color: theme.colors.text,
-              fontFamily: "'DM Sans', sans-serif",
+              fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
               fontSize: '1.2rem',
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
@@ -107,7 +107,7 @@ export default function TeamPreviewSlide({ slide, show }) {
           transition={{ delay: 0.4, duration: 0.4, ease: EASE_OUT }}
           style={{
             marginTop: '2rem',
-            fontFamily: "'DM Sans', sans-serif",
+            fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
             fontSize: '1rem',
             color: theme.colors.text,
             letterSpacing: '0.1em',

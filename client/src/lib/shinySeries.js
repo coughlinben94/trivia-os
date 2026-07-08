@@ -5,7 +5,7 @@
 //
 // Also normalizes two other things that have drifted apart in this codebase:
 // - media lives in data.mediaSlots[0] (host editor) OR the legacy flat
-//   data.mediaUrl/mediaType (Swing Round bulk-import via shinyStampers.js)
+//   data.mediaUrl/mediaType (legacy Swing Round bulk-import shape)
 // - visual-type shiny questions are flagged two different ways:
 //   data.shinyType === 'visual' (legacy/Swing Round) or
 //   data.shinyInputSchema.type === 'image' (current format library)
