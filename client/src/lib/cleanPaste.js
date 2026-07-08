@@ -76,19 +76,26 @@ export function makeQuestionPasteHandler(setQuestionValue, setAnswerValue) {
   return (e) => {
     e.preventDefault()
     const raw = e.clipboardData.getData('text/plain')
+    // Multiline clean only to DETECT the question/answer split (splitQuestionAnswer
+    // needs the line breaks). What lands in a field is always flattened to one
+    // line — a single archive question shouldn't carry Word's soft-wrap newlines
+    // or double spaces. `flatten` = the non-multiline clean (collapses \n and runs
+    // of whitespace).
+    const flatten = (s) => cleanPastedText(s, { multiline: false })
     const clean = cleanPastedText(raw, { multiline: true })
     const split = splitQuestionAnswer(clean)
     if (split) {
-      setQuestionValue(split.question)
-      setAnswerValue(split.answer)
+      setQuestionValue(flatten(split.question))
+      setAnswerValue(flatten(split.answer))
       return
     }
+    const flat = flatten(clean)
     const el = e.target
     const start = el.selectionStart ?? el.value.length
     const end = el.selectionEnd ?? el.value.length
-    const next = el.value.slice(0, start) + clean + el.value.slice(end)
+    const next = el.value.slice(0, start) + flat + el.value.slice(end)
     setQuestionValue(next)
-    const pos = start + clean.length
+    const pos = start + flat.length
     requestAnimationFrame(() => { try { el.setSelectionRange(pos, pos) } catch {} })
   }
 }
