@@ -122,7 +122,7 @@
 ## Known Issues
 
 - **`ThemeCanvas.jsx` / `ThemeForeground.jsx`** — wired but `scene: null` (background/foreground) on all 21 themes; a `cssClass` field now also exists on `scene`. Future use.
-- **`baynes-logo.svg`** — file doesn't exist anywhere in `client/public/`, not just `dist/`. Referenced in `BaynesWatermark.jsx` (every slide), `RoundIntroSlide.jsx`, and `Join.jsx` (top-of-form + NoShowScreen) — all render nothing/broken-img rather than the logo. Bigger surface area than previously noted; still acceptable-for-now per Ben, but worth knowing it's not just one screen.
+- **`baynes-logo.svg`** — shipped 2026-07-07 at repo-root `public/baynes-logo.svg` (the Baynes circle emblem; served from there because Vite's `publicDir` is repo-root `public/`, not `client/public/`). Referenced by `BaynesWatermark.jsx` (every slide, forced white via `brightness(0) invert(1)`), `RoundIntroSlide.jsx`, and `Join.jsx` (top-of-form + NoShowScreen) — all now render the mark. (Was missing for a long time; those five surfaces silently rendered nothing until this file landed.)
 - **`AmbientAudit.jsx`** / **`GradientAudit.jsx`** — dev tools, routed at `/ambient` and `/gradient` respectively (`App.jsx`). They ARE reachable in prod — the safety net is that both are `lazy()`-imported, so neither ships in the main bundle.
 
 ---

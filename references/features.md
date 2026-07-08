@@ -263,7 +263,7 @@ Managed via `HostPhotoLibrary.jsx`. Host can upload photos to a reusable library
 ### Audio Playback
 
 - Audio does NOT autoplay — host triggers from panel or Stream Deck (Space)
-- Animated waveform on display while playing (CSS bars, randomized heights, theme accent color)
+- Animated waveform on display while playing (CSS bars in fixed shiny gold via `shinyGold.js`, not theme accent); when paused it holds a static resting silhouette (also the reduced-motion fallback), not a looping idle
 - Host can replay, no limit
 - Volume controlled via system volume (Stream Deck Up/Down arrows)
 
