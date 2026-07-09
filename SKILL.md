@@ -1,13 +1,13 @@
 ---
 name: trivia-os
-description: Trivia OS — real-time trivia-night platform for Baynes Apple Valley (React + Vite + Supabase Realtime; 21 ambient themes with per-show font/color overrides, 15 slide types including automated Winner Reveal, full scoreboard system). Use this skill whenever working on Trivia OS or anything under ~/Projects/trivia-os — the host build/live control surface, the /display TV renderer, /join phones, slides, rounds, scoring, powerups, the ambient ParticleBackground themes, theme overrides, or display transitions/animations. Read this plus its references before any display/theme/animation work, even on casual asks.
+description: Trivia OS — real-time trivia-night platform for Baynes Apple Valley (React + Vite + Supabase Realtime; 21 ambient themes with per-show font/color overrides, 15 slide types including automated Winner Reveal, full scoreboard system). Use this skill whenever working on Trivia OS or anything under ~/Projects/baynes-trivia/trivia-os — the host build/live control surface, the /display TV renderer, /join phones, slides, rounds, scoring, powerups, the ambient ParticleBackground themes, theme overrides, or display transitions/animations. Read this plus its references before any display/theme/animation work, even on casual asks.
 ---
 
 # Trivia OS — Developer Skill
 
 > Real-time trivia night management platform. Replaces PowerPoint + Excel entirely. Four views: /host (build + control), /display (TV), /join (phones), /shows (dashboard + scoreboard history). Read this + all references before building anything display-facing.
 
-**Repo:** `~/Projects/trivia-os`  
+**Repo:** `~/Projects/baynes-trivia/trivia-os`  
 **Stack:** React 18, Vite, Tailwind, Framer Motion 10, Supabase JS, Fuse.js, nanoid  
 **Deploy:** `git push` → Vercel auto-deploys  
 **Live:** https://trivia-os.vercel.app  
@@ -16,6 +16,8 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 **Shipped 2026-06-30:** per-show theme font/color overrides + custom font upload (see Theme System), Winner Reveal slide + Final Break auto-close (see Slide Types), Go Live picker (jump to any slide accordion), answer-reveal overlay (Stream Deck A key), shiny-question sidebar/series improvements, full scoreboard system (admin modal, Quick Entry, TV overlay, phone drawer, ShowDetail history). See each section below for details.
 
 **Shipped 2026-07-05:** freeform overlay editor — text/image boxes any slide can carry (`data.overlays`), placed/dragged/resized/rotated in Build Mode, rendered on `/display` by a universal `OverlayLayer.jsx`. Replaces the old `data.elements`/`SlideElements.jsx` system. See "Overlay System" in `references/slides.md` for the full model and the coordinate law — read it before touching `SlideCanvasEditor.jsx`, `OverlayLayer.jsx`, or `SlideRenderer.jsx`.
+
+**Shipped 2026-07-06:** persistent design toolbar filling the strip above the slide canvas in `SlideCanvasEditor.jsx` (the "✏️ Design" toggle; layout mode auto-on). Four groups — History (undo/redo, `Cmd/Ctrl+Z`/`⇧`, snapshots on discrete ops + gesture-end), Insert (Text / Image / **Ben Photo** picker over `getHostPhotos()`), Text (font incl. Theme-font + the 4 presets, size, bold, italic, shadow, align, theme-palette swatches + free color picker — edits the selected overlay or, with nothing selected, sets next-box defaults), and Arrange (front/back/duplicate/delete). The old floating per-overlay toolbar was removed — the top strip is the single editing grammar. **The right rail stays strictly slide content** (hard constraint from Ben). Commits `6afc9c9..bdedf61`, branch `feat/slide-design-toolbar`. Snap guides + one-click centering (branch `feat/canvas-snap-guides`, commits `b7e1c23`/`1a5d06e`/`211b06c`): dragging an overlay snaps to canvas center (x/y 50%) and to other overlays' edges/centers at a ~1% threshold, per-axis independent, with a dashed guide line drawn through the engaged axis; `Alt/Option` held disables snapping. A snapped drag commits the *exact* value (centered stores `50.000`, not eyeball-close). Center H / Center V buttons live in the Arrange group.
 
 **Multiple sessions on this repo:** Ben sometimes runs more than one Claude Code session against this same working directory (not separate worktrees) at once. If you see unexpected commits, a branch pointer that moved, or files staged that you didn't touch — that's very likely the other session, not corruption. Check `git log`/`git status`/`git stash list` before assuming something broke, and don't force a branch switch or destructive git op without confirming with Ben first. Nothing has been lost doing this so far because every agent that hit ambiguous state stopped and asked rather than guessed — keep doing that.
 
@@ -44,6 +46,7 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 6. **Center safe-area:** keep the middle 60% width × 45% height of the display clear for question text. Ambient elements live in corners and edges.
 7. **Supabase project:** always confirm you're using `qwtbgusqfoypvehnungr` (Baynes Trivia), NOT `dreggwinegtirxxanntv` (Baynes Business Suite). Wrong project caused a `scoreboard_teams` 404 in production — verify `.env.local` before running any migrations.
 8. **Overlay layer is additive only** — the 15 slide renderers in `display/slides/` are never made editable and never gain a per-type overlay mount. `OverlayLayer.jsx` is mounted exactly once, generically, by `SlideRenderer.jsx`. Overlay position/size are always percent of canvas width/height (fontSize percent of height) — never pixels. See "Overlay System" in `references/slides.md`.
+9. **Snap guides are editor-only chrome.** Guide lines and snap logic live exclusively in `SlideCanvasEditor.jsx`. They never touch `OverlayLayer.jsx`, the 15 slide renderers, or the persisted `data.overlays` shape (zero new fields). Guides render only in the editor, never on `/display`. The guide color is a fixed high-contrast dashed magenta with a dark halo — deliberately NOT a theme token, because the canvas background varies across all 21 themes. The region-transform system (`data._regionTransforms`) is excluded from snapping — it has a separate, deferred pixel-law issue (RG-1) and must not gain snap behavior.
 
 ---
 
@@ -124,8 +127,11 @@ client/src/
       LiveMode.jsx        — control surface during show; S hotkey toggles scoreboard overlay;
                              "📊 Score" button in nav turns green when overlay is active
       AddSlideWizard.jsx  — guided slide creation (TYPE_CARDS icons must match
-                             RoundSidebar/SlideEditor's SLIDE_TYPE_META — this drifted
-                             once already, e.g. 'title' vs 'round-intro' emoji swap)
+                             RoundSidebar's SLIDE_TYPE_META — the only other type→icon
+                             map; SlideEditor has none, it branches on slide.type for
+                             forms only. This has drifted twice: an early 'title' vs
+                             'round-intro' swap, and 'title'/'state-of-union' both 🇺🇸
+                             until 2026-07-07 gave 'title' its own 📢.)
       AddRoundWizard.jsx  — 3-type round picker (Normal/Swing/PYL) before round creation
       SlideEditor.jsx     — per-slide editing panel; left side mounts SlideCanvasEditor,
                              right side is the type-specific content sidebar (no manual
@@ -137,7 +143,31 @@ client/src/
                              region editing (pre-existing, drags a slide's own built-in text
                              fields via `data._regionTransforms`) and overlay editing (this
                              feature, freeform text/image boxes via `data.overlays`, gated
-                             behind the "✏️ Edit layout" toggle). See references/slides.md.
+                             behind the "✏️ Edit layout" toggle). The persistent design toolbar
+                             (above the canvas, "✏️ Design" toggle) is the only design surface —
+                             undo/redo, insert (text/image/Ben Photo), font/size/color/bold/
+                             italic/shadow/align, and z-order/duplicate/delete all live here,
+                             acting on the selected overlay or setting next-box defaults. The
+                             right rail is content-only by hard rule — never add design controls
+                             to it. See references/slides.md.
+                             Font-target boundary: the toolbar's font controls style OVERLAY text
+                             boxes only. A slide's own built-in text reads `theme.fonts.display`
+                             and is changed in Theme (the per-show font override), NOT the toolbar
+                             — never wire the toolbar to `theme.fonts.display`, or per-show
+                             overrides break. The target chip makes the active target visible:
+                             amber "New text box" = styling applies to the next box you insert
+                             (next-box defaults); indigo "Selected text" = it applies to the
+                             selected overlay.
+                             ToolbarPopover (inline in this file — NOT a separate
+                             ToolbarPopover.jsx) is the reusable popover primitive for the
+                             toolbar: portal-based, right-edge-clamped, pointerdown-safe (OV-1)
+                             and capture-Escape (OV-3) by construction. Reuse it for any new
+                             toolbar popover rather than rolling a new one — a hand-rolled popover
+                             re-opens both landmines.
+                             Known limit (documented, not a regression): below ~1300px window
+                             width the Text group's trailing controls clip inside their track
+                             rather than scrolling; the ⋯ overflow / Arrange / History controls
+                             stay reachable.
       RoundSidebar.jsx    — round/slide navigation tree; shows shinyFormatName, groups series;
                              divider lines between every section (i > 0 segment-level +
                              slideIdx > 0 within general segments for multi-slide sections)
@@ -195,7 +225,7 @@ client/src/
     index.js              — THEMES array (21), getTheme(id), DEFAULT_THEME_ID
 ```
 
-**Every headline/display-font string in `client/src/components/display/slides/*.jsx` reads `theme.fonts.display`, not a hardcoded `'Boogaloo'`** (fixed 2026-06-30 — this is what makes per-show font overrides actually work on slide content). `Display.jsx`'s `PreShowScreen` title also reads it. If you add a new slide component with headline text, use `theme.fonts.display` from the start — don't hardcode a font family.
+**Every headline/display-font string in `client/src/components/display/slides/*.jsx` reads `theme.fonts.display`, not a hardcoded `'Boogaloo'`** (fixed 2026-06-30 — this is what makes per-show font overrides actually work on slide content). `Display.jsx`'s `PreShowScreen` title also reads it, and **body text reads `theme.fonts.body`** the same way. Finding 3 (2026-07-07) swept the last pure hardcodes — the PreShow team-count number (was `'Boogaloo'`) plus the `'DM Sans'` labels in `views/Display.jsx`, `ScoreboardOverlay`, and `TeamPreviewSlide` — all now route through the theme fonts, keeping the original family only as a fallback (`'${theme.fonts.body}', 'DM Sans', sans-serif`). If you add a new slide/display component with text, use `theme.fonts.display`/`theme.fonts.body` from the start — don't hardcode a font family, or per-show overrides silently no-op on it. (`/join` and host-panel chrome are intentionally out of this scope — they're not theme-driven display surfaces.)
 
 ---
 
@@ -355,7 +385,11 @@ actions.saveResults()               // aggregates team_scores → final_scores +
 
 **`updateSlide`'s debounced write is serialized, not just debounced — this matters for any new debounced-save path.** The 600ms `setTimeout` only coalesces calls that land inside the same window; calls spaced further apart (e.g. drag an overlay, pause, rotate it, pause, recolor it — completely normal host behavior) each schedule their own write. Early on this fired each as an independent, concurrent Supabase `UPDATE`, with no guarantee the one that *finishes* last is the one that was *scheduled* last — an earlier write resolving after a later one silently overwrote newer data with older, even though every request returned 204. Fixed (commit `84d0021`) by chaining each write onto a `slidesSaveChainRef` promise so they always complete in schedule order. If you add another debounced-save field to `useShow.js` beyond `slides`, give it the same chained-promise treatment, not a bare `clearTimeout`+`setTimeout`.
 
-**Realtime:** subscribes to `shows` table, `id=eq.${showId}` — all display/join surfaces auto-update.
+**Overlay editor has four interaction landmines — every one made the feature look *broken* or *absent*, and every one recurs the same way.** (1) **Focus-steal (OV-1):** any toolbar button or contenteditable-adjacent control MUST `preventDefault()` on `pointerdown`. Without it, clicking the button blurs an in-progress inline text edit → blur commits an empty box → the box self-deletes. A single missing `preventDefault` on the text-create path once made the *entire* overlay feature look unbuilt ("click does nothing"). (2) **Discrete-op state (OV-2):** create/delete/duplicate must use the functional `setState` form; the render-closure form writes a stale array and resurrects a just-deleted overlay (observed persisting to Supabase as an empty-text ghost). (3) **Escape scope (OV-3):** an inline edit's Escape/Enter handler must `stopPropagation()` — otherwise Escape bubbles out and unmounts the whole `SlideEditor` mid-edit. (4) **Verify against the stage, not the viewport:** an overlay stored at `x:37 y:42` reads as `38.9/43.2` measured against the browser viewport — that gap is pure 16:9 letterboxing, NOT drift. Measured against the stage element (`getBoundingClientRect` on the overlay node vs the stage node), stored and rendered percent match exactly. Any "overlay position is off on the TV" report must be re-measured stage-relative before it's believed.
+
+**Realtime:** subscribes to `shows` table, `id=eq.${showId}` — all display/join surfaces auto-update. **RT-1 landmine (P0):** Supabase Realtime omits unchanged TOASTed columns from UPDATE payloads — and every real show's `slides` jsonb is TOASTed (>~2KB). So a lightweight write (e.g. `answer_reveal` or `scoreboard_visible` only) delivers a row with NO `slides` key. `setShow(payload.new)` full-replace then nulls `currentSlide` → **blank TV** (and blank phones). `/display` and `/join` MUST merge the payload onto prior state, preserving any key absent from it — never full-replace. The host side (`useShow.js`) already merges; that's why it was immune. This is invisible to code-reading — it lives in Supabase's replication behavior, not the code's logic — so any new Realtime-synced field needs the same merge discipline.
+
+**Two independent show-shape implementations.** `Display.jsx` maintains its own show state (spreads raw Supabase rows directly) separately from `useShow.js`'s `normalizeShow()` (used by Host/Build/LiveMode). They drift independently: a new DB column must be threaded through BOTH by hand — `normalizeShow()` does not auto-map new columns. (Example: `audio_playing` survives on Display's raw-spread object but is absent from `normalizeShow()`'s output, so nothing Host-side can read it.)
 
 ---
 
@@ -412,10 +446,10 @@ questions { id serial PK, type NOT NULL CHECK ('regular'|'shiny'|'swing'|'pyl'|'
 shiny_formats { id text PK ('fmt_'+nanoid8), name, icon, description,
                 input_schema jsonb: { type, slots, sequential, seriesEnabled, hasPoints, labels, columnLabels } }
   -- the REAL shiny-format system — created/edited entirely in-app via "✨ Add Shiny"
-  -- (FormatLibrary.jsx + useShinyFormats.js). shinyFormatDictionary.js/shinyStampers.js
-  -- (SHINY_FORMATS/LAYOUTS/stampSlides) are DEAD CODE from an earlier design,
-  -- superseded 2026-06-30 — grep confirms zero call sites outside those two files.
-  -- Don't read or extend them for new formats.
+  -- (FormatLibrary.jsx + useShinyFormats.js). The old shinyFormatDictionary.js/
+  -- shinyStampers.js (SHINY_FORMATS/LAYOUTS/stampSlides) were dead code from an
+  -- earlier design (superseded 2026-06-30) and were DELETED 2026-07-07 — don't
+  -- recreate that pattern for new formats.
 
 scoreboard_teams { id uuid PK, show_id text, name text, scores jsonb DEFAULT '{}',
                    sort_order int, created_at timestamptz }
