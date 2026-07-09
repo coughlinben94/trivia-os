@@ -24,3 +24,6 @@ theme-screenshots-v2/
 
 .DS_Store
 *.zip
+*.bak
+.claude/settings.local.json
+.impeccable/
