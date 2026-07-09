@@ -18,7 +18,7 @@ Before doing anything in this project — including answering questions — read
 2. `~/.agents/skills/emil-design-eng/SKILL.md` — animation/polish philosophy
 3. `~/.agents/skills/baynes-design/SKILL.md` — Baynes brand identity
 
-> ⚠️ Broken references (found in 2026-07-09 audit): `emilkowal-animations` and `design-review` were required reading here but no longer exist in `~/.agents/skills` — confirm with Ben where they went. Interim: use the `gsap-*` skill suite + `emil-design-eng` for animation; `design-audit` for review.
+> Note (2026-07-09 audit): the old `emilkowal-animations` skill is gone — its animation content (decision framework, easing) lives inside `emil-design-eng`, which is already in the list above. The old `design-review` skill is also gone; use `design-audit` (or `impeccable` for host/product surfaces) for review passes.
 
 ## Before Building Any Feature
 - Run `systematic-debugging` if fixing a bug
