@@ -168,7 +168,7 @@ export default function CardPick({ candidates, winnerId, theme, onDone }) {
           ))}
         </div>
       </div>
-      <style>{`@keyframes popStage{0%{transform:scale(.9);opacity:0}100%{transform:scale(1);opacity:1}}@keyframes conf{0%{transform:translate(-50%,-50%) rotate(0);opacity:1}100%{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy) + 380px)) rotate(var(--r));opacity:0}}`}</style>
+      <style>{`@keyframes popStage{0%{transform:scale(.9);opacity:0}100%{transform:scale(1);opacity:1}}@keyframes conf{0%{transform:translate(-50%,-50%) rotate(0);opacity:1}100%{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy) + 380px)) rotate(var(--r));opacity:0}}@media (prefers-reduced-motion: reduce){*{animation-duration:1ms!important;animation-iteration-count:1!important;transition-duration:1ms!important}}`}</style>
     </div>
   );
 }

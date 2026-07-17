@@ -54,6 +54,7 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
   const CORNERS = [[CX - hx * 0.82, CY - hy * 0.78], [CX + hx * 0.82, CY - hy * 0.78], [CX - hx * 0.82, CY + hy * 0.78], [CX + hx * 0.82, CY + hy * 0.78]];
 
   useEffect(() => {
+    const pendingTimers = [];
     const find = (id) => F.current.find((f) => f.id === id);
     F.current = candidates.map((c, i) => ({
       ...c, color: PALETTE[i % PALETTE.length],
@@ -155,7 +156,7 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
 
       for (const f of F.current) {
         if (f.match !== cm) continue;
-        if (!f.alive) { f.vy += 0.5; f.x += f.vx; f.y += f.vy; f.rot += f.vrot; f.gray = Math.min(1, f.gray + 0.05); continue; }
+        if (!f.alive) { f.vy += 0.5; f.x += f.vx; f.y += f.vy; f.rot += f.vrot; continue; }
         if (now < f.appear) continue;
         if (P === "bell") { f.x = f.hx0; f.y = f.hy0 + Math.sin(now * 0.004 + f.bob) * 7; continue; }
 
@@ -235,7 +236,7 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
           fx.current.push({ id: Math.random(), x: v.x, y: v.y, born: now, flash: true, color: C.highlight });
           fx.current.push({ id: Math.random(), x: v.x, y: v.y - 78, born: now, txt: "⚔ SLICED!", big: true, color: C.highlight });
           for (let q = 0; q < 16; q++) fx.current.push({ id: Math.random(), x: v.x, y: v.y, born: now, shard: true, vx: rand(-14, 14), vy: rand(-16, 4), color: q % 2 ? v.color : C.highlight });
-          setTimeout(() => { if (b) { b.hasSword = false; b.state = "brawl"; } sword.current.active = false; }, 450);
+          pendingTimers.push(setTimeout(() => { if (b) { b.hasSword = false; b.state = "brawl"; } sword.current.active = false; }, 450));
         }
       }
 
@@ -262,7 +263,7 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
 
       // deaths (scripted)
       for (const f of F.current) if (f.match === cm && f.alive && (f.killed || (f.doomed && f.hitsTaken >= HITS_TO_KILL))) {
-        f.alive = false; f.hp = 0; f.vy = -6; f.vrot = rand(-14, 14); f.gray = 0; shake.current = Math.max(shake.current, 16);
+        f.alive = false; f.hp = 0; f.vy = -6; f.vrot = rand(-14, 14); f.gray = 1; shake.current = Math.max(shake.current, 16);
         if (!f.killed) fx.current.push({ id: Math.random(), x: f.x, y: f.y, born: now, ko: true, color: f.color });
       }
 
@@ -297,7 +298,7 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
       raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
-    return () => { cancelAnimationFrame(raf); };
+    return () => { cancelAnimationFrame(raf); pendingTimers.forEach(clearTimeout); };
   }, []);
 
   if (reducedMotion) {
@@ -382,7 +383,7 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
               const wt = f.win && celeb ? clamp((now - celeb) / 420, 0, 1) : 0;
               const bmp = f.win ? 1 + 0.4 * easeOutBack(wt) : armed ? 1.12 : 1;
               return (
-                <div key={f.id} style={{ position: "absolute", left: f.x, top: f.y, transform: `translate(-50%,-50%) rotate(${f.rot}deg) scale(${bmp * pScale})`, filter: `grayscale(${f.gray}) brightness(${f.hitFlash > 0 ? 1.85 : 1})`, opacity: entering ? 0 : f.alive ? 1 : 1 - f.gray * 0.7, transition: "opacity 300ms", willChange: armed || f.win ? "transform, opacity" : undefined, zIndex: f.win || armed ? 40 : 10 }}>
+                <div key={f.id} style={{ position: "absolute", left: f.x, top: f.y, transform: `translate(-50%,-50%) rotate(${f.rot}deg) scale(${bmp * pScale})`, filter: `grayscale(${f.gray}) brightness(${f.hitFlash > 0 ? 1.85 : 1})`, opacity: entering ? 0 : f.alive ? 1 : 1 - f.gray * 0.7, transition: "opacity 300ms, filter 160ms ease-out", willChange: armed || f.win ? "transform, opacity" : undefined, zIndex: f.win || armed ? 40 : 10 }}>
                   <div style={{ position: "relative", width: PLATE_W, padding: "9px 6px", borderRadius: 12, textAlign: "center", fontWeight: 900, fontSize: 18, lineHeight: 1.05, color: "#0b0d16", background: f.color, boxShadow: f.win || armed ? `0 0 60px ${C.highlight}, 0 0 0 4px ${C.highlight}` : "0 6px 14px #0009", border: "2px solid #00000033" }}>
                     {f.name}
                     {armed && <div style={{ position: "absolute", top: -30, right: -18, fontSize: 40, transform: "rotate(20deg)", filter: `drop-shadow(0 0 10px ${C.highlight})`, animation: "swordIn 260ms cubic-bezier(.34,1.56,.64,1) both" }}>⚔️</div>}

@@ -88,7 +88,9 @@ export default function ChestDuel({ candidates, winnerId, theme, onDone }) {
     const reduce = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const finish = () => {
       setView((v) => ({ ...v, mode: "win" }));
-      for (let k = 0; k < 46; k++) bang({ confetti: true, x: CX, y: CY - 40, vx: (Math.random() - .5) * 22, vy: -Math.random() * 16 - 4, color: [C.highlight, C.accent, APPLE, CREAM][k % 4] });
+      if (!reduce) {
+        for (let k = 0; k < 46; k++) bang({ confetti: true, x: CX, y: CY - 40, vx: (Math.random() - .5) * 22, vy: -Math.random() * 16 - 4, color: [C.highlight, C.accent, APPLE, CREAM][k % 4] });
+      }
       push(S(1900), () => { if (!doneRef.current) { doneRef.current = true; onDone && onDone(); } });
     };
     if (reduce || candidates.length < 2) { finish(); return () => T.current.forEach(clearTimeout); }
@@ -170,6 +172,8 @@ export default function ChestDuel({ candidates, winnerId, theme, onDone }) {
   }, []);
 
   useEffect(() => {
+    const reduce = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) return;
     let raf;
     const tick = () => {
       const now = performance.now();

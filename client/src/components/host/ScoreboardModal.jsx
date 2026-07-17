@@ -5,6 +5,7 @@ import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
 import BoxingRing from '../display/slides/BoxingRing.jsx'
 import ChestDuel from '../display/slides/ChestDuel.jsx'
 import CardPick from '../display/slides/CardPick.jsx'
+import BattleshipDuel from '../display/slides/BattleshipDuel.jsx'
 
 // ─── Quick Entry ──────────────────────────────────────────────────────────────
 function QuickEntry({ teams, cols, onSave, onClose }) {
@@ -391,6 +392,11 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
               disabled={teamsWithStats.length < 2}
               className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
             >📦 Chest</button>
+            <button
+              onClick={() => openAnim('battleship')}
+              disabled={teamsWithStats.length < 2}
+              className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
+            >🚢 Battleship</button>
             {confirmClear ? (
               <div className="flex items-center gap-1.5 ml-1">
                 <span className="text-xs text-red-600 font-semibold">Remove all teams?</span>
@@ -481,6 +487,14 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
             )}
             {activeAnim === 'cards' && (
               <CardPick
+                candidates={teamsWithStats}
+                winnerId={animWinnerId}
+                theme={theme}
+                onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}
+              />
+            )}
+            {activeAnim === 'battleship' && (
+              <BattleshipDuel
                 candidates={teamsWithStats}
                 winnerId={animWinnerId}
                 theme={theme}
