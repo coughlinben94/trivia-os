@@ -550,34 +550,84 @@ export default function Display() {
     load()
   }, [showId])
 
+  // TEAM-2 fix: postgres_changes over a live socket is at-most-once with no
+  // replay on rejoin — a channel that goes CHANNEL_ERROR/TIMED_OUT/CLOSED
+  // (e.g. a brief network blip) previously stayed dead silently: .subscribe()
+  // had no status callback, so every subsequent DB write vanished into a dead
+  // channel until someone hard-reloaded the TV. Reproduced live on Team
+  // Intro's step-advance — the DB write was always correct, the socket just
+  // wasn't delivering it anymore. Fix: watch subscribe() status, tear down
+  // and rejoin on any non-SUBSCRIBED terminal status, and on a RE-subscribe
+  // (i.e. we previously dropped) refetch the row once to catch up on
+  // whatever was missed during the dead window — self-heals in ~1.5s
+  // instead of requiring a manual reload.
   useEffect(() => {
     if (!show?.id) return
-    const channel = supabase
-      .channel(`display:${show.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'shows', filter: `id=eq.${show.id}` },
-        (payload) => {
-          const next = payload.new
-          const nextIndex = next.current_slide_index ?? 0
-          setDirection(nextIndex >= prevIndexRef.current ? 1 : -1)
-          prevIndexRef.current = nextIndex
-          // MERGE over the previous row — never replace it. Postgres logical
-          // replication omits unchanged TOASTed columns (any jsonb over ~2KB,
-          // i.e. every real show's `slides`) from UPDATE payloads, so a
-          // flag-only write (answer_reveal, scoreboard_visible) arrives here
-          // WITHOUT `slides`. A full replace blanked the TV on every A/S/R
-          // toggle and on the display's own jukebox-return jump.
-          setShow(prev => {
-            const merged = prev && prev.id === next.id ? { ...prev, ...next } : next
-            return { ...merged, theme: merged.theme_id ?? merged.theme, themeOverrides: merged.theme_overrides ?? merged.themeOverrides }
-          })
-          // Any successful show update means navigation is flowing again.
-          setNavDenied(false)
-        }
-      )
-      .subscribe()
-    return () => supabase.removeChannel(channel)
+    let channel
+    let retryTimer
+    let everSubscribed = false
+
+    function handlePayload(payload) {
+      const next = payload.new
+      const nextIndex = next.current_slide_index ?? 0
+      setDirection(nextIndex >= prevIndexRef.current ? 1 : -1)
+      prevIndexRef.current = nextIndex
+      // MERGE over the previous row — never replace it. Postgres logical
+      // replication omits unchanged TOASTed columns (any jsonb over ~2KB,
+      // i.e. every real show's `slides`) from UPDATE payloads, so a
+      // flag-only write (answer_reveal, scoreboard_visible) arrives here
+      // WITHOUT `slides`. A full replace blanked the TV on every A/S/R
+      // toggle and on the display's own jukebox-return jump.
+      setShow(prev => {
+        const merged = prev && prev.id === next.id ? { ...prev, ...next } : next
+        return { ...merged, theme: merged.theme_id ?? merged.theme, themeOverrides: merged.theme_overrides ?? merged.themeOverrides }
+      })
+      // Any successful show update means navigation is flowing again.
+      setNavDenied(false)
+    }
+
+    function refetchRow(showId) {
+      supabase.from('shows').select('*').eq('id', showId).single().then(({ data }) => {
+        if (!data) return
+        prevIndexRef.current = data.current_slide_index ?? 0
+        setShow(prev => (prev && prev.id === data.id
+          ? { ...prev, ...data, theme: data.theme_id ?? data.theme, themeOverrides: data.theme_overrides ?? data.themeOverrides }
+          : prev))
+      })
+    }
+
+    function subscribe(showId) {
+      channel = supabase
+        .channel(`display:${showId}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'shows', filter: `id=eq.${showId}` },
+          handlePayload
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            clearTimeout(retryTimer)
+            if (everSubscribed) {
+              console.warn('[Display] realtime channel rejoined — refetching to catch up on any missed updates')
+              refetchRow(showId)
+            }
+            everSubscribed = true
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            console.warn('[Display] realtime channel dropped:', status, '— rejoining in 1.5s')
+            clearTimeout(retryTimer)
+            retryTimer = setTimeout(() => {
+              supabase.removeChannel(channel)
+              subscribe(showId)
+            }, 1500)
+          }
+        })
+    }
+
+    subscribe(show.id)
+    return () => {
+      clearTimeout(retryTimer)
+      if (channel) supabase.removeChannel(channel)
+    }
   }, [show?.id])
 
   // Watch for any show going live — if it's not the one we're showing, switch to it
