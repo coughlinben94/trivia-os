@@ -635,13 +635,26 @@ export default function SlideCanvasEditor({
   }, [slide.id])
 
   // ── overlay box screen geometry (matches OverlayLayer exactly) ─────────────
+  // EDITOR-1 fix: position via `transform: translate()` instead of `left`/`top`.
+  // `startOverlayDrag`'s onMove calls patchOverlay(ov.id, {x,y}) on every
+  // pointermove — with left/top that's a layout-triggering property recomputed
+  // every frame of a drag; translate is GPU-composited, matching this app's
+  // usual GPU-only discipline (Critical Rule 2). CSS transform functions
+  // compose right-to-left, so `translate(x,y) rotate(deg)` still rotates the
+  // box around its own center FIRST (in its native 0,0-anchored box), then
+  // translates the already-rotated result into position — visually identical
+  // to the old left/top + transform:rotate(). Pure rendering-mechanism swap:
+  // ov.x/ov.y stay percent-of-canvas in data, unchanged (Critical Rule 8),
+  // and getBoundingClientRect()-based snap/measurement code (OV-4) sees the
+  // same resolved rect either way, since the browser resolves transforms into
+  // the rendered box before returning it.
   function overlayBoxStyle(ov) {
     return {
       position: 'absolute',
-      left: `${(ov.x ?? 0) / 100 * scaledW}px`,
-      top: `${(ov.y ?? 0) / 100 * scaledH}px`,
+      left: 0,
+      top: 0,
       width: `${(ov.w ?? 20) / 100 * scaledW}px`,
-      transform: `rotate(${ov.rotation ?? 0}deg)`,
+      transform: `translate(${(ov.x ?? 0) / 100 * scaledW}px, ${(ov.y ?? 0) / 100 * scaledH}px) rotate(${ov.rotation ?? 0}deg)`,
       transformOrigin: 'center',
       // Sit above the region handles (z-index 48) so an overlay dropped over a
       // slide's own text region is still grabbable in edit mode; relative ov.z
