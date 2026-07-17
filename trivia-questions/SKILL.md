@@ -41,6 +41,7 @@ When hunting facts (web search, lists, research), run every candidate through th
 4. **One unambiguous answer, gradeable in seconds by ear.** If two defensible answers exist, either rewrite until only one survives or explicitly allow it: "name either," "name one of the two."
 5. **Interesting even if you miss it.** The reveal should make the room go "ohhh" — the fact IS the entertainment. A question nobody enjoys hearing the answer to is dead weight.
 6. **VERIFY EVERY FACT via web search before proposing it.** A wrong answer in front of a live crowd is the content equivalent of a P0 bug. Confidently-remembered facts are exactly the ones that turn out wrong. Verify the setup fact AND the crossover clue independently.
+7. **Never trust a listicle.** Viral fact-lists and "50 amazing facts" content run ~5–10% quietly wrong — a July 2026 corpus review caught two that nearly entered the pipeline: "the Segway's inventor died on a Segway" (false — Dean Kamen is alive; it was Jimi Heselden, who *bought* the company, in 2010) and "the Abbey Road crossing is a UNESCO World Heritage site" (false — it's Grade II listed under English Heritage, 2010, not UNESCO). Verify against primary/institutional sources (Wikipedia + one independent), never against another listicle. If two sources disagree, the fact is dead or the dispute becomes the question.
 
 ## Difficulty Is Written, Not Tagged
 
@@ -91,7 +92,21 @@ The notes page also contains **format seeds** ("Kidz Bop lyrics — give lyrics 
 
 ## Question Bank Integration
 
-The canonical store is the `questions` table (Supabase project `qwtbgusqfoypvehnungr`): `text, answer, category, round_type (normal|swing|pyl), is_shiny, shiny_type, questions_data, used_on date[]`. When generating content: note which category/round_type each idea fits; favor topics underrepresented in the bank; check `used_on` and question text for repeats before proposing something Ben has already run (he reuses PYL boards deliberately, but never standalone questions verbatim within recent memory). When analyzing the bank: category balance, staleness ("current record holder" questions age), reuse patterns, and format-mix trends over time.
+The canonical store is the `questions` table (Supabase project `qwtbgusqfoypvehnungr`). **Real columns, verified 2026-07-17 against 1,901 live rows** (bulk-imported 2026-07-06 through 2026-07-15 from the legacy archive): `id, type (regular|shiny|swing|pyl|list), text, answer, is_bonus, is_shiny, shiny_type (image|text|audio|list|grid|video), shiny_format_name, questions_data (jsonb — list-shaped items for swing/pyl/multi-part shiny), created_at`.
+
+The schema also defines `category`, `round_type (normal|swing|pyl)`, `used_on date[]`, `show_title`, `show_date`, `round_title`, `subtitle` — **these columns exist but are effectively empty**: `category` is null on all 1,901 rows, `round_type` is null on 92% of them, `used_on` is empty on every single row. The bulk import never backfilled them. **Do not rely on these for underrepresented-topic detection or repeat-avoidance** — that guidance only becomes usable once Ben backfills the data; treat it as aspirational until then, and flag (don't silently fix) any data-quality issue you notice, since these are production rows.
+
+What actually works today:
+- **Slot-fitting:** use `type` + `is_bonus` + `is_shiny` to know what a candidate question is for.
+- **Named-format frequency:** `shiny_format_name` is well-populated (231/233 shiny rows) — `select shiny_format_name, count(*) from questions group by 1 order by 2 desc` tells you what's overused vs. fresh before proposing a shiny slot. See `references/format-library.md` for the standing frequency table (as of 2026-07-17: "We're not so different, you and I…" alone is ~24% of all shiny questions ever run).
+- **Repeat-avoidance:** since `used_on` can't help, text/answer-match against the bank instead — `where answer ilike '%<candidate answer>%'` — before proposing a standalone question.
+- **Bank analysis:** format-mix trends via `shiny_format_name`, staleness ("current record holder" questions age) via re-reading `text` for dated superlatives, reuse patterns via `answer` matching. Category-balance analysis isn't possible until that column is backfilled.
+
+**High-recurrence answers (from a July 2026 two-year docx-archive review, 87 shows) — check before reusing:** Ludicrous, Apothecary, Headless Horseman, Kenny Loggins, Regina George, Jack Nicholson. Most repeats trace to legitimate private/corporate-gig reuse (Anderson Eye, Freeland, Dow — verbatim reuse between weekly shows and private gigs is standard and fine), but a few land inside the weekly rotation itself — that's the one to avoid. Verbatim reuse *within* the weekly Baynes rotation is the only hard no.
+
+**Shiny format frequency, measured across the full docx archive (count = shows featuring the format, not individual rows — a different unit than the DB-based table in `format-library.md`, but the same signal):** Weekly staple — We're not so different (61 shows, near-every week). Regular rotation — One Hit Un-Wonder (29), Pixelate (29), Tri Bond (20), Singonyms (18), Name! That! X! (17), Map Maker (15). Occasional — Carmen San Diego (12), Title Drops (12), Song by the Scene (9), Put Me In Coach (7), Kevin James Zookeeper (7), Did You Tape the Instructions (6). Don't propose two staples in one round; prefer resting a format that ran the previous week.
+
+**PYL boards already run in 2026 (don't re-propose soon):** Operation ailments with no bones in the name · Ben Stiller (filmography) · Boat music · Weapon of choice · Most photographed buildings (NYT × NatGeo) · BNAS · Deadliest Warrior (VS edition) · Birds · Movie Boosts (product placements) · Did You Tape the Instructions (board-game parts) · Sitcom workplaces · State nicknames.
 
 ## Output Templates
 
