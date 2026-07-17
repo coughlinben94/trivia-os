@@ -6,16 +6,15 @@ import { EASE_OUT, EASE_EXIT } from "../../../lib/easings.js";
  * Contract: { candidates, winnerId, theme, onDone }
  * Stage 1344x756. Winner predetermined upstream (fair, not randomized on screen).
  *
- * Reuses the same wave/funnel scaling as BattleshipDuel — up to ~30 teams,
- * max 8 moles per screen:
- *   N <= 4   -> straight to the finale round with all N moles.
- *   N 5-8    -> one round narrows the fleet down to 4.
- *   N 9-30   -> exactly 4 chunks (each <=8), each round leaves 1 survivor,
- *               funneling to a 3-4 mole finale.
- * A cartoon carnival-worker character (photo headshot from /ben) stands
- * beside an arcade cabinet and swings a drawn mallet — wind-up, strike,
- * recoil — at every losing mole in sequence. The winner's mole never gets
- * whacked; it pops up fully at the end for the victory beat.
+ * Real arcade rules, not a fixed bracket: up to 10 holes stay on the cabinet
+ * the whole time, and every "round" a random handful of still-alive teams
+ * (1-3 decoys + this round's actual target) pop up in random holes together.
+ * The mallet only ever whacks the target; decoys duck back down safe. A
+ * team can pop up early, often, and repeatedly and still be the winner —
+ * there is no "safe by round 2" logic, it's just random until it's the last
+ * name standing. Scales to ~30 teams by cycling the same hole bank; only
+ * the winner's mole never gets whacked, and it gets the final solo pop for
+ * the victory beat.
  */
 
 const AREA_W = 1344, AREA_H = 756, CX = AREA_W / 2, CY = AREA_H / 2;
@@ -23,6 +22,7 @@ const HOLE_Y = 500;
 const CREAM = "#f5f0e8", APPLE = "#e02020";
 const PALETTE = ["#ff5d5d", "#5db0ff", "#7ee081", "#c98bff", "#ff9f43", "#4de3d0", "#ff6fb0", "#b0e04d", "#ffd24d", "#4d9fff", "#ff7ae0", "#7affb0"];
 const HEAD_IMG = "/ben/IMG_1216-removebg-preview.png";
+const MAX_HOLES = 10;
 
 const cb = (arr) => `cubic-bezier(${arr[0]},${arr[1]},${arr[2]},${arr[3]})`;
 const EASE_OUT_CSS = cb(EASE_OUT);
@@ -42,48 +42,15 @@ const ARM_TRANS = {
 const ARM_LEAN = { [WINDUP]: -7, [STRIKE]: 9, [RECOIL]: 5, [REST]: 0 };
 
 const rand = (a, b) => a + Math.random() * (b - a);
+const randInt = (a, b) => Math.floor(rand(a, b + 1));
 const pick = (arr) => arr[(Math.random() * arr.length) | 0];
 const shuffle = (a) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [b[i], b[j]] = [b[j], b[i]]; } return b; };
 
-function splitEven(arr, k) {
-  const out = Array.from({ length: k }, () => []);
-  arr.forEach((item, i) => out[i % k].push(item));
-  return out.filter((c) => c.length);
-}
-
-function buildPlan(candidates, winnerId) {
-  const N = candidates.length;
-  const pool = shuffle(candidates);
-  const waves = [];
-  let finalPool;
-
-  if (N > 8) {
-    const chunks = splitEven(pool, 4);
-    const survivors = [];
-    chunks.forEach((chunk) => {
-      const keepId = chunk.some((c) => c.id === winnerId) ? winnerId : pick(chunk).id;
-      waves.push({ ships: chunk, keepIds: [keepId] });
-      survivors.push(chunk.find((c) => c.id === keepId));
-    });
-    finalPool = survivors;
-  } else if (N > 4) {
-    const rest = shuffle(pool.filter((c) => c.id !== winnerId));
-    const keep = [pool.find((c) => c.id === winnerId), ...rest.slice(0, 3)];
-    waves.push({ ships: pool, keepIds: keep.map((c) => c.id) });
-    finalPool = keep;
-  } else {
-    finalPool = pool;
-  }
-
-  waves.push({ ships: finalPool, keepIds: [winnerId], finale: true });
-  return waves;
-}
-
-function layoutRow(list) {
-  const n = list.length;
+function holeLayout(count) {
+  const n = Math.max(count, 1);
   const spacing = Math.min(190, (AREA_W - 340) / Math.max(1, n - 1 || 1));
   const startX = CX - (spacing * (n - 1)) / 2;
-  return list.map((s, i) => ({ ...s, x: n === 1 ? CX : startX + spacing * i }));
+  return Array.from({ length: n }, (_, i) => (n === 1 ? CX : startX + spacing * i));
 }
 
 export default function WhackAMole({ candidates, winnerId, theme, onDone }) {
@@ -99,6 +66,8 @@ export default function WhackAMole({ candidates, winnerId, theme, onDone }) {
   }, []);
 
   const colorOf = useRef(Object.fromEntries(candidates.map((c, i) => [c.id, PALETTE[i % PALETTE.length]]))).current;
+  const HOLE_COUNT = Math.min(MAX_HOLES, candidates.length);
+  const holeX = holeLayout(HOLE_COUNT);
 
   const [moles, setMoles] = useState([]);
   const [charX, setCharX] = useState(-160);
@@ -119,9 +88,6 @@ export default function WhackAMole({ candidates, winnerId, theme, onDone }) {
       return () => clearTimeout(t);
     }
 
-    const plan = buildPlan(candidates, winnerId);
-    const totalWaves = plan.length - 1;
-
     const spawnStars = (x, y) => {
       const id = nextId();
       setFx((f) => [...f, { id, kind: "stars", x, y }]);
@@ -135,7 +101,6 @@ export default function WhackAMole({ candidates, winnerId, theme, onDone }) {
 
     const popMole = (id, up) => setMoles((list) => list.map((m) => (m.id === id ? { ...m, up } : m)));
     const whackMole = (id) => setMoles((list) => list.map((m) => (m.id === id ? { ...m, whacked: true } : m)));
-    const settleMole = (id) => setMoles((list) => list.map((m) => (m.id === id ? { ...m, whacked: false, up: false, out: true } : m)));
 
     const whack = (target, cb2) => {
       setCharX(target.x + 18); // stand beside the hole: mallet head lands on the mole at STRIKE
@@ -149,7 +114,7 @@ export default function WhackAMole({ candidates, winnerId, theme, onDone }) {
             spawnText(target.x, target.y - 120, pick(["BONK!", "WHACK!", "GOTCHA!", "SO LONG!"]));
             setArmAngle(RECOIL);
             push(120, () => {
-              settleMole(target.id);
+              popMole(target.id, false);
               setArmAngle(REST);
               push(240, cb2);
             });
@@ -158,50 +123,60 @@ export default function WhackAMole({ candidates, winnerId, theme, onDone }) {
       });
     };
 
-    const runWave = (wave, waveIndex, waveDone) => {
-      const laid = layoutRow(wave.ships.map((c) => ({ id: c.id, name: c.name })));
-      setMoles(laid.map((m) => ({ ...m, y: HOLE_Y, up: false, whacked: false })));
-      setVictory(null);
+    let alive = [...candidates];
+    const eliminationOrder = shuffle(candidates.filter((c) => c.id !== winnerId));
 
-      const label = wave.finale ? "FINAL ROUND" : `ROUND ${waveIndex + 1} OF ${totalWaves}`;
-      setBanner(label);
-      push(1300, () => setBanner(null));
+    const popRound = (targetId, cb2) => {
+      const target = alive.find((c) => c.id === targetId);
+      const decoyPool = alive.filter((c) => c.id !== targetId);
+      const decoyCount = Math.min(randInt(1, 3), decoyPool.length);
+      const decoys = shuffle(decoyPool).slice(0, decoyCount);
+      const participants = shuffle([target, ...decoys]);
+      const slots = shuffle([...Array(HOLE_COUNT).keys()]).slice(0, participants.length);
 
-      push(500, () => laid.forEach((m, i) => push(i * 60, () => popMole(m.id, true))));
+      const roundMoles = participants.map((c, i) => ({
+        id: c.id, name: c.name, x: holeX[slots[i]], y: HOLE_Y, up: false, whacked: false,
+      }));
+      setMoles(roundMoles);
+      setBanner(`${alive.length} team${alive.length === 1 ? "" : "s"} left`);
+      push(900, () => setBanner(null));
 
-      const targets = shuffle(laid.filter((m) => !wave.keepIds.includes(m.id)));
+      roundMoles.forEach((m, i) => push(i * 100, () => popMole(m.id, true)));
 
-      const runIndex = (i) => {
-        if (i >= targets.length) { waveDone(); return; }
-        const t = targets[i];
-        whack({ id: t.id, x: t.x, y: HOLE_Y }, () => runIndex(i + 1));
-      };
-      push(1200, () => runIndex(0));
-    };
-
-    const runVictory = (winnerMole) => {
-      popMole(winnerMole.id, true);
-      setVictory({ id: winnerMole.id, name: winnerMole.name, x: winnerMole.x, y: HOLE_Y });
-      const id = nextId();
-      setFx((f) => [...f, { id, kind: "confetti", x: winnerMole.x, y: HOLE_Y }]);
-      setCharX(-160);
-      push(1600, () => { if (!doneRef.current) { doneRef.current = true; onDone && onDone(); } });
-    };
-
-    const runPlan = (idx) => {
-      const wave = plan[idx];
-      if (wave.finale) {
-        runWave(wave, idx, () => {
-          const winnerCandidate = candidates.find((c) => c.id === winnerId);
-          const laidWinner = layoutRow([{ id: winnerCandidate.id, name: winnerCandidate.name }]);
-          push(400, () => runVictory({ ...winnerCandidate, x: laidWinner[0].x }));
+      push(roundMoles.length * 100 + 650, () => {
+        const targetMole = roundMoles.find((m) => m.id === targetId);
+        whack(targetMole, () => {
+          roundMoles.filter((m) => m.id !== targetId).forEach((m) => popMole(m.id, false));
+          alive = alive.filter((c) => c.id !== targetId);
+          push(420, cb2);
         });
-      } else {
-        runWave(wave, idx, () => push(700, () => runPlan(idx + 1)));
-      }
+      });
     };
 
-    push(500, () => runPlan(0));
+    const runVictory = (winnerCandidate) => {
+      const winnerMole = { id: winnerCandidate.id, name: winnerCandidate.name, x: CX, y: HOLE_Y, up: false, whacked: false };
+      setBanner("FINAL MOLE STANDING!");
+      setMoles([winnerMole]);
+      push(500, () => {
+        popMole(winnerMole.id, true);
+        setVictory({ id: winnerMole.id, name: winnerMole.name, x: CX, y: HOLE_Y });
+        const id = nextId();
+        setFx((f) => [...f, { id, kind: "confetti", x: CX, y: HOLE_Y }]);
+        setBanner(null);
+        push(1600, () => { if (!doneRef.current) { doneRef.current = true; onDone && onDone(); } });
+      });
+    };
+
+    const runIndex = (i) => {
+      if (i >= eliminationOrder.length) {
+        const winnerCandidate = candidates.find((c) => c.id === winnerId);
+        push(400, () => runVictory(winnerCandidate));
+        return;
+      }
+      popRound(eliminationOrder[i].id, () => runIndex(i + 1));
+    };
+
+    push(700, () => runIndex(0));
     return () => T.current.forEach(clearTimeout);
   }, []);
 
@@ -216,14 +191,10 @@ export default function WhackAMole({ candidates, winnerId, theme, onDone }) {
     );
   }
 
-  const n = Math.max(moles.length, 1);
-  const spacing = Math.min(190, (AREA_W - 340) / Math.max(1, n - 1 || 1));
-  const cabW = Math.max(spacing * (n - 1) + 260, 700);
+  const cabW = Math.max((holeX[holeX.length - 1] ?? CX) - (holeX[0] ?? CX) + 260, 700);
   const cabX = CX - cabW / 2;
   const cabTop = HOLE_Y - 60;
   const bulbCount = Math.floor(cabW / 26);
-  // Winner fx must track the winner mole's actual laid-out x (victory.x is the single-row center).
-  const vMoleX = victory ? (moles.find((m) => m.id === victory.id)?.x ?? victory.x) : 0;
 
   return (
     <div ref={wrapRef} style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }}>
@@ -273,11 +244,12 @@ export default function WhackAMole({ candidates, winnerId, theme, onDone }) {
           <div style={{ position: "absolute", left: cabX - 14, top: cabTop - 92, width: 20, height: 756 - (cabTop - 92) - 92, borderRadius: 8, background: "linear-gradient(90deg,#4a2c12,#2a1808)", boxShadow: "0 10px 20px #0008", zIndex: 5 }} />
           <div style={{ position: "absolute", left: cabX + cabW - 6, top: cabTop - 92, width: 20, height: 756 - (cabTop - 92) - 92, borderRadius: 8, background: "linear-gradient(90deg,#4a2c12,#2a1808)", boxShadow: "0 10px 20px #0008", zIndex: 5 }} />
 
-          {/* holes */}
-          {moles.map((m) => (
-            <div key={"hole" + m.id} style={{ position: "absolute", left: m.x - 54, top: HOLE_Y - 12, width: 108, height: 34, borderRadius: "50%", background: "radial-gradient(ellipse at 50% 40%, #050a04, #241408)", boxShadow: "inset 0 7px 12px #000d, 0 2px 0 #ffffff14", zIndex: 6 }} />
+          {/* fixed hole bank — reused every round, not owned by any one team */}
+          {holeX.map((x, i) => (
+            <div key={"hole" + i} style={{ position: "absolute", left: x - 54, top: HOLE_Y - 12, width: 108, height: 34, borderRadius: "50%", background: "radial-gradient(ellipse at 50% 40%, #050a04, #241408)", boxShadow: "inset 0 7px 12px #000d, 0 2px 0 #ffffff14", zIndex: 6 }} />
           ))}
-          {/* moles (clipped to their hole so they truly emerge from / vanish into it) */}
+
+          {/* whichever teams happen to be popped up this round */}
           {moles.map((m) => (
             <div key={m.id} style={{ position: "absolute", left: m.x - 60, top: HOLE_Y - 150, width: 120, height: 156, overflow: "hidden", zIndex: 5 }}>
               <div style={{
@@ -309,12 +281,9 @@ export default function WhackAMole({ candidates, winnerId, theme, onDone }) {
                 <div style={{ position: "absolute", left: 37, top: 61, width: 8, height: 10, borderRadius: "0 0 3px 3px", background: "#fff", border: "1px solid #00000022" }} />
                 <div style={{ position: "absolute", left: 47, top: 61, width: 8, height: 10, borderRadius: "0 0 3px 3px", background: "#fff", border: "1px solid #00000022" }} />
               </div>
-            </div>
-          ))}
-          {/* nameplates (fixed to the cabinet, not the mole) */}
-          {moles.map((m) => (
-            <div key={"plate" + m.id} style={{ position: "absolute", left: m.x - 72, top: HOLE_Y + 34, width: 144, textAlign: "center", zIndex: 7, opacity: m.out ? 0.35 : 1, transition: "opacity 300ms ease-out" }}>
-              <div style={{ display: "inline-block", maxWidth: 140, padding: "3px 10px", borderRadius: 6, background: "#140c04cc", border: "2px solid #ffe89a66", fontSize: 13, fontWeight: 800, color: CREAM, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.name}</div>
+              <div style={{ position: "absolute", left: -14, top: 128, width: 148, textAlign: "center", opacity: m.up ? 1 : 0, transition: "opacity 200ms ease" }}>
+                <div style={{ display: "inline-block", maxWidth: 144, padding: "3px 10px", borderRadius: 6, background: "#140c04cc", border: "2px solid #ffe89a66", fontSize: 13, fontWeight: 800, color: CREAM, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.name}</div>
+              </div>
             </div>
           ))}
 
@@ -348,7 +317,7 @@ export default function WhackAMole({ candidates, winnerId, theme, onDone }) {
               <span key={o.id + "_" + k} style={{ position: "absolute", left: o.x, top: o.y, fontSize: 16, zIndex: 46, animation: "star 480ms ease-out forwards", ["--sx"]: `${rand(-70, 70)}px`, ["--sy"]: `${rand(-70, 10)}px` }}>✦</span>
             ));
             if (o.kind === "confetti") return Array.from({ length: 64 }).map((_, k) => (
-              <div key={o.id + "_" + k} style={{ position: "absolute", left: victory ? vMoleX : o.x, top: o.y - 90, width: 7 + (k % 3) * 3, height: 12 + (k % 4) * 4, borderRadius: 2, background: [C.highlight, C.accent, APPLE, CREAM][k % 4], animation: `conf 1800ms ease-out ${(k % 9) * 30}ms forwards`, ["--dx"]: `${rand(-380, 380)}px`, ["--dy"]: `${rand(-320, 40)}px`, ["--r"]: `${rand(-360, 360)}deg`, zIndex: 60 }} />
+              <div key={o.id + "_" + k} style={{ position: "absolute", left: o.x, top: o.y - 90, width: 7 + (k % 3) * 3, height: 12 + (k % 4) * 4, borderRadius: 2, background: [C.highlight, C.accent, APPLE, CREAM][k % 4], animation: `conf 1800ms ease-out ${(k % 9) * 30}ms forwards`, ["--dx"]: `${rand(-380, 380)}px`, ["--dy"]: `${rand(-320, 40)}px`, ["--r"]: `${rand(-360, 360)}deg`, zIndex: 60 }} />
             ));
             return null;
           })}
@@ -356,8 +325,8 @@ export default function WhackAMole({ candidates, winnerId, theme, onDone }) {
           {/* victory */}
           {victory && (
             <>
-              <div style={{ position: "absolute", left: vMoleX - 110, top: HOLE_Y - 200, width: 220, height: 220, borderRadius: "50%", background: `radial-gradient(circle, ${C.highlight}55 0%, transparent 65%)`, zIndex: 4, animation: "winGlow 1200ms ease-in-out infinite" }} />
-              <div style={{ position: "absolute", left: vMoleX - 24, top: HOLE_Y - 148, zIndex: 20, animation: "popIn 320ms " + EASE_BOUNCE_CSS }}>
+              <div style={{ position: "absolute", left: victory.x - 110, top: HOLE_Y - 200, width: 220, height: 220, borderRadius: "50%", background: `radial-gradient(circle, ${C.highlight}55 0%, transparent 65%)`, zIndex: 4, animation: "winGlow 1200ms ease-in-out infinite" }} />
+              <div style={{ position: "absolute", left: victory.x - 24, top: HOLE_Y - 148, zIndex: 20, animation: "popIn 320ms " + EASE_BOUNCE_CSS }}>
                 <div style={{ fontSize: 42, animation: "bob 1700ms ease-in-out infinite" }}>👑</div>
               </div>
               <div style={{ position: "absolute", left: victory.x, top: HOLE_Y + 122, transform: "translate(-50%,0) scale(.9)", opacity: 0, padding: "14px 42px", borderRadius: 16, background: C.accent, color: C.bgDeep, fontWeight: 900, fontSize: 28, textAlign: "center", boxShadow: `0 0 60px ${C.highlight}`, animation: "cardIn 380ms " + EASE_BOUNCE_CSS + " 300ms forwards", zIndex: 80 }}>
