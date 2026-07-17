@@ -162,8 +162,21 @@ export default function TeamPickerSlide({ slide, show }) {
           beginItem();
         } else if (phase !== 'exit') { phase = 'exit'; pt = 0; }
       }
-      const warpTarget = c.seq[c.targetIdx]?.kind === 'landed' ? 0 : 1;
-      warp += (warpTarget - warp) * 0.045 * dtn;
+      // TEAM-1 fix: under reduced-motion, hold warp at its fixed low starting
+      // value instead of easing it toward 1 every frame. Previously only the
+      // star COUNT (190→110) and the text's zoom-approach (replaced with a
+      // flat fade below) respected `reduce` — this loop still ratcheted warp
+      // up to full speed regardless, so the streaking parallax lines (the
+      // actual vestibular-motion effect) kept playing continuously under
+      // reduced-motion. This is the one slide in the app using canvas/rAF
+      // instead of CSS `@keyframes`, so it sits outside the app's usual
+      // `.el-anim{animation:none}` pattern and needed its own explicit branch.
+      if (c.reduce) {
+        warp = 0.12;
+      } else {
+        const warpTarget = c.seq[c.targetIdx]?.kind === 'landed' ? 0 : 1;
+        warp += (warpTarget - warp) * 0.045 * dtn;
+      }
       const base = 0.019 * warp;
       dctx.fillStyle = `rgba(${bg.r},${bg.g},${bg.b},${c.reduce ? 1 : 0.30})`;
       dctx.fillRect(0, 0, W, H);
