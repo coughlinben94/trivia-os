@@ -55,6 +55,11 @@ function itemCutoffForLineCap(items, cap) {
   return items.length
 }
 
+// category is a comma-separated free-text field; split into individual tangent tags
+function categoryTags(row) {
+  return (row.category ?? '').split(',').map(s => s.trim()).filter(Boolean)
+}
+
 function matchesFilter(q, filter) {
   if (filter === 'all')     return true
   if (filter === 'regular') return q.type === 'regular' && !q.is_bonus
@@ -84,7 +89,7 @@ function SkeletonCard({ delay }) {
   )
 }
 
-function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, onCommit, onCancel, onDelete, saving, style }) {
+function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, onCommit, onCancel, onDelete, onTagClick, saving, style }) {
   const [expanded, setExpanded] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
@@ -164,11 +169,6 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
           {row.is_shiny && row.shiny_format_name && (
             <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200">
               {row.shiny_format_name}
-            </span>
-          )}
-          {row.category && (
-            <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-100">
-              {row.category}
             </span>
           )}
         </div>
@@ -300,6 +300,21 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
         </div>
       )}
 
+      {/* Tangent tags — secondary info, kept quiet so it doesn't compete with the question/answer */}
+      {!isEditing && row.category && (
+        <div className="flex flex-wrap gap-1 justify-end">
+          {categoryTags(row).map(tag => (
+            <button
+              key={tag}
+              onClick={() => onTagClick?.(tag)}
+              className="inline-block px-2 py-0.5 rounded-md text-[10px] font-medium text-gray-500 border border-gray-200 transition-colors duration-150 ease-out hover:border-teal-300 hover:text-teal-700"
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Actions — edit-mode only; the entry-point Edit button lives top-left (see header) */}
       {isEditing && (
         <div className="flex flex-col gap-1.5 pt-0.5">
@@ -358,6 +373,7 @@ export default function Questions() {
   const [shinyFormatFilter, setShinyFormatFilter] = useState(null) // shiny_format_name string or null (= all shiny)
   const { formats: shinyFormats } = useShinyFormats()
   const [showFilter, setShowFilter] = useState(null) // show_id string or null
+  const [activeTangent, setActiveTangent] = useState(null) // category tag string or null, from footer chip clicks
   const [editingId, setEditingId] = useState(null)
   const [editDraft, setEditDraft] = useState({ text: '', answer: '', category: '', items: null })
   const [saving, setSaving]       = useState(false)
@@ -419,6 +435,7 @@ export default function Questions() {
     if (showFilter && row.show_id !== showFilter) return false
     if (!matchesFilter(row, filter)) return false
     if (filter === 'shiny' && shinyFormatFilter && row.shiny_format_name !== shinyFormatFilter) return false
+    if (activeTangent && !categoryTags(row).includes(activeTangent)) return false
     if (!q) return true
     return (row.text ?? '').toLowerCase().includes(q) || (row.answer ?? '').toLowerCase().includes(q)
   })
@@ -608,6 +625,18 @@ export default function Questions() {
             ))}
           </div>
         )}
+
+        {activeTangent && (
+          <div className="flex gap-1.5 flex-wrap justify-center">
+            <button
+              onClick={() => setActiveTangent(null)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 transition-colors duration-150 ease-out hover:border-teal-400"
+            >
+              Tangent: {activeTangent}
+              <span aria-hidden="true">✕</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {writeError && (
@@ -653,6 +682,7 @@ export default function Questions() {
                 onCommit={commitEdit}
                 onCancel={cancelEdit}
                 onDelete={deleteQuestion}
+                onTagClick={setActiveTangent}
                 saving={saving}
                 style={{ animationDelay: `${Math.min(i * 30, 240)}ms` }}
               />
