@@ -84,6 +84,13 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
         {/* Actions */}
         <div className="flex items-center gap-1 shrink-0">
           <button
+            onClick={onOpenLibrary}
+            title="Switch shows, create a new one, duplicate, delete, import/export"
+            className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
+          >
+            Shows
+          </button>
+          <button
             onClick={onOpenScoreboard}
             title="Open scoreboard"
             className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
