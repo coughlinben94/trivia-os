@@ -48,8 +48,65 @@ Revision notes (newest first, only if iteration > 1):
 
 ## Queue
 
+### space-road-trip — Space Road Trip (four destinations)
+status: needs-revision
+journeyType: cross-theme
+fromTheme: midnight-galaxy
+toTheme: autumn-harvest
+source: ben-grilled
+iteration: 1
+supersedes: null
+
+Brief (beginning/middle/end):
+A four-stop tour built and heavily revised across a separate live session (not this
+tracking system) before tonight: midnight galaxy (opens, 10s, a calm star-warp hold
+with a hyperspace-snap flash punctuating it) → meteor shower (10s, flying THROUGH a
+z-depth debris field with camera shake, not watching one from a distance) → retro-arcade
+gas station on a rocky moon (10s, a ship flies in, lands with an engine-flare and
+ground-dust thump, parks beside a small relabeled "DINER" sign under a dominant ringed
+planet) → autumn harvest / supernova (10s, ember field building to a converge-burst-settle
+nova). In the real app these fire as four SEPARATE round-boundary journeys, each at its
+own round transition — this file is a combined review artifact for watching the whole
+arc at once, not how it plays live. Each individual stop, including its own bridge-in,
+sums to exactly 10,000ms — within the normal 8-14s per-journey target once split apart.
+Already through three Fable review passes (2nd: 5 findings fixed; 3rd: 10 findings
+fixed), one Gemini pass (2 fixes applied), and a guest-reaction simulation pass that
+drove the galaxy hyperspace-snap and gas-station touchdown-thump additions. Self-gate
+checklist in the file already passes.
+
+Revision notes (newest first):
+- 2026-07-20: [Claude, static audit] Missing `document.visibilitychange` handler —
+  `tStart` only resets on replay, never when the tab is backgrounded and returns. If
+  someone tabs away mid-animation, elapsed-time math will think far more time passed
+  than actually rendered, likely causing the sequence to jump or skip ahead
+  unpredictably on refocus. Add a visibilitychange listener that resets `tStart` the
+  same way `play()`'s replay reset already does.
+- 2026-07-20: [Claude, static audit] Missing the postMessage contract required by
+  `references/round-journeys.md` and AGENT-PROMPT.md Step 4. This file has a working
+  on-page Replay button but no `window.__journeyControls = { play, pause, replay }`,
+  no `postmessage-child-boilerplate.js` embedded, and no `pause` capability at all
+  (only play/restart exists). Embed the boilerplate verbatim; wire `play`/`pause`/
+  `replay` to the existing `tick()` / `cancelAnimationFrame()` / `resetUI()` mechanism
+  — `pause` needs a real implementation, not a no-op, since none currently exists.
+
+Known open item, not yet resolved (Ben's call, do not silently pick a side): the file's
+own notes flag that meteor shower's z-depth debris-field rework may be a "parallel
+invention" rather than an extension of the real `MeteorShowerStreak` motif in
+`ParticleBackground.jsx`, per `references/round-journeys.md`'s "extend, don't invent
+parallel" rule. This is a creative/architecture judgment call, not a bug — do not
+resolve it as part of tonight's revision pass; if it blocks you from completing the two
+technical fixes above cleanly, log it and stop rather than guessing which way it should
+go.
+
 ### greenhouse-gnome-rescue — Greenhouse Rescue
-status: building
+status: blocked
+note: this was a supervised dry-run claim (2026-07-20) used to validate the nightly
+  pipeline's infra end-to-end. The dry run was paused after the claim commit to fix two
+  real infra bugs (a sandbox delete-permission gate, and a push-failure misclassification
+  in guarded-commit-push.sh) and never resumed into Steps 3-6 — this was never actually
+  built, not a crash. Left `blocked` rather than deleted so there's a durable record; a
+  future run can pick this concept back up from scratch if it's still wanted, but should
+  treat it as unstarted, not resume "building."
 journeyType: same-theme
 theme: greenhouse
 source: agent-proposed+self-grilled
