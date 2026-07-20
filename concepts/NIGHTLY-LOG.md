@@ -65,10 +65,10 @@ whether it works end-to-end through the actual push path.
 trigger: manual
 claimed: space-road-trip (needs-revision, iteration 1 -> 2)
 preflight: pass
-sprites: pending
-audit: pending
-result: claim committed, build in progress
-commit: (pending — this is the claim commit)
+sprites: not needed (revision fixes control-flow/behavior only, no new sprites)
+audit: pass (see below)
+result: built concepts/space-road-trip-v2.html
+commit: 8cda24975951fe5410af82e29c0077e3ddd5c77e (claim commit; completion commit sha appended after Step 7 below)
 
 Second-ever live run of this file, and the first attempting the full Steps 0-7 path
 end-to-end (the prior run stopped after the claim commit to fix infra). Preflight found
@@ -77,9 +77,38 @@ status` call in this same session, confirming the canary in Step 0.1b is needed 
 not just the first; self-granted via `allow_cowork_file_delete` and cleared, canary
 re-tested clean afterward.
 
-Claiming `space-road-trip`'s two revision notes from Ben's morning review (missing
-`document.visibilitychange` handler, missing the postMessage contract) — details to follow
-in this entry once Steps 3-7 complete.
+Fixed `space-road-trip`'s two revision notes from Ben's morning review, nothing else
+touched (full-file diff against the superseded file confirmed the change is confined to
+one new state variable, the notes paragraph, and the control-flow block at the script's
+tail):
+1. Missing `document.visibilitychange` handler — fixed. Added a listener that stops the
+   loop while hidden and reuses the existing full-reset function (renamed `play()` ->
+   `replay()`) on return to visible, exactly as specified — no new reset mechanism.
+2. Missing the postMessage contract — fixed. `postmessage-child-boilerplate.js` embedded
+   verbatim (diffed programmatically byte-for-byte against the canonical file, confirmed
+   identical). `window.__journeyControls = { play, pause, replay }` wired to the real
+   mechanism: `replay` is the same function the on-page Replay button calls; `pause` is a
+   real implementation (cancels the pending animation frame, records the pause timestamp)
+   rather than the no-op that didn't exist before; `play` (resume) shifts `tStart` forward
+   by the paused duration before resuming, avoiding the same class of skip-ahead bug the
+   visibilitychange fix addresses for backgrounded tabs.
+
+Step 5 static audit: full checklist run (contrast, timing sums, frame-rate independence,
+GPU-only compliance, silhouette/particle-pooling/near-black-banding unchanged-verification,
+no external refs, sanitizer-scope N/A, postMessage contract, reduced-motion branch) —
+detailed results written into the file's own notes block. One pre-existing, out-of-scope
+finding surfaced (not fixed, per fix-exactly-what-was-named): `hud.style.color` is
+reassigned every animation frame with a discrete per-phase value — a minor redundant-write
+smell, not a visual GPU-only violation, present unchanged since before this file's six
+prior review passes and never flagged by any of them. Both new `<script>` blocks passed
+`node --check`. The known open item (meteor debris parallel-invention question) was left
+exactly as flagged in `QUEUE.md`, not resolved.
+
+Manifest: `validate-manifest.mjs` caught a real mistake before commit — this entry was
+first written with `status: "built"`, which isn't in the validator's `VALID_STATUSES` set
+(manifest.js uses `draft` for "freshly built, awaiting Ben's review", distinct from
+`QUEUE.md`'s own richer `built` queue-workflow status). Corrected to `"draft"`, re-validated
+clean, 2 entries total.
 
 Process note for whoever reads this next: this claim commit is going out later than Step 2
 specifies (the actual code fix was drafted in the working tree before this commit was

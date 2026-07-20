@@ -49,13 +49,13 @@ Revision notes (newest first, only if iteration > 1):
 ## Queue
 
 ### space-road-trip — Space Road Trip (four destinations)
-status: building
+status: built
 journeyType: cross-theme
 fromTheme: midnight-galaxy
 toTheme: autumn-harvest
 source: ben-grilled
-iteration: 1
-supersedes: null
+iteration: 2
+supersedes: space-road-trip-full-journey.html
 
 Brief (beginning/middle/end):
 A four-stop tour built and heavily revised across a separate live session (not this
