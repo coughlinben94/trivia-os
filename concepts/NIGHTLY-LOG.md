@@ -56,3 +56,7 @@ ended:
 what's needed from Ben: configure git push credentials for this sandbox/environment
   before any future run (attended or scheduled) can complete Step 7's push. Until then,
   every run will build and commit locally but never reach origin/main.
+
+Update: Ben configured `credential.helper "store --file=.git/credentials-store"` with a
+scoped PAT (contents: read/write, this repo only). This line itself is the real test of
+whether it works end-to-end through the actual push path.
