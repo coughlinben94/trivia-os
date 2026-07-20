@@ -25,15 +25,13 @@ cd ~/Projects/baynes-trivia/trivia-os
    ```bash
    TESTFILE="concepts/.delete-canary-$$"
    echo x > "$TESTFILE"
-   if ! rm -f "$TESTFILE" 2>/dev/null; then
-     echo "Delete permission blocked in this sandbox — self-granting." >&2
-     # Call the mcp__cowork__allow_cowork_file_delete tool for this file's path, then retry once.
-     rm -f "$TESTFILE" || { echo "Still blocked after self-grant — stop, this is a platform issue, not something to work around here." >&2; exit 1; }
-   fi
+   rm -f "$TESTFILE" 2>/dev/null
+   echo "exit code: $?"
    ```
+   Run that, and read the exit code it prints. **If it's nonzero (the delete failed):** stop the bash script here and call the `mcp__cowork__allow_cowork_file_delete` tool directly (not from inside a shell command — it's a separate tool call), passing this session's actual filesystem path to `$TESTFILE` as `file_path`. After that tool call returns, run `rm -f "$TESTFILE"` again as its own bash call. If it STILL fails after the self-grant, stop the entire run — this is a platform-level issue, not something to work around with a different bash trick.
    Whether this permission persists across sessions/runs is not yet confirmed — treat every run as needing this canary, not just the first.
 2. **Required docs readable:** `concepts/QUEUE.md`, `concepts/LESSONS.md`, `references/round-journeys.md`. If any is missing or unreadable, stop — you cannot safely proceed without them.
-3. **Recraft reachable.** Call the Recraft MCP `get_user` tool (search your tool list — it's on a server whose description mentions `generate_image`/`vectorize_image`/`create_style`; load it via ToolSearch if it's deferred). If this errors (auth, billing, network), stop — see the fallback note in Step 3, but a *total* Recraft outage where even `get_user` fails is a preflight failure, not a per-sprite fallback case.
+3. **Recraft reachable.** The Recraft MCP tools are very likely deferred at session start. Call `ToolSearch` with `{query: "recraft generate_image get_user vectorize_image", max_results: 10}` first — this returns the exact tool names (they look like `mcp__<id>__get_user`, `mcp__<id>__generate_image`, etc., where `<id>` is a UUID specific to this account's Recraft connection). Then call the `get_user` tool from those results. If ToolSearch returns nothing matching, or `get_user` errors (auth, billing, network), stop — see the fallback note in Step 3, but a *total* Recraft outage where even `get_user` fails is a preflight failure, not a per-sprite fallback case.
 4. **Sanitizer toolbox ready and self-tested:**
    ```bash
    cd concepts/tools
@@ -86,7 +84,7 @@ Read, in this order:
 1. This file (already done).
 2. `concepts/QUEUE.md` and `concepts/LESSONS.md` in full.
 3. `references/round-journeys.md` in full (the method, motion-technique checklist, loop-construction rules, composition checklist, prototype conventions — all binding).
-4. Load skills: `gsap-core`, `gsap-timeline` (construction quality), `emil-design-eng` (timing/anticipation/follow-through polish). Load `impeccable` later, specifically for Step 5's audit.
+4. Load skills using the Skill tool with these EXACT fully-qualified names (not the short names — the Skill tool requires an exact match from your available-skills listing, and these are namespaced by plugin): `gsap-skills:gsap-core`, `gsap-skills:gsap-timeline` (construction quality), `anthropic-skills:emil-design-eng` (timing/anticipation/follow-through polish). Load `anthropic-skills:impeccable` later, specifically for Step 5's audit. If any of these exact names isn't in your available-skills listing when you get there, search your listing for a name containing the same keyword (e.g. `gsap-core`, `emil-design-eng`, `impeccable`) before concluding it's missing — plugin namespaces can change, the underlying skill content is what matters.
 5. `concepts/tools/postmessage-child-boilerplate.js` — you will embed this verbatim into whatever you build tonight (see Step 4).
 6. **Anti-repetition check.** Read `concepts/manifest.js`'s existing entries (title/theme/palette/journeyType) and skim the notes blocks of the 5 most recent prototype files in `concepts/`. Tonight's piece must differ from the last 5 in at least setting, palette family, AND emotional register — a memory-less agent given the same prompt every night will otherwise converge on the same handful of ideas (haunted lighthouse, deep-sea glow, etc.) within two weeks. Note in tonight's brief, one line, what makes it distinct from recent work.
 
