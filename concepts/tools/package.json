@@ -1,0 +1,13 @@
+{
+  "name": "round-journey-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-contained toolbox for the nightly Round-Journey Designer Agent. Never installed at the repo root — deliberately isolated so the agent's dependencies can never collide with or modify client/.",
+  "type": "module",
+  "scripts": {
+    "test": "node test-sanitizer.mjs"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.9.8"
+  }
+}
