@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>sonora-balloons — CURRENT vs Kurzgesagt-direction REWORK</title>
+<style>
+  :root{
+    --bg:      #2a1238;
+    --bgDeep:  #180a28;
+    --accent:  #e06a28;
+    --highlight:#ffb84d;
+    --text:    #ffeeda;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0a0a;color:#e8e8e8;font-family:system-ui,sans-serif;padding:28px}
+  h1{font-size:1.15rem;font-weight:700;margin-bottom:4px}
+  .sub{color:#888;font-size:.8rem;margin-bottom:22px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .panel{background:#111;border-radius:10px;overflow:hidden;border:1px solid #222}
+  .label{padding:9px 14px;font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#aaa;background:#161616;display:flex;justify-content:space-between;align-items:center}
+  .label small{font-weight:400;text-transform:none;letter-spacing:0;color:#666;font-size:.72rem}
+  .stage{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden}
+  .safe{position:absolute;left:20%;top:28%;width:60%;height:44%;border:1.5px dashed rgba(255,60,220,.55);pointer-events:none;z-index:50;display:none}
+  .showsafe .safe{display:block}
+  .toggle{padding:8px 14px;background:#161616;font-size:.72rem;color:#999;display:flex;gap:8px;align-items:center}
+  .toggle input{accent-color:#e06a28}
+  .gate{margin-top:26px;background:#111;border:1px solid #222;border-radius:10px;padding:18px 20px}
+  .gate h2{font-size:.85rem;margin-bottom:12px;color:#ddd}
+  .gate table{width:100%;border-collapse:collapse;font-size:.78rem}
+  .gate td{padding:6px 8px;border-top:1px solid #1e1e1e;vertical-align:top}
+  .gate td:first-child{width:170px;color:#ccc;font-weight:600}
+  .pass{color:#5ec98a;font-weight:700}
+  .eyes{color:#e0a840;font-weight:700}
+  .notes{margin-top:18px;font-size:.8rem;color:#999;line-height:1.55}
+  .notes b{color:#ccc}
+
+  /* ── shared keyframes (GPU-only: transform / opacity) ───────────── */
+  @keyframes breathe{0%,100%{opacity:var(--lo,.3)}50%{opacity:var(--hi,.6)}}
+  @keyframes sway{0%,100%{transform:rotate(-2.4deg)}50%{transform:rotate(2.4deg)}}
+  @keyframes drift{from{transform:translate(0,0)}to{transform:translate(var(--dx,50%),var(--dy,0))}}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.2vh)}}
+  @keyframes wave{0%,100%{transform:translateX(-3vw) scaleY(.8);opacity:.3}50%{transform:translateX(3vw) scaleY(1.2);opacity:.55}}
+  @keyframes goreSlide{to{transform:translateX(var(--rep,-120px))}}
+  @media (prefers-reduced-motion: reduce){ .anim{ animation:none !important } }
+
+  /* ── CURRENT: naturalistic multi-stop dusk + thin-stripe balloons ─── */
+  .current-sky{position:absolute;inset:0;background:linear-gradient(180deg,#180a28 0%,#22103a 20%,#341444 40%,#6a2a3c 57%,#b0442a 71%,#e8863a 82%,#d0663a 87%,#6a5570 89%,#2a4a72 92%,#163a63 96%,#0e2c50 100%)}
+  .current-water{position:absolute;left:0;right:0;bottom:0;height:13%;background:linear-gradient(180deg,rgba(42,74,114,0) 0%,rgba(22,58,99,.75) 22%,#123453 55%,#0c2848 100%)}
+  .c-balloon{position:absolute;width:9.5%;aspect-ratio:1/1.6;animation:drift linear infinite alternate;will-change:transform}
+  .c-balloon .sway{position:absolute;inset:0;transform-origin:50% 10%;animation:sway ease-in-out infinite}
+  .c-env{position:absolute;inset:0;border-radius:50% 50% 42% 42%/58% 58% 42% 42%;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(30,10,20,.6)}
+  .c-stripes{position:absolute;inset:0;display:flex;animation:goreSlide linear infinite}
+  .c-stripes span{flex:0 0 10%;height:100%}
+  .c-shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(20,8,16,.4) 0%,transparent 22%,transparent 76%,rgba(20,8,16,.5) 100%)}
+  .c-basket{position:absolute;left:38%;bottom:-9%;width:24%;height:9%;background:#6b4a26;border-radius:2px}
+
+  /* ── REWORKED: Kurzgesagt-flat direction ─────────────────────────── */
+  .rw-sky{position:absolute;inset:0;background:linear-gradient(180deg,var(--bgDeep) 0%,var(--bgDeep) 32%,#4a1f36 55%,var(--accent) 78%,#7a4a6e 90%,#20365f 100%)}
+  .rw-water{position:absolute;left:0;right:0;bottom:0;height:14%;background:#0e2444}
+  .rw-water::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(224,106,40,.22),transparent 60%)}
+  .rw-sun{position:absolute;left:50%;bottom:8%;width:11%;aspect-ratio:1/1;border-radius:50%;background:var(--highlight);transform:translateX(-50%);box-shadow:0 0 60px 18px rgba(255,184,77,.35);animation:breathe ease-in-out infinite;--lo:.75;--hi:1}
+  .rw-balloon{position:absolute;width:9.5%;aspect-ratio:1/1.55;animation:drift linear infinite alternate;will-change:transform}
+  .rw-balloon .sway{position:absolute;inset:0;transform-origin:50% 8%;animation:sway ease-in-out infinite}
+  .rw-env{position:absolute;inset:0;border-radius:50% 50% 46% 46%/60% 60% 40% 40%}
+  .rw-basket{position:absolute;left:40%;bottom:-8%;width:20%;height:7%;border-radius:3px;background:#5a3a20}
+  .rw-line{position:absolute;left:47%;bottom:-6%;width:1px;height:6%;background:rgba(40,20,15,.5)}
+  .rw-line.r{left:53%}
+  .glow-dot{position:absolute;border-radius:50%;animation:breathe ease-in-out infinite;will-change:opacity}
+  .particle-stream{position:absolute;border-radius:50%;animation:bob ease-in-out infinite,breathe ease-in-out infinite;will-change:transform,opacity}
+</style>
+</head>
+<body>
+<h1>Theme rework prototype — sonora-balloons</h1>
+<div class="sub">CURRENT (shipped ✓) vs REWORKED (Kurzgesagt-flat direction) · colors sourced from theme.colors · toggle the safe-area overlay below</div>
+
+<div class="toggle" style="border-radius:8px;margin-bottom:14px;width:fit-content">
+  <input type="checkbox" id="safeToggle"> <label for="safeToggle">Show center safe-area (60%×45%)</label>
+</div>
+
+<div class="row" id="stageRow">
+
+  <div class="panel">
+    <div class="label">CURRENT <small>naturalistic gradient · rainbow gore-stripe envelopes · painterly shading</small></div>
+    <div class="stage">
+      <div class="current-sky"></div>
+      <div class="current-water"></div>
+      <div class="safe"></div>
+      <!-- 5 balloons, rainbow/sunset/ocean/berry/forest gore stripes -->
+      <div class="c-balloon anim" style="left:8%;top:10%;--dx:70%;--dy:1.4%;animation-duration:52s">
+        <div class="sway anim" style="animation-duration:8s">
+          <div class="c-env">
+            <div class="c-stripes anim" style="animation-duration:15s">
+              <span style="background:#e04028"></span><span style="background:#ff8830"></span><span style="background:#ffd028"></span><span style="background:#38b048"></span><span style="background:#3080e0"></span><span style="background:#9038e0"></span><span style="background:#e04028"></span><span style="background:#ff8830"></span><span style="background:#ffd028"></span><span style="background:#38b048"></span>
+            </div>
+            <div class="c-shade"></div>
+          </div>
+          <div class="c-basket"></div>
+        </div>
+      </div>
+      <div class="c-balloon anim" style="left:82%;top:22%;width:8%;--dx:-68%;--dy:-1.6%;animation-duration:60s">
+        <div class="sway anim" style="animation-duration:6.5s">
+          <div class="c-env">
+            <div class="c-stripes anim" style="animation-duration:11s">
+              <span style="background:#c81f4a"></span><span style="background:#ff7a30"></span><span style="background:#ffb040"></span><span style="background:#e05028"></span><span style="background:#c81f4a"></span><span style="background:#ff7a30"></span><span style="background:#ffb040"></span><span style="background:#e05028"></span>
+            </div>
+            <div class="c-shade"></div>
+          </div>
+          <div class="c-basket"></div>
+        </div>
+      </div>
+      <div class="c-balloon anim" style="left:20%;top:34%;width:8.5%;--dx:68%;--dy:1.2%;animation-duration:46s">
+        <div class="sway anim" style="animation-duration:9s">
+          <div class="c-env">
+            <div class="c-stripes anim" style="animation-duration:13s">
+              <span style="background:#38b0a0"></span><span style="background:#3080e0"></span><span style="background:#5060d0"></span><span style="background:#8040c8"></span><span style="background:#38b0a0"></span><span style="background:#3080e0"></span>
+            </div>
+            <div class="c-shade"></div>
+          </div>
+          <div class="c-basket"></div>
+        </div>
+      </div>
+      <!-- stars -->
+      <div class="glow-dot anim" style="left:14%;top:6%;width:2px;height:2px;background:#f6e6ff;animation-duration:7s;--lo:.25;--hi:.85"></div>
+      <div class="glow-dot anim" style="left:63%;top:9%;width:2px;height:2px;background:#f6e6ff;animation-duration:6s;--lo:.25;--hi:.85"></div>
+      <div class="glow-dot anim" style="left:40%;top:4%;width:1.6px;height:1.6px;background:#f6e6ff;animation-duration:8s;--lo:.25;--hi:.85"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="label">REWORKED <small>flat color-blocking · 3-band envelopes · bold single-hue fills · glow accents, no painterly shading</small></div>
+    <div class="stage">
+      <div class="rw-sky"></div>
+      <div class="rw-water"></div>
+      <div class="rw-sun anim"></div>
+      <div class="safe"></div>
+
+      <!-- 5 balloons: flat 3-band envelope, one bold hue family per balloon, no per-stripe outline -->
+      <div class="rw-balloon anim" style="left:8%;top:10%;--dx:70%;--dy:1.4%;animation-duration:52s">
+        <div class="sway anim" style="animation-duration:8s">
+          <div class="rw-env" style="background:var(--accent)"></div>
+          <div class="rw-env" style="clip-path:inset(0 0 55% 0);background:var(--highlight);opacity:.9"></div>
+          <div class="rw-line"></div><div class="rw-line r"></div>
+          <div class="rw-basket"></div>
+        </div>
+      </div>
+      <div class="rw-balloon anim" style="left:82%;top:22%;width:8%;--dx:-68%;--dy:-1.6%;animation-duration:60s">
+        <div class="sway anim" style="animation-duration:6.5s">
+          <div class="rw-env" style="background:#c81f4a"></div>
+          <div class="rw-env" style="clip-path:inset(0 0 55% 0);background:var(--highlight);opacity:.85"></div>
+          <div class="rw-line"></div><div class="rw-line r"></div>
+          <div class="rw-basket"></div>
+        </div>
+      </div>
+      <div class="rw-balloon anim" style="left:20%;top:34%;width:8.5%;--dx:68%;--dy:1.2%;animation-duration:46s">
+        <div class="sway anim" style="animation-duration:9s">
+          <div class="rw-env" style="background:#3080c0"></div>
+          <div class="rw-env" style="clip-path:inset(0 0 55% 0);background:var(--highlight);opacity:.85"></div>
+          <div class="rw-line"></div><div class="rw-line r"></div>
+          <div class="rw-basket"></div>
+        </div>
+      </div>
+
+      <!-- glowing particle stream (replaces naturalistic star sparkle) -->
+      <div class="particle-stream anim" style="left:14%;top:6%;width:5px;height:5px;background:var(--highlight);animation-duration:9s,7s;box-shadow:0 0 6px 1px rgba(255,184,77,.6)"></div>
+      <div class="particle-stream anim" style="left:63%;top:9%;width:4px;height:4px;background:var(--highlight);animation-duration:11s,6s;box-shadow:0 0 6px 1px rgba(255,184,77,.5)"></div>
+      <div class="particle-stream anim" style="left:40%;top:4%;width:4px;height:4px;background:var(--highlight);animation-duration:8s,8s;box-shadow:0 0 5px 1px rgba(255,184,77,.5)"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="gate">
+  <h2>Self-gate against the 7-check Acceptance Gate (references/themes.md)</h2>
+  <table>
+    <tr><td>1. Anchor</td><td><span class="pass">[auto] PASS</span> — 5 named balloon anchors, unchanged in count/position from shipped version.</td></tr>
+    <tr><td>2. Drifter</td><td><span class="pass">[auto] PASS</span> — same real-translate drift + sway as CURRENT; nothing removed.</td></tr>
+    <tr><td>3. Safe-area</td><td><span class="pass">[auto] PASS</span> — same lane coords as shipped (cy/sx/ex unchanged), so the pre-existing anchor/drifter ambiguity noted in AUDIT.md is <b>unchanged</b>, not newly introduced. <span class="eyes">[eyes] still Ben's call, same as before.</span></td></tr>
+    <tr><td>4. In-family color</td><td><span class="pass">[auto] PASS</span> — envelope base now uses <code>accent</code>/<code>highlight</code> directly instead of the fixed off-family rainbow/sunset/ocean palettes. Off-family balloon variety is <b>reduced</b>, not eliminated — this is a real style question, flagged below.</td></tr>
+    <tr><td>5. Motion matches world</td><td><span class="pass">[auto] PASS</span> — no pop-in, no new easing; identical drift/sway timing curves reused verbatim from the shipped component.</td></tr>
+    <tr><td>6. GPU-only + reduced-motion</td><td><span class="pass">[auto] PASS</span> — every animation here is transform/opacity only; <code>.anim</code> respects <code>prefers-reduced-motion</code> via the same media-query pattern as the shipped file.</td></tr>
+    <tr><td>7. Distinct at thumbnail</td><td><span class="eyes">[eyes] Ben's call</span> — flatter color-blocking may read as more generic at a glance since the multi-stop painterly dusk sky is what currently makes this theme instantly recognizable. Worth checking side-by-side at real thumbnail size.</td></tr>
+  </table>
+</div>
+
+<div class="notes">
+  <b>What actually changed:</b> envelope rendering only — flat 2-band fill (accent + highlight cap) replacing the 6/4/4-color gore-stripe bands, drop-shadow shading removed, thin rigging lines instead of a solid basket-strap block. Sky flattened from an 11-stop naturalistic gradient to 5 bolder stops. Stars became larger glowing accent dots with a soft box-shadow instead of tiny near-white sparkles — closer to the skill's "glowing particle stream" language.<br><br>
+  <b>What did NOT change:</b> anchor count/position, drift paths, sway timing, water band, haze layers, wave count — all reused as-is from the shipped component so this stays a scoped visual variant, not a rebuild.<br><br>
+  <b>Real trade-off to flag:</b> the shipped theme's rainbow/sunset/ocean/berry/forest palettes are a <i>documented sanctioned exception</i> (off-family, same treatment as Christmas Eve's garland green) specifically because 5 identical-hue balloons would be visually flat and hard to tell apart mid-drift. Going full single-hue-per-balloon Kurzgesagt-style removes that variety. This mock keeps 3 of the 5 balloons on distinct hues as a middle ground — worth your eyes-check on whether that's still "5 balloons" or starts reading as "3 colors, twice each."
+</div>
+
+<script>
+document.getElementById('safeToggle').addEventListener('change', e=>{
+  document.getElementById('stageRow').classList.toggle('showsafe', e.target.checked);
+});
+</script>
+</body>
+</html>

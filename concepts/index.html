@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Round Journey Gallery — Trivia OS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0c0e14;
+    --panel: #161a24;
+    --panel-border: #262b3a;
+    --text: #e8eaf0;
+    --text-muted: #8a8fa3;
+    --accent: #f5a623;
+    --status-draft: #3b82f6;
+    --status-blocked: #6b7280;
+    --status-needs-revision: #f5a623;
+    --status-rejected: #ef4444;
+    --status-approved: #22c55e;
+    --status-shipped: #a855f7;
+    --degraded: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    padding: 24px;
+  }
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0;
+    font-weight: 700;
+  }
+  #meta-line {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  #filter {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    width: 260px;
+    max-width: 100%;
+  }
+  #filter::placeholder { color: var(--text-muted); }
+  #error-banner {
+    display: none;
+    background: #3a1414;
+    border: 1px solid var(--status-rejected);
+    color: #fca5a5;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 14px;
+  }
+  #empty-state {
+    display: none;
+    color: var(--text-muted);
+    padding: 60px 20px;
+    text-align: center;
+    font-size: 15px;
+  }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    gap: 20px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .card-header {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .card-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .card-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0;
+  }
+  .card-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .pill-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .pill {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 999px;
+    color: #0c0e14;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .pill-degraded {
+    background: var(--degraded);
+    color: white;
+  }
+  .stage-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #000;
+  }
+  .stage-wrap iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+  }
+  .stage-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 20px;
+  }
+  .stage-placeholder.blocked { color: var(--status-blocked); }
+  .card-footer {
+    padding: 12px 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .actions-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  button.replay-btn {
+    background: var(--accent);
+    color: #0c0e14;
+    border: none;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button.replay-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .field-line {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .field-line strong { color: var(--text); }
+  .revision-notes {
+    font-size: 12px;
+    color: var(--text-muted);
+    border-top: 1px solid var(--panel-border);
+    padding-top: 8px;
+    margin-top: 2px;
+  }
+  .revision-notes-title {
+    color: var(--text);
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .revision-notes ul { margin: 0; padding-left: 18px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Round Journey Gallery</h1>
+    <div id="meta-line"></div>
+  </div>
+  <input id="filter" type="text" placeholder="Filter by id or theme…">
+</header>
+
+<div id="error-banner"></div>
+<div id="empty-state">No drafts yet. The nightly agent hasn't run, or the queue is empty — see QUEUE.md.</div>
+<div id="grid"></div>
+
+<!-- manifest.js MUST load before this script. It defines window.MANIFEST as a plain
+     JSON literal — see manifest.js's own header comment for the write contract. -->
+<script src="manifest.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const STATUS_LABEL = {
+    draft: 'Draft',
+    blocked: 'Blocked',
+    'needs-revision': 'Needs Revision',
+    rejected: 'Rejected',
+    approved: 'Approved',
+    shipped: 'Shipped',
+  };
+
+  const grid = document.getElementById('grid');
+  const errorBanner = document.getElementById('error-banner');
+  const emptyState = document.getElementById('empty-state');
+  const metaLine = document.getElementById('meta-line');
+  const filterInput = document.getElementById('filter');
+
+  function showError(msg) {
+    errorBanner.textContent = msg; // textContent only — never innerHTML on anything
+    errorBanner.style.display = 'block';
+  }
+
+  // --- Validate window.MANIFEST before touching it. manifest.js is written by the
+  // nightly agent; if it's ever malformed (crash mid-write outside the atomic-rename
+  // path, or a future bug in the writer), fail loud and visible rather than throwing
+  // deep inside render logic. ---
+  let entries = [];
+  if (typeof window.MANIFEST === 'undefined') {
+    showError('manifest.js did not define window.MANIFEST — nothing to show. Check that the file loaded and is not corrupted.');
+  } else if (!Array.isArray(window.MANIFEST)) {
+    showError('window.MANIFEST is not an array — manifest.js may be corrupted. Refusing to render until it is fixed.');
+  } else {
+    entries = window.MANIFEST.filter((e) => {
+      if (!e || typeof e !== 'object' || typeof e.id !== 'string' || typeof e.status !== 'string') {
+        console.warn('Skipping malformed manifest entry:', e);
+        return false;
+      }
+      return true;
+    });
+  }
+
+  metaLine.textContent = entries.length + ' entr' + (entries.length === 1 ? 'y' : 'ies') + ' in manifest.js';
+
+  // --- postMessage contract state: one nonce per rendered card, generated here in the
+  // parent (never trust a nonce a child could supply). The matching child-side listener
+  // is the boilerplate every nightly-generated prototype embeds — see AGENT-PROMPT.md's
+  // "postMessage contract" section, and PLAN.md §3e. ---
+  function makeNonce() {
+    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+    return 'n-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+
+  function sendToFrame(state, type) {
+    // Gate on `ready`, not `loaded`. `loaded` just means we've set .src; `ready` means the
+    // iframe's own `load` event has actually fired, so its document — and therefore its
+    // postMessage listener from postmessage-child-boilerplate.js — genuinely exists. A
+    // message sent to contentWindow before the child document (and its listener) exists
+    // is not guaranteed to be delivered/handled, which previously meant a fast scroll-past
+    // during initial load could lose a 'pause' and leave an animation running offscreen
+    // indefinitely. If not ready yet, queue the latest intent and flush it on 'load'.
+    if (!state.ready) {
+      state.pendingIntent = type;
+      return;
+    }
+    if (!state.iframeEl || !state.iframeEl.contentWindow) return;
+    // We address the frame directly by the reference captured at load time — this is
+    // what makes the control channel meaningfully ours, independent of what a
+    // file://-opaque origin string ('null') could ever assert. The nonce is the second
+    // layer: even a message that somehow reached the frame from elsewhere is inert
+    // without it, since the child's own listener checks the nonce it parsed from its
+    // own URL fragment before acting on anything.
+    state.iframeEl.contentWindow.postMessage({ type, nonce: state.nonce }, '*');
+  }
+
+  // Manifest `file` values become an iframe `src`. Even though manifest.js is meant to be
+  // written only by the trusted, atomic-write agent procedure, this validates the value
+  // is a plain local filename — no scheme, no path separators, no traversal — before it's
+  // ever used to navigate a frame. Defense-in-depth against a future writer bug or a
+  // hand-edit accident, not a claim that the normal path is untrusted.
+  const SAFE_FILENAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*\.html$/;
+  function isSafeLocalFile(file) {
+    if (typeof file !== 'string') return false;
+    if (!SAFE_FILENAME.test(file)) return false;
+    if (file.includes('..') || file.includes('/') || file.includes('\\')) return false;
+    return true;
+  }
+
+  const cardStates = []; // { iframeEl, nonce, loaded, file }
+
+  function buildCard(entry) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.id = entry.id;
+    card.dataset.theme = entry.theme || ((entry.fromTheme || '') + ' ' + (entry.toTheme || ''));
+
+    // --- header ---
+    const header = document.createElement('div');
+    header.className = 'card-header';
+
+    const titleRow = document.createElement('div');
+    titleRow.className = 'card-title-row';
+
+    const title = document.createElement('h3');
+    title.className = 'card-title';
+    const titleText = entry.journeyType === 'cross-theme'
+      ? (entry.fromTheme || '?') + ' → ' + (entry.toTheme || '?')
+      : (entry.theme || 'untitled');
+    title.textContent = titleText; // textContent: manifest strings are never trusted as HTML
+    titleRow.appendChild(title);
+
+    const iterBadge = document.createElement('span');
+    iterBadge.className = 'card-sub';
+    iterBadge.textContent = 'v' + (entry.iteration || 1);
+    titleRow.appendChild(iterBadge);
+
+    header.appendChild(titleRow);
+
+    const sub = document.createElement('div');
+    sub.className = 'card-sub';
+    sub.textContent = [entry.id, entry.date, entry.source].filter(Boolean).join(' · ');
+    header.appendChild(sub);
+
+    const pillRow = document.createElement('div');
+    pillRow.className = 'pill-row';
+
+    const statusPill = document.createElement('span');
+    statusPill.className = 'pill';
+    statusPill.style.background = 'var(--status-' + entry.status + ', #444)';
+    statusPill.textContent = STATUS_LABEL[entry.status] || entry.status;
+    pillRow.appendChild(statusPill);
+
+    if (entry.degraded) {
+      const degradedPill = document.createElement('span');
+      degradedPill.className = 'pill pill-degraded';
+      degradedPill.textContent = 'Degraded (fallback sprites)';
+      pillRow.appendChild(degradedPill);
+    }
+    header.appendChild(pillRow);
+
+    if (entry.targetShow || entry.targetRound) {
+      const targetLine = document.createElement('div');
+      targetLine.className = 'field-line';
+      targetLine.style.marginTop = '6px';
+      targetLine.textContent = 'Target: ' + [entry.targetShow, entry.targetRound].filter(Boolean).join(' — ');
+      header.appendChild(targetLine);
+    }
+
+    if (entry.supersedes) {
+      const supersedesLine = document.createElement('div');
+      supersedesLine.className = 'field-line';
+      supersedesLine.textContent = 'Supersedes: ' + entry.supersedes;
+      header.appendChild(supersedesLine);
+    }
+
+    card.appendChild(header);
+
+    // --- stage ---
+    const stageWrap = document.createElement('div');
+    stageWrap.className = 'stage-wrap';
+
+    const state = {
+      iframeEl: null, nonce: makeNonce(), loaded: false, ready: false,
+      pendingIntent: null, file: entry.file, observer: null,
+    };
+
+    const fileIsValid = entry.file ? isSafeLocalFile(entry.file) : false;
+
+    if (!entry.file || entry.status === 'blocked') {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'stage-placeholder blocked';
+      placeholder.textContent = 'Blocked — see NIGHTLY-LOG.md for why.';
+      stageWrap.appendChild(placeholder);
+    } else if (!fileIsValid) {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'stage-placeholder blocked';
+      placeholder.textContent = 'Manifest entry has an invalid file reference — refusing to load it. Check manifest.js by hand.';
+      stageWrap.appendChild(placeholder);
+      console.warn('Rejected unsafe manifest file value for entry', entry.id, ':', entry.file);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'stage-placeholder';
+      placeholder.textContent = 'Loading…';
+      stageWrap.appendChild(placeholder);
+
+      const iframe = document.createElement('iframe');
+      // allow-scripts WITHOUT allow-same-origin: the prototype can run its own animation
+      // JS, but is treated as opaque-origin and cannot reach anything on this page or
+      // the filesystem beyond itself. This is deliberate, not an oversight.
+      iframe.sandbox = 'allow-scripts';
+      iframe.dataset.lazy = 'true';
+      iframe.style.display = 'none';
+      state.iframeEl = iframe;
+
+      // Only once the iframe's own `load` event fires do we know its document — and the
+      // postmessage-child-boilerplate.js listener inside it — genuinely exists. Flush
+      // whatever the most recent intent was (a card can flip in/out of view several
+      // times before a slow-loading prototype finishes loading).
+      iframe.addEventListener('load', () => {
+        state.ready = true;
+        if (state.pendingIntent) {
+          const intent = state.pendingIntent;
+          state.pendingIntent = null;
+          sendToFrame(state, intent);
+        }
+      });
+
+      stageWrap.appendChild(iframe);
+
+      // Lazy-load + pause-offscreen: only fetch/run the prototype's rAF/CSS-animation
+      // loop while its card is actually visible. Loading every prototype's animation
+      // loop simultaneously (13+ and growing) would be a real performance problem on a
+      // laptop, per the plan's DoS-of-your-own-machine finding.
+      const observer = new IntersectionObserver((observerEntries) => {
+        for (const oe of observerEntries) {
+          if (oe.isIntersecting) {
+            if (!state.loaded) {
+              placeholder.style.display = 'none';
+              iframe.style.display = 'block';
+              // Nonce delivered via URL fragment, set before src assignment — the child
+              // reads location.hash on its own load, before any message could arrive.
+              iframe.src = entry.file + '#nonce=' + encodeURIComponent(state.nonce);
+              state.loaded = true;
+              state.pendingIntent = 'play'; // flushed once 'load' fires
+            } else {
+              sendToFrame(state, 'play');
+            }
+          } else if (state.loaded) {
+            sendToFrame(state, 'pause');
+          }
+        }
+      }, { threshold: 0.15 });
+      observer.observe(stageWrap);
+      state.observer = observer;
+    }
+
+    card.appendChild(stageWrap);
+    cardStates.push(state);
+
+    // --- footer ---
+    const footer = document.createElement('div');
+    footer.className = 'card-footer';
+
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'actions-row';
+    const replayBtn = document.createElement('button');
+    replayBtn.className = 'replay-btn';
+    replayBtn.textContent = 'Replay';
+    replayBtn.disabled = !entry.file || entry.status === 'blocked';
+    replayBtn.addEventListener('click', () => sendToFrame(state, 'replay'));
+    actionsRow.appendChild(replayBtn);
+    footer.appendChild(actionsRow);
+
+    if (Array.isArray(entry.sprites) && entry.sprites.length > 0) {
+      const spritesLine = document.createElement('div');
+      spritesLine.className = 'field-line';
+      spritesLine.textContent = entry.sprites.length + ' sprite(s) — ' +
+        entry.sprites.map((s) => s.model).filter(Boolean).join(', ');
+      footer.appendChild(spritesLine);
+    }
+
+    if (Array.isArray(entry.revisionNotes) && entry.revisionNotes.length > 0) {
+      const notesWrap = document.createElement('div');
+      notesWrap.className = 'revision-notes';
+      const notesTitle = document.createElement('div');
+      notesTitle.className = 'revision-notes-title';
+      notesTitle.textContent = 'Revision notes';
+      notesWrap.appendChild(notesTitle);
+      const ul = document.createElement('ul');
+      // newest first
+      const sorted = entry.revisionNotes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      for (const rn of sorted) {
+        const li = document.createElement('li');
+        li.textContent = (rn.date ? rn.date + ': ' : '') + (rn.note || '');
+        ul.appendChild(li);
+      }
+      notesWrap.appendChild(ul);
+      footer.appendChild(notesWrap);
+    }
+
+    card.appendChild(footer);
+    return card;
+  }
+
+  function render(filterText) {
+    // Disconnect every observer from the previous render before tearing down the DOM.
+    // Without this, each filter keystroke leaked a fresh set of IntersectionObservers
+    // (the old ones, still attached to now-detached nodes, aren't guaranteed prompt GC) —
+    // harmless for a moment, but this gallery is meant to stay open across a whole
+    // morning review session, so it accumulates for real over that time.
+    for (const s of cardStates) {
+      if (s.observer) s.observer.disconnect();
+    }
+    grid.innerHTML = '';
+    cardStates.length = 0;
+    const q = (filterText || '').trim().toLowerCase();
+    const visible = entries.filter((e) => {
+      if (!q) return true;
+      const hay = [e.id, e.theme, e.fromTheme, e.toTheme, e.targetShow, e.targetRound]
+        .filter(Boolean).join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+
+    // Newest first, but entries sharing an id (a version chain) stay adjacent and in
+    // iteration order — this is what makes "type the id, see the whole chain
+    // side-by-side" work as the compare mechanism.
+    const byId = new Map();
+    for (const e of visible) {
+      if (!byId.has(e.id)) byId.set(e.id, []);
+      byId.get(e.id).push(e);
+    }
+    const groups = Array.from(byId.values()).map((g) => g.sort((a, b) => (a.iteration || 1) - (b.iteration || 1)));
+    groups.sort((a, b) => (b[b.length - 1].date || '').localeCompare(a[a.length - 1].date || ''));
+
+    if (groups.length === 0) {
+      emptyState.style.display = 'block';
+      return;
+    }
+    emptyState.style.display = 'none';
+
+    for (const group of groups) {
+      for (const entry of group) {
+        grid.appendChild(buildCard(entry));
+      }
+    }
+  }
+
+  filterInput.addEventListener('input', () => render(filterInput.value));
+  render('');
+})();
+</script>
+</body>
+</html>

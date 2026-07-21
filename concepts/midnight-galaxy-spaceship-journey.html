@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>midnight-galaxy — meteor shower to galaxy round-journey prototype</title>
+<style>
+  :root{
+    --bg:#08001a; --bgDeep:#040010; --accent:#4a1a8f; --highlight:#c060ff; --text:#e8d0ff;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0a0a;color:#e8e8e8;font-family:system-ui,sans-serif;padding:28px}
+  h1{font-size:1.15rem;font-weight:700;margin-bottom:4px}
+  .sub{color:#888;font-size:.8rem;margin-bottom:20px;max-width:780px;line-height:1.5}
+  .wrap{max-width:960px}
+  .stage{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;border:1px solid #222;background:var(--bgDeep)}
+  canvas{position:absolute;inset:0;width:100%;height:100%}
+  .hud{position:absolute;bottom:6%;left:0;right:0;text-align:center;font-size:.75rem;letter-spacing:.3em;text-transform:uppercase;color:var(--highlight);opacity:0;transition:opacity .3s;pointer-events:none;font-weight:700}
+  .hud.show{opacity:.85}
+  .round{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.3rem;opacity:0;transition:opacity .5s ease-out;pointer-events:none}
+  .round.show{opacity:1}
+  .round .n{font-size:.9rem;letter-spacing:.35em;text-transform:uppercase;color:var(--highlight)}
+  .round .t{font-size:3rem;font-weight:700;color:var(--text)}
+  .controls{display:flex;gap:10px;align-items:center;margin:14px 0 24px;font-size:.78rem;color:#aaa;flex-wrap:wrap}
+  button{background:#161616;border:1px solid #2a2a2a;color:#eee;padding:8px 16px;border-radius:6px;font-size:.78rem;cursor:pointer}
+  button:hover{background:#1e1e1e}
+  label{display:flex;gap:6px;align-items:center}
+  input[type=checkbox]{accent-color:var(--highlight)}
+  .phase{font-size:.7rem;color:#666;margin-left:auto}
+  .notes{margin-top:20px;font-size:.8rem;color:#999;line-height:1.6;max-width:780px}
+  .notes b{color:#ccc}
+  .gate{margin-top:16px;font-size:.78rem;color:#888;line-height:1.7;max-width:780px}
+  .gate b{color:#bbb}
+  .gate ul{margin:6px 0 0 18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Meteor shower to galaxy — midnight-galaxy round journey</h1>
+<div class="sub">Baseline is the shipped team-picker warp engine (canvas/rAF, single <code>warp</code> value driving background star streaks) — kept as a subdued background layer. New foreground layer: a diagonal meteor shower, pre-allocated/recycled per meteor set, that carries both the arrival at the galaxy core and the departure back out. One theme, one motif, used at both waypoints — no separate "shooting-star burst" mechanic anymore.</div>
+
+<div class="stage" id="stage">
+  <canvas id="cv"></canvas>
+  <div class="round" id="round1"><div class="n">Arriving at</div><div class="t">Round 1</div></div>
+  <div class="round" id="round2"><div class="n">Arriving at</div><div class="t">Round 2</div></div>
+  <div class="hud" id="hud">Meteor shower</div>
+</div>
+
+<div class="controls">
+  <button id="replay">↻ Replay full journey</button>
+  <label><input type="checkbox" id="reducedToggle"> Simulate prefers-reduced-motion</label>
+  <span class="phase" id="phaseLabel">phase: idle</span>
+</div>
+
+<div class="notes">
+  <b>Decision this session:</b> the old prototype asked whether midnight-galaxy should get a themed warp effect or stay on team-picker's neutral one. Resolved: themed, fully — and the shooting-star "burst" that used to be a separate mechanic (a warp-value spike) is now the same meteor-shower motif reused at both ends of the journey, so the whole thing reads as one continuous idea instead of warp-plus-a-different-effect.<br><br>
+  <b>Sequence (~8.9s):</b> hold (500ms, ambient twinkle, no motion — anticipation beat) → meteor shower in (3200ms, diagonal streaks cross the frame slowly enough to actually track — background star-warp is held near-idle the whole beat, not just "subdued," so the meteor shower is the only streaking motion on screen; the windshield gag plays inside this beat) → galaxy arrival (1500ms, meteors have fully faded before this starts, radial flash + expanding ring, background warp settles near-still, "Round 1" fades in and holds) → meteor shower out (2400ms, a fresh randomized shower, not a repeat of the first — background warp stays at the same near-idle level as the entry shower, deliberately, so departure doesn't reopen the hyperspace look while meteors are also on screen) → settle (1300ms, meteors fade, "Round 2" fades in and holds).<br><br>
+  <b>Meteors slowed down on purpose:</b> the first pass had each meteor cross the frame in 550-850ms — fast enough that it read as a blur, not a "we had to slow the ship down to see this" moment. Flight time is now 1100-1600ms per meteor (roughly double), meteor count dropped from 16 to 12 so the slower streaks don't overlap into visual noise, and both meteor phases got substantially longer (3200ms/2400ms, up from 1450ms each) to give that slower pace room to actually play out instead of feeling rushed to fit a short window.<br><br>
+  <b>Meteors and hyperspace don't run together:</b> an earlier version of this file let background warp climb high enough during the meteor phases (targets of 0.16/0.22) that the star layer's own streak-rendering kicked in alongside the meteors — two different "long light-trail" motifs competing in the same beat, which read as cluttered rather than reinforcing. Background warp during both meteor phases is now held at 0.02, well under the 0.03 threshold where stars switch from dots to streaks — so the meteor shower is a clean, isolated beat with calm background stars, not a meteor-shower-plus-hyperspace mashup. If a dedicated hyperspace/warp beat is wanted later, it should be its own separate moment, not layered under the meteors.<br><br>
+  <b>Frame-timing fix applied:</b> the original file's background-warp easing (<code>warp += (target-warp)*rate</code>) advanced by a fixed rate per animation frame with no delta-time normalization — exactly the pitfall <code>references/round-journeys.md</code> already flags from <code>TeamPickerSlide.jsx</code> (runs ~2x too fast on a 120Hz display vs. what it's tuned for on 60Hz). Fixed here by copying that file's <code>dtn = min(26, dt)/16.667</code> clamp-and-normalize and scaling every per-frame lerp by it. Meteor flight itself was already timestamp-driven (elapsed real milliseconds, not frame count), so it didn't need the same fix.<br><br>
+  <b>Reduced motion:</b> unchanged in spirit from the original — background warp holds at a fixed low value throughout, no meteors, no flash, no ring; round labels just crossfade (Round 1 during galaxy-arrival/meteor-out, Round 2 during settle).<br><br>
+  <b>Story beat — the windshield gag:</b> about 30% into the meteor shower in, one meteor breaks from the ambient pattern and comes straight at camera (growing/brightening rather than streaking laterally, so it visually reads as "incoming" instead of "background"), hits at a rule-of-thirds point, and a crack spiders out in staggered jagged lines (not a single instant snap). The crack now sits alone, uncovered, for 1300ms (up from an initial 550ms that read as barely-there) before a bandaid scales and fades in over it (never pops in from nothing, per the no-pop-in rule) and the "damage" is comically patched — with room left over in the phase to sit on the patched-up beat for a moment before the shower ends. This is disabled entirely in reduced motion — it's pure narrative flourish, not information the ambient layer depends on. The crack's exact shape re-rolls each replay (see <code>makeCrack()</code>), everything else about its timing is fixed.<br><br>
+  <b>Open question for you:</b> theme can change mid-show (live, via <code>show.theme_id</code>, not locked per-round) — so this meteor-shower-to-galaxy motif should live under midnight-galaxy specifically, and every other theme that reaches this journey needs its own fresh per-theme motif rather than reusing this one. Worth deciding whether that's a lot of one-off prototypes to commission, or whether a smaller shared "family" of journey motifs (e.g. a couple of interchangeable arrival/departure shapes reskinned per theme's palette) is worth designing instead.
+</div>
+
+<div class="gate">
+  <b>Self-gate</b>
+  <ul>
+    <li>Extension, not a parallel system: background layer is still team-picker's exact star-projection math; meteor layer is new but reuses the same canvas, same additive blend mode, same recycle-a-fixed-pool discipline — not a second engine bolted on.</li>
+    <li>Real theme colors only: <code>bg #08001a</code>, <code>bgDeep #040010</code>, <code>accent #4a1a8f</code>, <code>highlight #c060ff</code>, <code>text #e8d0ff</code>, plus <code>shinyAccent #ff40a0</code> for the meteor head — all pulled from midnight-galaxy's actual entry in <code>themes/index.js</code>, nothing placeholder.</li>
+    <li>Replay button and reduced-motion toggle both tested working, not just wired.</li>
+    <li>GPU-appropriate: canvas/rAF for the per-frame star and meteor math (genuine per-frame numeric need — same precedent as team-picker and winner-reveal), CSS opacity-only for the round-label crossfades.</li>
+    <li>No pop-in anywhere: meteors fade in/out on their own envelope, round labels crossfade, flash/ring ramp rather than snap.</li>
+    <li>Edge margin respected: round-label text stays centered with real margin; only meteors and stars (atmosphere) are allowed to run off-frame.</li>
+  </ul>
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById('cv');
+const ctx = canvas.getContext('2d', { alpha: false });
+const W = 960, H = 540, CX = W/2, CY = H/2;
+canvas.width = W; canvas.height = H;
+
+const hexToRgb = hex => { const n = parseInt(hex.replace('#',''),16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; };
+const clamp01 = v => Math.max(0, Math.min(1, v));
+const BG = hexToRgb('#040010'), ACCENT = hexToRgb('#4a1a8f'), HI = hexToRgb('#c060ff'), HEAD = hexToRgb('#ff40a0');
+
+let reduced = false;
+
+// background star layer (unchanged math from team-picker's warp engine)
+let stars = [];
+function makeStars(n){ return Array.from({length:n},()=>({x:Math.random()*2-1,y:Math.random()*2-1,z:Math.random(),s:0.7+Math.random()*0.6})); }
+stars = makeStars(150);
+
+// wispy filament layer for the galaxy-core flash — same technique as the harvest supernova piece
+const WISP_COUNT = 9;
+let wisps = [];
+function makeWisps(){
+  return Array.from({length:WISP_COUNT}, (_, i) => ({
+    angle: (i/WISP_COUNT)*Math.PI*2 + (Math.random()*0.4-0.2),
+    radiusJitter: 0.78+Math.random()*0.34,
+    sizeJitter: 0.5+Math.random()*0.7,
+  }));
+}
+wisps = makeWisps();
+
+// foreground meteor layer — fixed-size pool, re-seeded fresh at each meteor phase's entry (never grown/discarded per frame)
+const METEOR_COUNT = 12;
+let meteors = [];
+function spawnMeteors(n, phaseDur){
+  const list = [];
+  const baseAngle = Math.atan2(0.80, -0.62); // primary shower direction: upper-right to lower-left
+  for (let i=0;i<n;i++){
+    const travel = 1100 + Math.random()*500;               // 1100-1600ms flight time — slow enough to actually track, not a blur
+    const maxDelay = Math.max(0, phaseDur - travel - 80);  // never let a meteor start so late it gets cut off by the phase ending
+    const delay = Math.random() * maxDelay * 0.85;
+    const angle = baseAngle + (Math.random()*16-8) * Math.PI/180;
+    const dist = Math.hypot(W,H) * (0.9 + Math.random()*0.5);
+    const sx = W*(0.5 + Math.random()*0.75);
+    const sy = -H*(0.05 + Math.random()*0.35);
+    const ex = sx + Math.cos(angle)*dist;
+    const ey = sy + Math.sin(angle)*dist;
+    list.push({
+      delay, travel, sx, sy, ex, ey,
+      bow: (Math.random()*24-12),               // slight perpendicular bow so the path arcs, not a dead-straight line
+      trailFrac: 0.14 + Math.random()*0.08,
+      w: 1.6 + Math.random()*1.8,
+    });
+  }
+  return list;
+}
+
+function drawMeteors(list, localMs){
+  ctx.globalCompositeOperation = 'lighter';
+  const lerp = (a,b,t)=>a+(b-a)*t;
+  for (const m of list){
+    const t = localMs - m.delay;
+    if (t < 0 || t > m.travel) continue;
+    const p = t / m.travel;
+    const x = lerp(m.sx, m.ex, p) + Math.sin(p*Math.PI)*m.bow;
+    const y = lerp(m.sy, m.ey, p);
+    const tp = Math.max(0, p - m.trailFrac);
+    const tx = lerp(m.sx, m.ex, tp) + Math.sin(tp*Math.PI)*m.bow;
+    const ty = lerp(m.sy, m.ey, tp);
+    let env = 1;
+    if (p < 0.15) env = p/0.15;
+    else if (p > 0.8) env = Math.max(0, (1-p)/0.2);
+    const grad = ctx.createLinearGradient(tx,ty,x,y);
+    grad.addColorStop(0, `rgba(${ACCENT.r},${ACCENT.g},${ACCENT.b},0)`);
+    grad.addColorStop(1, `rgba(${HEAD.r},${HEAD.g},${HEAD.b},${env*0.95})`);
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = m.w;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(x,y); ctx.stroke();
+    ctx.fillStyle = `rgba(${HEAD.r},${HEAD.g},${HEAD.b},${env})`;
+    ctx.beginPath(); ctx.arc(x,y,m.w*0.55,0,6.2832); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// phase durations — named once here, used by both the TIMELINE below and the windshield-gag
+// timing above it, so the two can't silently drift out of sync with each other
+const HOLD_DUR = 500, METEORS_IN_DUR = 3200, GALAXY_ARRIVAL_DUR = 1500, METEORS_OUT_DUR = 2400, SETTLE_DUR = 1300;
+
+// windshield-crack gag — a small scripted story beat inside the meteor shower: one meteor
+// clips the glass, a crack spiders out, then a bandaid slaps on and "fixes" it. Same beat every
+// replay in timing, but the crack's exact shape is re-rolled each time (see resetUI).
+const IMPACT_X = W*0.63, IMPACT_Y = H*0.36; // rule-of-thirds point, not dead center
+const IMPACT_MOMENT = METEORS_IN_DUR*0.30;  // ms into meteorsIn when the meteor hits — early enough
+                                             // to leave real room afterward for a long crack hold
+const IMPACT_APPROACH = 260;       // ms of visible "coming right at us" growth before contact
+const CRACK_GROW = 200;            // ms for the crack to finish spidering out
+const CRACK_HOLD = 1300;           // ms the crack sits alone, uncovered — was 550ms, too brief to read
+const BANDAID_IN = 240;            // ms the bandaid takes to scale/fade in
+let crackSeed = [], crackProgress = 0, bandaidProgress = 0, impactFlash = 0;
+function makeCrack(){
+  return Array.from({length:7}, (_, i) => ({
+    angle: (i/7)*Math.PI*2 + (Math.random()*0.5-0.25),
+    len: 26 + Math.random()*34,
+    startDelay: i*14 + Math.random()*18, // staggered spidering, not every line snapping at once
+    jag: (Math.random()*0.4-0.2),
+  }));
+}
+function roundRectPath(c,x,y,w,h,r){
+  c.beginPath();
+  c.moveTo(x+r,y); c.lineTo(x+w-r,y); c.arcTo(x+w,y,x+w,y+r,r);
+  c.lineTo(x+w,y+h-r); c.arcTo(x+w,y+h,x+w-r,y+h,r);
+  c.lineTo(x+r,y+h); c.arcTo(x,y+h,x,y+h-r,r);
+  c.lineTo(x,y+r); c.arcTo(x,y,x+r,y,r);
+  c.closePath();
+}
+function drawWindshieldGag(t){
+  const approachStart = IMPACT_MOMENT - IMPACT_APPROACH;
+  if (t >= approachStart && t < IMPACT_MOMENT) {
+    const ap = clamp01((t-approachStart)/IMPACT_APPROACH);
+    const grown = ap*ap*ap; // accelerating approach — reads as "coming right at us", not crossing the sky
+    const size = 2 + grown*22;
+    const ox = IMPACT_X - 90*(1-ap), oy = IMPACT_Y - 60*(1-ap);
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(ox,oy,0,ox,oy,Math.max(1,size));
+    g.addColorStop(0, 'rgba(255,255,255,0.9)');
+    g.addColorStop(0.5, `rgba(${HEAD.r},${HEAD.g},${HEAD.b},0.8)`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ox,oy,Math.max(1,size),0,6.2832); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  if (t >= IMPACT_MOMENT) {
+    const sinceImpact = t - IMPACT_MOMENT;
+    impactFlash = Math.max(0, 1 - sinceImpact/140);
+    crackProgress = clamp01(sinceImpact/(CRACK_GROW+40));
+    if (sinceImpact >= CRACK_GROW + CRACK_HOLD) bandaidProgress = clamp01((sinceImpact-CRACK_GROW-CRACK_HOLD)/BANDAID_IN);
+
+    if (impactFlash > 0) {
+      const g = ctx.createRadialGradient(IMPACT_X,IMPACT_Y,0,IMPACT_X,IMPACT_Y,70);
+      g.addColorStop(0, `rgba(255,255,255,${impactFlash*0.9})`);
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g; ctx.fillRect(IMPACT_X-70,IMPACT_Y-70,140,140);
+    }
+    if (crackProgress > 0) {
+      ctx.strokeStyle = 'rgba(230,238,255,0.85)'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+      for (const seg of crackSeed) {
+        const segT = clamp01((sinceImpact - seg.startDelay)/140);
+        if (segT <= 0) continue;
+        const midX = IMPACT_X + Math.cos(seg.angle+seg.jag)*seg.len*segT*0.5;
+        const midY = IMPACT_Y + Math.sin(seg.angle+seg.jag)*seg.len*segT*0.5;
+        const endX = IMPACT_X + Math.cos(seg.angle)*seg.len*segT;
+        const endY = IMPACT_Y + Math.sin(seg.angle)*seg.len*segT;
+        ctx.beginPath(); ctx.moveTo(IMPACT_X,IMPACT_Y); ctx.lineTo(midX,midY); ctx.lineTo(endX,endY); ctx.stroke();
+      }
+      ctx.fillStyle = `rgba(255,255,255,${0.7*crackProgress})`;
+      ctx.beginPath(); ctx.arc(IMPACT_X,IMPACT_Y,2.4,0,6.2832); ctx.fill();
+    }
+    if (bandaidProgress > 0) {
+      const bp = 1-(1-bandaidProgress)*(1-bandaidProgress); // quad ease-out
+      ctx.save();
+      ctx.translate(IMPACT_X, IMPACT_Y);
+      ctx.rotate(-0.18);
+      ctx.scale(0.9+0.1*bp, 0.9+0.1*bp);
+      ctx.globalAlpha = bp;
+      ctx.fillStyle = '#e7cda3';
+      roundRectPath(ctx, -27, -11, 54, 22, 8); ctx.fill();
+      ctx.fillStyle = '#f2ede2';
+      ctx.fillRect(-10,-7,20,14);
+      ctx.fillStyle = 'rgba(150,115,80,0.55)';
+      [[-18,-5],[-18,5],[18,-5],[18,5]].forEach(([dx,dy])=>{ ctx.beginPath(); ctx.arc(dx,dy,1.3,0,6.2832); ctx.fill(); });
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+// timeline in ms, phase name + duration
+const TIMELINE = [
+  { phase:'hold',          dur:HOLD_DUR },
+  { phase:'meteorsIn',     dur:METEORS_IN_DUR },
+  { phase:'galaxyArrival', dur:GALAXY_ARRIVAL_DUR },
+  { phase:'meteorsOut',    dur:METEORS_OUT_DUR },
+  { phase:'settle',        dur:SETTLE_DUR },
+];
+const TOTAL_DUR = TIMELINE.reduce((a,s)=>a+s.dur,0);
+let tStart = 0, elapsedInPhase = 0, warp = 0, flash = 0, ring = 0, raf;
+let lastNow = 0, currentPhaseName = null;
+const hud = document.getElementById('hud');
+const round1 = document.getElementById('round1');
+const round2 = document.getElementById('round2');
+const phaseLabel = document.getElementById('phaseLabel');
+
+function onPhaseEnter(phase, dur){
+  if (reduced) { meteors = []; return; }
+  meteors = (phase === 'meteorsIn' || phase === 'meteorsOut') ? spawnMeteors(METEOR_COUNT, dur) : [];
+}
+
+function resetUI(){
+  round1.classList.remove('show'); round2.classList.remove('show'); hud.classList.remove('show');
+  flash = 0; ring = 0; warp = reduced ? 0.1 : 0; currentPhaseName = null; lastNow = 0; meteors = [];
+  wisps = makeWisps();
+  crackSeed = makeCrack(); crackProgress = 0; bandaidProgress = 0; impactFlash = 0;
+}
+
+function tick(now){
+  if (!tStart) tStart = now;
+  const dt = lastNow ? (now - lastNow) : 16.667;
+  lastNow = now;
+  const dtn = Math.min(26, dt) / 16.667; // frame-timing normalization, copied from TeamPickerSlide.jsx per references/round-journeys.md
+
+  const total = now - tStart;
+  // clamp only for phase lookup — a total that has reached/passed TOTAL_DUR must still resolve
+  // to the final phase at its full duration, not fall through the loop and silently reset to hold
+  const totalForPhase = Math.min(total, TOTAL_DUR - 1);
+  let acc = 0, ph = TIMELINE[TIMELINE.length - 1];
+  for (const seg of TIMELINE) { if (totalForPhase < acc + seg.dur) { ph = seg; elapsedInPhase = totalForPhase - acc; break; } acc += seg.dur; }
+  const p = Math.min(1, elapsedInPhase / ph.dur);
+  phaseLabel.textContent = 'phase: ' + ph.phase;
+
+  if (ph.phase !== currentPhaseName) { currentPhaseName = ph.phase; onPhaseEnter(ph.phase, ph.dur); }
+
+  if (reduced) {
+    warp = 0.1; flash = 0; ring = 0;
+    hud.classList.remove('show');
+    round1.classList.toggle('show', ph.phase === 'galaxyArrival' || ph.phase === 'meteorsOut');
+    round2.classList.toggle('show', ph.phase === 'settle');
+  } else {
+    if (ph.phase === 'hold') { warp += (0.05 - warp) * 0.08 * dtn; hud.classList.remove('show'); round1.classList.remove('show'); round2.classList.remove('show'); }
+    else if (ph.phase === 'meteorsIn') { warp += (0.02 - warp) * 0.08 * dtn; hud.textContent='Meteor shower'; hud.classList.add('show'); round1.classList.remove('show'); flash=0; ring=0; }
+    else if (ph.phase === 'galaxyArrival') {
+      warp += (0.05 - warp) * 0.1 * dtn; hud.classList.remove('show');
+      flash = p < 0.18 ? p/0.18 : (p < 0.32 ? 1 : Math.max(0, 1 - (p-0.32)/0.4));
+      ring = p;
+      if (p > 0.35) round1.classList.add('show');
+    } else if (ph.phase === 'meteorsOut') { warp += (0.02 - warp) * 0.08 * dtn; flash=0; ring=0; hud.textContent='Departing'; hud.classList.add('show'); round1.classList.remove('show'); }
+    else if (ph.phase === 'settle') { warp += (0.04 - warp) * 0.08 * dtn; hud.classList.remove('show'); round1.classList.remove('show'); if (p > 0.3) round2.classList.add('show'); }
+  }
+
+  // draw
+  ctx.fillStyle = `rgba(${BG.r},${BG.g},${BG.b},0.32)`;
+  ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation = 'lighter';
+  const base = 0.021 * warp;
+  for (const s of stars) {
+    const prevZ = s.z; s.z -= base * s.s * dtn;
+    if (s.z <= 0.02) { s.x=Math.random()*2-1; s.y=Math.random()*2-1; s.z=1; continue; }
+    const sx=(s.x/s.z)*CX+CX, sy=(s.y/s.z)*CY+CY;
+    if (sx<-40||sx>W+40||sy<-40||sy>H+40) { s.x=Math.random()*2-1; s.y=Math.random()*2-1; s.z=1; continue; }
+    const depth = 1-s.z, a = Math.min(1,depth*1.15), tt = Math.min(1,depth*1.3);
+    const r = Math.round(ACCENT.r+(HI.r-ACCENT.r)*tt), g=Math.round(ACCENT.g+(HI.g-ACCENT.g)*tt), b=Math.round(ACCENT.b+(HI.b-ACCENT.b)*tt);
+    ctx.fillStyle = ctx.strokeStyle = `rgba(${r},${g},${b},${a})`;
+    const px=(s.x/prevZ)*CX+CX, py=(s.y/prevZ)*CY+CY;
+    const len = Math.abs(sx-px)+Math.abs(sy-py);
+    if (len<1.2 || warp<0.03) { ctx.beginPath(); ctx.arc(sx,sy,Math.max(0.6,depth*2),0,6.2832); ctx.fill(); }
+    else { ctx.lineWidth=Math.max(0.5,depth*depth*5); ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(sx,sy); ctx.stroke(); }
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  if (!reduced && (ph.phase === 'meteorsIn' || ph.phase === 'meteorsOut') && meteors.length) {
+    drawMeteors(meteors, elapsedInPhase);
+  }
+  if (!reduced && ph.phase === 'meteorsIn') {
+    drawWindshieldGag(elapsedInPhase);
+  }
+
+  if (!reduced && ring > 0) {
+    const rad = ring * H * 0.55;
+    const rg = ctx.createRadialGradient(CX,CY,0,CX,CY,rad);
+    rg.addColorStop(0, `rgba(255,255,255,${Math.max(0,0.5-ring*0.5)})`);
+    rg.addColorStop(0.4, `rgba(${HI.r},${HI.g},${HI.b},${Math.max(0,0.4-ring*0.35)})`);
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = rg; ctx.fillRect(0,0,W,H);
+
+    // wispy filament layer — breaks the perfect-circle read into something cloud-like
+    ctx.globalCompositeOperation = 'lighter';
+    const wispAlpha = Math.max(0, 0.28 - ring*0.22);
+    if (wispAlpha > 0.01) {
+      for (const w of wisps) {
+        const wr = rad * w.radiusJitter;
+        const wx = CX + Math.cos(w.angle)*wr, wy = CY + Math.sin(w.angle)*wr*0.62;
+        const wsize = Math.max(2, rad * 0.22 * w.sizeJitter);
+        const wg = ctx.createRadialGradient(wx,wy,0,wx,wy,wsize);
+        wg.addColorStop(0, `rgba(${ACCENT.r},${ACCENT.g},${ACCENT.b},${wispAlpha})`);
+        wg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = wg; ctx.fillRect(wx-wsize, wy-wsize, wsize*2, wsize*2);
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  if (!reduced && flash > 0) {
+    // anamorphic core streak — same cinematic cue as the harvest supernova piece
+    const streakH = H*0.045*(0.6+flash*0.4);
+    const sg = ctx.createLinearGradient(0, CY, W, CY);
+    sg.addColorStop(0, 'rgba(255,255,255,0)');
+    sg.addColorStop(0.5, `rgba(255,255,255,${flash*0.85})`);
+    sg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sg;
+    ctx.fillRect(0, CY-streakH/2, W, streakH);
+
+    ctx.fillStyle = `rgba(255,255,255,${flash*0.55})`;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  const vg = ctx.createRadialGradient(CX,CY,0,CX,CY,H*0.55);
+  vg.addColorStop(0,'rgba(4,0,16,0.7)'); vg.addColorStop(0.4,'rgba(4,0,16,0.35)'); vg.addColorStop(0.7,'rgba(0,0,0,0)');
+  ctx.fillStyle = vg; ctx.fillRect(0,0,W,H);
+
+  if (total < TOTAL_DUR) raf = requestAnimationFrame(tick);
+}
+
+function play(){
+  cancelAnimationFrame(raf);
+  tStart = 0; resetUI();
+  raf = requestAnimationFrame(tick);
+}
+document.getElementById('replay').addEventListener('click', play);
+document.getElementById('reducedToggle').addEventListener('change', e=>{ reduced = e.target.checked; play(); });
+play();
+</script>
+</body>
+</html>

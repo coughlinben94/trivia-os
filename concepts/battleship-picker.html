@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept — Battleship Salvo Picker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: #06121f;
+    color: #f4ede1;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ---------- control bar (matches sibling mockups) ---------- */
+  .bar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 18px;
+    background: #0a1826;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    z-index: 50;
+  }
+  .bar h1 {
+    font-family: 'Boogaloo', cursive;
+    font-size: 20px;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    color: #ffd166;
+  }
+  .bar .spacer { flex: 1; }
+  .bar button {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    color: #06121f;
+    background: #ffd166;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+  }
+  .bar button:active { transform: translateY(1px); }
+  .bar label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: rgba(244,237,225,0.75);
+    cursor: pointer;
+    user-select: none;
+  }
+  .bar .status {
+    font-size: 12px;
+    color: rgba(244,237,225,0.5);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- stage scaffold: fixed 1344×756 canvas, scaled to fit ---------- */
+  .stage-wrap { flex: 1; position: relative; overflow: hidden; }
+  .stage {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 1344px; height: 756px;
+    transform: translate(-50%, -50%) scale(1);
+    transform-origin: center center;
+    border-radius: 18px;
+    overflow: hidden;
+    background: linear-gradient(180deg,
+      #0b1d33 0%, #12304f 26%, #23486b 38%, #2c5878 41%,
+      #123a55 42%, #0d2c44 60%, #081e31 100%);
+    box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+  }
+  .stage.reduced * { animation: none !important; transition: none !important; }
+
+  /* ---------- GPU-safe looping keyframes (transform / opacity only) ---------- */
+  @keyframes bob {
+    0%, 100% { transform: translateY(0) rotate(-1deg); }
+    50%      { transform: translateY(-8px) rotate(1.3deg); }
+  }
+  @keyframes bobBig {
+    0%, 100% { transform: translateY(0) rotate(0.6deg); }
+    50%      { transform: translateY(-6px) rotate(-0.6deg); }
+  }
+  @keyframes seaDrift {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-90px); }
+  }
+  @keyframes cloudDrift {
+    from { transform: translateX(0); }
+    to   { transform: translateX(70px); }
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0.25; }
+    50%      { opacity: 1; }
+  }
+  @keyframes retPulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50%      { transform: translate(-50%, -50%) scale(1.14); }
+  }
+  @keyframes muzzle {
+    0%   { transform: translate(-50%, -50%) scale(0.3); opacity: 1; }
+    60%  { transform: translate(-50%, -50%) scale(1.5); opacity: 0.9; }
+    100% { transform: translate(-50%, -50%) scale(2.1); opacity: 0; }
+  }
+  @keyframes pburst {
+    0%   { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); opacity: 1; }
+    100% { transform: translate3d(var(--dx), var(--dy), 0) rotate(var(--rr)) scale(0.25); opacity: 0; }
+  }
+  @keyframes smokeUp {
+    0%   { transform: translate3d(0, 0, 0) scale(0.7); opacity: 0.85; }
+    100% { transform: translate3d(var(--dx), -90px, 0) scale(1.9); opacity: 0; }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translate(-50%, -50%) scale(var(--fit, 1)); }
+    20% { transform: translate(calc(-50% + 7px), calc(-50% - 5px)) scale(var(--fit, 1)); }
+    40% { transform: translate(calc(-50% - 6px), calc(-50% + 4px)) scale(var(--fit, 1)); }
+    60% { transform: translate(calc(-50% + 4px), calc(-50% + 3px)) scale(var(--fit, 1)); }
+    80% { transform: translate(calc(-50% - 3px), calc(-50% - 2px)) scale(var(--fit, 1)); }
+  }
+  @keyframes flashFade {
+    0%   { opacity: 0.7; }
+    100% { opacity: 0; }
+  }
+  @keyframes popIn {
+    0%   { transform: translate(-50%, -50%) scale(0.55); opacity: 0; }
+    65%  { transform: translate(-50%, -50%) scale(1.06); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  }
+  @keyframes bannerIn {
+    0%   { transform: translate(-50%, -50%) scale(0.7); opacity: 0; }
+    12%  { transform: translate(-50%, -50%) scale(1.04); opacity: 1; }
+    18%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    82%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    100% { transform: translate(-50%, -52%) scale(0.96); opacity: 0; }
+  }
+  @keyframes boomPop {
+    0%   { transform: translate(-50%, -50%) scale(0.4); opacity: 0; }
+    14%  { transform: translate(-50%, -50%) scale(1.18); opacity: 1; }
+    24%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    72%  { transform: translate(-50%, -62%) scale(1); opacity: 1; }
+    100% { transform: translate(-50%, -85%) scale(0.9); opacity: 0; }
+  }
+  @keyframes raysSpin {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to   { transform: translate(-50%, -50%) rotate(360deg); }
+  }
+  @keyframes flagWave {
+    0%, 100% { transform: skewY(-4deg); }
+    50%      { transform: skewY(4deg); }
+  }
+  @keyframes ripple {
+    0%   { transform: translate(-50%, -50%) scale(0.3); opacity: 0.8; }
+    100% { transform: translate(-50%, -50%) scale(2.4); opacity: 0; }
+  }
+  @keyframes searchBeam {
+    0%   { opacity: 0; }
+    100% { opacity: 0.75; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <h1>⚓ Concept — Battleship Salvo</h1>
+  <div class="spacer"></div>
+  <span class="status" id="status">idle</span>
+  <label><input type="checkbox" id="simReduced"> Simulate reduced motion</label>
+  <button id="replayBtn">↻ Replay</button>
+</div>
+
+<div class="stage-wrap" id="stageWrap">
+  <div class="stage" id="stage"></div>
+</div>
+
+<script>
+'use strict';
+
+/* =====================================================================
+   Battleship Salvo — Press-Your-Luck picker concept for Trivia OS.
+   Contract to eventually port: { candidates, winnerId, theme, onDone }.
+   GPU-only rule: everything continuous animates transform/opacity only.
+   ===================================================================== */
+
+const TEAMS = [
+  { id: 't1', name: 'Quizteama Aguilera', color: '#e4572e' },
+  { id: 't2', name: 'The Fact Checkers',  color: '#f4b41a' },
+  { id: 't3', name: 'Tequila Mockingbird', color: '#4cb944' },
+  { id: 't4', name: 'Les Quizerables',    color: '#3d9be9' },
+  { id: 't5', name: 'Cider House Rules',  color: '#b86bff' },
+  { id: 't6', name: 'John Trivia-olta',   color: '#ff6b9d' },
+];
+
+const THEME = { bg: '#12304f', bgDeep: '#081e31', accent: '#f4b41a', highlight: '#ffd166' };
+
+const AREA_W = 1344, AREA_H = 756, CX = AREA_W / 2, CY = AREA_H / 2;
+
+/* Player battleship turret pivot, in stage coordinates. */
+const TURRET = { x: 268, y: 596 };
+const BARREL_LEN = 74;
+
+/* Enemy fleet berths: { x, y (waterline), sc (scale) } — far ships smaller. */
+const BERTHS = [
+  { x: 330,  y: 385, sc: 0.80 },
+  { x: 580,  y: 360, sc: 0.74 },
+  { x: 840,  y: 380, sc: 0.80 },
+  { x: 1110, y: 358, sc: 0.74 },
+  { x: 690,  y: 505, sc: 0.98 },
+  { x: 1030, y: 520, sc: 1.00 },
+];
+
+const BOOMS = ['DIRECT HIT!', 'KABOOM!', 'TORPEDO STRIKE!', 'SHE’S GOING DOWN!', 'BULLSEYE!'];
+
+const stage    = document.getElementById('stage');
+const wrap     = document.getElementById('stageWrap');
+const statusEl = document.getElementById('status');
+const simRM    = document.getElementById('simReduced');
+
+let timers = [];
+let anims  = [];
+let ships  = [];
+let reticle = null;
+let barrel = null;
+
+/* ---------- helpers ---------- */
+
+function el(tag, style, html) {
+  const d = document.createElement(tag);
+  if (style) Object.assign(d.style, style);
+  if (html != null) d.innerHTML = html;
+  return d;
+}
+
+function at(ms, fn) { timers.push(setTimeout(fn, ms)); }
+
+function teardown() {
+  timers.forEach(clearTimeout);
+  timers = [];
+  anims.forEach(a => { try { a.cancel(); } catch (e) {} });
+  anims = [];
+  ships = [];
+  reticle = null;
+  barrel = null;
+  stage.innerHTML = '';
+  stage.classList.remove('reduced');
+}
+
+function setStatus(t) { statusEl.textContent = t; }
+
+function rand(a, b) { return a + Math.random() * (b - a); }
+
+/* Fit the fixed 1344×756 canvas to the viewport. Resize-driven, not per-frame. */
+function fit() {
+  const s = Math.min(wrap.clientWidth / (AREA_W + 40), wrap.clientHeight / (AREA_H + 40));
+  stage.style.setProperty('--fit', s);
+  stage.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
+}
+window.addEventListener('resize', fit);
+
+/* Particle burst — fixed count, CSS-keyframe driven; no JS physics loop. */
+function burst(x, y, colors, count, opts) {
+  const o = Object.assign({ minDist: 60, maxDist: 170, minSize: 6, maxSize: 14, dur: [600, 1100], gravity: 60, upBias: 0 }, opts || {});
+  for (let i = 0; i < count; i++) {
+    const ang  = Math.random() * Math.PI * 2;
+    const dist = rand(o.minDist, o.maxDist);
+    const dx = Math.cos(ang) * dist;
+    const dy = Math.sin(ang) * dist - o.upBias + o.gravity;
+    const size = rand(o.minSize, o.maxSize);
+    const p = el('div', {
+      position: 'absolute',
+      left: (x - size / 2) + 'px',
+      top:  (y - size / 2) + 'px',
+      width: size + 'px',
+      height: size + 'px',
+      borderRadius: Math.random() < 0.5 ? '50%' : '2px',
+      background: colors[i % colors.length],
+      pointerEvents: 'none',
+      zIndex: 40,
+      willChange: 'transform, opacity',
+      animation: 'pburst ' + rand(o.dur[0], o.dur[1]).toFixed(0) + 'ms cubic-bezier(0.16, 0.84, 0.44, 1) forwards',
+    });
+    p.style.setProperty('--dx', dx.toFixed(1) + 'px');
+    p.style.setProperty('--dy', dy.toFixed(1) + 'px');
+    p.style.setProperty('--rr', rand(-260, 260).toFixed(0) + 'deg');
+    stage.appendChild(p);
+    at(1400, () => p.remove());
+  }
+}
+
+function smokePuffs(x, y, count) {
+  for (let i = 0; i < count; i++) {
+    const size = rand(20, 42);
+    const p = el('div', {
+      position: 'absolute',
+      left: (x - size / 2 + rand(-16, 16)) + 'px',
+      top:  (y - size / 2 + rand(-8, 8)) + 'px',
+      width: size + 'px',
+      height: size + 'px',
+      borderRadius: '50%',
+      background: 'radial-gradient(circle, rgba(120,124,130,0.9) 0%, rgba(70,74,80,0.5) 60%, transparent 100%)',
+      pointerEvents: 'none',
+      zIndex: 38,
+      willChange: 'transform, opacity',
+      animation: 'smokeUp ' + rand(1100, 1800).toFixed(0) + 'ms ease-out ' + (i * 90) + 'ms forwards',
+      opacity: '0',
+    });
+    p.style.setProperty('--dx', rand(-30, 30).toFixed(0) + 'px');
+    stage.appendChild(p);
+    at(2600, () => p.remove());
+  }
+}
+
+function rippleAt(x, y) {
+  for (let i = 0; i < 2; i++) {
+    const r = el('div', {
+      position: 'absolute',
+      left: x + 'px',
+      top:  y + 'px',
+      width: '120px',
+      height: '34px',
+      border: '3px solid rgba(220,240,255,0.55)',
+      borderRadius: '50%',
+      pointerEvents: 'none',
+      zIndex: 24,
+      willChange: 'transform, opacity',
+      animation: 'ripple ' + (900 + i * 350) + 'ms ease-out ' + (i * 260) + 'ms forwards',
+      opacity: '0',
+    });
+    stage.appendChild(r);
+    at(2400, () => r.remove());
+  }
+}
+
+function boomText(x, y, txt) {
+  const b = el('div', {
+    position: 'absolute',
+    left: x + 'px',
+    top: (y - 70) + 'px',
+    transform: 'translate(-50%, -50%)',
+    fontFamily: "'Boogaloo', cursive",
+    fontSize: '44px',
+    color: '#ffd166',
+    textShadow: '0 3px 0 rgba(0,0,0,0.45), 0 0 18px rgba(255,140,40,0.6)',
+    whiteSpace: 'nowrap',
+    pointerEvents: 'none',
+    zIndex: 42,
+    willChange: 'transform, opacity',
+    animation: 'boomPop 1300ms cubic-bezier(0.22, 1, 0.36, 1) forwards',
+    opacity: '0',
+  }, txt);
+  stage.appendChild(b);
+  at(1500, () => b.remove());
+}
+
+function screenShake() {
+  const a = stage.animate([
+    { transform: 'translate(-50%, -50%) scale(var(--fit, 1))' },
+    { transform: 'translate(calc(-50% + 7px), calc(-50% - 5px)) scale(var(--fit, 1))', offset: 0.2 },
+    { transform: 'translate(calc(-50% - 6px), calc(-50% + 4px)) scale(var(--fit, 1))', offset: 0.4 },
+    { transform: 'translate(calc(-50% + 4px), calc(-50% + 3px)) scale(var(--fit, 1))', offset: 0.6 },
+    { transform: 'translate(calc(-50% - 3px), calc(-50% - 2px)) scale(var(--fit, 1))', offset: 0.8 },
+    { transform: 'translate(-50%, -50%) scale(var(--fit, 1))' },
+  ], { duration: 320, easing: 'linear' });
+  anims.push(a);
+}
+
+function impactFlash() {
+  const f = el('div', {
+    position: 'absolute',
+    inset: '0',
+    background: 'rgba(255,240,210,1)',
+    pointerEvents: 'none',
+    zIndex: 44,
+    willChange: 'opacity',
+    animation: 'flashFade 260ms ease-out forwards',
+  });
+  stage.appendChild(f);
+  at(400, () => f.remove());
+}
+
+/* ---------- scene construction ---------- */
+
+function buildBackdrop() {
+  // Stars — opacity twinkle only.
+  for (let i = 0; i < 26; i++) {
+    const s = el('div', {
+      position: 'absolute',
+      left: rand(20, AREA_W - 20) + 'px',
+      top: rand(12, 250) + 'px',
+      width: '3px', height: '3px',
+      borderRadius: '50%',
+      background: '#fdf6e3',
+      opacity: '0.4',
+      animation: 'twinkle ' + rand(1800, 4200).toFixed(0) + 'ms ease-in-out ' + rand(0, 2000).toFixed(0) + 'ms infinite',
+    });
+    stage.appendChild(s);
+  }
+
+  // Moon — static glow (box-shadow set once, never animated).
+  stage.appendChild(el('div', {
+    position: 'absolute',
+    left: '1130px', top: '64px',
+    width: '76px', height: '76px',
+    borderRadius: '50%',
+    background: 'radial-gradient(circle at 34% 34%, #fff8e6, #e8d8a8)',
+    boxShadow: '0 0 60px 18px rgba(255,244,214,0.28)',
+  }));
+
+  // Drifting clouds — translateX loop.
+  const cloudSpots = [[140, 90, 1], [520, 55, 0.8], [900, 120, 1.1]];
+  cloudSpots.forEach((c, i) => {
+    const cl = el('div', {
+      position: 'absolute',
+      left: c[0] + 'px', top: c[1] + 'px',
+      width: (170 * c[2]) + 'px', height: (40 * c[2]) + 'px',
+      borderRadius: '40px',
+      background: 'rgba(190,205,225,0.14)',
+      animation: 'cloudDrift ' + (16000 + i * 5000) + 'ms ease-in-out infinite alternate',
+    });
+    stage.appendChild(cl);
+  });
+
+  // Horizon glow line (static).
+  stage.appendChild(el('div', {
+    position: 'absolute',
+    left: '0', top: '308px',
+    width: '100%', height: '4px',
+    background: 'linear-gradient(90deg, transparent, rgba(255,214,140,0.35), transparent)',
+  }));
+
+  // Wave strips — width 260%, drifting on transform only.
+  [[336, 0.20, 26000], [470, 0.28, 20000], [640, 0.4, 15000]].forEach((w, i) => {
+    const strip = el('div', {
+      position: 'absolute',
+      left: '-200px', top: w[0] + 'px',
+      width: (AREA_W + 500) + 'px', height: '22px',
+      background: 'radial-gradient(circle at 12px -6px, transparent 12px, rgba(230,245,255,' + w[1] * 0.55 + ') 13px, transparent 16px)',
+      backgroundSize: '48px 22px',
+      backgroundRepeat: 'repeat-x',
+      opacity: String(w[1] + 0.25),
+      animation: 'seaDrift ' + w[2] + 'ms ease-in-out infinite alternate' + (i % 2 ? '-reverse' : ''),
+      zIndex: 6,
+    });
+    stage.appendChild(strip);
+  });
+}
+
+function buildPlayerShip() {
+  const shipW = 400, shipH = 240;
+  const wrapEl = el('div', {
+    position: 'absolute',
+    left: '18px',
+    top: (AREA_H - shipH - 20) + 'px',
+    width: shipW + 'px',
+    height: shipH + 'px',
+    zIndex: 30,
+    animation: 'bobBig 4600ms ease-in-out infinite',
+    willChange: 'transform',
+  });
+
+  // Hull.
+  wrapEl.appendChild(el('div', {
+    position: 'absolute',
+    left: '0', bottom: '18px',
+    width: '380px', height: '74px',
+    background: 'linear-gradient(180deg, #5d6b7d 0%, #465364 55%, #2e3948 100%)',
+    clipPath: 'polygon(0 18%, 96% 0, 100% 30%, 92% 100%, 6% 100%)',
+    borderRadius: '4px',
+  }));
+  // Hull stripe.
+  wrapEl.appendChild(el('div', {
+    position: 'absolute',
+    left: '14px', bottom: '58px',
+    width: '340px', height: '8px',
+    background: THEME.accent,
+    transform: 'rotate(-1.4deg)',
+    borderRadius: '4px',
+  }));
+  // Superstructure.
+  wrapEl.appendChild(el('div', {
+    position: 'absolute',
+    left: '120px', bottom: '90px',
+    width: '120px', height: '52px',
+    background: 'linear-gradient(180deg, #75849a, #55637a)',
+    borderRadius: '5px 5px 0 0',
+  }));
+  wrapEl.appendChild(el('div', {
+    position: 'absolute',
+    left: '146px', bottom: '142px',
+    width: '68px', height: '34px',
+    background: '#8593a8',
+    borderRadius: '4px 4px 0 0',
+  }, '<div style="position:absolute;left:8px;top:9px;width:52px;height:10px;background:#1d2836;border-radius:3px;"></div>'));
+  // Mast + radar.
+  wrapEl.appendChild(el('div', {
+    position: 'absolute',
+    left: '176px', bottom: '176px',
+    width: '5px', height: '46px',
+    background: '#2e3948',
+  }));
+  wrapEl.appendChild(el('div', {
+    position: 'absolute',
+    left: '160px', bottom: '218px',
+    width: '38px', height: '8px',
+    background: '#8593a8',
+    borderRadius: '4px',
+  }));
+  // Naval ensign — small flag with the venue color.
+  wrapEl.appendChild(el('div', {
+    position: 'absolute',
+    left: '182px', bottom: '198px',
+    width: '30px', height: '18px',
+    background: THEME.highlight,
+    clipPath: 'polygon(0 0, 100% 0, 84% 50%, 100% 100%, 0 100%)',
+    transformOrigin: 'left center',
+    animation: 'flagWave 1600ms ease-in-out infinite',
+  }));
+  // Turret base.
+  wrapEl.appendChild(el('div', {
+    position: 'absolute',
+    left: '222px', bottom: '88px',
+    width: '64px', height: '30px',
+    background: 'linear-gradient(180deg, #67758b, #46536a)',
+    borderRadius: '10px 10px 3px 3px',
+  }));
+
+  stage.appendChild(wrapEl);
+
+  // Barrel — separate stage-level element so aiming math stays in stage coords.
+  barrel = el('div', {
+    position: 'absolute',
+    left: TURRET.x + 'px',
+    top: (TURRET.y - 5) + 'px',
+    width: BARREL_LEN + 'px',
+    height: '10px',
+    background: 'linear-gradient(180deg, #7c8aa0, #4d5a70)',
+    borderRadius: '3px 5px 5px 3px',
+    transformOrigin: '0% 50%',
+    transform: 'rotate(-24deg)',
+    transition: 'transform 420ms cubic-bezier(0.34, 1.4, 0.64, 1)',
+    zIndex: 31,
+    willChange: 'transform',
+  });
+  stage.appendChild(barrel);
+
+  // Foam at bow (static).
+  stage.appendChild(el('div', {
+    position: 'absolute',
+    left: '10px',
+    top: (AREA_H - 46) + 'px',
+    width: '400px', height: '18px',
+    borderRadius: '50%',
+    background: 'rgba(225,242,255,0.16)',
+    zIndex: 29,
+  }));
+}
+
+function makeEnemyShip(team, berth) {
+  const artW = 176, artH = 128, clipH = 168;
+  // Clip container: bottom edge sits just below the waterline, so a sinking
+  // ship translates down out of view — "slips beneath the waves".
+  const wrapEl = el('div', {
+    position: 'absolute',
+    left: (berth.x - artW / 2) + 'px',
+    top: (berth.y - clipH + 16) + 'px',
+    width: artW + 'px',
+    height: clipH + 'px',
+    overflow: 'hidden',
+    zIndex: 20,
+    transform: 'scale(' + berth.sc + ')',
+    transformOrigin: '50% 100%',
+  });
+
+  const bobEl = el('div', {
+    position: 'absolute',
+    inset: '0',
+    animation: 'bob ' + rand(3400, 4600).toFixed(0) + 'ms ease-in-out ' + rand(0, 1600).toFixed(0) + 'ms infinite',
+    willChange: 'transform',
+  });
+
+  const art = el('div', {
+    position: 'absolute',
+    left: '0', bottom: '16px',
+    width: artW + 'px', height: artH + 'px',
+    willChange: 'transform, opacity',
+  });
+
+  const c = team.color;
+  art.innerHTML =
+    '<div style="position:absolute;left:13px;bottom:0;width:150px;height:44px;' +
+      'background:linear-gradient(180deg,#415062 0%,#2c3846 100%);' +
+      'clip-path:polygon(0 0,100% 0,82% 100%,18% 100%);' +
+      'border-top:6px solid ' + c + ';"></div>' +
+    '<div style="position:absolute;left:56px;bottom:48px;width:62px;height:26px;background:#54647a;border-radius:3px;">' +
+      '<div style="position:absolute;left:7px;top:8px;width:10px;height:10px;border-radius:50%;background:#cfe3f5;"></div>' +
+      '<div style="position:absolute;left:25px;top:8px;width:10px;height:10px;border-radius:50%;background:#cfe3f5;"></div>' +
+      '<div style="position:absolute;left:43px;top:8px;width:10px;height:10px;border-radius:50%;background:#cfe3f5;"></div>' +
+    '</div>' +
+    '<div style="position:absolute;left:82px;bottom:74px;width:17px;height:24px;background:#333f4f;border-radius:3px 3px 0 0;">' +
+      '<div style="position:absolute;left:0;top:0;width:100%;height:7px;background:' + c + ';border-radius:3px 3px 0 0;"></div>' +
+    '</div>' +
+    '<div style="position:absolute;left:42px;bottom:48px;width:4px;height:62px;background:#2c3846;"></div>' +
+    '<div style="position:absolute;left:46px;bottom:96px;width:28px;height:15px;background:' + c + ';' +
+      'clip-path:polygon(0 0,100% 50%,0 100%);transform-origin:left center;' +
+      'animation:flagWave ' + rand(1300, 1900).toFixed(0) + 'ms ease-in-out infinite;"></div>';
+
+  bobEl.appendChild(art);
+  wrapEl.appendChild(bobEl);
+  stage.appendChild(wrapEl);
+
+  // Foam ellipse at the waterline (static).
+  const foam = el('div', {
+    position: 'absolute',
+    left: (berth.x - 70 * berth.sc) + 'px',
+    top: (berth.y - 4) + 'px',
+    width: (140 * berth.sc) + 'px',
+    height: '12px',
+    borderRadius: '50%',
+    background: 'rgba(225,242,255,0.18)',
+    zIndex: 19,
+  });
+  stage.appendChild(foam);
+
+  // Name plate below the waterline mark.
+  const plate = el('div', {
+    position: 'absolute',
+    left: berth.x + 'px',
+    top: (berth.y + 20 * berth.sc + 6) + 'px',
+    transform: 'translateX(-50%)',
+    background: 'rgba(6, 18, 31, 0.82)',
+    border: '1.5px solid ' + team.color,
+    color: '#f4ede1',
+    fontFamily: "'DM Sans', sans-serif",
+    fontWeight: '700',
+    fontSize: '17px',
+    letterSpacing: '0.2px',
+    whiteSpace: 'nowrap',
+    padding: '5px 14px',
+    borderRadius: '999px',
+    zIndex: 26,
+    transition: 'opacity 900ms ease',
+  }, '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + team.color + ';margin-right:7px;"></span>' + team.name);
+  stage.appendChild(plate);
+
+  return { team, berth, wrapEl, bobEl, art, plate, foam, sunk: false };
+}
+
+/* ---------- combat ---------- */
+
+function aimAt(target) {
+  const ang = Math.atan2(target.y - TURRET.y, target.x - TURRET.x);
+  barrel.style.transform = 'rotate(' + (ang * 180 / Math.PI) + 'deg)';
+  return ang;
+}
+
+function quadPoint(p0, p1, p2, t) {
+  const u = 1 - t;
+  return {
+    x: u * u * p0.x + 2 * u * t * p1.x + t * t * p2.x,
+    y: u * u * p0.y + 2 * u * t * p1.y + t * t * p2.y,
+  };
+}
+
+function fireShell(target, flightMs) {
+  const ang = Math.atan2(target.y - TURRET.y, target.x - TURRET.x);
+  const start = {
+    x: TURRET.x + Math.cos(ang) * BARREL_LEN,
+    y: TURRET.y - 5 + Math.sin(ang) * BARREL_LEN,
+  };
+  const mid = {
+    x: (start.x + target.x) / 2,
+    y: Math.min(start.y, target.y) - 175,
+  };
+
+  // Muzzle flash.
+  const mf = el('div', {
+    position: 'absolute',
+    left: start.x + 'px', top: start.y + 'px',
+    width: '54px', height: '54px',
+    borderRadius: '50%',
+    background: 'radial-gradient(circle, #fff6d8 0%, #ffb347 45%, rgba(255,120,40,0) 75%)',
+    pointerEvents: 'none',
+    zIndex: 36,
+    willChange: 'transform, opacity',
+    animation: 'muzzle 240ms ease-out forwards',
+    transform: 'translate(-50%, -50%)',
+  });
+  stage.appendChild(mf);
+  at(400, () => mf.remove());
+
+  // Shell with glowing trail (static gradient; only transform animates).
+  const shell = el('div', {
+    position: 'absolute',
+    left: '-14px', top: '-5px',
+    width: '30px', height: '9px',
+    borderRadius: '5px',
+    background: 'linear-gradient(90deg, rgba(255,200,90,0) 0%, rgba(255,190,80,0.85) 45%, #fff3cf 100%)',
+    pointerEvents: 'none',
+    zIndex: 35,
+    willChange: 'transform',
+  });
+  stage.appendChild(shell);
+
+  const frames = [];
+  const N = 9;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const p = quadPoint(start, mid, target, t);
+    const dvx = 2 * (1 - t) * (mid.x - start.x) + 2 * t * (target.x - mid.x);
+    const dvy = 2 * (1 - t) * (mid.y - start.y) + 2 * t * (target.y - mid.y);
+    const rot = Math.atan2(dvy, dvx) * 180 / Math.PI;
+    frames.push({ transform: 'translate(' + p.x.toFixed(1) + 'px, ' + p.y.toFixed(1) + 'px) rotate(' + rot.toFixed(1) + 'deg)' });
+  }
+  const a = shell.animate(frames, { duration: flightMs, easing: 'linear', fill: 'forwards' });
+  anims.push(a);
+  at(flightMs + 80, () => shell.remove());
+}
+
+function playerRecoil() {
+  const a = barrel.animate([
+    { transform: barrel.style.transform + ' translateX(0)' },
+    { transform: barrel.style.transform + ' translateX(-10px)', offset: 0.25 },
+    { transform: barrel.style.transform + ' translateX(0)' },
+  ], { duration: 340, easing: 'ease-out' });
+  anims.push(a);
+}
+
+function sinkShip(ship, boomIdx) {
+  ship.sunk = true;
+  const { x, y } = { x: ship.berth.x, y: ship.berth.y };
+
+  impactFlash();
+  screenShake();
+  burst(x, y - 40 * ship.berth.sc, ['#ffd166', '#ff8c42', '#ff5233', '#fff3cf', ship.team.color], 16, { upBias: 50, maxDist: 190 });
+  smokePuffs(x, y - 46 * ship.berth.sc, 4);
+  boomText(x, y - 60, BOOMS[boomIdx % BOOMS.length]);
+  rippleAt(x, y);
+
+  // Fire glow on the ship, applied once (discrete state swap — allowed).
+  ship.art.style.filter = 'brightness(1.35) sepia(0.4)';
+
+  // List and slip beneath the waterline: one-time transform/opacity transition,
+  // clipped by the overflow-hidden wrapper whose bottom edge is the waterline.
+  const dir = Math.random() < 0.5 ? -1 : 1;
+  at(240, () => {
+    ship.art.style.transition = 'transform 2400ms cubic-bezier(0.55, 0.04, 0.72, 0.4), opacity 2400ms ease-in';
+    ship.art.style.transform = 'translateY(160px) rotate(' + (dir * 26) + 'deg)';
+    ship.art.style.opacity = '0.25';
+    ship.plate.style.opacity = '0.18';
+  });
+  at(1500, () => rippleAt(x, y));
+  at(2300, () => { ship.foam.style.opacity = '0'; });
+}
+
+/* ---------- reticle ---------- */
+
+function makeReticle() {
+  reticle = el('div', {
+    position: 'absolute',
+    left: '0px', top: '0px',
+    width: '150px', height: '110px',
+    pointerEvents: 'none',
+    zIndex: 34,
+    opacity: '0',
+    transform: 'translate(' + CX + 'px, ' + CY + 'px)',
+    transition: 'transform 520ms cubic-bezier(0.22, 1, 0.36, 1), opacity 300ms ease',
+    willChange: 'transform',
+  });
+  const box = el('div', {
+    position: 'absolute',
+    left: '50%', top: '50%',
+    width: '150px', height: '110px',
+    transform: 'translate(-50%, -50%)',
+    border: '3px solid ' + THEME.highlight,
+    borderRadius: '12px',
+    animation: 'retPulse 900ms ease-in-out infinite',
+    willChange: 'transform',
+  }, '<div style="position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:' + THEME.highlight + ';"></div>' +
+     '<div style="position:absolute;left:50%;top:-16px;transform:translateX(-50%);font-family:\'Boogaloo\',cursive;font-size:19px;color:' + THEME.highlight + ';letter-spacing:2px;">TARGET LOCKED</div>');
+  reticle.appendChild(box);
+  stage.appendChild(reticle);
+}
+
+function moveReticle(x, y) {
+  reticle.style.opacity = '1';
+  reticle.style.transform = 'translate(' + (x - 75) + 'px, ' + (y - 100) + 'px)';
+}
+
+/* ---------- banners & cards ---------- */
+
+function banner(text, y, ms, fontSize) {
+  const b = el('div', {
+    position: 'absolute',
+    left: CX + 'px', top: y + 'px',
+    transform: 'translate(-50%, -50%)',
+    fontFamily: "'Boogaloo', cursive",
+    fontSize: (fontSize || 58) + 'px',
+    letterSpacing: '2px',
+    color: '#f4ede1',
+    textShadow: '0 4px 0 rgba(0,0,0,0.4), 0 0 26px rgba(255,209,102,0.35)',
+    whiteSpace: 'nowrap',
+    zIndex: 46,
+    pointerEvents: 'none',
+    willChange: 'transform, opacity',
+    animation: 'bannerIn ' + ms + 'ms ease forwards',
+    opacity: '0',
+  }, text);
+  stage.appendChild(b);
+  at(ms + 200, () => b.remove());
+}
+
+function winnerCard(x, y, name, color) {
+  const card = el('div', {
+    position: 'absolute',
+    left: x + 'px', top: y + 'px',
+    transform: 'translate(-50%, -50%)',
+    background: 'linear-gradient(180deg, #14273c, #0b1a2b)',
+    border: '3px solid ' + THEME.highlight,
+    borderRadius: '22px',
+    padding: '34px 60px 30px',
+    textAlign: 'center',
+    zIndex: 48,
+    boxShadow: '0 20px 50px rgba(0,0,0,0.5), 0 0 40px rgba(255,209,102,0.22)',
+    willChange: 'transform, opacity',
+    animation: 'popIn 620ms cubic-bezier(0.34, 1.45, 0.64, 1) forwards',
+    opacity: '0',
+  },
+    '<div style="font-family:\'DM Sans\',sans-serif;font-weight:700;font-size:19px;letter-spacing:4px;color:' + THEME.highlight + ';margin-bottom:8px;">🏆 LAST SHIP STANDING</div>' +
+    '<div style="font-family:\'Boogaloo\',cursive;font-size:66px;line-height:1.05;color:#f4ede1;text-shadow:0 4px 0 rgba(0,0,0,0.35);">' + name + '</div>' +
+    '<div style="margin:16px auto 0;width:150px;height:7px;border-radius:4px;background:' + color + ';"></div>'
+  );
+  stage.appendChild(card);
+  return card;
+}
+
+function staticWinner(winner) {
+  stage.classList.add('reduced');
+  const card = el('div', {
+    position: 'absolute',
+    left: CX + 'px', top: CY + 'px',
+    transform: 'translate(-50%, -50%)',
+    background: 'linear-gradient(180deg, #14273c, #0b1a2b)',
+    border: '3px solid ' + THEME.highlight,
+    borderRadius: '22px',
+    padding: '34px 60px 30px',
+    textAlign: 'center',
+    zIndex: 48,
+  },
+    '<div style="font-family:\'DM Sans\',sans-serif;font-weight:700;font-size:18px;letter-spacing:4px;color:' + THEME.highlight + ';margin-bottom:8px;">WINNER</div>' +
+    '<div style="font-family:\'Boogaloo\',cursive;font-size:62px;line-height:1.05;color:#f4ede1;">' + winner.name + '</div>' +
+    '<div style="margin:16px auto 0;width:150px;height:7px;border-radius:4px;background:' + winner.color + ';"></div>'
+  );
+  stage.appendChild(card);
+}
+
+/* ---------- winner celebration ---------- */
+
+function celebrateWinner(ship) {
+  const { x, y } = { x: ship.berth.x, y: ship.berth.y };
+
+  // Searchlight beam from the top of the stage onto the survivor.
+  const beam = el('div', {
+    position: 'absolute',
+    left: (x - 190) + 'px', top: '-10px',
+    width: '380px', height: (y + 30) + 'px',
+    background: 'linear-gradient(180deg, rgba(255,244,200,0.0) 0%, rgba(255,244,200,0.16) 40%, rgba(255,236,170,0.32) 100%)',
+    clipPath: 'polygon(42% 0, 58% 0, 100% 100%, 0 100%)',
+    pointerEvents: 'none',
+    zIndex: 22,
+    willChange: 'opacity',
+    animation: 'searchBeam 700ms ease-out forwards',
+    opacity: '0',
+  });
+  stage.appendChild(beam);
+
+  // Rotating glory rays behind the ship — transform-only loop.
+  const rays = el('div', {
+    position: 'absolute',
+    left: x + 'px', top: (y - 40) + 'px',
+    width: '340px', height: '340px',
+    borderRadius: '50%',
+    background: 'repeating-conic-gradient(rgba(255,209,102,0.16) 0deg 12deg, rgba(255,209,102,0) 12deg 30deg)',
+    transform: 'translate(-50%, -50%)',
+    pointerEvents: 'none',
+    zIndex: 12,
+    willChange: 'transform',
+    animation: 'raysSpin 9000ms linear infinite',
+    opacity: '0',
+    transition: 'opacity 800ms ease',
+  });
+  stage.appendChild(rays);
+  at(60, () => { rays.style.opacity = '1'; });
+
+  // The survivor swells with pride — one-time transform transition.
+  ship.wrapEl.style.transition = 'transform 900ms cubic-bezier(0.34, 1.45, 0.64, 1)';
+  ship.wrapEl.style.transform = 'scale(' + (ship.berth.sc * 1.22) + ')';
+  ship.plate.style.transition = 'transform 900ms cubic-bezier(0.34, 1.45, 0.64, 1), opacity 400ms ease';
+  ship.plate.style.transform = 'translateX(-50%) scale(1.25)';
+
+  // Victory flag hoisted up the mast — one-time translate + opacity.
+  const flag = el('div', {
+    position: 'absolute',
+    left: (x - 16) + 'px', top: (y - 150 * ship.berth.sc) + 'px',
+    width: '52px', height: '30px',
+    background: ship.team.color,
+    clipPath: 'polygon(0 0, 100% 0, 86% 50%, 100% 100%, 0 100%)',
+    zIndex: 27,
+    transform: 'translateY(46px)',
+    opacity: '0',
+    transition: 'transform 800ms cubic-bezier(0.34, 1.4, 0.64, 1), opacity 400ms ease',
+    willChange: 'transform, opacity',
+  });
+  stage.appendChild(flag);
+  at(80, () => {
+    flag.style.transform = 'translateY(0)';
+    flag.style.opacity = '1';
+  });
+
+  rippleAt(x, y);
+}
+
+/* ---------- sequence ---------- */
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+function onDone(winner) {
+  setStatus('onDone → ' + winner.name);
+  console.log('[battleship-picker] onDone()', winner);
+}
+
+function run() {
+  teardown();
+  fit();
+
+  // winnerId is predetermined upstream in production; the mockup just picks one.
+  const winner = TEAMS[Math.floor(Math.random() * TEAMS.length)];
+  const reduced = simRM.checked ||
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (reduced) {
+    setStatus('reduced motion — static reveal');
+    at(1300, () => {
+      staticWinner(winner);
+      at(400, () => onDone(winner));
+    });
+    return;
+  }
+
+  setStatus('salvo running… winner: ' + winner.name);
+
+  buildBackdrop();
+  buildPlayerShip();
+
+  // One ship per team, berth order shuffled so the winner's spot varies.
+  const order = shuffle(TEAMS);
+  ships = order.map((team, i) => makeEnemyShip(team, BERTHS[i]));
+  const winnerShip = ships.find(s => s.team.id === winner.id);
+  const victims = shuffle(ships.filter(s => s.team.id !== winner.id));
+
+  makeReticle();
+
+  // Beat 1 — the fleet appears.
+  at(500, () => banner('⚓ ENEMY FLEET SIGHTED', 170, 1700, 62));
+
+  // Beat 2 — five sequential kill shots, one per losing team.
+  const FIRST = 2300, SPACING = 1900, FLIGHT = 660;
+  victims.forEach((ship, i) => {
+    const t0 = FIRST + i * SPACING;
+    const tx = ship.berth.x, ty = ship.berth.y - 40 * ship.berth.sc;
+
+    at(t0, () => moveReticle(tx, ty));
+    at(t0 + 480, () => aimAt({ x: tx, y: ty }));
+    at(t0 + 900, () => {
+      playerRecoil();
+      fireShell({ x: tx, y: ty }, FLIGHT);
+    });
+    at(t0 + 900 + FLIGHT, () => sinkShip(ship, i));
+  });
+
+  const lastImpact = FIRST + 4 * SPACING + 900 + FLIGHT;
+
+  // Beat 3 — smoke clears; the survivor gets its moment.
+  at(lastImpact + 600, () => { reticle.style.opacity = '0'; });
+  at(lastImpact + 1200, () => {
+    celebrateWinner(winnerShip);
+    banner('LAST SHIP STANDING!', 150, 2400, 68);
+  });
+  at(lastImpact + 1500, () => burst(winnerShip.berth.x, winnerShip.berth.y - 80, [winner.color, THEME.highlight, '#f4ede1'], 18, { upBias: 90, maxDist: 200 }));
+  at(lastImpact + 2000, () => burst(winnerShip.berth.x - 120, winnerShip.berth.y - 40, [winner.color, THEME.highlight, '#ff8c42'], 14, { upBias: 80 }));
+  at(lastImpact + 2400, () => burst(winnerShip.berth.x + 120, winnerShip.berth.y - 40, [winner.color, THEME.highlight, '#4cb944'], 14, { upBias: 80 }));
+
+  // Beat 4 — winner card + confetti, then onDone.
+  at(lastImpact + 2800, () => {
+    winnerCard(CX, CY - 30, winner.name, winner.color);
+    burst(CX, CY - 120, [winner.color, THEME.highlight, '#f4ede1', '#3d9be9', '#ff6b9d'], 26, { upBias: 120, maxDist: 320, gravity: 140, dur: [900, 1600] });
+  });
+  at(lastImpact + 4400, () => onDone(winner));
+}
+
+document.getElementById('replayBtn').addEventListener('click', run);
+simRM.addEventListener('change', run);
+
+fit();
+run();
+</script>
+</body>
+</html>

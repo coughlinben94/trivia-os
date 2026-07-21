@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>sonora-balloons — "ascend" transition prototype</title>
+<style>
+  :root{
+    --bgDeep:#180a28; --bg:#2a1238; --accent:#e06a28; --highlight:#ffb84d; --text:#ffeeda;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0a0a;color:#e8e8e8;font-family:system-ui,sans-serif;padding:28px}
+  h1{font-size:1.15rem;font-weight:700;margin-bottom:4px}
+  .sub{color:#888;font-size:.8rem;margin-bottom:20px;max-width:760px;line-height:1.5}
+  .wrap{max-width:960px}
+  .stage{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;border:1px solid #222;background:var(--bgDeep)}
+  .controls{display:flex;gap:10px;align-items:center;margin:14px 0 24px;font-size:.78rem;color:#aaa}
+  button{background:#161616;border:1px solid #2a2a2a;color:#eee;padding:8px 16px;border-radius:6px;font-size:.78rem;cursor:pointer}
+  button:hover{background:#1e1e1e}
+  label{display:flex;gap:6px;align-items:center}
+  input[type=checkbox]{accent-color:var(--accent)}
+
+  /* ── stage sky (matches shipped theme colors) ─────────────────────── */
+  .sky{position:absolute;inset:0;background:linear-gradient(180deg,var(--bgDeep) 0%,var(--bgDeep) 30%,#4a1f36 55%,var(--accent) 80%,#20365f 100%)}
+
+  /* ── outgoing content: generic placeholder title card ─────────────── */
+  .outgoing{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    animation: outgoingLift 3.4s cubic-bezier(.4,0,.2,1) 1 both}
+  .outgoing .card{font-size:2.4rem;font-weight:700;color:var(--text);letter-spacing:.02em;opacity:.9}
+  @keyframes outgoingLift{
+    0%   { transform: translateY(0) scale(1); opacity: 1; }
+    28%  { transform: translateY(0) scale(1); opacity: 1; }
+    62%  { transform: translateY(-6%) scale(.94); opacity: 0; }
+    100% { transform: translateY(-6%) scale(.94); opacity: 0; }
+  }
+
+  /* ── the balloon (reworked flat-color-blocked envelope) ────────────── */
+  .balloon{position:absolute;left:50%;bottom:-6%;width:26%;aspect-ratio:1/1.55;
+    transform:translateX(-50%);
+    animation: balloonAscend 3.4s cubic-bezier(.36,0,.2,1) 1 both}
+  @keyframes balloonAscend{
+    0%   { transform: translate(-50%,0)    scale(.85); opacity: 0; }
+    8%   { transform: translate(-50%,0)    scale(.85); opacity: 1; }
+    38%  { transform: translate(-50%,0)    scale(1);   opacity: 1; }  /* hold — let the eye land on it */
+    70%  { transform: translate(-50%,-95%)  scale(1.4); opacity: 1; }
+    92%  { transform: translate(-50%,-175%) scale(1.65); opacity: 1; }
+    100% { transform: translate(-50%,-215%) scale(1.75); opacity: 0; }
+  }
+  /* dark rim keeps the envelope legible even where its fill matches the sky band behind it */
+  .env{position:absolute;inset:0;border-radius:50% 50% 46% 46%/60% 60% 40% 40%;background:var(--accent);
+    border:2px solid rgba(20,8,16,.7)}
+  .env.cap{clip-path:inset(0 0 55% 0);background:var(--highlight);opacity:.92}
+  .rig{position:absolute;left:47%;bottom:-6%;width:2px;height:7%;background:rgba(40,20,15,.6)}
+  .rig.r{left:53%}
+  .basket{position:absolute;left:40%;bottom:-9%;width:20%;height:7%;border-radius:3px;background:#5a3a20}
+
+  /* ── golden light wash — the "carrying you up" beat, opacity-only ─── */
+  .wash{position:absolute;left:-20%;right:-20%;top:-20%;bottom:-20%;border-radius:50%;
+    filter:blur(60px); background:radial-gradient(circle, rgba(255,184,77,.55) 0%, rgba(255,184,77,0) 62%);
+    animation: washPulse 3.4s cubic-bezier(.4,0,.2,1) 1 both}
+  @keyframes washPulse{
+    0%,40%  { opacity:0; }
+    58%     { opacity:1; }
+    76%     { opacity:0; }
+    100%    { opacity:0; }
+  }
+
+  /* ── incoming: ROUND 1 reveal ───────────────────────────────────────── */
+  .incoming{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4rem;
+    animation: incomingReveal 3.4s cubic-bezier(.16,1,.3,1) 1 both}
+  .incoming .num{font-size:.95rem;letter-spacing:.3em;text-transform:uppercase;color:var(--highlight);opacity:.85}
+  .incoming .title{font-size:3.2rem;font-weight:700;color:var(--text)}
+  @keyframes incomingReveal{
+    0%,68%  { transform: scale(.85); opacity: 0; }
+    88%     { transform: scale(1.03); opacity: 1; }
+    100%    { transform: scale(1); opacity: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .reduced .outgoing,.reduced .balloon,.reduced .wash{ animation:none !important; opacity:0 !important }
+    .reduced .incoming{ animation: incomingReducedFade 1s ease-out 1 both !important }
+  }
+  @keyframes incomingReducedFade{ from{opacity:0} to{opacity:1} }
+
+  .notes{margin-top:20px;font-size:.8rem;color:#999;line-height:1.6;max-width:760px}
+  .notes b{color:#ccc}
+  .gate{margin-top:20px;background:#111;border:1px solid #222;border-radius:10px;padding:16px 18px;font-size:.78rem;color:#aaa;max-width:760px;line-height:1.6}
+  .gate b{color:#ddd}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>"ascend" transition — round-intro reveal, sonora-balloons</h1>
+<div class="sub">A themed, occasional transition (not one of the 10 snappy every-slide transitions) — same tier as Winner Reveal's multi-second sequence. Host picks it manually for a round-intro slide when the show theme is sonora-balloons. 2.6s total, replays below.</div>
+
+<div class="stage" id="stage">
+  <div class="sky"></div>
+  <div class="outgoing"><div class="card">TITLE SLIDE</div></div>
+  <div class="wash"></div>
+  <div class="balloon">
+    <div class="env"></div>
+    <div class="env cap"></div>
+    <div class="rig"></div><div class="rig r"></div>
+    <div class="basket"></div>
+  </div>
+  <div class="incoming">
+    <div class="num">Round 1</div>
+    <div class="title">Let's Go!</div>
+  </div>
+</div>
+
+<div class="controls">
+  <button id="replay">↻ Replay</button>
+  <label><input type="checkbox" id="reducedToggle"> Simulate prefers-reduced-motion</label>
+</div>
+
+<div class="notes">
+  <b>Sequence:</b> outgoing slide holds, then lifts and fades as the balloon rises from off-stage bottom, scaling up as if the camera is following it upward. A soft golden light wash (opacity-only, blur is static) crests around the balloon at the midpoint — the "lift-off" beat — then clears as the balloon exits off the top. Round 1 content scales in once the stage is clear.<br><br>
+  <b>Reduced motion:</b> balloon/wash/outgoing-lift are fully suppressed; round-intro content does a plain 1s opacity fade instead — same pattern as the shiny-transition fix (ANIM-1) already shipped elsewhere in this app.<br><br>
+  <b>What this is NOT:</b> the persistent ambient balloons in the background layer never touch this — this is a second, purpose-built balloon living only inside the transition component, since the ambient layer is architecturally locked to never remount.
+</div>
+
+<div class="gate">
+  <b>Self-gate:</b> GPU-only — every animated property above is transform/opacity, blur is static not animated. Reduced-motion — real branch included, not just CSS media-query on individual layers (matches ANIM-1 precedent). Safe-area — n/a, this fully occupies the stage by design (it's a transition, not persistent ambient). Not yet gated: real timing feel on an actual TV at bar distance, and whether 2.6s reads as "delightful" vs "too long to sit through every single round" over a whole night — worth your eyes-check before this goes anywhere near code.
+</div>
+</div>
+
+<script>
+const stage = document.getElementById('stage');
+document.getElementById('replay').addEventListener('click', () => {
+  stage.style.animation = 'none';
+  void stage.offsetWidth;
+  stage.querySelectorAll('.outgoing,.balloon,.wash,.incoming').forEach(el=>{
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
+  });
+});
+document.getElementById('reducedToggle').addEventListener('change', e=>{
+  stage.classList.toggle('reduced', e.target.checked);
+  document.getElementById('replay').click();
+});
+</script>
+</body>
+</html>

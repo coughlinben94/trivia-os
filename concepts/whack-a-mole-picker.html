@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Whack-a-Mole Machine — Preview</title>
+<style>
+  :root { --bg: #1a2e18; --bg-deep: #0e1c0c; --cream: #f5f0e8; --accent: #e8b64a; --highlight: #ffd24d; --apple: #e02020; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #050a05; color: var(--cream);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 24px;
+  }
+  h1 { font-size: 18px; letter-spacing: 2px; margin: 4px 0 0; opacity: .8; font-weight: 700; text-transform: uppercase; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  button { font: inherit; font-weight: 800; font-size: 13px; letter-spacing: .5px; text-transform: uppercase; padding: 10px 18px; border-radius: 10px; border: 2px solid transparent; cursor: pointer; background: var(--accent); color: #14251f; transition: transform 120ms cubic-bezier(0.23,1,0.32,1); }
+  button:active { transform: scale(0.97); }
+  button.ghost { background: transparent; border-color: #ffffff33; color: var(--cream); }
+  label.toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; opacity: .75; font-weight: 600; }
+  .stage-wrap { width: min(1120px, 94vw); aspect-ratio: 1344 / 756; position: relative; border-radius: 20px; overflow: hidden; border: 2px solid #ffffff1a; background: var(--bg-deep); box-shadow: 0 30px 70px #000a; }
+  .stage { width: 1344px; height: 756px; position: absolute; top: 50%; left: 50%; transform-origin: center; background: radial-gradient(ellipse 72% 58% at 50% 40%, #7ee08118 0%, transparent 62%), radial-gradient(ellipse at center, var(--bg) 0%, var(--bg-deep) 82%); overflow: hidden; }
+  .winner-static { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .winner-static .card { padding: 28px 56px; border-radius: 20px; background: var(--accent); font-weight: 900; font-size: 44px; color: #14251f; text-align: center; }
+  @keyframes popStage { 0% { transform: scale(.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes confPiece { 0% { transform: translate(-50%,-50%) rotate(0); opacity: 1; } 100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 380px)) rotate(var(--r)); opacity: 0; } }
+  .conf { position: absolute; width: 11px; height: 16px; border-radius: 2px; z-index: 60; animation: confPiece var(--dur, 1900ms) ease-out var(--delay, 0ms) forwards; }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+  @keyframes star { 0% { transform: translate(-50%,-50%) scale(.3) rotate(0); opacity: 1; } 100% { transform: translate(calc(-50% + var(--sx)), calc(-50% + var(--sy))) scale(1) rotate(180deg); opacity: 0; } }
+  @keyframes bulbPulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { *, .conf { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; } }
+</style>
+</head>
+<body>
+  <h1>Whack-a-Mole Machine — picker concept</h1>
+  <div class="controls">
+    <button id="replay">↻ Replay</button>
+    <label class="toggle"><input id="reduceToggle" type="checkbox" /> Simulate reduced motion</label>
+  </div>
+  <div class="stage-wrap"><div class="stage" id="stage"></div></div>
+
+<script>
+const TEAMS = [
+  { id: "t1", name: "The Fermenters", color: "#ff5d5d" },
+  { id: "t2", name: "Sour Patch Kids", color: "#5db0ff" },
+  { id: "t3", name: "Cider Squad", color: "#7ee081" },
+  { id: "t4", name: "Hop Heads", color: "#c98bff" },
+  { id: "t5", name: "Pressed & Confused", color: "#ff9f43" },
+  { id: "t6", name: "Barrel Aged", color: "#4de3d0" },
+];
+const AREA_W = 1344, AREA_H = 756, CX = AREA_W / 2, CY = AREA_H / 2;
+const CREAM = "#f5f0e8", ACCENT = "#e8b64a", HIGHLIGHT = "#ffd24d", APPLE = "#e02020";
+const HEAD_IMG = "../public/ben/IMG_1216-removebg-preview.png";
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = (arr) => arr[(Math.random() * arr.length) | 0];
+const shuffle = (a) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [b[i], b[j]] = [b[j], b[i]]; } return b; };
+const EASE_OUT = "cubic-bezier(0.23,1,0.32,1)";
+const EASE_IN = "cubic-bezier(0.55,0,0.85,0.35)";
+const EASE_BOUNCE = "cubic-bezier(0.34,1.56,0.64,1)";
+
+const stage = document.getElementById("stage");
+const reduceToggle = document.getElementById("reduceToggle");
+let timers = [];
+const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+function teardown() { timers.forEach(clearTimeout); timers = []; stage.innerHTML = ""; }
+function reducedMotion() { return reduceToggle.checked || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
+function el(tag, style, html) { const d = document.createElement(tag); Object.assign(d.style, style); if (html !== undefined) d.innerHTML = html; return d; }
+
+function confettiBurst(x, y, count, colors) {
+  const frag = document.createDocumentFragment();
+  for (let k = 0; k < count; k++) {
+    const d = document.createElement("div");
+    d.className = "conf"; d.style.left = x + "px"; d.style.top = y + "px";
+    d.style.background = colors[k % colors.length];
+    d.style.setProperty("--dx", rand(-380, 380) + "px");
+    d.style.setProperty("--dy", rand(-280, 30) + "px");
+    d.style.setProperty("--r", rand(-360, 360) + "deg");
+    d.style.setProperty("--dur", (1300 + rand(0, 500)) + "ms");
+    d.style.setProperty("--delay", (k % 9) * 26 + "ms");
+    frag.appendChild(d);
+  }
+  stage.appendChild(frag);
+}
+function winnerCard(x, y, name) {
+  const card = el("div", { position: "absolute", left: x + "px", top: y + "px", transform: "translate(-50%,0) scale(.9)", opacity: "0", padding: "16px 38px", borderRadius: "16px", background: ACCENT, color: "#14251f", fontWeight: "900", fontSize: "28px", boxShadow: `0 0 60px ${HIGHLIGHT}`, transition: `transform 380ms ${EASE_OUT}, opacity 380ms ${EASE_OUT}`, zIndex: 80 }, name);
+  stage.appendChild(card);
+  requestAnimationFrame(() => { card.style.opacity = "1"; card.style.transform = "translate(-50%,0) scale(1)"; });
+}
+function staticWinner(winner) { stage.innerHTML = `<div class="winner-static"><div class="card">${winner.name}</div></div>`; }
+function starBurst(x, y, count) {
+  const frag = document.createDocumentFragment();
+  for (let k = 0; k < count; k++) {
+    const s = el("span", { position: "absolute", left: x + "px", top: y + "px", fontSize: "16px", zIndex: 46 }, "✦");
+    s.style.setProperty("--sx", rand(-70, 70) + "px");
+    s.style.setProperty("--sy", rand(-70, 10) + "px");
+    s.style.animation = "star 480ms ease-out forwards";
+    frag.appendChild(s);
+  }
+  stage.appendChild(frag);
+}
+
+function buildCabinet(n, startX, spacing, holeY) {
+  const cabTop = holeY - 60, cabW = Math.max(spacing * (n - 1) + 260, 700), cabX = CX - cabW / 2;
+
+  // marquee header
+  const marquee = el("div", { position: "absolute", left: cabX + "px", top: cabTop - 88 + "px", width: cabW + "px", height: "56px", borderRadius: "14px", background: "linear-gradient(180deg, #3a2410, #201205)", border: "4px solid #6b4420", boxShadow: "0 10px 24px #0009", zIndex: 3 });
+  marquee.appendChild(el("div", { position: "absolute", inset: "0", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "900", fontSize: "26px", letterSpacing: "5px", color: HIGHLIGHT, textShadow: `0 0 14px ${HIGHLIGHT}` }, "WHACK-A-MOLE"));
+  const bulbCount = Math.floor(cabW / 26);
+  for (let i = 0; i < bulbCount; i++) {
+    const b = el("div", { position: "absolute", left: 10 + i * 26 + "px", top: "6px", width: "8px", height: "8px", borderRadius: "50%", background: i % 2 ? "#ffe89a" : "#ff8a8a", animation: `bulbPulse ${900 + (i % 3) * 220}ms ease-in-out infinite`, animationDelay: (i % 5) * 90 + "ms" });
+    marquee.appendChild(b);
+    const b2 = b.cloneNode();
+    b2.style.top = "42px";
+    marquee.appendChild(b2);
+  }
+  stage.appendChild(marquee);
+
+  // cabinet body (top slab + front face)
+  const slab = el("div", { position: "absolute", left: cabX + "px", top: cabTop + "px", width: cabW + "px", height: "70px", borderRadius: "18px 18px 0 0", background: "linear-gradient(180deg, #d94b3a, #a8291c)", boxShadow: "inset 0 -8px 14px #00000030", zIndex: 4 });
+  stage.appendChild(slab);
+  const face = el("div", { position: "absolute", left: cabX + "px", top: cabTop + 60 + "px", width: cabW + "px", height: "160px", borderRadius: "0 0 16px 16px", background: "repeating-linear-gradient(135deg, #2a4fae 0 26px, #23439a 26px 52px)", boxShadow: "0 16px 30px #0009", zIndex: 2 });
+  stage.appendChild(face);
+  for (let i = 0; i < 6; i++) {
+    face.appendChild(el("div", { position: "absolute", left: 20 + i * ((cabW - 40) / 5) + "px", top: "16px", width: "14px", height: "14px", borderRadius: "50%", background: "#ffffff55", boxShadow: "inset 0 2px 3px #0006" }));
+  }
+  face.appendChild(el("div", { position: "absolute", left: cabW / 2 - 40 + "px", top: "60px", width: "80px", height: "28px", borderRadius: "8px", background: "#0e1c12", border: "3px solid #ffe89a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "900", color: HIGHLIGHT }, "★ PRESS YOUR LUCK ★"));
+
+  return { cabTop, cabX, cabW };
+}
+
+function run() {
+  const winner = pick(TEAMS);
+  if (reducedMotion()) { staticWinner(winner); return; }
+
+  const n = TEAMS.length;
+  const spacing = Math.min(190, (AREA_W - 340) / (n - 1 || 1));
+  const startX = CX - (spacing * (n - 1)) / 2;
+  const holeY = 500;
+
+  stage.appendChild(el("div", { position: "absolute", left: "0", top: "0", width: "100%", height: "100%", animation: "popStage 420ms " + EASE_BOUNCE }));
+  buildCabinet(n, startX, spacing, holeY);
+
+  const holes = TEAMS.map((t, i) => {
+    const x = n === 1 ? CX : startX + spacing * i;
+    stage.appendChild(el("div", { position: "absolute", left: x - 52 + "px", top: holeY - 10 + "px", width: "104px", height: "30px", borderRadius: "50%", background: "radial-gradient(ellipse, #0a1408, #241408)", boxShadow: "inset 0 6px 10px #000c", zIndex: 6 }));
+    return { team: t, x, y: holeY };
+  });
+
+  const moles = holes.map((h) => {
+    const wrap = el("div", { position: "absolute", left: h.x - 46 + "px", top: h.y - 8 + "px", width: "92px", height: "120px", transform: "translateY(80px)", transformOrigin: "50% 100%", transition: `transform 260ms ${EASE_BOUNCE}`, zIndex: 5, animation: "bob 1700ms ease-in-out infinite" });
+    const body = el("div", { position: "relative", width: "92px", height: "100px" });
+    body.appendChild(el("div", { position: "absolute", left: "6px", top: "26px", width: "80px", height: "74px", borderRadius: "50% 50% 46% 46%", background: h.team.color, boxShadow: "inset -8px -8px 14px #00000030" }));
+    body.appendChild(el("div", { position: "absolute", left: "14px", top: "0", width: "16px", height: "20px", borderRadius: "50%", background: h.team.color }));
+    body.appendChild(el("div", { position: "absolute", left: "62px", top: "0", width: "16px", height: "20px", borderRadius: "50%", background: h.team.color }));
+    body.appendChild(el("div", { position: "absolute", left: "26px", top: "50px", width: "12px", height: "12px", borderRadius: "50%", background: "#1a1a1a" }));
+    body.appendChild(el("div", { position: "absolute", left: "54px", top: "50px", width: "12px", height: "12px", borderRadius: "50%", background: "#1a1a1a" }));
+    wrap.appendChild(body);
+    const label = el("div", { position: "absolute", left: "-30px", top: "104px", width: "152px", textAlign: "center", fontSize: "12px", fontWeight: "800", color: CREAM, textShadow: "0 1px 3px #000" }, h.team.name);
+    wrap.appendChild(label);
+    stage.appendChild(wrap);
+    return { team: h.team, x: h.x, y: h.y, el: wrap, body };
+  });
+
+  // ---- animated whacker character ----
+  const REST_ANGLE = 12, WINDUP_ANGLE = -118, STRIKE_ANGLE = 78, RECOIL_ANGLE = 52;
+  const character = el("div", { position: "absolute", left: "-160px", top: "300px", width: "150px", height: "200px", zIndex: 50, transition: `left 320ms ${EASE_OUT}` });
+
+  character.appendChild(el("div", { position: "absolute", left: "40px", top: "150px", width: "16px", height: "44px", borderRadius: "6px", background: "#3a2a1c" }));
+  character.appendChild(el("div", { position: "absolute", left: "70px", top: "150px", width: "16px", height: "44px", borderRadius: "6px", background: "#3a2a1c" }));
+  character.appendChild(el("div", { position: "absolute", left: "24px", top: "78px", width: "78px", height: "82px", borderRadius: "26px 26px 20px 20px", background: "#e8b64a", border: "3px solid #b8860b" }));
+  character.appendChild(el("div", { position: "absolute", left: "6px", top: "92px", width: "22px", height: "44px", borderRadius: "12px", background: "#e8b64a", border: "3px solid #b8860b", transform: "rotate(18deg)" }));
+
+  const headWrap = el("div", { position: "absolute", left: "30px", top: "18px", width: "68px", height: "68px", borderRadius: "50%", overflow: "hidden", border: `4px solid ${ACCENT}`, boxShadow: `0 0 16px ${HIGHLIGHT}88`, background: "#1c332c" });
+  headWrap.appendChild(el("img", { position: "absolute", width: "212px", left: "-71px", top: "-16px" }));
+  headWrap.firstChild.src = HEAD_IMG;
+  character.appendChild(headWrap);
+
+  const swingArm = el("div", { position: "absolute", left: "88px", top: "94px", width: "16px", height: "48px", borderRadius: "8px", background: "#e8b64a", border: "2px solid #b8860b", transformOrigin: "50% 6px", transform: `rotate(${REST_ANGLE}deg)`, transition: `transform 220ms ${EASE_OUT}`, zIndex: 55 });
+  swingArm.appendChild(el("div", { position: "absolute", left: "3px", top: "40px", width: "10px", height: "58px", borderRadius: "5px", background: "linear-gradient(90deg,#8a5a2c,#5a3a18)" }));
+  swingArm.appendChild(el("div", { position: "absolute", left: "-13px", top: "92px", width: "42px", height: "26px", borderRadius: "8px", background: "linear-gradient(180deg,#e05a4a,#a8291c)", border: "2px solid #6b1a10" }));
+  character.appendChild(swingArm);
+  stage.appendChild(character);
+
+  const swing = (target, cb) => {
+    character.style.left = target.x - 40 + "px";
+    at(340, () => {
+      swingArm.style.transition = `transform 210ms ${EASE_OUT}`;
+      swingArm.style.transform = `rotate(${WINDUP_ANGLE}deg)`;
+      at(220, () => {
+        swingArm.style.transition = `transform 120ms ${EASE_IN}`;
+        swingArm.style.transform = `rotate(${STRIKE_ANGLE}deg)`;
+        at(120, () => {
+          target.el.style.transition = "transform 90ms ease-in";
+          target.el.style.transform = "translateY(0) scaleY(.4) scaleX(1.3)";
+          target.body.style.filter = "brightness(0.7)";
+          starBurst(target.x, target.y - 30, 8);
+          const boom = el("div", { position: "absolute", left: target.x + "px", top: target.y - 60 + "px", transform: "translate(-50%,-50%) rotate(-6deg)", fontWeight: "900", fontSize: "26px", color: "#fff", textShadow: "0 0 14px #ffb14d, 2px 2px 0 #000", zIndex: 55 }, pick(["BONK!", "WHACK!", "GOTCHA!", "SO LONG!"]));
+          stage.appendChild(boom);
+          at(500, () => boom.remove());
+          swingArm.style.transition = `transform 90ms ${EASE_OUT}`;
+          swingArm.style.transform = `rotate(${RECOIL_ANGLE}deg)`;
+          at(110, () => {
+            target.el.style.transition = `transform 300ms ${EASE_OUT}`;
+            target.el.style.transform = "translateY(80px) scaleY(1) scaleX(1)";
+            target.el.style.animation = "none";
+            swingArm.style.transition = `transform 240ms ${EASE_OUT}`;
+            swingArm.style.transform = `rotate(${REST_ANGLE}deg)`;
+            at(260, () => cb && cb());
+          });
+        });
+      });
+    });
+  };
+
+  const others = shuffle(TEAMS.filter((t) => t.id !== winner.id));
+  let delay = 700;
+  others.forEach((t) => {
+    const target = moles.find((m) => m.team.id === t.id);
+    at(delay, () => swing(target));
+    delay += 1080;
+  });
+
+  at(delay + 200, () => {
+    const w = moles.find((m) => m.team.id === winner.id);
+    w.el.style.transition = `transform 420ms ${EASE_BOUNCE}`;
+    w.el.style.transform = "translateY(-30px)";
+    w.el.style.animation = "none";
+    w.el.style.filter = `drop-shadow(0 0 20px ${HIGHLIGHT})`;
+    const crown = el("div", { position: "absolute", left: w.x - 20 + "px", top: w.y - 62 + "px", fontSize: "34px", zIndex: 20 }, "👑");
+    stage.appendChild(crown);
+    character.style.left = "-160px";
+    confettiBurst(w.x, w.y, 50, [ACCENT, HIGHLIGHT, CREAM, winner.color]);
+    winnerCard(w.x, w.y + 130, winner.name);
+  });
+}
+
+document.getElementById("replay").addEventListener("click", () => { teardown(); run(); });
+reduceToggle.addEventListener("change", () => { teardown(); run(); });
+
+run();
+</script>
+</body>
+</html>

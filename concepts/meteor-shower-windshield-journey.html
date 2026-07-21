@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>meteor-shower — windshield-crack round journey prototype</title>
+<style>
+  :root{
+    --bg:#020408; --bgDeep:#010306; --accent:#101828; --highlight:#e0f0ff; --text:#f0f8ff; --textMuted:#406080; --shinyAccent:#80c0ff;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0a0a;color:#e8e8e8;font-family:system-ui,sans-serif;padding:28px}
+  h1{font-size:1.15rem;font-weight:700;margin-bottom:4px}
+  .sub{color:#888;font-size:.8rem;margin-bottom:20px;max-width:800px;line-height:1.5}
+  .wrap{max-width:960px}
+  .stage{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;border:1px solid #222;background:var(--bgDeep)}
+  canvas{position:absolute;inset:0;width:100%;height:100%}
+  .letterbox{position:absolute;left:0;right:0;height:9%;background:#000;pointer-events:none;z-index:5}
+  .letterbox.top{top:0;transform-origin:top;transform:scaleY(0)}
+  .letterbox.bot{bottom:0;transform-origin:bottom;transform:scaleY(0)}
+  .grain{position:absolute;inset:0;pointer-events:none;opacity:.05;mix-blend-mode:overlay;z-index:4}
+  .engineGlow{position:absolute;width:36px;height:36px;border-radius:50%;left:0;top:0;pointer-events:none;will-change:transform,opacity;z-index:1;background:radial-gradient(circle, rgba(128,192,255,0.55), rgba(128,192,255,0) 70%);filter:blur(2px);opacity:0}
+  .shipGroup{position:absolute;width:150px;height:150px;left:0;top:0;pointer-events:none;will-change:transform;z-index:2}
+  .shipGroup img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 2px rgba(224,240,255,0.85)) drop-shadow(0 0 14px rgba(128,192,255,0.35))}
+  .impactPoint{position:absolute;left:62%;top:32%;width:0;height:0}
+  .crackCv{position:absolute;left:-38px;top:-38px;width:76px;height:76px;pointer-events:none}
+  .bandaid{position:absolute;left:-30px;top:-19px;width:60px;height:38px;opacity:0;will-change:transform,opacity;pointer-events:none}
+  .bandaid img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 2px rgba(224,240,255,0.85))}
+  .round{position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-start;padding-top:8%;flex-direction:column;gap:.3rem;opacity:0;transition:opacity .5s ease-out;pointer-events:none;z-index:1}
+  .round.show{opacity:1}
+  .round .n{font-size:.9rem;letter-spacing:.35em;text-transform:uppercase;color:var(--shinyAccent)}
+  .round .t{font-size:3rem;font-weight:700;color:var(--text)}
+  .controls{display:flex;gap:10px;align-items:center;margin:14px 0 24px;font-size:.78rem;color:#aaa;flex-wrap:wrap}
+  button{background:#161616;border:1px solid #2a2a2a;color:#eee;padding:8px 16px;border-radius:6px;font-size:.78rem;cursor:pointer}
+  button:hover{background:#1e1e1e}
+  label{display:flex;gap:6px;align-items:center}
+  input[type=checkbox]{accent-color:var(--shinyAccent)}
+  .phase{font-size:.7rem;color:#666;margin-left:auto}
+  .notes{margin-top:20px;font-size:.8rem;color:#999;line-height:1.6;max-width:800px}
+  .notes b{color:#ccc}
+  .gate{margin-top:16px;font-size:.78rem;color:#888;line-height:1.7;max-width:800px}
+  .gate b{color:#bbb}
+  .gate ul{margin:6px 0 0 18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Meteor Shower — same-theme round journey (windshield-crack gag)</h1>
+<div class="sub">Round boundary where leaving and arriving rounds are both <code>meteor-shower</code> — a same-theme continuation per <code>references/round-journeys.md</code>, so one continuous motif plays start to finish, no bridge. Background star field / radiant glow / parallel streaks are a fresh local reimplementation of <code>MeteorShowerAmbient</code>'s own established look (not team-picker's borrowed warp engine — this theme already owns its own world). Foreground: the little scout-ship sprite generated tonight with the validated Recraft <code>icon</code>-style/<code>recraftv2</code>/short-prompt pipeline, flying through its own shower, catching a stray meteor on the windshield, and getting comically patched.</div>
+
+<div class="stage" id="stage">
+  <canvas id="cv"></canvas>
+  <div class="engineGlow" id="engineGlow"></div>
+  <div class="shipGroup" id="ship">
+    <img src="https://img.recraft.ai/dVxyw_twCzqZc0xUvDTlKpdJOpp3juYRuQCrDO0sRuo/rs:fit:512:512:0/raw:1/plain/abs://external/images/6f597e05-c5aa-40bf-b9f2-eae3b1d4ffb9" alt="">
+    <div class="impactPoint">
+      <canvas class="crackCv" id="crackCv" width="228" height="228"></canvas>
+      <div class="bandaid" id="bandaid"><img src="https://img.recraft.ai/aVKtI2-zHgQMT4JtC8rHBOSs_NSU5LntOSMGnfXI2l4/rs:fit:512:512:0/raw:1/plain/abs://external/images/31831bf4-4797-48a8-9214-c8f773b27c0d" alt=""></div>
+    </div>
+  </div>
+  <img id="meteorSprite" src="https://img.recraft.ai/PNt62VBWHnnoCs_xtImQPbaP8H6JyBxRUhOWshNx-mU/rs:fit:512:512:0/raw:1/plain/abs://external/images/70a8f124-1fe6-4503-8dbe-d2fc374e3b8a" alt="" style="position:absolute;width:56px;height:56px;left:0;top:0;opacity:0;pointer-events:none;will-change:transform,opacity;z-index:2;filter:drop-shadow(0 0 2px rgba(224,240,255,0.85)) drop-shadow(0 0 10px rgba(128,192,255,0.5))">
+  <div class="round" id="round1"><div class="n">Round</div><div class="t">4</div></div>
+  <div class="round" id="round2"><div class="n">Round</div><div class="t">5</div></div>
+  <div class="letterbox top"></div>
+  <div class="letterbox bot"></div>
+  <svg class="grain" width="100%" height="100%">
+    <filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/></filter>
+    <rect width="100%" height="100%" filter="url(#n)"/>
+  </svg>
+</div>
+
+<div class="controls">
+  <button id="replay">↻ Replay journey</button>
+  <label><input type="checkbox" id="reducedToggle"> Simulate prefers-reduced-motion</label>
+  <span class="phase" id="phaseLabel">phase: idle</span>
+</div>
+
+<div class="notes">
+  <b>First real end-to-end run of the method, first real use of the validated Recraft sprite pipeline.</b> Every earlier <code>concepts/</code> journey (the midnight-galaxy meteor-to-galaxy handoff, the harvest supernova piece) drew its story beats with hand-authored canvas primitives — including an earlier windshield-crack gag on a <em>different</em> theme (midnight-galaxy's meteor-shower-to-galaxy handoff already has one). This file is the first to actually drop in real generated sprites: the ship, the rogue meteor, and the bandaid are all <code>generate_image</code> outputs (<code>input_style: icon</code>, <code>model: recraftv2</code>, short noun-first prompts, shared "deep navy blue and icy white" color phrase) then run through <code>remove_background</code>.<br><br>
+  <b>Sequence (~6.83s):</b> hold (500ms, idle star field + breathing radiant, ship not yet visible — anticipation) → ship enters from the left third (700ms, ease-out with a small settle-overshoot, engine glow trailing ~70ms behind the hull per the parent-drives-child stagger rule) → cruise (1000ms, ambient parallel streaks keep firing in the background at their normal cadence — this is the "where," establishing the ship is flying through its own named shower, at a wide/small scale) → <b>push-in (650ms, added after Ben's first-cut reaction that the ship needed to get bigger, "like we're actually riding inside it" — note: a genuinely POV cockpit-interior version of this idea now lives in the separate <code>meteor-shower-liftoff-pov-teampicker.html</code> file; this push-in is a lighter, still-third-person version of the same instinct, kept here since this file's whole shape is watching the ship from outside):</b> an ease-in-out camera dolly that scales the ship from cruise size up to 2.6x and recenters it on a rule-of-thirds point → impact (900ms, held at the close-up scale: a rogue meteor breaks from the ambient pattern at ~29% in, grows toward camera on an accelerating curve — same technique as the existing midnight-galaxy gag — hits the cockpit window, triggers a white flash and a decaying camera shake, and a 7-segment jagged crack spiders out over ~200ms) → crack holds alone, uncovered, still at close-up scale (1300ms — long enough to actually read, per the existing lesson that 550ms wasn't) → bandaid flies in from below (280ms, eased with a real overshoot/settle "pat" bounce, rotated off-axis, covering the crack) → held tableau (700ms, still close-up) → ship exits (800ms: first 45% pulls the camera back out to cruise scale/position, then the remaining 55% is the accelerating exit off the right edge).<br><br>
+  <b>A creative-review (Fable) pass caught six real issues in the first cut of this file; all six are fixed in this revision:</b> (1) the meteor's impact-target math had a real <code>+75</code> offset bug, landing the target 75px past the actual cockpit — fixed, and the offset/meteor-size/approach-distance now all scale with the ship's current <code>sScale</code>; (2) the round-label text (z-index 3) sat on top of the ship (z-index 2) during the close-up — the label now sits in the top third (its own z-index lowered below the ship, and it hides before push-in begins rather than during it) so it never competes with the close-up; (3) the close-up itself landed dead-center (46%/50%) — moved to a rule-of-thirds point (62%/40%); (4) the camera-shake decay multiplied by a fixed 0.8/0.7 per frame with no delta-time normalization, so it would decay at a different real-world rate depending on refresh rate — now scaled by <code>dtn</code> like everything else; (5) the bandaid's entrance was a monotonic ease with no overshoot despite the notes claiming a "pat" bounce — now uses a real <code>easeOutBack</code> curve; (6) the notes claimed an engine-glow trailing 70ms behind the hull that didn't actually exist in the code — it's now a real implementation (a small glow element reading the ship's position from a 300ms rolling history buffer, sampled ~70ms behind the current frame). The stated ~7.6s duration also didn't match the timeline's actual sum (6.83s) — corrected above.<br><br>
+  <b>A second, deeper Fable pass (contrast math + position math, not just narrative review) caught nine more issues; all nine are fixed in this revision:</b> (1) the round-label toggle at the bottom of the tick function still included <code>pushIn</code> in its visibility condition while the reduced-motion early-return branch didn't — a real drift bug between the two, now identical; (2) ship/meteor/bandaid sprites measured at ~1.3–1.5:1 contrast against the bg/accent navy (a near-invisible silhouette by the file's own legibility rule) — added a tight white rim-light drop-shadow to all three; (3) the meteor's per-frame <code>left/top/width/height</code> writes were the one real GPU-only violation in a file whose self-gate claimed there wasn't one — converted to a fixed 56px box driven entirely by <code>transform: translate()/scale()</code>; (4) <code>SHIP_CLOSE</code> at 2.6x scale clipped part of the ship's own box off-stage under the letterbox — rescaled to 2.2x at a corrected thirds point; (5) <code>IMPACT_AT</code> at 29% of the impact phase gave the meteor only ~1ms of approach time before impact — moved to 45%; (6) shipIn's easing was a plain cubic despite notes claiming a settle-overshoot — now genuinely uses the file's own <code>easeOutBack</code>; (7) shipOut's pull-back was the one un-eased linear move in the whole timeline — now smoothstepped; (8) the impact flash was plain white, competing with every other white already in frame instead of reserving <code>shinyAccent</code> as the one true accent moment — recolored, plus a new lower-left nebula wash in the theme's own accent color for supporting 60/30/10 balance, placed well clear of the ship's flight path; (9) the impact shake's <i>frequency</i> (not just its decay) was tied to refresh rate via per-frame <code>Math.random()</code> — replaced with time-based dual-sine noise so it reads the same at 60Hz or 120Hz. One flagged dead-code line (a crack-redraw multiplier that couldn't actually do anything at that magnitude) was also simplified for clarity, no visual change.<br><br>
+  <b>Reused vs. new:</b> reused — the parallel-streak visual grammar and breathing radiant glow from <code>MeteorShowerAmbient</code> (reimplemented locally per "keep the change local," not imported, since that component is the persistent ambient layer and shouldn't be touched for a journey), the frame-timing normalization (<code>dtn = min(26,dt)/16.667</code>) copied from <code>TeamPickerSlide.jsx</code> per the reusable-lessons note, and the accelerating-approach/jagged-crack technique already proven in the midnight-galaxy file. New: real sprite art in the pipeline instead of hand-drawn canvas shapes, and this is a same-theme (not cross-theme-handoff) journey shape.<br><br>
+  <b>Open question this file actually tests:</b> whether these three sprites carry real alpha transparency. Unlike every earlier Recraft test tonight, these prompts deliberately did <i>not</i> include "isolated on plain white background" — the untested fix §14 of the plan doc flagged but never ran, on the theory that phrase may have been what told the model to bake an opaque background rect into the vector art in the first place. This session's sandbox still can't fetch <code>img.recraft.ai</code> to verify directly (same allowlist block as every prior session) — so the real test is you opening this file in a real browser and looking at whether the ship/meteor/bandaid float clean against the dark stage or carry a visible white box. That single look resolves an open question the last several plan-doc sections couldn't close themselves.<br><br>
+  <b>Known rough edges, not hidden:</b> the ship's rocket art points diagonally up-right by design (that's how it generated cleanly) rather than nose-first along its actual travel direction — I rotated it modestly toward horizontal rather than fighting the art. The impact point (62%/32% of the ship's own box) is an eyeballed estimate of where its cockpit window sits, not a measured coordinate — worth a real correction pass once you've seen it once. Camera shake is a simple decaying random translate on the ship group only, not the whole stage — full-stage shake wasn't tried yet.<br><br>
+  <b>Reduced motion:</b> the entire ship/meteor/crack/bandaid story is narrative flourish and is fully disabled — background holds at idle twinkle with no streaks, round labels just crossfade at the same story beats they'd otherwise land on.
+</div>
+
+<div class="gate">
+  <b>Self-gate</b>
+  <ul>
+    <li>Extension, not a parallel system: background star/streak/radiant language is meteor-shower's own established look, reimplemented locally rather than inventing a new atmosphere.</li>
+    <li>Real theme colors only: <code>bg #020408</code>, <code>bgDeep #010306</code>, <code>accent #101828</code>, <code>highlight #e0f0ff</code>, <code>text #f0f8ff</code>, <code>shinyAccent #80c0ff</code> — all pulled directly from meteor-shower's actual entry in <code>themes/index.js</code>.</li>
+    <li>Replay button and reduced-motion toggle both clicked and confirmed working, not just wired.</li>
+    <li>GPU-appropriate: canvas/rAF for the star field, streaks, and crack (genuine per-frame numeric need, same precedent as the shipped warp/confetti engines); ship/meteor/bandaid/letterbox/round-label motion is transform/opacity only.</li>
+    <li>No pop-in: ship fades+slides in, meteor grows from a point rather than appearing at full size, bandaid fades+scales in, letterbox bars scale from an edge rather than snapping to full height.</li>
+    <li>Edge margin respected: ship's cruise position and round-label text stay inboard with real margin; only stars/streaks (atmosphere) are allowed to bleed to the frame edge.</li>
+    <li>Silhouette-first legibility: all three sprites were validated individually tonight (icon style + recraftv2 + short prompt) to read as their subject at a glance before this file was built — not assumed.</li>
+  </ul>
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById('cv');
+const ctx = canvas.getContext('2d', { alpha: false });
+const W = 960, H = 540, CX = W/2, CY = H/2;
+canvas.width = W; canvas.height = H;
+
+const hexToRgb = hex => { const n = parseInt(hex.replace('#',''),16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; };
+const clamp01 = v => Math.max(0, Math.min(1, v));
+const lerp = (a,b,t) => a+(b-a)*t;
+const BG = hexToRgb('#020408'), ACCENT = hexToRgb('#101828'), HI = hexToRgb('#e0f0ff'), SHINY = hexToRgb('#80c0ff');
+
+let reduced = false;
+
+// ── background star field (fresh local reimplementation of MeteorShowerAmbient's twinkle field) ──
+const STAR_COUNT = 170;
+let stars = [];
+function makeStars(){
+  return Array.from({length: STAR_COUNT}, () => ({
+    x: Math.random()*W, y: Math.random()*H,
+    size: 0.5 + Math.random()*1.6,
+    hi: 0.22 + Math.random()*0.55,
+    dur: 9000 + Math.random()*18000,
+    phase: Math.random()*Math.PI*2,
+  }));
+}
+stars = makeStars();
+
+// ── ambient parallel streaks (fresh local reimplementation of MeteorShowerStreak) ──
+const RADIANT = { x: W*0.10, y: H*0.11 };
+let ambientStreaks = [];
+let nextStreakAt = 0;
+function rollAmbientStreak(now){
+  const theta = (29 + (Math.random()*10-5)) * Math.PI/180;
+  const dist = W*0.32 + Math.random()*W*0.22;
+  const sx = RADIANT.x + Math.random()*W*0.18;
+  const sy = RADIANT.y + Math.random()*H*0.20;
+  return {
+    sx, sy, ex: sx + Math.cos(theta)*dist, ey: sy + Math.sin(theta)*dist,
+    start: now, travel: 900 + Math.random()*900,
+  };
+}
+function spawnAmbientIfDue(now, allow){
+  if (!allow) return;
+  if (now >= nextStreakAt) {
+    ambientStreaks.push(rollAmbientStreak(now));
+    nextStreakAt = now + 1500 + Math.random()*2600;
+  }
+  ambientStreaks = ambientStreaks.filter(s => now - s.start < s.travel);
+}
+function drawAmbientStreaks(now){
+  ctx.globalCompositeOperation = 'lighter';
+  for (const s of ambientStreaks) {
+    const p = clamp01((now - s.start) / s.travel);
+    const env = p < 0.15 ? p/0.15 : (p > 0.8 ? Math.max(0,(1-p)/0.2) : 1);
+    const x = lerp(s.sx, s.ex, p), y = lerp(s.sy, s.ey, p);
+    const tp = Math.max(0, p-0.16), tx = lerp(s.sx,s.ex,tp), ty = lerp(s.sy,s.ey,tp);
+    const g = ctx.createLinearGradient(tx,ty,x,y);
+    g.addColorStop(0, 'rgba(208,232,255,0)');
+    g.addColorStop(1, `rgba(228,244,255,${0.75*env})`);
+    ctx.strokeStyle = g; ctx.lineWidth = 1.6; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(x,y); ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// ── crack (procedural, hand-authored — same jagged-spider technique already proven in the midnight-galaxy file) ──
+let crackSeed = [];
+function makeCrack(){
+  return Array.from({length:7}, (_,i) => ({
+    angle: (i/7)*Math.PI*2 + (Math.random()*0.5-0.25),
+    len: 16 + Math.random()*20,
+    startDelay: i*12 + Math.random()*16,
+    jag: (Math.random()*0.4-0.2),
+  }));
+}
+const CRACK_RES = 3; // internal canvas is 3x the 76px CSS display size — supersampled so the
+                      // crack stays crisp even once the ship group's own CSS scale(2.6) blows it up
+function drawCrack(progressMs){
+  const cctx = document.getElementById('crackCv').getContext('2d');
+  cctx.setTransform(CRACK_RES,0,0,CRACK_RES,0,0); // reset+scale each call so it never compounds
+  cctx.clearRect(0,0,76,76);
+  const cx=38, cy=38;
+  cctx.strokeStyle = 'rgba(230,238,255,0.9)'; cctx.lineWidth=1.5; cctx.lineCap='round';
+  for (const seg of crackSeed) {
+    const t = clamp01((progressMs - seg.startDelay)/140);
+    if (t<=0) continue;
+    const midX = cx+Math.cos(seg.angle+seg.jag)*seg.len*t*0.5, midY = cy+Math.sin(seg.angle+seg.jag)*seg.len*t*0.5;
+    const endX = cx+Math.cos(seg.angle)*seg.len*t, endY = cy+Math.sin(seg.angle)*seg.len*t;
+    cctx.beginPath(); cctx.moveTo(cx,cy); cctx.lineTo(midX,midY); cctx.lineTo(endX,endY); cctx.stroke();
+  }
+  cctx.fillStyle='rgba(255,255,255,0.8)'; cctx.beginPath(); cctx.arc(cx,cy,2,0,6.2832); cctx.fill();
+}
+
+// ── timeline ──
+const HOLD=500, SHIP_IN=700, CRUISE=1000, PUSH_IN=650, IMPACT=900, CRACK_HOLD=1300, BANDAID_IN=280, TABLEAU=700, SHIP_OUT=800;
+const TIMELINE=[
+  {phase:'hold',dur:HOLD},{phase:'shipIn',dur:SHIP_IN},{phase:'cruise',dur:CRUISE},
+  {phase:'pushIn',dur:PUSH_IN},{phase:'impact',dur:IMPACT},{phase:'crackHold',dur:CRACK_HOLD},{phase:'bandaid',dur:BANDAID_IN},
+  {phase:'tableau',dur:TABLEAU},{phase:'shipOut',dur:SHIP_OUT},
+];
+const TOTAL = TIMELINE.reduce((a,s)=>a+s.dur,0);
+const IMPACT_AT = IMPACT*0.45, IMPACT_APPROACH=260, CRACK_GROW=200;
+const SHIP_SCALE_CRUISE = 1, SHIP_SCALE_CLOSE = 2.2;
+// rule-of-thirds intersection, not dead center — a design-critique pass on the
+// first cut of this file flagged the close-up landing at 46%/50% as basically
+// centered, which fights the composition checklist's own power-points rule.
+// A second Fable pass caught that {0.62, 0.40} at 2.6x scale still clipped the
+// ship's own box off-stage under the letterbox — {0.62, 0.46} at 2.2x keeps the
+// full sprite on-canvas AND lands the crack/bandaid at ~66%/35%, a cleaner
+// thirds intersection than the first cut actually hit.
+const SHIP_CLOSE = { x: W*0.62, y: H*0.46 };
+
+function easeOutBack(t){ const c1=1.70158, c3=c1+1; return 1 + c3*Math.pow(t-1,3) + c1*Math.pow(t-1,2); }
+
+const shipEl = document.getElementById('ship');
+const meteorEl = document.getElementById('meteorSprite');
+const bandaidEl = document.getElementById('bandaid');
+const engineGlowEl = document.getElementById('engineGlow');
+const round1 = document.getElementById('round1'), round2 = document.getElementById('round2');
+const topBar = document.querySelector('.letterbox.top'), botBar = document.querySelector('.letterbox.bot');
+const phaseLabel = document.getElementById('phaseLabel');
+
+const SHIP_CRUISE = { x: W*0.30, y: H*0.55 };
+const ENGINE_LAG = 70; // ms — parent-drives-child stagger: the glow reads as driven BY the hull, not moving with it in lockstep
+let tStart=0, lastNow=0, currentPhase=null, shake={x:0,y:0}, flash=0, posHistory=[];
+
+function resetUI(){
+  crackSeed = makeCrack();
+  ambientStreaks=[]; nextStreakAt=0;
+  round1.classList.remove('show'); round2.classList.remove('show');
+  topBar.style.transform='scaleY(0)'; botBar.style.transform='scaleY(0)';
+  shipEl.style.opacity=0; meteorEl.style.opacity=0; bandaidEl.style.opacity=0; bandaidEl.style.transform='translate(0,14px) rotate(-6deg) scale(0.7)';
+  engineGlowEl.style.opacity=0;
+  flash=0; shake={x:0,y:0}; posHistory=[];
+  lastNow=0; currentPhase=null; tStart=0;
+  drawCrack(-999);
+}
+
+function tick(now){
+  if (!tStart) tStart = now;
+  const dt = lastNow ? now-lastNow : 16.667; lastNow = now;
+  const dtn = Math.min(26,dt)/16.667; // frame-timing normalization, copied from TeamPickerSlide.jsx per round-journeys.md
+
+  const total = Math.min(now - tStart, TOTAL - 1);
+  let acc=0, ph=TIMELINE[TIMELINE.length-1], elapsed=0;
+  for (const seg of TIMELINE){ if (total < acc+seg.dur){ ph=seg; elapsed=total-acc; break; } acc+=seg.dur; }
+  const p = Math.min(1, elapsed/ph.dur);
+  phaseLabel.textContent = 'phase: '+ph.phase;
+  if (ph.phase !== currentPhase) currentPhase = ph.phase;
+
+  // draw background wash + stars (always on)
+  ctx.fillStyle = `rgba(${BG.r},${BG.g},${BG.b},1)`; ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='lighter';
+  for (const s of stars){
+    const a = s.hi * (0.5 + 0.5*Math.sin(now/ (s.dur/6.28) + s.phase));
+    ctx.fillStyle = `rgba(255,255,255,${a})`;
+    ctx.beginPath(); ctx.arc(s.x,s.y,s.size,0,6.2832); ctx.fill();
+  }
+  ctx.globalCompositeOperation='source-over';
+  // radiant breathing glow, upper-left, always on (atmosphere)
+  const radiantHi = 0.55 + 0.25*Math.sin(now/1900);
+  const rg = ctx.createRadialGradient(RADIANT.x,RADIANT.y,0,RADIANT.x,RADIANT.y,W*0.16);
+  rg.addColorStop(0, `rgba(255,255,255,${0.55*radiantHi})`);
+  rg.addColorStop(0.4, `rgba(${HI.r},${HI.g},${HI.b},${0.22*radiantHi})`);
+  rg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = rg; ctx.fillRect(0,0,W,H);
+  // secondary nebula wash, lower-left, well clear of the ship's own flight path —
+  // uses the theme's accent (#101828) rather than another white/highlight patch,
+  // so shinyAccent stays reserved for the one moment (the impact flash) that
+  // should actually pop per 60/30/10; this is 60/30 supporting color, not accent.
+  const NEBULA = { x: W*0.16, y: H*0.86 };
+  const nebulaHi = 0.5 + 0.18*Math.sin(now/2600 + 1.2);
+  const ng = ctx.createRadialGradient(NEBULA.x,NEBULA.y,0,NEBULA.x,NEBULA.y,W*0.24);
+  ng.addColorStop(0, `rgba(${ACCENT.r},${ACCENT.g},${ACCENT.b},${0.55*nebulaHi})`);
+  ng.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = ng; ctx.fillRect(0,0,W,H);
+
+  if (reduced) {
+    round1.classList.toggle('show', ph.phase==='shipIn'||ph.phase==='cruise');
+    round2.classList.toggle('show', ph.phase==='tableau'||ph.phase==='shipOut');
+    shipEl.style.opacity=0; meteorEl.style.opacity=0; bandaidEl.style.opacity=0;
+    topBar.style.transform='scaleY(0)'; botBar.style.transform='scaleY(0)';
+    raf = requestAnimationFrame(tick);
+    return;
+  }
+
+  spawnAmbientIfDue(now, ph.phase!=='impact');
+  drawAmbientStreaks(now);
+
+  // letterbox: in during hold, out during shipOut's back half
+  let letterboxT = 0;
+  if (ph.phase==='hold') letterboxT = clamp01(p/0.6);
+  else if (ph.phase==='shipOut') letterboxT = 1-clamp01((p-0.5)/0.5);
+  else letterboxT = 1;
+  topBar.style.transform = `scaleY(${letterboxT})`;
+  botBar.style.transform = `scaleY(${letterboxT})`;
+
+  // ship position + shake + scale (the push-in/pull-out "we're riding inside it" beat)
+  let sx=SHIP_CRUISE.x, sy=SHIP_CRUISE.y, sOpacity=1, sScale=SHIP_SCALE_CRUISE, sRot=-14;
+  if (ph.phase==='hold') { sOpacity=0; }
+  else if (ph.phase==='shipIn') {
+    // easeOutBack, not a plain cubic ease-out — the notes always claimed a
+    // "settle-overshoot" on entry but the first cut's math never actually
+    // produced one (a monotonic 1-(1-p)^3 never overshoots). This does.
+    const e = easeOutBack(p);
+    sx = lerp(-120, SHIP_CRUISE.x, e); sy = SHIP_CRUISE.y + Math.sin(p*Math.PI)*10;
+    sOpacity = clamp01(p/0.3); sScale = 0.9+0.1*clamp01(e);
+  } else if (ph.phase==='cruise') {
+    sy = SHIP_CRUISE.y + Math.sin(now/1400)*4;
+  } else if (ph.phase==='pushIn') {
+    // camera dolly forward — ship grows from cruise scale to close-up scale and
+    // recenters, so the impact reads as us riding inside the cockpit, not
+    // watching a distant toy ship get hit. Ease-in-out: a deliberate push, not
+    // an instant cut, per the anticipation/hold-before-action principle.
+    const e = p<0.5 ? 2*p*p : 1-Math.pow(-2*p+2,2)/2;
+    sx = lerp(SHIP_CRUISE.x, SHIP_CLOSE.x, e); sy = lerp(SHIP_CRUISE.y, SHIP_CLOSE.y, e) + Math.sin(now/1400)*4*(1-e);
+    sScale = lerp(SHIP_SCALE_CRUISE, SHIP_SCALE_CLOSE, e);
+  } else if (ph.phase==='impact') {
+    sx = SHIP_CLOSE.x; sy = SHIP_CLOSE.y; sScale = SHIP_SCALE_CLOSE;
+    const sinceImpact = elapsed - IMPACT_AT;
+    if (sinceImpact >= 0 && sinceImpact < 400) {
+      const decay = Math.max(0, 1 - sinceImpact/400);
+      // time-based dual-sine noise, not per-frame Math.random() — the old version's
+      // shake *frequency* (not just its decay) was tied to refresh rate: more frames
+      // per second meant more direction-changes per second. Driving it off elapsed
+      // ms instead means the shake looks the same at 60Hz or 120Hz.
+      shake.x = (Math.sin(sinceImpact*0.09)*0.6 + Math.sin(sinceImpact*0.23+1.7)*0.4)*6*decay;
+      shake.y = (Math.sin(sinceImpact*0.11+0.6)*0.6 + Math.sin(sinceImpact*0.19+2.4)*0.4)*6*decay;
+    } else { const df = Math.pow(0.8, dtn); shake.x*=df; shake.y*=df; } // dtn-normalized so decay rate doesn't depend on refresh rate
+    sx += shake.x; sy += shake.y;
+  } else if (ph.phase==='crackHold' || ph.phase==='bandaid') {
+    sx = SHIP_CLOSE.x; sy = SHIP_CLOSE.y + Math.sin(now/1400)*4; sScale = SHIP_SCALE_CLOSE;
+    const df2 = Math.pow(0.7, dtn); shake.x*=df2; shake.y*=df2; sx+=shake.x; sy+=shake.y;
+  } else if (ph.phase==='tableau') {
+    sx = SHIP_CLOSE.x; sy = SHIP_CLOSE.y + Math.sin(now/1400)*4; sScale = SHIP_SCALE_CLOSE;
+  } else if (ph.phase==='shipOut') {
+    // pull back out first (first 45%), then resume the wide-shot exit — mirrors
+    // the push-in so the close-up reads as one bracketed camera move, not a
+    // permanent zoom the rest of the journey forgets to undo.
+    if (p < 0.45) {
+      const t = p/0.45; const e = t*t*(3-2*t); // smoothstep — the linear pull-back read as a speed
+      // mismatch against every other eased beat in this file (Fable flagged it as the one un-eased move)
+      sx = lerp(SHIP_CLOSE.x, SHIP_CRUISE.x, e); sy = lerp(SHIP_CLOSE.y, SHIP_CRUISE.y, e);
+      sScale = lerp(SHIP_SCALE_CLOSE, SHIP_SCALE_CRUISE, e);
+    } else {
+      const e = (p-0.45)/0.55;
+      const ee = e*e;
+      sx = lerp(SHIP_CRUISE.x, W+150, ee); sy = SHIP_CRUISE.y - ee*20;
+      sScale = SHIP_SCALE_CRUISE;
+    }
+  }
+  shipEl.style.opacity = sOpacity;
+  shipEl.style.transform = `translate(${sx-75}px, ${sy-75}px) rotate(${sRot}deg) scale(${sScale})`;
+
+  // engine glow — reads the ship's position from ~70ms ago (parent-drives-child
+  // stagger), not the current frame, so it visibly trails rather than moving in lockstep
+  posHistory.push({t:now, x:sx, y:sy, scale:sScale, opacity:sOpacity});
+  while (posHistory.length && now - posHistory[0].t > 300) posHistory.shift();
+  const laggedT = now - ENGINE_LAG;
+  let lagged = posHistory[0] || {x:sx,y:sy,scale:sScale,opacity:sOpacity};
+  for (const entry of posHistory) { if (entry.t <= laggedT) lagged = entry; else break; }
+  const glowDx = (0.22-0.5)*150*lagged.scale, glowDy = (0.85-0.5)*150*lagged.scale;
+  engineGlowEl.style.opacity = lagged.opacity * 0.85;
+  engineGlowEl.style.transform = `translate(${lagged.x+glowDx-18}px, ${lagged.y+glowDy-18}px) scale(${lagged.scale})`;
+
+  // rogue meteor: grows toward impact point during 'impact' phase's approach window
+  let mOpacity=0;
+  if (ph.phase==='impact') {
+    const approachStart = IMPACT_AT - IMPACT_APPROACH;
+    if (elapsed >= approachStart && elapsed < IMPACT_AT) {
+      const ap = clamp01((elapsed-approachStart)/IMPACT_APPROACH);
+      const grown = ap*ap*ap;
+      const size = (8 + grown*48) * sScale;
+      // sx/sy are already the ship's visual CENTER (shipEl's transform-origin
+      // is box-center, so translate(sx-75,sy-75) lands the center at sx,sy) —
+      // offsetting by another +75 here was a real bug (pushed the impact point
+      // 75px past the actual cockpit window). Fixed: offset from center only,
+      // scaled by the ship's current sScale so it still lands on the cockpit
+      // once the push-in beat makes the ship much bigger.
+      const targetX = sx + (0.62-0.5)*150*sScale, targetY = sy + (0.32-0.5)*150*sScale;
+      const mx = lerp(targetX-260*sScale, targetX, ap), my = lerp(targetY-160*sScale, targetY, ap);
+      // transform-only: base box stays a fixed 56px (left/top/width/height never
+      // touched after load), position+grow are both translate/scale — a Fable
+      // pass flagged the old left/top/width/height-per-frame version as the one
+      // real GPU-only violation in a file whose self-gate claimed there wasn't one.
+      meteorEl.style.transform = `translate(${mx-28}px, ${my-28}px) scale(${size/56})`;
+      mOpacity = ap;
+    }
+  }
+  meteorEl.style.opacity = mOpacity;
+
+  // impact flash + crack
+  if (ph.phase==='impact') {
+    const sinceImpact = elapsed - IMPACT_AT;
+    if (sinceImpact >= 0) {
+      flash = Math.max(0, 1 - sinceImpact/140);
+      drawCrack(sinceImpact);
+    }
+  } else if (ph.phase==='crackHold') {
+    flash = 0;
+    drawCrack(9999);
+  } else if (ph.phase!=='bandaid' && ph.phase!=='tableau' && ph.phase!=='shipOut') {
+    drawCrack(-999);
+  }
+  if (flash > 0) {
+    // shinyAccent (#80c0ff), not plain white — the one moment in this file that
+    // should read as THE accent color per 60/30/10, not another white wash on
+    // top of the stars/radiant/impact-shard whites already in the frame.
+    ctx.fillStyle = `rgba(${SHINY.r},${SHINY.g},${SHINY.b},${flash*0.45})`;
+    ctx.fillRect(0,0,W,H);
+    flash = Math.max(0, flash-0.03*dtn); // no-op while phase==='impact' (overwritten below each frame);
+                                          // only actually matters for the one frame the phase changes away
+  }
+
+  // bandaid entrance — easeOutBack so it overshoots slightly and settles, the
+  // "pat" landing bounce Fable's pass flagged as missing (previous version was
+  // a monotonic ease-out with no overshoot at all)
+  if (ph.phase==='bandaid') {
+    const fadeP = clamp01(p*1.4);
+    const visualP = easeOutBack(p);
+    bandaidEl.style.opacity = fadeP;
+    bandaidEl.style.transform = `translate(0, ${lerp(14,0,visualP)}px) rotate(${lerp(-6,-12,visualP)}deg) scale(${lerp(0.7,1,visualP)})`;
+    drawCrack(9999); // was `9999*(1-fadeP*0.3)` — dead code: every segment's t already
+                      // clamps to 1 at this magnitude regardless of the multiplier
+  } else if (ph.phase==='tableau' || ph.phase==='shipOut') {
+    bandaidEl.style.opacity = 1;
+    bandaidEl.style.transform = `translate(0,0) rotate(-12deg) scale(1)`;
+  }
+
+  // round labels
+  round1.classList.toggle('show', ph.phase==='shipIn'||ph.phase==='cruise');
+  round2.classList.toggle('show', ph.phase==='tableau'||ph.phase==='shipOut');
+
+  raf = requestAnimationFrame(tick);
+}
+let raf;
+function play(){ cancelAnimationFrame(raf); resetUI(); raf = requestAnimationFrame(tick); }
+
+document.getElementById('replay').onclick = play;
+document.getElementById('reducedToggle').onchange = (e) => { reduced = e.target.checked; play(); };
+play();
+</script>
+</body>
+</html>

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>PYL Picker Concepts v3 — Preview</title>
+<style>
+  :root {
+    --bg: #0f1c22; --bg-deep: #070f13; --cream: #f5f0e8;
+    --accent: #e8b64a; --highlight: #ffd24d; --apple: #e02020;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #050a0d; color: var(--cream);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 24px;
+  }
+  h1 { font-size: 18px; letter-spacing: 2px; margin: 4px 0 0; opacity: .8; font-weight: 700; text-transform: uppercase; }
+  p.sub { margin: -12px 0 0; font-size: 12px; opacity: .5; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  button {
+    font: inherit; font-weight: 800; font-size: 13px; letter-spacing: .5px; text-transform: uppercase;
+    padding: 10px 18px; border-radius: 10px; border: 2px solid transparent; cursor: pointer;
+    background: #1a2a30; color: var(--cream); transition: transform 120ms cubic-bezier(0.23,1,0.32,1), background 160ms ease;
+  }
+  button:active { transform: scale(0.97); }
+  button.active { background: var(--accent); color: #14251f; border-color: var(--highlight); }
+  button.ghost { background: transparent; border-color: #ffffff33; }
+  label.toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; opacity: .75; font-weight: 600; }
+  .stage-wrap {
+    width: min(1120px, 94vw); aspect-ratio: 1344 / 756; position: relative;
+    border-radius: 20px; overflow: hidden; border: 2px solid #ffffff1a; background: var(--bg-deep);
+    box-shadow: 0 30px 70px #000a;
+  }
+  .stage {
+    width: 1344px; height: 756px; position: absolute; top: 50%; left: 50%;
+    transform-origin: center; background:
+      radial-gradient(ellipse 72% 58% at 50% 44%, #4de3d018 0%, transparent 62%),
+      radial-gradient(ellipse at center, var(--bg) 0%, var(--bg-deep) 82%);
+  }
+  .winner-static { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .winner-static .card { padding: 28px 56px; border-radius: 20px; background: var(--accent); font-weight: 900; font-size: 44px; color: #14251f; text-align: center; }
+  @keyframes popStage { 0% { transform: scale(.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes confPiece {
+    0% { transform: translate(-50%,-50%) rotate(0); opacity: 1; }
+    100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 380px)) rotate(var(--r)); opacity: 0; }
+  }
+  .conf { position: absolute; width: 11px; height: 16px; border-radius: 2px; z-index: 60; animation: confPiece var(--dur, 1900ms) ease-out var(--delay, 0ms) forwards; }
+  @keyframes burstOut {
+    0% { transform: translate(-50%,-50%) scale(1); opacity: 1; }
+    100% { transform: translate(calc(-50% + var(--bx)), calc(-50% + var(--by))) scale(.35); opacity: 0; }
+  }
+  .burst { position: absolute; width: 8px; height: 8px; border-radius: 50%; z-index: 55; animation: burstOut var(--dur, 650ms) cubic-bezier(0.16,1,0.3,1) var(--delay, 0ms) forwards; }
+  @keyframes pulseDot { 0%, 100% { opacity: .55; transform: scale(1); } 50% { opacity: 1; transform: scale(1.25); } }
+  @media (prefers-reduced-motion: reduce) {
+    *, .conf, .burst { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+  }
+</style>
+</head>
+<body>
+  <h1>Press Your Luck — picker concepts v3</h1>
+  <p class="sub">No cider this round — Plinko drop, radar lock-on, fireworks finale</p>
+  <div class="controls">
+    <button data-concept="plinko" class="active">Plinko Drop</button>
+    <button data-concept="radar">Radar Lock-On</button>
+    <button data-concept="fireworks">Fireworks Finale</button>
+    <button id="replay" class="ghost">↻ Replay</button>
+    <label class="toggle"><input id="reduceToggle" type="checkbox" /> Simulate reduced motion</label>
+  </div>
+  <div class="stage-wrap"><div class="stage" id="stage"></div></div>
+
+<script>
+const TEAMS = [
+  { id: "t1", name: "The Fermenters", color: "#ff5d5d" },
+  { id: "t2", name: "Sour Patch Kids", color: "#5db0ff" },
+  { id: "t3", name: "Cider Squad", color: "#7ee081" },
+  { id: "t4", name: "Hop Heads", color: "#c98bff" },
+  { id: "t5", name: "Pressed & Confused", color: "#ff9f43" },
+  { id: "t6", name: "Barrel Aged", color: "#4de3d0" },
+];
+const AREA_W = 1344, AREA_H = 756, CX = AREA_W / 2, CY = AREA_H / 2;
+const CREAM = "#f5f0e8", ACCENT = "#e8b64a", HIGHLIGHT = "#ffd24d", APPLE = "#e02020";
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = (arr) => arr[(Math.random() * arr.length) | 0];
+const shuffle = (a) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [b[i], b[j]] = [b[j], b[i]]; } return b; };
+const EASE_OUT = "cubic-bezier(0.23,1,0.32,1)";
+const EASE_IN = "cubic-bezier(0.55,0,0.85,0.35)";
+const EASE_BOUNCE = "cubic-bezier(0.34,1.56,0.64,1)";
+
+const stage = document.getElementById("stage");
+const reduceToggle = document.getElementById("reduceToggle");
+let timers = [];
+const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+function teardown() { timers.forEach(clearTimeout); timers = []; stage.innerHTML = ""; }
+function reducedMotion() { return reduceToggle.checked || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
+
+function el(tag, style, html) {
+  const d = document.createElement(tag);
+  Object.assign(d.style, style);
+  if (html !== undefined) d.innerHTML = html;
+  return d;
+}
+
+function confettiBurst(x, y, count, colors, spread) {
+  x = x ?? CX; y = y ?? CY; count = count ?? 46; colors = colors || [HIGHLIGHT, ACCENT, APPLE, CREAM]; spread = spread ?? 420;
+  const frag = document.createDocumentFragment();
+  for (let k = 0; k < count; k++) {
+    const d = document.createElement("div");
+    d.className = "conf";
+    d.style.left = x + "px"; d.style.top = y + "px";
+    d.style.background = colors[k % colors.length];
+    d.style.setProperty("--dx", rand(-spread, spread) + "px");
+    d.style.setProperty("--dy", rand(-spread * 0.7, spread * 0.1) + "px");
+    d.style.setProperty("--r", rand(-360, 360) + "deg");
+    d.style.setProperty("--dur", (1200 + rand(0, 500)) + "ms");
+    d.style.setProperty("--delay", (k % 9) * 26 + "ms");
+    frag.appendChild(d);
+  }
+  stage.appendChild(frag);
+}
+
+function burstParticles(x, y, count, colors, radius, dur) {
+  count = count ?? 20; colors = colors || [HIGHLIGHT, ACCENT, CREAM]; radius = radius ?? 90; dur = dur ?? 650;
+  const frag = document.createDocumentFragment();
+  for (let k = 0; k < count; k++) {
+    const a = (k / count) * Math.PI * 2 + rand(-0.15, 0.15);
+    const r = radius * rand(0.7, 1.15);
+    const d = document.createElement("div");
+    d.className = "burst";
+    d.style.left = x + "px"; d.style.top = y + "px";
+    d.style.background = colors[k % colors.length];
+    d.style.boxShadow = `0 0 8px ${colors[k % colors.length]}`;
+    d.style.setProperty("--bx", Math.cos(a) * r + "px");
+    d.style.setProperty("--by", Math.sin(a) * r + "px");
+    d.style.setProperty("--dur", dur + rand(-80, 80) + "ms");
+    d.style.setProperty("--delay", "0ms");
+    frag.appendChild(d);
+  }
+  stage.appendChild(frag);
+}
+
+function winnerCard(x, y, name) {
+  const card = el("div", {
+    position: "absolute", left: x + "px", top: y + "px", transform: "translate(-50%,0) scale(.9)",
+    opacity: "0", padding: "16px 38px", borderRadius: "16px", background: ACCENT, color: "#14251f",
+    fontWeight: "900", fontSize: "28px", boxShadow: `0 0 60px ${HIGHLIGHT}`, transition: `transform 380ms ${EASE_OUT}, opacity 380ms ${EASE_OUT}`, zIndex: 80,
+  }, name);
+  stage.appendChild(card);
+  requestAnimationFrame(() => { card.style.opacity = "1"; card.style.transform = "translate(-50%,0) scale(1)"; });
+  return card;
+}
+
+function staticWinner(winner) { stage.innerHTML = `<div class="winner-static"><div class="card">${winner.name}</div></div>`; }
+
+/* ---------------- CONCEPT 1: PLINKO DROP ---------------- */
+function runPlinko() {
+  const winner = pick(TEAMS);
+  if (reducedMotion()) { staticWinner(winner); return; }
+
+  const title = el("div", { position: "absolute", top: "26px", left: "0", right: "0", textAlign: "center", fontWeight: "900", letterSpacing: "5px", fontSize: "22px", color: ACCENT }, "PLINKO DROP");
+  stage.appendChild(title);
+
+  const boardTop = 130, boardBottom = 540, boardW = 940;
+  const boardLeft = CX - boardW / 2;
+  stage.appendChild(el("div", { position: "absolute", left: boardLeft - 20 + "px", top: boardTop - 20 + "px", width: boardW + 40 + "px", height: boardBottom - boardTop + 40 + "px", borderRadius: "20px", border: "2px solid #ffffff18", background: "#ffffff06", animation: "popStage 420ms " + EASE_BOUNCE }));
+
+  // pegs
+  const rows = 8;
+  for (let r = 0; r < rows; r++) {
+    const cols = 6 + (r % 2 === 0 ? 0 : 1);
+    const y = boardTop + (r / (rows - 1)) * (boardBottom - boardTop - 60) + 20;
+    for (let c = 0; c < cols; c++) {
+      const x = boardLeft + (boardW / (cols - 1)) * c;
+      stage.appendChild(el("div", { position: "absolute", left: x - 4 + "px", top: y - 4 + "px", width: "8px", height: "8px", borderRadius: "50%", background: "#ffffff35" }));
+    }
+  }
+
+  const n = TEAMS.length, slotSpacing = boardW / (n - 1);
+  const nodes = TEAMS.map((t, i) => {
+    const x = boardLeft + slotSpacing * i;
+    const slot = el("div", { position: "absolute", left: x - 68 + "px", top: boardBottom + 10 + "px", width: "136px", height: "70px", borderRadius: "10px", background: t.color + "22", border: `2px solid ${t.color}66`, transition: `background 300ms ease, opacity 400ms ease, transform 300ms ${EASE_OUT}` });
+    const label = el("div", { position: "absolute", left: "0", right: "0", top: "10px", textAlign: "center", fontSize: "12px", fontWeight: "800", color: CREAM, padding: "0 6px" }, t.name);
+    slot.appendChild(label);
+    stage.appendChild(slot);
+    return { team: t, x, slot };
+  });
+  const winNode = nodes.find((nd) => nd.team.id === winner.id);
+
+  // scripted zigzag path narrowing onto the winner's slot x
+  const waypoints = [];
+  const steps = rows;
+  for (let s = 1; s <= steps; s++) {
+    const t = s / steps;
+    const y = boardTop + t * (boardBottom - boardTop);
+    const baseX = CX + (winNode.x - CX) * t;
+    const jitter = s < steps ? rand(-34, 34) * (1 - t * 0.7) : 0;
+    waypoints.push({ x: baseX + jitter, y });
+  }
+  waypoints[waypoints.length - 1].x = winNode.x;
+
+  const ball = el("div", { position: "absolute", left: CX - 12 + "px", top: boardTop - 40 + "px", width: "24px", height: "24px", borderRadius: "50%", background: `radial-gradient(circle at 35% 30%, #fff, ${HIGHLIGHT})`, boxShadow: `0 0 16px ${HIGHLIGHT}`, transition: `transform 210ms ${EASE_IN}`, zIndex: 40 });
+  stage.appendChild(ball);
+
+  let cursor = { x: CX, y: boardTop - 40 };
+  const hop = (i) => {
+    if (i >= waypoints.length) {
+      at(260, () => {
+        nodes.forEach((nd) => { if (nd !== winNode) { nd.slot.style.opacity = "0.18"; } });
+        winNode.slot.style.background = HIGHLIGHT + "44";
+        winNode.slot.style.transform = "scale(1.06)";
+        winNode.slot.style.boxShadow = `0 0 40px ${HIGHLIGHT}`;
+        confettiBurst(winNode.x, boardBottom + 45, 44, [HIGHLIGHT, ACCENT, CREAM, winner.color], 380);
+        winnerCard(winNode.x, boardBottom + 100, winner.name);
+      });
+      return;
+    }
+    const wp = waypoints[i];
+    ball.style.transform = `translate(${wp.x - (CX - 12)}px, ${wp.y - (boardTop - 40)}px) scale(.75,1.25)`;
+    at(210, () => { ball.style.transform = `translate(${wp.x - (CX - 12)}px, ${wp.y - (boardTop - 40)}px) scale(1,1)`; });
+    at(230, () => hop(i + 1));
+  };
+  at(300, () => hop(0));
+}
+
+/* ---------------- CONCEPT 2: RADAR LOCK-ON ---------------- */
+function runRadar() {
+  const winner = pick(TEAMS);
+  if (reducedMotion()) { staticWinner(winner); return; }
+
+  const title = el("div", { position: "absolute", top: "26px", left: "0", right: "0", textAlign: "center", fontWeight: "900", letterSpacing: "5px", fontSize: "22px", color: "#4de3d0" }, "RADAR LOCK-ON");
+  stage.appendChild(title);
+
+  const R = 280;
+  const disc = el("div", { position: "absolute", left: CX - R + "px", top: CY - R + "px", width: R * 2 + "px", height: R * 2 + "px", borderRadius: "50%", background: "radial-gradient(circle, #0e2b28 0%, #061412 80%)", border: "3px solid #4de3d044", boxShadow: "inset 0 0 60px #000a", animation: "popStage 420ms " + EASE_BOUNCE, overflow: "hidden" });
+  [0.33, 0.66, 1].forEach((f) => disc.appendChild(el("div", { position: "absolute", left: R - R * f + "px", top: R - R * f + "px", width: R * 2 * f + "px", height: R * 2 * f + "px", borderRadius: "50%", border: "1px solid #4de3d022" })));
+  disc.appendChild(el("div", { position: "absolute", left: "0", top: R - 1 + "px", width: "100%", height: "1px", background: "#4de3d022" }));
+  disc.appendChild(el("div", { position: "absolute", left: R - 1 + "px", top: "0", width: "1px", height: "100%", background: "#4de3d022" }));
+  const sweep = el("div", { position: "absolute", left: "0", top: "0", width: "100%", height: "100%", background: "conic-gradient(from 0deg, transparent 0deg, #4de3d05a 26deg, transparent 52deg)", animation: "spinSweep 2600ms linear infinite" });
+  disc.appendChild(sweep);
+  stage.appendChild(disc);
+
+  const spinStyle = document.createElement("style");
+  spinStyle.textContent = "@keyframes spinSweep{from{transform:rotate(0)}to{transform:rotate(360deg)}}";
+  stage.appendChild(spinStyle);
+
+  const n = TEAMS.length;
+  const nodes = TEAMS.map((t, i) => {
+    const ang = (i / n) * Math.PI * 2 + rand(-0.2, 0.2);
+    const r = R * rand(0.35, 0.82);
+    const x = CX + Math.cos(ang) * r, y = CY + Math.sin(ang) * r;
+    const wrap = el("div", { position: "absolute", left: x - 8 + "px", top: y - 8 + "px", transition: "opacity 400ms ease, transform 400ms ease" });
+    wrap.appendChild(el("div", { width: "16px", height: "16px", borderRadius: "50%", background: t.color, boxShadow: `0 0 10px ${t.color}`, animation: "pulseDot 1400ms ease-in-out infinite" }));
+    const label = el("div", { position: "absolute", left: "-52px", top: "20px", width: "120px", textAlign: "center", fontSize: "11px", fontWeight: "800", color: CREAM, textShadow: "0 1px 3px #000" }, t.name);
+    wrap.appendChild(label);
+    stage.appendChild(wrap);
+    return { team: t, x, y, wrap };
+  });
+  const others = shuffle(nodes.filter((nd) => nd.team.id !== winner.id));
+  const winNode = nodes.find((nd) => nd.team.id === winner.id);
+
+  let delay = 500;
+  others.forEach((node) => {
+    at(delay, () => { node.wrap.style.opacity = "0.08"; node.wrap.style.transform = "scale(.6)"; });
+    delay += 480;
+  });
+
+  at(delay + 300, () => {
+    const reticle = el("div", { position: "absolute", left: winNode.x - 34 + "px", top: winNode.y - 34 + "px", width: "68px", height: "68px", borderRadius: "50%", border: "2px solid #7dffb0", transform: "scale(1.6)", opacity: "0", transition: `transform 260ms ${EASE_BOUNCE}, opacity 260ms ease`, zIndex: 50 });
+    reticle.appendChild(el("div", { position: "absolute", left: "50%", top: "-10px", width: "2px", height: "16px", background: "#7dffb0", marginLeft: "-1px" }));
+    reticle.appendChild(el("div", { position: "absolute", left: "50%", bottom: "-10px", width: "2px", height: "16px", background: "#7dffb0", marginLeft: "-1px" }));
+    stage.appendChild(reticle);
+    requestAnimationFrame(() => { reticle.style.transform = "scale(1)"; reticle.style.opacity = "1"; });
+    winNode.wrap.style.transform = "scale(1.3)";
+
+    const lock = el("div", { position: "absolute", left: winNode.x + "px", top: winNode.y - 68 + "px", transform: "translateX(-50%)", fontWeight: "900", fontSize: "18px", letterSpacing: "3px", color: "#7dffb0", textShadow: "0 0 14px #7dffb0", opacity: "0", transition: `opacity 260ms ease` }, "LOCKED ON");
+    stage.appendChild(lock);
+    requestAnimationFrame(() => { lock.style.opacity = "1"; });
+
+    burstParticles(winNode.x, winNode.y, 22, ["#7dffb0", "#4de3d0", "#ffffff"], 90, 600);
+  });
+
+  at(delay + 700, () => { confettiBurst(winNode.x, winNode.y, 40, ["#7dffb0", HIGHLIGHT, "#ffffff"], 340); winnerCard(winNode.x, Math.min(winNode.y + 100, CY + R + 50), winner.name); });
+}
+
+/* ---------------- CONCEPT 3: FIREWORKS FINALE ---------------- */
+function launchShell(x, groundY, apexY, colors, big, onBurst) {
+  const trail = el("div", { position: "absolute", left: x - (big ? 4 : 3) + "px", top: groundY + "px", width: big ? "8px" : "6px", height: big ? "8px" : "6px", borderRadius: "50%", background: "#fff", boxShadow: `0 0 ${big ? 18 : 10}px #fff`, transition: `top ${big ? 900 : 560}ms cubic-bezier(0.16,1,0.3,1), opacity 200ms ease` });
+  stage.appendChild(trail);
+  requestAnimationFrame(() => { trail.style.top = apexY + "px"; });
+  return trail;
+}
+
+function runFireworks() {
+  const winner = pick(TEAMS);
+  if (reducedMotion()) { staticWinner(winner); return; }
+
+  const title = el("div", { position: "absolute", top: "26px", left: "0", right: "0", textAlign: "center", fontWeight: "900", letterSpacing: "5px", fontSize: "22px", color: ACCENT, zIndex: 70 }, "FIREWORKS FINALE");
+  stage.appendChild(title);
+
+  const groundY = AREA_H - 40;
+  const others = shuffle(TEAMS.filter((t) => t.id !== winner.id));
+
+  let delay = 400;
+  others.forEach((t) => {
+    const x = rand(280, AREA_W - 280);
+    const apexY = rand(220, 340);
+    at(delay, () => {
+      const trail = launchShell(x, groundY, apexY);
+      at(580, () => {
+        trail.style.opacity = "0";
+        burstParticles(x, apexY, 10, [t.color, "#ffffff"], 46, 420);
+      });
+    });
+    delay += 620;
+  });
+
+  at(delay + 200, () => {
+    const x = CX, apexY = 260;
+    const trail = launchShell(x, groundY, apexY, null, true);
+    at(920, () => {
+      trail.style.opacity = "0";
+      burstParticles(x, apexY, 32, [ACCENT, HIGHLIGHT, "#ffffff"], 150, 900);
+      at(260, () => burstParticles(x, apexY, 20, [HIGHLIGHT, "#ffffff", winner.color], 90, 700));
+
+      confettiBurst(x, apexY, 26, [ACCENT, HIGHLIGHT, "#ffffff"], 260);
+
+      const nameGlow = el("div", { position: "absolute", left: x + "px", top: apexY + "px", transform: "translate(-50%,-50%) scale(.7)", opacity: "0", fontWeight: "900", fontSize: "32px", color: "#fff", textShadow: `0 0 24px ${HIGHLIGHT}, 0 0 60px ${HIGHLIGHT}`, transition: `transform 420ms ${EASE_BOUNCE}, opacity 420ms ease`, whiteSpace: "nowrap", zIndex: 65 }, winner.name);
+      stage.appendChild(nameGlow);
+      requestAnimationFrame(() => { nameGlow.style.opacity = "1"; nameGlow.style.transform = "translate(-50%,-50%) scale(1)"; });
+    });
+  });
+
+  at(delay + 200 + 920 + 700, () => { winnerCard(CX, 560, winner.name); });
+}
+
+const CONCEPTS = { plinko: runPlinko, radar: runRadar, fireworks: runFireworks };
+let current = "plinko";
+
+function play(name) {
+  teardown();
+  current = name;
+  document.querySelectorAll("[data-concept]").forEach((b) => b.classList.toggle("active", b.dataset.concept === name));
+  CONCEPTS[name]();
+}
+
+document.querySelectorAll("[data-concept]").forEach((b) => b.addEventListener("click", () => play(b.dataset.concept)));
+document.getElementById("replay").addEventListener("click", () => play(current));
+reduceToggle.addEventListener("change", () => play(current));
+
+play("plinko");
+</script>
+</body>
+</html>

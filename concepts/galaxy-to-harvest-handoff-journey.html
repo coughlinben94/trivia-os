@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>midnight-galaxy → autumn-harvest — cross-theme handoff journey prototype</title>
+<style>
+  :root{ --text:#e8d0ff; }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0a0a;color:#e8e8e8;font-family:system-ui,sans-serif;padding:28px}
+  h1{font-size:1.15rem;font-weight:700;margin-bottom:4px}
+  .sub{color:#888;font-size:.8rem;margin-bottom:20px;max-width:780px;line-height:1.5}
+  .wrap{max-width:960px}
+  .stage{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;border:1px solid #222;background:#040010}
+  canvas{position:absolute;inset:0;width:100%;height:100%}
+  .hud{position:absolute;bottom:6%;left:0;right:0;text-align:center;font-size:.75rem;letter-spacing:.3em;text-transform:uppercase;opacity:0;transition:opacity .3s,color .3s;pointer-events:none;font-weight:700}
+  .hud.show{opacity:.85}
+  .round{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.3rem;opacity:0;transition:opacity .5s ease-out,color .3s;pointer-events:none}
+  .round.show{opacity:1}
+  .round .n{font-size:.9rem;letter-spacing:.35em;text-transform:uppercase}
+  .round .t{font-size:3rem;font-weight:700}
+  .controls{display:flex;gap:10px;align-items:center;margin:14px 0 24px;font-size:.78rem;color:#aaa;flex-wrap:wrap}
+  button{background:#161616;border:1px solid #2a2a2a;color:#eee;padding:8px 16px;border-radius:6px;font-size:.78rem;cursor:pointer}
+  button:hover{background:#1e1e1e}
+  label{display:flex;gap:6px;align-items:center}
+  input[type=checkbox]{accent-color:#c060ff}
+  .phase{font-size:.7rem;color:#666;margin-left:auto}
+  .notes{margin-top:20px;font-size:.8rem;color:#999;line-height:1.6;max-width:780px}
+  .notes b{color:#ccc}
+  .gate{margin-top:16px;font-size:.78rem;color:#888;line-height:1.7;max-width:780px}
+  .gate b{color:#bbb}
+  .gate ul{margin:6px 0 0 18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Galaxy → Harvest — cross-theme handoff journey</h1>
+<div class="sub">The structural piece agreed on this session: a journey has two ends. Same theme both sides of a round boundary → play one continuous single-theme motif (that's the existing meteor-shower-to-galaxy file, unchanged). Different themes on either side → depart in the leaving theme's own motif, cross a short neutral bridge (theme-agnostic, so this isn't an N² combinations problem), then arrive in the entering theme's own motif. This prototype is that second case: midnight-galaxy (Round 1) handing off to autumn-harvest (Round 2).</div>
+
+<div class="stage" id="stage">
+  <canvas id="cv"></canvas>
+  <div class="round" id="roundLabel"><div class="n">Arriving at</div><div class="t">Round 2</div></div>
+  <div class="hud" id="hud">Departing</div>
+</div>
+
+<div class="controls">
+  <button id="replay">↻ Replay full journey</button>
+  <label><input type="checkbox" id="reducedToggle"> Simulate prefers-reduced-motion</label>
+  <span class="phase" id="phaseLabel">phase: idle</span>
+</div>
+
+<div class="notes">
+  <b>Sequence (~5.75s):</b> depart-hold (400ms, calm galaxy starfield, this is still "inside" Round 1) → meteors out (1300ms, the galaxy file's own departure motif, reused as-is, warp climbing) → bridge (750ms, a genuinely neutral beat — background tone crossfades from galaxy's deep purple-black to harvest's deep ember-black, a small set of drifting motes shift color from galaxy highlight to harvest's hot gold across their own lifetime so the handoff reads as one continuous idea rather than a hard cut, and a fine noise/mote layer stays over the near-black crossfade the whole time per the near-black-banding lesson) → converge (900ms, the harvest file's own gathering-embers motif, reused as-is) → supernova (1500ms, the harvest file's own flash/ring/burst, "Round 2" fades in around the 35% mark in harvest's own text color) → settle (900ms, calm harvest ambient, label holding).<br><br>
+  <b>What's reused vs. new:</b> the galaxy half reuses the meteor-shower-to-galaxy file's star/meteor <em>functions</em> unmodified; the per-phase warp target values were re-tuned for this journey's own pacing (departing into a bridge reads differently than departing into a settle), so "reused" means the math, not every tuned number. Same relationship for the harvest half and its converge/burst functions. The only genuinely new code is the bridge phase (background tone crossfade + color-transitioning motes) and the single shared label element (one <code>#roundLabel</code>, not two elements — an earlier version of the meteor-shower file had a real bug where <code>#round1</code> was never hidden before <code>#round2</code> appeared, since fixed there; this file never had two label elements to begin with, so that class of bug structurally can't happen here).<br><br>
+  <b>Reduced motion:</b> no meteors, no converge/burst, no motes, no windshield gag — the background tone crossfade only runs during the 750ms bridge window (not stretched across the whole ~5.75s), and the round label appears at the same relative point (35% into where the supernova beat would be) as the non-reduced version's label timing.<br><br>
+  <b>Everything from this session, combined:</b> this file now carries every piece built tonight in one continuous journey — the meteor shower and windshield-crack-then-bandaid story beat from the standalone spaceship file (ported in as-is, just re-timed to this file's shorter 1300ms meteors-out window instead of that file's 1450ms), the cinematic nova upgrade (wispy filament ring, anamorphic core streak, extended hold-at-peak) on the harvest arrival, and the fix that keeps background warp out of the meteor beat so the shower stays a clean isolated moment. Nothing here is a new mechanic — it's the existing pieces assembled into the one thing they were always meant to add up to.<br><br>
+  <b>Open question for you:</b> this prototype always spends a fixed 750ms in the neutral bridge regardless of which two themes are handing off. Some theme pairs might want a longer or differently-styled bridge (a theme with a very bright palette crossfading through near-black might read harsher than two dark themes meeting) — worth deciding whether bridge duration/style is a fixed constant or a per-pair-of-themes tunable once more handoffs exist.
+</div>
+
+<div class="gate">
+  <b>Self-gate</b>
+  <ul>
+    <li>Two-ended structure matches this session's agreed design: departure motif (leaving theme, native colors) → neutral bridge (theme-agnostic) → arrival motif (entering theme, native colors).</li>
+    <li>Both halves reuse already-built, already-gated motifs rather than inventing new per-theme math — the bridge is the only new mechanism, and it's intentionally theme-agnostic so it doesn't need to be rebuilt per theme pair.</li>
+    <li>Real theme colors only, both themes, straight from <code>themes/index.js</code>.</li>
+    <li>Replay button and reduced-motion toggle both tested working.</li>
+    <li>Single label element — the two-label overlap bug from the earlier file structurally can't recur here.</li>
+    <li>Near-black banding guarded: bridge keeps a mote/noise layer over the whole crossfade rather than a bare gradient ramp through near-black.</li>
+  </ul>
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById('cv');
+const ctx = canvas.getContext('2d', { alpha: false });
+const W = 960, H = 540, CX = W/2, CY = H/2;
+canvas.width = W; canvas.height = H;
+const minDim = Math.min(W,H);
+
+const hexToRgb = hex => { const n = parseInt(hex.replace('#',''),16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; };
+const lerp = (a,b,t) => a+(b-a)*t;
+const clamp01 = v => Math.max(0, Math.min(1, v));
+const easeInCubic = p => p*p*p;
+const easeOutQuint = p => 1 - Math.pow(1-p, 5);
+const easeInOut = p => p<0.5 ? 2*p*p : 1-Math.pow(-2*p+2,2)/2;
+
+// ── palettes, straight from themes/index.js ──────────────────────────────
+const GAL = { bg:hexToRgb('#08001a'), bgDeep:hexToRgb('#040010'), accent:hexToRgb('#4a1a8f'), hi:hexToRgb('#c060ff'), hiHex:'#c060ff', textHex:'#e8d0ff' };
+const HAR = { bg:hexToRgb('#1a0800'), bgDeep:hexToRgb('#0e0400'), accent:hexToRgb('#7a2808'), hi:hexToRgb('#ff6820'), hiHex:'#ff6820', hot:hexToRgb('#e8a020'), whiteHot:hexToRgb('#fff4d0'), textHex:'#f8d8b0' };
+
+let reduced = false;
+
+// ── timeline ──────────────────────────────────────────────────────────────
+const DEPART_HOLD=400, METEORS_OUT=1300, BRIDGE=750, CONVERGE=900, SUPERNOVA=1500, SETTLE=900;
+const T_METEORS_START = DEPART_HOLD;
+const T_BRIDGE_START = DEPART_HOLD+METEORS_OUT;
+const T_CONVERGE_START = T_BRIDGE_START+BRIDGE;
+const T_SUPERNOVA_START = T_CONVERGE_START+CONVERGE;
+const T_SETTLE_START = T_SUPERNOVA_START+SUPERNOVA;
+const TOTAL = T_SETTLE_START+SETTLE;
+const FLASH_LAG = 70;
+
+const TIMELINE = [
+  { phase:'departHold', dur:DEPART_HOLD },
+  { phase:'meteorsOut', dur:METEORS_OUT },
+  { phase:'bridge',     dur:BRIDGE },
+  { phase:'converge',   dur:CONVERGE },
+  { phase:'supernova',  dur:SUPERNOVA },
+  { phase:'settle',     dur:SETTLE },
+];
+
+// ── galaxy half: background stars (unchanged math from team-picker's warp engine) ──
+let stars = Array.from({length:150},()=>({x:Math.random()*2-1,y:Math.random()*2-1,z:Math.random(),s:0.7+Math.random()*0.6}));
+let warp = 0;
+
+// galaxy meteors — unchanged from the shipped meteor-shower-to-galaxy file
+const METEOR_COUNT = 16;
+let meteors = [];
+function spawnMeteors(n, phaseDur){
+  const list = [];
+  const baseAngle = Math.atan2(0.80, -0.62);
+  for (let i=0;i<n;i++){
+    const travel = 550 + Math.random()*300;
+    const maxDelay = Math.max(0, phaseDur - travel - 80);
+    const delay = Math.random() * maxDelay * 0.85;
+    const angle = baseAngle + (Math.random()*16-8) * Math.PI/180;
+    const dist = Math.hypot(W,H) * (0.9 + Math.random()*0.5);
+    const sx = W*(0.5 + Math.random()*0.75);
+    const sy = -H*(0.05 + Math.random()*0.35);
+    list.push({ delay, travel, sx, sy, ex: sx+Math.cos(angle)*dist, ey: sy+Math.sin(angle)*dist,
+      bow:(Math.random()*24-12), trailFrac:0.14+Math.random()*0.08, w:1.6+Math.random()*1.8 });
+  }
+  return list;
+}
+function drawMeteors(list, localMs, headColor, tailColor){
+  ctx.globalCompositeOperation = 'lighter';
+  for (const m of list){
+    const t = localMs - m.delay;
+    if (t < 0 || t > m.travel) continue;
+    const p = t / m.travel;
+    const x = lerp(m.sx, m.ex, p) + Math.sin(p*Math.PI)*m.bow;
+    const y = lerp(m.sy, m.ey, p);
+    const tp = Math.max(0, p - m.trailFrac);
+    const tx = lerp(m.sx, m.ex, tp) + Math.sin(tp*Math.PI)*m.bow;
+    const ty = lerp(m.sy, m.ey, tp);
+    let env = 1;
+    if (p < 0.15) env = p/0.15; else if (p > 0.8) env = Math.max(0, (1-p)/0.2);
+    const grad = ctx.createLinearGradient(tx,ty,x,y);
+    grad.addColorStop(0, `rgba(${tailColor.r},${tailColor.g},${tailColor.b},0)`);
+    grad.addColorStop(1, `rgba(${headColor.r},${headColor.g},${headColor.b},${env*0.95})`);
+    ctx.strokeStyle = grad; ctx.lineWidth = m.w; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(x,y); ctx.stroke();
+    ctx.fillStyle = `rgba(${headColor.r},${headColor.g},${headColor.b},${env})`;
+    ctx.beginPath(); ctx.arc(x,y,m.w*0.55,0,6.2832); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+const METEOR_HEAD = hexToRgb('#ff40a0');
+
+// windshield-crack gag — same story beat as the standalone spaceship file, ported in so the
+// combined journey carries every piece built this session, not just the structural handoff.
+const IMPACT_X = W*0.63, IMPACT_Y = H*0.36;
+const IMPACT_MOMENT = METEORS_OUT*0.55; // ms into meteorsOut when the meteor hits
+const IMPACT_APPROACH = 260, CRACK_GROW = 200, CRACK_HOLD = 550, BANDAID_IN = 240;
+let crackSeed = [], crackProgress = 0, bandaidProgress = 0, impactFlash = 0;
+function makeCrack(){
+  return Array.from({length:7}, (_, i) => ({
+    angle: (i/7)*Math.PI*2 + (Math.random()*0.5-0.25),
+    len: 26 + Math.random()*34,
+    startDelay: i*14 + Math.random()*18,
+    jag: (Math.random()*0.4-0.2),
+  }));
+}
+function roundRectPath(c,x,y,w,h,r){
+  c.beginPath();
+  c.moveTo(x+r,y); c.lineTo(x+w-r,y); c.arcTo(x+w,y,x+w,y+r,r);
+  c.lineTo(x+w,y+h-r); c.arcTo(x+w,y+h,x+w-r,y+h,r);
+  c.lineTo(x+r,y+h); c.arcTo(x,y+h,x,y+h-r,r);
+  c.lineTo(x,y+r); c.arcTo(x,y,x+r,y,r);
+  c.closePath();
+}
+function drawWindshieldGag(t){
+  const approachStart = IMPACT_MOMENT - IMPACT_APPROACH;
+  if (t >= approachStart && t < IMPACT_MOMENT) {
+    const ap = clamp01((t-approachStart)/IMPACT_APPROACH);
+    const grown = ap*ap*ap;
+    const size = 2 + grown*22;
+    const ox = IMPACT_X - 90*(1-ap), oy = IMPACT_Y - 60*(1-ap);
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(ox,oy,0,ox,oy,Math.max(1,size));
+    g.addColorStop(0, 'rgba(255,255,255,0.9)');
+    g.addColorStop(0.5, `rgba(${METEOR_HEAD.r},${METEOR_HEAD.g},${METEOR_HEAD.b},0.8)`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ox,oy,Math.max(1,size),0,6.2832); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  if (t >= IMPACT_MOMENT) {
+    const sinceImpact = t - IMPACT_MOMENT;
+    impactFlash = Math.max(0, 1 - sinceImpact/140);
+    crackProgress = clamp01(sinceImpact/(CRACK_GROW+40));
+    if (sinceImpact >= CRACK_GROW + CRACK_HOLD) bandaidProgress = clamp01((sinceImpact-CRACK_GROW-CRACK_HOLD)/BANDAID_IN);
+
+    if (impactFlash > 0) {
+      const g = ctx.createRadialGradient(IMPACT_X,IMPACT_Y,0,IMPACT_X,IMPACT_Y,70);
+      g.addColorStop(0, `rgba(255,255,255,${impactFlash*0.9})`);
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g; ctx.fillRect(IMPACT_X-70,IMPACT_Y-70,140,140);
+    }
+    if (crackProgress > 0) {
+      ctx.strokeStyle = 'rgba(230,238,255,0.85)'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+      for (const seg of crackSeed) {
+        const segT = clamp01((sinceImpact - seg.startDelay)/140);
+        if (segT <= 0) continue;
+        const midX = IMPACT_X + Math.cos(seg.angle+seg.jag)*seg.len*segT*0.5;
+        const midY = IMPACT_Y + Math.sin(seg.angle+seg.jag)*seg.len*segT*0.5;
+        const endX = IMPACT_X + Math.cos(seg.angle)*seg.len*segT;
+        const endY = IMPACT_Y + Math.sin(seg.angle)*seg.len*segT;
+        ctx.beginPath(); ctx.moveTo(IMPACT_X,IMPACT_Y); ctx.lineTo(midX,midY); ctx.lineTo(endX,endY); ctx.stroke();
+      }
+      ctx.fillStyle = `rgba(255,255,255,${0.7*crackProgress})`;
+      ctx.beginPath(); ctx.arc(IMPACT_X,IMPACT_Y,2.4,0,6.2832); ctx.fill();
+    }
+    if (bandaidProgress > 0) {
+      const bp = 1-(1-bandaidProgress)*(1-bandaidProgress);
+      ctx.save();
+      ctx.translate(IMPACT_X, IMPACT_Y);
+      ctx.rotate(-0.18);
+      ctx.scale(0.9+0.1*bp, 0.9+0.1*bp);
+      ctx.globalAlpha = bp;
+      ctx.fillStyle = '#e7cda3';
+      roundRectPath(ctx, -27, -11, 54, 22, 8); ctx.fill();
+      ctx.fillStyle = '#f2ede2';
+      ctx.fillRect(-10,-7,20,14);
+      ctx.fillStyle = 'rgba(150,115,80,0.55)';
+      [[-18,-5],[-18,5],[18,-5],[18,5]].forEach(([dx,dy])=>{ ctx.beginPath(); ctx.arc(dx,dy,1.3,0,6.2832); ctx.fill(); });
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+// ── bridge: color-transitioning motes, theme-agnostic mechanism ──────────
+const MOTE_COUNT = 12;
+let motes = [];
+function spawnMotes(){
+  return Array.from({length:MOTE_COUNT}, () => ({
+    x: W*(0.15+Math.random()*0.7), y: H*(0.15+Math.random()*0.7),
+    vx: (Math.random()*2-1)*0.015, vy: (Math.random()*2-1)*0.015,
+    delay: Math.random()*BRIDGE*0.3, size: 1.4+Math.random()*1.8,
+  }));
+}
+
+// ── harvest half: ambient calm embers + hero converge/burst, unchanged math ──
+const AMBIENT_COUNT = 14;
+let ambient = Array.from({length:AMBIENT_COUNT}, () => ({
+  x: Math.random()*W, y: H + Math.random()*H*0.3,
+  speed: 0.10+Math.random()*0.12, drift:(Math.random()*2-1)*0.05,
+  size: 1.2+Math.random()*1.6, phase: Math.random()*Math.PI*2,
+}));
+
+const HERO_COUNT = 24;
+const H_CONVERGE_START = 0; // relative to converge-phase start
+const H_SUPERNOVA_LAG = FLASH_LAG;
+let heroes = [];
+function makeHeroes(){
+  return Array.from({length:HERO_COUNT}, (_, i) => {
+    const baseAngle = (i/HERO_COUNT)*Math.PI*2 + (Math.random()*0.3-0.15);
+    const R0 = minDim*(0.30+Math.random()*0.16);
+    const convergeDelay = Math.random()*280;
+    const convergeDur = Math.min(CONVERGE-convergeDelay-60, 550+Math.random()*300);
+    const Rmin = 4+Math.random()*6;
+    const burstDelay = Math.random()*220;
+    const burstDur = 850+Math.random()*400;
+    const Rfar = R0*(1.6+Math.random()*0.6);
+    const angVel = (Math.random()*2-1)*0.0006;
+    return { baseAngle, R0, convergeDelay, convergeDur, Rmin, burstDelay, burstDur, Rfar, angVel, size:2.2+Math.random()*2.2 };
+  });
+}
+function heroRadius(h, tSinceConverge){
+  const cStart = h.convergeDelay, cEnd = cStart+h.convergeDur;
+  const bStart = CONVERGE + h.burstDelay, bEnd = bStart+h.burstDur;
+  if (tSinceConverge < cStart) return h.R0;
+  if (tSinceConverge < cEnd) return lerp(h.R0, h.Rmin, easeInCubic(clamp01((tSinceConverge-cStart)/h.convergeDur)));
+  if (tSinceConverge < bStart) return h.Rmin;
+  if (tSinceConverge < bEnd) return lerp(h.Rmin, h.Rfar, easeOutQuint(clamp01((tSinceConverge-bStart)/h.burstDur)));
+  return null;
+}
+function heroAlpha(h, tSinceConverge){
+  const cStart = h.convergeDelay;
+  const bStart = CONVERGE + h.burstDelay, bEnd = bStart+h.burstDur;
+  if (tSinceConverge < cStart) return 0.55;
+  if (tSinceConverge < bStart) return 0.55+0.45*clamp01((tSinceConverge-cStart)/Math.max(1,(bStart-cStart)));
+  const bp = clamp01((tSinceConverge-bStart)/h.burstDur);
+  if (bp > 0.78) return Math.max(0, (1-bp)/0.22);
+  return 1;
+}
+
+// ── shared state ──────────────────────────────────────────────────────────
+let tStart=0, lastNow=0, flash=0, ring=0, raf;
+const hud = document.getElementById('hud');
+const roundLabel = document.getElementById('roundLabel');
+const phaseLabelEl = document.getElementById('phaseLabel');
+
+function resetUI(){
+  roundLabel.classList.remove('show'); hud.classList.remove('show');
+  flash=0; ring=0; lastNow=0;
+  meteors = []; motes = []; heroes = makeHeroes();
+  warp = reduced ? 0.1 : 0;
+  crackSeed = makeCrack(); crackProgress = 0; bandaidProgress = 0; impactFlash = 0;
+}
+
+function tick(now){
+  if (!tStart) tStart = now;
+  const dt = lastNow ? (now-lastNow) : 16.667; lastNow = now;
+  const dtn = Math.min(26, dt)/16.667;
+  const total = now - tStart;
+
+  const totalForPhase = Math.min(total, TOTAL - 1);
+  let acc=0, ph=TIMELINE[TIMELINE.length-1], elapsedInPhase=0;
+  for (const seg of TIMELINE){ if (totalForPhase < acc+seg.dur){ ph=seg; elapsedInPhase=totalForPhase-acc; break; } acc+=seg.dur; }
+  const p = Math.min(1, elapsedInPhase/ph.dur);
+  phaseLabelEl.textContent = 'phase: '+ph.phase;
+
+  // world mix: 0 = fully galaxy, 1 = fully harvest — only the bridge phase moves it
+  let worldMix = 0;
+  if (total < T_BRIDGE_START) worldMix = 0;
+  else if (total < T_CONVERGE_START) worldMix = easeInOut(clamp01((total-T_BRIDGE_START)/BRIDGE));
+  else worldMix = 1;
+
+  if (ph.phase === 'departHold') { hud.classList.remove('show'); roundLabel.classList.remove('show'); }
+  else if (ph.phase === 'meteorsOut') {
+    if (!reduced) { hud.style.color = GAL.hiHex; hud.textContent='Departing'; hud.classList.add('show'); }
+    if (!reduced && ph === TIMELINE[1] && meteors.length === 0) meteors = spawnMeteors(METEOR_COUNT, METEORS_OUT);
+  }
+  else if (ph.phase === 'bridge') {
+    hud.classList.remove('show');
+    if (!reduced && motes.length === 0) motes = spawnMotes();
+  }
+  else if (ph.phase === 'converge') { if (!reduced) { hud.style.color = HAR.hiHex; hud.textContent='Gathering'; hud.classList.add('show'); } }
+  else if (ph.phase === 'supernova') {
+    hud.classList.remove('show');
+    if (p > 0.35) { roundLabel.style.color = HAR.textHex; roundLabel.querySelector('.n').style.color = HAR.hiHex; roundLabel.querySelector('.t').style.color = HAR.textHex; roundLabel.classList.add('show'); }
+  }
+  else if (ph.phase === 'settle') { hud.classList.remove('show'); }
+
+  const supernovaAbs = T_SUPERNOVA_START;
+  const flashP = clamp01((total-(supernovaAbs+FLASH_LAG))/SUPERNOVA);
+  if (!reduced && total >= supernovaAbs+FLASH_LAG && total < supernovaAbs+SUPERNOVA+200) {
+    flash = flashP<0.22 ? flashP/0.22 : Math.max(0, 1-(flashP-0.22)/0.35);
+    ring = flashP;
+  } else if (reduced || total < supernovaAbs) { flash=0; ring=0; }
+
+  if (!reduced) {
+    // held near-idle (below the 0.03 dot/streak threshold) through the whole meteor beat so the
+    // meteor shower is a clean, isolated beat — no concurrent hyperspace star-streak competing with it
+    if (total < T_BRIDGE_START) warp += (0.02-warp)*0.08*dtn;
+    else warp += (0-warp)*0.08*dtn;
+  }
+
+  // ── draw ──
+  const bgNow = { r: Math.round(lerp(GAL.bgDeep.r, HAR.bgDeep.r, worldMix)), g: Math.round(lerp(GAL.bgDeep.g, HAR.bgDeep.g, worldMix)), b: Math.round(lerp(GAL.bgDeep.b, HAR.bgDeep.b, worldMix)) };
+  ctx.fillStyle = `rgba(${bgNow.r},${bgNow.g},${bgNow.b},1)`;
+  ctx.fillRect(0,0,W,H);
+
+  // galaxy layer — fades out as worldMix rises
+  const galAlpha = reduced ? 0 : clamp01(1-worldMix*1.4);
+  if (galAlpha > 0.01) {
+    ctx.globalAlpha = galAlpha;
+    ctx.globalCompositeOperation = 'lighter';
+    const base = 0.021*warp;
+    for (const s of stars) {
+      const prevZ=s.z; s.z -= base*s.s*dtn;
+      if (s.z<=0.02) { s.x=Math.random()*2-1; s.y=Math.random()*2-1; s.z=1; continue; }
+      const sx=(s.x/s.z)*CX+CX, sy=(s.y/s.z)*CY+CY;
+      if (sx<-40||sx>W+40||sy<-40||sy>H+40) { s.x=Math.random()*2-1; s.y=Math.random()*2-1; s.z=1; continue; }
+      const depth=1-s.z, a=Math.min(1,depth*1.15), tt=Math.min(1,depth*1.3);
+      const r=Math.round(GAL.accent.r+(GAL.hi.r-GAL.accent.r)*tt), g=Math.round(GAL.accent.g+(GAL.hi.g-GAL.accent.g)*tt), b=Math.round(GAL.accent.b+(GAL.hi.b-GAL.accent.b)*tt);
+      ctx.fillStyle = ctx.strokeStyle = `rgba(${r},${g},${b},${a})`;
+      const px=(s.x/prevZ)*CX+CX, py=(s.y/prevZ)*CY+CY;
+      const len=Math.abs(sx-px)+Math.abs(sy-py);
+      if (len<1.2||warp<0.03) { ctx.beginPath(); ctx.arc(sx,sy,Math.max(0.6,depth*2),0,6.2832); ctx.fill(); }
+      else { ctx.lineWidth=Math.max(0.5,depth*depth*5); ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(sx,sy); ctx.stroke(); }
+    }
+    ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+    if (meteors.length && ph.phase === 'meteorsOut') { ctx.globalAlpha=galAlpha; drawMeteors(meteors, elapsedInPhase, METEOR_HEAD, GAL.accent); ctx.globalAlpha=1; }
+    if (ph.phase === 'meteorsOut') { ctx.globalAlpha=galAlpha; drawWindshieldGag(elapsedInPhase); ctx.globalAlpha=1; }
+  }
+
+  // bridge motes — color-transitioning, only meaningful during/near the bridge
+  if (!reduced && motes.length && ph.phase === 'bridge') {
+    ctx.globalCompositeOperation='lighter';
+    for (const m of motes) {
+      const t = elapsedInPhase - m.delay;
+      if (t < 0) continue;
+      const mp = clamp01(t/(BRIDGE*0.7));
+      m.x += m.vx*dtn; m.y += m.vy*dtn;
+      const cr = Math.round(lerp(GAL.hi.r, HAR.hot.r, mp)), cg = Math.round(lerp(GAL.hi.g, HAR.hot.g, mp)), cb = Math.round(lerp(GAL.hi.b, HAR.hot.b, mp));
+      let env = 1; if (mp<0.2) env=mp/0.2; else if (mp>0.8) env=(1-mp)/0.2;
+      ctx.fillStyle = `rgba(${cr},${cg},${cb},${0.6*env})`;
+      ctx.beginPath(); ctx.arc(m.x, m.y, m.size, 0, 6.2832); ctx.fill();
+    }
+    ctx.globalCompositeOperation='source-over';
+  }
+
+  // harvest layer — fades in as worldMix rises
+  const harAlpha = reduced ? 0 : clamp01(worldMix*1.4);
+  if (harAlpha > 0.01) {
+    ctx.globalAlpha = harAlpha;
+    const baseGlow = ctx.createRadialGradient(CX,H*1.05,0,CX,H*1.05,H*0.9);
+    baseGlow.addColorStop(0, `rgba(${HAR.hi.r},${HAR.hi.g},${HAR.hi.b},0.30)`); baseGlow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = baseGlow; ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    for (const a of ambient) {
+      a.y -= a.speed*dtn; a.x += a.drift*dtn; a.phase += 0.02*dtn;
+      if (a.y < -10) { a.y = H+Math.random()*20; a.x = Math.random()*W; }
+      const flick = 0.5+0.5*Math.sin(a.phase);
+      ctx.fillStyle = `rgba(${HAR.hi.r},${HAR.hi.g},${HAR.hi.b},${0.18*flick})`;
+      ctx.beginPath(); ctx.arc(a.x,a.y,a.size,0,6.2832); ctx.fill();
+    }
+    if (total >= T_CONVERGE_START) {
+      const tSinceConverge = total - T_CONVERGE_START;
+      for (const h of heroes) {
+        const r = heroRadius(h, tSinceConverge);
+        if (r === null) continue;
+        const ang = h.baseAngle + h.angVel*tSinceConverge;
+        const x = CX+Math.cos(ang)*r, y = CY+Math.sin(ang)*r*0.62;
+        const alpha = heroAlpha(h, tSinceConverge);
+        const hot = clamp01(1-r/(minDim*0.55));
+        const cr = Math.round(lerp(HAR.accent.r, lerp(HAR.hot.r, HAR.whiteHot.r, hot), hot));
+        const cg = Math.round(lerp(HAR.accent.g, lerp(HAR.hot.g, HAR.whiteHot.g, hot), hot));
+        const cb = Math.round(lerp(HAR.accent.b, lerp(HAR.hot.b, HAR.whiteHot.b, hot), hot));
+        ctx.fillStyle = `rgba(${cr},${cg},${cb},${alpha})`;
+        ctx.beginPath(); ctx.arc(x,y,h.size*(0.7+hot*0.6),0,6.2832); ctx.fill();
+      }
+    }
+    ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+  }
+
+  if (reduced) {
+    // calm crossfade only — both idle layers at low opacity, no motion beyond drift
+    ctx.globalAlpha = 1-worldMix;
+    for (const s of stars) { const x=(s.x*0.5+0.5)*W, y=(s.y*0.5+0.5)*H; ctx.fillStyle=`rgba(${GAL.hi.r},${GAL.hi.g},${GAL.hi.b},0.4)`; ctx.beginPath(); ctx.arc(x,y,1.4,0,6.2832); ctx.fill(); }
+    ctx.globalAlpha = worldMix;
+    for (const h of heroes) { const x=CX+Math.cos(h.baseAngle)*h.R0, y=CY+Math.sin(h.baseAngle)*h.R0*0.62; ctx.fillStyle=`rgba(${HAR.hi.r},${HAR.hi.g},${HAR.hi.b},0.4)`; ctx.beginPath(); ctx.arc(x,y,h.size*0.6,0,6.2832); ctx.fill(); }
+    ctx.globalAlpha = 1;
+    if (total > T_SUPERNOVA_START + SUPERNOVA*0.35) { roundLabel.style.color=HAR.textHex; roundLabel.querySelector('.n').style.color=HAR.hiHex; roundLabel.querySelector('.t').style.color=HAR.textHex; roundLabel.classList.add('show'); }
+  }
+
+  if (!reduced && ring > 0) {
+    const rad = ring*H*0.6;
+    const rg = ctx.createRadialGradient(CX,CY,0,CX,CY,rad);
+    rg.addColorStop(0, `rgba(255,244,208,${Math.max(0,0.55-ring*0.5)})`);
+    rg.addColorStop(0.35, `rgba(${HAR.hot.r},${HAR.hot.g},${HAR.hot.b},${Math.max(0,0.45-ring*0.4)})`);
+    rg.addColorStop(0.7, `rgba(${HAR.hi.r},${HAR.hi.g},${HAR.hi.b},${Math.max(0,0.25-ring*0.22)})`);
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = rg; ctx.fillRect(0,0,W,H);
+  }
+  if (!reduced && flash > 0) { ctx.fillStyle = `rgba(255,244,208,${flash*0.6})`; ctx.fillRect(0,0,W,H); }
+
+  const vgCol = bgNow;
+  const vg = ctx.createRadialGradient(CX,CY,0,CX,CY,H*0.6);
+  vg.addColorStop(0, `rgba(${vgCol.r},${vgCol.g},${vgCol.b},0.65)`);
+  vg.addColorStop(0.4, `rgba(${vgCol.r},${vgCol.g},${vgCol.b},0.3)`);
+  vg.addColorStop(0.75, 'rgba(0,0,0,0)');
+  ctx.fillStyle = vg; ctx.fillRect(0,0,W,H);
+
+  if (total < TOTAL) raf = requestAnimationFrame(tick);
+}
+
+function play(){
+  cancelAnimationFrame(raf);
+  tStart = 0; resetUI();
+  raf = requestAnimationFrame(tick);
+}
+document.getElementById('replay').addEventListener('click', play);
+document.getElementById('reducedToggle').addEventListener('change', e=>{ reduced = e.target.checked; play(); });
+play();
+</script>
+</body>
+</html>

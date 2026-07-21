@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>meteor-shower — cockpit POV liftoff → team-picker handoff</title>
+<style>
+  :root{ --highlight:#e0f0ff; --shinyAccent:#80c0ff; }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0a0a;color:#e8e8e8;font-family:system-ui,sans-serif;padding:28px}
+  h1{font-size:1.15rem;font-weight:700;margin-bottom:4px}
+  .sub{color:#888;font-size:.8rem;margin-bottom:20px;max-width:800px;line-height:1.5}
+  .wrap{max-width:960px}
+  .stage{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;border:1px solid #222;background:#000}
+  canvas{position:absolute;inset:0;width:100%;height:100%;will-change:transform}
+  #world{position:absolute;inset:0;will-change:transform}
+  .engineGlow{position:absolute;width:44px;height:30px;border-radius:50%;left:0;top:0;pointer-events:none;will-change:transform,opacity;z-index:1;background:radial-gradient(ellipse, rgba(255,176,96,0.6), rgba(255,120,60,0.25) 55%, rgba(255,120,60,0) 75%);filter:blur(3px);opacity:0}
+  .shipGroup{position:absolute;width:150px;height:150px;left:0;top:0;pointer-events:none;will-change:transform;z-index:2}
+  .shipGroup img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 10px rgba(128,192,255,0.3))}
+  .leg{position:absolute;bottom:-6px;width:5px;height:22px;background:#0a1220;transform-origin:top center}
+  .captain{position:absolute;width:26px;height:30px;left:0;top:0;opacity:0;pointer-events:none;will-change:opacity;z-index:3}
+  .captain .head{position:absolute;left:6px;top:0;width:14px;height:14px;border-radius:50%;background:#050608;box-shadow:1px 0 0 rgba(128,192,255,0.3) inset}
+  .captain .shoulders{position:absolute;left:0;top:12px;width:26px;height:18px;border-radius:13px 13px 0 0;background:#050608;box-shadow:1px 0 0 rgba(128,192,255,0.25) inset}
+  .captain .earcup{position:absolute;left:3px;top:4px;width:5px;height:7px;border-radius:2px;background:#0a0e18;box-shadow:-0.5px 0 0 rgba(128,192,255,0.25) inset}
+  .captain .mic{position:absolute;left:11px;top:11px;width:8px;height:2px;border-radius:1px;background:#0a0e18;transform:rotate(18deg);transform-origin:left center}
+  .cockpit{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:6;--rimWarm:rgba(224,112,58,0.12);--rimCool:rgba(128,192,255,0.28)}
+  .cockpit .vignette{position:absolute;inset:0;background:radial-gradient(ellipse 64% 60% at 58% 56%, transparent 40%, #000 88%)}
+  .cockpit .rim{position:absolute;left:58%;top:56%;width:70%;height:74%;transform:translate(-50%,-50%);border-radius:52%;border:11px solid #0a0e18;box-shadow:0 0 0 3px var(--rimCool) inset, 0 0 0 14px var(--rimWarm) inset, 0 0 40px rgba(0,0,0,0.6) inset}
+  .cockpit .dash{position:absolute;left:6%;right:6%;bottom:0;height:13%;background:linear-gradient(to top, #0a0e18, rgba(10,14,24,0));}
+  .cockpit .dashGlow{position:absolute;left:46%;right:30%;bottom:3%;height:3px;border-radius:2px;background:rgba(128,192,255,0.55);box-shadow:0 0 10px 2px rgba(128,192,255,0.4)}
+  .cockpit .instr{position:absolute;bottom:5.5%;width:5px;height:5px;border-radius:50%;background:rgba(128,192,255,0.9);box-shadow:0 0 6px 1px rgba(128,192,255,0.7);animation:instrBlink linear infinite}
+  .cockpit .instr.i1{left:29%;animation-duration:1.7s}
+  .cockpit .instr.i2{left:33.5%;animation-duration:2.3s;animation-delay:-0.6s}
+  .cockpit .instr.i3{right:33.5%;animation-duration:3.1s;animation-delay:-1.4s}
+  .cockpit .instr.i4{right:29%;animation-duration:2.6s;animation-delay:-2s}
+  @keyframes instrBlink{0%,100%{opacity:.25}8%{opacity:1}16%{opacity:.35}60%{opacity:.4}70%{opacity:.9}80%{opacity:.3}}
+  .cockpit .strutL,.cockpit .strutR{position:absolute;top:0;bottom:0;width:9%;background:linear-gradient(to right, #0a0e18, rgba(10,14,24,0))}
+  .cockpit .strutL{left:0} .cockpit .strutR{right:0;background:linear-gradient(to left, #0a0e18, rgba(10,14,24,0))}
+  .cockpit .pilotSeat{position:absolute;left:20%;bottom:9%;width:15%;height:36%;background:#0d1320;border-radius:40% 40% 0 0;box-shadow:2px 0 0 var(--rimCool) inset, 0 -8px 18px var(--rimWarm)}
+  .letterbox{position:absolute;left:0;right:0;height:9%;background:#000;pointer-events:none;z-index:8}
+  .letterbox.top{top:0;transform-origin:top;transform:scaleY(0)}
+  .letterbox.bot{bottom:0;transform-origin:bottom;transform:scaleY(0)}
+  .grain{position:absolute;inset:0;pointer-events:none;opacity:.06;mix-blend-mode:screen;z-index:7}
+  .caption{position:absolute;left:0;right:0;bottom:12%;text-align:center;font-size:.7rem;letter-spacing:.3em;text-transform:uppercase;color:var(--shinyAccent);opacity:0;transition:opacity .4s;pointer-events:none;z-index:9;font-weight:700}
+  .caption.show{opacity:.85}
+  .controls{display:flex;gap:10px;align-items:center;margin:14px 0 24px;font-size:.78rem;color:#aaa;flex-wrap:wrap}
+  button{background:#161616;border:1px solid #2a2a2a;color:#eee;padding:8px 16px;border-radius:6px;font-size:.78rem;cursor:pointer}
+  button:hover{background:#1e1e1e}
+  label{display:flex;gap:6px;align-items:center}
+  input[type=checkbox]{accent-color:var(--shinyAccent)}
+  .phase{font-size:.7rem;color:#666;margin-left:auto}
+  .notes{margin-top:20px;font-size:.8rem;color:#999;line-height:1.6;max-width:800px}
+  .notes b{color:#ccc}
+  .gate{margin-top:16px;font-size:.78rem;color:#888;line-height:1.7;max-width:800px}
+  .gate b{color:#bbb}
+  .gate ul{margin:6px 0 0 18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Meteor Shower — ground rumble → captain glimpse → passenger POV → team-picker handoff</h1>
+<div class="sub">Revised again per Ben's fuller description of the actual sequence: ship rumbles on the ground (dusk, idle engine shake) → camera glides toward the cockpit window, where we glimpse the captain (a generic silhouette — not a literal likeness) → hard cut to a <b>passenger</b> POV, not a pilot POV (a seat-back silhouette in the cockpit framing's corner is the "someone else is flying this" cue) → ascent, sky darkening from dusk through meteor-shower's night palette into team-picker's fixed black/grayscale → handoff into the existing (theme-agnostic) <code>TeamPickerSlide</code> warp intro. Ben's framing: this ground→glide→POV→transit→handoff shape is the general scaffold for the whole journey concept going forward — only the vehicle and scenery change per destination, not the structure.</div>
+
+<div class="stage" id="stage">
+  <canvas id="cv"></canvas>
+  <div id="world">
+    <div class="engineGlow" id="engineGlow"></div>
+    <div class="shipGroup" id="ship">
+      <div class="leg" style="left:34px;transform:rotate(-14deg)"></div>
+      <div class="leg" style="right:34px;transform:rotate(14deg)"></div>
+      <img src="https://img.recraft.ai/dVxyw_twCzqZc0xUvDTlKpdJOpp3juYRuQCrDO0sRuo/rs:fit:512:512:0/raw:1/plain/abs://external/images/6f597e05-c5aa-40bf-b9f2-eae3b1d4ffb9" alt="">
+      <div class="captain" id="captain"><div class="shoulders"></div><div class="head"></div><div class="earcup"></div><div class="mic"></div></div>
+    </div>
+  </div>
+  <div class="cockpit" id="cockpit">
+    <div class="vignette"></div>
+    <div class="strutL"></div>
+    <div class="strutR"></div>
+    <div class="rim"></div>
+    <div class="pilotSeat"></div>
+    <div class="dash"></div>
+    <div class="dashGlow"></div>
+    <div class="instr i1"></div><div class="instr i2"></div><div class="instr i3"></div><div class="instr i4"></div>
+  </div>
+  <div class="caption" id="caption">Now let's meet our teams</div>
+  <div class="letterbox top"></div>
+  <div class="letterbox bot"></div>
+  <svg class="grain" width="100%" height="100%">
+    <filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/></filter>
+    <rect width="100%" height="100%" filter="url(#n)"/>
+  </svg>
+</div>
+
+<div class="controls">
+  <button id="replay">↻ Replay journey</button>
+  <label><input type="checkbox" id="reducedToggle"> Simulate prefers-reduced-motion</label>
+  <span class="phase" id="phaseLabel">phase: idle</span>
+</div>
+
+<div class="notes">
+  <b>Third pass, and why it changed again:</b> version 1 opened exterior and cut to POV partway through. Version 2 (per "we're riding inside the whole time") went full interior from frame one, deleting the ship entirely. Ben's fuller description of the actual sequence corrects both: there <i>is</i> an exterior beat (the ship rumbling on the ground), the camera <i>does</i> glide toward the window, and importantly we glimpse the captain at that window before cutting away — and the interior POV that follows is a <b>passenger's</b> POV, not the pilot's own eyes (Ben flies it; the audience/team rides along). The ship sprite is back, plus a small generic captain silhouette (not a literal likeness) and a seat-back silhouette in the cockpit's corner as the "someone else is driving" cue.<br><br>
+  <b>Sequence (~4.85s):</b> ground rumble (700ms — dusk, ship idling on its landing legs with a persistent small jitter, not a decaying shake — reads as "about to take off," not an impact; letterbox bars settle in) → glide to window (1100ms — the whole world scales up around a fixed point at the cockpit window's exact screen position, ease-in-out, so it reads as one continuous camera push rather than a generic zoom; the captain silhouette fades in only in the last ~45% of this beat — a glimpse, not a held shot) → POV cut (350ms — the captain glimpse cuts away fast in the first quarter of this beat, the ship hull fades out, the cockpit rim/dashboard/pilot-seat silhouette fade in) → ascent (2200ms — ground drops away and fades, sky darkens from dusk through meteor-shower's own navy-night palette, stars fade in and drift from icy-white toward team-picker's fixed grayscale) → handoff hold (500ms — fully resolved to team-picker's exact <code>#000000</code> bg / <code>#e8e8e8</code>-<code>#3a3a3a</code> grayscale stars, "Now let's meet our teams" caption fades in) — at this exact frame the real handoff crossfades into <code>TeamPickerSlide</code> itself.<br><br>
+  <b>Why a passenger POV needs a visible cue at all:</b> a bare cockpit frame with no pilot reads ambiguous — is no one flying this thing? The pilot-seat silhouette in the cockpit's lower-left corner (present the whole interior POV, not just a flash) is the minimal, non-literal way to keep "you're a passenger, someone else is driving" legible without any on-screen text, per the metaphor-over-literal-explanation principle.<br><br>
+  <b>Reused, not invented in parallel:</b> <code>TeamPickerSlide.jsx</code> is explicitly documented in its own source as theme-agnostic by design ("black background, grayscale-to-white stars... a consistent ceremony moment") — so rather than touching that component or inventing a competing "themed" warp look for the handoff, this file's whole job is to arrive at that exact palette by its last frame so the crossfade is invisible. That's "design as an extension" applied to a color endpoint, not a shared engine.<br><br>
+  <b>Known rough edges, not hidden:</b> the cockpit rim/dashboard/pilot-seat/captain silhouette are hand-drawn CSS shapes, not a generated asset — a real interior render (same Recraft pipeline, <code>digital_illustration</code> style) would read more crafted than flat CSS gradients. The captain silhouette's screen position is computed algebraically from the same eyeballed window-offset constant as the round-boundary file's impact point — not independently verified against where the sprite's actual window sits.<br><br>
+  <b>A Fable contrast/position/timing pass caught eleven real issues; all eleven are fixed in this revision:</b> (1) the caption's <code>z-index:8</code> collided with the bottom letterbox bar sharing the same z-index and coming later in the DOM — the caption never actually rendered; moved to <code>z-index:9</code>/<code>bottom:12%</code>; (2) every cockpit shape was <code>#050608</code> on a near-black vignette (~1.04:1 contrast — invisible), and the pilot seat sat entirely outside the rim's own left edge — recolored the seat, added a second warm/cool rim ring keyed live to <code>nightT</code>, and moved the seat inside the rim; (3) the dashboard had zero instrument lights despite the notes' own "no dashboard-light flicker" complaint — added four, blinking on irregular 1.7/2.3/3.1/2.6s cycles; (4) the background canvas was a sibling of <code>#world</code> and never moved at all during the 9.5x glide, so the "camera push" only ever moved the foreground — it now scales too, capped at 1.5x, anchored to the same window-point transform-origin; (5) the rumble's decay was a flat per-frame multiplier (frame-rate dependent) and its jitter itself was raw per-frame <code>Math.random()</code> — both replaced with time-based dual-sine noise decayed via <code>Math.pow(rate, dtn)</code>; (6) this file never computed <code>dtn</code> at all despite the notes implying frame-timing discipline — added, matching every other file's convention; (7) the dusk-to-navy horizon lerp passed straight through a muddy purple-brown band with zero stars anywhere near it (stars were capped to the top 62% of the frame) — added an intermediate plum waypoint, extended the star field to full height, and moved the star-alpha ramp earlier; (8) the shared grain overlay used <code>mix-blend-mode:overlay</code>, which is close to inert against a near-black background — switched to <code>screen</code>; (9) the captain silhouette read as a generic person-icon — added a small earcup and mic-stub detail; (10) the dashboard glow bar was centered on the frame's 50% axis while the rim itself sits at 58% (a real ~77px misalignment) — recentered the glow on the rim's own axis; (11) <code>nightT</code>/<code>dropT</code> were linear despite the ascent needing to read as accelerating away from the ground — both now ease in.<br><br>
+  <b>Also added, following a reference Ben pointed at as loose inspiration:</b> a cartoon rocket-launch reel supplied two cues used at restrained scale rather than copied outright — a faint pre-launch exhaust flicker under the ship during the ground-rumble/glide beats (anticipation, since this file cuts to POV before any actual launch burn plays), and two small, muted, slow-drifting background "planets" during ascent (a scaled-down nod to the reel's own busier field of passing worlds). Separately, the ascent's starfield was upgraded from a flat twinkle field to a real 3D-projection hyperdrive starfield — the vanilla canvas/rAF technique Ben flagged from a Kirupa reference — which now runs for the ascent + handoff-hold beats specifically and directly answers this file's own previously-flagged rough edge: there was no sense of forward motion/G-force during ascent beyond a color shift. It ramps up through ascent and decelerates to a near-stop by the end of handoff-hold, so the "arrival" reads as a real deceleration, not a hard cut.<br><br>
+  <b>Reduced motion:</b> the whole rumble/glide/POV-cut/ascent sequence is disabled — holds on the exterior ground frame (dusk, ship idle, no jitter, no captain), then hard-cuts straight to the team-picker-matched end state before the caption shows.
+</div>
+
+<div class="gate">
+  <b>Self-gate</b>
+  <ul>
+    <li>Extension, not a parallel system: ends by matching <code>TeamPickerSlide</code>'s own fixed, documented-as-theme-agnostic palette exactly, rather than inventing a competing "themed" warp look for the handoff.</li>
+    <li>Real theme colors where the theme still owns the frame: meteor-shower's own night palette (<code>bg #020408</code>, <code>highlight #e0f0ff</code>, <code>shinyAccent #80c0ff</code>) is what the sky/stars pass through on the way to team-picker's fixed grayscale — not a placeholder gradient.</li>
+    <li>Replay button and reduced-motion toggle both clicked and confirmed working, not just wired.</li>
+    <li>GPU-appropriate: canvas/rAF is used only for the sky-gradient/ground/star field/hyperdrive-starfield/meteor-streaks, all genuine per-frame numeric needs; ship/captain/cockpit/engine-glow/letterbox/caption motion is transform/opacity only, and both the foreground world push and the new background canvas parallax are one CSS <code>scale()</code> each, sharing a fixed <code>transform-origin</code>.</li>
+    <li>No pop-in: ship fades in already visible at rest (not scaling from 0), captain fades in rather than appearing instantly, ground fades and slides away, stars fade in, caption fades in, engine glow flickers up from zero rather than snapping on.</li>
+    <li>Passenger POV honored, not pilot POV: the pilot-seat silhouette stays visible in the cockpit framing's corner for the entire interior portion, not just a flash — the ongoing cue that someone else is flying this.</li>
+    <li>Anticipation honored: the rumble phase gives the eye something to read (idle jitter) before the camera starts moving, rather than cutting straight to motion.</li>
+  </ul>
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById('cv');
+const ctx = canvas.getContext('2d', { alpha: false });
+const W = 960, H = 540;
+canvas.width = W; canvas.height = H;
+const clamp01 = v => Math.max(0, Math.min(1, v));
+const lerp = (a,b,t) => a+(b-a)*t;
+const hexToRgb = hex => { const n = parseInt(hex.replace('#',''),16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; };
+const lerpRgb = (a,b,t) => ({ r: Math.round(lerp(a.r,b.r,t)), g: Math.round(lerp(a.g,b.g,t)), b: Math.round(lerp(a.b,b.b,t)) });
+
+// dusk -> meteor-shower navy-night -> team-picker fixed black
+const DUSK_TOP = hexToRgb('#2a1840'), DUSK_HORIZON = hexToRgb('#e0703a');
+const PLUM = hexToRgb('#5a2050'); // intermediate waypoint — a direct orange->navy lerp passed through a
+                                  // muddy purple-brown band with nothing (no stars, no shape) to relieve it
+const MS_BG = hexToRgb('#020408'), MS_HI = hexToRgb('#e0f0ff');
+const TP_BG = hexToRgb('#000000'), TP_STAR = hexToRgb('#e8e8e8');
+const SHINY = hexToRgb('#80c0ff');
+const easeInQuad = t => t*t;
+
+let reduced = false;
+const GROUND_Y = H*0.74;
+
+const world = document.getElementById('world');
+const shipEl = document.getElementById('ship');
+const captainEl = document.getElementById('captain');
+const engineGlowEl = document.getElementById('engineGlow');
+const cockpit = document.getElementById('cockpit');
+const caption = document.getElementById('caption');
+const topBar = document.querySelector('.letterbox.top'), botBar = document.querySelector('.letterbox.bot');
+const phaseLabel = document.getElementById('phaseLabel');
+
+const SHIP_X = W*0.5, SHIP_Y = GROUND_Y - 75; // box center so the 150px box's bottom edge sits on the ground line
+// same eyeballed cockpit-window coordinate used in the other ship prototypes (~62%/32% of the box)
+const WINDOW_X = SHIP_X + (0.62-0.5)*150, WINDOW_Y = SHIP_Y + (0.32-0.5)*150;
+const ZOOM_SCALE = 9.5;
+const CANVAS_ZOOM = 1.5; // background canvas parallax cap — a Fable pass caught the canvas as a sibling
+                          // of #world, so it never moved at all during the 9.5x glide; it now scales too,
+                          // just far less, so the glide reads as camera depth rather than a flat zoom-in
+                          // of one single plane.
+
+const GROUND_RUMBLE=700, GLIDE=1100, POV_CUT=350, ASCENT=2200, HANDOFF=500;
+const TIMELINE=[
+  {phase:'groundRumble',dur:GROUND_RUMBLE},{phase:'glideToWindow',dur:GLIDE},{phase:'povCut',dur:POV_CUT},
+  {phase:'ascent',dur:ASCENT},{phase:'handoffHold',dur:HANDOFF},
+];
+const TOTAL = TIMELINE.reduce((a,s)=>a+s.dur,0);
+
+let stars = [];
+function makeStars(n){
+  // full canvas height, not just the top 62% — the old cutoff left the horizon
+  // band with zero stars to break up the dusk-to-navy color transition there
+  return Array.from({length:n}, () => ({ x: Math.random()*W, y: Math.random()*H, size: 0.5+Math.random()*1.6, phase: Math.random()*Math.PI*2, dur: 8000+Math.random()*14000 }));
+}
+stars = makeStars(170);
+
+let planets = [
+  { x0: W*0.10, y: H*0.20, r: 10, hue: 'rgba(160,120,200,', drift: 0.006 },
+  { x0: W*0.90, y: H*0.32, r: 6,  hue: 'rgba(120,180,220,', drift: -0.004 },
+]; // distant drifting worlds during ascent — restrained (2, small, muted, off to the
+   // sides) rather than the "lots of planets" a cartoon launch reel can get away with;
+   // this stage still has a cockpit rim and dashboard competing for the same frame.
+
+let tStart=0, lastNow=0;
+let meteorStreaks = [];
+
+function resetUI(){
+  caption.classList.remove('show');
+  topBar.style.transform='scaleY(0)'; botBar.style.transform='scaleY(0)';
+  world.style.transformOrigin = `${WINDOW_X}px ${WINDOW_Y}px`;
+  world.style.transform = 'scale(1)';
+  canvas.style.transformOrigin = `${WINDOW_X}px ${WINDOW_Y}px`;
+  canvas.style.transform = 'scale(1)';
+  shipEl.style.opacity = 1; shipEl.style.transform = `translate(${SHIP_X-75}px, ${SHIP_Y-75}px)`;
+  captainEl.style.opacity = 0;
+  captainEl.style.transform = `translate(${WINDOW_X-13-(SHIP_X-75)}px, ${WINDOW_Y-15-(SHIP_Y-75)}px)`;
+  cockpit.style.opacity = 0;
+  engineGlowEl.style.opacity = 0;
+  // engineGlow is a sibling of #ship inside #world (not nested in it), so its
+  // translate is in #world's own coordinate space — same frame shipEl's translate
+  // uses, no re-basing needed. Anchored near the ship's landing-leg base.
+  engineGlowEl.style.transform = `translate(${SHIP_X-22}px, ${SHIP_Y+50}px)`;
+  meteorStreaks = [];
+  warpStars = makeWarpStars(90);
+  tStart = 0; lastNow = 0;
+}
+
+// two fixed cues at ~30%/~55% through the ascent phase, not random — a deliberate
+// "meteor shower" beat for a journey named after the theme that otherwise had
+// zero meteors anywhere in it
+function maybeSpawnMeteor(ascentElapsed){
+  for (const cue of [0.30, 0.55]) {
+    const at = cue*ASCENT;
+    if (ascentElapsed >= at && ascentElapsed < at+40 && !meteorStreaks.find(m=>m.cue===cue)) {
+      const theta = (195+Math.random()*20)*Math.PI/180;
+      const sx = W*(0.15+Math.random()*0.5), sy = H*0.06;
+      const dist = W*0.32;
+      meteorStreaks.push({ cue, sx, sy, ex: sx+Math.cos(theta)*dist, ey: sy+Math.sin(theta)*dist, start: ascentElapsed, travel: 650 });
+    }
+  }
+}
+function drawMeteorStreaks(ascentElapsed){
+  ctx.globalCompositeOperation = 'lighter';
+  for (const s of meteorStreaks) {
+    const sp = clamp01((ascentElapsed-s.start)/s.travel);
+    if (sp>=1) continue;
+    const env = sp<0.15 ? sp/0.15 : (sp>0.8 ? Math.max(0,(1-sp)/0.2) : 1);
+    const x=lerp(s.sx,s.ex,sp), y=lerp(s.sy,s.ey,sp);
+    const tp=Math.max(0,sp-0.18), tx=lerp(s.sx,s.ex,tp), ty=lerp(s.sy,s.ey,tp);
+    const g=ctx.createLinearGradient(tx,ty,x,y);
+    g.addColorStop(0,'rgba(224,240,255,0)');
+    g.addColorStop(1, `rgba(224,240,255,${0.8*env})`);
+    ctx.strokeStyle=g; ctx.lineWidth=1.6; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(x,y); ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawSky(t){
+  // t: 0 (dusk, cockpit hold) -> 1 (fully resolved to team-picker black)
+  const toNight = clamp01(t/0.55);
+  const toBlack = clamp01((t-0.55)/0.45);
+  const skyMid = lerpRgb(DUSK_TOP, MS_BG, toNight);
+  const bg = lerpRgb(skyMid, TP_BG, toBlack);
+  // horizon routes through an intermediate plum stop rather than a direct
+  // orange->navy lerp — the direct version passed through a muddy brown around
+  // t=0.2-0.3 with nothing else in frame (no stars, no shape) to relieve it.
+  const horizonToPlum = lerpRgb(DUSK_HORIZON, PLUM, clamp01(t/0.25));
+  const horizon = lerpRgb(horizonToPlum, MS_BG, clamp01((t-0.2)/0.4));
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, `rgb(${bg.r},${bg.g},${bg.b})`);
+  g.addColorStop(0.62, `rgb(${bg.r},${bg.g},${bg.b})`);
+  g.addColorStop(1, `rgb(${horizon.r},${horizon.g},${horizon.b})`);
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+  // star alpha now ramps in earlier/faster so the full-height field is already
+  // doing real work by t=0.2-0.3, breaking up that same muddy transition window
+  const starAlphaBase = clamp01((t-0.05)/0.45);
+  if (starAlphaBase > 0) {
+    const starColor = lerpRgb(MS_HI, TP_STAR, clamp01((t-0.55)/0.45));
+    for (const s of stars) {
+      const tw = 0.5+0.5*Math.sin(Date.now()/(s.dur/6.28)+s.phase);
+      const a = starAlphaBase * (0.3+0.7*tw);
+      ctx.fillStyle = `rgba(${starColor.r},${starColor.g},${starColor.b},${a})`;
+      ctx.beginPath(); ctx.arc(s.x, s.y*(1-t*0.15), s.size, 0, 6.2832); ctx.fill();
+    }
+  }
+
+  // two distant drifting planets, restrained per the composition checklist —
+  // this is the loose "colorful worlds passing by" beat requested as inspiration
+  // from a cartoon rocket-launch reference reel, scaled down to 60/30/10-safe
+  // background atmosphere rather than a foreground cartoon prop
+  const planetAlpha = starAlphaBase;
+  if (planetAlpha > 0) {
+    for (const pl of planets) {
+      const x = pl.x0 + Math.sin(Date.now()*pl.drift*0.001)*14;
+      const pg = ctx.createRadialGradient(x,pl.y,0,x,pl.y,pl.r);
+      pg.addColorStop(0, `${pl.hue}${0.5*planetAlpha})`);
+      pg.addColorStop(1, `${pl.hue}0)`);
+      ctx.fillStyle = pg;
+      ctx.beginPath(); ctx.arc(x, pl.y, pl.r, 0, 6.2832); ctx.fill();
+    }
+  }
+}
+
+function drawGround(dropT){
+  const alpha = 1-clamp01(dropT);
+  if (alpha <= 0) return;
+  const dy = dropT * H * 0.6;
+  ctx.fillStyle = `rgba(4,4,8,${alpha})`;
+  ctx.beginPath();
+  ctx.moveTo(0, GROUND_Y+dy);
+  ctx.bezierCurveTo(W*0.2,GROUND_Y-14+dy, W*0.35,GROUND_Y-22+dy, W*0.5,GROUND_Y-10+dy);
+  ctx.bezierCurveTo(W*0.68,GROUND_Y+2+dy, W*0.82,GROUND_Y-18+dy, W,GROUND_Y-6+dy);
+  ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath(); ctx.fill();
+  // two small silhouette spikes (distant rock outcrops), just enough to break up
+  // what was previously a flat, detail-free 2-bezier blob
+  ctx.beginPath();
+  ctx.moveTo(W*0.14,GROUND_Y-16+dy); ctx.lineTo(W*0.17,GROUND_Y-38+dy); ctx.lineTo(W*0.21,GROUND_Y-15+dy); ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(W*0.80,GROUND_Y-14+dy); ctx.lineTo(W*0.84,GROUND_Y-30+dy); ctx.lineTo(W*0.88,GROUND_Y-12+dy); ctx.closePath(); ctx.fill();
+}
+
+let rumble = {x:0,y:0};
+let warpStars = [];
+function makeWarpStars(n){
+  return Array.from({length:n}, () => ({ x:(Math.random()*2-1)*W*0.5, y:(Math.random()*2-1)*H*0.5, z: 0.05+Math.random() }));
+}
+function resetWarpStar(s){ s.x=(Math.random()*2-1)*W*0.5; s.y=(Math.random()*2-1)*H*0.5; s.z=1; }
+// classic 3D-projection starfield (the vanilla canvas/rAF hyperdrive technique
+// Ben pointed at as inspiration) — used only for the ascent beat's "flying
+// through space" moment; a color-shifting gradient alone wasn't communicating
+// forward motion, one of this file's own flagged rough edges.
+function drawWarpField(speed, alpha, dtn){
+  if (alpha <= 0 || speed <= 0) return;
+  const cx=W*0.5, cy=H*0.42;
+  ctx.globalCompositeOperation='lighter';
+  for (const s of warpStars) {
+    const prevZ = s.z;
+    s.z -= speed*0.02*dtn;
+    if (s.z <= 0.02) { resetWarpStar(s); continue; }
+    const px = cx + (s.x/prevZ), py = cy + (s.y/prevZ);
+    const x = cx + (s.x/s.z), y = cy + (s.y/s.z);
+    if (x<-60||x>W+60||y<-60||y>H+60) { resetWarpStar(s); continue; }
+    const streakA = alpha * clamp01(1.4-s.z);
+    ctx.strokeStyle = `rgba(224,240,255,${streakA})`;
+    ctx.lineWidth = Math.max(0.6,(1-s.z)*2.2);
+    ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(x,y); ctx.stroke();
+  }
+  ctx.globalCompositeOperation='source-over';
+}
+
+function rumbleNoise(now, amp){
+  // time-based dual-sine noise, not per-frame Math.random() — the old version's
+  // jitter frequency (not just its decay) was tied to refresh rate
+  return {
+    x: (Math.sin(now*0.031)*0.6+Math.sin(now*0.077+1.3)*0.4)*amp,
+    y: (Math.sin(now*0.043+0.4)*0.6+Math.sin(now*0.061+2.1)*0.4)*amp*0.8,
+  };
+}
+
+function tick(now){
+  if (!tStart) tStart = now;
+  const dt = lastNow ? now-lastNow : 16.667; lastNow = now;
+  const dtn = Math.min(26,dt)/16.667; // frame-timing normalization, same convention as TeamPickerSlide.jsx
+  const total = Math.min(now - tStart, TOTAL - 1);
+  let acc=0, ph=TIMELINE[TIMELINE.length-1], elapsed=0;
+  for (const seg of TIMELINE){ if (total < acc+seg.dur){ ph=seg; elapsed=total-acc; break; } acc+=seg.dur; }
+  const p = Math.min(1, elapsed/ph.dur);
+  phaseLabel.textContent = 'phase: '+ph.phase;
+
+  if (reduced) {
+    world.style.transform = 'scale(1)';
+    canvas.style.transform = 'scale(1)';
+    shipEl.style.transform = `translate(${SHIP_X-75}px, ${SHIP_Y-75}px)`;
+    captainEl.style.opacity = 0;
+    engineGlowEl.style.opacity = 0;
+    if (ph.phase==='handoffHold') {
+      drawSky(1); drawGround(1); shipEl.style.opacity=0; cockpit.style.opacity=1;
+      caption.classList.add('show'); topBar.style.transform='scaleY(1)'; botBar.style.transform='scaleY(1)';
+    } else {
+      drawSky(0); drawGround(0); shipEl.style.opacity=1; cockpit.style.opacity=0;
+      caption.classList.remove('show'); topBar.style.transform='scaleY(0)'; botBar.style.transform='scaleY(0)';
+    }
+    raf = requestAnimationFrame(tick);
+    return;
+  }
+
+  let nightT = 0, dropT = 0, letterboxT = 0, captionOn = false;
+  let worldScale = 1, shipOpacity = 1, captainOpacity = 0, cockpitOpacity = 0;
+  let engineGlowOpacity = 0, warpSpeed = 0, warpAlpha = 0;
+
+  if (ph.phase==='groundRumble') {
+    letterboxT = clamp01(p/0.5);
+    // idle engine rumble — persistent small jitter, not a decaying shake; reads as
+    // "about to take off" rather than an impact
+    const n = rumbleNoise(now, 1.4); rumble.x = n.x; rumble.y = n.y;
+    // a faint pre-launch exhaust flicker under the ship — the cartoon-rocket
+    // reference reel Ben pointed at as inspiration leans hard on visible flame/
+    // smoke; this file cuts to POV before an actual liftoff burn, so the flicker
+    // here is the anticipation beat rather than a full launch plume
+    engineGlowOpacity = clamp01(p/0.4) * (0.5+0.5*Math.sin(now/90));
+  } else if (ph.phase==='glideToWindow') {
+    letterboxT = 1;
+    const e = p<0.5 ? 2*p*p : 1-Math.pow(-2*p+2,2)/2;
+    worldScale = lerp(1, ZOOM_SCALE, e);
+    const df = Math.pow(0.85, dtn); rumble.x*=df; rumble.y*=df; // dtn-normalized decay, not a flat per-frame *0.85
+    captainOpacity = clamp01((p-0.55)/0.4); // brief glimpse only in the last part of the glide
+    engineGlowOpacity = (0.7-p*0.7) * (0.5+0.5*Math.sin(now/90));
+  } else if (ph.phase==='povCut') {
+    letterboxT = 1; worldScale = ZOOM_SCALE;
+    const df = Math.pow(0.7, dtn); rumble.x*=df; rumble.y*=df;
+    shipOpacity = 1-clamp01(p/0.7);
+    captainOpacity = Math.max(0, 1-clamp01(p/0.25)); // the glimpse cuts away fast, it's not a lingering shot
+    cockpitOpacity = clamp01((p-0.15)/0.7);
+  } else if (ph.phase==='ascent') {
+    letterboxT = 1; worldScale = ZOOM_SCALE;
+    shipOpacity = 0; captainOpacity = 0; cockpitOpacity = 1;
+    // ease-in, not linear — the sky-darken/ground-drop/hyperdrive trio now all
+    // accelerate together, reading as launch acceleration rather than a flat fade
+    nightT = easeInQuad(p); dropT = clamp01(easeInQuad(p)*1.15);
+    warpSpeed = lerp(0.4, 3.0, easeInQuad(p));
+    warpAlpha = clamp01(p/0.15);
+    maybeSpawnMeteor(elapsed);
+  } else if (ph.phase==='handoffHold') {
+    letterboxT = 1; worldScale = ZOOM_SCALE;
+    shipOpacity = 0; captainOpacity = 0; cockpitOpacity = 1;
+    nightT = 1; dropT = 1;
+    captionOn = p > 0.25;
+    warpSpeed = lerp(3.0, 0.5, easeInQuad(p)); // decelerating to a near-stop as we settle, arrival not a hard cut
+    warpAlpha = 1;
+  }
+
+  // background canvas now scales too (capped at CANVAS_ZOOM, well under the
+  // foreground world's ZOOM_SCALE) — it was previously a sibling of #world that
+  // never moved at all during the 9.5x glide, so the "camera push" only ever
+  // moved the foreground, not the depth cue a real push needs
+  const canvasScale = lerp(1, CANVAS_ZOOM, (worldScale-1)/(ZOOM_SCALE-1));
+  canvas.style.transform = `scale(${canvasScale})`;
+
+  world.style.transform = `scale(${worldScale})`;
+  shipEl.style.opacity = shipOpacity;
+  shipEl.style.transform = `translate(${SHIP_X-75+rumble.x}px, ${SHIP_Y-75+rumble.y}px)`;
+  captainEl.style.opacity = captainOpacity;
+  engineGlowEl.style.opacity = engineGlowOpacity;
+  engineGlowEl.style.transform = `translate(${SHIP_X-22+rumble.x}px, ${SHIP_Y+50+rumble.y}px)`;
+  cockpit.style.opacity = cockpitOpacity;
+  // rim/seat glow keyed to nightT: warm dusk-orange while the cockpit is still
+  // fresh off the exterior glide, cooling toward the shinyAccent blue as the
+  // ascent's night deepens — was a static blue the whole time before
+  const warmT = 1-clamp01(nightT/0.6);
+  cockpit.style.setProperty('--rimWarm', `rgba(224,112,58,${(0.16*warmT+0.03).toFixed(3)})`);
+  cockpit.style.setProperty('--rimCool', `rgba(128,192,255,${(0.16+0.14*(1-warmT)).toFixed(3)})`);
+  topBar.style.transform = `scaleY(${letterboxT})`;
+  botBar.style.transform = `scaleY(${letterboxT})`;
+  caption.classList.toggle('show', captionOn);
+
+  drawSky(nightT);
+  drawGround(dropT);
+  // meteor streaks are keyed to ascent's own local elapsed clock (their cue times
+  // are fractions of ASCENT) — only ever drawn during 'ascent' itself, both cues
+  // always finish well before the phase ends so there's nothing to carry into
+  // handoffHold's own (different) local clock
+  if (ph.phase==='ascent') drawMeteorStreaks(elapsed);
+  if (ph.phase==='ascent' || ph.phase==='handoffHold') drawWarpField(warpSpeed, warpAlpha, dtn);
+
+  raf = requestAnimationFrame(tick);
+}
+let raf;
+function play(){ cancelAnimationFrame(raf); resetUI(); raf = requestAnimationFrame(tick); }
+
+document.getElementById('replay').onclick = play;
+document.getElementById('reducedToggle').onchange = (e) => { reduced = e.target.checked; play(); };
+play();
+</script>
+</body>
+</html>

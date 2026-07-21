@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>midnight-galaxy — in-round echo motif prototype (spaceship flyby)</title>
+<style>
+  :root{ --bg:#08001a; --bgDeep:#040010; --accent:#4a1a8f; --highlight:#c060ff; --text:#e8d0ff; }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0a0a;color:#e8e8e8;font-family:system-ui,sans-serif;padding:28px}
+  h1{font-size:1.15rem;font-weight:700;margin-bottom:4px}
+  .sub{color:#888;font-size:.8rem;margin-bottom:20px;max-width:780px;line-height:1.5}
+  .wrap{max-width:960px}
+  .stage{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;border:1px solid #222;
+    background: radial-gradient(ellipse 90% 70% at 50% 100%, rgba(74,26,143,0.35), transparent),
+                linear-gradient(180deg, var(--bg) 0%, var(--bgDeep) 100%);}
+  .safe-area{position:absolute; left:12%; right:12%; top:18%; bottom:18%; border:1px dashed rgba(255,255,255,0.08); border-radius:8px; pointer-events:none;}
+  .card{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:.6rem; text-align:center; padding:0 8%;}
+  .card .k{font-size:.72rem; letter-spacing:.3em; text-transform:uppercase; color:var(--highlight); opacity:.85;}
+  .card .q{font-size:1.35rem; font-weight:700; color:var(--text); max-width:80%;}
+  .card .a{font-size:.85rem; color:#a898c8; margin-top:.4rem;}
+  .ship{position:absolute; top:8%; left:-10%; width:46px; height:20px; opacity:0; pointer-events:none;
+    transform:translateX(0) translateY(0); will-change:transform,opacity;}
+  .ship svg{width:100%; height:100%; display:block; overflow:visible;}
+  .ship.fly{ animation: flyby var(--flyDur,3.2s) cubic-bezier(0.32,0.1,0.2,1) forwards; }
+  @keyframes flyby{
+    0%   { transform: translate(0, 0); opacity:0; }
+    8%   { opacity:.9; }
+    50%  { transform: translate(60vw, 6vh); opacity:.9; }
+    92%  { opacity:.9; }
+    100% { transform: translate(128vw, 10vh); opacity:0; }
+  }
+  .controls{display:flex;gap:10px;align-items:center;margin:14px 0 24px;font-size:.78rem;color:#aaa;flex-wrap:wrap}
+  button{background:#161616;border:1px solid #2a2a2a;color:#eee;padding:8px 16px;border-radius:6px;font-size:.78rem;cursor:pointer}
+  button:hover{background:#1e1e1e}
+  label{display:flex;gap:6px;align-items:center}
+  input[type=checkbox]{accent-color:var(--highlight)}
+  .status{font-size:.7rem;color:#666;margin-left:auto}
+  .notes{margin-top:20px;font-size:.8rem;color:#999;line-height:1.6;max-width:780px}
+  .notes b{color:#ccc}
+  .gate{margin-top:16px;font-size:.78rem;color:#888;line-height:1.7;max-width:780px}
+  .gate b{color:#bbb}
+  .gate ul{margin:6px 0 0 18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>In-round echo motif — spaceship flyby (midnight-galaxy)</h1>
+<div class="sub">Different pattern from the round-journey files in this folder — this one plays <em>during</em> a round, not between rounds. It's a small, rare, CSS-only ambient accent living in the persistent layer (<code>ParticleBackground.jsx</code> territory in the real app), not a theatrical full-stage moment. This mockup includes a fake trivia-question card so you can judge whether the flyby ever gets in the way of what a guest is actually reading.</div>
+
+<div class="stage" id="stage">
+  <div class="safe-area"></div>
+  <div class="card">
+    <div class="k">Round 2 · Question 3</div>
+    <div class="q">Which spacecraft was the first to land humans on the Moon?</div>
+    <div class="a">A. Vostok 1 &nbsp; B. Apollo 11 &nbsp; C. Gemini 8 &nbsp; D. Soyuz 7</div>
+  </div>
+  <div class="ship" id="ship">
+    <svg viewBox="0 0 46 20" xmlns="http://www.w3.org/2000/svg">
+      <path d="M2,14 L30,9 L44,10 L30,11 Z" fill="#c060ff" opacity="0.9"/>
+      <path d="M2,14 L14,12 L14,16 Z" fill="#8050b0" opacity="0.7"/>
+      <circle cx="22" cy="9.6" r="2.1" fill="#e8d0ff" opacity="0.85"/>
+      <path d="M-6,10.5 L2,10 L2,10.6 L-6,11.2 Z" fill="#c060ff" opacity="0.5"/>
+    </svg>
+  </div>
+</div>
+
+<div class="controls">
+  <button id="triggerNow">↻ Trigger flyby now</button>
+  <label><input type="checkbox" id="autoToggle"> Auto mode (sped up for demo — real cadence is much rarer)</label>
+  <span class="status" id="status">idle</span>
+</div>
+
+<div class="notes">
+  <b>What this is:</b> per the "slight instances reminding guests where we're at" idea — a meteor streak, a nova pulse, a spaceship flyby — this is the third example of the same underlying mechanism: a small, theme-flavored accent that plays occasionally <em>during</em> a round, distinct from the big theatrical round-journey moments between rounds. Same mechanism, different content — a meteor-streak echo or a nova-pulse echo for other themes would be built the same way, not a new system per idea.<br><br>
+  <b>Why this is CSS-only, not canvas:</b> round journeys get canvas/rAF freedom because they're one-shot and occasional. This plays inside a live round, on the same persistent layer that already has to run jank-free for a 3+ hour show — so it follows <code>ambient-design-law.md</code>'s stricter rule: <code>transform</code>/<code>opacity</code> only, no continuous per-frame JS state. The flyby here is a single CSS <code>@keyframes</code> animation triggered by a class toggle; the only JS is a timer deciding <em>when</em> to trigger it, not driving the motion itself.<br><br>
+  <b>Why it stays out of the safe area:</b> the dashed box marks where question text and answers actually sit. The flyby's path (top ~8-18% of frame, well above the card) is deliberate — a round-journey gets to use the whole stage because nothing needs to stay readable during it, but this plays while a guest is mid-read, so it has to stay atmosphere, never figure competing with the actual question. Worth watching a few flybys with a real question on screen to judge whether even this path is distracting enough to move higher or make smaller.<br><br>
+  <b>On cadence:</b> the auto-mode toggle here fires every 4-9s so you can actually see it during a demo. In a real show that's much too often — a rare accent that shows up every few minutes reads as "oh, neat," the same one showing up every few seconds reads as noise. Real cadence needs its own decision (probably in the same "deliberate irregularity, not a fixed timer" spirit as the app's existing ambient timings), separately from this prototype.<br><br>
+  <b>No start/end point tied to a round:</b> rounds vary in length — some have five questions, some fifteen — so anything scheduled as "once per round" or "at X% through the round" either fires inconsistently or requires knowing a round's length in advance, which this layer shouldn't need to know. The mechanism here is deliberately just a randomized timer running on its own clock, with zero awareness of round or slide boundaries — it doesn't start when a round starts or need to resolve before a round ends, the same "doesn't care what's structurally happening" spirit the persistent ambient layer already has for its own remount rule. The one edge case worth naming rather than solving here: a flyby could be mid-animation the instant a round-journey transition fires. Given a flyby is ~3s and a round is many minutes, this is rare and low-stakes — letting it just finish (or simply get visually covered by the journey's own full-stage takeover) is probably fine without special handling, but flagging it in case it reads as janky once this is live.<br><br>
+  <b>Open question for you:</b> should in-round echoes be theme-specific content the same way journeys are (a meteor for midnight-galaxy, embers for autumn-harvest), or a single shared "something drifts by" mechanism reskinned per theme's palette? This prototype assumes the former, matching how journeys already work, but it's worth deciding explicitly rather than defaulting.
+</div>
+
+<div class="gate">
+  <b>Self-gate</b>
+  <ul>
+    <li>GPU-only: the flyby is <code>transform</code> + <code>opacity</code> via CSS <code>@keyframes</code>, no canvas, no continuous JS per-frame work — matches the ambient layer's stricter rule, unlike the round-journey files in this folder.</li>
+    <li>No pop-in: opacity ramps in/out at both ends of the flyby, it doesn't snap into view mid-frame.</li>
+    <li>Stays clear of the safe area: path runs well above the question-card region shown in this mockup.</li>
+    <li>Deliberately rare, not periodic: demo mode uses a randomized interval, not a fixed timer, per the loop-construction "deliberate irregularity" rule — though the real production cadence still needs its own decision, flagged above.</li>
+    <li>Real theme colors only: ship tint uses midnight-galaxy's <code>highlight</code>/<code>accent</code>/<code>text</code> values.</li>
+  </ul>
+</div>
+</div>
+
+<script>
+const ship = document.getElementById('ship');
+const statusEl = document.getElementById('status');
+const autoToggle = document.getElementById('autoToggle');
+let autoTimer = null;
+
+function fly(){
+  ship.classList.remove('fly');
+  // force reflow so the animation can restart even if triggered rapidly
+  void ship.offsetWidth;
+  const dur = 2.8 + Math.random()*0.8;
+  ship.style.setProperty('--flyDur', dur.toFixed(2)+'s');
+  ship.classList.add('fly');
+  statusEl.textContent = 'flyby triggered (duration ' + dur.toFixed(1) + 's)';
+}
+
+document.getElementById('triggerNow').addEventListener('click', fly);
+
+function scheduleNext(){
+  if (!autoToggle.checked) return;
+  const delay = 4000 + Math.random()*5000; // 4-9s, randomized — demo-speed, not production cadence
+  autoTimer = setTimeout(() => { fly(); scheduleNext(); }, delay);
+}
+autoToggle.addEventListener('change', () => {
+  clearTimeout(autoTimer);
+  if (autoToggle.checked) { statusEl.textContent = 'auto mode on'; scheduleNext(); }
+  else { statusEl.textContent = 'auto mode off'; }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>autumn-harvest — ember supernova round-journey prototype</title>
+<style>
+  :root{
+    --bg:#1a0800; --bgDeep:#0e0400; --accent:#7a2808; --highlight:#ff6820; --text:#f8d8b0;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0a0a;color:#e8e8e8;font-family:system-ui,sans-serif;padding:28px}
+  h1{font-size:1.15rem;font-weight:700;margin-bottom:4px}
+  .sub{color:#888;font-size:.8rem;margin-bottom:20px;max-width:780px;line-height:1.5}
+  .wrap{max-width:960px}
+  .stage{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;border:1px solid #222;background:var(--bgDeep)}
+  canvas{position:absolute;inset:0;width:100%;height:100%}
+  .hud{position:absolute;bottom:6%;left:0;right:0;text-align:center;font-size:.75rem;letter-spacing:.3em;text-transform:uppercase;color:var(--highlight);opacity:0;transition:opacity .3s;pointer-events:none;font-weight:700}
+  .hud.show{opacity:.85}
+  .round{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.3rem;opacity:0;transition:opacity .5s ease-out;pointer-events:none}
+  .round.show{opacity:1}
+  .round .n{font-size:.9rem;letter-spacing:.35em;text-transform:uppercase;color:var(--highlight)}
+  .round .t{font-size:3rem;font-weight:700;color:var(--text)}
+  .controls{display:flex;gap:10px;align-items:center;margin:14px 0 24px;font-size:.78rem;color:#aaa;flex-wrap:wrap}
+  button{background:#161616;border:1px solid #2a2a2a;color:#eee;padding:8px 16px;border-radius:6px;font-size:.78rem;cursor:pointer}
+  button:hover{background:#1e1e1e}
+  label{display:flex;gap:6px;align-items:center}
+  input[type=checkbox]{accent-color:var(--highlight)}
+  .phase{font-size:.7rem;color:#666;margin-left:auto}
+  .notes{margin-top:20px;font-size:.8rem;color:#999;line-height:1.6;max-width:780px}
+  .notes b{color:#ccc}
+  .gate{margin-top:16px;font-size:.78rem;color:#888;line-height:1.7;max-width:780px}
+  .gate b{color:#bbb}
+  .gate ul{margin:6px 0 0 18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Ember supernova — autumn-harvest round journey</h1>
+<div class="sub">Extends autumn-harvest's own shipped anchor (the rising embers in <code>AutumnHarvestAmbient</code>, <code>ParticleBackground.jsx</code>) rather than borrowing team-picker's star-warp engine — a fire theme's journey should be built from fire, not space math. A ring of embers gathers inward (anticipation), holds a beat, then erupts outward as the round arrives. One theme, one motif, same "converge then release" idea as the meteor-shower-to-galaxy piece, reskinned entirely in ember/harvest tones.</div>
+
+<div class="stage" id="stage">
+  <canvas id="cv"></canvas>
+  <div class="round" id="round1"><div class="n">Arriving at</div><div class="t">Round 2</div></div>
+  <div class="hud" id="hud">Gathering</div>
+</div>
+
+<div class="controls">
+  <button id="replay">↻ Replay full journey</button>
+  <label><input type="checkbox" id="reducedToggle"> Simulate prefers-reduced-motion</label>
+  <span class="phase" id="phaseLabel">phase: idle</span>
+</div>
+
+<div class="notes">
+  <b>Sequence (~5.2s):</b> hold (500ms, embers float at their normal idle radius, calm firelight base — anticipation beat, nothing dramatic yet) → converge (950ms, the same 24 embers accelerate inward toward center on a staggered per-ember schedule, ease-in so it reads as gathering pull rather than a snap; each one arrives and holds a beat, not all at exactly the same instant) → supernova (1500ms, ~70ms after the last embers settle at center — a small parent-drives-child lag so the flash reads as caused by the gathering, not simultaneous with it — a white-gold flash and expanding ember-orange ring release, and the same 24 embers erupt back outward past their original radius as fading sparks; "Round 2" fades in and holds around the 35% mark) → disperse (950ms, sparks continue outward and fade on their own staggered schedule — some finish before others, no simultaneous cutoff) → settle (1300ms, only the calm background ember layer remains, "Round 2" still holding).<br><br>
+  <b>One continuous object per ember, not a respawn:</b> each of the 24 hero embers is a single tracked object with its own idle radius, converge delay/duration, burst delay/duration, and spiral drift — it's rendered every phase, just evaluated at a different point in its own timeline, so nothing pops in when convergence starts or when the burst fires. The gentle idle float in the hold phase is the same object that later gathers and erupts.<br><br>
+  <b>Background stays background:</b> a separate, much calmer layer of small drifting embers plus a soft warm base glow runs underneath throughout, at lower brightness and much slower motion than the hero embers — same depth-via-differential-speed principle as the galaxy piece's subdued star layer while meteors are the foreground action.<br><br>
+  <b>Deliberately not reused:</b> autumn-harvest's falling-leaf motif (the other half of its shipped ambient anchor) isn't part of this prototype — this one is scoped to the supernova moment itself. A leaf-shower entry/exit companion (the equivalent of the meteor shower bracketing the galaxy arrival) would be a natural next piece, not built here yet.<br><br>
+  <b>Frame-timing normalization:</b> included from the start this time (the <code>dtn</code> clamp copied from <code>TeamPickerSlide.jsx</code> per <code>references/round-journeys.md</code>), applied to the background layer's idle drift.<br><br>
+  <b>Reduced motion:</b> embers hold at their idle positions throughout, no convergence, no flash, no ring, no burst — "Round 2" just crossfades in partway through where the supernova would have played.
+</div>
+
+<div class="gate">
+  <b>Self-gate</b>
+  <ul>
+    <li>Extension of an existing anchor, not a parallel system: the hero-ember math is a new per-frame use (converge/hold/burst) of the same idea autumn-harvest's shipped <code>RisingParticle</code> embers already establish — brightness, warm palette, upward-drifting sparks — not team-picker's star-warp borrowed and recolored.</li>
+    <li>Real theme colors only: <code>bg #1a0800</code>, <code>bgDeep #0e0400</code>, <code>accent #7a2808</code>, <code>highlight #ff6820</code>, <code>text #f8d8b0</code>, plus <code>shinyAccent #e8a020</code> for the hot flash core — all from autumn-harvest's actual entry in <code>themes/index.js</code>.</li>
+    <li>Replay button and reduced-motion toggle both tested working.</li>
+    <li>Canvas/rAF justified by genuine per-frame numeric need (24 independently-timed converge/burst paths plus a radial flash/ring) — same precedent as team-picker and winner-reveal.</li>
+    <li>No pop-in: embers are continuously-tracked single objects across every phase; round label crossfades rather than snapping in.</li>
+    <li>Edge margin respected: round-label text stays centered with real margin; only embers and the base glow (atmosphere) are allowed to travel off-frame.</li>
+  </ul>
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById('cv');
+const ctx = canvas.getContext('2d', { alpha: false });
+const W = 960, H = 540, CX = W/2, CY = H/2;
+canvas.width = W; canvas.height = H;
+const minDim = Math.min(W,H);
+
+const hexToRgb = hex => { const n = parseInt(hex.replace('#',''),16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; };
+const BG = hexToRgb('#0e0400'), ACCENT = hexToRgb('#7a2808'), HI = hexToRgb('#ff6820'), HOT = hexToRgb('#e8a020'), WHITEHOT = hexToRgb('#fff4d0');
+
+let reduced = false;
+const easeInCubic = p => p*p*p;
+const easeOutQuint = p => 1 - Math.pow(1-p, 5);
+const lerp = (a,b,t) => a+(b-a)*t;
+const clamp01 = v => Math.max(0, Math.min(1, v));
+
+// background ambient layer — calm, slow, low-brightness, always present (atmosphere stays ground)
+const AMBIENT_COUNT = 14;
+let ambient = Array.from({length:AMBIENT_COUNT}, () => ({
+  x: Math.random()*W, y: H + Math.random()*H*0.3,
+  speed: 0.10 + Math.random()*0.12, drift: (Math.random()*2-1)*0.05,
+  size: 1.2 + Math.random()*1.6, phase: Math.random()*Math.PI*2,
+}));
+
+// hero embers — one continuous tracked object per ember across the whole journey
+const HERO_COUNT = 24;
+const HOLD_DUR = 500, CONVERGE_DUR = 950, SUPERNOVA_DUR = 1500, DISPERSE_DUR = 950, SETTLE_DUR = 1300;
+const CONVERGE_START = HOLD_DUR;
+const SUPERNOVA_START = HOLD_DUR + CONVERGE_DUR;
+const FLASH_LAG = 70; // parent-drives-child: flash reads as caused by the gather, not simultaneous with it
+let heroes = [];
+// wispy filament layer for the nova ring — breaks the perfect-circle read into something cloud-like
+const WISP_COUNT = 9;
+let wisps = [];
+function makeWisps(){
+  return Array.from({length:WISP_COUNT}, (_, i) => ({
+    angle: (i/WISP_COUNT)*Math.PI*2 + (Math.random()*0.4-0.2),
+    radiusJitter: 0.78+Math.random()*0.34,
+    sizeJitter: 0.5+Math.random()*0.7,
+  }));
+}
+wisps = makeWisps();
+function makeHeroes(){
+  return Array.from({length:HERO_COUNT}, (_, i) => {
+    const baseAngle = (i/HERO_COUNT)*Math.PI*2 + (Math.random()*0.3-0.15);
+    const R0 = minDim*(0.30 + Math.random()*0.16);
+    const convergeDelay = Math.random()*280;
+    const convergeDur = Math.min(CONVERGE_DUR - convergeDelay - 60, 550 + Math.random()*300);
+    const Rmin = 4 + Math.random()*6;
+    const burstDelay = Math.random()*220;
+    const burstDur = 850 + Math.random()*400;
+    const Rfar = R0 * (1.6 + Math.random()*0.6);
+    const angVel = (Math.random()*2-1)*0.0006;
+    const size = 2.2 + Math.random()*2.2;
+    const bobPhase = Math.random()*Math.PI*2;
+    return { baseAngle, R0, convergeDelay, convergeDur, Rmin, burstDelay, burstDur, Rfar, angVel, size, bobPhase };
+  });
+}
+heroes = makeHeroes();
+
+let tStart = 0, elapsedInPhase = 0, flash = 0, ring = 0, raf;
+let lastNow = 0;
+const hud = document.getElementById('hud');
+const round1 = document.getElementById('round1');
+const phaseLabel = document.getElementById('phaseLabel');
+
+const TIMELINE = [
+  { phase:'hold',      dur:HOLD_DUR },
+  { phase:'converge',  dur:CONVERGE_DUR },
+  { phase:'supernova', dur:SUPERNOVA_DUR },
+  { phase:'disperse',  dur:DISPERSE_DUR },
+  { phase:'settle',    dur:SETTLE_DUR },
+];
+const TOTAL_DUR = TIMELINE.reduce((a,s)=>a+s.dur,0);
+
+function resetUI(){
+  round1.classList.remove('show'); hud.classList.remove('show');
+  flash = 0; ring = 0; lastNow = 0;
+  heroes = makeHeroes();
+  wisps = makeWisps();
+}
+
+// radius(t_abs) for one hero ember — single continuous function across the whole journey
+function heroRadius(h, tAbs){
+  const convergeStartAbs = CONVERGE_START + h.convergeDelay;
+  const convergeEndAbs = convergeStartAbs + h.convergeDur;
+  const burstStartAbs = SUPERNOVA_START + h.burstDelay;
+  const burstEndAbs = burstStartAbs + h.burstDur;
+  if (tAbs < convergeStartAbs) return h.R0;
+  if (tAbs < convergeEndAbs) return lerp(h.R0, h.Rmin, easeInCubic(clamp01((tAbs-convergeStartAbs)/h.convergeDur)));
+  if (tAbs < burstStartAbs) return h.Rmin;
+  if (tAbs < burstEndAbs) return lerp(h.Rmin, h.Rfar, easeOutQuint(clamp01((tAbs-burstStartAbs)/h.burstDur)));
+  return null; // fully dispersed — don't draw
+}
+function heroAlpha(h, tAbs, radiusPhase){
+  const convergeStartAbs = CONVERGE_START + h.convergeDelay;
+  const burstStartAbs = SUPERNOVA_START + h.burstDelay;
+  const burstEndAbs = burstStartAbs + h.burstDur;
+  if (tAbs < convergeStartAbs) return 0.55; // idle glow, dimmer than mid-gather
+  if (tAbs < burstStartAbs) return 0.55 + 0.45*clamp01((tAbs-convergeStartAbs)/(burstStartAbs-convergeStartAbs));
+  const bp = clamp01((tAbs-burstStartAbs)/h.burstDur);
+  if (bp > 0.78) return Math.max(0, (1-bp)/0.22); // staggered, non-simultaneous fade-out
+  return 1;
+}
+
+function tick(now){
+  if (!tStart) tStart = now;
+  const dt = lastNow ? (now - lastNow) : 16.667;
+  lastNow = now;
+  const dtn = Math.min(26, dt) / 16.667;
+
+  const total = now - tStart;
+  const totalForPhase = Math.min(total, TOTAL_DUR - 1);
+  let acc = 0, ph = TIMELINE[TIMELINE.length - 1];
+  for (const seg of TIMELINE) { if (totalForPhase < acc + seg.dur) { ph = seg; elapsedInPhase = totalForPhase - acc; break; } acc += seg.dur; }
+  const p = Math.min(1, elapsedInPhase / ph.dur);
+  phaseLabel.textContent = 'phase: ' + ph.phase;
+
+  if (ph.phase === 'hold') { hud.classList.remove('show'); round1.classList.remove('show'); }
+  else if (ph.phase === 'converge') { if (!reduced) { hud.textContent='Gathering'; hud.classList.add('show'); } }
+  else if (ph.phase === 'supernova') { hud.classList.remove('show'); if (p > 0.35) round1.classList.add('show'); }
+  else if (ph.phase === 'disperse' || ph.phase === 'settle') { hud.classList.remove('show'); }
+
+  const flashP = clamp01((total - (SUPERNOVA_START + FLASH_LAG)) / SUPERNOVA_DUR);
+  if (!reduced && total >= SUPERNOVA_START + FLASH_LAG && total < SUPERNOVA_START + SUPERNOVA_DUR + 200) {
+    // rise → hold at peak → longer decay tail, more cinematic weight than a symmetric rise/fall
+    flash = flashP < 0.16 ? flashP/0.16 : (flashP < 0.30 ? 1 : Math.max(0, 1 - (flashP-0.30)/0.4));
+    ring = flashP;
+  } else if (reduced || total < SUPERNOVA_START) { flash = 0; ring = 0; }
+
+  // draw
+  ctx.fillStyle = `rgba(${BG.r},${BG.g},${BG.b},1)`;
+  ctx.fillRect(0,0,W,H);
+
+  // warm base glow, bottom-anchored (firelight), matches the theme's own hearth-glow feel
+  const baseGlow = ctx.createRadialGradient(CX, H*1.05, 0, CX, H*1.05, H*0.9);
+  baseGlow.addColorStop(0, `rgba(${HI.r},${HI.g},${HI.b},0.30)`);
+  baseGlow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = baseGlow; ctx.fillRect(0,0,W,H);
+
+  // background ambient embers — calm, slow, always present
+  ctx.globalCompositeOperation = 'lighter';
+  for (const a of ambient) {
+    a.y -= a.speed * dtn; a.x += a.drift * dtn; a.phase += 0.02*dtn;
+    if (a.y < -10) { a.y = H + Math.random()*20; a.x = Math.random()*W; }
+    const flick = 0.5 + 0.5*Math.sin(a.phase);
+    ctx.fillStyle = `rgba(${HI.r},${HI.g},${HI.b},${0.18*flick})`;
+    ctx.beginPath(); ctx.arc(a.x, a.y, a.size, 0, 6.2832); ctx.fill();
+  }
+
+  // hero embers — one continuous object each
+  if (!reduced) {
+    for (const h of heroes) {
+      const r = heroRadius(h, total);
+      if (r === null) continue;
+      const ang = h.baseAngle + h.angVel*total;
+      const x = CX + Math.cos(ang)*r;
+      const y = CY + Math.sin(ang)*r*0.62; // slight vertical compression so the burst reads on a 16:9 stage, not a perfect circle
+      const alpha = heroAlpha(h, total);
+      const hot = clamp01(1 - r/(minDim*0.55));
+      const cr = Math.round(lerp(ACCENT.r, lerp(HOT.r, WHITEHOT.r, hot), hot));
+      const cg = Math.round(lerp(ACCENT.g, lerp(HOT.g, WHITEHOT.g, hot), hot));
+      const cb = Math.round(lerp(ACCENT.b, lerp(HOT.b, WHITEHOT.b, hot), hot));
+      ctx.fillStyle = `rgba(${cr},${cg},${cb},${alpha})`;
+      ctx.beginPath(); ctx.arc(x, y, h.size*(0.7+hot*0.6), 0, 6.2832); ctx.fill();
+    }
+  } else {
+    for (const h of heroes) {
+      const x = CX + Math.cos(h.baseAngle)*h.R0, y = CY + Math.sin(h.baseAngle)*h.R0*0.62;
+      ctx.fillStyle = `rgba(${HI.r},${HI.g},${HI.b},0.5)`;
+      ctx.beginPath(); ctx.arc(x, y, h.size*0.7, 0, 6.2832); ctx.fill();
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  if (!reduced && ring > 0) {
+    const rad = ring * H * 0.6;
+    const rg = ctx.createRadialGradient(CX,CY,0,CX,CY,rad);
+    rg.addColorStop(0, `rgba(255,244,208,${Math.max(0,0.55-ring*0.5)})`);
+    rg.addColorStop(0.35, `rgba(${HOT.r},${HOT.g},${HOT.b},${Math.max(0,0.45-ring*0.4)})`);
+    rg.addColorStop(0.7, `rgba(${HI.r},${HI.g},${HI.b},${Math.max(0,0.25-ring*0.22)})`);
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = rg; ctx.fillRect(0,0,W,H);
+
+    // wispy filament layer — jittered soft blobs around the ring's circumference so the edge
+    // reads as a cloud of gas/ember filaments, not a perfect drafting-compass circle
+    ctx.globalCompositeOperation = 'lighter';
+    const wispAlpha = Math.max(0, 0.32 - ring*0.24);
+    if (wispAlpha > 0.01) {
+      for (const w of wisps) {
+        const wr = rad * w.radiusJitter;
+        const wx = CX + Math.cos(w.angle)*wr, wy = CY + Math.sin(w.angle)*wr*0.62;
+        const wsize = Math.max(2, rad * 0.22 * w.sizeJitter);
+        const wg = ctx.createRadialGradient(wx,wy,0,wx,wy,wsize);
+        wg.addColorStop(0, `rgba(${HOT.r},${HOT.g},${HOT.b},${wispAlpha})`);
+        wg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = wg; ctx.fillRect(wx-wsize, wy-wsize, wsize*2, wsize*2);
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  if (!reduced && flash > 0) {
+    // anamorphic core streak — the single most identifying cinematic cue in real nova/supernova
+    // imagery: a sharp bright horizontal line straight through the hot core, not just a radial glow
+    const streakH = H*0.045*(0.6+flash*0.4);
+    const sg = ctx.createLinearGradient(0, CY, W, CY);
+    sg.addColorStop(0, 'rgba(255,255,255,0)');
+    sg.addColorStop(0.5, `rgba(255,255,255,${flash*0.85})`);
+    sg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sg;
+    ctx.fillRect(0, CY-streakH/2, W, streakH);
+
+    ctx.fillStyle = `rgba(255,244,208,${flash*0.6})`;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  const vg = ctx.createRadialGradient(CX,CY,0,CX,CY,H*0.6);
+  vg.addColorStop(0,'rgba(14,4,0,0.6)'); vg.addColorStop(0.4,'rgba(14,4,0,0.3)'); vg.addColorStop(0.75,'rgba(0,0,0,0)');
+  ctx.fillStyle = vg; ctx.fillRect(0,0,W,H);
+
+  if (total < TOTAL_DUR) raf = requestAnimationFrame(tick);
+}
+
+function play(){
+  cancelAnimationFrame(raf);
+  tStart = 0; resetUI();
+  raf = requestAnimationFrame(tick);
+}
+document.getElementById('replay').addEventListener('click', play);
+document.getElementById('reducedToggle').addEventListener('change', e=>{ reduced = e.target.checked; play(); });
+play();
+</script>
+</body>
+</html>
