@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Grep",
+      "Glob",
+      "ToolSearch",
+      "Skill",
+      "Bash(./concepts/tools/*)",
+      "Bash(git *)",
+      "Bash(node *)",
+      "Bash(npm *)",
+      "Bash(cd *)",
+      "Bash(echo *)",
+      "Bash(rm *)",
+      "Bash(cat *)",
+      "Bash(mv *)",
+      "Bash(gh *)",
+      "Bash(cd /Users/bencoughlin/Projects/baynes-trivia/trivia-os && *)",
+      "mcp__cowork__allow_cowork_file_delete",
+      "mcp__github__create_pull_request",
+      "mcp__chrome-devtools__navigate_page",
+      "mcp__chrome-devtools__take_screenshot",
+      "mcp__chrome-devtools__performance_start_trace",
+      "mcp__chrome-devtools__performance_stop_trace",
+      "mcp__chrome-devtools__performance_analyze_insight",
+      "SlashCommand(/preflight)",
+      "SlashCommand(/claim)",
+      "SlashCommand(/audit)",
+      "SlashCommand(/ship)"
+    ]
+  }
+}

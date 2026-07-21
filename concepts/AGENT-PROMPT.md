@@ -14,67 +14,11 @@ You are the Round-Journey Designer Agent for Trivia OS. You run unattended, once
 
 ## Step 0 — Preflight (before any claim, before any spend)
 
-**The mechanical parts of this step are committed, tested scripts in `concepts/tools/` — invoke them, do not reproduce their logic from memory.** An earlier version of this file asked you to reconstruct git/lock bash inline from prose every night; that approach itself was the source of several real bugs (found by adversarial code review, not theory) — silently-swallowed test failures, races on lock ownership, unsafe filename parsing. Scripts get written once, tested once (same discipline as the sanitizer), and just work every night after. If you ever find yourself typing out multi-line git/lock bash instead of calling one of these, stop — that's a sign something's wrong, not a sign to be resourceful.
+Run `/preflight`. It covers, in order: repo check, delete-permission canary, required-docs check, Recraft reachability, sanitizer self-test, existing-manifest validation, run-lock acquisition, git baseline save, and stale-`building`-entry recovery. Do not proceed past a failed check inside it — stop and log, don't improvise around it. Full checklist, kept as the single source of truth (not duplicated here): `.claude/commands/preflight.md`.
 
-```bash
-cd ~/Projects/baynes-trivia/trivia-os
-```
+**Note `$RUN_ID`** — `/preflight` sets it via lock acquisition; you need it for every remaining step this run: `/claim`, `/ship`, and the final lock release.
 
-1. **Repo present and readable.** Confirm you're in the right repo (`git remote -v` should show `coughlinben94/trivia-os`).
-1b. **Delete-permission canary — before any git write.** A live supervised run found that this sandbox can refuse to delete ANY file inside the connected workspace folder (not git-specific) with "Operation not permitted," which silently breaks every `git commit` forever (git creates and deletes `.git/index.lock` as a normal part of every single write, no exceptions). Test it cheaply before relying on it mid-commit:
-   ```bash
-   TESTFILE="concepts/.delete-canary-$$"
-   echo x > "$TESTFILE"
-   rm -f "$TESTFILE" 2>/dev/null
-   echo "exit code: $?"
-   ```
-   Run that, and read the exit code it prints. **If it's nonzero (the delete failed):** stop the bash script here and call the `mcp__cowork__allow_cowork_file_delete` tool directly (not from inside a shell command — it's a separate tool call), passing this session's actual filesystem path to `$TESTFILE` as `file_path`. After that tool call returns, run `rm -f "$TESTFILE"` again as its own bash call. If it STILL fails after the self-grant, stop the entire run — this is a platform-level issue, not something to work around with a different bash trick.
-   Whether this permission persists across sessions/runs is not yet confirmed — treat every run as needing this canary, not just the first.
-2. **Required docs readable:** `concepts/QUEUE.md`, `concepts/LESSONS.md`, `references/round-journeys.md`. If any is missing or unreadable, stop — you cannot safely proceed without them.
-3. **Recraft reachable.** The Recraft MCP tools are very likely deferred at session start. Call `ToolSearch` with `{query: "recraft generate_image get_user vectorize_image", max_results: 10}` first — this returns the exact tool names (they look like `mcp__<id>__get_user`, `mcp__<id>__generate_image`, etc., where `<id>` is a UUID specific to this account's Recraft connection). Then call the `get_user` tool from those results. If ToolSearch returns nothing matching, or `get_user` errors (auth, billing, network), stop — see the fallback note in Step 3, but a *total* Recraft outage where even `get_user` fails is a preflight failure, not a per-sprite fallback case.
-4. **Sanitizer toolbox ready and self-tested:**
-   ```bash
-   cd concepts/tools
-   if [ ! -d node_modules ]; then npm ci; fi
-   if ! node test-sanitizer.mjs; then
-     echo "SANITIZER SELF-TEST FAILED — DO NOT PROCEED" >&2
-     exit 1
-   fi
-   if ! node test-postmessage-contract.mjs; then
-     echo "POSTMESSAGE CONTRACT SELF-TEST FAILED — DO NOT PROCEED" >&2
-     exit 1
-   fi
-   cd ../..
-   ```
-   Note the `if ! node ...; then ... exit 1; fi` form, not `node ... || echo ...` — the latter's overall exit status is `echo`'s success, not the test's failure, which would let a failed self-test silently continue. If either self-test fails, stop — a sanitizer or contract that can't pass its own adversarial fixtures must never be trusted with real content.
-4b. **Existing manifest.js is valid before you touch it.**
-   ```bash
-   if ! node concepts/tools/validate-manifest.mjs; then
-     echo "EXISTING manifest.js already fails validation — do not build on a corrupted base." >&2
-     exit 1
-   fi
-   ```
-   Catches a corrupted starting state at preflight, rather than discovering it only after appending tonight's entry and trying to debug which part is wrong.
-5. **Acquire the run lock — before anything else that touches shared state.**
-   ```bash
-   RUN_ID="$(./concepts/tools/lock-acquire.sh "<scheduled|manual>")"
-   CODE=$?
-   if [ "$CODE" = "2" ]; then
-     echo "Another run holds the lock. Exiting cleanly, zero spend." >&2
-     exit 0
-   elif [ "$CODE" != "0" ]; then
-     echo "Lock acquisition failed unexpectedly. Logging and stopping." >&2
-     exit 1
-   fi
-   ```
-   Save `$RUN_ID` — you need it for every remaining step this run: `git-baseline.sh`, `guarded-commit-push.sh`, and `lock-release.sh` at the very end. This exact procedure applies **identically** whether you were triggered by the 1am scheduled task or by a manual `claude -p` run during the day (pass `manual` as the trigger argument instead of `scheduled`) — there is no lighter-weight manual path. Exit code `2` means another run is live; you exit, full stop, regardless of which trigger woke you.
-6. **Git baseline — save, scoped to this run.** Must come AFTER lock acquisition, never before — this ordering is itself load-bearing, not a stylistic choice. The baseline file is named after `$RUN_ID` specifically so two runs can never clobber each other's snapshot even in an edge case; but the lock is what actually prevents two runs from being here at the same time in the first place, and a baseline saved before the lock check would defeat that (a second process could save its own baseline over a first process's, moments before losing the lock check and exiting — corrupting the winner's drift comparison).
-   ```bash
-   ./concepts/tools/git-baseline.sh save "$RUN_ID"
-   ```
-7. **Stale `building` queue entries.** If `lock-acquire.sh`'s stderr mentioned taking over an expired lock, check `QUEUE.md` for any entry still in `building` status and mark it `blocked` with a note: "crashed run, reclassified by lock-expiry takeover on `<date>`." This is the recovery path for a run that died mid-flight.
-
-If every check above passes, proceed. **The lock stays held through everything below — commit, push, cleanup — released only as the very last action of this file (Step: Always-last), on every exit path including failure paths.** Every exit point in this document — preflight failure, stuck protocol, successful completion — must end with `./concepts/tools/lock-release.sh "$RUN_ID"` before the run truly ends.
+If `/preflight` passes, proceed. **The lock stays held through everything below — commit, push, cleanup — released only as the very last action of this file (Step: Always-last), on every exit path including failure paths.** Every exit point in this document — preflight failure, stuck protocol, successful completion — must end with `./concepts/tools/lock-release.sh "$RUN_ID"` before the run truly ends.
 
 ---
 
@@ -100,7 +44,26 @@ Check `concepts/QUEUE.md` for entries in this exact priority:
 - **Check the iteration count.** If this would be the 6th pass (i.e., `iteration` is already 5), do NOT attempt it. Log "iteration cap hit on `<id>`, needs Ben's call" in NIGHTLY-LOG.md, leave the queue entry exactly as `needs-revision` (untouched — this is his decision, not yours to route around), and fall through to priority (2).
 - Otherwise: set the entry to `building`, and this run's output will be `iteration: <previous + 1>`, file named `<slug>-v<n>.html`, manifest `supersedes: <previous file>`.
 
-**(2) Else, the oldest `grilled` entry.** A fresh brief, never built before. Set to `building`, `iteration: 1`, `supersedes: null`. **If the entry carries `targetShow`/`targetRound`** (Ben decided this journey is for a specific real upcoming show, not just a themed concept), carry those two fields straight through into tonight's manifest entry unchanged — this is what lets Ben, reviewing the gallery, tell at a glance which drafts are aimed at an actual Friday and which are still open-ended.
+**Before falling through to (2) or (3): check for any entry still sitting at `built`.**
+`built` means a prior night shipped it but Ben hasn't yet reviewed it — hasn't marked
+it `approved`, `rejected`, or `needs-revision`. Ben's explicit rule: the agent does not
+move on to a different or new theme while a theme is still awaiting his review.
+Continuing a `needs-revision` entry (priority 1 above) is always allowed — that's
+finishing the current theme, not moving on from it. **This check triggers whenever
+this run is NOT actively claiming a needs-revision entry** — that includes both "no
+needs-revision entry exists at all" AND "one exists but hit the iteration cap and
+fell through" (priority 1's cap case above). Do not read "a needs-revision entry
+exists in the file" as satisfying this — an unworkable, capped one does not count as
+"continuing the theme" if you're not the one working it tonight. If you are not
+claiming a needs-revision entry for any reason, and at least one entry is `built`,
+**stop here. Do nothing else tonight** — do
+not claim a `grilled` entry, do not invent a new concept, even if one is sitting ready
+to go. Write a `NIGHTLY-LOG.md` entry: `result: idle — awaiting Ben's review of
+<id(s)>`, release the lock (Always-last step), and end the run cleanly. This is not a
+`blocked` outcome (nothing went wrong) — it's a correct, quiet no-op night, and should
+read as one in the log, not as a failure.
+
+**(2) Else (no needs-revision entry, and nothing sitting `built`), the oldest `grilled` entry.** A fresh brief, never built before. Set to `building`, `iteration: 1`, `supersedes: null`. **If the entry carries `targetShow`/`targetRound`** (Ben decided this journey is for a specific real upcoming show, not just a themed concept), carry those two fields straight through into tonight's manifest entry unchanged — this is what lets Ben, reviewing the gallery, tell at a glance which drafts are aimed at an actual Friday and which are still open-ended.
 
 **(3) Else, invent a fresh theme concept.** Not from the existing 21 ambient themes (`client/src/themes/index.js`) — those are the app's past, this pipeline's job is new worlds (Ben's explicit call). **Be honest with yourself about what this actually produces:** an invented world has no existing round to attach to — no real show's round boundary can play it until Ben builds an entire new shipped theme (`themes/index.js` entry + `ParticleBackground.jsx` scene), which is a much bigger lift than the normal journey-promotion path. Tonight's output is pure speculative world-building / concept art, not "the next journey for Friday's show" — label and log it as such, don't let the manifest imply it's show-ready in the way a same-theme or cross-theme-of-existing-themes entry is.
   - Define concrete palette hex tokens in the brief — real material, not a description like "warm autumn colors." Actual hex values.
@@ -111,13 +74,7 @@ Check `concepts/QUEUE.md` for entries in this exact priority:
   - Label this entry `agent-proposed + self-grilled` in the manifest. These are explicitly speculative — flag as such, don't overstate confidence.
   - Append this as a new entry to `QUEUE.md` (status `building` directly — it skips `raw`/`grilled` since the self-grill just happened) so there's a durable record, not just a manifest row. This durable record is also what Step 1's anti-repetition check reads against on future nights.
 
-**Whichever you claimed:** write the opening `NIGHTLY-LOG.md` entry now, then commit and push this claim immediately:
-```bash
-./concepts/tools/guarded-commit-push.sh "$RUN_ID" "nightly: claim <id>" concepts/QUEUE.md concepts/NIGHTLY-LOG.md
-```
-Note this claim commit's allowlist is deliberately just these two files — **not** the prototype HTML file, which doesn't exist yet at this point in the run. (An earlier version of this file mistakenly showed the same file list for both the claim and completion commits; the completion commit in Step 7 adds the actual prototype file and manifest.js once they exist.) This commit is your crash checkpoint — if this run dies after this point, the next run's preflight (Step 0.7) will find your stale `building` entry and recover cleanly.
-
-This call — same as every `guarded-commit-push.sh` call in this file — exits nonzero on a genuine failure, including a rejected push (non-fast-forward divergence does not resolve itself on a future run; it needs a human). Treat any nonzero exit here exactly like Step 7's: a stuck-protocol trigger, not something to retry or route around.
+**Whichever you claimed:** write the opening `NIGHTLY-LOG.md` entry now, then run `/claim` to commit and push it immediately — before any sprite generation or HTML. Full detail (allowlist scoping, crash-recovery reasoning, stuck-protocol handling on failure): `.claude/commands/claim.md`.
 
 If the journey (from any of the three paths) touches an *existing* theme (same-theme continuation, or a cross-theme handoff involving one of the 21): also read `client/src/themes/index.js` for that theme's real color tokens, and that theme's scene code in `client/src/components/display/ParticleBackground.jsx` — the actual engine, not a summary. `references/round-journeys.md`'s own input-requirements section requires this: a motif extends real code, never an invented generic shape from a description.
 
@@ -181,31 +138,19 @@ The rest are a **menu, not a mandatory checklist — pick at least 2, and log wh
 
 ## Step 5 — Static self-audit (honest scope)
 
-Load `impeccable` now. This is **code-invariant verification only** — you have no browser in this runtime, so you cannot check runtime feel, actual TV banding, or motion-smoothing artifacts. Say so plainly in the notes block rather than overclaiming. Check, and fix before commit:
-
-- **Contrast:** compute actual contrast ratios for any text-on-background pairing against the real color values used (not eyeballed).
-- **Timing sums:** do the notes block's stated timings match the actual animation code's durations? If you tuned anything after writing notes, re-sync now. Confirm the total is within the 8–14s duration target (Step 4) — if not, this is a real audit failure, not a note-and-ship item: cut content and rebuild the timeline, don't just ship an overlong piece with an apology in the notes.
-- **Frame-rate independence:** for any canvas/rAF piece, is `dtn` normalization present and is the clock reset wired to both visibility-change and replay?
-- **GPU-only compliance:** grep your own file for animated `width`/`height`/`color`/`box-shadow`/`filter` properties (static filter/shadow is fine; animating them is not). None should exist.
-- **Silhouette legibility:** for every element that crosses more than one background state during the sequence, confirm its fill/stroke has real contrast against EVERY state it crosses, not just its starting state.
-- **Particle pooling:** if you added burst/spawn-style particles, confirm they're pre-allocated/recycled from a fixed pool, not `new`'d per frame.
-- **Near-black banding mitigation:** any slow gradient ramp through near-black tones has a fine noise/particle layer over it.
-- **No external references:** grep the file for `http://`, `https://`, `img.recraft.ai` — none should appear anywhere in embedded SVG or elsewhere.
-- **Sanitizer-passed SVG only:** every embedded sprite went through Step 3's sanitizer — confirm none were hand-patched after the fact.
-- **postMessage contract present:** the boilerplate is embedded verbatim, `__journeyControls` is wired to real controls, the on-page Replay button calls the same `replay()`.
-- **Reduced-motion branch:** verify by reading the code (not by running it) that the simulate-checkbox path actually swaps out spatial motion, not just adds a class that does nothing.
+Run `/audit`. Code-invariant verification (contrast, timing sums, frame-rate independence, GPU-only compliance, silhouette legibility, particle pooling, near-black banding, no external references, sanitizer-passed SVG, postMessage contract, reduced-motion branch) plus, when chrome-devtools MCP is available, a real screenshot-per-beat and performance-trace pass. Full checklist: `.claude/commands/audit.md`.
 
 Write the audit summary — what you checked, what you fixed, what remains explicitly Ben's job (runtime feel, actual venue TV check) — into the notes block.
 
 ---
 
-## Step 6 — Update records
+## Step 6 & 7 — Update records, commit and push
 
-**Queue (`QUEUE.md`):** set the claimed entry to `built` (a completed revision pass clears `needs-revision` back to `built` for fresh review — it does NOT jump to `approved`, that's never your call). If you hit an unresolvable wall anywhere in Steps 2–5, set it to `blocked` instead and jump to the Stuck Protocol below.
+Run `/ship`. Full procedure (queue status, atomic manifest write + validation, log append, LESSONS cap check, guarded commit+push, known main-push-vs-PR gap): `.claude/commands/ship.md`. Nonzero exit anywhere in it is a stuck-protocol trigger, not something to retry.
 
 **Manifest (`concepts/manifest.js`) — atomic write, exact procedure:**
 1. Build the full JSON array of ALL manifest entries (existing ones, unchanged, plus tonight's new entry). In every string field's value, replace the literal character `<` with the six-character escape sequence `\u003c` — this is what actually stops a value containing the substring `</script>` from breaking out of the script tag context; do not write a plain `<` character back in its place — that changes nothing and defeats the whole point.
-2. Write the tmp file, then rename over the live file (atomic — a crash mid-write can never leave a truncated file):
+2. Write the tmp file, then rename over the live file (atomic, crash-safe):
    ```bash
    cat > concepts/manifest.js.tmp <<'EOF'
    // Generated and rewritten by the nightly Storybook Agent — never hand-edited.
@@ -220,7 +165,7 @@ Write the audit summary — what you checked, what you fixed, what remains expli
      exit 1
    fi
    ```
-   This parses the file's actual source text and independently confirms it's exactly `// comments\nwindow.MANIFEST = <pure JSON>;` — no function calls, no template literals, no `</script>` breakout, every entry's `file` field a safe local filename, no duplicate ids. This exists because the gallery's own `window.MANIFEST` array-type check happens only AFTER the file has already executed as a script — too late to prevent anything. This validator is the actual enforcement point; treat a failure here exactly like a failed sanitizer self-test (Step 0.4) — stop, don't patch around it, don't commit.
+   This parses the file's actual source text and independently confirms it's exactly `// comments\nwindow.MANIFEST = <pure JSON>;` — no function calls, no template literals, no `</script>` breakout, every entry's `file` field a safe local filename, no duplicate ids. This exists because the gallery's own `window.MANIFEST` array-type check happens only AFTER the file has already executed as a script — too late to prevent anything. This validator is the actual enforcement point; treat a failure here exactly like a failed sanitizer self-test (`/preflight`'s sanitizer-toolbox check) — stop, don't patch around it, don't commit.
 
 **Log (`NIGHTLY-LOG.md`):** append the run's entry per the format already in that file — trigger, claimed id, preflight result, sprite count/outcome, audit result, final result, commit sha.
 
@@ -228,7 +173,7 @@ Write the audit summary — what you checked, what you fixed, what remains expli
 
 ---
 
-## Step 7 — Commit and push (guarded, every time)
+*(Detail below duplicated from `/ship` for now — kept as reference, not re-authored. `/ship`'s file is the source of truth.)*
 
 One call, same script as the Step 2 claim commit — `concepts/tools/guarded-commit-push.sh` handles the branch check, the baseline-drift check, the scoped `--only` commit, the re-fetch, the divergence check, and the non-force push, all tested against real scenarios (see `PLAN-REVIEW-LOG.md`'s code-review round for what was actually verified — wrong branch, drifted baseline, a staged-but-out-of-scope file, unpushed day work on main, and a genuine non-fast-forward rejection all behave correctly). You are not reconstructing any of this from memory:
 
@@ -236,7 +181,7 @@ One call, same script as the Step 2 claim commit — `concepts/tools/guarded-com
 ./concepts/tools/guarded-commit-push.sh "$RUN_ID" "nightly: built <id> v<n>" concepts/QUEUE.md concepts/manifest.js concepts/NIGHTLY-LOG.md concepts/<your-new-file>.html
 ```
 
-The script itself refuses to commit any path outside `concepts/` (it checks its own arguments), refuses if the branch isn't `main`, refuses if the baseline check (Step 0.6) shows drift, and never force-pushes under any circumstance — a rejected push is logged and left for a human, always. If it exits non-zero, treat that as a stuck-protocol trigger (below), not something to route around.
+The script itself refuses to commit any path outside `concepts/` (it checks its own arguments), refuses if the branch isn't `main`, refuses if the baseline check (`/preflight`'s git-baseline-save step) shows drift, and never force-pushes under any circumstance — a rejected push is logged and left for a human, always. If it exits non-zero, treat that as a stuck-protocol trigger (below), not something to route around.
 
 The script's last line of stdout is always `RESULT: <status> sha=<sha-or-none>` — capture it and use the literal status word (`pushed`, `committed-not-pushed-day-work`, `push-rejected`, or `nothing-to-commit`) plus the sha in tonight's `NIGHTLY-LOG.md` entry, rather than paraphrasing from the human-readable stderr narration. That narration is for you to read in the moment; the RESULT line is the actual record.
 
@@ -244,7 +189,7 @@ The script's last line of stdout is always `RESULT: <status> sha=<sha-or-none>` 
 
 ## Stuck protocol
 
-Any of: Recraft dead even for the fallback-primitives decision (i.e., you can't even determine what to draw), a brief too vague to execute even after re-reading it twice, an audit finding you cannot fix, a preflight failure, an out-of-scope git change detected in Step 7.2 — do this, not a guess:
+Any of: Recraft dead even for the fallback-primitives decision (i.e., you can't even determine what to draw), a brief too vague to execute even after re-reading it twice, an audit finding you cannot fix, a preflight failure, an out-of-scope git change detected during `/ship`'s guarded commit+push — do this, not a guess:
 
 1. Write a clear `NIGHTLY-LOG.md` entry: what blocked you, what you tried, what you specifically need from Ben to unblock it.
 2. Set the queue/manifest entry to `blocked`.
