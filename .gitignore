@@ -16,6 +16,9 @@ e2e/.auth/
 # Theme screenshots
 theme-screenshots/
 theme-screenshots-v2/
+
+# Local verification artifacts (screenshots, raw perf traces) - not committed, too large / regenerable
+concepts/.verification/
 .claude/skills/
 
 .env.local
