@@ -16,6 +16,19 @@ Ben's "daytime session" review from `AGENT-PROMPT.md`'s rule #2.
 
 ## Steps
 
+0. **Pull first.** As of the scratch-checkout redesign (see `/preflight`), the nightly
+   run no longer writes to this connected folder at all — it commits and pushes from a
+   separate scratch checkout, entirely to avoid the connected folder's delete-permission
+   wall. That means this folder's `main` is NOT automatically up to date with last
+   night's work until you pull it, right here, interactively (this is exactly the
+   context where Cowork's delete-permission prompt for `.git/index.lock` can actually
+   be answered by a live human):
+   ```bash
+   git pull --ff-only origin main
+   ```
+   If this isn't a clean fast-forward, stop and resolve it yourself before continuing —
+   don't merge/rebase past something you haven't looked at.
+
 1. **Find what was built last night.** Read `concepts/NIGHTLY-LOG.md`'s most recent
    entry to identify the prototype file, and `concepts/QUEUE.md` to confirm its
    current status (`built` expected; if `blocked`, stop here and read the log

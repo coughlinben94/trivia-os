@@ -7,6 +7,8 @@ disable-model-invocation: true
 
 # /ship — Step 6 (update records) + Step 7 (commit/push) — Storybook Agent
 
+CWD is still `$WORKDIR` (the scratch checkout from `/preflight`). This step's push is the only place tonight's work actually reaches `origin/main` — **the connected `~/Projects/baynes-trivia/trivia-os` folder is never written to by this run.** Ben's local copy (and `/morning-review`) picks up tonight's commit via a normal `git pull`, run interactively, the next time either of those runs.
+
 ## Update records
 
 **Queue (`QUEUE.md`):** set the claimed entry to `built` (a completed revision pass clears `needs-revision` back to `built` — never `approved`, that's never your call). If you hit an unresolvable wall anywhere in Steps 2–5, set it to `blocked` instead and jump to the Stuck Protocol in `AGENT-PROMPT.md`.

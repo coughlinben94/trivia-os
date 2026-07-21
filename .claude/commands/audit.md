@@ -6,6 +6,8 @@ disable-model-invocation: true
 
 # /audit — Step 5 static self-audit (Storybook Agent)
 
+CWD is still `$WORKDIR` (the scratch checkout) — read/grep the file you built there, same as always.
+
 Load the `anthropic-skills:impeccable` skill now, if not already loaded this run (use the exact fully-qualified name per `AGENT-PROMPT.md` Step 1 — if it's not in your available-skills listing under that name, search for one containing "impeccable" before concluding it's missing).
 
 This is **code-invariant verification only** — no browser in this runtime, so runtime feel, actual TV banding, and motion-smoothing artifacts cannot be checked here. Say so plainly in the notes block rather than overclaiming.

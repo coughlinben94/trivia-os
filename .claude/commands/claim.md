@@ -7,6 +7,8 @@ disable-model-invocation: true
 
 # /claim — Step 2 commit checkpoint (Storybook Agent)
 
+CWD must still be `$WORKDIR` (the scratch checkout `/preflight` set up) — never the connected `~/Projects/baynes-trivia/trivia-os` folder. This commit's push is what actually reaches `origin/main`; nothing here writes back to the connected folder.
+
 Once you've claimed a queue entry (revision, grilled brief, or self-invented concept per `AGENT-PROMPT.md` Step 2's priority order) and written the opening `NIGHTLY-LOG.md` entry, commit and push the claim immediately — before generating any sprites or writing any HTML:
 
 ```bash
