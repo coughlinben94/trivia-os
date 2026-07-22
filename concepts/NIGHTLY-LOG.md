@@ -311,4 +311,4 @@ result: built space-road-trip-v3.html (iteration 3, supersedes v2 — v2.html
   itself is UNCHANGED, restored from git after the edit was mistakenly first
   applied in place; caught before commit by re-reading PLAN.md's own
   "iterations never overwritten in place" rule mid-build)
-commit: (recorded below, same run)
+commit: pushed sha=702c43dd9869dea29e3f01b5881fa093562c1a49
