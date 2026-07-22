@@ -52,7 +52,7 @@ Revision notes (newest first, only if iteration > 1):
 ## Queue
 
 ### space-road-trip — Space Road Trip (four destinations)
-status: building
+status: audit-pending
 journeyType: cross-theme
 fromTheme: midnight-galaxy
 toTheme: autumn-harvest
