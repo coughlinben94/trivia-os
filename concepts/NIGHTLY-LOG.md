@@ -293,7 +293,22 @@ preflight: pass (required docs readable; sanitizer + postmessage self-tests 17/9
   `ensure-xdamage-stub.sh`'s header) — confirmed NOT a real blocker via a direct smoke
   test (launched Chromium with the stub's LD_LIBRARY_PATH, rendered a page, read its
   DOM) before proceeding, rather than trusting the installer's exit code either way.
-sprites: (pending — recorded when this run reaches that step)
-audit: (pending)
-result: (pending)
-commit: (pending)
+sprites: 0 calls — no new Recraft sprites needed; every new element (floating
+  island, debris rocks, drone, roof-mounted sign posts) is a hand-drawn canvas
+  primitive, same convention as the rest of this file
+audit: fixed (one real finding, one self-fix attempt per the one-attempt rule)
+  — first pass at the "debris rock" layer rendered as giant purple vase/pillar
+  shapes, not floating debris (caught by actually looking at rendered frames
+  via visual-audit.mjs + a new targeted concepts/tools/spot-check.mjs
+  companion script, not by re-reading the code); reworked into small irregular
+  jagged blobs, re-checked once, confirmed fixed. Drone bumped from W*0.028 to
+  W*0.045 in the same pass (was unreadable at original size). Single Fable
+  evidence-only pass confirmed all 8 claims, flagged two non-blocking items
+  (debris burst subtle at normal brightness; one spot-check frame mislabeled,
+  traced to the ship's off-frame start being by design, not a bug) — full
+  account in space-road-trip-v3.html's own notes block.
+result: built space-road-trip-v3.html (iteration 3, supersedes v2 — v2.html
+  itself is UNCHANGED, restored from git after the edit was mistakenly first
+  applied in place; caught before commit by re-reading PLAN.md's own
+  "iterations never overwritten in place" rule mid-build)
+commit: (recorded below, same run)
