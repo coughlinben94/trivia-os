@@ -52,14 +52,14 @@ Revision notes (newest first, only if iteration > 1):
 ## Queue
 
 ### space-road-trip — Space Road Trip (four destinations)
-status: built
+status: building
 journeyType: cross-theme
 fromTheme: midnight-galaxy
 toTheme: autumn-harvest
 source: ben-grilled
-iteration: 4
-file: space-road-trip-v4.html
-supersedes: space-road-trip-v3.html
+iteration: 5
+file: space-road-trip-v5.html
+supersedes: space-road-trip-v4.html
 
 Brief (beginning/middle/end):
 A four-stop tour built and heavily revised across a separate live session (not this
@@ -79,6 +79,23 @@ drove the galaxy hyperspace-snap and gas-station touchdown-thump additions. Self
 checklist in the file already passes.
 
 Revision notes (newest first):
+- 2026-07-22 [Ben, after watching v4]: "honestly, idk what that was. it was just
+  the diner scene from version 3 without the spaceship. we are going to be inside
+  the spaceship, like we're driving it, pull up to the diner. park. the drone is
+  then going to bring us dinner. then we fly off." v4's flat scale-only camera
+  push didn't read as PILOTING anything — just a slow zoom on an unchanged scene,
+  missing the felt sense of motion/control. Resolved via two follow-up questions,
+  Ben's answers locked as the spec for this pass:
+  - Arrival: push-in **plus a bank/tilt** — the camera should rotate slightly as
+    it approaches (like actually steering toward the diner), leveling out as it
+    settles/parks. Not rotation-free scale alone (that was v4's miss), and not a
+    continuous idle sway through the whole hold either (that option wasn't picked).
+  - Departure — NEW beat, not in the original brief: "then we fly off." A quick
+    punch-out (fast camera kick, e.g. a rapid zoom-out) in the last ~500ms of the
+    diner hold, right before the crossfade to harvest — not a full mirrored
+    pull-back replay of the arrival, just a snappy final kick.
+  - Everything else about v4 stands: no ship sprite, drone beat unchanged, scope
+    still diner-stop only.
 - 2026-07-22 [Claude, iteration 4 built + audited — status now `built`, awaiting
   Ben's review]: implemented the camera-POV fix below in `space-road-trip-v4.html`.
   `drawGasShip`/`drawGasShipBody` deleted outright; the diner stop's arrival is now

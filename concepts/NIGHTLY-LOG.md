@@ -347,3 +347,19 @@ audit: fixed (one real finding, one self-fix attempt per the one-attempt rule)
 result: built space-road-trip-v4.html (iteration 4, supersedes v3 — v3.html
   itself untouched, per the iterations-never-overwritten-in-place rule)
 commit: pushed sha=1d38e86fb67b010689308c7da998c615fb93723e
+
+## 2026-07-22 20:43 UTC — run 20260722T204309Z-6-27627
+trigger: manual (`/run`, attended)
+claimed: space-road-trip (needs-revision, iteration 5 — v4's camera-POV rework
+  read as "the diner scene minus the ship," not as actually piloting a ship;
+  Ben: "we are going to be inside the spaceship, like we're driving it, pull up
+  to the diner. park... then we fly off.") Locked spec (via 2 follow-up
+  questions): arrival gets a bank/tilt added to the existing push-in (not
+  rotation-free scale alone, not continuous idle sway); a NEW quick punch-out
+  departure beat in the last ~500ms of the hold, before the crossfade to harvest.
+preflight: lock acquired clean; manifest still valid from prior run; no stale
+  building/audit-pending entries.
+sprites: 0 calls expected — camera transform + timing only, no new sprites
+audit: (pending)
+result: (pending)
+commit: (pending)
