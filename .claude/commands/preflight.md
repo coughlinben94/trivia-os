@@ -40,6 +40,14 @@ cd ../..
 ```
 Use the `if ! node ...; then ... exit 1; fi` form — never `node ... || echo ...` (that masks a real failure behind `echo`'s own success).
 
+4a2. **Visual-audit browser present (in `$WORKDIR`):** `/audit`'s mandatory visual pass (Step 5) needs headless Chromium downloaded — this is separate from `npm ci`, which only installs the `playwright` package, not the browser binary itself.
+```bash
+cd concepts/tools
+npx playwright install chromium 2>&1 | tail -5
+cd ../..
+```
+This is a real network dependency (~110MB on a cold cache, cached under `$HOME/.cache/ms-playwright` across runs within the same sandbox lifetime). If it fails here (network egress blocked to the download host, disk space, etc.), do not silently skip the visual pass later — treat it the same as any other preflight failure: stop, log the exact error, don't improvise a workaround. A build with only the code-invariant checklist and no visual pass is a known-worse audit, not an acceptable silent downgrade — see `QUEUE.md`'s space-road-trip 2026-07-22 entry for why that gap is real, not theoretical.
+
 4b. **Existing manifest.js valid before you touch it:**
 ```bash
 if ! node concepts/tools/validate-manifest.mjs; then

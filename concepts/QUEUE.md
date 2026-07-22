@@ -49,7 +49,7 @@ Revision notes (newest first, only if iteration > 1):
 ## Queue
 
 ### space-road-trip — Space Road Trip (four destinations)
-status: built
+status: needs-revision
 journeyType: cross-theme
 fromTheme: midnight-galaxy
 toTheme: autumn-harvest
@@ -75,6 +75,27 @@ drove the galaxy hyperspace-snap and gas-station touchdown-thump additions. Self
 checklist in the file already passes.
 
 Revision notes (newest first):
+- 2026-07-22: [Claude + Ben, first-ever real visual audit — see concepts/tools/visual-audit.mjs]
+  This file had only ever passed the code-invariant checklist (`/audit`'s static checks);
+  nobody had actually watched it render until today, because headless screenshot capture
+  was blocked in every sandbox that tried it (missing `libXdamage.so.1`, no root/apt —
+  see `ensure-xdamage-stub.sh` for the fix, a tiny stub lib now compiled on demand).
+  Ran `v2` through it end to end (real headless Chromium, timed screenshots across the
+  full ~40s, zero page/console errors). Finding: the autumn-harvest/supernova finale
+  (stop 4/4) never visually pays off. Sampled at 0.5s, 9s, 18s, 27s, 36s, 38.7s, 41s, and
+  41.2s into that stop's own runtime — every single frame shows the same static field of
+  dim, scattered orange ember dots on a near-black background. The brief promises "ember
+  field building to a converge-burst-settle nova" and the on-screen label literally says
+  "ARRIVING — SUPERNOVA," but no burst, no bright flash, no visible convergence ever
+  renders in that window. Either the burst keyframe/opacity math isn't actually firing,
+  or its peak brightness is too dim against near-black to read as a payoff at all (same
+  family of issue Step 5's "near-black banding" check is meant to catch, but that check
+  is code-invariant only and wouldn't catch a burst that's technically present but
+  visually inert). This is the finale of a four-stop tour — it's the last thing anyone
+  sees, and right now it's an anticlimax. Needs an actual bright burst state (screen-flash
+  or a genuinely luminous particle convergence, not just more dim dots) at its peak
+  moment, verified by re-running `visual-audit.mjs` and looking at the frame, not just by
+  reading the animation code.
 - 2026-07-20: [Claude, static audit] Missing `document.visibilitychange` handler —
   `tStart` only resets on replay, never when the tab is backgrounded and returns. If
   someone tabs away mid-animation, elapsed-time math will think far more time passed

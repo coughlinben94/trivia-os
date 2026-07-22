@@ -16,6 +16,12 @@ e2e/.auth/
 # Theme screenshots
 theme-screenshots/
 theme-screenshots-v2/
+
+# Storybook Agent visual-audit frames — regenerated every /audit run, never
+# deleted in place (connected-folder delete-permission wall), so these would
+# otherwise accumulate forever if committed.
+concepts/.audit-shots/
+concepts/tools/.cache/
 .claude/skills/
 
 .env.local
