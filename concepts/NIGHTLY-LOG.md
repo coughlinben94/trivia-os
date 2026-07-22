@@ -380,4 +380,4 @@ audit: fixed (one real finding, one self-fix attempt per the one-attempt rule)
   block and QUEUE.md's revision notes.
 result: built space-road-trip-v5.html (iteration 5, supersedes v4 — v4.html
   itself untouched, per the iterations-never-overwritten-in-place rule)
-commit: pushed sha=
+commit: pushed sha=1463c8331e877e76fa47f23e078e3a4faa8cfda6
