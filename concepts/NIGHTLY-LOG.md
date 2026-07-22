@@ -280,3 +280,20 @@ session; that would need checking separately if this pipeline is ever run from t
 instead. The `.claude/commands/*.md` files are Claude Code's slash-command format
 (pre-existing convention in this repo) but were followed here as read instructions, not
 invoked as real slash commands — functionally equivalent, mechanically different.
+
+## 2026-07-22 19:35 UTC — run 20260722T193506Z-6-21209
+trigger: manual (`/run`, attended — Ben present, working directly in the connected
+  folder per `.claude/commands/run.md`, not the scratch-checkout path)
+claimed: space-road-trip (needs-revision, iteration 3 — diner-stop redesign only,
+  locked via a live grill session earlier tonight, see QUEUE.md revision notes)
+preflight: pass (required docs readable; sanitizer + postmessage self-tests 17/9
+  passed; manifest valid; no stale building/audit-pending entries — greenhouse-gnome-
+  rescue is `blocked`, unrelated). Note: `npx playwright install chromium`'s own
+  dependency validator still fails on the known missing `libXdamage.so.1` (see
+  `ensure-xdamage-stub.sh`'s header) — confirmed NOT a real blocker via a direct smoke
+  test (launched Chromium with the stub's LD_LIBRARY_PATH, rendered a page, read its
+  DOM) before proceeding, rather than trusting the installer's exit code either way.
+sprites: (pending — recorded when this run reaches that step)
+audit: (pending)
+result: (pending)
+commit: (pending)
