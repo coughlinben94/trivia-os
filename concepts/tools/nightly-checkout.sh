@@ -13,8 +13,20 @@
 # connected folder's .git at all — every git operation (lock, commit, push)
 # happens in this scratch checkout instead, where deletes are unrestricted.
 #
-# The connected folder is read exactly once by this script (to get the
-# remote URL and the existing credentials-store file) and never written to.
+# The connected folder is read exactly twice by this script (the remote URL,
+# and the existing credentials-store file's CONTENT, copied — not referenced
+# — into scratch) and never written to. Earlier version of this script
+# pointed the scratch checkout's credential.helper directly at the connected
+# folder's own credentials-store file — which is wrong: git's store-based
+# credential helper rewrites that file via a lock-then-rename on every single
+# auth (fetch/push/ls-remote), so it was silently writing back into the
+# connected folder's .git on every git operation despite this comment's
+# original claim otherwise. That rename is exactly the class of operation
+# the delete-permission wall blocks, and matches stale .lock/.stale fossils
+# found sitting in the connected repo's .git from a prior run. Copying the
+# credentials into scratch once, up front, closes this for good — every
+# later auth's lock+rename churn happens in scratch, never in the connected
+# folder.
 # Ben's own local copy / `/morning-review` picks up new commits via a normal
 # `git pull`, run interactively, where Cowork's delete-permission prompt CAN
 # actually be answered by a live human — that's the one context where this
@@ -36,12 +48,22 @@ set -euo pipefail
 
 CONNECTED_REPO="${1:?usage: nightly-checkout.sh <path-to-connected-repo>}"
 SCRATCH="${TMPDIR:-/tmp}/trivia-os-nightly-checkout"
-CRED_FILE="$CONNECTED_REPO/.git/credentials-store"
+CONNECTED_CRED_FILE="$CONNECTED_REPO/.git/credentials-store"
+# Lives in scratch, NOT in the connected folder — see the header comment.
+# Overwritten (not appended) fresh each run so a rotated PAT is always picked
+# up; this file itself never needs deleting, only ever replaced wholesale,
+# and it lives entirely outside the connected folder either way.
+SCRATCH_CRED_FILE="${TMPDIR:-/tmp}/trivia-os-nightly-credentials"
 
-if [ ! -f "$CRED_FILE" ]; then
-  echo "No credentials-store found at $CRED_FILE — cannot push without it. Stopping." >&2
+if [ ! -f "$CONNECTED_CRED_FILE" ]; then
+  echo "No credentials-store found at $CONNECTED_CRED_FILE — cannot push without it. Stopping." >&2
   exit 1
 fi
+
+# A plain read + a write to a scratch-only path — never a write back into
+# the connected folder.
+cat "$CONNECTED_CRED_FILE" > "$SCRATCH_CRED_FILE"
+chmod 600 "$SCRATCH_CRED_FILE"
 
 REMOTE_URL="$(git -C "$CONNECTED_REPO" remote get-url origin)"
 
@@ -65,16 +87,17 @@ else
   echo "Fresh scratch checkout cloned to $SCRATCH." >&2
 fi
 
-git -C "$SCRATCH" config credential.helper "store --file=$CRED_FILE"
+git -C "$SCRATCH" config credential.helper "store --file=$SCRATCH_CRED_FILE"
 git -C "$SCRATCH" config user.email "coughlinben94@gmail.com"
 git -C "$SCRATCH" config user.name "Trivia OS Nightly Agent"
 
 # Sanity check: confirm push auth actually works before handing back control,
 # rather than discovering an auth problem 6 steps later at the Step 7 push.
 # `git ls-remote` with the configured credential helper is a real auth probe
-# and touches nothing.
+# and touches nothing — and now, whatever internal lock+rename it does on
+# $SCRATCH_CRED_FILE happens purely in scratch space.
 if ! git -C "$SCRATCH" ls-remote origin main > /dev/null 2>&1; then
-  echo "Could not authenticate to origin from the scratch checkout — check $CRED_FILE is still valid." >&2
+  echo "Could not authenticate to origin from the scratch checkout — check $CONNECTED_CRED_FILE is still valid." >&2
   exit 1
 fi
 
