@@ -321,6 +321,29 @@ claimed: space-road-trip (needs-revision, iteration 4 — camera-POV rework of t
 preflight: pass (docs readable, manifest valid, no stale building/audit-pending
   entries, lock acquired clean)
 sprites: 0 calls — no new Recraft sprites, hand-drawn canvas primitives as before
-audit: (pending)
-result: (pending)
-commit: (pending)
+build: drawGasShip/drawGasShipBody deleted outright — no external ship sprite
+  drawn anywhere. Arrival is now updateGasArrival() driving a camera push/settle
+  (scale+translate on drawGasWorld's own content — planet, mesas, island,
+  building, sign, drone — background fill and deep starfield stay at identity),
+  same technique class as galaxy's zoom-punch, per Ben's own "in the middle"
+  resolution. Touchdown camera jolt reuses the pre-existing shipThump mechanic
+  unchanged. Takeout-drone beat kept per Ben's explicit call, retargeted to
+  deliver low-center-of-frame ("to us") instead of beside a parked ship.
+audit: fixed (one real finding, one self-fix attempt per the one-attempt rule)
+  — visual pass (visual-audit.mjs 34s scoped + spot-check.mjs retargeted to
+  this file, same 8 sub-beat timestamps as v3) found the touchdown flare's
+  gradient center left at the camera's own focus point (near roof height) —
+  a copy-paste leftover — instead of the ground-contact point the debris
+  burst uses. Re-anchored to the same point, re-checked once, confirmed by eye
+  (glow + debris co-located at ground level). Single Fable evidence-only pass
+  confirmed: no ship/hull anywhere, no cockpit-UI chrome, arrival reads as
+  camera motion (measured the DINER sign's own bbox scaling ~0.94→1.0), drone
+  delivery reads correctly. Fable could NOT confirm via pixel-diff that the
+  flare fix is visible at the exact captured touchdown millisecond — flagged,
+  not re-fixed (one-attempt rule already used on this finding), plausibly a
+  fast-decay/capture-timing artifact, same class as v3's own debris-subtlety
+  note. Full account in space-road-trip-v4.html's own notes block and
+  QUEUE.md's revision notes.
+result: built space-road-trip-v4.html (iteration 4, supersedes v3 — v3.html
+  itself untouched, per the iterations-never-overwritten-in-place rule)
+commit: pushed sha=

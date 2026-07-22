@@ -52,7 +52,7 @@ Revision notes (newest first, only if iteration > 1):
 ## Queue
 
 ### space-road-trip — Space Road Trip (four destinations)
-status: audit-pending
+status: built
 journeyType: cross-theme
 fromTheme: midnight-galaxy
 toTheme: autumn-harvest
@@ -79,6 +79,22 @@ drove the galaxy hyperspace-snap and gas-station touchdown-thump additions. Self
 checklist in the file already passes.
 
 Revision notes (newest first):
+- 2026-07-22 [Claude, iteration 4 built + audited — status now `built`, awaiting
+  Ben's review]: implemented the camera-POV fix below in `space-road-trip-v4.html`.
+  `drawGasShip`/`drawGasShipBody` deleted outright; the diner stop's arrival is now
+  a camera push (scale/translate on `drawGasWorld`'s own content, same technique
+  class as galaxy's zoom-punch) with no ship sprite ever drawn. Takeout-drone beat
+  kept, retargeted to deliver low-center-of-frame ("to us"). Step 5 visual pass
+  (generic + targeted spot-check) found one real bug — the touchdown flare was
+  centered near roof height instead of the ground-contact point the debris burst
+  uses — fixed within the one-attempt rule and re-checked once. Fable's evidence
+  pass confirmed no ship/no cockpit chrome/camera-motion arrival/correct drone
+  delivery, but could not confirm via pixel-diff that the flare fix is visible at
+  the exact captured touchdown millisecond (plausibly just fast decay + capture
+  timing, same class as this file's earlier debris-subtlety note, not re-litigated
+  further per the one-attempt rule). Full account in the file's own notes block.
+  Ben's own job: does the camera push read right, and is the touchdown flare
+  visible enough at real venue-TV brightness.
 - 2026-07-22 [Ben, after watching v3]: "remember, we are in the spaceship. i dont
   want to see the exterior when we go to the diner." Root cause: this file's own
   established scaffold (`meteor-shower-liftoff-pov-teampicker.html`'s notes — "Ben's

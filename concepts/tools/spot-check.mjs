@@ -15,14 +15,18 @@ const exportLine = execSync(`"${HERE}/ensure-xdamage-stub.sh"`, { encoding: 'utf
 const m = exportLine.match(/LD_LIBRARY_PATH="([^$"]+)/);
 if (m) process.env.LD_LIBRARY_PATH = `${m[1]}${process.env.LD_LIBRARY_PATH?':'+process.env.LD_LIBRARY_PATH:''}`;
 
-const FILE = resolve(HERE, '..', 'space-road-trip-v3.html');
+const FILE = resolve(HERE, '..', 'space-road-trip-v4.html');
 const OUT = resolve(HERE, '..', '.audit-shots', `spot-check-${Date.now()}`);
 mkdirSync(OUT, { recursive: true });
 
+// Retargeted 2026-07-22 for the v4 camera-POV rework — same absolute
+// timestamps as the v3 run (gasHold's own start time and every derived
+// sub-beat constant are unchanged by this pass), only the labels updated to
+// reflect what's actually being checked now (camera push-in, not ship flight).
 const targets = [
-  { t: 21300, label: 'ship-mid-flight' },
-  { t: 22600, label: 'ship-late-flight' },
-  { t: 24100, label: 'touchdown-debris' },
+  { t: 21300, label: 'camera-mid-push' },
+  { t: 22600, label: 'camera-near-settle' },
+  { t: 24100, label: 'touchdown-jolt-flare' },
   { t: 24500, label: 'debris-settling' },
   { t: 26000, label: 'drone-launched' },
   { t: 26900, label: 'drone-hover-delivery' },
