@@ -49,7 +49,7 @@ Revision notes (newest first, only if iteration > 1):
 ## Queue
 
 ### space-road-trip — Space Road Trip (four destinations)
-status: needs-revision
+status: built
 journeyType: cross-theme
 fromTheme: midnight-galaxy
 toTheme: autumn-harvest
@@ -75,27 +75,27 @@ drove the galaxy hyperspace-snap and gas-station touchdown-thump additions. Self
 checklist in the file already passes.
 
 Revision notes (newest first):
-- 2026-07-22: [Claude + Ben, first-ever real visual audit — see concepts/tools/visual-audit.mjs]
-  This file had only ever passed the code-invariant checklist (`/audit`'s static checks);
-  nobody had actually watched it render until today, because headless screenshot capture
-  was blocked in every sandbox that tried it (missing `libXdamage.so.1`, no root/apt —
-  see `ensure-xdamage-stub.sh` for the fix, a tiny stub lib now compiled on demand).
-  Ran `v2` through it end to end (real headless Chromium, timed screenshots across the
-  full ~40s, zero page/console errors). Finding: the autumn-harvest/supernova finale
-  (stop 4/4) never visually pays off. Sampled at 0.5s, 9s, 18s, 27s, 36s, 38.7s, 41s, and
-  41.2s into that stop's own runtime — every single frame shows the same static field of
-  dim, scattered orange ember dots on a near-black background. The brief promises "ember
-  field building to a converge-burst-settle nova" and the on-screen label literally says
-  "ARRIVING — SUPERNOVA," but no burst, no bright flash, no visible convergence ever
-  renders in that window. Either the burst keyframe/opacity math isn't actually firing,
-  or its peak brightness is too dim against near-black to read as a payoff at all (same
-  family of issue Step 5's "near-black banding" check is meant to catch, but that check
-  is code-invariant only and wouldn't catch a burst that's technically present but
-  visually inert). This is the finale of a four-stop tour — it's the last thing anyone
-  sees, and right now it's an anticlimax. Needs an actual bright burst state (screen-flash
-  or a genuinely luminous particle convergence, not just more dim dots) at its peak
-  moment, verified by re-running `visual-audit.mjs` and looking at the frame, not just by
-  reading the animation code.
+- 2026-07-22 [CORRECTION]: [Claude + Ben] The entry directly below this one ("finale
+  never visually pays off") was WRONG — retracted, not deleted, so the mistake and why
+  it happened stays on the record. Root cause: `visual-audit.mjs`'s first version
+  scheduled screenshot N+1 by adding to a running "requested time so far" tally that
+  never accounted for the real wall-clock cost of writing screenshot N to disk
+  (~100-300ms each). Over 6 screenshots that drift compounded to 1s+ — enough to miss
+  the supernova burst's entire ~1.1s window while still reporting a plausible-looking
+  nominal timestamp ("38.7s") that was actually already past it. Caught by building a
+  ground-truth probe that polls the file's own `#phaseLabel` DOM text instead of
+  trusting elapsed-time math, confirmed the real burst window is 38.2s-39.3s, and
+  captured it directly: the burst DOES fire, IS bright (a clear warm-white/gold radial
+  flash, easily legible against the ember field), and settles correctly afterward.
+  Nothing wrong with the animation. `visual-audit.mjs` is now fixed the same way (every
+  wait computed from real `Date.now()` elapsed, never a running tally; every screenshot
+  filename/log line includes real elapsed ms + the page's own phase label so a future
+  drift bug is self-evident instead of silently producing a false report). Re-verified
+  after the fix: the corrected script caught `phase: harNova` unassisted on a plain
+  `--interval=700` run, no manual probing needed. Lesson for future visual-audit passes,
+  general not file-specific: for any beat under ~2s, don't trust a single nominal-
+  timestamp sample — use a narrow `--interval` relative to that beat's own duration, and
+  cross-check the printed `real=`/label fields actually landed where you expected.
 - 2026-07-20: [Claude, static audit] Missing `document.visibilitychange` handler —
   `tStart` only resets on replay, never when the tab is backgrounded and returns. If
   someone tabs away mid-animation, elapsed-time math will think far more time passed

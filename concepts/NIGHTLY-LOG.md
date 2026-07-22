@@ -118,3 +118,60 @@ real time, not an unattended one, so the crash-recovery purpose of an early sepa
 push didn't apply the same way tonight. A future unattended run should still follow Step 2
 literally (claim commit pushed before any building work starts), since that ordering is
 what makes a mid-run crash recoverable by the next run's own preflight.
+
+## 2026-07-22 15:20 UTC — run (interactive, no run-lock — infra/tooling session, not a build claim)
+trigger: manual
+claimed: none (this session built pipeline tooling itself, not a queue entry)
+preflight: n/a — worked directly in the connected folder, interactively, with Ben present
+  (the one context nightly-checkout.sh's own header comment identifies as safe for that:
+  a live human can answer a delete-permission prompt here, unlike an unattended run)
+sprites: n/a
+audit: n/a (see below — this run's real subject WAS the audit tooling)
+result: built concepts/tools/visual-audit.mjs, xdamage-stub.c, ensure-xdamage-stub.sh;
+  corrected a false finding this same run produced and pushed against its own advice
+commit: 2c92a14 (visual-audit tool), then a follow-up correction commit (see next)
+
+Ben asked for an overall health pass on the pipeline (repo/git state, lock/queue
+integrity, self-tests, script syntax, scheduled-task config) — all clean, written up in
+chat. Ben then asked to actually watch space-road-trip and marked it needs-revision:
+"it hasn't been ran through the code thing we made" — the real ask, confirmed over
+several follow-ups, was that this pipeline is supposed to visually self-review its own
+output (screenshots + critique), not just pass a static checklist. That capability never
+existed — a prior attempt (see this file's 2026-07-21 entries) hit headless Chromium's
+missing `libXdamage.so.1` with no root/apt in that sandbox and was parked.
+
+Root-caused and fixed for real this run: confirmed via `nm -D --undefined-only` that
+exactly 4 symbols are needed from libXdamage (XDamageQueryExtension/Create/Destroy/
+Subtract), wrote a stub implementing them (QueryExtension returns False, same signal a
+real X server without the extension gives; the other 3 are safe no-ops), compiled
+on-demand into `concepts/tools/.cache/` (never committed as a binary). Confirmed headless
+screenshot capture works end to end. Built `visual-audit.mjs` around it, wired into
+`/audit` as a mandatory step (not conditional on chrome-devtools MCP), added the browser
+install to `/preflight`.
+
+Ran it against `space-road-trip-v2.html` and found what looked like a real bug: the
+autumn-harvest/supernova finale never visually paying off across 8 sampled frames.
+Wrote this up as a concrete revision note, flipped status to needs-revision, committed
+and pushed (`2c92a14`) — **without re-verifying against ground truth first**, a real
+process failure given this same session had just finished lecturing the pipeline's own
+docs about not trusting code-reading over actually looking. Ben kept pushing for
+specifics on "how does it improve itself," which is what prompted re-reading the actual
+burst-timing code (`harNova` phase math) before treating the finding as final — the
+harNova window turned out to be only ~1.1s wide (38.2s-39.3s of ~40s total), and the
+screenshot script's own cumulative wait-scheduling drift (never accounting for real
+screenshot-write time) meant every sample had already drifted past it by the time it
+fired. Built a ground-truth probe (poll the page's own `#phaseLabel` DOM text instead of
+trusting elapsed-time math) to confirm precisely, then captured the true window directly:
+the burst genuinely fires, is bright, and reads clearly. Fixed `visual-audit.mjs` itself
+to compute every wait from real `Date.now()` elapsed (never a running tally) and to print
+real-elapsed-ms + the page's own phase label alongside every screenshot, so this specific
+failure mode — a false report that looks plausible — can't happen silently again.
+Corrected `QUEUE.md`'s entry in place (retracted, not deleted, with the full root cause)
+and flipped space-road-trip back to `built` (awaiting Ben's normal review; nothing left
+unresolved from tonight's pass).
+
+Lesson for `LESSONS.md` (not yet folded in — this file is capped and this is the first
+real candidate): a visual claim from a NEW/first-run tool is not verified just because
+the tool ran without errors. Cross-check its own timing/targeting logic — especially for
+any beat under ~2s — before writing a finding into `QUEUE.md`, the same rigor already
+required of the code-invariant checklist.

@@ -11,4 +11,12 @@ learns what to repeat, not just what to avoid.)_
 
 ## Active Directives
 
-_(empty — this is a new pipeline. The first entries land after the first morning review.)_
+- 2026-07-22: When `visual-audit.mjs` output disagrees with what the animation code says
+  should happen — especially for any beat under ~2s (a burst, flash, impact) — don't
+  write the disagreement into `QUEUE.md` as a finding yet. Check the printed `real=`
+  elapsed and phase-label fields for EVERY relevant screenshot first: confirm a sample
+  actually landed inside the beat's real time window before concluding it's broken. A
+  first-run visual-audit pass on space-road-trip reported a "dead" supernova finale that
+  turned out to be a false positive — every sample had drifted past the real 1.1s burst
+  window without the tool (at the time) surfacing that fact. Ground truth from the page's
+  own DOM state beats a nominal timestamp every time.
