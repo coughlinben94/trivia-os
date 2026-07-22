@@ -52,12 +52,12 @@ Revision notes (newest first, only if iteration > 1):
 ## Queue
 
 ### space-road-trip — Space Road Trip (four destinations)
-status: built
+status: needs-revision
 journeyType: cross-theme
 fromTheme: midnight-galaxy
 toTheme: autumn-harvest
 source: ben-grilled
-iteration: 2
+iteration: 3
 supersedes: space-road-trip-full-journey.html
 
 Brief (beginning/middle/end):
@@ -78,6 +78,44 @@ drove the galaxy hyperspace-snap and gas-station touchdown-thump additions. Self
 checklist in the file already passes.
 
 Revision notes (newest first):
+- 2026-07-22 [Ben + Claude, live grilling session — using the `grilling` skill for
+  the first time on this pipeline]: the gas-station/diner stop is a full redesign,
+  not a tweak — Ben's words: "the space diner sucks... it doesn't pull anything into
+  it that I want." Root direction, clarified through the grill: **it's a distant
+  planet that happens to have a diner on it, not a "gas station" scene** — rename the
+  concept accordingly everywhere except existing internal code identifiers
+  (`GAS_HOLD`/`drawGasWorld`/etc. stay as legacy names, not worth a churn-risk rename
+  mid-pipeline; the CONCEPT is diner, full stop). Concrete resolved direction,
+  beginning to end:
+  - **Composition:** a floating rock/island in space, the diner built on it —
+    inspired by a Minecraft build Ben shared (small structure perched on a floating
+    island, planet looming behind). Keep leaning into the dominant background planet
+    already in the scene, don't compete with it.
+  - **Ground effect:** debris kicked up on touchdown, not dust — this is space, not a
+    dusty desert moon.
+  - **Palette:** stays purple-dominant (extend the existing `ARC` palette), teal and
+    pink as accent colors only — not a repaint, an accent shift.
+  - **Camera/blocking:** the ship does NOT fly into/at the diner. It approaches,
+    slows down on the way in (current flight-in reads too fast/abrupt), and parks
+    BESIDE the diner. After it lands, the camera holds a static wide shot — we're
+    looking back up at the ambient theme/planet backdrop with the ship parked next to
+    the diner in frame, not pushing in close.
+  - **Idle beat:** after landing, a small idle behavior (engine-glow idling) before the
+    payoff beat — don't cut straight from thump to done.
+  - **Payoff beat:** a small drone delivers a takeout order to the ship. Drone is
+    simple and on-palette (no fussy detail), mounted/docked on the diner's roof
+    (roof-mounted launch point, same roof that carries the sign — see below).
+  - **Signage:** "DINER" sign is roof-mounted with visible support posts holding it up
+    off the roofline — not flush-painted or floating.
+  - **Interior:** minimal — glimpses of warm interior light through windows only, not
+    a detailed interior scene. Keep it a silhouette/glow read, not content to render.
+  - **Duration:** extend this stop toward ~13s (up from the current ~10,000ms budget)
+    to fit the slowed flight-in + idle beat + drone delivery without feeling rushed —
+    still within the pipeline's 8-14s per-journey range.
+  This is a locked creative direction from a full grill session (not a vague vibe
+  note) — the next build pass should implement this redesign of the diner stop
+  specifically; the other three stops (galaxy, meteor shower, supernova) are NOT part
+  of this revision and should not be touched.
 - 2026-07-22 [Fable second-opinion, first real use of the new /audit step]: dispatched
   the one-Fable-pass against this file's evidence bundle (per the one-attempt-rule /
   second-opinion design). Fable read the screenshots itself and correctly flagged that
