@@ -233,3 +233,50 @@ happened yet this session — everything above was built and unit-verified (the 
 audit rewrite, specifically) but the full chained command hasn't had a live fire. First
 real `/run` is the actual proof this all fits together, same caution as every other
 "looks right on paper" claim tonight.
+
+## 2026-07-22 (same session, continued) — first real Fable second-opinion pass, and it worked
+
+Ben: "go" — asked to actually exercise the new machinery against space-road-trip.
+space-road-trip was already `built` (no open revision notes, nothing to claim/fix), so
+the genuinely untested piece was the Fable second-opinion pass itself — ran that for
+real rather than inventing new content just to exercise `/run`'s claim step.
+
+Generated a fresh evidence bundle (`space-road-trip-v2-official-*`) and dispatched the
+one Fable pass per `audit.md`'s spec: brief, builder's claims, evidence bundle path,
+explicitly scoped to check claims against evidence only. **It caught a real bug.** The
+builder's claim (mine) was "the burst is verified real, not just more dim dots." Fable
+read the actual screenshots and pointed out the one `harNova`-labeled frame available
+was captured ~103ms into the ~1100ms burst window — pre-burst convergence, not the
+flash — and said it would not sign off on that specific claim yet. Checked it directly:
+Fable was right. The sampler's phase-driven logic (built and verified earlier this same
+session) had a real gap — it guaranteed a frame at a phase's first moment but nothing
+guaranteed coverage of that phase's *peak*, which matters exactly when the interesting
+part of a beat isn't its opening frame (a burst, a flash, an impact).
+
+This is the one-Fable-pass design working exactly as intended: not a redundant second
+audit reaching the same conclusion, but an independent check that caught something the
+builder's own process missed. Worth stating plainly since it's the first real evidence
+either way: tonight's earlier argument against a 2-3 agent chain was that redundant
+reviewers using the same method catch the same blind spot — this result doesn't
+contradict that, it confirms the opposite case: ONE reviewer with a genuinely different
+angle (checking evidence rather than producing it) found something real, cheaply, in a
+single pass.
+
+Fixed `visual-audit.mjs`: added a dense-sampling window (250ms gaps) for the first
+1800ms after any phase change, before falling back to the throttled hold-gap cadence —
+guarantees multiple samples across any short beat (this pipeline's shortest, HAR_NOVA,
+is 1100ms, safely inside the 1800ms window) without exploding screenshot count on long
+ambient holds. Re-verified: fresh bundle (`fable-fix-verify-*`) now captures 3 frames
+inside the burst window; the peak frame (t=38800, real=38874ms) shows a clear bright
+warm-white/gold flash — confirmed by direct inspection, not just by the tool's own
+report. `QUEUE.md`'s space-road-trip entry updated with this account; no further
+revision needed on the animation itself, the gap was in the audit tool's coverage, not
+the built file.
+
+Also answered, for the record: this entire session ran in Cowork, not Claude Code.
+Cowork-specific tools used tonight — Recraft MCP, `allow_cowork_file_delete`, the
+Agent tool's `model: "fable"` option — are not confirmed to exist in a Claude Code
+session; that would need checking separately if this pipeline is ever run from there
+instead. The `.claude/commands/*.md` files are Claude Code's slash-command format
+(pre-existing convention in this repo) but were followed here as read instructions, not
+invoked as real slash commands — functionally equivalent, mechanically different.

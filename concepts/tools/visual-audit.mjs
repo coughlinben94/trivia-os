@@ -126,9 +126,24 @@ try {
     } catch { return ''; }
   };
 
+  // How long after a phase change to keep sampling densely (denseGap, not
+  // minHoldGap) before falling back to the throttled cadence. Must exceed
+  // this pipeline's longest observed SHORT beat (HAR_NOVA at 1100ms) with
+  // margin — set from a real caught bug, not a guess: a first version of
+  // this script sampled once at phase-onset and then not again until the
+  // NEXT phase change, so a beat like a burst/flash that peaks partway
+  // through a short phase (not at its very first frame) was never actually
+  // captured — a live Fable second-opinion pass caught this by checking a
+  // "burst" claim against the one available frame and correctly noting it
+  // showed pre-burst convergence, not the burst itself. See NIGHTLY-LOG.md's
+  // 2026-07-22 entry for the full account.
+  const denseWindowMs = 1800;
+  const denseGapMs = 250;
+
   const shots = [];
   let lastLabel = null;
   let lastShotAt = -Infinity;
+  let phaseChangedAt = 0;
 
   const takeShot = async (t, label, reason, realMs) => {
     const labelSlug = (label || 'nolabel').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'nolabel';
@@ -149,10 +164,14 @@ try {
     const isFirst = t === 0;
     const isLast = t + step > duration;
     const phaseChanged = label !== lastLabel;
-    const holdGapElapsed = (t - lastShotAt) >= minHoldGap;
-    if (isFirst || isLast || phaseChanged || holdGapElapsed) {
+    if (phaseChanged) phaseChangedAt = t;
+    const withinDenseWindow = (t - phaseChangedAt) < denseWindowMs;
+    const gapNeeded = withinDenseWindow ? denseGapMs : minHoldGap;
+    const gapElapsed = (t - lastShotAt) >= gapNeeded;
+    if (isFirst || isLast || phaseChanged || gapElapsed) {
       const realAtCapture = Date.now() - navStart;
-      await takeShot(t, label, isFirst ? 'first' : isLast ? 'last' : phaseChanged ? 'phase-change' : 'hold-gap', realAtCapture);
+      const reason = isFirst ? 'first' : isLast ? 'last' : phaseChanged ? 'phase-change' : withinDenseWindow ? 'dense-sample' : 'hold-gap';
+      await takeShot(t, label, reason, realAtCapture);
     }
     lastLabel = label;
   }

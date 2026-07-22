@@ -78,6 +78,22 @@ drove the galaxy hyperspace-snap and gas-station touchdown-thump additions. Self
 checklist in the file already passes.
 
 Revision notes (newest first):
+- 2026-07-22 [Fable second-opinion, first real use of the new /audit step]: dispatched
+  the one-Fable-pass against this file's evidence bundle (per the one-attempt-rule /
+  second-opinion design). Fable read the screenshots itself and correctly flagged that
+  the single `harNova`-labeled frame (captured ~103ms into the ~1100ms burst window, at
+  the moment of phase-onset) showed pre-burst convergence, not the actual bright flash —
+  a real gap: the sampler only guaranteed one frame at a phase's *first* moment, nothing
+  guaranteeing coverage of a short phase's *peak*. Verified by reading that exact frame:
+  Fable was right. Root-caused and fixed in `visual-audit.mjs` (added a dense-sampling
+  window after every phase change, not just a single onset shot — see the script's own
+  comment for detail) and re-verified: a fresh bundle now captures 3 frames inside the
+  burst window, including one squarely at its peak (clear bright warm-white/gold flash,
+  confirmed by direct inspection). This is the second-opinion step doing exactly its job
+  — catching a real gap in the builder's own evidence, not redundant confirmation of
+  what the builder already knew. No further revision needed on this beat; the finding
+  was about the AUDIT TOOL's coverage, not the animation itself (which was already
+  correct, per the 2026-07-22 [CORRECTION] entry below).
 - 2026-07-22 [CORRECTION]: [Claude + Ben] The entry directly below this one ("finale
   never visually pays off") was WRONG — retracted, not deleted, so the mistake and why
   it happened stays on the record. Root cause: `visual-audit.mjs`'s first version
