@@ -312,3 +312,15 @@ result: built space-road-trip-v3.html (iteration 3, supersedes v2 — v2.html
   applied in place; caught before commit by re-reading PLAN.md's own
   "iterations never overwritten in place" rule mid-build)
 commit: pushed sha=702c43dd9869dea29e3f01b5881fa093562c1a49
+
+## 2026-07-22 20:12 UTC — run 20260722T201228Z-14-27477
+trigger: manual (`/run`, attended)
+claimed: space-road-trip (needs-revision, iteration 4 — camera-POV rework of the
+  diner stop only, per Ben's "we are in the spaceship, i dont want to see the
+  exterior when we go to the diner")
+preflight: pass (docs readable, manifest valid, no stale building/audit-pending
+  entries, lock acquired clean)
+sprites: 0 calls — no new Recraft sprites, hand-drawn canvas primitives as before
+audit: (pending)
+result: (pending)
+commit: (pending)

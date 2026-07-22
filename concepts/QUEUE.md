@@ -52,14 +52,14 @@ Revision notes (newest first, only if iteration > 1):
 ## Queue
 
 ### space-road-trip — Space Road Trip (four destinations)
-status: built
+status: building
 journeyType: cross-theme
 fromTheme: midnight-galaxy
 toTheme: autumn-harvest
 source: ben-grilled
-iteration: 3
-file: space-road-trip-v3.html
-supersedes: space-road-trip-v2.html
+iteration: 4
+file: space-road-trip-v4.html
+supersedes: space-road-trip-v3.html
 
 Brief (beginning/middle/end):
 A four-stop tour built and heavily revised across a separate live session (not this
@@ -79,6 +79,37 @@ drove the galaxy hyperspace-snap and gas-station touchdown-thump additions. Self
 checklist in the file already passes.
 
 Revision notes (newest first):
+- 2026-07-22 [Ben, after watching v3]: "remember, we are in the spaceship. i dont
+  want to see the exterior when we go to the diner." Root cause: this file's own
+  established scaffold (`meteor-shower-liftoff-pov-teampicker.html`'s notes — "Ben's
+  framing: this ground→glide→POV→transit→handoff shape is the general scaffold for
+  the whole journey concept going forward") means the audience is a PASSENGER inside
+  the ship, not an outside observer watching our own ship fly around — v3's diner stop
+  broke this by showing our ship as a third-person object flying in and landing.
+  Clarified through follow-up: galaxy's calm star-warp hold and meteor shower's
+  debris-rush-plus-camera-shake ALREADY sell "we're inside" correctly — via pure
+  content and camera motion, zero UI chrome, zero visible external ship — that's the
+  target model for the diner fix too ("the middle": no full cockpit-dashboard overlay
+  like the liftoff file's struts/dash/vignette, but also no visible hull). Concrete
+  fix for the diner stop specifically (galaxy/meteor/harvest are NOT part of this
+  revision — Ben confirmed those already read right):
+  - Remove `drawGasShip`/`drawGasShipBody`'s rendering entirely — no external ship
+    silhouette ever flies across the frame.
+  - The flight-in becomes a CAMERA move instead: the diner/island/planet grow larger
+    as the camera itself pushes in and settles, same technique class as galaxy's
+    `zoomPunch` and the meteor shake (canvas-level transform, not a drawn object).
+  - Touchdown becomes a camera jolt (reuse the existing `shipThump` jolt mechanic,
+    already wired to `canvas.style.transform`) — no engine-flare-on-a-hull, consider
+    a screen-edge glow flash instead if a flare beat is still wanted.
+  - Debris kicked up on landing stays — it's kicked up outside "our window," not by a
+    visible ship, so it still makes sense with no hull present.
+  - **Keep the takeout-drone beat — Ben's explicit call, "the drone is bringing us
+    dinner!"** — reframe it as delivering TO the passengers/camera position, not to a
+    parked external ship. Drone still launches from the diner's roof dock, approaches,
+    delivers (the pink blip), returns — just arrives at "us" instead of at a hull.
+  - Idle beat (currently an idling ship engine-glow) becomes an ambient hold once
+    landed — some equivalent low-key life (e.g. a soft edge glow pulse) is fine, an
+    idling ship engine specifically is not, since there's no ship to show it on.
 - 2026-07-22 [Ben + Claude, live grilling session — using the `grilling` skill for
   the first time on this pipeline]: the gas-station/diner stop is a full redesign,
   not a tweak — Ben's words: "the space diner sucks... it doesn't pull anything into
