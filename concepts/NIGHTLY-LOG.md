@@ -175,3 +175,61 @@ real candidate): a visual claim from a NEW/first-run tool is not verified just b
 the tool ran without errors. Cross-check its own timing/targeting logic — especially for
 any beat under ~2s — before writing a finding into `QUEUE.md`, the same rigor already
 required of the code-invariant checklist.
+
+## 2026-07-22 (same session, continued) — architecture decisions: no more cron, one Fable pass, one-attempt rule
+
+Ben, after the correction above: **the nightly cron is off, on purpose, indefinitely.**
+"there is no nightly loop. we're only doing this now when i want it to happen." The
+scheduled task stays disabled. This pipeline now runs only on demand, attended, via the
+new `.claude/commands/run.md` ("press go").
+
+Also discussed and decided: whether to add multi-agent cross-review (Ben's framing:
+"the pass is done after the first agent writes its brief audit, then it goes to the
+other two agents"). Got two independent opinions before building anything — my own, and
+a live Fable subagent's (dispatched via the `Agent` tool specifically for this question,
+not asked to touch code). Both converged: a 2-3 agent review chain is the wrong fix for
+tonight's actual failure (a broken measurement tool, not a reasoning blind spot — a
+second reviewer given the same broken screenshots would have "confirmed" the same false
+finding), and chaining more unattended agent calls multiplies exposure to the real
+observed failure mode (dropped connections), not the one being guarded against. Ben's
+final call: exactly ONE extra agent (Fable), triggered only after Sonnet's own audit
+comes back clean OR after exactly one failed self-fix attempt — never a redundant second
+full audit, never a third agent. Encoded as the "one-attempt rule" in `QUEUE.md`'s status
+machine and as the "Second opinion" section in `.claude/commands/audit.md`.
+
+Built, in order, this same session:
+1. Tried Playwright's `page.clock` mocked-time API to make `visual-audit.mjs` seek
+   instantly instead of waiting in real time (Fable's suggestion, sound in principle).
+   Verified empirically before trusting it: precise on its own (2-call test matched
+   ground truth exactly), but interleaving `page.screenshot()` calls with it introduced
+   NEW real drift, worse than the original bug (confirmed by a direct side-by-side
+   comparison, with and without screenshots in the loop). Reverted rather than ship a
+   fix that looks clever but isn't actually correct — see `visual-audit.mjs`'s own
+   header comment for the full account, kept there so this false start isn't repeated.
+2. Rebuilt `visual-audit.mjs` v3: real-time polling, self-correcting waits (real
+   `Date.now()` elapsed each iteration, never a tally — same fix as the first
+   correction, done right this time), adaptive phase-driven sampling (screenshots on
+   phase-change + throttled hold-gap samples, generic across any file using the
+   `#phaseLabel` convention, not hand-tuned per file), and a real evidence bundle
+   (`index.json` + `INDEX.md` per run, both `requested` and `real` elapsed ms recorded
+   per shot so a future drift bug would be self-evident, not silent). Re-verified
+   against space-road-trip-v2.html: caught `phase: harNova` unassisted on a plain
+   default-flags run, zero page/console errors, real-vs-requested drift under 100ms
+   throughout a ~40s run.
+3. Added `audit-pending` as a new `QUEUE.md` status (checkpoint between `building` and
+   `built`) so a dropped connection mid-audit resumes by re-running just the audit
+   against already-committed code, not by re-building from scratch. Updated
+   `/preflight`'s stale-entry recovery to treat `audit-pending` differently from stale
+   `building` (recoverable work, not a crash to discard).
+4. Wrote `.claude/commands/run.md` — attended-mode entry point. Skips the
+   scratch-checkout dance entirely (that architecture solely exists for unattended runs
+   with no human to grant delete prompts; attended mode has Ben right there), works
+   directly in the connected folder, chains preflight-lite → claim → build/fix → audit
+   (checkpoint, one-attempt rule, Fable pass) → ship → lock-release. `AGENT-PROMPT.md`'s
+   unattended path is left fully intact, untouched, for if the cron ever comes back.
+
+Not yet exercised end-to-end: no real `/run` invocation against a live queue entry has
+happened yet this session — everything above was built and unit-verified (the visual-
+audit rewrite, specifically) but the full chained command hasn't had a live fire. First
+real `/run` is the actual proof this all fits together, same caution as every other
+"looks right on paper" claim tonight.

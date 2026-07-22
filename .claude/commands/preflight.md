@@ -77,6 +77,8 @@ Known, judged-acceptable residual limitation: this lock is local disk state in `
 ./concepts/tools/git-baseline.sh save "$RUN_ID"
 ```
 
-7. **Stale `building` queue entries.** If `lock-acquire.sh`'s stderr mentioned taking over an expired lock, check `QUEUE.md` for any entry still `building` and mark it `blocked`: "crashed run, reclassified by lock-expiry takeover on `<date>`."
+7. **Stale `building` / `audit-pending` queue entries.** If `lock-acquire.sh`'s stderr mentioned taking over an expired lock, check `QUEUE.md` for any entry left in one of these two states and handle them differently — they are NOT the same situation:
+   - Still `building`: no code was ever committed for this iteration — the crash happened before Step 4 finished. Mark it `blocked`: "crashed run, reclassified by lock-expiry takeover on `<date>`."
+   - Still `audit-pending`: the code WAS built and committed (see `/audit`'s checkpoint) — only the audit itself didn't finish. This is real, recoverable work — do not discard it or mark it `blocked`. Instead, skip `/claim` and Step 4 entirely for this entry and go straight to `/audit` against the file already committed for it (find it via that entry's `iteration`/`supersedes` fields in `QUEUE.md` and `manifest.js`). Log in `NIGHTLY-LOG.md` that this run resumed an interrupted audit rather than starting fresh.
 
 If every check passes: proceed to `/claim`. The lock stays held through everything else this run — released only via `lock-release.sh` as the final action, on every exit path. Everything from here on — `/claim`, sprite gen, `/audit`, `/ship` — runs with CWD `$WORKDIR`.

@@ -4,17 +4,20 @@ Theme entries for the nightly Storybook Agent. Schema and lifecycle are defined 
 
 ## Status machine
 
-`raw` → `grilled` → `building` → `built` → { `approved` | `rejected` | `needs-revision` }
-(a `needs-revision` entry loops back through `building` → `built` for its next iteration)
+`raw` → `grilled` → `building` → `audit-pending` → `built` → { `approved` | `rejected` | `needs-revision` }
+(a `needs-revision` entry loops back through `building` → `audit-pending` → `built` for its next iteration)
 
 - **raw**: an idea exists but hasn't been through a grill session yet. The agent will never build a `raw` entry.
 - **grilled**: Ben + Claude have run a daytime grill session and locked a one-paragraph brief with explicit beginning/middle/end story beats (per `references/round-journeys.md`'s "It's a story, not just a mood transition"). Cross-theme handoff briefs name both themes explicitly.
 - **building**: an agent run has claimed this entry (see PLAN.md §3c). If you see this status and no agent is currently running, the claiming run likely crashed — the next preflight will detect and reclassify it once its lock has expired.
-- **built**: a fresh iteration exists in `concepts/`, tracked in `manifest.js`, awaiting Ben's morning review.
+- **audit-pending**: the code exists and is committed, but Step 5 (static + visual audit) hasn't finished yet — a checkpoint so a dropped connection mid-audit resumes by re-running the audit, not by re-building from scratch (see AGENT-PROMPT.md Step 5 / 2026-07-22 checkpointing addition). If you see this with no run active, the next run's own preflight treats it the same as a stale `building` entry — reclassify once its lock has expired.
+- **built**: audit complete (both static and visual passed, or issues were found and the one allowed fix attempt was made — see the one-attempt rule below), tracked in `manifest.js`, awaiting Ben's morning review.
 - **blocked**: the agent hit a wall (see NIGHTLY-LOG.md for why) and stopped rather than guessing.
 - **approved**: Ben reviewed and signed off on the direction and execution. Ready for the human-driven promotion path (PLAN.md §5).
 - **rejected**: Ben reviewed and passed on the whole direction — not worth continuing. Reason lives in `LESSONS.md` (a general, cross-theme takeaway).
-- **needs-revision**: Ben reviewed, liked the direction, and gave one or more concrete fixable notes — this is NOT rejection. The notes live in this entry's own `Revision notes` list (below), not in `LESSONS.md`, because they're specific to this one piece. The next agent run claims `needs-revision` entries FIRST, before any `grilled` entry or a fresh invention (see PLAN.md §3c) — a stalled draft always gets priority over starting something new. **Capped at 5 iterations**: on the 5th revision cycle without approval, the agent stops looping automatically and logs "iteration cap hit, needs your call" — it's your decision from there whether to keep iterating by hand or mark it `rejected`.
+- **needs-revision**: Ben reviewed, liked the direction, and gave one or more concrete fixable notes — this is NOT rejection. The notes live in this entry's own `Revision notes` list (below), not in `LESSONS.md`, because they're specific to this one piece. The next agent run claims `needs-revision` entries FIRST, before any `grilled` entry or a fresh invention (see PLAN.md §3c) — a stalled draft always gets priority over starting something new. **Capped at 5 iterations**: on the 5th revision cycle without Ben's approval, the agent stops looping automatically and logs "iteration cap hit, needs your call" — it's your decision from there whether to keep iterating by hand or mark it `rejected`. This is Ben's own review cycle (across separate runs) — see the ONE-ATTEMPT rule below for the separate, much tighter cap on self-fix retries *within* a single run.
+
+**One-attempt rule (2026-07-22, Ben's explicit instruction — see NIGHTLY-LOG.md):** when Step 5's own audit (static or visual) finds an issue during a run, the agent gets exactly ONE fix attempt, then re-audits once. Whether that re-audit comes back clean or not, the run does NOT keep self-looping fix attempts — it proceeds straight to the single Fable second-opinion pass (see `.claude/commands/audit.md`'s "Second opinion" section) either way. If issues remain after the one attempt, say so plainly in the notes handed to Fable and to Ben — do not keep trying to fix it silently. This is deliberately much tighter than the 5-iteration Ben-review cap above: that cap governs iterations across separate mornings with Ben's own input between them; this rule governs a single run's own internal retry behavior, where repeated self-fix attempts without new information are the "sunk cost" failure mode Ben is explicitly guarding against.
 
 ## Entry format
 
