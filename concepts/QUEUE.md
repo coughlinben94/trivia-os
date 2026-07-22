@@ -52,7 +52,7 @@ Revision notes (newest first, only if iteration > 1):
 ## Queue
 
 ### space-road-trip — Space Road Trip (four destinations)
-status: audit-pending
+status: built
 journeyType: cross-theme
 fromTheme: midnight-galaxy
 toTheme: autumn-harvest
@@ -79,6 +79,19 @@ drove the galaxy hyperspace-snap and gas-station touchdown-thump additions. Self
 checklist in the file already passes.
 
 Revision notes (newest first):
+- 2026-07-22 [Claude, iteration 5 built + audited — status now `built`, awaiting
+  Ben's review]: implemented bank/tilt on arrival + a new quick punch-out
+  departure beat in `space-road-trip-v5.html`, per Ben's two follow-up answers
+  below. Visual pass caught a real, pre-existing (since iteration 4) bug: the
+  camera transform only ever wrapped the building/sign/drone, never the
+  planet/mesas/island, invisible at v4's mild scale change but obvious once
+  v5's stronger 0.7x departure punch made the diner visibly shrink away from
+  its own island. Fixed within the one-attempt rule — whole scene now scales
+  and rotates together. Fable's evidence pass confirmed the fix and both new
+  motions (bank levels out by settle, punch holds through the crossfade),
+  no unresolved issues. Full account in the file's own notes block. Ben's own
+  job: does the bank/tilt and punch read at the right strength on a real
+  screen.
 - 2026-07-22 [Ben, after watching v4]: "honestly, idk what that was. it was just
   the diner scene from version 3 without the spaceship. we are going to be inside
   the spaceship, like we're driving it, pull up to the diner. park. the drone is

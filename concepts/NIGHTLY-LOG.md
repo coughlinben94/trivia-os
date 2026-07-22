@@ -360,6 +360,24 @@ claimed: space-road-trip (needs-revision, iteration 5 — v4's camera-POV rework
 preflight: lock acquired clean; manifest still valid from prior run; no stale
   building/audit-pending entries.
 sprites: 0 calls expected — camera transform + timing only, no new sprites
-audit: (pending)
-result: (pending)
-commit: (pending)
+build: added bankAngle (GAS_BANK_MAX -0.06rad, eases to level as camP settles)
+  and a departure punch (camScale down to GAS_DEPART_MIN_SCALE 0.7 over the
+  final GAS_DEPART_DUR 500ms of the hold via easeOutQuint, held through the
+  bridge3 crossfade since geShip keeps counting through it). Both force-zeroed
+  under reduced motion.
+audit: fixed (one real finding, one self-fix attempt per the one-attempt rule)
+  — comparing frames across the arrival/settle/departure window (not just the
+  touchdown sub-beats) surfaced a real bug present since iteration 4: the
+  camera transform only ever wrapped the building/sign/drone, never the
+  planet/mesas/island — invisible at v4's mild 0.88->1 push, obvious once v5's
+  0.7x punch made the diner visibly shrink away from its own pinned-size
+  island. Fixed by moving the whole transform setup earlier (right after the
+  background stars), re-checked once via full re-render — whole scene now
+  scales/rotates together. Single Fable evidence-only pass confirmed the fix
+  (planet/island/mesas all scale together pre- vs post-fix) and both new
+  motions (bank levels by settle, punch holds through crossfade, no clipping),
+  no unresolved issues — full account in space-road-trip-v5.html's own notes
+  block and QUEUE.md's revision notes.
+result: built space-road-trip-v5.html (iteration 5, supersedes v4 — v4.html
+  itself untouched, per the iterations-never-overwritten-in-place rule)
+commit: pushed sha=

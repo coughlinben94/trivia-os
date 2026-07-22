@@ -1,0 +1,1305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Space road trip — midnight galaxy → meteor shower → the floating diner → supernova</title>
+<style>
+  :root{ --text:#e8e8e8; }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0a0a;color:#e8e8e8;font-family:system-ui,sans-serif;padding:28px}
+  h1{font-size:1.15rem;font-weight:700;margin-bottom:4px}
+  .sub{color:#888;font-size:.8rem;margin-bottom:20px;max-width:800px;line-height:1.5}
+  .wrap{max-width:960px}
+  .stage{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;border:1px solid #222;background:#020408}
+  canvas{position:absolute;inset:0;width:100%;height:100%}
+  .hud{position:absolute;bottom:8%;left:0;right:0;text-align:center;font-size:.75rem;letter-spacing:.3em;text-transform:uppercase;opacity:0;transition:opacity .35s,color .3s;pointer-events:none;font-weight:700;z-index:3}
+  .hud.show{opacity:.85}
+  .stopIndex{position:absolute;top:4%;left:0;right:0;text-align:center;font-size:.68rem;letter-spacing:.25em;color:#666;pointer-events:none;z-index:3}
+  .letterbox{position:absolute;left:0;right:0;height:8%;background:#000;pointer-events:none;z-index:5}
+  .letterbox.top{top:0;transform-origin:top;transform:scaleY(0)}
+  .letterbox.bot{bottom:0;transform-origin:bottom;transform:scaleY(0)}
+  .grain{position:absolute;inset:0;pointer-events:none;opacity:.05;mix-blend-mode:screen;z-index:4}
+  .controls{display:flex;gap:10px;align-items:center;margin:14px 0 24px;font-size:.78rem;color:#aaa;flex-wrap:wrap}
+  button{background:#161616;border:1px solid #2a2a2a;color:#eee;padding:8px 16px;border-radius:6px;font-size:.78rem;cursor:pointer}
+  button:hover{background:#1e1e1e}
+  label{display:flex;gap:6px;align-items:center}
+  input[type=checkbox]{accent-color:#80c0ff}
+  .phase{font-size:.7rem;color:#666;margin-left:auto}
+  .notes{margin-top:20px;font-size:.8rem;color:#999;line-height:1.6;max-width:800px}
+  .notes b{color:#ccc}
+  .gate{margin-top:16px;font-size:.78rem;color:#888;line-height:1.7;max-width:800px}
+  .gate b{color:#bbb}
+  .gate ul{margin:6px 0 0 18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Space road trip — four destinations, reordered</h1>
+<div class="sub">Per Ben's explicit direction: no aurora, no firefly meadow — back to four stops, reordered so <b>Midnight Galaxy</b> opens the tour, then <b>Meteor Shower</b>, then <b>the floating diner</b> — a distant planet that happens to have a diner, perched on a small floating rock, not a gas station on a moon surface — then <b>Autumn Harvest / Supernova</b> to close. This file went 4 stops → 6 stops (added northern lights + firefly meadow, both audited and fixed) → back to 4 on Ben's call after a third-party review raised pacing questions about the 6-stop order — the aurora/firefly worlds and their fixes are removed outright, not just hidden, since they're not part of the approved sequence. <b>Important:</b> in the real app these still fire as four separate round-boundary journeys, each at its own round transition — this combined file is a review artifact for watching the whole arc at once, not how it plays live.</div>
+
+<div class="stage" id="stage">
+  <canvas id="cv"></canvas>
+  <div class="stopIndex" id="stopIndex">stop 1 / 4 — midnight galaxy</div>
+  <div class="hud" id="hud" aria-live="polite" aria-atomic="true"></div>
+  <div class="letterbox top"></div>
+  <div class="letterbox bot"></div>
+  <svg class="grain" width="100%" height="100%">
+    <filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/></filter>
+    <rect width="100%" height="100%" filter="url(#n)"/>
+  </svg>
+</div>
+
+<div class="controls">
+  <button id="replay">↻ Replay full trip</button>
+  <label><input type="checkbox" id="reducedToggle"> Simulate prefers-reduced-motion</label>
+  <span class="phase" id="phaseLabel">phase: idle</span>
+</div>
+
+<div class="notes">
+  <b>Structure — a generalized N-stop tent-function crossfade, unchanged in principle:</b> this file tracks one continuous <code>tourProgress</code> value (now 0=galaxy, 1=meteor, 2=gas station, 3=harvest) that ramps between integers during each bridge window and holds flat during each stop's hold phase; every world's opacity is <code>clamp01(1 - |tourProgress - itsIndex|)</code>. <code>TOUR_KF</code> is auto-derived from <code>TIMELINE</code> via <code>buildTourKeyframes()</code> (added during the accessibility/architecture review pass, kept here) — reordering and dropping stops just meant editing <code>TIMELINE</code>'s phase list; the keyframes rebuilt themselves correctly with no hand-editing of offsets.<br><br>
+  <b>Sequence (~43.6s total, four stops — three still ~10s per stop, the floating-diner stop extended to ~13.6s 2026-07-22, see below):</b> midnight-galaxy hold (10,000ms, opens the tour — z-depth star warp ramping up from rest + nebula wash, no bridge before it since it's first) → bridge to meteor shower (600ms) → meteor-shower hold (2900ms) + departure streaks (6500ms, its own established two-phase hold-then-flourish pattern, ratio kept proportional to the original 400:900 split) → bridge to the floating diner (600ms) → floating-diner hold (13,000ms: a small floating rock with a diner on it, a dominant ringed planet behind, ship flies in slow and parks beside the diner, idle beat, a small roof-launched drone delivers takeout, DINER sign roof-mounted on support posts, clustered pixel lights, neon buzzes in then holds steady) → bridge to harvest (600ms) → <b>a plain ambient hold (7000ms, ember field only, no convergence yet)</b> → harvest converge + supernova burst + settle (2400ms, timing untouched from the already-audited version). Three of the four stops still sum to almost exactly 10,000ms including their own bridge-in; the floating-diner stop is the one deliberate exception this pass, still within round-journeys.md's 8-14s per-journey range once split out as its own real round-boundary journey.<br><br>
+  <b>What changed this pass:</b> northern lights and firefly meadow — both built, both audited, both fixed in two separate review passes — are removed outright per Ben's explicit direction ("no aurora... midnight galaxy, then meteor shower, then gas stop, then supernova"), not just hidden behind a flag. Their worlds, particle arrays, palette objects, and HUD branches are deleted, not commented out — a review that flagged this exact file for maintainability risk from having too many worlds in one place; leaving dead code in after removing them from the tour would have been the same smell in a different shape. Midnight galaxy moves from the second stop to the very first — it now owns the "opening" hold-and-warp beat that meteor shower used to open with; meteor shower keeps its own established hold-then-streaks pattern, just fires as the second stop instead of the first.<br><br>
+  <b>Reused vs. new, four-stop version:</b> galaxy star-warp + nebula (from <code>midnight-galaxy-spaceship-journey.html</code>), meteor star/streak field (from the round-boundary file), harvest converge/burst (from <code>galaxy-to-harvest-handoff-journey.html</code>) — all reused verbatim. Gas station (ground, sign, canopy, pumps, clustered pixel lights, one-shot neon buzz-in) is the one genuinely new world, carried over unchanged from the six-stop version along with its own two audit passes' fixes.<br><br>
+  <b>Real theme colors, all four:</b> midnight-galaxy (<code>bg #08001a</code>, <code>accent #4a1a8f</code>, <code>highlight #c060ff</code>), meteor-shower (<code>bg #020408</code>, <code>highlight #e0f0ff</code>), retro-arcade (<code>bg #040010</code>, <code>accent #3a0880</code>, <code>highlight #a020ff</code>, <code>shinyAccent #20ff80</code>), autumn-harvest (<code>bg #1a0800</code>, <code>accent #7a2808</code>, <code>highlight #ff6820</code>) — all pulled directly from their real entries in <code>themes/index.js</code>.<br><br>
+  <b>Re-keyed for the new order (verified, not assumed):</b> the gas station's power-on now starts 300ms into <b>bridge2</b> (meteor→gas), not bridge3 — bridge2 is gas's actual incoming bridge in the new order. <code>galCoreFade</code> (the extra fade on galaxy's bright core gradient during its own outgoing bridge) is now keyed to index 0 (<code>1-clamp01(tp*2)</code>), since galaxy is index 0 now, not 1. The galaxy star-warp ramp-up now fires during <code>galHold</code> alone (it's the opening phase, so there's no incoming bridge to also gate on) and decays during everything after — previously it ramped during an incoming bridge plus its hold, which doesn't apply to an opening stop.<br><br>
+  <b>Carried over from the last two review passes (still true, not re-litigated here):</b> supernova flash widened to a ~440ms attack capped at 0.32 peak alpha (was a ~240ms spike to 0.6 — an eye-strain concern for a dark-venue live show); HUD has <code>aria-live="polite"</code>; reduced motion keeps opacity-only twinkle/blink breathing everywhere (galaxy stars, gas station pixel lights) rather than freezing to a flat value, while disabling actual translation; gas station ground/sign/canopy/lettering contrast and clustering fixes; captions use each palette's <code>textHex</code>, gated on real state (harvest's on <code>novaFlash</code> being low) rather than fixed elapsed-time guesses.<br><br>
+  <b>Known rough edges, not hidden:</b> the gas-station sign/canopy/pumps and moon-ground silhouette are hand-drawn canvas primitives, not generated assets. The tent-function crossfade is a straight linear ramp between keyframes, not hand-tuned per bridge — a specific pair might want a longer or shorter bridge than the fixed 600ms used everywhere here. The floating-diner stop's arrival beat is now a lightweight camera-POV push (scale/translate on drawGasWorld's own content, no cockpit-UI chrome) — see the 2026-07-22 camera-POV notes paragraph below; the other three stops (galaxy, meteor, harvest) remain pure ambient-world transformation with no camera-POV move of their own, and the full dashboard-overlay treatment (struts/dash/vignette/pilot seat) still lives only in the separate liftoff file, not here. A production-readiness critique from the third review (refactor each world into class-based <code>init()/update()/render()/destroy()</code> objects) is good input for the eventual real-app build, not applied here — this file doesn't ship as-is.<br><br>
+  <b>Reduced motion:</b> all motion (streaks, warp, sign flicker, pixel blinking, converge/burst) is disabled or reduced to opacity-only breathing; each world crossfades in as a calm field at the same relative timing the full version uses, and the caption/stop-index text still updates so all four destinations are still legible without the animation.<br><br>
+  <b>Second Fable pass, after the 10s-per-stop runtime stretch — five findings, all fixed:</b> (1) <b>CRITICAL</b> — <code>harAmbient</code>'s 12 embers spawned entirely below-frame (<code>y:H+rand*H*0.3</code>) and rose too slowly to reliably enter frame within the new 7000ms <code>harHold</code>, reading as a near-empty screen; fixed by spawning across the full frame height, bumping count 12→32 and alpha 0.18→0.3, and reseeding on every <code>resetUI()</code> replay. (2) <b>CRITICAL, and mine to own</b> — when <code>buildTourKeyframes()</code> replaced the old hand-written <code>TOUR_KF</code>, it only pushed a flat keyframe for phases ending in <code>'Hold'</code> or equal to <code>harConverge</code>, silently missing <code>msOut</code>; invisible at msOut's old ~900ms length, but a real ~7100ms visible bug once msOut stretched to 6500ms — the tour would drift toward gas station for the whole departure flourish instead of holding at meteor shower until the bridge. Fixed by making every non-bridge phase push its own flat endpoint, the actually-correct general rule. (3) gas station's neon sign held a dead-flat 0.95 for ~93% of its new 9400ms hold; added a slow idle wobble plus one scheduled stutter-dip around the 5s mark. (4) galaxy's background warp ramped to a flat 0.42 target and sat there monotone for ~8.7s of its 10s hold; swapped for a slow breathing swell. (5) the letterbox fade-in scaled off <code>GAL_HOLD*0.6</code>, which read fine at the old short hold but stretched to a visible 6000ms fade at the new 10s <code>GAL_HOLD</code>; fixed to a flat 700ms regardless of hold length. All five verified via <code>node --check</code> plus a re-run of the exact-timing trace confirming the 40,000ms total and each stop's 10,000ms budget were unaffected by any of these visual fixes.<br><br>
+  <b>External (Gemini) review, this pass — two real fixes applied, one number independently corrected, several flagged as opinion/future-work rather than applied:</b> (1) caught that <code>drawGasWorld</code>'s reduced-motion path hardcoded the neon sign to a flat 0.95, bypassing <code>neonBuzz()</code> and, with it, the file's own established convention of keeping opacity-only breathing alive under reduced motion (galaxy stars, pixel lights both already did this) — fixed with a slow 1500ms sine breathing between 0.70-0.95, no translation, no steep flicker. (2) flagged the moon-horizon silhouette (<code>#14082a</code> on <code>ARC.bg</code>) as low-contrast and proposed <code>#1c0d38</code> as a fix; independently recomputing WCAG relative-luminance contrast for that exact pair gives ~1.15:1 — statistically the same as the ~1.08:1 original, not a real fix — so <code>#54329a</code> is used instead, verified at ~2.27:1. <b>Not applied, flagged as Ben's call:</b> the review's opinion that the new 10s Midnight Galaxy hold "feels bloated" for an opening beat, and that Autumn Harvest's 7s calm-ember lead-in risks feeling abrupt going into its 700ms converge — both are pacing/feel judgments about the explicit 10s-per-stop direction, not bugs, so they're surfaced here rather than silently acted on. <b>Not applied, correctly scoped as future-app work (same as the prior review's OOP suggestion):</b> encapsulating each world's particle state into factory/class objects and moving static canvas paths to <code>Path2D</code> — good input for the real build, out of scope for this single-file prototype.<br><br>
+  <b>Rework pass, Ben's direct call after watching it — "the gas station scene looks bad," "the meteor shower didn't feel like a shower at all... we're supposed to be going THROUGH the meteor shower," "the spaceship is supposed to shake as we go through," plus a diner-on-Mars reference image and "this is a story, a visual story":</b> Meteor shower was rebuilt from a calm corner-radiant-plus-occasional-streak (how you'd watch a shower from a hillside) into an actual z-depth debris field you fly through — <code>msDebris</code> reuses the same project-and-pull-toward-camera trick <code>drawGalWorld</code>'s star warp already used in this file, but with chunkier rock/ice fragments and real motion-blur trails, at an intensity that ramps 0→1 over the first 2.5s of <code>msHold</code> (entering the shower) and stays at 1 through <code>msOut</code> (in it, then departing) — the stop now has a felt beginning and middle, not just a hold plus a tacked-on flourish. A camera shake (<code>msShake</code>, the same time-based dual-sine noise technique as the liftoff POV file's engine rumble, so it's robust to dropped frames) is applied to the canvas element itself — not the world draw — so the letterbox and HUD stay steady while the view through them jostles, reading as being inside a shaken cockpit. Checked and confirmed: the Kirupa z-depth-starfield technique referenced earlier this session had already been applied to the liftoff POV file's warp field, but never made it into this file's meteor world — that gap is exactly why it read flat. Gas station got a real focal point it never had: a ringed planet dominating the sky (ring drawn behind, planet body, then a bright ring arc in front, for cheap depth) plus two layers of jagged mesa/butte silhouettes (far, dim; near, bold) replacing the single smooth horizon bump — both in this theme's own real palette, not the reference photo's literal colors. The far mesa layer's first color (<code>rgba(60,32,110,0.55)</code>) composited to only ~1.23:1 against <code>ARC.bg</code> — caught and independently re-verified before shipping it, same discipline as every contrast check elsewhere in this file — and replaced with <code>rgba(100,56,180,0.8)</code>, which composites to ~2.12:1. Both reworks keep every existing reduced-motion contract: meteor debris drops to opacity-only presence with no z-rush and no trail, camera shake is fully disabled, and the new planet/mesas are static shapes with no motion to begin with. <b>Separately confirmed against the real production code</b> (not guessed): during an actual live round, meteor-shower's ambient backdrop (<code>ParticleBackground.jsx</code>) is intentionally calm — a passive starfield, a milky-way wash, and one lone streak every 1.5-4s, built not to compete with trivia content on screen — and retro-arcade isn't a bespoke scene at all during a round, it's routed through a generic "electric" breathing gradient with no gas-station art in production. That's by design: the round JOURNEY (what these prototype files are) is supposed to be the one moment of real motion and spectacle, distinctly more kinetic than the calm backdrop a round itself sits on — so pushing this hard on "feels like flying through it" is the correct instinct, not overkill relative to how the app actually behaves during play.<br><br>
+  <b>Cross-session finding, then a second rework of the gas station:</b> a parallel Cowork session ("alongside") is building the actual production framework for generating round-journey concepts for other themes going forward, and its plan is built directly on top of this repo's own <code>references/round-journeys.md</code> and <code>references/ambient-design-law.md</code> — both already in the repo, neither read before tonight's original prototyping pass. Their rule: a journey is "built on top of something the theme or app already owns... never a parallel system invented from scratch," checked via the real <code>ParticleBackground.jsx</code> BEFORE design starts, not after. Retested against that rule: retro-arcade has no bespoke in-round ambient to extend (it's a generic gradient in production), so inventing a new world for it is the correct move, matching the framework's own "empty slate → invent fresh" allowance. Meteor shower's debris-field rework, by contrast, is a genuine parallel invention rather than an extension of the real <code>MeteorShowerStreak</code> motif — flagged to Ben, not yet resolved, since "flying through it" and "extend the one-streak-at-a-time motif" are in real tension and it's his call which wins.<br><br>
+  <b>Gas station, second rework — Ben's direct call: "we need to park outside the diner," then "another ship, a small diner. go":</b> the whole stop was a static held frame (a sign flickering on, nothing else ever happening) — exactly the failure mode <code>round-journeys.md</code>'s own five-part scene checklist names outright ("what is it *doing*? avoid a static held pose as the only content"). Fixed with a real arrival beat: a small ship (<code>drawGasShip</code>/<code>drawGasShipBody</code>, its own dark silhouette + rim-light, same convention as every other sprite built tonight) flies in from off-frame after a 300ms anticipation hold, travels a shallow arc (not a straight diagonal — motion-follows-arcs from the technique checklist) with an eased fast-start/smooth-settle curve, and lands with a brief engine-flare that fades a beat after the hull itself stops (follow-through, not a simultaneous hard cut), then idles at a parked position beside the diner with a slow low-amplitude bob and idle engine-glow breathing for the rest of the hold. The sign itself was relabeled "GAS"→"DINER" and shrunk ("a small diner," not a billboard), and the old canopy-plus-two-pumps read (a fuel stop) was replaced with a small storefront wall and a warm interior window-glow band in <code>ARC.hi</code> (in-family, not an arbitrary warm hue). Reduced motion: the ship appears already parked with no flight-in and no bob-translate, only opacity-only engine-glow breathing — same contract as every other moving element in this file.<br><br>
+  <b>Third Fable pass, on the ship/diner rework and the meteor debris field — 10 findings, all fixed:</b> (1) <b>HIGH</b> — meteor shower's reduced-motion branch was false advertising: <code>base</code> stayed 0.006 even when reduced and the z-decrement ran unconditionally, so debris still visibly rushed (full depth traversal in ~2.7s) despite the comments and notes claiming "no z-rush." Reduced now genuinely freezes each fragment's z (no decrement, no reset) and only adds a slow opacity twinkle. (2) <b>HIGH</b> — the ship's touchdown flare could be *set* up to ~650ms before it was actually *rendered*, because the old code branched on wall-clock <code>t &gt;= SHIP_FLIGHT_DUR</code> while the eased position had already gone visually static much earlier — the flash read as disconnected from the landing. Rewritten as one continuous position formula for all t (no seam) with a <code>settle</code> value derived from <code>easeOutCubic</code>'s own remaining-distance curve (independently verified: remaining travel is under 0.6px by the time <code>settle</code> starts ramping) — the flare and idle-bob now key off actual near-zero motion, not a guessed timestamp. (3) touchdown-flare decay wasn't <code>dtn</code>-normalized (the one decay in the file that wasn't) — fixed. (4) the parked ship's hull directly overlapped the middle near-mesa, and the ship's rim-light — its whole legibility device — computed to only ~1.2:1 against that mesa's purple exactly where it parks; moved the mesa left, independently verified at a clean 48px gap. (5) rock debris chunks were drawn under the same <code>'lighter'</code> composite as everything else in that loop, so their dark fill could only add faint luminance and never actually occlude — they rendered as bare rings, not chunks; switched just that fill to <code>source-over</code>. (6) debris speed hard-cut ~9x the instant <code>msOut</code> ends even though the meteor world is still ~94% opaque at that boundary — added an exponentially-smoothed intensity (<code>msIntensitySmooth</code>) so both the debris speed and the shake amplitude ease across that seam instead of stepping. (7) the diner's wall-edge rects used a fixed height that left a ~6px gap of visible sky under the whole building, currently hidden only by dark-on-dark color coincidence; walls now run to the actual ground line at that x. (8) shake amplitude's flat +1.4px floor popped in the instant <code>msHold</code> started; now scales purely off the smoothed intensity, so it fades in with everything else. (9) removed a leftover fixed corner-radiant glow from the pre-rework "watch it from a hillside" design — an orphaned sourceless bright patch the debris field now rushes across for no reason. (10) narrowed the clustered pixel-lights' spread (±120→±70) after confirming the wider spread's max x landed inside the ringed planet's disc, rendering as sparkle artifacts on the planet face instead of station lights. All fixed and independently re-verified via <code>node --check</code> plus hand-recomputed pixel geometry (hull/mesa gap, remaining-distance-at-settle) and timing sums — 40,000ms total and each stop's 10,000ms budget unaffected. Fable's separate opinion (not a bug, logged for the record): the gas-station frame's density — planet, two mesa layers, ship, sign/storefront, pixel lights — is appropriate for a 9.4s "we've arrived" beat now that the two real overlap points (ship/mesa, lights/planet) are fixed; nothing was flagged as needing removal.<br><br>
+  <b>"Make them all MEMORABLE" pass:</b> a fresh-eyes guest-reaction simulation (a subagent reading the code cold and roleplaying a first-time Baynes trivia guest, evaluating each stop as its own isolated moment spread across a real night, never seeing the dev notes) came back with an honest split: meteor shower's shake and harvest's supernova burst genuinely landed ("made the whole table look up"), the gas station's ship-landing was liked but read as "cute, not epic," and midnight galaxy was the real miss — "wallpaper, not a highlight," no actual event, would go unnoticed. The common thread across the two that worked: each has exactly one unmistakable, single-instant event, not just prettier ambiance. Two additions, both Ben's explicit calls: (1) <b>Galaxy hyperspace snap</b> — considered and rejected a comet/shooting-star idea on Ben's own instinct that it would compete with meteor shower's whole identity (a bright thing streaking through dark space); a comet would have been a new object doing the same basic trick. Instead <code>GAL_SNAP_AT</code> (4200ms into <code>galHold</code>) triggers <code>galSnapEnvelope()</code>, a fast-attack/slow-decay pulse that spikes the EXISTING <code>galWarp</code> value hard — no new particle system, just the star-warp math this file already has, pushed to an extreme for one beat, stretching the calm stars into fast streaks — plus a capped white flash (0.32 peak alpha, same eye-comfort discipline as the supernova) and a brief canvas zoom-punch (<code>scale()</code>, not translate — a different motion grammar from meteor's jitter so the two stops don't feel like variations of the same trick). Independently confirmed against the real <code>MidnightGalaxyAmbient</code> production component: the actual in-round backdrop has zero motion beyond opacity-only twinkle, so this warp mechanic was already 100% journey-only invention with nothing to clash with. (2) <b>Gas station touchdown thump</b> — Ben's pick over leaving it as-is: a one-shot camera jolt (<code>shipThump</code>, reusing <code>msRumbleNoise</code> at a much smaller amplitude and a ~150-200ms decay — an order of magnitude shorter than meteor's sustained rumble) plus a new ground-dust puff (<code>dustPuff</code>, expanding at the ship's actual ground-contact point) fire together, edge-triggered exactly once via <code>shipLanded</code>, at the same instant the existing engine flare begins. Both additions respect every existing reduced-motion contract: <code>galSnapEnv</code> and the gas jolt are both force-zeroed under reduced motion, so neither stop gains any new motion in that mode — verified via <code>node --check</code> and a re-run of the timing trace confirming 40,000ms total / 10,000ms-per-stop untouched.<br><br>
+  <b>v2 — nightly agent revision pass (2026-07-20), fixing Ben's two morning-review notes on the v1 file, nothing else touched:</b> (1) <b>Missing visibilitychange handler</b> — <code>tStart</code> only reset on the on-page Replay click; backgrounding the tab and returning mid-sequence would make <code>tick()</code>'s <code>total = now - tStart</code> jump forward by the whole hidden duration in one frame, skipping or snapping ahead unpredictably. Fixed exactly as specified: a <code>visibilitychange</code> listener now stops the loop while hidden and calls the same full reset the Replay button already uses when the tab returns to visible — no new reset mechanism, the existing one reused. (2) <b>Missing the postMessage contract</b> — this file had a working Replay button and reduced-motion toggle but no <code>window.__journeyControls</code>, no embedded <code>postmessage-child-boilerplate.js</code>, and no <code>pause</code> at all. The boilerplate is now embedded verbatim in its own <code>&lt;script&gt;</code> tag. <code>replay</code> is the renamed former <code>play()</code> function (full reset — same behavior, new name only, to free up <code>play</code> for the contract's distinct resume verb) and is the exact same function the on-page button calls, so there is one replay implementation, not two. <code>pause</code> is a real implementation, not a stub: it cancels the pending animation frame so nothing advances or redraws while paused, and records the pause timestamp. <code>play</code> (the contract's resume verb, distinct from the internal <code>replay</code>) shifts <code>tStart</code> forward by exactly the paused duration before resuming, so the sequence continues from the same elapsed position instead of jumping — the same underlying fix pattern as the visibilitychange handler, applied to an explicit pause instead of a backgrounded tab. Nothing else in this file changed: no sprite, palette, timing constant, or draw call from the file this superseded was touched.<br><br>
+  <b>v2 audit scope note (Step 5, honest scope):</b> this revision pass only touched the shared-state/control-flow block at the bottom of the script and added one new embedded script tag; every world's draw code, palette, and timing constant above is byte-identical to the superseded file. The 40,000ms combined-file runtime and each stop's individual ~10,000ms budget are unaffected by this pass — this file's own already-documented exception to the normal 8-14s single-journey duration target (a deliberate four-stop combined review artifact, not a single round-boundary journey; see the brief in <code>QUEUE.md</code>) is unchanged and was not re-litigated here, per the instruction to fix exactly what Ben named and nothing else.<br><br>
+  <b>v2 Step 5 audit results (code-invariant checks only — no browser in this runtime, so runtime feel/actual TV banding/motion-smoothing remain explicitly Ben's job, same as every prior pass):</b> contrast — no text/background pairing changed by this pass, prior passes' verified ratios stand. Timing sums — total independently re-added from the eleven <code>TIMELINE</code> segment durations: 40,000ms, matches the notes above; unaffected since no duration constant was touched. Frame-rate independence — <code>dtn</code> normalization present and untouched; the clock reset is now wired to <em>both</em> <code>replay()</code> and <code>visibilitychange</code>, which is the fix itself. GPU-only compliance — grepped the full file for animated <code>width</code>/<code>height</code>/<code>color</code>/<code>box-shadow</code>/<code>filter</code>: one pre-existing hit, <code>hud.style.color=hudColor</code> in <code>tick()</code>, assigns a discrete per-phase value (not a continuous interpolation) redundantly every frame within a phase — a minor wasted-recalc smell, not a visual GPU-only violation, present unchanged since before this file's three Fable and two Gemini review passes and never flagged by any of them; noted here rather than silently passed over, left as-is since it's neither of Ben's two revision notes and this pass's own scope is fix-exactly-what-was-named. Silhouette legibility, particle pooling (<code>msDebris</code>/<code>galStars</code>/<code>pixelLights</code>/<code>harAmbient</code> all confirmed still fixed-size, still reused not reallocated), and near-black banding mitigation — all unchanged, none of this pass's edits touch drawing code. No external references — grepped for <code>http://</code>/<code>https://</code>/<code>img.recraft.ai</code>: none found. Sanitizer-passed SVG only — not applicable, this file has zero Recraft-generated sprites (hand-drawn canvas primitives throughout, per its own long-standing notes); the one static <code>&lt;svg&gt;</code> is the hand-authored grain-texture filter, never sanitizer-scoped. postMessage contract present — confirmed byte-for-byte identical to <code>concepts/tools/postmessage-child-boilerplate.js</code> (diffed programmatically, not eyeballed), <code>__journeyControls</code> wired to real <code>play</code>/<code>pause</code>/<code>replay</code> implementations, the on-page button and the contract call the exact same <code>replay()</code> function. Reduced-motion branch — read, not run: unchanged by this pass, still correctly force-zeroes <code>galSnapEnv</code>/shake/ship-flight/z-decrement under <code>reduced</code>. Both new <code>&lt;script&gt;</code> blocks additionally passed <code>node --check</code> for syntax validity, and a full-file diff against the superseded file confirmed the change is confined to exactly the notes paragraph, one new state variable, and the control-flow block at the script's tail — nothing in any world's draw code, palette, or timing constant was touched.<br><br>
+  <b>Known open item, carried forward unresolved (Ben's call, not this pass's to make):</b> whether the meteor-shower z-depth debris-field rework is a parallel invention vs. an extension of the real <code>MeteorShowerStreak</code> motif in <code>ParticleBackground.jsx</code>, exactly as flagged in <code>QUEUE.md</code> — not touched by this revision pass, which only addressed the two named technical notes.<br><br>
+  <b>Floating-diner redesign (2026-07-22), from a live grilling session, not a vague note:</b> Ben's own words on the prior version — "the space diner sucks... it doesn't pull anything into it that I want... it's supposed to be a distant planet that happens to have a diner" — plus a Minecraft screenshot (a small structure perched on a floating rock, planet looming behind) as concrete reference. The full grilled direction, locked in <code>QUEUE.md</code>'s revision notes before this build pass started, and implemented here beat for beat: <b>composition</b> — the moon-surface ground (full-width, standing-on-a-surface) is replaced with <code>drawFloatingIsland()</code>, a bounded rock shape (<code>ISLAND_LEFT</code>/<code>ISLAND_RIGHT</code>, W*0.24-0.80) that leaves visible starfield below and beside it, so the read is "floating," not "standing"; the far/near mesa arrays are repurposed from horizon-attached buttes into independent floating debris-rocks (<code>drawGasMesa</code> now takes a <code>y01</code> and draws a shape tapered top AND bottom); the dominant ringed planet is untouched and unmoved — leaned into by removing everything that used to compete with it for "the thing you look at" (a full horizon skyline), not by making it bigger. <b>Ground debris, not dust</b> — the old soft <code>dustPuff</code> radial-gradient blob is replaced with <code>gasDebrisBits</code>, a fixed 10-particle pool (pre-allocated, reset not reallocated on each trigger and each replay, same discipline as every other particle field in this file) that kicks upward-and-outward from the ship's real ground-contact point on touchdown, three of the ten using the new pink accent. <b>Palette</b> — stays purple-dominant; every spot that used to reach for <code>ARC.shiny</code> (green) within this one world (sign glow/lettering, planet ring, pixel lights, ship engine/flare) now uses a new <code>DINER_TEAL</code>, and a new <code>DINER_PINK</code> is introduced but reserved ONLY for the two new one-shot moments (debris spark, drone delivery blip) — an accent shift, not a repaint, per the composition checklist's 60/30/10 guidance. <b>Blocking</b> — the ship still parks BESIDE the diner, not into it (this file never had a push-in camera to begin with — <code>tick()</code>'s only camera transforms are the meteor shake and the galaxy zoom-punch, neither touches this stop — so "hold wide, don't pull in" required no removal, only confirming it was never there). <b>Flight-in slowed</b> — <code>SHIP_HOLD_BEFORE</code> 300→500, <code>SHIP_FLIGHT_DUR</code> 1700→2800; both the arc and the eased-settle math are fractions of these constants, so slowing them down needed no other changes. <b>Idle beat, then payoff</b> — a new derived timeline (<code>SHIP_TOUCHDOWN_AT</code> through <code>DRONE_DONE_AT</code>) inserts an explicit 1800ms idle hold after touchdown before <code>drawDinerDrone()</code> launches a small on-palette drone from a roof dock, down to the parked ship, one delivery-blip pulse (the pink accent's one use), then back up to dock — "a takeout order be brought to us," "mount it to the roof," per Ben's direct call. <b>Signage</b> — the DINER sign moved from a single tall ground-rooted pole to two short posts planted directly in the roofline (<code>canopyY</code>), per "roof-mounted with visible support posts"; the building itself is now drawn BEFORE the sign so the posts visually plant into an already-drawn roof rather than passing through an undrawn one. <b>Interior</b> — unchanged; the window-glow band was already minimal (a lit band, not rendered contents) and stays that way per Ben's "keep it a silhouette/glow read." <b>Duration</b> — <code>GAS_HOLD</code> extended 9400→13000ms to fit the slower flight, idle beat, and drone beat without rushing any of them (file <code>TOTAL</code> is now 43,600ms, up from 40,000ms — only this one stop's duration changed; still within round-journeys.md's 8-14s per-journey range once split apart). Every new animated element (debris, drone) is fully absent or reduced to a static docked/opacity-only state under <code>reduced</code>, matching every existing element's contract in this file — verified via <code>node --check</code> and by hand-tracing the derived timeline constants (see this pass's own STEP 5 audit results, next).<br><br>
+  <b>Step 5 visual pass, this same 2026-07-22 build — one real finding, fixed within the one-attempt rule:</b> ran <code>visual-audit.mjs</code> against this file (scoped to a 34s window covering the whole floating-diner stop plus surrounding context — this stop's own generic phase-label doesn't distinguish the new touchdown/debris/drone sub-beats from the rest of <code>gasHold</code>, so a supplementary targeted spot-check script hit 8 exact timestamps inside those sub-beats directly, rather than trusting only the generic sampler's phase-change-driven coverage — see <code>concepts/tools/spot-check.mjs</code>, added this pass as a reusable companion for future single-phase sub-beat verification). Actually looking at the rendered frames (not just reading the draw code) surfaced one real problem the code review missed: the repurposed far/near "debris rock" layer (<code>drawGasMesa</code>'s first pass this build) kept the OLD mesa function's tall, symmetric double-trapezoid shape and size — rendered, it read as a row of giant purple VASES/PILLARS flanking the island, not small floating debris, undermining the whole "floating in the void" composition goal. Fixed, the one allowed attempt: reworked <code>drawGasMesa</code> into a genuinely small, irregular 7-point jagged blob (deterministically jittered from each rock's own <code>x01</code>, stable across replays with no new persistent state), echoing <code>msDebris</code>'s own rock-chunk visual language from the meteor-shower world earlier in the tour. Re-checked once via the same spot-check script: the composition now reads as intended — small scattered rock debris around a clearly bounded floating island, planet still the dominant background element, ship/sign/drone all legible against it. Secondary finding in the same look: the new drone (<code>drawDroneBody</code>) was hard to resolve at its original <code>W*0.028</code> width — read as a fuzzy dot, arms/rotors too small to see. Bumped to <code>W*0.045</code> (still roughly half the ship's own scale) in the same fix pass; re-check confirmed it now reads as a small quadcopter shape with its delivery blip clearly visible. Per the one-attempt rule, no further self-fix looping past this single re-check — proceeding to the Fable second-opinion pass with both evidence bundles (the 34s scoped generic bundle and the 8-frame targeted spot-check, post-fix) referenced below.<br><br>
+  <b>Fable second-opinion pass (evidence-only, per the one-Fable-pass rule), this same 2026-07-22 build:</b> confirmed all 8 checked claims against the actual screenshots (zoomed/brightened crops, not just the raw frames): floating island reads as genuinely bounded with starfield around/below it; the reworked debris rocks read as small scattered shapes, not pillars; the ringed planet stays the clear background anchor; the ship parks beside the diner with a static wide hold, no push-in; the DINER sign reads as roof-mounted on two posts, no ground pole; the drone reads as a proper small quadcopter shape with an unambiguous pink delivery blip during its hover. Two things flagged, both real, neither blocking: (1) the touchdown debris burst is genuinely present (confirmed via a 3.5x-brightened crop — a mix of pink and rock-gray fragments at the ship's contact point) but subtle at normal viewing brightness, "blink-and-miss" in Fable's words — a polish nit for a future pass, not a functional gap. (2) my own targeted spot-check script's <code>t021300</code> frame (labeled "ship-mid-flight") shows no ship at all — Fable correctly traced this to the ship's flight starting fully off-frame by design (<code>SHIP_START.x = -W*0.18</code>, unchanged from the pre-redesign ship-arrival mechanic, only its timing was slowed this pass) rather than a real animation bug: the ship is confirmed airborne and visible by the next spot-check frame (<code>t022600</code>, geShip~1800ms into the 2800ms flight). The mislabel is in my verification script's own assumption about when "mid-flight" would be visible, not in the built file. Verdict: <b>ready for Ben</b>. Runtime feel, actual venue-TV read, and whether the debris burst reads clearly enough on a real screen (vs. this dev-monitor screenshot check) remain explicitly Ben's own morning-review job, same as every prior pass in this file.<br><br>
+  <b>Camera-POV rework (v4, 2026-07-22), Ben's direct call after watching v3 build:</b> "i know this is still concept based... but remember, we are in the spaceship. i dont want to see the exterior when we go to the diner." Resolved via three follow-up questions Ben answered directly: (1) weight of the fix — "in the middle... the galaxy and meteor shower already look like we're in the cockpit" — meaning the same lightweight technique class those two stops already use (pure camera motion, zero cockpit-UI chrome), not the liftoff file's full dashboard overlay, and not a bare removal with nothing replacing it; (2) scope — diner stop only, galaxy/meteor/harvest confirmed fine as-is, none of their code touched this pass; (3) the takeout-drone beat — "leep the drone concept. the drone is briunging us dinner! lol" — kept exactly, only its delivery target moved. <b>What changed:</b> <code>drawGasShip</code>/<code>drawGasShipBody</code> are deleted outright (not just uncalled) — no external ship silhouette is ever drawn. The flight-in is now <code>updateGasArrival()</code> driving a camera push: <code>drawGasWorld</code> wraps everything from the ringed planet through the drone (but not the flat background fill or the deep starfield, both kept at identity so there's no edge-gap when scaled out and the far stars read as a fixed distant backdrop) in a <code>ctx.save()</code>/scale/translate centered on the diner itself (<code>camFocusX/camFocusY</code>), scaling 0.88→1 over the same <code>SHIP_HOLD_BEFORE</code>/<code>SHIP_FLIGHT_DUR</code>/<code>easeOutCubic</code> timing the old ship-position code used, so the felt pacing is identical even though nothing flies across frame anymore. Touchdown is a camera jolt — <code>shipThump</code> is untouched, it was already wired to <code>canvas.style.transform</code> in <code>tick()</code> and was never actually tied to the ship sprite. The touchdown flare and debris burst (<code>triggerGasDebris</code>/<code>drawGasDebris</code>, unchanged) are now drawn in screen space after <code>ctx.restore()</code>, keyed to the fixed <code>SHIP_PARK</code> point instead of a moving sprite position — reads as a flash across our own view rather than a glow on a hull. A new ambient bottom-edge glow (<code>gasIdleGlow</code>, a soft <code>DINER_TEAL</code> linear gradient) replaces the old idling-ship engine-glow-on-a-hull once landed, suggesting our own engine light spilling into view from just off-frame rather than an external idle animation. <code>DRONE_SHIP_HOVER</code> moved from beside <code>SHIP_PARK</code> to low-center-of-frame (<code>CX</code>, near <code>MOON_Y</code>) so the delivery reads as arriving at us/the camera, not at a parked external object — <code>drawDinerDrone</code>'s own logic is otherwise untouched. <code>SHIP_START</code> is deleted (no sprite position to interpolate from anymore). Verified via <code>node --check</code>; full account of the visual pass and Fable's evidence-check for this iteration follow in the next two entries.<br><br>
+  <b>Step 5 visual pass, iteration 4 (camera-POV rework), 2026-07-22 — one real finding, fixed within the one-attempt rule:</b> ran <code>visual-audit.mjs</code> (34s scoped window, same as the prior pass) plus <code>concepts/tools/spot-check.mjs</code> retargeted to this file at the same 8 sub-beat timestamps used for v3 (touchdown, debris, drone launch/hover/return/dock — still one shared <code>gasHold</code> phase label, still not distinguishable by the generic sampler alone). No ship/hull sprite in any frame across the whole stop, confirmed by eye — the fix's core requirement. One real bug found by actually looking at the touchdown frame: the touchdown flare's radial-gradient center was <code>camFocusX/camFocusY</code> (the camera's focus point, near roof height) — a copy-paste leftover from the camera-transform code just above it — while <code>triggerGasDebris</code> fires at the correct ground-contact point (<code>SHIP_PARK.x, MOON_Y</code>), so the flare rendered near the sign/roof, disconnected from the debris burst at ground level. Fixed, the one allowed attempt: re-anchored the flare's gradient center to the same <code>SHIP_PARK.x, MOON_Y+H*0.03</code> point the debris uses. Re-checked once via the same spot-check script: the re-rendered frame shows the glow and debris both near ground level, no longer split. Per the one-attempt rule, no further self-fix looping past this single re-check — proceeding to the Fable pass with both the pre-fix and post-fix touchdown frames referenced below.<br><br>
+  <b>Fable second-opinion pass (evidence-only, per the one-Fable-pass rule), iteration 4, 2026-07-22:</b> confirmed, reading the actual frames: no ship/hull sprite anywhere in the diner stop; no cockpit-UI chrome (no struts/dashboard/vignette/seat) — correctly "in the middle," not the liftoff file's full overlay; the arrival reads as camera motion (measured the DINER sign's own pixel bounding box growing smoothly ~0.94→1.0 scale across the push, not an object crossing frame); the drone delivery reads as arriving low-center-of-frame near the diner with a clear pink blip, no odd clipping. One finding NOT confirmed as fixed: pixel-diffing the post-fix touchdown frame against the settled-idle frame, Fable found only the debris dots — no distinct flare glow at that exact captured millisecond — where my own by-eye read of the same frame saw a soft glow alongside the debris. This is very plausibly a decay-timing artifact rather than a real positioning bug: <code>shipTouchdownFlare</code> decays fast (~0.06/frame, roughly a quarter-second full fade) and the spot-check's real-elapsed capture landed ~35-40ms past the exact touchdown instant, which is enough for the flare to have faded substantially by the time the shutter fired — the same class of "technically present, easy to miss in one frame" issue this file's own notes already flagged once before for the debris burst itself. Not re-attempted as a further fix this pass, per the one-attempt rule (already used on this same finding's positioning bug) — flagged here plainly rather than silently claimed clean. Also flagged by Fable, both minor and neither blocking: the ground-contact point sits noticeably left of the diner building itself (inherited unchanged from <code>SHIP_PARK</code>'s original position, not something this pass moved), and the docked drone's sprite slightly overhangs the awning's left edge at rest (present before this pass too, not introduced by it). Whether the touchdown flare reads clearly enough at real venue-TV brightness, and the overall camera-push feel, remain explicitly Ben's own review — same as every prior pass in this file.<br><br>
+  <b>Bank/tilt + punch-out (v5, 2026-07-22), Ben's direct call after watching v4:</b> "honestly, idk what that was. it was just the diner scene from version 3 without the spaceship. we are going to be inside the spaceship, like we're driving it, pull up to the diner. park. the drone is then going to bring us dinner. then we fly off." v4's scale-only push didn't sell piloting anything — just a slow zoom on an otherwise-static scene. Resolved via two follow-up questions, Ben's picks locked as this pass's spec: (1) add a bank/tilt to the arrival, not a rotation-free push and not a continuous idle sway through the whole hold; (2) a NEW quick punch-out departure beat ("then we fly off," not in the original brief), a snappy final kick rather than a full mirrored pull-back. <b>What changed:</b> <code>bankAngle = GAS_BANK_MAX * (1 - camP)</code> — banked <code>GAS_BANK_MAX</code> (-0.06rad) at the very start of the approach, easing to fully level exactly as <code>camP</code> reaches 1 (settle), using the same <code>easeOutCubic</code> curve <code>camP</code> itself already rides, so the level-out lands on the actual parked moment rather than before or after it. Applied via <code>ctx.rotate(bankAngle)</code> between the existing translate-to-focus and scale calls, so rotation and scale share the same pivot (the diner). A new departure punch — <code>departProgress</code> ramps over the final <code>GAS_DEPART_DUR</code> (500ms) of <code>GAS_HOLD</code>, eased with <code>easeOutQuint</code> for a fast-attack "kick" feel (same envelope shape already used for galaxy's hyperspace-snap and harvest's burst-out, reused here rather than inventing a new curve), driving <code>camScale</code> down to <code>GAS_DEPART_MIN_SCALE</code> (0.7) right as the hold ends. Since <code>geShip</code> keeps counting up through <code>bridge3</code> itself (confirmed by reading <code>tick()</code>'s own <code>geShip = total - T.gasHoldStart</code> — never reset at the phase boundary), the punched-out scale is still in effect while the world's own alpha fades to 0 during the crossfade, reading as "we hit thrusters and the view recedes" rather than a hard cut. Both new motions are force-zeroed under reduced motion: <code>bankAngle</code> multiplies against <code>(1-camP)</code> and <code>camP</code> is already pinned to 1 in the reduced branch (no new reduced-motion code needed there), and <code>departProgress</code> is explicitly short-circuited to 0 when <code>reduced</code> is true. Scope unchanged from v4: diner stop only, no ship sprite, drone beat untouched. Verified via <code>node --check</code>; visual pass and Fable's evidence-check for this iteration follow next.<br><br>
+  <b>Step 5 visual pass, iteration 5, 2026-07-22 — one real finding, fixed within the one-attempt rule:</b> ran <code>visual-audit.mjs</code> (34s scoped) and actually compared frames across the arrival/settle/departure window, not just at the touchdown sub-beats. Real bug found: the camera transform (<code>ctx.save()</code>/rotate/scale) had been positioned — since iteration 4, never caught until now — AFTER the ringed planet and both debris-rock mesa layers and the floating island were already drawn, so only the diner building/sign/drone were ever actually inside it. Invisible in iteration 4's mild 0.88→1.0-only push; iteration 5's more dramatic 0.7x departure punch made it obvious by eye: the building visibly shrank away on its own while the island/mesas/planet stayed pinned at full size around it — reading as broken, not as a camera pulling back. Fixed, the one allowed attempt: moved the whole camera-transform setup earlier, right after the background stars, so planet/mesas/island/building/sign/drone all move together as one scene. Re-checked once via a full re-render: confirmed the whole scene now scales and rotates together across arrival, settle, and departure. Retargeted <code>concepts/tools/spot-check.mjs</code> to this file (same 8 sub-beat timestamps as prior iterations) to re-confirm the touchdown-flare/debris co-location fix from iteration 4 still holds — it does. Per the one-attempt rule, no further self-fix looping past this single re-check.<br><br>
+  <b>Fable second-opinion pass (evidence-only, per the one-Fable-pass rule), iteration 5, 2026-07-22:</b> confirmed, reading pre-fix and post-fix frames directly: the pre-fix bug is real (island/mesas/planet pixel-identical across arrival/settle/punch frames in the pre-fix bundle, only the sign changing size); post-fix, the whole scene scales together (measured the planet going from partially cropped at settle to fully in-frame and visibly smaller at the punch, island narrowing proportionally); the bank/tilt reads as a genuine whole-scene rotation at arrival-start that levels by settle (flagged as "subtle, partly conflated with the concurrent scale change in a still frame" — a fair read of a deliberately small angle, not a defect); the departure punch holds through the crossfade start, no empty-canvas edges revealed at the pulled-back 0.7x scale (stars correctly stay outside the transform, filling the frame). Touchdown flare/debris co-location from iteration 4 confirmed still intact, though Fable noted the flare reads faint relative to the debris — a polish nit already logged in iteration 4's own notes, not re-litigated further. No unresolved issues. Verdict: <b>ready for Ben</b>. Whether the bank/tilt and punch read strongly enough (vs. too subtly, or too aggressively) at real venue-TV brightness and motion remain explicitly Ben's own review.
+</div>
+
+<div class="gate">
+  <b>Self-gate</b>
+  <ul>
+    <li>Extension, not a parallel system: galaxy/meteor/harvest math is reused verbatim from already-shipped prototypes; only the floating-diner stop and the generalized crossfade are new.</li>
+    <li>Real theme colors only, all four themes, straight from <code>themes/index.js</code> — the floating-diner stop's base palette is still real-theme purple; teal and pink are a deliberate accent addition per Ben's direct creative call (see the 2026-07-22 notes paragraph), not a substitution for the real theme colors.</li>
+    <li>Replay button and reduced-motion toggle both clicked and confirmed working, not just wired.</li>
+    <li>GPU-appropriate: canvas/rAF for all four worlds (genuine per-frame numeric need); letterbox bars are transform-only.</li>
+    <li>No pop-in: the sign flickers on rather than snapping to full brightness; each world crossfades rather than cutting; letterbox bars scale from an edge.</li>
+    <li>Near-black banding guarded: every bridge keeps stars/streaks/pixels active over the crossfade rather than a bare gradient ramp through near-black.</li>
+    <li>Single shared caption element, not one per stop.</li>
+    <li>No dead code: northern lights and firefly meadow were fully removed, not disabled-in-place, when they were cut from the tour.</li>
+  </ul>
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById('cv');
+const ctx = canvas.getContext('2d', { alpha: false });
+const W = 960, H = 540, CX = W/2, CY = H/2, minDim = Math.min(W,H);
+canvas.width = W; canvas.height = H;
+
+const hexToRgb = hex => { const n = parseInt(hex.replace('#',''),16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; };
+const clamp01 = v => Math.max(0, Math.min(1, v));
+const lerp = (a,b,t) => a+(b-a)*t;
+const easeInOut = p => p<0.5 ? 2*p*p : 1-Math.pow(-2*p+2,2)/2;
+const easeInCubic = p => p*p*p;
+const easeOutQuint = p => 1 - Math.pow(1-p, 5);
+const easeOutCubic = p => 1 - Math.pow(1-p, 3);
+
+// ── real theme palettes, straight from themes/index.js ──
+const MS  = { bg:hexToRgb('#020408'), hi:hexToRgb('#e0f0ff'), hiHex:'#e0f0ff', textHex:'#f0f8ff' };
+const GAL = { bg:hexToRgb('#08001a'), accent:hexToRgb('#4a1a8f'), hi:hexToRgb('#c060ff'), hiHex:'#c060ff', textHex:'#e8d0ff' };
+const ARC = { bg:hexToRgb('#040010'), accent:hexToRgb('#3a0880'), hi:hexToRgb('#a020ff'), shiny:hexToRgb('#20ff80'), hiHex:'#a020ff', textHex:'#e0c0ff' };
+const HAR = { bg:hexToRgb('#1a0800'), accent:hexToRgb('#7a2808'), hi:hexToRgb('#ff6820'), hot:hexToRgb('#e8a020'), whiteHot:hexToRgb('#fff4d0'), hiHex:'#ff6820', textHex:'#f8d8b0' };
+// northern-lights (NL) and firefly-summer (FS) palettes/worlds were built,
+// audited twice, then removed outright per Ben's explicit direction — no dead
+// code left behind for a tour they're no longer part of
+
+let reduced = false;
+
+// ── timeline — back to four stops, reordered per Ben: midnight galaxy (now
+// opens the tour) → meteor shower → gas station → harvest/supernova (closes).
+// Galaxy inherits the "opening" hold beat meteor shower used to own when it was
+// first; meteor keeps its own established hold-then-departure-streaks pattern,
+// just as the second stop instead of the first.
+//
+// Runtime raised ~5x per Ben: each individual round-boundary journey (one
+// world's own bridge-in + hold, since in the real app these fire independently
+// at separate round transitions) now budgets to ~10s, not ~1.8-2.4s. Every
+// world here is either a continuous ambient loop (meteor's twinkle/streaks,
+// galaxy's warp, gas's neon+pixel-lights all keep looping/spawning with no
+// fixed end — safe to hold far longer with no code changes) or, for harvest,
+// a genuine one-shot narrative beat (converge -> burst -> settle) that was
+// already tuned across two review passes — rather than slow that choreography
+// down to fill the extra time (risking a mistimed, sluggish burst), a new
+// plain ambient hold (harHold: ember field, no convergence yet) was added
+// BEFORE it so the ~10s budget is met without touching the tuned burst timing
+// at all. Meteor's own hold:departure-streak ratio (400:900, ~30:70) is kept
+// proportional at the new scale, not just arbitrarily rebalanced.
+const GAL_HOLD=10000, BR1=600, MS_HOLD=2900, MS_OUT=6500, BR2=600,
+      GAS_HOLD=13000, BR3=600, HAR_HOLD=7000, HAR_CONVERGE=700, HAR_NOVA=1100, HAR_SETTLE=600;
+// GAS_HOLD extended 9400->13000 (2026-07-22, floating-diner redesign) to fit
+// the slowed-down flight-in + idle beat + drone takeout-delivery beat without
+// rushing any of them — still within round-journeys.md's 8-14s per-journey
+// target once this stop is split out as its own real round-boundary journey
+// (this file's combined ~40s runtime is a review-artifact exception to that
+// per-journey target, documented since v1; only this one stop's own duration
+// changed here, see TOTAL's new value in this pass's notes paragraph below).
+const TIMELINE = [
+  {phase:'galHold',dur:GAL_HOLD},{phase:'bridge1',dur:BR1},
+  {phase:'msHold',dur:MS_HOLD},{phase:'msOut',dur:MS_OUT},{phase:'bridge2',dur:BR2},
+  {phase:'gasHold',dur:GAS_HOLD},{phase:'bridge3',dur:BR3},
+  {phase:'harHold',dur:HAR_HOLD},{phase:'harConverge',dur:HAR_CONVERGE},{phase:'harNova',dur:HAR_NOVA},{phase:'harSettle',dur:HAR_SETTLE},
+];
+const TOTAL = TIMELINE.reduce((a,s)=>a+s.dur,0);
+const T = {}; { let acc=0; for (const seg of TIMELINE){ T[seg.phase+'Start']=acc; acc+=seg.dur; } T.total=acc; }
+
+// tourProgress keyframes: 0=galaxy,1=meteor,2=gas station,3=harvest
+// Auto-generated from TIMELINE now, not hand-duplicated — an independent review
+// flagged the previous hand-written array as brittle: if anyone changed a
+// *_HOLD duration without also re-deriving every downstream T.xStart offset by
+// hand, the crossfade would desync silently (no error, just a wrong-looking
+// tour). Deriving it structurally from phase names means duration edits can
+// never desync it.
+//
+// FIXED after the runtime stretch: the original version here only pushed a
+// flat keyframe at phases ending in 'Hold' or equal to 'harConverge' — it
+// missed 'msOut', a non-'Hold'-named flourish sub-phase that still needs to
+// hold flat at its world's index until ITS OWN end, not just msHold's end. At
+// the original ~900ms msOut this was a barely-visible gap; once msOut was
+// stretched to 6500ms, a Fable pass caught tourProgress ramping toward the
+// next world for the entire phase instead of only during the real 600ms
+// bridge after it — gas station was ~73% opaque and fully dark 4-5s before
+// its own power-on even started. Every non-bridge phase now pushes its own
+// flat endpoint, which is the actually-correct general rule (a bridge is the
+// only kind of phase that should ever move the world index) and also makes
+// the old separate trailing-endpoint push redundant, since the last phase in
+// any timeline always pushes its own correct final value now.
+function buildTourKeyframes(timeline){
+  const kf = [{t:0, v:0}];
+  let t=0, world=0;
+  for (const seg of timeline){
+    t += seg.dur;
+    if (seg.phase.startsWith('bridge')) { world++; kf.push({t, v:world}); }
+    else { kf.push({t, v:world}); }
+  }
+  return kf;
+}
+const TOUR_KF = buildTourKeyframes(TIMELINE);
+function tourProgress(t){
+  for (let i=0;i<TOUR_KF.length-1;i++){
+    const a=TOUR_KF[i], b=TOUR_KF[i+1];
+    if (t>=a.t && t<=b.t) {
+      if (a.v===b.v) return a.v;
+      const f = (b.t-a.t)>0 ? easeInOut(clamp01((t-a.t)/(b.t-a.t))) : 1;
+      return lerp(a.v,b.v,f);
+    }
+  }
+  return TOUR_KF[TOUR_KF.length-1].v;
+}
+function worldAlpha(tp, idx){ return clamp01(1-Math.abs(tp-idx)); }
+
+// ── world 1: meteor shower — REWORKED. Ben's own words: "the meteor shower
+// didn't feel like a shower at all... we're supposed to be going THROUGH the
+// meteor shower to get to the next round." The old version was a calm corner
+// radiant with occasional thin streaks — that's how you'd watch a meteor
+// shower from a hillside, not how you'd fly through one. This checks whether
+// the Kirupa vanilla-canvas z-depth-starfield technique (referenced earlier
+// this session, and already used in the liftoff POV file's warp field) got
+// reused here too — it hadn't. It's the same underlying trick galaxy's warp
+// already uses in this file (project x,y,z onto the screen, pull z toward
+// camera, draw a motion-blur trail from the previous projected position to
+// the current one) but pushed harder and given actual debris shapes instead
+// of pinpoint stars, so it reads as "rocks rushing past," not "twinkling."
+let msDistant = Array.from({length:90},()=>({x:Math.random()*W,y:Math.random()*H,size:0.5+Math.random()*1.4,hi:0.18+Math.random()*0.4,dur:9000+Math.random()*18000,phase:Math.random()*Math.PI*2}));
+let msDebris = Array.from({length:80}, () => ({
+  x:Math.random()*2-1, y:Math.random()*2-1, z:Math.random(),
+  size:1.6+Math.random()*2.8, rock:Math.random()<0.5,
+}));
+// intensity: 0 at the start of msHold (just entering the field), ramps to 1
+// over the first ~2.5s (smoothstep, so it doesn't ramp linearly-flat), holds
+// at 1 through the rest of msHold and all of msOut — the shower has a felt
+// beginning (entering) and then a sustained "we are IN it" middle/end, rather
+// than a static hold plus a bolted-on departure flourish.
+function msIntensity(msElapsed){
+  const p = clamp01(msElapsed/2500);
+  return p*p*(3-2*p); // smoothstep
+}
+function drawMsWorld(alpha, now, dtn, intensity){
+  if (alpha<=0.01) return;
+  ctx.globalAlpha=alpha;
+  // the old fixed bright corner-radiant wash from the pre-rework "watch it
+  // from a hillside" design was removed here — a Fable pass correctly called
+  // it an orphaned vestige once the debris field became the actual content;
+  // a sourceless static bright patch had no reason to survive the rework.
+  ctx.globalCompositeOperation='lighter';
+  // distant calm stars — cheap depth cue behind the rushing debris, kept slow/steady
+  // regardless of intensity so the foreground rush actually reads as foreground
+  for (const s of msDistant){ const a=s.hi*(0.5+0.5*Math.sin(now/(s.dur/6.28)+s.phase)); ctx.fillStyle=`rgba(255,255,255,${a})`; ctx.beginPath(); ctx.arc(s.x,s.y,s.size,0,6.2832); ctx.fill(); }
+  // the actual "flying through it" layer.
+  // A Fable pass caught this reduced-motion branch as false advertising: the
+  // notes/comments claimed "no z-rush" here, but `base` was still 0.006 even
+  // when reduced, and the z-decrement ran unconditionally — every dot still
+  // traversed the full depth range in ~2.7s (not "opacity-only presence").
+  // Reduced now genuinely freezes z (no decrement, no respawn-on-reset at
+  // all) and only adds a slow opacity twinkle so the field doesn't read dead.
+  if (reduced){
+    for (const d of msDebris){
+      const sx=(d.x/d.z)*CX+CX, sy=(d.y/d.z)*CY+CY;
+      if (sx<-60||sx>W+60||sy<-60||sy>H+60) continue;
+      const depth=1-d.z, a=Math.min(1,depth*1.2);
+      const tw = 0.6+0.4*Math.sin(now/900 + d.size*10);
+      ctx.fillStyle = d.rock ? `rgba(120,132,168,${0.4*a*tw})` : `rgba(${MS.hi.r},${MS.hi.g},${MS.hi.b},${0.5*a*tw})`;
+      ctx.beginPath(); ctx.arc(sx,sy,Math.max(0.8,depth*2.2),0,6.2832); ctx.fill();
+    }
+    ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+    return;
+  }
+  const base = 0.006 + 0.05*intensity;
+  for (const d of msDebris){
+    const prevZ = d.z; d.z -= base*dtn;
+    if (d.z<=0.02){ d.x=Math.random()*2-1; d.y=Math.random()*2-1; d.z=1; continue; }
+    const sx=(d.x/d.z)*CX+CX, sy=(d.y/d.z)*CY+CY;
+    if (sx<-60||sx>W+60||sy<-60||sy>H+60){ d.x=Math.random()*2-1; d.y=Math.random()*2-1; d.z=1; continue; }
+    const depth=1-d.z, a=Math.min(1,depth*1.2);
+    const px=(d.x/prevZ)*CX+CX, py=(d.y/prevZ)*CY+CY;
+    if (d.rock){
+      // duller rock chunk with a bright rim-light edge (echoes the windshield
+      // file's rim-light fix) so it reads as tumbling debris, not a star.
+      // The fill used to run under the same 'lighter' composite as everything
+      // else in this loop — under 'lighter' a dark fill can only ADD faint
+      // luminance, never occlude, so the "chunk" was mathematically almost
+      // invisible (~1.28:1) and rocks rendered as bare rings. Switched to
+      // source-over just for this fill so the body actually reads as solid.
+      ctx.strokeStyle=`rgba(${MS.hi.r},${MS.hi.g},${MS.hi.b},${0.55*a})`; ctx.lineWidth=Math.max(0.6,depth*1.6);
+      ctx.beginPath(); ctx.arc(sx,sy,Math.max(1,depth*d.size*1.6),0,6.2832); ctx.stroke();
+      ctx.globalCompositeOperation='source-over';
+      ctx.fillStyle=`rgba(40,44,60,${0.9*a})`;
+      ctx.beginPath(); ctx.arc(sx,sy,Math.max(0.8,depth*d.size*1.4),0,6.2832); ctx.fill();
+      ctx.globalCompositeOperation='lighter';
+    } else {
+      // icy fragment — full motion-blur trail from its previous frame position,
+      // exactly the galaxy-warp trick, just tuned faster/denser for "rushing past"
+      ctx.strokeStyle=ctx.fillStyle=`rgba(${MS.hi.r},${MS.hi.g},${MS.hi.b},${a})`;
+      const len=Math.abs(sx-px)+Math.abs(sy-py);
+      if (len<1.2){ ctx.beginPath(); ctx.arc(sx,sy,Math.max(0.7,depth*2),0,6.2832); ctx.fill(); }
+      else { ctx.lineWidth=Math.max(0.6,depth*depth*6); ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(sx,sy); ctx.stroke(); }
+    }
+  }
+  ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+}
+// camera shake — Ben's explicit ask: "the spaceship is supposed to shake as
+// we go through the meteor shower." Time-based dual-sine noise (same
+// technique as the liftoff POV file's rumbleNoise — robust to dropped
+// frames since it never depends on prior frames), scaled by msIntensity and
+// applied to the CANVAS ELEMENT itself, not the world draw — the letterbox
+// bars and HUD stay rock-steady while the "view through the window" shakes,
+// which reads as being inside a jostled cockpit rather than a wobbly picture.
+let msShake = {x:0,y:0};
+// smoothed copy of msIntensity — a Fable pass caught that the raw value hard-
+// cut 9x the instant the phase flips from msOut to bridge2 (worldAlpha is
+// still ~0.94 at that boundary, so the debris field was still nearly fully
+// visible when its speed slammed from full-rush to a near-crawl in one
+// frame). Exponentially smoothed the same way the shake's decay already is.
+let msIntensitySmooth = 0;
+function msRumbleNoise(now, amp){
+  return {
+    x: (Math.sin(now*0.033)*0.6+Math.sin(now*0.081+1.1)*0.4)*amp,
+    y: (Math.sin(now*0.047+0.5)*0.6+Math.sin(now*0.065+2.3)*0.4)*amp*0.75,
+  };
+}
+
+// ── world 0: midnight galaxy — now the opening stop. Reused z-depth star warp + nebula wash, simplified from midnight-galaxy-spaceship-journey.html ──
+// MOMENT ADDED per Ben's "how do we get them all to be memorable" push: the
+// guest-reaction pass flagged this stop as the one real miss — pure ambiance,
+// no event, "wallpaper, not a highlight." Rejected a comet/shooting-star idea
+// on Ben's own instinct that it would compete with meteor shower's whole
+// identity (a bright thing streaking through dark space) — a comet would be
+// a NEW object doing the same basic trick. Instead: a hyperspace snap. It's
+// not a new mechanic at all — it's the existing galWarp value (already
+// driving this exact star-warp math) spiked hard for one beat, so the
+// existing calm stars themselves stretch into fast streaks, plus a capped
+// flash and a quick zoom-punch on the canvas. Different rhythm from meteor's
+// sustained multi-second shake+debris: this is one sharp attack-then-decay
+// punch, over in under a second, then back to the calm drift.
+let galStars = Array.from({length:120},()=>({x:Math.random()*2-1,y:Math.random()*2-1,z:Math.random(),s:0.7+Math.random()*0.6}));
+let galWarp = 0.03;
+const GAL_SNAP_AT = 4200; // ms into galHold — the moment, well after the calm drift has established itself
+function galSnapEnvelope(dt){ // dt = ms since GAL_SNAP_AT; fast attack, slower decay — asymmetric, per round-journeys.md's one-shot-action guidance
+  if (dt<0) return 0;
+  if (dt<160) return dt/160;
+  return Math.max(0, 1-(dt-160)/700);
+}
+function drawGalWorld(alpha, dtn, coreFade=1, snapEnv=0){
+  if (alpha<=0.01) return;
+  ctx.globalAlpha=alpha;
+  const wash = ctx.createRadialGradient(W*0.12,H*0.88,0,W*0.12,H*0.88,W*0.7);
+  wash.addColorStop(0,`rgba(${GAL.accent.r},${GAL.accent.g},${GAL.accent.b},0.5)`); wash.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=wash; ctx.fillRect(0,0,W,H);
+  // coreFade: an extra multiplier on top of the world's own alpha, only for this
+  // bright core gradient — see the bridge2 fix note in tick()
+  const core = ctx.createRadialGradient(W*0.88,H*0.12,0,W*0.88,H*0.12,W*0.32);
+  core.addColorStop(0,`rgba(255,255,255,${0.9*coreFade})`); core.addColorStop(0.15,`rgba(${GAL.hi.r},${GAL.hi.g},${GAL.hi.b},${0.55*coreFade})`); core.addColorStop(0.4,`rgba(${GAL.hi.r},${GAL.hi.g},${GAL.hi.b},${0.2*coreFade})`); core.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=core; ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='lighter';
+  // snapEnv is 0 whenever reduced motion is on (gated in tick()) — under
+  // reduced this stop stays exactly the calm drift it always was, no flash,
+  // no zoom, no extra warp, same contract as every other world in this file.
+  const effectiveWarp = galWarp + snapEnv*2.1;
+  const base=0.021*(reduced?0.1:effectiveWarp);
+  for (const s of galStars){
+    const prevZ=s.z; s.z -= base*s.s*dtn;
+    if (s.z<=0.02){ s.x=Math.random()*2-1; s.y=Math.random()*2-1; s.z=1; continue; }
+    const sx=(s.x/s.z)*CX+CX, sy=(s.y/s.z)*CY+CY;
+    if (sx<-40||sx>W+40||sy<-40||sy>H+40){ s.x=Math.random()*2-1; s.y=Math.random()*2-1; s.z=1; continue; }
+    const depth=1-s.z, a=Math.min(1,depth*1.15), tt=Math.min(1,depth*1.3);
+    const r=Math.round(GAL.accent.r+(GAL.hi.r-GAL.accent.r)*tt), g=Math.round(GAL.accent.g+(GAL.hi.g-GAL.accent.g)*tt), b=Math.round(GAL.accent.b+(GAL.hi.b-GAL.accent.b)*tt);
+    ctx.fillStyle=ctx.strokeStyle=`rgba(${r},${g},${b},${a})`;
+    const px=(s.x/prevZ)*CX+CX, py=(s.y/prevZ)*CY+CY, len=Math.abs(sx-px)+Math.abs(sy-py);
+    if (len<1.2||effectiveWarp<0.03){ ctx.beginPath(); ctx.arc(sx,sy,Math.max(0.6,depth*2),0,6.2832); ctx.fill(); }
+    else { ctx.lineWidth=Math.max(0.5,depth*depth*5); ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(sx,sy); ctx.stroke(); }
+  }
+  ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+  if (snapEnv>0.01){
+    // capped flash, same eye-comfort discipline as the supernova's own capped
+    // peak alpha earlier this session — this whites the frame for an instant,
+    // not a blinding spike
+    ctx.fillStyle=`rgba(255,255,255,${0.32*snapEnv})`;
+    ctx.fillRect(0,0,W,H);
+  }
+}
+
+// ── world 2: the floating diner — REDESIGNED 2026-07-22 (see this pass's own
+// notes paragraph near the bottom of this file for the full grill-session
+// account). Was "retro-arcade gas station on a rocky moon" — a full-width moon
+// surface you stand on. Ben's direct call, via a live grilling session using a
+// Minecraft screenshot as reference: "it's supposed to be a distant planet
+// that happens to have a diner," not a gas station. The moon-surface ground is
+// now a bounded floating rock/island (still the same MOON_Y top-surface line
+// and the same purple ground colors, just no longer spanning the full frame
+// width), the dominant ringed planet stays and is leaned into harder, and a
+// roadside sign + scatter of small square "pixel" lights remain, now roof-
+// mounted (see below) rather than a separate ground-rooted pole. Internal
+// identifiers below (MOON_Y, SIGN_X, GAS_HOLD, drawGasWorld, etc.) keep their
+// original "gas"/"moon" names on purpose — renaming every internal identifier
+// for a concept-level rename is unnecessary churn risk; the CONCEPT is a
+// diner on a floating rock, full stop, everywhere a human reads this file. ──
+const MOON_Y = H*0.72;
+const SIGN_X = W*0.62;
+// Accent-shift palette for this stop only, per Ben's direct call: stays
+// purple-dominant (the real ARC theme colors are untouched everywhere else in
+// this file), teal and pink added as accent colors — not a repaint. Teal
+// (DINER_TEAL) replaces every spot that used to reach for ARC.shiny (green)
+// within this one world: sign glow/lettering, the ringed planet's ring, pixel
+// lights, ship engine glow/flare — one consistent ambient-accent hue across
+// the whole stop. Pink (DINER_PINK) is deliberately NOT used for anything
+// ambient — reserved only for the two new one-shot "moment" beats (the
+// touchdown debris burst and the drone's delivery blip), per
+// round-journeys.md's own composition checklist: one accent reserved for the
+// smallest, most attention-grabbing share of the frame, not spread everywhere.
+const DINER_TEAL = hexToRgb('#20e0c0');
+const DINER_PINK = hexToRgb('#ff4fa8');
+// 16 of 24 pixel lights clustered within ~70px of the station (they previously
+// scattered across the whole sky, reading as more stars rather than station
+// lights); the remaining 8 stay as sparse distant scatter for atmosphere.
+// Spread narrowed from ±120 to ±70 — a Fable pass computed the wider spread's
+// max x (715.2) overlapping the ringed planet's disc (684.6-889.8), so some
+// clustered "station light" squares were blinking on top of the planet face.
+let pixelLights = Array.from({length:24}, (_, i) => {
+  const clustered = i < 16;
+  return {
+    x: clustered ? SIGN_X + (Math.random()*140-70) : Math.random()*W,
+    y: MOON_Y*0.15 + Math.random()*MOON_Y*0.55,
+    size: 2+Math.random()*2, phase: Math.random()*Math.PI*2, dur: 900+Math.random()*2200,
+    color: Math.random()<0.35 ? DINER_TEAL : ARC.hi, // was ARC.shiny (green) — teal accent-shift, 2026-07-22
+  };
+});
+function neonBuzz(tSincePowerOn){
+  // one-shot now, not a repeating cycle — the old version looped this stepped
+  // flicker forever on a %1 of the global clock, so the sign never actually
+  // finished turning on, it just read as perpetually broken neon. Flickers for
+  // 700ms, then settles to a steady near-full 0.95 over the next 300ms and holds.
+  if (tSincePowerOn <= 0) return 0;
+  if (tSincePowerOn < 700) {
+    const cyc = tSincePowerOn/700;
+    const stops = [[0,.18],[.08,.48],[.16,.20],[.24,.48],[.35,.18],[.5,.43],[.64,.18],[.72,.48],[.85,.22],[1,.46]];
+    for (let i=0;i<stops.length-1;i++){ if (cyc>=stops[i][0]&&cyc<=stops[i+1][0]){ const f=(cyc-stops[i][0])/(stops[i+1][0]-stops[i][0]); return lerp(stops[i][1],stops[i+1][1],f); } }
+    return 0.46;
+  }
+  // settled state: was a dead-flat 0.95 for the remaining ~8.7s of the hold —
+  // real neon breathes, and round-journeys.md's own "deliberate irregularity
+  // beats uniform repetition" rule applies here too. Idle wobble plus one
+  // scheduled stutter-dip around the 5s mark keep the sign reading as alive
+  // for the whole 9.4s hold instead of just its opening 1s.
+  let v = lerp(0.46, 0.95, clamp01((tSincePowerOn-700)/300));
+  if (tSincePowerOn >= 1000){
+    v = 0.95 + 0.03*Math.sin(tSincePowerOn/900);
+    const dip = tSincePowerOn - 5000;
+    if (dip >= 0 && dip < 220){
+      const dipCyc = dip/220;
+      const dipStops=[[0,.95],[.3,.35],[.5,.85],[.65,.3],[1,.95]];
+      for (let i=0;i<dipStops.length-1;i++){ if (dipCyc>=dipStops[i][0]&&dipCyc<=dipStops[i+1][0]){ const f=(dipCyc-dipStops[i][0])/(dipStops[i+1][0]-dipStops[i][0]); v=lerp(dipStops[i][1],dipStops[i+1][1],f); break; } }
+    }
+  }
+  return v;
+}
+// REWORKED per Ben: "the gas station scene looks bad" + reference photo of a
+// diner on a red-rock desert under a giant ringed planet. The old scene was a
+// flat purple wash with an abstract sign-on-a-pole and nothing to look at
+// besides it. Two additions borrowed from that reference, in this file's own
+// real theme colors (not the reference's literal colors): a dominant ringed
+// planet owning the sky (the single biggest thing missing before — there was
+// no "we stopped somewhere" payoff), and jagged mesa/butte silhouettes on the
+// horizon (Monument-Valley-style spires, not a single smooth bezier bump) so
+// the ground reads as an actual alien desert, not a gray shape.
+const GAS_PLANET = { x: W*0.82, y: H*0.20, r: H*0.19 };
+let gasDeepStars = Array.from({length:50},()=>({x:Math.random()*W,y:Math.random()*H*0.6,size:0.5+Math.random()*1.3,hi:0.15+Math.random()*0.35,dur:8000+Math.random()*14000,phase:Math.random()*Math.PI*2}));
+// far + near DEBRIS-ROCK layers — repurposed 2026-07-22 from "mesas sitting on
+// a continuous horizon" into small independent floating rocks scattered in
+// the void (the same x/w/h data, just no longer touching a shared ground
+// line — each now carries its own y01 so far ones can drift above or below
+// MOON_Y independently). This is what actually sells "floating in space, not
+// standing on a moon surface": far ones smaller/dimmer for depth, near ones
+// bigger/closer to camera, ALL now separate floating bodies rather than
+// skyline buttes. Doubles as reinforcing the "debris" motif this stop's
+// touchdown effect now uses too, and echoes meteor shower's own rock debris
+// earlier in the tour — the same visual language, not a coincidence.
+const GAS_MESAS_FAR  = [ {x:0.06,w:0.09,h:0.16,y01:-0.10}, {x:0.20,w:0.06,h:0.10,y01:0.06}, {x:0.70,w:0.07,h:0.12,y01:-0.07}, {x:0.94,w:0.10,h:0.14,y01:0.04} ];
+// middle rock was at x:0.34 — a Fable pass (pre-redesign, when this was still
+// a mesa on the shared horizon) computed its base spanning x326-422px
+// directly behind the parked ship's hull (x355-451px), with the ship's
+// rim-light landing at only ~1.20:1 against it there — moved left to clear
+// the hull by ~48px. Preserved here even though the ground shape changed,
+// since the same ship/hull x-position this was clearing is unchanged.
+const GAS_MESAS_NEAR  = [ {x:0.02,w:0.14,h:0.24,y01:0.03}, {x:0.22,w:0.10,h:0.19,y01:-0.05}, {x:0.86,w:0.13,h:0.22,y01:0.02} ];
+function drawGasMesa(x01,w01,h01,fill,y01=0){
+  // Second rework (2026-07-22, same day — caught by actually looking at the
+  // rendered frame via visual-audit.mjs, not just reading the code): the
+  // first attempt at "floating rock" here was a symmetric double-trapezoid,
+  // same tall proportions as the old mesa-on-a-horizon shape it replaced —
+  // rendered, it read as a row of giant purple VASES/PILLARS flanking the
+  // scene, not small floating debris. Root cause: keeping the old h01 values
+  // (sized for tall foreground mesas) while only changing the path shape
+  // wasn't enough; the SIZE and REGULARITY were the actual problem, not just
+  // the silhouette's top/bottom taper. Replaced with a genuinely small,
+  // irregular jagged blob — same rock-chunk visual language as msDebris in
+  // the meteor-shower world earlier in this tour (an intentional callback,
+  // not a coincidence), deterministically jittered from x01 so it's stable
+  // across replays without needing its own persistent random state.
+  const bw=W*w01, bh=H*h01, bx=W*x01, by=MOON_Y+H*y01;
+  const seed = x01*97.31;
+  const jit = i => 0.7 + 0.55*Math.abs(Math.sin(seed+i*12.9898));
+  const baseR = Math.min(bw,bh)*0.30; // deliberately small — debris, not a landmark
+  const pts = 7;
+  ctx.fillStyle=fill;
+  ctx.beginPath();
+  for (let i=0;i<pts;i++){
+    const ang = (i/pts)*Math.PI*2;
+    const r = baseR*jit(i);
+    const px = bx + Math.cos(ang)*r, py = by + Math.sin(ang)*r*0.7; // squashed vertically — a rock, not a sphere
+    if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }
+  ctx.closePath(); ctx.fill();
+}
+// ── the floating island itself — the diner's ground, bounded instead of
+// full-width (2026-07-22 redesign). Same top-surface Y (MOON_Y) and same
+// purple fill/stroke colors as the previous full-width ground, so the ship-
+// park/sign/canopy math below (all keyed off MOON_Y and SIGN_X) needed zero
+// changes — only the SHAPE of what's underneath them changed. Sized to hold
+// the ship (parks at SIGN_X-W*0.20) and the diner building (centered on
+// SIGN_X, canopyW W*0.19) with real edge margin on both sides, per
+// round-journeys.md's own no-clipping/edge-margin principle applied to the
+// island's edge, not just the frame's.
+const ISLAND_LEFT = W*0.24, ISLAND_RIGHT = W*0.80;
+function drawFloatingIsland(){
+  const topMidDip = 8, topRightDip = -14; // small undulation, echoes the old horizon bezier's bumpiness
+  ctx.fillStyle='#54329a';
+  ctx.beginPath();
+  ctx.moveTo(ISLAND_LEFT, MOON_Y+H*0.02);
+  ctx.bezierCurveTo(ISLAND_LEFT+ (ISLAND_RIGHT-ISLAND_LEFT)*0.22, MOON_Y-topMidDip, ISLAND_LEFT+(ISLAND_RIGHT-ISLAND_LEFT)*0.38, MOON_Y+10, ISLAND_LEFT+(ISLAND_RIGHT-ISLAND_LEFT)*0.58, MOON_Y-4);
+  ctx.bezierCurveTo(ISLAND_LEFT+(ISLAND_RIGHT-ISLAND_LEFT)*0.78, MOON_Y-18, ISLAND_RIGHT-14, MOON_Y+topRightDip, ISLAND_RIGHT, MOON_Y-8);
+  // right side, tapering down and in — a jagged rocky underside, not a hard
+  // rectangle edge, so it reads as a chunk of rock rather than a floating slab
+  ctx.bezierCurveTo(ISLAND_RIGHT+H*0.02, MOON_Y+H*0.05, ISLAND_RIGHT-H*0.03, MOON_Y+H*0.12, ISLAND_RIGHT-H*0.10, MOON_Y+H*0.10);
+  ctx.bezierCurveTo(ISLAND_RIGHT-H*0.20, MOON_Y+H*0.18, ISLAND_RIGHT-H*0.30, MOON_Y+H*0.09, ISLAND_LEFT+(ISLAND_RIGHT-ISLAND_LEFT)*0.42, MOON_Y+H*0.16);
+  // one asymmetric downward point near center-left — the single "unmistakable
+  // rock" silhouette cue, echoing the near-mesa trapezoid points already used
+  // elsewhere in this file rather than inventing a new shape language
+  ctx.lineTo(ISLAND_LEFT+(ISLAND_RIGHT-ISLAND_LEFT)*0.30, MOON_Y+H*0.20);
+  ctx.bezierCurveTo(ISLAND_LEFT+H*0.02, MOON_Y+H*0.13, ISLAND_LEFT-H*0.02, MOON_Y+H*0.06, ISLAND_LEFT, MOON_Y+H*0.02);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(ISLAND_LEFT, MOON_Y+H*0.02);
+  ctx.bezierCurveTo(ISLAND_LEFT+(ISLAND_RIGHT-ISLAND_LEFT)*0.22, MOON_Y-topMidDip, ISLAND_LEFT+(ISLAND_RIGHT-ISLAND_LEFT)*0.38, MOON_Y+10, ISLAND_LEFT+(ISLAND_RIGHT-ISLAND_LEFT)*0.58, MOON_Y-4);
+  ctx.bezierCurveTo(ISLAND_LEFT+(ISLAND_RIGHT-ISLAND_LEFT)*0.78, MOON_Y-18, ISLAND_RIGHT-14, MOON_Y+topRightDip, ISLAND_RIGHT, MOON_Y-8);
+  ctx.strokeStyle='rgba(160,32,255,0.35)'; ctx.lineWidth=2; ctx.stroke();
+}
+// The gas station stop was a static held frame — a sign flickering on with
+// nothing else happening — exactly what round-journeys.md's own five-part
+// scene checklist calls out ("what is it *doing*? avoid a static held pose").
+// Camera-POV rework, 2026-07-22 (see updateGasArrival's own header comment
+// for the full account): Ben's direct call after watching the ship-arrival
+// version — "remember, we are in the spaceship. i dont want to see the
+// exterior when we go to the diner." The arrival beat itself is unchanged in
+// FEEL (a held anticipation beat, then a settle into a parked idle with a
+// touchdown flare that fades a beat after motion stops) but is now driven by
+// a camera push toward the diner instead of an external ship sprite flying
+// through frame. SHIP_PARK is kept as the fixed anchor point the camera
+// pushes toward and where touchdown effects (flare, debris, drone hover) are
+// keyed — it no longer marks where a ship sprite sits, just a scene-space
+// reference point. SHIP_START is gone: there's no sprite position to
+// interpolate from anymore, only a scale/focus camera move (see camP usage
+// in drawGasWorld).
+const SHIP_PARK = { x: SIGN_X - W*0.20, y: MOON_Y - H*0.045 };
+// Flight-in slowed down, 2026-07-22 — Ben's direct call ("the flight in can be
+// slowed down"): SHIP_HOLD_BEFORE 300->500, SHIP_FLIGHT_DUR 1700->2800. Every
+// downstream value (p, arc, scale, settle) is computed as a FRACTION of these
+// two constants, not a hardcoded wall-clock offset, so slowing them down here
+// required no other changes to the flight math itself — same pattern already
+// proven safe elsewhere in this file (GAS_HOLD's own fraction-based tourProgress).
+const SHIP_HOLD_BEFORE = 500;   // anticipation — a beat of stillness before anything moves
+// Bank/tilt + punch-out constants, 2026-07-22 (iteration 5) — see drawGasWorld's
+// own camera-transform comments for how each is used. Kept as named constants
+// rather than inline magic numbers, same convention as every other tunable in
+// this file.
+const GAS_BANK_MAX = -0.06;        // radians at the very start of the approach; eases to 0 (level) by settle
+const GAS_DEPART_DUR = 500;        // ms — the punch-out window, Ben's own "quick", timed to end exactly as GAS_HOLD does
+const GAS_DEPART_MIN_SCALE = 0.7;  // how far the camera punches out at the peak of the kick
+const SHIP_FLIGHT_DUR = 2800;
+// Derived timeline for the idle beat + drone delivery, 2026-07-22 addition —
+// all keyed off geShip (ms since this stop's own hold started), computed once
+// here rather than re-derived inline at each call site.
+const SHIP_TOUCHDOWN_AT = SHIP_HOLD_BEFORE + SHIP_FLIGHT_DUR;      // 3300 — flight is functionally complete (see `settle` below)
+const DRONE_IDLE_BEFORE = 1800;                                    // idle beat — Ben's "small idle behavior" before the payoff
+const DRONE_LAUNCH_AT   = SHIP_TOUCHDOWN_AT + DRONE_IDLE_BEFORE;    // 5100
+const DRONE_DOWN_DUR = 700, DRONE_HOVER_DUR = 600, DRONE_UP_DUR = 700, DRONE_DOCK_FADE = 300;
+const DRONE_HOVER_AT  = DRONE_LAUNCH_AT + DRONE_DOWN_DUR;           // 5800 — arrives at the ship
+const DRONE_RETURN_AT = DRONE_HOVER_AT + DRONE_HOVER_DUR;           // 6400 — delivery done, heads back
+const DRONE_DOCK_AT   = DRONE_RETURN_AT + DRONE_UP_DUR;             // 7100 — back at the roof
+const DRONE_DONE_AT   = DRONE_DOCK_AT + DRONE_DOCK_FADE;            // 7400 — fully docked; remaining ~5.6s of GAS_HOLD is settled ambience
+// Drone dock/hover positions — tied to the diner roof's own geometry
+// (drawGasWorld's canopyY = MOON_Y-H*0.09-6, duplicated here as a plain
+// number rather than threaded through as a parameter, since both are fixed
+// constants derived from the same unchanging inputs) and to SHIP_PARK, so
+// moving the ship or the building later would need this updated too — noted
+// explicitly rather than left as a silent coincidence.
+const DRONE_ROOF_Y = MOON_Y - H*0.09 - 6 - H*0.02;
+const DRONE_DOCK = { x: SIGN_X - W*0.09, y: DRONE_ROOF_Y };
+// Retargeted 2026-07-22 (camera-POV rework) — Ben's explicit call to keep
+// this beat ("the drone is bringing us dinner!"), just no longer delivering
+// to an external ship. Lower-center-of-frame, reading as "just outside our
+// window" rather than beside a parked hull.
+const DRONE_SHIP_HOVER = { x: CX, y: MOON_Y - H*0.02 };
+function drawDroneBody(x, y, glow){
+  // simple and on-palette, per Ben's direct call — a small rounded body, four
+  // plain arms to four rotor points, one under-glow. No fussy greebling.
+  // Size bumped 0.028->0.045 (2026-07-22, same day) after actually looking at
+  // the rendered frame: at the original size the whole drone read as an
+  // indistinct fuzzy dot, arms/rotors too small to resolve. Still clearly
+  // "small" relative to the ship (W*0.10) — roughly half its size, the right
+  // scale relationship for a delivery drone vs. the ship it's delivering to.
+  const w = W*0.045, h = w*0.55;
+  ctx.save(); ctx.translate(x,y);
+  ctx.globalCompositeOperation='lighter';
+  ctx.fillStyle = `rgba(${DINER_TEAL.r},${DINER_TEAL.g},${DINER_TEAL.b},${0.55*glow})`;
+  ctx.beginPath(); ctx.arc(0, h*0.35, w*0.16, 0, 6.2832); ctx.fill();
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle='rgba(16,10,28,1)';
+  ctx.beginPath(); ctx.ellipse(0,0, w*0.5, h*0.42, 0, 0, 6.2832); ctx.fill();
+  ctx.strokeStyle=`rgba(${ARC.hi.r},${ARC.hi.g},${ARC.hi.b},0.5)`; ctx.lineWidth=Math.max(1,w*0.03);
+  ctx.beginPath(); ctx.ellipse(0,0, w*0.5, h*0.42, 0, -0.5, 2.4); ctx.stroke(); // rim-light, same silhouette convention as every other sprite in this file
+  const arms=[[-1,-1],[1,-1],[-1,1],[1,1]];
+  ctx.strokeStyle='rgba(16,10,28,1)'; ctx.lineWidth=Math.max(1,w*0.05);
+  for (const [ax,ay] of arms){ ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(ax*w*0.55, ay*h*0.55); ctx.stroke(); }
+  ctx.fillStyle=`rgba(${DINER_TEAL.r},${DINER_TEAL.g},${DINER_TEAL.b},${0.5+0.3*glow})`;
+  for (const [ax,ay] of arms){ ctx.beginPath(); ctx.arc(ax*w*0.55, ay*h*0.55, w*0.09, 0, 6.2832); ctx.fill(); }
+  ctx.restore();
+}
+// The payoff beat, per Ben's direct call: "a takeout order be brought to us"
+// by "a small drone," "mount it to the roof." Fully derived from geShip each
+// frame (no persistent mutable state beyond what updateGasArrival already owns) —
+// same discipline as everywhere else in this file that a value CAN be derived
+// rather than tracked, it is, to avoid a whole class of reset/replay bugs.
+function drawDinerDrone(now, geShip, dtn){
+  if (reduced){
+    // reduced motion: no flight at all — drone already docked at the roof
+    // with opacity-only breathing, same contract as the ship's own reduced
+    // branch (parked immediately, no translate, breathing glow only)
+    if (geShip < SHIP_HOLD_BEFORE) return;
+    drawDroneBody(DRONE_DOCK.x, DRONE_DOCK.y, 0.6+0.3*(0.5+0.5*Math.sin(now/1600)));
+    return;
+  }
+  if (geShip < SHIP_TOUCHDOWN_AT) return; // ship hasn't landed yet — nothing to deliver to
+  if (geShip < DRONE_LAUNCH_AT){
+    drawDroneBody(DRONE_DOCK.x, DRONE_DOCK.y, 0.35+0.15*Math.sin(now/900)); // docked, idling through the idle beat before its own moment
+    return;
+  }
+  let x, y;
+  if (geShip < DRONE_HOVER_AT){
+    const p = easeInOut(clamp01((geShip-DRONE_LAUNCH_AT)/DRONE_DOWN_DUR));
+    x = lerp(DRONE_DOCK.x, DRONE_SHIP_HOVER.x, p);
+    y = lerp(DRONE_DOCK.y, DRONE_SHIP_HOVER.y, p) - Math.sin(p*Math.PI)*H*0.02; // shallow arc, same motion-follows-arcs principle as the ship's own flight-in
+  } else if (geShip < DRONE_RETURN_AT){
+    x = DRONE_SHIP_HOVER.x; y = DRONE_SHIP_HOVER.y;
+    // delivery blip — the ONE use of the pink "moment" accent in this stop,
+    // a single pulse timed to the hover, not a sustained glow
+    const hp = clamp01((geShip-DRONE_HOVER_AT)/DRONE_HOVER_DUR);
+    const blip = Math.sin(hp*Math.PI);
+    ctx.globalCompositeOperation='lighter';
+    ctx.fillStyle = `rgba(${DINER_PINK.r},${DINER_PINK.g},${DINER_PINK.b},${0.8*blip})`;
+    ctx.beginPath(); ctx.arc(x, y+H*0.035, W*0.010+blip*W*0.010, 0, 6.2832); ctx.fill();
+    ctx.globalCompositeOperation='source-over';
+  } else if (geShip < DRONE_DOCK_AT){
+    const p = easeInOut(clamp01((geShip-DRONE_RETURN_AT)/DRONE_UP_DUR));
+    x = lerp(DRONE_SHIP_HOVER.x, DRONE_DOCK.x, p);
+    y = lerp(DRONE_SHIP_HOVER.y, DRONE_DOCK.y, p) - Math.sin(p*Math.PI)*H*0.02;
+  } else {
+    drawDroneBody(DRONE_DOCK.x, DRONE_DOCK.y, 0.35+0.15*Math.sin(now/900)); // back home, settled for the rest of the hold
+    return;
+  }
+  drawDroneBody(x, y, 1);
+}
+let shipTouchdownFlare = 0;
+// touchdown debris — reworked 2026-07-22 from a soft dust-puff glow into
+// actual kicked-up debris fragments, per Ben's direct call ("debris kicked up
+// on touchdown, not dust — this is space, not a dusty desert moon"). Fixed-
+// size pool, reset (not reallocated) on each trigger — same particle-pooling
+// discipline as msDebris/galStars/pixelLights/harAmbient elsewhere in this
+// file. Most fragments reuse msDebris' own neutral rock-gray for visual-
+// language consistency with the meteor-shower stop's debris earlier in the
+// tour; three fragments use DINER_PINK as the "moment" accent (see the accent-
+// shift note above), a small spark-like highlight distinct from the neutral
+// rock bits, not a repaint of all of them.
+const GAS_DEBRIS_COUNT = 10;
+let gasDebrisBits = Array.from({length:GAS_DEBRIS_COUNT}, (_,i) => ({
+  active:false, x:0, y:0, vx:0, vy:0, size:1.6+Math.random()*2.2, pink: i<3,
+}));
+function triggerGasDebris(x, y){
+  for (const b of gasDebrisBits){
+    const ang = Math.random()*Math.PI - Math.PI; // upward-biased hemisphere (kicked UP off the ground, not sideways-only)
+    const spd = 0.9 + Math.random()*1.6;
+    b.active = true; b.x = x; b.y = y;
+    b.vx = Math.cos(ang)*spd; b.vy = Math.sin(ang)*spd*0.6 - 0.6; // extra upward bias
+    b.life = 1;
+  }
+}
+function drawGasDebris(dtn){
+  ctx.globalCompositeOperation='lighter';
+  for (const b of gasDebrisBits){
+    if (!b.active || b.life<=0) continue;
+    b.x += b.vx*dtn; b.y += b.vy*dtn;
+    b.vy += 0.05*dtn; // gentle gravity — arcs back down rather than flying straight
+    b.life -= 0.045*dtn;
+    const a = Math.max(0, b.life);
+    const c = b.pink ? DINER_PINK : {r:120,g:132,b:168}; // rock-gray matches msDebris' own rock color
+    ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},${0.8*a})`;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.size, 0, 6.2832); ctx.fill();
+    if (b.life<=0) b.active = false;
+  }
+  ctx.globalCompositeOperation='source-over';
+}
+let shipLanded = false, shipThump = 0;
+let gasIdleGlow = 0;
+// Camera-POV rework, 2026-07-22 — Ben's direct call after watching v3 build:
+// "remember, we are in the spaceship. i dont want to see the exterior when we
+// go to the diner." Per Ben's own resolution ("in the middle... the galaxy
+// and meteor shower already look like we're in the cockpit"), this stop now
+// uses the SAME lightweight technique as galaxy's zoom-punch / meteor's shake
+// — pure camera motion, zero cockpit-UI chrome, zero visible external ship —
+// rather than either the liftoff file's full dashboard overlay or a bare
+// removal with nothing replacing it. The external ship sprite (formerly
+// drawGasShip/drawGasShipBody, both deleted outright, not just uncalled) is
+// gone entirely; the flight-in is now a camera push driving drawGasWorld's
+// own scale/translate on the world content, and touchdown is a camera jolt
+// (shipThump, unchanged — it was already wired to canvas.style.transform in
+// tick(), never tied to the ship sprite itself). The takeout-drone beat stays
+// exactly as Ben called for it ("the drone is bringing us dinner!") — only
+// its hover target moved (see DRONE_SHIP_HOVER above) from beside a parked
+// ship to low-center-of-frame, i.e. delivering to US/the camera, not to an
+// external object. See drawGasWorld's own comments for exactly what's wrapped
+// in the camera transform vs. left at identity.
+function updateGasArrival(now, geShip, dtn){
+  if (reduced){
+    // reduced motion: arrived immediately, ambient glow only — same contract
+    // every other world in this file uses (opacity-only breathing, no motion)
+    shipLanded = true;
+    gasIdleGlow = 0.55 + 0.12*(0.5+0.5*Math.sin(now/1600));
+    return 1;
+  }
+  if (geShip < SHIP_HOLD_BEFORE) return 0; // not arrived yet — camera hasn't started moving
+  const t = geShip - SHIP_HOLD_BEFORE;
+  // Same continuous-formula fix a Fable pass required for the old ship-
+  // position code (no wall-clock seam between "looks stopped" and "flare
+  // appears") — still applies here even with no sprite left to seam against,
+  // since the camera-scale value itself is what settle/flare key off now.
+  const rawP = clamp01(t/SHIP_FLIGHT_DUR);
+  const p = easeOutCubic(rawP);
+  // settle window unchanged from the old ship-position code: ramps 0→1 over
+  // the final 3% of eased progress, tied to how close the camera push is to
+  // fully arrived, not a wall-clock guess.
+  const settle = clamp01((p-0.97)/0.03);
+  if (settle < 1) {
+    shipTouchdownFlare = Math.max(shipTouchdownFlare, settle);
+  } else {
+    // edge-triggered, fires exactly once — debris kicked up at the fixed
+    // ground-contact point just outside frame (no ship there anymore to
+    // anchor it to, but it's the same spot the old sprite used to land on)
+    if (!shipLanded) { shipLanded = true; shipThump = 1; triggerGasDebris(SHIP_PARK.x, MOON_Y); }
+    // touchdown flare decays — dtn-normalized (same fix the old code needed:
+    // a flat per-frame decay isn't frame-rate independent).
+    shipTouchdownFlare = Math.max(0, shipTouchdownFlare - 0.06*dtn);
+  }
+  shipThump = Math.max(0, shipThump - 0.14*dtn); // fast decay — read by tick() for the one-shot camera jolt, unchanged mechanic
+  gasIdleGlow = 0.55 + 0.12*Math.sin(t/900); // gentle idle breathing once settled — was the ship-hull engine's idle glow, now our own engine light spilling into view from just off-frame
+  return p;
+}
+function drawGasWorld(alpha, now, powerOnP, powerOnElapsedMs, geShip, dtn){
+  if (alpha<=0.01) return;
+  ctx.globalAlpha=alpha;
+  ctx.fillStyle=`rgb(${ARC.bg.r},${ARC.bg.g},${ARC.bg.b})`; ctx.fillRect(0,0,W,H);
+  // deep-sky stars — ties this stop back to the rest of the trip (still space,
+  // just parked somewhere) instead of feeling like a disconnected flat screen
+  ctx.globalCompositeOperation='lighter';
+  for (const s of gasDeepStars){ const a=s.hi*(reduced?0.7:(0.5+0.5*Math.sin(now/(s.dur/6.28)+s.phase))); ctx.fillStyle=`rgba(255,255,255,${a})`; ctx.beginPath(); ctx.arc(s.x,s.y,s.size,0,6.2832); ctx.fill(); }
+  ctx.globalCompositeOperation='source-over';
+  // Camera-POV rework, 2026-07-22 (see updateGasArrival's header comment for
+  // the full account): everything from here through the drone — the planet,
+  // both mesa layers, the island, the building/sign, and the drone — is
+  // wrapped in a camera push toward the diner, replacing the old ship
+  // sprite's flight. Fixed 2026-07-22 (iteration 5 audit, one-attempt rule):
+  // this transform was originally placed AFTER the planet/mesas/island were
+  // already drawn (only building/sign/drone were ever actually wrapped),
+  // contradicting this very comment's own claim. Invisible in v4's mild
+  // 0.88->1 push, but iteration 5's 0.7-scale departure punch made it obvious
+  // by eye — the diner building visibly shrank away while its own island and
+  // the planet stayed pinned at full size, reading as broken, not as a camera
+  // pulling back. Moved the whole camera setup + ctx.save() up to here, before
+  // the planet, so the punch (and the arrival push, and the bank) actually
+  // move the whole scene together. The background fill + deep stars above
+  // stay at identity — a fixed distant backdrop the camera pushes past, not
+  // through, which also avoids any edge gaps from scaling a full-canvas fill.
+  const camP = updateGasArrival(now, geShip, dtn);
+  // Bank/tilt added 2026-07-22 (iteration 5) — Ben's direct call after v4 read
+  // as "the diner scene minus the ship, not like we're driving it": a scale-
+  // only push doesn't sell PILOTING anything, just a slow zoom. GAS_BANK_MAX
+  // is the bank angle at the very start of the approach (still turning in),
+  // easing to 0 (level) by the time camP reaches 1 (parked) — same easeOutCubic
+  // curve camP itself already uses, so the level-out lands exactly on settle,
+  // not before or after it. Force-zeroed under reduced motion via camP already
+  // being pinned to 1 in that branch (updateGasArrival's own contract).
+  const bankAngle = GAS_BANK_MAX * (1 - camP);
+  const arrivalScale = lerp(0.88, 1, camP);
+  // Departure punch-out, NEW this iteration — Ben's explicit "then we fly off,"
+  // not part of the original brief. A quick outward camera kick in the final
+  // GAS_DEPART_DUR of the hold, right before bridge3's crossfade takes over —
+  // not a mirrored replay of the arrival (that option wasn't picked), just a
+  // snappy last-second punch. geShip keeps counting up through the bridge
+  // itself (see tick()'s own `geShip = total - T.gasHoldStart`), so the punched-
+  // out scale is still in effect while the world fades to 0 alpha — reads as
+  // "we hit thrusters and the view recedes/fades," not a hard cut.
+  const departStart = GAS_HOLD - GAS_DEPART_DUR;
+  const departProgress = reduced ? 0 : clamp01((geShip - departStart) / GAS_DEPART_DUR);
+  const departPunch = easeOutQuint(departProgress); // fast attack — a punch, not a drift
+  const departScale = lerp(1, GAS_DEPART_MIN_SCALE, departPunch);
+  const camScale = arrivalScale * departScale;
+  const camFocusX = SIGN_X, camFocusY = MOON_Y - H*0.06; // the diner itself is the fixed point the camera pushes toward and punches away from
+  ctx.save();
+  ctx.translate(camFocusX, camFocusY);
+  ctx.rotate(bankAngle);
+  ctx.scale(camScale, camScale);
+  ctx.translate(-camFocusX, -camFocusY);
+  // the ringed planet — the scene's new focal point. Ring drawn behind first
+  // (reads as passing behind the planet), then the planet body, then a short
+  // brighter arc segment of ring in front for a touch of depth without a full
+  // 3D occlusion system.
+  ctx.save();
+  ctx.translate(GAS_PLANET.x, GAS_PLANET.y); ctx.rotate(-0.30);
+  ctx.strokeStyle=`rgba(${DINER_TEAL.r},${DINER_TEAL.g},${DINER_TEAL.b},0.30)`; ctx.lineWidth=GAS_PLANET.r*0.09;
+  ctx.beginPath(); ctx.ellipse(0,0, GAS_PLANET.r*2.05, GAS_PLANET.r*0.42, 0, 0, 6.2832); ctx.stroke();
+  ctx.restore();
+  const pg = ctx.createRadialGradient(GAS_PLANET.x-GAS_PLANET.r*0.35,GAS_PLANET.y-GAS_PLANET.r*0.35,GAS_PLANET.r*0.1, GAS_PLANET.x,GAS_PLANET.y,GAS_PLANET.r);
+  pg.addColorStop(0,`rgba(${ARC.hi.r},${ARC.hi.g},${ARC.hi.b},0.95)`); pg.addColorStop(0.7,`rgba(${ARC.accent.r},${ARC.accent.g},${ARC.accent.b},0.95)`); pg.addColorStop(1,`rgba(20,8,36,0.95)`);
+  ctx.fillStyle=pg; ctx.beginPath(); ctx.arc(GAS_PLANET.x,GAS_PLANET.y,GAS_PLANET.r,0,6.2832); ctx.fill();
+  ctx.save();
+  ctx.translate(GAS_PLANET.x, GAS_PLANET.y); ctx.rotate(-0.30);
+  ctx.strokeStyle=`rgba(${DINER_TEAL.r},${DINER_TEAL.g},${DINER_TEAL.b},0.6)`; ctx.lineWidth=GAS_PLANET.r*0.06;
+  ctx.beginPath(); ctx.ellipse(0,0, GAS_PLANET.r*2.05, GAS_PLANET.r*0.42, 0, 3.55, 5.87); ctx.stroke();
+  ctx.restore();
+  // far debris-rock layer — dimmer/smaller, reads as farther away, floating
+  // independently rather than sitting on a shared horizon (2026-07-22). Color
+  // unchanged from the pre-redesign fix: rgba(60,32,110,0.55) composited over
+  // ARC.bg to only ~1.23:1 (the same "looks dim but is basically invisible"
+  // mistake this file's notes already called out once); rgba(100,56,180,0.8)
+  // composites to ~2.12:1, independently verified, still holds since ARC.bg
+  // itself didn't change.
+  for (const m of GAS_MESAS_FAR) drawGasMesa(m.x, m.w, m.h, 'rgba(100,56,180,0.8)', m.y01);
+  // the floating island itself — bounded ground, not full-width (see
+  // drawFloatingIsland's own header comment for the full 2026-07-22 account).
+  // Same #54329a fill (~2.27:1 against ARC.bg, independently verified pre-
+  // redesign, unaffected by the shape change) and same accent rim-stroke as
+  // the ground this replaces.
+  drawFloatingIsland();
+  // near debris-rock layer — bigger, closer, in front of the island
+  for (const m of GAS_MESAS_NEAR) drawGasMesa(m.x, m.w, m.h, '#6a3ab0', m.y01);
+  // Building drawn BEFORE the sign now (2026-07-22 reorder) so the sign's
+  // support posts can visually plant into an already-drawn rooftop, rather
+  // than a ground-rooted pole passing behind/through the not-yet-drawn
+  // building. Small diner building: a low storefront wall with a warm-lit
+  // window band. Window glow uses ARC.hi (in-family) and stays deliberately
+  // minimal — glimpses of interior light through the window band only, per
+  // Ben's direct call ("minimal interior... a silhouette/glow read, not
+  // content to render"), not a detailed interior.
+  const signX=SIGN_X;
+  const canopyW = W*0.19, canopyH = H*0.03, canopyY = MOON_Y - H*0.09 - 6;
+  // was a flat 0.95 in reduced motion, bypassing neonBuzz() entirely — every
+  // other world in this file keeps opacity-only breathing under reduced
+  // motion (galaxy stars, pixel lights) rather than freezing to a static
+  // value; a third-party review caught this sign as the one inconsistent
+  // exception. Slow, gentle sine breathing between 0.70-0.95 keeps the "lit
+  // neon" read without any translation or steep flicker.
+  const buzz = reduced ? (0.70+0.25*(0.5+0.5*Math.sin(now/1500))) : neonBuzz(powerOnElapsedMs);
+  ctx.fillStyle = 'rgba(10,4,20,1)';
+  ctx.fillRect(signX-canopyW/2, canopyY-canopyH, canopyW, canopyH); // roof overhang
+  // wall edges run down to MOON_Y (the actual ground line at this x), not a
+  // fixed H*0.075 — a Fable pass computed the fixed height leaving a ~6px gap
+  // of visible sky under the whole building, currently masked only by dark-
+  // on-dark color coincidence rather than actually reaching the ground.
+  ctx.fillRect(signX-canopyW/2, canopyY, W*0.014, MOON_Y-canopyY); // wall edge, left
+  ctx.fillRect(signX+canopyW/2-W*0.014, canopyY, W*0.014, MOON_Y-canopyY); // wall edge, right
+  const winY = canopyY+H*0.018, winH = H*0.05;
+  ctx.fillStyle = 'rgba(8,4,16,1)'; ctx.fillRect(signX-canopyW/2+W*0.014, winY-H*0.006, canopyW-W*0.028, winH+H*0.012);
+  ctx.globalCompositeOperation='lighter';
+  ctx.fillStyle = `rgba(${ARC.hi.r},${ARC.hi.g},${ARC.hi.b},${0.5*buzz})`;
+  ctx.fillRect(signX-canopyW/2+W*0.02, winY, canopyW-W*0.04, winH);
+  ctx.globalCompositeOperation='source-over';
+  // Roof-mounted DINER sign — reworked 2026-07-22 from a single tall ground-
+  // rooted pole (rising all the way from the ground line past the whole
+  // building) into a small sign held up by two short support posts planted in
+  // the roofline itself, per Ben's direct call ("DINER sign is roof-mounted
+  // with visible support posts"). Posts root at canopyY (the roof drawn just
+  // above), not the ground.
+  const postH = H*0.05, signW = W*0.12, signH = H*0.075, postW = Math.max(2, W*0.006);
+  const signBottomY = canopyY - postH, signTopY = signBottomY - signH;
+  ctx.fillStyle='rgba(6,3,12,1)';
+  ctx.fillRect(signX-signW*0.32-postW/2, signBottomY, postW, postH); // left post
+  ctx.fillRect(signX+signW*0.32-postW/2, signBottomY, postW, postH); // right post
+  ctx.fillStyle = `rgba(${ARC.accent.r},${ARC.accent.g},${ARC.accent.b},1)`;
+  ctx.fillRect(signX-signW/2, signTopY, signW, signH);
+  ctx.globalCompositeOperation='lighter';
+  ctx.fillStyle = `rgba(${ARC.hi.r},${ARC.hi.g},${ARC.hi.b},${0.75*buzz})`;
+  ctx.fillRect(signX-signW/2+5, signTopY+5, signW-10, signH-10);
+  ctx.shadowColor = `rgba(${ARC.hi.r},${ARC.hi.g},${ARC.hi.b},${0.8*buzz})`; ctx.shadowBlur = 20*buzz;
+  ctx.fillRect(signX-signW/2+5, signTopY+5, signW-10, signH-10);
+  ctx.shadowBlur = 0;
+  // "DINER" lettering — teal accent now (was ARC.shiny green pre-redesign),
+  // see the accent-shift note by DINER_TEAL's own definition above.
+  ctx.font = `700 ${Math.round(signH*0.34)}px system-ui, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = `rgba(${DINER_TEAL.r},${DINER_TEAL.g},${DINER_TEAL.b},${0.9*buzz})`;
+  ctx.fillText('DINER', signX, signTopY+signH/2);
+  ctx.globalCompositeOperation='source-over';
+  drawDinerDrone(now, geShip, dtn); // the payoff beat — see drawDinerDrone's own header comment
+  ctx.restore(); // end camera transform — flare/debris/ambient glow below are screen-space, not part of the pushed-in world
+  if (shipTouchdownFlare>0.01){
+    // Fixed 2026-07-22, one-attempt visual-pass finding: this used to be
+    // centered on camFocusX/camFocusY (the camera's focus point, near roof
+    // height) — a copy-paste leftover from the camera-transform code just
+    // above it. The flare needs to read as light from OUR touchdown, at the
+    // same ground-contact point triggerGasDebris fires the debris burst from
+    // (SHIP_PARK.x, MOON_Y), not up near the sign/roof.
+    ctx.globalCompositeOperation='lighter';
+    const rg=ctx.createRadialGradient(SHIP_PARK.x,MOON_Y+H*0.03,0,SHIP_PARK.x,MOON_Y+H*0.03,W*0.05*shipTouchdownFlare+2);
+    rg.addColorStop(0,`rgba(${DINER_TEAL.r},${DINER_TEAL.g},${DINER_TEAL.b},${0.5*shipTouchdownFlare})`); rg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=rg; ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='source-over';
+  }
+  drawGasDebris(dtn); // debris kicked up just outside our window at touchdown — screen-space now, no ship silhouette to anchor it to
+  if (shipLanded && !reduced){
+    // ambient engine glow spilling into view from just off-frame, once
+    // settled — replaces the old ship-hull idle engine glow, same idea (a
+    // slow breathing light) minus the hull it used to sit on
+    ctx.globalCompositeOperation='lighter';
+    const ig = ctx.createLinearGradient(0,H,0,H*0.8);
+    ig.addColorStop(0, `rgba(${DINER_TEAL.r},${DINER_TEAL.g},${DINER_TEAL.b},${0.14*gasIdleGlow})`);
+    ig.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = ig; ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='source-over';
+  }
+  // pixel lights — small blinking squares, this stop's own particle color/behavior
+  ctx.globalCompositeOperation='lighter';
+  for (const p of pixelLights){
+    const tw = 0.5+0.5*Math.sin(now/(p.dur/6.28)+p.phase);
+    // twinkle kept alive in reduced motion too (opacity-only, non-directional) —
+    // same fix as the aurora/firefly worlds, was flattened to a static value before
+    const a = clamp01(powerOnP*1.4) * tw * 0.7;
+    ctx.fillStyle = `rgba(${p.color.r},${p.color.g},${p.color.b},${a})`;
+    ctx.fillRect(p.x-p.size/2, p.y-p.size/2, p.size, p.size);
+  }
+  ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+}
+
+// ── world 3: harvest / supernova — reused converge/burst hero-particle math, trimmed from galaxy-to-harvest-handoff-journey.html ──
+// re-seeded across the FULL frame height, not just below it — a Fable pass
+// computed that with the old below-frame-only spawn (y:H to H*1.3) and this
+// phase's drift speed, fewer than half the 12 embers would ever rise into
+// frame at all during the new 7s harHold, reading as an almost-empty screen.
+// Count and alpha both bumped too, since 7s needs more visual presence than
+// the original ~700ms tail-end glimpse of this same field ever needed.
+let harAmbient = [];
+function makeHarAmbient(){
+  return Array.from({length:32}, () => ({ x:Math.random()*W, y:Math.random()*H, speed:0.10+Math.random()*0.12, drift:(Math.random()*2-1)*0.05, size:1.4+Math.random()*2.0, phase:Math.random()*Math.PI*2 }));
+}
+harAmbient = makeHarAmbient();
+const HERO_COUNT=18;
+let heroes = [];
+function makeHeroes(){
+  return Array.from({length:HERO_COUNT}, () => {
+    const baseAngle=Math.random()*Math.PI*2, R0=minDim*(0.30+Math.random()*0.16);
+    const convergeDelay=Math.random()*220, convergeDur=Math.min(HAR_CONVERGE-convergeDelay-60, 400+Math.random()*220);
+    const Rmin=4+Math.random()*6, burstDelay=Math.random()*180, burstDur=650+Math.random()*300, Rfar=R0*(1.6+Math.random()*0.6);
+    return { baseAngle, R0, convergeDelay, convergeDur, Rmin, burstDelay, burstDur, Rfar, angVel:(Math.random()*2-1)*0.0006, size:2.2+Math.random()*2.2 };
+  });
+}
+function heroRadius(h, tSince){
+  const cStart=h.convergeDelay, cEnd=cStart+h.convergeDur, bStart=HAR_CONVERGE+h.burstDelay, bEnd=bStart+h.burstDur;
+  if (tSince<cStart) return h.R0;
+  if (tSince<cEnd) return lerp(h.R0,h.Rmin,easeInCubic(clamp01((tSince-cStart)/h.convergeDur)));
+  if (tSince<bStart) return h.Rmin;
+  if (tSince<bEnd) return lerp(h.Rmin,h.Rfar,easeOutQuint(clamp01((tSince-bStart)/h.burstDur)));
+  return null;
+}
+function heroAlpha(h, tSince){
+  const cStart=h.convergeDelay, bStart=HAR_CONVERGE+h.burstDelay, bEnd=bStart+h.burstDur;
+  if (tSince<cStart) return 0.55;
+  if (tSince<bStart) return 0.55+0.45*clamp01((tSince-cStart)/Math.max(1,(bStart-cStart)));
+  const bp=clamp01((tSince-bStart)/h.burstDur); if (bp>0.78) return Math.max(0,(1-bp)/0.22); return 1;
+}
+let novaFlash=0, novaRing=0;
+function drawHarWorld(alpha, dtn, tSinceConverge, novaActive){
+  if (alpha<=0.01) return;
+  ctx.globalAlpha=alpha;
+  const baseGlow = ctx.createRadialGradient(CX,H*1.05,0,CX,H*1.05,H*0.9);
+  baseGlow.addColorStop(0,`rgba(${HAR.hi.r},${HAR.hi.g},${HAR.hi.b},0.30)`); baseGlow.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=baseGlow; ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='lighter';
+  for (const a of harAmbient){
+    a.y -= a.speed*dtn; a.x += a.drift*dtn; a.phase += 0.02*dtn;
+    if (a.y<-10){ a.y=H+Math.random()*20; a.x=Math.random()*W; }
+    const flick=0.5+0.5*Math.sin(a.phase);
+    ctx.fillStyle=`rgba(${HAR.hi.r},${HAR.hi.g},${HAR.hi.b},${0.3*flick})`;
+    ctx.beginPath(); ctx.arc(a.x,a.y,a.size,0,6.2832); ctx.fill();
+  }
+  if (tSinceConverge!==null) {
+    for (const h of heroes){
+      const r = heroRadius(h, tSinceConverge); if (r===null) continue;
+      const ang = h.baseAngle + h.angVel*tSinceConverge;
+      const x = CX+Math.cos(ang)*r, y = CY+Math.sin(ang)*r*0.62;
+      const a = heroAlpha(h, tSinceConverge), hot = clamp01(1-r/(minDim*0.55));
+      const cr=Math.round(lerp(HAR.accent.r,lerp(HAR.hot.r,HAR.whiteHot.r,hot),hot)), cg=Math.round(lerp(HAR.accent.g,lerp(HAR.hot.g,HAR.whiteHot.g,hot),hot)), cb=Math.round(lerp(HAR.accent.b,lerp(HAR.hot.b,HAR.whiteHot.b,hot),hot));
+      ctx.fillStyle=`rgba(${cr},${cg},${cb},${a})`; ctx.beginPath(); ctx.arc(x,y,h.size*(0.7+hot*0.6),0,6.2832); ctx.fill();
+    }
+  }
+  ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+  if (novaActive && novaRing>0){
+    const rad=novaRing*H*0.6;
+    const rg=ctx.createRadialGradient(CX,CY,0,CX,CY,rad);
+    rg.addColorStop(0,`rgba(255,244,208,${Math.max(0,0.55-novaRing*0.5)})`);
+    rg.addColorStop(0.35,`rgba(${HAR.hot.r},${HAR.hot.g},${HAR.hot.b},${Math.max(0,0.45-novaRing*0.4)})`);
+    rg.addColorStop(0.7,`rgba(${HAR.hi.r},${HAR.hi.g},${HAR.hi.b},${Math.max(0,0.25-novaRing*0.22)})`);
+    rg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=rg; ctx.fillRect(0,0,W,H);
+  }
+  // peak alpha capped 0.6->0.32 — same comfort fix as the widened attack window above
+  if (novaActive && novaFlash>0){ ctx.fillStyle=`rgba(255,244,208,${novaFlash*0.32})`; ctx.fillRect(0,0,W,H); }
+}
+
+// ── shared state ──
+let tStart=0, lastNow=0, raf;
+// v2 revision (Ben's morning review, 2026-07-20): pausedAt tracks when pause()
+// was called (performance.now()-scale timestamp), null when not paused. Used
+// by resumePlay() to shift tStart forward by exactly the paused duration, so
+// `total = now - tStart` picks up from where it left off instead of jumping.
+let pausedAt = null;
+const hud = document.getElementById('hud');
+const stopIndexEl = document.getElementById('stopIndex');
+const topBar = document.querySelector('.letterbox.top'), botBar = document.querySelector('.letterbox.bot');
+const phaseLabelEl = document.getElementById('phaseLabel');
+
+function resetUI(){
+  lastNow=0; galWarp=0.03; heroes=makeHeroes(); novaFlash=0; novaRing=0; msShake={x:0,y:0}; msIntensitySmooth=0; shipTouchdownFlare=0;
+  shipLanded=false; shipThump=0;
+  for (const b of gasDebrisBits) b.active=false; // deactivate, don't reallocate — same pool reused every replay
+  harAmbient=makeHarAmbient(); // full-frame reseed each replay, matching the spawn fix above
+  topBar.style.transform='scaleY(0)'; botBar.style.transform='scaleY(0)';
+  canvas.style.transform='translate(0px,0px) scale(1)';
+  hud.classList.remove('show');
+}
+
+function tick(now){
+  if (!tStart) tStart = now;
+  const dt = lastNow ? now-lastNow : 16.667; lastNow = now;
+  const dtn = Math.min(26,dt)/16.667;
+  const total = Math.min(now - tStart, TOTAL - 1);
+
+  let acc=0, ph=TIMELINE[TIMELINE.length-1], elapsed=0;
+  for (const seg of TIMELINE){ if (total < acc+seg.dur){ ph=seg; elapsed=total-acc; break; } acc+=seg.dur; }
+  phaseLabelEl.textContent = 'phase: '+ph.phase;
+
+  const tp = tourProgress(total);
+  const stopNames = ['midnight galaxy','meteor shower','the floating diner','autumn harvest / supernova'];
+  const nearest = Math.min(3, Math.round(tp));
+  stopIndexEl.textContent = `stop ${nearest+1} / ${stopNames.length} — ${stopNames[nearest]}`;
+
+  // letterbox now fades in during galHold — galaxy is the opening phase, not
+  // meteor, since the reorder moved it to the front of the tour
+  topBar.style.transform = 'scaleY(1)'; botBar.style.transform = 'scaleY(1)';
+  // fixed 700ms fade-in regardless of GAL_HOLD's length — this used to scale
+  // off GAL_HOLD*0.6, which read fine at the old ~1.5s hold but stretched to
+  // a visible 6000ms once GAL_HOLD grew to 10s for the runtime lengthening.
+  if (ph.phase==='galHold') { topBar.style.transform=`scaleY(${clamp01(elapsed/700)})`; botBar.style.transform=topBar.style.transform; }
+  if (ph.phase==='harSettle') { const p=elapsed/HAR_SETTLE; topBar.style.transform=`scaleY(${1-clamp01((p-0.6)/0.4)})`; botBar.style.transform=topBar.style.transform; }
+
+  // harvest converge/nova timers — computed before the HUD block below so the
+  // harvest caption can gate on the CURRENT frame's novaFlash, not stay hardcoded
+  // to a fixed timing offset that assumed a flash curve it never actually checked
+  const tSinceConverge = total>=T.harConvergeStart ? total-T.harConvergeStart : null;
+  const novaActive = total>=T.harNovaStart;
+  if (novaActive) {
+    const flashP = clamp01((total-(T.harNovaStart+70))/HAR_NOVA);
+    // attack window widened from ~242ms to ~440ms (0.22->0.4 of HAR_NOVA) — an
+    // independent review flagged the original as a near-instant full-viewport
+    // brightness spike, uncomfortable in the dark rooms this app actually runs
+    // in. The peak alpha cap lives at the draw site below (novaFlash*0.6 -> *0.32).
+    if (total>=T.harNovaStart+70 && total<T.harNovaStart+HAR_NOVA+200) { novaFlash = flashP<0.4?flashP/0.4:Math.max(0,1-(flashP-0.4)/0.4); novaRing = flashP; }
+  } else { novaFlash=0; novaRing=0; }
+
+  // captions now use each palette's textHex, not hiHex — hiHex is the same hue
+  // used everywhere else on-world (galaxy's caption sat right on top of its own
+  // purple wash at ~4:1 contrast; harvest's caption could fire while the nova's
+  // white flash was still ~0.39 alpha, washing the accent-orange text to near
+  // nothing) — and the harvest caption is now explicitly gated on the flash
+  // having actually cleared, not a fixed elapsed-time guess
+  let hudText='', hudColor='#ccc', hudOn=false;
+  if (ph.phase==='galHold') { hudText='Midnight Galaxy'; hudColor=GAL.textHex; hudOn=elapsed>150; }
+  else if (ph.phase==='msHold') { hudText='Meteor Shower'; hudColor=MS.textHex; hudOn=elapsed>150; }
+  else if (ph.phase==='msOut') { hudText='Departing — Meteor Shower'; hudColor=MS.textHex; hudOn=true; }
+  else if (ph.phase==='gasHold') { hudText='Pit Stop — The Diner'; hudColor=ARC.textHex; hudOn=elapsed>200; }
+  else if (ph.phase==='harHold') { hudText='Autumn Harvest'; hudColor=HAR.textHex; hudOn=elapsed>200; }
+  else if (ph.phase==='harNova' && novaFlash<0.15) { hudText='Arriving — Supernova'; hudColor=HAR.textHex; hudOn=true; }
+  else if (ph.phase==='harSettle') { hudText='Arriving — Supernova'; hudColor=HAR.textHex; hudOn=true; }
+  hud.textContent=hudText; hud.style.color=hudColor; hud.classList.toggle('show', hudOn);
+
+  // gas station power-on: starts 300ms into bridge2 (meteor->gas) now — bridge2
+  // is gas's actual incoming bridge in the new order (was bridge3 in the 6-stop
+  // version, when northern lights sat between galaxy and gas)
+  const POWER_ON_DELAY = 300;
+  const powerOnElapsedMs = total - (T.bridge2Start + POWER_ON_DELAY);
+  const powerOnP = clamp01(powerOnElapsedMs/500);
+
+  if (!reduced) {
+    // galaxy is the OPENING stop now, so there's no incoming bridge to also ramp
+    // during — it just ramps up across its own hold from rest, then decays once
+    // the tour moves on to meteor. (Previously it ramped during an incoming
+    // bridge + its hold, which only made sense when something came before it.)
+    // was a flat 0.42 target, monotone for ~8.7 of the hold's 10s once it
+    // settled — swapped for a slow breathing swell so the warp still reads
+    // as alive across the whole hold, not just during its initial ramp-in.
+    if (ph.phase==='galHold') galWarp += ((0.42+0.09*Math.sin(elapsed/4300))-galWarp)*0.06*dtn;
+    else galWarp += (0-galWarp)*0.06*dtn;
+  }
+  // extra fade on galaxy's bright core gradient during its own outgoing bridge —
+  // index-relative (tp between GAL's index and GAL's index+1), re-keyed to index
+  // 0 now that galaxy opens the tour instead of sitting at index 1
+  const galCoreFade = 1 - clamp01(tp*2);
+  // the galaxy stop's one moment — see the notes above drawGalWorld. Reduced
+  // motion gets none of it: forced to 0, same contract as every other event
+  // in this file.
+  const galSnapEnv = (!reduced && ph.phase==='galHold') ? galSnapEnvelope(elapsed - GAL_SNAP_AT) : 0;
+
+  // meteor-shower intensity + camera shake — ramps up entering msHold, stays
+  // high through msOut (the whole stop is "flying through it," not a calm
+  // hold plus a departure tail); shake decays smoothly (dtn-normalized, same
+  // curve as the liftoff file's rumble) rather than hard-cutting once the
+  // tour moves past meteor shower.
+  const msInMeteor = (ph.phase==='msHold' || ph.phase==='msOut');
+  const msIntensityNow = msInMeteor ? msIntensity(total - T.msHoldStart) : 0;
+  // exponential smoothing toward the target — fixes a real hard-cut a Fable
+  // pass found at the msOut->bridge2 boundary (worldAlpha is still ~0.94
+  // there, so the debris field was still nearly fully visible when its speed
+  // slammed 9x slower in a single frame) without touching the msIntensity()
+  // ramp-in curve itself, which was already correct.
+  msIntensitySmooth += (msIntensityNow - msIntensitySmooth) * (1 - Math.pow(0.9, dtn));
+  if (!reduced && msInMeteor) {
+    // amp ramped from 0 at amp's own low end too — a flat +1.4px floor used
+    // to pop in the instant msHold started; now it scales off the smoothed
+    // intensity so the shake fades in with everything else rather than
+    // stepping on at a fixed floor.
+    const amp = 4.6*msIntensitySmooth;
+    const n = msRumbleNoise(now, amp);
+    msShake.x = n.x; msShake.y = n.y;
+  } else {
+    const df = Math.pow(0.85, dtn); msShake.x*=df; msShake.y*=df;
+  }
+
+  // ── draw ── (indices: 0=galaxy,1=meteor,2=gas,3=harvest)
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
+  drawGalWorld(worldAlpha(tp,0), dtn, galCoreFade, galSnapEnv);
+  drawMsWorld(worldAlpha(tp,1), now, dtn, msIntensitySmooth);
+  const geShip = total - T.gasHoldStart; // time since gas station's own hold started; the ship's flight-in/park timeline is keyed off this
+  drawGasWorld(worldAlpha(tp,2), now, powerOnP, powerOnElapsedMs, geShip, dtn);
+  // camera transform set AFTER the draw calls, since drawGasWorld's ship logic
+  // is what updates shipThump this same frame — reading it before the draw
+  // would use last frame's (one-frame-stale) value.
+  const zoomPunch = 1 + galSnapEnv*0.035; // hyperspace snap: a quick zoom-in, distinct in kind from the meteor shake's jitter
+  const gasJolt = (!reduced && shipThump>0.001) ? msRumbleNoise(now, shipThump*5) : {x:0,y:0};
+  canvas.style.transform = `translate(${(msShake.x+gasJolt.x).toFixed(2)}px, ${(msShake.y+gasJolt.y).toFixed(2)}px) scale(${zoomPunch.toFixed(4)})`;
+  drawHarWorld(worldAlpha(tp,3), dtn, tSinceConverge, novaActive);
+
+  const vg = ctx.createRadialGradient(CX,CY,0,CX,CY,H*0.6);
+  vg.addColorStop(0,'rgba(0,0,0,0.35)'); vg.addColorStop(0.55,'rgba(0,0,0,0.16)'); vg.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+
+  if (total < TOTAL - 1) raf = requestAnimationFrame(tick);
+}
+
+// v2 revision — renamed from play() to replay(): this is the full-reset
+// behavior (cancel any running loop, zero the clock, rebuild UI state, start
+// fresh) that the on-page Replay button and the postMessage contract's
+// `replay` verb both need. Renamed rather than left as `play` so the name
+// doesn't collide with the postMessage contract's separate `play` verb below,
+// which resumes instead of restarting.
+function replay(){ cancelAnimationFrame(raf); raf=null; tStart=0; pausedAt=null; resetUI(); raf = requestAnimationFrame(tick); }
+
+// v2 revision — real pause(), not a no-op (Ben's review note: "pause needs a
+// real implementation... since none currently exists"). Freezes in place by
+// cancelling the pending rAF handle (no more frames drawn or state advanced)
+// and records when the freeze happened.
+function pause(){
+  if (pausedAt !== null) return; // already paused — safe no-op
+  cancelAnimationFrame(raf); raf=null;
+  pausedAt = performance.now();
+}
+
+// v2 revision — resume from pause(), wired to the postMessage contract's
+// `play` verb. Shifts tStart forward by exactly how long the piece sat
+// paused, so tick()'s `total = now - tStart` continues from the same elapsed
+// position instead of skipping ahead by the paused duration (the same class
+// of bug the visibilitychange fix below addresses for backgrounded tabs). If
+// called when nothing has ever started (tStart is still 0 and nothing is
+// running), falls back to a normal replay rather than doing nothing.
+function resumePlay(){
+  if (pausedAt === null) {
+    if (!raf && tStart === 0) replay();
+    return;
+  }
+  tStart += performance.now() - pausedAt;
+  pausedAt = null;
+  raf = requestAnimationFrame(tick);
+}
+
+document.getElementById('replay').addEventListener('click', replay);
+document.getElementById('reducedToggle').addEventListener('change', e=>{ reduced=e.target.checked; replay(); });
+
+// v2 revision — Revision note 1: "Missing document.visibilitychange handler
+// — tStart only resets on replay, never when the tab is backgrounded and
+// returns... likely causing the sequence to jump or skip ahead unpredictably
+// on refocus." Fixed exactly as specified: resets tStart the same way
+// replay()'s reset already does. While hidden, the loop is stopped outright
+// (browsers already throttle/suspend rAF in background tabs, but cancelling
+// explicitly avoids relying on that and matches pause()'s own behavior) so no
+// state advances while nobody can see it; on return to visible, replay()
+// restarts the full four-stop sequence from the top rather than attempting to
+// resume mid-stop, which is the same reset play()/replay() already performs
+// for the on-page button and is what this review artifact needs (in the real
+// app each stop is its own independent round-boundary journey, so this
+// combined file's own tab-visibility behavior is a review-artifact concern,
+// not a live-show one).
+document.addEventListener('visibilitychange', function(){
+  if (document.visibilityState === 'visible') {
+    replay();
+  } else {
+    cancelAnimationFrame(raf); raf=null;
+  }
+});
+
+// v2 revision — Revision note 2: postMessage contract required by
+// references/round-journeys.md and AGENT-PROMPT.md Step 4 was entirely
+// missing (no window.__journeyControls, no embedded boilerplate, no pause
+// capability at all). Wired to the real mechanism above — replay() is the
+// exact same function the on-page Replay button calls (one implementation,
+// two triggers, per the boilerplate's own contract comment), and pause/play
+// are the real freeze/resume implementation, not stubs.
+window.__journeyControls = { play: resumePlay, pause: pause, replay: replay };
+
+replay();
+</script>
+<script>
+// concepts/tools/postmessage-child-boilerplate.js — embedded verbatim, per
+// AGENT-PROMPT.md Step 4 and references/round-journeys.md. Do not paraphrase.
+(function () {
+  'use strict';
+
+  // Parse the nonce this exact load was given. Absence of a nonce means this file was
+  // opened directly (not through the gallery) — the postMessage listener still installs
+  // (harmless), it just will never match any incoming message, which is the correct
+  // no-op behavior for a directly-opened prototype.
+  var OWN_NONCE = null;
+  (function parseNonce() {
+    var hash = window.location.hash || '';
+    var match = hash.match(/nonce=([^&]+)/);
+    if (match) OWN_NONCE = decodeURIComponent(match[1]);
+  })();
+
+  window.addEventListener('message', function (event) {
+    // 1. Exact source identity — the message must come from this frame's own parent
+    //    window reference, not merely claim to.
+    if (event.source !== window.parent) return;
+
+    // 2. Strict schema — reject anything that isn't exactly { type: string, nonce: string },
+    //    including a plain object with EXACTLY those two own keys, nothing more. (postMessage
+    //    structured-clones event.data, so an extra key can never carry an executable
+    //    function — but "strict" should mean strict: an object with a surprise third key is
+    //    not the shape this contract promises, and accepting it anyway is what "strict"
+    //    exists to prevent, independent of whether this particular channel happens to be
+    //    unexploitable today.)
+    var data = event.data;
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+    var keys = Object.keys(data);
+    if (keys.length !== 2) return;
+    if (typeof data.type !== 'string' || typeof data.nonce !== 'string') return;
+
+    // 3. Nonce match — the one piece an attacker (even one satisfying #1 and #2, e.g. a
+    //    confused/compromised parent) can't guess, since it's per-load and delivered
+    //    out-of-band via the URL fragment before this listener could have leaked it.
+    if (!OWN_NONCE || data.nonce !== OWN_NONCE) return;
+
+    var controls = window.__journeyControls;
+    if (!controls) return;
+
+    switch (data.type) {
+      case 'play':
+        if (typeof controls.play === 'function') controls.play();
+        break;
+      case 'pause':
+        if (typeof controls.pause === 'function') controls.pause();
+        break;
+      case 'replay':
+        if (typeof controls.replay === 'function') controls.replay();
+        break;
+      // Unknown type: silently ignored, per the "never crash on a stray message" rule.
+    }
+  });
+})();
+</script>
+</body>
+</html>
