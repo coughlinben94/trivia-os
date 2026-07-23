@@ -57,9 +57,9 @@ journeyType: cross-theme
 fromTheme: midnight-galaxy
 toTheme: autumn-harvest
 source: ben-grilled
-iteration: 5
-file: space-road-trip-v5.html
-supersedes: space-road-trip-v4.html
+iteration: 6
+file: space-road-trip-v14.html
+supersedes: space-road-trip-v5.html
 
 Brief (beginning/middle/end):
 A four-stop tour built and heavily revised across a separate live session (not this
@@ -79,6 +79,93 @@ drove the galaxy hyperspace-snap and gas-station touchdown-thump additions. Self
 checklist in the file already passes.
 
 Revision notes (newest first):
+- 2026-07-23 [Claude, same file (`space-road-trip-v14.html`), in-place rework
+  after iteration 6 shipped — not logged incrementally as it happened, closed
+  out here before starting the next round of work]: two further passes on top
+  of the iteration-6 build below, still `space-road-trip-v14.html`, no new
+  iteration number cut. Pass one: refactored the diner flyby's discrete
+  per-rock state machines into a single continuous `flightPos` motion
+  parameter (same technique now shared with the battle stop below) and
+  synced camera shake to it. Pass two, per Ben's direct instruction: converted
+  the meteor-shower stop into a literal Star Wars space-battle homage
+  (X-wing/Y-wing/TIE fighters dogfighting past a Death Star) — Ben's explicit,
+  informed, twice-repeated call, knowingly accepting real trademark/copyright
+  exposure for this commercial venue; not re-litigated, settled. Ship/station
+  art generated via Recraft (`generate_image` + `remove_background`),
+  background-removed, base64-embedded, no external file refs — one Y-wing
+  candidate collapsed to an X-wing likeness and needed a pure-anatomy
+  re-prompt with explicit negatives; TIE/Death Star were regenerated on white
+  backgrounds after black-background originals left unfilled/see-through
+  regions post-removal. Dispatched an arms-length Fable-model audit
+  (`Agent` tool, `model: "fable"`) against `references/round-journeys.md`'s
+  motion/loop/composition/prototype checklists; every finding independently
+  re-verified against the actual file (not taken on Fable's word) before
+  fixing. Five real bugs fixed: `bank` computed per-ship but never applied to
+  rotation (the stated banking-weave goal didn't render); `drawBattleShip`
+  overwrote `globalAlpha` instead of composing with the world's own fade
+  alpha; a `-99999` sentinel `msElapsed` used during the bridge-out crossfade
+  caused ships to visibly teleport back to entry pose and the windshield-crack
+  overlay to pop off instead of fading — fixed by caching last-real
+  `flightPos`/crack-elapsed across the sentinel window; the crack overlay's
+  fixed screen position landed directly on the Death Star's disc (illegible);
+  TIE silhouette was illegible against the plain black background for roughly
+  half its sweep (added a static rim-glow shadow). Also removed dead code:
+  `peakX` (computed, never read, present in both the battle mechanic and the
+  diner flyby mechanic it was copied from) and `battleFlyIntensity` (zero
+  call sites, comment falsely claimed a `tick()` integration). Renamed
+  visible HUD/title text from "Meteor Shower" to "Space Battle". Verified via
+  `node --check` on both extracted `<script>` blocks and two real headless-
+  Chromium Playwright render passes (normal motion + reduced motion via the
+  actual `#reducedToggle` checkbox) — zero console/page errors either way.
+  **Not fixed, logged as lower-priority polish, not a bug:** the three
+  ship-vs-ship encounters read as visually similar to each other, and the
+  exiting/entering encounter groups pile up on the same side of frame at both
+  stop handoffs. Ben's own job: does the banking weave and crossfade hold up
+  at real speed now, not just in the frame-by-frame screenshots.
+- 2026-07-23 [Claude, iteration 6 built — status now `built`, awaiting Ben's
+  review]: ships `space-road-trip-v14.html`. This iteration's actual history
+  spans two sessions and was never recorded incrementally in this file or in
+  `manifest.js` — recorded here as one entry rather than backfilling nine
+  fictitious intermediate ones. Chronologically: (1) a prior session dispatched
+  5 independent Fable agents on the diner stop, 2 on the harvest/supernova
+  finale, and 1 on the meteor shower, each with full creative authority and a
+  requirement to call Recraft; all 8 independently discovered that the file
+  they were handed (then `v12.html`) silently crashed on its very first diner-
+  stop frame (a deleted function, `drawFloatingIsland`, left called from
+  `drawGasWorld`) — nobody had ever actually watched that version play. (2)
+  This session manually consolidated the strongest surviving candidates by
+  hand (no new agents dispatched): the `v13-camera.html` diner-stop fix (most
+  root-caused of 5 independent rebuilds, already carrying a real Recraft
+  diner-rock asset) as the base, with the meteor-buildup candidate's hero-
+  visibility geometry fix and the supernova-climax candidate's nova redesign
+  grafted on top — the latter graft included fixing one real bug in the
+  source candidate (`drawHarWorld`'s signature was changed to take a new
+  `now` param but its call site was never updated; caught by grep, not
+  assumed, before it could ship broken). (3) Ben then gave two more direct
+  instructions this same session: scrap the drone/single-destination-arrival
+  concept entirely ("each of the four scenes is just going to be a diff vibe
+  now") in favor of a movie-style flyby past four separate small business-
+  rocks (diner/motel/arcade/drive-in theater — four fresh Recraft
+  illustrations, one generation pass so they read as a consistent set,
+  background-removed with alpha-content bounds measured programmatically, not
+  eyeballed); and delete the midnight-galaxy barrel roll outright. Both
+  implemented and verified directly (real headless-Chromium renders, `node
+  --check`, and — after discovering this file's `reduced` flag is wired only
+  to the in-page `#reducedToggle` checkbox, not the actual
+  `prefers-reduced-motion` media query — a corrected reduced-motion check via
+  that checkbox specifically). **One real gap surfaced by that correction and
+  deliberately left open, not fixed this pass:** the harvest/supernova stop's
+  ember drift and its whole converge→nova→settle sequence have zero `reduced`
+  gating anywhere in this file's history (pre-dates this session's climax
+  work) — checking the box during the finale currently plays the full burst
+  identically to normal motion. Flagged in `NIGHTLY-LOG.md`, not silently
+  carried forward. **What this ship does NOT include:** no formal `/audit`
+  Fable second-opinion pass was run against the final `v14.html` specifically
+  — verification was direct (this session's own headless renders +
+  screenshots), not the pipeline's own second-reviewer step. Ben's own job:
+  everything real-time-feel (not just frame-correctness) always is in this
+  file — specifically, does the flyby's banking read right at real speed, and
+  do the four rock illustrations hold up at real venue-TV brightness.
 - 2026-07-22 [Claude, iteration 5 built + audited — status now `built`, awaiting
   Ben's review]: implemented bank/tilt on arrival + a new quick punch-out
   departure beat in `space-road-trip-v5.html`, per Ben's two follow-up answers
