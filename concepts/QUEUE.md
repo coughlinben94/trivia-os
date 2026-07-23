@@ -51,34 +51,93 @@ Revision notes (newest first, only if iteration > 1):
 
 ## Queue
 
-### space-road-trip — Space Road Trip (four destinations)
+### space-road-trip — Star Wars Road Trip (four Star Wars destinations)
 status: built
 journeyType: cross-theme
-fromTheme: midnight-galaxy
-toTheme: autumn-harvest
+fromTheme: star-wars-dogfight
+toTheme: death-star-trench-run
 source: ben-grilled
-iteration: 6
-file: space-road-trip-v14.html
-supersedes: space-road-trip-v5.html
+iteration: 7
+file: space-road-trip-v18.html
+supersedes: space-road-trip-v14.html
 
 Brief (beginning/middle/end):
-A four-stop tour built and heavily revised across a separate live session (not this
-tracking system) before tonight: midnight galaxy (opens, 10s, a calm star-warp hold
-with a hyperspace-snap flash punctuating it) → meteor shower (10s, flying THROUGH a
-z-depth debris field with camera shake, not watching one from a distance) → retro-arcade
-gas station on a rocky moon (10s, a ship flies in, lands with an engine-flare and
-ground-dust thump, parks beside a small relabeled "DINER" sign under a dominant ringed
-planet) → autumn harvest / supernova (10s, ember field building to a converge-burst-settle
-nova). In the real app these fire as four SEPARATE round-boundary journeys, each at its
-own round transition — this file is a combined review artifact for watching the whole
-arc at once, not how it plays live. Each individual stop, including its own bridge-in,
-sums to exactly 10,000ms — within the normal 8-14s per-journey target once split apart.
-Already through three Fable review passes (2nd: 5 findings fixed; 3rd: 10 findings
-fixed), one Gemini pass (2 fixes applied), and a guest-reaction simulation pass that
-drove the galaxy hyperspace-snap and gas-station touchdown-thump additions. Self-gate
-checklist in the file already passes.
+Full hard-left theme replacement, Ben's direct call: the previous four-stop generic
+"space road trip" (midnight galaxy → meteor shower → diner flyby → harvest/supernova)
+is retired in favor of a four-stop **Star Wars** tour, all four stops now Star Wars
+segments, connected by one shared hyperspace-jump tunnel bridge effect (procedural
+radial star-streaks, replaces the old flat ~600ms alpha crossfade at every bridge):
+dogfight (polished from the prior iteration's meteor-shower conversion — 3 depth
+tiers, differentiated encounters, pile-up fix, hero TIE-explosion crowning moment)
+→ Millennium Falcon chase (new — chase-cam, ~200ms dtn-normalized camera lag,
+crowning moment = a hard bank through a closing asteroid gap at the last instant)
+→ Hoth AT-AT flyby (new — procedural scrolling ground, 3 walkers at parallax depths,
+deliberately no leg animation per an explicit risk-simplification call, crowning
+moment = a nearby blast jolts the camera) → Death Star trench run (new, finale —
+bespoke forward-scroll corridor, NOT the shared sweep primitive the other 3 stops
+use, reuses the same Death Star asset established in the dogfight stop for an
+establishing glimpse, crowning moment = a surface-gun blast beside the ship). Old
+`space-road-trip-v14.html` untouched on disk (this repo's iterations-never-
+overwritten-in-place rule) — full revert path if this direction doesn't land. In the
+real app these fire as four SEPARATE round-boundary journeys; this file is a combined
+review artifact. Trademark/copyright exposure for literal Star Wars content already
+knowingly accepted by Ben (settled in the prior iteration, reconfirmed this pass —
+"not worried about copyright, only using it for fun"). Went through a full 7-task
+subagent-driven build (skeleton+shared primitive, then each of the 4 segments, then
+a Fable second-opinion audit against `references/round-journeys.md`'s checklists with
+every finding independently re-verified against source before fixing — 6 of 8
+findings were real bugs and got fixed: trench wall panels not reading as a corridor,
+trench reduced-motion still animating lasers, dogfight windshield crack popping
+instead of fading at a bridge, a false "3 walkers visible together" claim on Hoth,
+panel/obstacle recycle pop-out, a too-weak Hoth crowning moment, and a reduced-motion
+ending inconsistency). Self-gate checklist in the file already passes.
 
 Revision notes (newest first):
+- 2026-07-23 [Claude, iteration 7 built — status now `built`, awaiting Ben's
+  review]: ships `space-road-trip-v18.html`, supersedes `space-road-trip-v14.html`
+  (untouched, full revert path). Full hard-left theme replacement per Ben's direct
+  instruction: all four stops become Star Wars segments (see Brief above for the
+  per-stop breakdown). Built via a 7-task subagent-driven plan
+  (`docs/superpowers/plans` equivalent tracked in this session's own plan file,
+  not duplicated here): Task 1 copied v14 into v18, deleted the 3 retired scenes,
+  extracted a shared `sweepFrame(track, flightPos, windowWidth, config)` motion
+  primitive from the pre-existing dogfight math (verified pure/input-driven per
+  `references/round-journeys.md`'s extraction-vs-copy rule before sharing it),
+  and added the hyperspace-jump bridge effect. Tasks 2-5 built/polished each of
+  the 4 segments in sequence (one implementer at a time — all edits land in the
+  same file, parallel dispatch would conflict). New Recraft assets generated this
+  pass: Millennium Falcon (3 bank poses), 2 plain asteroids, 1 AT-AT standing
+  profile, 1 trench-wall texture (a trench obstacle sprite failed twice and was
+  replaced with a procedural canvas silhouette per this session's 2-attempt retry
+  cap, not force-regenerated a third time). Task 6 dispatched an arms-length Fable
+  audit against `references/round-journeys.md`'s full checklist (motion/loop/
+  composition/prototype conventions, dtn-normalization, particle-pooling,
+  crowning-moment bar), then independently re-verified every finding against the
+  actual code before fixing anything — 6 of 8 findings were real and got fixed:
+  trench-wall panels read as a flat rectangle collage instead of a receding
+  corridor (fixed via clip-to-corridor-path + multiply blending); trench's
+  reduced-motion branch still animated laser bolts (removed, now genuinely
+  static like the other 3 segments); the dogfight's windshield crack popped off
+  instead of fading during bridge1 (one-line sentinel-variable fix — the exact
+  bug class an earlier iteration's fix comment claimed was already handled, it
+  wasn't, in this one code path); Hoth's documented "3 walkers visible together"
+  moment was independently recomputed and found to never actually happen on
+  screen (a ~300ms gap in `sweepFrame`'s own geometry) — retimed and re-verified
+  numerically + by screenshot; trench panel/obstacle recycling popped out at
+  18-32% alpha instead of 0 (fixed); Hoth's crowning-moment streak expired
+  exactly at its own peak instant with an invisible flash color (fixed — added
+  a decay tail, switched to a saturated color). Two findings left as known,
+  deliberately-unfixed gaps, flagged plainly rather than silently carried:
+  Hoth's ambient blaster flicker draws fixed-position lines not anchored to any
+  walker (cosmetic, not trivial to fix cleanly); Task 5 (trench run) shipped
+  without its own dated `.notes` entry in the file (this QUEUE.md entry is the
+  full record of it). **What this ship does NOT include:** no formal `/audit`
+  Fable pass was run a second time after the fix pass (the fix pass's own
+  regression screenshots stood in for it) — flagged, not glossed over. Ben's
+  own job: everything real-time-feel, plus the specific asks he made going in —
+  does the Falcon/AT-AT/trench-wall art actually read as those things at a
+  glance, and does the whole thing feel like "one perfect" pass on ship
+  fidelity rather than a rough first draft.
 - 2026-07-23 [Claude, same file (`space-road-trip-v14.html`), in-place rework
   after iteration 6 shipped — not logged incrementally as it happened, closed
   out here before starting the next round of work]: two further passes on top
