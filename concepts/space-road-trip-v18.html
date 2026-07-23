@@ -119,7 +119,8 @@
   <b>Fable audit pass (independent consultant, no attachment to the build) plus my own follow-up verification against the real code — every finding below confirmed directly, not taken on Fable's word — five real bugs found and fixed:</b> (1) <b>the stop's whole stated idea didn't render</b> — <code>battleEncounterFrame</code> computed a <code>bank</code> value but <code>drawBattleEncounter</code> never read it, so ships flew dead-straight with zero roll despite "banking weave" being the explicit grill decision; now wired into each ship's <code>rot</code>. (2) ships didn't fade with the world during the bridge crossfades — <code>drawBattleShip</code> overwrote <code>globalAlpha</code> with just its own window-alpha instead of composing with whatever was already active; now multiplies against the incoming value. (3) a real teleport/pop-off during the outgoing bridge — <code>tick()</code> calls <code>drawMsWorld</code> with a <code>-99999</code> sentinel <code>msElapsed</code> once the stop ends, and <code>flightPos</code>/the crack overlay were both recomputing straight off that sentinel, snapping the flight position back to its start (an encounter would re-appear near its entry pose) and cutting the crack off in one frame instead of fading it with the world; both now hold their last real value through the bridge instead of recomputing from the sentinel, reset alongside the file's other replay-state in <code>resetUI()</code>. (4) the crack overlay's fixed screen position landed directly on the Death Star's disc, reading as scaffolding on the sphere rather than a windshield crack; moved to a lower-left position clear of the station. (5) the TIE fighter's near-black hull was barely legible against the plain space background for roughly half its sweep; gave it a static (non-animated, so still GPU-cheap) rim-glow shadow specific to that ship type. Also dropped two pieces of dead code the audit surfaced: <code>peakX</code> in both <code>battleEncounterFrame</code> and the diner flyby's own <code>flybyRockFrame</code> (computed, never read, in both — a pre-existing pattern, not something this build introduced) and <code>battleFlyIntensity</code> (defined, zero call sites, its own comment falsely claiming a <code>tick()</code> integration that never existed).<br><br>
   <b>Also renamed:</b> the on-screen HUD text ("Meteor Shower" / "Departing — Meteor Shower"), the stop-index label, and the page title all still said meteor shower over what's now Star Wars visuals — updated to "Space Battle" throughout. Kept deliberately non-franchise-specific in the visible text itself (the accepted IP risk is the ship/station art, not gratuitous on-screen wording).<br><br>
   <b>Not done, flagged not hidden:</b> Fable also noted the three ship-vs-ship encounters read as visually near-identical (same straight sweep, same envelope, distinguishable mainly by which sprite crosses) and that the exiting/entering encounter groups pile up on the same side of frame at both handoffs — real observations about monotony, not bugs, and not touched this pass; that's a bigger creative rework than the fix list called for. <code>MS_CRACK_SPOKES</code>' geometry wasn't touched, only its anchor point. Re-verified via <code>node --check</code> on both script blocks after every edit in this pass, plus a real headless-Chromium render across the encounters, the bridge2 transition, and the impact/crack beat: zero console/page errors; ships now visibly bank through the weave; the fixed TIE glow reads clearly against black; the crack sits clear of the Death Star; and stepping through the bridge2 frames one at a time confirms the ship/crack teleport-and-pop-off is gone — the exiting encounter now holds its position and fades smoothly with the world into the next stop instead of snapping back. Reduced motion re-checked too, via the actual <code>#reducedToggle</code> checkbox (not the Playwright context-option method this file has already flagged as invalid): still a static wide shot of all three encounters, no bank, no lasers, no shake, TIE glow present — none of this pass's fixes changed that branch's behavior, confirmed rather than assumed.<br><br>
-  <b>v18 (2026-07-23) — Task 1 of a 7-task Star Wars pivot plan, full hard-left theme replace, Ben's direct call:</b> this is a NEW FILE (<code>space-road-trip-v18.html</code>), copied from <code>v14.html</code> which stays completely untouched on disk as the fallback/revert point — this repo's iteration convention, not a git branch. All 3 non-battle scenes (midnight galaxy, diner/business-rock flyby, harvest/supernova) are deleted outright, not hidden: their palettes (<code>GAL</code>/<code>ARC</code>/<code>HAR</code>), particle arrays, draw functions (<code>drawGalWorld</code>/<code>drawGasWorld</code>/<code>drawHarWorld</code> and everything each one solely depended on — <code>flybyWindow</code>/<code>flybyRockFrame</code>/<code>drawFlybyRock</code>/<code>drawGasRush</code>/<code>drawGasCanopyHint</code>/<code>makeHarAmbient</code>/<code>makeHeroes</code>/<code>heroRadius</code>/<code>heroAlpha</code>, the four rock image assets + <code>makeRockImg</code>), and their <code>TIMELINE</code> entries are gone. The dogfight (space-battle) scene is KEPT verbatim — <code>drawMsWorld</code>/<code>drawDeathStar</code>/<code>drawBattleEncounter</code>/<code>drawBattleShip</code>/<code>drawLaserFlicker</code>/<code>msIntensity</code>/<code>drawMsCrackOverlay</code>, the ship image assets, the <code>MS</code> palette, <code>BATTLE_ENCOUNTERS</code>, <code>msLastFlightPos</code>/<code>msLastCrackElapsed</code>'s bridge-sentinel handling — nothing here changed except the one refactor below. <b>Shared <code>sweepFrame</code> primitive extracted:</b> the dogfight's <code>battleWindow</code>/<code>battleEncounterFrame</code> and the (now-deleted) diner flyby's near-identical <code>flybyWindow</code>/<code>flybyRockFrame</code> were the same mechanic twice over — one continuous <code>flightPos</code> value swept through a raised-cosine visibility window, with eased scale + bank. Replaced both with one shared <code>sweepWindow(d,w)</code> / <code>sweepFrame(track, flightPos, windowWidth, config)</code> pair (defined right after <code>worldAlpha</code>, above the dogfight section, as shared infra for Tasks 2-4's Falcon chase and Hoth flyby to reuse — see that function's own comment for its exact config shape). <code>drawBattleEncounter</code>'s call site now calls <code>sweepFrame(e.track, flightPos, BATTLE_WINDOW, {side:e.side, laneY:e.laneY, baseH:BASE_SHIP_H, peakScale:BATTLE_PEAK_SCALE, bankMax:BATTLE_BANK_MAX})</code> — <code>sweepFrame</code>'s default <code>edgeFrac</code> (0.15) and <code>minScale</code> (0.35) were picked to exactly match the dogfight's own prior hardcoded values, so this is a pure refactor with no behavior change (verified via Playwright screenshots at 3 timestamps across the encounter sweep, see this pass's own verification note further down in this same entry's summary). <code>battleWindow</code>/<code>battleEncounterFrame</code> are deleted, superseded by the shared pair. <b>TIMELINE restructured</b> to four stops: <code>msHold</code>/<code>msOut</code> (dogfight, unchanged durations, now the OPENING stop with no leading bridge, same "first stop" treatment galaxy used to get) → <code>bridge1</code> (600ms, hyperspace jump) → <code>falconHold</code> (10,000ms placeholder) → <code>bridge2</code> (600ms) → <code>hothHold</code> (10,000ms placeholder) → <code>bridge3</code> (600ms) → <code>trenchHold</code> (10,000ms placeholder, finale, no trailing bridge). The 3 new placeholder segments share one generic <code>drawPlaceholderWorld(alpha,label,bg)</code> helper (solid fill + centered label + "placeholder" subtext) rather than three near-identical stub functions — nothing to differentiate yet since Tasks 2-5 build the real content. <b>Hyperspace-jump tunnel</b> (<code>drawHyperspaceJump(alpha,progress)</code>, procedural radial star-streaks from a vanishing point, no image assets) replaces the flat ~600ms alpha crossfade at every bridge, implemented ONCE and reused at all three — hooked in for free by driving both <code>alpha</code> and <code>progress</code> straight off the fractional part of the existing <code>tourProgress()</code> value (0 during any hold, sweeping 0→1 across any bridge's <code>easeInOut</code> ramp), rather than gating on specific bridge phase names — so no per-bridge wiring was needed and no parallel timing system was built. A small camera zoom-punch is summed into the existing shake-transform pattern in <code>tick()</code>, scaled off the same envelope. Force-zeroed under <code>reduced</code>, same contract as every other event in this file. <b>Not done this pass, by design:</b> the dogfight's own visual polish (depth tiers, hero TIE-breakup beat, encounter differentiation) is explicitly Task 2, not touched here beyond the <code>sweepFrame</code> refactor. The 3 placeholder segments have zero real content — Tasks 3-5 replace them with the Falcon chase, Hoth AT-AT flyby, and Death Star trench run. See the plan doc (<code>~/.claude/plans/we-are-going-to-cryptic-creek.md</code>) for the full 7-task breakdown and segment designs.
+  <b>v18 (2026-07-23) — Task 1 of a 7-task Star Wars pivot plan, full hard-left theme replace, Ben's direct call:</b> this is a NEW FILE (<code>space-road-trip-v18.html</code>), copied from <code>v14.html</code> which stays completely untouched on disk as the fallback/revert point — this repo's iteration convention, not a git branch. All 3 non-battle scenes (midnight galaxy, diner/business-rock flyby, harvest/supernova) are deleted outright, not hidden: their palettes (<code>GAL</code>/<code>ARC</code>/<code>HAR</code>), particle arrays, draw functions (<code>drawGalWorld</code>/<code>drawGasWorld</code>/<code>drawHarWorld</code> and everything each one solely depended on — <code>flybyWindow</code>/<code>flybyRockFrame</code>/<code>drawFlybyRock</code>/<code>drawGasRush</code>/<code>drawGasCanopyHint</code>/<code>makeHarAmbient</code>/<code>makeHeroes</code>/<code>heroRadius</code>/<code>heroAlpha</code>, the four rock image assets + <code>makeRockImg</code>), and their <code>TIMELINE</code> entries are gone. The dogfight (space-battle) scene is KEPT verbatim — <code>drawMsWorld</code>/<code>drawDeathStar</code>/<code>drawBattleEncounter</code>/<code>drawBattleShip</code>/<code>drawLaserFlicker</code>/<code>msIntensity</code>/<code>drawMsCrackOverlay</code>, the ship image assets, the <code>MS</code> palette, <code>BATTLE_ENCOUNTERS</code>, <code>msLastFlightPos</code>/<code>msLastCrackElapsed</code>'s bridge-sentinel handling — nothing here changed except the one refactor below. <b>Shared <code>sweepFrame</code> primitive extracted:</b> the dogfight's <code>battleWindow</code>/<code>battleEncounterFrame</code> and the (now-deleted) diner flyby's near-identical <code>flybyWindow</code>/<code>flybyRockFrame</code> were the same mechanic twice over — one continuous <code>flightPos</code> value swept through a raised-cosine visibility window, with eased scale + bank. Replaced both with one shared <code>sweepWindow(d,w)</code> / <code>sweepFrame(track, flightPos, windowWidth, config)</code> pair (defined right after <code>worldAlpha</code>, above the dogfight section, as shared infra for Tasks 2-4's Falcon chase and Hoth flyby to reuse — see that function's own comment for its exact config shape). <code>drawBattleEncounter</code>'s call site now calls <code>sweepFrame(e.track, flightPos, BATTLE_WINDOW, {side:e.side, laneY:e.laneY, baseH:BASE_SHIP_H, peakScale:BATTLE_PEAK_SCALE, bankMax:BATTLE_BANK_MAX})</code> — <code>sweepFrame</code>'s default <code>edgeFrac</code> (0.15) and <code>minScale</code> (0.35) were picked to exactly match the dogfight's own prior hardcoded values, so this is a pure refactor with no behavior change (verified via Playwright screenshots at 3 timestamps across the encounter sweep, see this pass's own verification note further down in this same entry's summary). <code>battleWindow</code>/<code>battleEncounterFrame</code> are deleted, superseded by the shared pair. <b>TIMELINE restructured</b> to four stops: <code>msHold</code>/<code>msOut</code> (dogfight, unchanged durations, now the OPENING stop with no leading bridge, same "first stop" treatment galaxy used to get) → <code>bridge1</code> (600ms, hyperspace jump) → <code>falconHold</code> (10,000ms placeholder) → <code>bridge2</code> (600ms) → <code>hothHold</code> (10,000ms placeholder) → <code>bridge3</code> (600ms) → <code>trenchHold</code> (10,000ms placeholder, finale, no trailing bridge). The 3 new placeholder segments share one generic <code>drawPlaceholderWorld(alpha,label,bg)</code> helper (solid fill + centered label + "placeholder" subtext) rather than three near-identical stub functions — nothing to differentiate yet since Tasks 2-5 build the real content. <b>Hyperspace-jump tunnel</b> (<code>drawHyperspaceJump(alpha,progress)</code>, procedural radial star-streaks from a vanishing point, no image assets) replaces the flat ~600ms alpha crossfade at every bridge, implemented ONCE and reused at all three — hooked in for free by driving both <code>alpha</code> and <code>progress</code> straight off the fractional part of the existing <code>tourProgress()</code> value (0 during any hold, sweeping 0→1 across any bridge's <code>easeInOut</code> ramp), rather than gating on specific bridge phase names — so no per-bridge wiring was needed and no parallel timing system was built. A small camera zoom-punch is summed into the existing shake-transform pattern in <code>tick()</code>, scaled off the same envelope. Force-zeroed under <code>reduced</code>, same contract as every other event in this file. <b>Not done this pass, by design:</b> the dogfight's own visual polish (depth tiers, hero TIE-breakup beat, encounter differentiation) is explicitly Task 2, not touched here beyond the <code>sweepFrame</code> refactor. The 3 placeholder segments have zero real content — Tasks 3-5 replace them with the Falcon chase, Hoth AT-AT flyby, and Death Star trench run. See the plan doc (<code>~/.claude/plans/we-are-going-to-cryptic-creek.md</code>) for the full 7-task breakdown and segment designs.<br><br>
+  <b>Task 2 (2026-07-23) — dogfight polish pass, all four numbered items from the plan:</b> (1) <b>3 depth tiers</b> instead of flat scale: a new far tier (<code>msFarBlips</code>, 22 tiny static red/green pinpricks — a distant dogfight we're not part of, drawn alongside the pre-existing <code>msDistant</code> loop so it renders in both the reduced and full branch) sits behind a new mid tier (<code>MID_SHIPS</code>, 5 small ship sprites swept via the SAME <code>sweepFrame</code> primitive at <code>MID_PEAK_SCALE</code>=0.5 and, per round-journeys.md's differential-speed guidance, at only <code>MID_PARALLAX</code>=0.45 of flightPos's rate — a further-back layer that moves less across frame per unit of camera advance, not just renders smaller), which sits behind the existing near tier (<code>BATTLE_ENCOUNTERS</code>, unchanged mechanic, now scaled up further for the finale — see below). Zero changes to <code>sweepFrame</code>'s own contract; the mid tier is a second call site reusing the exact same config shape. (2) <b>Encounters differentiated</b>: composition/count/timing now genuinely vary — encounter 1 is a tight 2-ship chase (narrowest window, quick), encounter 2 a 3-ship bomber-flanked-by-two spread (default window), encounter 3 the 4-ship finale (widest window + biggest peakScale, closest/longest-lingering, escalating into the existing impact beat) — rather than three same-feeling pairs. (3) <b>Same-side pile-up fixed at its root cause, not patched per-instance</b>: worked out on paper first — <code>sweepFrame</code>'s enter/exit edges are both fully determined by one <code>side</code> value (side&lt;0 enters left/exits right, side&gt;0 the reverse), so at any encounter-to-encounter crossfade the EXITING encounter's exit edge and the ENTERING encounter's entry edge land on the same side of frame whenever consecutive <code>side</code> values differ — the old alternating -1/+1/-1 pattern guaranteed a pile-up at both handoffs, structurally, every time. All three encounters now use <code>side:-1</code> (one consistent flight direction, like a train window), which fixes both handoffs at once. Verified directly: screenshots at both crossover midpoints (t≈3350ms and t≈6090ms) show the exiting encounter on the left edge and the entering encounter on the right edge every time — never both on the same side. Custom, non-uniform <code>BATTLE_TRACKS</code> (<code>[0, 1, 1.7]</code>, replacing the old uniform <code>i*BATTLE_TRACK_SPACING</code>) additionally give the finale room to peak with real separation before <code>MS_IMPACT_AT</code>. (4) <b>Hero crowning-moment beat</b>: the finale encounter's trailing TIE (<code>hero:true</code>) takes a hit and is replaced by a burst from a fixed, pre-allocated 24-particle pool (<code>msBurstParticles</code> — same convention as <code>msDebris</code>: allocated once at module load, reset in place via <code>triggerMsBurst()</code>/<code>resetUI()</code>, never <code>new</code>'d or spliced per frame), plus a brief localized radial flash distinct from the existing fullscreen impact flash. Timing (<code>MS_BURST_AT</code>) is solved, not eyeballed — derived from the SAME flight-position formula (now named <code>MS_FLIGHT_DUR</code>, extracted from drawMsWorld's own prior inline literal as a pure refactor, no behavior change) so it always lands exactly at the finale's peak visibility regardless of any future track retune, and lands ~780ms ahead of <code>MS_IMPACT_AT</code> so the two beats read as distinct events (confirmed by screenshot, not assumed). Burst particle life/position advance via <code>dtn</code>, per round-journeys.md's normalization rule for any new continuously-advancing value. The hero ship (and its laser-flicker link) stop being drawn once destroyed (<code>msBurstTriggered</code>, checked in <code>drawBattleEncounter</code>) — gated so the reduced-motion branch (which never triggers the burst) always shows the finale's full 4-ship intact. <b>Preserved, verified not just assumed:</b> all 5 prior-session bug fixes (banking wiring, alpha compositing, bridge2 sentinel-hold, crack position, TIE rim-glow — the rim-glow specifically now shared for free by the new mid tier, since it reuses <code>drawBattleShip</code> unmodified), the reduced-motion branch's existing contract, and <code>sweepFrame</code>'s exact signature/config-field meanings (only new call sites added, no existing field repurposed). <b>Verification:</b> <code>node --check</code> clean on both script blocks. Headless-Chromium Playwright, real DOM <code>#reducedToggle</code> checkbox (not the context option): zero console/page errors across a run covering each encounter's peak, the burst trigger frame and the following ~1.4s of particle life, the windshield-impact frame, both encounter-to-encounter crossovers, the bridge1 hyperspace transition, and the post-bridge Falcon-chase placeholder; reduced-motion screenshots confirmed pixel-static across a 1.5s gap (no drift) with the finale's hero TIE still intact. <b>Not done this pass, by design:</b> Falcon chase / Hoth flyby / trench run remain placeholders — Tasks 3-5.
 </div>
 </div>
 
@@ -391,30 +392,86 @@ let msDebris = Array.from({length:80}, () => ({
 // genuinely continuous rather than three discrete events. Each encounter is
 // 2-3 ships at small fixed offsets from one shared anchor point/scale, so
 // the pair reads as fighting each other at any distance, not just at peak.
-const BATTLE_TRACK_SPACING = 1;
 const BATTLE_WINDOW = 1.3;   // same worst-case-68%-combined-visibility width verified for the diner flyby — no dip between encounters
 const BATTLE_SPAN_LEAD = 0.55;
 const BASE_SHIP_H = H*0.16;  // world pixel height at scale=1 (per-ship; group scale multiplies this)
 const BATTLE_PEAK_SCALE = 2.1;
 const BATTLE_BANK_MAX = 0.26;
+// Task 2 (dogfight polish) — differentiation + pile-up fix, applied together:
+// (a) all three `side` values are now -1 (was -1/+1/-1). Math on the old
+// alternating pattern: sweepFrame's enter/exit edges are both fixed by
+// `side` (side<0 enters left, exits right; side>0 the reverse), so at each
+// encounter-to-encounter crossfade the EXITING encounter's exit edge and the
+// ENTERING encounter's entry edge only land on opposite sides of frame when
+// consecutive `side` values MATCH — alternating them (the old code) forces
+// both edges onto the same side at every handoff, which is exactly the
+// "same-side pile-up... at both stop handoffs" bug. One consistent side
+// (a single continuous flight direction, same as a train window) fixes both
+// handoffs at once, structurally, not per-encounter. (b) composition/count/
+// timing now genuinely differ per encounter instead of reading as the same
+// pair three times: enc.1 is a tight 2-ship chase (smallest window — whips
+// past quick), enc.2 is a 3-ship bomber-flanked-by-two spread (default
+// window), enc.3 is the 4-ship finale (widest window + biggest peakScale —
+// lingers longest, closest to camera, escalating into the impact beat).
+// enc.3's trailing TIE carries `hero:true` — the crowning-moment ship that
+// takes the hit (see MS_BURST_AT below); it stays ships[3] so the existing
+// laser-flicker anchor (ships[0]) is untouched by its later removal.
+const BATTLE_TRACKS = [0, 1, 1.7]; // custom, not uniform spacing — finale sits
+// closer to encounter 2 than a uniform ladder would, so its peak (and the
+// hero burst it triggers) lands with real separation before MS_IMPACT_AT
+// rather than crowding right up against it.
 const BATTLE_ENCOUNTERS = [
-  { side:-1, laneY:0.42, ships:[
-      { key:'xwing', dx:-0.62, dy:-0.10, rot:0.12 },
-      { key:'tie',   dx:0.55,  dy:0.14,  rot:-0.22 },
+  { side:-1, laneY:0.38, window: BATTLE_WINDOW*0.8, peakScale: BATTLE_PEAK_SCALE*0.9, ships:[
+      { key:'tie',   dx:0.10,  dy:0.05,  rot:-0.10 },
+      { key:'xwing', dx:-0.52, dy:-0.06, rot:0.14 },
   ]},
-  { side:+1, laneY:0.58, ships:[
-      { key:'ywing', dx:-0.58, dy:0.12,  rot:0.08 },
-      { key:'tie',   dx:0.60,  dy:-0.10, rot:-0.18 },
+  { side:-1, laneY:0.60, window: BATTLE_WINDOW, peakScale: BATTLE_PEAK_SCALE, ships:[
+      { key:'ywing', dx:-0.10, dy:0.10,  rot:0.05 },
+      { key:'tie',   dx:0.58,  dy:-0.22, rot:-0.20 },
+      { key:'tie',   dx:0.55,  dy:0.40,  rot:0.22 },
   ]},
-  { side:-1, laneY:0.50, ships:[
-      { key:'xwing', dx:-0.70, dy:0,     rot:0.10 },
-      { key:'tie',   dx:0.45,  dy:-0.30, rot:-0.24 },
-      { key:'tie',   dx:0.50,  dy:0.32,  rot:0.20 },
+  { side:-1, laneY:0.48, window: BATTLE_WINDOW*1.15, peakScale: BATTLE_PEAK_SCALE*1.1, ships:[
+      { key:'xwing', dx:-0.66, dy:-0.14, rot:0.10 },
+      { key:'ywing', dx:-0.60, dy:0.22,  rot:0.06 },
+      { key:'tie',   dx:0.42,  dy:-0.10, rot:-0.22 },
+      { key:'tie',   dx:0.56,  dy:0.30,  rot:0.24, hero:true },
   ]},
 ];
-BATTLE_ENCOUNTERS.forEach((e,i) => { e.track = i*BATTLE_TRACK_SPACING; });
+BATTLE_ENCOUNTERS.forEach((e,i) => { e.track = BATTLE_TRACKS[i]; });
 const BATTLE_START = -BATTLE_SPAN_LEAD;
-const BATTLE_END = (BATTLE_ENCOUNTERS.length-1)*BATTLE_TRACK_SPACING + BATTLE_SPAN_LEAD;
+const BATTLE_END = BATTLE_TRACKS[BATTLE_TRACKS.length-1] + BATTLE_SPAN_LEAD;
+const FINALE_ENCOUNTER = BATTLE_ENCOUNTERS[BATTLE_ENCOUNTERS.length-1];
+
+// ── mid depth tier (Task 2) — small ship sprites sweeping at reduced scale
+// and a fraction of flightPos's rate (round-journeys.md: depth via
+// differential speed, not just scale — a further-back layer should move
+// less across frame per unit of camera advance, not just render smaller).
+// Reuses the same sweepFrame primitive + drawBattleShip (so TIE rim-glow
+// legibility carries over for free), just a second, independent call site —
+// no change to sweepFrame's own contract. Not drawn under `reduced` (motion
+// layer, same as the near encounters going static there).
+const MID_PARALLAX = 0.45;
+const MID_WINDOW = 0.34;
+const MID_PEAK_SCALE = 0.5;
+const MID_SHIPS = [
+  { key:'xwing', laneY:0.16, track:-0.05 },
+  { key:'tie',   laneY:0.86, track:0.18 },
+  { key:'tie',   laneY:0.24, track:0.48 },
+  { key:'ywing', laneY:0.78, track:0.74 },
+  { key:'tie',   laneY:0.20, track:1.02 },
+];
+
+// ── far depth tier (Task 2) — no sprite, just tiny colored pinpricks (a
+// distant dogfight we're not part of) behind everything else. Static
+// positions, opacity-only twinkle keyed off `now` (same technique as
+// msDistant just above), so it renders in BOTH the reduced and full branch
+// (drawn ahead of the `if(reduced)` split below) exactly like msDistant does.
+const MS_FAR_COUNT = 22;
+let msFarBlips = Array.from({length: MS_FAR_COUNT}, () => ({
+  x: Math.random()*W, y: H*0.08+Math.random()*H*0.68,
+  size: 0.6+Math.random()*0.7, isRed: Math.random()<0.5,
+  dur: 900+Math.random()*2200, phase: Math.random()*Math.PI*2,
+}));
 // bridge1 (the crossfade OUT of this stop, v18 renumbering — this used to be
 // bridge2 back when galaxy opened the tour) calls drawMsWorld with the
 // sentinel msElapsed=-99999 (see tick()) so the world keeps fading out by
@@ -461,12 +518,18 @@ function drawLaserFlicker(x1,y1,x2,y2,now,seed,color){
   ctx.beginPath(); ctx.moveTo(bx-ux*boltLen/2, by-uy*boltLen/2); ctx.lineTo(bx+ux*boltLen/2, by+uy*boltLen/2); ctx.stroke();
 }
 function drawBattleEncounter(e, frame, now){
+  // Task 2 crowning moment: once the hero TIE (see MS_BURST_AT) has taken
+  // its hit, it's gone for the rest of the run — replaced by the particle
+  // burst, not redrawn as an intact ship. Only ever true post-trigger, and
+  // the trigger is itself gated !reduced, so this is a no-op under reduced.
+  const heroDestroyed = msBurstTriggered;
   const baseImgH = frame.h;
   const positions = e.ships.map(s => ({
     x: frame.x + s.dx*baseImgH,
     y: frame.y + s.dy*baseImgH,
   }));
   for (let i=0; i<e.ships.length; i++){
+    if (heroDestroyed && e.ships[i].hero) continue;
     drawBattleShip(BATTLE_SHIPS[e.ships[i].key], positions[i].x, positions[i].y, baseImgH*(e.ships[i].key==='tie'?0.62:0.9), frame.alpha, e.ships[i].rot + frame.bank);
   }
   if (frame.alpha>0.2 && !reduced){
@@ -474,11 +537,58 @@ function drawBattleEncounter(e, frame, now){
     // rebel ships (xwing/ywing) fire red, TIEs fire green — movie-accurate,
     // and a useful free way to tell the sides apart at a glance
     for (let i=1; i<positions.length; i++){
+      if (heroDestroyed && e.ships[i].hero) continue; // no beam to a ship that's already gone
       const fromRebel = e.ships[0].key!=='tie';
       drawLaserFlicker(positions[0].x, positions[0].y, positions[i].x, positions[i].y, now, e.track*7+i, fromRebel ? 'rgba(255,70,70,0.9)' : 'rgba(90,255,120,0.9)');
     }
     ctx.globalCompositeOperation='source-over';
   }
+}
+// ── hero crowning-moment particle burst (Task 2) — "a TIE takes a hit and
+// breaks into a procedural particle burst crossing the windshield," per the
+// plan and round-journeys.md's explicit per-stop-needs-one-instant lesson.
+// Fixed, pre-allocated pool — same convention as msDebris just above:
+// created once at module load, reused (reset in place) every trigger and
+// every replay, never `new`'d or push/spliced per frame.
+const MS_BURST_COUNT = 24;
+let msBurstParticles = Array.from({length: MS_BURST_COUNT}, () => ({
+  active:false, x:0, y:0, vx:0, vy:0, life:0, maxLife:1, size:1, spark:false,
+}));
+let msBurstTriggered = false; // edge-trigger latch, reset in resetUI()
+let msBurstX = 0, msBurstY = 0; // origin, kept for the flash draw below (particles move; the flash's center shouldn't)
+function triggerMsBurst(x, y){
+  msBurstX = x; msBurstY = y;
+  for (let i=0; i<msBurstParticles.length; i++){
+    const p = msBurstParticles[i];
+    const ang = Math.random()*Math.PI*2, spd = 1.4+Math.random()*3.2;
+    p.active = true; p.x = x; p.y = y;
+    p.vx = Math.cos(ang)*spd; p.vy = Math.sin(ang)*spd;
+    p.life = 0; p.maxLife = 34+Math.random()*30; // ~0.57-1.07s at 60fps
+    p.size = 1.2+Math.random()*2.6; p.spark = i%2===0;
+  }
+}
+// dtn-normalized per round-journeys.md — this is a NEW continuously-advancing
+// value (particle life/position), so it advances via dtn like every other
+// per-frame accumulator in this file (msDebris' z-decrement, msShake's
+// smoothing), not a raw per-frame increment.
+function updateDrawMsBurst(dtn){
+  ctx.globalCompositeOperation='lighter';
+  for (const p of msBurstParticles){
+    if (!p.active) continue;
+    p.life += dtn;
+    if (p.life>=p.maxLife){ p.active=false; continue; }
+    p.x += p.vx*dtn; p.y += p.vy*dtn;
+    const drag = Math.pow(0.965, dtn); p.vx*=drag; p.vy*=drag;
+    const t = p.life/p.maxLife, a = 1-t;
+    if (p.spark){
+      ctx.fillStyle = `rgba(255,${Math.round(230-60*t)},${Math.round(180-140*t)},${a})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size*(1-t*0.4), 0, 6.2832); ctx.fill();
+    } else {
+      ctx.fillStyle = `rgba(${Math.round(255-90*t)},${Math.round(140-60*t)},${Math.round(70-40*t)},${a*0.9})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 6.2832); ctx.fill();
+    }
+  }
+  ctx.globalCompositeOperation='source-over';
 }
 // v11 escalation rework — Ben's direct call, KEPT UNCHANGED from the meteor-
 // shower version: "it needs to feel like an actual [event]... the first
@@ -496,6 +606,19 @@ const MS_SWARM_AT = 300; // battle intensity starts ramping almost immediately �
 // the meteor-shower version, only the notes below re-flavored: a chunk of
 // battle debris (not a meteor) hits our windshield late in the stop.
 const MS_IMPACT_AT = MS_HOLD + MS_OUT - 1400, MS_IMPACT_DUR = 220;
+// Task 2 — extracted, not new: this is the exact denominator drawMsWorld's
+// flightPos lerp already used inline (MS_HOLD+MS_OUT-MS_IMPACT_DUR-200); named
+// here so MS_BURST_AT can derive off the same flight-position math without
+// duplicating the literal formula. Pure refactor at the drawMsWorld call site
+// below — same value, no behavior change.
+const MS_FLIGHT_DUR = MS_HOLD + MS_OUT - MS_IMPACT_DUR - 200;
+// hero crowning-moment timing — solved so MS_BURST_AT lands exactly when
+// flightPos reaches FINALE_ENCOUNTER.track (its peak: alpha=1, full scale),
+// not eyeballed, so the burst always fires while the ship is fully visible
+// regardless of any future BATTLE_TRACKS retune. Comfortably ahead of
+// MS_IMPACT_AT (~780ms) so the two beats read as distinct events.
+const MS_BURST_AT = MS_FLIGHT_DUR * clamp01((FINALE_ENCOUNTER.track - BATTLE_START)/(BATTLE_END - BATTLE_START));
+const MS_BURST_FLASH_DUR = 220;
 // moved off the Death Star (MS_DEATHSTAR sits at 0.74W/0.32H, r 0.34H) — the
 // crack used to land directly on the gray sphere and read as scaffolding on
 // it instead of a windshield crack; lower-left is clear of both the station
@@ -530,9 +653,17 @@ function drawMsWorld(alpha, now, dtn, intensity, msElapsed){
   drawDeathStar();
   ctx.globalCompositeOperation='lighter';
   for (const s of msDistant){ const a=s.hi*(0.5+0.5*Math.sin(now/(s.dur/6.28)+s.phase)); ctx.fillStyle=`rgba(255,255,255,${a})`; ctx.beginPath(); ctx.arc(s.x,s.y,s.size,0,6.2832); ctx.fill(); }
+  // far depth tier (Task 2) — tiny colored pinpricks, a distant dogfight
+  // we're not part of. Drawn here so it renders in both reduced and full
+  // (ahead of the branch below), same as msDistant just above.
+  for (const s of msFarBlips){
+    const a = 0.10+0.22*(0.5+0.5*Math.sin(now/(s.dur/6.28)+s.phase));
+    ctx.fillStyle = s.isRed ? `rgba(255,90,90,${a})` : `rgba(110,255,140,${a})`;
+    ctx.beginPath(); ctx.arc(s.x,s.y,s.size,0,6.2832); ctx.fill();
+  }
   const haveRealElapsed = msElapsed>=0;
   const flightPos = haveRealElapsed
-    ? (msLastFlightPos = lerp(BATTLE_START, BATTLE_END, clamp01(msElapsed/(MS_HOLD+MS_OUT-MS_IMPACT_DUR-200))))
+    ? (msLastFlightPos = lerp(BATTLE_START, BATTLE_END, clamp01(msElapsed/MS_FLIGHT_DUR)))
     : msLastFlightPos;
   const crackElapsed = haveRealElapsed ? (msLastCrackElapsed = msElapsed) : msLastCrackElapsed;
   if (reduced){
@@ -585,11 +716,53 @@ function drawMsWorld(alpha, now, dtn, intensity, msElapsed){
     }
   }
   ctx.globalCompositeOperation='source-over';
+  // mid depth tier (Task 2) — small sprites at MID_PARALLAX's fraction of
+  // flightPos's rate; drawn behind the near encounters, ahead of the
+  // ambient debris above. Motion layer, so skipped under reduced (matches
+  // the near encounters going static there).
+  const midFlightPos = flightPos*MID_PARALLAX;
+  for (const m of MID_SHIPS){
+    const f = sweepFrame(m.track, midFlightPos, MID_WINDOW, { side:-1, laneY:m.laneY, baseH:BASE_SHIP_H, peakScale:MID_PEAK_SCALE, bankMax:BATTLE_BANK_MAX*0.6 });
+    if (f) drawBattleShip(BATTLE_SHIPS[m.key], f.x, f.y, f.h*(m.key==='tie'?0.62:0.9), f.alpha*0.85, f.bank);
+  }
   for (const e of BATTLE_ENCOUNTERS){
     // v18: sweepFrame's default edgeFrac (0.15) and minScale (0.35) match this
     // stop's own prior hardcoded values exactly — pure refactor, no behavior change.
-    const f = sweepFrame(e.track, flightPos, BATTLE_WINDOW, { side:e.side, laneY:e.laneY, baseH:BASE_SHIP_H, peakScale:BATTLE_PEAK_SCALE, bankMax:BATTLE_BANK_MAX });
-    if (f) drawBattleEncounter(e, f, now);
+    const f = sweepFrame(e.track, flightPos, e.window ?? BATTLE_WINDOW, { side:e.side, laneY:e.laneY, baseH:BASE_SHIP_H, peakScale:e.peakScale ?? BATTLE_PEAK_SCALE, bankMax:BATTLE_BANK_MAX });
+    if (f) {
+      drawBattleEncounter(e, f, now);
+      // hero crowning-moment trigger (Task 2, edge-triggered exactly once —
+      // same pattern as this file's other one-shot triggers, e.g. shipLanded
+      // in the diner stop this file used to have): fires only for the
+      // finale encounter, only once flightPos has carried it to MS_BURST_AT,
+      // and grabs the hero ship's own screen position via the SAME dx/dy
+      // math drawBattleEncounter just used internally, so the burst starts
+      // exactly where the ship was, not a guessed/duplicated position.
+      if (!reduced && !msBurstTriggered && e===FINALE_ENCOUNTER && msElapsed>=MS_BURST_AT){
+        const heroShip = e.ships.find(s=>s.hero);
+        if (heroShip){
+          triggerMsBurst(f.x + heroShip.dx*f.h, f.y + heroShip.dy*f.h);
+          msBurstTriggered = true;
+        }
+      }
+    }
+  }
+  updateDrawMsBurst(dtn);
+  // hero burst's own brief localized flash, distinct from and well ahead of
+  // the windshield-impact fullscreen flash below — keeps the two beats
+  // reading as separate events, per this file's eye-comfort discipline
+  // (a small radial pop, not another fullscreen wash).
+  if (msBurstTriggered && msElapsed>=MS_BURST_AT){
+    const burstFlashEnv = clamp01(1 - (msElapsed-MS_BURST_AT)/MS_BURST_FLASH_DUR);
+    if (burstFlashEnv>0.01){
+      const fg = ctx.createRadialGradient(msBurstX,msBurstY,0,msBurstX,msBurstY,BASE_SHIP_H*0.6);
+      fg.addColorStop(0, `rgba(255,240,210,${0.55*burstFlashEnv})`);
+      fg.addColorStop(1, 'rgba(255,240,210,0)');
+      ctx.globalCompositeOperation='lighter';
+      ctx.fillStyle = fg;
+      ctx.fillRect(0,0,W,H);
+      ctx.globalCompositeOperation='source-over';
+    }
   }
   // the impact object itself — a chunk of battle wreckage closing straight
   // on the camera, same drawMsHeroMeteor projection technique the meteor
@@ -650,6 +823,9 @@ const phaseLabelEl = document.getElementById('phaseLabel');
 
 function resetUI(){
   lastNow=0; msShake={x:0,y:0}; msIntensitySmooth=0; msLastFlightPos=BATTLE_START; msLastCrackElapsed=-99999;
+  // Task 2 hero-burst state — same reset discipline as every other one-shot
+  // trigger/pool in this file (msLastFlightPos etc, just above).
+  msBurstTriggered=false; for (const p of msBurstParticles) p.active=false;
   topBar.style.transform='scaleY(0)'; botBar.style.transform='scaleY(0)';
   canvas.style.transform='translate(0px,0px) scale(1)';
   hud.classList.remove('show');
