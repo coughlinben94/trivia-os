@@ -10,7 +10,7 @@ export default defineConfig({
   timeout: 30000,
   globalSetup: './e2e/global-setup.js',
   use: {
-    baseURL: 'https://trivia-os.vercel.app',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'https://trivia-os.vercel.app',
     headless: true,
     screenshot: 'only-on-failure',
     // Pre-authenticated past HostPinGate — see global-setup.js. Every spec
