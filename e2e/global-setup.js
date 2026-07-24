@@ -6,11 +6,11 @@
 //
 // HostPinGate only renders once a show is "loaded" — Host.jsx shows an
 // in-page ShowPicker otherwise, not a redirect — so this seeds the same
-// Test show (show_WLBM5jvb) every other spec in this suite already defaults to.
+// Test show (show_fQtKIq7M) every other spec in this suite already defaults to.
 
 import { chromium } from '@playwright/test'
 
-const SHOW_ID = 'show_WLBM5jvb'
+const SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID || 'show_fQtKIq7M'
 const STORAGE_STATE_PATH = 'e2e/.auth/host.json'
 
 export default async function globalSetup(config) {

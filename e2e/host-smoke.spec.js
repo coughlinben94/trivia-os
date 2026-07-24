@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-const SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID || 'show_WLBM5jvb'
+const SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID || 'show_fQtKIq7M'
 
 async function loadAndCollect(page, path) {
   const errors = []
