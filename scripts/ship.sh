@@ -15,7 +15,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-if ! git diff --quiet || ! git diff --cached --quiet; then
+if [ -n "$(git status --porcelain)" ]; then
   echo "SHIP_BLOCKED: working tree has uncommitted changes — commit everything before shipping, so what gets tested is exactly what gets pushed."
   exit 1
 fi
