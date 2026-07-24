@@ -15,6 +15,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "SHIP_BLOCKED: working tree has uncommitted changes — commit everything before shipping, so what gets tested is exactly what gets pushed."
+  exit 1
+fi
+
 PREVIEW_PORT=4173
 PREVIEW_URL="http://localhost:${PREVIEW_PORT}"
 
