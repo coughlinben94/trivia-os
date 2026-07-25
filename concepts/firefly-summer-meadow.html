@@ -39,6 +39,34 @@
      history — removed there as an ill-fitting leftover water-reflection glint in a desert/
      mountain scene; correct fit here, this is an actual lake). */
   @keyframes sdWave { 0%,100%{transform:translateX(-3.6vw) scaleY(.74);opacity:.34} 50%{transform:translateX(3.6vw) scaleY(1.27);opacity:.62} }
+
+  /* ── fireflies (Task 4) ──
+     ffFlash: asymmetric flash-and-decay, grounded in real Photinus pyralis biology — a brief
+     streak roughly every 5-7s (per-firefly period set in JS), mostly dim between. Fast rise
+     (88%->91%, ~3% of cycle) to full peak, slower fall (91%->100%, ~9%) through an overshoot-dip
+     at 96%, non-zero base (0.15, not 0) — a faint constant ember scatter between flashes rather
+     than a full blackout, matching how real fireflies never go fully invisible at rest. */
+  @keyframes ffFlash { 0%,88%{opacity:.15} 91%{opacity:1} 96%{opacity:.35} 100%{opacity:.15} }
+  /* ffJStroke: the "big dipper" signature — a short upward dip coupled to the SAME period/delay
+     as ffFlash (91% keyframe mark lines up with the flash's own peak; composed on its own
+     wrapper, see buildFirefly below, so it never fights ffDrift's translate). Spec text called
+     for translateY(-6%), but percentage transforms resolve against the ANIMATING ELEMENT's own
+     box — these divs are 2-5px, so 6% of that is sub-pixel and invisible. Ported to -1.6cqh
+     (container-query height, same unit this file/Sonora Balloons already uses for stage-relative
+     motion) instead, so the dip is actually visible against the stage rather than the firefly's
+     own tiny box. */
+  @keyframes ffJStroke { 0%,88%{transform:translateY(0)} 91%{transform:translateY(-1.6cqh)} 100%{transform:translateY(0)} }
+  /* ffDrift: direct port of Sonora Balloons' sdBalloonDrift — rest->target->rest WITHIN one
+     iteration (NOT direction:alternate; see that file's keyframe comment for the mid-flight-snap
+     bug class this shape was built to avoid), so every iteration boundary is a genuine rest point
+     safe to reroll --dx/--dy against. Magnitude is small (a few cqw/cqh — gentle local wander),
+     not balloon-scale cross-stage flight. */
+  @keyframes ffDrift { 0%{transform:translate(0,0)} 50%{transform:translate(var(--dx,3cqw),var(--dy,2cqh))} 100%{transform:translate(0,0)} }
+  /* ffFade: verbatim port of Sonora Balloons' sdBalloonFade flat-hold shape (fast ramp in, real
+     hold at peak, fast ramp out, real hold at zero) — filler fireflies only, on an independent
+     long period distinct from the ~5-7s flash clock, so individual fireflies appear/disappear
+     over a much slower timescale than they blink. */
+  @keyframes ffFade { 0%,100%{opacity:0} 12%{opacity:var(--fadeOp,1)} 45%{opacity:var(--fadeOp,1)} 58%{opacity:0} }
 </style>
 </head>
 <body>
@@ -71,15 +99,26 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
          < treeMid < treeFront (sharpest, darkest, nearest — carries the oak landmark). -->
     <div id="treeBack" style="position:absolute;inset:0;z-index:3"></div>
     <div id="treeMid" style="position:absolute;inset:0;z-index:4"></div>
+    <!-- firefliesBehind (Task 4): the subset of fireflies occluded by the front treeline, for a
+         free depth cue. Deliberately given the SAME z-index as treeMid (4), not a fractional
+         "4.5" — z-index only accepts integers, and this achieves the exact same paint order
+         through normal stacking rules: same-z-index siblings paint in DOM order, so this div
+         (declared after treeMid) paints ON TOP of treeMid, while treeFront's own z-index:5
+         always paints after ANY z:4 element regardless of DOM position — landing this layer
+         behind treeFront and in front of treeMid without needing a non-integer value. -->
+    <div id="firefliesBehind" style="position:absolute;inset:0;z-index:4"></div>
     <div id="treeFront" style="position:absolute;inset:0;z-index:5"></div>
 
-    <!-- lake, 2 parts: static treeline reflection (z6, genuinely no animation — a dark mirrored
-         silhouette alone is what makes a band read as "water" before any pixel moves) and a
+    <!-- lake, 3 parts: static treeline reflection (z6, genuinely no animation — a dark mirrored
+         silhouette alone is what makes a band read as "water" before any pixel moves), a
          shimmer overlay (z7, ported verbatim from Sonora Balloons' removed sdWave mechanism —
-         see buildLakeShimmer below). Reflected firefly flashes (3rd lake element per the design
-         spec) deliberately deferred — depends on Task 4 fireflies, which don't exist yet. -->
+         see buildLakeShimmer below), and firefly reflections (Task 4, appended into THIS div at
+         runtime — see the fireflies block below for why lakeShimmer and not lakeReflection). -->
     <div id="lakeReflection" style="position:absolute;left:0;width:100%;bottom:0;height:13%;z-index:6;opacity:.35;filter:blur(1.5px);transform:scaleY(-1);overflow:hidden"></div>
     <div id="lakeShimmer" style="position:absolute;inset:0;z-index:7"></div>
+    <!-- firefliesFront (Task 4): the subset of fireflies rendered in front of everything,
+         including the lake. -->
+    <div id="firefliesFront" style="position:absolute;inset:0;z-index:8"></div>
   </div>
   <div class="safe-area"></div>
 </div>
@@ -96,7 +135,7 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
   The center box (20% left, 28% top, 60% wide, 44% tall) is reserved for potential UI or focal point layering. Firefly swarms should avoid clustering heavily within it; the jar will sit just below and to the left as a secondary focus point.
 
   <h2>Honest gaps</h2>
-  Built: sky gradient (8-stop indigo-to-olive ramp, fixed backdrop, Task 1) and star field (22 independent stars, fade + position-reroll cycles, Task 1); 3-layer treeline (treeBack/treeMid/treeFront, 240/150/90s durations, R/L/R scroll directions, filter-based depth blur/desaturation, Task 2) and oak landmark silhouette (Recraft image asset, front layer's two "A"-slot tiles, Task 2); lake (Task 3) — static treeline-reflection silhouette (no animation) plus a shimmer overlay ported from Sonora Balloons' sdWave mechanism. Not yet: fireflies, porch backdrop, jar sprite, swing bench, and reflected firefly flashes in the lake (Tasks 4–7).
+  Built: sky gradient (8-stop indigo-to-olive ramp, fixed backdrop, Task 1) and star field (22 independent stars, fade + position-reroll cycles, Task 1); 3-layer treeline (treeBack/treeMid/treeFront, 240/150/90s durations, R/L/R scroll directions, filter-based depth blur/desaturation, Task 2) and oak landmark silhouette (Recraft image asset, front layer's two "A"-slot tiles, Task 2); lake (Task 3) — static treeline-reflection silhouette (no animation) plus a shimmer overlay ported from Sonora Balloons' sdWave mechanism; fireflies (Task 4) — 10 hero + 30 filler, flash-and-decay (ffFlash) + J-stroke (ffJStroke) + drift (ffDrift, ported from Sonora Balloons' sdBalloonDrift) + independent fade-in/out for fillers (ffFade), some behind the front treeline and some in front of everything, plus mirrored lake reflections for fireflies near the shoreline. Not yet: porch backdrop, jar sprite, and swing bench (Tasks 5–7).
 </div>
 
 <div class="gate">
@@ -106,7 +145,7 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
     <li class="pass">✓ Safe-area overlay — 20%/28%/60%/44% box, dashed border, center label, pointer-events:none</li>
     <li class="pass">✓ Reduced-motion mechanism — CSS rules (prefers-reduced-motion + .rm-force) and rmToggle event listener wired</li>
     <li class="pass">✓ Legend — positioned top-4%, centered, describes the ambient nature</li>
-    <li class="pass">✓ Theme content: sky gradient, stars, 3-layer treeline with oak landmark, and lake (static reflection + shimmer) (Tasks 1–3, complete); fireflies, porch, jar, swing pending (Tasks 4–7)</li>
+    <li class="pass">✓ Theme content: sky gradient, stars, 3-layer treeline with oak landmark, lake (static reflection + shimmer), and fireflies (hero+filler, flash+J-stroke+drift+fade, lake reflections) (Tasks 1–4, complete); porch, jar, swing pending (Tasks 5–7)</li>
     <li class="pass">✓ Valid HTML/CSS — no syntax errors, loads cleanly in browser</li>
   </ul>
 </div>
@@ -299,6 +338,164 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
     el.className = 'sd-anim';
     el.style.cssText = `position:absolute;left:-14%;right:-14%;bottom:${w.bottom};height:2%;border-radius:50%;filter:blur(4px);background:linear-gradient(90deg, rgba(120,160,200,0) 0%, rgba(120,160,200,.30) 30%, rgba(150,185,215,.34) 55%, rgba(120,160,200,.28) 75%, rgba(120,160,200,0) 100%);animation:sdWave ${w.dur} ease-in-out ${w.delay} infinite`;
     lakeShimmerEl.appendChild(el);
+  });
+
+  // ── fireflies (Task 4) ──
+  // Composition mirrors Sonora Balloons' nested-wrapper convention — each wrapper owns exactly
+  // ONE animated property so transform-driven layers never fight: fadeWrap (opacity, ffFade,
+  // fillers only) > driftWrap (transform:translate, ffDrift) > jWrap (transform:translateY,
+  // ffJStroke) > flashDiv (opacity, ffFlash). Nested opacity COMPOUNDS visually (a child's
+  // rendered opacity multiplies against every ancestor's own opacity), which is exactly what's
+  // wanted here: fadeWrap's opacity answers "does this firefly exist right now at all" while
+  // flashDiv's answers "is it mid-blink" — the two multiply together for free, no JS math
+  // needed, and — critically — they're on DIFFERENT elements, unlike the balloon file's
+  // sdBalloonDrift+sdBalloonFade pair (which could share one element only because THOSE two
+  // animate different properties transform/opacity; ffFade and ffFlash both animate opacity, so
+  // sharing an element would have one silently overriding the other).
+  const FF_HIGHLIGHT = '#d4a020', FF_ACCENT = '#a0ff40'; // theme highlight (gold) + shinyAccent
+  // (bright yellow-green) — real firefly bioluminescence peaks ~560nm (yellow-green), so this
+  // pairing is the biologically-accurate uniform-color choice the spec calls for, not just the
+  // simplest one. glowColor below picks HIGHLIGHT most of the time, ACCENT as the minority tone.
+  const LAKE_TOP = 87; // #lakeReflection/#lakeShimmer's shared bottom:0/height:13% band starts at
+                        // 100-13=87% down the stage — reflection math below mirrors around this.
+  const firefliesBehindEl = document.getElementById('firefliesBehind');
+  const firefliesFrontEl = document.getElementById('firefliesFront');
+
+  // Position generators. Y stays within 38-86%: above the lake's own 87% shoreline (so every
+  // firefly is unambiguously "in the meadow", never inside the water itself) and below the open
+  // sky (where stars live). Filler x is uniform full-width ("no firefly-free zones"); hero x is
+  // LEFT-WEIGHTED (soft — 70% chance drawn from a left band, 30% chance from anywhere) since the
+  // porch/jar that don't exist yet (Tasks 5-6) will land on the left — not a hard exclusion zone
+  // elsewhere, per spec.
+  function fillerPos(){ return { x:+(Math.random()*98).toFixed(2), y:+(38+Math.random()*48).toFixed(2) }; }
+  function heroPos(){
+    const x = Math.random() < 0.7 ? 2+Math.random()*38 : 2+Math.random()*88;
+    return { x:+x.toFixed(2), y:+(38+Math.random()*48).toFixed(2) };
+  }
+
+  function buildFirefly(cfg){
+    // cfg: {x, y, size, hasFade, glowColor, flashPeriod, flashDelay, reroll}. glowColor/
+    // flashPeriod/flashDelay are generated by the caller (not in here) so the lake-reflection
+    // code below can reuse the EXACT same values — a reflection must share its source's real
+    // ffFlash timing, not run an independently-timed clone.
+    const flashDiv = document.createElement('div');
+    flashDiv.className = 'sd-anim';
+    flashDiv.style.cssText = `position:absolute;inset:0;border-radius:50%;background:${cfg.glowColor};box-shadow:0 0 ${(cfg.size*3).toFixed(1)}px ${(cfg.size*1.1).toFixed(1)}px ${cfg.glowColor};animation:ffFlash ${cfg.flashPeriod}s ease-in-out infinite ${cfg.flashDelay}`;
+
+    const jWrap = document.createElement('div');
+    jWrap.className = 'sd-anim';
+    // Same period/delay as the flash it's coupled to — the J-stroke's 91% dip lines up with the
+    // flash's own 91% peak, the real "big dipper" signature (upward flick WHILE it flashes).
+    jWrap.style.cssText = `position:absolute;inset:0;animation:ffJStroke ${cfg.flashPeriod}s ease-in-out infinite ${cfg.flashDelay}`;
+    jWrap.appendChild(flashDiv);
+
+    const dx0 = Math.random()*10 - 5, dy0 = Math.random()*6 - 3; // small local wander, cqw/cqh
+    const driftDur = (10 + Math.random()*14).toFixed(2);
+    const driftDelay = `${-(Math.random()*driftDur).toFixed(2)}s`;
+    const driftWrap = document.createElement('div');
+    driftWrap.className = 'sd-anim';
+    // hasFade fireflies get their left/top/size on the OUTER fadeWrap instead (built below), so
+    // driftWrap here is just inset:0 inside it; non-fade (hero) fireflies have no outer wrapper,
+    // so driftWrap itself owns the static position.
+    const posCss = cfg.hasFade ? `position:absolute;inset:0` : `position:absolute;left:${cfg.x}%;top:${cfg.y}%;width:${cfg.size}px;height:${cfg.size}px`;
+    driftWrap.style.cssText = `${posCss};--dx:${dx0.toFixed(2)}cqw;--dy:${dy0.toFixed(2)}cqh;animation:ffDrift ${driftDur}s ease-in-out infinite ${driftDelay}`;
+    driftWrap.appendChild(jWrap);
+
+    // Reroll --dx/--dy on every ffDrift iteration boundary — its keyframe goes rest->target->rest
+    // WITHIN one iteration (not direction:alternate), so every boundary is a genuine rest point,
+    // same guarantee sdBalloonDrift relies on. REQUIRED bubbling guard: jWrap's ffJStroke and
+    // flashDiv's ffFlash both live inside driftWrap and fire their OWN 'animationiteration' on
+    // their own ~5-7s clock, which bubbles up to driftWrap — without the e.animationName check
+    // this handler would reroll drift mid-flight on every flash too, not just every drift cycle
+    // (the exact bug class Fable's re-check caught in the balloon file).
+    const rerollDrift = (e) => {
+      if (e.animationName !== 'ffDrift') return;
+      const mag = 0.5 + Math.random()*0.9;
+      driftWrap.style.setProperty('--dx', `${(dx0*mag).toFixed(2)}cqw`);
+      driftWrap.style.setProperty('--dy', `${(dy0*mag).toFixed(2)}cqh`);
+      // Speed via WAAPI playbackRate, NEVER animationDuration directly — writing duration on a
+      // running CSS animation remaps its already-elapsed time and snaps the visible position, and
+      // (for a comma-separated animation list) stomps every OTHER animation's own duration too.
+      // See sonora-balloons-depth.html's rerollDrift comment for the confirmed repro of both bugs.
+      const driftAnim = driftWrap.getAnimations().find(a => a.animationName === 'ffDrift');
+      if (driftAnim) driftAnim.playbackRate = 1/mag;
+    };
+    driftWrap.addEventListener('animationiteration', rerollDrift);
+
+    if (!cfg.hasFade) return driftWrap;
+
+    const fadePeriod = (14 + Math.random()*10).toFixed(2); // independent of the ~5-7s flash clock
+    const fadeDelay = `${-(Math.random()*fadePeriod).toFixed(2)}s`;
+    const fadeWrap = document.createElement('div');
+    fadeWrap.className = 'sd-anim';
+    fadeWrap.style.cssText = `position:absolute;left:${cfg.x}%;top:${cfg.y}%;width:${cfg.size}px;height:${cfg.size}px;--fadeOp:1;animation:ffFade ${fadePeriod}s ease-in-out infinite ${fadeDelay}`;
+    fadeWrap.appendChild(driftWrap);
+    // Reposition only while invisible (ffFade's own rest point, opacity:0) — same silent-
+    // teleport pattern the stars and balloon-file fillers use. Gated to ffFade specifically:
+    // 'animationiteration' bubbles from ffDrift/ffJStroke/ffFlash too.
+    fadeWrap.addEventListener('animationiteration', (e) => {
+      if (e.animationName !== 'ffFade') return;
+      const pos = cfg.reroll();
+      fadeWrap.style.left = `${pos.x}%`;
+      fadeWrap.style.top = `${pos.y}%`;
+    });
+    return fadeWrap;
+  }
+
+  // Population: 10 hero (4-5px) + 30 filler (2-3px) = 40 total. Duty-cycle math: a ~0.5s-
+  // equivalent flash on a ~6s cycle is ~8% duty cycle — at 10 total fireflies, fewer than 1 is
+  // lit at any instant (reads as dead); at ~40, 3-4 are lit at any instant with a new one
+  // igniting roughly twice a second, the real-meadow read. ~30% of each tier renders behind the
+  // front treeline (firefliesBehindEl, occlusion depth cue); the rest render in front of
+  // everything (firefliesFrontEl).
+  const reflectionSources = [];
+  function spawnTier(tier, count){
+    for (let i=0;i<count;i++){
+      const pos = tier === 'hero' ? heroPos() : fillerPos();
+      const size = tier === 'hero' ? +(4+Math.random()*1).toFixed(2) : +(2+Math.random()*1).toFixed(2);
+      const glowColor = Math.random() < 0.78 ? FF_HIGHLIGHT : FF_ACCENT;
+      const flashPeriod = +(5+Math.random()*2).toFixed(2); // ~5-7s per-insect interval
+      const flashDelay = `${-(Math.random()*flashPeriod).toFixed(2)}s`;
+      const cfg = {
+        x: pos.x, y: pos.y, size, glowColor, flashPeriod, flashDelay,
+        hasFade: tier === 'filler',
+        reroll: tier === 'hero' ? heroPos : fillerPos,
+      };
+      const el = buildFirefly(cfg);
+      const behind = Math.random() < 0.3;
+      (behind ? firefliesBehindEl : firefliesFrontEl).appendChild(el);
+      // Reflection candidates: only fireflies close enough to the shoreline that mirroring them
+      // lands INSIDE the lake's own 13%-tall band (LAKE_TOP=87, band runs 87-100) — anything
+      // higher up would mirror past y:100 and off the bottom of the stage entirely, so it's
+      // skipped here rather than clamped/faked into a wrong position.
+      if (LAKE_TOP - pos.y <= 12){
+        reflectionSources.push({ x:pos.x, y:pos.y, size, glowColor, flashPeriod, flashDelay });
+      }
+    }
+  }
+  spawnTier('hero', 10);
+  spawnTier('filler', 30);
+
+  // ── lake firefly reflections (Task 3 code-review carryover) ──
+  // Attach to #lakeShimmer, NOT #lakeReflection: lakeReflection has transform:scaleY(-1) on the
+  // whole div (it flips the static treeline silhouette), which would double the mirror math for
+  // anything placed inside it (undo its flip, then redo the firefly's own mirror, awkwardly).
+  // lakeShimmer is unflipped, full-stage (inset:0), and already uses this same bottom%-anchored
+  // coordinate convention (see LAKE_WAVES above) — a firefly's mirrored y-position drops straight
+  // in with no extra transform math. Each reflection shares its source's exact ffFlash duration
+  // AND delay (not a separately-timed clone), so it flashes exactly when the source does; it's
+  // dimmer (opacity:.4), blurred, and vertically stretched (scaleY, transform-origin:top so it
+  // streaks DOWN into the lake band from the mirrored point, not symmetrically past the
+  // shoreline). Reflections don't inherit the source's drift/J-stroke motion — a static mirror
+  // position — a known simplification: the drift magnitude is small enough that this doesn't
+  // visibly desync, but a fully faithful version would replicate the same driftWrap/jWrap stack
+  // mirrored. Upgrade path if reflections read as too static next to their moving source.
+  reflectionSources.forEach(r => {
+    const mirroredY = 2*LAKE_TOP - r.y;
+    const refl = document.createElement('div');
+    refl.className = 'sd-anim';
+    refl.style.cssText = `position:absolute;left:${r.x}%;top:${mirroredY.toFixed(2)}%;width:${r.size}px;height:${r.size}px;border-radius:50%;transform-origin:top;transform:scaleY(2.2);opacity:.4;filter:blur(1.4px);background:${r.glowColor};box-shadow:0 0 ${(r.size*2.4).toFixed(1)}px ${r.size}px ${r.glowColor};animation:ffFlash ${r.flashPeriod}s ease-in-out infinite ${r.flashDelay}`;
+    lakeShimmerEl.appendChild(refl);
   });
 })();
 </script>
