@@ -168,14 +168,21 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
   // The oak landmark: one hand-placed silhouette (not part of the bump generation above), fixed
   // in the front layer's FIRST tile only, overlaid on a spot where variant A's own crown line is
   // deliberately kept low/flat (x48-84) so the oak reads as a distinct mass sitting in front of
-  // it, not fused into it. Built wide-not-tall: 3 lobes of deliberately uneven width (~10 / ~6 /
-  // ~20 viewBox units — never evenly spaced), each a rounded Q-curve dome, with the widest lobe
-  // drooping into an asymmetric overhang past where a symmetric dome would close. A narrow trunk
-  // (4 units, offset left-of-center under the canopy, not centered) is the only part of the
-  // shape that touches the ground; everywhere else the canopy underside sits a few units above
-  // the local treeline crown, leaving a sliver of gap between overhang and ground — that gap,
-  // not apex height, is what reads as "tree" instead of "terrain spike."
-  const OAK_PATH_D = 'M60,100 L60,85 L48,86 Q52,74 58,85 Q60,64 64,84 Q70,68 78,83 Q82,78 84,88 L64,85 L64,100 Z';
+  // it, not fused into it. Built wide-not-tall: 3 lobes of deliberately uneven width (~10 / ~8 /
+  // ~18 viewBox units — never evenly spaced), each a rounded Q-curve dome, with the widest lobe
+  // drooping into an asymmetric overhang past where a symmetric dome would close. The middle
+  // lobe's control point is spread wide of its endpoints and its apex kept shallow so its
+  // on-screen width:height ratio (post ~2.2x x-stretch) reads as a dome like its neighbors,
+  // not a narrow steeple. A narrow trunk (4 units, offset left-of-center under the canopy, not
+  // centered) is the only part of the shape that touches the ground; everywhere else the canopy
+  // underside sits a few units above the local treeline crown, leaving a sliver of gap between
+  // overhang and ground — that gap, not apex height, is what reads as "tree" instead of "terrain
+  // spike." Fill is the back-layer's own accent green (#1a3808, richer/lighter than the front
+  // layer's near-black #0a1a02), at full opacity, so the oak reads as a distinct landmark mass
+  // instead of camouflaging into the surrounding front treeline it shares a tier with.
+  const OAK_PATH_D = 'M60,100 L60,85 L48,86 Q52,74 58,85 Q62,75 66,84 Q70,68 78,83 Q82,78 84,88 L64,85 L64,100 Z';
+  const OAK_FILL = '#1a3808';
+  const OAK_OP = 1.0;
 
   const TREE_TIERS = [
     { key:'treeBack',  shape:'back',  fill:'#1a3808', blur:2, sat:0.55, op:0.88, dur:240, dir:'R' },
@@ -216,8 +223,8 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
       if (tier.key === 'treeFront' && i === 0){
         const oak = document.createElementNS('http://www.w3.org/2000/svg','path');
         oak.setAttribute('d', OAK_PATH_D);
-        oak.setAttribute('fill', tier.fill);
-        oak.setAttribute('opacity', tier.op);
+        oak.setAttribute('fill', OAK_FILL);
+        oak.setAttribute('opacity', OAK_OP);
         svg.appendChild(oak);
       }
       wrap.appendChild(svg);
