@@ -340,7 +340,25 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
         const oak = document.createElement('img');
         oak.src = OAK_IMG_SRC;
         oak.alt = '';
-        oak.style.cssText = 'position:absolute;left:48%;bottom:0%;width:19%;height:auto;pointer-events:none';
+        // bottom (design-review fix, was 0%): the ORIGINAL comment above claimed bottom:0% "roots
+        // it into the front treeline's crown line, same y100 the SVG path's L100,100 uses" — true
+        // only at a tile's extreme x=0/x=100 edges (where the path is forced to close at y100 for
+        // seam continuity). At this oak's actual x (left:48%, mid-tile), TREE_SHAPE_VARIANTS.front[0]
+        // reads "Q44,72 48,86" — the real crown/ground line there is y≈86, not y100. bottom:0%
+        // instead pinned the oak's own bottom edge to the tile's absolute bottom (y100), so ~14pt
+        // of the oak (its trunk base) sank into y87-100 — exactly the #lakeReflection band (z6,
+        // paints ABOVE treeFront's z5). That band is a semi-opaque (opacity:.35) blurred SVG
+        // reflection of the treeline's OWN fill color, whose crown-line geometry has nothing to do
+        // with the oak's actual raster silhouette/edges sitting underneath it — so the two
+        // overlapped as a color/edge mismatch: the reported "blocky gray-green smear with ragged
+        // edges." (Confirmed no oak-image reflection is attempted anywhere in this file — the lake
+        // reflection is built once, from TREE_SHAPE_VARIANTS.front[0] only, see buildLakeReflection
+        // below; this was a plain positioning bug, not a broken image-reflection technique.)
+        // Fix: raise the oak's bottom anchor to sit on its OWN real ground line (14% from the tile
+        // bottom = y86, matching the Q-curve value above) instead of the tile's absolute edge,
+        // clearing the lake band (which starts at y87) with a small margin — oak no longer dips
+        // into the reflection layer at all, so nothing paints over it there.
+        oak.style.cssText = 'position:absolute;left:48%;bottom:14%;width:19%;height:auto;pointer-events:none';
         wrap.appendChild(oak);
       }
       track.appendChild(wrap);
@@ -665,6 +683,24 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
     porch.style.cssText = 'display:block;position:absolute;left:0;top:0;width:18%;height:auto;pointer-events:none;-webkit-mask-image:linear-gradient(to right, black 0%, black 85%, transparent 100%);mask-image:linear-gradient(to right, black 0%, black 85%, transparent 100%);';
     document.getElementById('porch').appendChild(porch);
 
+    // Fade-zone shadow overlay (design-review fix — porch's right-edge mask fade above read as
+    // "the image has a hole in it" rather than "fading into shadow": the sky gradient behind this
+    // x-range (indigo/plum, y0-50%) is LIGHTER than the porch's dark wood tones, so as the mask
+    // above dissolves the porch toward transparent, it reveals progressively MORE of that lighter
+    // sky — reading as the asset breaking/ending, not as material receding into shade. Fix: a
+    // plain dark linear-gradient div, same x-range as the mask's own fade zone (85-100% of the
+    // porch img's own 18%-wide box = stage x 15.3-18%, computed the same way, not re-guessed),
+    // full image height (top:0, height:50.3% — see the post-extension seam-y comment above), going
+    // transparent (left, where the porch is still opaque) to near-black at moderate opacity
+    // (right, the fade tip). This darkens the whole transition zone regardless of what's actually
+    // behind it, same "darken the edges" trick as this project's shared Vignette component, scoped
+    // to just this one fade zone — so the dissolve reads as deepening shadow, not a see-through
+    // gap. Same conceptual trick as the shared Vignette component (darkening edges), scoped locally
+    // here instead of applied stage-wide.
+    const fadeShadow = document.createElement('div');
+    fadeShadow.style.cssText = 'position:absolute;left:15.3%;width:2.7%;top:0;height:50.3%;background:linear-gradient(to right, rgba(4,8,6,0) 0%, rgba(4,8,6,.72) 100%);pointer-events:none';
+    document.getElementById('porch').appendChild(fadeShadow);
+
     // Post extension rectangle (issue 2) — see header comment above for color/x-span sourcing.
     // Runs from the image's own bottom edge (y≈50.3%, where the source's bled-off post cuts)
     // down to y=78%, inside the front treeline's crown band (~72–96%, it scrolls). Two prior fix
@@ -819,11 +855,20 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
     // cast a gentle glow on the porch floor around it. Reuses FF_HIGHLIGHT (the theme's gold
     // firefly color, already defined above) so the glow reads as the same light family as the
     // fireflies themselves, not an unrelated color introduced just for this element.
-    // Kept as a symmetric halo around the jar (same +2.75%/+1.61% offsets on each side used since
-    // the original ground-level placement) — width/height unchanged, re-centered again here on
-    // the jar's new (v3) hung position: left = 7.05−2.75 = 4.30%, top = 50.5−1.61 = 48.89%.
+    // Kept as a symmetric halo around the jar — center stays locked to the jar's own center
+    // (x=9.30%, y=57.885%, i.e. JAR_LEFT+JAR_WIDTH/2, JAR_TOP+JAR_HEIGHT/2) so any future resize
+    // of the box below keeps the halo centered without re-deriving the offsets by hand.
+    // Sized up (design-review fix — the jar is this theme's real focal element, but at its
+    // original 10%x18% / 66-33%-alpha stops it was nearly the darkest thing in its own cluster,
+    // losing the eye to the porch's brighter orange rim-light stripes, the scene's actual
+    // brightest constant element). Widened to 16%x28% and pushed every gradient stop's alpha up
+    // (dd/80/30 vs the old 66/33) with a softer, bigger blur (13px vs 9px) so the glow has a
+    // genuinely stronger constant presence, not just brighter during the in-jar fireflies' brief
+    // flashes.
+    const glowCenterX = JAR_LEFT + JAR_WIDTH/2, glowCenterY = JAR_TOP + JAR_HEIGHT/2;
+    const glowW = 16, glowH = 28;
     const glow = document.createElement('div');
-    glow.style.cssText = `position:absolute;left:4.30%;top:48.89%;width:10%;height:18%;border-radius:50%;background:radial-gradient(closest-side, ${FF_HIGHLIGHT}66 0%, ${FF_HIGHLIGHT}33 45%, transparent 75%);filter:blur(9px);pointer-events:none`;
+    glow.style.cssText = `position:absolute;left:${(glowCenterX-glowW/2).toFixed(2)}%;top:${(glowCenterY-glowH/2).toFixed(2)}%;width:${glowW}%;height:${glowH}%;border-radius:50%;background:radial-gradient(closest-side, ${FF_HIGHLIGHT}dd 0%, ${FF_HIGHLIGHT}80 40%, ${FF_HIGHLIGHT}30 65%, transparent 85%);filter:blur(13px);pointer-events:none`;
     document.getElementById('jar').appendChild(glow);
 
     const jar = document.createElement('img');
@@ -831,6 +876,16 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
     jar.alt = '';
     jar.style.cssText = `display:block;position:absolute;left:${JAR_LEFT}%;top:${JAR_TOP}%;width:${JAR_WIDTH}%;height:auto;pointer-events:none`;
     document.getElementById('jar').appendChild(jar);
+
+    // Lid highlight (design-review fix, "warm lid highlight" suggestion) — a small soft warm-white
+    // sheen over the lid/shoulder area (the jar's own top ~15%, above the fy≈0.20 lid/body split
+    // measured elsewhere in this function) so the jar itself, not just its halo, reads as more
+    // luminous at rest. Plain radial-gradient div, tiny blur, painted after the jar img so it sits
+    // on top.
+    const lidHighlight = document.createElement('div');
+    const lidX = JAR_LEFT + JAR_WIDTH*0.5, lidY = JAR_TOP + JAR_HEIGHT*0.11;
+    lidHighlight.style.cssText = `position:absolute;left:${(lidX-1.3).toFixed(2)}%;top:${(lidY-1.1).toFixed(2)}%;width:2.6%;height:2.2%;border-radius:50%;background:radial-gradient(closest-side, rgba(255,230,170,.65) 0%, rgba(255,230,170,.25) 55%, transparent 85%);filter:blur(1.5px);pointer-events:none`;
+    document.getElementById('jar').appendChild(lidHighlight);
 
     // In-jar fireflies (2-3, per spec) — reuse ffFlash DIRECTLY (same keyframe as the main
     // meadow population and the lake reflections above), just without ffJStroke/ffDrift: these
