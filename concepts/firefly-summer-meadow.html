@@ -634,9 +634,32 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
     // scrolling behind it — treeline or hill — rather than presenting a hard boundary. This also
     // makes the missing outline/highlight detail far less noticeable, since it's already fading
     // to nothing by the point it would matter.
+    //
+    // Seam-row re-sample (precision pass): re-measured at the asset's true last opaque row
+    // (y=1215 of 1216, a 50%-alpha edge crossover — not an arbitrary point further down the
+    // post, since shading varies slightly with depth) instead of the y=500–1200 average used
+    // above. Fill color at that row: (28,49,42) = #1c312a, exactly the value already in use —
+    // confirmed, not re-guessed. Left/right edges at that same row (50%-alpha crossover):
+    // x≈120.4–251.4 of 773 → 2.80–5.85% of the 18%-wide image (previously 2.8–5.9%, based on a
+    // looser any-nonzero-alpha threshold) — width tightened from 3.1% to 3.05% accordingly.
     const postExt = document.createElement('div');
-    postExt.style.cssText = 'position:absolute;left:2.8%;width:3.1%;top:50.3%;height:27.7%;background:#1c312a;pointer-events:none;-webkit-mask-image:linear-gradient(to bottom, black 0%, black 65%, transparent 100%);mask-image:linear-gradient(to bottom, black 0%, black 65%, transparent 100%);';
+    postExt.style.cssText = 'position:absolute;left:2.80%;width:3.05%;top:50.3%;height:27.7%;background:#1c312a;pointer-events:none;-webkit-mask-image:linear-gradient(to bottom, black 0%, black 65%, transparent 100%);mask-image:linear-gradient(to bottom, black 0%, black 65%, transparent 100%);';
     document.getElementById('porch').appendChild(postExt);
+
+    // Orange highlight-stripe continuation: the source image's sunlit rim highlight (a thin
+    // vertical stripe along the post's left face, distinct from the dark fill) also stops dead
+    // at the same seam instead of continuing into the hand-coded extension. Sampled at the same
+    // seam row (y=1215): the stripe's saturated pixels run x≈125–132 of 773 (transition pixels
+    // at 123–124 and 133–134 blend into the outline/fill on either side), average color
+    // (201,122,74) = #c97a4a. Converted to stage-relative %: x≈2.88–3.12% (left:2.88%,
+    // width:0.24%) — sits just inside the post rect's own left edge (2.80–5.85%), matching the
+    // stripe's position relative to the post in the source art. Runs only ~18% of the
+    // extension's height (a short continuation, not a full-length stripe) and reuses the exact
+    // same mask-image gradient as the post rect, so it fades out on its own shorter scale
+    // without needing separate fade tuning.
+    const postExtStripe = document.createElement('div');
+    postExtStripe.style.cssText = 'position:absolute;left:2.88%;width:0.24%;top:50.3%;height:5%;background:#c97a4a;pointer-events:none;-webkit-mask-image:linear-gradient(to bottom, black 0%, black 65%, transparent 100%);mask-image:linear-gradient(to bottom, black 0%, black 65%, transparent 100%);';
+    document.getElementById('porch').appendChild(postExtStripe);
   })();
 })();
 </script>
