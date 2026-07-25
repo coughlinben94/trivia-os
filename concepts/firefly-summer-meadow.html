@@ -31,6 +31,8 @@
   /* reduced motion: keep opacity (comprehension), strip movement (transform-driven) */
   @media (prefers-reduced-motion: reduce){ .sd-anim{ animation:none !important } }
   .rm-force .sd-anim{ animation:none !important }
+
+  @keyframes sdStar { 0%,100%{opacity:0} 50%{opacity:.9} }
 </style>
 </head>
 <body>
@@ -47,6 +49,14 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
 
 <div class="stage" id="stage">
   <div class="legend">FIREFLY SUMMER — ambient, continuous</div>
+  <div id="world" style="position:absolute;inset:0;overflow:hidden">
+    <!-- dusk sky gradient — fixed backdrop, never animates. Deliberate exception to the
+         in-family-color rule (see design spec): a multi-stop indigo->plum->teal->olive->near-black
+         ramp instead of a monochrome dark-green, matching the precedent set by Sonora Balloons'
+         own sky gradient. -->
+    <div style="position:absolute;inset:0;background:linear-gradient(180deg, #0a0620 0%, #1a1040 18%, #241a52 32%, #1f3050 48%, #1a4048 62%, #2a3818 78%, #4a3810 88%, #1a2808 96%, #040e04 100%)"></div>
+    <div id="stars"></div>
+  </div>
   <div class="safe-area"></div>
 </div>
 
@@ -82,8 +92,26 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
 (function(){
   const stage = document.getElementById('stage');
   const rmToggle = document.getElementById('rmToggle');
+  const starsEl = document.getElementById('stars');
 
   rmToggle.addEventListener('change', () => stage.classList.toggle('rm-force', rmToggle.checked));
+
+  // Stars reroll position on every fade cycle (2026-07-24, Ben: "ensure the stars ... come in
+  // and out in and out. random places") — sdStar's keyframe now dips to opacity:0 at each cycle
+  // boundary (was .25, never fully gone), so the star is genuinely invisible exactly when
+  // 'animationiteration' fires; relocating left/top at that instant is a silent teleport, not a
+  // visible jump, same safe-at-rest reroll pattern used elsewhere in this file.
+  for (let i=0;i<22;i++){
+    const s = document.createElement('div');
+    const dur = (5+Math.random()*8).toFixed(2), delay = -(Math.random()*10).toFixed(2);
+    s.className = 'sd-anim';
+    s.style.cssText = `position:absolute;left:${(2+Math.random()*96).toFixed(2)}%;top:${(1.5+Math.random()*25).toFixed(2)}%;width:${1+Math.random()*1.6}px;height:${1+Math.random()*1.6}px;border-radius:50%;background:#f6e6ff;animation:sdStar ${dur}s ${delay}s ease-in-out infinite`;
+    s.addEventListener('animationiteration', () => {
+      s.style.left = `${(2+Math.random()*96).toFixed(2)}%`;
+      s.style.top = `${(1.5+Math.random()*25).toFixed(2)}%`;
+    });
+    starsEl.appendChild(s);
+  }
 })();
 </script>
 </body>
