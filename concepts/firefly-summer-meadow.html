@@ -162,27 +162,28 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
             'M0,100 L0,82 Q10,77 20,79 Q34,63 46,75 Q56,68 64,74 Q76,80 86,79 Q94,68 100,82 L100,100 Z'],
     mid:   ['M0,100 L0,89 Q8,76 16,80 Q22,70 30,82 Q40,86 50,85 Q58,74 66,81 Q74,72 82,80 Q90,84 100,89 L100,100 Z',
             'M0,100 L0,89 Q10,83 18,86 Q28,68 36,79 Q44,72 52,80 Q64,85 74,84 Q84,73 92,81 Q97,86 100,89 L100,100 Z'],
-    front: ['M0,100 L0,96 Q4,86 8,90 Q12,78 18,88 Q22,91 28,90 Q34,76 40,87 Q44,72 48,86 Q58,90 68,89 Q76,91 84,90 Q90,80 96,88 Q99,93 100,96 L100,100 Z',
-            'M0,100 L0,96 Q6,90 12,93 Q18,76 24,88 Q28,72 34,86 Q40,90 48,89 Q54,78 60,87 Q64,73 70,85 Q76,91 84,90 Q90,77 96,88 Q98,90 100,96 L100,100 Z'],
+    front: ['M0,100 L0,96 Q4,86 8,90 Q10,82 12,87 Q15,74 18,88 Q24,94 28,92 Q34,76 40,87 Q44,72 48,86 Q58,90 68,89 Q76,91 84,90 Q88,84 90,90 Q93,76 96,88 Q99,93 100,96 L100,100 Z',
+            'M0,100 L0,96 Q6,90 12,93 Q16,82 19,87 Q22,72 24,88 Q28,72 34,86 Q40,90 48,89 Q54,78 60,87 Q62,80 65,86 Q68,70 70,85 Q79,94 84,92 Q90,77 96,88 Q98,90 100,96 L100,100 Z'],
   };
   // The oak landmark: one hand-placed silhouette (not part of the bump generation above), fixed
   // in the front layer's FIRST tile only, overlaid on a spot where variant A's own crown line is
-  // deliberately kept low/flat (x48-84) so the oak reads as a distinct mass sitting in front of
-  // it, not fused into it. Built wide-not-tall: 3 lobes of deliberately uneven width (~10 / ~8 /
-  // ~18 viewBox units — never evenly spaced), each a rounded Q-curve dome, with the widest lobe
-  // drooping into an asymmetric overhang past where a symmetric dome would close. The middle
-  // lobe's control point is spread wide of its endpoints and its apex kept shallow so its
-  // on-screen width:height ratio (post ~2.2x x-stretch) reads as a dome like its neighbors,
-  // not a narrow steeple. A narrow trunk (4 units, offset left-of-center under the canopy, not
-  // centered) is the only part of the shape that touches the ground; everywhere else the canopy
-  // underside sits a few units above the local treeline crown, leaving a sliver of gap between
-  // overhang and ground — that gap, not apex height, is what reads as "tree" instead of "terrain
-  // spike." Fill is the back-layer's own accent green (#1a3808, richer/lighter than the front
-  // layer's near-black #0a1a02), at full opacity, so the oak reads as a distinct landmark mass
-  // instead of camouflaging into the surrounding front treeline it shares a tier with.
-  const OAK_PATH_D = 'M60,100 L60,85 L48,86 Q52,74 58,85 Q62,75 66,84 Q70,68 78,83 Q82,78 84,88 L64,85 L64,100 Z';
-  const OAK_FILL = '#1a3808';
-  const OAK_OP = 1.0;
+  // deliberately kept low/flat (x48-84, untouched by the round-3 compound-crown rework above) so
+  // the oak reads as a distinct mass sitting in front of it, not fused into it.
+  // Round 3 fix (2nd Fable critique, oak-specific): (1) trunk now terminates at the front layer's
+  // own local baseline (y95, not y100 — no more full-height pierce), narrowed to 2 viewBox units
+  // at the base tapering to 1.2 at the canopy attach point; (2) both canopy-underside spans (left
+  // edge-to-trunk and trunk-to-right-edge) are now 2 shallow concave Q-curve scallops each instead
+  // of single straight L segments — the underside arcs UP into the mass, opposite the crown tops'
+  // convex bulge; (3) every inter-lobe notch is raised well clear of (numerically less than) the
+  // underside's own y-range so the canopy silhouette stays one connected mass with no background
+  // gaps; (4) apex raised (tallest lobe control now y60, actual curve peak ~y68) and fill dropped
+  // to match the front layer's own near-black (#0a1a02, same as TREE_TIERS front fill) instead of
+  // borrowing the lighter back-layer green — the oak now reads as nearest via scale/silhouette,
+  // not via being brighter than everything behind it. 3 lobes of deliberately uneven width
+  // (~10 / ~8 / ~18 viewBox units) preserved from the original design intent.
+  const OAK_PATH_D = 'M60,95 L60.6,85 Q57,80 54,88 Q51,82 48,87 Q52,68 58,79 Q61,66 66,78 Q70,60 78,74 Q82,68 84,80 Q80,76 76,82 Q69,78 61.8,85 L62,95 Z';
+  const OAK_FILL = '#0a1a02';
+  const OAK_OP = 0.96;
 
   const TREE_TIERS = [
     { key:'treeBack',  shape:'back',  fill:'#1a3808', blur:2, sat:0.55, op:0.88, dur:240, dir:'R' },
