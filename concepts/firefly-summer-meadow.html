@@ -464,11 +464,16 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
       const el = buildFirefly(cfg);
       const behind = Math.random() < 0.3;
       (behind ? firefliesBehindEl : firefliesFrontEl).appendChild(el);
-      // Reflection candidates: only fireflies close enough to the shoreline that mirroring them
-      // lands INSIDE the lake's own 13%-tall band (LAKE_TOP=87, band runs 87-100) — anything
-      // higher up would mirror past y:100 and off the bottom of the stage entirely, so it's
-      // skipped here rather than clamped/faked into a wrong position.
-      if (LAKE_TOP - pos.y <= 12){
+      // Reflection candidates: only HERO-tier fireflies (never reroll position, so a reflection
+      // snapshot taken here stays valid forever) that are close enough to the shoreline that
+      // mirroring them lands INSIDE the lake's own 13%-tall band (LAKE_TOP=87, band runs 87-100)
+      // — anything higher up would mirror past y:100 and off the bottom of the stage entirely, so
+      // it's skipped here rather than clamped/faked into a wrong position. Filler-tier fireflies
+      // are EXCLUDED regardless of y: they reroll to a new random position on every ffFade
+      // iteration (see fadeWrap's 'animationiteration' handler above), but a reflection div is
+      // built once from this snapshot and never updated — keeping fillers here produced stale
+      // "ghost" reflections still flashing at a position their source firefly had abandoned.
+      if (!cfg.hasFade && LAKE_TOP - pos.y <= 12){
         reflectionSources.push({ x:pos.x, y:pos.y, size, glowColor, flashPeriod, flashDelay });
       }
     }
