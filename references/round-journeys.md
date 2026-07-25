@@ -107,6 +107,27 @@ Before writing the prototype HTML, load:
 - `emil-design-eng` — timing/anticipation/follow-through polish, so motion doesn't default to generic linear/spring AI-motion.
 - `impeccable` — after the prototype exists, to audit whether it reads premium or just functional.
 
+### Reference shelf — react-bits (<https://reactbits.dev>)
+
+An external library of ~140 animated React components. Nothing from it is installed in this repo and it is not a dependency — it's a shelf to pull a single component off when a specific theme actually needs one, then adapt it. Worth knowing about because hand-writing a fragment shader from scratch for a journey backdrop is a lot of work when a good one already exists.
+
+Where it's genuinely useful here:
+
+- **GPU shader backdrops for a journey beat** — `galaxy`, `lightning`, `light-rays`, `pixel-snow`, `soft-aurora`, `particles` map onto worlds this app's themes already occupy. All are colorable via uniforms, so they can take a theme's real palette rather than shipping someone else's colors.
+- **Kinetic text for a one-shot reveal** — `count-up` for a number landing, `decrypted-text` / `shuffle` for a title card resolving.
+
+All eight names above are react-bits' own slugs, confirmed against its source — search reactbits.dev for the slug, not for a description.
+
+Rules for reaching for it, all of which override "it looks cool":
+
+- **Journeys only, never the persistent ambient layer.** These are continuously-running WebGL shaders. `ambient-design-law.md`'s transform/opacity-only rule exists because that layer runs 3+ hours unremounted, and a shader there is a different power and thermal profile on a venue TV. Round journeys are one-shot, which is the tier that already gets canvas/rAF freedom.
+- **Reuse still comes first.** Rule 2 of the method above is unchanged — check what `ParticleBackground.jsx` and `TeamPickerSlide.jsx` already own for that theme's world before pulling anything external. A borrowed generic shader that doesn't extend the theme's existing artwork is exactly the "wallpaper, not a highlight" failure in Reusable lessons.
+- **Anything pulled in needs real teardown.** Cancel the rAF, drop the resize listener, and release the WebGL context on unmount. Browsers cap live WebGL contexts around 16; a show that mounts and unmounts slides all night will hit that ceiling if a shader leaks its context each time.
+- **Reduced-motion must be a runtime branch, not a one-time check at init.** The prototype conventions require a working "Simulate prefers-reduced-motion" toggle; a shader that samples the media query once on mount can't honor it.
+- **Skip the pointer-driven ones entirely.** Roughly half the library is cursor, hover and click effects. There is no pointer on the display TV.
+
+License: MIT + Commons Clause. Using a component inside this app is explicitly permitted ("as part of an application, website, or product"); redistributing the components themselves — including as a port — is not. Pull from reactbits.dev directly and keep its copyright notice with anything adapted. Do not source these through third-party repackagings: in one such repackaging (nexu-io/motion-anything, checked 2026-07-25), 41 of 85 recipes declared `upstream: null, attribution_required: false` while shipping code its own ATTRIBUTION.md admits is a react-bits port — and every one of the six shaders named above was in that 41. Upstream metadata in a repackaging is not evidence of provenance.
+
 ### Input requirements — real material only
 
 Never brief this from a verbal description alone. Before design starts, supply:
