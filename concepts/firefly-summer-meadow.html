@@ -138,27 +138,44 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
   // the shared 0-100 viewBox, so a real vertical band shows between it and whatever paints in
   // front of it — see that file's z-order comments for why this works).
   //
-  // What's different from the ridge: a treeline is jagged, not a smooth rolling dune. Point data
-  // below varies BOTH crown width (x-spacing between points) AND crown height (y per point)
-  // irregularly — not a repeating triangle wave — so it doesn't read as a uniform generated
-  // pattern. Colors are dark-green (theme accent #1a3808 as the back-layer anchor, lightened/
-  // darkened a step per layer against the olive/near-black horizon band of #world's own sky
-  // gradient — same "tune against the actual gradient it sits in front of" lesson as the ridge
-  // fill rework) instead of purple.
+  // What's different from the ridge: a treeline needs to read as TREES, not terrain — convex
+  // crown domes (SVG `Q` quadratic-bezier curves) separated by narrow notch valleys, never
+  // straight polygon segments (straight lines between apex points read as mountain ridgelines,
+  // per design critique — see HANDOFF notes). Each variant is authored in CLUSTERS (2-3 crowns
+  // bunched tight, then a longer flatter low stretch, then an isolated crown) rather than
+  // per-point jitter, since evenly-alternating noise still reads as "generated" even when the
+  // raw numbers differ. Each layer also gets a genuinely different shape LANGUAGE, not just
+  // scale/blur: back = 5 broad low-frequency rolling swells (fine detail is wasted — it's
+  // blurred); mid = moderate crown count/curvature; front = the most crowns and the sharpest
+  // curvature, since it renders with zero blur. Within a layer, variant A and variant B both
+  // still land on the SAME edge-y at x=0/x=100 (required for tile-seam continuity) but the
+  // curve APPROACHING that shared point differs (different Q control points), so the two tile
+  // copies don't stamp an identical "saddle" at every seam. Per the on-screen aspect distortion
+  // (viewBox stretched ~2.2:1 via preserveAspectRatio="none"), crown widths below are authored
+  // roughly half as wide in viewBox x-units as they should actually look on screen. Colors are
+  // dark-green (theme accent #1a3808 as the back-layer anchor, lightened/darkened a step per
+  // layer against the olive/near-black horizon band of #world's own sky gradient — same "tune
+  // against the actual gradient it sits in front of" lesson as the ridge fill rework) instead of
+  // purple.
   const TREE_SHAPE_VARIANTS = {
-    back:  ['0,100 0,82 5.8,74.5 15.4,70.1 23.6,73.7 32.5,77 39.8,77.5 49.0,74.2 57.5,77.7 68.3,76.2 74.6,71.2 80.1,75.6 87.4,77.5 97.2,72.2 100,82 100,100',
-            '0,100 0,82 6.8,73 18.6,73.4 25.9,72.8 34.8,76.6 43.0,74.5 50.8,77.9 59.7,70.5 67.9,75.9 75.5,77.3 82.2,72.1 89.4,78.1 100,82 100,100'],
-    mid:   ['0,100 0,89 9.7,79.1 18.7,81.7 25.4,74.7 33.0,83.8 39.8,78.5 48.0,78.2 54.6,79.5 61.4,80.1 67.3,76.7 74.6,79.6 82.5,74.5 90.0,81.4 98.3,81 100,89 100,100',
-            '0,100 0,89 5.8,75.8 14.3,76.2 19.0,78.6 23.7,77.2 30.2,76.1 37.3,80.5 44.9,79.5 50.7,78 56.0,81.3 61.4,81.6 70.2,79.3 74.3,74.2 82.4,76 87.8,83.7 94.0,75.3 100,89 100,100'],
-    front: ['0,100 0,96 4.2,87.6 12.6,87.8 19.2,82.6 23.7,89.7 32.1,79.3 37.9,87.7 44.5,87.8 50.5,81.1 56.6,86.1 64.3,85.5 69.2,83.9 75.7,83.2 83.6,86.5 92.4,84.8 100,96 100,100',
-            '0,100 0,96 10.0,88.7 17.9,82.4 27.3,87.5 32.7,82.8 40.0,84.8 46.1,85.4 52.4,89.3 61.3,88.3 68.1,80.7 77.8,87.1 83.2,83.5 92.7,81.8 100,96 100,100'],
+    back:  ['M0,100 L0,82 Q6,68 14,74 Q22,66 30,76 Q42,78 54,77 Q66,66 78,75 Q88,70 100,82 L100,100 Z',
+            'M0,100 L0,82 Q10,77 20,79 Q34,63 46,75 Q56,68 64,74 Q76,80 86,79 Q94,68 100,82 L100,100 Z'],
+    mid:   ['M0,100 L0,89 Q8,76 16,80 Q22,70 30,82 Q40,86 50,85 Q58,74 66,81 Q74,72 82,80 Q90,84 100,89 L100,100 Z',
+            'M0,100 L0,89 Q10,83 18,86 Q28,68 36,79 Q44,72 52,80 Q64,85 74,84 Q84,73 92,81 Q97,86 100,89 L100,100 Z'],
+    front: ['M0,100 L0,96 Q4,86 8,90 Q12,78 18,88 Q22,91 28,90 Q34,76 40,87 Q44,72 48,86 Q58,90 68,89 Q76,91 84,90 Q90,80 96,88 Q99,93 100,96 L100,100 Z',
+            'M0,100 L0,96 Q6,90 12,93 Q18,76 24,88 Q28,72 34,86 Q40,90 48,89 Q54,78 60,87 Q64,73 70,85 Q76,91 84,90 Q90,77 96,88 Q98,90 100,96 L100,100 Z'],
   };
-  // The oak landmark: one single wider/taller silhouette, hand-placed (not part of the random
-  // per-point bump generation above) at a fixed spot in the front layer's FIRST tile only —
-  // apex ~y:66, taller than every other crown in all 3 layers, so it reads as a deliberate
-  // landmark rather than "a bigger triangle." 4 lobes / 3 notch-outs along the top edge give it
-  // an irregular lobed oak-canopy outline instead of a smooth dome.
-  const OAK_POINTS = '16,100 16,88 19,78 22,70 25,76 28,66 31,75 34,71 37,79 40,74 44,88 44,100';
+  // The oak landmark: one hand-placed silhouette (not part of the bump generation above), fixed
+  // in the front layer's FIRST tile only, overlaid on a spot where variant A's own crown line is
+  // deliberately kept low/flat (x48-84) so the oak reads as a distinct mass sitting in front of
+  // it, not fused into it. Built wide-not-tall: 3 lobes of deliberately uneven width (~10 / ~6 /
+  // ~20 viewBox units — never evenly spaced), each a rounded Q-curve dome, with the widest lobe
+  // drooping into an asymmetric overhang past where a symmetric dome would close. A narrow trunk
+  // (4 units, offset left-of-center under the canopy, not centered) is the only part of the
+  // shape that touches the ground; everywhere else the canopy underside sits a few units above
+  // the local treeline crown, leaving a sliver of gap between overhang and ground — that gap,
+  // not apex height, is what reads as "tree" instead of "terrain spike."
+  const OAK_PATH_D = 'M60,100 L60,85 L48,86 Q52,74 58,85 Q60,64 64,84 Q70,68 78,83 Q82,78 84,88 L64,85 L64,100 Z';
 
   const TREE_TIERS = [
     { key:'treeBack',  shape:'back',  fill:'#1a3808', blur:2, sat:0.55, op:0.88, dur:240, dir:'R' },
@@ -190,15 +207,15 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
       svg.setAttribute('viewBox','0 0 100 100');
       svg.setAttribute('preserveAspectRatio','none');
       svg.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:100%';
-      const poly = document.createElementNS('http://www.w3.org/2000/svg','polygon');
-      poly.setAttribute('points', variants[i % 2]);
-      poly.setAttribute('fill', tier.fill);
-      poly.setAttribute('opacity', tier.op);
-      svg.appendChild(poly);
-      // oak landmark: front layer's first tile only, fixed point, not per-tile random bumps
+      const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('d', variants[i % 2]);
+      path.setAttribute('fill', tier.fill);
+      path.setAttribute('opacity', tier.op);
+      svg.appendChild(path);
+      // oak landmark: front layer's first tile only, fixed shape, not per-tile random bumps
       if (tier.key === 'treeFront' && i === 0){
-        const oak = document.createElementNS('http://www.w3.org/2000/svg','polygon');
-        oak.setAttribute('points', OAK_POINTS);
+        const oak = document.createElementNS('http://www.w3.org/2000/svg','path');
+        oak.setAttribute('d', OAK_PATH_D);
         oak.setAttribute('fill', tier.fill);
         oak.setAttribute('opacity', tier.op);
         svg.appendChild(oak);
