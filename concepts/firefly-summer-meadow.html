@@ -601,43 +601,41 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
     // re-guessed) — and confirmed constant (non-tapering) down the post's full height, so a plain
     // non-tapered rectangle is geometrically correct, not just a convenient approximation.
     //
-    // (2) RAZOR-STRAIGHT ROOF CROP: the critique's suggested x≈448 cutoff was checked against the
-    // real image and doesn't hold up — a full-column opacity scan shows the roof beam/ceiling
-    // plane is one continuous opaque fill from the post all the way to the image's own right edge
-    // (x=773, e.g. row y=450 is opaque x=1–772 with no break), and x≈448 sits inside swing chain
-    // 1's own hardware (mount hole ~x=440–470) while chain 2 sits further right at x≈551–572 — a
-    // crop at 448 would slice through chain 1 and drop chain 2 entirely, failing the "chains must
-    // stay visible" requirement. The actual defect is the image's TRUE right edge (x=773): every
-    // diagonal roofline/trim there is cut fully opaque against transparent sky with nothing to
-    // taper into, reading as an obvious photo crop. Simply shrinking the <img> width would not
-    // hide this — it would rescale the whole 0–773 span smaller, keeping the same bad edge
-    // visible, just tinier. Instead: an overflow:hidden wrapper narrower than the full image,
-    // holding an oversized (un-shrunk) <img> inside it, so only the image's own left portion
-    // renders and the true right edge falls outside the wrapper entirely — the "show only the
-    // left portion at a wider display scale" approach, not a uniform shrink. Crop boundary chosen
-    // at source x=620 (of 773): clears chain 2's rightmost pixel (~572) with ~48px/6% margin so
-    // it isn't flush against the edge, while landing close enough to the post/chain cluster that
-    // the new edge reads as part of that busy foreground grouping rather than an isolated straight
-    // line floating in open sky (confirmed by rendering candidate crops and comparing).
-    const CROP_FRACTION = 620 / 773; // show only the source image's left ~80.2% (post + both chains)
-    const cropWrap = document.createElement('div');
-    cropWrap.style.cssText = `position:absolute;left:0;top:0;width:${(18 * CROP_FRACTION).toFixed(3)}%;overflow:hidden;pointer-events:none;`;
+    // (2) RAZOR-STRAIGHT ROOF CROP (3rd fix pass): two prior attempts (a hard image crop, then
+    // an overflow:hidden wrapper narrower than the full image) both just relocated the same
+    // defect — a razor-straight vertical cut against open sky — from the source's true right
+    // edge (x=773, where the roofline/trim is cut fully opaque against transparent with nothing
+    // to taper into) to whatever new boundary was chosen instead. A hard edge is never robust
+    // regardless of where it's placed. Fixed this time with a soft opacity fade instead: a
+    // mask-image linear-gradient (left-to-right, opaque through 85% of the image's width, then
+    // fading to fully transparent by 100%) applied to the <img> itself, so the roof visually
+    // dissolves into the sky well before the true right edge rather than getting chopped
+    // anywhere. The 85% fade-start point sits at source x≈657 (of 773) — safely past swing
+    // chain 2's rightmost pixel (~572, ~11% margin) — so both chains stay fully opaque and
+    // visible; only the trailing roofline/trim past them fades out. No cropWrap/CROP_FRACTION
+    // needed anymore: the full image renders at its natural 18%-of-stage width and the mask does
+    // the edge work a wrapper boundary used to.
     const porch = document.createElement('img');
     porch.src = PORCH_IMG_SRC;
     porch.alt = '';
-    // Width is relative to cropWrap (the new containing block), scaled up so the image still
-    // renders at the original 18%-of-stage scale — only the wrapper's overflow:hidden changes
-    // what's visible, not the image's own size. 100/CROP_FRACTION simplifies from 18/(18*CROP_FRACTION)*100.
-    porch.style.cssText = `display:block;width:${(100 / CROP_FRACTION).toFixed(3)}%;height:auto;pointer-events:none;`;
-    cropWrap.appendChild(porch);
-    document.getElementById('porch').appendChild(cropWrap);
+    porch.style.cssText = 'display:block;position:absolute;left:0;top:0;width:18%;height:auto;pointer-events:none;-webkit-mask-image:linear-gradient(to right, black 0%, black 85%, transparent 100%);mask-image:linear-gradient(to right, black 0%, black 85%, transparent 100%);';
+    document.getElementById('porch').appendChild(porch);
 
-    // Post extension rectangle (issue 1) — see header comment above for color/x-span sourcing.
+    // Post extension rectangle (issue 2) — see header comment above for color/x-span sourcing.
     // Runs from the image's own bottom edge (y≈50.3%, where the source's bled-off post cuts)
-    // down to y=78%, inside the front treeline's crown band (~72–96%, it scrolls) so the post
-    // reads as rooted in the meadow instead of stopping at an arbitrary blank point.
+    // down to y=78%, inside the front treeline's crown band (~72–96%, it scrolls). Two prior fix
+    // attempts left a hard rectangle bottom edge that (a) never continues the source image's
+    // black outline stroke or orange sunlit highlight, so those details terminate abruptly right
+    // at the seam, and (b) sometimes lands against a lighter midground hill instead of the dark
+    // front treeline as the scrolling background shifts, reading as a rectangle against a
+    // mismatched color. Fixed with an opacity fade instead of a hard edge: full opacity at the
+    // top (the real seam, closest to the actual image and least likely to be scrutinized) fading
+    // to 0 over the bottom ~35% of the rectangle's height, so it dissolves into whatever's
+    // scrolling behind it — treeline or hill — rather than presenting a hard boundary. This also
+    // makes the missing outline/highlight detail far less noticeable, since it's already fading
+    // to nothing by the point it would matter.
     const postExt = document.createElement('div');
-    postExt.style.cssText = 'position:absolute;left:2.8%;width:3.1%;top:50.3%;height:27.7%;background:#1c312a;pointer-events:none;';
+    postExt.style.cssText = 'position:absolute;left:2.8%;width:3.1%;top:50.3%;height:27.7%;background:#1c312a;pointer-events:none;-webkit-mask-image:linear-gradient(to bottom, black 0%, black 65%, transparent 100%);mask-image:linear-gradient(to bottom, black 0%, black 65%, transparent 100%);';
     document.getElementById('porch').appendChild(postExt);
   })();
 })();
