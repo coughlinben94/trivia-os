@@ -44,9 +44,9 @@
      ffFlash: asymmetric flash-and-decay, grounded in real Photinus pyralis biology — a brief
      streak roughly every 5-7s (per-firefly period set in JS), mostly dim between. Fast rise
      (88%->91%, ~3% of cycle) to full peak, slower fall (91%->100%, ~9%) through an overshoot-dip
-     at 96%, non-zero base (0.15, not 0) — a faint constant ember scatter between flashes rather
+     at 96%, non-zero base (0.22, not 0) — a faint constant ember scatter between flashes rather
      than a full blackout, matching how real fireflies never go fully invisible at rest. */
-  @keyframes ffFlash { 0%,88%{opacity:.15} 91%{opacity:1} 96%{opacity:.35} 100%{opacity:.15} }
+  @keyframes ffFlash { 0%,88%{opacity:.22} 91%{opacity:1} 96%{opacity:.35} 100%{opacity:.22} }
   /* ffJStroke: the "big dipper" signature — a short upward dip coupled to the SAME period/delay
      as ffFlash (91% keyframe mark lines up with the flash's own peak; composed on its own
      wrapper, see buildFirefly below, so it never fights ffDrift's translate). Spec text called
@@ -78,7 +78,7 @@ A nighttime scene: a small porch and house frame the left edge. A mason jar sits
 </div>
 
 <div class="sub" style="margin-top:8px;font-size:.78rem">
-This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, and safe-area overlay are in place, but no animated content layers yet. Treeline, porch, jar, firefly swarms, lake, and sky backdrop all come in subsequent tasks. Only the structure to anchor them exists now.
+Sky, stars, 3-layer treeline with oak landmark, lake, and 40 fireflies (hero+filler, flash+J-stroke+drift+fade, lake reflections) are all built and committed (Tasks 1–4). Porch, jar, and swing bench are still to come (Tasks 5–7).
 </div>
 
 <div class="stage" id="stage">
@@ -129,7 +129,7 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
 </div>
 <div class="notes">
   <h2>Scaffold structure</h2>
-  The <code>.stage</code> container, <code>.safe-area</code> overlay, <code>.legend</code> label, and reduced-motion toggle mechanism are all wired and verified. This is a clean foundation for adding layers: sky gradient, treeline depth layers, porch + jar sprites, and firefly animation groups in subsequent tasks.
+  The <code>.stage</code> container, <code>.safe-area</code> overlay, <code>.legend</code> label, and reduced-motion toggle mechanism are all wired and verified. Sky gradient, star field, treeline depth layers, lake, and firefly animation groups are built on top of it (Tasks 1–4); porch + jar sprites remain for later tasks.
 
   <h2>Safe-area placement</h2>
   The center box (20% left, 28% top, 60% wide, 44% tall) is reserved for potential UI or focal point layering. Firefly swarms should avoid clustering heavily within it; the jar will sit just below and to the left as a secondary focus point.
@@ -361,16 +361,21 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
   const firefliesBehindEl = document.getElementById('firefliesBehind');
   const firefliesFrontEl = document.getElementById('firefliesFront');
 
-  // Position generators. Y stays within 38-86%: above the lake's own 87% shoreline (so every
-  // firefly is unambiguously "in the meadow", never inside the water itself) and below the open
-  // sky (where stars live). Filler x is uniform full-width ("no firefly-free zones"); hero x is
-  // LEFT-WEIGHTED (soft — 70% chance drawn from a left band, 30% chance from anywhere) since the
-  // porch/jar that don't exist yet (Tasks 5-6) will land on the left — not a hard exclusion zone
-  // elsewhere, per spec.
-  function fillerPos(){ return { x:+(Math.random()*98).toFixed(2), y:+(38+Math.random()*48).toFixed(2) }; }
+  // Position generators. Y stays within 65-86%: above the lake's own 87% shoreline (so every
+  // firefly is unambiguously "in the meadow", never inside the water itself) and below the
+  // treeline's crown line (the back layer's own haziest peaks top out around y63 — see
+  // TREE_SHAPE_VARIANTS.back — so 65 clears them with a small margin) and well clear of the star
+  // field above (stars live at y1.5-26.5, see the star-loop above). Old range started at y38, which
+  // floated fireflies through the open sky band between the stars and the treeline crowns —
+  // visually indistinguishable from the star field at a glance; this keeps the whole population
+  // in the meadow/shoreline band instead. Filler x is uniform full-width ("no firefly-free
+  // zones"); hero x is LEFT-WEIGHTED (soft — 70% chance drawn from a left band, 30% chance from
+  // anywhere) since the porch/jar that don't exist yet (Tasks 5-6) will land on the left — not a
+  // hard exclusion zone elsewhere, per spec.
+  function fillerPos(){ return { x:+(Math.random()*98).toFixed(2), y:+(65+Math.random()*21).toFixed(2) }; }
   function heroPos(){
     const x = Math.random() < 0.7 ? 2+Math.random()*38 : 2+Math.random()*88;
-    return { x:+x.toFixed(2), y:+(38+Math.random()*48).toFixed(2) };
+    return { x:+x.toFixed(2), y:+(65+Math.random()*21).toFixed(2) };
   }
 
   function buildFirefly(cfg){
