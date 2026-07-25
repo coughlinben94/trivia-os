@@ -140,14 +140,16 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
          behind. See PORCH_IMG_SRC comment below for the crop/positioning rationale. -->
     <div id="porch" style="position:absolute;inset:0;z-index:9;pointer-events:none"></div>
 
-    <!-- swing bench (Task 7): hand-coded (simple rounded-rect + plank-line geometry — same tier
-         of effort as Sonora Balloons' own basket, unlike the Recraft-illustrated porch/oak/jar
-         which needed real organic-shape illustration), hung from the porch's own two ORIGINAL
-         swing chains (chain 1 x≈10.6%, chain 2 x≈13.1%, both bled off uncut at y≈50.3% — see the
+    <!-- swing bench (Task 7, REWORKED — v1 read as an invisible shadow sliver at ~90x15px on a
+         1600px render; a design critique called it out and this is the fix): hand-coded (simple
+         rounded-rect body + backrest-slat/seat-seam lines + a rim-light edge — same tier of
+         effort as Sonora Balloons' own basket, unlike the Recraft-illustrated porch/oak/jar which
+         needed real organic-shape illustration), hung from the porch's own two ORIGINAL swing
+         chains (chain 1 x≈10.6%, chain 2 x≈13.1%, both bled off uncut at y≈50.3% — see the
          "Task 6–7 anchor coordinates" comment above buildPorch). The jar (Task 6) has its own
          separate hand-coded hook and never touches either chain, so both stay free for this.
          Same z-index tier (9) as porch/jar, but placed BEFORE #jar in DOM order deliberately:
-         the bench's x-range overlaps the jar's x-range by ~1.25 points near chain 1 (the jar's
+         the bench's x-range overlaps the jar's x-range by ~1.35 points near chain 1 (the jar's
          own footprint extends slightly past where chain 1 hangs), so painting jar AFTER bench
          lets the jar — the theme's real focal element — occlude that small sliver instead of the
          bench cutting into the jar's lid. See buildBench below for the full placement, sway, and
@@ -179,7 +181,7 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
   The center box (20% left, 28% top, 60% wide, 44% tall) is reserved for potential UI or focal point layering. Firefly swarms should avoid clustering heavily within it; the jar sits at x7.5–12%, entirely left of the safe-area's own 20% edge, as the scene's real focal point.
 
   <h2>Honest gaps</h2>
-  Built: sky gradient (8-stop indigo-to-olive ramp, fixed backdrop, Task 1) and star field (22 independent stars, fade + position-reroll cycles, Task 1); 3-layer treeline (treeBack/treeMid/treeFront, 240/150/90s durations, R/L/R scroll directions, filter-based depth blur/desaturation, Task 2) and oak landmark silhouette (Recraft image asset, front layer's two "A"-slot tiles, Task 2); lake (Task 3) — static treeline-reflection silhouette (no animation) plus a shimmer overlay ported from Sonora Balloons' sdWave mechanism; fireflies (Task 4) — 10 hero + 30 filler, flash-and-decay (ffFlash) + J-stroke (ffJStroke) + drift (ffDrift, ported from Sonora Balloons' sdBalloonDrift) + independent fade-in/out for fillers (ffFade), some behind the front treeline and some in front of everything, plus mirrored lake reflections for fireflies near the shoreline; porch backdrop (Task 5, v2 asset) — Recraft-generated flat-vector porch eave corner (ceiling plane, roof beam, post, empty swing chains), background-removed with a clean alpha channel, cropped to real content bounds and bled off the top/right/bottom, composited as a plain transparent image (no CSS mask needed); mason jar (Task 6, Recraft asset) — standalone jar illustration, clean alpha-cutout, cropped to real content bounds, hung from its own hand-coded hook+chain in the gap between the post and swing chain 1 (v3 fix — the original v2 fix hung it from swing chain 1's own endpoint, but Task 7's swing bench needs both swing chains free, one per side, so the jar now has a dedicated hook instead), with a static ambient glow and 3 in-jar fireflies reusing ffFlash on their own slower independent clock; swing bench (Task 7) — hand-coded rounded-rect body + 2 plank-line seams, dark-wood-tone fill (#1c312a, sampled directly from the porch post/chain color), spanning the porch's own two original swing chains (chain 1 x≈10.6%, chain 2 x≈13.1%, both at y≈50.3%) with a small overhang past each attachment point, swaying via sdBenchSway (rotate about the bench's own top edge, ±2.5-5.5° amplitude on a 4-5s period, amplitude rerolled on every animation iteration so it settles-then-nudges rather than ticking at a fixed arc).
+  Built: sky gradient (8-stop indigo-to-olive ramp, fixed backdrop, Task 1) and star field (22 independent stars, fade + position-reroll cycles, Task 1); 3-layer treeline (treeBack/treeMid/treeFront, 240/150/90s durations, R/L/R scroll directions, filter-based depth blur/desaturation, Task 2) and oak landmark silhouette (Recraft image asset, front layer's two "A"-slot tiles, Task 2); lake (Task 3) — static treeline-reflection silhouette (no animation) plus a shimmer overlay ported from Sonora Balloons' sdWave mechanism; fireflies (Task 4) — 10 hero + 30 filler, flash-and-decay (ffFlash) + J-stroke (ffJStroke) + drift (ffDrift, ported from Sonora Balloons' sdBalloonDrift) + independent fade-in/out for fillers (ffFade), some behind the front treeline and some in front of everything, plus mirrored lake reflections for fireflies near the shoreline; porch backdrop (Task 5, v2 asset) — Recraft-generated flat-vector porch eave corner (ceiling plane, roof beam, post, empty swing chains), background-removed with a clean alpha channel, cropped to real content bounds and bled off the top/right/bottom, composited as a plain transparent image (no CSS mask needed); mason jar (Task 6, Recraft asset) — standalone jar illustration, clean alpha-cutout, cropped to real content bounds, hung from its own hand-coded hook+chain in the gap between the post and swing chain 1 (v3 fix — the original v2 fix hung it from swing chain 1's own endpoint, but Task 7's swing bench needs both swing chains free, one per side, so the jar now has a dedicated hook instead), with a static ambient glow and 3 in-jar fireflies reusing ffFlash on their own slower independent clock; swing bench (Task 7, reworked after a design critique found v1 an illegibly small ~34x14px sliver) — hand-coded rounded-rect body (now 6.40% x 4.2% stage, ≈70x26px at this file's 1100px stage width) + 2 backrest-slat lines + 1 seat-seam line, dark-wood-tone fill (#1c312a, sampled directly from the porch post/chain color), a warm-orange rim-light along the seat's top edge (#c97a4a, the same sampled highlight color as the post's own rim stripe), spanning the porch's own two original swing chains (chain 1 x≈10.6%, chain 2 x≈13.1%, both at y≈50.3%) with an asymmetric overhang past each attachment point (small on the jar side, larger on the open-meadow side, to grow the bench without growing the jar/bench overlap), swaying via sdBenchSway (rotate about the bench's own top edge, ±2.5-5.5° amplitude on a 4-5s period, amplitude rerolled on every animation iteration so it settles-then-nudges rather than ticking at a fixed arc — the larger box size alone roughly doubles the visible pixel displacement per degree versus v1).
 </div>
 
 <div class="gate">
@@ -840,50 +842,79 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
     });
   })();
 
-  // ── swing bench (Task 7): hand-coded — same tier of effort as Sonora Balloons' own basket
-  // (a bench is genuinely simple geometry, unlike the organic oak/jar/porch which needed real
-  // Recraft illustration) ──
+  // ── swing bench (Task 7, REWORKED): hand-coded — same tier of effort as Sonora Balloons' own
+  // basket (a bench is genuinely simple geometry, unlike the organic oak/jar/porch which needed
+  // real Recraft illustration) ──
+  //
+  // v1 POST-MORTEM (why this whole function was rebuilt): design critique measured the original
+  // geometry (3.10% x 2.2% stage, ≈34x14px at this file's 1100px stage width) and found it read
+  // as a thin shadow sliver, not furniture, and that its rotation-based sway produced only ~2px of
+  // visible displacement — both root-caused to the object being too small, not to the animation
+  // mechanism (sdBenchSway/amplitude-reroll below is unchanged and was already correct). This
+  // rebuild fixes size/shape/lighting only.
   (function buildBench(){
     // Anchor coordinates measured off the real porch asset — not re-measured/re-guessed here,
     // taken directly from the "Task 6–7 anchor coordinates" comment above buildPorch: swing
     // chain 1 center x≈10.6%, chain 2 center x≈13.1%, both bled off uncut at y≈50.3% (no hook/
-    // terminus pixel in the source art — that crop line IS the real anchor y).
+    // terminus pixel in the source art — that crop line IS the real anchor y). These chain x
+    // positions are fixed pixels in the porch image and cannot move — the fix below grows the
+    // bench by extending its OVERHANG past each chain instead, asymmetrically (see next comment).
     const CHAIN1_X = 10.6, CHAIN2_X = 13.1, CHAIN_Y = 50.3;
-    // Small overhang past each chain's own x — a real porch-swing seat extends a little past its
-    // two suspension points rather than terminating exactly at them. Kept small (0.3pt/side) so
-    // the bench still plausibly reads as spanning BETWEEN the two chains, not floating wider.
-    const OVERHANG = 0.3;
-    const BENCH_LEFT = CHAIN1_X - OVERHANG;                  // 10.30%
-    const BENCH_WIDTH = (CHAIN2_X + OVERHANG) - BENCH_LEFT;  // 3.10%
+    // Overhang past each chain's own x — asymmetric on purpose. The jar's footprint (x 7.05–
+    // 11.55%, see buildJar) sits immediately left of chain 1, so growing the LEFT overhang would
+    // grow the jar/bench overlap 1:1. Growing the RIGHT overhang instead (open meadow past chain
+    // 2, nothing to collide with) buys most of the size increase for free: left overhang goes
+    // 0.3->0.4pt (barely more than v1) while right overhang goes 0.3->3.5pt. Net effect: overlap
+    // with the jar grows only 1.25->1.35pt (essentially unchanged) even though total bench width
+    // more than doubles (3.10%->6.40%).
+    const OVERHANG_LEFT = 0.4, OVERHANG_RIGHT = 3.5;
+    const BENCH_LEFT = CHAIN1_X - OVERHANG_LEFT;                    // 10.20%
+    const BENCH_WIDTH = (CHAIN2_X + OVERHANG_RIGHT) - BENCH_LEFT;   // 6.40%
     // Top sits 0.2pt ABOVE the chains' own y≈50.3% crop line — a small deliberate overlap UP
     // into the chains' last rendered pixels so the seam is covered regardless of AA, same
     // small-intentional-overlap convention (not a hairline gap) the jar's own hook+chain uses
     // (CHAIN_BOTTOM sits 0.4pt past the jar's own top for the same reason, just downward there).
     const BENCH_TOP = CHAIN_Y - 0.2;   // 50.10%
-    const BENCH_HEIGHT = 2.2;          // stage %, seat+low-back silhouette depth
+    // Height nearly doubled (2.2% -> 4.2%) to give room for a real seat + a distinct backrest-slat
+    // band above it, instead of one thin sliver. At this file's 1100px stage width that's
+    // 6.40% * 1100 = 70px wide x 4.2% * 618.75 = 26px tall — unmistakably a bench-shaped block at
+    // normal viewing scale, not a hairline (v1 was 34x14px).
+    const BENCH_HEIGHT = 4.2;
 
     // Safe-area check (real math, not eyeballed — this file has had repeated safe-area intrusion
-    // bugs this session): safe-area is x20–80%/y28–72%. Bench's full x-range is 10.30–13.40%,
-    // entirely left of the safe-area's own 20% edge (6.60-point margin) — zero intersection
-    // regardless of y, the same disjoint-x shortcut the jar and post extension already rely on.
+    // bugs this session): safe-area is x20–80%/y28–72%. Bench's full x-range is now 10.20–16.60%
+    // (BENCH_LEFT to BENCH_LEFT+BENCH_WIDTH), entirely left of the safe-area's own 20% edge — a
+    // 3.40-point margin (tighter than v1's 6.60pt since the box grew, but still a clean,
+    // comfortable gap) — zero intersection regardless of y, same disjoint-x shortcut the jar and
+    // post extension already rely on.
     //
     // Jar-overlap check: the jar's own x-range is 7.05–11.55% (JAR_LEFT/JAR_WIDTH, see buildJar
-    // above), which overlaps the bench's 10.30–13.40% range by 1.25 points (10.30–11.55) — chain
-    // 1 sits close enough to the jar's right edge that some overlap is unavoidable once the
-    // bench genuinely attaches to chain 1's real x. In y, the jar starts at 50.5% and the bench
-    // spans 50.10–52.30%, overlapping by 1.80 points (50.5–52.30) — inside the jar's own lid
-    // band. Resolved by DOM order, not shape: #bench sits BEFORE #jar in the markup (both
-    // z-index:9), so the jar — the theme's real focal element — paints over that small sliver
-    // instead of the bench cutting into the jar's lid (see the #bench markup comment above).
+    // above), which overlaps the bench's new 10.20–16.60% range by 1.35 points (10.20–11.55) —
+    // barely more than v1's 1.25pt, thanks to the asymmetric overhang above. In y, the jar starts
+    // at 50.5% and the bench now spans 50.10–54.30%, overlapping by 3.80 points (50.50–54.30) —
+    // more than v1's 1.80pt since the bench is taller, but the INTERSECTION rectangle (the actual
+    // area that can visually collide) is x[10.20,11.55] × y[50.50,54.30]: a small corner near the
+    // jar's own lid/upper-body, not the bench's visual center. Resolved the same way as v1 — by
+    // DOM order, not shape: #bench sits BEFORE #jar in the markup (both z-index:9), so the jar —
+    // the theme's real focal element — paints over that corner instead of the bench cutting into
+    // the jar's lid (see the #bench markup comment above). Confirmed visually acceptable via the
+    // rendered frame captures (visual-audit run, ff-bench-rework slug) — the jar's lower-left edge
+    // just grazes the bench's upper-right corner, reading as a plausible near-object overlap
+    // rather than a graphical glitch.
     const bench = document.createElement('div');
     bench.className = 'sd-anim';
-    const randomAmp = () => `${(2.5 + Math.random()*3).toFixed(2)}deg`; // 2.5–5.5deg range
+    const randomAmp = () => `${(2.5 + Math.random()*3).toFixed(2)}deg`; // 2.5–5.5deg range,
+      // unchanged from v1 — the size increase alone roughly doubles the pivot-to-corner distance
+      // (√((half-width)²+height²): v1 ≈22px, v2 ≈44px at this file's 1100px stage width), which
+      // roughly doubles the visible pixel displacement per degree of rotation for free. Confirmed
+      // sufficient via the post-render pixel-diff check (see verification notes) rather than
+      // bumping the amplitude blind.
     const swayDur = (4 + Math.random()*1).toFixed(2); // 4-5s period — wider/slower than Sonora
       // Balloons' own sdSway (±2.4deg/6.5s): a narrower, fixed-amplitude arc on a similarly small
       // hanging object reads as a metronome rather than something actually swinging, so this uses
       // a bigger amplitude range instead (see the reroll below) on a shorter period.
     const swayDelay = `${-(Math.random()*swayDur).toFixed(2)}s`;
-    bench.style.cssText = `position:absolute;left:${BENCH_LEFT.toFixed(2)}%;top:${BENCH_TOP.toFixed(2)}%;width:${BENCH_WIDTH.toFixed(2)}%;height:${BENCH_HEIGHT}%;border-radius:18%/22%;background:#1c312a;transform-origin:50% 0%;--swayAmp:${randomAmp()};animation:sdBenchSway ${swayDur}s ease-in-out infinite ${swayDelay};pointer-events:none`;
+    bench.style.cssText = `position:absolute;left:${BENCH_LEFT.toFixed(2)}%;top:${BENCH_TOP.toFixed(2)}%;width:${BENCH_WIDTH.toFixed(2)}%;height:${BENCH_HEIGHT}%;border-radius:12%/12%;background:#1c312a;transform-origin:50% 0%;--swayAmp:${randomAmp()};animation:sdBenchSway ${swayDur}s ease-in-out infinite ${swayDelay};pointer-events:none`;
 
     // Reroll amplitude at each rest boundary — same pattern as the stars' position reroll and the
     // balloons' drift reroll. sdBenchSway is the ONLY animation on this element (no separate
@@ -896,13 +927,31 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
       bench.style.setProperty('--swayAmp', randomAmp());
     });
 
-    // Plank lines (2, per spec) — thin darker seam divs, same "separate simple div per detail"
-    // convention as the post's own highlight stripe (postExtStripe above), not a gradient trick.
-    [38, 66].forEach(topPct => {
-      const plank = document.createElement('div');
-      plank.style.cssText = `position:absolute;left:4%;width:92%;top:${topPct}%;height:1px;background:#0f2019;pointer-events:none`;
-      bench.appendChild(plank);
+    // Rim-light (fix for critique issue 2 — the bench previously carried none of the porch's
+    // established warm-orange edge highlight, so it read as pure shadow against everything else's
+    // lit edges). Color #c97a4a is not a new value — it's the EXACT sampled orange already in use
+    // for the post's own sunlit rim stripe (see postExtStripe above, sampled directly off the
+    // porch asset's real pixels at its seam row). Thin band along the seat's top edge only (the
+    // spec allows top and/or front; top is where every other porch edge — roofline, post, beam —
+    // actually carries its highlight, so this matches that established convention most directly).
+    const BENCH_HIGHLIGHT = '#c97a4a';
+    const rimLight = document.createElement('div');
+    rimLight.style.cssText = `position:absolute;left:3%;width:94%;top:0;height:6%;min-height:1.5px;background:${BENCH_HIGHLIGHT};border-radius:40%/60%;opacity:.9;box-shadow:0 0 2px 0 ${BENCH_HIGHLIGHT}aa;pointer-events:none`;
+    bench.appendChild(rimLight);
+
+    // Backrest-slat lines (2) sit in the upper band of the box, seat-seam line (1) lower down —
+    // same "separate simple div per detail" convention as the post's own highlight stripe
+    // (postExtStripe above), not a gradient trick. Reworked from v1's 2 mid-height lines: pushing
+    // 2 of the 3 lines into the top ~40% of the (now taller) box reads as backrest slats above a
+    // seat, rather than 2 seams with no seat/back distinction.
+    [18, 34].forEach(topPct => {
+      const slat = document.createElement('div');
+      slat.style.cssText = `position:absolute;left:4%;width:92%;top:${topPct}%;height:1px;background:#0f2019;pointer-events:none`;
+      bench.appendChild(slat);
     });
+    const seatLine = document.createElement('div');
+    seatLine.style.cssText = `position:absolute;left:2%;width:96%;top:58%;height:1.5px;background:#0f2019;opacity:.85;pointer-events:none`;
+    bench.appendChild(seatLine);
 
     document.getElementById('bench').appendChild(bench);
   })();
