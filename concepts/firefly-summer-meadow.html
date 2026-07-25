@@ -67,6 +67,18 @@
      long period distinct from the ~5-7s flash clock, so individual fireflies appear/disappear
      over a much slower timescale than they blink. */
   @keyframes ffFade { 0%,100%{opacity:0} 12%{opacity:var(--fadeOp,1)} 45%{opacity:var(--fadeOp,1)} 58%{opacity:0} }
+
+  /* ── porch swing bench (Task 7) ── sdBenchSway: same rotate-about-top-anchor shape as Sonora
+     Balloons' own sdSway (rotate(-X) -> rotate(+X) -> rotate(-X) across one cycle, transform-
+     origin near the top of the swaying element), but the amplitude is read from a CSS custom
+     property (--swayAmp) instead of a fixed ±2.4deg, so JS can reroll it on every
+     'animationiteration' (see buildBench below). The balloon file's own sway never rerolls its
+     amplitude and stays fixed at ±2.4deg/6.5s — a narrow, constant arc on a small hanging object
+     reads as a metronome rather than something actually swinging. This uses a wider ±2.5-5.5deg
+     range on a shorter 4-5s period instead, and the per-cycle reroll means the swing arcs,
+     nearly settles, then gets nudged to a new amplitude, rather than ticking at one constant
+     amplitude forever. */
+  @keyframes sdBenchSway { 0%,100%{transform:rotate(calc(var(--swayAmp,4.5deg) * -1))} 50%{transform:rotate(var(--swayAmp,4.5deg))} }
 </style>
 </head>
 <body>
@@ -78,7 +90,7 @@ A nighttime scene: a small porch and house frame the left edge. A mason jar sits
 </div>
 
 <div class="sub" style="margin-top:8px;font-size:.78rem">
-Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler, flash+J-stroke+drift+fade, lake reflections), the porch backdrop, and the mason jar (glow + 3 in-jar fireflies) are all built and committed (Tasks 1–6). Swing bench is still to come (Task 7).
+Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler, flash+J-stroke+drift+fade, lake reflections), the porch backdrop, the mason jar (glow + 3 in-jar fireflies), and the hand-coded swing bench (hung from the porch's own two swing chains, amplitude-reroll sway) are all built and committed (Tasks 1–7).
 </div>
 
 <div class="stage" id="stage">
@@ -128,12 +140,28 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
          behind. See PORCH_IMG_SRC comment below for the crop/positioning rationale. -->
     <div id="porch" style="position:absolute;inset:0;z-index:9;pointer-events:none"></div>
 
+    <!-- swing bench (Task 7): hand-coded (simple rounded-rect + plank-line geometry — same tier
+         of effort as Sonora Balloons' own basket, unlike the Recraft-illustrated porch/oak/jar
+         which needed real organic-shape illustration), hung from the porch's own two ORIGINAL
+         swing chains (chain 1 x≈10.6%, chain 2 x≈13.1%, both bled off uncut at y≈50.3% — see the
+         "Task 6–7 anchor coordinates" comment above buildPorch). The jar (Task 6) has its own
+         separate hand-coded hook and never touches either chain, so both stay free for this.
+         Same z-index tier (9) as porch/jar, but placed BEFORE #jar in DOM order deliberately:
+         the bench's x-range overlaps the jar's x-range by ~1.25 points near chain 1 (the jar's
+         own footprint extends slightly past where chain 1 hangs), so painting jar AFTER bench
+         lets the jar — the theme's real focal element — occlude that small sliver instead of the
+         bench cutting into the jar's lid. See buildBench below for the full placement, sway, and
+         safe-area math. -->
+    <div id="bench" style="position:absolute;inset:0;z-index:9;pointer-events:none"></div>
+
     <!-- jar (Task 6, Recraft asset): the theme's real focal element — a standalone mason jar,
          not architectural like the porch. Same z-index tier (9) as the porch since it's the
          same foreground-object depth (in front of firefliesFront z8, so meadow fireflies pass
          behind it); it doesn't overlap the post so paint order relative to #porch doesn't
-         matter. See buildJar below for placement rationale (no rail in this asset — ground-
-         level next to the post instead) and the safe-area clearance math. -->
+         matter. Deliberately placed AFTER #bench (Task 7) in DOM order so the jar's own lid
+         occludes the small overlap sliver near chain 1 — see the bench comment above and
+         buildJar below for placement rationale (no rail in this asset — ground-level next to the
+         post instead) and the safe-area clearance math. -->
     <div id="jar" style="position:absolute;inset:0;z-index:9;pointer-events:none"></div>
   </div>
   <div class="safe-area"></div>
@@ -145,13 +173,13 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
 </div>
 <div class="notes">
   <h2>Scaffold structure</h2>
-  The <code>.stage</code> container, <code>.safe-area</code> overlay, <code>.legend</code> label, and reduced-motion toggle mechanism are all wired and verified. Sky gradient, star field, treeline depth layers, lake, firefly animation groups, porch backdrop, and jar are all built on top of it (Tasks 1–6); the swing bench remains for a later task.
+  The <code>.stage</code> container, <code>.safe-area</code> overlay, <code>.legend</code> label, and reduced-motion toggle mechanism are all wired and verified. Sky gradient, star field, treeline depth layers, lake, firefly animation groups, porch backdrop, jar, and swing bench are all built on top of it (Tasks 1–7).
 
   <h2>Safe-area placement</h2>
   The center box (20% left, 28% top, 60% wide, 44% tall) is reserved for potential UI or focal point layering. Firefly swarms should avoid clustering heavily within it; the jar sits at x7.5–12%, entirely left of the safe-area's own 20% edge, as the scene's real focal point.
 
   <h2>Honest gaps</h2>
-  Built: sky gradient (8-stop indigo-to-olive ramp, fixed backdrop, Task 1) and star field (22 independent stars, fade + position-reroll cycles, Task 1); 3-layer treeline (treeBack/treeMid/treeFront, 240/150/90s durations, R/L/R scroll directions, filter-based depth blur/desaturation, Task 2) and oak landmark silhouette (Recraft image asset, front layer's two "A"-slot tiles, Task 2); lake (Task 3) — static treeline-reflection silhouette (no animation) plus a shimmer overlay ported from Sonora Balloons' sdWave mechanism; fireflies (Task 4) — 10 hero + 30 filler, flash-and-decay (ffFlash) + J-stroke (ffJStroke) + drift (ffDrift, ported from Sonora Balloons' sdBalloonDrift) + independent fade-in/out for fillers (ffFade), some behind the front treeline and some in front of everything, plus mirrored lake reflections for fireflies near the shoreline; porch backdrop (Task 5, v2 asset) — Recraft-generated flat-vector porch eave corner (ceiling plane, roof beam, post, empty swing chains), background-removed with a clean alpha channel, cropped to real content bounds and bled off the top/right/bottom, composited as a plain transparent image (no CSS mask needed); mason jar (Task 6, Recraft asset) — standalone jar illustration, clean alpha-cutout, cropped to real content bounds, hung from its own hand-coded hook+chain in the gap between the post and swing chain 1 (v3 fix — the original v2 fix hung it from swing chain 1's own endpoint, but Task 7's swing bench needs both swing chains free, one per side, so the jar now has a dedicated hook instead), with a static ambient glow and 3 in-jar fireflies reusing ffFlash on their own slower independent clock. Not yet: swing bench (Task 7).
+  Built: sky gradient (8-stop indigo-to-olive ramp, fixed backdrop, Task 1) and star field (22 independent stars, fade + position-reroll cycles, Task 1); 3-layer treeline (treeBack/treeMid/treeFront, 240/150/90s durations, R/L/R scroll directions, filter-based depth blur/desaturation, Task 2) and oak landmark silhouette (Recraft image asset, front layer's two "A"-slot tiles, Task 2); lake (Task 3) — static treeline-reflection silhouette (no animation) plus a shimmer overlay ported from Sonora Balloons' sdWave mechanism; fireflies (Task 4) — 10 hero + 30 filler, flash-and-decay (ffFlash) + J-stroke (ffJStroke) + drift (ffDrift, ported from Sonora Balloons' sdBalloonDrift) + independent fade-in/out for fillers (ffFade), some behind the front treeline and some in front of everything, plus mirrored lake reflections for fireflies near the shoreline; porch backdrop (Task 5, v2 asset) — Recraft-generated flat-vector porch eave corner (ceiling plane, roof beam, post, empty swing chains), background-removed with a clean alpha channel, cropped to real content bounds and bled off the top/right/bottom, composited as a plain transparent image (no CSS mask needed); mason jar (Task 6, Recraft asset) — standalone jar illustration, clean alpha-cutout, cropped to real content bounds, hung from its own hand-coded hook+chain in the gap between the post and swing chain 1 (v3 fix — the original v2 fix hung it from swing chain 1's own endpoint, but Task 7's swing bench needs both swing chains free, one per side, so the jar now has a dedicated hook instead), with a static ambient glow and 3 in-jar fireflies reusing ffFlash on their own slower independent clock; swing bench (Task 7) — hand-coded rounded-rect body + 2 plank-line seams, dark-wood-tone fill (#1c312a, sampled directly from the porch post/chain color), spanning the porch's own two original swing chains (chain 1 x≈10.6%, chain 2 x≈13.1%, both at y≈50.3%) with a small overhang past each attachment point, swaying via sdBenchSway (rotate about the bench's own top edge, ±2.5-5.5° amplitude on a 4-5s period, amplitude rerolled on every animation iteration so it settles-then-nudges rather than ticking at a fixed arc).
 </div>
 
 <div class="gate">
@@ -161,7 +189,7 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
     <li class="pass">✓ Safe-area overlay — 20%/28%/60%/44% box, dashed border, center label, pointer-events:none</li>
     <li class="pass">✓ Reduced-motion mechanism — CSS rules (prefers-reduced-motion + .rm-force) and rmToggle event listener wired</li>
     <li class="pass">✓ Legend — positioned top-4%, centered, describes the ambient nature</li>
-    <li class="pass">✓ Theme content: sky gradient, stars, 3-layer treeline with oak landmark, lake (static reflection + shimmer), fireflies (hero+filler, flash+J-stroke+drift+fade, lake reflections), porch backdrop (Recraft asset, clean alpha-cutout corner anchor), and mason jar (Recraft asset, clean alpha-cutout, static glow, 3 in-jar fireflies on independent timing) (Tasks 1–6, complete); swing pending (Task 7)</li>
+    <li class="pass">✓ Theme content: sky gradient, stars, 3-layer treeline with oak landmark, lake (static reflection + shimmer), fireflies (hero+filler, flash+J-stroke+drift+fade, lake reflections), porch backdrop (Recraft asset, clean alpha-cutout corner anchor), mason jar (Recraft asset, clean alpha-cutout, static glow, 3 in-jar fireflies on independent timing), and swing bench (hand-coded, hung from the porch's own two swing chains, amplitude-reroll sway) (Tasks 1–7, complete)</li>
     <li class="pass">✓ Valid HTML/CSS — no syntax errors, loads cleanly in browser</li>
   </ul>
 </div>
@@ -810,6 +838,73 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
       dot.style.cssText = `position:absolute;left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;width:${f.size}px;height:${f.size}px;border-radius:50%;background:${glowColor};box-shadow:0 0 ${(f.size*3).toFixed(1)}px ${(f.size*1.1).toFixed(1)}px ${glowColor};animation:ffFlash ${period}s ease-in-out infinite ${delay}`;
       document.getElementById('jar').appendChild(dot);
     });
+  })();
+
+  // ── swing bench (Task 7): hand-coded — same tier of effort as Sonora Balloons' own basket
+  // (a bench is genuinely simple geometry, unlike the organic oak/jar/porch which needed real
+  // Recraft illustration) ──
+  (function buildBench(){
+    // Anchor coordinates measured off the real porch asset — not re-measured/re-guessed here,
+    // taken directly from the "Task 6–7 anchor coordinates" comment above buildPorch: swing
+    // chain 1 center x≈10.6%, chain 2 center x≈13.1%, both bled off uncut at y≈50.3% (no hook/
+    // terminus pixel in the source art — that crop line IS the real anchor y).
+    const CHAIN1_X = 10.6, CHAIN2_X = 13.1, CHAIN_Y = 50.3;
+    // Small overhang past each chain's own x — a real porch-swing seat extends a little past its
+    // two suspension points rather than terminating exactly at them. Kept small (0.3pt/side) so
+    // the bench still plausibly reads as spanning BETWEEN the two chains, not floating wider.
+    const OVERHANG = 0.3;
+    const BENCH_LEFT = CHAIN1_X - OVERHANG;                  // 10.30%
+    const BENCH_WIDTH = (CHAIN2_X + OVERHANG) - BENCH_LEFT;  // 3.10%
+    // Top sits 0.2pt ABOVE the chains' own y≈50.3% crop line — a small deliberate overlap UP
+    // into the chains' last rendered pixels so the seam is covered regardless of AA, same
+    // small-intentional-overlap convention (not a hairline gap) the jar's own hook+chain uses
+    // (CHAIN_BOTTOM sits 0.4pt past the jar's own top for the same reason, just downward there).
+    const BENCH_TOP = CHAIN_Y - 0.2;   // 50.10%
+    const BENCH_HEIGHT = 2.2;          // stage %, seat+low-back silhouette depth
+
+    // Safe-area check (real math, not eyeballed — this file has had repeated safe-area intrusion
+    // bugs this session): safe-area is x20–80%/y28–72%. Bench's full x-range is 10.30–13.40%,
+    // entirely left of the safe-area's own 20% edge (6.60-point margin) — zero intersection
+    // regardless of y, the same disjoint-x shortcut the jar and post extension already rely on.
+    //
+    // Jar-overlap check: the jar's own x-range is 7.05–11.55% (JAR_LEFT/JAR_WIDTH, see buildJar
+    // above), which overlaps the bench's 10.30–13.40% range by 1.25 points (10.30–11.55) — chain
+    // 1 sits close enough to the jar's right edge that some overlap is unavoidable once the
+    // bench genuinely attaches to chain 1's real x. In y, the jar starts at 50.5% and the bench
+    // spans 50.10–52.30%, overlapping by 1.80 points (50.5–52.30) — inside the jar's own lid
+    // band. Resolved by DOM order, not shape: #bench sits BEFORE #jar in the markup (both
+    // z-index:9), so the jar — the theme's real focal element — paints over that small sliver
+    // instead of the bench cutting into the jar's lid (see the #bench markup comment above).
+    const bench = document.createElement('div');
+    bench.className = 'sd-anim';
+    const randomAmp = () => `${(2.5 + Math.random()*3).toFixed(2)}deg`; // 2.5–5.5deg range
+    const swayDur = (4 + Math.random()*1).toFixed(2); // 4-5s period — wider/slower than Sonora
+      // Balloons' own sdSway (±2.4deg/6.5s): a narrower, fixed-amplitude arc on a similarly small
+      // hanging object reads as a metronome rather than something actually swinging, so this uses
+      // a bigger amplitude range instead (see the reroll below) on a shorter period.
+    const swayDelay = `${-(Math.random()*swayDur).toFixed(2)}s`;
+    bench.style.cssText = `position:absolute;left:${BENCH_LEFT.toFixed(2)}%;top:${BENCH_TOP.toFixed(2)}%;width:${BENCH_WIDTH.toFixed(2)}%;height:${BENCH_HEIGHT}%;border-radius:18%/22%;background:#1c312a;transform-origin:50% 0%;--swayAmp:${randomAmp()};animation:sdBenchSway ${swayDur}s ease-in-out infinite ${swayDelay};pointer-events:none`;
+
+    // Reroll amplitude at each rest boundary — same pattern as the stars' position reroll and the
+    // balloons' drift reroll. sdBenchSway is the ONLY animation on this element (no separate
+    // breathe/drift wrapper the way the balloons compose several — just this one sway), so unlike
+    // the balloon file's rerollDrift, no e.animationName bubbling guard is needed here: there is
+    // no child animation whose own 'animationiteration' could bubble up and cause a spurious
+    // reroll. Confirmed by checking this element's own getAnimations() — sdBenchSway is the only
+    // entry, so every 'animationiteration' this element receives IS a genuine sway rest boundary.
+    bench.addEventListener('animationiteration', () => {
+      bench.style.setProperty('--swayAmp', randomAmp());
+    });
+
+    // Plank lines (2, per spec) — thin darker seam divs, same "separate simple div per detail"
+    // convention as the post's own highlight stripe (postExtStripe above), not a gradient trick.
+    [38, 66].forEach(topPct => {
+      const plank = document.createElement('div');
+      plank.style.cssText = `position:absolute;left:4%;width:92%;top:${topPct}%;height:1px;background:#0f2019;pointer-events:none`;
+      bench.appendChild(plank);
+    });
+
+    document.getElementById('bench').appendChild(bench);
   })();
 
 })();
