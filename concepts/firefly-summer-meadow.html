@@ -35,6 +35,10 @@
   @keyframes sdStar { 0%,100%{opacity:0} 50%{opacity:.9} }
   @keyframes sdRidgeLoopR { from{transform:translateX(0)}   to{transform:translateX(-50%)} }
   @keyframes sdRidgeLoopL { from{transform:translateX(-50%)} to{transform:translateX(0)} }
+  /* ported verbatim from Sonora Balloons' sdWave (see concepts/sonora-balloons-depth.html git
+     history — removed there as an ill-fitting leftover water-reflection glint in a desert/
+     mountain scene; correct fit here, this is an actual lake). */
+  @keyframes sdWave { 0%,100%{transform:translateX(-3.6vw) scaleY(.74);opacity:.34} 50%{transform:translateX(3.6vw) scaleY(1.27);opacity:.62} }
 </style>
 </head>
 <body>
@@ -68,6 +72,14 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
     <div id="treeBack" style="position:absolute;inset:0;z-index:3"></div>
     <div id="treeMid" style="position:absolute;inset:0;z-index:4"></div>
     <div id="treeFront" style="position:absolute;inset:0;z-index:5"></div>
+
+    <!-- lake, 2 parts: static treeline reflection (z6, genuinely no animation — a dark mirrored
+         silhouette alone is what makes a band read as "water" before any pixel moves) and a
+         shimmer overlay (z7, ported verbatim from Sonora Balloons' removed sdWave mechanism —
+         see buildLakeShimmer below). Reflected firefly flashes (3rd lake element per the design
+         spec) deliberately deferred — depends on Task 4 fireflies, which don't exist yet. -->
+    <div id="lakeReflection" style="position:absolute;left:0;width:100%;bottom:0;height:13%;z-index:6;opacity:.35;filter:blur(1.5px);transform:scaleY(-1);overflow:hidden"></div>
+    <div id="lakeShimmer" style="position:absolute;inset:0;z-index:7"></div>
   </div>
   <div class="safe-area"></div>
 </div>
@@ -84,7 +96,7 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
   The center box (20% left, 28% top, 60% wide, 44% tall) is reserved for potential UI or focal point layering. Firefly swarms should avoid clustering heavily within it; the jar will sit just below and to the left as a secondary focus point.
 
   <h2>Honest gaps</h2>
-  Built: sky gradient (8-stop indigo-to-olive ramp, fixed backdrop, Task 1) and star field (22 independent stars, fade + position-reroll cycles, Task 1); 3-layer treeline (treeBack/treeMid/treeFront, 240/150/90s durations, R/L/R scroll directions, filter-based depth blur/desaturation, Task 2) and oak landmark silhouette (Recraft image asset, front layer's two "A"-slot tiles, Task 2). Not yet: lake, fireflies, porch backdrop, jar sprite, and swing bench (Tasks 3–7).
+  Built: sky gradient (8-stop indigo-to-olive ramp, fixed backdrop, Task 1) and star field (22 independent stars, fade + position-reroll cycles, Task 1); 3-layer treeline (treeBack/treeMid/treeFront, 240/150/90s durations, R/L/R scroll directions, filter-based depth blur/desaturation, Task 2) and oak landmark silhouette (Recraft image asset, front layer's two "A"-slot tiles, Task 2); lake (Task 3) — static treeline-reflection silhouette (no animation) plus a shimmer overlay ported from Sonora Balloons' sdWave mechanism. Not yet: fireflies, porch backdrop, jar sprite, swing bench, and reflected firefly flashes in the lake (Tasks 4–7).
 </div>
 
 <div class="gate">
@@ -94,7 +106,7 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
     <li class="pass">✓ Safe-area overlay — 20%/28%/60%/44% box, dashed border, center label, pointer-events:none</li>
     <li class="pass">✓ Reduced-motion mechanism — CSS rules (prefers-reduced-motion + .rm-force) and rmToggle event listener wired</li>
     <li class="pass">✓ Legend — positioned top-4%, centered, describes the ambient nature</li>
-    <li class="pass">✓ Theme content: sky gradient, stars, and 3-layer treeline with oak landmark (Tasks 1–2, complete); fireflies, lake, porch, jar, swing pending (Tasks 3–7)</li>
+    <li class="pass">✓ Theme content: sky gradient, stars, 3-layer treeline with oak landmark, and lake (static reflection + shimmer) (Tasks 1–3, complete); fireflies, porch, jar, swing pending (Tasks 4–7)</li>
     <li class="pass">✓ Valid HTML/CSS — no syntax errors, loads cleanly in browser</li>
   </ul>
 </div>
@@ -254,6 +266,40 @@ This commit is <b>harness-only</b>: the stage container, reduced-motion toggle, 
     return holder;
   }
   TREE_TIERS.forEach(t => els[t.key].appendChild(buildTreeline(t)));
+
+  // ── lake, part 1: static treeline reflection. Reuses TREE_SHAPE_VARIANTS.front[0] directly
+  // (not a new shape) as a single full-width path — no tiling loop, since this is one static
+  // band, not a scrolling layer — with the same fill as the front treeline tier. transform:
+  // scaleY(-1) on the containing div (not the path) flips it so the tree-crown region, which
+  // sits at this local viewBox's own y100 baseline (bottom of the div, same as every treeline
+  // tile), lands at the TOP of the lake band instead — directly against the real treeline's
+  // baseline above it, reading as its mirror. No .sd-anim class, no keyframe: completely static.
+  (function buildLakeReflection(){
+    const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox','0 0 100 100');
+    svg.setAttribute('preserveAspectRatio','none');
+    svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d', TREE_SHAPE_VARIANTS.front[0]);
+    path.setAttribute('fill', TREE_TIERS.find(t => t.key === 'treeFront').fill);
+    svg.appendChild(path);
+    document.getElementById('lakeReflection').appendChild(svg);
+  })();
+
+  // ── lake, part 2: shimmer. Ported verbatim (keyframe + WAVES array + building loop) from
+  // Sonora Balloons — see concepts/sonora-balloons-depth.html git history for the original
+  // #waves/sdWave code, removed from that file as an ill-fitting leftover in a desert/mountain
+  // scene. Same mechanism, correct fit here: soft horizontal blurred glint streaks, each
+  // translating+scaling on ease-in-out, at different bottom%/duration/delay so they never sync.
+  // bottom:10%/7%/4% all land inside this file's 13%-tall lake band untouched.
+  const LAKE_WAVES = [ {bottom:'10%',dur:'13s',delay:'-2s'}, {bottom:'7%',dur:'17s',delay:'-8s'}, {bottom:'4%',dur:'15s',delay:'-5s'} ];
+  const lakeShimmerEl = document.getElementById('lakeShimmer');
+  LAKE_WAVES.forEach(w => {
+    const el = document.createElement('div');
+    el.className = 'sd-anim';
+    el.style.cssText = `position:absolute;left:-14%;right:-14%;bottom:${w.bottom};height:2%;border-radius:50%;filter:blur(4px);background:linear-gradient(90deg, rgba(120,160,200,0) 0%, rgba(120,160,200,.30) 30%, rgba(150,185,215,.34) 55%, rgba(120,160,200,.28) 75%, rgba(120,160,200,0) 100%);animation:sdWave ${w.dur} ease-in-out ${w.delay} infinite`;
+    lakeShimmerEl.appendChild(el);
+  });
 })();
 </script>
 </body>
