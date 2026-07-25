@@ -791,7 +791,10 @@ Sky, stars, 3-layer treeline with oak landmark, lake, 40 fireflies (hero+filler,
   (function buildJarChain(){
     const HOOK_X = 9.3;       // stage %, center — see "Hook mount point" comment above buildJar
     const HOOK_Y = 25.75;     // stage %, real measured beam-underside alpha transition at this x
-    const CHAIN_BOTTOM = 50.9; // 0.4pt past the jar's own top (50.5%), same overlap convention as v2
+    // 0.4pt past the jar's own top, same overlap convention as v2 — derived from the shared
+    // JAR_BOUNDS const (see comment above JAR_IMG_SRC) instead of a separately-typed literal,
+    // so this stays in sync automatically if the jar's geometry ever changes again.
+    const CHAIN_BOTTOM = JAR_BOUNDS.top + 0.4;
     const TRIM = '#1c312a';
 
     // Hook loop: small open ring, straddling the beam's own measured edge (HOOK_Y) so it reads as
