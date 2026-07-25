@@ -135,6 +135,15 @@ Never brief this from a verbal description alone. Before design starts, supply:
 - The actual `ParticleBackground.jsx` (or relevant existing engine file) for that theme, so the new motif extends real code, not an invented generic shape.
 - Separated visual assets (isolated layers with transparent backgrounds), never a single fused scene — a fused illustration or baked video can't become theme-aware, retriggerable, code-driven motion.
 
+**Generate a raster asset only where drawn detail earns it. Draw geometry as shapes.** A porch post, a rail, a chain, a hook, a windowframe — anything that is rectangles, lines and arcs — should be drawn in code (canvas or SVG) with the theme's real palette. Generate WebP/PNG only for things a shape can't carry: a painted backdrop, foliage mass, a textured surface, a detailed vehicle.
+
+Two reasons, and the second is the expensive one:
+
+- **Generated raster can't take a theme's colors.** Baked pixels are baked. Cross-theme handoffs need each theme's native palette, and there are 21 themes. Shapes recolor for free; images need regenerating per theme.
+- **Every generated asset arrives with joints that have to be repaired by hand, and the repairs cost more than the asset.** Measured on `firefly-summer-meadow.html`, 2026-07-25: 29 commits over 5h33m, and the majority were compositing fixes, not design — "oak tile-wrap seamlessness, edge halo", "razor-straight roof crop edge", "replace porch hard-cut edges with soft opacity fades", "precisely match porch post-extension color/width/stripe at seam", a floating post, a jar with no ground. The porch backdrop was regenerated twice and *still* needed several geometry fixes after. None of those failure modes exist for a drawn shape: there is no seam to match, no halo to hide, no crop edge to disguise.
+
+Note the sprite-per-STATE budget in `concepts/AGENT-PROMPT.md` is a workaround for raster, not a principle. A drawn element that changes state is one asset with a layer you reveal, not two generated images.
+
 ### Scope
 
 One moment, one theme, one file per prototype round. Don't ask for "the whole journey" in one pass — narrow scope gets faster, clearer iteration than one sprawling scene.
