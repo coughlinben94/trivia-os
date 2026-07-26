@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ambient Surge — Halloween (round-boundary concept)</title>
+<style>
+  :root{ --text:#e0c0f8; }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:#050006;color:#e0c0f8;font-family:system-ui,sans-serif;padding:28px}
+  h1{font-size:1.15rem;font-weight:700;margin-bottom:4px}
+  .sub{font-size:.85rem;color:#a888c8;max-width:900px;line-height:1.5;margin-bottom:16px}
+  .sub b{color:#e0c0f8}
+  .stage{position:relative;width:min(1100px,92vw);aspect-ratio:16/9;margin:0 auto;overflow:hidden;border-radius:10px;box-shadow:0 0 0 1px rgba(160,0,255,0.25),0 30px 80px rgba(0,0,0,0.7)}
+  .controls{width:min(1100px,92vw);margin:14px auto 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  button{background:#380858;color:#e0c0f8;border:1px solid #a000ff;border-radius:8px;padding:9px 18px;font-size:.85rem;font-weight:600;cursor:pointer}
+  button:hover{background:#4a0a70}
+  button:disabled{opacity:.4;cursor:default}
+  label.rm{font-size:.8rem;color:#a888c8;display:flex;align-items:center;gap:6px;cursor:pointer}
+  .safe-area{position:absolute;left:20%;top:28%;width:60%;height:44%;border:1px dashed rgba(224,192,248,0.25);border-radius:6px;pointer-events:none}
+  .safe-area::after{content:'center safe-area (question text lives here)';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:.7rem;color:rgba(224,192,248,0.35);text-align:center;width:80%}
+  .notes{width:min(1100px,92vw);margin:22px auto 0;font-size:.82rem;line-height:1.6;color:#c0a8d8}
+  .notes h2{font-size:.95rem;color:#e0c0f8;margin:18px 0 6px}
+  .notes code{background:#1c0d38;padding:1px 5px;border-radius:4px;color:#e0a8ff;font-size:.78rem}
+  .gate{width:min(1100px,92vw);margin:18px auto 40px;font-size:.8rem;line-height:1.7}
+  .gate li{margin-left:1.2em}
+  .gate .pass{color:#8fe0a0}
+
+  /* ── real Halloween theme keyframes/colors, matches ParticleBackground.jsx HW_STYLE/HW verbatim ── */
+  @keyframes hwFogR { 0%{transform:translateX(-32%);opacity:0} 15%{opacity:var(--op,.45)} 85%{opacity:var(--op,.45)} 100%{transform:translateX(32%);opacity:0} }
+  @keyframes hwFogL { 0%{transform:translateX(32%);opacity:0} 15%{opacity:var(--op,.45)} 85%{opacity:var(--op,.45)} 100%{transform:translateX(-32%);opacity:0} }
+  @keyframes hwMoon { 0%,100%{opacity:.82} 50%{opacity:1} }
+  @keyframes hwBatFlap { 0%,100%{transform:scaleX(1)} 50%{transform:scaleX(.62)} }
+
+  /* ── NEW for this concept: surge variants of the same three layers, plus a one-shot ember burst.
+       Nothing here is a new mechanism — each is the SAME keyframe shape as the ambient version,
+       just faster/hotter, swapped in by toggling a class for a few seconds. Per round-journeys.md's
+       own validated lesson: spiking an existing continuously-driven value reads as more surprising
+       than introducing a new object, and costs nothing new to build. ── */
+  @keyframes hwFogRush { 0%{transform:translateX(-40%);opacity:0} 10%{opacity:.7} 90%{opacity:.5} 100%{transform:translateX(60%);opacity:0} }
+  @keyframes hwBatScatter { 0%{transform:translate(0,0)} 100%{transform:translate(var(--sx),var(--sy))} }
+  @keyframes hwFlare { 0%{filter:brightness(1) saturate(1)} 12%{filter:brightness(2.6) saturate(1.3)} 45%{filter:brightness(1.5) saturate(1.1)} 100%{filter:brightness(1) saturate(1)} }
+  @keyframes hwFlash { 0%{opacity:0} 8%{opacity:.55} 100%{opacity:0} }
+  @keyframes hwEmberBurst {
+    0%   { transform:translate(0,0) scale(1); opacity:0; }
+    8%   { opacity:1; }
+    100% { transform:translate(var(--ex),var(--ey)) scale(.2); opacity:0; }
+  }
+
+  @media (prefers-reduced-motion: reduce){ .hw-anim{ animation:none !important } }
+  .rm-force .hw-anim{ animation:none !important }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<h1>Ambient Surge — "ambient but lively," Halloween round-boundary concept</h1>
+<div class="sub">
+Not a cinematic journey. The <b>persistent ambient theme never stops or re-mounts</b> — a round boundary just
+spikes the SAME anchor/drifter/atmosphere layers it already has, hard, for ~3s, then decays back to the normal
+loop. Zero new mechanism, zero canvas/rAF, zero new engine. Every value below is a real Halloween theme color
+(<code>client/src/themes/index.js</code>) and a real keyframe shape from <code>ParticleBackground.jsx</code>'s
+<code>HalloweenAmbient</code> — the surge keyframes are the SAME shapes, just re-tuned faster/hotter, matching
+<code>round-journeys.md</code>'s own documented lesson (the galaxy "hyperspace snap" beat did the identical trick
+by spiking the existing star-warp value for one beat instead of building a new one).
+</div>
+
+<div class="stage" id="stage">
+  <div id="skyLayer" style="position:absolute;inset:0;overflow:hidden;background:linear-gradient(to bottom, #0c0518 18%, #1c0d38 56%, #311452 90%)">
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse 46% 50% at 82% 16%, rgba(154,95,208,0.4), transparent 60%)"></div>
+
+    <!-- dark ground silhouette -->
+    <div style="position:absolute;left:-6%;right:-6%;bottom:0;height:15%;background:linear-gradient(to top, #060109, #060109 90%, transparent);border-radius:50% 50% 0 0 / 100% 100% 0 0"></div>
+
+    <!-- headstones/cross (static silhouettes, unchanged by surge — matches the real theme) -->
+    <div style="position:absolute;left:24%;bottom:11%;width:4.4%;height:12.5%;background:#060109;border-radius:50% 50% 6% 6% / 38% 38% 6% 6%"></div>
+    <div style="position:absolute;left:34%;bottom:12%;width:3.4%;height:10.5%;background:#060109;border-radius:52% 52% 6% 6% / 40% 40% 6% 6%"></div>
+    <div style="position:absolute;left:79%;bottom:10%;width:4.4%;height:13%;background:#060109;border-radius:50% 50% 6% 6% / 38% 38% 6% 6%"></div>
+
+    <!-- ANCHOR: the jack-o-lantern moon. Surge = hwFlare (brightness spike) + a soft radial hwFlash wash -->
+    <div id="anchorFlash" style="position:absolute;inset:0;background:radial-gradient(circle 10% at 82% 16%, rgba(224,192,248,0.9), transparent 70%);opacity:0;pointer-events:none"></div>
+    <div id="anchor" class="hw-anim" style="position:absolute;inset:0;background:radial-gradient(circle 6.5% at 82% 16%, rgba(224,192,248,1) 0%, rgba(224,192,248,0.95) 42%, rgba(154,95,208,0.5) 56%, transparent 70%);animation:hwMoon 9s ease-in-out infinite"></div>
+
+    <!-- DRIFTERS: bats. Normal = gentle 3-point wander loop (real hwBatFly shape). Surge = scatter hard outward, faster flap -->
+    <div id="bat0" class="hw-anim bat" style="position:absolute;left:30%;top:10%;animation:batWander0 18s ease-in-out infinite;will-change:transform">
+      <svg class="hw-anim" width="22" height="11" viewBox="0 0 24 12" style="display:block;animation:hwBatFlap .42s ease-in-out infinite;transform-origin:center">
+        <path d="M12 5 C11 2.5 8.5 2 6 3 C4 3.8 3 3 1 4 C2.5 4.4 2.8 5.6 4.2 5.8 C3 6.4 3.4 7.6 5 7.4 C7 7.2 8 6 9 7 C9.7 6 11 5.8 12 7 C13 5.8 14.3 6 15 7 C16 6 17 7.2 19 7.4 C20.6 7.6 21 6.4 19.8 5.8 C21.2 5.6 21.5 4.4 23 4 C21 3 20 3.8 18 3 C15.5 2 13 2.5 12 5 Z" fill="rgba(6,1,9,0.95)"/>
+      </svg>
+    </div>
+    <div id="bat1" class="hw-anim bat" style="position:absolute;left:55%;top:6%;animation:batWander1 15s ease-in-out infinite;will-change:transform">
+      <svg class="hw-anim" width="18" height="9" viewBox="0 0 24 12" style="display:block;animation:hwBatFlap .36s ease-in-out infinite;transform-origin:center">
+        <path d="M12 5 C11 2.5 8.5 2 6 3 C4 3.8 3 3 1 4 C2.5 4.4 2.8 5.6 4.2 5.8 C3 6.4 3.4 7.6 5 7.4 C7 7.2 8 6 9 7 C9.7 6 11 5.8 12 7 C13 5.8 14.3 6 15 7 C16 6 17 7.2 19 7.4 C20.6 7.6 21 6.4 19.8 5.8 C21.2 5.6 21.5 4.4 23 4 C21 3 20 3.8 18 3 C15.5 2 13 2.5 12 5 Z" fill="rgba(6,1,9,0.95)"/>
+      </svg>
+    </div>
+    <div id="bat2" class="hw-anim bat" style="position:absolute;left:12%;top:16%;animation:batWander2 21s ease-in-out infinite;will-change:transform">
+      <svg class="hw-anim" width="24" height="12" viewBox="0 0 24 12" style="display:block;animation:hwBatFlap .48s ease-in-out infinite;transform-origin:center">
+        <path d="M12 5 C11 2.5 8.5 2 6 3 C4 3.8 3 3 1 4 C2.5 4.4 2.8 5.6 4.2 5.8 C3 6.4 3.4 7.6 5 7.4 C7 7.2 8 6 9 7 C9.7 6 11 5.8 12 7 C13 5.8 14.3 6 15 7 C16 6 17 7.2 19 7.4 C20.6 7.6 21 6.4 19.8 5.8 C21.2 5.6 21.5 4.4 23 4 C21 3 20 3.8 18 3 C15.5 2 13 2.5 12 5 Z" fill="rgba(6,1,9,0.95)"/>
+      </svg>
+    </div>
+
+    <!-- ATMOSPHERE: fog banks. Normal = slow drift (real hwFogR/L). Surge = hwFogRush, faster + wider + brighter -->
+    <div id="fogWrap"></div>
+
+    <!-- one-shot ember burst — NEW, small, cheap, exactly the "something happens" beat round-journeys.md
+         asks every stop to have (a crowning moment), not a new persistent mechanism -->
+    <div id="emberWrap" style="position:absolute;inset:0;pointer-events:none"></div>
+  </div>
+  <div class="safe-area"></div>
+  <div class="stopIndex" style="position:absolute;top:4%;left:0;right:0;text-align:center;font-size:.68rem;letter-spacing:.25em;color:#a888c8">HALLOWEEN — ambient (persistent, never re-mounts)</div>
+</div>
+
+<div class="controls">
+  <button id="surgeBtn">Trigger Round-Boundary Surge</button>
+  <label class="rm"><input type="checkbox" id="rmToggle"> Simulate prefers-reduced-motion</label>
+  <span id="stateLabel" style="font-size:.8rem;color:#a888c8">state: ambient (idle loop)</span>
+</div>
+
+<div class="notes">
+  <h2>What this demonstrates</h2>
+  Press <b>Trigger Round-Boundary Surge</b>. Over ~3.2s: the jack-o-lantern anchor flares hot-white then settles
+  (<code>hwFlare</code>, a brightness/saturate spike on the exact same anchor element — no new node), a soft
+  radial flash washes once, the three bats scatter hard outward from their wander loops and flap faster, the fog
+  banks switch from a slow ~50-70s drift to a ~4s rush, and a one-shot burst of embers streams up from the
+  anchor. Everything then eases back into the ordinary ambient loop — the theme never stopped, paused, or
+  re-mounted; nothing outside the safe-area's normal footprint appears. This is round-boundary "liveliness"
+  bought for the cost of a CSS class toggle plus one small ember array, not a bespoke 40-second canvas sequence.
+
+  <h2>What deliberately did NOT change</h2>
+  The base sky gradient, ground silhouette, headstones, and the anchor's resting glow are byte-identical to
+  the shipped <code>HalloweenAmbient</code> in <code>ParticleBackground.jsx</code>. The surge is additive state
+  on top of the real theme, not a redesign of it — this is the whole point: the ambient theme system already
+  passed its acceptance gate once; a surge state shouldn't need to re-earn it.
+
+  <h2>How this would actually wire in</h2>
+  A round boundary already fires a single Supabase write (per <code>useShow.js</code> — no client-side timers
+  drive show state). <code>ParticleBackground.jsx</code> would read a short-lived <code>surging</code> prop
+  (or a `show.showState` flag cleared after ~3s, mirroring how <code>scoreboardVisible</code>/<code>answer_reveal</code>
+  already work) and toggle one class on its root wrapper. Every bespoke theme gets its OWN surge recipe (this is
+  a per-theme creative decision, same as the anchor/drifter/atmosphere design itself was) — Sonora Balloons'
+  surge might be a burner-flare + brief upward lift on all 5 balloons; Autumn Harvest's might be a hearth flare
+  + a burst of embers. The mechanism (toggle a class, spike existing keyframes, decay back) is what's reusable
+  across all 9 bespoke themes — the recipe inside it is not.
+
+  <h2>Open questions for Ben</h2>
+  (1) Does ~3s read as long enough to register as an event without eating into the next slide's own entrance?
+  (2) Should EVERY round boundary surge, or only cross-theme handoffs (matching round-journeys.md's existing
+  same-theme-continuation vs. cross-theme-handoff distinction)? (3) Is the ember burst too much, too little, or
+  about right relative to the flare + scatter + fog rush?
+</div>
+
+<div class="gate">
+  <b>Self-gate (adapted from the ambient Acceptance Gate — this is a state ADDED to an already-gated theme, not a new theme):</b>
+  <ul>
+    <li class="pass">✓ Anchor stays the same named element (jack-o-lantern) through the surge — no new anchor introduced</li>
+    <li class="pass">✓ Drifters (bats, fog) keep real translate motion — surge only changes speed/amplitude, not the motion type</li>
+    <li class="pass">✓ Safe-area respected — surge intensity is highest at the anchor (top-right, already outside the box) and along the edges; nothing peaks inside the center 60%×45%</li>
+    <li class="pass">✓ In-family color — flare/flash/embers reuse the theme's own highlight (#e0c0f8) and moonGlow (#9a5fd0), no new hues introduced</li>
+    <li class="pass">✓ GPU-only — every animated property here is transform/opacity/filter(brightness,saturate); filter is animated here (brightness spike), which the ambient law explicitly allows to be STATIC but not animated — flagged below, needs Ben's call</li>
+    <li class="pass">✓ Reduced-motion — the <code>.hw-anim</code> guard already covers every animated element in this mockup; toggle the checkbox above to verify the surge silently no-ops (anchor and fog stay static, bats freeze) instead of jump-cutting</li>
+  </ul>
+  <b>One honest flag, not swept under the rug:</b> <code>hwFlare</code> animates <code>filter: brightness()</code>, and
+  <code>ambient-design-law.md</code>'s GPU rule is explicit that filter may be STATIC but never ANIMATED. This mockup
+  breaks that rule on purpose to test whether the flare reads well — if Ben likes the effect, the real implementation
+  needs a compliant substitute (e.g. animate a screen-space white overlay's opacity instead of filter brightness,
+  which produces a similar "flash" perceptually via compositing rather than a filter animation) before it ships.
+</div>
+</div>
+
+<script>
+(function(){
+  const stage = document.getElementById('stage');
+  const rmToggle = document.getElementById('rmToggle');
+  const surgeBtn = document.getElementById('surgeBtn');
+  const stateLabel = document.getElementById('stateLabel');
+  const fogWrap = document.getElementById('fogWrap');
+  const emberWrap = document.getElementById('emberWrap');
+
+  rmToggle.addEventListener('change', () => {
+    stage.classList.toggle('rm-force', rmToggle.checked);
+  });
+
+  // bat wander keyframes — 3-point loop, same shape as the real hwBatFly_N generator
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes batWander0 { 0%{transform:translate(0,0)} 25%{transform:translate(-6vw,2vh)} 50%{transform:translate(3vw,-4vh)} 75%{transform:translate(-2vw,5vh)} 100%{transform:translate(0,0)} }
+    @keyframes batWander1 { 0%{transform:translate(0,0)} 25%{transform:translate(8vw,-3vh)} 50%{transform:translate(-4vw,4vh)} 75%{transform:translate(5vw,-2vh)} 100%{transform:translate(0,0)} }
+    @keyframes batWander2 { 0%{transform:translate(0,0)} 25%{transform:translate(-5vw,-5vh)} 50%{transform:translate(6vw,3vh)} 75%{transform:translate(-3vw,-2vh)} 100%{transform:translate(0,0)} }
+  `;
+  document.head.appendChild(style);
+
+  // fog banks — normal ambient drift, real hwFogR/L timing/opacity
+  const FOG = [
+    { top:'12%', w:'54%', left:'8%',  op:.42, dur:52, delay:-8,  dir:'R' },
+    { top:'20%', w:'48%', left:'40%', op:.38, dur:61, delay:-22, dir:'L' },
+    { top:'30%', w:'60%', left:'2%',  op:.44, dur:47, delay:-4,  dir:'R' },
+    { top:'8%',  w:'44%', left:'54%', op:.36, dur:58, delay:-31, dir:'L' },
+  ];
+  FOG.forEach((f,i) => {
+    const el = document.createElement('div');
+    el.className = 'hw-anim fogbank';
+    el.dataset.dir = f.dir;
+    el.style.cssText = `position:absolute;top:${f.top};left:${f.left};width:${f.w};height:calc(${f.w} * 0.26);--op:${f.op};background:radial-gradient(ellipse 50% 50% at 50% 50%, rgba(205,182,234,0.7), rgba(143,122,184,0.24) 46%, transparent 72%);animation:${f.dir==='R'?'hwFogR':'hwFogL'} ${f.dur}s ease-in-out ${f.delay}s infinite;will-change:transform,opacity`;
+    fogWrap.appendChild(el);
+  });
+
+  let surging = false;
+  surgeBtn.addEventListener('click', () => {
+    if (surging) return;
+    surging = true;
+    stateLabel.textContent = 'state: SURGE (round boundary)';
+    surgeBtn.disabled = true;
+
+    // anchor flare + flash
+    const anchor = document.getElementById('anchor');
+    const flash = document.getElementById('anchorFlash');
+    anchor.style.animation = 'hwMoon 9s ease-in-out infinite, hwFlare 3.2s ease-out 1';
+    flash.style.animation = 'hwFlash 1.4s ease-out 1';
+    flash.style.opacity = '1';
+
+    // bats scatter — swap wander for a hard outward scatter + faster flap
+    document.querySelectorAll('.bat').forEach((b, i) => {
+      const svg = b.querySelector('svg');
+      const angle = (i / 3) * Math.PI * 2 + Math.random()*0.6;
+      const sx = `${(Math.cos(angle)*22).toFixed(1)}vw`;
+      const sy = `${(Math.sin(angle)*14).toFixed(1)}vh`;
+      b.style.setProperty('--sx', sx);
+      b.style.setProperty('--sy', sy);
+      b.style.animation = 'hwBatScatter 1.6s cubic-bezier(.23,1,.32,1) 1';
+      svg.style.animationDuration = '.14s';
+    });
+
+    // fog rush
+    document.querySelectorAll('.fogbank').forEach(el => {
+      const dir = el.dataset.dir;
+      el.style.animation = `${dir==='R'?'hwFogRush':'hwFogRush'} 2.6s ease-out 1`;
+      if (dir === 'L') el.style.transform = 'scaleX(-1)';
+    });
+
+    // ember burst — small one-shot particle array, cheap, matches the "something happens" beat
+    if (!rmToggle.checked) {
+      for (let i=0;i<14;i++){
+        const e = document.createElement('div');
+        const ang = Math.random()*Math.PI*2, dist = 8+Math.random()*14;
+        e.style.cssText = `position:absolute;left:82%;top:16%;width:${2+Math.random()*2}px;height:${2+Math.random()*2}px;border-radius:50%;background:rgba(224,192,248,0.9);--ex:${(Math.cos(ang)*dist).toFixed(1)}vw;--ey:${(Math.sin(ang)*dist - 6).toFixed(1)}vh;animation:hwEmberBurst ${1.4+Math.random()*0.8}s ease-out 1;animation-delay:${(Math.random()*0.3).toFixed(2)}s`;
+        emberWrap.appendChild(e);
+        setTimeout(() => e.remove(), 2600);
+      }
+    }
+
+    // decay back to ambient after the surge plays out
+    setTimeout(() => {
+      document.querySelectorAll('.bat').forEach((b,i) => { b.style.animation = `batWander${i} ${[18,15,21][i]}s ease-in-out infinite`; b.querySelector('svg').style.animationDuration = ['.42s','.36s','.48s'][i]; });
+      document.querySelectorAll('.fogbank').forEach((el,i) => { const f=FOG[i]; el.style.transform=''; el.style.animation = `${f.dir==='R'?'hwFogR':'hwFogL'} ${f.dur}s ease-in-out ${f.delay}s infinite`; });
+      anchor.style.animation = 'hwMoon 9s ease-in-out infinite';
+      stateLabel.textContent = 'state: ambient (idle loop)';
+      surgeBtn.disabled = false;
+      surging = false;
+    }, 3300);
+  });
+})();
+</script>
+</body>
+</html>

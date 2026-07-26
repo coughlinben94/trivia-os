@@ -6,9 +6,27 @@ disable-model-invocation: true
 
 # /audit — Step 5 static + visual self-audit, then second opinion (Storybook Agent)
 
-CWD is still `$WORKDIR` (the scratch checkout) — read/grep the file you built there, same as always.
+## Mode: nightly pipeline vs. standalone
 
-## Checkpoint first
+This step runs in one of two modes. Pick whichever matches how you got here — everything
+from the checklist onward (checklist, visual pass, one-attempt rule, Fable second opinion)
+is identical in both; only the checkpoint/bookkeeping differs.
+
+- **Nightly pipeline mode** (`/claim` already ran, a `QUEUE.md` round-journey entry is
+  claimed): CWD is `$WORKDIR` (the scratch checkout). Run "Checkpoint first" below, and
+  end by proceeding to `/ship`.
+- **Standalone mode** (2026-07-24, per Ben's explicit request to decouple this step — you're
+  auditing whatever concepts/*.html file is actively being worked on live, right now, with
+  no `QUEUE.md` entry because it isn't a round journey — e.g. an ambient-theme prototype):
+  CWD is the connected repo (same as `/run`'s attended mode, no scratch checkout, no
+  `$WORKDIR`). **Skip "Checkpoint first" entirely** — there is no queue entry to checkpoint.
+  Take the file path directly (from the conversation, not from `QUEUE.md`). End by reporting
+  findings straight to Ben in the conversation, not to `NIGHTLY-LOG.md`/`manifest.js` — there
+  is no `/ship` step for a file with no queue entry. If Ben later wants it in the nightly
+  pipeline (e.g. promoted into a real round journey), that's a separate, explicit decision —
+  don't infer it from having run this.
+
+## Checkpoint first (nightly pipeline mode only)
 
 Before running any checks, set the claimed entry's `QUEUE.md` status to `audit-pending`
 and commit that (same guarded-commit pattern as `/claim`'s checkpoint):
@@ -36,6 +54,91 @@ Check, and fix before commit:
 - **Sanitizer-passed SVG only:** every embedded sprite went through Step 3's sanitizer; confirm none were hand-patched after.
 - **postMessage contract present:** boilerplate embedded verbatim, `__journeyControls` wired to real controls, on-page Replay button calls the same `replay()`.
 - **Reduced-motion branch:** verify by reading the code (not running it) that the simulate-checkbox path actually swaps out spatial motion.
+
+## Visual pass — two passes, both mandatory (restructured 2026-07-24)
+
+Ben's own framing: a single snapshot review only catches composition/color/distinctness —
+it structurally cannot catch anything that only shows up over time (a loop seam, two
+periods syncing up, whether it still feels alive at minute 90). Split into two passes.
+**Sonnet's own documented failure mode is skipping the second pass unless forced — so it
+is not optional, not "if time allows," run it every time**, even though the mechanical
+snapshot pass alone will often look done.
+
+### Pass 1 — Snapshot (composition, color, distinctness)
+
+This is the pass already described below: run `visual-audit.mjs`, read every screenshot in
+the bundle, check per-beat correctness/legibility per the checklist above.
+
+### Pass 2 — Endurance (loops, sync, TV physics) — for anything that runs continuously
+
+Everything in this pass requires watching real elapsed time, not a single frame — budget
+`--duration` on `visual-audit.mjs` accordingly (a full loop period at minimum; several
+periods when checking sync). Applies fully to ambient themes (persistent, multi-hour) and
+partially to round journeys (loop-seam and TV-physics items still apply even to an 8-14s
+piece; the "minute 90" / burn-in items are ambient-specific, skip them for a journey).
+
+**Time-scale** (the biggest blind spot — a snapshot review can't see this at all):
+- Watch one full loop of the longest animation. Does the seam show — snap, hitch, or
+  teleport where it wraps?
+- Do any two loop durations share small common multiples? Periods like 8s and 4s sync up
+  and pulse together every cycle — durations should be co-prime-ish, not round multiples
+  of each other.
+- Would this still feel alive at minute 90, or does it read as one gimmick repeating? Name
+  the second-order motion (slow drift under fast flicker) or flag its absence.
+- Does anything only look good at load? Staggered entrance animations that never recur mean
+  the scene runs flatter than its first 10 seconds forever after.
+
+**Physical viewing conditions** (TV in a dark bar, 10+ ft away):
+- Squint test at simulated 10 ft: does the anchor still read as its thing, or become a
+  smudge?
+- Dark-gradient banding: cheap TV panels band hard on slow, dark, low-saturation gradients.
+  Any wash spanning less than ~10% lightness over a large area is a banding suspect.
+- Near-black floor: TVs crush shadows. Anything designed to sit at 3-8% lightness will
+  vanish or block up. Check the darkest intended-visible element specifically.
+- Burn-in / dirt: any bright static element parked in one spot for hours? An anchor can
+  glow, but its hot core should breathe position or intensity slightly.
+
+**Coexistence** (ambient never plays alone):
+- Does the busiest region collide with where question text, `QuestionCounter`, the
+  watermark, or the scoreboard overlay actually land — not just the abstract safe-area
+  rect drawn in a prototype?
+- Test against the lightest text color across override scenarios, not just the theme
+  default — the host can override text color; ambient must not assume it.
+- Shiny slides swap in `shinyBg`/`shinyAccent` — does the ambient clash when a gold shiny
+  slide sits on top of it?
+- Motion near the safe-area edge: peripheral flicker while people are reading is worse than
+  motion far from it. Rate edge-adjacent motion by frequency, not just position.
+
+**Tint + theme-family checks:**
+- Run the tint mentally at an extreme override (hue-shift 180°): does any "in-family" color
+  break because it was eyeballed instead of run through `tint()`? Conversely, is any
+  sanctioned literal (white core, silhouette) accidentally wrapped in tint when it
+  shouldn't be?
+- Twin test across all 21 themes: name the theme this one most resembles at thumbnail size.
+  If the answer comes fast, it isn't distinct enough.
+- Does the scene depend on the vignette to work? It shouldn't — vignette is applied after,
+  and its strength varies per theme.
+
+**Cheap-tell / craft:**
+- Count distinct opacity levels. Fewer than 3 reads as a flat poster; everything sitting at
+  0.3 is the classic AI-ambient tell.
+- Any element with perfectly linear or default ease? Ambients need eased, organic timing
+  everywhere — linear is only correct for continuous rotation/conveyor motion.
+- Symmetry check: mirrored or evenly-spaced elements read as generated. Offsets should look
+  placed, not distributed.
+- Hard-edge count, inverted from the usual "no hard edges" instinct: zero hard edges reads
+  as mush, more than ~2 reads as clip-art. There's a real target band in between.
+
+**Engineering** (beyond the GPU-only rule already in the checklist above):
+- Count composited layers, not just properties. 40 blurred divs each on their own layer
+  passes the transform/opacity rule and still cooks the GPU — set a rough node budget
+  (~30 animated elements) and flag if a scene blows past it.
+- Large static `filter: blur()` areas are allowed but expensive at 1080p full-bleed — flag
+  any blur radius above ~40px on a near-fullscreen element.
+- Keyframe/class-name collision: new `@keyframes`/class names must not shadow another
+  ambient's or the shared `ambient*` helpers.
+- Reduced-motion isn't pass/fail-only: with animation off, is the static frame still a
+  designed composition, or does it freeze mid-awkward pose?
 
 ## Visual pass — mandatory, not conditional
 
@@ -90,17 +193,18 @@ If Chrome DevTools MCP also happens to be available this run, you can additional
 compositor-only verification (transform/opacity) — but `visual-audit.mjs` is the primary,
 always-available path and is not conditional on that MCP being connected.
 
-## One-attempt rule (Ben's explicit instruction, 2026-07-22)
+## Two-attempt rule (revised 2026-07-24, supersedes the original one-attempt rule)
 
-If the checklist or the visual pass finds an issue: fix it, **once**, then re-run the
-relevant check(s) one time. Whatever the result of that single re-check — clean or still
-broken — **do not attempt a second self-fix.** Proceed straight to the second opinion
-below either way. If something is still broken after the one attempt, say so plainly in
-the notes handed to Fable and to `QUEUE.md` — do not keep silently retrying. This is a
-tighter, separate cap from `QUEUE.md`'s 5-iteration Ben-review cap (that one governs
-revision cycles across separate mornings with Ben's own input between them); this one
-governs a single run's own internal retry behavior, which has no new information between
-attempts and is exactly the sunk-cost loop Ben is guarding against.
+If the checklist or the visual pass finds an issue: fix it, re-run the relevant check(s),
+and look at the result. You get **at most two** self-fix attempts on the same issue. If
+it's still broken after the second attempt, **stop and ask Ben directly** — do not proceed
+to the Fable second opinion as a substitute for asking him, and do not attempt a third fix.
+Ben's own words: "the goal is to never have to attempt to fix something more than twice
+without asking for my opinion." Fable's evidence-only pass (below) still runs regardless —
+it's not a replacement for Ben's input on a stuck issue, it's a separate, always-on check.
+This is a tighter, separate cap from `QUEUE.md`'s 5-iteration Ben-review cap (that one
+governs revision cycles across separate mornings with Ben's own input between them); this
+one governs a single run's own internal retry behavior before Ben has to get involved.
 
 ## Second opinion — exactly one Fable pass, evidence-only
 
@@ -108,9 +212,10 @@ Once the audit above is done (clean, or not-clean-after-one-attempt per the rule
 dispatch **exactly one** subagent with `model: "fable"` via the `Agent` tool. Its job is
 narrow: check your claims against the evidence bundle, nothing else.
 
-- Give it: the brief (from `QUEUE.md`), your audit findings/fixes so far, and the
-  evidence bundle directory path (tell it to `Read` the screenshots itself — don't just
-  paste your own description of them).
+- Give it: the brief (from `QUEUE.md` in nightly mode; from the live conversation's own
+  context in standalone mode), your audit findings/fixes so far, and the evidence bundle
+  directory path (tell it to `Read` the screenshots itself — don't just paste your own
+  description of them).
 - Explicitly tell it NOT to rebuild, NOT to re-run its own visual-audit pass, NOT to
   propose a full redesign — its only job is: does the evidence actually support "this is
   ready for Ben" (or, if you're passing along an unresolved issue, does the evidence
@@ -126,4 +231,10 @@ narrow: check your claims against the evidence bundle, nothing else.
 
 Write the audit summary — what you checked, what you fixed, what the visual pass found,
 what Fable said, what remains explicitly Ben's job (runtime feel, actual venue TV check)
-— into the notes block. Then proceed to `/ship`.
+— into the notes block.
+
+**Nightly pipeline mode:** proceed to `/ship`.
+
+**Standalone mode:** report the summary directly to Ben in the conversation. No `/ship`,
+no `QUEUE.md`/`manifest.js`/`NIGHTLY-LOG.md` writes — those are round-journey pipeline
+bookkeeping and don't apply to a file with no queue entry.

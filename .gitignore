@@ -29,3 +29,5 @@ concepts/tools/.cache/
 
 .DS_Store
 *.zip
+
+.superpowers/

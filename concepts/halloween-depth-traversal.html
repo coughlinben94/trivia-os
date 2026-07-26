@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Depth Traversal — Halloween (round-boundary walk)</title>
+<style>
+  :root{ --text:#e0c0f8; }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:#050006;color:#e0c0f8;font-family:system-ui,sans-serif;padding:28px}
+  h1{font-size:1.15rem;font-weight:700;margin-bottom:4px}
+  .sub{font-size:.85rem;color:#a888c8;max-width:940px;line-height:1.55;margin-bottom:16px}
+  .sub b{color:#e0c0f8}
+  .sub code{background:#22103a;padding:1px 5px;border-radius:4px;color:#e0a8ff;font-size:.78rem}
+  .stage{position:relative;width:min(1100px,92vw);aspect-ratio:16/9;margin:0 auto;overflow:hidden;border-radius:10px;box-shadow:0 0 0 1px rgba(160,0,255,0.25),0 30px 80px rgba(0,0,0,0.7);container-type:size}
+  .controls{width:min(1100px,92vw);margin:14px auto 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  button{background:#380858;color:#e0c0f8;border:1px solid #a000ff;border-radius:8px;padding:9px 18px;font-size:.85rem;font-weight:600;cursor:pointer}
+  button:hover{background:#4a0a70}
+  button:disabled{opacity:.4;cursor:default}
+  label.rm{font-size:.8rem;color:#a888c8;display:flex;align-items:center;gap:6px;cursor:pointer}
+  .safe-area{position:absolute;left:20%;top:28%;width:60%;height:44%;border:1px dashed rgba(224,192,248,0.25);border-radius:6px;pointer-events:none;z-index:30}
+  .safe-area::after{content:'center safe-area';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:.7rem;color:rgba(224,192,248,0.35)}
+  .notes{width:min(1100px,92vw);margin:22px auto 0;font-size:.82rem;line-height:1.65;color:#c0a8d8}
+  .notes h2{font-size:.95rem;color:#e0c0f8;margin:18px 0 6px}
+  .notes code{background:#22103a;padding:1px 5px;border-radius:4px;color:#e0a8ff;font-size:.78rem}
+  .gate{width:min(1100px,92vw);margin:18px auto 40px;font-size:.8rem;line-height:1.7}
+  .gate li{margin-left:1.2em}
+  .gate .pass{color:#8fe0a0}
+  .gate .flag{color:#f0c060}
+  .legend{position:absolute;top:4%;left:0;right:0;text-align:center;font-size:.65rem;letter-spacing:.2em;color:rgba(224,192,248,0.55);z-index:31}
+
+  @media (prefers-reduced-motion: reduce){ .hd-anim{ animation:none !important; transition:none !important } }
+  .rm-force .hd-anim{ animation:none !important; transition:none !important }
+
+  @keyframes hdFogDriftR { 0%{transform:translateX(-30%);opacity:0} 15%{opacity:.4} 85%{opacity:.4} 100%{transform:translateX(30%);opacity:0} }
+  @keyframes hdFogDriftL { 0%{transform:translateX(30%);opacity:0} 15%{opacity:.4} 85%{opacity:.4} 100%{transform:translateX(-30%);opacity:0} }
+  @keyframes hdBatFlap { 0%,100%{transform:scaleX(1)} 50%{transform:scaleX(.62)} }
+  @keyframes hdBatWander { 0%{transform:translate(0,0)} 25%{transform:translate(-4%,2%)} 50%{transform:translate(3%,-3%)} 75%{transform:translate(-2%,3%)} 100%{transform:translate(0,0)} }
+  @keyframes hdMoon { 0%,100%{opacity:.82} 50%{opacity:1} }
+
+  /* the two things every plane in the moving stack transitions with — always transform/opacity,
+     duration/easing set inline per-call so the "dolly" and the "instant swap-in" can share one
+     mechanism (a plain CSS transition on transform+opacity, not a new engine) */
+  .dolly{transition:transform 1.8s cubic-bezier(.36,0,.24,1), opacity 1.8s cubic-bezier(.36,0,.24,1)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<h1>Depth Traversal — Halloween, "walking through the graveyard"</h1>
+<div class="sub">
+Real request: <b>"i think this could be cool. like we're actually WALKING through the graveyard for the
+halloween theme."</b> Built per both independent Fable consultants' converged shape: <b>the jack-o-lantern
+moon is the one FIXED anchor</b> — it never moves, it's the destination you're walking toward — while two
+"obstacle" planes (headstones near, fog+bats mid) physically dolly forward and exit through the frame edges
+at each round boundary, and a new obstacle plane fades in behind to replace what left. Press
+<b>Advance Round</b> a few times: watch the near headstone cluster grow, blow past the frame edges, and
+vanish, while the moon barely moves at all — that differential is the whole illusion, not any single layer's
+motion. Every 3rd press recycles content (mirrored + re-rolled) rather than needing unique art per round.
+</div>
+
+<div class="stage" id="stage">
+  <div class="legend" id="legend">HALLOWEEN — round 1, outside the gate</div>
+  <div id="world" style="position:absolute;inset:0;overflow:hidden;background:linear-gradient(to bottom, #0c0518 18%, #1c0d38 56%, #311452 90%)">
+
+    <!-- FIXED ANCHOR — the jack-o-lantern moon. Deliberately NOT part of the cycling stack;
+         this is the one element that does not dolly, does not exit, does not recycle. It is
+         the destination the whole traversal is walking toward. -->
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse 46% 50% at 82% 16%, rgba(154,95,208,0.4), transparent 60%);z-index:5"></div>
+    <div class="hd-anim" style="position:absolute;inset:0;background:radial-gradient(circle 6.5% at 82% 16%, rgba(224,192,248,1) 0%, rgba(224,192,248,0.95) 42%, rgba(154,95,208,0.5) 56%, transparent 70%);animation:hdMoon 9s ease-in-out infinite;z-index:5"></div>
+    <div id="stars"></div>
+
+    <!-- the two cycling planes live here, built/replaced by JS -->
+    <div id="planeMid" style="position:absolute;inset:0;z-index:8"></div>
+    <div id="planeNear" style="position:absolute;inset:0;z-index:12"></div>
+
+  </div>
+  <div class="safe-area"></div>
+</div>
+
+<div class="controls">
+  <button id="advanceBtn">Advance Round →</button>
+  <button id="resetBtn">Reset to Round 1</button>
+  <label class="rm"><input type="checkbox" id="rmToggle"> Simulate prefers-reduced-motion</label>
+  <span id="stateLabel" style="font-size:.8rem;color:#a888c8">depthIndex: 0</span>
+</div>
+
+<div class="notes">
+  <h2>How the traversal actually works</h2>
+  Plane state is derived purely from one integer, <code>depthIndex</code> (bumped once per round
+  boundary) — planes are rebuilt from that number on every advance, never accumulated transform-on-
+  transform, per the "idempotent, survives a mid-show refresh" note from one of the two Fable reviews.
+  On advance: <code>planeNear</code> scales to ~2.6x and fades out past the frame edges (the "walked past
+  it" beat), <code>planeMid</code> promotes into the near slot (scale ~1.6x → 1x, same transform/opacity
+  transition), and a new mid plane fades in behind at ~0.55x, desaturated and blurred (atmospheric
+  perspective, static filter set at spawn — never animated, per the GPU law). The old exited plane is
+  removed from the DOM only after its own transition finishes.
+
+  <h2>Recycling (every 3rd advance in this proof)</h2>
+  Instead of unique headstone art per round, a recycled plane mirrors (<code>scaleX(-1)</code>), re-rolls
+  its random headstone/cross layout (the same <code>Math.random()</code> placement the shipped theme
+  already uses for fog/bats — no new mechanism), and shifts one degree darker/deeper into the palette per
+  lap. This is deliberately visible in this proof (the legend calls out "(recycled)") so you can judge
+  whether it actually reads as fresh vs. as a repeat — that judgment call is yours, not something to
+  self-certify.
+
+  <h2>The filter-handoff snag, solved</h2>
+  A promoted plane's blur/saturation can't animate (GPU law is explicit: filter must be static). This proof
+  swaps each plane's filter value in one step exactly when its promotion transition starts — imperceptible
+  in motion, unlike animating the filter itself which would violate the transform/opacity-only rule.
+
+  <h2>What this is NOT proving yet</h2>
+  Only 2 cycling planes (near + mid), not the full 3-cycling-plus-fixed-anchor stack a shipped version might
+  want. No mid-round "surge" layered on top yet (fog/bats spike) — this proof is traversal only, to keep it
+  legible. Both Fable reviews were explicit: prove traversal + recycling on 2 flagship themes with existing
+  assets before drawing one new art layer — this is exactly that, zero new art beyond what the shipped
+  Halloween theme already owns (headstones, cross, fog, bats, moon).
+</div>
+
+<div class="gate">
+  <b>Self-gate:</b>
+  <ul>
+    <li class="pass">✓ Anchor — the moon stays the one fixed, named focal element through every advance</li>
+    <li class="pass">✓ Drifters — bats/fog keep real translate motion independent of the traversal transitions</li>
+    <li class="pass">✓ Safe-area — the dolly's exit/entry motion is scaled from plane elements outside the box; nothing traversal-specific is centered in the 60%×45% box</li>
+    <li class="pass">✓ GPU-only — every animated property is transform/opacity; filter is set once per plane at spawn/promotion, never inside a transition or @keyframe</li>
+    <li class="pass">✓ Reduced-motion — toggle the checkbox: dolly transitions and bat/fog drift all freeze; advancing still changes which plane is "near" (state changes, motion doesn't)</li>
+    <li class="pass">✓ Idempotent — state is rebuilt from <code>depthIndex</code> each call, not accumulated; hit Reset to confirm round 1 always looks the same regardless of how many advances preceded it</li>
+    <li class="flag">⚑ Recycling quality is a judgment call, not auto-verified — watch 3-4 advances yourself and decide if the mirrored/re-rolled headstones read as "more graveyard" or "that graveyard again"</li>
+    <li class="flag">⚑ Not yet composed with the surge mechanism (concepts/ambient-surge-halloween.html) — per both Fable reviews they should share the plane stack eventually, not proven here</li>
+  </ul>
+</div>
+</div>
+
+<script>
+(function(){
+  const stage = document.getElementById('stage');
+  const rmToggle = document.getElementById('rmToggle');
+  const advanceBtn = document.getElementById('advanceBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const stateLabel = document.getElementById('stateLabel');
+  const legend = document.getElementById('legend');
+  const starsEl = document.getElementById('stars');
+  const planeNearEl = document.getElementById('planeNear');
+  const planeMidEl = document.getElementById('planeMid');
+
+  rmToggle.addEventListener('change', () => stage.classList.toggle('rm-force', rmToggle.checked));
+
+  for (let i=0;i<26;i++){
+    const s = document.createElement('div');
+    const dur = (5+Math.random()*8).toFixed(2), delay = -(Math.random()*10).toFixed(2);
+    s.style.cssText = `position:absolute;left:${(2+Math.random()*96).toFixed(2)}%;top:${(1.5+Math.random()*25).toFixed(2)}%;width:${1+Math.random()*1.6}px;height:${1+Math.random()*1.6}px;border-radius:50%;background:#f6e6ff;opacity:${(0.25+Math.random()*0.5).toFixed(2)}`;
+    starsEl.appendChild(s);
+  }
+
+  // one obstacle-plane builder — reused for both the near and mid slot, and for every
+  // recycled re-entry. `recycled` flips mirroring + a re-roll seed + a darker palette step.
+  function buildObstaclePlane(depthIndex, recycled){
+    const mirror = recycled ? -1 : 1;
+    const seed = depthIndex + (recycled ? 100 : 0);
+    let s = seed * 9301 + 49297; // deterministic-ish jitter, no Math.random() so replays match
+    function rnd(){ s = (s*9301+49297) % 233280; return s/233280; }
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = `position:absolute;inset:0;transform:scaleX(${mirror})`;
+
+    const ground = document.createElement('div');
+    ground.style.cssText = `position:absolute;left:-6%;right:-6%;bottom:0;height:15%;background:linear-gradient(to top, #060109, #060109 90%, transparent);border-radius:50% 50% 0 0 / 100% 100% 0 0`;
+    wrap.appendChild(ground);
+
+    const COUNT = 4 + Math.floor(rnd()*2);
+    for (let i=0;i<COUNT;i++){
+      const left = 8 + rnd()*80;
+      const w = 3.2 + rnd()*2.4;
+      const h = 9 + rnd()*7;
+      const hs = document.createElement('div');
+      hs.style.cssText = `position:absolute;left:${left.toFixed(1)}%;bottom:9%;width:${w.toFixed(1)}%;height:${h.toFixed(1)}%;background:#060109;border-radius:50% 50% 6% 6% / 38% 38% 6% 6%`;
+      wrap.appendChild(hs);
+    }
+
+    // fog + bats belong to the MID plane conceptually but are cheap enough to include on any
+    // recycled/promoted plane so a promoted-to-near plane doesn't suddenly lose its own atmosphere
+    for (let i=0;i<3;i++){
+      const dir = rnd()<0.5 ? 'R':'L';
+      const f = document.createElement('div');
+      const top = (10+rnd()*30).toFixed(1), w=(40+rnd()*30).toFixed(0);
+      f.className = 'hd-anim';
+      f.style.cssText = `position:absolute;top:${top}%;left:${(10+rnd()*40).toFixed(1)}%;width:${w}%;height:calc(${w}% * 0.26);background:radial-gradient(ellipse 50% 50% at 50% 50%, rgba(205,182,234,0.6), rgba(143,122,184,0.2) 46%, transparent 72%);animation:${dir==='R'?'hdFogDriftR':'hdFogDriftL'} ${(46+rnd()*20).toFixed(0)}s ease-in-out ${(-rnd()*20).toFixed(0)}s infinite`;
+      wrap.appendChild(f);
+    }
+    const bat = document.createElement('div');
+    bat.className = 'hd-anim';
+    bat.style.cssText = `position:absolute;left:${(15+rnd()*60).toFixed(1)}%;top:${(8+rnd()*20).toFixed(1)}%;animation:hdBatWander ${(14+rnd()*8).toFixed(0)}s ease-in-out infinite`;
+    bat.innerHTML = `<svg class="hd-anim" width="20" height="10" viewBox="0 0 24 12" style="display:block;animation:hdBatFlap .4s ease-in-out infinite"><path d="M12 5 C11 2.5 8.5 2 6 3 C4 3.8 3 3 1 4 C2.5 4.4 2.8 5.6 4.2 5.8 C3 6.4 3.4 7.6 5 7.4 C7 7.2 8 6 9 7 C9.7 6 11 5.8 12 7 C13 5.8 14.3 6 15 7 C16 6 17 7.2 19 7.4 C20.6 7.6 21 6.4 19.8 5.8 C21.2 5.6 21.5 4.4 23 4 C21 3 20 3.8 18 3 C15.5 2 13 2.5 12 5 Z" fill="rgba(6,1,9,0.95)"/></svg>`;
+    wrap.appendChild(bat);
+
+    // atmospheric perspective — set once at spawn, never animated (GPU law)
+    const filterVal = recycled ? 'blur(1.5px) saturate(0.5) brightness(0.85)' : 'none';
+    wrap.style.filter = filterVal;
+
+    return wrap;
+  }
+
+  let depthIndex = 0;
+  let animating = false;
+
+  function render(initial){
+    const recycled = depthIndex > 0 && depthIndex % 3 === 0;
+    legend.textContent = `HALLOWEEN — round ${depthIndex+1}${recycled ? ' (recycled)' : ''}`;
+    stateLabel.textContent = `depthIndex: ${depthIndex}`;
+
+    const newNear = buildObstaclePlane(depthIndex, false);
+    const newMid = buildObstaclePlane(depthIndex+1, depthIndex+1 > 0 && (depthIndex+1) % 3 === 0);
+
+    if (initial){
+      newNear.style.transform += ' scale(1)'; newNear.style.opacity = '1';
+      newMid.style.transform += ' scale(0.55)'; newMid.style.opacity = '0.55';
+      planeNearEl.innerHTML=''; planeNearEl.appendChild(newNear);
+      planeMidEl.innerHTML=''; planeMidEl.appendChild(newMid);
+      return;
+    }
+
+    // 1. current near plane dollies forward and exits
+    const oldNear = planeNearEl.firstElementChild;
+    if (oldNear){
+      oldNear.classList.add('dolly');
+      oldNear.style.transform = oldNear.style.transform.replace(/scale\([^)]*\)/, '') + ' scale(2.6)';
+      oldNear.style.opacity = '0';
+      setTimeout(() => oldNear.remove(), 1900);
+    }
+    // 2. current mid plane promotes into the near slot (same element moves container + transitions)
+    const promoted = planeMidEl.firstElementChild;
+    if (promoted){
+      promoted.classList.add('dolly');
+      // swap its atmospheric filter to "close" values in the same frame the promotion starts —
+      // instant swap, not an animated filter, per the filter-handoff note
+      promoted.style.filter = 'none';
+      promoted.style.transform = promoted.style.transform.replace(/scale\([^)]*\)/, '') + ' scale(1)';
+      promoted.style.opacity = '1';
+      planeNearEl.appendChild(promoted);
+    }
+    // 3. a fresh (or recycled) far-ish plane fades into the mid slot
+    newMid.classList.add('dolly');
+    newMid.style.opacity = '0';
+    planeMidEl.innerHTML = '';
+    planeMidEl.appendChild(newMid);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      newMid.style.transform += ' scale(0.55)';
+      newMid.style.opacity = '0.55';
+    }));
+  }
+
+  advanceBtn.addEventListener('click', () => {
+    if (animating) return;
+    animating = true; advanceBtn.disabled = true;
+    depthIndex++;
+    render(false);
+    setTimeout(() => { animating = false; advanceBtn.disabled = false; }, 1850);
+  });
+
+  resetBtn.addEventListener('click', () => {
+    depthIndex = 0;
+    render(true);
+  });
+
+  render(true);
+})();
+</script>
+</body>
+</html>

@@ -119,6 +119,16 @@ try {
 
   const navStart = Date.now();
   await page.goto(`file://${absFile}`, { waitUntil: 'load' });
+  // Files with page chrome above the stage (title, notes, direction-change
+  // callouts) push .stage below the fold at the fixed 900px viewport height,
+  // silently cropping the bottom of every shot — caught by a Fable
+  // second-opinion pass on sonora-balloons-depth.html finding it couldn't
+  // trust any terrain-baseline claim from the bundle. Scroll it fully into
+  // view once; a no-op for fullscreen journey files where .stage already
+  // fills the viewport.
+  await page.evaluate(() => {
+    document.querySelector('.stage')?.scrollIntoView({ block: 'center' });
+  });
 
   const readLabel = async () => {
     try {

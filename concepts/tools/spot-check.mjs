@@ -15,7 +15,7 @@ const exportLine = execSync(`"${HERE}/ensure-xdamage-stub.sh"`, { encoding: 'utf
 const m = exportLine.match(/LD_LIBRARY_PATH="([^$"]+)/);
 if (m) process.env.LD_LIBRARY_PATH = `${m[1]}${process.env.LD_LIBRARY_PATH?':'+process.env.LD_LIBRARY_PATH:''}`;
 
-const FILE = resolve(HERE, '..', 'space-road-trip-v5.html');
+const FILE = resolve(HERE, '..', 'space-road-trip-v11.html');
 const OUT = resolve(HERE, '..', '.audit-shots', `spot-check-${Date.now()}`);
 mkdirSync(OUT, { recursive: true });
 
