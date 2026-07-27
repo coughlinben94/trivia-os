@@ -189,36 +189,34 @@
   </div>
   <div id="flameCore" class="sd-anim"></div>
 
-  <!-- Chairs, roto-traced (2nd hand-built attempt read ambiguous as a rounded
-       pod-on-legs; re-drawn against the raster reference itself, zoomed, not
-       from memory): the reference's chair is a bent-wood sling lounge chair —
-       a single continuous pale frame edge curving from the top of the
-       backrest down through a pinched waist into a seat and one visible
-       front leg, with a darker fabric panel draped over it and a distinct
-       concave notch at the top center (not a smooth dome). Traced by eye for
-       proportion only; every coordinate below is hand-placed this session. -->
+  <!-- Chairs, rebuilt as ICONIC per Ben's 2026-07-27 call (fix-round on
+       commit 8c8c790): three hand-built figurative attempts at this
+       reference's realistic bent-wood sling chair all read as a rounded
+       pod/mushroom on thin legs (the smooth continuous backrest curve was
+       the common failure mechanism each time). Per OBJECT-RENDERING-
+       PROTOCOL.md's own noun-test definition, a shape "fully specifiable in
+       one sentence of pure geometry" is iconic, not figurative, and hand-
+       codes directly with no escalation ladder: this chair is a flat back
+       panel + a flat seat panel meeting the backrest at a right-angle
+       corner (a straight join, not a curve), plus one straight front leg
+       and one straight back leg reaching the ground — the universal
+       side-profile "chair" pictogram. All four rects, no curves anywhere in
+       either chair. chairRight mirrors chairLeft so both chairs' open/seat
+       side faces the fire at center. -->
   <div id="chairLeft">
     <svg viewBox="0 0 220 260" preserveAspectRatio="none">
-      <line x1="75" y1="168" x2="32" y2="250" stroke="var(--chair-frame)" stroke-width="10" stroke-linecap="round"/>
-      <line x1="118" y1="168" x2="98" y2="252" stroke="var(--chair-frame-front)" stroke-width="10" stroke-linecap="round"/>
-      <line x1="142" y1="168" x2="152" y2="250" stroke="#a8845a" stroke-width="10" stroke-linecap="round"/>
-      <path fill="var(--chair-seat)" stroke="var(--chair-seat-edge)" stroke-width="3"
-        d="M110,14 C90,14 72,26 65,46 C58,66 78,84 85,100 C78,116 60,140 55,170
-           L165,170 C160,140 142,116 135,100 C142,84 162,66 155,46 C148,26 130,14 110,14 Z"/>
-      <path d="M155,46 C162,66 142,84 135,100 C142,116 160,140 165,170"
-        stroke="#a8845a" stroke-width="6" fill="none" stroke-linecap="round"/>
+      <rect x="44" y="184" width="16" height="66" fill="var(--chair-frame-front)"/>
+      <rect x="158" y="184" width="16" height="66" fill="var(--chair-frame-front)"/>
+      <rect x="40" y="18" width="28" height="140" rx="4" fill="var(--chair-frame)" stroke="var(--chair-seat-edge)" stroke-width="3"/>
+      <rect x="40" y="158" width="134" height="26" rx="3" fill="var(--chair-seat)" stroke="var(--chair-seat-edge)" stroke-width="3"/>
     </svg>
   </div>
   <div id="chairRight">
     <svg viewBox="0 0 220 260" preserveAspectRatio="none">
-      <line x1="70" y1="172" x2="24" y2="252" stroke="var(--chair-frame)" stroke-width="10" stroke-linecap="round"/>
-      <line x1="112" y1="172" x2="92" y2="254" stroke="var(--chair-frame-front)" stroke-width="10" stroke-linecap="round"/>
-      <line x1="136" y1="172" x2="146" y2="252" stroke="#a8845a" stroke-width="10" stroke-linecap="round"/>
-      <path fill="var(--chair-seat)" stroke="var(--chair-seat-edge)" stroke-width="3"
-        d="M105,12 C85,12 68,24 61,44 C54,64 74,82 81,98 C74,114 56,138 50,174
-           L160,174 C155,138 137,114 130,98 C137,82 157,64 150,44 C143,24 125,12 105,12 Z"/>
-      <path d="M150,44 C157,64 137,82 130,98 C137,114 155,138 160,174"
-        stroke="#a8845a" stroke-width="6" fill="none" stroke-linecap="round"/>
+      <rect x="46" y="184" width="16" height="66" fill="var(--chair-frame-front)"/>
+      <rect x="160" y="184" width="16" height="66" fill="var(--chair-frame-front)"/>
+      <rect x="152" y="18" width="28" height="140" rx="4" fill="var(--chair-frame)" stroke="var(--chair-seat-edge)" stroke-width="3"/>
+      <rect x="46" y="158" width="134" height="26" rx="3" fill="var(--chair-seat)" stroke="var(--chair-seat-edge)" stroke-width="3"/>
     </svg>
   </div>
 
@@ -271,7 +269,13 @@
   <ul>
     <li><b>Treeline</b> — figurative. PASS = a fresh viewer names this as a dark tree line / forest silhouette
       across the far shore.</li>
-    <li><b>Chair (×2)</b> — figurative. PASS = a fresh viewer names this as an empty camp/lawn chair on the sand.</li>
+    <li><b>Chair (×2)</b> — reclassified ICONIC 2026-07-27 (fix-round, Ben's call), after three
+      figurative hand-built attempts at the reference's realistic sling-chair pose all read as a
+      rounded pod/mushroom on legs. A flat back panel + flat seat panel meeting at a right-angle
+      corner, plus two straight legs, is fully specifiable in one sentence of pure geometry per
+      the noun test's own definition of iconic — it hand-codes directly, no figurative escalation
+      ladder applies. PASS = a fresh viewer names this as an empty camp/lawn chair on the sand,
+      unambiguously, without requiring justification.</li>
     <li><b>Flame</b> — figurative. PASS = a fresh viewer names this as a campfire flame.</li>
     <li><b>Logs</b> — figurative (per this project's own prior classification of this exact element), but
       fully specifiable as tapered crossed capsules — hand-coded directly. PASS = a fresh viewer names this
@@ -280,10 +284,14 @@
       lake surface.</li>
     <li><b>Sand path</b> — figurative. PASS = a fresh viewer names this as a winding path through the sand.</li>
   </ul>
-  <p>All six are first-attempt hand-builds this session — strike count is 0/2 for each per
-  <code>concepts/.design-attempt-counts.json</code> (not written by this agent; gate-owned). If a fresh
-  visual read fails any of these twice, the next attempt is a <em>tighter roto-trace</em> off the same
-  reference image, still hand-built — not a third blind guess, and never the generated asset itself.</p>
+  <p>The other five (treeline, flame, logs, reflection, sand path) are first-attempt hand-builds
+  this session — strike count 0/2 each per <code>concepts/.design-attempt-counts.json</code> (not
+  written by this agent; gate-owned). If a fresh visual read fails any of those twice, the next
+  attempt is a <em>tighter roto-trace</em> off the same reference image, still hand-built — not a
+  third blind guess, and never the generated asset itself. The chair is exempt from that ladder
+  entirely as of this fix-round: it's iconic, not figurative (see above), so the two-strike cap
+  and roto-trace escalation don't apply to it — its only bar is geometry-lint plus a fresh
+  visual read.</p>
 
   <h2>Radial-gradient margin math (every glow/pool/reflection layer)</h2>
   <p><code>#flameGlow</code> box 26%×26% at (37%,72%): ellipse 40% 55% at 50% 78% → x margin 10% each side
