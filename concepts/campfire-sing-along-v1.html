@@ -208,10 +208,25 @@
            straight down into the log-base flare, with no local peak/notch
            anywhere in x128-180. Left shoulder, central spire, mid/core
            layers, and the gradient are untouched (never flagged by any
-           critic pass). -->
+           critic pass).
+           2026-07-27 fix-round 7: round 6's replacement curve was a real
+           silhouette fix but left a tangent-continuity break at the shared
+           anchor (168,275), where the shoulder curve meets the base flare --
+           incoming tangent (from control pt 160,250) pointed down-right at
+           ~72 degrees, outgoing tangent (to control pt 140,295) pointed
+           down-left at ~144 degrees, a 72-degree direction reversal at one
+           anchor, reading as a hard notch/ledge/construction-seam to 2/3
+           critic reads even though there was no longer any small bump/lobe.
+           Fixed by moving only the two control points flanking that one
+           anchor (160,250 -> 176,250 and 140,295 -> 160,299) so both
+           tangent vectors now point ~108 degrees (within 1 degree of each
+           other) -- the anchor itself, its neighbors' neighbors, and every
+           other segment are unchanged. Confirmed by direction math, not
+           just re-render: this is a pure G1-continuity correction, not a
+           silhouette redesign. -->
       <path fill="url(#flameOuterGrad)" d="M38,278 C20,240 48,185 58,165 C66,172 74,195 78,205
         C82,140 89,38 92,25 C97,35 108,95 112,130 C116,112 124,98 128,90
-        C133,100 140,165 145,195 C150,210 160,250 168,275 C140,295 70,295 38,278 Z"/>
+        C133,100 140,165 145,195 C150,210 176,250 168,275 C160,299 70,295 38,278 Z"/>
       <!-- mid layer: 3 tongues (tall/medium/stub), inset and independently
            drawn, not a uniform scale-copy of the outer crown -->
       <path fill="url(#flameMidGrad)" d="M58,272 C42,225 84,95 90,75 C96,90 108,110 112,140
