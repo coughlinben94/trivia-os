@@ -264,3 +264,21 @@ lean on them before trying anything new."
   bumps (2, not 3) at more clearly differentiated heights, not the same 3 bumps with more jitter
   added. A tighter trace can mean *simplifying* the shape count, not just varying the shapes
   already there.
+
+- 2026-07-27 (round 6): **Third consecutive independent FAIL on the same right-shoulder region —
+  fix was removal, not another reshape, per Ben's explicit instruction.** The round-5 two-bump
+  retrace still read as "a repeated small-bump pattern" / "3-4 small evenly-sized teeth stepping
+  down" on a fresh critic pass — three strikes total on this exact spot, each a different bump
+  count (uniform lobes → 3 teeth → 2 teeth) but the same underlying failure mode: any small
+  secondary shape placed in that zone reads as a decorative repeat, regardless of how carefully its
+  count/height/spacing is varied. Ben's call: stop trying to reshape small lobes in that region,
+  remove them entirely. Fix: the outer path's secondary peak (128,90) now tapers in one continuous
+  curve straight down into the log-base flare — no local peak or notch anywhere in x128-180. Left
+  shoulder, central spire, mid/core layers, and gradient untouched (never flagged). geometry-lint
+  0 FAIL/0 WARN, `assert-safe-zone-luminance.mjs` 51/51 PASS, rendered and zoomed at two animation
+  phases by eye — no repeated bump visible either time. **Not yet independently critic-verified —
+  Ben is running that pass manually; do not read this as closed until that verdict lands.**
+  Takeaway for future stuck-region fixes: when the same coordinate range fails 3 times running with
+  the fix varying only the *shape* of the small elements inside it (not their presence), the next
+  move is testing whether the region needs any small shape there at all — a null/removal hypothesis
+  — before trying a 4th version of "the right small shape."
