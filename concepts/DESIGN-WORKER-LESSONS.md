@@ -244,3 +244,23 @@ lean on them before trying anything new."
   of this entry — this is strike 2 on this element if the fresh independent read fails again; a
   third hand-coded attempt would be a protocol violation, escalating to a tighter roto-trace off
   the locked Recraft reference instead of another free-form redesign.
+
+- 2026-07-27 (round 5): **Strike 2 confirmed** — 2/3 FAIL again, this time localized: both FAIL
+  votes independently named the same specific spot, a tight row of 3 near-identical small
+  triangular teeth on the outer path's right shoulder (x145-172 in the 200x300 viewBox), reading
+  as "a repeated decorative zigzag/sawtooth" rather than organic flame licks. Per the escalation
+  rule this went to a tighter reference-trace, not a third free-form redesign: zoomed into the
+  actual Recraft reference's own right shoulder (existing session crops, `flame_right_big.png`)
+  and found it has only ONE clearly rounded medium lick there (wide control-point spread, not a
+  sharp triangle) followed by ONE distinctly smaller, lower, unevenly-spaced flatter bump before
+  the taper to the base — not a repeating row at all. Rebuilt that segment to match: two bumps at
+  clearly different heights (168 vs 192, a 24-unit gap) and uneven x-spacing (15/12/8 units, not a
+  fixed interval), with rounder curve-handle spread instead of tight sawtooth control points. Left
+  crown, mid layer, core layer, and the hot-core-to-cool-edge gradient were untouched (neither
+  critic flagged them). **Confirmed pattern for the record, not yet re-verified by an independent
+  critic pass — do not read this as closed:** when a small-lobe region of a hand-traced figurative
+  silhouette reads as a "repeated/uniform tooth pattern," check whether the reference itself has
+  that many bumps at all before adding variety to existing bumps — here the reference had *fewer*
+  bumps (2, not 3) at more clearly differentiated heights, not the same 3 bumps with more jitter
+  added. A tighter trace can mean *simplifying* the shape count, not just varying the shapes
+  already there.
