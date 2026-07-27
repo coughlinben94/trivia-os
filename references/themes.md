@@ -38,7 +38,7 @@ Every theme must have:
 
 …with the **center of the screen left open** for the question text.
 
-**Canonical exemplars (the bar to match):** `autumn-harvest`, `pure-michigan`, `firefly-summer`. Study them before building. What they share: a warm focal anchor plus discrete, trackable, in-family motion over layered glows.
+**Canonical exemplars (the bar to match):** `autumn-harvest`, `pure-michigan`, `sonora-balloons`. Study them before building. What they share: a warm focal anchor plus discrete, trackable, in-family motion over layered glows. (Corrected 2026-07-26 — this line previously named `firefly-summer`, which the "Two ambient systems" section above already correctly lists as a retired-bespoke GRADIENT theme with no scene of its own. The two contradicted each other; this line was stale.)
 
 **The failure mode (what "bland" means here):** a pure breathing-gradient wash with no anchor and nothing to track. At 10 ft a pulsing gradient reads as a flat color field — there's nothing for the eye to lock onto. Most of the un-reworked themes fail this way; that is the whole point of the bland-pass.
 
@@ -96,6 +96,42 @@ Test: eyedrop any ambient layer — if its hue is outside accent→highlight and
 3. **Drifter(s).** Add ≥1 trackable moving element (drift / fall / rise / wander), in-family. Focal-tier motion lives or passes **outside the safe-area**.
 4. **Motion register.** Name the world's felt state → its physical analogue → `breathe`/`flicker`/`buzz` + timing (table below).
 5. **Keep the center open.** Verify against the safe-area.
+6. **Hero beat (adopted 2026-07-26, corrected same day).** Every ~3-5
+   minutes, the anchor or a drifter gets one brief (~3-6s) heightened
+   moment — brighter flare, an extra drifter crossing, a bigger version of
+   its normal motion — then returns cleanly to baseline. This is the
+   ambient system's answer to "give it some story/personality." **Flagged
+   and fixed the same day it was proposed: a hero beat is, structurally,
+   the exact same low-duty-cycle bet that just got round-journeys demoted
+   (roughly the same single-digit-percent duty cycle), described in the
+   same "give it story/personality" language that produced the swing.**
+   Adopting it anyway, on these non-negotiable terms, because it's built
+   into the always-on layer instead of replacing it — but it only counts as
+   that, not a relapse, if every one of these four checks is real, not
+   just a sentence:
+   - **Shipped-state gate.** The theme must pass all seven Acceptance Gate
+     rows with the hero-beat parameter **switched off**. The off state is
+     the actual shipped artifact; the beat is provably a bonus layered on
+     top of something already complete, never a component the theme needs
+     to read correctly.
+   - **Zero new elements.** The elevated state may only change existing
+     parameters (scale, opacity, speed, count) on things the baseline
+     state already renders. It may not introduce a new component, a new
+     keyframe, or — most importantly — any new figurative element. A hero
+     beat that adds a pictorial object is a noun-test violation like any
+     other; 1a's ambient branch (cut or abstract-ify) applies to it exactly
+     as much as to the base design.
+   - **Peak-state safe-area check.** Gate #3 (safe-area) is normally
+     checked against static coordinates. That check is blind to a 4-second
+     flare by construction. The hero beat must be re-checked against the
+     safe-area at its **peak** elevated moment specifically, not just at
+     baseline.
+   - **Decoupled timer.** The interval is wall-clock and free-running,
+     with no dependency on round/slide state. If it ever gets tied to round
+     boundaries "since that's a natural moment," it has quietly become an
+     unauthorized, ungated round-journey and must go through that system's
+     own rules instead, including the go/no-go test in
+     `concepts/ROUND-JOURNEY-FLAGSHIP-MECHANISM.md`.
 
 ---
 
@@ -179,6 +215,47 @@ Adapted from gestalt + isolation for TV-at-bar-distance:
 **File:** `client/src/components/display/ParticleBackground.jsx`
 
 1. **Light, not clip-art.** Ambient is built from color gradients, glow layers, and CSS `@keyframes`. A defined **anchor** may be a glowing form (a soft-edged sun disc, soft SVG aurora curtains) when legibility demands it — kept soft, reading as *light*. Still no hard pictorial icons, characters, or objects. **This refines SKILL.md §7's blanket "no shapes / no SVG / no box-shadow" — `northern-lights` already ships soft SVG curtains and the anchor disc uses a *static* `box-shadow` glow. The real rule is *no clip-art*, not *no defined light forms*. Keep SKILL.md §7 in sync with this.**
+1a. **The noun test (adopted 2026-07-26, corrected same day, not waivable
+by a future spec).** Before any element is coded, classify it: would a
+guest at 20 feet identify it by its contour or its joints (a swing, a rope,
+a specific animal, a vehicle)? That's **figurative**. What happens next
+depends on which system this is for — **this split is itself the fix for a
+real gap found in the first version of this rule**, which said "generate
+it" unconditionally and would have let a future builder re-ship Firefly
+Summer's exact failure through a newly-sanctioned door:
+
+- **In a round-journey** (full-stage, no safe-area, more pictorial license
+  by design): generate the figurative element and confirm, alone, that it
+  reads as its noun before it enters any scene.
+- **In an ambient theme: never generate a pictorial figurative object and
+  place it as-is.** Rule 2 above ("light, not clip-art") already forbids
+  hard pictorial icons, characters, or objects here, generated or
+  hand-coded — that rule predates and outranks this one. A figurative idea
+  in an ambient brief gets one of two treatments: **cut it** from the brief
+  entirely, or **restate it as an abstract light form** that fits the
+  existing tonal exceptions only (a hot near-white anchor core; a dark
+  silhouette drifter, per the in-family color rule above — `sand-dune-
+  chill`'s gulls are the sanctioned example: recognizable in outline, but
+  flat, tonal, and never rendered as a detailed pictorial asset). If
+  neither treatment can make the idea work, the idea doesn't belong in an
+  ambient theme — that is a valid, correct outcome, not a failure to solve.
+
+Fully describable in one sentence of pure geometry (a disc, a beam, a
+glowing dot, a flat gradient)? That's **iconic** in either system — hand-
+code it. A hand-coded figurative element (round-journey only) that fails a
+fresh visual read twice escalates to generated art immediately; a third
+hand-coded attempt on the same element is a spec violation. Any generated
+sprite (round-journey only) gets a **normalization pass** before use — its
+palette clamped to the scene's existing hex values, one line weight, one
+light direction, flat (non-photoreal) shading — and a **bail-out rule**: if
+it can't be reliably clamped, drop generation for that element and
+hand-author it instead; never ship "close enough." Don't over-correct
+toward flawless, either — gradients/detail that are too smooth or
+symmetrical are their own tell; keep deliberate, hand-authored imperfection
+in the flat-vector layer. **No spec may waive any of this** — Firefly
+Summer's actual failure was a written waiver of this exact family of rule,
+not a wrong pipeline. Full background and worked examples:
+`concepts/OBJECT-RENDERING-PROTOCOL.md`.
 2. **GPU-only.** Every `@keyframes` animates only `transform` / `opacity`. Never `width`, `height`, `background-position`, `color`, `box-shadow`, `filter`, or any layout property. (Static `filter`/`box-shadow` for softness is fine; just don't animate them.)
 3. **Locked background.** `<ParticleBackground>` never re-mounts on slide changes; it persists for the session.
 4. **Pure CSS is the default — no React state driving continuous motion.** All *frame-by-frame* motion is `@keyframes`, not `rAF`. (`useMemo` for static element arrays is fine.) **Sanctioned exception, narrow:** a component may use `useState`/`useEffect` solely to re-roll random placement/timing on a natural loop boundary (an `animationiteration` event, or a self-scheduled timer) — never for continuous per-frame updates — so the `prefers-reduced-motion` guard can freeze it in place without a visible teleport/jump. Two real implementations exist, both acceptable: `SbMote` (sonora-balloons) mutates a DOM node directly via a ref inside its `animationiteration` listener, never triggering React re-render; `NebulaBloomer`/`GalaxySatellite` (midnight-galaxy) and `MeteorShowerStreak` (meteor-shower) instead call a plain `useState` setter on the same kind of loop boundary, which *does* re-render — both are fine, the constraint is about avoiding rAF-driven continuous re-renders, not state itself. Read the reduced-motion comment at each of these four before assuming a fifth exception is safe.
@@ -191,11 +268,11 @@ Adapted from gestalt + isolation for TV-at-bar-distance:
      - **Carry color to the edges:** a lone centered dome fades the corners to black (rejected). Layer a wide low base ellipse under it — `radial-gradient(ellipse 135% 32% at 50% 105%, …)` — so color still reaches the corners while the center rises.
      - **Curve the light, keep the ground flat:** dome a glow / light pool (dance floor, horizon bloom); keep literal terrain (sand, ground) a flat gradient — a raised terrain mound reads as a weird hill (rejected on the sunset beach).
 
-`ParticleBackground` takes `{ theme }`. For the 12 gradient themes it renders `<BreathingGradient>` (see the rework section at top); for the 9 bespoke themes it looks up `AMBIENT_MAP[theme.id]`. Components render under one `absolute inset-0` wrapper.
+`ParticleBackground` takes `{ theme }`. For the 12 gradient themes it renders `<BreathingGradient>` (see the rework section at top); for the 10 bespoke themes it looks up `AMBIENT_MAP[theme.id]`. Components render under one `absolute inset-0` wrapper.
 
 ---
 
-## The Themes (9 bespoke + 12 gradient)
+## The Themes (10 bespoke + 12 gradient)
 
 Defined in `themes/index.js`, in this order:
 
