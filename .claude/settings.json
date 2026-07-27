@@ -30,6 +30,38 @@
       "SlashCommand(/claim)",
       "SlashCommand(/audit)",
       "SlashCommand(/ship)"
+    ],
+    "deny": [
+      "Write(concepts/.design-critic-verdicts/**)",
+      "Edit(concepts/.design-critic-verdicts/**)",
+      "Write(concepts/.design-attempt-counts.json)",
+      "Edit(concepts/.design-attempt-counts.json)",
+      "Write(concepts/design-cases.json)",
+      "Edit(concepts/design-cases.json)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/geometry-lint.mjs --hook" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/design-done-gate.mjs" }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/design-done-gate.mjs" }
+        ]
+      }
     ]
   }
 }

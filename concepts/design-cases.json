@@ -1,0 +1,154 @@
+{
+  "_schema": {
+    "note": "Structured, UNCAPPED case log \u2014 the actual memory of record for the design engine. v2 (2026-07-26): added `category` per the memory-specialist think-tank finding that pure noun-substring matching missed related failures (e.g. 'vine' didn't fire 'rope''s lesson despite being the same failure class). Match on noun OR category. Case-writing is done-gate-owned (mechanical, keyed off the critic's verdict), NOT worker-owned \u2014 the worker may propose rootCause/fixThatWorked text in its report, but the verdict/category/approach fields must come from the critic's structured output, never the agent that might have just failed. This file is write-denied to the design-worker agent (.claude/settings.json) for that reason. v3 (2026-07-27): design-done-gate.mjs now runs TWO gates and writes records from both, so entries carry a `_gate` discriminator and the quality gate's own extra fields. Everything prefixed `_` is machine-written by the gate; unprefixed fields may be hand-enriched later. A record is written once per freshly-computed critic verdict \u2014 never for a cached verdict re-read on a later Stop, which would log one critic read many times. v4 (2026-07-27): the gate that writes this file had a front-door bypass until now \u2014 it only looked at visual files that were still DIRTY in git, while simultaneously refusing to allow a Stop on any file that was still dirty, so the only way a Stop ever succeeded was with nothing to review and no record written. Read every pre-2026-07-27 gap in this log with that in mind: absence of a record does not mean a scene passed, it may mean the scene was committed before the gate looked. The trigger is now session authorship, not git state. Same release added defect severity (`_minorFindings`, `_verdictSource`), so agreed-but-minor craft findings are recorded on PASSING scenes instead of being discarded to keep `defects` empty \u2014 the first mechanism in this system that can accumulate small recurring flaws rather than only disasters.",
+    "fields": {
+      "noun": "the plain-English thing this element is (used for lookup \u2014 'rope', 'water surface', 'flame', 'ridge line'). Gate-written correctness records use the `ELEMENT: <name>` marker from the source file; if the file has no marker the gate falls back to a line-anchored slug and the noun is NOT a real noun (see _dataQuality on the 2026-07-27 campfire record). Quality-gate records use '<filename> (whole scene)'.",
+      "category": "thin-flexible-cord | liquid-surface | organic-contour | iconic-geometry | glow-light | ground-decor \u2014 mirrors OBJECT-RENDERING-PROTOCOL.md's figurative/iconic classes, coarser than noun so a NEW noun in the same class still surfaces the lesson. Plus `whole-scene-craft`, written only by the quality gate: not an object class at all, it means the record is about the execution of an entire frame. Plus `uncategorized` when the critic returned no category.",
+      "approach": "hand-coded-css | hand-coded-svg | generated-recraft | generated-then-hand-refined. CAVEAT: gate-written records hardcode 'hand-coded-css' \u2014 the hook cannot tell how an element was actually made. Treat `approach` on any record with `_autoWritten: true` as unverified until a human corrects it.",
+      "verdict": "PASS | FAIL | PARTIAL (shipped as best-achieved, not fully resolved). Gate-written records are only ever PASS or FAIL; PARTIAL is a human judgment.",
+      "rootCause": "the concrete mechanism, not just the symptom. On gate-written FAILs this is the critic's concatenated per-sample reasons, i.e. a symptom report, not yet a root cause \u2014 worth rewriting by hand once the real cause is known.",
+      "fixThatWorked": "null if verdict is FAIL and nothing fixed it yet. Never auto-filled: the gate writes null always, on purpose, so agent-authored prose can't masquerade as a confirmed fix.",
+      "file": "where this lives/lived in the repo",
+      "date": "YYYY-MM-DD",
+      "_autoWritten": "true when design-done-gate.mjs wrote this record mechanically rather than a human authoring it",
+      "_gate": "'correctness' (trivia-os-design-critic \u2014 does this read as its noun / stay in its constraints, per element) or 'quality' (trivia-os-design-quality-critic \u2014 is this WELL MADE, per whole scene, against a locked reference). A scene must pass both. Absent on records predating 2026-07-27.",
+      "_sampleVotes": "{pass, fail, total} across the independent critic samples that were actually counted, plus `droppedBlind` on quality records (samples discarded for not reporting referenceUsed:true). total < 3 means samples were lost or dropped, so the verdict rests on thinner evidence than usual. Read it together with `_panel` \u2014 see that field for why a unanimous result is worth much less than it looks.",
+      "_panel": "v6+ (2026-07-27). The model behind each counted vote, in order, e.g. ['sonnet','opus','haiku']. The gate deliberately runs a heterogeneous panel rather than one model three times, because diverse-model juries beat a single repeated judge. Read this before trusting a 3-0: an all-'default' panel means the named models were unavailable and the spawn fell back, so the three votes are three samples of ONE model and carry far less information than three entries suggest. Even a genuinely diverse panel only reduces the problem \u2014 measured panels spanning many model families still retain roughly two votes' worth of real independence out of nine, because the models make the same mistakes on the same images. A 2-1, or a dissenting single sample, is worth reading rather than discarding. Absent (null) on records predating v6. v7+ (2026-07-27): all three panel slots are now NAMED models (sonnet/opus/haiku) rather than default+opus+haiku \u2014 the old list silently contained a duplicate whenever the ambient session default happened to already be opus or haiku, and the default's identity is not knowable from inside the hook. A 'default' entry now means that slot's named model was unavailable and the spawn fell back; the hook also prints a warning when the counted samples span fewer than 2 distinct models.",
+      "_defects": "quality gate only. Closed-vocabulary tags agreed by 2+ samples AND called MAJOR by 2+ samples: missing-detail, faded-detail, underdrawn-linework, scratchy-linework, uniform-mechanical-repetition, whole-frame-blur, focal-subject-soft, flat-depth, muddy-values, empty-region, register-mismatch. These are the blocking findings. The catch-all `other` is deliberately excluded from agreement (two samples reaching for the catch-all about unrelated things is agreement on a word, not on a defect); its specifics survive as prose in the verdict's `reason`. v7+ (2026-07-27): severity split out \u2014 see `_minorFindings` for the agreed-but-not-blocking half, which before v7 had to be discarded because `defects` was required to be empty on a PASS.",
+      "_reference": "quality gate only. The QUALITY_REFERENCE marker value from the source file \u2014 the locked reference image the craft level was graded against. It is a floor for craft, not a target for content: deviations from it are recorded as `deviations` in the verdict file, not as defects.",
+      "_minorFindings": "v7+ (2026-07-27), quality gate only. Tags agreed by 2+ samples that were NOT called major by 2+ of them: real, visible, correctly named, and not disqualifying. Non-blocking, and recorded even on a PASS. This field exists because the rubric used to be binary, so a small flaw two independent samples both saw had to either sink the whole scene or be deleted \u2014 and it was deleted, meaning this log could only ever learn about disasters. THE POINT IS THE COUNT ACROSS SCENES: one `faded-detail` minor on one scene is noise; the same tag on six hand-built treelines is a convention that needs writing into DESIGN-WORKER-LESSONS.md. Query this field before starting a new scene in a class that already has records.",
+      "_verdictSource": "v7+ (2026-07-27), quality gate only. 'majority-vote' (the normal case) or 'agreed-major-defect-override' \u2014 the latter means the sample tally came out PASS but 2+ samples independently named the same MAJOR defect, and the gate recorded FAIL anyway. An agreed major defect outranks the tally; a panel contradicting itself is not rounded in the permissive direction. Worth reading on any FAIL that looks surprising against its `_sampleVotes`."
+    }
+  },
+  "cases": [
+    {
+      "noun": "rope",
+      "category": "thin-flexible-cord",
+      "approach": "hand-coded-css",
+      "verdict": "FAIL",
+      "rootCause": "Rendered thick, wood-toned, visible its whole run \u2014 reads as a rigid post/crane boom, not slack cord. A written rule requiring 'vertical, parallel, visible whole run' forecloses the sag/taper that would sell rope. Blur mismatch compounded it: 0.3-0.4px on the rope vs 1.5-9px on the rest of the scene.",
+      "fixThatWorked": null,
+      "file": "concepts/firefly-summer-meadow.html (swing, deleted line of work)",
+      "date": "2026-07-24"
+    },
+    {
+      "noun": "swing bench",
+      "category": "iconic-geometry",
+      "approach": "hand-coded-css",
+      "verdict": "FAIL",
+      "rootCause": "Passed 27/27 locked numeric layout checks across 7 rounds and still read as a crane boom. The checks were position/bounding-box only \u2014 none of them could see rigidity, blur mismatch, or 'reads as a rope' at all. A check that can't see the failure mode isn't a check.",
+      "fixThatWorked": null,
+      "file": "concepts/firefly-summer-meadow.html",
+      "date": "2026-07-24"
+    },
+    {
+      "noun": "oak tree",
+      "category": "organic-contour",
+      "approach": "hand-coded-svg",
+      "verdict": "FAIL",
+      "rootCause": "3 hand-coded attempts at treeline/oak silhouette geometry failed Fable critique each round (uniform bump spacing reading as computer-generated zigzag, oak not distinct from a bigger triangle).",
+      "fixThatWorked": null,
+      "file": "concepts/firefly-summer-meadow.html",
+      "date": "2026-07-24"
+    },
+    {
+      "noun": "oak tree",
+      "category": "organic-contour",
+      "approach": "generated-recraft",
+      "verdict": "PASS",
+      "rootCause": "n/a \u2014 this is the fix.",
+      "fixThatWorked": "One Recraft generation pass fixed outright what 3 hand-coded attempts couldn't converge on. Confirms: figurative/organic-contour elements should default to generated, not hand-coded.",
+      "file": "concepts/firefly-summer-meadow.html",
+      "date": "2026-07-24"
+    },
+    {
+      "noun": "water surface (pond)",
+      "category": "liquid-surface",
+      "approach": "hand-coded-css",
+      "verdict": "FAIL",
+      "rootCause": "4 distinct, non-converging failures in sequence: flat rectangle read as 'a wall'; trapezoid + streaks read as 'a lit sports court, streaks = lane lines'; blob reflections still read as 'pool/ice rink'; uniform 1.5px blur everywhere (blur floor applied too literally, as a flat target not a minimum) read as 'the whole frame out of focus,' not deliberate depth.",
+      "fixThatWorked": null,
+      "file": "concepts/firefly-summer-pond-deck-v1.html",
+      "date": "2026-07-26"
+    },
+    {
+      "noun": "water surface (pond)",
+      "category": "liquid-surface",
+      "approach": "generated-then-hand-refined",
+      "verdict": "PARTIAL",
+      "rootCause": "n/a",
+      "fixThatWorked": "Generated raster water texture (Recraft realistic_image style) + a ~55%-opacity dark navy-teal scrim, clipped to the hand-coded trapezoid path, was a real improvement (no longer 'a wall') but never fully crossed into 'unambiguously reads as pond' \u2014 edges still read too clean/rectangular, water still sits 'above' the rail rather than continuing under it. Shipped as best-achieved per an explicit stop-guessing decision, not a clean pass.",
+      "file": "concepts/firefly-summer-pond-deck-v1.html",
+      "date": "2026-07-26"
+    },
+    {
+      "noun": "hanging lantern",
+      "category": "iconic-geometry",
+      "approach": "hand-coded-css",
+      "verdict": "PASS",
+      "rootCause": "n/a",
+      "fixThatWorked": "Asymmetric pair (different height/size/sway amplitude/period) + rotation-angle-over-time assertion (not position-only) + real pendulum sine motion. First Fable checkpoint in either build (meadow or pond-deck) to pass outright with no defect surfaced.",
+      "file": "concepts/firefly-summer-pond-deck-v1.html",
+      "date": "2026-07-26"
+    },
+    {
+      "noun": "campfire flame",
+      "category": "glow-light",
+      "approach": "hand-coded-css",
+      "verdict": "FAIL",
+      "rootCause": "Radial-gradient center\u00b1radius overran the flame wrapper's box on 2 of 3 layers (up to 30 percentage points on the brightest layer) before reaching transparent, so the box's rectangular edge cut off still-opaque color. The dimmest layer separately carried a box-shadow on a plain non-rounded div \u2014 a blurred-rectangle-not-a-glow bug, independent of the gradient issue. Shipped without ever being rendered or committed.",
+      "fixThatWorked": null,
+      "file": "client/src/components/display/ParticleBackground.jsx \u2014 DELETED ENTIRELY 2026-07-26, this case is the reason the geometry-lint engine exists",
+      "date": "2026-07-26"
+    },
+    {
+      "noun": "distant mountain ridge line",
+      "category": "iconic-geometry",
+      "approach": "hand-coded-svg",
+      "verdict": "PASS",
+      "rootCause": "n/a",
+      "fixThatWorked": "Plain rolling-silhouette polygons (no flat tops, no secondary forms) \u2014 deliberately the simplest possible shape once a more detailed figurative foreground (mesa, cacti) was cut. 4-copy [A,B,A,B] tiling for seamless scroll-loop, per-layer fill lightened progressively.",
+      "file": "concepts/sonora-balloons-depth.html",
+      "date": "2026-07-24"
+    },
+    {
+      "noun": "hot air balloon",
+      "category": "iconic-geometry",
+      "approach": "hand-coded-svg",
+      "verdict": "PASS",
+      "rootCause": "n/a",
+      "fixThatWorked": "SVG stripe-gore envelope + basket construction, unchanged since first draft \u2014 never the source of a real complaint across the whole session. A relatively simple, near-iconic silhouette (round envelope, geometric basket) rather than a fully organic contour.",
+      "file": "concepts/sonora-balloons-depth.html",
+      "date": "2026-07-24"
+    },
+    {
+      "noun": "desert cactus / ground decor (fence, rocks, ocotillo)",
+      "category": "ground-decor",
+      "approach": "hand-coded-css",
+      "verdict": "FAIL",
+      "rootCause": "Floating decor, floating cacti, and terrain-shape bugs kept resurfacing in new forms even after each individual fix verified clean, across several rework passes. Root mechanical cause of 'cacti not connected to the ground': items anchored to a FIXED height while the terrain height under them varied 4-18% across its width.",
+      "fixThatWorked": null,
+      "file": "concepts/sonora-balloons-depth.html \u2014 foreground concept squashed entirely, not shipped",
+      "date": "2026-07-24"
+    },
+    {
+      "noun": "campfire-sing-along-v1.html L1 (no element marker \u2014 slug fallback, not a real noun)",
+      "category": "uncategorized",
+      "_dataQuality": "Repaired 2026-07-27. This record was written by design-done-gate.mjs when its element-marker scan could not work at all on an untracked file (it examined only line 1), so the slug fell back to a line anchor and was stored as if it were a noun. `noun` was the raw slug 'concepts_campfire-sing-along-v1.html_L1'; `category` was 'liquid-surface', which the critic supplied for a whole-file slug covering fire, chairs, treeline, sand and reflection \u2014 matching on it would have surfaced pond-water lessons for an unrelated element. Both the marker-scan bug and the null-elementName bug behind this are fixed in the gate (v4/v5 header notes). The FAIL itself is genuine and worth keeping: three samples independently found no frozen 'PASS = a fresh viewer names this as ___' criterion in the file.",
+      "_originalNoun": "concepts_campfire-sing-along-v1.html_L1",
+      "_originalCategory": "liquid-surface",
+      "approach": "hand-coded-css",
+      "verdict": "FAIL",
+      "rootCause": "[sample 1: FAIL] No frozen 'PASS = a fresh viewer names this as ___' sentence exists anywhere in campfire-sing-along-v1.html for this element \u2014 grepped for 'PASS =', 'fresh viewer', 'pass criterion' and found only generic protocol references, no element-specific criterion to grade against. Visually the fire/chairs/treeline/sand/reflection all read correctly as their named nouns, but an ungraded element must block per instructions regardless. [sample 2: FAIL] No frozen pass-criterion sentence ('PASS = a fresh viewer names this as ___') exists anywhere in campfire-sing-along-v1.html for element L1 \u2014 the file has design-rationale prose (line 313) but no per-element grading target, so this element cannot be fairly scored against a criterion that doesn't exist. [sample 3: FAIL] No frozen pass-criterion sentence (\"PASS = a fresh viewer names this as ___\") exists anywhere in the file per OBJECT-RENDERING-PROTOCOL.md \u2014 grepped for 'PASS =' and 'fresh viewer names', zero matches. Visual form itself is acceptable (chairs, fire, treeline all read clearly; reflection blobs under the fire at y~50-63% are the one soft spot, reading as separate light patches rather than one continuous streak) but there is no stated criterion to grade against.",
+      "fixThatWorked": null,
+      "file": "concepts/campfire-sing-along-v1.html",
+      "date": "2026-07-27",
+      "_autoWritten": true,
+      "_sampleVotes": {
+        "pass": 0,
+        "fail": 3,
+        "total": 3
+      }
+    }
+  ]
+}
