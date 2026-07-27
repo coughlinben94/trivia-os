@@ -282,3 +282,25 @@ lean on them before trying anything new."
   the fix varying only the *shape* of the small elements inside it (not their presence), the next
   move is testing whether the region needs any small shape there at all — a null/removal hypothesis
   — before trying a 4th version of "the right small shape."
+
+- 2026-07-27 (round 7): **Round 6's fix was the right silhouette but introduced a real bezier
+  tangent-continuity break, not another shape/symmetry defect — a genuinely new failure category
+  for this element.** 2/3 fresh critic reads described the same right-shoulder spot as "a hard
+  right-angle stair-step notch," "a ledge then a vertical drop," and "a construction seam/glitch,"
+  language distinct from every prior round's "repeated bump/tooth" complaints. Root cause, found
+  by reading the actual path data and computing tangent directions (not by eyeballing): at the
+  shared anchor (168,275) where the shoulder curve (`...160,250 168,275`) meets the base-flare
+  curve (`168,275 140,295...`), the incoming tangent (anchor minus its control point) pointed
+  ~72° and the outgoing tangent (its control point minus anchor) pointed ~144° — a 72° direction
+  reversal at one point, which reads as a corner regardless of how clean the silhouette is on
+  either side of it. Fixed by moving only the two control points immediately flanking that one
+  anchor (160,250→176,250 and 140,295→160,299) so both tangent vectors land within ~1° of each
+  other, then confirming the adjacent segments stay monotonic (no new bulge introduced) by solving
+  for each segment's x-extrema before re-rendering. geometry-lint 0 FAIL, `assert-safe-zone-
+  luminance.mjs` 51/51 PASS, rendered/zoomed at two flicker phases — edge traces as one continuous
+  curve both times. Takeaway: when a critic's language shifts from "repeated/bumpy" to "notch/
+  ledge/right-angle/seam" on the *same* coordinate range across rounds, that's a signal to check
+  bezier tangent continuity at the segment boundary directly (compare the vector from each
+  anchor's incoming control point to the anchor against the vector from the anchor to its outgoing
+  control point) rather than reshaping the silhouette again — the defect can be purely mechanical
+  even when the overall curve looks fine zoomed out.
