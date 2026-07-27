@@ -124,6 +124,25 @@ lean on them before trying anything new."
   hits spec, safe-area math clears" is not the same claim as "I rendered this and looked at it."
   Do not report a visual task done without an actual render + look step (Chrome MCP screenshot,
   or a real headless capture) in the same turn.
+- **A safe-area/zone check should scan the zone's actual rendered pixels, not just re-verify the
+  one named element.** `assert-safe-zone-luminance.mjs` (Campfire, round 3) caught a bright static
+  sand-path corner, several twinkling stars, and the shooting star's tail — none of which were the
+  element it was built to re-check — simply because it scans every pixel in the zone instead of
+  asserting per-element opacity values. A raw-pixel scan is a strict superset of a hand-picked
+  per-element check; prefer it whenever the failure mode is "something in this region is too
+  bright," not "this one shape's opacity is wrong."
+- **An eased (non-`linear`) CSS animation's `animation-timing-function` re-applies fresh to EACH
+  keyframe-to-keyframe segment independently, not once across the whole timeline.** If one
+  property (e.g. `transform`) is keyed at only 0%/100% while another (e.g. `opacity`) gains extra
+  keyframes in between, they no longer share one "current progress" value once a non-linear easing
+  is in play — computing "which keyframe% this animation reaches a given rendered position" from
+  one property and using it to predict another property's value at that instant will be wrong, and
+  wrong in a way invisible from reading the CSS source (three successive, arithmetically-correct
+  opacity-clamp attempts on Campfire's embers all failed at real render time for exactly this
+  reason). `linear` timing is exempt (a linear map is invariant to per-segment vs. global
+  application). When a rendered position must be guaranteed safe regardless of an eased
+  animation's internal timing, occlude by the FINAL RENDERED POSITION (e.g. a `mask-image` keyed
+  to real stage coordinates) instead of trying to predict the right keyframe percentage.
 
 ## Active Directives
 
@@ -155,17 +174,40 @@ lean on them before trying anything new."
   got it there (real margin math per gradient, no `box-shadow`, `filter: blur()` as a mechanical
   floor) is already captured in Established Conventions above.
 
-- 2026-07-27: **Reflection-dimming scrim (`#reflectionScrim`) — fixed and self-reverified, not yet
-  critic-reverified.** Root cause: see the new "What has failed" entry above (radius too small for
-  the target shape, the inverse of the flame's overrun bug). Fix applied same session: widened the
-  scrim's box/ellipse (box `18%,63%,66%,17%`; `ellipse 40.9% 27.6% at 50.3% 44.9%`) so its radius
-  actually spans the reflection's real half-extents (dx≈18.9%, dy≈3.3% from center), and added a
-  third gradient stop (0%/50%/70%/100%) so alpha stays ≥0.35 out to 70% of the radius instead of
-  crashing near-zero by the midpoint. Re-rendered and re-sampled the exact pixel the critics'
-  worst case landed on: 238,184,134 (lum 191.87, no differential) before the fix → 144,116,98
-  (lum 120.7, a real ~37% luminance drop) after, at the identical stage coordinate (x57.75%,
-  y71.9%). Zone-wide average luminance dropped 73.4→55.9. `geometry-lint.mjs` clean (0 FAIL/0 WARN,
-  including the new gradient's margins). **Not yet re-verified by the `trivia-os-design-critic`
-  gate** — that re-check belongs to the dispatching session per this project's standing rule that
-  the authoring agent cannot self-certify. If the critic still finds no real differential on a
-  fresh pixel-sample, that's strike two on this element.
+- 2026-07-27: **Reflection-dimming scrim, round 2 (radial-gradient refit) — superseded, see round
+  3 below.** The radial refit (box `18%,63%,66%,17%`; `ellipse 40.9% 27.6% at 50.3% 44.9%`) fixed
+  the *radius-too-small* bug but two independent critic passes still failed it: dimming was
+  inconsistent ACROSS THE WIDTH of the streak (bright at some x, dim at others) — a radial
+  gradient decays from one center point in every direction and cannot hold a flat level across a
+  wide horizontal band, no matter how its radius/stops are tuned. Mechanism-level bug, not a
+  tuning bug. Superseded by the round-3 entry below.
+
+- 2026-07-27 (round 3): **`#reflectionScrim` switched from radial- to linear-gradient (vertical
+  only) — mechanism fix, not another tuning pass.** `linear-gradient(to bottom, ...)` has no
+  x-term, so "brighter at some x than others" becomes structurally impossible rather than merely
+  improved. Also caught, same round, by building `concepts/tools/assert-safe-zone-luminance.mjs`
+  (a raw-pixel scan of the safe-area, independent of which element causes a bright pixel) —
+  confirms the "verification must render+look, and must check the ZONE not just the named fix"
+  convention earns its keep: the tool caught THREE things nobody had named going in — (1) the
+  static sand path's own traced fill poking into the zone's bottom-left corner (a documented,
+  never-pixel-verified claim in this file's own notes block that "sand is dark/low-contrast
+  atmosphere" was flatly wrong — sand's fill is one of the brighter tones in the scene); (2)
+  several twinkling background stars sitting inside or near enough to the zone that their
+  box-shadow glow crosses the boundary at too-bright a level, including two independently-dim
+  stars whose halos still stacked over threshold when both twinkled near-peak at once; (3) the
+  shooting star's own tail-end (its visible window spans y13-36%, and the y28-72% floor cuts
+  through the middle of that) at a brightness this session had earlier *eyeballed* as "probably
+  fine, already fading" without measuring — wrong, by about +29 luminance over the chosen
+  threshold. All three got the same tool-driven fix-and-reverify loop as the named elements.
+  Also surfaced a genuine renderer quirk worth flagging for future work: embers' `ease-out`
+  timing function is applied FRESH to each keyframe-to-keyframe segment independently (per the
+  CSS Animations spec), not once across the whole 0-100% timeline — so once opacity gained extra
+  keyframes beyond transform's original two (0%/100%), assuming a shared "current progress"
+  value for both properties became false, and three successive opacity-clamp attempts (each
+  correct arithmetic on paper) kept failing at real render time for a reason invisible from the
+  CSS source alone. Fixed by occluding embers with a `mask-image` keyed to final rendered
+  stage-y instead of trying to predict which keyframe% an eased timeline reaches a given
+  position — mechanism-independent of easing entirely. (The shooting star's own `linear` timing
+  was NOT affected by this — linear is invariant to per-segment vs. global application, so its
+  keyframe-percentage math stayed reliable.) See Established Conventions below for the
+  generalized versions of both new findings.

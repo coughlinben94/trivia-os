@@ -111,33 +111,77 @@
   }
 
   /* ---- reflection dimming scrim: only the part inside the question safe-area needs this ----
-     FIX (2026-07-27): the first version's ellipse radius (ry=30% of a 14%-tall box = only
-     4.2% of stage height) decayed to near-zero alpha well before covering the reflection's
-     real extent. Direct pixel-sampling of the rendered PNG (not just re-reading the CSS)
-     confirmed it: the brightest reflection pixel found inside the y28-72% safe-area band
-     measured 238,184,134 vs the raw undimmed fill 249,178,110 — a ~4-point luminance
-     differential out of 255, i.e. no visible dimming, matching two independent design-critic
-     FAILs that found the same thing by eye. Root cause: the gradient's dark color only
-     existed between stage-y 64.12-72.52% (center 68.32% ± Ry 4.2%), but the reflection's
-     actual bbox is 67.34-73.94% — so the bottom ~1.4% of the streak sat entirely past the
-     ellipse's 100% stop (untouched by design of the math, not a z-order/paint bug), and even
-     within the covered span, alpha fell off so fast that a point at 91% of the normalized
-     radius (well within the reflection's own bbox) was already down to ~6% alpha.
-     Refit: box widened to 66%x17% (x18-84%, y63-80%) so the ellipse's own radius
-     (Rx=27%, Ry=4.7% of stage, i.e. 40.9%/27.6% of the box) can actually span the
-     reflection's real half-extents (dx=18.9%, dy=3.3% from its center at 51.2%,70.64%)
-     while still tapering to transparent with real margin before the box edge (~6-9% of box
-     width each side; ~17-27% of box height top/bottom). Three gradient stops (0%/50%/70%)
-     instead of two so alpha stays ≥0.35 out to 70% of the radius — the previous single
-     midpoint stop let alpha crash to near-zero well before covering the shape. Verified by
-     re-rendering + re-sampling the same region after this change (see commit message) —
-     center-of-zone pixel and worst-observed-bright pixel both now show a real drop
-     (roughly 188→70-125 depending on position), not just a math claim. Radial (not a
-     hard-edged rectangular fade) so there's still no visible box seam across the streak. */
+     MECHANISM FIX (round 3, 2026-07-27): round 2's radial-gradient refit (kept below in git
+     history) still failed — two independent critic passes found the dimming inconsistent
+     across the streak's width, bright at some x-positions and dim at others. Ben's own read of
+     the math confirmed why: a radial gradient decays continuously outward from ONE center point
+     in every direction. Centered mid-band, its alpha is necessarily higher at the center-x than
+     at the left/right portions of a WIDE horizontal streak — no radius/stop tuning fixes that,
+     because it's what a radial gradient mathematically is, not a mistake in this instance's
+     numbers. Round 2's fix (radial, box 18%,63%,66%,17%, ellipse 40.9%/27.6% at 50.3%/44.9%)
+     is the artifact of that diagnosis, not a working fix.
+     Switched mechanism to a `linear-gradient(to bottom, ...)`: alpha varies ONLY with y (a
+     flat plateau across the full x-range of the box, tapering to transparent only at the box's
+     own top/bottom edges) — there is no x-term in a `to bottom` linear-gradient at all, so
+     "brighter at some x than others" is structurally impossible, not just improved.
+     Box: left 29%, top 64.5%, width 43%, height 11% → spans x29-72%, y64.5-75.5%. The
+     reflection's own measured bbox (dx=18.9%/dy=3.3% from its center at 51.2%,70.64%, i.e.
+     x32.3-70.1%, y67.34-73.94%) sits fully inside this box with margin on every side (2.7%
+     left, 1.9% right, 2.84% top, 1.56% bottom) — the box is sized to the shape's real extent,
+     not eyeballed, per the Established Convention on checking a gradient/scrim's coverage
+     against the target's own measured bbox, not just its own box.
+     Gradient stops 0%/15%/85%/100% (of the 11%-tall box: stage-y 64.5/66.15/74.15/75.5%) put
+     the flat max-alpha plateau from 66.15-74.15%, which fully encloses the reflection's real
+     67.34-73.94% span — so every point inside the reflection's bbox sits in the FLAT part of
+     the curve, not partway down a taper.
+     alpha=0.93, not the originally-computed 0.62 — raised in two steps after
+     assert-safe-zone-luminance.mjs's pixel scan (built this same round, see that file) found
+     something the CSS math alone couldn't predict: at the anti-aliased SEAMS between the
+     reflection's own internal color bands (it's a "row of connected lens-shaped humps," per the
+     notes below, not one flat fill — adjacent humps use rgb(249,178,110)/(248,~189,~135)/etc at
+     their AA boundaries), the rendered composite under this scrim measured real, repeatable
+     "extra brightness" versus flat-fill math (confirmed via an isolated same-CSS control test
+     against a uniform-fill div, which composited exactly to formula — so this is specific to
+     compositing over the traced SVG's own internal AA seams, not a bug in the gradient itself,
+     most likely GPU layer/texture resampling at those high-local-contrast pixels). At stage
+     (57.75%,71.85%) — the coordinate the round-2 lessons-file entry flagged — alpha=0.62 left a
+     worst pixel at rgb(140,114,98), lum≈118.4, still over threshold; 0.78 fixed that specific
+     coordinate but the tool then found the SAME seam-leak pattern recurring at a DIFFERENT
+     x-position (~48%) along the reflection's scalloped width at a worse magnitude, so alpha went
+     to 0.93 for real margin against a leak whose exact severity varies unpredictably by seam
+     rather than re-tuning to whatever the next-worst sampled coordinate happened to need.
+     (In the end, several of the run-to-run failures chased down this path turned out to trace to
+     embers/stars/the shooting star, not this scrim — see DESIGN-WORKER-LESSONS.md's round-3
+     entry — so 0.93 carries more margin than the scrim's own residual leak strictly required;
+     left as-is rather than re-tuned back down, since it's already verified clean and re-opening
+     it risks reintroducing exactly the bug this round exists to fix.) No box-shadow, single
+     <div>. */
   #reflectionScrim{
-    position:absolute; left:18%; top:63%; width:66%; height:17%;
+    position:absolute; left:29%; top:64.5%; width:43%; height:11%;
     z-index:11; pointer-events:none;
-    background:radial-gradient(ellipse 40.9% 27.6% at 50.3% 44.9%, rgba(8,4,20,0.75) 0%, rgba(8,4,20,0.55) 50%, rgba(8,4,20,0.35) 70%, rgba(8,4,20,0) 100%);
+    background:linear-gradient(to bottom, rgba(8,4,20,0) 0%, rgba(8,4,20,0.93) 15%, rgba(8,4,20,0.93) 85%, rgba(8,4,20,0) 100%);
+  }
+
+  /* ---- sand-path corner scrim: a NEW finding, not one of the three named elements ----
+     assert-safe-zone-luminance.mjs (built this same round for reflectionScrim/embers/
+     shootingStar) does a raw pixel scan independent of which element causes a bright pixel —
+     and it caught one nobody had named: the traced sand path's leftmost lobe (bottom-left of
+     frame) pokes up into the safe-area's bottom-left corner, measured rgb(210,168,140), lum
+     174.9, real pixels found at stage x10-28.92%/y66.11-74.85% (i.e. within the zone's own
+     x20-80/y28-72 bounds at x20-28.92%, y66.11-72%). This directly contradicts this file's own
+     earlier claim (see the notes block below) that "sand... is dark/low-contrast atmosphere
+     already and needed no separate treatment" — that claim was never pixel-verified and was
+     wrong; sand's own traced fill (rgb(197,146,113)-family) is one of the brighter tones in the
+     whole scene, not dark. Same flat vertical-linear-gradient mechanism as #reflectionScrim
+     (uniform across x, no radial decay), same alpha (0.93, same margin-of-safety reasoning
+     re: AA-seam compositing leak documented on that element). Box left18%/width13% (18-31%)
+     encloses the real x20-28.92% violation with margin; top61%/height13% (61-74%), stops
+     0/15/85/100, puts the flat plateau at 62.95-72.55% stage-y, enclosing the real
+     66.11-72% violation range with margin on both sides. */
+  #sandCornerScrim{
+    position:absolute; left:18%; top:61%; width:13%; height:13%;
+    z-index:11; pointer-events:none;
+    background:linear-gradient(to bottom, rgba(8,4,20,0) 0%, rgba(8,4,20,0.93) 15%, rgba(8,4,20,0.93) 85%, rgba(8,4,20,0) 100%);
   }
 
   /* ---- stars ---- */
@@ -163,16 +207,71 @@
     animation:meteorStreak 34s linear infinite;
     animation-delay:6s;
   }
+  /* Safe-zone clamp (round 3, 2026-07-27 audit): the streak's `transform` is only keyed at
+     1%/9% (one segment) with `linear` timing (not `ease-out`, unlike embers — so, unlike that
+     element, per-segment easing distortion does NOT apply here; this keyframe% math is real).
+     x=8+52*f, y=10+26*f for f=(keyframe%-1)/8. Solving y=28 (the safe-area's own floor) gives
+     f=0.6923, keyframe%≈6.54 — and x at that instant is 8+52*0.6923=44.0%, which is exactly
+     the (44.0%,28.0%) coordinate assert-safe-zone-luminance.mjs caught (lum ~139, opacity ~0.35
+     there under the original two-stop 2%->9% opacity fade). The star's visible window (2%-9%)
+     spans y13.25%-36%, so its LATTER half (keyframe 6.54%-9%, y28%-36%) sits inside the zone —
+     this was flagged during the original Task-2 audit as "probably self-mitigating since it's
+     already fading," which was an eyeballed guess, not a measurement, and turned out to be
+     wrong by about +29 luminance over threshold. Added a keyframe AT that same 6.54% crossing
+     that drops opacity to .08 (from the ~.35 the unclamped fade would have interpolated to) —
+     every point with keyframe% >= 6.54 (i.e. every point with stage-y <= 28%, the whole in-zone
+     portion of its transit) now stays low, confirmed by re-running the tool repeatedly (real-
+     time jitter included) with 0 further FAILs at this coordinate. */
   @keyframes meteorStreak{
     0%{ opacity:0; transform:translate(0,0) }
     1%{ opacity:0; transform:translate(0,0) }
     2%{ opacity:1 }
+    6.54%{ opacity:.08 }
     9%{ opacity:0; transform:translate(52cqw,26cqh) }
     100%{ opacity:0; transform:translate(52cqw,26cqh) }
   }
 
   /* ---- embers: the trackable drifter ---- */
-  #embers{ position:absolute; inset:0; z-index:17; pointer-events:none; }
+  /* Safe-zone occlusion (round 3, 2026-07-27 audit): three attempts at capping #ember's
+     OPACITY at a specific @keyframes percentage (.32, then .15, then .06, then a hard 0 past
+     keyframe 17.4%) all still let bright, uncapped-looking embers through at real render time —
+     assert-safe-zone-luminance.mjs kept measuring opacity ~0.85+ at stage-y inside the y72%
+     floor, seemingly contradicting the CSS. Root cause, found by reading computed
+     opacity+transform together at a failing instant (not just the CSS source): `.ember`'s
+     `animation-timing-function` is `ease-out`, and per the CSS Animations spec, that easing is
+     re-applied FRESH to EACH keyframe-to-keyframe segment independently, not once across the
+     whole 0-100% timeline. `transform` is only keyed at 0%/100% (one segment, one easing
+     application), but the added opacity keyframes (8%/15%/17.4%) created several SEPARATE
+     segments, each with its OWN independent ease-out curve remapping real time to progress
+     within that narrow slice. There is no single shared "current progress" driving both
+     properties once they have different keyframe counts under a shared non-linear easing —
+     the "keyframe% where y crosses 72%" math this file's earlier version relied on was
+     computed as if transform were linear-in-time, which ease-out makes false. That's why the
+     clamp kept measuring wrong in the browser despite being correct arithmetic on paper.
+     Fix: stop trying to predict which keyframe% corresponds to which stage-y under an easing
+     curve at all. Instead, occlude by FINAL RENDERED POSITION directly — #embers (the
+     container, `inset:0` over the whole stage) gets a `mask-image` that's fully transparent
+     above stage-y 72% and fully opaque below it, with a short feather (70-72%) for a soft
+     edge instead of a hard pop. This is mechanism-independent of the animation's easing curve
+     or any individual ember's `--dur`/`--delay` — whatever pixel an ember paints above the
+     floor is masked away regardless of how it got there. Confirmed by re-running
+     assert-safe-zone-luminance.mjs (multiple runs, real-time jitter included): 0 FAIL. The
+     @keyframes themselves were reverted close to their pre-audit shape (see below) since the
+     opacity clamp is no longer the safety mechanism — the mask is.
+     First mask attempt used a 70-72% feather (fade in across that 2% band) — still FAILed,
+     because the failing pixels sat at y≈71.9%, i.e. 95% of the way THROUGH that feather, where
+     mask alpha was already ~0.95 (nearly fully visible) — the feather itself straddled the exact
+     boundary it was supposed to protect. Switched to a true hard cutoff (two stops at the same
+     72% position — an instant step, not a gradient) specifically because two prior soft-margin
+     attempts in this same file (this one, and the reflection scrim's own round-2 radius) both
+     failed by cutting a taper too close to the real boundary. An ember is a few px across and
+     already fading at this point in its arc; an instant cutoff here is not perceptible at
+     normal speed. */
+  #embers{
+    position:absolute; inset:0; z-index:17; pointer-events:none;
+    -webkit-mask-image:linear-gradient(to bottom, transparent 0%, transparent 72%, black 72%, black 100%);
+            mask-image:linear-gradient(to bottom, transparent 0%, transparent 72%, black 72%, black 100%);
+  }
   .ember{
     position:absolute; bottom:24%; width:var(--sz); height:var(--sz); border-radius:50%;
     background:radial-gradient(ellipse 42% 42% at 50% 50%, rgba(255,214,150,0.95) 0%, rgba(247,143,75,0.6) 60%, rgba(247,143,75,0) 100%);
@@ -183,7 +282,7 @@
   @keyframes emberRise{
     0%{ transform:translate(0,0); opacity:0 }
     8%{ opacity:.9 }
-    60%{ opacity:.55 }
+    60%{ opacity:.5 }
     100%{ transform:translate(var(--drift), -23cqh); opacity:0 }
   }
 
@@ -212,28 +311,39 @@ Anchor = the flame (traced silhouette + hot near-white core + separate ambient-b
 
 <div class="stage" id="stage">
   <div class="legend">CAMPFIRE SING-ALONG</div>
+  <!-- Star peaks below: a NEW finding from assert-safe-zone-luminance.mjs, not one of the
+       three elements this round was scoped to. 14 of the 22 stars sit inside or near the
+       y28-72%/x20-80% safe-area (either directly inside it, or close enough above/left/right
+       of its edges that box-shadow blur + twinkle can still bleed a too-bright pixel across
+       the line). Their --peak was reduced from each star's original individually-authored
+       value first to 0.35 (fixed the single-star cases), then to 0.22 after the tool still
+       occasionally (~1 real-time run in 5) caught a marginal over-threshold pixel between two
+       already-dimmed neighboring stars (46.4%,21.8% and 39.9%,28.0% are only ~7% apart) —
+       their individual halos, each independently under threshold, can still stack when both
+       happen to twinkle near peak at the same real moment. 0.22 gives real margin against that
+       stacking case rather than chasing a fifth precise number. -->
   <div id="stars" class="sd-anim">
 <div class="star sd-anim" style="left:87.0%;top:43.9%;--sz:2.73px;--dur:5.82s;--delay:-3.27s;--peak:0.80"></div>
 <div class="star sd-anim" style="left:59.2%;top:5.7%;--sz:2.32px;--dur:5.85s;--delay:-4.16s;--peak:0.66"></div>
-<div class="star sd-anim" style="left:73.2%;top:50.4%;--sz:2.79px;--dur:6.24s;--delay:-1.14s;--peak:0.60"></div>
-<div class="star sd-anim" style="left:64.9%;top:44.6%;--sz:1.46px;--dur:4.70s;--delay:-1.47s;--peak:0.72"></div>
+<div class="star sd-anim" style="left:73.2%;top:50.4%;--sz:2.79px;--dur:6.24s;--delay:-1.14s;--peak:0.22"></div>
+<div class="star sd-anim" style="left:64.9%;top:44.6%;--sz:1.46px;--dur:4.70s;--delay:-1.47s;--peak:0.22"></div>
 <div class="star sd-anim" style="left:66.4%;top:5.0%;--sz:2.07px;--dur:5.78s;--delay:-2.50s;--peak:0.81"></div>
-<div class="star sd-anim" style="left:13.6%;top:48.3%;--sz:1.96px;--dur:3.80s;--delay:-3.34s;--peak:0.62"></div>
-<div class="star sd-anim" style="left:34.7%;top:41.2%;--sz:1.65px;--dur:3.30s;--delay:-3.23s;--peak:0.61"></div>
-<div class="star sd-anim" style="left:65.5%;top:50.2%;--sz:1.69px;--dur:5.42s;--delay:-0.39s;--peak:0.57"></div>
-<div class="star sd-anim" style="left:42.1%;top:42.1%;--sz:2.60px;--dur:4.48s;--delay:-2.19s;--peak:0.60"></div>
+<div class="star sd-anim" style="left:13.6%;top:48.3%;--sz:1.96px;--dur:3.80s;--delay:-3.34s;--peak:0.22"></div>
+<div class="star sd-anim" style="left:34.7%;top:41.2%;--sz:1.65px;--dur:3.30s;--delay:-3.23s;--peak:0.22"></div>
+<div class="star sd-anim" style="left:65.5%;top:50.2%;--sz:1.69px;--dur:5.42s;--delay:-0.39s;--peak:0.22"></div>
+<div class="star sd-anim" style="left:42.1%;top:42.1%;--sz:2.60px;--dur:4.48s;--delay:-2.19s;--peak:0.22"></div>
 <div class="star sd-anim" style="left:92.5%;top:33.5%;--sz:1.71px;--dur:5.02s;--delay:-2.83s;--peak:0.83"></div>
-<div class="star sd-anim" style="left:56.7%;top:41.2%;--sz:2.77px;--dur:4.77s;--delay:-3.00s;--peak:0.66"></div>
-<div class="star sd-anim" style="left:62.6%;top:31.7%;--sz:1.50px;--dur:4.87s;--delay:-0.09s;--peak:0.56"></div>
-<div class="star sd-anim" style="left:46.4%;top:21.8%;--sz:1.64px;--dur:6.45s;--delay:-0.41s;--peak:0.66"></div>
-<div class="star sd-anim" style="left:39.9%;top:28.0%;--sz:2.12px;--dur:3.85s;--delay:-0.39s;--peak:0.72"></div>
+<div class="star sd-anim" style="left:56.7%;top:41.2%;--sz:2.77px;--dur:4.77s;--delay:-3.00s;--peak:0.22"></div>
+<div class="star sd-anim" style="left:62.6%;top:31.7%;--sz:1.50px;--dur:4.87s;--delay:-0.09s;--peak:0.22"></div>
+<div class="star sd-anim" style="left:46.4%;top:21.8%;--sz:1.64px;--dur:6.45s;--delay:-0.41s;--peak:0.22"></div>
+<div class="star sd-anim" style="left:39.9%;top:28.0%;--sz:2.12px;--dur:3.85s;--delay:-0.39s;--peak:0.22"></div>
 <div class="star sd-anim" style="left:75.1%;top:17.2%;--sz:1.87px;--dur:4.99s;--delay:-2.31s;--peak:0.84"></div>
 <div class="star sd-anim" style="left:88.2%;top:5.8%;--sz:1.44px;--dur:4.21s;--delay:-2.03s;--peak:0.81"></div>
 <div class="star sd-anim" style="left:15.0%;top:10.7%;--sz:1.34px;--dur:6.04s;--delay:-2.96s;--peak:0.74"></div>
-<div class="star sd-anim" style="left:79.6%;top:48.4%;--sz:2.11px;--dur:4.82s;--delay:-3.97s;--peak:0.75"></div>
-<div class="star sd-anim" style="left:26.0%;top:35.7%;--sz:2.70px;--dur:5.07s;--delay:-4.13s;--peak:0.59"></div>
-<div class="star sd-anim" style="left:78.2%;top:39.2%;--sz:2.02px;--dur:4.54s;--delay:-3.62s;--peak:0.74"></div>
-<div class="star sd-anim" style="left:76.1%;top:25.5%;--sz:2.22px;--dur:4.36s;--delay:-0.45s;--peak:0.62"></div>
+<div class="star sd-anim" style="left:79.6%;top:48.4%;--sz:2.11px;--dur:4.82s;--delay:-3.97s;--peak:0.22"></div>
+<div class="star sd-anim" style="left:26.0%;top:35.7%;--sz:2.70px;--dur:5.07s;--delay:-4.13s;--peak:0.22"></div>
+<div class="star sd-anim" style="left:78.2%;top:39.2%;--sz:2.02px;--dur:4.54s;--delay:-3.62s;--peak:0.22"></div>
+<div class="star sd-anim" style="left:76.1%;top:25.5%;--sz:2.22px;--dur:4.36s;--delay:-0.45s;--peak:0.22"></div>
 <div class="star sd-anim" style="left:51.9%;top:11.4%;--sz:2.22px;--dur:5.66s;--delay:-0.37s;--peak:0.69"></div>
     <div id="shootingStar" class="sd-anim"></div>
   </div>
@@ -281,6 +391,7 @@ Anchor = the flame (traced silhouette + hot near-white core + separate ambient-b
   </svg>
 
   <div id="reflectionScrim"></div>
+  <div id="sandCornerScrim"></div>
 
   <div id="groundPool" class="sd-anim"></div>
   <div id="flameGlow" class="sd-anim"></div>
