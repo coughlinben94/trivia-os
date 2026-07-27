@@ -48,6 +48,21 @@ lean on them before trying anything new."
 - **A ground-anchored light-pool that lags the light source instead of strobing in sync with it**
   (Campfire's ember-lit ground glow, per an Opus review that found a single strobing blob wasn't
   convincing on its own).
+- **Reclassifying a stuck figurative element as ICONIC once it turns out to be specifiable in one
+  sentence of pure geometry** (Campfire's camp chairs, 2026-07-27 fix-round). Three figurative
+  hand-built attempts at the reference's realistic bent-wood sling-chair pose — including a tight
+  roto-trace off the reference itself — all converged on the same failure: a rounded pod/mushroom
+  on thin legs, because a smooth continuous backrest curve was the shared mechanism each time.
+  Rather than a fourth figurative attempt (already past the two-strike cap) or shipping generated
+  art (banned by the reference-first addendum), the fix was to re-examine the classification
+  itself: a flat back panel + flat seat panel meeting at a right-angle corner, plus two straight
+  legs, is fully specifiable in one sentence of pure geometry — iconic, not figurative, per the
+  noun test's own definition — and hand-codes with no escalation ladder at all. Fixed on the first
+  attempt under the new classification. Takeaway: when a hand-coded figurative element keeps
+  failing in the same way (here, "reads as round/organic" every time), check whether it was
+  mis-classified as figurative in the first place before trying a tighter trace — the noun test
+  cuts both ways, and re-classifying can dissolve a stuck multi-round failure instead of forcing
+  another lap of the same ladder.
 
 ## What has failed (confirmed-bad, do not retry as-is)
 
