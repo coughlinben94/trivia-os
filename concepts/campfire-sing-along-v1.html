@@ -16,15 +16,34 @@
 
   Named defects from the prior (deleted) attempt this build must not repeat:
     1. Stars must actually register — bright enough to see at a glance.
-    2. Chairs need real presence, not a thin flat silhouette.
+    2. (Chairs cut entirely, 2026-07-27 fix-round — see below. No longer applicable.)
     3. No unintentional blur — only glow/light layers carry filter:blur(); every solid silhouette
-       (flame, logs, chairs, treeline, reflection blobs, sand path) is fully sharp, 0 blur.
+       (flame, logs, treeline, reflection blobs, sand path) is fully sharp, 0 blur.
     4. Tree line needs real height/shape variation across its run, not one repeated unit.
     5. Water/reflection must stay visibly present after safe-zone dimming — dimmed, not erased —
        and the safe-zone composition is baked in below (reflection + scrim sized in from the
-       start; every focal-tier element — flame, chairs, logs, groundGlow — is placed with its top
+       start; every focal-tier element — flame, logs, groundGlow — is placed with its top
        edge at or below stage y=73%, comfortably clear of the y=72% safe-area floor by
        construction, not by after-the-fact patching).
+
+  2026-07-27 fix round (Ben's four notes, post-critic-verdict): (1) chairs cut entirely — no fresh
+  critic evidence supported them this round and Ben's own read said they weren't working after
+  three prior attempts; the flame alone is enough of a focal point per themes.md's cut-or-
+  abstractify fallback. (2) flame/log compositing reworked — logs widened/thickened so the crossed
+  base actually reads and extends past the flame's own footprint, log crossing point moved to sit
+  under the flame's base for real base-then-flame layering. (3) water/reflection rebuilt: a
+  dedicated cool teal-navy `.waterBody` wash gives the lake its own hue family distinct from the
+  sand (was bleeding the sand gradient's tan straight into the reflection band); the flat CSS
+  scrim rectangle (a literal dead-straight-edge stacked-div tell per the FAIL evidence) is now a
+  blurred, wavy-edged SVG shape with uniform fill alpha (still no x-term in the dimming level, per
+  the round-3 linear-only lesson below — a flat fill has no directional falloff at all); a
+  shoreline stroke was added so the water/sand boundary is a visible line, not just a fade. (4)
+  treeline rebuilt as one continuous hand-authored jagged silhouette path (not stacked circles) —
+  real valleys dipping toward the baseline give genuine sky-gaps between crown clusters, and
+  conifer spikes now carry shoulder/flare points instead of sitting as bare isolated triangles.
+  Sky/star layer adopts `concepts/sonora-balloons-depth.html`'s specific star technique: each star
+  now dips fully to opacity 0 once per cycle and rerolls its position while invisible (same
+  silent-teleport-on-`animationiteration` mechanism), instead of sitting fixed forever.
 
   Safe-area (per references/themes.md): x20-80%, y28-72% of the stage. Kept open/quiet. The only
   element whose extent genuinely overlaps that box is the reflection band (a lake, sitting right
@@ -35,9 +54,9 @@
   the luminance floor on its own; verified with concepts/tools/assert-safe-zone-luminance.mjs
   (hardcoded to this exact filename) after building, not assumed.
 
-  No `rotate(` appears anywhere in this file, by construction (mirrored chair uses scaleX, the
-  shooting star uses a pre-angled SVG line + translate) — sidesteps the mandatory
-  rotation-angle-over-time evidence requirement entirely rather than needing it and skipping it.
+  No `rotate(` appears anywhere in this file, by construction (the shooting star uses a
+  pre-angled SVG line + translate) — sidesteps the mandatory rotation-angle-over-time evidence
+  requirement entirely rather than needing it and skipping it.
 -->
 <style>
   :root { color-scheme: dark; }
@@ -73,8 +92,11 @@
     box-shadow: 0 0 9px 3px rgba(255, 250, 240, 0.9);
     animation: starTwinkle 4s ease-in-out infinite;
   }
+  /* Dips fully to 0 once per cycle (fix-round: adapted directly from
+     concepts/sonora-balloons-depth.html's star technique) so a position reroll at that instant is
+     a silent teleport, never a visible jump — see the JS listener below. */
   @keyframes starTwinkle {
-    0%, 100% { opacity: var(--lo, 0.55); }
+    0%, 100% { opacity: 0; }
     50% { opacity: var(--hi, 1); }
   }
 
@@ -101,45 +123,59 @@
   .treelineWrap svg { width: 100%; height: 100%; display: block; }
   .treeline { fill: #04081b; }
 
-  /* ── 5. reflection (water) ── */
+  /* ── 5. water body (NEW, fix-round) — the lake's own cool/dark hue family, distinct from the
+     sand below it. Root cause of the FAIL evidence ("same tan/khaki hue as the sand... reads as
+     low haze on the ground"): the old sandGround gradient didn't go fully transparent until
+     y≈64%, which is INSIDE the reflection band's own vertical span (63-72%) — so sand's warm tone
+     was bleeding straight through behind the reflection the whole time. This wash gives the water
+     its own teal-navy identity (cooler/darker than the purple sky, unrelated to the sand's tan),
+     full-stage-width, fading transparent at both top and bottom per themes.md rule 6. ── */
+  .waterBody {
+    position: absolute; left: 0; top: 58%; width: 100%; height: 18%;
+    background: linear-gradient(to bottom,
+      rgba(9, 20, 40, 0) 0%,
+      rgba(8, 28, 46, 0.40) 24%,
+      rgba(6, 32, 48, 0.58) 50%,
+      rgba(8, 28, 46, 0.40) 76%,
+      rgba(9, 20, 40, 0) 100%);
+  }
+
+  /* ── 6. reflection (water) ── */
   .reflectionWrap { position: absolute; left: 20%; top: 63%; width: 60%; height: 9%; }
   .reflectionWrap svg { width: 100%; height: 100%; display: block; overflow: visible; }
   /* Deliberate, sanctioned blur — this is a lake/background-plane layer, the one category
      defect 3 explicitly allows distance-based softening on; real water reflections are soft. */
   .reflectionBody { filter: blur(3px); }
   .reflectionBlob { fill: #fff0d2; filter: blur(2.5px); }
+  /* Visible waterline/shore edge (FAIL fix (b): "no waterline, no shore edge") — a soft wavy
+     stroke, distinct from the glow blobs above, marking where the lake actually meets the shore. */
+  .reflectionShoreline { fill: none; stroke: rgba(255, 228, 188, 0.42); stroke-width: 2.5; filter: blur(1.5px); }
 
-  /* Linear-only scrim (never radial — see header note). Uniform across the whole width of its
-     own box, so it cannot reproduce the round-2 "bright at some x, dim at others" bug by
-     construction — there is no x-term in a `to bottom` gradient. */
-  .reflectionScrim {
-    /* Full stage width, not just the reflection's own x-span: a narrower box's left/right edges
-       cut across plain lake with nothing to hide the seam, which rendered as a visible hard
-       rectangle outline on the first pass. Full-width edges land at the stage's own frame
-       boundary instead, per references/themes.md rule 6's "fade only at the transitions that
-       are actually visible" pattern — only top/bottom need to fade, and they still do. */
-    position: absolute; left: 0; top: 62%; width: 100%; height: 11%;
-    background: linear-gradient(to bottom,
-      rgba(8,4,20,0) 0%,
-      rgba(8,4,20,0.72) 28%,
-      rgba(8,4,20,0.72) 72%,
-      rgba(8,4,20,0) 100%);
-  }
+  /* Scrim: wavy-edged SVG shape, not a CSS rectangle (FAIL fix (c) — the flat gradient rectangle
+     WAS the "dead-straight full-width horizontal cut... a stacked-div tell" the critic named).
+     Kept as a single UNIFORM fill-alpha path — no gradient at all inside it, so there is no x-term
+     AND no y-term to reproduce the round-2 "bright at some x, dim at others" bug; a flat fill is a
+     stricter guarantee of uniform dimming than the old linear-gradient rectangle was. The blur
+     softens the wavy silhouette's edges per rule 6 ("soft blend, never a hard edge"). */
+  .scrimWrap { position: absolute; left: 0; top: 62%; width: 100%; height: 11%; }
+  .scrimWrap svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .scrimShape { fill: rgba(8, 4, 20, 0.62); filter: blur(7px); }
 
-  /* ── 6. sand ground — flat gradient, no mound (references/themes.md rule 6: a raised terrain
-     mound reads as a weird hill, rejected precedent). Fully transparent by stage y≈64%, well
-     clear of the safe-area floor at y72%. ── */
+  /* ── 7. sand ground — flat gradient, no mound (references/themes.md rule 6: a raised terrain
+     mound reads as a weird hill, rejected precedent). Transparent point moved from y≈64% to
+     y≈74% (fix-round) so it clears the reflection band's full extent (63-72%) with real margin —
+     the old 64% cutoff sat INSIDE that band, which is the sand-bleed root cause fixed above. ── */
   .sandGround {
     background: linear-gradient(to top,
-      #7c4e28 0%, #96622f 8%, #a5713f 15%, #c08a54 22%, transparent 36%);
+      #7c4e28 0%, #8f5c2c 6%, #9f6836 12%, #ac7440 18%, transparent 26%);
   }
 
-  /* ── 7. sand path — confined to y75-99%, entirely below the safe-area floor by construction ── */
+  /* ── 8. sand path — confined to y75-99%, entirely below the safe-area floor by construction ── */
   .sandPathWrap { position: absolute; left: 0; top: 74%; width: 42%; height: 26%; }
   .sandPathWrap svg { width: 100%; height: 100%; display: block; overflow: visible; }
   .sandPath { fill: none; stroke: #c9946a; stroke-width: 14; stroke-linecap: round; stroke-linejoin: round; }
 
-  /* ── 8. ground glow (firelit sand patch) — glow-light, iconic, ground-anchored ── */
+  /* ── 9. ground glow (firelit sand patch) — glow-light, iconic, ground-anchored ── */
   .groundGlow {
     position: absolute; left: 36%; top: 88%; width: 28%; height: 11%;
     background: radial-gradient(ellipse 42% 65% at 50% 82%,
@@ -147,13 +183,17 @@
     filter: blur(6px);
   }
 
-  /* ── 9. logs ── */
-  .logsWrap { position: absolute; left: 44%; top: 88%; width: 12%; height: 9%; }
+  /* ── 10. logs — widened/thickened so the crossed base actually reads and extends past the
+     flame's own footprint on both sides (the prior narrow, thin-stroke logs rendered as two
+     nearly-invisible ticks under the flame, which is why the fire never read as rising OUT of a
+     log base — see fix-round note at top of file). Crossing point positioned so it sits under
+     the flame's own base for real base-then-flame layering. ── */
+  .logsWrap { position: absolute; left: 36%; top: 88%; width: 28%; height: 14%; }
   .logsWrap svg { width: 100%; height: 100%; display: block; overflow: visible; }
-  .log { stroke: #4a1710; stroke-width: 15; stroke-linecap: round; fill: none; }
-  .log.hi { stroke: #6b2814; }
+  .log { stroke: #4a1710; stroke-width: 22; stroke-linecap: round; fill: none; }
+  .log.hi { stroke: #6f2c16; }
 
-  /* ── 10. flame ── */
+  /* ── 11. flame ── */
   .flameGlow {
     position: absolute; left: 39%; top: 73%; width: 22%; height: 23%;
     background: radial-gradient(ellipse 42% 55% at 50% 80%,
@@ -184,7 +224,7 @@
   .poolPulse { animation: poolPulse 2.6s ease-in-out infinite; animation-delay: -0.55s; }
   @keyframes poolPulse { 0%,100% { opacity: 0.7; } 50% { opacity: 1; } }
 
-  /* ── 11. embers — confined to y76-99%, never crossing the safe-area floor, sidestepping the
+  /* ── 12. embers — confined to y76-99%, never crossing the safe-area floor, sidestepping the
      eased-timeline/masking saga entirely by never needing it ── */
   .ember {
     position: absolute;
@@ -199,19 +239,6 @@
     80%  { opacity: 0.5; }
     100% { transform: translate(var(--dx, 1cqw), -9cqh); opacity: 0; }
   }
-
-  /* ── 12. chairs ── */
-  .chairWrap svg { width: 100%; height: 100%; display: block; overflow: visible; }
-  .chairLeft { position: absolute; left: 21%; top: 74%; width: 18%; height: 24%; }
-  .chairRight { position: absolute; left: 61%; top: 75%; width: 17%; height: 23%; transform: scaleX(-1); }
-  .chairFabric { fill: #5a2515; stroke: #3a1509; stroke-width: 4; }
-  .chairFabricLight { fill: #7a3520; stroke: #3a1509; stroke-width: 4; }
-  .chairLeg { stroke: #caa06a; stroke-width: 11; stroke-linecap: round; fill: none; }
-  .chairLegBack { stroke: #a67e4c; stroke-width: 10; stroke-linecap: round; fill: none; }
-  .chairLegCasing { stroke: #2c1006; stroke-width: 15; stroke-linecap: round; fill: none; }
-  .chairShadow { fill: rgba(5,2,10,0.4); }
-  .chairSeam { fill: none; stroke: #3a1509; stroke-width: 2.5; opacity: 0.7; }
-  .chairRim { fill: none; stroke: #a4593a; stroke-width: 2.5; opacity: 0.8; }
 
   /* ── 13. vignette — two edge-to-edge linear gradients, sidesteps the radial-margin check
      entirely (a vignette's dark color is SUPPOSED to reach the box edge) ── */
@@ -258,11 +285,12 @@
   <!-- PASS = a fresh viewer names this as a distant tree line / forest silhouette along the shore. -->
   <div class="treelineWrap">
     <svg viewBox="0 0 1600 200" preserveAspectRatio="none">
-      <rect class="treeline" x="0" y="168" width="1600" height="32"/>
-      <g id="treeCrowns" class="treeline"></g>
-      <g id="treeSpikes" class="treeline"></g>
+      <path id="treeCanopy" class="treeline"></path>
     </svg>
   </div>
+
+  <!-- water's own cool hue family, distinct from the sand — see fix-round note at top of file -->
+  <div class="waterBody"></div>
 
   <!-- ELEMENT: reflection -->
   <!-- PASS = a fresh viewer names this as firelight reflected/shimmering on the water. -->
@@ -291,9 +319,22 @@
       <ellipse class="reflectionBlob" cx="230" cy="40" rx="70" ry="6" opacity="0.5"/>
       <ellipse class="reflectionBlob" cx="470" cy="46" rx="85" ry="7" opacity="0.6"/>
       <ellipse class="reflectionBlob" cx="620" cy="36" rx="55" ry="5" opacity="0.45"/>
+      <!-- shoreline: a visible wavy edge where the water meets the shore (FAIL fix (b)) -->
+      <path class="reflectionShoreline" d="
+        M 20,72 C 90,64 160,78 240,66 C 320,56 380,74 440,64
+        C 500,56 560,72 620,62 C 680,54 730,60 780,58"/>
     </svg>
   </div>
-  <div class="reflectionScrim"></div>
+  <div class="scrimWrap">
+    <svg viewBox="0 0 1600 140" preserveAspectRatio="none">
+      <path class="scrimShape" d="
+        M 0,20 C 120,10 240,34 380,18 C 520,4 640,30 780,14
+        C 900,2 1020,26 1160,12 C 1300,0 1420,22 1600,10
+        L 1600,120 C 1460,132 1340,108 1200,124
+        C 1060,138 940,114 800,126 C 660,140 540,116 400,128
+        C 260,138 140,116 0,126 Z"/>
+    </svg>
+  </div>
 
   <div class="layer sandGround"></div>
 
@@ -310,9 +351,10 @@
   <!-- ELEMENT: logs -->
   <!-- PASS = a fresh viewer names this as crossed logs at the base of a campfire. -->
   <div class="logsWrap">
-    <svg viewBox="0 0 200 140" overflow="visible">
-      <line class="log"    x1="20" y1="115" x2="175" y2="70"/>
-      <line class="log hi" x1="15" y1="80"  x2="182" y2="120"/>
+    <svg viewBox="0 0 200 100" overflow="visible">
+      <line class="log"    x1="6"  y1="72" x2="194" y2="30"/>
+      <line class="log hi" x1="10" y1="28" x2="190" y2="78"/>
+      <circle cx="100" cy="50" r="7" fill="#7a5a34" stroke="#2c1006" stroke-width="2.5"/>
     </svg>
   </div>
 
@@ -383,122 +425,101 @@
 
   <div id="embers"></div>
 
-  <!-- ELEMENT: chairs -->
-  <!-- PASS = a fresh viewer names this as two empty camp chairs facing the fire. -->
-  <div class="chairWrap chairLeft">
-    <svg viewBox="0 0 200 260">
-      <ellipse class="chairShadow" cx="100" cy="248" rx="72" ry="11"/>
-      <!-- back legs (rear pair, crossing under the seat) — dark casing pass first for contrast -->
-      <line class="chairLegCasing" x1="72" y1="150" x2="168" y2="244"/>
-      <line class="chairLegCasing" x1="128" y1="150" x2="32" y2="244"/>
-      <line class="chairLegBack" x1="72" y1="150" x2="168" y2="244"/>
-      <line class="chairLegBack" x1="128" y1="150" x2="32" y2="244"/>
-      <!-- front legs -->
-      <line class="chairLegCasing" x1="48" y1="168" x2="28" y2="246"/>
-      <line class="chairLegCasing" x1="152" y1="168" x2="172" y2="246"/>
-      <line class="chairLeg" x1="48" y1="168" x2="28" y2="246"/>
-      <line class="chairLeg" x1="152" y1="168" x2="172" y2="246"/>
-      <circle cx="100" cy="200" r="6" fill="#8a6a3e" stroke="#3a1509" stroke-width="2"/>
-      <!-- seat panel -->
-      <path class="chairFabricLight" d="M 55,132 L 145,132 L 168,168 L 32,168 Z"/>
-      <!-- back panel: flatter-topped sling-back shape (not a full round tombstone arch) -->
-      <path class="chairFabric" d="
-        M 54,140
-        C 50,118 48,52 62,30
-        C 72,16 128,16 138,30
-        C 152,52 150,118 146,140
-        C 132,148 68,148 54,140 Z"/>
-      <!-- fabric seam + top rim highlight for texture/presence -->
-      <path class="chairSeam" d="M 60,78 C 80,84 120,84 140,78"/>
-      <path class="chairRim" d="M 66,32 C 78,20 122,20 134,32"/>
-    </svg>
-  </div>
-
-  <div class="chairWrap chairRight">
-    <svg viewBox="0 0 200 260">
-      <ellipse class="chairShadow" cx="100" cy="248" rx="70" ry="11"/>
-      <line class="chairLegCasing" x1="72" y1="150" x2="168" y2="244"/>
-      <line class="chairLegCasing" x1="128" y1="150" x2="32" y2="244"/>
-      <line class="chairLegBack" x1="72" y1="150" x2="168" y2="244"/>
-      <line class="chairLegBack" x1="128" y1="150" x2="32" y2="244"/>
-      <line class="chairLegCasing" x1="48" y1="168" x2="28" y2="246"/>
-      <line class="chairLegCasing" x1="152" y1="168" x2="172" y2="246"/>
-      <line class="chairLeg" x1="48" y1="168" x2="28" y2="246"/>
-      <line class="chairLeg" x1="152" y1="168" x2="172" y2="246"/>
-      <circle cx="100" cy="200" r="6" fill="#8a6a3e" stroke="#3a1509" stroke-width="2"/>
-      <path class="chairFabricLight" d="M 55,132 L 145,132 L 168,168 L 32,168 Z"/>
-      <path class="chairFabric" d="
-        M 54,140
-        C 50,118 48,52 62,30
-        C 72,16 128,16 138,30
-        C 152,52 150,118 146,140
-        C 132,148 68,148 54,140 Z"/>
-      <path class="chairSeam" d="M 60,78 C 80,84 120,84 140,78"/>
-      <path class="chairRim" d="M 66,32 C 78,20 122,20 134,32"/>
-    </svg>
-  </div>
-
   <div class="layer vignette"></div>
 
 </div>
 
 <script>
-  // Stars: hand-placed, mostly y3-26% (well clear of the y28-72% safe-area), a few sparse ones
-  // dip to y30-33% but stay dim enough (--lo/--hi kept low) to clear the luminance floor there.
+  // Stars: hand-placed initial positions, mostly y3-26% (well clear of the y28-72% safe-area).
+  // Fix-round: adapted from concepts/sonora-balloons-depth.html's star technique — each star's
+  // own keyframe now dips fully to opacity 0 once per cycle (see starTwinkle above), and an
+  // 'animationiteration' listener rerolls its position at exactly that instant, i.e. while
+  // invisible, so the reroll is a silent teleport, never a visible jump (same rest-point-reroll
+  // pattern sonora-balloons-depth.html uses for its own stars, "come in and out, random places").
+  // Reroll range (x 2-98%, y 2-26%) mirrors the hand-verified band the original STARS array
+  // already stayed inside, so this can't regress the safe-zone luminance check.
   const STARS = [
-    [4,6,3,0.65,1],[9,14,4,0.55,0.95],[14,4,3,0.7,1],[19,19,3,0.6,0.95],
-    [24,9,4,0.55,0.92],[29,16,3,0.65,1],[35,5,4,0.6,1],[41,22,3,0.55,0.9],
-    [47,11,4,0.65,1],[53,7,3,0.55,0.95],[58,18,4,0.6,1],[64,4,3,0.65,0.95],
-    [70,13,4,0.55,0.95],[76,20,3,0.65,1],[82,8,4,0.6,1],[87,15,3,0.55,0.92],
-    [93,6,4,0.65,1],[97,17,3,0.55,0.95],[12,25,2,0.45,0.75],[62,26,2,0.45,0.75],
-    [88,25,2,0.45,0.77],[3,20,3,0.5,0.82],[45,3,4,0.65,1],[68,24,2,0.45,0.75]
+    [4,6,3,1],[9,14,4,0.95],[14,4,3,1],[19,19,3,0.95],
+    [24,9,4,0.92],[29,16,3,1],[35,5,4,1],[41,22,3,0.9],
+    [47,11,4,1],[53,7,3,0.95],[58,18,4,1],[64,4,3,0.95],
+    [70,13,4,0.95],[76,20,3,1],[82,8,4,1],[87,15,3,0.92],
+    [93,6,4,1],[97,17,3,0.95],[12,25,2,0.75],[62,26,2,0.75],
+    [88,25,2,0.77],[3,20,3,0.82],[45,3,4,1],[68,24,2,0.75]
   ];
   const starsHost = document.getElementById('stars');
-  STARS.forEach(([x,y,size,lo,hi],i) => {
+  STARS.forEach(([x,y,size,hi],i) => {
     const el = document.createElement('div');
     el.className = 'star';
     el.style.left = x + '%';
     el.style.top = y + '%';
     el.style.width = size + 'px';
     el.style.height = size + 'px';
-    el.style.setProperty('--lo', lo);
     el.style.setProperty('--hi', hi);
-    el.style.animationDuration = (3.2 + (i % 7) * 0.5) + 's';
+    el.style.animationDuration = (5 + (i % 9)) + 's';
     el.style.animationDelay = (-(i * 0.83)) + 's';
+    el.addEventListener('animationiteration', () => {
+      el.style.left = (2 + Math.random() * 96).toFixed(2) + '%';
+      el.style.top = (2 + Math.random() * 24).toFixed(2) + '%';
+    });
     starsHost.appendChild(el);
   });
 
-  // Treeline: overlapping rounded crown clumps (real forest-edge silhouette — bumpy/rounded, not
-  // mountains) + a handful of taller narrow conifer spikes at irregular positions, so the shape
-  // has genuine per-clump height/width variation instead of one repeated scalloped unit. cy/r
-  // both vary per clump; a solid base rect underneath (in the markup) fills any gaps between
-  // clump bottoms so the silhouette reads as one continuous tree line, not floating circles.
-  const SVG_NS = 'http://www.w3.org/2000/svg';
-  const CROWNS = [ // [cx, cy, r]
-    [10,178,22],[46,172,30],[86,180,18],[118,168,34],[156,176,24],[196,170,38],
-    [238,179,20],[272,166,42],[312,174,26],[352,181,17],[388,169,36],[428,177,23],
-    [464,171,33],[500,180,19],[536,165,45],[578,175,27],[614,182,16],[650,168,39],
-    [690,176,24],[726,170,35],[764,179,21],[800,167,41],[838,174,28],[876,181,18],
-    [912,169,37],[950,177,25],[988,171,32],[1026,180,20],[1064,166,44],[1104,175,26],
-    [1142,182,17],[1178,168,38],[1216,176,23],[1254,171,34],[1292,179,19],[1330,165,46],
-    [1370,175,27],[1408,181,16],[1446,169,40],[1484,177,24],[1522,172,31],[1560,180,20],
-    [1596,168,28]
+  // Treeline: ONE continuous hand-authored jagged silhouette (fix-round rebuild — the prior
+  // overlapping-circle-clump approach read as "a continuous band of smooth rounded humps... a row
+  // of identical smooth circular domes," per the FAIL evidence). Straight-line (L) segments only,
+  // deliberately not curve-smoothed — jaggedness reads as trees, smoothness reads as hills, which
+  // was the core complaint. Real valleys (points dipping to y~180-186, close to the y=200
+  // baseline) recur across the run so there is genuine negative sky-space between crown clusters,
+  // not just thinner overlap. Conifer spikes are embedded INSIDE clusters with shoulder points on
+  // both sides (a dip-then-sharp-rise-then-dip, not a bare isolated triangle sitting on top), so
+  // they read as branch-flared conifers rather than "hairline pins/antennae."
+  const TREE_CANOPY_PTS = [
+    [-20,186],
+    [10,150],[26,168],[44,132],[60,158],
+    [82,183],
+    [104,110],[112,150],[122,96],[132,150],
+    [150,180],
+    [172,145],[190,120],[206,155],[222,128],[240,162],
+    [262,184],
+    [284,105],[292,148],
+    [312,175],
+    [334,138],[352,118],[368,148],[386,124],[404,158],
+    [426,182],
+    [448,160],[466,130],[484,168],
+    [504,186],
+    [526,100],[534,146],
+    [552,172],
+    [574,142],[592,116],[608,152],[624,122],[642,160],
+    [664,183],
+    [686,150],[702,170],[718,134],
+    [738,185],
+    [760,108],[768,150],
+    [788,178],
+    [810,140],[828,116],[844,150],[862,126],[880,158],
+    [902,184],
+    [924,155],[940,175],[956,132],
+    [976,186],
+    [998,102],[1006,148],
+    [1026,174],
+    [1048,140],[1066,118],[1082,152],[1100,124],[1118,160],
+    [1140,183],
+    [1162,148],[1178,168],[1194,130],
+    [1214,185],
+    [1236,106],[1244,150],
+    [1264,176],
+    [1286,142],[1304,116],[1320,150],[1338,122],[1356,158],
+    [1378,184],
+    [1400,152],[1416,172],[1432,134],
+    [1454,186],
+    [1476,112],[1484,150],
+    [1504,178],
+    [1526,140],[1544,118],[1560,150],[1578,126],[1620,158]
   ];
-  const SPIKES = [ // [cx, tipY, halfWidth]  baseline at y=178
-    [130,44,11],[340,68,9],[506,30,13],[700,60,10],[930,40,12],[1180,64,9],[1440,36,12]
-  ];
-  const crownsHost = document.getElementById('treeCrowns');
-  CROWNS.forEach(([cx,cy,r]) => {
-    const c = document.createElementNS(SVG_NS,'circle');
-    c.setAttribute('cx',cx); c.setAttribute('cy',cy); c.setAttribute('r',r);
-    crownsHost.appendChild(c);
-  });
-  const spikesHost = document.getElementById('treeSpikes');
-  SPIKES.forEach(([cx,tipY,hw]) => {
-    const p = document.createElementNS(SVG_NS,'polygon');
-    p.setAttribute('points', `${cx-hw},178 ${cx},${tipY} ${cx+hw},178`);
-    spikesHost.appendChild(p);
-  });
+  const canopyHost = document.getElementById('treeCanopy');
+  let canopyD = `M ${TREE_CANOPY_PTS[0][0]},${TREE_CANOPY_PTS[0][1]}`;
+  for (let i = 1; i < TREE_CANOPY_PTS.length; i++) canopyD += ` L ${TREE_CANOPY_PTS[i][0]},${TREE_CANOPY_PTS[i][1]}`;
+  canopyD += ' L 1620,200 L -20,200 Z';
+  canopyHost.setAttribute('d', canopyD);
 
   // Embers: rise confined to y76-99% of the stage (never above y76%, a 4pp margin below the
   // safe-area's y72 floor), so no eased-timeline masking is needed at all.
