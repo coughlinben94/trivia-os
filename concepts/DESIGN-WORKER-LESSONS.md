@@ -1,0 +1,171 @@
+# Design Worker — Lessons
+
+Read this file in full before starting any visual/ambient/design task in Trivia OS. Update it
+after every real failure or fix — not every task, only when something actually went wrong or a
+genuinely new pattern got confirmed. Same cap discipline as `concepts/LESSONS.md`: at most 10
+active directives below "Established Conventions." When a normal run would push past 10, fold
+the oldest into a one-line addition to Established Conventions and drop the verbatim original.
+
+This file is scoped to the design worker only (ambient themes, round-journey visuals, hand-coded
+shapes, Recraft assets). It does not replace `concepts/LESSONS.md` (the nightly round-journey
+storybook pipeline's own feedback loop) — that one stays as-is.
+
+**2026-07-26 status change, per external audit:** this file is now config and human-readable
+history, not enforcement. The mechanical layer — `.claude/hooks/geometry-lint.mjs`,
+`.claude/hooks/design-done-gate.mjs`, the `trivia-os-design-critic` agent, and
+`concepts/.design-attempt-counts.json` (all write-denied to the design-worker agent at the
+permissions level) — is what actually enforces anything now. This file's own Active Directives
+section previously contained an arithmetic error about the exact incident it was written to
+prevent (see the corrected entry below) — a live demonstration of why prose self-review wasn't
+sufficient on its own.
+
+## What has worked (confirmed-good, keep doing this)
+
+Short list on purpose — most attempts in this project's history have failed or partially failed.
+Don't read the shortness as "nothing works"; read it as "these are the few load-bearing patterns,
+lean on them before trying anything new."
+
+- **Recraft-generated art for anything figurative/contour-identifiable, isolation-validated before
+  it touches a scene.** Firefly Summer's oak: 3 hand-coded attempts failed, 1 Recraft pass fixed
+  it outright. Pond water: hand-coded fill failed 6 non-converging ways, 1 generated raster
+  texture (plus a dark scrim) was the only version that stopped reading as "a wall/court/pool."
+- **A single soft glow blob as an abstract fire/light stand-in** (autumn-harvest theme) — this
+  project's one other real fire, confirmed good, never re-litigated. The lesson taken from it for
+  Campfire Sing-Along was narrower: keep this abstract-glow approach, don't upgrade to a literal
+  animated flame silhouette (that's the swing's failure category, not this one's).
+  Note this is one theme's element, not the flame's own full solution — Campfire's flame is still
+  mid-fix as of 2026-07-26; see Active Directives.
+- **Asymmetric pairs beat matched pairs.** Firefly Summer's two pond-deck lanterns (different
+  height/size/sway amplitude/period) passed Fable checkpoint B outright — the first checkpoint in
+  either build to pass without surfacing a real defect. A prior matched/mirrored version would
+  have repeated the "dead-center/mirror composition" mistake this project explicitly flags.
+  Full-width rail + baluster occlusion did the same job for "selling the vantage" that the earlier
+  under-scoped single-corner rail stub couldn't.
+- **Rotation-angle-over-time sampling for anything that's supposed to swing/sway subtly.** The
+  only assertion technique in this project's history proven to catch a real invisible-motion bug
+  (the meadow swing's near-motionless sway went undetected across 27/27 position-only PASSes for
+  many rounds; the same swing, once resampled by rotation angle, immediately showed the gap).
+- **A ground-anchored light-pool that lags the light source instead of strobing in sync with it**
+  (Campfire's ember-lit ground glow, per an Opus review that found a single strobing blob wasn't
+  convincing on its own).
+
+## What has failed (confirmed-bad, do not retry as-is)
+
+- **Hand-typed rope/cord that stays thick, wood-toned, and visible its whole run.** Reads as a
+  rigid post/crane boom, not slack cord — failed across all 7 Fable-verified rounds of the meadow
+  swing. A written rule requiring "vertical, parallel, visible whole run" forecloses the sag/taper
+  that would have sold rope; don't write that rule again for a cord/rope element.
+- **Hand-coded flat rectangular/trapezoid water fill for a pond/lake/ocean surface.** Failed 4
+  distinct, non-converging ways (wall → sports court/pool with "lane line" streaks → still
+  pool/ice-rink-reading blob reflections → correctly-graduated blur that still didn't register as
+  intentional). Start any future water surface with generated raster texture, not a hand-coded
+  fill.
+- **A single blur value applied uniformly across an entire scene ("blur floor" applied too
+  literally).** Firefly Summer's pond attempt 3 used uniform 1.5px blur everywhere and it read as
+  "the whole frame is out of focus," not a deliberate depth style — the floor is a *minimum*, not
+  a target; foreground/background still need to graduate (attempt 4 tried ~1.6-2.4px foreground /
+  ~3.4-4.5px background, which fixed the "out of focus" complaint even though the underlying pond
+  shape complaint was separate and unresolved).
+- **`box-shadow` as a stand-in for a soft radial glow on a non-rounded element.** Renders a
+  blurred rectangle, not a glow — see the box-shadow convention below. Confirmed as (at minimum) a
+  contributing cause of Campfire's flame reading as "a lit rectangle."
+- **Radial-gradient ellipse radii sized without checking `center ± radius` against the box's own
+  edges.** Same Campfire flame bug, independent of the box-shadow issue above — the gradient
+  stops themselves never reached transparent before the box's edges cut them off on 2 of 3 layers,
+  worst on the brightest/most-visible one.
+- **A radial-gradient scrim sized without checking its radius against the *target shape's own
+  extent* — the inverse of the overrun bug above.** Campfire's `#reflectionScrim` (dimming the
+  fire-reflection streak where it crosses the question safe-area) fit cleanly inside its own box
+  (geometry-lint gave it a real margin) but its radius was far smaller than the reflection's actual
+  bbox: `ry` resolved to only ~4.2% of stage height against a reflection that was ~6.6% tall, so the
+  gradient's dark color decayed to near-transparent well before covering the shape, and its bottom
+  ~1.4% sat entirely past the 100% stop. Direct pixel-sampling of the rendered PNG (not a re-read of
+  the CSS) confirmed it: the brightest reflection pixel inside the protected zone was 238,184,134 —
+  a ~4-point luminance difference out of 255 from the raw undimmed fill (249,178,110), i.e. no
+  visible dimming, matching two independent design-critic FAILs that found the same thing by eye.
+  Checking a gradient's margin against its own box is necessary but not sufficient — also check its
+  radius against the real half-extents of whatever it's supposed to cover, from the shape's own
+  measured bbox, not an eyeballed guess.
+
+## Established Conventions
+
+- **Radial-gradient-in-a-box must be checked with real math, not eyeballed.** A `radial-gradient`
+  ellipse's percentage radii are relative to the element's own box width/height. If
+  `center ± radius` (computed per axis) falls outside the box on any side the design needs to
+  taper (usually top/left/right; bottom is often fine to leave open if it's the object's anchor
+  point), that side never reaches `transparent` before the box edge cuts it off — the box's own
+  rectangular boundary becomes visible as a hard edge. This reads as "a lit rectangle," not the
+  intended shape. Compute `center_x ± (radius_x% * width)` and `center_y ± (radius_y% * height)`
+  explicitly for every stop before shipping; leave real margin (aim for 5-15%), don't rely on the
+  gradient stop reaching exactly 100%.
+- **`box-shadow` on a plain (non-rounded) div follows that div's rectangular shape.** A soft glow
+  effect built as `box-shadow: 0 0 <blur> <spread> <color>` on an element with no `border-radius`
+  renders a blurred rectangle, not a blurred glow. If the intent is an ambient soft-glow halo, use
+  a separate radial-gradient layer (own box, own margin math above) or set `border-radius: 50%`
+  on that specific element first.
+- **Hand-typed figurative shapes (rope, swing, treeline, literal flame silhouette) are the highest
+  failure-rate category in this project.** Firefly Summer's swing passed 27/27 locked numeric
+  checks and still read as a crane boom after 7 rounds; two Recraft-generated replacements (oak,
+  pond water) each fixed on the first or near-first pass what hand-coding couldn't converge on in
+  3-6 rounds. Classify every element with the noun test (`concepts/OBJECT-RENDERING-PROTOCOL.md`)
+  before writing a line of code. Anything a guest would identify by contour or joints escalates to
+  generated + isolation-validated art. Only truly one-sentence-of-geometry shapes (disc, beam, flat
+  gradient plane, glowing dot) get hand-coded.
+- **Blur-floor rule: every element in a bespoke ambient scene needs ≥1.5px blur, no exceptions.**
+  A rendering-technique mismatch (one sharp-vector element next to everything-else-soft) reads as
+  visibly wrong even when the shape itself is correct — this is a separate failure mode from a bad
+  shape, and needs its own explicit check.
+- **A position-only assertion cannot verify motion that's supposed to be subtle.** Small-angle
+  swings/sways can move a bounding box only 1-2% of stage width — inside typical position
+  tolerance — and pass numerically while being visually motionless. Any assertion covering
+  rotation/sway must sample the actual transform (e.g. `getComputedStyle(...).transform` converted
+  to an angle) over multiple real-time points across a full period, not just position.
+- **Verification-before-completion is not optional for visual work, ever.** "Code parses, timing
+  hits spec, safe-area math clears" is not the same claim as "I rendered this and looked at it."
+  Do not report a visual task done without an actual render + look step (Chrome MCP screenshot,
+  or a real headless capture) in the same turn.
+
+## Active Directives
+
+- 2026-07-26 (corrected 2026-07-26, same day — see status note at top of file): Campfire
+  Sing-Along's flame rendered as "a lit rectangle" on first ship. Root cause, confirmed by
+  `.claude/hooks/geometry-lint.mjs` run against the actual code (not eyeballed): of the three
+  flame `GlowLayer` radial gradients, the two brightest layers (`ellipse 70% 85% at 50% 78%` and
+  `ellipse 58% 72% at 50% 82%`) genuinely overran the flame wrapper's left/right edges (and, for
+  the brightest layer, the top edge too) before reaching `transparent` — real overruns, up to
+  30 percentage points on the worst one. **The third, dimmest layer (`ellipse 46% 60% at 50%
+  86%`) does NOT overrun** — its horizontal margin is a real but thin ~4%, a near-miss the linter
+  now grades WARN rather than FAIL. That layer's actual, confirmed defect is independent: it
+  carried a `box-shadow: 0 0 5vw 1.5vw ...` on a plain rectangular div with no `border-radius`
+  (see the box-shadow convention above) — a blurred-rectangle-not-a-glow bug, caught by the
+  linter's second check, not the gradient-margin one. The original version of this entry claimed
+  "all three gradients overran by 4-20%," which was wrong for this layer; an external audit
+  caught the error by hand-checking the math, and `geometry-lint.mjs` now confirms the audit's
+  correction mechanically. Fix applied same session: recomputed the two overrunning gradients'
+  radii/centers with real margin, removed the box-shadow in favor of a separate wide/blurred
+  ambient bloom layer, and added `filter: blur()` as a mechanical safety net. **Not yet
+  re-verified by an actual render + look, and not yet re-checked against the fixed
+  `geometry-lint.mjs`** — do not report this fixed until both happen. If a fresh visual check
+  still fails on this same hand-coded flame approach, that is strike two on this element — now
+  tracked mechanically in `concepts/.design-attempt-counts.json`, not just by memory.
+
+- 2026-07-27: **Flame directive above, closed out.** `trivia-os-design-critic` ran 3/3 PASS on the
+  flame (per the dispatching session, which runs the critic manually since the automated done-gate
+  hook doesn't reliably fire for background Agent-tool dispatches). No action needed — the fix that
+  got it there (real margin math per gradient, no `box-shadow`, `filter: blur()` as a mechanical
+  floor) is already captured in Established Conventions above.
+
+- 2026-07-27: **Reflection-dimming scrim (`#reflectionScrim`) — fixed and self-reverified, not yet
+  critic-reverified.** Root cause: see the new "What has failed" entry above (radius too small for
+  the target shape, the inverse of the flame's overrun bug). Fix applied same session: widened the
+  scrim's box/ellipse (box `18%,63%,66%,17%`; `ellipse 40.9% 27.6% at 50.3% 44.9%`) so its radius
+  actually spans the reflection's real half-extents (dx≈18.9%, dy≈3.3% from center), and added a
+  third gradient stop (0%/50%/70%/100%) so alpha stays ≥0.35 out to 70% of the radius instead of
+  crashing near-zero by the midpoint. Re-rendered and re-sampled the exact pixel the critics'
+  worst case landed on: 238,184,134 (lum 191.87, no differential) before the fix → 144,116,98
+  (lum 120.7, a real ~37% luminance drop) after, at the identical stage coordinate (x57.75%,
+  y71.9%). Zone-wide average luminance dropped 73.4→55.9. `geometry-lint.mjs` clean (0 FAIL/0 WARN,
+  including the new gradient's margins). **Not yet re-verified by the `trivia-os-design-critic`
+  gate** — that re-check belongs to the dispatching session per this project's standing rule that
+  the authoring agent cannot self-certify. If the critic still finds no real differential on a
+  fresh pixel-sample, that's strike two on this element.

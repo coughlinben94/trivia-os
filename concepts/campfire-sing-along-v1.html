@@ -111,19 +111,33 @@
   }
 
   /* ---- reflection dimming scrim: only the part inside the question safe-area needs this ----
-     Radial (not a hard-edged rectangular fade) so there's no visible box seam across the
-     streak — a straight linear fade box left a visible horizontal line partway down the
-     reflection on the first pass (the exact "banded rectangle" pattern themes.md warns
-     against for zone layers). Box padded beyond the reflection's own bbox (26-76% x,
-     63-77% y vs. the reflection's actual 32.3-70.1%/67.34-73.94%) so the ellipse's margin
-     math checks out per the established radial-gradient convention: left/right/top margins
-     are real (8%/8%/8%); bottom is intentionally unscored, repurposed here for "fades toward
-     the un-dimmed area below the zone," not a ground anchor — same exemption, different
-     reason, noted in the spec. */
+     FIX (2026-07-27): the first version's ellipse radius (ry=30% of a 14%-tall box = only
+     4.2% of stage height) decayed to near-zero alpha well before covering the reflection's
+     real extent. Direct pixel-sampling of the rendered PNG (not just re-reading the CSS)
+     confirmed it: the brightest reflection pixel found inside the y28-72% safe-area band
+     measured 238,184,134 vs the raw undimmed fill 249,178,110 — a ~4-point luminance
+     differential out of 255, i.e. no visible dimming, matching two independent design-critic
+     FAILs that found the same thing by eye. Root cause: the gradient's dark color only
+     existed between stage-y 64.12-72.52% (center 68.32% ± Ry 4.2%), but the reflection's
+     actual bbox is 67.34-73.94% — so the bottom ~1.4% of the streak sat entirely past the
+     ellipse's 100% stop (untouched by design of the math, not a z-order/paint bug), and even
+     within the covered span, alpha fell off so fast that a point at 91% of the normalized
+     radius (well within the reflection's own bbox) was already down to ~6% alpha.
+     Refit: box widened to 66%x17% (x18-84%, y63-80%) so the ellipse's own radius
+     (Rx=27%, Ry=4.7% of stage, i.e. 40.9%/27.6% of the box) can actually span the
+     reflection's real half-extents (dx=18.9%, dy=3.3% from its center at 51.2%,70.64%)
+     while still tapering to transparent with real margin before the box edge (~6-9% of box
+     width each side; ~17-27% of box height top/bottom). Three gradient stops (0%/50%/70%)
+     instead of two so alpha stays ≥0.35 out to 70% of the radius — the previous single
+     midpoint stop let alpha crash to near-zero well before covering the shape. Verified by
+     re-rendering + re-sampling the same region after this change (see commit message) —
+     center-of-zone pixel and worst-observed-bright pixel both now show a real drop
+     (roughly 188→70-125 depending on position), not just a math claim. Radial (not a
+     hard-edged rectangular fade) so there's still no visible box seam across the streak. */
   #reflectionScrim{
-    position:absolute; left:26%; top:63%; width:50%; height:14%;
+    position:absolute; left:18%; top:63%; width:66%; height:17%;
     z-index:11; pointer-events:none;
-    background:radial-gradient(ellipse 42% 30% at 50% 38%, rgba(8,4,20,0.68) 0%, rgba(8,4,20,0.38) 45%, rgba(8,4,20,0) 100%);
+    background:radial-gradient(ellipse 40.9% 27.6% at 50.3% 44.9%, rgba(8,4,20,0.75) 0%, rgba(8,4,20,0.55) 50%, rgba(8,4,20,0.35) 70%, rgba(8,4,20,0) 100%);
   }
 
   /* ---- stars ---- */
@@ -302,7 +316,8 @@ Anchor = the flame (traced silhouette + hot near-white core + separate ambient-b
   The Recraft source's own internal layout puts the fire/chairs roughly mid-frame (flame tip at 70.6% of the source's own height, chairs from ~74-97%) — which would sit squarely inside <code>references/themes.md</code>'s hard 20-80%/28-72% question safe-area if used at native scale. Rather than hand-editing any traced path's coordinates (which would break "the vector is the geometry source of truth"), the entire traced assembly is displayed as one uniformly-compressed block (a single CSS <code>width:100%; height:86.87%</code> on the wrapping <code>&lt;svg&gt;</code>, bottom-anchored, native viewBox unchanged) so every path's relative position to every other path is preserved exactly, and only the assembly's placement within the stage changes. A first attempt used the opposite construction (an oversized, cropped box) on the theory it would push content down the same way — rendering it showed the reflection-dimming scrim landing on a completely different part of the frame than the actual (still bright) reflection, which is what caught the direction error. See <code>concepts/campfire-sing-along-spec.md</code> for the full derivation, the wrong-direction first pass, and the resulting per-element stage-percent bounds.
 
   <h2>Reflection streak vs. the safe-area — the specific rule this brief called out</h2>
-  After the remap, the reflection streak spans stage-y ≈67.3%-72.3% (main band) — meaning essentially its entire visible extent falls inside or right at the edge of the y28-72% safe-area, and its x-span (≈32-70%) sits fully inside the x20-80% band too. Two things address this, not one: (1) the source's own reflection shape is already a scalloped/broken silhouette (a row of connected lens-shaped humps, not a solid bar) — so "broken up" was true before any edit; (2) <code>#reflectionScrim</code> is a dark <em>radial</em>-gradient overlay, padded well past the reflection's own bounding box, darkest near the top of the band (deepest inside the zone) and fading smoothly in every direction — a first attempt used a rectangular box with a straight top-to-bottom fade and left a visible hard seam partway down the streak (the "banded rectangle" pattern <code>themes.md</code> warns about), fixed by switching to a padded radial shape with real margin on every side that needs to taper. Everything else the source draws in that vertical range (treeline, sand, chair silhouettes) is dark/low-contrast atmosphere already and needed no separate treatment, per <code>themes.md</code>'s "atmosphere may pass behind the text freely" allowance.
+  After the remap, the reflection streak spans stage-y ≈67.34%-73.94% — meaning essentially its entire visible extent falls inside or right at the edge of the y28-72% safe-area, and its x-span (≈32.3-70.1%) sits fully inside the x20-80% band too. Two things address this, not one: (1) the source's own reflection shape is already a scalloped/broken silhouette (a row of connected lens-shaped humps, not a solid bar) — so "broken up" was true before any edit; (2) <code>#reflectionScrim</code> is a dark <em>radial</em>-gradient overlay sized so its real (non-decayed) alpha actually spans the reflection's own bounding box, not just its dead center.
+  <br><br><b>Correction, 2026-07-27:</b> the first version of this scrim shipped with a real, measured bug, not just a documented risk — two independent design-critic passes pixel-sampled the actual rendered PNG and found <em>no measurable brightness differential</em> between the reflection inside vs. outside the zone (peak pixel ~247-249/255 either way). Direct re-sampling confirmed why: that version's ellipse radius (Ry ≈4.2% of stage height) decayed to near-zero alpha before reaching most of the reflection's real 6.6%-tall extent — the bottom ~1.4% of the streak sat entirely past the gradient's 100% stop, untouched by construction. Fixed by widening the box/ellipse so its radius (Rx≈27%, Ry≈4.7% of stage) actually covers the reflection's real half-extents, and adding a third gradient stop (0%/50%/70%/100%) so alpha stays ≥0.35 out to 70% of the radius instead of crashing to near-zero by the midpoint. Re-rendered and re-sampled the same regions after the fix — see <code>concepts/DESIGN-WORKER-LESSONS.md</code>'s corresponding entry for the numbers. A first attempt (before either of these) used a rectangular box with a straight top-to-bottom fade and left a visible hard seam partway down the streak (the "banded rectangle" pattern <code>themes.md</code> warns about) — that's why this stays a padded radial shape, not a box fade. Everything else the source draws in that vertical range (treeline, sand, chair silhouettes) is dark/low-contrast atmosphere already and needed no separate treatment, per <code>themes.md</code>'s "atmosphere may pass behind the text freely" allowance.
 
   <h2>Radial-gradient margin math — done in the spec file, not eyeballed</h2>
   Given this exact project's most recent documented failure (<code>concepts/DESIGN-WORKER-LESSONS.md</code>'s 2026-07-26 entry: an earlier Campfire flame build shipped with two of three glow gradients overrunning their own box before reaching transparent, plus a <code>box-shadow</code> glow on a non-rounded div), every radial-gradient layer here (<code>#flameGlow</code>, <code>#flameCore</code>, <code>#groundPool</code>) has its own box and its <code>center ± radius</code> computed per-axis against that box's own width/height in <code>concepts/campfire-sing-along-spec.md</code>, with real margin on every side except the ground-anchored bottom edge (sanctioned per the Established Convention — an anchor's own base is allowed to run to/past its box edge). No <code>box-shadow</code> is used anywhere in this file for a glow effect.
