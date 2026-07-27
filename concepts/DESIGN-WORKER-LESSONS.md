@@ -226,3 +226,21 @@ lean on them before trying anything new."
   was NOT affected by this — linear is invariant to per-segment vs. global application, so its
   keyframe-percentage math stayed reliable.) See Established Conventions below for the
   generalized versions of both new findings.
+
+- 2026-07-27 (round 4): **Flame reopened — the 2026-07-27 "closed out, 3/3 PASS" entry above did
+  not hold.** A later independent critic pass (3 samples) came back 2/3 FAIL on the same
+  hand-drawn flame, all three converging on one root defect: two near-mirrored outer paths plus
+  one scaled-down mid path, each a single flat fill, read as symmetric "cauliflower/dough-ball"
+  scallops with only the topmost lobe actually tapering to a point, and no hot-core-to-edge color
+  transition. Geometry-lint and the safe-zone luminance check had both been PASSing the whole
+  time — neither one checks path-level symmetry or per-lobe taper, so a clean mechanical run
+  co-existed with a real form failure the whole prior round; a numeric gate is not a substitute
+  for looking at the actual silhouette. Fix: rebuilt as one crown per layer (outer/mid/core), each
+  layer's tongues independently drawn with distinct height/lean/flank-width so none are scaled or
+  mirrored copies of another, plus a real per-layer vertical `linearGradient` (cool red-orange at
+  the tips, hot yellow-white near the base) replacing the flat single-color fills. Re-rendered and
+  zoomed at two different flicker-animation phases — silhouette held asymmetric with every visible
+  tip tapering to a real point at both. Not yet re-scored by an independent critic pass at the time
+  of this entry — this is strike 2 on this element if the fresh independent read fails again; a
+  third hand-coded attempt would be a protocol violation, escalating to a tighter roto-trace off
+  the locked Recraft reference instead of another free-form redesign.

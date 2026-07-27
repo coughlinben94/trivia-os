@@ -174,17 +174,45 @@
 
   <div id="flameWrap" class="sd-anim">
     <svg viewBox="0 0 200 300" preserveAspectRatio="none">
-      <!-- secondary, shorter tongue peeking from behind/right of the main one -->
-      <path fill="var(--flame-outer)" d="M140,88 C118,112 108,138 122,163 C106,174 98,195 111,216
-        C120,231 136,239 152,235 C170,230 180,211 173,191 C184,177 179,156 162,148
-        C169,127 158,102 140,88 Z"/>
-      <!-- main flame tongue: one dominant S-curve licking silhouette -->
-      <path fill="var(--flame-outer)" d="M103,20 C70,55 55,90 65,120 C40,110 30,140 45,170
-        C20,190 15,225 40,250 C55,270 75,282 100,285 C125,282 148,268 160,245
-        C172,222 168,190 148,175 C160,150 155,120 130,110 C138,85 128,55 103,20 Z"/>
-      <path fill="var(--flame-mid)" d="M103,55 C78,85 68,112 76,135 C58,128 50,152 62,175
-        C42,192 40,218 60,238 C72,252 88,260 103,262 C120,260 138,250 146,232
-        C155,215 150,192 135,182 C144,163 140,140 122,132 C128,112 120,85 103,55 Z"/>
+      <!-- 2026-07-27 fix-round: rebuilt from three concentric mirrored-lobe
+           paths (critic 2/3 FAIL: "cauliflower/dough-ball" scallops, only
+           the top lobe tapered, flat monochrome fill) to one crown per
+           layer where every tongue has its own height/lean/tip-sharpness —
+           no lobe is a scaled or mirrored copy of another — plus a real
+           per-layer vertical gradient (cool red-orange at the tips, hot
+           yellow near the base) instead of one flat fill per layer. -->
+      <defs>
+        <linearGradient id="flameOuterGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#c8431f"/>
+          <stop offset="55%" stop-color="#f78f4b"/>
+          <stop offset="100%" stop-color="#ffcf8a"/>
+        </linearGradient>
+        <linearGradient id="flameMidGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f78f4b"/>
+          <stop offset="50%" stop-color="#ffb877"/>
+          <stop offset="100%" stop-color="#ffe3b0"/>
+        </linearGradient>
+        <linearGradient id="flameCoreGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffb877"/>
+          <stop offset="100%" stop-color="#fff2d6"/>
+        </linearGradient>
+      </defs>
+      <!-- outer layer: 4 tongues, heights 25/90/165/175 (tallest to shortest,
+           no two equal), each its own lean + asymmetric flank widths; tip4
+           carries its own small jagged sub-spike for uneven-tip variety -->
+      <path fill="url(#flameOuterGrad)" d="M38,278 C20,240 48,185 58,165 C66,172 74,195 78,205
+        C82,140 89,38 92,25 C97,35 108,95 112,130 C116,112 124,98 128,90
+        C133,100 140,165 145,195 C151,183 158,178 162,175 C164,178 165,184 166,188
+        C168,184 170,180 172,178 C175,195 172,250 168,275 C140,295 70,295 38,278 Z"/>
+      <!-- mid layer: 3 tongues (tall/medium/stub), inset and independently
+           drawn, not a uniform scale-copy of the outer crown -->
+      <path fill="url(#flameMidGrad)" d="M58,272 C42,225 84,95 90,75 C96,90 108,110 112,140
+        C116,128 119,122 122,115 C128,122 140,190 145,205 C147,200 149,193 150,190
+        C154,205 153,245 155,268 C120,285 85,286 58,272 Z"/>
+      <!-- core: single narrow hot tongue, off-center under the tallest
+           outer/mid lobes (where real fire's visible hot core sits) -->
+      <path fill="url(#flameCoreGrad)" d="M78,265 C64,220 90,138 96,120 C102,128 106,145 108,158
+        C112,190 106,235 102,266 C95,272 85,272 78,265 Z"/>
     </svg>
   </div>
   <div id="flameCore" class="sd-anim"></div>
@@ -276,7 +304,18 @@
       the noun test's own definition of iconic — it hand-codes directly, no figurative escalation
       ladder applies. PASS = a fresh viewer names this as an empty camp/lawn chair on the sand,
       unambiguously, without requiring justification.</li>
-    <li><b>Flame</b> — figurative. PASS = a fresh viewer names this as a campfire flame.</li>
+    <li><b>Flame</b> — figurative. PASS = a fresh viewer names this as a campfire flame. Fix-round
+      2026-07-27 (strike 2, independent critic 2/3 FAIL): the prior version used two mirrored,
+      near-identical outer paths plus one scaled mid path, all flat single-color fills — read as
+      "cauliflower/dough-ball scallops," only the very top lobe tapering, no hot-core-to-edge
+      color transition. Rebuilt as one crown per layer (outer 4 tongues at heights 25/90/165/175
+      — no two equal, each its own lean/flank-width/tip-sharpness, tip4 carrying its own small
+      jagged sub-spike; mid 3 tongues independently drawn, not a scaled copy of the outer crown;
+      core a single off-center hot tongue under the tallest lobes) plus a real per-layer vertical
+      gradient (cool red-orange at the tips, hot yellow-white near the base) instead of one flat
+      fill per layer. Re-rendered and zoomed in at two different flicker-animation phases:
+      silhouette holds asymmetric with every visible tip tapering to a real point at both phases.
+      Not yet re-scored by the independent critic — do not treat this note as a PASS claim.</li>
     <li><b>Logs</b> — figurative (per this project's own prior classification of this exact element), but
       fully specifiable as tapered crossed capsules — hand-coded directly. PASS = a fresh viewer names this
       as crossed firewood under the flame.</li>
