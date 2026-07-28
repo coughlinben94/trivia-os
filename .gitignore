@@ -22,6 +22,7 @@ theme-screenshots-v2/
 # otherwise accumulate forever if committed.
 concepts/.audit-shots/
 concepts/.design-gate-audit.log
+concepts/.design-gate-integrity.json
 concepts/tools/.cache/
 .claude/skills/
 
