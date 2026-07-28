@@ -1310,15 +1310,24 @@ for (const file of touchedFiles) {
     }
 
     // 3c. Per-element half of the pass-criterion check. The file-level half
-    // ran once, above the loop; this one only asks whether the criterion that
-    // exists is anywhere near THIS element's marker. Warning, not a blocker —
-    // the gate cannot tell which element a given sentence is about.
+    // ran once, above the loop; this one asks whether the criterion that
+    // exists is anywhere near THIS element's marker. Now BLOCKING, not a
+    // warning: the file-level check alone let one "PASS =" sentence anywhere
+    // in a multi-element file satisfy every element, so a five-element file
+    // needed only one criterion comment total and four elements were
+    // effectively ungraded while reading as "compliant." The correctness
+    // critic's own instructions already say a criterion-less element should
+    // block "just as hard as a visual defect would" — this makes that literal
+    // instead of a check that only ever printed a warning nobody was required
+    // to act on.
     if (elementName && hasCriterionAnywhere) {
       const markerAt = codeText.search(new RegExp(`ELEMENT:\\s*${elementName}(?![A-Za-z0-9_-])`));
       if (markerAt >= 0 && !/PASS\s*=/.test(codeText.slice(Math.max(0, markerAt - 400), markerAt + 1200))) {
-        console.error(`design-done-gate: [${slug}] the file has a "PASS =" criterion somewhere, but not within ` +
-          `~1200 chars of this element's marker. The critic grades per element; if that distant sentence is ` +
-          `about a different element, this one is effectively ungraded and will FAIL for it.`);
+        blockers++;
+        problems.push(`${file} [${slug}]: the file has a "PASS =" criterion somewhere, but not within ` +
+          `~1200 chars of THIS element's "ELEMENT: ${elementName}" marker. The critic grades per element; a ` +
+          `criterion that far away is very likely about a different element, which leaves this one effectively ` +
+          `ungraded. Add "PASS = a fresh viewer names this as ___." directly next to this element's marker.`);
       }
     }
 
