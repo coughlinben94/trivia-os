@@ -755,8 +755,8 @@ function writeCase(record) {
     const casesData = existsSync(casesFile) ? JSON.parse(readFileSync(casesFile, 'utf8')) : { cases: [] };
     casesData.cases = casesData.cases || [];
     casesData.cases.push(record);
-    writeFileSync(casesFile, JSON.stringify(casesData, null, 2));
-    auditLog('design-cases.json', 'append-case', { noun: record.noun, verdict: record.verdict, file: record.file });
+    writeProtectedFile(casesFile, () => writeFileSync(casesFile, JSON.stringify(casesData, null, 2)));
+    auditLog('design-cases.json', 'append-case', { noun: record.noun, verdict: record.verdict, file: record.file }, casesFile);
   } catch (e) { console.error(`design-done-gate: WARNING — could not auto-write case record: ${e.message}`); }
 }
 
@@ -1661,8 +1661,8 @@ for (const file of touchedFiles) {
           `takes when the vote outvotes it without an agreed-major override firing — logged to ` +
           `design-cases.json; worth reading the full reason text before treating this element as settled.`);
       }
-      writeFileSync(verdictPath, JSON.stringify(parsed, null, 2));
-      auditLog('design-critic-verdicts', 'write-verdict', { slug, verdict: parsed.verdict, file });
+      writeProtectedFile(verdictPath, () => writeFileSync(verdictPath, JSON.stringify(parsed, null, 2)));
+      auditLog('design-critic-verdicts', 'write-verdict', { slug, verdict: parsed.verdict, file }, verdictPath);
       verdict = parsed;
       verdictJustComputed = true;
     }
@@ -1906,8 +1906,8 @@ for (const file of touchedFiles) {
                 sampleVotes: { pass: votes.pass, fail: votes.fail, total: votes.total, droppedBlind: blind },
                 panel: seeing.map(s => s._model || 'default'), // see the correctness verdict's note
               };
-              writeFileSync(qualityVerdictPath, JSON.stringify(qVerdict, null, 2));
-              auditLog('design-critic-verdicts', 'write-quality-verdict', { qualitySlug, verdict: qVerdict.verdict, file });
+              writeProtectedFile(qualityVerdictPath, () => writeFileSync(qualityVerdictPath, JSON.stringify(qVerdict, null, 2)));
+              auditLog('design-critic-verdicts', 'write-quality-verdict', { qualitySlug, verdict: qVerdict.verdict, file }, qualityVerdictPath);
               qJustComputed = true;
               writeCase({
                 noun: `${file.split('/').pop()} (whole scene)`, category: 'whole-scene-craft',
@@ -2028,8 +2028,8 @@ try {
     if (theirs.unlocked === false) mine.unlocked = false;
     mine.overridesUsed = Math.max(mine.overridesUsed || 0, theirs.overridesUsed || 0);
   }
-  writeFileSync(COUNTS_FILE, JSON.stringify(countsMap, null, 2));
-  auditLog('design-attempt-counts.json', 'write-counts', { keys: Object.keys(countsMap) });
+  writeProtectedFile(COUNTS_FILE, () => writeFileSync(COUNTS_FILE, JSON.stringify(countsMap, null, 2)));
+  auditLog('design-attempt-counts.json', 'write-counts', { keys: Object.keys(countsMap) }, COUNTS_FILE);
 } catch (e) { console.error(`design-done-gate: WARNING — could not write ${COUNTS_FILE}: ${e.message} (strike counts for this run are lost).`); }
 
 if (problems.length > 0) {
