@@ -419,8 +419,15 @@ function tallyDefects(samples, tagSet) {
   const tagCounts = {};   // tag -> total samples naming it
   const majorCounts = {}; // tag -> samples calling it major
   const offVocabulary = new Set();
+  const dissentMajorSet = new Set();
   for (const s of samples) {
-    const entries = (s.defects || [])
+    // Array-guard: a critic sample emitting a malformed `defects` value (a bare string, an object,
+    // anything non-array) must not throw here — that would propagate out of the whole per-file loop
+    // into the top-level crash handler, replacing every OTHER file's checks in this run with one
+    // stack trace and losing whatever verdict write was in flight (fixes B8/finding #8). Fail toward
+    // "no defects reported by this sample," not toward a crash.
+    const rawDefects = Array.isArray(s.defects) ? s.defects : [];
+    const entries = rawDefects
       .map(d => (typeof d === 'string'
         ? { tag: d, severity: 'major' }
         : { tag: d?.tag, severity: d?.severity === 'minor' ? 'minor' : 'major' }))
@@ -432,12 +439,22 @@ function tallyDefects(samples, tagSet) {
       tagCounts[t] = (tagCounts[t] || 0) + 1;
       if (majorHere.has(t)) majorCounts[t] = (majorCounts[t] || 0) + 1;
     }
+    // A FAIL-voting sample naming a major, valid-vocabulary tag is real dissent signal, tracked
+    // separately from the 2+-samples-agree tally above — see the majorOverride call sites for why
+    // this exists and why the 2+-agreement version alone was structurally unable to fire.
+    if (s.verdict === 'FAIL') {
+      for (const t of majorHere) if (tagSet.has(t)) dissentMajorSet.add(t);
+    }
   }
   const agreedAll = Object.keys(tagCounts).filter(t => t !== 'other' && tagCounts[t] >= 2).sort();
   const agreedDefects = agreedAll.filter(t => (majorCounts[t] || 0) >= 2);
   const agreedMinor = agreedAll.filter(t => (majorCounts[t] || 0) < 2);
   const defectsSingleSample = Object.keys(tagCounts).filter(t => t === 'other' || tagCounts[t] < 2).sort();
-  return { agreedDefects, agreedMinor, defectsSingleSample, defectsOffVocabulary: [...offVocabulary].sort() };
+  return {
+    agreedDefects, agreedMinor, defectsSingleSample,
+    defectsOffVocabulary: [...offVocabulary].sort(),
+    dissentMajors: [...dissentMajorSet].sort(),
+  };
 }
 
 // Pull the LAST balanced {...} object out of a model's stdout. The old
@@ -1446,21 +1463,32 @@ for (const file of touchedFiles) {
         continue;
       }
       const votes = tallyVotes(samples);
-      const { agreedDefects, agreedMinor, defectsSingleSample, defectsOffVocabulary } =
+      const { agreedDefects, agreedMinor, defectsSingleSample, defectsOffVocabulary, dissentMajors } =
         tallyDefects(samples, CORRECTNESS_DEFECT_TAGS);
-      // An agreed MAJOR defect outranks the tally — the same rule the quality gate already
-      // enforces (see its own note above). Two independent samples both naming the same tag AND
-      // both calling it major, while the vote still lands on PASS, is the panel contradicting
-      // itself, and this gate is not allowed to round that in the permissive direction. This is
-      // the exact hole that let `logs` PASS 2-1 tonight while sample 2's dissent named the precise
-      // defect (no taper/no bark/hard cutoff at the flame boundary) that a `box-tell` +
-      // `silhouette-mismatch` pair would have caught structurally instead of relying on the raw
-      // vote.
-      const majorOverride = votes.verdict === 'PASS' && agreedDefects.length > 0;
+      // TWO independent override conditions, not one — the 2+-samples-agree rule below was the
+      // ENTIRE override at first, and confirmed-by-replay it was dead code for the exact scenario it
+      // exists to catch: `trivia-os-design-critic.md` instructs "if it's major, vote FAIL," so in the
+      // overwhelmingly common 2-1 PASS split, only the ONE dissenting (FAIL-voting) sample can ever
+      // legitimately carry a major tag — the two PASS-voting samples never will, by that instruction's
+      // own design. Requiring 2+ SAMPLES to independently agree on the same major tag therefore capped
+      // the override at "all 3 flip to FAIL," which isn't an override at all, just unanimous FAIL.
+      // Replaying the real `logs` incident (2 PASS with no majors, per instructions; 1 FAIL naming
+      // `box-tell`+`silhouette-mismatch` as major) through the ORIGINAL condition confirmed this:
+      // majorOverride was false, final verdict stayed PASS. A single confident, named, MAJOR-severity
+      // dissent is real signal this gate is not allowed to silently outvote — the critic's own
+      // instructions already say "major means this alone should sink the element" and warn against
+      // marking something major casually, which is exactly why one such claim, even from a single
+      // sample, is trustworthy enough to act on without requiring a second sample that structurally
+      // cannot exist in the 2-1 case. The 2+-agreement condition is kept as a second OR-branch (not
+      // removed) purely as defensive belt-and-suspenders for an unexpected 3-0-flip or imperfect
+      // instruction-following case; it is not expected to be what actually fires in practice.
+      const majorOverride = votes.verdict === 'PASS' && (agreedDefects.length > 0 || dissentMajors.length > 0);
       if (majorOverride) {
         console.error(`design-done-gate: [${slug}] correctness vote was ${votes.pass}/${votes.total} ` +
-          `PASS, but 2+ samples independently named the same MAJOR defect (${agreedDefects.join(', ')}). ` +
-          `Recorded as FAIL — an agreed major defect outranks the tally.`);
+          `PASS, but ${agreedDefects.length > 0
+            ? `2+ samples independently named the same MAJOR defect (${agreedDefects.join(', ')})`
+            : `a dissenting (FAIL-voting) sample named a MAJOR defect (${dissentMajors.join(', ')})`}. ` +
+          `Recorded as FAIL — a real major-severity dissent outranks the tally.`);
       }
       const parsed = {
         verdict: majorOverride ? 'FAIL' : votes.verdict,
@@ -1703,19 +1731,19 @@ for (const file of touchedFiles) {
               // back-compat with anything already on disk). A tag two or more
               // samples reach for is a finding either way; it is MAJOR only if
               // two or more of them called it major.
-              const { agreedDefects, agreedMinor, defectsSingleSample, defectsOffVocabulary } =
+              const { agreedDefects, agreedMinor, defectsSingleSample, defectsOffVocabulary, dissentMajors } =
                 tallyDefects(seeing, QUALITY_DEFECT_TAGS);
-              // An agreed MAJOR defect outranks the vote. Two independent
-              // samples both naming the same tag AND both calling it major,
-              // while the tally still lands on PASS, is the panel contradicting
-              // itself — and this gate is not allowed to round that in the
-              // permissive direction. (The reverse never happens: minor
-              // findings cannot manufacture a FAIL.)
-              const majorOverride = votes.verdict === 'PASS' && agreedDefects.length > 0;
+              // Same fix as the correctness gate, same underlying cause: `trivia-os-design-quality-
+              // critic.md` also instructs "if it is major, vote FAIL," so this gate's 2+-samples-agree
+              // condition was equally structurally unreachable for a 2-1 PASS split with one confident
+              // dissenter. See the correctness gate's version of this comment for the full replay/proof.
+              const majorOverride = votes.verdict === 'PASS' && (agreedDefects.length > 0 || dissentMajors.length > 0);
               if (majorOverride) {
                 console.error(`design-done-gate: [${file}] QUALITY vote was ` +
-                  `${votes.pass}/${votes.total} PASS, but 2+ samples independently named the same MAJOR defect ` +
-                  `(${agreedDefects.join(', ')}). Recorded as FAIL — an agreed major defect outranks the tally.`);
+                  `${votes.pass}/${votes.total} PASS, but ${agreedDefects.length > 0
+                    ? `2+ samples independently named the same MAJOR defect (${agreedDefects.join(', ')})`
+                    : `a dissenting (FAIL-voting) sample named a MAJOR defect (${dissentMajors.join(', ')})`}. ` +
+                  `Recorded as FAIL — a real major-severity dissent outranks the tally.`);
               }
               qVerdict = {
                 verdict: majorOverride ? 'FAIL' : votes.verdict,
