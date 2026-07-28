@@ -10,6 +10,26 @@
 // wrote it, which put the running record out of order in the one file whose
 // whole point is an honest running record. Re-sorted here.)
 //
+// v10 (2026-07-28, round-2 independent review — concepts/design-pipeline-hardening-review-round2.md
+// found two real bugs in what v9-era work shipped, confirmed by replaying the actual historical
+// `logs` incident through the live code, not taken on faith):
+//   1. THE MAJOR-DEFECT OVERRIDE WAS UNREACHABLE for the exact scenario it was built to catch. Both
+//      critic prompts instruct "if it's major, vote FAIL," so a PASS-voting sample can never
+//      legitimately carry a major tag — in the common 2-1 PASS split, only the one dissenting
+//      (FAIL-voting) sample can ever name one, and the override required 2+ SAMPLES to agree on the
+//      same major tag, which can never happen in that shape. Replaying `logs` (2 PASS with no majors,
+//      1 FAIL naming box-tell+silhouette-mismatch as major) through the pre-fix code confirmed it:
+//      majorOverride stayed false, verdict stayed PASS. Fixed by adding `dissentMajors` to
+//      tallyDefects()'s return value (major tags named by any FAIL-voting sample) and OR-ing it into
+//      both gates' majorOverride condition. The 2+-agreement condition is kept as a secondary
+//      belt-and-suspenders branch, not removed — it just isn't what fires in the common case anymore.
+//   2. A lone dissent on an otherwise-PASSing verdict was written to the verdict JSON and case log but
+//      printed to stderr in NEITHER gate on a PASS (the quality gate only surfaced it inline as part
+//      of a FAIL message). The worker's "relay non-blocking findings on a PASS" instruction had
+//      nothing real to relay for exactly the case that motivated it. Both gates now print
+//      `defectsSingleSample` unconditionally, mirroring the existing agreedMinor/minorFindings
+//      "whatever the verdict" pattern.
+//
 // v9 (2026-07-27, sixth and final review pass of the night. v8's two headline
 // fixes were re-tested in a scratch git repo, not re-read: (1) the
 // session-start diff baseline genuinely catches every element across MULTIPLE
