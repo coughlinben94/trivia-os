@@ -21,6 +21,7 @@ theme-screenshots-v2/
 # deleted in place (connected-folder delete-permission wall), so these would
 # otherwise accumulate forever if committed.
 concepts/.audit-shots/
+concepts/.design-gate-audit.log
 concepts/tools/.cache/
 .claude/skills/
 
