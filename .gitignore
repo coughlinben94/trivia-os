@@ -23,6 +23,7 @@ theme-screenshots-v2/
 concepts/.audit-shots/
 concepts/.design-gate-audit.log
 concepts/.design-gate-integrity.json
+concepts/.design-gate-integrity.lock/
 concepts/tools/.cache/
 .claude/skills/
 
