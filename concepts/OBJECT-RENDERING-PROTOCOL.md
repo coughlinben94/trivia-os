@@ -83,7 +83,7 @@ plane? That's **iconic** — hand-code it, no escalation needed.
     `concepts/design-pipeline-hardening-fix.md` more load-bearing, not less: a gate that can be
     gamed is the actual risk a pictorial-scenes-allowed policy creates; a gate that genuinely holds
     is what makes the policy safe to rely on. See `references/themes.md` rule 1a's ambient branch
-    and `concepts/campfire-sing-along-spec.md`'s "Known open item" section — both updated to match.
+    and `concepts/campfire-sing-along-spec.md`'s "Formerly-open item" section — both updated to match.
   - **Still open, lower priority:** a completeness check comparing the locked brief's element list
     against what the Recraft reference actually contains, so an omission (Campfire Sing-Along's
     reference shipped with no stars at all, despite a starry night sky being in scope) gets caught
