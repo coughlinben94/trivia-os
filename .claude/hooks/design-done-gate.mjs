@@ -393,9 +393,9 @@
 // Exit 0 = allow Stop. Exit 2 = block, forcing the agent to keep working.
 
 import { execSync, spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, appendFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, appendFileSync, chmodSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -403,6 +403,23 @@ const SHOT_DIR = resolve(REPO_ROOT, 'concepts', '.audit-shots');
 const VERDICT_DIR = resolve(REPO_ROOT, 'concepts', '.design-critic-verdicts');
 const COUNTS_FILE = resolve(REPO_ROOT, 'concepts', '.design-attempt-counts.json');
 const AUDIT_LOG_FILE = resolve(REPO_ROOT, 'concepts', '.design-gate-audit.log');
+// Gate-owned sidecar recording this gate's own last-known-good content hash for every protected
+// store it writes — the ONLY thing that writes this file is recordIntegrity() below. Read at the
+// very top of every invocation by checkIntegrityOrBlock(), before any other logic runs. This layer
+// exists because protect-json-stores.mjs's Bash-text pattern matching is provably incomplete (its own
+// KNOWN LIMITATIONS section names multi-hop pipe chaining as an accepted residual gap) — rather than
+// chase the next bypass SHAPE with a 12th regex, this compares actual file content against this
+// gate's own record of what it last wrote there. It does not matter how a mismatch happened —
+// through a documented Bash-guard gap, a future Claude Code feature, a process running outside this
+// hook's Bash-guard coverage entirely, or anything else. A mismatch is a mismatch.
+const INTEGRITY_FILE = resolve(REPO_ROOT, 'concepts', '.design-gate-integrity.json');
+// OS-level backstop (independent of, and does not rely on, protect-json-stores.mjs at all): every
+// protected file is chmod'd read-only immediately after this gate writes it, and briefly unlocked
+// only around the gate's own next write. An ordinary accidental overwrite — `> file`, an editor
+// save, a script that doesn't specifically re-chmod first — fails at the filesystem level even if
+// some future Bash construct slips past the text guard entirely undetected.
+const PROTECTED_STORE_MODE = 0o444;
+const WRITABLE_MODE = 0o644;
 const CRITIC_AGENT_FILE = resolve(REPO_ROOT, '.claude/agents/trivia-os-design-critic.md');
 const QUALITY_AGENT_FILE = resolve(REPO_ROOT, '.claude/agents/trivia-os-design-quality-critic.md');
 const VISUAL_PATH_RE = /(^|\/)concepts\/.*\.html$|(^|\/)client\/src\/components\/display\/.*\.jsx$/;
@@ -668,17 +685,59 @@ function freshShotsFor(prefix, absFile) {
   return { fresh: freshShots.length > 0, shots, freshShots };
 }
 
+// The ONLY function anywhere that writes concepts/.design-gate-integrity.json (besides the
+// human-invoked concepts/tools/reseed-design-gate-integrity.mjs, which exists specifically for the
+// human-confirmed recovery path this file's own BLOCKED message points to). Called from auditLog()
+// immediately after every protected-store write, so the sidecar's recorded hash and the audit log's
+// record of that same write land together, atomically, from the same function call.
+function recordIntegrity(...absPaths) {
+  try {
+    let sidecar = {};
+    if (existsSync(INTEGRITY_FILE)) {
+      try { sidecar = JSON.parse(readFileSync(INTEGRITY_FILE, 'utf8')); } catch { sidecar = {}; }
+    }
+    for (const absPath of absPaths) {
+      const rel = relative(REPO_ROOT, absPath);
+      const hash = hashFile(absPath);
+      if (hash === null) delete sidecar[rel]; else sidecar[rel] = hash;
+    }
+    writeProtectedFile(INTEGRITY_FILE, () => writeFileSync(INTEGRITY_FILE, JSON.stringify(sidecar, null, 2)));
+  } catch (e) { console.error(`design-done-gate: WARNING — could not update integrity sidecar: ${e.message}`); }
+}
+
+// OS-level chmod backstop (see PROTECTED_STORE_MODE's comment above) — every protected-store write in
+// this file goes through this instead of calling writeFileSync/appendFileSync directly: briefly
+// restore write access (the file is normally locked read-only from the PREVIOUS write this same
+// function made), run the actual write via the caller-supplied `writeFn`, then re-lock read-only
+// immediately. `writeFn` does the write itself (writeFileSync vs. appendFileSync differ enough — one
+// full-replace, one append — that this helper stays agnostic and just brackets whichever one the
+// caller needs).
+function writeProtectedFile(absPath, writeFn) {
+  const existedBefore = existsSync(absPath);
+  if (existedBefore) { try { chmodSync(absPath, WRITABLE_MODE); } catch { /* not yet lockable, or already writable */ } }
+  writeFn();
+  try { chmodSync(absPath, PROTECTED_STORE_MODE); } catch (e) {
+    console.error(`design-done-gate: WARNING — could not chmod ${absPath} read-only after writing it: ${e.message}`);
+  }
+}
+
 // Append-only audit trail (mitigates B4: "no integrity trail on the three JSON stores. A
 // delete-and-regenerate cycle is indistinguishable from a legitimate first run.") Every write this
 // gate makes to one of its own protected stores is logged here — not to PREVENT tampering (that is
-// protect-json-stores.mjs's job) but so a human sweep can tell a genuine write history from a store
-// that was deleted and silently regenerated, and so concepts/tools/sweep-stale-design-entries.mjs
-// below has something to cross-check against. Never blocks on failure — an audit log write failing
-// should not itself fail the Stop.
-function auditLog(store, action, detail) {
+// protect-json-stores.mjs's job, and, as of this round, the hash/chmod layers' job too) but so a
+// human sweep can tell a genuine write history from a store that was deleted and silently
+// regenerated, and so concepts/tools/sweep-stale-design-entries.mjs below has something to
+// cross-check against. Never blocks on failure — an audit log write failing should not itself fail
+// the Stop. `writtenPath`, when given, is the absolute path of the OTHER protected file this call is
+// reporting a write to (design-cases.json, a verdict file, or the counts file) — recordIntegrity()
+// hashes both it and this audit log file (which the appendFileSync line below just changed) in one
+// sidecar update, so the two stay synchronized.
+function auditLog(store, action, detail, writtenPath) {
   try {
-    appendFileSync(AUDIT_LOG_FILE, JSON.stringify({ timestamp: new Date().toISOString(), store, action, detail }) + '\n');
+    writeProtectedFile(AUDIT_LOG_FILE, () =>
+      appendFileSync(AUDIT_LOG_FILE, JSON.stringify({ timestamp: new Date().toISOString(), store, action, detail }) + '\n'));
   } catch (e) { console.error(`design-done-gate: WARNING — could not append to ${AUDIT_LOG_FILE}: ${e.message}`); }
+  recordIntegrity(...(writtenPath ? [writtenPath, AUDIT_LOG_FILE] : [AUDIT_LOG_FILE]));
 }
 
 // Append one gate-owned record to design-cases.json. Shared so the quality
@@ -766,6 +825,14 @@ function slugify(s) { return s.replace(/[^a-zA-Z0-9._-]/g, '_'); }
 // look erroneously "fresh" relative to it. A hash of the actual bytes cannot
 // be fooled by any mtime trick on either side of the comparison.
 function sceneHash(codeText) { return createHash('sha256').update(codeText).digest('hex'); }
+// Content hash of a file on disk, for the integrity sidecar. Returns null (not throws) for a
+// missing/unreadable file — a null hash means "this path currently has nothing," which is a valid,
+// checkable state (see checkIntegrityOrBlock: a recorded hash with a now-missing file is itself a
+// reportable mismatch, not a crash).
+function hashFile(absPath) {
+  try { return createHash('sha256').update(readFileSync(absPath)).digest('hex'); }
+  catch { return null; }
+}
 
 // Files this session's OWN transcript wrote, as repo-relative paths. A
 // background subagent it dispatched has its own transcript and its own
@@ -894,6 +961,48 @@ function sessionTouchedFiles(transcriptPath) {
   }
   return { paths, startedAt };
 }
+
+// Integrity check — the FIRST thing this hook does on every single invocation, before anything
+// else, including the depth guard directly below. See INTEGRITY_FILE's own comment above for why
+// this layer exists: it does not try to guess HOW a protected file might have changed, only WHETHER
+// it did, by comparing each protected store's current content hash against this gate's own last-
+// recorded hash. The sidecar and the audit log are updated together, atomically, by the same
+// recordIntegrity() call inside auditLog() (see below) — so a hash match is itself proof that the
+// last change to that file happened through this gate's own write path, which the audit log
+// necessarily also has an entry for. A mismatch therefore means exactly what the spec asks this
+// check to catch: the file changed with no corresponding audit-log entry explaining it, regardless
+// of mechanism.
+function checkIntegrityOrBlock() {
+  if (!existsSync(INTEGRITY_FILE)) return; // first run ever — no baseline recorded yet to compare against
+  let sidecar;
+  try {
+    sidecar = JSON.parse(readFileSync(INTEGRITY_FILE, 'utf8'));
+  } catch (e) {
+    console.error(`design-done-gate: BLOCKED — ${INTEGRITY_FILE} exists but is not valid JSON ` +
+      `(${e.message}). This file is gate-owned and should never be hand-edited or corrupted. A human ` +
+      `must inspect it and either restore a good copy or intentionally reseed it (see ` +
+      `concepts/tools/reseed-design-gate-integrity.mjs) before this gate can run again.`);
+    process.exit(2);
+  }
+  const mismatches = [];
+  for (const [rel, expectedHash] of Object.entries(sidecar)) {
+    const actualHash = hashFile(resolve(REPO_ROOT, rel));
+    if (actualHash !== expectedHash) mismatches.push({ rel, expectedHash, actualHash });
+  }
+  if (mismatches.length > 0) {
+    console.error(`design-done-gate: BLOCKED — ${mismatches.length} gate-protected file(s) do not ` +
+      `match this gate's own last-recorded content hash:\n` +
+      mismatches.map(m => `  - ${m.rel}: expected ${m.expectedHash ?? '(no prior record — new to the sidecar)'}, ` +
+        `found ${m.actualHash ?? '(file is now missing)'}`).join('\n') +
+      `\nThis means at least one of these files changed by some means other than this gate's own ` +
+      `writes — regardless of how (a Bash-guard bypass, a bug, anything else). This is a hard stop: ` +
+      `stop and ask Ben to confirm whether the change was intentional. If it was, re-baseline with ` +
+      `\`node concepts/tools/reseed-design-gate-integrity.mjs\` (a human-invoked action, never done by ` +
+      `this gate automatically) before continuing. Do not silently proceed or auto-repair.`);
+    process.exit(2);
+  }
+}
+checkIntegrityOrBlock();
 
 // Depth guard, set only on the critic subprocesses this script spawns (see the
 // note in spawnCriticVotes). A critic session's Stop must not run the gate that
