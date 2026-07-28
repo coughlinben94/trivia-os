@@ -1520,6 +1520,13 @@ for (const file of touchedFiles) {
           `MINOR findings (2+ samples, none blocking): ${agreedMinor.join(', ')}. Logged to ` +
           `design-cases.json.`);
       }
+      if (defectsSingleSample.length) {
+        console.error(`design-done-gate: [${slug}] correctness verdict ${parsed.verdict} with a ` +
+          `SINGLE-SAMPLE finding (only one of three samples named it — treat as a lead, not a confirmed ` +
+          `finding): ${defectsSingleSample.join(', ')}. This is the exact shape a lone dissenting sample ` +
+          `takes when the vote outvotes it without an agreed-major override firing — logged to ` +
+          `design-cases.json; worth reading the full reason text before treating this element as settled.`);
+      }
       writeFileSync(verdictPath, JSON.stringify(parsed, null, 2));
       auditLog('design-critic-verdicts', 'write-verdict', { slug, verdict: parsed.verdict, file });
       verdict = parsed;
@@ -1800,6 +1807,13 @@ for (const file of touchedFiles) {
               `findings (2+ samples, none blocking): ${qVerdict.minorFindings.join(', ')}. Logged to ` +
               `design-cases.json. Worth fixing if it is cheap; worth watching if the same tag keeps recurring ` +
               `across scenes, which is the pattern this field exists to make countable.`);
+          }
+          if (qVerdict?.defectsSingleSample?.length) {
+            console.error(`design-done-gate: [${file}] QUALITY verdict ${qVerdict.verdict} with a ` +
+              `SINGLE-SAMPLE finding (only one of three samples named it): ${qVerdict.defectsSingleSample.join(', ')}. ` +
+              `Previously this was only surfaced inline as part of a FAIL message — meaning a single dissent on ` +
+              `an otherwise-PASSing scene was recorded but never printed anywhere. Logged to design-cases.json ` +
+              `regardless of verdict now.`);
           }
 
           if (qVerdict && qVerdict.verdict === 'FAIL') {
