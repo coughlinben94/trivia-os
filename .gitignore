@@ -32,3 +32,4 @@ concepts/tools/.cache/
 *.zip
 
 .superpowers/
+.worktrees/
