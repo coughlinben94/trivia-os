@@ -84,34 +84,80 @@ Every consumer of a round value calls this normalizer first — no migration nee
 show's history breaks.
 
 **`computeTotal(scores, cols)` changes** to sum `written + phone` per round before
-summing rounds. This is the single chokepoint every display surface already calls
-through (`ScoreboardModal`, `ScoreboardOverlay`, the `/join` `ScoresDrawer`,
-`ShowDetail`), so the merge-into-one-number behavior Ben asked for — no separate
-column, one total — falls out of fixing it in exactly one place.
+summing rounds — genuinely the single chokepoint for *totals*.
 
-**Quick Entry and the manual score cell (`TeamTable`) both write only `written`.**
-Typing a number in either place has always meant "this round's hand-graded points";
-that doesn't change. The `phone` value is written exactly once, by the auto-scoring
-step below, and is never a field a host types into directly.
+**Correction from independent review: totals are not the only place a round value is
+touched.** Four call sites read or write a round's raw cell value directly, bypassing
+`computeTotal` entirely, and all four need updating or this breaks on day one:
 
-### 3. Question authoring: `slide.data.phoneScoring`
+- `ScoreboardModal.jsx` `TeamTable`'s score `<input>` (line ~187) reads
+  `team.scores[c.key]` straight into a number input — needs to read
+  `normalizeRoundScore(team.scores[c.key]).written`, not the raw cell.
+- `ScoreboardModal.jsx`'s `updateScore()` (line ~282-285), the actual write path
+  behind **both** the manual score cell and Quick Entry's `quickSave` (which calls
+  `updateScore` directly) — today it does
+  `scores: { ...t.scores, [key]: Number(val) }`, which clobbers the whole round value.
+  As written, editing a round's score after Lock Answers has run would silently zero
+  out that round's `phone` contribution. Must become
+  `scores: { ...t.scores, [key]: { ...normalizeRoundScore(t.scores[key]), written: Number(val) } }`
+  — preserve `phone`, only overwrite `written`.
+- `ScoreboardOverlay.jsx` (line ~72-73) — TV per-round score pills read
+  `team.scores?.[col.key]` and do a direct `Number(val) === 0` check. Needs the same
+  normalize-then-sum treatment or it renders an object/`NaN` on the TV.
+- `ShowDetail.jsx` (line ~172-173) — public show-history page does
+  `Number((team.scores ?? {})[col.key])` per round. Same issue, and this one's
+  public-facing, which is exactly the class of surface this spec is emphatic must
+  never show broken or leaked internals.
 
-A `question`-type (or new dedicated) slide carries:
+**Quick Entry and the manual score cell (`TeamTable`) both write only `written`**
+(intent unchanged from the original draft) — the fix above is what makes that
+actually true in code rather than just true in this document. The `phone` value is
+written only by the auto-scoring step below and by `normalizeRoundScore`'s
+pass-through of whatever `phone` already existed.
+
+### 3. Question authoring: a shiny-format mechanic, not a separate system
+
+**Revised after Ben's note: "Use Your Phone" must be rope into the shiny question
+builder and architecture, not stand alongside it as a second authoring path.** The app
+already has exactly one in-app format-creation flow — "✨ Add Shiny" →
+`FormatLibrary.jsx` → `shiny_formats` table → picked in `AddSlideWizard` → filled in
+per-slide in `SlideEditor`. Matching becomes one more entry in that same pipeline, the
+same way `shinyType: 'audio'` or `input_schema.type === 'list'` are today, not a
+parallel `phoneScoring` field bolted onto a plain question slide.
+
+**`shiny_formats.input_schema` gets one new `type`:**
+
+```js
+input_schema: {
+  type: 'matching',
+  hasPoints: true,
+  pointsPerMatch: 2,   // host-set default when creating the format; overridable per-slide
+}
+```
+
+This is created via the existing FormatLibrary UI exactly like every other format —
+no new host-facing screen. A new `isMatchingShiny()` helper joins the existing
+`isListShiny()` in `shinySeries.js`, following the same pattern, so `SlideRenderer`
+and `QuestionSlide.jsx`'s dispatch logic gain one more branch, not a second dispatch
+system.
+
+**Per-slide content** — the actual 4 people/4 aliases for *this* question — is filled
+in on `slide.data` when the host builds that specific question in `SlideEditor`, the
+same way `ShinyListBuilder` lets a host fill in `data.listItems` for a list-type shiny
+question today:
 
 ```js
 data: {
   ...existing question fields,
-  phoneScoring: {
-    mechanic: 'matching',
-    pointsPerMatch: 2,
-    pairs: [
-      { id: 'p1', left: 'Abraham Lincoln', right: 'Honest Abe' },
-      { id: 'p2', left: 'Amelia Earhart',  right: 'Lady Lindy' },
-      { id: 'p3', left: 'Muhammad Ali',    right: 'The Greatest' },
-      { id: 'p4', left: 'Babe Ruth',       right: 'The Bambino' },
-    ],
-    locked: false,   // flips true when host hits "Lock Answers"
-  }
+  isShiny: true,               // same flag every shiny question already carries
+  pairs: [
+    { id: 'p1', left: 'Abraham Lincoln', right: 'Honest Abe' },
+    { id: 'p2', left: 'Amelia Earhart',  right: 'Lady Lindy' },
+    { id: 'p3', left: 'Muhammad Ali',    right: 'The Greatest' },
+    { id: 'p4', left: 'Babe Ruth',       right: 'The Bambino' },
+  ],
+  pointsPerMatch: 2,           // seeded from the format's default, editable per-slide
+  matchingLocked: false,       // flips true when host hits "Lock Answers"
 }
 ```
 
@@ -120,16 +166,28 @@ reference on both sides. Left items render in one column order, right items in a
 **shuffled** order per slide (fixed once when the slide goes live, not re-shuffled per
 team — see Open Questions), so it isn't a positional giveaway.
 
+Being a real `isShiny` question also means Matching gets the existing
+`ShinyIntroScreen` announce beat ("✨ Format Name") for free, the same beat every other
+shiny question already opens with — one less thing this spec needs to invent.
+
 ## Phone UI (`/join`)
 
-When the live slide has a `phoneScoring` block and isn't locked, `LiveView` renders a
+When the live slide is `isMatchingShiny()` and isn't locked, `LiveView` renders a
 matching board instead of the plain read-only question text: left column (fixed
-order), right column (shuffled order). Tap a left item, then tap a right item — they
-link with a colored connector and both dim out of the "unpaired" pool. Tap either half
-of an already-made pair to undo it. An implicit "answer so far" upserts to
-`phone_answers` on every pair change (not just on a final submit tap) — cheap writes,
-same debounce-and-retry shape `Join.jsx` already uses elsewhere, and it means a team
-that closes the browser mid-question doesn't lose progress.
+order), right column (shuffled order). **Revised per Ben: color-fill matching, not a
+connector line.** A fixed palette of N colors is available, N = number of pairs (4
+pairs → 4 colors). Tap a left item, then tap a right item — both items fill solid with
+the same color, taken from the palette in pairing order (the team's first pair made
+gets color 1, second gets color 2, etc.). A same-color fill on both sides — red name,
+red alias — is what reads as "this is the pair I'm submitting," at a glance, on a
+small screen, with no lines crossing each other to untangle. Tap either half of an
+already-colored pair to undo it (both items clear back to unfilled, that color returns
+to the available pool). Color assignment is purely a submission-side visual aid — it
+carries no meaning against the answer key, which is still checked by which item IDs a
+team paired, not which color they happened to use. An implicit "answer so far" upserts
+to `phone_answers` on every pair change (not just on a final submit tap) — cheap
+writes, same debounce-and-retry shape `Join.jsx` already uses elsewhere, and it means a
+team that closes the browser mid-question doesn't lose progress.
 
 **Tap-to-pair, not drag.** Matches this app's existing precedent — every other
 `/join` interaction (powerup, registration, scoreboard) is one discrete write per
@@ -141,18 +199,44 @@ No forward/timer pressure from the app itself — same as every other slide, the
 question stays open until the host moves on. That's the host's cue to hit **Lock
 Answers**.
 
+## /display rendering (gap found in review — added here)
+
+A matching question is still a real slide on `/display`, and per Critical Rule 5
+("Design is not optional"), it needs an actual designed render, not just a
+description of the phone side. Three states, one component
+(`MatchingQuestion.jsx`, mounted the same way `ShinyListQuestion` is today —
+dispatched from `QuestionSlide.jsx` once `isMatchingShiny()` is true, after the shared
+`ShinyIntroScreen` beat):
+
+1. **Open** — the two columns (people / aliases), same shuffled-right-column order
+   every phone sees, with a live "X of Y teams have submitted" count (subscribed the
+   same way the rest of `/display` already subscribes to `shows`/team state) so the
+   room has something to watch while phones are tapping. No per-team answers shown —
+   nobody's individual picks are public.
+2. **Locked, not yet scored** — brief transitional state between the host clicking
+   Lock Answers and scores finishing computation (should be near-instant, but the
+   render needs to exist so there's no blank frame).
+3. **Revealed** — correct pairs shown with the same shared-color-fill convention the
+   phones use (not a connector line, per the Phone UI section above), each pair's fill
+   in fixed shiny gold to match the existing shiny visual language, same treatment
+   `PylRevealSlide` already gives a
+   correct-answer reveal. This state needs its own explicit host trigger (a "Reveal"
+   action separate from Lock — locking closes submissions, revealing is a presentation
+   beat the host times independently, same separation `answer_reveal` already has for
+   ordinary questions).
+
 ## Locking and scoring
 
-New control in `LiveMode.jsx`, visible only when the live slide carries
-`phoneScoring`: **Lock Answers**. On click:
+New control in `LiveMode.jsx`, visible only when the live slide is
+`isMatchingShiny()`: **Lock Answers**. On click:
 
-1. Writes `slide.data.phoneScoring.locked = true` (via the existing `updateSlide`
+1. Writes `slide.data.matchingLocked = true` (via the existing `updateSlide`
    debounced-and-serialized path — no new save mechanism needed).
 2. `/join` immediately stops accepting new pair taps for that slide (locked board
    renders read-only, showing the team's last submitted state).
 3. Host panel reads all `phone_answers` rows for that `slide_id`, scores each team's
-   `answer` against `phoneScoring.pairs` (count of correctly-matched `id`s ×
-   `pointsPerMatch`), and writes each team's result into `scoreboard_teams` — merging
+   `answer` against `slide.data.pairs` (count of correctly-matched `id`s ×
+   `slide.data.pointsPerMatch`), and writes each team's result into `scoreboard_teams` — merging
    into that round's `phone` value (additively, in case a round somehow carries more
    than one phone-scored question — sum, don't overwrite).
 4. A submission missing entirely (team never answered) scores 0, same as a blank
