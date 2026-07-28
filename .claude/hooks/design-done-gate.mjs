@@ -393,7 +393,7 @@
 // Exit 0 = allow Stop. Exit 2 = block, forcing the agent to keep working.
 
 import { execSync, spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, statSync, lstatSync, mkdirSync, readdirSync, appendFileSync, chmodSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, statSync, lstatSync, mkdirSync, readdirSync, appendFileSync, chmodSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -437,6 +437,39 @@ const MAX_LOCK_ATTEMPTS = 5;
 function sleepSync(ms) {
   const sab = new SharedArrayBuffer(4);
   Atomics.wait(new Int32Array(sab), 0, 0, ms);
+}
+// Second-pass review finding (CRITICAL): retry-on-EACCES does NOT fix recordIntegrity's read-merge-
+// write race, because two concurrent calls both successfully chmod-unlock and both successfully
+// write — neither ever throws, so the retry path never even engages (proven empirically: 5 real
+// concurrent trials lost an update in 3, with zero WARN messages printed). This needs actual mutual
+// exclusion around the read-merge-write, not a retry. NOT reusing concepts/tools/lock-acquire.sh —
+// that tool is shaped for a single 4-hour nightly run with quarantine/takeover machinery, and reusing
+// it here would serialize every concurrent Stop-hook invocation across the whole repo for up to 4
+// hours, conflicting with this file's own pre-existing countsMap merge-against-disk logic, which
+// explicitly expects and allows concurrent sessions. This is the same "mkdir is atomic" primitive,
+// deliberately much smaller and shorter-lived: scoped to ONLY the sidecar's own critical section,
+// sized for actual millisecond-scale contention between brief gate writes, not hours.
+const SIDECAR_LOCK_DIR = resolve(REPO_ROOT, 'concepts', '.design-gate-integrity.lock');
+const SIDECAR_LOCK_MAX_WAIT_MS = 2000;
+const SIDECAR_LOCK_STALE_MS = 10000; // older than this = a crashed holder, not a live one — take over
+function acquireSidecarLock() {
+  const deadline = Date.now() + SIDECAR_LOCK_MAX_WAIT_MS;
+  for (;;) {
+    try { mkdirSync(SIDECAR_LOCK_DIR); return; } catch (e) { if (e.code !== 'EEXIST') throw e; }
+    let age = Infinity;
+    try { age = Date.now() - statSync(SIDECAR_LOCK_DIR).mtimeMs; } catch { /* raced away between mkdir failing and stat — try again */ }
+    if (age > SIDECAR_LOCK_STALE_MS) {
+      try { rmSync(SIDECAR_LOCK_DIR, { recursive: true, force: true }); } catch { /* lost the takeover race — loop and retry mkdir */ }
+      continue;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for the integrity-sidecar lock (held by another process for under ${SIDECAR_LOCK_STALE_MS}ms)`);
+    }
+    sleepSync(20);
+  }
+}
+function releaseSidecarLock() {
+  try { rmSync(SIDECAR_LOCK_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
 }
 const CRITIC_AGENT_FILE = resolve(REPO_ROOT, '.claude/agents/trivia-os-design-critic.md');
 const QUALITY_AGENT_FILE = resolve(REPO_ROOT, '.claude/agents/trivia-os-design-quality-critic.md');
@@ -709,43 +742,41 @@ function freshShotsFor(prefix, absFile) {
 // immediately after every protected-store write, so the sidecar's recorded hash and the audit log's
 // record of that same write land together, atomically, from the same function call.
 function recordIntegrity(...absPaths) {
-  for (let attempt = 1; attempt <= MAX_LOCK_ATTEMPTS; attempt++) {
-    try {
-      // Re-read the sidecar FRESH every attempt, not once outside the loop — round-3 finding #4:
-      // this read-merge-write was a classic non-atomic race. Process A reads the sidecar, process B
-      // (a concurrent gate run) finishes its own read-merge-write in between, then A writes its
-      // merge back — silently dropping B's entry, with no mismatch ever detected for the file B just
-      // protected (checkIntegrityOrBlock only iterates entries the sidecar ALREADY has). Re-reading
-      // on every retry means a losing attempt sees the winner's update and merges on top of it
-      // instead of overwriting it.
-      let sidecar = {};
-      if (existsSync(INTEGRITY_FILE)) {
-        try { sidecar = JSON.parse(readFileSync(INTEGRITY_FILE, 'utf8')); } catch { sidecar = {}; }
-      }
-      for (const absPath of absPaths) {
-        const rel = relative(REPO_ROOT, absPath);
-        const hash = hashFile(absPath);
-        if (hash === null) {
-          // Round-3 finding #10: hashFile() returns null for ANY read error, not just "the file is
-          // genuinely gone" — a transient permission blip from another concurrent writer would look
-          // identical to a real delete. Only actually erase the sidecar entry (i.e. stop protecting
-          // this path) when the file is truly absent (ENOENT). Any OTHER error leaves the existing
-          // entry in place — erring toward keeping protection rather than silently dropping it; the
-          // next successful write to this path will correct the entry regardless.
-          let stillExists = true;
-          try { lstatSync(absPath); } catch (e) { if (e.code === 'ENOENT') stillExists = false; }
-          if (!stillExists) delete sidecar[rel];
-        } else {
-          sidecar[rel] = hash;
-        }
-      }
-      writeProtectedFile(INTEGRITY_FILE, () => writeFileSync(INTEGRITY_FILE, JSON.stringify(sidecar, null, 2)));
-      return;
-    } catch (e) {
-      if ((e.code === 'EACCES' || e.code === 'EPERM') && attempt < MAX_LOCK_ATTEMPTS) { sleepSync(20 * attempt); continue; }
-      console.error(`design-done-gate: WARNING — could not update integrity sidecar: ${e.message}`);
-      return;
+  try {
+    acquireSidecarLock();
+  } catch (e) {
+    console.error(`design-done-gate: WARNING — could not update integrity sidecar (lock): ${e.message}`);
+    return;
+  }
+  try {
+    // Second-pass review finding (CRITICAL): a plain retry-on-EACCES does NOT close this race —
+    // chmod-then-write lets two concurrent callers BOTH succeed without ever throwing, silently
+    // dropping whichever one writes the sidecar last-but-based-on-stale-data. acquireSidecarLock()
+    // above gives this whole read-merge-write a real critical section instead.
+    let sidecar = {};
+    if (existsSync(INTEGRITY_FILE)) {
+      try { sidecar = JSON.parse(readFileSync(INTEGRITY_FILE, 'utf8')); } catch { sidecar = {}; }
     }
+    for (const absPath of absPaths) {
+      const rel = relative(REPO_ROOT, absPath);
+      const hash = hashFile(absPath);
+      if (hash === null) {
+        // hashFile() returns null for ANY read error, not just "the file is genuinely gone" — a
+        // transient permission blip would look identical to a real delete. Only erase the sidecar
+        // entry (stop protecting this path) when the file is truly absent (ENOENT). Any OTHER error
+        // leaves the existing entry in place — erring toward keeping protection, not dropping it.
+        let stillExists = true;
+        try { lstatSync(absPath); } catch (e) { if (e.code === 'ENOENT') stillExists = false; }
+        if (!stillExists) delete sidecar[rel];
+      } else {
+        sidecar[rel] = hash;
+      }
+    }
+    writeProtectedFile(INTEGRITY_FILE, () => writeFileSync(INTEGRITY_FILE, JSON.stringify(sidecar, null, 2)));
+  } catch (e) {
+    console.error(`design-done-gate: WARNING — could not update integrity sidecar: ${e.message}`);
+  } finally {
+    releaseSidecarLock();
   }
 }
 
@@ -762,17 +793,21 @@ function recordIntegrity(...absPaths) {
 // not exotic. Accepted, same spirit as this file's other documented residual gaps.
 function writeProtectedFile(absPath, writeFn) {
   for (let attempt = 1; attempt <= MAX_LOCK_ATTEMPTS; attempt++) {
-    if (existsSync(absPath)) {
-      // Round-3 finding #11: chmodSync follows symlinks — it chmods the TARGET, not the link itself.
-      // If one of these paths were ever replaced with a symlink, the "directory" holding the link
-      // stays writable (no chmod needed to swap it out), and this function would happily chmod
-      // whatever the link points AT, silently making some unrelated file read-only. None of these
-      // paths should ever legitimately be a symlink — refuse outright rather than operate through one.
-      try {
-        if (lstatSync(absPath).isSymbolicLink()) {
-          throw new Error(`${absPath} is a symlink, not a regular file — refusing to write through it`);
-        }
-      } catch (e) { if (e.code !== 'ENOENT') throw e; }
+    // Second-pass review finding (CRITICAL): the previous version gated this whole block behind
+    // `existsSync(absPath)`, which FOLLOWS symlinks and returns false for a BROKEN one — a broken
+    // symlink at a not-yet-existing protected path skipped this entire check, fell through to
+    // writeFn(), wrote THROUGH the link, and the finally below chmod'd whatever the link pointed at.
+    // Verified live: a broken symlink from a new verdict path to .claude/settings.json let the gate
+    // write gate-controlled content into settings.json and lock IT to 444. lstatSync, tried
+    // unconditionally here (not gated behind existsSync), reports on the LINK itself and succeeds
+    // identically for a working OR a broken symlink — only a genuinely absent path throws ENOENT.
+    let lst = null;
+    try { lst = lstatSync(absPath); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+    const isSymlink = !!(lst && lst.isSymbolicLink());
+    if (lst) {
+      if (isSymlink) {
+        throw new Error(`${absPath} is a symlink, not a regular file — refusing to write through it`);
+      }
       try { chmodSync(absPath, WRITABLE_MODE); } catch { /* not yet lockable, or already writable */ }
     }
     try {
@@ -785,8 +820,12 @@ function writeProtectedFile(absPath, writeFn) {
       }
       throw e;
     } finally {
-      try { chmodSync(absPath, PROTECTED_STORE_MODE); } catch (e2) {
-        console.error(`design-done-gate: WARNING — could not chmod ${absPath} read-only after writing it: ${e2.message}`);
+      // Skip the chmod attempt entirely when we already refused above for being a symlink — it would
+      // just chmod through the link again and log a confusing extra warning for no benefit.
+      if (!isSymlink) {
+        try { chmodSync(absPath, PROTECTED_STORE_MODE); } catch (e2) {
+          console.error(`design-done-gate: WARNING — could not chmod ${absPath} read-only after writing it: ${e2.message}`);
+        }
       }
     }
   }
@@ -1054,14 +1093,26 @@ function sessionTouchedFiles(transcriptPath) {
 // safer than weakening the check for convenience.
 function checkIntegrityOrBlock() {
   if (!existsSync(INTEGRITY_FILE)) return; // first run ever — no baseline recorded yet to compare against
+  // The sidecar itself is never in its own list of entries to check (it can't hash itself — see its
+  // own doc comment above), so a symlinked sidecar would otherwise pass completely clean while
+  // pointing at an attacker-controlled baseline. Check this one path explicitly before trusting
+  // anything it says.
+  try {
+    if (lstatSync(INTEGRITY_FILE).isSymbolicLink()) {
+      console.error(`design-done-gate: BLOCKED — ${INTEGRITY_FILE} is a symlink, not a regular file. ` +
+        `This should never happen. STOP HERE: do not attempt to resolve this yourself. Tell Ben and ` +
+        `wait for him to investigate from his own terminal.`);
+      process.exit(2);
+    }
+  } catch { /* ENOENT here would be surprising given the existsSync check just above, but not fatal — fall through */ }
   let sidecar;
   try {
     sidecar = JSON.parse(readFileSync(INTEGRITY_FILE, 'utf8'));
   } catch (e) {
     console.error(`design-done-gate: BLOCKED — ${INTEGRITY_FILE} exists but is not valid JSON ` +
-      `(${e.message}). This file is gate-owned and should never be hand-edited or corrupted. A human ` +
-      `must inspect it and either restore a good copy or intentionally reseed it (see ` +
-      `concepts/tools/reseed-design-gate-integrity.mjs) before this gate can run again.`);
+      `(${e.message}). This file is gate-owned and should never be hand-edited or corrupted. STOP HERE: ` +
+      `do not attempt to resolve this yourself. Tell Ben this file is corrupted and wait for him to ` +
+      `investigate and restore it from his own terminal.`);
     process.exit(2);
   }
   const mismatches = [];
@@ -1076,21 +1127,39 @@ function checkIntegrityOrBlock() {
     const actualHash = hashFile(absPath);
     if (isSymlink || actualHash !== expectedHash) mismatches.push({ rel, expectedHash, actualHash, isSymlink });
   }
-  // Round-3 finding #6: the loop above only checks entries the sidecar ALREADY has. A file that
-  // reaches disk WITHOUT ever going through this gate's own write path (recordIntegrity is the only
-  // thing that adds an entry) would have no entry to compare against and would sit permanently
-  // invisible to this check. Separately confirm every canonical store location that currently EXISTS
-  // has SOME sidecar entry at all.
-  const canonicalSingleFiles = [COUNTS_FILE, resolve(REPO_ROOT, 'concepts', 'design-cases.json'), AUDIT_LOG_FILE];
-  const onDiskPaths = canonicalSingleFiles.filter(existsSync);
-  if (existsSync(VERDICT_DIR)) {
+  // Round-3 finding #6, REFINED after a second review found the first version false-locks every
+  // fresh worktree/clone: the loop above only checks entries the sidecar ALREADY has. A file that
+  // reaches disk WITHOUT ever going through this gate's own write path would have no entry to compare
+  // against and would sit permanently invisible to this check. But COUNTS_FILE and design-cases.json
+  // are GIT-TRACKED — a brand-new worktree checks them out with real, legitimate historical content
+  // immediately, before this gitignored sidecar has ever run there once, and writeCase only fires
+  // when a verdict was actually computed this run (an early exit before that point is completely
+  // normal). Flagging that as suspicious false-blocked the second gate run in every new worktree —
+  // proven live. Scoped now to ONLY paths that do NOT carry pre-existing content into a fresh
+  // worktree: AUDIT_LOG_FILE is gitignored (starts absent there) and VERDICT_DIR's contents are
+  // untracked (git worktrees never carry over untracked files at all) — for those, "exists with no
+  // sidecar entry" really is only explainable by something reaching disk outside this gate's own
+  // write path. COUNTS_FILE and design-cases.json remain fully covered by the loop above once they DO
+  // have an entry — same accepted bootstrap cost as this function's other "known, accepted
+  // operational cost" comment, just extended to worktree creation, not only ordinary git operations.
+  function existsOnDisk(absPath) {
+    // lstatSync (not existsSync) — existsSync follows symlinks and returns false for a BROKEN one,
+    // which would make a broken-symlink verdict file invisible to this check too (same root cause as
+    // the writeProtectedFile symlink bug fixed elsewhere this round).
+    try { lstatSync(absPath); return true; } catch { return false; }
+  }
+  const onDiskPaths = [AUDIT_LOG_FILE].filter(existsOnDisk);
+  if (existsOnDisk(VERDICT_DIR)) {
     for (const f of readdirSync(VERDICT_DIR)) {
       if (f.endsWith('.json')) onDiskPaths.push(resolve(VERDICT_DIR, f));
     }
   }
   for (const absPath of onDiskPaths) {
     const rel = relative(REPO_ROOT, absPath);
-    if (!(rel in sidecar)) mismatches.push({ rel, expectedHash: undefined, actualHash: hashFile(absPath), isSymlink: false });
+    if (rel in sidecar) continue;
+    let isSymlink = false;
+    try { isSymlink = lstatSync(absPath).isSymbolicLink(); } catch { /* already confirmed to exist above */ }
+    mismatches.push({ rel, expectedHash: undefined, actualHash: hashFile(absPath), isSymlink });
   }
   if (mismatches.length > 0) {
     console.error(`design-done-gate: BLOCKED — ${mismatches.length} gate-protected file(s) do not ` +

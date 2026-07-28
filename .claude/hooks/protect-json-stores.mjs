@@ -221,6 +221,16 @@ const JSON_STORE_PATH_RE = /concepts\/\.design-attempt-counts\.json|concepts\/de
 // filename-based block the same way it can route around any of this file's other checks. Honest
 // about that, not pretending otherwise.
 const RESEED_TOOL_RE = /reseed-design-gate-integrity/;
+const RESEED_TOOL_INVOKE_RE = /\b(?:node|bash|sh|zsh|python3?|perl|ruby|deno|bun|cat|less|more|head|tail|vim|vi|nano|emacs|source)\b[^;|&\n]*reseed-design-gate-integrity/;
+function segmentInvokesReseedTool(seg) {
+  const dequoted = seg.replace(/['"]/g, '');
+  if (RESEED_TOOL_INVOKE_RE.test(dequoted)) return true;
+  // Shell-wrapped nested invocation (bash -c '...', piped into a shell, heredoc) — same loosened
+  // fallback pattern this file already uses elsewhere for shell-wrapped segments, since the real
+  // verb is hidden one level inside and the outer segment's first word is just bash/sh/zsh itself.
+  if (segmentPipesIntoShell(seg) && RESEED_TOOL_RE.test(dequoted)) return true;
+  return false;
+}
 const SHOTS_DIR_RE = /concepts\/\.audit-shots\//;
 // Recursive — matches concepts/foo.html AND concepts/any/nested/path/foo.html, matching
 // design-done-gate.mjs's own stated scope ("concepts/**.html always").
@@ -282,6 +292,13 @@ function segmentTampersWithJsonStore(seg) {
   // itself, which is shared with the concepts-glob/bare-directory checks below and would over-block
   // ordinary scene-file permission changes, which were never the concern here).
   if ((fw === 'chmod' || fw === 'chown' || fw === 'chflags') && JSON_STORE_PATH_RE.test(dequoted)) return true;
+  // Second-pass review finding: chmod -R 644 concepts (bare directory) and chmod 644 concepts/*.json
+  // (glob) both still passed — the check above only covers NAMED paths. Unlike rm/mv/tee, there is no
+  // legitimate reason a worker would ever need to change permissions on scene files at all
+  // (permissions aren't part of the design-review content model), so safe to block broadly here in a
+  // way that would be over-blocking for rm/mv/tee.
+  if ((fw === 'chmod' || fw === 'chown' || fw === 'chflags') &&
+      (CONCEPTS_GLOB_RE.test(seg) || CLAUDE_HOOKS_GLOB_RE.test(seg) || BARE_CONCEPTS_RE.test(dequoted))) return true;
   if (fw === 'sed' && /-i\b/.test(seg) && JSON_STORE_PATH_RE.test(dequoted)) return true;
   if (fw === 'cp' || fw === 'install') {
     for (const m of dequoted.matchAll(ANCHORED_DEST_RE)) {
@@ -303,8 +320,8 @@ function segmentTampersWithJsonStore(seg) {
   // unwrapped equivalents correctly blocked two lines above.
   if (segmentPipesIntoShell(seg)) {
     if (LOOSE_WRITE_VERB_RE.test(dequoted) && JSON_STORE_PATH_RE.test(dequoted)) return true;
-    if (/\brm\b|\bmv\b/.test(dequoted) && BARE_CONCEPTS_RE.test(dequoted)) return true;
-    if (/\brm\b|\bmv\b|\bcp\b|\btee\b/.test(dequoted) && (CONCEPTS_GLOB_RE.test(seg) || CLAUDE_HOOKS_GLOB_RE.test(seg))) return true;
+    if (/\brm\b|\bmv\b|\bchmod\b|\bchown\b|\bchflags\b/.test(dequoted) && BARE_CONCEPTS_RE.test(dequoted)) return true;
+    if (/\brm\b|\bmv\b|\bcp\b|\btee\b|\bchmod\b|\bchown\b|\bchflags\b/.test(dequoted) && (CONCEPTS_GLOB_RE.test(seg) || CLAUDE_HOOKS_GLOB_RE.test(seg))) return true;
   }
   return false;
 }
@@ -362,7 +379,7 @@ const command = payload.tool_input?.command;
 if (typeof command !== 'string') process.exit(0);
 
 for (const seg of splitSegments(command)) {
-  if (RESEED_TOOL_RE.test(seg)) {
+  if (segmentInvokesReseedTool(seg)) {
     console.error(`protect-json-stores: BLOCKED — this Bash segment references the integrity-sidecar ` +
       `recovery tool: "${seg.trim()}". concepts/tools/reseed-design-gate-integrity.mjs must be run by ` +
       `Ben directly, in his own terminal, never through an agent's Bash tool call. If the gate just ` +
