@@ -174,6 +174,41 @@ function splitSegments(command) {
 const JSON_STORE_PATH_RE = /concepts\/\.design-attempt-counts\.json|concepts\/design-cases\.json|concepts\/\.design-critic-verdicts\b|concepts\/\.design-gate-audit\.log/;
 const SHOTS_DIR_RE = /concepts\/\.audit-shots\//;
 
+// Destructive git verbs — CRITICAL finding #2 (round 2 review): git checkout/restore/stash/rm/clean
+// touching a protected path, or git reset --hard at all, silently reverts or wipes the protected
+// stores with zero relationship to protect-json-stores.mjs's write-verb detection above (none of
+// those regexes look at git subcommands at all). Confirmed live: `git checkout HEAD~3 --
+// concepts/design-cases.json`, `git clean -fdx concepts/`, `git stash push -- concepts/design-
+// cases.json`, `git reset --hard HEAD~1`, and `git restore concepts/.design-attempt-counts.json` all
+// returned exit 0 (allowed) before this fix. This was the single largest hole in the whole guard —
+// bigger than anything the write-verb detection covered, since design-cases.json and
+// .design-attempt-counts.json are both git-tracked and Bash(git *) is unrestricted.
+const GIT_DESTRUCTIVE_RE = /^\s*git\s+(checkout|restore|stash|rm|clean|reset)\b/;
+function segmentIsDestructiveGit(seg) {
+  const m = GIT_DESTRUCTIVE_RE.exec(seg);
+  if (!m) return false;
+  const subcommand = m[1];
+  const dequoted = seg.replace(/['"]/g, '');
+  // `git clean` wipes untracked files by DIRECTORY scope, not by naming a specific file — it can
+  // never be scoped to "does this segment mention the exact protected filename" the way rm/mv can,
+  // because it doesn't need to. .design-critic-verdicts/ and .design-gate-audit.log are BOTH
+  // untracked (design-cases.json and .design-attempt-counts.json are git-tracked, so `clean` doesn't
+  // touch those two, but does touch the other two) — block any `git clean` outright rather than try
+  // to prove a particular invocation is safe.
+  if (subcommand === 'clean') return true;
+  // `git reset --hard` discards ALL uncommitted changes repo-wide and never names a path at all —
+  // there is nothing to co-occurrence-check against. This project's own global instructions already
+  // say never run this without explicit request; enforcing that mechanically here is consistent, not
+  // an extra restriction invented for this file.
+  if (subcommand === 'reset') return /--hard\b/.test(seg);
+  // checkout/restore/stash/rm: dangerous specifically when they name a protected path, or when they
+  // target the whole tree (a bare "." or "-- ." with nothing more specific narrows "everything",
+  // which trivially includes the protected paths).
+  if (JSON_STORE_PATH_RE.test(dequoted)) return true;
+  if (/(?:^|\s)(?:--\s+)?\.\s*$/.test(seg.trimEnd())) return true;
+  return false;
+}
+
 const WHOLE_SEGMENT_WRITE_RE = /\brm\b|\bmv\b|\btouch\b|\bsed\s+-i\b|\btee\b/;
 const ANCHORED_WRITE_RE = /(?:>>?\s*|\bcp\s+(?:-\S+\s+)*\S+\s+|\binstall\s+(?:-\S+\s+)*\S+\s+)(['"]?)([\w./-]+)\1/g;
 const INTERPRETER_RE = /\b(?:node|python3?|deno|bun|perl|ruby)\b/;
@@ -221,6 +256,15 @@ for (const seg of splitSegments(command)) {
       `Use cat/grep, or a real script file, instead of an inline eval flag if you need to read one of ` +
       `these files programmatically. If you need to change one of these files, stop and ask Ben — do ` +
       `not route around this.`);
+    process.exit(2);
+  }
+  if (segmentIsDestructiveGit(seg)) {
+    console.error(`protect-json-stores: BLOCKED — this Bash segment is a destructive git operation ` +
+      `touching a gate-protected path (or the whole tree): "${seg.trim()}". git checkout/restore/stash/rm ` +
+      `naming one of the protected stores, any git clean (wipes untracked files by directory scope, ` +
+      `including .design-critic-verdicts/ and .design-gate-audit.log), and git reset --hard (discards ` +
+      `everything uncommitted repo-wide) are all blocked here. Reverting these files through git history ` +
+      `is not a Bash-guard bypass — if you genuinely need to roll one back, stop and ask Ben.`);
     process.exit(2);
   }
   if (segmentForgesShotMtime(seg)) {
