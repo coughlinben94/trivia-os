@@ -734,9 +734,8 @@ function writeProtectedFile(absPath, writeFn) {
 // the Stop. `writtenPath`, when given, is the absolute path of the OTHER protected file this call is
 // reporting a write to (design-cases.json, a verdict file, or the counts file) — recordIntegrity()
 // hashes both it and this audit log file (which the appendFileSync line below just changed) in one
-// sidecar update, so the two stay synchronized. As of this commit no call site actually passes
-// writtenPath yet — see the follow-on task that wires writeCase/verdict-writes/counts-write through
-// writeProtectedFile and starts passing it.
+// sidecar update, so the two stay synchronized. writeCase, both verdict writes, and the counts write
+// all pass writtenPath as of this commit.
 function auditLog(store, action, detail, writtenPath) {
   try {
     writeProtectedFile(AUDIT_LOG_FILE, () =>
