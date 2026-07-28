@@ -373,7 +373,7 @@
 // Exit 0 = allow Stop. Exit 2 = block, forcing the agent to keep working.
 
 import { execSync, spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, appendFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -382,6 +382,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SHOT_DIR = resolve(REPO_ROOT, 'concepts', '.audit-shots');
 const VERDICT_DIR = resolve(REPO_ROOT, 'concepts', '.design-critic-verdicts');
 const COUNTS_FILE = resolve(REPO_ROOT, 'concepts', '.design-attempt-counts.json');
+const AUDIT_LOG_FILE = resolve(REPO_ROOT, 'concepts', '.design-gate-audit.log');
 const CRITIC_AGENT_FILE = resolve(REPO_ROOT, '.claude/agents/trivia-os-design-critic.md');
 const QUALITY_AGENT_FILE = resolve(REPO_ROOT, '.claude/agents/trivia-os-design-quality-critic.md');
 const VISUAL_PATH_RE = /(^|\/)concepts\/.*\.html$|(^|\/)client\/src\/components\/display\/.*\.jsx$/;
@@ -630,6 +631,19 @@ function freshShotsFor(prefix, absFile) {
   return { fresh: freshShots.length > 0, shots, freshShots };
 }
 
+// Append-only audit trail (mitigates B4: "no integrity trail on the three JSON stores. A
+// delete-and-regenerate cycle is indistinguishable from a legitimate first run.") Every write this
+// gate makes to one of its own protected stores is logged here — not to PREVENT tampering (that is
+// protect-json-stores.mjs's job) but so a human sweep can tell a genuine write history from a store
+// that was deleted and silently regenerated, and so concepts/tools/sweep-stale-design-entries.mjs
+// below has something to cross-check against. Never blocks on failure — an audit log write failing
+// should not itself fail the Stop.
+function auditLog(store, action, detail) {
+  try {
+    appendFileSync(AUDIT_LOG_FILE, JSON.stringify({ timestamp: new Date().toISOString(), store, action, detail }) + '\n');
+  } catch (e) { console.error(`design-done-gate: WARNING — could not append to ${AUDIT_LOG_FILE}: ${e.message}`); }
+}
+
 // Append one gate-owned record to design-cases.json. Shared so the quality
 // gate's verdicts land in the same case log as the correctness gate's —
 // "thin, blurry, worse than the reference" is exactly the history this file
@@ -641,6 +655,7 @@ function writeCase(record) {
     casesData.cases = casesData.cases || [];
     casesData.cases.push(record);
     writeFileSync(casesFile, JSON.stringify(casesData, null, 2));
+    auditLog('design-cases.json', 'append-case', { noun: record.noun, verdict: record.verdict, file: record.file });
   } catch (e) { console.error(`design-done-gate: WARNING — could not auto-write case record: ${e.message}`); }
 }
 
@@ -1478,6 +1493,7 @@ for (const file of touchedFiles) {
           `design-cases.json.`);
       }
       writeFileSync(verdictPath, JSON.stringify(parsed, null, 2));
+      auditLog('design-critic-verdicts', 'write-verdict', { slug, verdict: parsed.verdict, file });
       verdict = parsed;
       verdictJustComputed = true;
     }
@@ -1722,6 +1738,7 @@ for (const file of touchedFiles) {
                 panel: seeing.map(s => s._model || 'default'), // see the correctness verdict's note
               };
               writeFileSync(qualityVerdictPath, JSON.stringify(qVerdict, null, 2));
+              auditLog('design-critic-verdicts', 'write-quality-verdict', { qualitySlug, verdict: qVerdict.verdict, file });
               qJustComputed = true;
               writeCase({
                 noun: `${file.split('/').pop()} (whole scene)`, category: 'whole-scene-craft',
@@ -1836,6 +1853,7 @@ try {
     mine.overridesUsed = Math.max(mine.overridesUsed || 0, theirs.overridesUsed || 0);
   }
   writeFileSync(COUNTS_FILE, JSON.stringify(countsMap, null, 2));
+  auditLog('design-attempt-counts.json', 'write-counts', { keys: Object.keys(countsMap) });
 } catch (e) { console.error(`design-done-gate: WARNING — could not write ${COUNTS_FILE}: ${e.message} (strike counts for this run are lost).`); }
 
 if (problems.length > 0) {
