@@ -12,13 +12,20 @@
       "Bash(git *)",
       "Bash(node *)",
       "Bash(npm *)",
-      "Bash(cd *)",
       "Bash(echo *)",
       "Bash(rm *)",
       "Bash(cat *)",
       "Bash(mv *)",
       "Bash(gh *)",
-      "Bash(cd /Users/bencoughlin/Projects/baynes-trivia/trivia-os && *)",
+      "Bash(cd /Users/bencoughlin/Projects/baynes-trivia/trivia-os && git *)",
+      "Bash(cd /Users/bencoughlin/Projects/baynes-trivia/trivia-os && node *)",
+      "Bash(cd /Users/bencoughlin/Projects/baynes-trivia/trivia-os && npm *)",
+      "Bash(cd /Users/bencoughlin/Projects/baynes-trivia/trivia-os && echo *)",
+      "Bash(cd /Users/bencoughlin/Projects/baynes-trivia/trivia-os && rm *)",
+      "Bash(cd /Users/bencoughlin/Projects/baynes-trivia/trivia-os && cat *)",
+      "Bash(cd /Users/bencoughlin/Projects/baynes-trivia/trivia-os && mv *)",
+      "Bash(cd /Users/bencoughlin/Projects/baynes-trivia/trivia-os && gh *)",
+      "Bash(cd /Users/bencoughlin/Projects/baynes-trivia/trivia-os && ./concepts/tools/*)",
       "mcp__cowork__allow_cowork_file_delete",
       "mcp__github__create_pull_request",
       "mcp__chrome-devtools__navigate_page",
@@ -41,6 +48,14 @@
     ]
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/protect-json-stores.mjs" }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
