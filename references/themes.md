@@ -227,18 +227,23 @@ Summer's exact failure through a newly-sanctioned door:
 - **In a round-journey** (full-stage, no safe-area, more pictorial license
   by design): generate the figurative element and confirm, alone, that it
   reads as its noun before it enters any scene.
-- **In an ambient theme: never generate a pictorial figurative object and
-  place it as-is.** Rule 2 above ("light, not clip-art") already forbids
-  hard pictorial icons, characters, or objects here, generated or
-  hand-coded — that rule predates and outranks this one. A figurative idea
-  in an ambient brief gets one of two treatments: **cut it** from the brief
-  entirely, or **restate it as an abstract light form** that fits the
-  existing tonal exceptions only (a hot near-white anchor core; a dark
-  silhouette drifter, per the in-family color rule above — `sand-dune-
-  chill`'s gulls are the sanctioned example: recognizable in outline, but
-  flat, tonal, and never rendered as a detailed pictorial asset). If
-  neither treatment can make the idea work, the idea doesn't belong in an
-  ambient theme — that is a valid, correct outcome, not a failure to solve.
+- **In an ambient theme, a fully pictorial figurative scene is allowed —
+  resolved 2026-07-27, Ben's ruling — but only by genuinely clearing both
+  design-critic gates, never by placing it and hoping.** This bullet
+  previously said "never" outright; that was written before whole-scene
+  Recraft reference images and the dual correctness+quality critic gate
+  existed, and it does not survive contact with either. The rule that
+  actually still binds is rule 2 above ("light, not clip-art") in its literal
+  form: no hard register mismatch, no clip-art-flat icon dropped into an
+  otherwise-soft scene, no element that reads as pasted rather than drawn by
+  the same hand as everything around it. A pictorial idea in an ambient
+  brief is still cut, or restated as an abstract light form, whenever it
+  can't clear that bar — those remain valid, correct outcomes, not just a
+  fallback. What changed is that "fully pictorial and it clears the bar" is
+  now also a valid outcome, where before it was foreclosed outright. See
+  `concepts/OBJECT-RENDERING-PROTOCOL.md`'s addendum for the full reasoning
+  and `concepts/design-pipeline-hardening-fix.md` for why the gate itself
+  has to be trustworthy before this policy is safe to lean on.
 
 Fully describable in one sentence of pure geometry (a disc, a beam, a
 glowing dot, a flat gradient)? That's **iconic** in either system — hand-

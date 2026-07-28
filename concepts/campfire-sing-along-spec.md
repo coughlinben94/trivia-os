@@ -226,18 +226,18 @@ this file; the only hand-authored additions are abstract light forms (glow/core/
 sanctioned near-white-core and light-pool exceptions) and particle-tier dots (embers, stars,
 shooting star), all iconic (one sentence of geometry each).
 
-## Known open item — not yet resolved, flagged rather than hidden
+## Formerly-open item — resolved 2026-07-27
 
-`references/themes.md` rule 1a states an ambient theme may **never** place a pictorial figurative
-object as-is — only cut it or restate it as an abstract light form (the near-white-core / dark-
-silhouette-drifter exceptions). Two static camp chairs and a full campfire scene are, literally,
-placed pictorial objects, not abstracted into light forms. This spec's read: the brief itself
-(explicit "trace the vector source's real shapes for the fire, chairs, and tree line") is a
-same-session, explicit instruction that supersedes that default for this one theme, on the same
-logic that already lets `sonora-balloons` ship five recognizable hot-air balloons as its anchor —
-the operative bar in 1a's own text is "no hard pictorial icons... kept soft, reading as light" /
-no register mismatch, not "nothing may ever be recognizable as an object." This traced geometry is
-one coherent flat-vector asset (no photoreal/vector register mismatch) and the fire/core/glow
-carry the "reading as light" quality the rule actually asks for. Flagging this rather than quietly
-picking a side — if the design-critic gate or Ben reads it differently, the chairs are the
-element to cut or re-abstract, not the flame.
+`references/themes.md` rule 1a and `concepts/OBJECT-RENDERING-PROTOCOL.md`'s addendum both now say
+plainly: a fully pictorial ambient scene is allowed, contingent on genuinely clearing both critic
+gates. This spec's read at the time (below, kept for the record) turned out to be the direction Ben
+actually ruled — but it is no longer a same-session judgment call resting on an analogy to
+`sonora-balloons`; it's the standing rule. The bar is unchanged from what this section already
+argued: no register mismatch, no element that reads as pasted rather than drawn by the same hand as
+everything around it, and the chairs/flame/treeline/reflection genuinely passing both critics — not
+this spec's own reasoning standing in for that.
+
+Original reasoning, kept for the record: the operative bar in rule 1a was always "no hard pictorial
+icons... kept soft, reading as light" / no register mismatch, not "nothing may ever be recognizable
+as an object" — this traced geometry is one coherent flat-vector asset with no photoreal/vector
+register mismatch, and the fire/core/glow carry the "reading as light" quality the rule asks for.

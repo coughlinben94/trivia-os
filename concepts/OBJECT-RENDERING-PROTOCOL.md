@@ -71,12 +71,19 @@ plane? That's **iconic** — hand-code it, no escalation needed.
     inconsistent with hand-placed anchors, or the absence of a provenance comment) is a violation
     the same way an unrounded box-shadow is — this is the thing that makes "hand-built" checkable
     instead of a promise.
-  - **Open item, not yet resolved — needs Ben's explicit call before whole-scene pictorial
-    ambients (a lakeshore, a campfire, a full illustrated setting) are treated as settled
-    practice:** `references/themes.md` rule 1 says ambients should be "light, not clip-art" —
-    written before whole-scene reference images were part of the pipeline. Whether a fully
-    pictorial ambient scene is in-bounds at all, separate from the trace-vs-hand-build question
-    resolved above, is still open and deserves a deliberate rule rewrite, not a quiet exception.
+  - **Resolved 2026-07-27 — Ben's ruling: a fully pictorial ambient scene belongs in the house
+    style, contingent on genuinely clearing the gate.** `references/themes.md` rule 1/1a's "light,
+    not clip-art" language predates whole-scene reference images being part of the pipeline and read
+    as a blanket ban on placed pictorial objects in ambient themes; it is not one. The operative bar
+    was never "nothing may ever be recognizable as an object" — it's whether the built scene reads
+    as one coherent hand (no register mismatch between hard pictorial elements and everything soft
+    around them) and whether it genuinely passes both critic gates (noun-test correctness AND the
+    whole-scene quality/craft critic), not whether a majority vote or a background dispatch let it
+    through on a technicality. This makes fixes #1-#4 in
+    `concepts/design-pipeline-hardening-fix.md` more load-bearing, not less: a gate that can be
+    gamed is the actual risk a pictorial-scenes-allowed policy creates; a gate that genuinely holds
+    is what makes the policy safe to rely on. See `references/themes.md` rule 1a's ambient branch
+    and `concepts/campfire-sing-along-spec.md`'s "Known open item" section — both updated to match.
   - **Still open, lower priority:** a completeness check comparing the locked brief's element list
     against what the Recraft reference actually contains, so an omission (Campfire Sing-Along's
     reference shipped with no stars at all, despite a starry night sky being in scope) gets caught
