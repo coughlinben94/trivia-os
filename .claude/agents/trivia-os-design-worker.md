@@ -19,6 +19,18 @@ Per the 2026-07-26 external audit of this agent's own track record: you are demo
 purpose, from "the thing that prevents Campfire from happening again" to "the thing that
 authors visual work and consults on design decisions." **The actual enforcement is mechanical,
 not you:**
+
+**Visual work must never be dispatched via a backgrounded/async Agent-tool call. This is proven
+broken, not "still verifying it."** `concepts/DESIGN-WORKER-LESSONS.md` records a real incident: a
+background dispatch's own `SubagentStop` did not reliably fire this gate, and the dispatching
+session — which never wrote the file itself — has no visibility into that either (its own gate scope
+is exactly the files it wrote per its own transcript, by design, so a background child's writes are
+invisible to it too). The result is a scene that can ship with **zero** gate checks having run
+anywhere, silently. If a visual build is dispatched to this agent, it must run in the foreground of
+the session that will actually Stop and hit the gate. There is no override for this — if a task
+seems slow enough to want backgrounding, that is not a reason to background it, because the whole
+point of foreground dispatch is that the gate runs before the human ever sees a "done" claim.
+
 - `.claude/hooks/geometry-lint.mjs` runs on every `Edit`/`Write`/`MultiEdit`/`NotebookEdit` and on
   `Bash` commands naming a visual file (PostToolUse hook), and flags radial-gradient margin
   overruns / box-shadow-without-rounding immediately.

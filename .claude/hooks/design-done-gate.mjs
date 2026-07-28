@@ -902,6 +902,43 @@ const touchedFiles = session === null
   ? dirtyVisualFiles
   : [...new Set([...session.paths].filter(f => VISUAL_PATH_RE.test(f)))];
 
+// ── Orphan trip-wire (diagnostic only, never blocking). A dirty/uncommitted visual file this
+// session did NOT write (per its own transcript) but that also has no fresh critic verdict of any
+// kind anywhere is exactly the shape of a backgrounded Agent-tool dispatch whose own SubagentStop
+// never ran this gate (see concepts/design-pipeline-hardening-fix.md, A2): the child's gate was
+// never invoked, and this session's own scope deliberately excludes files it didn't write itself
+// (see the v3 note above — that exclusion is what stops a prior session's abandoned WIP from
+// blocking every Stop forever, and it must not be undone here). So: warn loudly, never block. A
+// hard block on a file this session didn't touch would repeat the exact v3 bug this file already
+// fixed once. The real backstop is the hard rule in trivia-os-design-worker.md's header — this is
+// a diagnostic net for when that rule is violated anyway, not a second enforcement mechanism.
+for (const orphanFile of dirtyVisualFiles.filter(f => !touchedFiles.includes(f))) {
+  const absOrphan = resolve(REPO_ROOT, orphanFile);
+  if (!existsSync(absOrphan)) continue;
+  const orphanMtime = statSync(absOrphan).mtimeMs;
+  let anyFreshVerdict = false;
+  try {
+    for (const vf of readdirSync(VERDICT_DIR)) {
+      if (!vf.endsWith('.json')) continue;
+      let v;
+      try { v = JSON.parse(readFileSync(resolve(VERDICT_DIR, vf), 'utf8')); } catch { continue; }
+      if (v.checkedFile === orphanFile && v.timestamp && new Date(v.timestamp).getTime() >= orphanMtime) {
+        anyFreshVerdict = true;
+        break;
+      }
+    }
+  } catch { /* no verdict dir yet — treat as no fresh verdict */ }
+  if (!anyFreshVerdict) {
+    console.error(`design-done-gate: WARNING — ${orphanFile} is dirty/uncommitted, was NOT written ` +
+      `by this session's own transcript, and has no fresh critic verdict of any kind on file. This ` +
+      `is the exact shape of a backgrounded Agent-tool dispatch whose own SubagentStop never ran ` +
+      `this gate — foreground dispatch is required for all visual work (see ` +
+      `trivia-os-design-worker.md). NOT blocking this Stop on it (it may also just be another ` +
+      `session's unrelated WIP) — but if ${orphanFile} is meant to be done, a foreground session ` +
+      `must render, screenshot, and Stop against it directly before it can pass.`);
+  }
+}
+
 if (touchedFiles.length === 0) process.exit(0);
 
 // Said out loud so a reader of the hook output can tell "the gate ran and
