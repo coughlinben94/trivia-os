@@ -48,6 +48,15 @@ each time.
    the thing it's drawn as" tell?
 3. **Scene coherence** — does it match the rendering register of everything around it (flat vs.
    photoreal, in-palette or not)?
+
+**Before concluding PASS, name the single most likely reason a skeptical second reviewer would FAIL
+this, then check whether that reason actually holds.** If it does hold, that is your verdict — FAIL,
+with that reason. If it genuinely doesn't (you checked and the thing you worried about isn't actually
+there), say so and explain why in your reasoning; don't skip this step just because your first
+instinct was PASS. This costs nothing extra to run and directly targets the panel's known weak point:
+three samples reasoning independently toward "yes, looks fine" make the same mistake far more often
+than three samples that each had to argue against their own leaning conclusion first.
+
 Cite roughly WHERE in the image each judgment comes from (e.g. "the left third," "the bottom edge")
 — this is a known, real technique for catching a model that claims to have looked at something it
 actually skimmed past. A verdict with no cited location for its reasoning is weaker evidence, not

@@ -80,6 +80,13 @@ that's flat." If it only reads as a defect *because it differs from the referenc
 defect. Drop it. A verdict made of nothing but difference-from-reference is a copy check, and this
 project explicitly does not ship copies of the reference; it hand-builds from them.
 
+**Second self-check, distinct from the anti-overfit one above: before concluding PASS, name the
+single most likely reason a skeptical second reviewer would FAIL this, then check whether that reason
+actually holds.** If it does, that's a real defect — name it with its tag and severity. If it
+genuinely doesn't hold, say so in your reasoning rather than silently skipping the question. Three
+samples that each independently argued against their own leaning PASS catch more real defects than
+three samples that all just confirmed their first read.
+
 ## What you're given
 
 - The rendered scene (one or more screenshots).
