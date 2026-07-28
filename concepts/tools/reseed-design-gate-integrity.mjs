@@ -17,6 +17,10 @@
 // directory).
 //
 // Run it as: node concepts/tools/reseed-design-gate-integrity.mjs
+//
+// Exits 0 on success. An uncaught error before this point (e.g. a permissions problem this script
+// itself can't work around) exits non-zero with a Node stack trace — acceptable for a human-run,
+// one-off recovery tool, unlike the gate hooks which must fail closed with a specific message.
 
 import { readFileSync, writeFileSync, existsSync, chmodSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -67,9 +71,13 @@ if (existsSync(VERDICT_DIR)) {
   }
 }
 
-writeFileSync(INTEGRITY_FILE, JSON.stringify(sidecar, null, 2));
-try { chmodSync(INTEGRITY_FILE, PROTECTED_STORE_MODE); } catch (e) {
-  console.error(`reseed: WARNING — could not chmod ${INTEGRITY_FILE}: ${e.message}`);
+if (existsSync(INTEGRITY_FILE)) { try { chmodSync(INTEGRITY_FILE, 0o644); } catch { /* not yet lockable, or already writable */ } }
+try {
+  writeFileSync(INTEGRITY_FILE, JSON.stringify(sidecar, null, 2));
+} finally {
+  try { chmodSync(INTEGRITY_FILE, PROTECTED_STORE_MODE); } catch (e) {
+    console.error(`reseed: WARNING — could not chmod ${INTEGRITY_FILE}: ${e.message}`);
+  }
 }
 
 console.log(`reseed-design-gate-integrity: recorded ${seeded} file(s) into ${INTEGRITY_FILE} and ` +
