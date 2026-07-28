@@ -1662,7 +1662,9 @@ for (const file of touchedFiles) {
               writeCase({
                 noun: `${file.split('/').pop()} (whole scene)`, category: 'whole-scene-craft',
                 approach: 'hand-coded-css', verdict: qVerdict.verdict,
-                rootCause: qVerdict.verdict === 'FAIL' ? qVerdict.reason : 'n/a',
+                rootCause: qVerdict.reason,
+                _dissent: qVerdict.verdict === 'PASS' && qVerdict.sampleVotes && qVerdict.sampleVotes.pass !== qVerdict.sampleVotes.total
+                  ? true : undefined,
                 fixThatWorked: null, file, date: new Date().toISOString().slice(0, 10),
                 _autoWritten: true, _gate: 'quality', _reference: rawRef,
                 _defects: qVerdict.defects, _minorFindings: qVerdict.minorFindings || [],
