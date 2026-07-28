@@ -715,9 +715,12 @@ function recordIntegrity(...absPaths) {
 function writeProtectedFile(absPath, writeFn) {
   const existedBefore = existsSync(absPath);
   if (existedBefore) { try { chmodSync(absPath, WRITABLE_MODE); } catch { /* not yet lockable, or already writable */ } }
-  writeFn();
-  try { chmodSync(absPath, PROTECTED_STORE_MODE); } catch (e) {
-    console.error(`design-done-gate: WARNING — could not chmod ${absPath} read-only after writing it: ${e.message}`);
+  try {
+    writeFn();
+  } finally {
+    try { chmodSync(absPath, PROTECTED_STORE_MODE); } catch (e) {
+      console.error(`design-done-gate: WARNING — could not chmod ${absPath} read-only after writing it: ${e.message}`);
+    }
   }
 }
 
@@ -731,7 +734,9 @@ function writeProtectedFile(absPath, writeFn) {
 // the Stop. `writtenPath`, when given, is the absolute path of the OTHER protected file this call is
 // reporting a write to (design-cases.json, a verdict file, or the counts file) — recordIntegrity()
 // hashes both it and this audit log file (which the appendFileSync line below just changed) in one
-// sidecar update, so the two stay synchronized.
+// sidecar update, so the two stay synchronized. As of this commit no call site actually passes
+// writtenPath yet — see the follow-on task that wires writeCase/verdict-writes/counts-write through
+// writeProtectedFile and starts passing it.
 function auditLog(store, action, detail, writtenPath) {
   try {
     writeProtectedFile(AUDIT_LOG_FILE, () =>
