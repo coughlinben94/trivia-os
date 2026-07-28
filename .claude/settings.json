@@ -44,7 +44,9 @@
       "Write(concepts/.design-attempt-counts.json)",
       "Edit(concepts/.design-attempt-counts.json)",
       "Write(concepts/design-cases.json)",
-      "Edit(concepts/design-cases.json)"
+      "Edit(concepts/design-cases.json)",
+      "Write(concepts/.design-gate-audit.log)",
+      "Edit(concepts/.design-gate-audit.log)"
     ]
   },
   "hooks": {
