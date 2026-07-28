@@ -207,7 +207,7 @@ function splitSegments(command) {
 }
 
 // ── Protected-path patterns ──
-const JSON_STORE_PATH_RE = /concepts\/\.design-attempt-counts\.json|concepts\/design-cases\.json|concepts\/\.design-critic-verdicts\b|concepts\/\.design-gate-audit\.log|\.claude\/settings\.json|\.claude\/hooks\/protect-json-stores\.mjs|\.claude\/hooks\/design-done-gate\.mjs|\.claude\/hooks\/geometry-lint\.mjs/;
+const JSON_STORE_PATH_RE = /concepts\/\.design-attempt-counts\.json|concepts\/design-cases\.json|concepts\/\.design-critic-verdicts\b|concepts\/\.design-gate-audit\.log|concepts\/\.design-gate-integrity\.json|\.claude\/settings\.json|\.claude\/hooks\/protect-json-stores\.mjs|\.claude\/hooks\/design-done-gate\.mjs|\.claude\/hooks\/geometry-lint\.mjs/;
 const SHOTS_DIR_RE = /concepts\/\.audit-shots\//;
 // Recursive — matches concepts/foo.html AND concepts/any/nested/path/foo.html, matching
 // design-done-gate.mjs's own stated scope ("concepts/**.html always").
