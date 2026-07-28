@@ -207,7 +207,7 @@ function splitSegments(command) {
 }
 
 // ── Protected-path patterns ──
-const JSON_STORE_PATH_RE = /concepts\/\.design-attempt-counts\.json|concepts\/design-cases\.json|concepts\/\.design-critic-verdicts\b|concepts\/\.design-gate-audit\.log|concepts\/\.design-gate-integrity\.json|\.claude\/settings\.json|\.claude\/hooks\/protect-json-stores\.mjs|\.claude\/hooks\/design-done-gate\.mjs|\.claude\/hooks\/geometry-lint\.mjs/;
+const JSON_STORE_PATH_RE = /concepts\/\.design-attempt-counts\.json|concepts\/design-cases\.json|concepts\/\.design-critic-verdicts\b|concepts\/\.design-gate-audit\.log|concepts\/\.design-gate-integrity\.json|concepts\/\.design-gate-integrity\.lock\b|\.claude\/settings\.json|\.claude\/hooks\/protect-json-stores\.mjs|\.claude\/hooks\/design-done-gate\.mjs|\.claude\/hooks\/geometry-lint\.mjs/;
 // Round-3 adversarial review finding: concepts/tools/reseed-design-gate-integrity.mjs is the ONLY
 // sanctioned way to re-baseline the integrity sidecar after a human confirms a legitimate
 // out-of-band change — but nothing stopped an agent from simply running it itself via Bash (no
@@ -272,7 +272,7 @@ function segmentPipesIntoShell(seg) {
   if (!SHELL_INTERPRETER_RE.test(seg)) return false;
   return SHELL_INVOKE_START_RE.test(seg) || /\|\s*(?:\S*\/)?(?:env\s+)?(?:bash|sh|zsh)\b/.test(seg) || HEREDOC_MARKER_RE.test(seg);
 }
-const LOOSE_WRITE_VERB_RE = /\brm\b|\bmv\b|\btouch\b|\bsed\s+-i\b|\btee\b|\btruncate\b|\bln\b|\bdd\b|\bchmod\b|\bchown\b|\bchflags\b/;
+const LOOSE_WRITE_VERB_RE = /\brm\b|\bmv\b|\btouch\b|\bsed\s+-i\b|\btee\b|\btruncate\b|\bln\b|\bdd\b|\bchmod\b|\bchown\b|\bchflags\b|\bmkdir\b/;
 
 function firstWord(seg) {
   const m = /^\s*(?:\.\/)?([\w.-]+)/.exec(seg);
@@ -292,6 +292,12 @@ function segmentTampersWithJsonStore(seg) {
   // itself, which is shared with the concepts-glob/bare-directory checks below and would over-block
   // ordinary scene-file permission changes, which were never the concern here).
   if ((fw === 'chmod' || fw === 'chown' || fw === 'chflags') && JSON_STORE_PATH_RE.test(dequoted)) return true;
+  // Self-identified gap while verifying F6b: JSON_STORE_PATH_RE now covers concepts/.design-gate-
+  // integrity.lock (the mkdir-based lock dir added this round), but `mkdir` itself was never in any
+  // verb-check set — `rm -rf` on the lock dir was already caught (rm is in WHOLE_SEGMENT_WRITE_VERBS),
+  // but `mkdir concepts/.design-gate-integrity.lock` was not. Narrow, matching the chmod precedent
+  // directly above (JSON_STORE_PATH_RE only, not added to WHOLE_SEGMENT_WRITE_VERBS itself).
+  if (fw === 'mkdir' && JSON_STORE_PATH_RE.test(dequoted)) return true;
   // Second-pass review finding: chmod -R 644 concepts (bare directory) and chmod 644 concepts/*.json
   // (glob) both still passed — the check above only covers NAMED paths. Unlike rm/mv/tee, there is no
   // legitimate reason a worker would ever need to change permissions on scene files at all

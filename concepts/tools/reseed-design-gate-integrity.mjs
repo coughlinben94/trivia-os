@@ -22,7 +22,7 @@
 // itself can't work around) exits non-zero with a Node stack trace — acceptable for a human-run,
 // one-off recovery tool, unlike the gate hooks which must fail closed with a specific message.
 
-import { readFileSync, writeFileSync, existsSync, chmodSync, readdirSync, appendFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, lstatSync, chmodSync, readdirSync, appendFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -82,7 +82,14 @@ if (existsSync(VERDICT_DIR)) {
   }
 }
 
-if (existsSync(INTEGRITY_FILE)) { try { chmodSync(INTEGRITY_FILE, 0o644); } catch { /* not yet lockable, or already writable */ } }
+let integrityLst = null;
+try { integrityLst = lstatSync(INTEGRITY_FILE); } catch { /* doesn't exist yet — fine */ }
+if (integrityLst && integrityLst.isSymbolicLink()) {
+  console.error(`reseed: ERROR — ${INTEGRITY_FILE} is a symlink, not a regular file. Refusing to write ` +
+    `through it. Investigate before re-running.`);
+  process.exit(1);
+}
+if (integrityLst) { try { chmodSync(INTEGRITY_FILE, 0o644); } catch { /* not yet lockable, or already writable */ } }
 try {
   writeFileSync(INTEGRITY_FILE, JSON.stringify(sidecar, null, 2));
 } finally {

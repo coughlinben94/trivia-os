@@ -458,7 +458,7 @@ function acquireSidecarLock() {
     try { mkdirSync(SIDECAR_LOCK_DIR); return; } catch (e) { if (e.code !== 'EEXIST') throw e; }
     let age = Infinity;
     try { age = Date.now() - statSync(SIDECAR_LOCK_DIR).mtimeMs; } catch { /* raced away between mkdir failing and stat — try again */ }
-    if (age > SIDECAR_LOCK_STALE_MS) {
+    if (age > SIDECAR_LOCK_STALE_MS || age < 0) {
       try { rmSync(SIDECAR_LOCK_DIR, { recursive: true, force: true }); } catch { /* lost the takeover race — loop and retry mkdir */ }
       continue;
     }
@@ -745,17 +745,39 @@ function recordIntegrity(...absPaths) {
   try {
     acquireSidecarLock();
   } catch (e) {
-    console.error(`design-done-gate: WARNING — could not update integrity sidecar (lock): ${e.message}`);
-    return;
+    // Third-pass review finding (Medium): silently warning-and-returning here left the sidecar stale
+    // relative to the store write that already succeeded — the actual confusion then landed on some
+    // LATER run as an unexplained integrity block, disconnected from what really happened. Block NOW,
+    // clearly, instead — matching this file's fail-closed-with-a-specific-message philosophy
+    // everywhere else, rather than deferring a worse, confusing failure to the future.
+    console.error(`design-done-gate: BLOCKED — could not acquire the integrity-sidecar lock (${e.message}). ` +
+      `Proceeding without recording this write's hash would leave the sidecar silently stale, causing a ` +
+      `confusing integrity block on some FUTURE run instead of a clear one now. If this keeps happening, ` +
+      `another gate invocation may be stuck — tell Ben.`);
+    process.exit(2);
   }
   try {
     // Second-pass review finding (CRITICAL): a plain retry-on-EACCES does NOT close this race —
     // chmod-then-write lets two concurrent callers BOTH succeed without ever throwing, silently
     // dropping whichever one writes the sidecar last-but-based-on-stale-data. acquireSidecarLock()
     // above gives this whole read-merge-write a real critical section instead.
-    let sidecar = {};
+    let sidecar;
     if (existsSync(INTEGRITY_FILE)) {
-      try { sidecar = JSON.parse(readFileSync(INTEGRITY_FILE, 'utf8')); } catch { sidecar = {}; }
+      try {
+        sidecar = JSON.parse(readFileSync(INTEGRITY_FILE, 'utf8'));
+      } catch (e) {
+        // Third-pass review finding (High): resetting to {} here on a parse failure silently drops
+        // EVERY prior baseline entry, not just the ones this call is about to update — proven to
+        // permanently erase design-cases.json's entry, invisibly, since that path is deliberately
+        // excluded from the unrecorded-file sweep (it's git-tracked, legitimately pre-exists in fresh
+        // worktrees without a sidecar entry — see checkIntegrityOrBlock's comment). checkIntegrityOrBlock
+        // already treats an unparseable sidecar as a hard BLOCK — refuse to write here too, leaving the
+        // corrupt file untouched for that same check to catch on the NEXT run, instead of quietly
+        // replacing it with something that looks like a legitimate fresh start.
+        throw new Error(`refusing to overwrite an unparseable integrity sidecar (${e.message}) — leaving it as-is for checkIntegrityOrBlock to catch on the next run`);
+      }
+    } else {
+      sidecar = {};
     }
     for (const absPath of absPaths) {
       const rel = relative(REPO_ROOT, absPath);
@@ -1092,7 +1114,15 @@ function sessionTouchedFiles(transcriptPath) {
 // mean an attacker's committed tampering auto-passes too — accepting the operational friction is
 // safer than weakening the check for convenience.
 function checkIntegrityOrBlock() {
-  if (!existsSync(INTEGRITY_FILE)) return; // first run ever — no baseline recorded yet to compare against
+  // Third-pass review finding (CRITICAL): existsSync(INTEGRITY_FILE) here — the SAME bug class this
+  // build already fixed in writeProtectedFile and the unrecorded-file sweep below — follows symlinks
+  // and returns false for a BROKEN one, so a broken-symlink sidecar looked identical to "no sidecar
+  // yet" and returned here immediately, skipping even the symlink check 6 lines below (which exists
+  // specifically to catch this). lstatSync reports on the LINK itself and succeeds for a broken
+  // symlink the same as a working one — only genuine absence throws ENOENT.
+  let integrityFileExists = true;
+  try { lstatSync(INTEGRITY_FILE); } catch { integrityFileExists = false; }
+  if (!integrityFileExists) return; // first run ever — no baseline recorded yet to compare against
   // The sidecar itself is never in its own list of entries to check (it can't hash itself — see its
   // own doc comment above), so a symlinked sidecar would otherwise pass completely clean while
   // pointing at an attacker-controlled baseline. Check this one path explicitly before trusting
@@ -1126,6 +1156,29 @@ function checkIntegrityOrBlock() {
     try { isSymlink = lstatSync(absPath).isSymbolicLink(); } catch { /* doesn't exist — handled by the hash check below */ }
     const actualHash = hashFile(absPath);
     if (isSymlink || actualHash !== expectedHash) mismatches.push({ rel, expectedHash, actualHash, isSymlink });
+  }
+  // Third-pass review finding (Medium): COUNTS_FILE and design-cases.json are deliberately excluded
+  // from the unrecorded-file sweep below (they're git-tracked and legitimately pre-exist in a fresh
+  // worktree without a sidecar entry yet — see that block's own comment). But that means a SYMLINK at
+  // either path, before it ever gets a sidecar entry, is invisible to every other check here — proven
+  // to silently and permanently disable the two-strike enforcement (COUNTS_FILE's content drives it
+  // directly). A symlink at either of these two specific paths is never legitimate regardless of
+  // worktree freshness, so check for it unconditionally, independent of whether a sidecar entry
+  // exists yet — this doesn't reopen the fresh-worktree false-block, since ordinary git-checked-out
+  // CONTENT at these paths is still fine; only an actual symlink is flagged.
+  for (const symlinkCheckPath of [COUNTS_FILE, resolve(REPO_ROOT, 'concepts', 'design-cases.json')]) {
+    const symlinkCheckRel = relative(REPO_ROOT, symlinkCheckPath);
+    if (mismatches.some(m => m.rel === symlinkCheckRel)) continue; // already flagged by the loop above
+    let symlinkCheckIsSymlink = false;
+    try { symlinkCheckIsSymlink = lstatSync(symlinkCheckPath).isSymbolicLink(); } catch { /* doesn't exist yet — fine */ }
+    if (symlinkCheckIsSymlink) {
+      mismatches.push({
+        rel: symlinkCheckRel,
+        expectedHash: sidecar[symlinkCheckRel],
+        actualHash: hashFile(symlinkCheckPath),
+        isSymlink: true,
+      });
+    }
   }
   // Round-3 finding #6, REFINED after a second review found the first version false-locks every
   // fresh worktree/clone: the loop above only checks entries the sidecar ALREADY has. A file that
@@ -1194,7 +1247,21 @@ if (process.env.DESIGN_GATE_CHILD === '1') {
     '(DESIGN_GATE_CHILD=1). Reviewing the reviewer would recurse.');
   process.exit(0);
 }
-checkIntegrityOrBlock();
+try {
+  checkIntegrityOrBlock();
+} catch (e) {
+  // Third-pass review finding (CRITICAL): checkIntegrityOrBlock() was the ONLY function in this file
+  // not wrapped in this file's own established crash-to-BLOCK pattern — an uncaught exception inside
+  // it (proven reachable: a sidecar containing literal `null`, or VERDICT_DIR replaced by a plain
+  // file) fell through to Node's default uncaught-exception exit code (1), which Claude Code treats
+  // as non-blocking. A bug in the ONE function that exists specifically to catch tampering would have
+  // silently disabled the entire integrity layer instead of blocking. Fail closed here too, matching
+  // protect-json-stores.mjs's own top-level try/catch wrapper for the identical reason.
+  console.error(`design-done-gate: BLOCKED — checkIntegrityOrBlock() crashed (${e && e.stack ? e.stack : e}) ` +
+    `— failing closed rather than silently skipping the integrity check. STOP HERE: tell Ben this ` +
+    `crashed and wait for him to investigate from his own terminal.`);
+  process.exit(2);
+}
 
 const payload = readStdinJson();
 const isSecondPass = payload.stop_hook_active === true;
