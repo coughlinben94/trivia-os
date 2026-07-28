@@ -224,6 +224,16 @@ Read, in this order:
   assertion, not a position-only check** — use/extend
   `concepts/tools/assert-rotation-over-time.mjs`. A position-only bounding-box check missed the
   meadow swing's near-motionless sway for 27 straight rounds; it cannot see small-angle rotation.
+- **Before hand-coding or roto-tracing any element in a category with 2+ prior FAILs anywhere in
+  `concepts/design-cases.json`** (check the `category` field — e.g. `organic-contour`, `liquid-
+  surface` — across ALL scenes, not just this one), **quote the prior root causes in your build plan
+  and state specifically why this attempt addresses the mechanism, not just repeats it.** Treeline and
+  reflection have each failed this way multiple times, in multiple scenes, for the same underlying
+  reasons named in `DESIGN-WORKER-LESSONS.md` — re-guessing blind on a category with an established
+  failure pattern, without first naming what's different about this attempt, is exactly the "same
+  mistake, different scene" loop this file exists to stop. This does not mean the category is banned
+  (B7 is resolved — pictorial scenes are allowed, contingent on genuinely clearing the gate) — it means
+  don't re-attempt it on hope alone.
 
 ## Verification — non-negotiable, every time (and no longer just on your say-so)
 
