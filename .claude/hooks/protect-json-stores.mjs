@@ -208,6 +208,19 @@ function splitSegments(command) {
 
 // ── Protected-path patterns ──
 const JSON_STORE_PATH_RE = /concepts\/\.design-attempt-counts\.json|concepts\/design-cases\.json|concepts\/\.design-critic-verdicts\b|concepts\/\.design-gate-audit\.log|concepts\/\.design-gate-integrity\.json|\.claude\/settings\.json|\.claude\/hooks\/protect-json-stores\.mjs|\.claude\/hooks\/design-done-gate\.mjs|\.claude\/hooks\/geometry-lint\.mjs/;
+// Round-3 adversarial review finding: concepts/tools/reseed-design-gate-integrity.mjs is the ONLY
+// sanctioned way to re-baseline the integrity sidecar after a human confirms a legitimate
+// out-of-band change — but nothing stopped an agent from simply running it itself via Bash (no
+// verb/eval-flag/heredoc pattern matched a bare `node script.mjs` invocation), which would silently
+// re-baseline the sidecar to whatever tampered content is currently on disk. This blocks ANY Bash
+// mention of the tool by name — reading it, running it, piping into it — regardless of verb, since
+// there is no legitimate reason an agent's Bash tool call should ever reference it at all; it exists
+// to be run by Ben directly, from his own terminal. This is the same category of defense as
+// everything else in this file: it raises the bar, it does not make the recovery path
+// unbypassable — a sufficiently motivated agent with broad Bash access can still route around a
+// filename-based block the same way it can route around any of this file's other checks. Honest
+// about that, not pretending otherwise.
+const RESEED_TOOL_RE = /reseed-design-gate-integrity/;
 const SHOTS_DIR_RE = /concepts\/\.audit-shots\//;
 // Recursive — matches concepts/foo.html AND concepts/any/nested/path/foo.html, matching
 // design-done-gate.mjs's own stated scope ("concepts/**.html always").
@@ -249,7 +262,7 @@ function segmentPipesIntoShell(seg) {
   if (!SHELL_INTERPRETER_RE.test(seg)) return false;
   return SHELL_INVOKE_START_RE.test(seg) || /\|\s*(?:\S*\/)?(?:env\s+)?(?:bash|sh|zsh)\b/.test(seg) || HEREDOC_MARKER_RE.test(seg);
 }
-const LOOSE_WRITE_VERB_RE = /\brm\b|\bmv\b|\btouch\b|\bsed\s+-i\b|\btee\b|\btruncate\b|\bln\b|\bdd\b/;
+const LOOSE_WRITE_VERB_RE = /\brm\b|\bmv\b|\btouch\b|\bsed\s+-i\b|\btee\b|\btruncate\b|\bln\b|\bdd\b|\bchmod\b|\bchown\b|\bchflags\b/;
 
 function firstWord(seg) {
   const m = /^\s*(?:\.\/)?([\w.-]+)/.exec(seg);
@@ -262,6 +275,13 @@ function segmentTampersWithJsonStore(seg) {
   const fw = firstWord(seg);
 
   if (WHOLE_SEGMENT_WRITE_VERBS.has(fw) && JSON_STORE_PATH_RE.test(dequoted)) return true;
+  // Round-3 adversarial review finding: chmod/chown/chflags were not in WHOLE_SEGMENT_WRITE_VERBS at
+  // all, so `chmod 644 concepts/design-cases.json` silently stripped the new chmod-444 OS-level lock
+  // (design-done-gate.mjs's writeProtectedFile()) in one allowed command — verified live during
+  // review. Scoped narrowly to JSON_STORE_PATH_RE only (not added to WHOLE_SEGMENT_WRITE_VERBS
+  // itself, which is shared with the concepts-glob/bare-directory checks below and would over-block
+  // ordinary scene-file permission changes, which were never the concern here).
+  if ((fw === 'chmod' || fw === 'chown' || fw === 'chflags') && JSON_STORE_PATH_RE.test(dequoted)) return true;
   if (fw === 'sed' && /-i\b/.test(seg) && JSON_STORE_PATH_RE.test(dequoted)) return true;
   if (fw === 'cp' || fw === 'install') {
     for (const m of dequoted.matchAll(ANCHORED_DEST_RE)) {
@@ -342,6 +362,14 @@ const command = payload.tool_input?.command;
 if (typeof command !== 'string') process.exit(0);
 
 for (const seg of splitSegments(command)) {
+  if (RESEED_TOOL_RE.test(seg)) {
+    console.error(`protect-json-stores: BLOCKED — this Bash segment references the integrity-sidecar ` +
+      `recovery tool: "${seg.trim()}". concepts/tools/reseed-design-gate-integrity.mjs must be run by ` +
+      `Ben directly, in his own terminal, never through an agent's Bash tool call. If the gate just ` +
+      `blocked on an integrity mismatch, stop and tell Ben exactly which file(s) mismatched — do not ` +
+      `attempt to resolve it yourself.`);
+    process.exit(2);
+  }
   if (segmentTampersWithJsonStore(seg)) {
     console.error(`protect-json-stores: BLOCKED — this Bash segment writes (or could write) to a ` +
       `gate/guard-owned store: "${seg.trim()}". concepts/.design-attempt-counts.json, ` +

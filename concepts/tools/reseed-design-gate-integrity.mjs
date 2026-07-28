@@ -22,7 +22,7 @@
 // itself can't work around) exits non-zero with a Node stack trace — acceptable for a human-run,
 // one-off recovery tool, unlike the gate hooks which must fail closed with a specific message.
 
-import { readFileSync, writeFileSync, existsSync, chmodSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, chmodSync, readdirSync, appendFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,10 +32,11 @@ const INTEGRITY_FILE = resolve(REPO_ROOT, 'concepts', '.design-gate-integrity.js
 const VERDICT_DIR = resolve(REPO_ROOT, 'concepts', '.design-critic-verdicts');
 const PROTECTED_STORE_MODE = 0o444;
 
+const AUDIT_LOG_FILE = resolve(REPO_ROOT, 'concepts', '.design-gate-audit.log');
 const singleFilePaths = [
   resolve(REPO_ROOT, 'concepts', '.design-attempt-counts.json'),
   resolve(REPO_ROOT, 'concepts', 'design-cases.json'),
-  resolve(REPO_ROOT, 'concepts', '.design-gate-audit.log'),
+  AUDIT_LOG_FILE,
 ];
 
 function hashFile(absPath) {
@@ -45,6 +46,16 @@ function hashFile(absPath) {
 
 const sidecar = {};
 let seeded = 0;
+
+// Append a trace of this re-baseline event BEFORE hashing the stores below (AUDIT_LOG_FILE is one
+// of singleFilePaths) — otherwise the sidecar would record a hash from BEFORE this append, and the
+// very next gate run would immediately false-block on the audit log itself. Re-baselining is the
+// single most security-relevant event in this system; it should leave the same kind of trace every
+// other protected-store write does, not none at all.
+if (existsSync(AUDIT_LOG_FILE)) { try { chmodSync(AUDIT_LOG_FILE, 0o644); } catch { /* not yet lockable, or already writable */ } }
+try {
+  appendFileSync(AUDIT_LOG_FILE, JSON.stringify({ timestamp: new Date().toISOString(), store: 'integrity', action: 'reseed' }) + '\n');
+} catch (e) { console.error(`reseed: WARNING — could not append to audit log: ${e.message}`); }
 
 for (const absPath of singleFilePaths) {
   if (!existsSync(absPath)) continue;
