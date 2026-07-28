@@ -266,3 +266,17 @@ those are gate-owned files you can't write to, by design:
 Be specific about what you actually checked (which files, what you rendered, what the gates said),
 not just "done." If you hit the two-strike stop condition on an element, say so plainly and name
 what scope decision you need from Ben before continuing — don't quietly keep guessing.
+
+**If the gate blocks (exit 2), reproduce its full, unedited `problems[]` list to the human — every
+line, not a summary or a selection.** This is not a style preference: a real FAIL on a real element
+(groundGlow, 2026-07-27) was pushed into `problems[]` and printed on exit correctly, and then never
+appeared in the reported summary anyway, because "be specific" left room to paraphrase. A summary
+that drops even one blocked item is indistinguishable, to the human reading it, from a summary of a
+gate that never found that problem at all — and the human cannot tell the difference from your
+report alone, only by re-reading the raw stderr themselves, which defeats the point of you reporting
+at all.
+
+**If the gate passes (exit 0), state which slugs have non-blocking findings recorded even though
+nothing blocked** — agreed MINOR defects, an off-vocabulary tag warning, or an orphan-file warning
+about a DIFFERENT file are all printed to stderr on a passing run too, and "the gate passed" is not
+the same claim as "the gate printed nothing."
