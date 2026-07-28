@@ -374,6 +374,7 @@
 
 import { execSync, spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -703,6 +704,16 @@ function readStdinJson() {
 }
 function sh(cmd) { try { return execSync(cmd, { cwd: REPO_ROOT, encoding: 'utf8' }); } catch (e) { return e.stdout || ''; } }
 function slugify(s) { return s.replace(/[^a-zA-Z0-9._-]/g, '_'); }
+
+// Content hash of the scene file, computed by the GATE itself from bytes
+// already read into memory — never by an agent-invoked step. This is what
+// makes verdict freshness genuinely forgery-resistant (fixes the verdict
+// half of B2): mtime comparison can be defeated by backdating the SCENE
+// FILE's own mtime (touch -d on the .html file, which is not one of the
+// paths protect-json-stores.mjs restricts), making a stale cached verdict
+// look erroneously "fresh" relative to it. A hash of the actual bytes cannot
+// be fooled by any mtime trick on either side of the comparison.
+function sceneHash(codeText) { return createHash('sha256').update(codeText).digest('hex'); }
 
 // Files this session's OWN transcript wrote, as repo-relative paths. A
 // background subagent it dispatched has its own transcript and its own
@@ -1334,9 +1345,13 @@ for (const file of touchedFiles) {
     // underneath it. A verdict about a previous version of the file is not a
     // verdict about this one.
     const verdictAge = verdict?.timestamp ? new Date(verdict.timestamp).getTime() : 0;
+    // Freshness's third condition used to be "verdict newer than the file's mtime" — forgeable by
+    // backdating the SCENE FILE's own mtime (a path this gate does not otherwise restrict). Content-
+    // hash equality replaces it: the verdict is about THIS EXACT content, or it isn't, independent of
+    // any timestamp on either side. `codeText` is already in memory from this file's own read above.
     const verdictIsFresh = !!verdict && verdict.checkedFile === file && verdictAge > 0 &&
       (Date.now() - verdictAge) < 1000 * 60 * 60 &&
-      verdictAge >= statSync(abs).mtimeMs;
+      verdict.sceneFileHash === sceneHash(codeText);
 
     let verdictJustComputed = false;
     if (!verdictIsFresh && isSecondPass) {
@@ -1434,6 +1449,7 @@ for (const file of touchedFiles) {
         defectsSingleSample,
         defectsOffVocabulary,
         checkedFile: file,
+        sceneFileHash: sceneHash(codeText),
         timestamp: new Date().toISOString(),
         sampleVotes: { pass: votes.pass, fail: votes.fail, total: votes.total },
         // Which model produced each counted vote. Recorded so a later reader
@@ -1585,8 +1601,9 @@ for (const file of touchedFiles) {
           // Same three-part freshness rule as the correctness verdict: a
           // verdict older than the file it judged is about a different file.
           const qAge = qVerdict?.timestamp ? new Date(qVerdict.timestamp).getTime() : 0;
+          // Same hash-based freshness as the correctness verdict — see that check's comment.
           const qVerdictIsFresh = !!qVerdict && qVerdict.checkedFile === file && qAge > 0 &&
-            (Date.now() - qAge) < 1000 * 60 * 60 && qAge >= statSync(abs).mtimeMs;
+            (Date.now() - qAge) < 1000 * 60 * 60 && qVerdict.sceneFileHash === sceneHash(codeText);
           // Mirrors the correctness loop's `verdictJustComputed`: needed so the
           // single-use override is not spent against a verdict this script has
           // already declared out of date. See twoStrikeBlocked()'s note.
@@ -1691,6 +1708,7 @@ for (const file of touchedFiles) {
                 defectsOffVocabulary,
                 deviations: [...new Set(seeing.flatMap(s => s.deviations || []))],
                 checkedFile: file, timestamp: new Date().toISOString(),
+                sceneFileHash: sceneHash(codeText),
                 sampleVotes: { pass: votes.pass, fail: votes.fail, total: votes.total, droppedBlind: blind },
                 panel: seeing.map(s => s._model || 'default'), // see the correctness verdict's note
               };
