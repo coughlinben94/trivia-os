@@ -173,6 +173,20 @@ function splitSegments(command) {
 
 const JSON_STORE_PATH_RE = /concepts\/\.design-attempt-counts\.json|concepts\/design-cases\.json|concepts\/\.design-critic-verdicts\b|concepts\/\.design-gate-audit\.log/;
 const SHOTS_DIR_RE = /concepts\/\.audit-shots\//;
+// Finding #3 (round 2 review): the verdict now carries a content hash (see design-done-gate.mjs's
+// sceneHash()), which correctly detects when a scene's CONTENT changed — but freshShotsFor() still
+// compares screenshot mtime against the scene FILE's mtime, and until now nothing stopped that mtime
+// from being forged the same way screenshot mtimes were before the prior round's fix. Confirmed live:
+// `node -e "require('fs').utimesSync('concepts/scene.html',0,0)"` and `touch -d` both passed the guard.
+// Attack: edit the scene for real (hash correctly goes stale, forcing a critic re-spawn), backdate its
+// mtime, and every PRE-EDIT screenshot reads as fresh again — so the critic panel judges old pixels
+// while the resulting verdict gets stamped with the NEW content's hash, looking bound to evidence it
+// was never shown. Rather than build a second, agent-controlled hash-sidecar scheme for screenshots
+// (which has the same forgeability problem the verdict hash avoided only because the GATE computes
+// it, not an agent-invoked step), this closes the actual attack at its root: an agent simply cannot
+// forge a scene file's mtime anymore, so editing it for real is the only way its mtime changes.
+const SCENE_FILE_RE = /concepts\/[\w.-]+\.html\b/;
+const EVIDENCE_MTIME_PATH_RE = new RegExp(`${SHOTS_DIR_RE.source}|${SCENE_FILE_RE.source}`);
 
 // Destructive git verbs — CRITICAL finding #2 (round 2 review): git checkout/restore/stash/rm/clean
 // touching a protected path, or git reset --hard at all, silently reverts or wipes the protected
@@ -225,10 +239,13 @@ function segmentTampersWithJsonStore(seg) {
   return false;
 }
 
-// Narrower mtime-forgery-only protection for the screenshots directory.
+// Narrower mtime-forgery-only protection — screenshots AND scene .html files. Neither of these is
+// gate-owned (the worker legitimately writes/renames/copies screenshots, and legitimately edits scene
+// files — that's the entire point of this repo's concepts/ build lab), so only mtime-forgery verbs are
+// blocked here, not ordinary writes/renames/deletes.
 function segmentForgesShotMtime(seg) {
-  if (/\btouch\b/.test(seg) && SHOTS_DIR_RE.test(seg)) return true;
-  if (INTERPRETER_RE.test(seg) && EVAL_FLAG_RE.test(seg) && MTIME_TAMPER_HINT_RE.test(seg) && SHOTS_DIR_RE.test(seg)) return true;
+  if (/\btouch\b/.test(seg) && EVIDENCE_MTIME_PATH_RE.test(seg)) return true;
+  if (INTERPRETER_RE.test(seg) && EVAL_FLAG_RE.test(seg) && MTIME_TAMPER_HINT_RE.test(seg) && EVIDENCE_MTIME_PATH_RE.test(seg)) return true;
   return false;
 }
 
