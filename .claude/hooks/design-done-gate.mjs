@@ -398,6 +398,38 @@ const QUALITY_DEFECT_TAGS = new Set([
   'register-mismatch', 'other',
 ]);
 
+// Shared between the quality gate and (as of the correctness-severity fix) the correctness gate:
+// tally defect tags across N critic samples, apply the closed-vocabulary filter, and separate
+// "agreed by 2+ samples" from "single-sample lead" — `other` never counts toward agreement (two
+// samples reaching for the catch-all about two unrelated things is agreement on a word, not on a
+// finding). Returns the pieces a verdict object needs; does NOT decide PASS/FAIL — the caller
+// combines this with tallyVotes() to compute the majorOverride, since only the caller knows
+// whether the vote-based verdict is being overridden.
+function tallyDefects(samples, tagSet) {
+  const tagCounts = {};   // tag -> total samples naming it
+  const majorCounts = {}; // tag -> samples calling it major
+  const offVocabulary = new Set();
+  for (const s of samples) {
+    const entries = (s.defects || [])
+      .map(d => (typeof d === 'string'
+        ? { tag: d, severity: 'major' }
+        : { tag: d?.tag, severity: d?.severity === 'minor' ? 'minor' : 'major' }))
+      .filter(d => d.tag);
+    const majorHere = new Set(entries.filter(d => d.severity === 'major').map(d => d.tag));
+    const tags = entries.map(d => d.tag);
+    for (const t of new Set(tags)) {
+      if (!tagSet.has(t)) { offVocabulary.add(t); continue; }
+      tagCounts[t] = (tagCounts[t] || 0) + 1;
+      if (majorHere.has(t)) majorCounts[t] = (majorCounts[t] || 0) + 1;
+    }
+  }
+  const agreedAll = Object.keys(tagCounts).filter(t => t !== 'other' && tagCounts[t] >= 2).sort();
+  const agreedDefects = agreedAll.filter(t => (majorCounts[t] || 0) >= 2);
+  const agreedMinor = agreedAll.filter(t => (majorCounts[t] || 0) < 2);
+  const defectsSingleSample = Object.keys(tagCounts).filter(t => t === 'other' || tagCounts[t] < 2).sort();
+  return { agreedDefects, agreedMinor, defectsSingleSample, defectsOffVocabulary: [...offVocabulary].sort() };
+}
+
 // Pull the LAST balanced {...} object out of a model's stdout. The old
 // version used two regexes (innermost-only, then one-level-nested) and
 // concatenated them — it silently failed on any verdict object containing
@@ -1550,39 +1582,8 @@ for (const file of touchedFiles) {
               // back-compat with anything already on disk). A tag two or more
               // samples reach for is a finding either way; it is MAJOR only if
               // two or more of them called it major.
-              const tagCounts = {};   // tag -> total samples naming it
-              const majorCounts = {}; // tag -> samples calling it major
-              const offVocabulary = new Set();
-              for (const s of seeing) {
-                const entries = (s.defects || [])
-                  .map(d => (typeof d === 'string'
-                    ? { tag: d, severity: 'major' }
-                    : { tag: d?.tag, severity: d?.severity === 'minor' ? 'minor' : 'major' }))
-                  .filter(d => d.tag);
-                const majorHere = new Set(entries.filter(d => d.severity === 'major').map(d => d.tag));
-                const tags = entries.map(d => d.tag);
-                for (const t of new Set(tags)) {
-                  if (QUALITY_DEFECT_TAGS.has(t) && majorHere.has(t)) majorCounts[t] = (majorCounts[t] || 0) + 1;
-                  // Tags are validated against the critic file's closed set.
-                  // Without this, "closed vocabulary" was a promise in a prompt
-                  // and nothing more — drift would go straight into the counts
-                  // and into design-cases.json, where it can never be counted
-                  // across scenes, which was the whole point of closing the set.
-                  if (!QUALITY_DEFECT_TAGS.has(t)) { offVocabulary.add(t); continue; }
-                  tagCounts[t] = (tagCounts[t] || 0) + 1;
-                }
-              }
-              // `other` is excluded from agreement on purpose. It is the
-              // catch-all, so it is the tag two samples are most likely to
-              // reach for about two COMPLETELY DIFFERENT observations — an
-              // agreement on the word, not on the finding. That is the known
-              // failure mode of closed-vocabulary tagging, and treating it as
-              // a confirmed defect would put a meaningless label in the case
-              // log and in the two-strike message. It stays visible as a
-              // single-sample note; the specifics live in `reason`.
-              const agreedAll = Object.keys(tagCounts).filter(t => t !== 'other' && tagCounts[t] >= 2).sort();
-              const agreedDefects = agreedAll.filter(t => (majorCounts[t] || 0) >= 2);
-              const agreedMinor = agreedAll.filter(t => (majorCounts[t] || 0) < 2);
+              const { agreedDefects, agreedMinor, defectsSingleSample, defectsOffVocabulary } =
+                tallyDefects(seeing, QUALITY_DEFECT_TAGS);
               // An agreed MAJOR defect outranks the vote. Two independent
               // samples both naming the same tag AND both calling it major,
               // while the tally still lands on PASS, is the panel contradicting
@@ -1607,8 +1608,8 @@ for (const file of touchedFiles) {
                 // be counted across scenes — which is how "every hand-built
                 // treeline comes out slightly faded" ever becomes visible.
                 minorFindings: agreedMinor,
-                defectsSingleSample: Object.keys(tagCounts).filter(t => t === 'other' || tagCounts[t] < 2).sort(),
-                defectsOffVocabulary: [...offVocabulary].sort(),
+                defectsSingleSample,
+                defectsOffVocabulary,
                 deviations: [...new Set(seeing.flatMap(s => s.deviations || []))],
                 checkedFile: file, timestamp: new Date().toISOString(),
                 sampleVotes: { pass: votes.pass, fail: votes.fail, total: votes.total, droppedBlind: blind },
