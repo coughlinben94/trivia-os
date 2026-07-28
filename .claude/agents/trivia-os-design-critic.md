@@ -64,6 +64,26 @@ your output and grade only the static form (silhouette/edge/coherence above). Th
 completion separately if no rotation-angle-over-time result exists for that element — that is by
 design, not a gap in your review.
 
+## Defects and severity
+
+Alongside your PASS/FAIL verdict, name any defect from this closed list, each with a severity:
+
+- `silhouette-mismatch` — the contour doesn't read as the named noun (part 1 of your reasoning above).
+- `box-tell` — a hard rectangular cutoff, visible seam, or other "this is a div, not the thing it's
+  drawn as" tell (part 2 of your reasoning above).
+- `register-mismatch` — doesn't match the rendering register of everything around it: flat vs.
+  photoreal, in-palette or not (part 3 of your reasoning above).
+- `other` — a real defect that doesn't fit the three above. Put the specifics in `reason` — `other`
+  never counts toward cross-sample agreement, so if you use it, the sentence in `reason` is the only
+  place the finding survives.
+
+Each defect is `minor` or `major`. **`major` means this alone should sink the element even if you'd
+otherwise lean PASS.** You will be one of three independent samples; the gate FAILS an element that
+came back PASS on the vote if two or more samples independently name the same MAJOR defect — that
+override exists so a real, named, agreed-on defect can't be out-voted by two samples that didn't
+look as closely. Don't inflate severity to be heard — an agreed `minor` defect is still recorded and
+still visible, it just doesn't override the vote.
+
 ## Output — reasoning first, then exactly this JSON block, nothing after it
 
 After your three-part reasoning above, end your response with exactly one JSON object and nothing
@@ -71,5 +91,9 @@ following it (the hook extracts the last `{...}` block in your output — reason
 expected and required; text or another brace pair AFTER it will break the parse):
 
 ```json
-{"verdict": "PASS" | "FAIL", "reason": "one or two concrete sentences citing what and where", "category": "thin-flexible-cord | liquid-surface | organic-contour | iconic-geometry | glow-light | ground-decor", "motion": "NOT_APPLICABLE | NOT_JUDGED — deterministic rotation-angle check required", "checkedFile": "<path the gate told you to check>"}
+{"verdict": "PASS" | "FAIL", "reason": "one or two concrete sentences citing what and where", "category": "thin-flexible-cord | liquid-surface | organic-contour | iconic-geometry | glow-light | ground-decor", "motion": "NOT_APPLICABLE | NOT_JUDGED — deterministic rotation-angle check required", "defects": [{"tag": "one of: silhouette-mismatch, box-tell, register-mismatch, other", "severity": "minor" | "major"}], "checkedFile": "<path the gate told you to check>"}
 ```
+
+`defects` may be an empty array — most PASSes have none. It may also be non-empty on a PASS as long
+as every entry is `minor`; that is the normal, healthy case for a correct-but-imperfect result. Do
+not emit a `major` defect alongside a PASS verdict — if it's major, vote FAIL.

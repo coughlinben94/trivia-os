@@ -398,6 +398,14 @@ const QUALITY_DEFECT_TAGS = new Set([
   'register-mismatch', 'other',
 ]);
 
+// The correctness critic's closed defect vocabulary — mirrors its own three-part reasoning
+// (silhouette/contour, edge/box-tell, scene coherence). Kept deliberately narrower than the
+// quality critic's vocabulary: this critic grades "does it read as its noun," not "is it well
+// made" — a small, tight set is easier to keep meaningfully distinct from QUALITY_DEFECT_TAGS.
+const CORRECTNESS_DEFECT_TAGS = new Set([
+  'silhouette-mismatch', 'box-tell', 'register-mismatch', 'other',
+]);
+
 // Shared between the quality gate and (as of the correctness-severity fix) the correctness gate:
 // tally defect tags across N critic samples, apply the closed-vocabulary filter, and separate
 // "agreed by 2+ samples" from "single-sample lead" — `other` never counts toward agreement (two
@@ -1362,11 +1370,32 @@ for (const file of touchedFiles) {
         continue;
       }
       const votes = tallyVotes(samples);
+      const { agreedDefects, agreedMinor, defectsSingleSample, defectsOffVocabulary } =
+        tallyDefects(samples, CORRECTNESS_DEFECT_TAGS);
+      // An agreed MAJOR defect outranks the tally — the same rule the quality gate already
+      // enforces (see its own note above). Two independent samples both naming the same tag AND
+      // both calling it major, while the vote still lands on PASS, is the panel contradicting
+      // itself, and this gate is not allowed to round that in the permissive direction. This is
+      // the exact hole that let `logs` PASS 2-1 tonight while sample 2's dissent named the precise
+      // defect (no taper/no bark/hard cutoff at the flame boundary) that a `box-tell` +
+      // `silhouette-mismatch` pair would have caught structurally instead of relying on the raw
+      // vote.
+      const majorOverride = votes.verdict === 'PASS' && agreedDefects.length > 0;
+      if (majorOverride) {
+        console.error(`design-done-gate: [${slug}] correctness vote was ${votes.pass}/${votes.total} ` +
+          `PASS, but 2+ samples independently named the same MAJOR defect (${agreedDefects.join(', ')}). ` +
+          `Recorded as FAIL — an agreed major defect outranks the tally.`);
+      }
       const parsed = {
-        verdict: votes.verdict,
+        verdict: majorOverride ? 'FAIL' : votes.verdict,
+        verdictSource: majorOverride ? 'agreed-major-defect-override' : 'majority-vote',
         reason: samples.map((s, i) => `[sample ${i + 1}: ${s.verdict}] ${s.reason || ''}`).join(' '),
         category: samples.find(s => s.category)?.category || null,
         motion: samples.find(s => s.motion && s.motion !== 'NOT_APPLICABLE')?.motion || 'NOT_APPLICABLE',
+        defects: agreedDefects,
+        minorFindings: agreedMinor,
+        defectsSingleSample,
+        defectsOffVocabulary,
         checkedFile: file,
         timestamp: new Date().toISOString(),
         sampleVotes: { pass: votes.pass, fail: votes.fail, total: votes.total },
@@ -1376,6 +1405,16 @@ for (const file of touchedFiles) {
         // the difference decides how much a unanimous result is worth.
         panel: samples.map(s => s._model || 'default'),
       };
+      if (defectsOffVocabulary.length) {
+        console.error(`design-done-gate: [${slug}] correctness critic returned tags outside its ` +
+          `closed set and they were discarded: ${defectsOffVocabulary.join(', ')}. If these keep ` +
+          `recurring, add them to BOTH trivia-os-design-critic.md and CORRECTNESS_DEFECT_TAGS here.`);
+      }
+      if (agreedMinor.length) {
+        console.error(`design-done-gate: [${slug}] correctness verdict ${parsed.verdict} with agreed ` +
+          `MINOR findings (2+ samples, none blocking): ${agreedMinor.join(', ')}. Logged to ` +
+          `design-cases.json.`);
+      }
       writeFileSync(verdictPath, JSON.stringify(parsed, null, 2));
       verdict = parsed;
       verdictJustComputed = true;
@@ -1396,10 +1435,13 @@ for (const file of touchedFiles) {
     if (verdictJustComputed) writeCase({
       noun: elementName || slug, category: verdict.category || 'uncategorized',
       approach: 'hand-coded-css', verdict: verdict.verdict,
-      rootCause: verdict.verdict === 'FAIL' ? verdict.reason : 'n/a',
+      rootCause: verdict.reason,
+      _dissent: verdict.verdict === 'PASS' && verdict.sampleVotes && verdict.sampleVotes.pass !== verdict.sampleVotes.total
+        ? true : undefined,
       fixThatWorked: null, file, date: new Date().toISOString().slice(0, 10),
       _autoWritten: true, _gate: 'correctness', _sampleVotes: verdict.sampleVotes || null,
-      _panel: verdict.panel || null,
+      _panel: verdict.panel || null, _defects: verdict.defects || [],
+      _minorFindings: verdict.minorFindings || [], _verdictSource: verdict.verdictSource || 'majority-vote',
     });
 
     if (verdict && verdict.verdict === 'FAIL') {
