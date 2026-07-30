@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
-import { deriveRoundCols, computeTotal, MEDALS } from '../../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, normalizeRoundScore, MEDALS } from '../../lib/scoreboardMath.js'
 import { EASE_OUT, EASE_DROP } from '../../lib/easings.js'
 
 // ─── Single team row ───────────────────────────────────────────────────────
@@ -69,8 +69,9 @@ function TeamRow({ team, rank, cols, delay, isTop, reduce }) {
       {/* Round score pills */}
       <div className="shrink-0 hidden xl:flex items-center gap-1.5">
         {cols.map(col => {
-          const val = team.scores?.[col.key]
-          if (val == null || val === '' || Number(val) === 0) return null
+          const { written, phone } = normalizeRoundScore(team.scores?.[col.key])
+          const total = written + phone
+          if (total === 0) return null
           return (
             <span
               key={col.key}
@@ -86,7 +87,7 @@ function TeamRow({ team, rank, cols, delay, isTop, reduce }) {
                 whiteSpace: 'nowrap',
               }}
             >
-              {col.label} {Number(val)}
+              {col.label} {total}
             </span>
           )
         })}

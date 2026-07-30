@@ -7,6 +7,7 @@ import YoutubeClipEditor from './YoutubeClipEditor.jsx'
 import HostPhotoLibrary from './HostPhotoLibrary.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
 import SlideCanvasEditor from './SlideCanvasEditor.jsx'
+import MatchingBoard from '../join/MatchingBoard.jsx'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 
@@ -710,8 +711,31 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
             />
           )}
 
-          {/* Question text — not for list type */}
-          {schema.type !== 'list' && (
+          {/* Matching builder */}
+          {schema.type === 'matching' && (
+            <>
+              <MatchingBuilder
+                pairs={data.pairs ?? [{ id: 'p0', left: '', right: '' }, { id: 'p1', left: '', right: '' }]}
+                pointsPerMatch={data.pointsPerMatch ?? 2}
+                onChangePairs={pairs => onChange('pairs', pairs)}
+                onChangePoints={pts => onChange('pointsPerMatch', pts)}
+              />
+              <div className="flex flex-col gap-2">
+                <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
+                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
+                  <MatchingBoard
+                    preview
+                    theme={theme}
+                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
+                    slide={{ id: slide.id, showId: show?.id, data: { ...data, pairs: data.pairs ?? [{ id: 'p0', left: '', right: '' }, { id: 'p1', left: '', right: '' }] } }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Question text — not for list or matching types */}
+          {schema.type !== 'list' && schema.type !== 'matching' && (
             <Field label="Question Text">
               <TextArea value={data.text} onChange={v => onChange('text', v)} placeholder="Write the question here…" rows={3} />
             </Field>
@@ -964,6 +988,64 @@ function ShinyListBuilder({ items, hasPoints, onChange }) {
       >
         + Add item
       </button>
+    </div>
+  )
+}
+
+function MatchingBuilder({ pairs, pointsPerMatch, onChangePairs, onChangePoints }) {
+  function updatePair(i, side, value) {
+    onChangePairs(pairs.map((p, idx) => idx === i ? { ...p, [side]: value } : p))
+  }
+  function addPair() {
+    onChangePairs([...pairs, { id: `p${Date.now()}_${pairs.length}`, left: '', right: '' }])
+  }
+  function removePair(i) {
+    onChangePairs(pairs.filter((_, idx) => idx !== i))
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="block text-xs font-medium text-gray-700 mb-1.5">Matching Pairs</label>
+      {pairs.map((pair, i) => (
+        <div key={pair.id} className="flex gap-2 items-center">
+          <span className="text-xs text-gray-400 w-5 shrink-0 text-right">{i + 1}.</span>
+          <input
+            value={pair.left}
+            onChange={e => updatePair(i, 'left', e.target.value)}
+            placeholder="Left item…"
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+          />
+          <span className="text-xs text-gray-300 shrink-0">↔</span>
+          <input
+            value={pair.right}
+            onChange={e => updatePair(i, 'right', e.target.value)}
+            placeholder="Right item…"
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+          />
+          {pairs.length > 2 && (
+            <button
+              onClick={() => removePair(i)}
+              className="text-xs text-gray-300 hover:text-red-400 shrink-0"
+            >✕</button>
+          )}
+        </div>
+      ))}
+      <button
+        onClick={addPair}
+        className="text-xs text-baynes-forest hover:text-green-800 font-medium text-left"
+      >
+        + Add pair
+      </button>
+      <div className="flex items-center gap-2 mt-1 pt-3 border-t border-gray-100">
+        <label className="text-xs font-medium text-gray-700">Points per correct pair</label>
+        <input
+          type="number"
+          value={pointsPerMatch}
+          onChange={e => onChangePoints(Number(e.target.value))}
+          min={0}
+          className="w-16 border border-gray-200 rounded px-2 py-1.5 text-sm text-center text-gray-900 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+        />
+      </div>
     </div>
   )
 }

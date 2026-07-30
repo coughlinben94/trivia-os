@@ -1,11 +1,12 @@
 import { useEffect, useCallback, useState } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
-import { resolveShinyPart } from '../../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny } from '../../lib/shinySeries.js'
 import ScorePanel from './ScorePanel.jsx'
 import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
 import { supabase } from '../../lib/supabase.js'
-import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, normalizeRoundScore } from '../../lib/scoreboardMath.js'
+import { scoreMatchingSubmission } from '../../lib/matchingScoring.js'
 
 const SLIDE_META = {
   'title':             { label: 'Title',       color: 'bg-purple-100 text-purple-700' },
@@ -183,6 +184,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [scorePanelOpen, setScorePanelOpen] = useState(false)
   const [themePickerOpen, setThemePickerOpen] = useState(false)
   const [pylPickerBusy, setPylPickerBusy] = useState(false)
+  const [matchingBusy, setMatchingBusy] = useState(false)
 
   const slides = sortedSlides(show)
   const currentIndex = show.showState.currentSlideIndex ?? 0
@@ -220,6 +222,58 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       })
     } finally {
       setPylPickerBusy(false)
+    }
+  }
+
+  async function handleLockAndScoreMatching(slide) {
+    setMatchingBusy(true)
+    try {
+      await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true } })
+
+      const { data: answers, error: fetchError } = await supabase
+        .from('phone_answers')
+        .select('team_id, answer')
+        .eq('slide_id', slide.id)
+      if (fetchError) { console.error('phone_answers fetch failed:', fetchError); return }
+
+      const { data: teams, error: teamsError } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('show_id', show.id)
+      if (teamsError) { console.error('teams fetch failed:', teamsError); return }
+
+      const { data: scoreboardTeams, error: sbError } = await supabase
+        .from('scoreboard_teams')
+        .select('id, show_id, name, scores, sort_order')
+        .eq('show_id', show.id)
+      if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); return }
+
+      const round = show.rounds.find(r => r.id === slide.roundId)
+      const roundKey = round ? `r_${round.id}` : 'bonus'
+      const pointsPerMatch = slide.data.pointsPerMatch ?? 2
+
+      const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name.trim().toLowerCase()]))
+
+      const updates = []
+      for (const ans of answers ?? []) {
+        const points = scoreMatchingSubmission(ans.answer, pointsPerMatch)
+        const teamName = teamIdToName.get(ans.team_id)
+        if (!teamName) continue // team_id has no matching live registration — skip, nothing to attribute the score to
+        const sbTeam = (scoreboardTeams ?? []).find(t => t.name.trim().toLowerCase() === teamName)
+        if (!sbTeam) continue // no scoreboard_teams row for this name yet — host hasn't added them to the admin scoreboard, nothing to fold into
+        const prevSplit = normalizeRoundScore(sbTeam.scores?.[roundKey])
+        const nextScores = { ...sbTeam.scores, [roundKey]: { written: prevSplit.written, phone: points } }
+        updates.push({ id: sbTeam.id, show_id: sbTeam.show_id, name: sbTeam.name, scores: nextScores, sort_order: sbTeam.sort_order })
+      }
+
+      if (updates.length > 0) {
+        const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
+        if (updateError) console.error('scoreboard_teams score fold-in failed:', updateError)
+      }
+
+      await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true, matchingRevealed: true } })
+    } finally {
+      setMatchingBusy(false)
     }
   }
 
@@ -362,6 +416,23 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         {/* Left column — 60% */}
         <div className="flex flex-col gap-3" style={{ flex: '0 0 60%' }}>
           <CurrentSlideCard slide={currentSlide} show={show} />
+
+          {currentSlide?.type === 'question' && isMatchingShiny(currentSlide?.data) && !currentSlide?.data?.matchingLocked && (
+            <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
+              <p className="text-xs text-gray-400 mb-3">Matching question — teams are submitting on their phones</p>
+              <button
+                onClick={() => handleLockAndScoreMatching(currentSlide)}
+                disabled={matchingBusy}
+                className={`w-full py-3 rounded-xl border-2 font-semibold text-sm transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
+                  matchingBusy
+                    ? 'border-gray-100 text-gray-300 cursor-not-allowed'
+                    : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'
+                }`}
+              >
+                {matchingBusy ? 'Scoring…' : '🔒 Lock Answers & Score'}
+              </button>
+            </div>
+          )}
 
           {currentSlide?.type === 'pyl-reveal' && !currentSlide?.data?.animationId && (
             <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">

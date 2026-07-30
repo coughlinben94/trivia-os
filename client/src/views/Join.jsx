@@ -5,7 +5,8 @@ import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
-import { resolveShinyPart } from '../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny } from '../lib/shinySeries.js'
+import MatchingBoard from '../components/join/MatchingBoard.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
 import { EASE_OUT, EASE_PANEL } from '../lib/easings.js'
@@ -340,7 +341,7 @@ function WaitingScreen({ teamName, theme, onOpenScores }) {
 }
 
 // ─── Slide content ────────────────────────────────────────────────────────────
-function SlideContent({ slide, show, theme }) {
+function SlideContent({ slide, show, theme, team }) {
   if (!slide) return null
   const text      = theme?.colors?.text      ?? '#ffffff'
   const round     = show?.rounds?.find(r => r.id === slide.roundId) ?? null
@@ -355,6 +356,9 @@ function SlideContent({ slide, show, theme }) {
             {d.isSeries && d.seriesTheme ? d.seriesTheme : 'Next question incoming…'}
           </p>
         )
+      }
+      if (d.isShiny && isMatchingShiny(d)) {
+        return <MatchingBoard slide={slide} team={team} theme={theme} />
       }
       const part = resolveShinyPart(d)
       return (
@@ -835,7 +839,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
           }
         >
           {revealed ? (
-            <SlideContent slide={visibleSlide} show={show} theme={theme} />
+            <SlideContent slide={visibleSlide} show={show} theme={theme} team={team} />
           ) : (
             <p style={{ color: `${text}50`, fontSize: 'clamp(1rem, 4vw, 1.2rem)', lineHeight: 1.5, margin: 0, fontStyle: 'italic', textAlign: 'center', padding: '2rem 0' }}>
               Get ready…

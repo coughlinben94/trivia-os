@@ -55,3 +55,7 @@ export function isListShiny(data) {
 export function isVideoShiny(data) {
   return data.shinyInputSchema?.type === 'video'
 }
+
+export function isMatchingShiny(data) {
+  return data.shinyInputSchema?.type === 'matching'
+}

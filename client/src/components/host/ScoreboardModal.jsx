@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
-import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, normalizeRoundScore } from '../../lib/scoreboardMath.js'
 import BoxingRing from '../display/slides/BoxingRing.jsx'
 import ChestDuel from '../display/slides/ChestDuel.jsx'
 import CardPick from '../display/slides/CardPick.jsx'
@@ -147,6 +147,11 @@ function addStats(teams, cols) {
   return withTotals.map(t => ({ ...t, _place: placeMap[t.id] }))
 }
 
+const EMPTY_STR = ""
+const DIDNT_SAVE_MSG = "Did not save — check connection"
+const AMBER_CLS = "border-amber-400"
+const GRAY_CLS = "border-transparent hover:border-gray-200 focus:border-[#1a6b4a]"
+
 const TH = ({ children, className = '', style }) => (
   <th className={`text-[10px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 py-2 px-1 ${className}`} style={style}>
     {children}
@@ -182,16 +187,25 @@ function TeamTable({ teams, cols, onUpdateName, onUpdateScore, onDelete, highlig
                     atRiskCells?.[`${team.id}:name`] ? 'border-amber-400' : 'border-transparent hover:border-gray-200 focus:border-[#1a6b4a]'
                   }`} />
               </td>
-              {cols.map(c => (
-                <td key={c.key} className="px-1 py-1 text-center">
-                  <input type="number" value={team.scores[c.key] ?? ''} placeholder="—"
-                    onChange={e => onUpdateScore(team.id, c.key, e.target.value)}
-                    title={atRiskCells?.[`${team.id}:${c.key}`] ? 'Didn’t save — check connection' : undefined}
-                    className={`w-full text-center text-sm text-gray-800 bg-transparent border-b outline-none py-0.5 placeholder:text-gray-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                      atRiskCells?.[`${team.id}:${c.key}`] ? 'border-amber-400' : 'border-transparent hover:border-gray-200 focus:border-[#1a6b4a]'
-                    }`} />
-                </td>
-              ))}
+              {cols.map(c => {
+                const split = normalizeRoundScore(team.scores[c.key])
+                return (
+                  <td key={c.key} className="px-1 py-1 text-center">
+                    <input type="number" value={split.written || EMPTY_STR} placeholder="—"
+                      onChange={e => onUpdateScore(team.id, c.key, e.target.value)}
+                      title={atRiskCells?.[`${team.id}:${c.key}`] ? DIDNT_SAVE_MSG : undefined}
+                      className={`w-full text-center text-sm text-gray-800 bg-transparent border-b outline-none py-0.5 placeholder:text-gray-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                        atRiskCells?.[`${team.id}:${c.key}`] ? AMBER_CLS : GRAY_CLS
+                      }`} />
+                    {split.phone > 0 && (
+                      <span
+                        title={`+${split.phone} from phone`}
+                        className="block text-[9px] leading-none text-amber-500 font-semibold mt-0.5"
+                      >⚡ +{split.phone}</span>
+                    )}
+                  </td>
+                )
+              })}
               <td className="text-center text-sm font-bold text-gray-900 px-1 tabular-nums">
                 {team._total > 0 ? team._total : '—'}
               </td>
@@ -282,7 +296,14 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
   function updateScore(id, key, val) {
     setTeams(prev => prev.map(t => {
       if (t.id !== id) return t
-      const updated = { ...t, scores: { ...t.scores, [key]: val === '' ? null : Number(val) } }
+      const prevSplit = normalizeRoundScore(t.scores[key])
+      const updated = {
+        ...t,
+        scores: {
+          ...t.scores,
+          [key]: val === '' ? { written: 0, phone: prevSplit.phone } : { written: Number(val), phone: prevSplit.phone },
+        },
+      }
       save(updated, key)
       return updated
     }))

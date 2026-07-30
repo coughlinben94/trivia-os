@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
-import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, normalizeRoundScore, MEDALS } from '../lib/scoreboardMath.js'
 
 function getRoundLabel(round, slides) {
   const roundSlides = slides.filter(s => s.roundId === round.id)
@@ -167,22 +167,28 @@ export default function ShowDetail() {
                         }
                       </td>
                       <td className="px-4 py-2.5 font-medium text-gray-800">{team.name}</td>
-                      {roundCols.map(col => (
-                        <td key={col.key} className="px-3 py-2.5 text-center text-gray-600 tabular-nums">
-                          {(team.scores ?? {})[col.key] != null
-                            ? Number((team.scores ?? {})[col.key])
-                            : <span className="text-gray-300">—</span>
-                          }
-                        </td>
-                      ))}
-                      {(scoreboardTeams ?? []).some(t => (t.scores ?? {})['bonus'] != null) && (
-                        <td className="px-3 py-2.5 text-center text-gray-600 tabular-nums">
-                          {(team.scores ?? {})['bonus'] != null
-                            ? Number((team.scores ?? {})['bonus'])
-                            : <span className="text-gray-300">—</span>
-                          }
-                        </td>
-                      )}
+                      {roundCols.map(col => {
+                        const { written, phone } = normalizeRoundScore((team.scores ?? {})[col.key])
+                        return (
+                          <td key={col.key} className="px-3 py-2.5 text-center text-gray-600 tabular-nums">
+                            {(team.scores ?? {})[col.key] != null
+                              ? written + phone
+                              : <span className="text-gray-300">—</span>
+                            }
+                          </td>
+                        )
+                      })}
+                      {(scoreboardTeams ?? []).some(t => (t.scores ?? {})['bonus'] != null) && (() => {
+                        const { written, phone } = normalizeRoundScore((team.scores ?? {})['bonus'])
+                        return (
+                          <td className="px-3 py-2.5 text-center text-gray-600 tabular-nums">
+                            {(team.scores ?? {})['bonus'] != null
+                              ? written + phone
+                              : <span className="text-gray-300">—</span>
+                            }
+                          </td>
+                        )
+                      })()}
                       <td className="px-4 py-2.5 text-right font-bold text-[#1a6b4a] tabular-nums">{team.total}</td>
                     </tr>
                   ))}

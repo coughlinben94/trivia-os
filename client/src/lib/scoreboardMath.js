@@ -25,9 +25,26 @@ export function deriveRoundCols(show) {
   return cols
 }
 
+// A round's stored score value is EITHER a legacy plain number (every show
+// created before 2026-07-28) or a { written, phone } split (new — see
+// docs/superpowers/specs/2026-07-28-phone-answer-scoring-design.md). This is
+// the one place that ambiguity gets resolved — every consumer of a round
+// value, read or write, must go through this first. Never read
+// `scores[key]` directly anywhere else in the codebase.
+export function normalizeRoundScore(raw) {
+  if (raw != null && typeof raw === 'object') {
+    return { written: Number(raw.written) || 0, phone: Number(raw.phone) || 0 }
+  }
+  const n = Number(raw)
+  return { written: Number.isFinite(n) ? n : 0, phone: 0 }
+}
+
 // Sums only the keys present in `cols` — a team's scores object may carry
 // stale keys from a since-deleted round, which must not count toward the total.
 export function computeTotal(scores, cols) {
   if (!scores || typeof scores !== 'object') return 0
-  return cols.reduce((sum, c) => sum + (Number(scores[c.key]) || 0), 0)
+  return cols.reduce((sum, c) => {
+    const { written, phone } = normalizeRoundScore(scores[c.key])
+    return sum + written + phone
+  }, 0)
 }
