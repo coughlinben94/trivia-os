@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>World 07 — the ring · Trivia OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════════
+   WORLD 07 — THE RING · 2026-07-30
+   Supersedes world-06. Built to the S2 engine contract and the S1 art
+   measurements, both of which were derived by measuring world-06 rather
+   than by opinion.
+
+   ── WHAT WORLD-06 GOT WRONG (all measured, not guessed) ───────────────
+   1. NO PARALLAX. Every layer was written `--sd = PANE_W`, so all three
+      translated 1920px per turn. The depth system was inert during the
+      one second anybody was watching it. Fixed: per-layer surge
+      480 / 1920 / 2880 — a 1 : 4 : 6 ratio.
+   2. THE WORLD RAN OUT. The strip was 24,960px, features stopped at
+      22,325, and the offset never wrapped. After 13 advances you were
+      looking at empty sky. On a 30-slide night, 18 slides were blank.
+      Fixed: each layer is a CYLINDER of exactly 12 x its own surge, so
+      every layer returns to phase 0 after twelve turns, simultaneously,
+      in integer arithmetic. It cannot run out because it closes.
+   3. LAYOUT WAS NOT REPRODUCIBLE. `featureY()` called Math.random() while
+      everything else was seeded, so the world differed between reloads —
+      which would have defeated any automated check. Fixed: one seeded
+      hash, everywhere, no exceptions.
+   4. NOTHING WAS A MOMENT. Mean luma across the twelve panes spanned
+      1.097x and chroma 1.03x. Twelve different objects that all read the
+      same. Fixed: an explicit value arc, one crest and one trough per
+      turn, target span 2.2-4.0x.
+   5. A FIXED BLOB OUT-LIT THE CONTENT. The corner haze sat on the
+      non-moving sky layer and contributed 84% as much frame luminance as
+      all twelve panes of content combined — identical every pane. Fixed:
+      the sky is now nearly bare and the panes carry their own light.
+   6. THE RAIL WAS NEVER GLUE. Continuous strip drift ran at 0.4-1.8 px/s,
+      which is 1.5x to 7x SLOWER than a speed this project already rejected
+      as visually frozen (ledger #11). It was described as the thing that
+      made a turn read as a turn; it was invisible. Deleted. Continuous
+      life is carried by twinkle and local motion, both bounded.
+
+   ── THE MODEL ─────────────────────────────────────────────────────────
+   A 360 ring of sky in twelve stations. Each slide is one station. A turn
+   rotates to the next. Layers translate different distances per turn —
+   that difference IS the depth — but every layer's period is exactly
+   twelve turns, so a station always lands on the composition it was
+   authored with. Register is preserved by construction, not by tuning.
+
+   `mid` translates exactly one frame per turn, so a station is one
+   authored frame: what you design is what lands. That rule is what keeps
+   composition trustworthy while `far` and `near` slide past at 1/4 and
+   3/2 speed.
+
+   HOUSE LAW: transform + opacity only; static filter/box-shadow never
+   animated; no requestAnimationFrame; reduced motion freezes, never
+   vanishes; blur never applied to small elements (a blur wider than a
+   quarter of an element deletes it); deep space, so radial colour only —
+   a vertical ramp always implies a horizon.
+
+   DESIGN SPACE: true pixels on 1920x1080, CSS-scaled to fit.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--pg:#0b0c10;--pg-card:#14161d;--pg-line:#262a34}
+body{background:var(--pg);color:#ddd8e8;font-family:'DM Sans',system-ui,sans-serif;
+  line-height:1.55;padding:0 0 80px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1320px;margin:0 auto;padding:0 28px}
+header.pg{padding:44px 0 20px;border-bottom:1px solid var(--pg-line);margin-bottom:20px}
+header.pg .eyebrow{font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:#8a7ad0;font-weight:700;margin-bottom:10px}
+header.pg h1{font-family:'Boogaloo',cursive;font-size:clamp(32px,5vw,48px);line-height:1.05;margin-bottom:10px}
+header.pg p{max-width:80ch;color:#9aa0ae;font-size:14.5px}
+header.pg b{color:#ddd8e8;font-weight:500}
+.ctl{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px}
+.ctl button{font-size:12.5px;font-weight:600;letter-spacing:.03em;
+  background:var(--pg-card);border:1px solid var(--pg-line);color:#b9b3c8;
+  border-radius:7px;padding:8px 14px;cursor:pointer;
+  transition:border-color .15s,color .15s,background .15s;user-select:none}
+.ctl button:hover{border-color:#6a5aa8;color:#fff}
+.ctl button.on{background:#2a2140;border-color:#8a6ad0;color:#fff}
+.ctl .big{font-size:13.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  background:#2a2140;border:1px solid #8a6ad0;color:#fff;border-radius:8px;padding:10px 24px}
+.ctl .big:hover{background:#3a2e58}
+.ctl .sep{width:1px;align-self:stretch;background:var(--pg-line);margin:0 4px}
+.ctl .grpLabel{font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:#7a7f90;font-weight:700;padding:0 2px}
+.sub{color:#8b91a0;font-size:12.5px;margin:0 0 14px;font-variant-numeric:tabular-nums}
+.sub b{color:#ddd8e8;font-weight:600}
+
+.stage{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;
+  border-radius:10px;background:#01010a;
+  box-shadow:0 24px 70px rgba(0,0,0,.6),0 0 0 1px var(--pg-line)}
+.design{position:absolute;left:0;top:0;width:1920px;height:1080px;
+  transform-origin:0 0;overflow:hidden}
+
+/* ══ LAYER CHASSIS ══
+   .lyr  clip box, viewport sized, NEVER transformed — bounds the raster
+     .surge  the ONLY transform. One per layer. No rail, nothing nested,
+             nothing to disagree with. */
+.lyr{position:absolute;inset:0;overflow:hidden}
+.surge{position:absolute;left:0;top:0;width:100%;height:100%;
+  will-change:transform;transform:translate3d(0,0,0)}
+.stage.go .surge{transition:transform var(--surge-ms) cubic-bezier(.16,.62,.28,1)}
+
+/* ══ SKY ══ deliberately almost bare. In world-06 a fixed corner blob
+   out-lit twelve panes of content; the panes now carry their own light.
+   Radial only — a vertical ramp always implies a horizon. */
+.void{position:absolute;inset:0;
+  background:radial-gradient(ellipse 138% 128% at 50% 48%,
+    var(--sky-1) 0%, var(--sky-2) 46%, var(--sky-3) 78%, var(--sky-4) 100%)}
+
+/* ══ STARS ══ every one twinkles, wide swing, 5–13s — the Sonora
+   behaviour Ben named as the bar. NEVER a blur filter on these. */
+.star{position:absolute;border-radius:50%;background:var(--sc);
+  animation:tw var(--tp) ease-in-out infinite;animation-delay:var(--td)}
+@keyframes tw{0%,100%{opacity:var(--ob)}50%{opacity:var(--op)}}
+
+/* ══ PRIMITIVES ══ the engine renders these; a world may not invent a
+   shape. Each guarantees its own hard edge structurally, so "all soft =
+   mush" becomes impossible rather than merely discouraged. ══ */
+.pf{position:absolute;pointer-events:none;
+  animation:pfBreathe var(--pb) ease-in-out infinite;animation-delay:var(--pd)}
+@keyframes pfBreathe{0%,100%{opacity:var(--pa)}50%{opacity:var(--pa2)}}
+
+/* blob — n-lobe cloud + a mandatory rim arc so it is never all-soft */
+.b-lobe{position:absolute;border-radius:50%}
+.b-rim{position:absolute;border-radius:50%;border:2px solid var(--rim);
+  border-right-color:transparent;border-bottom-color:transparent}
+
+/* dots — inherently hard-edged, so a cluster always reads */
+.d-glow{position:absolute;inset:0;border-radius:50%}
+
+/* spikes — hot core + radial spikes */
+.s-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fffaf0}
+.s-spk{position:absolute;left:50%;top:50%;transform-origin:50% 50%}
+
+/* lens — flattened disc, optional dust lane */
+.l-disc{position:absolute;inset:0;border-radius:50%}
+.l-lane{position:absolute;left:6%;right:6%;top:46%;height:8%;border-radius:50%;
+  background:rgba(4,3,14,.62)}
+.l-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fff6e6}
+
+/* streak — head + coma + tapering tail */
+.k-tail{position:absolute;left:0;top:50%;border-radius:999px}
+.k-head{position:absolute;right:-4px;top:50%;border-radius:50%}
+
+/* ribbon — long tapered form with a mandatory rim */
+.r-body{position:absolute;inset:0;border-radius:50%}
+
+/* ══ SHOOTING STAR ══ */
+.shootLane{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.shootRot{position:absolute;transform:rotate(var(--sa))}
+.shoot{width:210px;height:2.6px;border-radius:2px;opacity:0;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,246,226,0) 14%,
+    rgba(255,246,226,.6) 72%,#fff8ec 100%);
+  animation:shootGo var(--sdu) linear both}
+@keyframes shootGo{
+  0%{transform:translate3d(0,0,0);opacity:0}
+  10%{opacity:.95} 74%{opacity:.85}
+  100%{transform:translate3d(var(--sd2),0,0);opacity:0}
+}
+
+/* ══ QUESTION — camera-fixed HUD. ONE gesture, not three beats.
+   Out is the whole block in 160ms; the screen is textless across the
+   entire velocity peak; in begins at 1150ms on the deceleration tail. */
+.qScrim{position:absolute;left:0;right:0;opacity:0;
+  transition:opacity .45s ease;pointer-events:none}
+.qScrim.on{opacity:1}
+.qLayer{position:absolute;left:384px;width:1152px;top:540px;
+  transform:translateY(-50%);text-align:center;pointer-events:none}
+.qLayer .qtext{font-family:'DM Sans',sans-serif;font-weight:500;
+  line-height:1.3;color:var(--q-col);transition:color .6s ease}
+.qLayer .w{display:inline-block;opacity:0}
+.qLayer.out{animation:qOut 160ms cubic-bezier(.4,0,1,1) both}
+@keyframes qOut{from{opacity:1;transform:translateY(-50%) translate3d(0,0,0)}
+                to  {opacity:0;transform:translateY(-50%) translate3d(0,-14px,0)}}
+@keyframes wIn {from{opacity:0;transform:translate3d(0,22px,0)}
+                to  {opacity:1;transform:translate3d(0,0,0)}}
+.stage.hideQ .qLayer,.stage.hideQ .qScrim{display:none}
+
+.vig{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 150% 140% at 50% 50%,
+    transparent 0%, transparent 68%, rgba(1,1,8,.34) 100%)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.05;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.55'/></svg>")}
+.stage.noGrain .grain{display:none}
+.guides{position:absolute;left:20%;top:28%;width:60%;height:44%;
+  border:2px dashed rgba(160,200,255,.5);border-radius:6px;pointer-events:none;display:none}
+.guides::after{content:'safe box · 60% × 44%';position:absolute;left:10px;top:8px;
+  font-size:15px;letter-spacing:.1em;color:rgba(160,200,255,.7);font-weight:600}
+.stage.showGuides .guides{display:block}
+
+@media (prefers-reduced-motion:reduce){
+  .surge{transition:none!important}
+  .star,.pf,.shoot{animation-play-state:paused!important}
+}
+.stage.rm .surge{transition:none!important}
+.stage.rm .star,.stage.rm .pf,.stage.rm .shoot{animation-play-state:paused!important}
+
+.notes{margin-top:30px;background:var(--pg-card);border:1px solid var(--pg-line);
+  border-radius:10px;padding:24px 28px}
+.notes h3{font-family:'Boogaloo',cursive;font-size:23px;margin-bottom:10px}
+.notes h3 span{color:#8a7ad0}
+.notes p{color:#9aa0ae;font-size:14px;max-width:92ch;margin-bottom:9px}
+.notes p:last-child{margin-bottom:0}
+.notes b{color:#ddd8e8;font-weight:600}
+.notes code{background:#0e1017;padding:1px 5px;border-radius:4px;font-size:13px}
+</style>
+</head>
+<body>
+<header class="pg"><div class="wrap">
+  <div class="eyebrow">World 07 · the ring</div>
+  <h1>The ring</h1>
+  <p>Twelve stations of sky. Each slide is one station; a turn rotates to the next;
+  twelve turns brings you back. <b>Layers move different distances per turn</b> —
+  480, 1920 and 2880px — and that difference is the depth. Every layer's period is
+  exactly twelve turns, so a station always lands on the composition it was authored
+  with. <b>Each station has its own brightness target</b>, so some are quiet and two
+  or three are loud, instead of twelve panes that all read the same.</p>
+</div></header>
+
+<div class="wrap">
+  <div class="ctl">
+    <button class="big" id="btnAdv">Turn &#9656;</button>
+    <button id="btnAuto">Auto-advance</button>
+    <button id="btnShoot">Shooting star</button>
+    <span class="sep"></span>
+    <span class="grpLabel">Jump to</span>
+    <button data-jump="quiet">Quietest</button>
+    <button data-jump="loud">Loudest</button>
+    <span class="sep"></span>
+    <button class="on" id="tQ">Question</button>
+    <button id="tG">Safe box</button>
+    <button class="on" id="tN">Grain</button>
+    <button id="tR">Reduced motion</button>
+  </div>
+  <div class="sub" id="status"></div>
+  <div class="stage" id="stage"><div class="design" id="design">
+    <div class="qScrim" id="qScrim"></div>
+    <div class="qLayer" id="qLayer"><div class="qtext" id="qText"></div></div>
+    <div class="vig"></div>
+    <div class="guides"></div>
+    <div class="grain"></div>
+  </div></div>
+
+  <div class="notes">
+    <h3><span>What changed from world-06.</span> Five measured defects, five fixes.</h3>
+    <p><b>Real parallax.</b> world-06 wrote the same travel distance onto every layer,
+    so nothing moved relative to anything else during the one second you were watching.
+    Now <code>far</code> moves 480px per turn, <code>mid</code> 1920, <code>near</code>
+    2880 — a 1 : 4 : 6 ratio.</p>
+    <p><b>It cannot run out.</b> world-06's strip ended after 13 turns and the rest of
+    the night was blank sky. Each layer is now a cylinder of exactly twelve times its own
+    surge, so all layers hit phase zero together on turn twelve, in integer arithmetic.
+    <code>mid</code> moves exactly one frame per turn, which is what makes a station
+    reliably the frame you authored.</p>
+    <p><b>Panes differ.</b> A value arc gives each station a brightness target with one
+    crest and one trough per turn. Most stations are quiet so two or three can be loud.
+    world-06's twelve panes spanned 1.097× — effectively identical.</p>
+    <p><b>The sky is nearly bare.</b> world-06's fixed corner haze contributed 84% as much
+    light as all twelve panes of content, identically every time — which is the opposite of
+    "each pane is a different place."</p>
+    <p><b>Reproducible.</b> Every position, size and alpha comes from one seeded hash, so
+    the world is identical on every load and any defect can be re-rendered on demand.</p>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ═══════════════════════════════════════════════════════════════════════
+   ENGINE — identical for every theme. A world never sets any of this.
+   Every number appears exactly once. Anything derivable is derived by one
+   function. (world-06 declared travel in two places; the two disagreed,
+   and that was the pop.)
+   ═══════════════════════════════════════════════════════════════════════ */
+const ENGINE = {
+  W: 1920, H: 1080,
+  PANES: 12,
+  SURGE_MS: 1700,
+  SAFE: { x:0.20, y:0.28, w:0.60, h:0.44 },
+
+  /* surge = px this layer moves per turn.  m = how many times its content
+     repeats around the ring (m must divide PANES; m>1 only where content
+     is anonymous, because an anonymous repeat is invisible).
+     cylinder = PANES * surge — the layer's period, always exactly 12 turns. */
+  LAYERS: [
+    { id:'sky',  surge:0,    m:1 },
+    { id:'far',  surge:480,  m:1 },
+    { id:'mid',  surge:1920, m:1 },
+    { id:'near', surge:2880, m:3 },
+  ],
+
+  Q: { OUT_MS:160, IN_START_MS:1150, IN_MS:420, IN_STAGGER_MS:34,
+       BOX:{ w:1152, h:420, minPx:34, maxPx:68, maxLines:4 } },
+
+  /* value arc — one crest, one trough per turn. The 1.6 exponent is what
+     makes most stations quiet and two or three loud. */
+  ARC: { lo:18, hi:52, exp:1.6 },
+
+  STAR_ALPHA_FLOOR: 0.28,
+  DWELL_MS: 75000,
+  SHOOT_MS: [45000, 120000],
+};
+const cylinderOf = L => ENGINE.PANES * L.surge;
+const authorPeriodOf = L => cylinderOf(L) / L.m;
+
+/* ── one seeded hash, used for everything. No Math.random anywhere in
+   world construction: world-06 used it for vertical placement only, which
+   made the layout differ between reloads and would have defeated any
+   automated check. ── */
+function hash32(x, seed){
+  let h = (x|0) ^ (seed|0);
+  h = Math.imul(h ^ (h>>>16), 2246822507);
+  h = Math.imul(h ^ (h>>>13), 3266489909);
+  return ((h ^ (h>>>16)) >>> 0);
+}
+function rng(i, seed){
+  let n = hash32(i, seed);
+  return () => { n = hash32(n, 0x9E3779B9); return n / 4294967296; };
+}
+const lerp = (a,b,t) => a + (b-a)*t;
+
+/* ═══ THE WORLD — this is the only part a generator writes ═════════════ */
+const WORLD = {
+  id: 'midnight-galaxy',
+  type: 'space',
+  name: 'Midnight Galaxy',
+  phase: 5,                             // where the arc crest falls
+  sky: ['#0b0a20','#07061c','#040313','#010109'],
+  qColours: ['#e2ccff', '#ffc48a'],
+  /* one entry per station. `key` is the nameable thing; `accent` marks the
+     stations allowed the one complementary hue. */
+  stations: [
+    { key:'orange nebula',  prim:'blob',   hue:28,  accent:true  },
+    { key:'star cluster',   prim:'dots',   hue:268, accent:false },
+    { key:'supernova',      prim:'spikes', hue:36,  accent:true  },
+    { key:'spiral galaxy',  prim:'lens',   hue:276, accent:false },
+    { key:'comet',          prim:'streak', hue:208, accent:false },
+    { key:'violet nebula',  prim:'blob',   hue:282, accent:false },
+    { key:'dust ribbon',    prim:'ribbon', hue:264, accent:false },
+    { key:'binary pair',    prim:'dots',   hue:214, accent:false },
+    { key:'rose nebula',    prim:'blob',   hue:330, accent:true  },
+    { key:'ringed lens',    prim:'lens',   hue:250, accent:false },
+    { key:'open cluster',   prim:'dots',   hue:224, accent:false },
+    { key:'green nebula',   prim:'blob',   hue:140, accent:false },
+  ],
+};
+
+/* target mean luma per station — the arc. A seeded ±10% jitter (never
+   Math.random) breaks up the cosine trough's flat neighbourhood — without it,
+   stations 6-8 all round to brightness 18 (S1 defect: "nothing is a moment"). */
+function arcAt(i){
+  const { lo, hi, exp } = ENGINE.ARC;
+  const t = 0.5 - 0.5*Math.cos(2*Math.PI*(i + WORLD.phase)/ENGINE.PANES);
+  const base = lo + (hi-lo)*Math.pow(t, exp);
+  const jitter = lerp(-0.10, 0.10, rng(i, 0x4217)());
+  return base * (1 + jitter);
+}
+const ARC = Array.from({length:ENGINE.PANES}, (_,i) => arcAt(i));
+const ARC_MIN = Math.min(...ARC), ARC_MAX = Math.max(...ARC);
+/* 0 at the quietest station, 1 at the loudest — drives size and alpha */
+const loudness = i => (ARC[i] - ARC_MIN) / (ARC_MAX - ARC_MIN);
+
+const stage = document.getElementById('stage');
+const design = document.getElementById('design');
+function fit(){ design.style.transform = 'scale(' + (stage.clientWidth/ENGINE.W) + ')'; }
+new ResizeObserver(fit).observe(stage); fit();
+function el(c){ const d = document.createElement('div'); if (c) d.className = c; return d; }
+const px = n => n.toFixed(1) + 'px';
+
+/* ═══ PRIMITIVES ═══ the engine renders these; a world picks one and a
+   hue. Each guarantees a hard edge structurally, so nothing can turn to
+   mush. Sizes come from the tier bands; alpha from the station's arc. */
+function hsla(h,s,l,a){ return `hsla(${h},${s}%,${l}%,${a})`; }
+
+function makePrim(kind, w, h, hue, alpha, r){
+  const f = el('pf');
+  f.style.width = px(w); f.style.height = px(h);
+  f.style.setProperty('--pa',  alpha.toFixed(3));
+  f.style.setProperty('--pa2', Math.min(alpha*1.18, 1).toFixed(3));
+  f.style.setProperty('--pb', (47 + Math.floor(r()*26)) + 's');
+  f.style.setProperty('--pd', (-r()*40).toFixed(1) + 's');
+
+  if (kind === 'blob'){
+    for (let i=0;i<3;i++){
+      const L = el('b-lobe');
+      const lw = w*(0.62 + r()*0.38), lh = h*(0.55 + r()*0.45);
+      L.style.left = px((w-lw)*r()); L.style.top = px((h-lh)*r());
+      L.style.width = px(lw); L.style.height = px(lh);
+      L.style.background = `radial-gradient(ellipse 56% 44% at ${40+r()*20}% 50%,
+        ${hsla(hue, 72, 62, 0.42)} 0%, ${hsla(hue-8, 64, 46, 0.20)} 40%,
+        ${hsla(hue-14, 56, 30, 0.07)} 66%, transparent 82%)`;
+      L.style.transform = `rotate(${(-30+r()*60).toFixed(0)}deg)`;
+      f.appendChild(L);
+    }
+    const rim = el('b-rim');
+    const rw = w*0.52, rh = h*0.52;
+    rim.style.left = px(w*0.16); rim.style.top = px(h*0.18);
+    rim.style.width = px(rw); rim.style.height = px(rh);
+    rim.style.setProperty('--rim', hsla(hue+6, 88, 78, 0.34));
+    rim.style.transform = `rotate(${(-40+r()*80).toFixed(0)}deg)`;
+    f.appendChild(rim);
+  }
+
+  else if (kind === 'dots'){
+    const g = el('d-glow');
+    g.style.background = `radial-gradient(circle closest-side,
+      ${hsla(hue,58,66,0.16)} 0%, ${hsla(hue,50,52,0.06)} 48%, transparent 76%)`;
+    f.appendChild(g);
+    const n = 26 + Math.floor(r()*22);
+    for (let i=0;i<n;i++){
+      const a = r()*Math.PI*2, rad = Math.pow(r(),0.55)*0.46;
+      const s = 2.0 + r()*3.4;
+      const d = el(); d.style.position='absolute'; d.style.borderRadius='50%';
+      d.style.left = px((0.5+Math.cos(a)*rad)*w);
+      d.style.top  = px((0.5+Math.sin(a)*rad)*h);
+      d.style.width = d.style.height = px(s);
+      d.style.background = i%4 ? '#ffffff' : hsla(hue,70,84,1);
+      d.style.opacity = (0.55 + r()*0.45).toFixed(2);
+      if (s > 4.2) d.style.boxShadow = `0 0 ${px(s*2.2)} ${px(s*0.3)} ${hsla(hue,70,80,0.5)}`;
+      f.appendChild(d);
+    }
+  }
+
+  else if (kind === 'spikes'){
+    const sh = el('d-glow');
+    sh.style.background = `radial-gradient(circle closest-side,
+      ${hsla(hue,80,74,0.34)} 0%, ${hsla(hue-10,70,58,0.16)} 26%,
+      ${hsla(hue-30,60,44,0.08)} 52%, transparent 76%)`;
+    f.appendChild(sh);
+    for (let i=0;i<6;i++){
+      const s = el('s-spk');
+      const len = w*(i<2 ? 0.86 : 0.54), th = i<2 ? 3 : 2;
+      s.style.width = px(len); s.style.height = px(th);
+      s.style.marginLeft = px(-len/2); s.style.marginTop = px(-th/2);
+      s.style.background = `linear-gradient(90deg,transparent 0%,${hsla(hue,86,86,0.46)} 50%,transparent 100%)`;
+      s.style.transform = `rotate(${i*30 + (i<2?0:15)}deg)`;
+      f.appendChild(s);
+    }
+    const c = el('s-core');
+    const cs = Math.max(16, w*0.055);
+    c.style.width = c.style.height = px(cs);
+    c.style.marginLeft = px(-cs/2); c.style.marginTop = px(-cs/2);
+    c.style.boxShadow = `0 0 ${px(cs*2.4)} ${px(cs*0.8)} ${hsla(hue,84,74,0.55)}`;
+    f.appendChild(c);
+  }
+
+  else if (kind === 'lens'){
+    const d = el('l-disc');
+    d.style.background = `radial-gradient(ellipse 54% 24% at 50% 50%,
+      ${hsla(hue,60,74,0.30)} 0%, ${hsla(hue,54,58,0.15)} 42%, transparent 74%)`;
+    f.appendChild(d);
+    const lane = el('l-lane'); f.appendChild(lane);
+    const c = el('l-core');
+    const cs = Math.max(11, w*0.032);
+    c.style.width = c.style.height = px(cs);
+    c.style.marginLeft = px(-cs/2); c.style.marginTop = px(-cs/2);
+    c.style.boxShadow = `0 0 ${px(cs*2.6)} ${px(cs*0.7)} ${hsla(hue,70,80,0.45)}`;
+    f.appendChild(c);
+    f.style.transform = `rotate(${(-30+r()*24).toFixed(0)}deg)`;
+  }
+
+  else if (kind === 'streak'){
+    const t = el('k-tail');
+    t.style.width = '100%'; t.style.height = px(Math.max(5, h*0.10));
+    t.style.marginTop = px(-Math.max(5, h*0.10)/2);
+    t.style.background = `linear-gradient(90deg,transparent 0%,${hsla(hue,60,70,0.08)} 22%,
+      ${hsla(hue,66,78,0.28)} 74%,${hsla(hue,70,90,0.55)} 100%)`;
+    f.appendChild(t);
+    const hd = el('k-head');
+    const hs = Math.max(14, h*0.30);
+    hd.style.width = hd.style.height = px(hs); hd.style.marginTop = px(-hs/2);
+    hd.style.background = '#f2fbff';
+    hd.style.boxShadow = `0 0 ${px(hs*2.2)} ${px(hs*0.6)} ${hsla(hue,72,80,0.5)}`;
+    f.appendChild(hd);
+    f.style.transform = `rotate(${(-26+r()*16).toFixed(0)}deg)`;
+  }
+
+  else if (kind === 'ribbon'){
+    const b = el('r-body');
+    b.style.background = `radial-gradient(ellipse 60% 18% at 50% 50%,
+      ${hsla(hue,44,26,0.72)} 0%, ${hsla(hue,40,20,0.40)} 44%, transparent 76%)`;
+    f.appendChild(b);
+    const rim = el('b-rim');
+    rim.style.left='4%'; rim.style.top='34%'; rim.style.width='92%'; rim.style.height='32%';
+    rim.style.setProperty('--rim', hsla(hue+10, 60, 70, 0.22));
+    f.appendChild(rim);
+    f.style.transform = `rotate(${(-18+r()*36).toFixed(0)}deg)`;
+  }
+  return f;
+}
+
+/* ═══ PLACEMENT ═══ keep solid forms out of the safe box. Atmosphere may
+   cross it; a form may not. Bands are derived from ENGINE.SAFE so the box
+   is declared once. */
+function bandY(r, h){
+  const H = ENGINE.H, top = ENGINE.SAFE.y*H, bot = (ENGINE.SAFE.y+ENGINE.SAFE.h)*H;
+  const upper = r() < 0.5;
+  if (upper) return Math.max(-h*0.10, (top - h) * (0.25 + r()*0.75));
+  return Math.min(H - h*0.88, bot + (H - bot - h) * (r()*0.72));
+}
+
+/* ═══ STARS ═══ S1 measured world-06 at 117/frame with the whole field
+   contributing an eighth of what one fixed blob did. Target 150–260. */
+const TEMP = ['#ffffff','#f6e6ff','#ffffff','#fff3e2','#eaf0ff'];
+function buildStars(host, period, perFrame, sizeMul, seed){
+  const n = Math.round(perFrame * (period / ENGINE.W));
+  const frag = document.createDocumentFragment();
+  for (let i=0;i<n;i++){
+    const r = rng(i, seed), roll = r();
+    /* 65% small, 27% mid, 8% big — S1 §4.5 */
+    const size = (roll < 0.65 ? 1.2 + r()*1.0
+                : roll < 0.92 ? 2.4 + r()*1.6
+                : 4.5 + r()*3.5) * sizeMul;
+    const lo = ENGINE.STAR_ALPHA_FLOOR + r()*0.14;
+    const hi = Math.min(lo + 0.40 + r()*0.15, 1);
+    const dur = 5 + r()*8;
+    const d = el('star'), s = d.style;
+    s.left = px(r()*period); s.top = px(r()*ENGINE.H);
+    s.width = s.height = px(size);
+    s.setProperty('--sc', TEMP[i%5]);
+    s.setProperty('--ob', lo.toFixed(2));
+    s.setProperty('--op', hi.toFixed(2));
+    s.setProperty('--tp', dur.toFixed(2)+'s');
+    s.setProperty('--td', (-r()*dur).toFixed(2)+'s');
+    /* glow is a box-shadow, never a blur filter — a blur wider than a
+       quarter of an element deletes it (ledger #14) */
+    if (size >= 5) s.boxShadow = `0 0 ${px(size*2.2)} ${px(size*0.3)} ${TEMP[i%5]}`;
+    frag.appendChild(d);
+  }
+  host.appendChild(frag);
+  return n;
+}
+
+/* ═══ BUILD ═══ */
+const surgeEls = {};
+let starTotal = 0, formTotal = 0;
+
+function buildLayerContent(host, L){
+  const period = authorPeriodOf(L);
+
+  if (L.id === 'far'){
+    /* slow, dense star field + one wide soft wash per two stations.
+       far moves 480px/turn, so its content changes slowly — which is
+       what "far" means. */
+    starTotal += buildStars(host, period, 140, 1.0, 0xA11CE);
+    for (let i=0;i<6;i++){
+      const r = rng(i, 0xFA2);
+      const st = WORLD.stations[(i*2) % ENGINE.PANES];
+      const lou = loudness((i*2) % ENGINE.PANES);
+      const w = lerp(620, 900, r()), h = w*(0.52 + r()*0.22);
+      const f = makePrim('blob', w, h, st.hue, lerp(0.16, 0.30, lou), r);
+      f.style.left = px(i*(period/6) + r()*(period/6 - w));
+      f.style.top  = px(bandY(r, h));
+      host.appendChild(f); formTotal++;
+    }
+  }
+
+  else if (L.id === 'mid'){
+    /* THE COMPOSITION LAYER. mid moves exactly one frame per turn, so
+       station i is authored into the frame at x = i*W and lands there
+       every single time. What you design is what you get. */
+    for (let i=0;i<ENGINE.PANES;i++){
+      const st = WORLD.stations[i];
+      const r = rng(i, 0x5EED);
+      const lou = loudness(i);
+      const x0 = i * ENGINE.W;
+
+      /* headline form — 576–880px longest edge, scaled by loudness */
+      const hw = lerp(576, 880, lou*0.75 + r()*0.25);
+      const hh = st.prim === 'streak' ? hw*0.30
+               : st.prim === 'ribbon' ? hw*0.34
+               : hw*(0.62 + r()*0.26);
+      const alpha = lerp(0.34, 0.55, lou);
+      const head = makePrim(st.prim, hw, hh, st.hue, alpha, r);
+      head.style.left = px(x0 + lerp(0.06, 0.44, r())*(ENGINE.W - hw));
+      head.style.top  = px(bandY(r, hh));
+      host.appendChild(head); formTotal++;
+
+      /* one feature-tier companion in the opposite band, so a station
+         reads as a place rather than one object in a void */
+      const others = ['blob','dots','lens','streak'].filter(k => k !== st.prim);
+      const ck = others[Math.floor(r()*others.length)];
+      const cw = lerp(230, 420, r());
+      const ch = ck === 'streak' ? cw*0.30 : cw*(0.60 + r()*0.28);
+      const comp = makePrim(ck, cw, ch, st.hue + (st.accent ? 168 : lerp(-22,22,r())),
+                            lerp(0.30, 0.48, lou)*0.8, r);
+      comp.style.left = px(x0 + lerp(0.10, 0.62, r())*(ENGINE.W - cw));
+      comp.style.top  = px(bandY(r, ch));
+      host.appendChild(comp); formTotal++;
+
+      /* detail-tier specks, count follows loudness */
+      const dn = Math.round(lerp(1, 4, lou));
+      for (let k=0;k<dn;k++){
+        const dw = lerp(58, 154, r());
+        const d = makePrim('dots', dw, dw*0.9, st.hue, lerp(0.34,0.60,lou)*0.7, r);
+        d.style.left = px(x0 + r()*(ENGINE.W - dw));
+        d.style.top  = px(bandY(r, dw*0.9));
+        host.appendChild(d); formTotal++;
+      }
+    }
+  }
+
+  else if (L.id === 'near'){
+    /* fast and anonymous — the layer that sells the turn. Content repeats
+       3x around the ring, which is invisible precisely because nothing
+       here is identifiable. */
+    starTotal += buildStars(host, period, 26, 1.5, 0xBEEF);
+  }
+}
+
+(function build(){
+  const before = document.getElementById('qScrim');
+
+  const sky = el('lyr');
+  const skyInner = el('surge');
+  skyInner.style.transition = 'none';
+  skyInner.appendChild(el('void'));
+  sky.appendChild(skyInner);
+  design.insertBefore(sky, before);
+
+  for (const L of ENGINE.LAYERS){
+    if (L.id === 'sky') continue;
+    const cyl = cylinderOf(L), period = authorPeriodOf(L);
+    const lyr = el('lyr'), surge = el('surge');
+    surge.style.width = px(cyl + ENGINE.W);
+    lyr.appendChild(surge);
+    design.insertBefore(lyr, before);
+
+    /* author one period, then repeat it m+1 times. The extra copy covers
+       the window that hangs past the cylinder just before it wraps. */
+    const proto = el(); proto.style.position='absolute'; proto.style.inset='0';
+    buildLayerContent(proto, L);
+    for (let k=0; k<=L.m; k++){
+      const copy = k === 0 ? proto : proto.cloneNode(true);
+      copy.style.position = 'absolute';
+      copy.style.left = px(k * period);
+      copy.style.top = '0';
+      copy.style.width = px(period);
+      surge.appendChild(copy);
+    }
+    surgeEls[L.id] = surge;
+  }
+
+  const shootLane = el('shootLane');
+  design.insertBefore(shootLane, before);
+  window.__shootLane = shootLane;
+  stage.style.setProperty('--surge-ms', ENGINE.SURGE_MS + 'ms');
+  WORLD.sky.forEach((c,i) => stage.style.setProperty('--sky-'+(i+1), c));
+})();
+
+/* ═══ QUESTIONS ═══ */
+const QUESTIONS = [
+  'Gordon Lightfoot sang about the Edmund Fitzgerald. Which Great Lake took her down?',
+  'What is the only U.S. state that grows coffee commercially?',
+  'Which planet spins so slowly that its day outlasts its year?',
+  'What is the tallest animal walking the Earth today?',
+  'Which country invented the croissant, and it was not France?',
+  'What mythical creature is the national animal of Scotland?',
+  'In poker, which hand wins: a flush or a full house?',
+  'Which Beatles album cover shows the band on a crosswalk?',
+  'What is the smallest country in the world by land area?',
+  'Which element gives Mars its red colour?',
+  'Which ocean is the deepest on Earth?',
+  'What is the hardest naturally occurring substance?',
+];
+let _mc=null; const ctx2=()=>(_mc||(_mc=document.createElement('canvas').getContext('2d')));
+function wrapLines(t,p,maxW){const c=ctx2();c.font='500 '+p+'px "DM Sans"';
+  const w=String(t).split(/\s+/).filter(Boolean); if(!w.length)return[''];
+  const L=[];let l=w[0];
+  for(let i=1;i<w.length;i++){const s=l+' '+w[i];
+    if(c.measureText(s).width<=maxW)l=s;else{L.push(l);l=w[i]}}
+  L.push(l);return L}
+function fits(t,p,bw,bh,ml){const L=wrapLines(t,p,bw); if(L.length>ml)return false;
+  const c=ctx2();c.font='500 '+p+'px "DM Sans"';
+  for(const ln of L)if(c.measureText(ln).width>bw)return false;
+  return L.length*p*1.3<=bh}
+function fitPx(t){const B=ENGINE.Q.BOX;
+  if(fits(t,B.maxPx,B.w,B.h,B.maxLines))return B.maxPx;
+  let lo=B.minPx,hi=B.maxPx;
+  for(let i=0;i<9;i++){const m=(lo+hi)/2;
+    if(fits(t,m,B.w,B.h,B.maxLines))lo=m;else hi=m}
+  return Math.max(B.minPx,lo)}
+
+const qLayer=document.getElementById('qLayer'),qText=document.getElementById('qText'),
+      qScrim=document.getElementById('qScrim');
+let fontsOK=false;
+const fontsReady=(document.fonts&&document.fonts.ready
+  ?Promise.all([document.fonts.load('500 40px "DM Sans"'),
+                document.fonts.load('400 40px "Boogaloo"')]).then(()=>document.fonts.ready)
+  :Promise.resolve()).then(()=>{fontsOK=true});
+
+/* scrim is an ELLIPSE, never a band — a straight horizontal edge always
+   reads as a horizon or a letterbox. Alpha tracks the station's own
+   brightness so a quiet pane doesn't get a black bruise under it. */
+function layoutScrim(station){
+  const dr=design.getBoundingClientRect(),qr=qLayer.getBoundingClientRect();
+  const sc=stage.clientWidth/ENGINE.W||1;
+  const top=(qr.top-dr.top)/sc, h=qr.height/sc;
+  const cy=top+h/2, H=h*3.1;
+  const a=Math.max(0.20, Math.min(0.62, 0.20 + 0.006*ARC[station]));
+  qScrim.style.top=px(cy-H/2); qScrim.style.height=px(H);
+  qScrim.style.background=`radial-gradient(ellipse 46% 50% at 50% 50%,
+    rgba(2,2,10,${a.toFixed(2)}) 0%, rgba(2,2,10,${(a*0.7).toFixed(2)}) 42%,
+    rgba(2,2,10,${(a*0.3).toFixed(2)}) 68%, transparent 88%)`;
+}
+let curQ=-1;
+function renderQ(i){
+  const text=QUESTIONS[i%QUESTIONS.length];
+  stage.style.setProperty('--q-col', WORLD.qColours[i%2]);
+  qLayer.classList.remove('out');
+  qText.style.fontSize=fitPx(text)+'px';
+  qText.textContent='';
+  text.split(' ').forEach((w,k,arr)=>{
+    const s=document.createElement('span'); s.className='w'; s.textContent=w;
+    if(isReduced()) s.style.opacity=1;
+    else{ s.style.animation=`wIn ${ENGINE.Q.IN_MS}ms cubic-bezier(.23,1,.32,1) both`;
+          s.style.animationDelay=(k*ENGINE.Q.IN_STAGGER_MS)+'ms'; }
+    qText.appendChild(s);
+    if(k<arr.length-1) qText.appendChild(document.createTextNode(' '));
+  });
+  layoutScrim(station); qScrim.classList.add('on');
+}
+function showQ(i){ curQ=i; if(fontsOK)renderQ(i); else fontsReady.then(()=>{if(curQ===i)renderQ(i)}); }
+function hideQ(){ qScrim.classList.remove('on'); qLayer.classList.add('out'); }
+
+/* ═══ THE TURN ═══ one transition, one curve, one duration; only the
+   distance differs per layer. Offsets wrap modulo the layer's cylinder,
+   and because every cylinder is exactly 12 surges, all layers return to
+   phase 0 together on turn twelve. Integer arithmetic throughout — no
+   float ever reaches a transform. */
+const mediaRM=matchMedia('(prefers-reduced-motion: reduce)');
+let manualRM=false; const isReduced=()=>mediaRM.matches||manualRM;
+let station=0, slide=0, turns=0, busy=false, autoOn=false, autoT=null;
+const offset={};
+ENGINE.LAYERS.forEach(L=>{ if(L.id!=='sky') offset[L.id]=0; });
+
+function writeOffsets(){
+  for (const L of ENGINE.LAYERS){
+    if (L.id === 'sky') continue;
+    surgeEls[L.id].style.transform = `translate3d(${-offset[L.id]}px,0,0)`;
+  }
+}
+function turn(){
+  if (busy) return;
+  busy = true;
+  hideQ();
+  const willWrap = ENGINE.LAYERS.some(L => L.id!=='sky' &&
+      offset[L.id] + L.surge >= cylinderOf(L));
+
+  if (isReduced() || willWrap){
+    /* at the wrap we jump rather than animate: sliding back across a
+       whole cylinder would be a rewind. Because the content at phase 0
+       is identical to the content at phase cylinder, the jump is
+       invisible — that is the entire point of closing the ring. */
+    ENGINE.LAYERS.forEach(L=>{ if(L.id!=='sky')
+      offset[L.id] = (offset[L.id] + L.surge) % cylinderOf(L); });
+    stage.classList.remove('go'); writeOffsets(); land();
+    return;
+  }
+  stage.classList.add('go');
+  ENGINE.LAYERS.forEach(L=>{ if(L.id!=='sky') offset[L.id] += L.surge; });
+  writeOffsets();
+  setTimeout(land, ENGINE.Q.IN_START_MS);
+  setTimeout(()=>{ stage.classList.remove('go'); busy=false; }, ENGINE.SURGE_MS + 60);
+}
+function land(){
+  station = (station+1) % ENGINE.PANES;
+  slide++; turns++;
+  showQ(slide); status(); busy = false;
+}
+function jumpTo(target){
+  while (station !== target){
+    ENGINE.LAYERS.forEach(L=>{ if(L.id!=='sky')
+      offset[L.id] = (offset[L.id] + L.surge) % cylinderOf(L); });
+    station = (station+1) % ENGINE.PANES; slide++;
+  }
+  stage.classList.remove('go'); writeOffsets(); showQ(slide); status();
+}
+function autoLoop(){ clearTimeout(autoT); if(!autoOn)return;
+  autoT=setTimeout(()=>{turn();autoLoop()}, ENGINE.DWELL_MS); }
+
+/* ═══ SHOOTING STAR ═══ */
+let shootSide=1, shootT=null;
+function spawnShoot(){
+  if(isReduced())return;
+  const rot=el('shootRot'), s=el('shoot'), d=shootSide; shootSide=-shootSide;
+  rot.style.left=px(d>0?140+Math.random()*500:1180+Math.random()*500);
+  rot.style.top=px(70+Math.random()*760);
+  rot.style.setProperty('--sa',(d>0?1:-1)*(14+Math.random()*16)+'deg');
+  s.style.setProperty('--sd2',px((d>0?1:-1)*(640+Math.random()*380)));
+  s.style.setProperty('--sdu',(1.5+Math.random()*1.2)+'s');
+  rot.appendChild(s); window.__shootLane.appendChild(rot);
+  s.addEventListener('animationend',()=>rot.remove());
+}
+function shootLoop(){ clearTimeout(shootT);
+  const[a,b]=ENGINE.SHOOT_MS;
+  shootT=setTimeout(()=>{spawnShoot();shootLoop()}, a+Math.random()*(b-a)); }
+
+/* ═══ CONTROLS ═══ */
+const quietStation = ARC.indexOf(ARC_MIN), loudStation = ARC.indexOf(ARC_MAX);
+function status(){
+  const st = WORLD.stations[station];
+  document.getElementById('status').innerHTML =
+    `<b>Station ${station+1} / ${ENGINE.PANES}</b> (${station*30}° of 360°)` +
+    ` &nbsp;·&nbsp; <b>${st.key}</b>` +
+    ` &nbsp;·&nbsp; brightness target <b>${ARC[station].toFixed(0)}</b>` +
+    ` (arc ${ARC_MIN.toFixed(0)}–${ARC_MAX.toFixed(0)}, span ${(ARC_MAX/ARC_MIN).toFixed(2)}×)` +
+    ` &nbsp;·&nbsp; slide ${slide+1}, text <b>${slide%2?'orange':'purple'}</b>` +
+    ` &nbsp;·&nbsp; ${starTotal.toLocaleString()} stars · ${formTotal} forms` +
+    ` &nbsp;·&nbsp; turn ${turns}`;
+}
+document.getElementById('btnAdv').addEventListener('click', turn);
+document.getElementById('btnShoot').addEventListener('click', spawnShoot);
+const autoBtn=document.getElementById('btnAuto');
+autoBtn.addEventListener('click',()=>{autoOn=!autoOn;autoBtn.classList.toggle('on',autoOn);
+  if(autoOn)autoLoop();else clearTimeout(autoT)});
+document.querySelectorAll('[data-jump]').forEach(b=>
+  b.addEventListener('click',()=>jumpTo(b.dataset.jump==='quiet'?quietStation:loudStation)));
+function toggle(id,cls,invert){const b=document.getElementById(id);
+  b.addEventListener('click',()=>{b.classList.toggle('on');
+    const on=b.classList.contains('on'); if(cls==='rm')manualRM=on;
+    stage.classList.toggle(cls,invert?!on:on)})}
+toggle('tQ','hideQ',true); toggle('tG','showGuides',false);
+toggle('tN','noGrain',true); toggle('tR','rm',false);
+new ResizeObserver(()=>{if(curQ>=0&&fontsOK)renderQ(curQ)}).observe(stage);
+
+/* ═══ BOOT ═══ */
+stage.style.setProperty('--q-col', WORLD.qColours[0]);
+writeOffsets(); shootLoop();
+setTimeout(()=>showQ(0),400);
+status();
+
+/* exposed for the render gate */
+window.__world = { ENGINE, WORLD, ARC, cylinderOf, authorPeriodOf,
+  get station(){return station}, jumpTo, turn, offset };
+</script>
+</body>
+</html>
