@@ -437,7 +437,6 @@ function makePrim(kind, w, h, hue, alpha, r){
     const rcx = (bx0+bx1)/2, rcy = (by0+by1)/2;
     rim.style.left = px(rcx - rw/2); rim.style.top = px(rcy - rh/2);
     rim.style.width = px(rw); rim.style.height = px(rh);
-    rim.style.borderWidth = '4px';
     rim.style.setProperty('--rim', hsla(hue+6, 90, 82, 0.85));
     rim.style.transform = `rotate(${domRot.toFixed(0)}deg)`;
     f.appendChild(rim);
@@ -499,7 +498,6 @@ function makePrim(kind, w, h, hue, alpha, r){
        4px (spec §6.1's floor) — a 0-blur/0-spread box-shadow's visible
        width equals its offset exactly, so this must be 4px, not 2px. */
     const lane = el('l-lane');
-    lane.style.background = 'rgba(4,3,14,.62)';
     lane.style.boxShadow = `0 -4px 0 0 ${hsla(hue,60,70,0.5)}, 0 4px 0 0 ${hsla(hue,60,70,0.5)}`;
     f.appendChild(lane);
     const c = el('l-core');
@@ -549,7 +547,6 @@ function makePrim(kind, w, h, hue, alpha, r){
        visible extent rather than floating unrelated inside it. */
     const rim = el('b-rim');
     rim.style.left='4%'; rim.style.top='34%'; rim.style.width='92%'; rim.style.height='32%';
-    rim.style.borderWidth = '4px';
     rim.style.setProperty('--rim', hsla(hue+10, 70, 78, 0.85));
     f.appendChild(rim);
     f.style.transform = `rotate(${(-18+r()*36).toFixed(0)}deg)`;
