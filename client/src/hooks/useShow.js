@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { DEFAULT_THEME_ID } from '../themes/index.js'
-import { deriveRoundCols, computeTotal } from '../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, roundScoreTotal } from '../lib/scoreboardMath.js'
 import { renumberRoundQuestions } from '../lib/questionNumbering.js'
+import { trackWrite } from '../lib/writeTracking.js'
 
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 const SHOW_MEDIA_BUCKET = 'trivia-show-media'
@@ -57,14 +58,9 @@ export function useShow() {
   // or roll back the optimistic update (that's a bigger behavior change), but
   // it at least surfaces the failure instead of swallowing it completely.
   async function updateShowRow(id, patch) {
-    const { error } = await supabase.from('shows').update(patch).eq('id', id)
-    if (error) {
-      console.error(`[useShow] shows update failed (${Object.keys(patch).join(', ')}):`, error)
-      setWriteError({ id: `we_${Date.now()}`, message: 'Save failed — check connection' })
-    } else {
-      setWriteError(null)
-    }
-    return !error
+    const result = await supabase.from('shows').update(patch).eq('id', id)
+    if (result.error) console.error(`[useShow] shows update failed (${Object.keys(patch).join(', ')}):`, result.error)
+    return trackWrite(Promise.resolve(result), setWriteError)
   }
 
   // Refs for debounced saves — always hold latest values without stale closure issues
@@ -767,11 +763,12 @@ export function useShow() {
     // caught, silently dropping that score update. `id` is deterministic
     // (not a fresh nanoid per call) so a same-row upsert-on-conflict doesn't
     // churn the primary key on every edit.
-    const { error } = await supabase.from('team_scores').upsert(
+    const result = await supabase.from('team_scores').upsert(
       { id: `sc_${teamId}_${roundIndex}`, show_id: show.id, team_id: teamId, round_index: roundIndex, score, updated_at: new Date().toISOString() },
       { onConflict: 'team_id,round_index' }
     )
-    if (error) console.error('[useShow] updateRoundScore failed:', error)
+    if (result.error) console.error('[useShow] updateRoundScore failed:', result.error)
+    return trackWrite(Promise.resolve(result), setWriteError)
   }
 
   async function saveResults() {
@@ -786,7 +783,7 @@ export function useShow() {
         teamId: t.id,
         name: t.name,
         total: computeTotal(t.scores, cols),
-        rounds: cols.map(c => Number(t.scores?.[c.key] ?? 0)),
+        rounds: cols.map(c => roundScoreTotal(t.scores?.[c.key])),
       })).sort((a, b) => b.total - a.total)
     } else {
       // Fallback: legacy team_scores

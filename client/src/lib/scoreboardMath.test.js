@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeRoundScore, computeTotal } from './scoreboardMath.js'
+import { normalizeRoundScore, computeTotal, roundScoreTotal } from './scoreboardMath.js'
 
 describe('normalizeRoundScore', () => {
   it('treats a legacy plain number as written-only', () => {
@@ -37,5 +37,18 @@ describe('computeTotal', () => {
   it('returns 0 for missing/invalid scores object', () => {
     expect(computeTotal(null, cols)).toBe(0)
     expect(computeTotal(undefined, cols)).toBe(0)
+  })
+})
+
+describe('roundScoreTotal', () => {
+  it('returns a legacy plain number unchanged', () => {
+    expect(roundScoreTotal(10)).toBe(10)
+  })
+  it('sums written+phone for a split round instead of NaN', () => {
+    expect(roundScoreTotal({ written: 8, phone: 6 })).toBe(14)
+  })
+  it('returns 0 for null/undefined', () => {
+    expect(roundScoreTotal(null)).toBe(0)
+    expect(roundScoreTotal(undefined)).toBe(0)
   })
 })

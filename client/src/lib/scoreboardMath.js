@@ -39,6 +39,13 @@ export function normalizeRoundScore(raw) {
   return { written: Number.isFinite(n) ? n : 0, phone: 0 }
 }
 
+// Single-round scalar for display (history chips, exports) — same shape
+// resolution as normalizeRoundScore, collapsed to one number.
+export function roundScoreTotal(raw) {
+  const { written, phone } = normalizeRoundScore(raw)
+  return written + phone
+}
+
 // Sums only the keys present in `cols` — a team's scores object may carry
 // stale keys from a since-deleted round, which must not count toward the total.
 export function computeTotal(scores, cols) {
