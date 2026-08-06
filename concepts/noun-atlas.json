@@ -1,0 +1,16 @@
+{
+  "space": {
+    "nouns": ["nebula", "star cluster", "supernova", "spiral galaxy", "comet", "dust ribbon", "binary pair", "open cluster"],
+    "primitiveMap": {
+      "nebula": "blob",
+      "star cluster": "dots",
+      "supernova": "spikes",
+      "spiral galaxy": "lens",
+      "comet": "streak",
+      "dust ribbon": "ribbon",
+      "binary pair": "dots",
+      "open cluster": "dots"
+    },
+    "bannedInThisType": ["vertical gradient (implies a horizon)"]
+  }
+}
