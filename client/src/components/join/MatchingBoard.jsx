@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase.js'
-import { seededShuffle } from '../../lib/matchingScoring.js'
+import { seededShuffle, buildMatchAnswer } from '../../lib/matchingScoring.js'
 
 const PALETTE = ['#e02020', '#3aa0e0', '#e0a020', '#8050c0', '#20a060', '#e05090']
 
@@ -15,9 +15,11 @@ export default function MatchingBoard({ slide, team, theme, preview = false }) {
   const locked = !!data.matchingLocked
   const text = theme?.colors?.text ?? '#ffffff'
 
-  // connections: { [itemId]: colorIndex } — one entry per left OR right item
-  // that's been assigned a color. A completed pair exists once both a left
-  // item and a right item share the same colorIndex.
+  // connections: { [`${side}:${itemId}`]: colorIndex } — side-tagged because
+  // left and right items share the same id space (pairs.map(p => p.id) is
+  // identical for both columns), so an untagged key can't tell "left p0" from
+  // "right p0" apart and a wrong match collapses into a same-id correct one.
+  // A completed pair exists once a left key and a right key share a colorIndex.
   const [connections, setConnections] = useState({})
   const [pendingSide, setPendingSide] = useState(null) // { side: 'left'|'right', itemId } — first tap of a pair, waiting for the second
   const [saveFailed, setSaveFailed] = useState(false)
@@ -36,33 +38,26 @@ export default function MatchingBoard({ slide, team, theme, preview = false }) {
 
   const submit = useCallback(async (nextConnections) => {
     if (preview) return
-    const leftIds = pairs.map(p => p.id)
-    const rightIds = pairs.map(p => p.id)
-    const byColor = {}
-    Object.entries(nextConnections).forEach(([itemId, color]) => {
-      byColor[color] = byColor[color] ?? {}
-      if (leftIds.includes(itemId)) byColor[color].leftId = itemId
-      if (rightIds.includes(itemId)) byColor[color].rightId = itemId
-    })
-    const answer = Object.values(byColor).filter(p => p.leftId && p.rightId)
+    const answer = buildMatchAnswer(nextConnections)
     const { error } = await supabase.from('phone_answers').upsert(
       { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer },
       { onConflict: 'slide_id,team_id' }
     )
     if (error) console.error('[MatchingBoard] answer save failed:', error)
     setSaveFailed(!!error)
-  }, [preview, pairs, slide.id, slide.showId, team.id, team.showId])
+  }, [preview, slide.id, slide.showId, team.id, team.showId])
 
   function tapItem(side, itemId) {
     if (locked) return
+    const key = `${side}:${itemId}`
     const usedColors = new Set(Object.values(connections))
     const nextColor = PALETTE.findIndex((_, i) => !usedColors.has(i))
 
     // Already colored — tapping it again undoes that pair (both halves clear).
-    if (connections[itemId] != null) {
-      const color = connections[itemId]
+    if (connections[key] != null) {
+      const color = connections[key]
       const next = { ...connections }
-      Object.keys(next).forEach(id => { if (next[id] === color) delete next[id] })
+      Object.keys(next).forEach(k => { if (next[k] === color) delete next[k] })
       setConnections(next)
       submit(next)
       return
@@ -77,7 +72,7 @@ export default function MatchingBoard({ slide, team, theme, preview = false }) {
       return
     }
     if (nextColor === -1) return // no colors left (shouldn't happen — palette matches pair count)
-    const next = { ...connections, [pendingSide.itemId]: nextColor, [itemId]: nextColor }
+    const next = { ...connections, [`${pendingSide.side}:${pendingSide.itemId}`]: nextColor, [key]: nextColor }
     setConnections(next)
     setPendingSide(null)
     submit(next)
@@ -96,8 +91,8 @@ export default function MatchingBoard({ slide, team, theme, preview = false }) {
         if (cancelled || !row?.answer) return
         const restored = {}
         row.answer.forEach((pair, i) => {
-          restored[pair.leftId] = i
-          restored[pair.rightId] = i
+          restored[`left:${pair.leftId}`] = i
+          restored[`right:${pair.rightId}`] = i
         })
         setConnections(restored)
       })
@@ -109,14 +104,14 @@ export default function MatchingBoard({ slide, team, theme, preview = false }) {
       <div style={{ display: 'flex', gap: '0.75rem' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', flex: 1 }}>
           {pairs.map(p => (
-            <MatchTile key={p.id} label={p.left} color={connections[p.id] != null ? PALETTE[connections[p.id]] : null}
+            <MatchTile key={p.id} label={p.left} color={connections[`left:${p.id}`] != null ? PALETTE[connections[`left:${p.id}`]] : null}
               pending={pendingSide?.side === 'left' && pendingSide.itemId === p.id}
               disabled={locked} onTap={() => tapItem('left', p.id)} textColor={text} />
           ))}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', flex: 1 }}>
           {rightOrder.map(p => (
-            <MatchTile key={p.id} label={p.right} color={connections[p.id] != null ? PALETTE[connections[p.id]] : null}
+            <MatchTile key={p.id} label={p.right} color={connections[`right:${p.id}`] != null ? PALETTE[connections[`right:${p.id}`]] : null}
               pending={pendingSide?.side === 'right' && pendingSide.itemId === p.id}
               disabled={locked} onTap={() => tapItem('right', p.id)} textColor={text} />
           ))}

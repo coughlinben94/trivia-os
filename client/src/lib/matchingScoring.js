@@ -2,10 +2,11 @@ import { normalizeRoundScore } from './scoreboardMath.js'
 
 // A matching submission is scored purely from its own shape — no answer-key
 // lookup needed. Each pair in slide.data.pairs shares one `id` between its
-// left and right column entries (see docs/superpowers/specs/2026-07-28-
-// phone-answer-scoring-design.md and MatchingBoard.jsx, which only ever
-// writes a connection as { leftId, rightId } pulled from the actual rendered
-// items). A connection is correct exactly when leftId === rightId.
+// left and right column entries — a CORRECT match is the same id tapped on
+// both sides, so scoring is just leftId === rightId. This only works because
+// MatchingBoard.jsx's connections map is keyed by side (`left:id`/`right:id`,
+// see buildMatchAnswer below) — without the side tag, a left id and an
+// unrelated right id sharing the same raw pair id would collapse together.
 
 export function scoreMatchingSubmission(answer, pointsPerMatch) {
   if (!Array.isArray(answer)) return 0
@@ -36,6 +37,21 @@ function mulberry32(seed) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
+}
+
+// connections is { [`${side}:${itemId}`]: colorIndex } — side-tagged because
+// left and right items share the same id space (see top-of-file note). Two
+// entries sharing a color form a pair; only a left+right pair counts (two
+// same-side taps, or a lone tap, are incomplete and dropped).
+export function buildMatchAnswer(connections) {
+  const byColor = {}
+  for (const [key, color] of Object.entries(connections ?? {})) {
+    const [side, itemId] = key.split(':')
+    byColor[color] = byColor[color] ?? {}
+    if (side === 'left') byColor[color].leftId = itemId
+    if (side === 'right') byColor[color].rightId = itemId
+  }
+  return Object.values(byColor).filter(p => p.leftId != null && p.rightId != null)
 }
 
 // Fisher-Yates, seeded by `seed` (typically a slide id) so the shuffle is

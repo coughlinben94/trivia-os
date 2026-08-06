@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { scoreMatchingSubmission, seededShuffle, computeMatchingScoreUpdates } from './matchingScoring.js'
+import { scoreMatchingSubmission, seededShuffle, computeMatchingScoreUpdates, buildMatchAnswer } from './matchingScoring.js'
 
 describe('scoreMatchingSubmission', () => {
   it('scores zero for no pairs', () => {
@@ -85,5 +85,41 @@ describe('computeMatchingScoreUpdates', () => {
     const answers = [{ team_id: 'team_1', answer: [{ leftId: 'p1', rightId: 'p1' }] }]
     const [update] = computeMatchingScoreUpdates({ answers, teams, scoreboardTeams: sbWithOtherRound, roundKey: 'r_1', pointsPerMatch: 2 })
     expect(update.scores.r_0).toBe(10)
+  })
+})
+
+describe('buildMatchAnswer', () => {
+  // Bug this guards against: a left and right item can share the same raw
+  // id (pairs.map(p => p.id) on both sides), so connections MUST be keyed
+  // by side — a wrong match (left:p0 with right:p1) must never collapse
+  // into a same-id pair that scores as correct.
+  it('pairs a correct match — left and right tapped with the same color', () => {
+    const connections = { 'left:p0': 0, 'right:p0': 0 }
+    expect(buildMatchAnswer(connections)).toEqual([{ leftId: 'p0', rightId: 'p0' }])
+  })
+
+  it('a wrong match stays a wrong match — does not collapse to leftId === rightId', () => {
+    const connections = { 'left:p0': 0, 'right:p1': 0 }
+    const [pair] = buildMatchAnswer(connections)
+    expect(pair.leftId).toBe('p0')
+    expect(pair.rightId).toBe('p1')
+    expect(pair.leftId).not.toBe(pair.rightId)
+  })
+
+  it('handles multiple pairs by color, correct and wrong mixed', () => {
+    const connections = { 'left:p0': 0, 'right:p0': 0, 'left:p1': 1, 'right:p2': 1 }
+    const answer = buildMatchAnswer(connections)
+    expect(answer).toHaveLength(2)
+    expect(answer).toContainEqual({ leftId: 'p0', rightId: 'p0' })
+    expect(answer).toContainEqual({ leftId: 'p1', rightId: 'p2' })
+  })
+
+  it('omits an incomplete pair — only one side tapped for that color', () => {
+    const connections = { 'left:p0': 0 }
+    expect(buildMatchAnswer(connections)).toEqual([])
+  })
+
+  it('returns empty for no connections', () => {
+    expect(buildMatchAnswer({})).toEqual([])
   })
 })
