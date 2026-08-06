@@ -1143,9 +1143,25 @@ export default function Join() {
     // supabase-js; only a brand-new registration needs to mint one.
     let ownerUid = (await supabase.auth.getSession()).data.session?.user?.id
     if (!ownerUid) {
-      const { data, error: authError } = await supabase.auth.signInAnonymously()
-      if (authError) throw new Error("Couldn't start your session — try again")
-      ownerUid = data.user.id
+      // Supabase rate-limits anonymous sign-in per IP (30/hr default) — a
+      // venue's shared wifi NATs every phone behind one address, so a burst
+      // of teams joining in the same minute can collide even well under that
+      // hourly cap. One short retry absorbs that burst; a real 429 past the
+      // hourly budget gets its own message instead of inviting immediate
+      // re-tapping, which would only burn what's left of the budget faster.
+      let authError
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const { data, error } = await supabase.auth.signInAnonymously()
+        if (!error) { ownerUid = data.user.id; break }
+        authError = error
+        if (attempt === 0 && error.status !== 429) break
+        if (attempt === 0) await new Promise(r => setTimeout(r, 2500))
+      }
+      if (!ownerUid) {
+        throw new Error(authError?.status === 429
+          ? "Too many phones joining right now — wait a minute and try again"
+          : "Couldn't start your session — try again")
+      }
     }
 
     const color  = TEAM_COLORS[Math.floor(Math.random() * TEAM_COLORS.length)]
