@@ -29,4 +29,11 @@ describe('floorContrast', () => {
     const fixed = floorContrast('#4a1a8f', [bg], 7)
     expect(contrastRatio(fixed, bg)).toBeGreaterThanOrEqual(7)
   })
+
+  it('clears the floor against every background when given more than one, using the default minRatio', () => {
+    // mirrors ThemeProvider.jsx's real call shape: floorContrast(textMuted, [bg, bgDeep])
+    const result = floorContrast('#2a1a3a', ['#08001a', '#040010'])
+    expect(contrastRatio(result, '#08001a')).toBeGreaterThanOrEqual(3)
+    expect(contrastRatio(result, '#040010')).toBeGreaterThanOrEqual(3)
+  })
 })
