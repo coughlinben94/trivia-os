@@ -420,23 +420,30 @@ function makePrim(kind, w, h, hue, alpha, r){
        original defect, re-introduced by the rim-only fix that shipped
        after). Positioned inside the real lobe-cluster bbox (not a fixed
        0.42-0.58 window) so it always lands on actual glow, not empty sky.
-       Reuses .s-core — inline left/top/width/height override its centred
-       CSS defaults, and the cream background plus glow shadow reads as a
-       bright core the same way it does on spikes. */
+       A soft radial fill instead of .s-core's flat #fffaf0 disc — a hard
+       opaque circle at this size (11% of width, no converging structure
+       around it, unlike spikes) read as a moon or planet pasted on the
+       cloud, not a bright core; measured on a real render. */
     const core = el('s-core');
     const cs = w * (0.08 + r()*0.06);
     const ccx = lerp(bx0, bx1, 0.3+r()*0.4), ccy = lerp(by0, by1, 0.3+r()*0.4);
     core.style.width = core.style.height = px(cs);
     core.style.left = px(ccx - cs/2); core.style.top = px(ccy - cs/2);
+    core.style.background = `radial-gradient(circle, ${hsla(hue, 30, 96, 0.95)} 0%, ${hsla(hue, 70, 80, 0.5)} 55%, transparent 100%)`;
     core.style.boxShadow = `0 0 ${px(cs*2.4)} ${px(cs*0.8)} ${hsla(hue, 84, 78, 0.55)}`;
     f.appendChild(core);
-    /* rim: 4px minimum, traces the ACTUAL lobe cluster's bounding box
-       (inset 8%) and rotates with the dominant (largest) lobe, instead of
-       a fixed-center box with an independent random rotation — that
-       version floated over empty sky whenever the 3 randomly-placed lobes
-       didn't cluster near center, which is most of the time. */
+    /* rim: 4px minimum, traces the ACTUAL lobe cluster's bounding box,
+       inset to the gradient's OWN visible radii (56%/44% — matching each
+       lobe's `ellipse 56% 44%` gradient above) rather than a uniform 92%,
+       and rotates with the dominant (largest) lobe. The first version of
+       this fix insets the LAYOUT box, not the visible glow inside it —
+       each lobe's gradient only reads out to ~56%/44% of its own layout
+       box before fading to near-nothing, so a 92%-inset rim traced empty
+       sky around the glow (measured: 0% of the drawn arc within 2% of any
+       visible glow). Calibrated on a real render: 56%/44% puts ~95% of
+       the arc on the cloud. */
     const rim = el('b-rim');
-    const rw = (bx1-bx0)*0.92, rh = (by1-by0)*0.92;
+    const rw = (bx1-bx0)*0.56, rh = (by1-by0)*0.44;
     const rcx = (bx0+bx1)/2, rcy = (by0+by1)/2;
     rim.style.left = px(rcx - rw/2); rim.style.top = px(rcy - rh/2);
     rim.style.width = px(rw); rim.style.height = px(rh);
@@ -499,8 +506,14 @@ function makePrim(kind, w, h, hue, alpha, r){
        needs a rim"). A thin bright edge above/below the dark lane gives it
        the contrast delta instead of relying on its own darkness to read.
        4px (spec §6.1's floor) — a 0-blur/0-spread box-shadow's visible
-       width equals its offset exactly, so this must be 4px, not 2px. */
+       width equals its offset exactly, so this must be 4px, not 2px.
+       Width narrowed from the CSS default's 88% (left/right:6%) to 55%,
+       centered — the disc's gradient (ellipse 54% 24%, transparent at
+       74%) only reads out to roughly half the disc's own width, so an
+       88%-wide lane spanned mostly empty sky and closed into a bright
+       ring around a small smudge rather than a lane across the disc. */
     const lane = el('l-lane');
+    lane.style.left = '22.5%'; lane.style.right = '22.5%';
     lane.style.boxShadow = `0 -4px 0 0 ${hsla(hue,60,70,0.5)}, 0 4px 0 0 ${hsla(hue,60,70,0.5)}`;
     f.appendChild(lane);
     const c = el('l-core');
@@ -523,13 +536,20 @@ function makePrim(kind, w, h, hue, alpha, r){
        a point-source shooting star (spec §6.2 — the two must not share an
        anatomy). Reuses .d-glow — its CSS only carries position/inset/
        border-radius, no dot-cluster-specific geometry, so overriding
-       left/top/width/height here is a clean fit, not a coupling. */
+       left/top/width/height here is a clean fit, not a coupling.
+       Centered on the head's actual position (.k-head's CSS is
+       right:-4px, top:50%, so its center sits at x = w+4-hs/2) — this
+       used to be computed independently from a fixed w*0.78 offset and
+       landed 63% of the coma's own radius off the nucleus, which is a
+       coma sitting BESIDE the head rather than enveloping it. */
+    const hs = Math.max(16, h*0.30);
+    const headCx = w + 4 - hs/2;
+    const comaW = h*0.7;
     const coma = el('d-glow');
-    coma.style.left = px(w*0.78); coma.style.top = '0'; coma.style.width = px(h*0.7); coma.style.height = '100%';
+    coma.style.left = px(headCx - comaW/2); coma.style.top = '0'; coma.style.width = px(comaW); coma.style.height = '100%';
     coma.style.background = `radial-gradient(circle, ${hsla(hue,70,85,0.5)} 0%, transparent 70%)`;
     f.appendChild(coma);
     const hd = el('k-head');
-    const hs = Math.max(16, h*0.30);
     hd.style.width = hd.style.height = px(hs); hd.style.marginTop = px(-hs/2);
     hd.style.background = '#f2fbff';
     hd.style.boxShadow = `0 0 ${px(hs*2.2)} ${px(hs*0.6)} ${hsla(hue,72,80,0.5)}`;
@@ -581,11 +601,19 @@ function makePrim(kind, w, h, hue, alpha, r){
     /* two unequal bodies + a shared halo — distinct from the unparameterized
        dots cluster (spec §6.2: an atlas entry must be a recipe, not a bare
        primitive token). */
-    const halo = el('d-glow');
-    halo.style.background = `radial-gradient(circle closest-side, ${hsla(hue,60,70,0.20)} 0%, transparent 75%)`;
-    f.appendChild(halo);
     const sizes = [0.62, 0.40]; // two unequal bodies, not two identical dots
     const positions = [[0.38,0.5],[0.62,0.5]];
+    /* halo scoped to the two dots' own span (not .d-glow's inset:0 default,
+       which fills the entire headline box, 576-880px, at up to 6-9x the
+       dots' combined ~0.35w footprint) — unsized it merged the two dots and
+       their oversized halo into one solid oval on a real render, reading as
+       another blob rather than a distinct binary-pair silhouette. */
+    const halo = el('d-glow');
+    const haloD = w * 0.5;
+    halo.style.left = px(w*0.5 - haloD/2); halo.style.top = px(h*0.5 - haloD/2);
+    halo.style.width = halo.style.height = px(haloD);
+    halo.style.background = `radial-gradient(circle closest-side, ${hsla(hue,60,70,0.20)} 0%, transparent 75%)`;
+    f.appendChild(halo);
     sizes.forEach((sz, i) => {
       const d = el(); d.style.position='absolute'; d.style.borderRadius='50%';
       const s = w * sz * 0.22;
