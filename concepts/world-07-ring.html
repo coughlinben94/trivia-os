@@ -151,6 +151,9 @@ header.pg b{color:#ddd8e8;font-weight:500}
 /* ribbon — long tapered form with a mandatory rim */
 .r-body{position:absolute;inset:0;border-radius:50%}
 
+/* ring — closed ellipse stroke wrapping a planet body */
+.rg-ring{position:absolute;border-radius:50%}
+
 /* ══ SHOOTING STAR ══ */
 .shootLane{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 .shootRot{position:absolute;transform:rotate(var(--sa))}
@@ -342,9 +345,9 @@ const WORLD = {
     { key:'comet',          prim:'streak', hue:208, accent:false },
     { key:'violet nebula',  prim:'blob',   hue:282, accent:false },
     { key:'dust ribbon',    prim:'ribbon', hue:264, accent:false },
-    { key:'binary pair',    prim:'dots',   hue:214, accent:false },
+    { key:'binary pair',    prim:'binary', hue:214, accent:false },
     { key:'rose nebula',    prim:'blob',   hue:330, accent:true  },
-    { key:'ringed lens',    prim:'lens',   hue:250, accent:false },
+    { key:'ringed lens',    prim:'ring',   hue:250, accent:false },
     { key:'open cluster',   prim:'dots',   hue:224, accent:false },
     { key:'green nebula',   prim:'blob',   hue:140, accent:false },
   ],
@@ -550,6 +553,48 @@ function makePrim(kind, w, h, hue, alpha, r){
     rim.style.setProperty('--rim', hsla(hue+10, 70, 78, 0.85));
     f.appendChild(rim);
     f.style.transform = `rotate(${(-18+r()*36).toFixed(0)}deg)`;
+  }
+
+  else if (kind === 'ring'){
+    const ring = el('rg-ring');
+    const rw = w*0.9, rh = h*0.9;
+    ring.style.left = px((w-rw)/2); ring.style.top = px((h-rh)/2);
+    ring.style.width = px(rw); ring.style.height = px(rh);
+    ring.style.borderWidth = px(Math.max(4, w*0.02));
+    ring.style.borderStyle = 'solid';
+    ring.style.borderColor = hsla(hue, 70, 78, 0.75);
+    f.appendChild(ring);
+    /* planet body it wraps — reuses .l-disc (position:absolute;inset:0;
+       border-radius:50%, no lens-specific geometry baked in); the inline
+       left/top/width/height below fully override its inset:0 default per
+       the CSS over-constrained-box rule (right/bottom get dropped, verified
+       empirically, not assumed), so this is a clean reuse, not a coupling. */
+    const body = el('l-disc');
+    const bw = w*0.42, bh = h*0.42;
+    body.style.left = px((w-bw)/2); body.style.top = px((h-bh)/2);
+    body.style.width = px(bw); body.style.height = px(bh);
+    body.style.background = `radial-gradient(circle at 38% 38%, ${hsla(hue,60,68,0.9)} 0%, ${hsla(hue,50,40,0.7)} 70%, transparent 100%)`;
+    f.appendChild(body);
+  }
+
+  else if (kind === 'binary'){
+    /* two unequal bodies + a shared halo — distinct from the unparameterized
+       dots cluster (spec §6.2: an atlas entry must be a recipe, not a bare
+       primitive token). */
+    const halo = el('d-glow');
+    halo.style.background = `radial-gradient(circle closest-side, ${hsla(hue,60,70,0.20)} 0%, transparent 75%)`;
+    f.appendChild(halo);
+    const sizes = [0.62, 0.40]; // two unequal bodies, not two identical dots
+    const positions = [[0.38,0.5],[0.62,0.5]];
+    sizes.forEach((sz, i) => {
+      const d = el(); d.style.position='absolute'; d.style.borderRadius='50%';
+      const s = w * sz * 0.22;
+      d.style.left = px(positions[i][0]*w - s/2); d.style.top = px(positions[i][1]*h - s/2);
+      d.style.width = d.style.height = px(s);
+      d.style.background = hsla(hue, 70, 85, 1);
+      d.style.boxShadow = `0 0 ${px(s*2)} ${px(s*0.3)} ${hsla(hue,70,80,0.5)}`;
+      f.appendChild(d);
+    });
   }
   return f;
 }
