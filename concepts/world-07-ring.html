@@ -128,7 +128,7 @@ header.pg b{color:#ddd8e8;font-weight:500}
 
 /* blob — n-lobe cloud + a mandatory rim arc so it is never all-soft */
 .b-lobe{position:absolute;border-radius:50%}
-.b-rim{position:absolute;border-radius:50%;border:2px solid var(--rim);
+.b-rim{position:absolute;border-radius:50%;border:4px solid var(--rim);
   border-right-color:transparent;border-bottom-color:transparent}
 
 /* dots — inherently hard-edged, so a cluster always reads */
@@ -406,11 +406,26 @@ function makePrim(kind, w, h, hue, alpha, r){
       L.style.transform = `rotate(${(-30+r()*60).toFixed(0)}deg)`;
       f.appendChild(L);
     }
+    /* core-as-a-region: 8-14% of the cloud's width, NOT a pixel dot (S1's
+       original defect, re-introduced by the rim-only fix that shipped
+       after). Reuses .s-core — inline left/top/width/height override its
+       centred CSS defaults, and the cream background plus glow shadow
+       reads as a bright core the same way it does on spikes. */
+    const core = el('s-core');
+    const cs = w * (0.08 + r()*0.06);
+    core.style.width = core.style.height = px(cs);
+    core.style.left = px(w*(0.42+r()*0.16) - cs/2); core.style.top = px(h*(0.42+r()*0.16) - cs/2);
+    core.style.boxShadow = `0 0 ${px(cs*2.4)} ${px(cs*0.8)} ${hsla(hue, 84, 78, 0.55)}`;
+    f.appendChild(core);
+    /* rim: 4px minimum, traces the outer lobe's own silhouette (same
+       ellipse geometry as the largest lobe, scaled to ~86% so it reads as
+       an edge on THAT shape, not a floating unrelated arc). */
     const rim = el('b-rim');
-    const rw = w*0.52, rh = h*0.52;
-    rim.style.left = px(w*0.16); rim.style.top = px(h*0.18);
+    const rw = w*0.86, rh = h*0.86;
+    rim.style.left = px((w-rw)/2); rim.style.top = px((h-rh)/2);
     rim.style.width = px(rw); rim.style.height = px(rh);
-    rim.style.setProperty('--rim', hsla(hue+6, 88, 78, 0.34));
+    rim.style.borderWidth = '4px';
+    rim.style.setProperty('--rim', hsla(hue+6, 90, 82, 0.85));
     rim.style.transform = `rotate(${(-40+r()*80).toFixed(0)}deg)`;
     f.appendChild(rim);
   }
@@ -443,10 +458,11 @@ function makePrim(kind, w, h, hue, alpha, r){
     f.appendChild(sh);
     for (let i=0;i<6;i++){
       const s = el('s-spk');
-      const len = w*(i<2 ? 0.86 : 0.54), th = i<2 ? 3 : 2;
+      const len = w*(i<2 ? 0.86 : 0.54);
+      const th = Math.max(4, w*0.012); // was fixed i<2?3:2 — now scales with w, floor 4px
       s.style.width = px(len); s.style.height = px(th);
       s.style.marginLeft = px(-len/2); s.style.marginTop = px(-th/2);
-      s.style.background = `linear-gradient(90deg,transparent 0%,${hsla(hue,86,86,0.46)} 50%,transparent 100%)`;
+      s.style.background = `linear-gradient(90deg,transparent 0%,${hsla(hue,86,86,0.7)} 50%,transparent 100%)`;
       s.style.transform = `rotate(${i*30 + (i<2?0:15)}deg)`;
       f.appendChild(s);
     }
@@ -463,7 +479,14 @@ function makePrim(kind, w, h, hue, alpha, r){
     d.style.background = `radial-gradient(ellipse 54% 24% at 50% 50%,
       ${hsla(hue,60,74,0.30)} 0%, ${hsla(hue,54,58,0.15)} 42%, transparent 74%)`;
     f.appendChild(d);
-    const lane = el('l-lane'); f.appendChild(lane);
+    /* dust lane: dark-on-dark against a disc whose own peak alpha is only
+       0.30 is invisible on its own (spec §7.2 — "dark on dark is nothing,
+       needs a rim"). A thin bright edge above/below the dark lane gives it
+       the contrast delta instead of relying on its own darkness to read. */
+    const lane = el('l-lane');
+    lane.style.background = 'rgba(4,3,14,.62)';
+    lane.style.boxShadow = `0 -2px 0 0 ${hsla(hue,60,70,0.5)}, 0 2px 0 0 ${hsla(hue,60,70,0.5)}`;
+    f.appendChild(lane);
     const c = el('l-core');
     const cs = Math.max(11, w*0.032);
     c.style.width = c.style.height = px(cs);
@@ -475,13 +498,22 @@ function makePrim(kind, w, h, hue, alpha, r){
 
   else if (kind === 'streak'){
     const t = el('k-tail');
-    t.style.width = '100%'; t.style.height = px(Math.max(5, h*0.10));
-    t.style.marginTop = px(-Math.max(5, h*0.10)/2);
-    t.style.background = `linear-gradient(90deg,transparent 0%,${hsla(hue,60,70,0.08)} 22%,
-      ${hsla(hue,66,78,0.28)} 74%,${hsla(hue,70,90,0.55)} 100%)`;
+    t.style.width = '100%'; t.style.height = px(Math.max(6, h*0.14)); // broadens vs prior 0.10
+    t.style.marginTop = px(-Math.max(6, h*0.14)/2);
+    t.style.background = `linear-gradient(90deg,transparent 0%,${hsla(hue,60,70,0.10)} 18%,
+      ${hsla(hue,66,78,0.32)} 70%,${hsla(hue,70,90,0.62)} 100%)`;
     f.appendChild(t);
+    /* coma: soft glow bigger than the nucleus, marking this as a comet not
+       a point-source shooting star (spec §6.2 — the two must not share an
+       anatomy). Reuses .d-glow — its CSS only carries position/inset/
+       border-radius, no dot-cluster-specific geometry, so overriding
+       left/top/width/height here is a clean fit, not a coupling. */
+    const coma = el('d-glow');
+    coma.style.left = px(w*0.78); coma.style.top = '0'; coma.style.width = px(h*0.7); coma.style.height = '100%';
+    coma.style.background = `radial-gradient(circle, ${hsla(hue,70,85,0.5)} 0%, transparent 70%)`;
+    f.appendChild(coma);
     const hd = el('k-head');
-    const hs = Math.max(14, h*0.30);
+    const hs = Math.max(16, h*0.30);
     hd.style.width = hd.style.height = px(hs); hd.style.marginTop = px(-hs/2);
     hd.style.background = '#f2fbff';
     hd.style.boxShadow = `0 0 ${px(hs*2.2)} ${px(hs*0.6)} ${hsla(hue,72,80,0.5)}`;
@@ -494,9 +526,16 @@ function makePrim(kind, w, h, hue, alpha, r){
     b.style.background = `radial-gradient(ellipse 60% 18% at 50% 50%,
       ${hsla(hue,44,26,0.72)} 0%, ${hsla(hue,40,20,0.40)} 44%, transparent 76%)`;
     f.appendChild(b);
+    /* same dark-on-dark failure as lens, worse (the body itself peaks at
+       0.72 alpha but over a near-black hue). Reuses .b-rim — its arc-style
+       border (right/bottom transparent) and inset-shape logic don't assume
+       a round parent, only an elliptical border-box, which ribbon's body
+       also is (just flatter), so the geometry still traces the body's own
+       visible extent rather than floating unrelated inside it. */
     const rim = el('b-rim');
     rim.style.left='4%'; rim.style.top='34%'; rim.style.width='92%'; rim.style.height='32%';
-    rim.style.setProperty('--rim', hsla(hue+10, 60, 70, 0.22));
+    rim.style.borderWidth = '4px';
+    rim.style.setProperty('--rim', hsla(hue+10, 70, 78, 0.85));
     f.appendChild(rim);
     f.style.transform = `rotate(${(-18+r()*36).toFixed(0)}deg)`;
   }
