@@ -241,9 +241,16 @@ function makePrim(kind, w, h, hue, alpha, r) {
 // (appendix #3).
 function bandY(engine, r, h) {
   const H = engine.H, top = engine.SAFE.y * H, bot = (engine.SAFE.y + engine.SAFE.h) * H
-  const upper = r() < 0.5
-  if (upper) return Math.max(-h * 0.10, (top - h) * (0.05 + r() * 0.95))
-  return Math.min(H - h * 0.88, bot + (H - bot - h) * (r() * 0.95))
+  const upper = r() < 0.5, margin = 8
+  // Clamp by centroid (y + h/2), not a fixed offset from y — see
+  // world-07-ring.html's bandY() for why (tall headlines could land with
+  // their centroid inside the safe box under the old constants).
+  if (upper) {
+    const maxY = top - h / 2 - margin, minY = -h * 0.10
+    return maxY <= minY ? maxY : minY + (maxY - minY) * r()
+  }
+  const minY = bot - h / 2 + margin, maxY = H - h * 0.88
+  return minY >= maxY ? minY : minY + (maxY - minY) * r()
 }
 
 // ═══ STARS ═══ every one twinkles, wide swing, 5-13s.

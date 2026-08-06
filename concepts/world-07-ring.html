@@ -514,9 +514,19 @@ function makePrim(kind, w, h, hue, alpha, r){
    stripe §2 was written to eliminate (appendix #3). */
 function bandY(r, h){
   const H = ENGINE.H, top = ENGINE.SAFE.y*H, bot = (ENGINE.SAFE.y+ENGINE.SAFE.h)*H;
-  const upper = r() < 0.5;
-  if (upper) return Math.max(-h*0.10, (top - h) * (0.05 + r()*0.95));
-  return Math.min(H - h*0.88, bot + (H - bot - h) * (r()*0.95));
+  const upper = r() < 0.5, margin = 8;
+  // Clamp by centroid (y + h/2), not by a fixed offset from y — the old
+  // constants assumed a small h and let tall headlines (up to ~774px)
+  // land with their CENTROID inside the safe box. This stays correct for
+  // any h, and still lets up to half the element's area cross into the
+  // box edge (satisfying the vertical-spread rule) without the centroid
+  // ever doing so.
+  if (upper){
+    const maxY = top - h/2 - margin, minY = -h*0.10;
+    return maxY <= minY ? maxY : minY + (maxY - minY) * r();
+  }
+  const minY = bot - h/2 + margin, maxY = H - h*0.88;
+  return minY >= maxY ? minY : minY + (maxY - minY) * r();
 }
 
 /* ═══ STARS ═══ S1 measured world-06 at 117/frame with the whole field
