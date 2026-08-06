@@ -395,38 +395,51 @@ function makePrim(kind, w, h, hue, alpha, r){
   f.style.setProperty('--pd', (-r()*40).toFixed(1) + 's');
 
   if (kind === 'blob'){
+    let bx0=Infinity, by0=Infinity, bx1=-Infinity, by1=-Infinity, domRot=0, domArea=-1;
     for (let i=0;i<3;i++){
       const L = el('b-lobe');
       const lw = w*(0.62 + r()*0.38), lh = h*(0.55 + r()*0.45);
-      L.style.left = px((w-lw)*r()); L.style.top = px((h-lh)*r());
+      const lx = (w-lw)*r(), ly = (h-lh)*r();
+      L.style.left = px(lx); L.style.top = px(ly);
       L.style.width = px(lw); L.style.height = px(lh);
       L.style.background = `radial-gradient(ellipse 56% 44% at ${40+r()*20}% 50%,
         ${hsla(hue, 72, 62, 0.42)} 0%, ${hsla(hue-8, 64, 46, 0.20)} 40%,
         ${hsla(hue-14, 56, 30, 0.07)} 66%, transparent 82%)`;
-      L.style.transform = `rotate(${(-30+r()*60).toFixed(0)}deg)`;
+      const rot = -30+r()*60;
+      L.style.transform = `rotate(${rot.toFixed(0)}deg)`;
       f.appendChild(L);
+      bx0 = Math.min(bx0, lx); by0 = Math.min(by0, ly);
+      bx1 = Math.max(bx1, lx+lw); by1 = Math.max(by1, ly+lh);
+      const area = lw*lh;
+      if (area > domArea){ domArea = area; domRot = rot; }
     }
     /* core-as-a-region: 8-14% of the cloud's width, NOT a pixel dot (S1's
        original defect, re-introduced by the rim-only fix that shipped
-       after). Reuses .s-core — inline left/top/width/height override its
-       centred CSS defaults, and the cream background plus glow shadow
-       reads as a bright core the same way it does on spikes. */
+       after). Positioned inside the real lobe-cluster bbox (not a fixed
+       0.42-0.58 window) so it always lands on actual glow, not empty sky.
+       Reuses .s-core — inline left/top/width/height override its centred
+       CSS defaults, and the cream background plus glow shadow reads as a
+       bright core the same way it does on spikes. */
     const core = el('s-core');
     const cs = w * (0.08 + r()*0.06);
+    const ccx = lerp(bx0, bx1, 0.3+r()*0.4), ccy = lerp(by0, by1, 0.3+r()*0.4);
     core.style.width = core.style.height = px(cs);
-    core.style.left = px(w*(0.42+r()*0.16) - cs/2); core.style.top = px(h*(0.42+r()*0.16) - cs/2);
+    core.style.left = px(ccx - cs/2); core.style.top = px(ccy - cs/2);
     core.style.boxShadow = `0 0 ${px(cs*2.4)} ${px(cs*0.8)} ${hsla(hue, 84, 78, 0.55)}`;
     f.appendChild(core);
-    /* rim: 4px minimum, traces the outer lobe's own silhouette (same
-       ellipse geometry as the largest lobe, scaled to ~86% so it reads as
-       an edge on THAT shape, not a floating unrelated arc). */
+    /* rim: 4px minimum, traces the ACTUAL lobe cluster's bounding box
+       (inset 8%) and rotates with the dominant (largest) lobe, instead of
+       a fixed-center box with an independent random rotation — that
+       version floated over empty sky whenever the 3 randomly-placed lobes
+       didn't cluster near center, which is most of the time. */
     const rim = el('b-rim');
-    const rw = w*0.86, rh = h*0.86;
-    rim.style.left = px((w-rw)/2); rim.style.top = px((h-rh)/2);
+    const rw = (bx1-bx0)*0.92, rh = (by1-by0)*0.92;
+    const rcx = (bx0+bx1)/2, rcy = (by0+by1)/2;
+    rim.style.left = px(rcx - rw/2); rim.style.top = px(rcy - rh/2);
     rim.style.width = px(rw); rim.style.height = px(rh);
     rim.style.borderWidth = '4px';
     rim.style.setProperty('--rim', hsla(hue+6, 90, 82, 0.85));
-    rim.style.transform = `rotate(${(-40+r()*80).toFixed(0)}deg)`;
+    rim.style.transform = `rotate(${domRot.toFixed(0)}deg)`;
     f.appendChild(rim);
   }
 
@@ -482,10 +495,12 @@ function makePrim(kind, w, h, hue, alpha, r){
     /* dust lane: dark-on-dark against a disc whose own peak alpha is only
        0.30 is invisible on its own (spec §7.2 — "dark on dark is nothing,
        needs a rim"). A thin bright edge above/below the dark lane gives it
-       the contrast delta instead of relying on its own darkness to read. */
+       the contrast delta instead of relying on its own darkness to read.
+       4px (spec §6.1's floor) — a 0-blur/0-spread box-shadow's visible
+       width equals its offset exactly, so this must be 4px, not 2px. */
     const lane = el('l-lane');
     lane.style.background = 'rgba(4,3,14,.62)';
-    lane.style.boxShadow = `0 -2px 0 0 ${hsla(hue,60,70,0.5)}, 0 2px 0 0 ${hsla(hue,60,70,0.5)}`;
+    lane.style.boxShadow = `0 -4px 0 0 ${hsla(hue,60,70,0.5)}, 0 4px 0 0 ${hsla(hue,60,70,0.5)}`;
     f.appendChild(lane);
     const c = el('l-core');
     const cs = Math.max(11, w*0.032);
@@ -817,6 +832,7 @@ function writeOffsets(){
     surgeEls[L.id].style.transform = `translate3d(${-offset[L.id]}px,0,0)`;
   }
 }
+let landTimer=null;
 function turn(){
   if (busy) { queuedTurns++; return; }
   busy = true;
@@ -829,16 +845,23 @@ function turn(){
     /* at the wrap we jump rather than animate: sliding back across a
        whole cylinder would be a rewind. Because the content at phase 0
        is identical to the content at phase cylinder, the jump is
-       invisible — that is the entire point of closing the ring. */
+       invisible — that is the entire point of closing the ring.
+       land() (called next) may itself drain a queued turn and re-add
+       'go' in the same tick; without a forced reflow between the remove
+       and that re-add, the browser coalesces both style writes into one
+       paint and animates the jump as a visible rewind instead of
+       snapping it. */
     ENGINE.LAYERS.forEach(L=>{ if(L.id!=='sky')
       offset[L.id] = (offset[L.id] + L.surge) % cylinderOf(L); });
-    stage.classList.remove('go'); writeOffsets(); land();
+    stage.classList.remove('go'); writeOffsets();
+    void stage.offsetWidth;
+    land();
     return;
   }
   stage.classList.add('go');
   ENGINE.LAYERS.forEach(L=>{ if(L.id!=='sky') offset[L.id] += L.surge; });
   writeOffsets();
-  setTimeout(land, ENGINE.Q.IN_START_MS);
+  landTimer = setTimeout(land, ENGINE.Q.IN_START_MS);
   // gen-guarded: if a queued turn already started a new cycle by the time
   // this fires, land() has already cleared busy for that new cycle — an
   // unconditional clear here would falsely unlock mid-transition, and an
@@ -852,6 +875,10 @@ function land(){
   if (queuedTurns > 0) { queuedTurns--; turn(); }
 }
 function jumpTo(target){
+  // Authoritative resync: cancels any turn() this jump is interrupting, so
+  // a jump made while a turn is in flight (or queued behind it) can't be
+  // overshot by that turn still landing afterward.
+  clearTimeout(landTimer); busy = false; queuedTurns = 0; turnGen++;
   while (station !== target){
     ENGINE.LAYERS.forEach(L=>{ if(L.id!=='sky')
       offset[L.id] = (offset[L.id] + L.surge) % cylinderOf(L); });
