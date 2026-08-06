@@ -35,8 +35,8 @@ export default function ShinyMatchingQuestion({ slide, theme }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '4rem' }}>
       <div style={{ display: 'flex', gap: '6vw', width: '100%', maxWidth: 1400, justifyContent: 'space-between' }}>
-        <Column items={pairs.map(p => ({ id: p.id, label: p.left }))} theme={theme} revealed={revealed} shouldReduceMotion={shouldReduceMotion} />
-        <Column items={seededShuffle(pairs, slide.id ?? 'preview').map(p => ({ id: p.id, label: p.right }))} theme={theme} revealed={revealed} shouldReduceMotion={shouldReduceMotion} />
+        <Column items={pairs.map((p, i) => ({ id: p.id, label: p.left, pairRank: i }))} theme={theme} revealed={revealed} shouldReduceMotion={shouldReduceMotion} />
+        <Column items={seededShuffle(pairs, slide.id ?? 'preview').map(p => ({ id: p.id, label: p.right, pairRank: pairs.findIndex(x => x.id === p.id) }))} theme={theme} revealed={revealed} shouldReduceMotion={shouldReduceMotion} />
       </div>
       {!locked && (
         <motion.p
@@ -67,6 +67,7 @@ function Column({ items, theme, revealed, shouldReduceMotion }) {
           animate={{ opacity: 1, transform: 'translateY(0px)' }}
           transition={{ duration: 0.28, delay: i * 0.05, ease: EASE_OUT }}
           style={{
+            display: 'flex', alignItems: 'center', gap: '0.9rem',
             padding: '1.25rem 1.75rem',
             borderRadius: 14,
             fontSize: '1.4rem',
@@ -76,6 +77,20 @@ function Column({ items, theme, revealed, shouldReduceMotion }) {
             border: revealed ? 'none' : '1px solid rgba(255,255,255,0.12)',
           }}
         >
+          {/* The right column is shuffled independently, so nothing else on
+              screen shows which left item actually pairs with which right
+              item once revealed — this rank badge (shared by both halves of
+              the same pair, taken from the unshuffled pairs order) is that
+              correspondence. */}
+          {revealed && (
+            <span style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '1.8rem', height: '1.8rem', borderRadius: '50%',
+              background: 'rgba(0,0,0,0.18)', fontSize: '1rem', fontWeight: 700, flexShrink: 0,
+            }}>
+              {item.pairRank + 1}
+            </span>
+          )}
           {item.label}
         </motion.div>
       ))}
