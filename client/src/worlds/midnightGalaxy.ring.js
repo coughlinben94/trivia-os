@@ -1,6 +1,7 @@
 import { THEMES } from '../themes/index.js'
 
 const theme = THEMES.find(t => t.id === 'midnight-galaxy')
+if (!theme) throw new Error('midnightGalaxy.ring.js: no THEMES entry with id "midnight-galaxy"')
 
 export const midnightGalaxyRing = {
   id: 'midnight-galaxy',
