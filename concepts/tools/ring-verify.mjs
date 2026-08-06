@@ -21,9 +21,13 @@
 //     state machine (station 0-11, offsets, ARC) queried directly via the
 //     window.__world contract the engine already exposes.
 // Per the handoff doc: "Scope it to work, not to a pipeline." This script is
-// the work. Wiring it into design-done-gate.mjs's Stop-hook (so it fires
-// automatically on concepts/world-*.html / future client/src/worlds/*.world.js)
-// is a follow-up, not done here — see docs/superpowers/plans for that task.
+// the work. It IS wired into design-done-gate.mjs's Stop-hook (see that
+// file's RING_FILE_RE), scoped to concepts/world-*.html only — this tool
+// needs a standalone page exposing window.__world, which a bare ES module
+// like client/src/worlds/midnightGalaxy.ring.js structurally can't do. The
+// React port (RingAmbient.jsx + *.ring.js world data) has NO automated
+// regression gate yet beyond ringEngine.js's vitest coverage — a future
+// task, not this one.
 //
 // Usage:
 //   node concepts/tools/ring-verify.mjs <path-to-html>
