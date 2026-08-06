@@ -481,11 +481,13 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
     writeOffsets()
   }
 
+  // turn/jumpTo close over refs only (stable identities), so the empty dep
+  // array is safe — the handle never needs to be recomputed after mount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useImperativeHandle(ref, () => ({
     turn,
     jumpTo,
     get station() { return stationRef.current },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [])
 
   return (
