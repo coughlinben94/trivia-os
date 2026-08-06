@@ -263,6 +263,15 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
 
       const updates = computeMatchingScoreUpdates({ answers, teams, scoreboardTeams, roundKey, pointsPerMatch })
 
+      // Answers exist but none could be attributed to a scoreboard row — a
+      // real problem (team-name mismatch, or nobody's been added to the
+      // scoreboard yet), not a legitimate "nothing to score" case. Treat it
+      // like any other scoring failure: don't reveal, stay on Retry Scoring.
+      if ((answers?.length ?? 0) > 0 && updates.length === 0) {
+        setMatchingScoreError('No answers could be matched to the scoreboard — check team names match, then retry')
+        return
+      }
+
       if (updates.length > 0) {
         const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
         if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setMatchingScoreError('Scoring failed — check connection and retry'); return }
