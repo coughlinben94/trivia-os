@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
-import { deriveRoundCols, computeTotal, normalizeRoundScore } from '../../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, normalizeRoundScore, mergeScoreEdit } from '../../lib/scoreboardMath.js'
 import BoxingRing from '../display/slides/BoxingRing.jsx'
 import ChestDuel from '../display/slides/ChestDuel.jsx'
 import CardPick from '../display/slides/CardPick.jsx'
@@ -261,14 +261,23 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
     clearTimeout(saveTimers.current[team.id])
     const cellKey = `${team.id}:${fieldKey}`
     saveTimers.current[team.id] = setTimeout(async () => {
+      // Name edits never touch `scores` at all — Supabase upsert only
+      // updates columns present in the payload, so omitting it leaves
+      // whatever's in the DB (e.g. a concurrent phone-answer fold-in)
+      // untouched instead of overwriting it with this client's local copy.
+      let payload = { id: team.id, show_id: show.id, name: team.name, sort_order: team.sort_order }
+      if (fieldKey !== 'name') {
+        // Score edit — merge onto a fresh read instead of the local copy,
+        // which can be stale on OTHER round keys written elsewhere (see
+        // mergeScoreEdit).
+        const { data: fresh } = await supabase.from('scoreboard_teams').select('scores').eq('id', team.id).single()
+        payload.scores = mergeScoreEdit(fresh?.scores, team.scores, fieldKey)
+      }
       // Supabase's query builder is a lazy thenable — without awaiting (or
       // otherwise consuming) it, the request is built but never actually
       // sent. Every other write in this file awaits; this one silently
       // didn't, so name/score edits typed into the table never persisted.
-      const { error } = await supabase.from('scoreboard_teams').upsert({
-        id: team.id, show_id: show.id,
-        name: team.name, scores: team.scores, sort_order: team.sort_order,
-      })
+      const { error } = await supabase.from('scoreboard_teams').upsert(payload)
       if (error) {
         console.error('scoreboard_teams save failed:', error)
         setAtRiskCells(prev => ({ ...prev, [cellKey]: true }))

@@ -46,6 +46,17 @@ export function roundScoreTotal(raw) {
   return written + phone
 }
 
+// ScoreboardModal's debounced save merges onto a fresh DB read instead of
+// upserting the client's whole local copy — the local copy can be stale on
+// round keys the host isn't currently editing (e.g. LiveMode's phone-answer
+// fold-in writing a different round between this modal's load and its next
+// save). `fresh` is null on a failed refetch — fall back to `local` whole
+// rather than writing just the one edited key and dropping every other round.
+export function mergeScoreEdit(fresh, local, fieldKey) {
+  if (!fresh) return local
+  return { ...fresh, [fieldKey]: local[fieldKey] }
+}
+
 // Sums only the keys present in `cols` — a team's scores object may carry
 // stale keys from a since-deleted round, which must not count toward the total.
 export function computeTotal(scores, cols) {

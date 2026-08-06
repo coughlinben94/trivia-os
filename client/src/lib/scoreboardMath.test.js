@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeRoundScore, computeTotal, roundScoreTotal } from './scoreboardMath.js'
+import { normalizeRoundScore, computeTotal, roundScoreTotal, mergeScoreEdit } from './scoreboardMath.js'
 
 describe('normalizeRoundScore', () => {
   it('treats a legacy plain number as written-only', () => {
@@ -50,5 +50,33 @@ describe('roundScoreTotal', () => {
   it('returns 0 for null/undefined', () => {
     expect(roundScoreTotal(null)).toBe(0)
     expect(roundScoreTotal(undefined)).toBe(0)
+  })
+})
+
+describe('mergeScoreEdit', () => {
+  // Bug this guards against: ScoreboardModal's debounced save used to upsert
+  // the client's whole (possibly stale) local scores object, clobbering a
+  // concurrent write to a DIFFERENT round key made elsewhere (e.g. LiveMode's
+  // phone-answer fold-in writing r_2 while the host edits r_1 in this modal).
+
+  it('takes the edited key from local, everything else from the fresh DB row', () => {
+    const fresh = { r_1: { written: 5, phone: 0 }, r_2: { written: 3, phone: 6 } } // r_2.phone landed after this client's snapshot
+    const local = { r_1: { written: 9, phone: 0 }, r_2: { written: 3, phone: 0 } } // stale on r_2.phone
+    expect(mergeScoreEdit(fresh, local, 'r_1')).toEqual({
+      r_1: { written: 9, phone: 0 }, // the edit
+      r_2: { written: 3, phone: 6 }, // preserved from fresh, not clobbered by stale local
+    })
+  })
+
+  it('falls back to local scores whole when the fresh fetch failed, rather than dropping other keys', () => {
+    const local = { r_1: { written: 9, phone: 0 }, r_2: { written: 3, phone: 6 } }
+    expect(mergeScoreEdit(null, local, 'r_1')).toBe(local)
+    expect(mergeScoreEdit(undefined, local, 'r_1')).toBe(local)
+  })
+
+  it('edited key wins even if fresh also has a value for it', () => {
+    const fresh = { r_1: { written: 1, phone: 0 } }
+    const local = { r_1: { written: 9, phone: 0 } }
+    expect(mergeScoreEdit(fresh, local, 'r_1')).toEqual({ r_1: { written: 9, phone: 0 } })
   })
 })
