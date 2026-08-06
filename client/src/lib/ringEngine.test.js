@@ -1,6 +1,5 @@
-// client/src/lib/ringEngine.test.js — run: node client/src/lib/ringEngine.test.js
-import assert from 'node:assert/strict'
-import { cylinderOf, authorPeriodOf, buildArc, hash32, rng } from './ringEngine.js'
+import { describe, it, expect } from 'vitest'
+import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, hash32, rng } from './ringEngine.js'
 
 const ENGINE = { PANES: 12, ARC: { lo: 18, hi: 52, exp: 1.6 } }
 const LAYERS = [
@@ -10,20 +9,50 @@ const LAYERS = [
 ]
 const WORLD = { phase: 5 }
 
-// layer arithmetic — matches concepts/tools/ring-verify.mjs's live-DOM check
-assert.equal(cylinderOf(ENGINE, LAYERS[0]), 5760, 'far cylinder')
-assert.equal(cylinderOf(ENGINE, LAYERS[1]), 23040, 'mid cylinder')
-assert.equal(cylinderOf(ENGINE, LAYERS[2]), 34560, 'near cylinder')
-assert.equal(authorPeriodOf(ENGINE, LAYERS[2]), 11520, 'near authorPeriod (m=3)')
+describe('cylinderOf / authorPeriodOf', () => {
+  // layer arithmetic — matches concepts/tools/ring-verify.mjs's live-DOM check
+  it('computes cylinder length per layer', () => {
+    expect(cylinderOf(ENGINE, LAYERS[0])).toBe(5760) // far
+    expect(cylinderOf(ENGINE, LAYERS[1])).toBe(23040) // mid
+    expect(cylinderOf(ENGINE, LAYERS[2])).toBe(34560) // near
+  })
+  it('divides cylinder by m for authorPeriod', () => {
+    expect(authorPeriodOf(ENGINE, LAYERS[2])).toBe(11520) // near, m=3
+  })
+})
 
-// value arc span — matches the 2.99x this session measured live
-const arc = buildArc(ENGINE, WORLD)
-const span = Math.max(...arc) / Math.min(...arc)
-assert.ok(span >= 2.2 && span <= 4.0, `arc span ${span} out of 2.2-4.0 band`)
+describe('buildArc', () => {
+  it('keeps the value arc span within the 2.2-4.0 band', () => {
+    // matches the 2.99x this session measured live
+    const arc = buildArc(ENGINE, WORLD)
+    const span = Math.max(...arc) / Math.min(...arc)
+    expect(span).toBeGreaterThanOrEqual(2.2)
+    expect(span).toBeLessThanOrEqual(4.0)
+  })
+})
 
-// determinism — same (i, seed) must always produce the same stream, or the
-// world differs between reloads (the exact world-06 bug this engine exists to fix)
-const a = rng(3, 0x4217), b = rng(3, 0x4217)
-assert.equal(a(), b(), 'rng(i, seed) must be deterministic')
+describe('loudnessOf', () => {
+  const arc = [10, 20, 30]
+  it('maps the minimum value to 0', () => {
+    expect(loudnessOf(arc, 0)).toBe(0)
+  })
+  it('maps the maximum value to 1', () => {
+    expect(loudnessOf(arc, 2)).toBe(1)
+  })
+})
 
-console.log('ringEngine.test.js: all assertions passed')
+describe('rng', () => {
+  it('is deterministic — same (i, seed) always produces the same stream', () => {
+    // the exact world-06 bug this engine exists to fix: the world must not
+    // differ between reloads
+    const a = rng(3, 0x4217)
+    const b = rng(3, 0x4217)
+    expect(a()).toBe(b())
+  })
+  it('advances its stream via hash32 on each call', () => {
+    const seed = hash32(3, 0x4217)
+    const next = hash32(seed, 0x9e3779b9)
+    const gen = rng(3, 0x4217)
+    expect(gen()).toBe(next / 4294967296)
+  })
+})
