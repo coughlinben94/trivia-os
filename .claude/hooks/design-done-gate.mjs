@@ -474,6 +474,9 @@ function releaseSidecarLock() {
 const CRITIC_AGENT_FILE = resolve(REPO_ROOT, '.claude/agents/trivia-os-design-critic.md');
 const QUALITY_AGENT_FILE = resolve(REPO_ROOT, '.claude/agents/trivia-os-design-quality-critic.md');
 const VISUAL_PATH_RE = /(^|\/)concepts\/.*\.html$|(^|\/)client\/src\/components\/display\/.*\.jsx$/;
+// Ring-engine world files only — see the ring-verify.mjs call site below (2c)
+// for why this is scoped narrower than VISUAL_PATH_RE.
+const RING_FILE_RE = /(^|\/)concepts\/world-.*\.html$/;
 
 // The quality critic's closed defect vocabulary, mirrored here so the gate can
 // VALIDATE what comes back instead of trusting the prompt. Must stay in sync
@@ -1604,6 +1607,19 @@ for (const file of touchedFiles) {
   // Read once per file, not once per slug (it was re-read inside the slug loop
   // AND again by the quality gate, three reads of the same bytes).
   const codeText = readFileSync(abs, 'utf8');
+
+  // 2c. ring-verify.mjs is a separate, ring-engine-specific gate (station/
+  // cylinder/arc checks that mean nothing for a non-ring concepts/*.html
+  // file) — see concepts/tools/ring-verify.mjs's own header for why this
+  // isn't folded into geometry-lint.mjs. Scoped to files whose path matches
+  // AND whose content actually defines window.__world, using codeText read
+  // above rather than a second readFileSync of the same bytes.
+  if (RING_FILE_RE.test(file) && codeText.includes('window.__world')) {
+    const ringRes = spawnSync('node', [resolve(REPO_ROOT, 'concepts/tools/ring-verify.mjs'), abs], { encoding: 'utf8' });
+    if (ringRes.status !== 0) {
+      problems.push(`${file}: ring-verify.mjs FAILED (exit ${ringRes.status}). Output:\n${ringRes.stdout}\n${ringRes.stderr}`);
+    }
+  }
 
   // 2b. In scope for craft review at all? See inCraftScope's note.
   if (!inCraftScope(file, codeText)) {
