@@ -1,4 +1,5 @@
 import { THEMES } from '../themes/index.js'
+import { ensureLegibleTextColor } from '../lib/colorContrast.js'
 
 const theme = THEMES.find(t => t.id === 'midnight-galaxy')
 if (!theme) throw new Error('midnightGalaxy.ring.js: no THEMES entry with id "midnight-galaxy"')
@@ -24,7 +25,14 @@ export const midnightGalaxyRing = {
   // from the theme so a host's per-show color override (ThemeProvider's
   // applyOverrides) reaches this world too, instead of silently no-op'ing.
   sky: [theme.colors.bg, mixHex(theme.colors.bg, theme.colors.bgDeep, 0.5), theme.colors.bgDeep, '#010109'],
-  qColours: [theme.colors.highlight, theme.colors.accent],
+  // Never source question text from theme.colors.accent — it's a UI-surface
+  // color (buttons/panels), not tuned for text legibility. For Midnight
+  // Galaxy that was #4a1a8f, ~1.4:1 against the display bg. Both colors run
+  // through the legibility floor (spec §9).
+  qColours: [
+    ensureLegibleTextColor(theme.colors.highlight, theme.colors.bgDeep),
+    ensureLegibleTextColor(theme.colors.text ?? theme.colors.highlight, theme.colors.bgDeep),
+  ],
   stations: [
     { key: 'orange nebula', prim: 'blob', hue: 28, accent: true },
     { key: 'star cluster', prim: 'dots', hue: 268, accent: false },
