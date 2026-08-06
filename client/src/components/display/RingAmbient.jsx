@@ -375,6 +375,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
   const stationRef = useRef(0)
   const busyRef = useRef(false)
   const queuedTurnsRef = useRef(0)
+  const turnTimerRef = useRef(null)
 
   // ── build once on mount — never re-run on worldData change. This is the
   // whole point of the task: RingAmbient will eventually live inside
@@ -499,6 +500,11 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
       ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] = (offset[L.id] + L.surge) % cylinderOf(ENGINE, L) })
       stage.classList.remove('go')
       writeOffsets()
+      // unlock() may drain a queued turn and re-add 'go' in this same
+      // tick; without a forced reflow between the remove and that re-add,
+      // the browser coalesces both writes into one paint and the wrap
+      // animates as a visible rewind instead of snapping.
+      void stage.offsetWidth
       stationRef.current = (stationRef.current + 1) % ENGINE.PANES
       unlock()
       return
@@ -508,13 +514,19 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
     ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] += L.surge })
     writeOffsets()
     stationRef.current = (stationRef.current + 1) % ENGINE.PANES
-    setTimeout(() => {
+    turnTimerRef.current = setTimeout(() => {
       stage.classList.remove('go')
       unlock()
     }, ENGINE.SURGE_MS + 60)
   }
 
   function jumpTo(target) {
+    // Authoritative resync: cancels any turn() this jump is interrupting
+    // (and drops anything queued behind it), so a jump made mid-transition
+    // can't be overshot by that turn still landing afterward.
+    clearTimeout(turnTimerRef.current)
+    busyRef.current = false
+    queuedTurnsRef.current = 0
     // stationRef only ever holds 0..PANES-1 — normalize first, or an
     // out-of-range/non-integer target (a raw slide index from a future
     // caller, an off-by-one, a stray float) never equals stationRef.current
