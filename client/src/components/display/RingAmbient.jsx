@@ -494,7 +494,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
     <div
       ref={stageElRef}
       className="ring-stage"
-      style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#01010a' }}
+      style={{ position: 'absolute', inset: 0, aspectRatio: '16/9', overflow: 'hidden', background: '#01010a' }}
     >
       <style>{RING_CSS}</style>
       <div
