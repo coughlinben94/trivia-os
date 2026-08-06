@@ -768,6 +768,7 @@ function hideQ(){ qScrim.classList.remove('on'); qLayer.classList.add('out'); }
 const mediaRM=matchMedia('(prefers-reduced-motion: reduce)');
 let manualRM=false; const isReduced=()=>mediaRM.matches||manualRM;
 let station=0, slide=0, turns=0, busy=false, autoOn=false, autoT=null;
+let queuedTurns=0, turnGen=0;
 const offset={};
 ENGINE.LAYERS.forEach(L=>{ if(L.id!=='sky') offset[L.id]=0; });
 
@@ -778,8 +779,9 @@ function writeOffsets(){
   }
 }
 function turn(){
-  if (busy) return;
+  if (busy) { queuedTurns++; return; }
   busy = true;
+  const gen = ++turnGen;
   hideQ();
   const willWrap = ENGINE.LAYERS.some(L => L.id!=='sky' &&
       offset[L.id] + L.surge >= cylinderOf(L));
@@ -798,12 +800,17 @@ function turn(){
   ENGINE.LAYERS.forEach(L=>{ if(L.id!=='sky') offset[L.id] += L.surge; });
   writeOffsets();
   setTimeout(land, ENGINE.Q.IN_START_MS);
-  setTimeout(()=>{ stage.classList.remove('go'); busy=false; }, ENGINE.SURGE_MS + 60);
+  // gen-guarded: if a queued turn already started a new cycle by the time
+  // this fires, land() has already cleared busy for that new cycle — an
+  // unconditional clear here would falsely unlock mid-transition, and an
+  // unconditional class removal would cut the new turn's animation short.
+  setTimeout(()=>{ if (gen === turnGen) stage.classList.remove('go'); }, ENGINE.SURGE_MS + 60);
 }
 function land(){
   station = (station+1) % ENGINE.PANES;
   slide++; turns++;
   showQ(slide); status(); busy = false;
+  if (queuedTurns > 0) { queuedTurns--; turn(); }
 }
 function jumpTo(target){
   while (station !== target){

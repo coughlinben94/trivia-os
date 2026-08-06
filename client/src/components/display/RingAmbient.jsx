@@ -374,6 +374,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
   const offsetRef = useRef({})
   const stationRef = useRef(0)
   const busyRef = useRef(false)
+  const queuedTurnsRef = useRef(0)
 
   // ── build once on mount — never re-run on worldData change. This is the
   // whole point of the task: RingAmbient will eventually live inside
@@ -468,11 +469,26 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
   // system out of scope for this component, there is no such constant to
   // defer to, so here `station` updates synchronously with `offset`, and
   // `busy` unlocks once, when the transition actually completes
-  // (SURGE_MS+60) — a caller can't start a new turn while the previous one
-  // is still visually animating. The wrap-modulo math and the
-  // +1-mod-PANES increment itself are unchanged from the reference.
+  // (SURGE_MS+60) — a caller-initiated turn during that window queues (see
+  // below) rather than starting a second transition mid-animation. The
+  // wrap-modulo math and the +1-mod-PANES increment itself are unchanged
+  // from the reference.
+  // A turn() received while busy queues instead of vanishing — the ring's
+  // whole model depends on station always equaling slideIndex % PANES, so a
+  // rapid double-advance (a real thing a host does) must never drop a turn
+  // silently. See concepts/ART-DIRECTION-SPEC.md §8. unlock() is the single
+  // choke point both busy-clearing sites below call through, so a queued
+  // turn drains exactly once busy actually frees up.
+  function unlock() {
+    busyRef.current = false
+    if (queuedTurnsRef.current > 0) {
+      queuedTurnsRef.current--
+      turn()
+    }
+  }
+
   function turn() {
-    if (busyRef.current) return
+    if (busyRef.current) { queuedTurnsRef.current++; return }
     busyRef.current = true
     const stage = stageElRef.current
     const offset = offsetRef.current
@@ -484,7 +500,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
       stage.classList.remove('go')
       writeOffsets()
       stationRef.current = (stationRef.current + 1) % ENGINE.PANES
-      busyRef.current = false
+      unlock()
       return
     }
 
@@ -494,7 +510,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
     stationRef.current = (stationRef.current + 1) % ENGINE.PANES
     setTimeout(() => {
       stage.classList.remove('go')
-      busyRef.current = false
+      unlock()
     }, ENGINE.SURGE_MS + 60)
   }
 
