@@ -56,52 +56,56 @@ const px = n => n.toFixed(1) + 'px'
 function hsla(h, s, l, a) { return `hsla(${h},${s}%,${l}%,${a})` }
 
 // ── CSS — verbatim port of the reference build's chassis/primitive/star
-// rules (the exact class list named in the task: .lyr, .surge, .void,
-// .star, .pf, .b-lobe, .b-rim, .d-glow, .s-core, .s-spk, .l-disc, .l-lane,
-// .l-core, .k-tail, .k-head, .r-body, @keyframes tw/pfBreathe). `.stage` is
-// renamed `.ring-stage` — that class isn't part of the ring-verify.mjs
-// contract (only #design, .void, .star, .surge, window.__world are), and
-// "stage" is generic enough to risk colliding with unrelated app CSS. ──
+// rules (the exact class list named in the task: .ring-lyr, .ring-surge,
+// .ring-void, .ring-star, .ring-pf, .ring-b-lobe, .ring-b-rim, .ring-d-glow,
+// .ring-s-core, .ring-s-spk, .ring-l-disc, .ring-l-lane, .ring-l-core,
+// .ring-k-tail, .ring-k-head, .ring-r-body, @keyframes ringTw/ringPfBreathe
+// — all prefixed to match ParticleBackground.jsx's convention (kebab-case
+// classes, camelCase keyframes, e.g. .hw-anim / ambientBreathe / hwFogR).
+// `.stage` is renamed `.ring-stage` — that class isn't part of the
+// ring-verify.mjs contract (only #design, .void, .star, .surge,
+// window.__world are), and "stage" is generic enough to risk colliding with
+// unrelated app CSS. ──
 const RING_CSS = `
-.lyr{position:absolute;inset:0;overflow:hidden}
-.surge{position:absolute;left:0;top:0;width:100%;height:100%;
+.ring-lyr{position:absolute;inset:0;overflow:hidden}
+.ring-surge{position:absolute;left:0;top:0;width:100%;height:100%;
   will-change:transform;transform:translate3d(0,0,0)}
-.ring-stage.go .surge{transition:transform var(--surge-ms) cubic-bezier(${EASE_SURGE.join(',')})}
+.ring-stage.go .ring-surge{transition:transform var(--surge-ms) cubic-bezier(${EASE_SURGE.join(',')})}
 
-.void{position:absolute;inset:0;
+.ring-void{position:absolute;inset:0;
   background:radial-gradient(ellipse 138% 128% at 50% 48%,
     var(--sky-1) 0%, var(--sky-2) 46%, var(--sky-3) 78%, var(--sky-4) 100%)}
 
-.star{position:absolute;border-radius:50%;background:var(--sc);
-  animation:tw var(--tp) ease-in-out infinite;animation-delay:var(--td)}
-@keyframes tw{0%,100%{opacity:var(--ob)}50%{opacity:var(--op)}}
+.ring-star{position:absolute;border-radius:50%;background:var(--sc);
+  animation:ringTw var(--tp) ease-in-out infinite;animation-delay:var(--td)}
+@keyframes ringTw{0%,100%{opacity:var(--ob)}50%{opacity:var(--op)}}
 
-.pf{position:absolute;pointer-events:none;
-  animation:pfBreathe var(--pb) ease-in-out infinite;animation-delay:var(--pd)}
-@keyframes pfBreathe{0%,100%{opacity:var(--pa)}50%{opacity:var(--pa2)}}
+.ring-pf{position:absolute;pointer-events:none;
+  animation:ringPfBreathe var(--pb) ease-in-out infinite;animation-delay:var(--pd)}
+@keyframes ringPfBreathe{0%,100%{opacity:var(--pa)}50%{opacity:var(--pa2)}}
 
-.b-lobe{position:absolute;border-radius:50%}
-.b-rim{position:absolute;border-radius:50%;border:2px solid var(--rim);
+.ring-b-lobe{position:absolute;border-radius:50%}
+.ring-b-rim{position:absolute;border-radius:50%;border:2px solid var(--rim);
   border-right-color:transparent;border-bottom-color:transparent}
 
-.d-glow{position:absolute;inset:0;border-radius:50%}
+.ring-d-glow{position:absolute;inset:0;border-radius:50%}
 
-.s-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fffaf0}
-.s-spk{position:absolute;left:50%;top:50%;transform-origin:50% 50%}
+.ring-s-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fffaf0}
+.ring-s-spk{position:absolute;left:50%;top:50%;transform-origin:50% 50%}
 
-.l-disc{position:absolute;inset:0;border-radius:50%}
-.l-lane{position:absolute;left:6%;right:6%;top:46%;height:8%;border-radius:50%;
+.ring-l-disc{position:absolute;inset:0;border-radius:50%}
+.ring-l-lane{position:absolute;left:6%;right:6%;top:46%;height:8%;border-radius:50%;
   background:rgba(4,3,14,.62)}
-.l-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fff6e6}
+.ring-l-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fff6e6}
 
-.k-tail{position:absolute;left:0;top:50%;border-radius:999px}
-.k-head{position:absolute;right:-4px;top:50%;border-radius:50%}
+.ring-k-tail{position:absolute;left:0;top:50%;border-radius:999px}
+.ring-k-head{position:absolute;right:-4px;top:50%;border-radius:50%}
 
-.r-body{position:absolute;inset:0;border-radius:50%}
+.ring-r-body{position:absolute;inset:0;border-radius:50%}
 
 @media (prefers-reduced-motion:reduce){
-  .surge{transition:none!important}
-  .star,.pf{animation-play-state:paused!important}
+  .ring-surge{transition:none!important}
+  .ring-star,.ring-pf{animation-play-state:paused!important}
 }
 `
 
@@ -110,7 +114,7 @@ const RING_CSS = `
 // inline style/gradient/transform is load-bearing for how the ambient
 // actually looks (Ben has already reviewed and approved this appearance).
 function makePrim(kind, w, h, hue, alpha, r) {
-  const f = el('pf')
+  const f = el('ring-pf')
   f.style.width = px(w); f.style.height = px(h)
   f.style.setProperty('--pa', alpha.toFixed(3))
   f.style.setProperty('--pa2', Math.min(alpha * 1.18, 1).toFixed(3))
@@ -119,7 +123,7 @@ function makePrim(kind, w, h, hue, alpha, r) {
 
   if (kind === 'blob') {
     for (let i = 0; i < 3; i++) {
-      const L = el('b-lobe')
+      const L = el('ring-b-lobe')
       const lw = w * (0.62 + r() * 0.38), lh = h * (0.55 + r() * 0.45)
       L.style.left = px((w - lw) * r()); L.style.top = px((h - lh) * r())
       L.style.width = px(lw); L.style.height = px(lh)
@@ -129,7 +133,7 @@ function makePrim(kind, w, h, hue, alpha, r) {
       L.style.transform = `rotate(${(-30 + r() * 60).toFixed(0)}deg)`
       f.appendChild(L)
     }
-    const rim = el('b-rim')
+    const rim = el('ring-b-rim')
     const rw = w * 0.52, rh = h * 0.52
     rim.style.left = px(w * 0.16); rim.style.top = px(h * 0.18)
     rim.style.width = px(rw); rim.style.height = px(rh)
@@ -139,7 +143,7 @@ function makePrim(kind, w, h, hue, alpha, r) {
   }
 
   else if (kind === 'dots') {
-    const g = el('d-glow')
+    const g = el('ring-d-glow')
     g.style.background = `radial-gradient(circle closest-side,
       ${hsla(hue, 58, 66, 0.16)} 0%, ${hsla(hue, 50, 52, 0.06)} 48%, transparent 76%)`
     f.appendChild(g)
@@ -159,13 +163,13 @@ function makePrim(kind, w, h, hue, alpha, r) {
   }
 
   else if (kind === 'spikes') {
-    const sh = el('d-glow')
+    const sh = el('ring-d-glow')
     sh.style.background = `radial-gradient(circle closest-side,
       ${hsla(hue, 80, 74, 0.34)} 0%, ${hsla(hue - 10, 70, 58, 0.16)} 26%,
       ${hsla(hue - 30, 60, 44, 0.08)} 52%, transparent 76%)`
     f.appendChild(sh)
     for (let i = 0; i < 6; i++) {
-      const s = el('s-spk')
+      const s = el('ring-s-spk')
       const len = w * (i < 2 ? 0.86 : 0.54), th = i < 2 ? 3 : 2
       s.style.width = px(len); s.style.height = px(th)
       s.style.marginLeft = px(-len / 2); s.style.marginTop = px(-th / 2)
@@ -173,7 +177,7 @@ function makePrim(kind, w, h, hue, alpha, r) {
       s.style.transform = `rotate(${i * 30 + (i < 2 ? 0 : 15)}deg)`
       f.appendChild(s)
     }
-    const c = el('s-core')
+    const c = el('ring-s-core')
     const cs = Math.max(16, w * 0.055)
     c.style.width = c.style.height = px(cs)
     c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
@@ -182,12 +186,12 @@ function makePrim(kind, w, h, hue, alpha, r) {
   }
 
   else if (kind === 'lens') {
-    const d = el('l-disc')
+    const d = el('ring-l-disc')
     d.style.background = `radial-gradient(ellipse 54% 24% at 50% 50%,
       ${hsla(hue, 60, 74, 0.30)} 0%, ${hsla(hue, 54, 58, 0.15)} 42%, transparent 74%)`
     f.appendChild(d)
-    const lane = el('l-lane'); f.appendChild(lane)
-    const c = el('l-core')
+    const lane = el('ring-l-lane'); f.appendChild(lane)
+    const c = el('ring-l-core')
     const cs = Math.max(11, w * 0.032)
     c.style.width = c.style.height = px(cs)
     c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
@@ -197,13 +201,13 @@ function makePrim(kind, w, h, hue, alpha, r) {
   }
 
   else if (kind === 'streak') {
-    const t = el('k-tail')
+    const t = el('ring-k-tail')
     t.style.width = '100%'; t.style.height = px(Math.max(5, h * 0.10))
     t.style.marginTop = px(-Math.max(5, h * 0.10) / 2)
     t.style.background = `linear-gradient(90deg,transparent 0%,${hsla(hue, 60, 70, 0.08)} 22%,
       ${hsla(hue, 66, 78, 0.28)} 74%,${hsla(hue, 70, 90, 0.55)} 100%)`
     f.appendChild(t)
-    const hd = el('k-head')
+    const hd = el('ring-k-head')
     const hs = Math.max(14, h * 0.30)
     hd.style.width = hd.style.height = px(hs); hd.style.marginTop = px(-hs / 2)
     hd.style.background = '#f2fbff'
@@ -213,11 +217,11 @@ function makePrim(kind, w, h, hue, alpha, r) {
   }
 
   else if (kind === 'ribbon') {
-    const b = el('r-body')
+    const b = el('ring-r-body')
     b.style.background = `radial-gradient(ellipse 60% 18% at 50% 50%,
       ${hsla(hue, 44, 26, 0.72)} 0%, ${hsla(hue, 40, 20, 0.40)} 44%, transparent 76%)`
     f.appendChild(b)
-    const rim = el('b-rim')
+    const rim = el('ring-b-rim')
     rim.style.left = '4%'; rim.style.top = '34%'; rim.style.width = '92%'; rim.style.height = '32%'
     rim.style.setProperty('--rim', hsla(hue + 10, 60, 70, 0.22))
     f.appendChild(rim)
@@ -249,7 +253,7 @@ function buildStars(engine, host, period, perFrame, sizeMul, seed) {
     const lo = engine.STAR_ALPHA_FLOOR + r() * 0.14
     const hi = Math.min(lo + 0.40 + r() * 0.15, 1)
     const dur = 5 + r() * 8
-    const d = el('star'), s = d.style
+    const d = el('ring-star'), s = d.style
     s.left = px(r() * period); s.top = px(r() * engine.H)
     s.width = s.height = px(size)
     s.setProperty('--sc', TEMP[i % 5])
@@ -369,10 +373,10 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
     const arc = buildArc(ENGINE, worldData)
 
     // sky layer — bare, never transformed, never offset
-    const sky = el('lyr')
-    const skyInner = el('surge')
+    const sky = el('ring-lyr')
+    const skyInner = el('ring-surge')
     skyInner.style.transition = 'none'
-    skyInner.appendChild(el('void'))
+    skyInner.appendChild(el('ring-void'))
     sky.appendChild(skyInner)
     design.appendChild(sky)
 
@@ -381,8 +385,8 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
       if (L.id === 'sky') continue
       const cyl = cylinderOf(ENGINE, L)
       const period = authorPeriodOf(ENGINE, L)
-      const lyr = el('lyr')
-      const surge = el('surge')
+      const lyr = el('ring-lyr')
+      const surge = el('ring-surge')
       surge.style.width = px(cyl + ENGINE.W)
       lyr.appendChild(surge)
       design.appendChild(lyr)
@@ -473,6 +477,11 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
   }
 
   function jumpTo(target) {
+    // stationRef only ever holds 0..PANES-1 — normalize first, or an
+    // out-of-range/non-integer target (a raw slide index from a future
+    // caller, an off-by-one, a stray float) never equals stationRef.current
+    // and this loop spins forever.
+    target = ((Math.trunc(target) % ENGINE.PANES) + ENGINE.PANES) % ENGINE.PANES
     const offset = offsetRef.current
     while (stationRef.current !== target) {
       ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] = (offset[L.id] + L.surge) % cylinderOf(ENGINE, L) })
