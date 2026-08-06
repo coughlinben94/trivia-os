@@ -1,5 +1,5 @@
 import { THEMES } from '../themes/index.js'
-import { ensureLegibleTextColor } from '../lib/colorContrast.js'
+import { floorContrast } from '../lib/contrast.js'
 
 const theme = THEMES.find(t => t.id === 'midnight-galaxy')
 if (!theme) throw new Error('midnightGalaxy.ring.js: no THEMES entry with id "midnight-galaxy"')
@@ -27,11 +27,13 @@ export const midnightGalaxyRing = {
   sky: [theme.colors.bg, mixHex(theme.colors.bg, theme.colors.bgDeep, 0.5), theme.colors.bgDeep, '#010109'],
   // Never source question text from theme.colors.accent — it's a UI-surface
   // color (buttons/panels), not tuned for text legibility. For Midnight
-  // Galaxy that was #4a1a8f, ~1.4:1 against the display bg. Both colors run
-  // through the legibility floor (spec §9).
+  // Galaxy that was #4a1a8f, ~1.8:1 against the display bg. Both colors run
+  // through the same legibility floor ThemeProvider already uses for
+  // textMuted (spec §9) — 7:1, bar-distance/motion floor, not the bare 4.5:1
+  // WCAG minimum.
   qColours: [
-    ensureLegibleTextColor(theme.colors.highlight, theme.colors.bgDeep),
-    ensureLegibleTextColor(theme.colors.text ?? theme.colors.highlight, theme.colors.bgDeep),
+    floorContrast(theme.colors.highlight, [theme.colors.bgDeep], 7),
+    floorContrast(theme.colors.text ?? theme.colors.highlight, [theme.colors.bgDeep], 7),
   ],
   stations: [
     { key: 'orange nebula', prim: 'blob', hue: 28, accent: true },
