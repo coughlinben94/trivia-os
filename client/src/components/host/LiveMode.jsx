@@ -5,8 +5,8 @@ import { resolveShinyPart, isMatchingShiny } from '../../lib/shinySeries.js'
 import ScorePanel from './ScorePanel.jsx'
 import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
 import { supabase } from '../../lib/supabase.js'
-import { deriveRoundCols, computeTotal, normalizeRoundScore } from '../../lib/scoreboardMath.js'
-import { scoreMatchingSubmission } from '../../lib/matchingScoring.js'
+import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
+import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 
 const SLIDE_META = {
   'title':             { label: 'Title',       color: 'bg-purple-100 text-purple-700' },
@@ -185,6 +185,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [themePickerOpen, setThemePickerOpen] = useState(false)
   const [pylPickerBusy, setPylPickerBusy] = useState(false)
   const [matchingBusy, setMatchingBusy] = useState(false)
+  const [matchingScoreError, setMatchingScoreError] = useState(null)
 
   const slides = sortedSlides(show)
   const currentIndex = show.showState.currentSlideIndex ?? 0
@@ -225,50 +226,46 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     }
   }
 
+  // Locking stops teams from submitting more answers, so it's written first and
+  // stays written even if scoring below fails — but the button (see JSX) stays
+  // visible as "Retry Scoring" for as long as matchingRevealed is false, so a
+  // transient fetch/write failure never strands the slide with no recovery path
+  // short of hand-editing slide JSON.
   async function handleLockAndScoreMatching(slide) {
     setMatchingBusy(true)
+    setMatchingScoreError(null)
     try {
-      await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true } })
+      if (!slide.data.matchingLocked) {
+        await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true } })
+      }
 
       const { data: answers, error: fetchError } = await supabase
         .from('phone_answers')
         .select('team_id, answer')
         .eq('slide_id', slide.id)
-      if (fetchError) { console.error('phone_answers fetch failed:', fetchError); return }
+      if (fetchError) { console.error('phone_answers fetch failed:', fetchError); setMatchingScoreError('Scoring failed — check connection and retry'); return }
 
       const { data: teams, error: teamsError } = await supabase
         .from('teams')
         .select('id, name')
         .eq('show_id', show.id)
-      if (teamsError) { console.error('teams fetch failed:', teamsError); return }
+      if (teamsError) { console.error('teams fetch failed:', teamsError); setMatchingScoreError('Scoring failed — check connection and retry'); return }
 
       const { data: scoreboardTeams, error: sbError } = await supabase
         .from('scoreboard_teams')
         .select('id, show_id, name, scores, sort_order')
         .eq('show_id', show.id)
-      if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); return }
+      if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); setMatchingScoreError('Scoring failed — check connection and retry'); return }
 
       const round = show.rounds.find(r => r.id === slide.roundId)
       const roundKey = round ? `r_${round.id}` : 'bonus'
       const pointsPerMatch = slide.data.pointsPerMatch ?? 2
 
-      const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name.trim().toLowerCase()]))
-
-      const updates = []
-      for (const ans of answers ?? []) {
-        const points = scoreMatchingSubmission(ans.answer, pointsPerMatch)
-        const teamName = teamIdToName.get(ans.team_id)
-        if (!teamName) continue // team_id has no matching live registration — skip, nothing to attribute the score to
-        const sbTeam = (scoreboardTeams ?? []).find(t => t.name.trim().toLowerCase() === teamName)
-        if (!sbTeam) continue // no scoreboard_teams row for this name yet — host hasn't added them to the admin scoreboard, nothing to fold into
-        const prevSplit = normalizeRoundScore(sbTeam.scores?.[roundKey])
-        const nextScores = { ...sbTeam.scores, [roundKey]: { written: prevSplit.written, phone: points } }
-        updates.push({ id: sbTeam.id, show_id: sbTeam.show_id, name: sbTeam.name, scores: nextScores, sort_order: sbTeam.sort_order })
-      }
+      const updates = computeMatchingScoreUpdates({ answers, teams, scoreboardTeams, roundKey, pointsPerMatch })
 
       if (updates.length > 0) {
         const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
-        if (updateError) console.error('scoreboard_teams score fold-in failed:', updateError)
+        if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setMatchingScoreError('Scoring failed — check connection and retry'); return }
       }
 
       await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true, matchingRevealed: true } })
@@ -417,7 +414,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         <div className="flex flex-col gap-3" style={{ flex: '0 0 60%' }}>
           <CurrentSlideCard slide={currentSlide} show={show} />
 
-          {currentSlide?.type === 'question' && isMatchingShiny(currentSlide?.data) && !currentSlide?.data?.matchingLocked && (
+          {currentSlide?.type === 'question' && isMatchingShiny(currentSlide?.data) && !currentSlide?.data?.matchingRevealed && (
             <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
               <p className="text-xs text-gray-400 mb-3">Matching question — teams are submitting on their phones</p>
               <button
@@ -429,8 +426,11 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                     : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'
                 }`}
               >
-                {matchingBusy ? 'Scoring…' : '🔒 Lock Answers & Score'}
+                {matchingBusy ? 'Scoring…' : currentSlide?.data?.matchingLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score'}
               </button>
+              {matchingScoreError && (
+                <p className="text-xs text-red-600 mt-2 text-center">{matchingScoreError}</p>
+              )}
             </div>
           )}
 

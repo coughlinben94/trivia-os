@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { scoreMatchingSubmission, seededShuffle } from './matchingScoring.js'
+import { scoreMatchingSubmission, seededShuffle, computeMatchingScoreUpdates } from './matchingScoring.js'
 
 describe('scoreMatchingSubmission', () => {
   it('scores zero for no pairs', () => {
@@ -53,5 +53,37 @@ describe('seededShuffle', () => {
     const copy = [...items]
     seededShuffle(items, 'seed')
     expect(items).toEqual(copy)
+  })
+})
+
+describe('computeMatchingScoreUpdates', () => {
+  const teams = [{ id: 'team_1', name: 'The Quizzlers' }]
+  const scoreboardTeams = [
+    { id: 'sb_1', show_id: 'show_1', name: '  the quizzlers  ', scores: { r_1: { written: 5, phone: 0 } }, sort_order: 0 },
+  ]
+
+  it('matches a team by case-insensitive, trimmed name and preserves the written half', () => {
+    const answers = [{ team_id: 'team_1', answer: [{ leftId: 'p1', rightId: 'p1' }] }]
+    const updates = computeMatchingScoreUpdates({ answers, teams, scoreboardTeams, roundKey: 'r_1', pointsPerMatch: 2 })
+    expect(updates).toEqual([
+      { id: 'sb_1', show_id: 'show_1', name: '  the quizzlers  ', scores: { r_1: { written: 5, phone: 2 } }, sort_order: 0 },
+    ])
+  })
+
+  it('skips an answer whose team_id has no live team registration', () => {
+    const answers = [{ team_id: 'ghost_team', answer: [{ leftId: 'p1', rightId: 'p1' }] }]
+    expect(computeMatchingScoreUpdates({ answers, teams, scoreboardTeams, roundKey: 'r_1', pointsPerMatch: 2 })).toEqual([])
+  })
+
+  it('skips a team with no matching scoreboard_teams row', () => {
+    const answers = [{ team_id: 'team_1', answer: [{ leftId: 'p1', rightId: 'p1' }] }]
+    expect(computeMatchingScoreUpdates({ answers, teams, scoreboardTeams: [], roundKey: 'r_1', pointsPerMatch: 2 })).toEqual([])
+  })
+
+  it('does not disturb other rounds already on the scoreboard row', () => {
+    const sbWithOtherRound = [{ ...scoreboardTeams[0], scores: { r_0: 10, r_1: { written: 5, phone: 0 } } }]
+    const answers = [{ team_id: 'team_1', answer: [{ leftId: 'p1', rightId: 'p1' }] }]
+    const [update] = computeMatchingScoreUpdates({ answers, teams, scoreboardTeams: sbWithOtherRound, roundKey: 'r_1', pointsPerMatch: 2 })
+    expect(update.scores.r_0).toBe(10)
   })
 })

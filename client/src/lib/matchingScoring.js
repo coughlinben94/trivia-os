@@ -1,3 +1,5 @@
+import { normalizeRoundScore } from './scoreboardMath.js'
+
 // A matching submission is scored purely from its own shape — no answer-key
 // lookup needed. Each pair in slide.data.pairs shares one `id` between its
 // left and right column entries (see docs/superpowers/specs/2026-07-28-
@@ -48,4 +50,25 @@ export function seededShuffle(items, seed) {
     ;[arr[i], arr[j]] = [arr[j], arr[i]]
   }
   return arr
+}
+
+// Pure fold-in: given phone_answers + live team registrations + the admin
+// scoreboard, compute the scoreboard_teams rows to upsert. team_id <-> team
+// name matching is case-insensitive/trimmed since `teams` (phone) and
+// `scoreboard_teams` (host-typed) have no FK relationship. Skips anything
+// that can't be attributed rather than guessing.
+export function computeMatchingScoreUpdates({ answers, teams, scoreboardTeams, roundKey, pointsPerMatch }) {
+  const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name.trim().toLowerCase()]))
+  const updates = []
+  for (const ans of answers ?? []) {
+    const teamName = teamIdToName.get(ans.team_id)
+    if (!teamName) continue // team_id has no matching live registration — nothing to attribute the score to
+    const sbTeam = (scoreboardTeams ?? []).find(t => t.name.trim().toLowerCase() === teamName)
+    if (!sbTeam) continue // no scoreboard_teams row for this name yet — host hasn't added them to the admin scoreboard
+    const points = scoreMatchingSubmission(ans.answer, pointsPerMatch)
+    const prevSplit = normalizeRoundScore(sbTeam.scores?.[roundKey])
+    const nextScores = { ...sbTeam.scores, [roundKey]: { written: prevSplit.written, phone: points } }
+    updates.push({ id: sbTeam.id, show_id: sbTeam.show_id, name: sbTeam.name, scores: nextScores, sort_order: sbTeam.sort_order })
+  }
+  return updates
 }
