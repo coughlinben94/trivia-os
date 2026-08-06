@@ -20,6 +20,7 @@ export default function MatchingBoard({ slide, team, theme, preview = false }) {
   // item and a right item share the same colorIndex.
   const [connections, setConnections] = useState({})
   const [pendingSide, setPendingSide] = useState(null) // { side: 'left'|'right', itemId } — first tap of a pair, waiting for the second
+  const [saveFailed, setSaveFailed] = useState(false)
 
   const rightOrder = seededShuffle(pairs, slide.id ?? 'preview')
   const pairIdsKey = pairs.map(p => p.id).join(',')
@@ -44,10 +45,12 @@ export default function MatchingBoard({ slide, team, theme, preview = false }) {
       if (rightIds.includes(itemId)) byColor[color].rightId = itemId
     })
     const answer = Object.values(byColor).filter(p => p.leftId && p.rightId)
-    await supabase.from('phone_answers').upsert(
+    const { error } = await supabase.from('phone_answers').upsert(
       { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer },
       { onConflict: 'slide_id,team_id' }
     )
+    if (error) console.error('[MatchingBoard] answer save failed:', error)
+    setSaveFailed(!!error)
   }, [preview, pairs, slide.id, slide.showId, team.id, team.showId])
 
   function tapItem(side, itemId) {
@@ -122,6 +125,11 @@ export default function MatchingBoard({ slide, team, theme, preview = false }) {
       <p style={{ color: `${text}55`, fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>
         {locked ? 'Answers locked' : 'Tap one from each side to match them'}
       </p>
+      {saveFailed && !locked && (
+        <p style={{ color: '#ff6b6b', fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
+          Couldn't save — check your connection and tap a pair again
+        </p>
+      )}
     </div>
   )
 }
