@@ -1136,9 +1136,21 @@ export default function Join() {
     const taken = (allTeams ?? []).some(t => t.name.toLowerCase() === name.toLowerCase())
     if (taken) throw new Error("That name's taken — try another")
 
+    // RLS ties this team's row (and its phone_answers) to this browser's own
+    // anon auth session, not just to knowing the team_id — team_id alone was
+    // never actually secret (teams SELECT is public). A returning team on
+    // the same browser already has this session restored automatically by
+    // supabase-js; only a brand-new registration needs to mint one.
+    let ownerUid = (await supabase.auth.getSession()).data.session?.user?.id
+    if (!ownerUid) {
+      const { data, error: authError } = await supabase.auth.signInAnonymously()
+      if (authError) throw new Error("Couldn't start your session — try again")
+      ownerUid = data.user.id
+    }
+
     const color  = TEAM_COLORS[Math.floor(Math.random() * TEAM_COLORS.length)]
     const teamId = `team_${nanoid(8)}`
-    const { error } = await supabase.from('teams').insert({ id: teamId, show_id: actualShowId, name, color, is_connected: true, powerup_used: false })
+    const { error } = await supabase.from('teams').insert({ id: teamId, show_id: actualShowId, name, color, is_connected: true, powerup_used: false, owner_uid: ownerUid })
     if (error) {
       if (error.code === '23505') throw new Error("That name's taken — try another")
       throw new Error(error.message)
