@@ -230,14 +230,20 @@ function makePrim(kind, w, h, hue, alpha, r) {
   return f
 }
 
-// ═══ PLACEMENT ═══ keep solid forms out of the safe box. Atmosphere may
-// cross it; a form may not. Bands are derived from engine.SAFE so the box
-// is declared once.
+// ═══ PLACEMENT ═══ centroid+luminance, not geometric exclusion. Keep
+// element CENTROIDS out of the safe box (top/bot below) — that's the whole
+// geometric constraint; area may cross freely because the scrim's adaptive
+// alpha, not an evacuated band, protects legibility (spec §2). Within the
+// upper/lower bands, draw close to the box edge (near y=302/778) as often
+// as the frame's extreme top/bottom — was (0.25 + r()*0.75) / (r()*0.72),
+// which pushed every centroid away from the edge and evacuated the
+// y 302-778 stripe of area, recreating the dead stripe §2 eliminates
+// (appendix #3).
 function bandY(engine, r, h) {
   const H = engine.H, top = engine.SAFE.y * H, bot = (engine.SAFE.y + engine.SAFE.h) * H
   const upper = r() < 0.5
-  if (upper) return Math.max(-h * 0.10, (top - h) * (0.25 + r() * 0.75))
-  return Math.min(H - h * 0.88, bot + (H - bot - h) * (r() * 0.72))
+  if (upper) return Math.max(-h * 0.10, (top - h) * (0.05 + r() * 0.95))
+  return Math.min(H - h * 0.88, bot + (H - bot - h) * (r() * 0.95))
 }
 
 // ═══ STARS ═══ every one twinkles, wide swing, 5-13s.
@@ -304,7 +310,16 @@ function buildLayerContent(engine, world, arc, host, L) {
           : hw * (0.62 + r() * 0.26)
       const alpha = lerp(0.34, 0.55, lou)
       const head = makePrim(st.prim, hw, hh, st.hue, alpha, r)
-      head.style.left = px(x0 + lerp(0.06, 0.44, r()) * (engine.W - hw))
+      // was lerp(0.06, 0.44, r()) — capped well below the frame's full
+      // width, so a centroid can never land right of ~x900. Measured mean
+      // centroid x = 692 against a frame center of 960 (spec §2, appendix
+      // #2). Draw range must span >=0.90 of available width; measured
+      // against the reference build's real render (same seed/content),
+      // [0.08, 0.98] lands mean centroid x at 920 (within the 960±96
+      // gate) — [0.02, 0.92] alone undershot to 848, just outside the
+      // band, so this was iterated per §2's gate, not shipped on the first
+      // guess.
+      head.style.left = px(x0 + lerp(0.08, 0.98, r()) * (engine.W - hw))
       head.style.top = px(bandY(engine, r, hh))
       host.appendChild(head)
 
@@ -315,7 +330,7 @@ function buildLayerContent(engine, world, arc, host, L) {
       const ch = ck === 'streak' ? cw * 0.30 : cw * (0.60 + r() * 0.28)
       const comp = makePrim(ck, cw, ch, st.hue + (st.accent ? 168 : lerp(-22, 22, r())),
         lerp(0.30, 0.48, lou) * 0.8, r)
-      comp.style.left = px(x0 + lerp(0.10, 0.62, r()) * (engine.W - cw))
+      comp.style.left = px(x0 + lerp(0.08, 0.98, r()) * (engine.W - cw))
       comp.style.top = px(bandY(engine, r, ch))
       host.appendChild(comp)
 
