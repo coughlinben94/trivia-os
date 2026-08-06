@@ -3,6 +3,18 @@ import { THEMES } from '../themes/index.js'
 const theme = THEMES.find(t => t.id === 'midnight-galaxy')
 if (!theme) throw new Error('midnightGalaxy.ring.js: no THEMES entry with id "midnight-galaxy"')
 
+// theme.colors only has 2 sky-relevant stops (bg, bgDeep); the reference
+// build's sky is a continuous 4-stop ramp. Duplicating bgDeep for both
+// middle stops (an earlier version of this file did that) renders a flat
+// solid band from 46% to 78% of the gradient radius — a visible regression
+// from the reference's smooth falloff. Interpolating a real midpoint keeps
+// the ramp continuous instead.
+const mixHex = (a, b, t) => {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16)
+  const ch = (shift) => Math.round((((pa >> shift) & 255) * (1 - t)) + (((pb >> shift) & 255) * t))
+  return `#${[16, 8, 0].map(s => ch(s).toString(16).padStart(2, '0')).join('')}`
+}
+
 export const midnightGalaxyRing = {
   id: 'midnight-galaxy',
   type: 'space',
@@ -11,7 +23,7 @@ export const midnightGalaxyRing = {
   // was a hardcoded 4-stop array in concepts/world-07-ring.html; now derived
   // from the theme so a host's per-show color override (ThemeProvider's
   // applyOverrides) reaches this world too, instead of silently no-op'ing.
-  sky: [theme.colors.bg, theme.colors.bgDeep, theme.colors.bgDeep, '#010109'],
+  sky: [theme.colors.bg, mixHex(theme.colors.bg, theme.colors.bgDeep, 0.5), theme.colors.bgDeep, '#010109'],
   qColours: [theme.colors.highlight, theme.colors.accent],
   stations: [
     { key: 'orange nebula', prim: 'blob', hue: 28, accent: true },

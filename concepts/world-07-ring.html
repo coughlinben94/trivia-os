@@ -350,15 +350,24 @@ const WORLD = {
   ],
 };
 
-/* target mean luma per station — the arc. A seeded ±10% jitter (never
-   Math.random) breaks up the cosine trough's flat neighbourhood — without it,
-   stations 6-8 all round to brightness 18 (S1 defect: "nothing is a moment"). */
+/* target mean luma per station — the arc. A seeded jitter (never Math.random)
+   breaks up the cosine trough's flat neighbourhood — without it, stations
+   6-8 all round to brightness 18 (S1 defect: "nothing is a moment").
+   The trough is symmetric by construction (stations 6 and 8, either side of
+   the minimum at 7, get an IDENTICAL base before jitter). A ±10% multiplier
+   ON BASE was tried first and passed the numeric gate (span/no-flat-
+   neighbours) while leaving the defect intact — near the trough base is
+   only ~18, so ±10% is ~±1.8, not enough to separate two already-identical
+   values on an 18-52 range; loudness at 6/7/8 stayed ~0.14/0/0.04, still
+   visually flat. Scaling the jitter to the ARC's own range (hi-lo) instead
+   of to the local base is what actually breaks the symmetry: seed 0x1234 at
+   ±14% of range gives loudness 0.149/0.000/0.073 — real separation. */
 function arcAt(i){
   const { lo, hi, exp } = ENGINE.ARC;
   const t = 0.5 - 0.5*Math.cos(2*Math.PI*(i + WORLD.phase)/ENGINE.PANES);
   const base = lo + (hi-lo)*Math.pow(t, exp);
-  const jitter = lerp(-0.10, 0.10, rng(i, 0x4217)());
-  return base * (1 + jitter);
+  const jitter = lerp(-0.14, 0.14, rng(i, 0x1234)()) * (hi-lo);
+  return Math.max(1, base + jitter);
 }
 const ARC = Array.from({length:ENGINE.PANES}, (_,i) => arcAt(i));
 const ARC_MIN = Math.min(...ARC), ARC_MAX = Math.max(...ARC);
