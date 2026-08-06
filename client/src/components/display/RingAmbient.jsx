@@ -25,6 +25,7 @@
 // system (spawnShoot/shootLoop/.shootLane).
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, rng, lerp } from '../../lib/ringEngine.js'
+import { EASE_SURGE } from '../../lib/easings.js'
 
 // ENGINE — engine-fixed, identical for every world; never a prop (a world
 // never sets any of this, same as the reference build's own ENGINE const).
@@ -65,7 +66,7 @@ const RING_CSS = `
 .lyr{position:absolute;inset:0;overflow:hidden}
 .surge{position:absolute;left:0;top:0;width:100%;height:100%;
   will-change:transform;transform:translate3d(0,0,0)}
-.ring-stage.go .surge{transition:transform var(--surge-ms) cubic-bezier(.16,.62,.28,1)}
+.ring-stage.go .surge{transition:transform var(--surge-ms) cubic-bezier(${EASE_SURGE.join(',')})}
 
 .void{position:absolute;inset:0;
   background:radial-gradient(ellipse 138% 128% at 50% 48%,
