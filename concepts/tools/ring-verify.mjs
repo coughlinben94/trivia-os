@@ -67,7 +67,12 @@ function functionBody(src, name) {
   return { start: m.index, end: i };
 }
 {
-  const scriptMatch = source.match(/<script>([\s\S]*?)<\/script>/);
+  // [^>]* tolerates attributes (e.g. type="module") — a bare /<script>/
+  // match failed the moment world-07-ring.html's script gained one, silently
+  // falling back to scanning the WHOLE file (including the <style> block's
+  // history comment prose mentioning "Math.random()") instead of just the
+  // script body, and flagging that prose as a stray call.
+  const scriptMatch = source.match(/<script[^>]*>([\s\S]*?)<\/script>/);
   const script = scriptMatch ? scriptMatch[1] : source;
   const sanctioned = ['spawnShoot', 'shootLoop']
     .map(n => functionBody(script, n))
@@ -83,7 +88,15 @@ function functionBody(src, name) {
 }
 
 // ── dynamic checks: drive the real thing in real Chromium ──
-const browser = await chromium.launch();
+// --disable-web-security: world-07-ring.html loads <script type="module">,
+// which imports client/src/lib/ringPrimitives.js. Chromium enforces CORS on
+// ES module fetches even under file://  ("origin 'null' ... blocked by CORS
+// policy") with no equivalent to the old <script> cross-file leniency, so a
+// vanilla launch() can no longer load this file at all — every check below
+// would silently see an empty window.__world instead of a real failure.
+// This is a local, disposable headless instance loading a known-trusted
+// local file for testing; it never fetches anything remote.
+const browser = await chromium.launch({ args: ['--disable-web-security'] });
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 const consoleErrors = [];
 page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
