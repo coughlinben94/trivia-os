@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onOpenLibrary, onOpenScoreboard, onDashboard }) {
+export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onOpenLibrary, onOpenScoreboard, onDashboard, previewSlideId }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [copied, setCopied] = useState(false)
@@ -98,8 +98,11 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
             Score
           </button>
           <button
-            onClick={() => window.open(`/display?show=${show.id}&preview=true`, '_blank')}
-            title="Preview display on current theme"
+            onClick={() => window.open(
+              `/display?show=${show.id}&preview=true${previewSlideId ? `&slide=${previewSlideId}` : ''}`,
+              '_blank'
+            )}
+            title={previewSlideId ? 'Preview the selected slide on the real TV renderer' : 'Preview display on current theme'}
             className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
           >
             Preview

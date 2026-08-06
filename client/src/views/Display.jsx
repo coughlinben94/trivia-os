@@ -14,6 +14,7 @@ import StageFrame from '../display/StageFrame.jsx'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
 import { resolveShinyPart } from '../lib/shinySeries.js'
 import { EASE_OUT } from '../lib/easings.js'
+import { resolvePreviewShow } from '../lib/previewSlide.js'
 
 // ─── No-show holding screen (before any show goes live) ────────────────────
 
@@ -224,56 +225,27 @@ function PreShowScreen({ show, onInstall }) {
   )
 }
 
-// ─── Preview slide ─────────────────────────────────────────────────────────
+// ─── Preview badge ─────────────────────────────────────────────────────────
+// Overlaid on top of the real DisplayInner render in preview mode — the show's
+// actual current slide, actual theme, actual data (e.g. a matching question's
+// real live submit count), just labeled so the host knows it's not the real
+// live broadcast. Previously this route rendered a hardcoded placeholder
+// sentence instead of any real slide — this badge is the only preview-specific
+// UI left; the slide itself is the same SlideRenderer path the TV uses.
 
-function PreviewSlide() {
+function PreviewBadge() {
   const { theme } = useTheme()
-
   return (
     <div
-      className="w-screen h-screen overflow-hidden relative select-none"
-      style={{ background: theme.colors.bgDeep }}
+      className="fixed top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
+      style={{ opacity: 0.35 }}
     >
-      <ParticleBackground theme={theme} />
-
-      {/* PREVIEW MODE label */}
-      <div
-        className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
-        style={{ opacity: 0.25 }}
+      <span
+        className="text-xs font-bold tracking-widest uppercase"
+        style={{ color: theme.colors.text, fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif` }}
       >
-        <span
-          className="text-xs font-bold tracking-widest uppercase"
-          style={{ color: theme.colors.text, fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif` }}
-        >
-          PREVIEW MODE
-        </span>
-      </div>
-
-      {/* Radial glow */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: `radial-gradient(ellipse 70% 50% at 50% 50%, ${theme.colors.accent}20 0%, transparent 70%)`,
-        }}
-      />
-
-      {/* Sample question text — centered */}
-      <div className="absolute inset-0 flex items-center justify-center px-24 py-20">
-        <p
-          className="text-center leading-relaxed"
-          style={{
-            color: theme.colors.text,
-            fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-            fontSize: 'clamp(2rem, 4.5vw, 4.5rem)',
-            fontWeight: 500,
-            maxWidth: '80ch',
-          }}
-        >
-          This is what your questions will look like on screen.
-        </p>
-      </div>
-
-      <BaynesWatermark />
+        PREVIEW MODE
+      </span>
     </div>
   )
 }
@@ -336,7 +308,7 @@ function AnswerRevealOverlay({ show, currentSlide }) {
 
 // ─── Live display ──────────────────────────────────────────────────────────
 
-function DisplayInner({ show, direction }) {
+function DisplayInner({ show, direction, isPreview = false }) {
   const { theme } = useTheme()
   const sortedSlides = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
   const currentSlide = sortedSlides[show.current_slide_index ?? 0] ?? null
@@ -380,6 +352,7 @@ function DisplayInner({ show, direction }) {
                 slide={currentSlide}
                 show={show}
                 direction={direction}
+                isPreview={isPreview}
               />
             )}
           </AnimatePresence>
@@ -403,6 +376,7 @@ export default function Display() {
   const isDemo = searchParams.get('demo') === '1'
   const showId = searchParams.get('show')
   const isPreview = searchParams.get('preview') === 'true'
+  const previewSlideId = searchParams.get('slide')
   const [show, setShow] = useState(null)
   const [loading, setLoading] = useState(true)
   const prevIndexRef = useRef(0)
@@ -694,7 +668,8 @@ export default function Display() {
   if (isPreview) {
     return (
       <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
-        <PreviewSlide />
+        <DisplayInner show={resolvePreviewShow(show, previewSlideId)} direction={1} isPreview />
+        <PreviewBadge />
       </ThemeProvider>
     )
   }

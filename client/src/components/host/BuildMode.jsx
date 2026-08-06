@@ -526,6 +526,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
         onOpenLibrary={onOpenLibrary}
         onOpenScoreboard={onOpenScoreboard}
         onDashboard={mode !== 'wizard' ? returnToDashboard : undefined}
+        previewSlideId={syncedSelectedSlide?.id ?? null}
       />
 
       <div className="flex flex-1 min-h-0">
