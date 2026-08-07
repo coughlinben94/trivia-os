@@ -51,8 +51,9 @@ const ENGINE = {
 
 // ── CSS — the chassis/primitive/star rules (.ring-lyr, .ring-surge,
 // .ring-void, .ring-star, .ring-pf, .ring-b-lobe, .ring-b-rim, .ring-d-glow,
-// .ring-s-core, .ring-s-spk, .ring-l-disc, .ring-l-lane, .ring-l-core,
-// .ring-k-tail, .ring-k-head, .ring-r-body, .ring-rg-ring, @keyframes
+// .ring-s-core, .ring-s-spk, .ring-l-disc, .ring-l-arm, .ring-l-arm-edge,
+// .ring-l-core, .ring-k-tail, .ring-k-head, .ring-r-body, .ring-r-edge,
+// .ring-rg-ring, @keyframes
 // ringTw/ringPfBreathe) now come from client/src/lib/ringPrimitives.js's
 // ringCss('ring-') — the same source concepts/world-07-ring.html's
 // unprefixed <style> injects via ringCss(''). These were hand-duplicated

@@ -152,21 +152,78 @@ function makePrim(el, kind, w, h, hue, alpha, r) {
   }
 
   else if (kind === 'lens') {
+    // was a full inset:0 ellipse spanning the ENTIRE headline box - the
+    // literal "flattened ellipse disc" this fix exists to move away from
+    // (a fill-black test that treats any-nonzero-alpha as "on" turns a
+    // full-box wash into one giant ellipse regardless of what's drawn on
+    // top of it). Bounded to roughly the arm cluster's own footprint
+    // instead, so it reads as a soft galactic bulge behind the arms, not
+    // the dominant shape of the whole primitive.
     const d = el('l-disc')
-    d.style.background = `radial-gradient(ellipse 54% 24% at 50% 50%,
-      ${hsla(hue, 60, 74, 0.30)} 0%, ${hsla(hue, 54, 58, 0.15)} 42%, transparent 74%)`
+    const dw = w * 0.60, dh = h * 0.60
+    d.style.left = px(w * 0.5 - dw / 2); d.style.top = px(h * 0.5 - dh / 2)
+    d.style.width = px(dw); d.style.height = px(dh)
+    d.style.background = `radial-gradient(ellipse 62% 62% at 50% 50%,
+      ${hsla(hue, 40, 44, 0.16)} 0%, ${hsla(hue, 36, 32, 0.08)} 50%, transparent 80%)`
     f.appendChild(d)
-    // dust lane: dark-on-dark against the disc's own low peak alpha is
-    // invisible on its own - a thin bright edge above/below the dark lane
-    // gives it the contrast delta. Narrowed from the CSS default's 88%
-    // width to 55%, centered - the disc's gradient only reads out to
-    // roughly half the disc's own width.
-    const lane = el('l-lane')
-    lane.style.left = '22.5%'; lane.style.right = '22.5%'
-    lane.style.boxShadow = `0 -4px 0 0 ${hsla(hue, 60, 70, 0.5)}, 0 4px 0 0 ${hsla(hue, 60, 70, 0.5)}`
-    f.appendChild(lane)
+    // spiral arms: this used to be a straight dust lane across a flattened
+    // disc, which fill-black-silhouettes indistinguishable from `ring`'s
+    // actual hollow ellipse - two nouns, one silhouette. A true curve isn't
+    // in this vocabulary (no path/bezier primitive) - two rotated straight
+    // ellipses were tried first and rendered as a sharp V/boomerang, not a
+    // spiral (confirmed on an isolated render, not assumed). Reused the
+    // technique `blob` already uses to fake an irregular cloud from
+    // circular primitives instead: each arm is 5 soft lobes stepped along a
+    // logarithmic spiral (radius grows, angle advances, size shrinks) out
+    // from the core - a real curve made of overlapping circles, the same
+    // way blob fakes an irregular silhouette from three overlapping
+    // ellipses.
+    const cx = w * 0.5, cy = h * 0.5
+    const baseAng = r() * Math.PI * 2
+    let domEdge = null, domEdgeArea = -1
+    ;[1, -1].forEach((dir, ai) => {
+      // 6 lobes, radius growing from near-core to ~0.34w and angle
+      // advancing ~20-27deg/step (~110-140deg total sweep) - spaced far
+      // enough apart that they trace a visible curve instead of stacking
+      // into one indistinct blob (the first attempt at this: radius grew
+      // from ~0.06w with lobes sized ~0.22w, so consecutive lobes overlapped
+      // almost completely and it rendered as a fuzzy ball with a stray
+      // bright line, not an arm - confirmed on an isolated render).
+      const lobes = 6
+      const maxRad = w * (0.30 + r() * 0.08)
+      const dTheta = (0.36 + r() * 0.10) * dir
+      for (let k = 0; k < lobes; k++) {
+        const t = k / (lobes - 1)
+        const rad = maxRad * (0.12 + 0.88 * Math.pow(t, 0.9))
+        const ang = baseAng + dTheta * k
+        const lx = cx + Math.cos(ang) * rad, ly = cy + Math.sin(ang) * rad * (h / w)
+        const ls = w * (0.19 - t * 0.11) * (0.9 + r() * 0.2)
+        const lobe = el('l-arm')
+        lobe.style.width = lobe.style.height = px(Math.max(10, ls))
+        lobe.style.left = px(lx - ls / 2); lobe.style.top = px(ly - ls / 2)
+        lobe.style.background = `radial-gradient(circle,
+          ${hsla(hue + ai * 6, 62 - t * 10, 72 - t * 16, 0.42 - t * 0.20)} 0%,
+          ${hsla(hue, 52, 46, 0.16 - t * 0.08)} 55%, transparent 82%)`
+        f.appendChild(lobe)
+        if (k <= 1 && ls > domEdgeArea) { domEdgeArea = ls; domEdge = { lx, ly, ls, ang } }
+      }
+    })
+    // bright inner edge: hugs whichever lobe came out biggest AND closest
+    // to the core (across both arms) - same hug-the-actual-glow approach as
+    // blob's rim (sized/rotated to that lobe's own visible extent), not a
+    // floating shape placed elsewhere in the frame.
+    if (domEdge) {
+      const edge = el('l-arm-edge')
+      const es = domEdge.ls * 0.60
+      edge.style.width = px(es); edge.style.height = px(Math.max(4, es * 0.22))
+      edge.style.left = px(domEdge.lx - es / 2); edge.style.top = px(domEdge.ly - es * 0.11)
+      edge.style.transform = `rotate(${(domEdge.ang * 180 / Math.PI).toFixed(0)}deg)`
+      edge.style.background = `linear-gradient(90deg, transparent 0%,
+        ${hsla(hue + 8, 72, 88, 0.85)} 44%, ${hsla(hue + 8, 72, 88, 0.85)} 56%, transparent 100%)`
+      f.appendChild(edge)
+    }
     const c = el('l-core')
-    const cs = Math.max(11, w * 0.032)
+    const cs = Math.max(11, w * 0.036)
     c.style.width = c.style.height = px(cs)
     c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
     c.style.boxShadow = `0 0 ${px(cs * 2.6)} ${px(cs * 0.7)} ${hsla(hue, 70, 80, 0.45)}`
@@ -201,18 +258,29 @@ function makePrim(el, kind, w, h, hue, alpha, r) {
   }
 
   else if (kind === 'ribbon') {
+    // was 'ellipse 60% 18%' - a headline-sized bounding box (576-880px)
+    // with a visible gradient reading out to only 18% of its own height:
+    // big box, near-nothing inside it ("a scratch on a dark screen" per the
+    // visual review). Box size alone doesn't fix ink (spec §1) - the
+    // gradient's own visible extent has to be big. Widened/heightened to
+    // 94%/42% of the box (nearly the full frame this headline occupies)
+    // and alpha lowered - big AND dim, not small and dim.
     const b = el('r-body')
-    b.style.background = `radial-gradient(ellipse 60% 18% at 50% 50%,
-      ${hsla(hue, 44, 26, 0.72)} 0%, ${hsla(hue, 40, 20, 0.40)} 44%, transparent 76%)`
+    b.style.background = `radial-gradient(ellipse 94% 42% at 50% 50%,
+      ${hsla(hue, 42, 30, 0.38)} 0%, ${hsla(hue, 38, 24, 0.22)} 46%,
+      ${hsla(hue, 34, 18, 0.09)} 70%, transparent 88%)`
     f.appendChild(b)
-    // same dark-on-dark failure as lens, worse. Reuses .b-rim - its arc-style
-    // border (right/bottom transparent) and inset-shape logic don't assume
-    // a round parent, only an elliptical border-box, which ribbon's body
-    // also is (just flatter).
-    const rim = el('b-rim')
-    rim.style.left = '4%'; rim.style.top = '34%'; rim.style.width = '92%'; rim.style.height = '32%'
-    rim.style.setProperty('--rim', hsla(hue + 10, 70, 78, 0.85))
-    f.appendChild(rim)
+    // hard edge traces the band's OWN long top edge only (one rim, per
+    // spec's fix suggestion) - a bright horizontal line positioned at the
+    // gradient's own visible top extent (42% ellipse height => the visible
+    // edge sits ~19% of h above center), not a floating full-ellipse ring.
+    const edge = el('r-edge')
+    edge.style.left = '5%'; edge.style.right = '5%'
+    edge.style.top = px(h * 0.5 - h * 0.19)
+    edge.style.height = px(Math.max(4, h * 0.022))
+    edge.style.background = `linear-gradient(90deg, transparent 0%,
+      ${hsla(hue + 6, 60, 76, 0.55)} 20%, ${hsla(hue + 6, 62, 80, 0.65)} 80%, transparent 100%)`
+    f.appendChild(edge)
     f.style.transform = `rotate(${(-18 + r() * 36).toFixed(0)}deg)`
   }
 
@@ -259,7 +327,16 @@ function makePrim(el, kind, w, h, hue, alpha, r) {
       const s = w * sz * 0.22
       d.style.left = px(positions[i][0] * w - s / 2); d.style.top = px(positions[i][1] * h - s / 2)
       d.style.width = d.style.height = px(s)
-      d.style.background = hsla(hue, 70, 85, 1)
+      // was a flat `hsla(...,1)` opaque fill - the only fully-opaque flat
+      // element in a world built entirely from glowing forms (a real
+      // regression from the halo-sizing fix, which correctly stopped the
+      // two dots merging into one blob but overshot into flat matte
+      // circles). Hot core fading to a soft halo instead, matching every
+      // other primitive's own core treatment (blob/spikes/lens all use a
+      // radial-gradient core, never a flat disc).
+      d.style.background = `radial-gradient(circle at 36% 36%,
+        ${hsla(hue, 25, 97, 1)} 0%, ${hsla(hue, 65, 84, 0.92)} 34%,
+        ${hsla(hue, 62, 60, 0.55)} 64%, ${hsla(hue, 55, 38, 0.16)} 100%)`
       d.style.boxShadow = `0 0 ${px(s * 2)} ${px(s * 0.3)} ${hsla(hue, 70, 80, 0.5)}`
       f.appendChild(d)
     })
@@ -378,14 +455,15 @@ export function ringCss(prefix) {
 .${p}s-spk{position:absolute;left:50%;top:50%;transform-origin:50% 50%}
 
 .${p}l-disc{position:absolute;inset:0;border-radius:50%}
-.${p}l-lane{position:absolute;left:6%;right:6%;top:46%;height:8%;border-radius:50%;
-  background:rgba(4,3,14,.62)}
 .${p}l-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fff6e6}
+.${p}l-arm{position:absolute;border-radius:50%}
+.${p}l-arm-edge{position:absolute;border-radius:999px}
 
 .${p}k-tail{position:absolute;left:0;top:50%;border-radius:999px}
 .${p}k-head{position:absolute;right:-4px;top:50%;border-radius:50%}
 
 .${p}r-body{position:absolute;inset:0;border-radius:50%}
+.${p}r-edge{position:absolute;border-radius:999px}
 
 .${p}rg-ring{position:absolute;border-radius:50%}
 `

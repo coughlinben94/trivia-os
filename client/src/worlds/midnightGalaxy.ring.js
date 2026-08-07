@@ -80,6 +80,19 @@ export const midnightGalaxyRing = {
     // primitive/silhouette anyway), and inside the blue anchor's window
     // with an 18° margin. Renamed to match — a teal/cyan blob still
     // labelled "green" would be a stale key.
-    { key: 'teal nebula', prim: 'blob', hue: 196, accent: false },
+    // Task 3 step 4: blob was the headline on stations 1, 6, 9 AND this one
+    // - 4 times in 12, with 12->1 cyclically adjacent (spec §6.2/§10 bans
+    // both: >3 headline appearances, and any two on adjacent stations).
+    // Reassigned this station (the one already flagged above as the odd one
+    // out) from blob to ribbon - a wide, dim, low-alpha gas band (after
+    // this session's ribbon fix) reads as a filamentary nebula at least as
+    // well as a cloud-blob does, so the noun survives, just reshaped.
+    // Leaves blob at 1/6/9 only (pairwise cyclic distances 5, 3, 4 - none
+    // adjacent) and puts ribbon at 2 stations (this one and station 7's
+    // dust ribbon), cyclic distance 5, not adjacent. Renamed the key from
+    // "teal nebula" to "teal filament" since the noun itself changed, not
+    // just the hue (spec §10: the largest element's noun must change, not
+    // just its color).
+    { key: 'teal filament', prim: 'ribbon', hue: 196, accent: false },
   ],
 }
