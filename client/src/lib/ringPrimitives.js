@@ -197,17 +197,31 @@ function makePrim(el, kind, w, h, hue, alpha, r) {
     // Verified over 30 seed x aspect-ratio combinations (see PR notes):
     // ratio band [0.71, 0.97], inside 0.7-1.05 throughout.
     const ARM_TARGET_RATIO = 0.85 // midpoint of the required 0.7-1.05 band
-    ;[1, -1].forEach((dir, ai) => {
-      // 6 lobes, radius growing from near-core to ~0.30-0.38w and angle
-      // advancing ~20-27deg/step (~110-140deg total sweep) along the curve.
+    ;[0, Math.PI].forEach((phase, ai) => {
+      // 6 lobes stepped along a TRUE logarithmic spiral (angle grows with
+      // ln(radius), not linearly with k). Both arms sweep the SAME
+      // rotational direction now - no dir=+1/-1 sign flip - and start
+      // pi apart (opposite sides of the core). Two arms mirroring sweep
+      // *direction* from the same start angle used to close a ~206-264deg
+      // combined arc into a horseshoe/ring silhouette (a §6.2 anatomy
+      // collision with `dots`) - same direction + opposite start angles
+      // reads as an actual pinwheel/S-spiral instead.
       const lobes = 6
       const maxRad = w * (0.30 + r() * 0.08)
-      const dTheta = (0.36 + r() * 0.10) * dir
+      const r0 = maxRad * 0.12 // innermost lobe radius, ln() reference point
+      const pitch = 0.85 + r() * 0.25 // ln(maxRad/r0) ~= 2.12 -> ~103-134deg sweep/arm
       const pos = []
       for (let k = 0; k < lobes; k++) {
         const t = k / (lobes - 1)
         const rad = maxRad * (0.12 + 0.88 * Math.pow(t, 0.9))
-        const ang = baseAng + dTheta * k
+        // ang grows with ln(rad/r0) instead of a constant per-lobe step:
+        // tangential spacing (rad * dAng) now tracks radial spacing
+        // instead of ballooning with radius, so the gap-derived diameter
+        // below tapers toward the tip for free. A post-hoc multiplier on
+        // diam alone was tried first and rejected - shrinking diameter
+        // without also shrinking gap pushes the ratio straight out of the
+        // 0.7-1.05 band near the tip (verified by hand, see PR notes).
+        const ang = baseAng + phase + pitch * Math.log(rad / r0)
         pos.push({ x: cx + Math.cos(ang) * rad, y: cy + Math.sin(ang) * rad * (h / w), ang, t })
       }
       // gap[k] = centre distance between lobe k and lobe k+1 along the curve.
@@ -217,7 +231,8 @@ function makePrim(el, kind, w, h, hue, alpha, r) {
       }
       // diameter derived from the neighbouring gap(s), not tuned
       // independently - guarantees the ratio lands near target regardless
-      // of the maxRad/dTheta jitter above.
+      // of the maxRad/pitch jitter above (unchanged mechanism from the
+      // prior fix - do not decouple this from the geometry above it).
       const diam = pos.map((_, k) => {
         const g0 = gap[k - 1], g1 = gap[k]
         const avg = (g0 !== undefined && g1 !== undefined) ? (g0 + g1) / 2 : (g0 ?? g1)
