@@ -310,9 +310,20 @@ const WORLD = {
     { key:'dust ribbon',    prim:'ribbon', hue:264, accent:false },
     { key:'binary pair',    prim:'binary', hue:214, accent:false },
     { key:'rose nebula',    prim:'blob',   hue:330, accent:true  },
-    { key:'ringed lens',    prim:'ring',   hue:250, accent:false },
+    { key:'ringed lens',    prim:'ring',   hue:256, accent:false },
     { key:'open cluster',   prim:'dots',   hue:224, accent:false },
-    { key:'green nebula',   prim:'blob',   hue:140, accent:false },
+    { key:'teal filament',  prim:'ribbon', hue:196, accent:false },
+  ],
+  /* mirrors client/src/worlds/midnightGalaxy.ring.js's hueAnchors — this
+     file has its own independent WORLD.stations (not driven by that file),
+     so a fix landing in one does not automatically apply to the other. A
+     review caught exactly this: the cyclic-adjacency fix (blob 4x incl.
+     stations 12->1 adjacent) landed in midnightGalaxy.ring.js but not here,
+     leaving the actual rendered/reviewed reference build still violating
+     spec §6.2/§10 while the gate stayed green (it has no check for this). */
+  hueAnchors: [
+    { deg: 276, window: 25 },
+    { deg: 214, window: 25 },
   ],
 };
 
