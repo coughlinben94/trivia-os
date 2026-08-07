@@ -116,10 +116,19 @@ function buildLayerContent(engine, world, arc, host, L) {
     // through view for ~5 of the ring's 12 stations as it passes — inside
     // the required 4-6 band. `lens` chosen per this session's own finding
     // that it reads more legibly than the other glow primitives.
+    // hueAnchors[1] (214, cool blue), not [0] (276, violet): hueAnchors[0]
+    // is the exact hue+primitive station 3 (spiral galaxy) uses as its own
+    // headline (lens@276) — the anchor's visible window (stations 1-5,
+    // which includes station 3) rendered a second, indistinguishable
+    // spiral galaxy at 760px vs the headline's <=576-880px (1.3x apart) —
+    // a duplicate, not an anchor (spec §6.2/§7.6 violation). No station
+    // uses `lens` at 214 — checked against every entry in
+    // midnightGalaxy.ring.js's stations list, not just this anchor's
+    // visible window.
     {
       const ar = rng(0, 0xA4C7)
       const AW = 760, AH = Math.round(AW * 0.62)
-      const anchorHue = world.hueAnchors[0].deg
+      const anchorHue = world.hueAnchors[1].deg
       const anchor = dom.makePrim('lens', AW, AH, anchorHue, 0.34, ar)
       anchor.style.left = px(period * 0.42 - AW / 2)
       anchor.style.top = px(dom.bandY(ar, AH))
@@ -135,13 +144,20 @@ function buildLayerContent(engine, world, arc, host, L) {
     // transform was deliberately deleted earlier this session for causing
     // visible pops at turn boundaries; this can't reintroduce that bug
     // class because .ring-surge's own transform is never touched here.
-    // 1800px/480s = 3.75px/s (clears the >=2.7px/s floor), crossing time
-    // 8min (inside the 4-12min band); linear+alternate so it reverses
-    // cleanly at each end instead of snapping back to the start.
+    // 3600px/480s = 7.5px/s (was 1800px/480s = 3.75px/s — technically
+    // above the 2.7px/s floor but too subtle to notice unprompted;
+    // doubling the travel at the same duration clears the floor with real
+    // margin), crossing time = 3600/7.5 = 480s = 8min, unchanged and still
+    // inside the 4-12min band; linear+alternate so it reverses cleanly at
+    // each end instead of snapping back to the start. Size bumped 9->14px
+    // and given a warmer color + a bigger/stronger glow than any star can
+    // reach (far-layer stars top out at size 8 with box-shadow blur
+    // 17.6px/spread 2.4px — see ringPrimitives.js's .drift, blur
+    // 32px/spread 10px) so it reads as an object, not one more star.
     {
       const dr = rng(0, 0xD817)
       const drift = dom.el('drift')
-      const ds = 9
+      const ds = 14
       drift.style.width = drift.style.height = px(ds)
       drift.style.left = px(period * 0.12)
       drift.style.top = px(dom.bandY(dr, ds))
@@ -230,7 +246,12 @@ function buildLayerContent(engine, world, arc, host, L) {
       bridge.style.left = px(headCx); bridge.style.top = px(headCy)
       bridge.style.width = px(Math.hypot(bdx, bdy))
       bridge.style.transform = `rotate(${(Math.atan2(bdy, bdx) * 180 / Math.PI).toFixed(1)}deg)`
-      bridge.style.background = `linear-gradient(90deg, ${hsla(st.hue, 40, 70, 0.16)} 0%, ${hsla(st.hue, 40, 70, 0.10)} 100%)`
+      // was alpha 0.16→0.10, height 3px (ringPrimitives.js) — dimmer/
+      // thinner than the faintest star, so on accent stations (hue delta
+      // ~168°, this bridge is the ONLY declared-pair signal, spec §7.5)
+      // the pair read as unconnected. Bumped to 0.34→0.18 + 5px height,
+      // checked against a real render on an accent station.
+      bridge.style.background = `linear-gradient(90deg, ${hsla(st.hue, 40, 70, 0.34)} 0%, ${hsla(st.hue, 40, 70, 0.18)} 100%)`
       host.appendChild(bridge)
 
       // detail-tier specks, count follows loudness. k===0 is forced toward
@@ -254,29 +275,26 @@ function buildLayerContent(engine, world, arc, host, L) {
       // above is a translucent glow that only alpha-blends with what's
       // behind it; this is a genuinely dark, rimmed disc (makeOccluder,
       // reusing the b-lobe rim's partial-border contrast treatment) placed
-      // over a small patch of GUARANTEED star content — not hoping
-      // buildStars' scattered draw happened to land some underneath — so
-      // an ablation render actually has something real to occlude.
+      // to dim REAL star content behind it — far/mid/near's own real
+      // `.star` elements from buildStars, never synthetic ones injected
+      // just for the measurement. (An earlier version spawned 6 fake
+      // `.occ-star` dots inside the occluder's own box so the ablation
+      // test always had something to find — they were never visible in the
+      // real render, always covered, and sat on the occluder's own plane
+      // with no real parallax relationship to it. That made the ablation
+      // number pass without proving anything about actual content.) Sized
+      // up from the original 150-210px band to 260-340px — large enough
+      // that real star density (measured ~214 visible stars/frame across
+      // far+mid+near, concepts/tools/ring-verify.mjs check #10) reliably
+      // puts several real stars under the footprint instead of leaving it
+      // to chance at the smaller size; see concepts/tools/
+      // ring-occlusion-ablation.mjs for the actual measured before/after
+      // luminance ratios per station.
       if (i % 3 === 0) {
         const orr = rng(i, 0x0CC1)
-        const os = lerp(150, 210, orr())
+        const os = lerp(260, 340, orr())
         const ox = x0 + orr() * (engine.W - os)
         const oy = dom.bandY(orr, os)
-        for (let si = 0; si < 6; si++) {
-          const sr = rng(si, 0x0CC1 + i)
-          const s = dom.el('star')
-          const ssize = 1.8 + sr() * 2.4
-          s.style.left = px(ox + sr() * os)
-          s.style.top = px(oy + sr() * os)
-          s.style.width = s.style.height = px(ssize)
-          s.style.setProperty('--sc', '#ffffff')
-          s.style.setProperty('--ob', '0.32')
-          s.style.setProperty('--op', '0.78')
-          s.style.setProperty('--tp', '8s')
-          s.style.setProperty('--td', '0s')
-          s.classList.add('occ-star') // ablation-measurement marker only, not styled
-          host.appendChild(s)
-        }
         const occ = dom.makeOccluder(os, st.hue)
         occ.style.left = px(ox)
         occ.style.top = px(oy)

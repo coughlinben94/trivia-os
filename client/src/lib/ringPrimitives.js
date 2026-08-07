@@ -423,8 +423,16 @@ function makePrim(el, kind, w, h, hue, alpha, r) {
 function makeOccluder(el, size, hue) {
   const f = el('occ')
   f.style.width = f.style.height = px(size)
+  // alphas raised from .95/.94/.92 — real-star ablation measurement
+  // (concepts/tools/ring-occlusion-ablation.mjs) found the old alpha let
+  // enough of the underlying sky bleed through that a few real, faint
+  // stars (near the twinkle floor, already barely above sky level
+  // unoccluded) landed just over the required <=0.5x footprint-luminance
+  // ratio on one of the 4 stations. Still not fully opaque (kept short of
+  // 1.0, matching this shape's own "near-opaque dark disc" description),
+  // just dark enough to close that gap.
   f.style.background = `radial-gradient(circle at 42% 40%,
-    ${hsla(hue, 20, 7, 0.95)} 0%, ${hsla(hue, 16, 4, 0.94)} 62%, ${hsla(hue, 12, 2, 0.92)} 100%)`
+    ${hsla(hue, 20, 7, 0.99)} 0%, ${hsla(hue, 16, 4, 0.985)} 62%, ${hsla(hue, 12, 2, 0.98)} 100%)`
   f.style.boxShadow = `inset 0 0 ${px(size * 0.2)} ${hsla(hue, 10, 0, 0.55)}`
   const rim = el('occ-rim')
   rim.style.setProperty('--rim', hsla(hue + 10, 70, 82, 0.85))
@@ -556,15 +564,15 @@ export function ringCss(prefix) {
 
 .${p}rg-ring{position:absolute;border-radius:50%}
 
-.${p}pair-bridge{position:absolute;height:3px;transform-origin:0 50%;pointer-events:none}
+.${p}pair-bridge{position:absolute;height:5px;transform-origin:0 50%;pointer-events:none}
 
 .${p}occ{position:absolute;border-radius:50%}
 .${p}occ-rim{position:absolute;inset:0;border-radius:50%;border:5px solid var(--rim);
   border-right-color:transparent;border-bottom-color:transparent}
 
-.${p}drift{position:absolute;border-radius:50%;background:#fff6e6;
+.${p}drift{position:absolute;border-radius:50%;background:#ffd9a0;
   animation:${driftMove} 480s linear infinite alternate;
-  box-shadow:0 0 14px 4px rgba(255,235,200,0.55)}
-@keyframes ${driftMove}{0%{transform:translateX(0)}100%{transform:translateX(1800px)}}
+  box-shadow:0 0 32px 10px rgba(255,183,110,0.75)}
+@keyframes ${driftMove}{0%{transform:translateX(0)}100%{transform:translateX(3600px)}}
 `
 }
