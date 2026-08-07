@@ -248,7 +248,11 @@ function makePrim(el, kind, w, h, hue, alpha, r) {
           ${hsla(hue + ai * 6, 62 - t * 10, 72 - t * 16, 0.42 - t * 0.20)} 0%,
           ${hsla(hue, 52, 46, 0.16 - t * 0.08)} 55%, transparent 82%)`
         f.appendChild(lobe)
-        if (k <= 1 && ls > domEdgeArea) { domEdgeArea = ls; domEdge = { lx, ly, ls, ang } }
+        // edge highlight rotates to the spiral's local TANGENT, not its
+        // radial angle - for r = r0*e^(ang/pitch), tangent-to-radial
+        // offset is atan(pitch) (~40-48deg here). Using the raw radial
+        // `ang` pointed the highlight across the arm instead of along it.
+        if (k <= 1 && ls > domEdgeArea) { domEdgeArea = ls; domEdge = { lx, ly, ls, ang: ang + Math.atan(pitch) } }
       })
     })
     // bright inner edge: hugs whichever lobe came out biggest AND closest
