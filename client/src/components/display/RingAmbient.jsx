@@ -61,9 +61,10 @@ const ENGINE = {
 // the same bug class the makePrim extraction already fixed once).
 //
 // `.ring-stage` and its `.go` transition trigger stay local — that class
-// isn't part of the ring-verify.mjs contract (only #design, .void, .star,
-// .surge, window.__world are, and this component isn't even wired into
-// that gate — see the file header), "stage" is generic enough to risk
+// isn't part of the ring-verify.mjs contract (only #design, .ring-void,
+// .ring-star, .ring-surge, window.__world are — see the mount effect below
+// for this component's own window.__world exposure), "stage" is generic
+// enough to risk
 // colliding with unrelated app CSS, and the easing here comes from this
 // app's own client/src/lib/easings.js rather than the reference build's
 // hardcoded curve. The reduced-motion query stays local too: it's a
@@ -388,11 +389,33 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
 
     writeOffsets()
 
+    // Exposed for concepts/tools/ring-verify.mjs's live-route pass — mirrors the
+    // reference build's own window.__world contract (concepts/world-07-ring.html,
+    // bottom of its <script>) so the gate can drive/measure the component that
+    // actually ships instead of only the standalone HTML file. turn/jumpTo are
+    // function declarations elsewhere in this component body (hoisted, so they
+    // exist by the time this effect runs); station/offset stay live getters so the
+    // gate always reads current state, not a snapshot from mount time.
+    // cylinderOf/authorPeriodOf are re-curried to the reference build's own
+    // single-argument shape (`cylinderOf(L)`, closing over ENGINE) rather than
+    // exposed as ringEngine.js's real two-argument `(engine, layer)` signature —
+    // the gate calls `w.cylinderOf(L)` identically against both passes, and this
+    // is the one place that has to bridge the difference, not the gate.
+    window.__world = {
+      ENGINE, WORLD: worldData, ARC: arc,
+      cylinderOf: (L) => cylinderOf(ENGINE, L),
+      authorPeriodOf: (L) => authorPeriodOf(ENGINE, L),
+      get station() { return stationRef.current },
+      get offset() { return offsetRef.current },
+      jumpTo, turn,
+    }
+
     // React 18 StrictMode double-invokes this effect in dev; clear what we
     // built so the second invocation doesn't append a duplicate DOM tree.
     return () => {
       ro.disconnect()
       design.replaceChildren()
+      if (window.__world && window.__world.WORLD === worldData) delete window.__world
     }
   }, [])
 
