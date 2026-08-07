@@ -174,8 +174,11 @@ await new Promise((resolve) => server.close(resolve));
 //    corner/rim bug slipped through undetected. A single faint star near
 //    the sky's own noise floor swinging above 1.0x is expected — both its
 //    with/without values are tiny, so small pixel-level differences swing
-//    the ratio without carrying any real signal; flagged as NOISE, not
-//    counted against the pass bar, but never hidden.
+//    the ratio without carrying any real signal; flagged as NOISE for a
+//    human reading the per-star lines. Its luminance is still summed into
+//    the AGGREGATE like every other star — flagging it doesn't exclude it
+//    from the number PASS/FAIL is gated on, it only tells you the PER-STAR
+//    ratio next to it is unreliable on its own.
 console.log(`\nring-occlusion-ablation — real far/mid stars only, station 0/3/6/9\n`);
 let anyFail = false;
 const NOISE_FLOOR = 25; // both readings under this = too dim to carry signal either way
