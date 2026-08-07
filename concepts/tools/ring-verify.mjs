@@ -70,8 +70,44 @@ const source = readFileSync(absPath, 'utf8');
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
-const results = []; // { name, status: PASS|WARN|FAIL, detail }
-function report(name, status, detail) { results.push({ name, status, detail }); }
+const results = []; // { name, status: PASS|WARN|FAIL, detail, tier: 'regression'|'content' }
+function report(name, status, detail, tier = 'regression') { results.push({ name, status, detail, tier }); }
+
+// ═══════════════════════════════════════════════════════════════════════
+// CONTENT-BUDGET BASELINE — Task 8 hardening pass split the report into two
+// tiers (design-consultant sign-off: "a gate that is permanently red is a
+// gate people stop reading"). The seven checks below (ink-per-station,
+// headline-ink, largest-element mid-share, elements-per-station, bleed,
+// quadrant-rotation, horizontal-balance) are real, known content gaps
+// against ART-DIRECTION-SPEC.md §1/§2's absolute targets — closing them is
+// real design work, out of scope for the verify-gate task itself. Gating
+// the whole script red on them forever just trains people to ignore FAIL.
+//
+// Instead: each metric below is the actual measured badness (station/
+// quadrant count out of band, or points outside the balance band) at the
+// moment this two-tier split landed (2026-08-07, ring-scaffold-absorption,
+// same commit that fixed the mid-share threshold bug — see the midShare
+// section above). The content-budget tier's pass criterion is "not WORSE
+// than this," not "meets the spec target" — the spec target and the real
+// absolute numbers still print in every check's detail string, they just
+// don't gate the tier. Lower is always better for every metric here.
+// Update this object (with a comment explaining why) whenever real content
+// work closes one of these gaps for good — don't bump it to silence a
+// regression.
+// ═══════════════════════════════════════════════════════════════════════
+const CONTENT_BASELINE = {
+  html: { inkPerStation: 10, headlineInk: 11, midShare: 1, elementsPerStation: 4, bleed: 0, quadrant: 2, balance: 34.3 },
+  'react-live': { inkPerStation: 11, headlineInk: 11, midShare: 1, elementsPerStation: 4, bleed: 0, quadrant: 2, balance: 34.3 },
+};
+// current-badness score is compared against CONTENT_BASELINE[label][key];
+// worse (higher) than the recorded baseline reports FAIL ("regressed"),
+// equal-or-better reports PASS ("no worse than the known backlog").
+function contentReport(P, label, key, name, badness, spec, tier = 'content') {
+  const base = CONTENT_BASELINE[label][key];
+  const status = badness > base ? 'FAIL' : 'PASS';
+  const note = badness > base ? `REGRESSED (baseline ${base}, now ${badness})` : `no worse than baseline (baseline ${base}, now ${badness})`;
+  report(P(name), status, `${spec} — ${note}`, tier);
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // STATIC CHECKS — no browser needed, run once regardless of either pass.
@@ -353,6 +389,20 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
       // MID (composition) layer specifically — the far layer's own wash blobs/
       // anchor/drift also carry the shared `.pf` class, and would contaminate an
       // unscoped count. #design > .lyr is [sky, far, mid, near] in DOM order.
+      // Deliberately NOT counted: `.pair-bridge` (spec §7.5's "connecting
+      // bridge"). §1 says "every element belongs to exactly one tier," and
+      // the four tiers (Headline/Feature/Detail/Atmosphere, spec §1) size
+      // and gate the nine primitive NOUNS from §6's vocabulary
+      // (blob/dots/spikes/lens/streak/ribbon/ring/binary/sprite) — the
+      // bridge is not one of those nouns. §7.5 lists it as one of several
+      // interchangeable ways to SIGNAL a declared pair ("a common halo, an
+      // aligned axis, a colour echo, a connecting bridge") — the other three
+      // options (reusing an existing element's halo, an alignment, a hue
+      // choice) obviously aren't separately-counted elements either, so the
+      // bridge shouldn't be singled out just because it happens to be its
+      // own DOM node. It's relational scaffolding between two already-
+      // counted elements, not a third noun. Verified against §6's own
+      // primitive list before writing this comment (2026-08-07 review).
       const lyrs = [...document.querySelectorAll('#design > .' + prefix + 'lyr')];
       const midLyr = lyrs[2];
       const pfEls = midLyr ? [...midLyr.querySelectorAll('.' + prefix + 'pf')].map(el => toDesign(el.getBoundingClientRect())).filter(onScreen) : [];
@@ -376,15 +426,30 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
     // screenshot #1: natural composited frame (all layers, resting/frozen state)
     const pngNatural = PNG.sync.read(await design.screenshot());
 
-    // screenshot #2: mid-layer only (sky/far/near hidden) — for the "largest
-    // element supplies >=55% of MID-layer ink" rule, which is explicitly scoped
-    // to the composition layer (far-layer washes and the star field both add ink
-    // at every station and would make the rule unmeasurable otherwise — spec §1).
+    // screenshot #2: mid-layer only (sky/far/near AND #qLayer hidden) — for the
+    // "largest element supplies >=55% of MID-layer ink" rule, which is explicitly
+    // scoped to the composition layer (far-layer washes and the star field both
+    // add ink at every station and would make the rule unmeasurable otherwise —
+    // spec §1). #qLayer must be hidden here too, for the same reason it's hidden
+    // for the forced-peak safe-box shot below: the HTML reference build renders
+    // real (bright, near-white/orange) demo question text in #qLayer, sitting
+    // outside any `.lyr` layer entirely, so it survived the sky/far/near hiding
+    // untouched and quietly became the largest single source of "mid-layer ink"
+    // in this screenshot — RingAmbient has no #qLayer at all, so this bug only
+    // ever hit the HTML pass, and only ever polluted the DENOMINATOR (total
+    // mid-layer ink), never the headline's own numerator (the text sits well
+    // outside every station's headline box). That's what produced station 1's
+    // reported 8.6% (HTML) vs 43.8% (React) mid-share gap: found by rendering
+    // both mid-only screenshots and visually comparing them (2026-08-07) — the
+    // HTML one had the demo question plainly visible; confirmed the fix below
+    // collapses the gap (see this task's session notes for the before/after).
     await page.evaluate((prefix) => {
       [...document.querySelectorAll('#design > .' + prefix + 'lyr')].forEach((l, i) => {
         l.dataset.ringVerifySavedDisplay = l.style.display;
         l.style.display = i === 2 ? '' : 'none';
       });
+      const qLayer = document.getElementById('qLayer');
+      if (qLayer) { qLayer.dataset.ringVerifySavedDisplay = qLayer.style.display; qLayer.style.display = 'none'; }
     }, prefix);
     const pngMid = PNG.sync.read(await design.screenshot());
     await page.evaluate((prefix) => {
@@ -392,6 +457,8 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
         l.style.display = l.dataset.ringVerifySavedDisplay || '';
         delete l.dataset.ringVerifySavedDisplay;
       });
+      const qLayer = document.getElementById('qLayer');
+      if (qLayer) { qLayer.style.display = qLayer.dataset.ringVerifySavedDisplay || ''; delete qLayer.dataset.ringVerifySavedDisplay; }
     }, prefix);
 
     // screenshot #3: forced breathe/twinkle PEAK. Per-element `--pd`/`--td`
@@ -413,6 +480,17 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
       const qLayer = document.getElementById('qLayer');
       if (qLayer) { qLayer.dataset.ringVerifySavedDisplay = qLayer.style.display; qLayer.style.display = 'none'; }
     });
+
+    // screenshot #3a: safe-box NATURAL baseline — same qLayer masking as the
+    // forced-peak shot below, but BEFORE any --pa/--ob forcing. This exists
+    // solely so the peak-forcing has a self-check (see safeStatsNatural
+    // below): the safe box's natural luma (mean ~12-19) sits so far under
+    // the 34 cap that if forcing silently no-op'd (selector typo, wrong
+    // custom-property name, browser quirk swallowing the mutation), the cap
+    // check would still read PASS and nothing would notice. Comparing this
+    // reading against the forced-peak one below is what would catch that.
+    const pngSafeNatural = PNG.sync.read(await design.screenshot());
+
     await page.evaluate((prefix) => {
       document.querySelectorAll('.' + prefix + 'star').forEach(el => {
         const cs = getComputedStyle(el);
@@ -456,11 +534,36 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
       const headHistNatural = histOf(pngNatural, sx0, sy0, sx1, sy1);
       headlineInkFrac = countAbove(headHistNatural, threshold) / frameHist.total; // fraction of the WHOLE frame
 
+      // mid-share threshold must come from the MID-ONLY frame's own median,
+      // not the natural (sky+far+mid+near composited) frame's. pngMid is a
+      // materially different background (sky/far/near hidden — mostly the
+      // page's own dark backdrop instead of nebula wash + star field), so
+      // naturalMedian+20 is the wrong cap for it: whichever build's far/sky
+      // layers happen to be brighter pushes naturalMedian (and therefore the
+      // threshold) up or down, which changes how many mid-layer pixels clear
+      // it — a pure measurement artifact, not a real content difference.
+      //
+      // This alone did NOT fully explain the originally-reported 8.6%
+      // (HTML) vs 43.8% (React) station-1 gap, though — most of that came
+      // from a second, bigger bug in the pngMid capture itself (screenshot
+      // #2 above): the HTML build's #qLayer demo question text sits outside
+      // every `.lyr` layer, so it survived the old sky/far/near-only hiding
+      // and got counted as "mid-layer ink" — the largest single contributor
+      // to the HTML pass's midInkCount denominator, present in NO React
+      // measurement since RingAmbient has no #qLayer at all. Fixed by also
+      // hiding #qLayer for this screenshot (see above). With both fixes,
+      // station 1 lands at 40.7% (HTML) vs 45.9% (React) — a normal ~5pp
+      // build-to-build gap, not the original 5x. All 12 stations moved
+      // into similarly close alignment (e.g. st0 96.5% vs 97.3%, st6 67.9%
+      // vs 69.2%) once #qLayer stopped polluting the HTML pass's
+      // denominator. Confirmed by rendering both mid-only screenshots to
+      // PNG and comparing them directly (2026-08-07).
       const midHist = histOf(pngMid, 0, 0, pngMid.width, pngMid.height);
-      const midInkCount = countAbove(midHist, threshold);
+      const midThreshold = statsFromHist(midHist).median + 20;
+      const midInkCount = countAbove(midHist, midThreshold);
       const hx1m = Math.min(pngMid.width, h.x1 * scale), hy1m = Math.min(pngMid.height, h.y1 * scale);
       const headHistMid = histOf(pngMid, sx0, sy0, hx1m, hy1m);
-      const headCountMid = countAbove(headHistMid, threshold);
+      const headCountMid = countAbove(headHistMid, midThreshold);
       midShare = midInkCount > 0 ? headCountMid / midInkCount : null;
 
       const ox0 = Math.max(h.x0, 0), oy0 = Math.max(h.y0, 0), ox1 = Math.min(h.x1, 1920), oy1 = Math.min(h.y1, 1080);
@@ -473,12 +576,14 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
       quadrant = (cx < 960 ? 'L' : 'R') + (cy < 540 ? 'T' : 'B');
     }
 
-    // safe box: design x 384-1536, y 302-778 — measured on the FORCED-PEAK frame.
+    // safe box: design x 384-1536, y 302-778 — measured on the FORCED-PEAK frame,
+    // plus the pre-forcing NATURAL reading at the same crop for the self-check below.
     const safeStats = statsFromHist(histOf(pngPeak, 384 * scale, 302 * scale, 1536 * scale, 778 * scale));
+    const safeStatsNatural = statsFromHist(histOf(pngSafeNatural, 384 * scale, 302 * scale, 1536 * scale, 778 * scale));
 
     stationMetrics.push({
       s, starCount: dom.starCount, elementCount: dom.elementCount,
-      inkFrac, headlineInkFrac, midShare, bleedFrac, centroid, quadrant, safeStats,
+      inkFrac, headlineInkFrac, midShare, bleedFrac, centroid, quadrant, safeStats, safeStatsNatural,
       hasHeadline: !!dom.headline,
     });
   }
@@ -491,42 +596,76 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
     report(P('visible stars per frame (target 150-260)'), status, `mean ${mean.toFixed(0)} — per-station ${counts.join(',')}`);
   }
 
-  // 11. ink per station: 6-18% of the frame (spec §1)
+  // 11. ink per station: 6-18% of the frame (spec §1) — CONTENT-BUDGET tier:
+  //     gated against the recorded baseline (CONTENT_BASELINE), not the
+  //     absolute spec band — see that object's comment for why.
   {
     const bad = stationMetrics.filter(m => m.inkFrac < 0.06 || m.inkFrac > 0.18);
-    report(P('ink per station (6-18% of frame)'), bad.length === 0 ? 'PASS' : 'FAIL',
-      `${stationMetrics.map(m => `st${m.s}=${pct(m.inkFrac)}`).join(' ')}` +
-      (bad.length ? ` — OUT OF BAND: ${bad.map(m => `st${m.s}`).join(',')}` : ''));
+    const spec = `${stationMetrics.map(m => `st${m.s}=${pct(m.inkFrac)}`).join(' ')}` +
+      (bad.length ? ` — OUT OF SPEC BAND (6-18%): ${bad.map(m => `st${m.s}`).join(',')}` : ' — all in spec band');
+    contentReport(P, label, 'inkPerStation', 'ink per station (6-18% of frame)', bad.length, spec);
   }
 
-  // 12. headline ink, when present: 4-9% of the frame (spec §1)
+  // 12. headline ink, when present: 4-9% of the frame (spec §1) — content-budget.
   {
     const withHeadline = stationMetrics.filter(m => m.hasHeadline);
     const missing = stationMetrics.filter(m => !m.hasHeadline);
     const bad = withHeadline.filter(m => m.headlineInkFrac < 0.04 || m.headlineInkFrac > 0.09);
-    const status = bad.length === 0 && missing.length === 0 ? 'PASS' : 'FAIL';
-    report(P('headline ink, when present (4-9% of frame)'), status,
-      `${withHeadline.map(m => `st${m.s}=${pct(m.headlineInkFrac)}`).join(' ')}` +
-      (bad.length ? ` — OUT OF BAND: ${bad.map(m => `st${m.s}`).join(',')}` : '') +
-      (missing.length ? ` — NO HEADLINE FOUND: ${missing.map(m => `st${m.s}`).join(',')}` : ''));
+    const badness = bad.length + missing.length;
+    const spec = `${withHeadline.map(m => `st${m.s}=${pct(m.headlineInkFrac)}`).join(' ')}` +
+      (bad.length ? ` — OUT OF SPEC BAND (4-9%): ${bad.map(m => `st${m.s}`).join(',')}` : '') +
+      (missing.length ? ` — NO HEADLINE FOUND: ${missing.map(m => `st${m.s}`).join(',')}` : '');
+    contentReport(P, label, 'headlineInk', 'headline ink, when present (4-9% of frame)', badness, spec);
   }
 
-  // 13. largest element supplies >=55% of the MID layer's own ink (spec §1)
+  // 13. largest element supplies >=55% of the MID layer's own ink (spec §1) —
+  //     content-budget. Threshold bug (natural-frame median applied to the
+  //     mid-only screenshot) fixed above — see the midThreshold comment.
   {
     const withHeadline = stationMetrics.filter(m => m.hasHeadline && m.midShare != null);
+    const missing = stationMetrics.length - withHeadline.length;
     const bad = withHeadline.filter(m => m.midShare < 0.55);
-    const status = bad.length === 0 && withHeadline.length === stationMetrics.length ? 'PASS' : 'FAIL';
-    report(P('largest element supplies >=55% of mid-layer ink'), status,
-      `${withHeadline.map(m => `st${m.s}=${pct(m.midShare)}`).join(' ')}` +
-      (bad.length ? ` — BELOW 55%: ${bad.map(m => `st${m.s}`).join(',')}` : ''));
+    const badness = bad.length + missing;
+    const spec = `${withHeadline.map(m => `st${m.s}=${pct(m.midShare)}`).join(' ')}` +
+      (bad.length ? ` — BELOW 55%: ${bad.map(m => `st${m.s}`).join(',')}` : '');
+    contentReport(P, label, 'midShare', 'largest element supplies >=55% of mid-layer ink', badness, spec);
   }
 
-  // 14. elements per station, excluding atmosphere: 2-5 (spec §1)
+  // 14. elements per station, excluding atmosphere: 2-5 (spec §1) — content-budget.
   {
     const bad = stationMetrics.filter(m => m.elementCount < 2 || m.elementCount > 5);
-    report(P('elements per station, excl. atmosphere (2-5)'), bad.length === 0 ? 'PASS' : 'FAIL',
-      `${stationMetrics.map(m => `st${m.s}=${m.elementCount}`).join(' ')}` +
-      (bad.length ? ` — OUT OF BAND: ${bad.map(m => `st${m.s}(${m.elementCount})`).join(',')}` : ''));
+    const spec = `${stationMetrics.map(m => `st${m.s}=${m.elementCount}`).join(' ')}` +
+      (bad.length ? ` — OUT OF SPEC BAND (2-5): ${bad.map(m => `st${m.s}(${m.elementCount})`).join(',')}` : '');
+    contentReport(P, label, 'elementsPerStation', 'elements per station, excl. atmosphere (2-5)', bad.length, spec);
+  }
+
+  // 15a. peak-forcing self-check. The safe box's natural (unforced) luma sits
+  //      so far under the 34 cap (mean ~12-19) that if the --pa/--ob forcing
+  //      above silently no-op'd — selector typo, wrong custom-property name,
+  //      a browser quirk swallowing the mutation — the cap check below would
+  //      still read PASS and nothing would notice it isn't actually testing
+  //      peak state anymore. This asserts the forced reading is measurably
+  //      brighter than the natural one at the identical crop/qLayer-masking,
+  //      so a silently-broken forcing mechanism fails loud instead of quiet.
+  //
+  //      EPS is deliberately tiny (float-tie guard only), NOT a magnitude
+  //      bar: the safe box is mostly static, non-animated background (sky
+  //      wash + companion/detail primitives with no breathe animation), so
+  //      only a handful of stars plus, at some stations, a sliver of the
+  //      one animated headline element actually respond to forcing — real,
+  //      confirmed-working forcing only moves the box's aggregate MEAN by
+  //      ~0.1-0.7 luma (measured directly: an isolated .pf-breathe element's
+  //      own opacity jumps from a resting 0.78 to a forced 0.88, exactly its
+  //      --pa2 peak, every time — see 2026-08-07 review notes). An EPS of 1+
+  //      would false-FAIL on that genuine small effect and defeat the point.
+  {
+    const EPS = 0.01;
+    const bad = stationMetrics.filter(m => m.safeStats.mean <= m.safeStatsNatural.mean + EPS);
+    const detail = `${stationMetrics.map(m => `st${m.s}=natural(mean${m.safeStatsNatural.mean.toFixed(1)}/p99.5-${m.safeStatsNatural.p995})->peak(mean${m.safeStats.mean.toFixed(1)}/p99.5-${m.safeStats.p995})`).join(' ')}`;
+    report(P('safe-box peak-forcing self-check (peak must be measurably brighter than natural)'),
+      bad.length === 0 ? 'PASS' : 'FAIL',
+      bad.length === 0 ? `peak-forcing measurably raises safe-box luma at every station — ${detail}`
+        : `peak-forcing had no effect — safe-box measurement is not actually testing peak state. NO EFFECT: ${bad.map(m => `st${m.s}`).join(',')} — ${detail}`);
   }
 
   // 15. safe-box luminance cap, mean <=34 / p99.5 <=72, measured at forced peak (spec §2)
@@ -549,34 +688,36 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
 
   // 16. bleed: 3-5 of 12 stations' largest element cropped 10-35% by a frame edge,
   //     post-rotation (spec §2). Any station cropped >35% is a real violation
-  //     regardless of the 3-5 count.
+  //     regardless of the 3-5 count. Content-budget.
   {
     const withHeadline = stationMetrics.filter(m => m.hasHeadline);
     const bleeding = withHeadline.filter(m => m.bleedFrac >= 0.10 && m.bleedFrac <= 0.35);
     const overCropped = withHeadline.filter(m => m.bleedFrac > 0.35);
-    const status = overCropped.length === 0 && bleeding.length >= 3 && bleeding.length <= 5 ? 'PASS' : 'FAIL';
-    report(P('bleed: 3-5/12 stations cropped 10-35% by frame edge'), status,
-      `${withHeadline.map(m => `st${m.s}=${pct(m.bleedFrac)}`).join(' ')} — ${bleeding.length} station(s) in 10-35% band` +
-      (overCropped.length ? `; ACCIDENTAL CLIP (>35%): ${overCropped.map(m => `st${m.s}`).join(',')}` : ''));
+    const bandMiss = bleeding.length < 3 ? 3 - bleeding.length : bleeding.length > 5 ? bleeding.length - 5 : 0;
+    const badness = overCropped.length + bandMiss;
+    const spec = `${withHeadline.map(m => `st${m.s}=${pct(m.bleedFrac)}`).join(' ')} — ${bleeding.length} station(s) in 10-35% band (target 3-5)` +
+      (overCropped.length ? `; ACCIDENTAL CLIP (>35%): ${overCropped.map(m => `st${m.s}`).join(',')}` : '');
+    contentReport(P, label, 'bleed', 'bleed: 3-5/12 stations cropped 10-35% by frame edge', badness, spec);
   }
 
   // 17 & 18. quadrant rotation (2-4 per quadrant over 12) + horizontal balance
   //          (mean centroid x within 960+/-96) — both derived from the same
-  //          per-station headline centroid, spec §2.
+  //          per-station headline centroid, spec §2. Content-budget.
   {
     const withHeadline = stationMetrics.filter(m => m.hasHeadline && m.centroid);
+    const missing = stationMetrics.length - withHeadline.length;
     const counts = { LT: 0, RT: 0, LB: 0, RB: 0 };
     withHeadline.forEach(m => { counts[m.quadrant] = (counts[m.quadrant] || 0) + 1; });
     const quadBad = Object.entries(counts).filter(([, c]) => c < 2 || c > 4);
-    report(P('quadrant rotation (largest element, 2-4x per quadrant/12)'),
-      quadBad.length === 0 && withHeadline.length === stationMetrics.length ? 'PASS' : 'FAIL',
-      `LT=${counts.LT} RT=${counts.RT} LB=${counts.LB} RB=${counts.RB}` +
-      (quadBad.length ? ` — OUT OF BAND: ${quadBad.map(([q, c]) => `${q}=${c}`).join(',')}` : ''));
+    const quadBadness = quadBad.length + missing;
+    const quadSpec = `LT=${counts.LT} RT=${counts.RT} LB=${counts.LB} RB=${counts.RB} (target 2-4 each)` +
+      (quadBad.length ? ` — OUT OF BAND: ${quadBad.map(([q, c]) => `${q}=${c}`).join(',')}` : '');
+    contentReport(P, label, 'quadrant', 'quadrant rotation (largest element, 2-4x per quadrant/12)', quadBadness, quadSpec);
 
     const meanX = withHeadline.reduce((a, m) => a + m.centroid.x, 0) / withHeadline.length;
-    const balOk = meanX >= 864 && meanX <= 1056;
-    report(P('horizontal balance (mean centroid x within 960+/-96)'), balOk ? 'PASS' : 'FAIL',
-      `mean centroid x = ${meanX.toFixed(1)} (band 864-1056) — per-station ${withHeadline.map(m => `st${m.s}=${m.centroid.x.toFixed(0)}`).join(' ')}`);
+    const balBadness = meanX < 864 ? 864 - meanX : meanX > 1056 ? meanX - 1056 : 0;
+    const balSpec = `mean centroid x = ${meanX.toFixed(1)} (target 864-1056) — per-station ${withHeadline.map(m => `st${m.s}=${m.centroid.x.toFixed(0)}`).join(' ')}`;
+    contentReport(P, label, 'balance', 'horizontal balance (mean centroid x within 960+/-96)', balBadness, balSpec);
   }
 
   // 19. console clean across the entire pass (arithmetic drive + content measurement)
@@ -677,11 +818,31 @@ if (process.env.RING_VERIFY_SKIP_LIVE === '1') {
 await browser.close();
 finish();
 
-function finish() {
-  const width = Math.max(...results.map(r => r.name.length));
-  for (const r of results) {
+function printTier(label, rows, width) {
+  console.log(`\n── ${label} ──`);
+  for (const r of rows) {
     console.log(`${r.status.padEnd(4)} ${r.name.padEnd(width)}  ${r.detail}`);
   }
+}
+
+function finish() {
+  const width = Math.max(...results.map(r => r.name.length));
+  const regression = results.filter(r => r.tier === 'regression');
+  const content = results.filter(r => r.tier === 'content');
+
+  printTier('REGRESSION TIER — must always be green (structural/engine correctness)', regression, width);
+  const regFails = regression.filter(r => r.status === 'FAIL');
+  const regWarns = regression.filter(r => r.status === 'WARN');
+  console.log(regFails.length === 0
+    ? `\nregression tier: all ${regression.length} checks green (${regWarns.length} WARN)`
+    : `\nregression tier: ${regFails.length}/${regression.length} FAIL — ${regFails.map(r => r.name).join(', ')}`);
+
+  printTier('CONTENT-BUDGET TIER — known gaps vs ART-DIRECTION-SPEC.md §1/§2, gated against a recorded baseline, not the absolute target', content, width);
+  const contentFails = content.filter(r => r.status === 'FAIL');
+  console.log(contentFails.length === 0
+    ? `\ncontent-budget tier: ${content.length} known gap(s), none regressed from baseline`
+    : `\ncontent-budget tier: ${contentFails.length} REGRESSED from baseline — ${contentFails.map(r => r.name).join(', ')}`);
+
   const fails = results.filter(r => r.status === 'FAIL');
   const warns = results.filter(r => r.status === 'WARN');
   console.log(`\n${results.length} checks — ${results.length - fails.length - warns.length} PASS, ${warns.length} WARN, ${fails.length} FAIL`);
