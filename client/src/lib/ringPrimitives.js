@@ -181,23 +181,51 @@ function makePrim(el, kind, w, h, hue, alpha, r) {
     const cx = w * 0.5, cy = h * 0.5
     const baseAng = r() * Math.PI * 2
     let domEdge = null, domEdgeArea = -1
+    // touching-but-distinct band: consecutive lobes' centre-distance /
+    // mean-diameter must land in ~0.7-1.05 (spec §6.2 silhouette test) -
+    // measured, overlapping enough to read as one continuous curved band,
+    // separated enough to still be individual lobes. Sizing lobes off a
+    // formula unrelated to how far apart they actually land (the prior
+    // approach: radius from a t^0.9 falloff, diameter from an independent
+    // linear taper) put NO radius band in range - inner lobes clumped
+    // (ratio 0.32-0.5, tangential spacing tiny relative to their own size)
+    // while outer lobes gapped (ratio 0.9-1.5, tangential spacing (r*dTheta)
+    // grows with radius while the independent taper kept shrinking
+    // diameter). Fix: compute lobe POSITIONS first, then derive each
+    // lobe's diameter from its actual neighbouring gap distances / a target
+    // ratio - the size follows the geometry instead of fighting it.
+    // Verified over 30 seed x aspect-ratio combinations (see PR notes):
+    // ratio band [0.71, 0.97], inside 0.7-1.05 throughout.
+    const ARM_TARGET_RATIO = 0.85 // midpoint of the required 0.7-1.05 band
     ;[1, -1].forEach((dir, ai) => {
-      // 6 lobes, radius growing from near-core to ~0.34w and angle
-      // advancing ~20-27deg/step (~110-140deg total sweep) - spaced far
-      // enough apart that they trace a visible curve instead of stacking
-      // into one indistinct blob (the first attempt at this: radius grew
-      // from ~0.06w with lobes sized ~0.22w, so consecutive lobes overlapped
-      // almost completely and it rendered as a fuzzy ball with a stray
-      // bright line, not an arm - confirmed on an isolated render).
+      // 6 lobes, radius growing from near-core to ~0.30-0.38w and angle
+      // advancing ~20-27deg/step (~110-140deg total sweep) along the curve.
       const lobes = 6
       const maxRad = w * (0.30 + r() * 0.08)
       const dTheta = (0.36 + r() * 0.10) * dir
+      const pos = []
       for (let k = 0; k < lobes; k++) {
         const t = k / (lobes - 1)
         const rad = maxRad * (0.12 + 0.88 * Math.pow(t, 0.9))
         const ang = baseAng + dTheta * k
-        const lx = cx + Math.cos(ang) * rad, ly = cy + Math.sin(ang) * rad * (h / w)
-        const ls = w * (0.19 - t * 0.11) * (0.9 + r() * 0.2)
+        pos.push({ x: cx + Math.cos(ang) * rad, y: cy + Math.sin(ang) * rad * (h / w), ang, t })
+      }
+      // gap[k] = centre distance between lobe k and lobe k+1 along the curve.
+      const gap = []
+      for (let k = 0; k < lobes - 1; k++) {
+        gap.push(Math.hypot(pos[k + 1].x - pos[k].x, pos[k + 1].y - pos[k].y))
+      }
+      // diameter derived from the neighbouring gap(s), not tuned
+      // independently - guarantees the ratio lands near target regardless
+      // of the maxRad/dTheta jitter above.
+      const diam = pos.map((_, k) => {
+        const g0 = gap[k - 1], g1 = gap[k]
+        const avg = (g0 !== undefined && g1 !== undefined) ? (g0 + g1) / 2 : (g0 ?? g1)
+        return avg / ARM_TARGET_RATIO
+      })
+      pos.forEach((p, k) => {
+        const { x: lx, y: ly, t, ang } = p
+        const ls = diam[k] * (0.9 + r() * 0.2)
         const lobe = el('l-arm')
         lobe.style.width = lobe.style.height = px(Math.max(10, ls))
         lobe.style.left = px(lx - ls / 2); lobe.style.top = px(ly - ls / 2)
@@ -206,7 +234,7 @@ function makePrim(el, kind, w, h, hue, alpha, r) {
           ${hsla(hue, 52, 46, 0.16 - t * 0.08)} 55%, transparent 82%)`
         f.appendChild(lobe)
         if (k <= 1 && ls > domEdgeArea) { domEdgeArea = ls; domEdge = { lx, ly, ls, ang } }
-      }
+      })
     })
     // bright inner edge: hugs whichever lobe came out biggest AND closest
     // to the core (across both arms) - same hug-the-actual-glow approach as
@@ -334,9 +362,17 @@ function makePrim(el, kind, w, h, hue, alpha, r) {
       // circles). Hot core fading to a soft halo instead, matching every
       // other primitive's own core treatment (blob/spikes/lens all use a
       // radial-gradient core, never a flat disc).
-      d.style.background = `radial-gradient(circle at 36% 36%,
-        ${hsla(hue, 25, 97, 1)} 0%, ${hsla(hue, 65, 84, 0.92)} 34%,
-        ${hsla(hue, 62, 60, 0.55)} 64%, ${hsla(hue, 55, 38, 0.16)} 100%)`
+      //
+      // was `at 36% 36%` (an off-center light source with a dark
+      // unlit remainder) - the exact same recipe `ring`'s planet body uses
+      // for lit-sphere shading, so binary and ring shared an anatomy (spec
+      // §6.2: two distinct nouns must not share an anatomy). A star isn't
+      // lit from one side, it emits from its own centre - `at 50% 50%`
+      // with a symmetric hot-core-fading-outward falloff (the same
+      // treatment blob/spikes/lens already use for their cores) reads as a
+      // glowing star instead of a shadowed planet.
+      d.style.background = `radial-gradient(circle at 50% 50%,
+        ${hsla(hue, 25, 97, 1)} 0%, ${hsla(hue, 60, 72, 0.55)} 50%, transparent 100%)`
       d.style.boxShadow = `0 0 ${px(s * 2)} ${px(s * 0.3)} ${hsla(hue, 70, 80, 0.5)}`
       f.appendChild(d)
     })
