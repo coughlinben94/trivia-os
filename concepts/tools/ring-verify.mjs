@@ -41,6 +41,7 @@ import { createServer } from 'node:http';
 import { readFile, readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const readFileAsync = promisify(readFile);
 
@@ -64,7 +65,10 @@ const source = readFileSync(absPath, 'utf8');
 // (this script's cwd, matching how it's invoked - `node
 // concepts/tools/ring-verify.mjs concepts/world-07-ring.html` from the repo
 // root) for the duration of this script's run only.
-const REPO_ROOT = process.cwd();
+// Was process.cwd() - worked only when invoked from the repo root. Anchored
+// to this file's own location instead (concepts/tools/ -> repo root), so the
+// gate's static server roots correctly regardless of invocation directory.
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript' };
 function startStaticServer(rootDir) {
   return new Promise((resolve) => {
