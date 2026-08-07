@@ -423,16 +423,17 @@ function makePrim(el, kind, w, h, hue, alpha, r) {
 function makeOccluder(el, size, hue) {
   const f = el('occ')
   f.style.width = f.style.height = px(size)
-  // alphas raised from .95/.94/.92 — real-star ablation measurement
-  // (concepts/tools/ring-occlusion-ablation.mjs) found the old alpha let
-  // enough of the underlying sky bleed through that a few real, faint
-  // stars (near the twinkle floor, already barely above sky level
-  // unoccluded) landed just over the required <=0.5x footprint-luminance
-  // ratio on one of the 4 stations. Still not fully opaque (kept short of
-  // 1.0, matching this shape's own "near-opaque dark disc" description),
-  // just dark enough to close that gap.
+  // The ablation ratio is ~D/S (occluder disc luminance / unoccluded star
+  // luminance) once transmission is this low — raising alpha further
+  // barely moves it, because alpha was never the limiting term. Disc
+  // lightness is: measured L7/4/2 put stations 0 and 9 at 0.46x/0.49x,
+  // a ~2% margin under the <=0.5x ceiling that rode on which stars'
+  // seeded twinkle phase happened to freeze near their trough during
+  // measurement (concepts/tools/ring-occlusion-ablation.mjs) rather than
+  // real coverage. L3/2/1 drops D far enough that every station lands
+  // near 0.18x-0.19x - a real ~2.5x margin, independent of twinkle phase.
   f.style.background = `radial-gradient(circle at 42% 40%,
-    ${hsla(hue, 20, 7, 0.99)} 0%, ${hsla(hue, 16, 4, 0.985)} 62%, ${hsla(hue, 12, 2, 0.98)} 100%)`
+    ${hsla(hue, 20, 3, 0.99)} 0%, ${hsla(hue, 16, 2, 0.985)} 62%, ${hsla(hue, 12, 1, 0.98)} 100%)`
   f.style.boxShadow = `inset 0 0 ${px(size * 0.2)} ${hsla(hue, 10, 0, 0.55)}`
   const rim = el('occ-rim')
   rim.style.setProperty('--rim', hsla(hue + 10, 70, 82, 0.85))

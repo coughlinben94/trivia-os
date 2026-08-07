@@ -77,6 +77,7 @@ ${ringCss('ring-')}
 @media (prefers-reduced-motion:reduce){
   .ring-surge{transition:none!important}
   .ring-star,.ring-pf{animation-play-state:paused!important}
+  .ring-drift{animation-play-state:paused!important}
 }
 `
 
