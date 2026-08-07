@@ -395,8 +395,12 @@ function buildLayerContent(host, L){
       const lou = loudness(i);
       const x0 = i * ENGINE.W;
 
-      /* headline form — 576–880px longest edge, scaled by loudness */
-      const hw = lerp(576, 880, lou*0.75 + r()*0.25);
+      /* headline form — 576-880px longest edge, full tier range regardless
+         of loudness (was lerp(576,880, lou*0.75+r()*0.25) — quiet stations
+         got stuck near the 576 floor, loud ones near 880, so a quiet
+         station read as a small/sparse frame instead of "large and dim."
+         Loudness now speaks through alpha/detail-count only, below. */
+      const hw = lerp(576, 880, r());
       const hh = st.prim === 'streak' ? hw*0.30
                : st.prim === 'ribbon' ? hw*0.34
                : hw*(0.62 + r()*0.26);
