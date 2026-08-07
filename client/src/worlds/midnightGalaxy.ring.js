@@ -38,6 +38,17 @@ export const midnightGalaxyRing = {
     floorContrast(theme.colors.highlight, [theme.colors.bgDeep], 7),
     floorContrast(theme.colors.text ?? theme.colors.highlight, [theme.colors.bgDeep], 7),
   ],
+  // Two anchors, not one 34°-of-highlight window (spec §4): Midnight Galaxy
+  // is genuinely a violet/purple family (the theme's own highlight, 276°)
+  // plus a cool-blue family that's already live across three stations
+  // (comet 208°, binary pair 214°, open cluster 224°) — stretching one
+  // window to cover both would either exclude the blues or blur the two
+  // apart. orange nebula/supernova/rose nebula stay the world's one warm
+  // complementary accent (≤3 stations, cap already met — see below).
+  hueAnchors: [
+    { deg: 276, window: 25 }, // violet/purple - the theme's own highlight
+    { deg: 214, window: 25 }, // cool blue - comet, open cluster, binary pair already live here
+  ],
   stations: [
     { key: 'orange nebula', prim: 'blob', hue: 28, accent: true },
     { key: 'star cluster', prim: 'dots', hue: 268, accent: false },
@@ -48,8 +59,27 @@ export const midnightGalaxyRing = {
     { key: 'dust ribbon', prim: 'ribbon', hue: 264, accent: false },
     { key: 'binary pair', prim: 'binary', hue: 214, accent: false },
     { key: 'rose nebula', prim: 'blob', hue: 330, accent: true },
-    { key: 'ringed lens', prim: 'ring', hue: 250, accent: false },
+    // was 250° — 26° from the violet anchor, 1° outside its own window and
+    // not marked accent; a second, unflagged outlier the spec-coverage
+    // audit missed. Nudged 6° (imperceptible) to land inside the window
+    // with margin instead of introducing a 4th accent for a 1° miss.
+    { key: 'ringed lens', prim: 'ring', hue: 256, accent: false },
     { key: 'open cluster', prim: 'dots', hue: 224, accent: false },
-    { key: 'green nebula', prim: 'blob', hue: 140, accent: false },
+    // was 'green nebula' at 140° — 74° from the nearer (blue) anchor, the
+    // spec-coverage audit's flagged outlier. Marking it a 3rd accent isn't
+    // available: orange nebula/supernova/rose nebula already fill the
+    // ≤3-station accent budget, and green would be a second, unrelated
+    // complementary direction on top of that one (the spec allows ONE
+    // deliberate opposite, not two). Re-hued into the blue anchor's window,
+    // but stopped at its cool (cyan) edge rather than jumping to violet —
+    // pulling it to 250-260° would sit it directly on top of ringed lens/
+    // dust ribbon/spiral galaxy/violet nebula, an already-dense 5-station
+    // cluster, and would flatten exactly the "different part of the sky"
+    // reader review praised. At 196° it's still legibly cooler/greener
+    // than the violet cluster, 12° clear of comet (208°, a different
+    // primitive/silhouette anyway), and inside the blue anchor's window
+    // with an 18° margin. Renamed to match — a teal/cyan blob still
+    // labelled "green" would be a stale key.
+    { key: 'teal nebula', prim: 'blob', hue: 196, accent: false },
   ],
 }
