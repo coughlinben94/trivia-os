@@ -36,11 +36,26 @@ export function px(n) { return n.toFixed(1) + 'px' }
 
 export function hsla(h, s, l, a) { return `hsla(${h},${s}%,${l}%,${a})` }
 
-// bandY: places an element's TOP edge such that its CENTROID never falls
-// inside engine.SAFE, for any element height h - clamped by centroid, not a
-// fixed y-offset (see ART-DIRECTION-SPEC.md §2; this fixed a real safe-box
-// violation earlier this session where a tall headline's centroid could
-// land inside the box under the old fixed-offset constants).
+// bandY: places an element's TOP edge such that its full bounding box - not
+// just its centroid - never falls inside engine.SAFE, for any element height
+// h, with an 8px margin (see ART-DIRECTION-SPEC.md §2; this fixed a real
+// safe-box violation earlier this session where a tall headline's centroid
+// could land inside the box under the old fixed-offset constants).
+//
+// Was centroid-only (margin applied to `h/2`, guaranteeing only the middle
+// point stayed clear) until 2026-08-07's investigation of a real, measured
+// safe-box p99.5 overage on stations 0/9: the occluder's rim border sits
+// flush with its own bbox edge (border:5px solid, inset:0); 'blob's three
+// child lobes are ROTATED, so their real axis-aligned bbox is bigger than
+// the declared w/h; 'ring's border is a near-full-alpha 90%-of-bbox circle.
+// All three primitive kinds put real, bright ink within a few px of their
+// own declared box edge - the centroid-only rule let up to h/2 of any of
+// them bleed straight into the safe box. Rather than special-case which
+// primitive kinds are "soft enough" (a growing, easy-to-get-wrong list -
+// this investigation alone found 3 different offenders across headline,
+// companion, far-layer wash, and the occluder, all under the SAME bug),
+// every element's real edge now clears the box, full stop - measured to
+// drop p99.5 across all 12 stations, not just the 2 that were failing.
 //
 // forceUpper (optional): pins the upper/lower band choice instead of
 // drawing it (still consumes one r() call either way - callers that pass
@@ -58,10 +73,10 @@ function bandY(engine, r, h, forceUpper) {
   const upper = forceUpper !== undefined ? forceUpper : r() < 0.5
   const margin = 8
   if (upper) {
-    const maxY = top - h / 2 - margin, minY = -h * 0.10
+    const maxY = top - h - margin, minY = -h * 0.10
     return maxY <= minY ? maxY : minY + (maxY - minY) * r()
   }
-  const minY = bot - h / 2 + margin, maxY = H - h * 0.88
+  const minY = bot + margin, maxY = H - h * 0.88
   return minY >= maxY ? minY : minY + (maxY - minY) * r()
 }
 
