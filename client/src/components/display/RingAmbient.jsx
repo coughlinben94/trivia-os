@@ -26,7 +26,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, rng, lerp } from '../../lib/ringEngine.js'
 import { EASE_SURGE } from '../../lib/easings.js'
-import { el, px, hsla, makePrim, bandY, buildStars } from '../../lib/ringPrimitives.js'
+import { ringDom, px, ringCss } from '../../lib/ringPrimitives.js'
 
 // ENGINE — engine-fixed, identical for every world; never a prop (a world
 // never sets any of this, same as the reference build's own ENGINE const).
@@ -49,55 +49,29 @@ const ENGINE = {
   STAR_ALPHA_FLOOR: 0.28,
 }
 
-// ── CSS — verbatim port of the reference build's chassis/primitive/star
-// rules (the exact class list named in the task: .ring-lyr, .ring-surge,
+// ── CSS — the chassis/primitive/star rules (.ring-lyr, .ring-surge,
 // .ring-void, .ring-star, .ring-pf, .ring-b-lobe, .ring-b-rim, .ring-d-glow,
 // .ring-s-core, .ring-s-spk, .ring-l-disc, .ring-l-lane, .ring-l-core,
-// .ring-k-tail, .ring-k-head, .ring-r-body, @keyframes ringTw/ringPfBreathe
-// — all prefixed to match ParticleBackground.jsx's convention (kebab-case
-// classes, camelCase keyframes, e.g. .hw-anim / ambientBreathe / hwFogR).
-// `.stage` is renamed `.ring-stage` — that class isn't part of the
-// ring-verify.mjs contract (only #design, .void, .star, .surge,
-// window.__world are), and "stage" is generic enough to risk colliding with
-// unrelated app CSS. ──
+// .ring-k-tail, .ring-k-head, .ring-r-body, .ring-rg-ring, @keyframes
+// ringTw/ringPfBreathe) now come from client/src/lib/ringPrimitives.js's
+// ringCss('ring-') — the same source concepts/world-07-ring.html's
+// unprefixed <style> injects via ringCss(''). These were hand-duplicated
+// against that page's <style> block (in sync, but nothing enforced that —
+// the same bug class the makePrim extraction already fixed once).
+//
+// `.ring-stage` and its `.go` transition trigger stay local — that class
+// isn't part of the ring-verify.mjs contract (only #design, .void, .star,
+// .surge, window.__world are, and this component isn't even wired into
+// that gate — see the file header), "stage" is generic enough to risk
+// colliding with unrelated app CSS, and the easing here comes from this
+// app's own client/src/lib/easings.js rather than the reference build's
+// hardcoded curve. The reduced-motion query stays local too: it's a
+// deliberate subset of the reference build's (no `.shoot`, no `.stage.rm`
+// manual toggle — both belong to systems out of scope for this port, see
+// the file header). ──
 const RING_CSS = `
-.ring-lyr{position:absolute;inset:0;overflow:hidden}
-.ring-surge{position:absolute;left:0;top:0;width:100%;height:100%;
-  will-change:transform;transform:translate3d(0,0,0)}
+${ringCss('ring-')}
 .ring-stage.go .ring-surge{transition:transform var(--surge-ms) cubic-bezier(${EASE_SURGE.join(',')})}
-
-.ring-void{position:absolute;inset:0;
-  background:radial-gradient(ellipse 138% 128% at 50% 48%,
-    var(--sky-1) 0%, var(--sky-2) 46%, var(--sky-3) 78%, var(--sky-4) 100%)}
-
-.ring-star{position:absolute;border-radius:50%;background:var(--sc);
-  animation:ringTw var(--tp) ease-in-out infinite;animation-delay:var(--td)}
-@keyframes ringTw{0%,100%{opacity:var(--ob)}50%{opacity:var(--op)}}
-
-.ring-pf{position:absolute;pointer-events:none;
-  animation:ringPfBreathe var(--pb) ease-in-out infinite;animation-delay:var(--pd)}
-@keyframes ringPfBreathe{0%,100%{opacity:var(--pa)}50%{opacity:var(--pa2)}}
-
-.ring-b-lobe{position:absolute;border-radius:50%}
-.ring-b-rim{position:absolute;border-radius:50%;border:4px solid var(--rim);
-  border-right-color:transparent;border-bottom-color:transparent}
-
-.ring-d-glow{position:absolute;inset:0;border-radius:50%}
-
-.ring-s-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fffaf0}
-.ring-s-spk{position:absolute;left:50%;top:50%;transform-origin:50% 50%}
-
-.ring-l-disc{position:absolute;inset:0;border-radius:50%}
-.ring-l-lane{position:absolute;left:6%;right:6%;top:46%;height:8%;border-radius:50%;
-  background:rgba(4,3,14,.62)}
-.ring-l-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fff6e6}
-
-.ring-k-tail{position:absolute;left:0;top:50%;border-radius:999px}
-.ring-k-head{position:absolute;right:-4px;top:50%;border-radius:50%}
-
-.ring-r-body{position:absolute;inset:0;border-radius:50%}
-
-.ring-rg-ring{position:absolute;border-radius:50%}
 
 @media (prefers-reduced-motion:reduce){
   .ring-surge{transition:none!important}
@@ -105,11 +79,15 @@ const RING_CSS = `
 }
 `
 
-// makePrim/bandY/buildStars now live in client/src/lib/ringPrimitives.js —
-// imported above with the "ring-" classPrefix and the local ENGINE passed
-// explicitly. See that module for the full primitive-rendering logic
-// (blob/dots/spikes/lens/streak/ribbon/ring/binary) — ported verbatim, one
-// source now shared with concepts/world-07-ring.html.
+// dom.el/dom.makePrim/dom.bandY/dom.buildStars (and the plain px export)
+// come from client/src/lib/ringPrimitives.js's ringDom('ring-', ENGINE)
+// call below. ENGINE (unlike worldData) is module-scoped, not a prop, so
+// dom can be too — every call site in this file, in buildLayerContent and
+// in the mount effect, goes through it rather than ever passing the
+// "ring-" prefix by hand. See that module for the full primitive-rendering
+// logic (blob/dots/spikes/lens/streak/ribbon/ring/binary) — one source now
+// shared with concepts/world-07-ring.html.
+const dom = ringDom('ring-', ENGINE)
 
 // ═══ BUILD ═══ dispatches per-layer content building.
 function buildLayerContent(engine, world, arc, host, L) {
@@ -117,15 +95,15 @@ function buildLayerContent(engine, world, arc, host, L) {
 
   if (L.id === 'far') {
     /* slow, dense star field + one wide soft wash per two stations */
-    buildStars('ring-', engine, host, period, 140, 1.0, 0xA11CE)
+    dom.buildStars(host, period, 140, 1.0, 0xA11CE)
     for (let i = 0; i < 6; i++) {
       const r = rng(i, 0xFA2)
       const st = world.stations[(i * 2) % engine.PANES]
       const lou = loudnessOf(arc, (i * 2) % engine.PANES)
       const w = lerp(620, 900, r()), h = w * (0.52 + r() * 0.22)
-      const f = makePrim('ring-', 'blob', w, h, st.hue, lerp(0.16, 0.30, lou), r)
+      const f = dom.makePrim('blob', w, h, st.hue, lerp(0.16, 0.30, lou), r)
       f.style.left = px(i * (period / 6) + r() * (period / 6 - w))
-      f.style.top = px(bandY(engine, r, h))
+      f.style.top = px(dom.bandY(r, h))
       host.appendChild(f)
     }
   }
@@ -145,7 +123,7 @@ function buildLayerContent(engine, world, arc, host, L) {
         : st.prim === 'ribbon' ? hw * 0.34
           : hw * (0.62 + r() * 0.26)
       const alpha = lerp(0.34, 0.55, lou)
-      const head = makePrim('ring-', st.prim, hw, hh, st.hue, alpha, r)
+      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, r)
       // was lerp(0.06, 0.44, r()) — capped well below the frame's full
       // width, so a centroid can never land right of ~x900. Measured mean
       // centroid x = 692 against a frame center of 960 (spec §2, appendix
@@ -156,7 +134,7 @@ function buildLayerContent(engine, world, arc, host, L) {
       // band, so this was iterated per §2's gate, not shipped on the first
       // guess.
       head.style.left = px(x0 + lerp(0.08, 0.98, r()) * (engine.W - hw))
-      head.style.top = px(bandY(engine, r, hh))
+      head.style.top = px(dom.bandY(r, hh))
       host.appendChild(head)
 
       /* one feature-tier companion in the opposite band */
@@ -164,19 +142,19 @@ function buildLayerContent(engine, world, arc, host, L) {
       const ck = others[Math.floor(r() * others.length)]
       const cw = lerp(230, 420, r())
       const ch = ck === 'streak' ? cw * 0.30 : cw * (0.60 + r() * 0.28)
-      const comp = makePrim('ring-', ck, cw, ch, st.hue + (st.accent ? 168 : lerp(-22, 22, r())),
+      const comp = dom.makePrim(ck, cw, ch, st.hue + (st.accent ? 168 : lerp(-22, 22, r())),
         lerp(0.30, 0.48, lou) * 0.8, r)
       comp.style.left = px(x0 + lerp(0.08, 0.98, r()) * (engine.W - cw))
-      comp.style.top = px(bandY(engine, r, ch))
+      comp.style.top = px(dom.bandY(r, ch))
       host.appendChild(comp)
 
       /* detail-tier specks, count follows loudness */
       const dn = Math.round(lerp(1, 4, lou))
       for (let k = 0; k < dn; k++) {
         const dw = lerp(58, 154, r())
-        const d = makePrim('ring-', 'dots', dw, dw * 0.9, st.hue, lerp(0.34, 0.60, lou) * 0.7, r)
+        const d = dom.makePrim('dots', dw, dw * 0.9, st.hue, lerp(0.34, 0.60, lou) * 0.7, r)
         d.style.left = px(x0 + r() * (engine.W - dw))
-        d.style.top = px(bandY(engine, r, dw * 0.9))
+        d.style.top = px(dom.bandY(r, dw * 0.9))
         host.appendChild(d)
       }
     }
@@ -184,7 +162,7 @@ function buildLayerContent(engine, world, arc, host, L) {
 
   else if (L.id === 'near') {
     /* fast and anonymous — the layer that sells the turn */
-    buildStars('ring-', engine, host, period, 26, 1.5, 0xBEEF)
+    dom.buildStars(host, period, 26, 1.5, 0xBEEF)
   }
 }
 
@@ -226,10 +204,10 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
     const arc = buildArc(ENGINE, worldData)
 
     // sky layer — bare, never transformed, never offset
-    const sky = el('ring-', 'lyr')
-    const skyInner = el('ring-', 'surge')
+    const sky = dom.el('lyr')
+    const skyInner = dom.el('surge')
     skyInner.style.transition = 'none'
-    skyInner.appendChild(el('ring-', 'void'))
+    skyInner.appendChild(dom.el('void'))
     sky.appendChild(skyInner)
     design.appendChild(sky)
 
@@ -238,15 +216,15 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
       if (L.id === 'sky') continue
       const cyl = cylinderOf(ENGINE, L)
       const period = authorPeriodOf(ENGINE, L)
-      const lyr = el('ring-', 'lyr')
-      const surge = el('ring-', 'surge')
+      const lyr = dom.el('lyr')
+      const surge = dom.el('surge')
       surge.style.width = px(cyl + ENGINE.W)
       lyr.appendChild(surge)
       design.appendChild(lyr)
 
       // author one period, then repeat it m+1 times. The extra copy covers
       // the window that hangs past the cylinder just before it wraps.
-      const proto = el('ring-', ''); proto.style.position = 'absolute'; proto.style.inset = '0'
+      const proto = dom.el(''); proto.style.position = 'absolute'; proto.style.inset = '0'
       buildLayerContent(ENGINE, worldData, arc, proto, L)
       for (let k = 0; k <= L.m; k++) {
         const copy = k === 0 ? proto : proto.cloneNode(true)

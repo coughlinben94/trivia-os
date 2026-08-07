@@ -9,31 +9,28 @@
 // because its copy of makePrim had no branch for a primitive the world data
 // required. One source now; both builds consume it.
 //
-// classPrefix lets each embedding context keep its own CSS-class convention
-// without this module caring: concepts/world-07-ring.html uses unprefixed
-// classes (.b-lobe, .b-rim); RingAmbient.jsx prefixes everything (.ring-b-lobe,
-// .ring-b-rim) to avoid colliding with the rest of the app's CSS. Every
-// element this module creates goes through prefix(name) instead of a literal
-// string.
+// ringDom(prefix, engine) is the ONLY way a consumer touches this module's
+// class-prefixed builders. It closes over prefix/engine once and hands back
+// el/makePrim/bandY/buildStars already bound, so no call site downstream
+// ever passes a literal prefix string again. The prior design threaded
+// `prefix` through every call site by hand (~21 in the HTML, ~13 in the
+// JSX) - a call written the old one-argument way (`el('b-lobe')`, which
+// under the old two-arg signature meant prefix='b-lobe', name=undefined)
+// silently produced a classless, invisible div: no error, exactly the
+// "renders as an empty thing" bug class this module exists to prevent.
+// ringDom() makes that call shape impossible - there is no bare `el` to
+// misuse.
 //
-// engine is passed explicitly (not closed over) because this module has no
-// access to either caller's local ENGINE constant - world-07-ring.html's own
-// ENGINE stays a same-file const (this module is a separate script context
-// once imported), and RingAmbient.jsx already took this same approach before
-// the extraction (its bandY/buildStars already accepted engine as a param).
+// engine is bound the same way (not read off a caller's module-scope
+// ENGINE const) because this module has no access to either caller's local
+// ENGINE - world-07-ring.html's own ENGINE stays a same-file const (this
+// module is a separate script context once imported), and RingAmbient.jsx
+// already took this same approach before the extraction (its bandY/
+// buildStars already accepted engine as a param).
 //
 // rng/lerp come from client/src/lib/ringEngine.js rather than being
-// redefined here - that module already has them (RingAmbient.jsx already
-// imports both from there; world-07-ring.html's own local rng/lerp are the
-// numerically identical hash32-based implementation, so importing here
-// instead of duplicating is not a behavior change).
+// redefined here - that module already has them.
 import { rng, lerp } from './ringEngine.js'
-
-export function el(prefix, name) {
-  const d = document.createElement('div')
-  if (name) d.className = prefix + name
-  return d
-}
 
 export function px(n) { return n.toFixed(1) + 'px' }
 
@@ -44,7 +41,7 @@ export function hsla(h, s, l, a) { return `hsla(${h},${s}%,${l}%,${a})` }
 // fixed y-offset (see ART-DIRECTION-SPEC.md §2; this fixed a real safe-box
 // violation earlier this session where a tall headline's centroid could
 // land inside the box under the old fixed-offset constants).
-export function bandY(engine, r, h) {
+function bandY(engine, r, h) {
   const H = engine.H, top = engine.SAFE.y * H, bot = (engine.SAFE.y + engine.SAFE.h) * H
   const upper = r() < 0.5, margin = 8
   if (upper) {
@@ -57,8 +54,11 @@ export function bandY(engine, r, h) {
 
 // ═══ PRIMITIVES ═══ the engine renders these; a world picks one and a hue.
 // Each guarantees a hard edge structurally, so nothing can turn to mush.
-function makePrim(prefix, kind, w, h, hue, alpha, r) {
-  const f = el(prefix, 'pf')
+// `el` is a bound element factory (see ringDom below) that already carries
+// its consumer's class prefix - every call in this function is just
+// el('some-class').
+function makePrim(el, kind, w, h, hue, alpha, r) {
+  const f = el('pf')
   f.style.width = px(w); f.style.height = px(h)
   f.style.setProperty('--pa', alpha.toFixed(3))
   f.style.setProperty('--pa2', Math.min(alpha * 1.18, 1).toFixed(3))
@@ -68,7 +68,7 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
   if (kind === 'blob') {
     let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity, domRot = 0, domArea = -1
     for (let i = 0; i < 3; i++) {
-      const L = el(prefix, 'b-lobe')
+      const L = el('b-lobe')
       const lw = w * (0.62 + r() * 0.38), lh = h * (0.55 + r() * 0.45)
       const lx = (w - lw) * r(), ly = (h - lh) * r()
       L.style.left = px(lx); L.style.top = px(ly)
@@ -86,7 +86,7 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
     }
     // core-as-a-region: 8-14% of the cloud's width, positioned inside the
     // real lobe-cluster bbox, soft radial fill (not a flat disc).
-    const core = el(prefix, 's-core')
+    const core = el('s-core')
     const cs = w * (0.08 + r() * 0.06)
     const ccx = lerp(bx0, bx1, 0.3 + r() * 0.4), ccy = lerp(by0, by1, 0.3 + r() * 0.4)
     core.style.width = core.style.height = px(cs)
@@ -97,7 +97,7 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
     // rim: traces the ACTUAL lobe cluster's bounding box, inset to the
     // gradient's own visible radii (56%/44%, matching each lobe's own
     // `ellipse 56% 44%` gradient above), rotated with the dominant lobe.
-    const rim = el(prefix, 'b-rim')
+    const rim = el('b-rim')
     const rw = (bx1 - bx0) * 0.56, rh = (by1 - by0) * 0.44
     const rcx = (bx0 + bx1) / 2, rcy = (by0 + by1) / 2
     rim.style.left = px(rcx - rw / 2); rim.style.top = px(rcy - rh / 2)
@@ -108,7 +108,7 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
   }
 
   else if (kind === 'dots') {
-    const g = el(prefix, 'd-glow')
+    const g = el('d-glow')
     g.style.background = `radial-gradient(circle closest-side,
       ${hsla(hue, 58, 66, 0.16)} 0%, ${hsla(hue, 50, 52, 0.06)} 48%, transparent 76%)`
     f.appendChild(g)
@@ -116,7 +116,7 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
     for (let i = 0; i < n; i++) {
       const a = r() * Math.PI * 2, rad = Math.pow(r(), 0.55) * 0.46
       const s = 2.0 + r() * 3.4
-      const d = el(prefix, ''); d.style.position = 'absolute'; d.style.borderRadius = '50%'
+      const d = el(''); d.style.position = 'absolute'; d.style.borderRadius = '50%'
       d.style.left = px((0.5 + Math.cos(a) * rad) * w)
       d.style.top = px((0.5 + Math.sin(a) * rad) * h)
       d.style.width = d.style.height = px(s)
@@ -128,13 +128,13 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
   }
 
   else if (kind === 'spikes') {
-    const sh = el(prefix, 'd-glow')
+    const sh = el('d-glow')
     sh.style.background = `radial-gradient(circle closest-side,
       ${hsla(hue, 80, 74, 0.34)} 0%, ${hsla(hue - 10, 70, 58, 0.16)} 26%,
       ${hsla(hue - 30, 60, 44, 0.08)} 52%, transparent 76%)`
     f.appendChild(sh)
     for (let i = 0; i < 6; i++) {
-      const s = el(prefix, 's-spk')
+      const s = el('s-spk')
       const len = w * (i < 2 ? 0.86 : 0.54)
       const th = Math.max(4, w * 0.012) // scales with w, floor 4px
       s.style.width = px(len); s.style.height = px(th)
@@ -143,7 +143,7 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
       s.style.transform = `rotate(${i * 30 + (i < 2 ? 0 : 15)}deg)`
       f.appendChild(s)
     }
-    const c = el(prefix, 's-core')
+    const c = el('s-core')
     const cs = Math.max(16, w * 0.055)
     c.style.width = c.style.height = px(cs)
     c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
@@ -152,7 +152,7 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
   }
 
   else if (kind === 'lens') {
-    const d = el(prefix, 'l-disc')
+    const d = el('l-disc')
     d.style.background = `radial-gradient(ellipse 54% 24% at 50% 50%,
       ${hsla(hue, 60, 74, 0.30)} 0%, ${hsla(hue, 54, 58, 0.15)} 42%, transparent 74%)`
     f.appendChild(d)
@@ -161,11 +161,11 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
     // gives it the contrast delta. Narrowed from the CSS default's 88%
     // width to 55%, centered - the disc's gradient only reads out to
     // roughly half the disc's own width.
-    const lane = el(prefix, 'l-lane')
+    const lane = el('l-lane')
     lane.style.left = '22.5%'; lane.style.right = '22.5%'
     lane.style.boxShadow = `0 -4px 0 0 ${hsla(hue, 60, 70, 0.5)}, 0 4px 0 0 ${hsla(hue, 60, 70, 0.5)}`
     f.appendChild(lane)
-    const c = el(prefix, 'l-core')
+    const c = el('l-core')
     const cs = Math.max(11, w * 0.032)
     c.style.width = c.style.height = px(cs)
     c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
@@ -175,7 +175,7 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
   }
 
   else if (kind === 'streak') {
-    const t = el(prefix, 'k-tail')
+    const t = el('k-tail')
     t.style.width = '100%'; t.style.height = px(Math.max(6, h * 0.14)) // broadens vs prior 0.10
     t.style.marginTop = px(-Math.max(6, h * 0.14) / 2)
     t.style.background = `linear-gradient(90deg,transparent 0%,${hsla(hue, 60, 70, 0.10)} 18%,
@@ -188,11 +188,11 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
     const hs = Math.max(16, h * 0.30)
     const headCx = w + 4 - hs / 2
     const comaW = h * 0.7
-    const coma = el(prefix, 'd-glow')
+    const coma = el('d-glow')
     coma.style.left = px(headCx - comaW / 2); coma.style.top = '0'; coma.style.width = px(comaW); coma.style.height = '100%'
     coma.style.background = `radial-gradient(circle, ${hsla(hue, 70, 85, 0.5)} 0%, transparent 70%)`
     f.appendChild(coma)
-    const hd = el(prefix, 'k-head')
+    const hd = el('k-head')
     hd.style.width = hd.style.height = px(hs); hd.style.marginTop = px(-hs / 2)
     hd.style.background = '#f2fbff'
     hd.style.boxShadow = `0 0 ${px(hs * 2.2)} ${px(hs * 0.6)} ${hsla(hue, 72, 80, 0.5)}`
@@ -201,7 +201,7 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
   }
 
   else if (kind === 'ribbon') {
-    const b = el(prefix, 'r-body')
+    const b = el('r-body')
     b.style.background = `radial-gradient(ellipse 60% 18% at 50% 50%,
       ${hsla(hue, 44, 26, 0.72)} 0%, ${hsla(hue, 40, 20, 0.40)} 44%, transparent 76%)`
     f.appendChild(b)
@@ -209,7 +209,7 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
     // border (right/bottom transparent) and inset-shape logic don't assume
     // a round parent, only an elliptical border-box, which ribbon's body
     // also is (just flatter).
-    const rim = el(prefix, 'b-rim')
+    const rim = el('b-rim')
     rim.style.left = '4%'; rim.style.top = '34%'; rim.style.width = '92%'; rim.style.height = '32%'
     rim.style.setProperty('--rim', hsla(hue + 10, 70, 78, 0.85))
     f.appendChild(rim)
@@ -217,7 +217,7 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
   }
 
   else if (kind === 'ring') {
-    const ring = el(prefix, 'rg-ring')
+    const ring = el('rg-ring')
     const rw = w * 0.9, rh = h * 0.9
     ring.style.left = px((w - rw) / 2); ring.style.top = px((h - rh) / 2)
     ring.style.width = px(rw); ring.style.height = px(rh)
@@ -230,7 +230,7 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
     // left/top/width/height below fully override its inset:0 default per
     // the CSS over-constrained-box rule (right/bottom get dropped, verified
     // empirically, not assumed), so this is a clean reuse, not a coupling.
-    const body = el(prefix, 'l-disc')
+    const body = el('l-disc')
     const bw = w * 0.42, bh = h * 0.42
     body.style.left = px((w - bw) / 2); body.style.top = px((h - bh) / 2)
     body.style.width = px(bw); body.style.height = px(bh)
@@ -248,14 +248,14 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
     // which fills the entire headline box) - unsized it merged the two dots
     // and their oversized halo into one solid oval on a real render, reading
     // as another blob rather than a distinct binary-pair silhouette.
-    const halo = el(prefix, 'd-glow')
+    const halo = el('d-glow')
     const haloD = w * 0.5
     halo.style.left = px(w * 0.5 - haloD / 2); halo.style.top = px(h * 0.5 - haloD / 2)
     halo.style.width = halo.style.height = px(haloD)
     halo.style.background = `radial-gradient(circle closest-side, ${hsla(hue, 60, 70, 0.20)} 0%, transparent 75%)`
     f.appendChild(halo)
     sizes.forEach((sz, i) => {
-      const d = el(prefix, ''); d.style.position = 'absolute'; d.style.borderRadius = '50%'
+      const d = el(''); d.style.position = 'absolute'; d.style.borderRadius = '50%'
       const s = w * sz * 0.22
       d.style.left = px(positions[i][0] * w - s / 2); d.style.top = px(positions[i][1] * h - s / 2)
       d.style.width = d.style.height = px(s)
@@ -267,13 +267,11 @@ function makePrim(prefix, kind, w, h, hue, alpha, r) {
   return f
 }
 
-export { makePrim }
-
 // ═══ STARS ═══ every one twinkles, wide swing, 5-13s - the Sonora
 // behaviour Ben named as the bar. NEVER a blur filter on these.
 const TEMP = ['#ffffff', '#f6e6ff', '#ffffff', '#fff3e2', '#eaf0ff']
 
-export function buildStars(prefix, engine, host, period, perFrame, sizeMul, seed) {
+function buildStars(el, engine, host, period, perFrame, sizeMul, seed) {
   const n = Math.round(perFrame * (period / engine.W))
   const frag = document.createDocumentFragment()
   for (let i = 0; i < n; i++) {
@@ -285,7 +283,7 @@ export function buildStars(prefix, engine, host, period, perFrame, sizeMul, seed
     const lo = engine.STAR_ALPHA_FLOOR + r() * 0.14
     const hi = Math.min(lo + 0.40 + r() * 0.15, 1)
     const dur = 5 + r() * 8
-    const d = el(prefix, 'star'), s = d.style
+    const d = el('star'), s = d.style
     s.left = px(r() * period); s.top = px(r() * engine.H)
     s.width = s.height = px(size)
     s.setProperty('--sc', TEMP[i % 5])
@@ -300,4 +298,95 @@ export function buildStars(prefix, engine, host, period, perFrame, sizeMul, seed
   }
   host.appendChild(frag)
   return n
+}
+
+// ringDom: bind a class prefix + engine once per consumer. Returns el/
+// makePrim/bandY/buildStars ready to call with no prefix/engine argument to
+// ever get wrong - see the module comment above for the bug this replaces.
+export function ringDom(prefix, engine) {
+  const el = (name) => {
+    const d = document.createElement('div')
+    if (name) d.className = prefix + name
+    return d
+  }
+  return {
+    el,
+    makePrim: (kind, w, h, hue, alpha, r) => makePrim(el, kind, w, h, hue, alpha, r),
+    bandY: (r, h) => bandY(engine, r, h),
+    buildStars: (host, period, perFrame, sizeMul, seed) => buildStars(el, engine, host, period, perFrame, sizeMul, seed),
+  }
+}
+
+// ═══ CSS ═══ the primitive-related rules were hand-duplicated between
+// world-07-ring.html's <style> block and RingAmbient.jsx's RING_CSS template
+// literal (in sync, but nothing enforced that - the exact bug class this
+// module already fixed once for makePrim). ringCss(prefix) is the one
+// source for the rules that are genuinely identical modulo class prefix.
+//
+// NOT included here, on purpose - these are real, deliberate differences
+// between the two contexts, not omissions to fix:
+//   - the `.stage`/`.ring-stage` chassis and its `.go` transition rule
+//     (`.stage.go .surge{transition:...}`) - .stage/.ring-stage are each
+//     file's own top-level class (HTML defines it as page chrome; the JSX
+//     applies it via inline style), not something ringPrimitives owns, and
+//     the transition's easing source differs (HTML hardcodes the curve,
+//     the JSX reads client/src/lib/easings.js's EASE_SURGE).
+//   - the reduced-motion media query - the JSX's is a strict subset (no
+//     `.shoot`, no `.stage.rm` manual-toggle branch, since both belong to
+//     the HTML-only shooting-star/demo-controls systems).
+//   - `.shootLane`/`.shootRot`/`.shoot`/`@keyframes shootGo` - the shooting
+//     star system exists only in the HTML reference build.
+//
+// Keyframe names differ by design too (`tw`/`pfBreathe` unprefixed in the
+// HTML vs `ringTw`/`ringPfBreathe` in the JSX, to avoid colliding with
+// unrelated keyframes elsewhere in the app's CSS) - kfName() derives the
+// right one from the same `prefix` a caller already has, so this can't
+// drift out of sync with the class-prefix convention the way the old
+// hand-duplicated blocks could.
+function kfName(prefix, camelName) {
+  const stem = prefix.replace(/-$/, '')
+  return stem ? stem + camelName : camelName[0].toLowerCase() + camelName.slice(1)
+}
+
+export function ringCss(prefix) {
+  const p = prefix
+  const tw = kfName(p, 'Tw'), pfBreathe = kfName(p, 'PfBreathe')
+  return `
+.${p}lyr{position:absolute;inset:0;overflow:hidden}
+.${p}surge{position:absolute;left:0;top:0;width:100%;height:100%;
+  will-change:transform;transform:translate3d(0,0,0)}
+
+.${p}void{position:absolute;inset:0;
+  background:radial-gradient(ellipse 138% 128% at 50% 48%,
+    var(--sky-1) 0%, var(--sky-2) 46%, var(--sky-3) 78%, var(--sky-4) 100%)}
+
+.${p}star{position:absolute;border-radius:50%;background:var(--sc);
+  animation:${tw} var(--tp) ease-in-out infinite;animation-delay:var(--td)}
+@keyframes ${tw}{0%,100%{opacity:var(--ob)}50%{opacity:var(--op)}}
+
+.${p}pf{position:absolute;pointer-events:none;
+  animation:${pfBreathe} var(--pb) ease-in-out infinite;animation-delay:var(--pd)}
+@keyframes ${pfBreathe}{0%,100%{opacity:var(--pa)}50%{opacity:var(--pa2)}}
+
+.${p}b-lobe{position:absolute;border-radius:50%}
+.${p}b-rim{position:absolute;border-radius:50%;border:4px solid var(--rim);
+  border-right-color:transparent;border-bottom-color:transparent}
+
+.${p}d-glow{position:absolute;inset:0;border-radius:50%}
+
+.${p}s-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fffaf0}
+.${p}s-spk{position:absolute;left:50%;top:50%;transform-origin:50% 50%}
+
+.${p}l-disc{position:absolute;inset:0;border-radius:50%}
+.${p}l-lane{position:absolute;left:6%;right:6%;top:46%;height:8%;border-radius:50%;
+  background:rgba(4,3,14,.62)}
+.${p}l-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fff6e6}
+
+.${p}k-tail{position:absolute;left:0;top:50%;border-radius:999px}
+.${p}k-head{position:absolute;right:-4px;top:50%;border-radius:50%}
+
+.${p}r-body{position:absolute;inset:0;border-radius:50%}
+
+.${p}rg-ring{position:absolute;border-radius:50%}
+`
 }

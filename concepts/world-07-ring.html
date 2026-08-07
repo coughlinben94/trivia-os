@@ -97,62 +97,18 @@ header.pg b{color:#ddd8e8;font-weight:500}
 .design{position:absolute;left:0;top:0;width:1920px;height:1080px;
   transform-origin:0 0;overflow:hidden}
 
-/* ══ LAYER CHASSIS ══
-   .lyr  clip box, viewport sized, NEVER transformed — bounds the raster
-     .surge  the ONLY transform. One per layer. No rail, nothing nested,
-             nothing to disagree with. */
-.lyr{position:absolute;inset:0;overflow:hidden}
-.surge{position:absolute;left:0;top:0;width:100%;height:100%;
-  will-change:transform;transform:translate3d(0,0,0)}
+/* ══ LAYER CHASSIS / SKY / STARS / PRIMITIVES ══
+   .lyr/.surge/.void/.star/.pf and the eight primitive shape classes
+   (.b-lobe, .b-rim, .d-glow, .s-core, .s-spk, .l-disc, .l-lane, .l-core,
+   .k-tail, .k-head, .r-body, .rg-ring) plus their @keyframes now come from
+   client/src/lib/ringPrimitives.js's ringCss('') — injected into a <style>
+   tag by the module script below, right before dom is built. This was
+   hand-duplicated against RingAmbient.jsx's RING_CSS (in sync, but nothing
+   enforced that — the same bug class the makePrim extraction already fixed
+   once). Only the `.go` transition trigger stays here: it couples to
+   `.stage`, which is this page's own top-level class, not something
+   ringPrimitives owns. */
 .stage.go .surge{transition:transform var(--surge-ms) cubic-bezier(.16,.62,.28,1)}
-
-/* ══ SKY ══ deliberately almost bare. In world-06 a fixed corner blob
-   out-lit twelve panes of content; the panes now carry their own light.
-   Radial only — a vertical ramp always implies a horizon. */
-.void{position:absolute;inset:0;
-  background:radial-gradient(ellipse 138% 128% at 50% 48%,
-    var(--sky-1) 0%, var(--sky-2) 46%, var(--sky-3) 78%, var(--sky-4) 100%)}
-
-/* ══ STARS ══ every one twinkles, wide swing, 5–13s — the Sonora
-   behaviour Ben named as the bar. NEVER a blur filter on these. */
-.star{position:absolute;border-radius:50%;background:var(--sc);
-  animation:tw var(--tp) ease-in-out infinite;animation-delay:var(--td)}
-@keyframes tw{0%,100%{opacity:var(--ob)}50%{opacity:var(--op)}}
-
-/* ══ PRIMITIVES ══ the engine renders these; a world may not invent a
-   shape. Each guarantees its own hard edge structurally, so "all soft =
-   mush" becomes impossible rather than merely discouraged. ══ */
-.pf{position:absolute;pointer-events:none;
-  animation:pfBreathe var(--pb) ease-in-out infinite;animation-delay:var(--pd)}
-@keyframes pfBreathe{0%,100%{opacity:var(--pa)}50%{opacity:var(--pa2)}}
-
-/* blob — n-lobe cloud + a mandatory rim arc so it is never all-soft */
-.b-lobe{position:absolute;border-radius:50%}
-.b-rim{position:absolute;border-radius:50%;border:4px solid var(--rim);
-  border-right-color:transparent;border-bottom-color:transparent}
-
-/* dots — inherently hard-edged, so a cluster always reads */
-.d-glow{position:absolute;inset:0;border-radius:50%}
-
-/* spikes — hot core + radial spikes */
-.s-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fffaf0}
-.s-spk{position:absolute;left:50%;top:50%;transform-origin:50% 50%}
-
-/* lens — flattened disc, optional dust lane */
-.l-disc{position:absolute;inset:0;border-radius:50%}
-.l-lane{position:absolute;left:6%;right:6%;top:46%;height:8%;border-radius:50%;
-  background:rgba(4,3,14,.62)}
-.l-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fff6e6}
-
-/* streak — head + coma + tapering tail */
-.k-tail{position:absolute;left:0;top:50%;border-radius:999px}
-.k-head{position:absolute;right:-4px;top:50%;border-radius:50%}
-
-/* ribbon — long tapered form with a mandatory rim */
-.r-body{position:absolute;inset:0;border-radius:50%}
-
-/* ring — closed ellipse stroke wrapping a planet body */
-.rg-ring{position:absolute;border-radius:50%}
 
 /* ══ SHOOTING STAR ══ */
 .shootLane{position:absolute;inset:0;pointer-events:none;overflow:hidden}
@@ -274,12 +230,14 @@ header.pg b{color:#ddd8e8;font-weight:500}
 
 <script type="module">
 'use strict';
-// el/px/hsla/makePrim/bandY/buildStars now live in
-// client/src/lib/ringPrimitives.js — imported here with the empty-string
-// classPrefix (this build's CSS is unprefixed: .b-lobe, .pf, etc.) so the
-// same source RingAmbient.jsx consumes (with the "ring-" prefix) drives
-// this reference build too.
-import { el, px, hsla, makePrim, bandY, buildStars } from '../client/src/lib/ringPrimitives.js';
+// ringDom/px/ringCss now live in client/src/lib/ringPrimitives.js — ringDom
+// is called once below with the empty-string classPrefix (this build's CSS
+// is unprefixed: .b-lobe, .pf, etc.) so the same source RingAmbient.jsx
+// consumes (with the "ring-" prefix) drives this reference build too. Every
+// el/makePrim/bandY/buildStars call site below goes through the returned
+// `dom` object — no call site ever passes a literal prefix string again.
+import { ringDom, px, ringCss } from '../client/src/lib/ringPrimitives.js';
+import { rng, lerp } from '../client/src/lib/ringEngine.js';
 /* ═══════════════════════════════════════════════════════════════════════
    ENGINE — identical for every theme. A world never sets any of this.
    Every number appears exactly once. Anything derivable is derived by one
@@ -317,21 +275,20 @@ const ENGINE = {
 const cylinderOf = L => ENGINE.PANES * L.surge;
 const authorPeriodOf = L => cylinderOf(L) / L.m;
 
-/* ── one seeded hash, used for everything. No Math.random anywhere in
-   world construction: world-06 used it for vertical placement only, which
-   made the layout differ between reloads and would have defeated any
-   automated check. ── */
-function hash32(x, seed){
-  let h = (x|0) ^ (seed|0);
-  h = Math.imul(h ^ (h>>>16), 2246822507);
-  h = Math.imul(h ^ (h>>>13), 3266489909);
-  return ((h ^ (h>>>16)) >>> 0);
-}
-function rng(i, seed){
-  let n = hash32(i, seed);
-  return () => { n = hash32(n, 0x9E3779B9); return n / 4294967296; };
-}
-const lerp = (a,b,t) => a + (b-a)*t;
+/* rng/lerp (and the hash32 they're built on) come from
+   client/src/lib/ringEngine.js rather than being redefined here — that
+   module already has them (buildStars, inside the shared ringPrimitives
+   module, already depends on them internally). A local copy here was
+   bit-identical but unenforced: a future edit to ringEngine.js's RNG could
+   silently desync this page's form placement from its star placement. One
+   seeded hash, used for everything, imported from one place. No
+   Math.random anywhere in world construction: world-06 used it for
+   vertical placement only, which made the layout differ between reloads
+   and would have defeated any automated check. */
+const dom = ringDom('', ENGINE);
+const primStyle = document.createElement('style');
+primStyle.textContent = ringCss('');
+document.head.appendChild(primStyle);
 
 /* ═══ THE WORLD — this is the only part a generator writes ═════════════ */
 const WORLD = {
@@ -388,13 +345,11 @@ const design = document.getElementById('design');
 function fit(){ design.style.transform = 'scale(' + (stage.clientWidth/ENGINE.W) + ')'; }
 new ResizeObserver(fit).observe(stage); fit();
 
-// el/px/hsla/makePrim/bandY/buildStars now live in
-// client/src/lib/ringPrimitives.js — imported above with the empty-string
-// classPrefix (this build's CSS is unprefixed) and ENGINE passed
-// explicitly. See that module for the full primitive-rendering logic
+// dom.el/dom.makePrim/dom.bandY/dom.buildStars (and the plain px export)
+// come from client/src/lib/ringPrimitives.js's ringDom('', ENGINE) call
+// above. See that module for the full primitive-rendering logic
 // (blob/dots/spikes/lens/streak/ribbon/ring/binary), the bandY placement
-// logic, and buildStars — ported verbatim, one source now shared with
-// RingAmbient.jsx.
+// logic, and buildStars — one source now shared with RingAmbient.jsx.
 /* ═══ BUILD ═══ */
 const surgeEls = {};
 let starTotal = 0, formTotal = 0;
@@ -406,15 +361,15 @@ function buildLayerContent(host, L){
     /* slow, dense star field + one wide soft wash per two stations.
        far moves 480px/turn, so its content changes slowly — which is
        what "far" means. */
-    starTotal += buildStars('', ENGINE, host, period, 140, 1.0, 0xA11CE);
+    starTotal += dom.buildStars(host, period, 140, 1.0, 0xA11CE);
     for (let i=0;i<6;i++){
       const r = rng(i, 0xFA2);
       const st = WORLD.stations[(i*2) % ENGINE.PANES];
       const lou = loudness((i*2) % ENGINE.PANES);
       const w = lerp(620, 900, r()), h = w*(0.52 + r()*0.22);
-      const f = makePrim('', 'blob', w, h, st.hue, lerp(0.16, 0.30, lou), r);
+      const f = dom.makePrim('blob', w, h, st.hue, lerp(0.16, 0.30, lou), r);
       f.style.left = px(i*(period/6) + r()*(period/6 - w));
-      f.style.top  = px(bandY(ENGINE, r, h));
+      f.style.top  = px(dom.bandY(r, h));
       host.appendChild(f); formTotal++;
     }
   }
@@ -435,7 +390,7 @@ function buildLayerContent(host, L){
                : st.prim === 'ribbon' ? hw*0.34
                : hw*(0.62 + r()*0.26);
       const alpha = lerp(0.34, 0.55, lou);
-      const head = makePrim('', st.prim, hw, hh, st.hue, alpha, r);
+      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, r);
       /* was lerp(0.06, 0.44, r()) — capped well below the frame's full
          width, so a centroid can never land right of ~x900. Measured mean
          centroid x = 692 against a frame center of 960 (spec §2, appendix
@@ -444,7 +399,7 @@ function buildLayerContent(host, L){
          x at 920 (within the 960±96 gate) — [0.02,0.92] alone undershot to
          848, just outside the band, so this was iterated per §2's gate. */
       head.style.left = px(x0 + lerp(0.08, 0.98, r())*(ENGINE.W - hw));
-      head.style.top  = px(bandY(ENGINE, r, hh));
+      head.style.top  = px(dom.bandY(r, hh));
       host.appendChild(head); formTotal++;
 
       /* one feature-tier companion in the opposite band, so a station
@@ -453,19 +408,19 @@ function buildLayerContent(host, L){
       const ck = others[Math.floor(r()*others.length)];
       const cw = lerp(230, 420, r());
       const ch = ck === 'streak' ? cw*0.30 : cw*(0.60 + r()*0.28);
-      const comp = makePrim('', ck, cw, ch, st.hue + (st.accent ? 168 : lerp(-22,22,r())),
+      const comp = dom.makePrim(ck, cw, ch, st.hue + (st.accent ? 168 : lerp(-22,22,r())),
                             lerp(0.30, 0.48, lou)*0.8, r);
       comp.style.left = px(x0 + lerp(0.08, 0.98, r())*(ENGINE.W - cw));
-      comp.style.top  = px(bandY(ENGINE, r, ch));
+      comp.style.top  = px(dom.bandY(r, ch));
       host.appendChild(comp); formTotal++;
 
       /* detail-tier specks, count follows loudness */
       const dn = Math.round(lerp(1, 4, lou));
       for (let k=0;k<dn;k++){
         const dw = lerp(58, 154, r());
-        const d = makePrim('', 'dots', dw, dw*0.9, st.hue, lerp(0.34,0.60,lou)*0.7, r);
+        const d = dom.makePrim('dots', dw, dw*0.9, st.hue, lerp(0.34,0.60,lou)*0.7, r);
         d.style.left = px(x0 + r()*(ENGINE.W - dw));
-        d.style.top  = px(bandY(ENGINE, r, dw*0.9));
+        d.style.top  = px(dom.bandY(r, dw*0.9));
         host.appendChild(d); formTotal++;
       }
     }
@@ -475,31 +430,31 @@ function buildLayerContent(host, L){
     /* fast and anonymous — the layer that sells the turn. Content repeats
        3x around the ring, which is invisible precisely because nothing
        here is identifiable. */
-    starTotal += buildStars('', ENGINE, host, period, 26, 1.5, 0xBEEF);
+    starTotal += dom.buildStars(host, period, 26, 1.5, 0xBEEF);
   }
 }
 
 (function build(){
   const before = document.getElementById('qScrim');
 
-  const sky = el('', 'lyr');
-  const skyInner = el('', 'surge');
+  const sky = dom.el('lyr');
+  const skyInner = dom.el('surge');
   skyInner.style.transition = 'none';
-  skyInner.appendChild(el('', 'void'));
+  skyInner.appendChild(dom.el('void'));
   sky.appendChild(skyInner);
   design.insertBefore(sky, before);
 
   for (const L of ENGINE.LAYERS){
     if (L.id === 'sky') continue;
     const cyl = cylinderOf(L), period = authorPeriodOf(L);
-    const lyr = el('', 'lyr'), surge = el('', 'surge');
+    const lyr = dom.el('lyr'), surge = dom.el('surge');
     surge.style.width = px(cyl + ENGINE.W);
     lyr.appendChild(surge);
     design.insertBefore(lyr, before);
 
     /* author one period, then repeat it m+1 times. The extra copy covers
        the window that hangs past the cylinder just before it wraps. */
-    const proto = el('', ''); proto.style.position='absolute'; proto.style.inset='0';
+    const proto = dom.el(''); proto.style.position='absolute'; proto.style.inset='0';
     buildLayerContent(proto, L);
     for (let k=0; k<=L.m; k++){
       const copy = k === 0 ? proto : proto.cloneNode(true);
@@ -512,7 +467,7 @@ function buildLayerContent(host, L){
     surgeEls[L.id] = surge;
   }
 
-  const shootLane = el('', 'shootLane');
+  const shootLane = dom.el('shootLane');
   design.insertBefore(shootLane, before);
   window.__shootLane = shootLane;
   stage.style.setProperty('--surge-ms', ENGINE.SURGE_MS + 'ms');
@@ -673,7 +628,7 @@ function autoLoop(){ clearTimeout(autoT); if(!autoOn)return;
 let shootSide=1, shootT=null;
 function spawnShoot(){
   if(isReduced())return;
-  const rot=el('', 'shootRot'), s=el('', 'shoot'), d=shootSide; shootSide=-shootSide;
+  const rot=dom.el('shootRot'), s=dom.el('shoot'), d=shootSide; shootSide=-shootSide;
   rot.style.left=px(d>0?140+Math.random()*500:1180+Math.random()*500);
   rot.style.top=px(70+Math.random()*760);
   rot.style.setProperty('--sa',(d>0?1:-1)*(14+Math.random()*16)+'deg');
