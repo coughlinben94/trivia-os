@@ -118,8 +118,11 @@ function buildLayerContent(engine, world, arc, host, L) {
        differing per §0's ratio) — see concepts/world-07-ring.html's
        identical comment for the reasoning: mid's surge (1920) already
        sits between far (480) and near (2880) in the engine's 1:4:6
-       ratio family, so reusing it needs no new surge value. */
-    dom.buildStars(host, period, 40, 1.0, 0xCAFE1)
+       ratio family, so reusing it needs no new surge value.
+       sizeMul 1.25 (not far's 1.0): far:mid:near size ramps 1.0:1.25:1.5
+       against the 1:4:6 speed ramp, so depth reads from a static frame
+       too, not just from differential motion. */
+    dom.buildStars(host, period, 40, 1.25, 0xCAFE1)
 
     for (let i = 0; i < engine.PANES; i++) {
       const st = world.stations[i]
