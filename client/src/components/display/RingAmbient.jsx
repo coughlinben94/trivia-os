@@ -113,6 +113,14 @@ function buildLayerContent(engine, world, arc, host, L) {
     /* THE COMPOSITION LAYER. mid moves exactly one frame per turn, so
        station i is authored into the frame at x = i*W and lands there
        every single time. */
+
+    /* third star layer (spec §5: >=3 star layers, surge distances
+       differing per §0's ratio) — see concepts/world-07-ring.html's
+       identical comment for the reasoning: mid's surge (1920) already
+       sits between far (480) and near (2880) in the engine's 1:4:6
+       ratio family, so reusing it needs no new surge value. */
+    dom.buildStars(host, period, 40, 1.0, 0xCAFE1)
+
     for (let i = 0; i < engine.PANES; i++) {
       const st = world.stations[i]
       const r = rng(i, 0x5EED)

@@ -389,6 +389,15 @@ function buildLayerContent(host, L){
     /* THE COMPOSITION LAYER. mid moves exactly one frame per turn, so
        station i is authored into the frame at x = i*W and lands there
        every single time. What you design is what you get. */
+
+    /* third star layer (spec §5: >=3 star layers, surge distances
+       differing per §0's ratio). mid's surge (1920, exactly one frame)
+       already sits between far (480) and near (2880) in the engine's
+       1:4:6 ratio family — reusing it needs no new surge value and stays
+       inside the already-gated layer-arithmetic checks. Drawn first so
+       the station forms below paint on top of it. */
+    starTotal += dom.buildStars(host, period, 40, 1.0, 0xCAFE1);
+
     for (let i=0;i<ENGINE.PANES;i++){
       const st = WORLD.stations[i];
       const r = rng(i, 0x5EED);
