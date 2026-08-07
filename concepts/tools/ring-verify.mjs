@@ -37,8 +37,12 @@
 // concepts/world-07-ring.html already exports at the bottom of its script.
 
 import { chromium } from 'playwright';
-import { readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { readFile, readFileSync } from 'node:fs';
+import { promisify } from 'node:util';
 import path from 'node:path';
+
+const readFileAsync = promisify(readFile);
 
 const target = process.argv[2];
 if (!target) {
@@ -47,6 +51,44 @@ if (!target) {
 }
 const absPath = path.resolve(target);
 const source = readFileSync(absPath, 'utf8');
+
+// ── static file server ──
+// world-07-ring.html loads <script type="module">, which imports
+// ../client/src/lib/ringPrimitives.js. Chromium enforces CORS on ES module
+// fetches even under file:// ("origin 'null' ... blocked by CORS policy"),
+// so a vanilla launch() historically couldn't load this file at all - the
+// prior version of this gate worked around that with a
+// `chromium.launch({ args: ['--disable-web-security'] })` flag instead. A
+// real (if minimal) static server sidesteps the file:// origin entirely, so
+// the browser launch can stay a stock, secure one. Serves the repo root
+// (this script's cwd, matching how it's invoked - `node
+// concepts/tools/ring-verify.mjs concepts/world-07-ring.html` from the repo
+// root) for the duration of this script's run only.
+const REPO_ROOT = process.cwd();
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript' };
+function startStaticServer(rootDir) {
+  return new Promise((resolve) => {
+    const server = createServer(async (req, res) => {
+      try {
+        const urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+        const filePath = path.join(rootDir, path.normalize(urlPath));
+        // don't serve outside rootDir (e.g. a `..`-laden request path)
+        if (!filePath.startsWith(rootDir)) { res.writeHead(403); res.end(); return; }
+        const data = await readFileAsync(filePath);
+        res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
+        res.end(data);
+      } catch {
+        res.writeHead(404); res.end('Not found');
+      }
+    });
+    server.listen(0, '127.0.0.1', () => resolve(server));
+  });
+}
+const server = await startStaticServer(REPO_ROOT);
+const port = server.address().port;
+const relPath = path.relative(REPO_ROOT, absPath).split(path.sep).join('/');
+const targetUrl = `http://127.0.0.1:${port}/${relPath}`;
+async function closeServer() { await new Promise((resolve) => server.close(resolve)); }
 
 const results = []; // { name, status: PASS|WARN|FAIL, detail }
 function report(name, status, detail) { results.push({ name, status, detail }); }
@@ -88,21 +130,17 @@ function functionBody(src, name) {
 }
 
 // ── dynamic checks: drive the real thing in real Chromium ──
-// --disable-web-security: world-07-ring.html loads <script type="module">,
-// which imports client/src/lib/ringPrimitives.js. Chromium enforces CORS on
-// ES module fetches even under file://  ("origin 'null' ... blocked by CORS
-// policy") with no equivalent to the old <script> cross-file leniency, so a
-// vanilla launch() can no longer load this file at all — every check below
-// would silently see an empty window.__world instead of a real failure.
-// This is a local, disposable headless instance loading a known-trusted
-// local file for testing; it never fetches anything remote.
-const browser = await chromium.launch({ args: ['--disable-web-security'] });
+// A stock, secure launch - no flags needed. Serving over the static server
+// above (rather than file://) is what makes the ES-module import in
+// world-07-ring.html's <script type="module"> resolve under Chromium's CORS
+// enforcement without weakening the browser's own security.
+const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 const consoleErrors = [];
 page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
 page.on('pageerror', err => consoleErrors.push('pageerror: ' + err.message));
 
-await page.goto('file://' + absPath);
+await page.goto(targetUrl);
 await page.waitForTimeout(500);
 
 const world = await page.evaluate(() => {
@@ -119,6 +157,7 @@ const world = await page.evaluate(() => {
 if (!world) {
   report('window.__world contract', 'FAIL', 'target does not expose window.__world — cannot verify');
   await browser.close();
+  await closeServer();
   finish();
 }
 
@@ -252,6 +291,7 @@ report('console clean', consoleErrors.length === 0 ? 'PASS' : 'FAIL',
     : consoleErrors.slice(0, 5).join(' | '));
 
 await browser.close();
+await closeServer();
 finish();
 
 function finish() {
