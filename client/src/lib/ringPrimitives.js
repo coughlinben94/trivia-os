@@ -70,13 +70,32 @@ function bandY(engine, r, h, forceUpper) {
 // `el` is a bound element factory (see ringDom below) that already carries
 // its consumer's class prefix - every call in this function is just
 // el('some-class').
-function makePrim(el, kind, w, h, hue, alpha, r) {
-  const f = el('pf')
+// isHeadline (spec §8: "sub-visible animation is banned as dead weight" —
+// every primitive used to breathe at a ~1.18x alpha swing, mostly under the
+// 22-luma perceptibility floor the spec bans as render cost nobody can see).
+// Only the station's actual headline element (the one call per station built
+// from st.prim/st.hue at full 576-880px tier - see buildLayerContent in both
+// concepts/world-07-ring.html and RingAmbient.jsx) may breathe; every other
+// call (far-wash blob, far-layer anchor, companion, detail-tier dots) passes
+// isHeadline=false/omitted and gets a static, non-animated opacity instead -
+// cheaper to render and correct per spec, since a swing nobody can see was
+// never buying anything. r() is still drawn twice unconditionally for --pb/
+// --pd even when unused, so skipping them wouldn't reorder every downstream
+// seeded draw in the caller (position/size/hue jitter for elements authored
+// after this one in the same station) - only whether the result gets used.
+function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
+  const f = el(isHeadline ? 'pf pf-breathe' : 'pf')
   f.style.width = px(w); f.style.height = px(h)
-  f.style.setProperty('--pa', alpha.toFixed(3))
-  f.style.setProperty('--pa2', Math.min(alpha * 1.18, 1).toFixed(3))
-  f.style.setProperty('--pb', (47 + Math.floor(r() * 26)) + 's')
-  f.style.setProperty('--pd', (-r() * 40).toFixed(1) + 's')
+  const pb = (47 + Math.floor(r() * 26)) + 's' // 47-72s, already clears the >=30s floor
+  const pd = (-r() * 40).toFixed(1) + 's'
+  if (isHeadline) {
+    f.style.setProperty('--pa', alpha.toFixed(3))
+    f.style.setProperty('--pa2', Math.min(alpha * 1.6, 1).toFixed(3))
+    f.style.setProperty('--pb', pb)
+    f.style.setProperty('--pd', pd)
+  } else {
+    f.style.opacity = alpha.toFixed(3)
+  }
 
   if (kind === 'blob') {
     let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity, domRot = 0, domArea = -1
@@ -480,12 +499,16 @@ function buildStars(el, engine, host, period, perFrame, sizeMul, seed) {
 export function ringDom(prefix, engine) {
   const el = (name) => {
     const d = document.createElement('div')
-    if (name) d.className = prefix + name
+    // space-separated names each get their own prefix (e.g. 'pf pf-breathe'
+    // -> 'ring-pf ring-pf-breathe') so a headline element can carry the
+    // static .pf base plus the animated .pf-breathe modifier without a
+    // second call site threading the literal prefix by hand.
+    if (name) d.className = name.split(' ').map(n => prefix + n).join(' ')
     return d
   }
   return {
     el,
-    makePrim: (kind, w, h, hue, alpha, r) => makePrim(el, kind, w, h, hue, alpha, r),
+    makePrim: (kind, w, h, hue, alpha, r, isHeadline) => makePrim(el, kind, w, h, hue, alpha, r, isHeadline),
     bandY: (r, h, forceUpper) => bandY(engine, r, h, forceUpper),
     buildStars: (host, period, perFrame, sizeMul, seed) => buildStars(el, engine, host, period, perFrame, sizeMul, seed),
     makeOccluder: (size, hue) => makeOccluder(el, size, hue),
@@ -539,8 +562,8 @@ export function ringCss(prefix) {
   animation:${tw} var(--tp) ease-in-out infinite;animation-delay:var(--td)}
 @keyframes ${tw}{0%,100%{opacity:var(--ob)}50%{opacity:var(--op)}}
 
-.${p}pf{position:absolute;pointer-events:none;
-  animation:${pfBreathe} var(--pb) ease-in-out infinite;animation-delay:var(--pd)}
+.${p}pf{position:absolute;pointer-events:none}
+.${p}pf-breathe{animation:${pfBreathe} var(--pb) ease-in-out infinite;animation-delay:var(--pd)}
 @keyframes ${pfBreathe}{0%,100%{opacity:var(--pa)}50%{opacity:var(--pa2)}}
 
 .${p}b-lobe{position:absolute;border-radius:50%}

@@ -476,7 +476,7 @@ function buildLayerContent(host, L){
                : st.prim === 'ribbon' ? hw*0.34
                : hw*(0.62 + r()*0.26);
       const alpha = lerp(0.34, 0.55, lou);
-      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, r);
+      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, r, true); // isHeadline: only per-station breathe (spec §8)
       /* was lerp(0.06, 0.44, r()) — capped well below the frame's full
          width, so a centroid can never land right of ~x900. Measured mean
          centroid x = 692 against a frame center of 960 (spec §2, appendix
