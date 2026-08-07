@@ -26,7 +26,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, rng, lerp } from '../../lib/ringEngine.js'
 import { EASE_SURGE } from '../../lib/easings.js'
-import { ringDom, px, ringCss } from '../../lib/ringPrimitives.js'
+import { ringDom, px, hsla, ringCss } from '../../lib/ringPrimitives.js'
 
 // ENGINE — engine-fixed, identical for every world; never a prop (a world
 // never sets any of this, same as the reference build's own ENGINE const).
@@ -107,6 +107,46 @@ function buildLayerContent(engine, world, arc, host, L) {
       f.style.top = px(dom.bandY(r, h))
       host.appendChild(f)
     }
+
+    // far-layer anchor (spec §7.6): one nameable form, authored ONCE per
+    // far-layer author-period (not per-station), sized off the layer's own
+    // real arithmetic — visibleStations = (frameWidth + anchorWidth) /
+    // farSurge, not a guessed pane count. At AW=760, farSurge=480:
+    // (1920+760)/480 = 5.58, so the far layer's own scroll carries it
+    // through view for ~5 of the ring's 12 stations as it passes — inside
+    // the required 4-6 band. `lens` chosen per this session's own finding
+    // that it reads more legibly than the other glow primitives.
+    {
+      const ar = rng(0, 0xA4C7)
+      const AW = 760, AH = Math.round(AW * 0.62)
+      const anchorHue = world.hueAnchors[0].deg
+      const anchor = dom.makePrim('lens', AW, AH, anchorHue, 0.34, ar)
+      anchor.style.left = px(period * 0.42 - AW / 2)
+      anchor.style.top = px(dom.bandY(ar, AH))
+      host.appendChild(anchor)
+    }
+
+    // one trackable drifter (spec §7.7): the only element in this world
+    // carrying its own continuous transform, so the up-to-75s gap between
+    // turns isn't a freeze-frame with only twinkle for company. The
+    // transform lives on THIS element (.ring-drift's own CSS animation,
+    // see ringCss) nested INSIDE far's already-transformed .ring-surge —
+    // never a second transform on the layer itself. A rail-style layer
+    // transform was deliberately deleted earlier this session for causing
+    // visible pops at turn boundaries; this can't reintroduce that bug
+    // class because .ring-surge's own transform is never touched here.
+    // 1800px/480s = 3.75px/s (clears the >=2.7px/s floor), crossing time
+    // 8min (inside the 4-12min band); linear+alternate so it reverses
+    // cleanly at each end instead of snapping back to the start.
+    {
+      const dr = rng(0, 0xD817)
+      const drift = dom.el('drift')
+      const ds = 9
+      drift.style.width = drift.style.height = px(ds)
+      drift.style.left = px(period * 0.12)
+      drift.style.top = px(dom.bandY(dr, ds))
+      host.appendChild(drift)
+    }
   }
 
   else if (L.id === 'mid') {
@@ -150,29 +190,97 @@ function buildLayerContent(engine, world, arc, host, L) {
       // gate) — [0.02, 0.92] alone undershot to 848, just outside the
       // band, so this was iterated per §2's gate, not shipped on the first
       // guess.
-      head.style.left = px(x0 + lerp(0.08, 0.98, r()) * (engine.W - hw))
-      head.style.top = px(dom.bandY(r, hh))
+      const pairUpper = r() < 0.5 // shared band draw — see bandY's forceUpper comment (spec §7.5)
+      const headLeft = x0 + lerp(0.08, 0.98, r()) * (engine.W - hw)
+      const headTop = dom.bandY(r, hh, pairUpper)
+      head.style.left = px(headLeft)
+      head.style.top = px(headTop)
       host.appendChild(head)
+      const headCx = headLeft + hw / 2, headCy = headTop + hh / 2
 
-      /* one feature-tier companion in the opposite band */
+      // one feature-tier companion — this IS the station's declared pair
+      // (spec §7.5): two elements linked by proximity plus a shared visual
+      // property, not two independent random placements (a collage, not a
+      // pair). Proximity is forced by construction: same vertical band as
+      // the headline (pairUpper — independent draws could land ~470px
+      // apart, the full gap between bands) plus a bounded offset from its
+      // own centroid, not a fresh frame-wide draw. Shared property: hue
+      // echo within ±18° for non-accent stations (inside the spec's 20°
+      // budget); accent stations intentionally push the companion hue
+      // ~168° away (the world's one complementary-accent mechanic), so hue
+      // can't carry the pair there — the connecting bridge below does,
+      // drawn for every station regardless of hue.
       const others = ['blob', 'dots', 'lens', 'streak'].filter(k => k !== st.prim)
       const ck = others[Math.floor(r() * others.length)]
       const cw = lerp(230, 420, r())
       const ch = ck === 'streak' ? cw * 0.30 : cw * (0.60 + r() * 0.28)
-      const comp = dom.makePrim(ck, cw, ch, st.hue + (st.accent ? 168 : lerp(-22, 22, r())),
-        lerp(0.30, 0.48, lou) * 0.8, r)
-      comp.style.left = px(x0 + lerp(0.08, 0.98, r()) * (engine.W - cw))
-      comp.style.top = px(dom.bandY(r, ch))
+      const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, r()))
+      const comp = dom.makePrim(ck, cw, ch, compHue, lerp(0.30, 0.48, lou) * 0.8, r)
+      const pairAng = r() * Math.PI * 2, pairRad = lerp(160, 380, r())
+      let compCx = headCx + Math.cos(pairAng) * pairRad
+      compCx = Math.min(x0 + engine.W - cw / 2, Math.max(x0 + cw / 2, compCx))
+      const compTop = dom.bandY(r, ch, pairUpper)
+      comp.style.left = px(compCx - cw / 2)
+      comp.style.top = px(compTop)
       host.appendChild(comp)
+      const compCy = compTop + ch / 2
 
-      /* detail-tier specks, count follows loudness */
+      const bdx = compCx - headCx, bdy = compCy - headCy
+      const bridge = dom.el('pair-bridge')
+      bridge.style.left = px(headCx); bridge.style.top = px(headCy)
+      bridge.style.width = px(Math.hypot(bdx, bdy))
+      bridge.style.transform = `rotate(${(Math.atan2(bdy, bdx) * 180 / Math.PI).toFixed(1)}deg)`
+      bridge.style.background = `linear-gradient(90deg, ${hsla(st.hue, 40, 70, 0.16)} 0%, ${hsla(st.hue, 40, 70, 0.10)} 100%)`
+      host.appendChild(bridge)
+
+      // detail-tier specks, count follows loudness. k===0 is forced toward
+      // the tier floor (spec §7.3 scale ladder): the worst-case headline
+      // (576px) divided by a detail element that happened to draw near the
+      // old ceiling (154px) measured at 3.7x — under the required >=6x.
+      // Forcing one detail element per station into [58,70] guarantees
+      // 576/70 = 8.2x even in the worst-case headline draw; the ladder no
+      // longer depends on two independent random draws going its way.
       const dn = Math.round(lerp(1, 4, lou))
       for (let k = 0; k < dn; k++) {
-        const dw = lerp(58, 154, r())
+        const dw = k === 0 ? lerp(58, 70, r()) : lerp(58, 154, r())
         const d = dom.makePrim('dots', dw, dw * 0.9, st.hue, lerp(0.34, 0.60, lou) * 0.7, r)
         d.style.left = px(x0 + r() * (engine.W - dw))
         d.style.top = px(dom.bandY(r, dw * 0.9))
         host.appendChild(d)
+      }
+
+      // occlusion (spec §7.2), measured by ablation, on every third
+      // station (4 of 12 — the required >=1-in-3 floor). Every primitive
+      // above is a translucent glow that only alpha-blends with what's
+      // behind it; this is a genuinely dark, rimmed disc (makeOccluder,
+      // reusing the b-lobe rim's partial-border contrast treatment) placed
+      // over a small patch of GUARANTEED star content — not hoping
+      // buildStars' scattered draw happened to land some underneath — so
+      // an ablation render actually has something real to occlude.
+      if (i % 3 === 0) {
+        const orr = rng(i, 0x0CC1)
+        const os = lerp(150, 210, orr())
+        const ox = x0 + orr() * (engine.W - os)
+        const oy = dom.bandY(orr, os)
+        for (let si = 0; si < 6; si++) {
+          const sr = rng(si, 0x0CC1 + i)
+          const s = dom.el('star')
+          const ssize = 1.8 + sr() * 2.4
+          s.style.left = px(ox + sr() * os)
+          s.style.top = px(oy + sr() * os)
+          s.style.width = s.style.height = px(ssize)
+          s.style.setProperty('--sc', '#ffffff')
+          s.style.setProperty('--ob', '0.32')
+          s.style.setProperty('--op', '0.78')
+          s.style.setProperty('--tp', '8s')
+          s.style.setProperty('--td', '0s')
+          s.classList.add('occ-star') // ablation-measurement marker only, not styled
+          host.appendChild(s)
+        }
+        const occ = dom.makeOccluder(os, st.hue)
+        occ.style.left = px(ox)
+        occ.style.top = px(oy)
+        host.appendChild(occ)
       }
     }
   }

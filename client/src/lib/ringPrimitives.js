@@ -41,9 +41,22 @@ export function hsla(h, s, l, a) { return `hsla(${h},${s}%,${l}%,${a})` }
 // fixed y-offset (see ART-DIRECTION-SPEC.md §2; this fixed a real safe-box
 // violation earlier this session where a tall headline's centroid could
 // land inside the box under the old fixed-offset constants).
-function bandY(engine, r, h) {
+//
+// forceUpper (optional): pins the upper/lower band choice instead of
+// drawing it (still consumes one r() call either way - callers that pass
+// forceUpper still burn the coin-flip draw upstream so the seeded sequence
+// stays stable). Added for §7.5 declared pairs - a headline and its
+// companion drawn onto INDEPENDENT random bands can land ~470px apart
+// vertically (the full gap between the two bands), which makes "declared
+// pair" a lie no bridge/hue-echo can fix. Forcing both onto the same band
+// keeps their vertical gap inside one band's own (much smaller) variance
+// without weakening the safe-box guarantee - the band itself is still the
+// same safe-box-respecting geometry below, just shared by two callers
+// instead of drawn twice.
+function bandY(engine, r, h, forceUpper) {
   const H = engine.H, top = engine.SAFE.y * H, bot = (engine.SAFE.y + engine.SAFE.h) * H
-  const upper = r() < 0.5, margin = 8
+  const upper = forceUpper !== undefined ? forceUpper : r() < 0.5
+  const margin = 8
   if (upper) {
     const maxY = top - h / 2 - margin, minY = -h * 0.10
     return maxY <= minY ? maxY : minY + (maxY - minY) * r()
@@ -399,6 +412,26 @@ function makePrim(el, kind, w, h, hue, alpha, r) {
   return f
 }
 
+// ═══ OCCLUDER ═══ §7.2 (occlusion, measured by ablation) needs a shape that
+// actually blocks what's behind it - every primitive above is a translucent
+// glow that only alpha-blends with the star layer, never truly occludes it.
+// A near-opaque dark disc with a bright rim (same partial-border rim
+// technique as .b-lobe's rim above - two solid edges, two transparent, so
+// it still reads as a shape's edge rather than a flat silhouette) is dark
+// enough to occlude and rimmed enough to still be visible against a dark
+// sky (§6.1: "a dark shape over dark sky is invisible without one").
+function makeOccluder(el, size, hue) {
+  const f = el('occ')
+  f.style.width = f.style.height = px(size)
+  f.style.background = `radial-gradient(circle at 42% 40%,
+    ${hsla(hue, 20, 7, 0.95)} 0%, ${hsla(hue, 16, 4, 0.94)} 62%, ${hsla(hue, 12, 2, 0.92)} 100%)`
+  f.style.boxShadow = `inset 0 0 ${px(size * 0.2)} ${hsla(hue, 10, 0, 0.55)}`
+  const rim = el('occ-rim')
+  rim.style.setProperty('--rim', hsla(hue + 10, 70, 82, 0.85))
+  f.appendChild(rim)
+  return f
+}
+
 // ═══ STARS ═══ every one twinkles, wide swing, 5-13s - the Sonora
 // behaviour Ben named as the bar. NEVER a blur filter on these.
 const TEMP = ['#ffffff', '#f6e6ff', '#ffffff', '#fff3e2', '#eaf0ff']
@@ -444,8 +477,9 @@ export function ringDom(prefix, engine) {
   return {
     el,
     makePrim: (kind, w, h, hue, alpha, r) => makePrim(el, kind, w, h, hue, alpha, r),
-    bandY: (r, h) => bandY(engine, r, h),
+    bandY: (r, h, forceUpper) => bandY(engine, r, h, forceUpper),
     buildStars: (host, period, perFrame, sizeMul, seed) => buildStars(el, engine, host, period, perFrame, sizeMul, seed),
+    makeOccluder: (size, hue) => makeOccluder(el, size, hue),
   }
 }
 
@@ -482,7 +516,7 @@ function kfName(prefix, camelName) {
 
 export function ringCss(prefix) {
   const p = prefix
-  const tw = kfName(p, 'Tw'), pfBreathe = kfName(p, 'PfBreathe')
+  const tw = kfName(p, 'Tw'), pfBreathe = kfName(p, 'PfBreathe'), driftMove = kfName(p, 'DriftMove')
   return `
 .${p}lyr{position:absolute;inset:0;overflow:hidden}
 .${p}surge{position:absolute;left:0;top:0;width:100%;height:100%;
@@ -521,5 +555,16 @@ export function ringCss(prefix) {
 .${p}r-edge{position:absolute;border-radius:999px}
 
 .${p}rg-ring{position:absolute;border-radius:50%}
+
+.${p}pair-bridge{position:absolute;height:3px;transform-origin:0 50%;pointer-events:none}
+
+.${p}occ{position:absolute;border-radius:50%}
+.${p}occ-rim{position:absolute;inset:0;border-radius:50%;border:5px solid var(--rim);
+  border-right-color:transparent;border-bottom-color:transparent}
+
+.${p}drift{position:absolute;border-radius:50%;background:#fff6e6;
+  animation:${driftMove} 480s linear infinite alternate;
+  box-shadow:0 0 14px 4px rgba(255,235,200,0.55)}
+@keyframes ${driftMove}{0%{transform:translateX(0)}100%{transform:translateX(1800px)}}
 `
 }
