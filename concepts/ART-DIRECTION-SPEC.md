@@ -291,7 +291,25 @@ precisely the thing a procedural generator can't be trusted to invent from scrat
 else about how it's used (placement, size, alpha, arc position) stays generated and gated like
 every other primitive.
 
-### 6.1 Hard-edge requirement — with a real thickness and contrast floor
+### 6.0 Every station's subject is drawn, not glowed (added 2026-08-09)
+
+**[auto] A station's headline primitive (`st.prim`) must be a drawn kind — currently `sprite` or
+`ring`, `ground` once built — never one of the seven glow kinds (`blob dots spikes lens streak
+ribbon binary`).** Glow primitives are atmosphere: a wash, a wide soft field behind the subject.
+They are never the subject itself.
+
+This is a rule, not a one-station patch, because the failure isn't per-station — it's structural.
+Fixing st6 (`ribbon`→`sprite`, extent 2.4%→16.8% at equal-order signal) simply promoted st10 to
+the new worst-scoring station (signal 17.0, extent 2.3%, and not even in the arc's quiet group —
+it's a loud-arc station with a glow-only primitive, the same defect in a different slot). Any
+station left on a glow-only primitive will eventually be *someone's* bottom of the ranking,
+because a median-filling glow's own headline box structurally covers far less of itself than an
+opaque path does (measured: glow extents cluster 2–10% across every glow-primitive station
+measured so far; sprite extents measured 16–17%). Swapping the worst offender one at a time never
+closes this — it just moves the title.
+
+Enforced by `ring-verify.mjs`'s drawn-subject check (per-station, static — no render needed,
+reads `st.prim` directly): fails a station whose `prim` isn't in the drawn set.
 
 - **[auto] Every element ≥ 12% of frame width must contain a hard sub-element that is:**
   - **thickness ≥ 4px**, not 2px — at a 55" 1080p panel viewed from ~12 feet, one design pixel

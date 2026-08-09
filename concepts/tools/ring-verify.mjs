@@ -176,6 +176,12 @@ const SPEC = Object.freeze({
   // so reapplying it would silently pass stations that never improved).
   // Reported as measurement only until a floor is deliberately re-derived.
   perceptibility:     { k: 20, marginPx: 80,                 src: 'ART-DIRECTION-SPEC.md:72 §1' },
+  // drawn-subject: a station's headline primitive must be a drawn (opaque,
+  // closed-path) kind, never one of the seven glow kinds. Rule, not a
+  // per-station patch (ART-DIRECTION-SPEC.md §6.0) — the st6 fix simply
+  // promoted st10 into the same defect's worst slot, because a glow-only
+  // headline structurally covers far less of its own box than a drawn one.
+  drawnSubject:       { kinds: ['sprite', 'ring', 'ground'],  src: 'ART-DIRECTION-SPEC.md:294 §6.0' },
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -293,6 +299,39 @@ function functionBody(src, name) {
     missing.length === 0
       ? `${distinctPrims.length} distinct prim value(s) across ${worldFiles.length} world file(s) [${distinctPrims.join(',')}] all have a matching kind==='...' branch (${branches.size} branches in ringPrimitives.js)`
       : `${missing.length} prim value(s) with NO makePrim branch: ${missing.join(',')} — would render as an empty div`);
+}
+
+// ── drawn-subject (ART-DIRECTION-SPEC.md §6.0, added 2026-08-09): every
+//    station's headline primitive must be a drawn kind, never glow-only.
+//    Reads st.prim directly per file, in array order (station index =
+//    position in the stations array) — no render needed. Re-parses the world
+//    files rather than reaching into the parity check's block-scoped
+//    `primUses` above (kept as two independent checks on purpose). ──
+{
+  const worldsDir = path.join(REPO_ROOT, 'client/src/worlds');
+  const worldFiles = readdirSync(worldsDir).filter(f => f.endsWith('.ring.js'));
+  const primUses = [];
+  for (const f of worldFiles) {
+    const txt = readFileSync(path.join(worldsDir, f), 'utf8');
+    const re = /\bprim\s*:\s*'([^']+)'/g;
+    let m;
+    while ((m = re.exec(txt))) primUses.push({ prim: m[1], file: f });
+  }
+  const drawnKinds = new Set(SPEC.drawnSubject.kinds);
+  const byFile = {};
+  for (const u of primUses) { (byFile[u.file] ||= []).push(u.prim); }
+  const violations = [];
+  for (const [f, prims] of Object.entries(byFile)) {
+    prims.forEach((prim, i) => { if (!drawnKinds.has(prim)) violations.push(`${f}:st${i}(${prim})`); });
+  }
+  const total = primUses.length;
+  report(`every station's headline is a drawn primitive (${[...drawnKinds].join('/')})`,
+    violations.length === 0 ? 'PASS' : 'FAIL',
+    (violations.length === 0
+      ? `all ${total} station(s) across ${Object.keys(byFile).length} world file(s) use a drawn headline primitive`
+      : `${violations.length}/${total} station(s) still glow-only: ${violations.join(', ')}`) +
+    ` [${SPEC.drawnSubject.src}]`,
+    'spec');
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -549,9 +588,20 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
       const midLyr = lyrs[2];
       const pfEls = midLyr ? [...midLyr.querySelectorAll('.' + prefix + 'pf')].map(el => toDesign(el.getBoundingClientRect())).filter(onScreen) : [];
       const occEls = midLyr ? [...midLyr.querySelectorAll('.' + prefix + 'occ')].map(el => toDesign(el.getBoundingClientRect())).filter(onScreen) : [];
-      const headlineD = midLyr
-        ? ([...midLyr.querySelectorAll('.' + prefix + 'pf-breathe')].map(el => toDesign(el.getBoundingClientRect())).find(onScreen) || null)
+      // Every onscreen headline, not just the current station's own — the
+      // mid layer holds all 12 stations' headlines at once (plus cylinder-
+      // wraparound duplicates), jumpTo() only pans. Picking the one closest
+      // to the viewport's own centre (960) is more robust than "first in
+      // DOM order" once more than one primitive is a bright, opaque sprite:
+      // a DOM-order pick is silently wrong the moment two are onscreen
+      // together, and .find() alone gives no way to notice that happened.
+      const onscreenHeadlines = midLyr
+        ? [...midLyr.querySelectorAll('.' + prefix + 'pf-breathe')].map(el => toDesign(el.getBoundingClientRect())).filter(onScreen)
+        : [];
+      const headlineD = onscreenHeadlines.length
+        ? onscreenHeadlines.slice().sort((a, b) => Math.abs((a.x0 + a.x1) / 2 - 960) - Math.abs((b.x0 + b.x1) / 2 - 960))[0]
         : null;
+      const otherHeadlines = headlineD ? onscreenHeadlines.filter(h => h !== headlineD) : [];
 
       let starCount = 0;
       document.querySelectorAll('.' + prefix + 'star').forEach(el => { if (onScreen(toDesign(el.getBoundingClientRect()))) starCount++; });
@@ -561,6 +611,7 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
         elementCount: pfEls.length + occEls.length,
         occCount: occEls.length,
         headline: headlineD,
+        otherHeadlines,
         starCount,
       };
     }, prefix);
@@ -676,7 +727,7 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
     const threshold = frameStatsNatural.median + 20; // spec §1: "paneMedianLuma + 20"
     const inkFrac = countAbove(frameHist, threshold) / frameHist.total;
 
-    let headlineInkFrac = null, midShare = null, bleedFrac = null, centroid = null, quadrant = null, vertSpreadFrac = null, signal = null, extent = null;
+    let headlineInkFrac = null, midShare = null, bleedFrac = null, centroid = null, quadrant = null, vertSpreadFrac = null, signal = null, extent = null, contaminatedBy = 0;
     if (dom.headline) {
       const h = dom.headline;
       const sx0 = Math.max(0, h.x0 * scale), sy0 = Math.max(0, h.y0 * scale);
@@ -747,15 +798,38 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
       const ex1 = Math.min(pngPeak.width, sx1 + mPx), ey1 = Math.min(pngPeak.height, sy1 + mPx);
       const headHistPeak = histOf(pngPeak, sx0, sy0, sx1, sy1);
       const expandedHistPeak = histOf(pngPeak, ex0, ey0, ex1, ey1);
+
+      // Contamination guard (2026-08-09, added once a second station carried
+      // an opaque sprite): a bright neighbour's headline landing inside THIS
+      // station's 80px surround band would raise the surround median and
+      // deflate `signal` — a false negative the metric can't see on its own.
+      // Clip every other onscreen headline to the expanded region and
+      // subtract its pixels from the surround the same way the own headline
+      // already is. contamination stays [] (and this is a no-op) unless two
+      // headlines are ever close enough to actually overlap.
+      const contamination = [];
+      const excludeHist = { hist: new Uint32Array(256), total: 0 };
+      for (const oh of dom.otherHeadlines) {
+        const ox0 = oh.x0 * scale, oy0 = oh.y0 * scale, ox1 = oh.x1 * scale, oy1 = oh.y1 * scale;
+        const ix0 = Math.max(ex0, ox0), iy0 = Math.max(ey0, oy0);
+        const ix1 = Math.min(ex1, ox1), iy1 = Math.min(ey1, oy1);
+        if (ix1 > ix0 && iy1 > iy0) {
+          contamination.push({ ox0, oy0, ox1, oy1 });
+          const eh = histOf(pngPeak, ix0, iy0, ix1, iy1);
+          for (let v = 0; v < 256; v++) excludeHist.hist[v] += eh.hist[v];
+          excludeHist.total += eh.total;
+        }
+      }
       const surroundHistPeak = {
-        hist: expandedHistPeak.hist.map((v, i) => v - headHistPeak.hist[i]),
-        total: expandedHistPeak.total - headHistPeak.total,
+        hist: expandedHistPeak.hist.map((v, i) => v - headHistPeak.hist[i] - excludeHist.hist[i]),
+        total: expandedHistPeak.total - headHistPeak.total - excludeHist.total,
       };
       const surroundMedianPeak = statsFromHist(surroundHistPeak).median;
       signal = statsFromHist(headHistPeak).p95 - surroundMedianPeak;
       extent = headHistPeak.total > 0
         ? countAbove(headHistPeak, surroundMedianPeak + SPEC.perceptibility.k) / headHistPeak.total
         : 0;
+      contaminatedBy = contamination.length;
     }
 
     // safe box: design x 384-1536, y 302-778 — measured on the FORCED-PEAK frame,
@@ -780,7 +854,7 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
 
     stationMetrics.push({
       s, starCount: dom.starCount, elementCount: dom.elementCount, occCount: dom.occCount,
-      inkFrac, headlineInkFrac, midShare, bleedFrac, centroid, quadrant, vertSpreadFrac, signal, extent, safeStats, safeStatsNatural,
+      inkFrac, headlineInkFrac, midShare, bleedFrac, centroid, quadrant, vertSpreadFrac, signal, extent, contaminatedBy, safeStats, safeStatsNatural,
       meanLuma: frameStatsNatural.mean,
       outsideMeanLuma: outsideStatsNatural.mean,
       hasHeadline: !!dom.headline,
@@ -988,14 +1062,24 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
   //      exactly the "moving the threshold" failure mode this project's own
   //      standing rules forbid). Report tier only; always WARN, never FAIL,
   //      until a floor is deliberately re-derived against these two numbers.
+  //
+  //      KNOWN LIMITATION, not fixed: p95 is maxed out by any bright speck
+  //      covering as little as ~5% of the box — a hot-cored glow (blob/lens/
+  //      spikes's own `s-core` element) can clear a high `signal` reading
+  //      without reading as a drawn object at all. signal alone cannot tell
+  //      "opaque sprite" from "glow with a bright pinpoint center" apart;
+  //      only extent does that. Left open per 2026-08-09 review — do not
+  //      infer object-ness from signal alone.
   {
     const S = SPEC.perceptibility;
     const withHeadline = stationMetrics.filter(m => m.hasHeadline);
     const missing = stationMetrics.length - withHeadline.length;
+    const contaminated = withHeadline.filter(m => m.contaminatedBy > 0);
     report(P(`perceptibility (signal=p95(box)-median(surround), extent=%box>median(surround)+${S.k}, ${S.marginPx}px surround) — measurement only, no floor set`),
       'WARN',
-      `${withHeadline.map(m => `st${m.s}=signal:${m.signal.toFixed(1)},extent:${(m.extent * 100).toFixed(1)}%`).join(' ')}` +
+      `${withHeadline.map(m => `st${m.s}=signal:${m.signal.toFixed(1)},extent:${(m.extent * 100).toFixed(1)}%${m.contaminatedBy ? `[CONTAMINATED by ${m.contaminatedBy} neighbour(s), excluded]` : ''}`).join(' ')}` +
       (missing ? ` — ${missing} station(s) with no measurable headline` : '') +
+      (contaminated.length ? ` — ${contaminated.length}/12 surround band(s) overlapped another station's headline; those pixels were excluded before computing signal/extent above` : ' — no surround-band contamination detected across all 12 stations') +
       ` [${S.src}]`,
       'spec');
   }
