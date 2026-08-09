@@ -103,13 +103,24 @@ export function hsla(h, s, l, a) { return `hsla(${h},${s}%,${l}%,${a})` }
 const ROTATION_MAX_DEG = { lens: 30, streak: 26, ribbon: 18 }
 
 // Worst-case post-rotation bounding-box height for a kind that may rotate
-// after placement — this is the KNOWN GAP fix from bandY's own history above
+// after placement — closes the KNOWN GAP bandY's own history above flagged
 // (2026-08-08 review): the clamp was sizing off styled h, "passing by seed
 // luck, not by construction." Uses each kind's fixed rotation-range BOUND,
 // not the actual per-instance angle (not drawn yet when bandY is called —
 // drawing it early would reorder every downstream seeded value for that
 // station), so the clamp holds regardless of which angle in range lands.
 // Non-rotating kinds (the other 9) return h unchanged.
+//
+// HARDENING, not a fix for any measured regression: added 2026-08-09 while
+// chasing a safe-box luminance-cap FAIL at st4/st10, on the reasonable
+// assumption that this exact gap was the cause. It wasn't — killed and
+// re-verified via npm run verify:ring afterward (regression tier unchanged,
+// same 2 stations, same margin) before the real cause (neighbour-station
+// .b-lobe bleed, unrelated to rotation) was found. Keep this — it's still a
+// real, previously-documented gap the file's own comments had been asking
+// to close, and it's provably non-regressing (every non-rotating call site
+// is byte-identical, confirmed against the same gate run) — just don't cite
+// it as the st4/st10 fix in a future session.
 export function rotatedBandH(kind, w, h) {
   const maxDeg = ROTATION_MAX_DEG[kind]
   if (!maxDeg) return h
@@ -117,16 +128,17 @@ export function rotatedBandH(kind, w, h) {
   return w * Math.abs(Math.sin(rad)) + h * Math.abs(Math.cos(rad))
 }
 
-// effH (optional): the KNOWN GAP fix above — the real post-rotation bounding-
-// box height to clamp against, from rotatedBandH(), when it differs from the
-// element's own styled h (lens/streak/ribbon rotate the whole element after
-// this call). Every bound below is computed against effH so the constraint
-// reflects real on-screen extent; the result is then converted back to a top
-// edge for the actual (pre-rotation) box of height h. CSS rotate() pivots on
-// the untransformed box's own center, so that center — topEdge + h/2 — is
-// exactly what the rotated bbox shares with the unrotated one; effH===h
-// (the default, every non-rotating call site) makes this byte-identical to
-// the prior formula.
+// effH (optional): the real post-rotation bounding-box height to clamp
+// against, from rotatedBandH() (see its own comment — this is hardening,
+// not the fix for any specific measured regression), when it differs from
+// the element's own styled h (lens/streak/ribbon rotate the whole element
+// after this call). Every bound below is computed against effH so the
+// constraint reflects real on-screen extent; the result is then converted
+// back to a top edge for the actual (pre-rotation) box of height h. CSS
+// rotate() pivots on the untransformed box's own center, so that center —
+// topEdge + h/2 — is exactly what the rotated bbox shares with the
+// unrotated one; effH===h (the default, every non-rotating call site) makes
+// this byte-identical to the prior formula.
 function bandY(engine, r, h, forceUpper, effH) {
   const eff = effH === undefined ? h : effH
   const H = engine.H, top = engine.SAFE.y * H, bot = (engine.SAFE.y + engine.SAFE.h) * H
