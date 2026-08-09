@@ -259,7 +259,7 @@ function buildLayerContent(engine, world, arc, host, L) {
       // guess.
       const pairUpper = rPairBand() < 0.5 // shared band draw — see bandY's forceUpper comment (spec §7.5)
       const headLeft = x0 + lerp(0.08, 0.98, rHeadline()) * (engine.W - hw)
-      const headTop = dom.bandY(rHeadline, hh, pairUpper)
+      const headTop = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh))
       head.style.left = px(headLeft)
       head.style.top = px(headTop)
       host.appendChild(head)
@@ -286,7 +286,7 @@ function buildLayerContent(engine, world, arc, host, L) {
       const pairAng = rCompanion() * Math.PI * 2, pairRad = lerp(160, 380, rCompanion())
       let compCx = headCx + Math.cos(pairAng) * pairRad
       compCx = Math.min(x0 + engine.W - cw / 2, Math.max(x0 + cw / 2, compCx))
-      const compTop = dom.bandY(rCompanion, ch, pairUpper)
+      const compTop = dom.bandY(rCompanion, ch, pairUpper, dom.rotatedBandH(ck, cw, ch))
       comp.style.left = px(compCx - cw / 2)
       comp.style.top = px(compTop)
       host.appendChild(comp)

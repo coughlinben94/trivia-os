@@ -96,16 +96,51 @@ export function hsla(h, s, l, a) { return `hsla(${h},${s}%,${l}%,${a})` }
 // without weakening the safe-box guarantee - the band itself is still the
 // same safe-box-respecting geometry below, just shared by two callers
 // instead of drawn twice.
-function bandY(engine, r, h, forceUpper) {
+// Kinds whose makePrim branch rotates the whole returned element (f.style.
+// transform = rotate(...)) AFTER bandY has already placed it — lens/streak/
+// ribbon below, each from a fixed per-kind range, not a fresh draw per call.
+// Keep in sync with those three rotate() calls if their ranges ever change.
+const ROTATION_MAX_DEG = { lens: 30, streak: 26, ribbon: 18 }
+
+// Worst-case post-rotation bounding-box height for a kind that may rotate
+// after placement — this is the KNOWN GAP fix from bandY's own history above
+// (2026-08-08 review): the clamp was sizing off styled h, "passing by seed
+// luck, not by construction." Uses each kind's fixed rotation-range BOUND,
+// not the actual per-instance angle (not drawn yet when bandY is called —
+// drawing it early would reorder every downstream seeded value for that
+// station), so the clamp holds regardless of which angle in range lands.
+// Non-rotating kinds (the other 9) return h unchanged.
+export function rotatedBandH(kind, w, h) {
+  const maxDeg = ROTATION_MAX_DEG[kind]
+  if (!maxDeg) return h
+  const rad = maxDeg * Math.PI / 180
+  return w * Math.abs(Math.sin(rad)) + h * Math.abs(Math.cos(rad))
+}
+
+// effH (optional): the KNOWN GAP fix above — the real post-rotation bounding-
+// box height to clamp against, from rotatedBandH(), when it differs from the
+// element's own styled h (lens/streak/ribbon rotate the whole element after
+// this call). Every bound below is computed against effH so the constraint
+// reflects real on-screen extent; the result is then converted back to a top
+// edge for the actual (pre-rotation) box of height h. CSS rotate() pivots on
+// the untransformed box's own center, so that center — topEdge + h/2 — is
+// exactly what the rotated bbox shares with the unrotated one; effH===h
+// (the default, every non-rotating call site) makes this byte-identical to
+// the prior formula.
+function bandY(engine, r, h, forceUpper, effH) {
+  const eff = effH === undefined ? h : effH
   const H = engine.H, top = engine.SAFE.y * H, bot = (engine.SAFE.y + engine.SAFE.h) * H
   const upper = forceUpper !== undefined ? forceUpper : r() < 0.5
   const margin = 8
+  let edgeEff
   if (upper) {
-    const maxY = top - margin - h / 2, minY = -h * 0.30
-    return maxY <= minY ? maxY : minY + (maxY - minY) * r()
+    const maxY = top - margin - eff / 2, minY = -eff * 0.30
+    edgeEff = maxY <= minY ? maxY : minY + (maxY - minY) * r()
+  } else {
+    const minY = bot + margin - eff / 2, maxY = H - eff * 0.70
+    edgeEff = minY >= maxY ? minY : minY + (maxY - minY) * r()
   }
-  const minY = bot + margin - h / 2, maxY = H - h * 0.70
-  return minY >= maxY ? minY : minY + (maxY - minY) * r()
+  return edgeEff + eff / 2 - h / 2
 }
 
 // ═══ PRIMITIVES ═══ the engine renders these; a world picks one and a hue.
@@ -897,7 +932,8 @@ export function ringDom(prefix, engine) {
   return {
     el,
     makePrim: (kind, w, h, hue, alpha, r, isHeadline, fill) => makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill),
-    bandY: (r, h, forceUpper) => bandY(engine, r, h, forceUpper),
+    bandY: (r, h, forceUpper, effH) => bandY(engine, r, h, forceUpper, effH),
+    rotatedBandH,
     buildStars: (host, period, perFrame, sizeMul, seed) => buildStars(el, engine, host, period, perFrame, sizeMul, seed),
     makeOccluder: (size, hue, fill) => makeOccluder(el, size, hue, fill),
   }
