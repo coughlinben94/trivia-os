@@ -1,0 +1,38 @@
+{
+  "verdict": "FAIL",
+  "verdictSource": "majority-vote",
+  "reason": "[sample 1: FAIL] The water/reflection band (~62-71% height, x 22-80%) is a hazy indistinct fog patch rather than a legible reflective surface, and the flame (~x 42-58%, y 70-97%) is a single soft feathered glow blob with no distinct flame lobes, unlike the reference's crisp lobed flame and clear reflection texture. [sample 2: FAIL] Whole frame is unintentionally soft — the nearest elements (foreground sand band, the pale squiggle at x 0-27%/y 76-93%) are as blurred as the horizon, and the water band at y 62-78% is a smear with no drawn shoreline where the reference has a hard shore curve and defined sand-bar lobes. The left third of the foreground (x 0-40%, y 78-97%) holds nothing but a flat gradient and one stroke that resolves as no object, and the crisp vector fire/logs against the airbrushed everything-else reads as two different hands in one frame. [sample 3: FAIL] Focal campfire element lacks reference craft standard. Flames have minimal internal detail/texture compared to reference's multi-layer depth work. Logs simplified to basic ovals vs. reference's textured renderings. Scene reads competent but under-detailed at its central focus.",
+  "defects": [
+    "missing-detail"
+  ],
+  "minorFindings": [
+    "register-mismatch"
+  ],
+  "defectsSingleSample": [
+    "empty-region",
+    "faded-detail",
+    "focal-subject-soft",
+    "uniform-mechanical-repetition",
+    "whole-frame-blur"
+  ],
+  "defectsOffVocabulary": [],
+  "deviations": [
+    "spiky-conifer-treeline",
+    "widescreen-recomposition",
+    "stars-added",
+    "chair-omitted"
+  ],
+  "checkedFile": "concepts/campfire-sing-along-v1.html",
+  "timestamp": "2026-07-27T22:19:35.061Z",
+  "sampleVotes": {
+    "pass": 0,
+    "fail": 3,
+    "total": 3,
+    "droppedBlind": 0
+  },
+  "panel": [
+    "default",
+    "opus",
+    "haiku"
+  ]
+}

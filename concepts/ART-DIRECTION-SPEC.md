@@ -52,7 +52,15 @@ where it may sit. "Ink" = fraction of frame pixels whose luma exceeds `paneMedia
   `transparent`; the floor was always about whether the form is visible at all, not about every
   gradient step. (The original draft's literal wording — "no stop below 0.25" — is
   unsatisfiable by any radial gradient and would fail every soft falloff in the vocabulary.)
-- **[auto] Ink per station: 6–18% of the frame.**
+- **[auto] Ink per station: floor scales with the station's own arc target, ceiling flat at
+  18% of the frame.** (Amended 2026-08-08 — was a flat 6–18% band. A flat floor applied to
+  twelve stations whose entire value arc exists so quiet ones legitimately carry less; a
+  station near the arc's trough was being held to the same ink minimum as one at the crest.
+  Floor(i) = 6% × (station *i*'s arc target ÷ the arc's own `hi`) — reaches the old flat 6%
+  only near the loud end, scales down toward the quiet end. Ceiling stays flat: no station has
+  ever measured over 18%, and nothing argues a quiet station should be allowed *more* ink than
+  a loud one, only less. See `concepts/tools/ring-verify.mjs`'s `SPEC.inkPerStation` /
+  check 11 for the implementation.)
 - **[auto] The station's largest element supplies ≥ 55% of the mid (composition) layer's ink**
   — scoped to the composition layer specifically, since far-layer washes and the star field
   both contribute ink at every station and would make the rule unmeasurable otherwise.
@@ -61,6 +69,18 @@ where it may sit. "Ink" = fraction of frame pixels whose luma exceeds `paneMedia
   ink its box size implies. Box size alone will not fix it; alpha and edge structure will.
 - **[auto] Elements per station, excluding atmosphere: 2–5.** Every station has at least one
   element at Feature tier or above. No station is ever empty.
+- **[auto] Perceptibility floor, independent of the arc.** (Added 2026-08-09.) The arc's job is
+  brightness; whether a station holds a perceptible, nameable form is not negotiable at any arc
+  value — a quiet station is dim, never invisible. Measured as local contrast, not frame-wide
+  ink: `headline box's own median luma − median luma of an 80px band immediately outside the
+  headline box (forced-peak frame, same peak-forcing the safe-box cap already uses)`. **Floor:
+  ≥ 10.** Grounded in this document's own existing ink threshold (`paneMedianLuma + 20`, §1
+  above) — the same "clearly distinguishable" bar, halved, because this is a tighter, purely
+  local comparison (a headline against its own immediate neighbourhood) rather than a form
+  against the whole busy frame, and a local test can reasonably ask less in absolute luma and
+  still be a meaningful floor. Proposed, not empirically calibrated against a large sample — the
+  citation is a reasoned relationship to an existing rule, not a derived constant; revisit if it
+  proves too strict or too loose against real content once more stations are checked against it.
 
 ---
 
@@ -77,11 +97,24 @@ dead stripe evacuated of content.
   not a static authored-frame snapshot. Mean ≤ 34, 99.5th percentile ≤ 72. Measure at each
   element's breathe/twinkle peak, not its resting alpha; a gate that only checks the authored
   frame certifies nothing about what a viewer actually sees over 75 seconds of motion.
-- **[auto] The scrim is part of the spec, not an implementation detail.** An elliptical
-  (never a rectangular band — a hard horizontal edge reads as a horizon or a letterbox)
-  scrim behind the question text, alpha tracking the station's own brightness target
-  (`0.20 ≤ alpha ≤ 0.62`, keyed to that station's arc value). This is what lets the centroid
-  rule stay permissive: the scrim, not an evacuated stripe, is what protects legibility.
+- **[auto] The scrim is part of the spec, not an implementation detail.** A scrim behind the
+  question text, alpha tracking the station's own brightness target (`0.20 ≤ alpha ≤ 0.62`,
+  keyed to that station's arc value). **The scrim's alpha must reach exactly zero strictly
+  inside its own element bounds, on every axis.** (Amended 2026-08-09 — supersedes the earlier
+  "elliptical, never a rectangular band" phrasing of this rule. Both failure modes it named — a
+  hard-edged rectangular band, AND an ellipse whose own falloff is clipped by its element's box
+  edge before reaching transparent — are the same underlying defect: an abrupt discontinuity in
+  the alpha ramp, which reads as a horizon or letterbox either way. "Elliptical" alone doesn't
+  prevent it, and this project shipped that exact miss once already: a box far wider than it is
+  tall, with the ellipse's own radius sized off that box, clipped at the box edge before fading
+  out — a visible horizontal seam, confirmed by rendering it. `concepts/DESIGN-WORKER-LESSONS.md`
+  2026-07-27 rounds 2-3, a different scrim, proved the mechanism independently: a radial gradient
+  decays from one centre in every direction and cannot hold a flat level across a box much wider
+  than it is tall, no matter how its radius/stops are tuned — tuning the ellipse doesn't fix a
+  box the gradient can't fit inside. The fix here is a box with enough margin on every axis that
+  the gradient's own falloff always completes before the box edge — not a linear-gradient swap
+  (that lesson's own fix), which would reintroduce a hard vertical edge on this scrim's left/right
+  bounds instead.)
 - **[auto] Quadrant rotation.** Split the frame at x = 960, y = 540. Over twelve stations each
   quadrant hosts the largest element **at least twice, at most four times.**
 - **[auto] Horizontal balance.** Mean centroid x over a full turn must land within **960 ±
@@ -127,7 +160,10 @@ dead stripe evacuated of content.
   ```
   Reference values that satisfy every rule below: seed producing loudness separation
   ≥ 0.07 between any two trough-adjacent stations, span 2.2–4.0×, absolute band intact.
-- **[auto] Absolute band.** Quietest station mean 14–22; loudest 40–66.
+- **[auto] Absolute band.** Quietest station mean 8–13; loudest 26–34. (Rebased 2026-08-08 with
+  ARC.lo/hi 18/52 → 10/31 — see B2-luminance.md §5: 52 was outside the envelope this spec's own
+  alpha/placement caps allow for a space world's flat-base sky, and was never reachable at any
+  legal ink level. 10/31 is measured reachable at 96% of intended contrast.)
 - **[auto] Span: 2.2–4.0× (max ÷ min).** Below 2.2 nothing is a moment; above 4.0 the quiet
   stations look broken.
 - **[auto] Adjacent-station minimum gap, not rank distance.** The original draft's rank-based
@@ -306,7 +342,13 @@ every other primitive.
   visibly dims what's behind it. At least one station in three contains an occluder: render
   with and without it, and star-field luminance inside the occluder's footprint must drop to
   ≤ 0.5× the same stars unoccluded. A dark occluder additionally needs the §6.1 rim treatment —
-  dark shape over dark sky is invisible without one.
+  dark shape over dark sky is invisible without one. **No occluder (or any other subtractive
+  element — a dust lane, a dark ribbon) on a station in the bottom third of the arc by loudness
+  rank.** (Amended 2026-08-09 — a subtractive element paired with an already-quiet station is
+  the worst combination available: a station rendered and judged as an empty or broken pane,
+  not a deliberately quiet one, because the thing standing in for its content was designed to
+  remove light, not carry a form. Presence is never the arc's job — the arc only ever says how
+  bright. See the perceptibility floor below, which this rule exists to protect.)
 - **[auto] §7.3 Scale ladder.** Within a station, largest ÷ smallest non-atmosphere element
   ≥ 6× in longest dimension.
 - **[auto] §7.4 Atmospheric perspective, applied between form-bearing layers.** Far-layer mean

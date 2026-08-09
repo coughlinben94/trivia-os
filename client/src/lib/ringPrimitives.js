@@ -36,26 +36,54 @@ export function px(n) { return n.toFixed(1) + 'px' }
 
 export function hsla(h, s, l, a) { return `hsla(${h},${s}%,${l}%,${a})` }
 
-// bandY: places an element's TOP edge such that its full bounding box - not
-// just its centroid - never falls inside engine.SAFE, for any element height
-// h, with an 8px margin (see ART-DIRECTION-SPEC.md §2; this fixed a real
-// safe-box violation earlier this session where a tall headline's centroid
-// could land inside the box under the old fixed-offset constants).
+// bandY: places an element's TOP edge such that its CENTROID never falls
+// inside engine.SAFE, for any element height h, with an 8px margin (see
+// ART-DIRECTION-SPEC.md §2: "Never a geometric exclusion zone... Overlap is
+// allowed, provided the luminance cap holds" - a full-bbox exclusion is a
+// spec violation, not a stricter safety margin).
 //
-// Was centroid-only (margin applied to `h/2`, guaranteeing only the middle
-// point stayed clear) until 2026-08-07's investigation of a real, measured
-// safe-box p99.5 overage on stations 0/9: the occluder's rim border sits
-// flush with its own bbox edge (border:5px solid, inset:0); 'blob's three
-// child lobes are ROTATED, so their real axis-aligned bbox is bigger than
-// the declared w/h; 'ring's border is a near-full-alpha 90%-of-bbox circle.
-// All three primitive kinds put real, bright ink within a few px of their
-// own declared box edge - the centroid-only rule let up to h/2 of any of
-// them bleed straight into the safe box. Rather than special-case which
-// primitive kinds are "soft enough" (a growing, easy-to-get-wrong list -
-// this investigation alone found 3 different offenders across headline,
-// companion, far-layer wash, and the occluder, all under the SAME bug),
-// every element's real edge now clears the box, full stop - measured to
-// drop p99.5 across all 12 stations, not just the 2 that were failing.
+// 2026-08-07 briefly switched this to full-bbox clearance (margin applied to
+// the whole box, not h/2) to chase a measured safe-box p99.5 overage on
+// stations 0/9. That traded one bug for two spec violations: it directly
+// contradicts §2's explicit ban on geometric exclusion zones, and measured
+// 2026-08-08 to be the sole cause of a bleed regression (0 -> 7 stations
+// "accidentally clipped" >35% by the frame edge - full A/B isolated via a
+// throwaway worktree at the pre-change commit). Centroid clearance restored
+// the same day - NOT a byte-identical revert: the off-frame bounds
+// (minY=-h*0.30 upper / maxY=H-h*0.70 lower) are new, tighter than the
+// pre-3304681 values (-h*0.10 / H-h*0.88). Loosening them further reopens
+// the accidental-clip defect (see caveat below); tightening them further
+// starves the still-unmet vertical-spread/ink floor (spec §2/§1) the
+// build already can't hit. This is the balance point measured to clear
+// both, not an arbitrary choice. The actual luminance overage came from
+// real bright-edge ink on 4 elements sitting close to their own
+// primitive's declared edge - occluder's rim border (flush, inset:0),
+// blob's rim (traces the rotated lobe cluster's own bbox) and its core
+// (small hot-spot + blurred boxShadow - a p99.5 metric's favorite
+// target), and ring's border (~90% of its bbox, near-full alpha). Fixed
+// each at the source (dimmed alpha) rather than by excluding geometry, so
+// overlap into the safe box stays legal and the box itself stops reading
+// as a dead stripe. CAVEAT (2026-08-08 review, unresolved): st0 clears the
+// p99.5 cap at exactly 72/72 - zero headroom. Any future change that adds
+// ink to st0 (the ink-per-station floor is still unmet on 11/12 stations,
+// st0 included at the time of writing) will need to re-earn that margin,
+// not assume it's still there.
+//
+// KNOWN GAP (2026-08-08 review, not yet fixed): this clamp sizes off the
+// element's STYLED h, not its post-rotation bounding box. `lens`/`streak`/
+// `ribbon` rotate the whole element after bandY places it - a large enough
+// rotation angle can push the real on-screen extent past the 35%
+// accidental-clip line this fix exists to hold, even though the styled h
+// clears it. Currently passing by seed luck, not by construction (st3's
+// lens measured 33.8% against a computed rotated-AABB worst case of
+// 35.3%). Needs the clamp to size off the rotated AABB height, not h,
+// before this can be trusted under a different seed or content change.
+//
+// Reverting which branch (upper/lower) fires per station reshuffles every
+// downstream seeded draw for that station (companion kind/hue, pair angle,
+// detail specks all pull from the same rng stream after the headline's
+// bandY call) - expected, not a bug on its own; diff per-station output
+// before/after if chasing an unrelated content-budget regression here.
 //
 // forceUpper (optional): pins the upper/lower band choice instead of
 // drawing it (still consumes one r() call either way - callers that pass
@@ -73,10 +101,10 @@ function bandY(engine, r, h, forceUpper) {
   const upper = forceUpper !== undefined ? forceUpper : r() < 0.5
   const margin = 8
   if (upper) {
-    const maxY = top - h - margin, minY = -h * 0.10
+    const maxY = top - margin - h / 2, minY = -h * 0.30
     return maxY <= minY ? maxY : minY + (maxY - minY) * r()
   }
-  const minY = bot + margin, maxY = H - h * 0.88
+  const minY = bot + margin - h / 2, maxY = H - h * 0.70
   return minY >= maxY ? minY : minY + (maxY - minY) * r()
 }
 
@@ -98,7 +126,25 @@ function bandY(engine, r, h, forceUpper) {
 // --pd even when unused, so skipping them wouldn't reorder every downstream
 // seeded draw in the caller (position/size/hue jitter for elements authored
 // after this one in the same station) - only whether the result gets used.
-function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
+// B2-luminance.md §2.2: the arc's units reach the pixel through `fill`
+// (client/src/lib/ringEngine.js's fillOf()), which scales every interior
+// gradient stop's alpha AND its painted extent. Extent is the stronger
+// lever (measured: 1->2 on extent alone moves a station's frame-mean +93%,
+// 1->3 on alpha alone +41%) — a headline box was occupying 20-27% of the
+// frame while its own gradient painted 0.9-24% of that box's interior; the
+// box was never the problem, the paint inside it was.
+// E() scales a gradient's own ending-shape size and terminal stop (how far
+// the paint reaches WITHIN the element's box) — never the element's own w/h/
+// position. B2's own blob-lobe note is explicit about why: "box is legal;
+// the paint grows" — the placement/safe-box/bleed geometry throughout this
+// file was independently, expensively tuned (see bandY's history above) and
+// stays untouched here.
+const ALPHA_GAIN = 2.6
+const EXTENT_GAIN = 1.9
+const A = (a, fill) => Math.min(1, a * ALPHA_GAIN * fill)
+const E = (e, fill) => Math.min(100, e * EXTENT_GAIN * fill)
+
+function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill = 1) {
   const f = el(isHeadline ? 'pf pf-breathe' : 'pf')
   f.style.width = px(w); f.style.height = px(h)
   const pb = (47 + Math.floor(r() * 26)) + 's' // 47-72s, already clears the >=30s floor
@@ -120,9 +166,9 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
       const lx = (w - lw) * r(), ly = (h - lh) * r()
       L.style.left = px(lx); L.style.top = px(ly)
       L.style.width = px(lw); L.style.height = px(lh)
-      L.style.background = `radial-gradient(ellipse 56% 44% at ${40 + r() * 20}% 50%,
-        ${hsla(hue, 72, 62, 0.42)} 0%, ${hsla(hue - 8, 64, 46, 0.20)} 40%,
-        ${hsla(hue - 14, 56, 30, 0.07)} 66%, transparent 82%)`
+      L.style.background = `radial-gradient(ellipse ${E(56, fill).toFixed(0)}% ${E(44, fill).toFixed(0)}% at ${40 + r() * 20}% 50%,
+        ${hsla(hue, 72, 62, A(0.42, fill))} 0%, ${hsla(hue - 8, 64, 46, A(0.20, fill))} 40%,
+        ${hsla(hue - 14, 56, 30, A(0.07, fill))} 66%, transparent ${E(82, fill).toFixed(0)}%)`
       const rot = -30 + r() * 60
       L.style.transform = `rotate(${rot.toFixed(0)}deg)`
       f.appendChild(L)
@@ -138,8 +184,8 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
     const ccx = lerp(bx0, bx1, 0.3 + r() * 0.4), ccy = lerp(by0, by1, 0.3 + r() * 0.4)
     core.style.width = core.style.height = px(cs)
     core.style.left = px(ccx - cs / 2); core.style.top = px(ccy - cs / 2)
-    core.style.background = `radial-gradient(circle, ${hsla(hue, 30, 96, 0.95)} 0%, ${hsla(hue, 70, 80, 0.5)} 55%, transparent 100%)`
-    core.style.boxShadow = `0 0 ${px(cs * 2.4)} ${px(cs * 0.8)} ${hsla(hue, 84, 78, 0.55)}`
+    core.style.background = `radial-gradient(circle, ${hsla(hue, 30, 96, A(0.70, fill))} 0%, ${hsla(hue, 70, 80, A(0.35, fill))} 55%, transparent 100%)`
+    core.style.boxShadow = `0 0 ${px(cs * 2.4)} ${px(cs * 0.8)} ${hsla(hue, 84, 78, A(0.22, fill))}`
     f.appendChild(core)
     // rim: traces the ACTUAL lobe cluster's bounding box, inset to the
     // gradient's own visible radii (56%/44%, matching each lobe's own
@@ -149,7 +195,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
     const rcx = (bx0 + bx1) / 2, rcy = (by0 + by1) / 2
     rim.style.left = px(rcx - rw / 2); rim.style.top = px(rcy - rh / 2)
     rim.style.width = px(rw); rim.style.height = px(rh)
-    rim.style.setProperty('--rim', hsla(hue + 6, 90, 82, 0.85))
+    rim.style.setProperty('--rim', hsla(hue + 6, 90, 82, 0.55))
     rim.style.transform = `rotate(${domRot.toFixed(0)}deg)`
     f.appendChild(rim)
   }
@@ -157,7 +203,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
   else if (kind === 'dots') {
     const g = el('d-glow')
     g.style.background = `radial-gradient(circle closest-side,
-      ${hsla(hue, 58, 66, 0.16)} 0%, ${hsla(hue, 50, 52, 0.06)} 48%, transparent 76%)`
+      ${hsla(hue, 58, 66, A(0.16, fill))} 0%, ${hsla(hue, 50, 52, A(0.06, fill))} 48%, transparent ${E(76, fill).toFixed(0)}%)`
     f.appendChild(g)
     const n = 26 + Math.floor(r() * 22)
     for (let i = 0; i < n; i++) {
@@ -177,8 +223,8 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
   else if (kind === 'spikes') {
     const sh = el('d-glow')
     sh.style.background = `radial-gradient(circle closest-side,
-      ${hsla(hue, 80, 74, 0.34)} 0%, ${hsla(hue - 10, 70, 58, 0.16)} 26%,
-      ${hsla(hue - 30, 60, 44, 0.08)} 52%, transparent 76%)`
+      ${hsla(hue, 80, 74, A(0.34, fill))} 0%, ${hsla(hue - 10, 70, 58, A(0.16, fill))} 26%,
+      ${hsla(hue - 30, 60, 44, A(0.08, fill))} 52%, transparent ${E(76, fill).toFixed(0)}%)`
     f.appendChild(sh)
     for (let i = 0; i < 6; i++) {
       const s = el('s-spk')
@@ -194,7 +240,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
     const cs = Math.max(16, w * 0.055)
     c.style.width = c.style.height = px(cs)
     c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
-    c.style.boxShadow = `0 0 ${px(cs * 2.4)} ${px(cs * 0.8)} ${hsla(hue, 84, 74, 0.55)}`
+    c.style.boxShadow = `0 0 ${px(cs * 2.4)} ${px(cs * 0.8)} ${hsla(hue, 84, 74, A(0.55, fill))}`
     f.appendChild(c)
   }
 
@@ -210,8 +256,8 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
     const dw = w * 0.60, dh = h * 0.60
     d.style.left = px(w * 0.5 - dw / 2); d.style.top = px(h * 0.5 - dh / 2)
     d.style.width = px(dw); d.style.height = px(dh)
-    d.style.background = `radial-gradient(ellipse 62% 62% at 50% 50%,
-      ${hsla(hue, 40, 44, 0.16)} 0%, ${hsla(hue, 36, 32, 0.08)} 50%, transparent 80%)`
+    d.style.background = `radial-gradient(ellipse ${E(62, fill).toFixed(0)}% ${E(62, fill).toFixed(0)}% at 50% 50%,
+      ${hsla(hue, 40, 44, A(0.16, fill))} 0%, ${hsla(hue, 36, 32, A(0.08, fill))} 50%, transparent ${E(80, fill).toFixed(0)}%)`
     f.appendChild(d)
     // spiral arms: this used to be a straight dust lane across a flattened
     // disc, which fill-black-silhouettes indistinguishable from `ring`'s
@@ -292,8 +338,8 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
         lobe.style.width = lobe.style.height = px(Math.max(10, ls))
         lobe.style.left = px(lx - ls / 2); lobe.style.top = px(ly - ls / 2)
         lobe.style.background = `radial-gradient(circle,
-          ${hsla(hue + ai * 6, 62 - t * 10, 72 - t * 16, 0.42 - t * 0.20)} 0%,
-          ${hsla(hue, 52, 46, 0.16 - t * 0.08)} 55%, transparent 82%)`
+          ${hsla(hue + ai * 6, 62 - t * 10, 72 - t * 16, A(0.42 - t * 0.20, fill))} 0%,
+          ${hsla(hue, 52, 46, A(0.16 - t * 0.08, fill))} 55%, transparent ${E(82, fill).toFixed(0)}%)`
         f.appendChild(lobe)
         // edge highlight rotates to the spiral's local TANGENT, not its
         // radial angle - for r = r0*e^(ang/pitch), tangent-to-radial
@@ -320,17 +366,20 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
     const cs = Math.max(11, w * 0.036)
     c.style.width = c.style.height = px(cs)
     c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
-    c.style.boxShadow = `0 0 ${px(cs * 2.6)} ${px(cs * 0.7)} ${hsla(hue, 70, 80, 0.45)}`
+    c.style.boxShadow = `0 0 ${px(cs * 2.6)} ${px(cs * 0.7)} ${hsla(hue, 70, 80, A(0.45, fill))}`
     f.appendChild(c)
     f.style.transform = `rotate(${(-30 + r() * 24).toFixed(0)}deg)`
   }
 
   else if (kind === 'streak') {
     const t = el('k-tail')
-    t.style.width = '100%'; t.style.height = px(Math.max(6, h * 0.14)) // broadens vs prior 0.10
-    t.style.marginTop = px(-Math.max(6, h * 0.14) / 2)
-    t.style.background = `linear-gradient(90deg,transparent 0%,${hsla(hue, 60, 70, 0.10)} 18%,
-      ${hsla(hue, 66, 78, 0.32)} 70%,${hsla(hue, 70, 90, 0.62)} 100%)`
+    // tail bar's own thickness, not the headline box's w/h — same "paint
+    // grows inside an unchanged box" rule as every other primitive above.
+    const tailH = Math.max(6, h * 0.14 * EXTENT_GAIN * fill)
+    t.style.width = '100%'; t.style.height = px(tailH)
+    t.style.marginTop = px(-tailH / 2)
+    t.style.background = `linear-gradient(90deg,transparent 0%,${hsla(hue, 60, 70, A(0.10, fill))} 18%,
+      ${hsla(hue, 66, 78, A(0.32, fill))} 70%,${hsla(hue, 70, 90, A(0.62, fill))} 100%)`
     f.appendChild(t)
     // coma: soft glow bigger than the nucleus, marking this as a comet not
     // a point-source shooting star. Centered on the head's actual position
@@ -341,12 +390,12 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
     const comaW = h * 0.7
     const coma = el('d-glow')
     coma.style.left = px(headCx - comaW / 2); coma.style.top = '0'; coma.style.width = px(comaW); coma.style.height = '100%'
-    coma.style.background = `radial-gradient(circle, ${hsla(hue, 70, 85, 0.5)} 0%, transparent 70%)`
+    coma.style.background = `radial-gradient(circle, ${hsla(hue, 70, 85, A(0.5, fill))} 0%, transparent ${E(70, fill).toFixed(0)}%)`
     f.appendChild(coma)
     const hd = el('k-head')
     hd.style.width = hd.style.height = px(hs); hd.style.marginTop = px(-hs / 2)
     hd.style.background = '#f2fbff'
-    hd.style.boxShadow = `0 0 ${px(hs * 2.2)} ${px(hs * 0.6)} ${hsla(hue, 72, 80, 0.5)}`
+    hd.style.boxShadow = `0 0 ${px(hs * 2.2)} ${px(hs * 0.6)} ${hsla(hue, 72, 80, A(0.5, fill))}`
     f.appendChild(hd)
     f.style.transform = `rotate(${(-26 + r() * 16).toFixed(0)}deg)`
   }
@@ -361,8 +410,8 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
     // and alpha lowered - big AND dim, not small and dim.
     const b = el('r-body')
     b.style.background = `radial-gradient(ellipse 94% 42% at 50% 50%,
-      ${hsla(hue, 42, 30, 0.38)} 0%, ${hsla(hue, 38, 24, 0.22)} 46%,
-      ${hsla(hue, 34, 18, 0.09)} 70%, transparent 88%)`
+      ${hsla(hue, 42, 30, A(0.38, fill))} 0%, ${hsla(hue, 38, 24, A(0.22, fill))} 46%,
+      ${hsla(hue, 34, 18, A(0.09, fill))} 70%, transparent ${E(88, fill).toFixed(0)}%)`
     f.appendChild(b)
     // hard edge traces the band's OWN long top edge only (one rim, per
     // spec's fix suggestion) - a bright horizontal line positioned at the
@@ -385,7 +434,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
     ring.style.width = px(rw); ring.style.height = px(rh)
     ring.style.borderWidth = px(Math.max(4, w * 0.02))
     ring.style.borderStyle = 'solid'
-    ring.style.borderColor = hsla(hue, 70, 78, 0.75)
+    ring.style.borderColor = hsla(hue, 70, 78, 0.55)
     f.appendChild(ring)
     // planet body it wraps - reuses .l-disc (position:absolute;inset:0;
     // border-radius:50%, no lens-specific geometry baked in); the inline
@@ -396,8 +445,18 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
     const bw = w * 0.42, bh = h * 0.42
     body.style.left = px((w - bw) / 2); body.style.top = px((h - bh) / 2)
     body.style.width = px(bw); body.style.height = px(bh)
-    body.style.background = `radial-gradient(circle at 38% 38%, ${hsla(hue, 60, 68, 0.9)} 0%, ${hsla(hue, 50, 40, 0.7)} 70%, transparent 100%)`
+    body.style.background = `radial-gradient(circle at 38% 38%, ${hsla(hue, 60, 68, A(0.9, fill))} 0%, ${hsla(hue, 50, 40, A(0.7, fill))} 70%, transparent 100%)`
     f.appendChild(body)
+    // outer glow (B2 sec 2.2): `ring` had no glow at all outside its hard
+    // border/planet — the whole primitive's painted surface was the
+    // thinnest of the eight kinds measured. A new closest-side wash behind
+    // the ring/planet, scaled by fill same as every other primitive's paint.
+    const glow = el('d-glow')
+    const gd = w * 0.95
+    glow.style.left = px((w - gd) / 2); glow.style.top = px((h - gd) / 2)
+    glow.style.width = glow.style.height = px(gd)
+    glow.style.background = `radial-gradient(circle closest-side, ${hsla(hue, 55, 70, A(0.30, fill))} 0%, transparent ${E(96, fill).toFixed(0)}%)`
+    f.insertBefore(glow, ring)
   }
 
   else if (kind === 'binary') {
@@ -414,7 +473,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
     const haloD = w * 0.5
     halo.style.left = px(w * 0.5 - haloD / 2); halo.style.top = px(h * 0.5 - haloD / 2)
     halo.style.width = halo.style.height = px(haloD)
-    halo.style.background = `radial-gradient(circle closest-side, ${hsla(hue, 60, 70, 0.20)} 0%, transparent 75%)`
+    halo.style.background = `radial-gradient(circle closest-side, ${hsla(hue, 60, 70, A(0.20, fill))} 0%, transparent ${E(75, fill).toFixed(0)}%)`
     f.appendChild(halo)
     sizes.forEach((sz, i) => {
       const d = el(''); d.style.position = 'absolute'; d.style.borderRadius = '50%'
@@ -438,10 +497,45 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline) {
       // treatment blob/spikes/lens already use for their cores) reads as a
       // glowing star instead of a shadowed planet.
       d.style.background = `radial-gradient(circle at 50% 50%,
-        ${hsla(hue, 25, 97, 1)} 0%, ${hsla(hue, 60, 72, 0.55)} 50%, transparent 100%)`
-      d.style.boxShadow = `0 0 ${px(s * 2)} ${px(s * 0.3)} ${hsla(hue, 70, 80, 0.5)}`
+        ${hsla(hue, 25, 97, A(1, fill))} 0%, ${hsla(hue, 60, 72, A(0.55, fill))} 50%, transparent 100%)`
+      d.style.boxShadow = `0 0 ${px(s * 2)} ${px(s * 0.3)} ${hsla(hue, 70, 80, A(0.5, fill))}`
       f.appendChild(d)
     })
+  }
+
+  else if (kind === 'sprite') {
+    // spec §6: a closed opaque path — the noun a gradient can't carry
+    // (Sonora's balloons "read at distance because they're drawn"). Two
+    // wavy edges offset by a constant band-thickness, so the outline can
+    // never self-intersect. 10 hand-authored anchor points (spec: 5-10),
+    // solid fill + a real stroke (non-scaling so it holds >=4px on screen
+    // no matter the element's own w/h tier), one lighter interior band
+    // tracing the centerline. Test case: st6's own noun ("dust ribbon")
+    // drawn instead of glowed, isolating whether opacity — not the arc — is
+    // what perceptibility was missing (B2-luminance.md; the fill/arc gain
+    // is deliberately NOT applied here, since an opaque path has nothing
+    // for A()/E() to scale).
+    const NS = 'http://www.w3.org/2000/svg'
+    const svg = document.createElementNS(NS, 'svg')
+    svg.setAttribute('viewBox', '0 0 100 100')
+    svg.setAttribute('preserveAspectRatio', 'none')
+    svg.style.position = 'absolute'; svg.style.inset = '0'
+    svg.style.width = '100%'; svg.style.height = '100%'
+    const body = document.createElementNS(NS, 'path')
+    body.setAttribute('d', 'M5,45 L30,25 L50,45 L70,25 L95,45 L95,61 L70,41 L50,61 L30,41 L5,61 Z')
+    body.setAttribute('fill', hsla(hue, 62, 52, 1))
+    body.setAttribute('stroke', hsla(hue + 10, 70, 84, 1))
+    body.setAttribute('stroke-width', '4')
+    body.setAttribute('vector-effect', 'non-scaling-stroke')
+    svg.appendChild(body)
+    const band = document.createElementNS(NS, 'path')
+    band.setAttribute('d', 'M8,53 L30,33 L50,53 L70,33 L92,50')
+    band.setAttribute('fill', 'none')
+    band.setAttribute('stroke', hsla(hue - 12, 42, 90, 0.65))
+    band.setAttribute('stroke-width', '2.5')
+    band.setAttribute('vector-effect', 'non-scaling-stroke')
+    svg.appendChild(band)
+    f.appendChild(svg)
   }
   return f
 }
@@ -470,7 +564,7 @@ function makeOccluder(el, size, hue) {
     ${hsla(hue, 20, 3, 0.99)} 0%, ${hsla(hue, 16, 2, 0.985)} 62%, ${hsla(hue, 12, 1, 0.98)} 100%)`
   f.style.boxShadow = `inset 0 0 ${px(size * 0.2)} ${hsla(hue, 10, 0, 0.55)}`
   const rim = el('occ-rim')
-  rim.style.setProperty('--rim', hsla(hue + 10, 70, 82, 0.85))
+  rim.style.setProperty('--rim', hsla(hue + 10, 70, 82, 0.55))
   f.appendChild(rim)
   return f
 }
@@ -523,7 +617,7 @@ export function ringDom(prefix, engine) {
   }
   return {
     el,
-    makePrim: (kind, w, h, hue, alpha, r, isHeadline) => makePrim(el, kind, w, h, hue, alpha, r, isHeadline),
+    makePrim: (kind, w, h, hue, alpha, r, isHeadline, fill) => makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill),
     bandY: (r, h, forceUpper) => bandY(engine, r, h, forceUpper),
     buildStars: (host, period, perFrame, sizeMul, seed) => buildStars(el, engine, host, period, perFrame, sizeMul, seed),
     makeOccluder: (size, hue) => makeOccluder(el, size, hue),

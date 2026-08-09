@@ -1,0 +1,18 @@
+{
+  "verdict": "PASS",
+  "reason": "[sample 1: PASS] Both chairs (left third and right third of frame) show a rounded-top back, seat plank, and X-braced splayed legs reading clearly as camp chairs; empty, flanking the fire, flat-vector palette matches rest of scene. [sample 2: FAIL] Both chairs (left ~x18%, right ~x72%) are drawn dead-frontal and exact mirrors, with no inward angle or foreshortening, so they read as facing the viewer rather than facing the fire at center; the seat is also a hard straight-edged trapezoid plank with no sling sag or armrests, reading closer to a padded stool on a sawhorse than a camp chair. [sample 3: PASS] Both chairs read clearly as empty camp chairs facing the fire — recognizable silhouettes with distinct back panel, seat, and four legs, layered rendering for depth, grounded in scene cohesively",
+  "category": "iconic-geometry",
+  "motion": "NOT_APPLICABLE",
+  "checkedFile": "concepts/campfire-sing-along-v1.html",
+  "timestamp": "2026-07-27T21:33:59.447Z",
+  "sampleVotes": {
+    "pass": 2,
+    "fail": 1,
+    "total": 3
+  },
+  "panel": [
+    "sonnet",
+    "opus",
+    "haiku"
+  ]
+}

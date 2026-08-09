@@ -1,0 +1,18 @@
+{
+  "verdict": "PASS",
+  "reason": "[sample 1: PASS] Two brown capsule-shaped bars cross in an X directly under the flame base (center third of frame), with visible top-edge highlight giving cylindrical log-like shading; rounded caps at left/right edges avoid any box/div tell, and the flat-gradient style matches the flame and sand-path elements around it. [sample 2: FAIL] The two elements are constant-width round-capped strokes with no taper, end-grain, bark, or shading (left ends x≈140/145, right ends x≈525/530), so the silhouette reads as crossed dowels or bars rather than logs; they also paint over the flame's midsection at x≈270-400, y≈50-75 and leave a hard horizontal cutoff at the flame's bottom edge (x≈265-400, y≈108), so the fire does not read as rising out of a log base. [sample 3: PASS] Clear X-shaped silhouette of two crossed logs in warm wood tones at the base of the campfire, no box-tell artifacts, consistent rendering style with scene.",
+  "category": "iconic-geometry",
+  "motion": "NOT_APPLICABLE",
+  "checkedFile": "concepts/campfire-sing-along-v1.html",
+  "timestamp": "2026-07-27T22:11:46.902Z",
+  "sampleVotes": {
+    "pass": 2,
+    "fail": 1,
+    "total": 3
+  },
+  "panel": [
+    "sonnet",
+    "opus",
+    "haiku"
+  ]
+}

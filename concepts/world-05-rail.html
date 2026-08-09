@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>World 05 — the rail · Trivia OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════════
+   WORLD 05 — THE RAIL · 2026-07-30 · rev 2
+
+   THE WHOLE SCENE, per Ben: drifting stars, sometimes a shooting star,
+   one small orange nebula. No planets. No rocks. No rings. Question text
+   alternates purple / orange slide to slide.
+
+   Depth comes from THREE STAR LAYERS AT DIFFERENT SPEEDS. That is the
+   entire parallax system - no objects needed. Far stars nearly hold
+   still, near stars slide. The eye reads depth from the speed difference
+   alone, which is the oldest and most reliable parallax there is.
+
+   ── FIXED SINCE REV 1 (all four found by actually rendering it) ────────
+   1. THE HORIZON. Rev 1 used linear-gradient colour bands at 38deg. Band
+      edges land near-horizontal, and a horizontal edge always reads as
+      ground - the exact failure that made an earlier build grow terrain.
+      Bands are gone. Colour now comes from the nebula and a single soft
+      corner haze that dies long before centre. Nothing in this file can
+      produce a horizontal edge.
+   2. NO STARS. Rev 1 sized star count per pixel of the night's strip, so
+      a slow layer got 23 stars for the entire show - four on screen.
+      Density is now declared PER FRAME and multiplied by the strip
+      length. ~1,300 stars, ~330 in frame at any moment.
+   3. EMPTY FRAME. Rev 1 filled the world with faint nebulae and 3px
+      dust that nothing could see. Deleted.
+   4. A BRIGHT PLANET UNDER THE TEXT. Deleted with the rest.
+
+   ── THE ENGINE (unchanged, and it worked) ─────────────────────────────
+   · DRIFT AND SURGE ON SEPARATE ELEMENTS. .rail carries one linear
+     animation for the whole night; .surge carries the per-advance move;
+     they compose by nesting. No settle, no modulo, no re-basing, so there
+     is no moment where two numbers must agree - which is what produced
+     the pop in world-04. Verified smooth in the rev-1 render.
+   · NO WRAP, NO TILE, NO LOOP. A show is finite. Each layer is one strip
+     long enough to cover the night, every star placed once by a seeded
+     hash, never reused. Nothing can repeat because nothing comes back.
+   · ONE SOURCE OF TRUTH. Every distance and velocity is declared once in
+     CONFIG and written to CSS custom properties. Never restated.
+   · SPEEDS SET BY A REAL QUESTION LENGTH (~75s), not the 9s every earlier
+     document assumed.
+
+   HOUSE LAW: transform + opacity only; static filter/box-shadow never
+   animated; no requestAnimationFrame; reduced motion freezes rather than
+   vanishes; mutually prime clocks; deep space, so no ground, no horizon,
+   no vertical gradients; the 60x44 centre box stays clear and nothing
+   crossing it may brighten it.
+
+   DESIGN SPACE: true pixels on a 1920x1080 stage, CSS-scaled to fit, so
+   every number in CONFIG is literal.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--pg:#0b0c10;--pg-card:#14161d;--pg-line:#262a34}
+body{background:var(--pg);color:#ddd8e8;font-family:'DM Sans',system-ui,sans-serif;
+  line-height:1.55;padding:0 0 80px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1320px;margin:0 auto;padding:0 28px}
+header.pg{padding:48px 0 22px;border-bottom:1px solid var(--pg-line);margin-bottom:22px}
+header.pg .eyebrow{font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:#8a7ad0;font-weight:700;margin-bottom:10px}
+header.pg h1{font-family:'Boogaloo',cursive;font-size:clamp(32px,5vw,48px);line-height:1.05;margin-bottom:10px}
+header.pg p{max-width:80ch;color:#9aa0ae;font-size:14.5px}
+header.pg b{color:#ddd8e8;font-weight:500}
+.ctl{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px}
+.ctl button{font-size:12.5px;font-weight:600;letter-spacing:.03em;
+  background:var(--pg-card);border:1px solid var(--pg-line);color:#b9b3c8;
+  border-radius:7px;padding:8px 14px;cursor:pointer;
+  transition:border-color .15s,color .15s,background .15s;user-select:none}
+.ctl button:hover{border-color:#6a5aa8;color:#fff}
+.ctl button.on{background:#2a2140;border-color:#8a6ad0;color:#fff}
+.ctl .big{font-size:13.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  background:#2a2140;border:1px solid #8a6ad0;color:#fff;border-radius:8px;padding:10px 24px}
+.ctl .big:hover{background:#3a2e58}
+.ctl .sep{width:1px;align-self:stretch;background:var(--pg-line);margin:0 4px}
+.ctl .grpLabel{font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:#7a7f90;font-weight:700;padding:0 2px}
+.sub{color:#8b91a0;font-size:12.5px;margin:0 0 14px;font-variant-numeric:tabular-nums}
+.sub b{color:#ddd8e8;font-weight:600}
+
+/* ══ STAGE ══ .design is a fixed 1920x1080 space scaled to fit, so every
+   px number in CONFIG means exactly what it says. */
+.stage{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;
+  border-radius:10px;background:#01010a;
+  box-shadow:0 24px 70px rgba(0,0,0,.6),0 0 0 1px var(--pg-line)}
+.design{position:absolute;left:0;top:0;width:1920px;height:1080px;
+  transform-origin:0 0;overflow:hidden}
+
+/* ══ LAYER CHASSIS ══
+   .lyr   clip box, never transformed  → bounds the raster
+     .rail  the night's drift, one linear animation, no wrap
+       .surge the per-advance move
+   Separate elements, so they can never disagree. Nothing to pop. */
+.lyr{position:absolute;inset:0}
+.rail,.surge{position:absolute;inset:0;will-change:transform}
+@keyframes railGo{
+  from{transform:translate3d(0,0,0)}
+  to  {transform:translate3d(calc(var(--dist) * -1px),0,0)}
+}
+.l-sf .rail{animation:railGo var(--sf-dur) linear infinite}
+.l-sm .rail{animation:railGo var(--sm-dur) linear infinite}
+.l-sn .rail{animation:railGo var(--sn-dur) linear infinite}
+/* one shared curve, one shared duration, every layer. Only distance
+   differs — that is what holds the depth ratios rigid through the move. */
+.stage.go .surge{animation:surgeGo var(--surge-ms) cubic-bezier(.16,.62,.28,1) both}
+@keyframes surgeGo{
+  from{transform:translate3d(0,0,0)}
+  to  {transform:translate3d(calc(var(--sd) * -1px),0,0)}
+}
+
+/* ══ THE VOID ══ near-black, faintly cool. Radial only — a vertical ramp
+   always implies a horizon, so there is deliberately no vertical
+   structure anywhere in this file. */
+.void{position:absolute;inset:0;
+  background:radial-gradient(ellipse 140% 130% at 50% 46%,
+    #0a0a1c 0%, #06061a 46%, #020210 78%, #010108 100%)}
+
+/* A single soft haze in one corner, low alpha, dying well before centre.
+   Radial and cornered so it cannot form a straight edge anywhere. */
+.haze{position:absolute;left:-24%;bottom:-30%;width:86%;height:86%;
+  border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle closest-side,
+    rgba(96,58,190,.24) 0%, rgba(74,44,150,.10) 44%, transparent 74%);
+  animation:hazeBreathe 43s ease-in-out infinite}
+@keyframes hazeBreathe{0%,100%{opacity:.72}50%{opacity:1}}
+
+/* ══ THE ANCHOR — the small orange nebula ══
+   The one nameable thing, and the only real colour in the frame. At
+   optical infinity, so it never translates: zero parallax is not a cheat,
+   it is exactly what an infinitely distant thing does when you travel
+   past it. Placed clear of the 60x44 centre box. One near-hard edge (the
+   core) so it does not read as mush. Breathes on opacity only. */
+.nebula{position:absolute;pointer-events:none;
+  animation:nebBreathe 67s ease-in-out infinite}
+.nebula .cloud{position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(ellipse 58% 44% at 46% 52%,
+    rgba(255,164,74,.34) 0%, rgba(226,116,46,.17) 38%,
+    rgba(150,60,40,.07) 62%, transparent 80%);
+  transform:rotate(-18deg)}
+.nebula .cloud2{position:absolute;inset:12% 6% 18% 14%;border-radius:50%;
+  background:radial-gradient(ellipse 50% 40% at 56% 44%,
+    rgba(255,196,120,.22) 0%, rgba(214,104,52,.09) 46%, transparent 74%);
+  transform:rotate(24deg)}
+.nebula .core{position:absolute;left:44%;top:48%;width:9px;height:9px;
+  border-radius:50%;background:#fff0d4;
+  box-shadow:0 0 22px 6px rgba(255,178,96,.45)}
+@keyframes nebBreathe{0%,100%{opacity:.84}50%{opacity:1}}
+
+/* ══ STARS — the whole world ══ NO BLUR, EVER. A blur wider than about a
+   quarter of an element deletes it rather than softening it, which is how
+   an earlier build turned "stars are the hero" into grey noise. */
+.star{position:absolute;border-radius:50%;background:var(--sc)}
+.star.tw{animation:tw var(--tp) ease-in-out infinite;animation-delay:var(--td)}
+.star.hero{box-shadow:0 0 10px 1.5px var(--sg)}
+@keyframes tw{0%,100%{opacity:var(--ob)}50%{opacity:var(--op)}}
+
+/* ══ SHOOTING STAR ══ occasional, 40–120s, alternating sides. Linear on
+   purpose — an eased streak reads as a slug. */
+.shootLane{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.shootRot{position:absolute;transform:rotate(var(--sa))}
+.shoot{width:190px;height:2.4px;border-radius:2px;opacity:0;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,246,226,0) 14%,
+    rgba(255,246,226,.55) 72%,#fff8ec 100%);
+  animation:shootGo var(--sdu) linear both}
+@keyframes shootGo{
+  0%  {transform:translate3d(0,0,0);opacity:0}
+  10% {opacity:.95}
+  74% {opacity:.85}
+  100%{transform:translate3d(var(--sd2),0,0);opacity:0}
+}
+
+/* ══ QUESTION — camera-fixed HUD, never translates with the world ══
+   Colour alternates purple / orange slide to slide. */
+.qScrim{position:absolute;left:0;right:0;opacity:0;
+  transition:opacity .45s ease;pointer-events:none}
+.qScrim.on{opacity:1}
+.qLayer{position:absolute;left:384px;width:1152px;top:540px;
+  transform:translateY(-50%);text-align:center;pointer-events:none}
+.qLayer .qtext{font-family:'DM Sans',sans-serif;font-weight:500;
+  line-height:1.3;color:var(--q-col);transition:color .5s ease}
+.qLayer .w{display:inline-block;opacity:0}
+@keyframes wIn {from{opacity:0;transform:translate3d(0,22px,0)}
+                to  {opacity:1;transform:translate3d(0,0,0)}}
+@keyframes wOut{from{opacity:1;transform:translate3d(0,0,0)}
+                to  {opacity:0;transform:translate3d(0,-16px,0)}}
+.stage.hideQ .qLayer,.stage.hideQ .qScrim{display:none}
+
+/* ══ OVERLAYS ══ */
+.vig{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 148% 138% at 50% 50%,
+    transparent 0%, transparent 66%, rgba(1,1,8,.36) 100%)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.05;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.55'/></svg>")}
+.stage.noGrain .grain{display:none}
+.guides{position:absolute;left:20%;top:28%;width:60%;height:44%;
+  border:2px dashed rgba(160,200,255,.5);border-radius:6px;
+  pointer-events:none;display:none}
+.guides::after{content:'safe area · 60% × 44%';position:absolute;left:10px;top:8px;
+  font-size:15px;letter-spacing:.1em;color:rgba(160,200,255,.7);font-weight:600}
+.stage.showGuides .guides{display:block}
+
+@media (prefers-reduced-motion:reduce){
+  .rail,.surge,.star,.haze,.nebula,.shoot{animation-play-state:paused!important}
+}
+.stage.rm .rail,.stage.rm .surge,.stage.rm .star,
+.stage.rm .haze,.stage.rm .nebula,.stage.rm .shoot{animation-play-state:paused!important}
+
+.notes{margin-top:34px;background:var(--pg-card);border:1px solid var(--pg-line);
+  border-radius:10px;padding:24px 28px}
+.notes h3{font-family:'Boogaloo',cursive;font-size:23px;margin-bottom:10px}
+.notes h3 span{color:#8a7ad0}
+.notes p{color:#9aa0ae;font-size:14px;max-width:92ch;margin-bottom:9px}
+.notes p:last-child{margin-bottom:0}
+.notes b{color:#ddd8e8;font-weight:600}
+.notes code{background:#0e1017;padding:1px 5px;border-radius:4px;font-size:13px}
+</style>
+</head>
+<body>
+<header class="pg"><div class="wrap">
+  <div class="eyebrow">World 05 · the rail · rev 2</div>
+  <h1>The rail</h1>
+  <p>Drifting stars, a small orange nebula, and now and then a shooting star.
+  <b>Depth is three star layers at different speeds</b> — no objects needed.
+  One straight line through space, long enough to last the night, with every
+  star placed once and never reused, so nothing can repeat. The question
+  alternates <b>purple and orange</b> slide to slide.</p>
+</div></header>
+
+<div class="wrap">
+  <div class="ctl">
+    <button class="big" id="btnAdv">Advance &#9656;</button>
+    <button id="btnAuto">Auto-advance</button>
+    <button id="btnShoot">Shooting star now</button>
+    <span class="sep"></span>
+    <span class="grpLabel">Time</span>
+    <button class="on" data-spd="1">1&times;</button>
+    <button data-spd="10">10&times;</button>
+    <button data-spd="60">60&times;</button>
+    <span class="sep"></span>
+    <button class="on" id="tQ">Question</button>
+    <button id="tG">Safe area</button>
+    <button class="on" id="tN">Grain</button>
+    <button id="tR">Reduced motion</button>
+  </div>
+  <div class="sub" id="status"></div>
+  <div class="stage" id="stage"><div class="design" id="design">
+    <div class="qScrim" id="qScrim"></div>
+    <div class="qLayer" id="qLayer"><div class="qtext" id="qText"></div></div>
+    <div class="vig"></div>
+    <div class="guides"></div>
+    <div class="grain"></div>
+  </div></div>
+
+  <div class="notes">
+    <h3><span>What this is.</span> Stars, a nebula, and nothing else.</h3>
+    <p><b>Depth without objects.</b> Three star layers run at 0.4, 1.6 and
+    5&nbsp;px/s. The far field almost holds still, the near field slides. That
+    speed difference is the entire parallax system — the oldest and most reliable
+    depth cue there is, and it needs no planets, rocks or rings.</p>
+    <p><b>Nothing repeats, because nothing is reused.</b> A show is finite, so
+    each layer is one strip long enough to cover the whole night, with every star
+    placed once by a seeded hash. No tile period, no wrap, no seam, nothing that
+    comes back around. That entire class of bug stops existing.</p>
+    <p><b>No jolt, by construction.</b> Drift runs on <code>.rail</code> and the
+    advance runs on <code>.surge</code>, and they nest. There is no settle step and
+    no re-basing, so there is no moment where two numbers have to agree — which is
+    exactly what produced the pop in the previous version.</p>
+    <p><b>Nothing here can make a horizon.</b> The previous revision used linear
+    colour bands, whose edges landed near-horizontal and read as ground. Bands are
+    gone. All colour is radial and cornered, so no straight edge can form.</p>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ═══════════════════════════════════════════════════════════════════════
+   CONFIG — the only place any number is declared. Everything CSS needs is
+   written to custom properties at boot and never restated in the
+   stylesheet. Breaking this rule is what produced world-04's pop.
+   All values are true pixels in the 1920x1080 design space.
+   ═══════════════════════════════════════════════════════════════════════ */
+const CONFIG = {
+  W:1920, H:1080,
+  showSeconds: 3*3600,
+  surgeMs: 1200,
+  slides: 30,
+  dwellMs: 75000,          // a real question, not the 9s everyone assumed
+
+  /* v = drift px/s · surge = px per advance · perFrame = stars visible at
+     once from this layer. Count is perFrame x (strip / frameWidth), which
+     is the bug rev 1 had backwards. */
+  layers: [
+    { id:'sf', v:0.4, surge: 14, perFrame:210, tier:'far'  },
+    { id:'sm', v:1.6, surge: 46, perFrame: 78, tier:'mid'  },
+    { id:'sn', v:5.0, surge:132, perFrame: 30, tier:'near' },
+  ],
+
+  /* the anchor: one small orange nebula, clear of the centre box */
+  nebula: { x:1290, y:150, w:430, h:300 },
+  shootEveryMs: [40000, 120000],
+};
+
+/* seeded hash — same input, same output, so any frame is reproducible */
+function hash32(x, seed){
+  let h = (x|0) ^ (seed|0);
+  h = Math.imul(h ^ (h>>>16), 2246822507);
+  h = Math.imul(h ^ (h>>>13), 3266489909);
+  return ((h ^ (h>>>16)) >>> 0);
+}
+function rngAt(i, seed){
+  let n = hash32(i, seed);
+  return () => { n = hash32(n, 0x9E3779B9); return n / 4294967296; };
+}
+
+const stage  = document.getElementById('stage');
+const design = document.getElementById('design');
+
+function fit(){ design.style.transform = 'scale(' + (stage.clientWidth / CONFIG.W) + ')'; }
+new ResizeObserver(fit).observe(stage); fit();
+
+function el(cls){ const d = document.createElement('div'); if (cls) d.className = cls; return d; }
+
+/* strip length = the night's drift + every surge + one frame of margin,
+   so the rail animation never has to wrap */
+const totalDistance = L => L.v * CONFIG.showSeconds + L.surge * CONFIG.slides + CONFIG.W;
+
+/* ══ STAR FIELD ══
+   Three tiers by layer. Far stars are small, dim and dense; near stars
+   are fewer, larger and brighter, so the speed difference reads as depth
+   rather than as inconsistency. Only ~1 in 6 twinkles — the rest are
+   static divs, which keeps the compositor honest. */
+const TW = [11,13,17,29,31];
+const TEMP = ['#fff3dc','#ffffff','#dfeaff','#ffffff','#e9f2ff'];
+const TIER = {
+  far : { size:[1.4,1.4], ob:[.26,.30], hero:0    },
+  mid : { size:[2.0,2.2], ob:[.42,.34], hero:0.02 },
+  near: { size:[3.0,3.4], ob:[.62,.34], hero:0.10 },
+};
+function buildStars(surge, dist, L, seed){
+  const t = TIER[L.tier];
+  const n = Math.round(L.perFrame * (dist / CONFIG.W));
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < n; i++){
+    const r = rngAt(i, seed);
+    const isHero = r() < t.hero;
+    const size = t.size[0] + r() * t.size[1] + (isHero ? 2.4 : 0);
+    const ob   = Math.min(t.ob[0] + r() * t.ob[1] + (isHero ? .22 : 0), 1);
+    const twk  = i % 6 === 0 || isHero;
+    const per  = TW[i % 5];
+    const c    = TEMP[i % 5];
+    const d = el('star' + (twk ? ' tw' : '') + (isHero ? ' hero' : ''));
+    const s = d.style;
+    s.left = (r() * dist).toFixed(1) + 'px';
+    s.top  = (r() * CONFIG.H).toFixed(1) + 'px';
+    s.width = s.height = size.toFixed(2) + 'px';
+    s.setProperty('--sc', c);
+    if (isHero) s.setProperty('--sg', c);
+    if (twk){
+      s.setProperty('--ob', ob.toFixed(2));
+      s.setProperty('--op', Math.min(ob + .26, 1).toFixed(2));
+      s.setProperty('--tp', per + 's');
+      s.setProperty('--td', (-r() * per).toFixed(1) + 's');
+    } else {
+      s.opacity = ob.toFixed(2);
+    }
+    frag.appendChild(d);
+  }
+  surge.appendChild(frag);
+  return n;
+}
+
+/* ══ BUILD ══ */
+const railEls = {};
+let starTotal = 0;
+const shootLane = el('shootLane');
+
+(function build(){
+  const before = document.getElementById('qScrim');
+
+  // sky: at infinity, no rail. Void + one cornered haze + the nebula.
+  const sky = el('lyr l-sky');
+  sky.appendChild(el('void'));
+  sky.appendChild(el('haze'));
+  const neb = el('nebula');
+  neb.style.left = CONFIG.nebula.x + 'px';
+  neb.style.top  = CONFIG.nebula.y + 'px';
+  neb.style.width  = CONFIG.nebula.w + 'px';
+  neb.style.height = CONFIG.nebula.h + 'px';
+  neb.appendChild(el('cloud'));
+  neb.appendChild(el('cloud2'));
+  neb.appendChild(el('core'));
+  sky.appendChild(neb);
+  design.insertBefore(sky, before);
+
+  CONFIG.layers.forEach((L, i) => {
+    const dist  = totalDistance(L);
+    const lyr   = el('lyr l-' + L.id);
+    const rail  = el('rail');
+    const surge = el('surge');
+    rail.appendChild(surge); lyr.appendChild(rail);
+    design.insertBefore(lyr, before);
+    starTotal += buildStars(surge, dist, L, 0x5EED + i * 977);
+    // ONE declaration each, JS → CSS. Never restated in the stylesheet.
+    lyr.style.setProperty('--dist', dist.toFixed(0));
+    lyr.style.setProperty('--sd', L.surge);
+    stage.style.setProperty('--' + L.id + '-dur', (dist / L.v).toFixed(1) + 's');
+    railEls[L.id] = rail;
+  });
+
+  design.insertBefore(shootLane, before);
+  stage.style.setProperty('--surge-ms', CONFIG.surgeMs + 'ms');
+})();
+
+/* ══ QUESTIONS — colour alternates purple / orange ══ */
+const Q_COLOURS = ['#e2ccff', '#ffc48a'];
+const QUESTIONS = [
+  'Gordon Lightfoot sang about the Edmund Fitzgerald. Which Great Lake took her down?',
+  'What is the only U.S. state that grows coffee commercially?',
+  'Which planet spins so slowly that its day outlasts its year?',
+  'What is the tallest animal walking the Earth today?',
+  'Which country invented the croissant, and it was not France?',
+  'What mythical creature is the national animal of Scotland?',
+  'In poker, which hand wins: a flush or a full house?',
+  'Which Beatles album cover shows the band on a crosswalk?',
+  'What is the smallest country in the world by land area?',
+  'Which element gives Mars its red colour?',
+];
+
+/* measure-to-fit, ported from client/src/lib/autoFitText.js */
+let _mc = null;
+const ctx2 = () => (_mc || (_mc = document.createElement('canvas').getContext('2d')));
+function wrapLines(text, px, maxW){
+  const c = ctx2(); c.font = '500 ' + px + 'px "DM Sans"';
+  const words = String(text).split(/\s+/).filter(Boolean);
+  if (!words.length) return [''];
+  const lines = []; let line = words[0];
+  for (let i = 1; i < words.length; i++){
+    const t = line + ' ' + words[i];
+    if (c.measureText(t).width <= maxW) line = t; else { lines.push(line); line = words[i]; }
+  }
+  lines.push(line); return lines;
+}
+function fits(text, px, boxW, boxH, maxLines){
+  const lines = wrapLines(text, px, boxW);
+  if (lines.length > maxLines) return false;
+  const c = ctx2(); c.font = '500 ' + px + 'px "DM Sans"';
+  for (const ln of lines) if (c.measureText(ln).width > boxW) return false;
+  return lines.length * px * 1.3 <= boxH;
+}
+function fitPx(text, boxW, boxH, floor, ceil, maxLines){
+  if (fits(text, ceil, boxW, boxH, maxLines)) return ceil;
+  let lo = floor, hi = ceil;
+  for (let i = 0; i < 9; i++){
+    const m = (lo + hi) / 2;
+    if (fits(text, m, boxW, boxH, maxLines)) lo = m; else hi = m;
+  }
+  return Math.max(floor, lo);
+}
+
+const qLayer = document.getElementById('qLayer'),
+      qText  = document.getElementById('qText'),
+      qScrim = document.getElementById('qScrim');
+let fontsOK = false;
+const fontsReady = (document.fonts && document.fonts.ready
+  ? Promise.all([document.fonts.load('500 40px "DM Sans"'),
+                 document.fonts.load('400 40px "Boogaloo"')]).then(() => document.fonts.ready)
+  : Promise.resolve()).then(() => { fontsOK = true; });
+
+function layoutScrim(){
+  const dr = design.getBoundingClientRect(), qr = qLayer.getBoundingClientRect();
+  const sc = stage.clientWidth / CONFIG.W || 1;
+  const top = (qr.top - dr.top) / sc, h = qr.height / sc;
+  const pad = 30, fe = 84, T = top - pad - fe, H = h + 2 * (pad + fe);
+  const p = (fe / H * 100).toFixed(2);
+  qScrim.style.top = T + 'px'; qScrim.style.height = H + 'px';
+  // feathered well past the text so no straight edge is ever visible —
+  // a hard scrim edge is itself a horizon
+  qScrim.style.background = 'linear-gradient(180deg,transparent 0%,' +
+    'rgba(2,2,10,.55) ' + p + '%,rgba(2,2,10,.55) ' + (100 - p) + '%,transparent 100%)';
+}
+let curQ = -1;
+function renderQ(i){
+  const text = QUESTIONS[i % QUESTIONS.length];
+  stage.style.setProperty('--q-col', Q_COLOURS[i % 2]);
+  qText.style.fontSize = fitPx(text, 1152, 420, 34, 68, 4) + 'px';
+  qText.textContent = '';
+  const words = text.split(' ');
+  words.forEach((w, k) => {
+    const s = document.createElement('span');
+    s.className = 'w'; s.textContent = w;
+    if (isReduced()) s.style.opacity = 1;
+    else { s.style.animation = 'wIn .42s cubic-bezier(.23,1,.32,1) both';
+           s.style.animationDelay = (k * 42) + 'ms'; }
+    qText.appendChild(s);
+    if (k < words.length - 1) qText.appendChild(document.createTextNode(' '));
+  });
+  layoutScrim(); qScrim.classList.add('on');
+}
+function showQ(i){
+  curQ = i;
+  if (fontsOK) renderQ(i); else fontsReady.then(() => { if (curQ === i) renderQ(i); });
+}
+function hideQ(){
+  qScrim.classList.remove('on');
+  qText.querySelectorAll('.w').forEach((s, k) => {
+    if (isReduced()){ s.style.opacity = 0; return; }
+    s.style.animation = 'wOut .26s cubic-bezier(.4,0,.7,1) both';
+    s.style.animationDelay = (k * 20) + 'ms';
+  });
+}
+
+/* ══ ADVANCE ══ drift is never touched, never restarted, never re-based,
+   so it cannot pop. The surge is baked into its own element's transform
+   in ONE synchronous task, so no frame can paint between the two. */
+const mediaRM = matchMedia('(prefers-reduced-motion: reduce)');
+let manualRM = false;
+const isReduced = () => mediaRM.matches || manualRM;
+
+let slide = 0, busy = false, speed = 1, autoOn = false, autoT = null, failT = null;
+const baked = { sf:0, sm:0, sn:0 };
+
+function bakeSurge(){
+  CONFIG.layers.forEach(L => {
+    baked[L.id] += L.surge;
+    railEls[L.id].firstElementChild.style.transform =
+      'translate3d(' + (-baked[L.id]) + 'px,0,0)';
+  });
+}
+function land(){ slide = (slide + 1) % CONFIG.slides; showQ(slide); status(); busy = false; }
+function advance(){
+  if (busy) return;
+  busy = true; hideQ();
+  if (isReduced()){ bakeSurge(); land(); return; }
+  stage.classList.add('go');
+  failT = setTimeout(finishSurge, CONFIG.surgeMs + 400);
+}
+function finishSurge(){
+  if (!stage.classList.contains('go')) return;
+  clearTimeout(failT);
+  stage.classList.remove('go'); bakeSurge(); land();
+}
+stage.addEventListener('animationend', e => {
+  if (e.animationName === 'surgeGo' && e.target.parentElement === railEls.sn) finishSurge();
+});
+function autoLoop(){
+  clearTimeout(autoT);
+  if (!autoOn) return;
+  autoT = setTimeout(() => { advance(); autoLoop(); }, CONFIG.dwellMs / speed);
+}
+
+/* ══ SHOOTING STAR ══ */
+let shootSide = 1, shootT = null;
+function spawnShoot(){
+  if (isReduced()) return;
+  const rot = el('shootRot'), s = el('shoot');
+  const d = shootSide; shootSide = -shootSide;
+  rot.style.left = (d > 0 ? 140 + Math.random() * 500 : 1180 + Math.random() * 500) + 'px';
+  rot.style.top  = (70 + Math.random() * 760) + 'px';
+  rot.style.setProperty('--sa', (d > 0 ? 1 : -1) * (14 + Math.random() * 16) + 'deg');
+  s.style.setProperty('--sd2', (d > 0 ? 1 : -1) * (620 + Math.random() * 360) + 'px');
+  s.style.setProperty('--sdu', (1.5 + Math.random() * 1.2) + 's');
+  rot.appendChild(s); shootLane.appendChild(rot);
+  s.addEventListener('animationend', () => rot.remove());
+}
+function shootLoop(){
+  clearTimeout(shootT);
+  const [a, b] = CONFIG.shootEveryMs;
+  shootT = setTimeout(() => { spawnShoot(); shootLoop(); }, (a + Math.random() * (b - a)) / speed);
+}
+
+/* ══ TIME ══ playbackRate changes speed from the current instant with no
+   position remap. animationDuration would re-map elapsed time and snap. */
+function applySpeed(){
+  Object.values(railEls).forEach(r =>
+    r.getAnimations().forEach(a => { a.playbackRate = speed; }));
+}
+
+/* ══ CONTROLS ══ */
+function status(){
+  const near = CONFIG.layers[2], far = CONFIG.layers[0];
+  document.getElementById('status').innerHTML =
+    '<b>Slide ' + (slide + 1) + ' / ' + CONFIG.slides + '</b>' +
+    ' &nbsp;·&nbsp; <b>' + starTotal.toLocaleString() + '</b> stars, placed once, never reused' +
+    ' &nbsp;·&nbsp; near field crosses in <b>' + (CONFIG.W / near.v / 60).toFixed(1) + ' min</b>,' +
+    ' far field in <b>' + (CONFIG.W / far.v / 3600).toFixed(1) + ' h</b>' +
+    ' &nbsp;·&nbsp; text <b>' + (slide % 2 ? 'orange' : 'purple') + '</b>' +
+    ' &nbsp;·&nbsp; time <b>' + speed + '×</b>';
+}
+document.getElementById('btnAdv').addEventListener('click', () => advance());
+document.getElementById('btnShoot').addEventListener('click', spawnShoot);
+const autoBtn = document.getElementById('btnAuto');
+autoBtn.addEventListener('click', () => {
+  autoOn = !autoOn; autoBtn.classList.toggle('on', autoOn);
+  if (autoOn) autoLoop(); else clearTimeout(autoT);
+});
+document.querySelectorAll('[data-spd]').forEach(b =>
+  b.addEventListener('click', () => {
+    speed = +b.dataset.spd;
+    document.querySelectorAll('[data-spd]').forEach(x => x.classList.toggle('on', x === b));
+    applySpeed(); if (autoOn) autoLoop(); shootLoop(); status();
+  }));
+function toggle(id, cls, invert){
+  const b = document.getElementById(id);
+  b.addEventListener('click', () => {
+    b.classList.toggle('on');
+    const on = b.classList.contains('on');
+    if (cls === 'rm') manualRM = on;
+    stage.classList.toggle(cls, invert ? !on : on);
+  });
+}
+toggle('tQ','hideQ',true); toggle('tG','showGuides',false);
+toggle('tN','noGrain',true); toggle('tR','rm',false);
+new ResizeObserver(() => { if (curQ >= 0 && fontsOK) renderQ(curQ); }).observe(stage);
+
+/* ══ BOOT ══ */
+stage.style.setProperty('--q-col', Q_COLOURS[0]);
+applySpeed(); shootLoop();
+setTimeout(() => showQ(0), 500);
+status();
+</script>
+</body>
+</html>

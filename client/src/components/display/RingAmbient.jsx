@@ -16,15 +16,23 @@
 // re-render of this subtree.
 //
 // Out of scope for this port (see the plan task for the full reasoning):
-// question-slide rendering (qScrim/qLayer/qText/renderQ/showQ/hideQ/
-// layoutScrim/fitPx/wrapLines/fits — Trivia OS already has its own
-// question-rendering system elsewhere), the reference build's own demo-page
-// chrome (.notes/.ctl/header/.sub/status line, the safe-box `.guides`
-// overlay, `.vig` vignette and `.grain` texture — none of these appear in
-// the task's explicit "CSS you'll need" class list), and the shooting-star
-// system (spawnShoot/shootLoop/.shootLane).
+// question TEXT rendering (qLayer/qText/renderQ/showQ/hideQ/fitPx/wrapLines/
+// fits — Trivia OS already has its own question-rendering system elsewhere,
+// which composites on top of this component), the reference build's own
+// demo-page chrome (.notes/.ctl/header/.sub/status line, the safe-box
+// `.guides` overlay, `.vig` vignette and `.grain` texture — none of these
+// appear in the task's explicit "CSS you'll need" class list), and the
+// shooting-star system (spawnShoot/shootLoop/.shootLane).
+//
+// The SCRIM (qScrim/layoutScrim in the reference build) is IN scope, unlike
+// the rest of the question system: spec §2 requires it under any text this
+// safe box carries, RingAmbient shipping without it is a real legibility
+// regression (station 0 measured p99.5 99 against a 72 cap — bright content
+// with nothing dimming it), and its geometry/alpha don't depend on knowing
+// anything about the app's actual question text or its show/hide timing —
+// only on the current station. See layoutScrim() below.
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
-import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, rng, lerp } from '../../lib/ringEngine.js'
+import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, fillOf, rng, lerp } from '../../lib/ringEngine.js'
 import { EASE_SURGE } from '../../lib/easings.js'
 import { ringDom, px, hsla, ringCss } from '../../lib/ringPrimitives.js'
 
@@ -45,7 +53,13 @@ const ENGINE = {
     { id: 'mid',  surge: 1920, m: 1 },
     { id: 'near', surge: 2880, m: 3 },
   ],
-  ARC: { lo: 18, hi: 52, exp: 1.6 },
+  // B2-luminance.md sec 2.1/5.3: {18,52} was frame-mean luma outside what the
+  // spec's own alpha/placement caps can physically reach (ceiling ~28-30 at
+  // legal peak alpha) — unreachable at any ink level the spec permits, and
+  // pre-fillOf() the value never reached a pixel anyway (proved: scaling it
+  // 10x rendered byte-identical frames). ref/fillMin/fillMax feed fillOf()
+  // below, the channel that DOES reach a pixel.
+  ARC: { lo: 10, hi: 31, exp: 1.6, ref: 31, fillMin: 0.35, fillMax: 1.00 },
   STAR_ALPHA_FLOOR: 0.28,
 }
 
@@ -71,9 +85,16 @@ const ENGINE = {
 // deliberate subset of the reference build's (no `.shoot`, no `.stage.rm`
 // manual toggle — both belong to systems out of scope for this port, see
 // the file header). ──
+// .ring-scrim: full-frame geometry (left/top/width/height) is fixed once at
+// build time (ART-DIRECTION-SPEC.md sec 2 — see the build effect below for
+// why full-frame, not a fitted box); only the alpha-bearing background is
+// per-station (see layoutScrim below). position:absolute only — no CSS
+// transition, this component owns no question-visibility state to animate
+// against.
 const RING_CSS = `
 ${ringCss('ring-')}
 .ring-stage.go .ring-surge{transition:transform var(--surge-ms) cubic-bezier(${EASE_SURGE.join(',')})}
+.ring-scrim{position:absolute;pointer-events:none}
 
 @media (prefers-reduced-motion:reduce){
   .ring-surge{transition:none!important}
@@ -103,8 +124,9 @@ function buildLayerContent(engine, world, arc, host, L) {
       const r = rng(i, 0xFA2)
       const st = world.stations[(i * 2) % engine.PANES]
       const lou = loudnessOf(arc, (i * 2) % engine.PANES)
+      const fill = fillOf(engine, arc, (i * 2) % engine.PANES) * 0.62 // pushed back behind mid (B2 sec 1.3/2.2: far out-shouted mid on 7/12 stations)
       const w = lerp(620, 900, r()), h = w * (0.52 + r() * 0.22)
-      const f = dom.makePrim('blob', w, h, st.hue, lerp(0.16, 0.30, lou), r)
+      const f = dom.makePrim('blob', w, h, st.hue, lerp(0.16, 0.30, lou), r, false, fill)
       f.style.left = px(i * (period / 6) + r() * (period / 6 - w))
       f.style.top = px(dom.bandY(r, h))
       host.appendChild(f)
@@ -182,10 +204,37 @@ function buildLayerContent(engine, world, arc, host, L) {
        too, not just from differential motion. */
     dom.buildStars(host, period, 40, 1.25, 0xCAFE1)
 
+    // occlusion eligibility (2026-08-09, spec §7.2 amendment): a subtractive
+    // element (occluder) paired with an already-quiet station is the worst
+    // combination available — st6 carried both the arc's own local trough
+    // AND a large dark occluder, and rendered/judged as an empty or broken
+    // pane, not a deliberately quiet one (this is about presence, which is
+    // never the arc's job; the arc only ever says how bright). Bottom third
+    // BY LOUDNESS RANK (not by absolute arc value, which would vary in
+    // count seed-to-seed on a peaked, non-uniform arc) is excluded from
+    // occlusion; the remaining loud two-thirds keep the >=1-in-3 floor
+    // (spec §7.2) via alternating rank instead of the old i%3 cadence,
+    // which never looked at loudness at all.
+    const byLoudnessDesc = [...Array(engine.PANES).keys()].sort((a, b) => arc[b] - arc[a])
+    const occlusionEligible = byLoudnessDesc.slice(0, engine.PANES - Math.floor(engine.PANES / 3))
+    const occluderStations = new Set(occlusionEligible.filter((_, k) => k % 2 === 0))
+
     for (let i = 0; i < engine.PANES; i++) {
       const st = world.stations[i]
-      const r = rng(i, 0x5EED)
+      // Each property below draws from its OWN seeded stream, keyed by
+      // station index + a distinct per-property constant — not one shared
+      // stream read sequentially. See concepts/world-07-ring.html's
+      // identical comment for why (2026-08-08: a bandY fix reshuffled 4 of
+      // 12 stations' companion kind/hue as a pure side effect of consuming
+      // a different number of r() calls upstream, with no logical
+      // connection between the two — separate streams make that class of
+      // bug structurally impossible).
+      const rHeadline = rng(i, 0x5EED1)
+      const rPairBand = rng(i, 0x5EED2) // only the shared upper/lower coin-flip (spec §7.5 — this one draw IS intentionally shared)
+      const rCompanion = rng(i, 0x5EED3)
+      const rDetail = rng(i, 0x5EED4)
       const lou = loudnessOf(arc, i)
+      const fill = fillOf(engine, arc, i)
       const x0 = i * engine.W
 
       // headline form — 576-880px longest edge, full tier range regardless
@@ -193,12 +242,12 @@ function buildLayerContent(engine, world, arc, host, L) {
       // got stuck near the 576 floor, loud ones near 880, so a quiet
       // station read as a small/sparse frame instead of "large and dim."
       // Loudness now speaks through alpha/detail-count only, below.
-      const hw = lerp(576, 880, r())
+      const hw = lerp(576, 880, rHeadline())
       const hh = st.prim === 'streak' ? hw * 0.30
         : st.prim === 'ribbon' ? hw * 0.34
-          : hw * (0.62 + r() * 0.26)
+          : hw * (0.62 + rHeadline() * 0.26)
       const alpha = lerp(0.34, 0.55, lou)
-      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, r, true) // isHeadline: only per-station breathe (spec §8)
+      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, fill) // isHeadline: only per-station breathe (spec §8)
       // was lerp(0.06, 0.44, r()) — capped well below the frame's full
       // width, so a centroid can never land right of ~x900. Measured mean
       // centroid x = 692 against a frame center of 960 (spec §2, appendix
@@ -208,9 +257,9 @@ function buildLayerContent(engine, world, arc, host, L) {
       // gate) — [0.02, 0.92] alone undershot to 848, just outside the
       // band, so this was iterated per §2's gate, not shipped on the first
       // guess.
-      const pairUpper = r() < 0.5 // shared band draw — see bandY's forceUpper comment (spec §7.5)
-      const headLeft = x0 + lerp(0.08, 0.98, r()) * (engine.W - hw)
-      const headTop = dom.bandY(r, hh, pairUpper)
+      const pairUpper = rPairBand() < 0.5 // shared band draw — see bandY's forceUpper comment (spec §7.5)
+      const headLeft = x0 + lerp(0.08, 0.98, rHeadline()) * (engine.W - hw)
+      const headTop = dom.bandY(rHeadline, hh, pairUpper)
       head.style.left = px(headLeft)
       head.style.top = px(headTop)
       host.appendChild(head)
@@ -229,15 +278,15 @@ function buildLayerContent(engine, world, arc, host, L) {
       // can't carry the pair there — the connecting bridge below does,
       // drawn for every station regardless of hue.
       const others = ['blob', 'dots', 'lens', 'streak'].filter(k => k !== st.prim)
-      const ck = others[Math.floor(r() * others.length)]
-      const cw = lerp(230, 420, r())
-      const ch = ck === 'streak' ? cw * 0.30 : cw * (0.60 + r() * 0.28)
-      const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, r()))
-      const comp = dom.makePrim(ck, cw, ch, compHue, lerp(0.30, 0.48, lou) * 0.8, r)
-      const pairAng = r() * Math.PI * 2, pairRad = lerp(160, 380, r())
+      const ck = others[Math.floor(rCompanion() * others.length)]
+      const cw = lerp(230, 420, rCompanion())
+      const ch = ck === 'streak' ? cw * 0.30 : cw * (0.60 + rCompanion() * 0.28)
+      const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, rCompanion()))
+      const comp = dom.makePrim(ck, cw, ch, compHue, lerp(0.30, 0.48, lou) * 0.8, rCompanion, false, fill)
+      const pairAng = rCompanion() * Math.PI * 2, pairRad = lerp(160, 380, rCompanion())
       let compCx = headCx + Math.cos(pairAng) * pairRad
       compCx = Math.min(x0 + engine.W - cw / 2, Math.max(x0 + cw / 2, compCx))
-      const compTop = dom.bandY(r, ch, pairUpper)
+      const compTop = dom.bandY(rCompanion, ch, pairUpper)
       comp.style.left = px(compCx - cw / 2)
       comp.style.top = px(compTop)
       host.appendChild(comp)
@@ -265,15 +314,16 @@ function buildLayerContent(engine, world, arc, host, L) {
       // longer depends on two independent random draws going its way.
       const dn = Math.round(lerp(1, 4, lou))
       for (let k = 0; k < dn; k++) {
-        const dw = k === 0 ? lerp(58, 70, r()) : lerp(58, 154, r())
-        const d = dom.makePrim('dots', dw, dw * 0.9, st.hue, lerp(0.34, 0.60, lou) * 0.7, r)
-        d.style.left = px(x0 + r() * (engine.W - dw))
-        d.style.top = px(dom.bandY(r, dw * 0.9))
+        const dw = k === 0 ? lerp(58, 70, rDetail()) : lerp(58, 154, rDetail())
+        const d = dom.makePrim('dots', dw, dw * 0.9, st.hue, lerp(0.34, 0.60, lou) * 0.7, rDetail, false, fill)
+        d.style.left = px(x0 + rDetail() * (engine.W - dw))
+        d.style.top = px(dom.bandY(rDetail, dw * 0.9))
         host.appendChild(d)
       }
 
-      // occlusion (spec §7.2), measured by ablation, on every third
-      // station (4 of 12 — the required >=1-in-3 floor). Every primitive
+      // occlusion (spec §7.2), measured by ablation, on the loud two-thirds
+      // only (occluderStations, computed above — 4 of 12, the required
+      // >=1-in-3 floor). Every primitive
       // above is a translucent glow that only alpha-blends with what's
       // behind it; this is a genuinely dark, rimmed disc (makeOccluder,
       // reusing the b-lobe rim's partial-border contrast treatment) placed
@@ -292,7 +342,7 @@ function buildLayerContent(engine, world, arc, host, L) {
       // to chance at the smaller size; see concepts/tools/
       // ring-occlusion-ablation.mjs for the actual measured before/after
       // luminance ratios per station.
-      if (i % 3 === 0) {
+      if (occluderStations.has(i)) {
         const orr = rng(i, 0x0CC1)
         const os = lerp(260, 340, orr())
         const ox = x0 + orr() * (engine.W - os)
@@ -323,6 +373,8 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
   const stageElRef = useRef(null)
   const designElRef = useRef(null)
   const surgeElsRef = useRef({})
+  const scrimElRef = useRef(null)
+  const arcRef = useRef(null)
   const offsetRef = useRef({})
   const stationRef = useRef(0)
   const busyRef = useRef(false)
@@ -383,6 +435,29 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
       offsetRef.current[L.id] = 0
     }
     surgeElsRef.current = surgeEls
+    arcRef.current = arc
+
+    // scrim (ART-DIRECTION-SPEC.md sec 2: "alpha must reach exactly zero
+    // strictly inside its own element bounds, on every axis"). Appended
+    // last, so it paints above every ring content layer (matches
+    // world-07-ring.html's own insertBefore(layer, qScrim) ordering — every
+    // layer lands before the scrim in DOM order, this component just gets
+    // there by being last to append instead). FULL FRAME, no fitted box —
+    // a 2026-08-08 fitted box (-14% inset, y230-850, ~4:1 aspect) clipped
+    // the ellipse's own falloff at the box edge before it reached
+    // transparent (confirmed by rendering it: a hard horizontal seam,
+    // exactly the "dead stripe" the old elliptical-never-a-band rule meant
+    // to prevent). A full 1920x1080 element has no boundary inside the
+    // frame to expose — its boundary IS the frame's — so the gradient
+    // below just needs to fade out before ITS edges, not some inner box's.
+    const scrim = dom.el('scrim')
+    scrim.style.left = '0'
+    scrim.style.top = '0'
+    scrim.style.width = px(ENGINE.W)
+    scrim.style.height = px(ENGINE.H)
+    design.appendChild(scrim)
+    scrimElRef.current = scrim
+    layoutScrim(stationRef.current)
 
     stage.style.setProperty('--surge-ms', ENGINE.SURGE_MS + 'ms')
     worldData.sky.forEach((c, i) => stage.style.setProperty('--sky-' + (i + 1), c))
@@ -427,6 +502,42 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
       const surgeEl = surgeEls[L.id]
       if (surgeEl) surgeEl.style.transform = `translate3d(${-offset[L.id]}px,0,0)`
     }
+  }
+
+  // scrim alpha only — geometry is fixed at mount (full frame, see the
+  // build effect). Alpha formula mirrors world-07-ring.html's layoutScrim()
+  // exactly: scale-free via loudnessOf(), so it moves with the arc
+  // regardless of what ENGINE.ARC.lo/hi are.
+  //
+  // Ellipse 70%/62% of a 1920x1080 box: radii 1344x670px from centre.
+  // Tuned empirically in two rounds against gates pulling opposite ways —
+  // not derived from one formula, and not stable at either round-1 value:
+  //   - rx (70%, unchanged since round 1) and the transparent stop (74%,
+  //     994px) hold the frame-edge boundary-alpha check (must reach zero
+  //     strictly inside the element's own 1920x1080 bounds — verified live,
+  //     diff 0.9-1.0) while getting the safe box's own corner pixels
+  //     (which sit past the 45% stop) into the gradient's reach at all.
+  //   - ry alone (round 1: 50%, ry=540) got the OLD cap (p99.5<=72) to
+  //     EXACTLY 72/72 — zero headroom, which is what the cap's own
+  //     2026-08-09 retarget (<=68, WARN inside 4pts) exists to catch. 50%
+  //     couldn't be pushed further without more room: it already equalled
+  //     the frame's own half-height. Growing to 62% (670px, 130px past the
+  //     frame's own 540px half-height on that axis) needs no compensating
+  //     change to the transparent stop — the STOP is a fraction of ry too,
+  //     so growing ry alone deepens near-safe-box coverage without moving
+  //     where the vertical falloff completes in absolute pixels enough to
+  //     threaten that axis's own edge (still verified live, not assumed).
+  //     Round 2 measured: st0 p99.5 72 -> 62, six points of real margin
+  //     under the new 68 cap, same bandY-style zero-headroom caveat this
+  //     project has been burned by before — don't let a future change eat
+  //     it back to zero without re-measuring.
+  function layoutScrim(station) {
+    const scrim = scrimElRef.current, arc = arcRef.current
+    if (!scrim || !arc) return
+    const a = lerp(0.30, 0.68, loudnessOf(arc, station))
+    scrim.style.background = `radial-gradient(ellipse 70% 62% at 50% 50%,
+      rgba(2,2,10,${a.toFixed(2)}) 0%, rgba(2,2,10,${(a * 0.75).toFixed(2)}) 45%,
+      transparent 74%)`
   }
 
   // Offsets wrap modulo the layer's cylinder, and because every cylinder is
@@ -480,6 +591,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
       // animates as a visible rewind instead of snapping.
       void stage.offsetWidth
       stationRef.current = (stationRef.current + 1) % ENGINE.PANES
+      layoutScrim(stationRef.current)
       unlock()
       return
     }
@@ -488,6 +600,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
     ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] += L.surge })
     writeOffsets()
     stationRef.current = (stationRef.current + 1) % ENGINE.PANES
+    layoutScrim(stationRef.current)
     turnTimerRef.current = setTimeout(() => {
       stage.classList.remove('go')
       unlock()
@@ -513,6 +626,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
     }
     stageElRef.current.classList.remove('go')
     writeOffsets()
+    layoutScrim(stationRef.current)
   }
 
   // turn/jumpTo close over refs only (stable identities), so the empty dep

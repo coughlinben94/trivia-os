@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>World 01 — Deep Space v2 · Trivia OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   WORLD 01 — DEEP SPACE · v2
+   Redesign of world-01-deep-space.html per Ben's notes, 2026-07-30.
+   v1 stays untouched; iterations never overwrite in place.
+
+   THE HOUSE NUMBERS (carried from v1, unchanged)
+   THE PERIOD LAW          every animated thing gets a mutually-prime
+                           period: 11 / 13 / 17 / 19 / 23 / 29 / 31 / 37 /
+                           41 / 43 s. No two share a period or a drift
+                           direction.
+   THE DRIFT BANDS         far 0.3–1.5px/s · mid 2–6px/s · drifter 15–60px/s
+                           discrete events 300–900px/s over 2–4s
+                           (calibrated 55" panel @ 15ft, 1920px)
+   THE VALUE LAW           breathing ±0.04–0.08 alpha on a 0.30–0.55 base,
+                           12–25s. (The bright star tier runs a sanctioned
+                           hero exception, few per pane, documented below.)
+   TWO EVENT TIERS         ambient events (shooting stars) 1 per 40–120s,
+                           jittered ±40%. PUNCTUATION (GIFs + sound bites)
+                           3–4 per NIGHT, host-fired. Rarity is the value.
+   GPU RULE                transform + opacity only. Static filter/shadow OK.
+   NO rAF                  must survive 2.5 hours on a cheap HDMI stick.
+   PHASE                   one JS epoch at load drives both the CSS strip
+                           and the question scheduler, so they never argue.
+
+   WHAT v2 CHANGES (Ben's notes are the spec)
+   · The bottom-left nebula blob is GONE. Ugly. Not shrunk — gone.
+   · Skies are Sonora-structured: multi-stop VERTICAL linear ramps with a
+     real top-to-bottom color journey, never centered radial blobs.
+   · 5 night palettes cross-fade on a 775s cycle — mutually prime with the
+     344s pane loop (344 = 2³·43, 775 = 5²·31), so 8 panes × 5 palettes =
+     40 distinct looks that never re-sync.
+   · Stars are the hero: 3 size tiers, 5 twinkle groups on primes
+     11/13/17/19/23, per-star base alpha and color. Dust tier is static
+     (no animation) to keep the animated-element count sane on a stick.
+   · 8 panes + a 9th clone of pane 1, so 8→1 wraps seamlessly.
+   · Planet at half v1 size (8% vs 16.5%), on 2 of 8 panes only.
+   · Question staggers in word-by-word (45ms apart, DM Sans 500) after
+     each pan settles, leaves on the next pan.
+   · Shooting star with a real taper and a gentle arc replaces v1's comet.
+   ══════════════════════════════════════════════════════════════════════ */
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --w-core:      #f6efff;   /* near-white star core */
+  --w-highlight: #9f86ff;   /* glints + accents     */
+  --text:   #ece6ff;
+  --muted:  #8878b8;
+
+  /* page chrome */
+  --pg:     #0b0c10;
+  --pg-card:#14161d;
+  --pg-line:#262a34;
+}
+
+body{
+  background:var(--pg); color:#ddd8e8;
+  font-family:'DM Sans',system-ui,sans-serif; line-height:1.55;
+  padding:0 0 90px; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1240px;margin:0 auto;padding:0 28px}
+
+header.pg{padding:56px 0 26px;border-bottom:1px solid var(--pg-line);margin-bottom:26px}
+header.pg .eyebrow{font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:#8a7ad0;font-weight:700;margin-bottom:12px}
+header.pg h1{font-family:'Boogaloo',cursive;font-size:clamp(34px,5vw,52px);line-height:1.05;margin-bottom:12px}
+header.pg p{max-width:76ch;color:#9aa0ae;font-size:15px}
+header.pg b{color:#ddd8e8;font-weight:500}
+header.pg code{background:#1e2029;padding:1px 5px;border-radius:4px;font-size:13px;color:#c8a8ff}
+
+/* ── controls ─────────────────────────────────────────────────────── */
+.ctl{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.ctl button,.ctl label{
+  font-size:12.5px;font-weight:600;letter-spacing:.03em;
+  background:var(--pg-card);border:1px solid var(--pg-line);color:#b9b3c8;
+  border-radius:7px;padding:8px 14px;cursor:pointer;
+  transition:border-color .15s,color .15s,background .15s;
+  display:inline-flex;align-items:center;gap:7px;user-select:none;
+}
+.ctl button:hover,.ctl label:hover{border-color:#6a5aa8;color:#fff}
+.ctl button.on,.ctl label.on{background:#2a2140;border-color:#8a6ad0;color:#fff}
+.ctl input{accent-color:#8a6ad0}
+.ctl .sep{width:1px;background:var(--pg-line);margin:0 4px}
+
+/* ══════════════════════════════════════════════════════════════════════
+   THE STAGE
+   ══════════════════════════════════════════════════════════════════════ */
+.stage{
+  position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;
+  border-radius:8px;background:#010107;
+  box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 0 1px var(--pg-line);
+  container-type:size;
+  --spd:1;
+}
+
+/* ══ THE SKY — the palette carrier ══════════════════════════════════════
+   Sonora's structure, deep-space hues: each palette is one multi-stop
+   VERTICAL linear ramp, a real color journey top to bottom. NOT radial.
+   5 stacked layers; the base (P1) never animates; P2–P5 each hold a
+   155s window on a 775s cycle with ~12s opacity cross-fades. Opacity
+   only — animating registered color properties would repaint every
+   gradient per frame, which breaks the GPU rule on a cheap stick.       */
+.sky{position:absolute;inset:0}
+.sky>div{position:absolute;inset:0}
+.skyP1{ /* INDIGO — the resting state */
+  background:linear-gradient(180deg,
+    #020207 0%, #05081c 16%, #0a0f2e 34%, #101744 52%, #171e54 68%,
+    #131a4a 78%, #0c1234 89%, #05081e 97%, #030410 100%);
+}
+.skyP2{ /* VIOLET NEBULA */
+  background:linear-gradient(180deg,
+    #070313 0%, #120a2a 18%, #211040 38%, #331856 56%, #44206a 70%,
+    #33195a 80%, #1d0e3c 90%, #0d0522 97%, #060312 100%);
+}
+.skyP3{ /* TEAL DEEP */
+  background:linear-gradient(180deg,
+    #010508 0%, #041018 18%, #072230 38%, #0a3444 57%, #0e4252 70%,
+    #0a3646 80%, #062230 90%, #03121c 97%, #02080e 100%);
+}
+.skyP4{ /* EMBER HORIZON — dying-star warmth low in frame */
+  background:linear-gradient(180deg,
+    #05030e 0%, #0c061c 20%, #170a2a 40%, #250e34 58%, #3c163a 74%,
+    #5c2440 86%, #3a1830 93%, #1e0a1e 98%, #0e0514 100%);
+}
+.skyP5{ /* AURORA GREEN */
+  background:linear-gradient(180deg,
+    #020507 0%, #041012 18%, #07241f 38%, #0a382c 56%, #0e4634 70%,
+    #0a3829 80%, #06241c 90%, #031310 97%, #02080a 100%);
+}
+.skyP2,.skyP3,.skyP4,.skyP5{opacity:0;animation:skyWin calc(775s / var(--spd)) linear infinite}
+.skyP2{animation-delay:calc(-620s / var(--spd))}
+.skyP3{animation-delay:calc(-465s / var(--spd))}
+.skyP4{animation-delay:calc(-310s / var(--spd))}
+.skyP5{animation-delay:calc(-155s / var(--spd))}
+/* flat holds: identical values at both ends of a span = a genuine hold */
+@keyframes skyWin{
+  0%{opacity:0} 1.6%,18.4%{opacity:1} 20%,100%{opacity:0}
+}
+
+/* ══ THE STRIP — 9 panes (8 + clone of pane 1 for the seamless wrap) ══ */
+.strip{
+  position:absolute;top:0;left:0;height:100%;width:900%;
+  /* animation applied from JS at the shared epoch */
+}
+/* 344s loop · 8 segments of 43s = 39s flat hold + 4s glide.
+   Ends on pane 9 (a pixel-identical clone of pane 1), so the 100%→0%
+   jump is invisible. Linear on purpose — eased timing re-applies per
+   keyframe segment and only linear keeps hold math honest.             */
+@keyframes paneCycle{
+  0%,      11.337% { transform:translate3d(0,0,0) }
+  12.5%,   23.837% { transform:translate3d(-11.1111%,0,0) }
+  25%,     36.337% { transform:translate3d(-22.2222%,0,0) }
+  37.5%,   48.837% { transform:translate3d(-33.3333%,0,0) }
+  50%,     61.337% { transform:translate3d(-44.4444%,0,0) }
+  62.5%,   73.837% { transform:translate3d(-55.5556%,0,0) }
+  75%,     86.337% { transform:translate3d(-66.6667%,0,0) }
+  87.5%,   98.837% { transform:translate3d(-77.7778%,0,0) }
+  100%             { transform:translate3d(-88.8889%,0,0) }
+}
+.pane{position:absolute;top:0;height:100%;width:11.1111%;overflow:hidden}
+
+/* ── FAR · the starfield — now the hero ───────────────────────────────
+   0.3–1.5px/s: full-stage traverse in ~26 min. Reads as static; the
+   scene is measurably different when you glance back.                  */
+.far{position:absolute;inset:-6% -4%;animation:farDrift calc(1560s / var(--spd)) linear infinite}
+@keyframes farDrift{to{transform:translate3d(5%,-1.4%,0)}}
+.star{position:absolute;border-radius:50%}
+/* five twinkle groups on primes 11/13/17/19/23 — never re-align in 2.5h.
+   Per-star --lo/--hi set inline; dust tier gets NO animation at all.   */
+.tw1{animation:twk calc(11s / var(--spd)) ease-in-out infinite}
+.tw2{animation:twk calc(13s / var(--spd)) ease-in-out infinite}
+.tw3{animation:twk calc(17s / var(--spd)) ease-in-out infinite}
+.tw4{animation:twk calc(19s / var(--spd)) ease-in-out infinite}
+.tw5{animation:twk calc(23s / var(--spd)) ease-in-out infinite}
+@keyframes twk{0%,100%{opacity:var(--lo,.3)}50%{opacity:var(--hi,.42)}}
+
+/* ── ANCHORS — one nameable thing per pane, all outside the safe area.
+   No radial blobs. Bands are LINEAR gradients (Sonora's lesson); every
+   round glow sits on a border-radius:50% element (lessons file: shadow
+   on a square div renders a blurred rectangle).                        */
+
+/* Pane 2 + 6 planet bodies — half v1's size */
+.plan{
+  position:absolute;right:8%;top:10%;width:8%;aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle at 34% 30%, #d8b8ff 0%, #8a58d0 38%, #35186a 72%, #180a34 100%);
+  box-shadow:0 0 2.6cqw rgba(159,134,255,.30);  /* static, rounded ✓ */
+  animation:breathe19 calc(19s / var(--spd)) ease-in-out infinite;
+}
+.ring{
+  position:absolute;right:4.6%;top:13.4%;width:14.8%;aspect-ratio:3.6;
+  border-radius:50%;border:0.22cqw solid rgba(200,160,255,.5);
+  transform:rotate(-16deg);
+  border-bottom-color:rgba(200,160,255,.14);
+}
+.cres{
+  position:absolute;left:9%;top:11%;width:9%;aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle at 30% 26%, #2c1a4e 0%, #180d30 55%, #0a0518 100%);
+  box-shadow:inset 0.5cqw 0.4cqw 1.7cqw rgba(246,239,255,.55);  /* the lit rim */
+}
+
+/* Pane 3 · nebula veil — a vertical LINEAR band, left margin.
+   Gradient runs 90deg across its own width and reaches transparent at
+   both ends inside the box — no lit-rectangle edge possible.           */
+.veilcol{
+  position:absolute;left:3%;top:-6%;width:17%;height:114%;
+  background:linear-gradient(90deg, transparent 0%,
+    rgba(159,134,255,.10) 34%, rgba(159,134,255,.15) 52%,
+    rgba(120,90,220,.08) 72%, transparent 100%);
+  filter:blur(10px);              /* static */
+  animation:breathe29 calc(29s / var(--spd)) ease-in-out infinite;
+}
+
+/* Pane 4 · globular cluster core glow — small rounded disc under the
+   JS-seeded gaussian star cluster. closest-side radial inside its own
+   50%-rounded box, transparent by 82% — margin math checked.           */
+.clcore{
+  position:absolute;left:73%;top:68%;width:12%;aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle closest-side, rgba(246,239,255,.16) 0%,
+    rgba(159,134,255,.08) 48%, transparent 82%);
+  filter:blur(4px);
+  animation:breathe31 calc(31s / var(--spd)) ease-in-out infinite;
+}
+
+/* Pane 6 · milky band — soft diagonal LINEAR band, blurred, breathing */
+.milky{
+  position:absolute;left:-22%;top:6%;width:150%;height:34%;
+  transform:rotate(-13deg);
+  background:linear-gradient(180deg, transparent 0%,
+    rgba(159,134,255,.07) 30%, rgba(246,239,255,.06) 50%,
+    rgba(120,90,220,.05) 70%, transparent 100%);
+  filter:blur(13px);
+  animation:breathe37 calc(37s / var(--spd)) ease-in-out infinite;
+}
+
+/* Pane 7 · binary glints — two cross-flare stars on 41s / 43s */
+.glint{position:absolute;width:5cqw;aspect-ratio:1}
+.glint::before,.glint::after{
+  content:'';position:absolute;left:0;top:50%;width:100%;height:1.5px;
+  transform:translateY(-50%);
+  background:linear-gradient(90deg, transparent, rgba(246,239,255,.55) 46% 54%, transparent);
+}
+.glint::after{transform:translateY(-50%) rotate(90deg)}
+.glint i{
+  position:absolute;left:50%;top:50%;width:0.5cqw;aspect-ratio:1;border-radius:50%;
+  transform:translate(-50%,-50%);background:var(--w-core);
+  box-shadow:0 0 1.2cqw 0.2cqw rgba(159,134,255,.55);   /* static, rounded ✓ */
+}
+.gl1{animation:glintbr calc(41s / var(--spd)) ease-in-out infinite}
+.gl2{animation:glintbr calc(43s / var(--spd)) ease-in-out infinite}
+@keyframes glintbr{0%,100%{opacity:.38}50%{opacity:.5}}
+
+/* Pane 8 · dust lane — dark LINEAR band across the top, blurred */
+.dustlane{
+  position:absolute;left:-6%;top:-8%;width:114%;height:27%;
+  transform:rotate(-3.5deg);
+  background:linear-gradient(180deg, rgba(1,1,7,.9) 0%, rgba(1,1,7,.55) 55%, transparent 100%);
+  filter:blur(6px);
+}
+
+/* breathing set — all within ±0.04–0.08 on their base */
+@keyframes breathe19{0%,100%{opacity:.88}50%{opacity:.96}}
+@keyframes breathe29{0%,100%{opacity:.5}50%{opacity:.58}}
+@keyframes breathe31{0%,100%{opacity:.44}50%{opacity:.52}}
+@keyframes breathe37{0%,100%{opacity:.42}50%{opacity:.48}}
+
+/* ── DRIFTER · 15–60px/s, crosses in 30–120s, one per pane max ─────── */
+.drifter{
+  position:absolute;width:0.5cqw;aspect-ratio:1;border-radius:50%;
+  background:var(--w-core);
+  box-shadow:0 0 1.4cqw 0.25cqw rgba(159,134,255,.55);  /* static, rounded ✓ */
+}
+.dr88 {top:22%;left:-6%;animation:drA calc(88s  / var(--spd)) linear infinite}
+.dr104{top:36%;left:-6%;animation:drA calc(104s / var(--spd)) linear infinite}
+.dr127{top:64%;left:-6%;animation:drB calc(127s / var(--spd)) linear infinite}
+/* directions deliberately disagree */
+@keyframes drA{
+  0%{transform:translate3d(0,0,0);opacity:0}
+  6%{opacity:.85} 88%{opacity:.85}
+  100%{transform:translate3d(118cqw,13cqh,0);opacity:0}
+}
+@keyframes drB{
+  0%{transform:translate3d(0,0,0);opacity:0}
+  8%{opacity:.65} 86%{opacity:.65}
+  100%{transform:translate3d(118cqw,-20cqh,0);opacity:0}
+}
+
+/* ── OCCLUDER · dark near-plane, clipped by frame, static blur ─────── */
+.occ{
+  position:absolute;background:#01010a;
+  filter:blur(3px);
+  animation:occDrift calc(310s / var(--spd)) linear infinite;
+}
+@keyframes occDrift{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(-2cqw,0.8cqh,0)}}
+.occ.rock{
+  left:-6%;bottom:-24%;width:30%;aspect-ratio:1.5;
+  border-radius:52% 48% 40% 60% / 62% 56% 44% 38%;
+}
+.occ.rock2{
+  right:-9%;bottom:-28%;width:36%;aspect-ratio:1.7;
+  border-radius:44% 56% 62% 38% / 50% 44% 56% 50%;
+  animation-duration:calc(430s / var(--spd));
+}
+
+/* ══ THE EVENT CHANNEL — shooting star ═════════════════════════════════
+   1 per 40–120s, jittered ±40%, scheduled from JS on a natural boundary
+   (the sanctioned exception — not per-frame). ~64cqw in 2.2s ≈ 560px/s
+   on a 1920 panel: inside the 300–900px/s discrete-event band.
+   Structure: .shot holds a static per-fire rotation → .sx runs x linear
+   → .sy adds an ease-in y sag (the arc) → .streak tapers + fades.
+   transform-origin at the head, so the tail collapses INTO the head at
+   death — a real taper, not a bar switching off.                       */
+.shot{position:absolute;pointer-events:none;opacity:0}
+.shot.fire{opacity:1}
+.sx,.sy{position:absolute;left:0;top:0}
+.shot.fire .sx{animation:shotX 2.2s linear forwards}
+.shot.fire .sy{animation:shotY 2.2s cubic-bezier(.55,0,1,.55) forwards}
+.shot.fire .streak{animation:shotStreak 2.2s linear forwards}
+@keyframes shotX{to{transform:translate3d(64cqw,0,0)}}
+@keyframes shotY{to{transform:translate3d(0,8cqh,0)}}
+.streak{
+  position:relative;width:13cqw;height:2px;border-radius:999px;
+  transform-origin:100% 50%;opacity:0;
+  background:linear-gradient(90deg, transparent 0%,
+    rgba(159,134,255,.10) 22%, rgba(200,178,255,.42) 58%,
+    rgba(246,239,255,.85) 88%, #fff 100%);
+}
+.streak::after{
+  content:'';position:absolute;right:-0.25cqw;top:50%;
+  width:0.55cqw;aspect-ratio:1;border-radius:50%;
+  transform:translateY(-50%);background:#fff;
+  box-shadow:0 0 1.6cqw 0.3cqw rgba(210,190,255,.8);  /* static, rounded ✓ */
+}
+@keyframes shotStreak{
+  0%  {opacity:0;transform:scaleX(.12)}
+  9%  {opacity:1}
+  42% {transform:scaleX(1)}
+  70% {opacity:1}
+  100%{opacity:0;transform:scaleX(.4)}
+}
+
+/* GIF payload — punctuation tier, host-fired, edge slot only */
+.gifslot{
+  position:absolute;width:13%;opacity:0;pointer-events:none;
+  filter:drop-shadow(0 0.4cqw 1cqw rgba(0,0,0,.6));
+}
+.gifslot.fire{animation:gifGo 6.5s ease-in-out forwards}
+@keyframes gifGo{
+  0%  {opacity:0;transform:translate3d(0,2cqh,0)}
+  9%  {opacity:.92;transform:translate3d(0,0,0)}
+  80% {opacity:.92;transform:translate3d(0,0,0)}
+  100%{opacity:0;transform:translate3d(0,-1.6cqh,0)}
+}
+
+/* ── GRAIN — static, pre-rendered data-URI. Kills gradient banding. ── */
+.grain{
+  position:absolute;inset:0;pointer-events:none;opacity:.11;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='170' height='170'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='170' height='170' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.vig{
+  position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 78% 74% at 50% 48%, transparent 42%, rgba(1,1,8,.6) 100%);
+}
+
+/* ── QUESTION LAYER — arrives typographically after the pan settles ── */
+.qwrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:0 13cqw;pointer-events:none}
+/* linear scrim BAND behind the text only — never a full-frame wash */
+.scrim{
+  position:absolute;left:0;right:0;top:24cqh;height:52cqh;opacity:0;
+  transition:opacity .9s ease;
+  background:linear-gradient(180deg,transparent,rgba(1,1,10,.5) 26%,rgba(1,1,10,.5) 74%,transparent);
+}
+.stage.qon .scrim{opacity:1}
+.q{position:relative;text-align:center}
+.qnum{
+  font-family:'DM Sans';font-weight:700;font-size:1.15cqw;letter-spacing:.36em;
+  text-transform:uppercase;color:var(--w-highlight);margin-bottom:2.2cqh;
+  opacity:0;transform:translate3d(0,0.6cqh,0);
+  transition:opacity .5s ease,transform .5s ease;
+}
+.stage.qon .qnum{opacity:1;transform:none}
+.qtext{
+  font-family:'DM Sans';font-weight:500;font-size:4.1cqw;line-height:1.26;color:var(--text);
+  text-shadow:0 0.3cqw 2.2cqw rgba(1,1,10,.85);
+}
+/* per-word stagger: inline transition-delay (i × 45ms) applies on the
+   way IN; on the way OUT the !important zero-delay wins over inline,
+   so exits are quick and together while entries cascade.               */
+.qtext .w{
+  display:inline-block;opacity:0;transform:translate3d(0,0.9cqh,0);
+  transition:opacity .55s cubic-bezier(.2,.7,.3,1),transform .55s cubic-bezier(.2,.7,.3,1);
+}
+.stage.qon .qtext .w{opacity:1;transform:none}
+.stage:not(.qon) .qtext .w{transition-delay:0s !important;transition-duration:.32s}
+
+/* ── safe-area guides (dev only) ───────────────────────────────────── */
+.safe{position:absolute;left:20%;right:20%;top:27.5%;bottom:27.5%;
+  border:1px dashed rgba(255,60,180,.85);pointer-events:none;display:none}
+.safe::after{content:'SAFE AREA 60% × 45%';position:absolute;top:-1.9cqh;left:0;
+  font:700 0.85cqw/1 'DM Sans';letter-spacing:.2em;color:rgba(255,60,180,.95)}
+.stage.guides .safe{display:block}
+
+.stage.noq .qwrap,.stage.noq .scrim{display:none}
+.stage.nograin .grain{display:none}
+
+/* ── readout ──────────────────────────────────────────────────────── */
+.readout{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--pg-line);
+  border:1px solid var(--pg-line);border-radius:8px;overflow:hidden;margin-top:16px;
+}
+.readout>div{background:var(--pg-card);padding:13px 15px 15px}
+.readout h4{font-size:10px;letter-spacing:.17em;text-transform:uppercase;color:#7d8290;
+  font-weight:700;margin-bottom:6px}
+.readout p{font-size:13px;line-height:1.45;color:#c8c3d4}
+.readout b{color:#c8a8ff;font-weight:600}
+@media(max-width:860px){.readout{grid-template-columns:repeat(2,1fr)}}
+
+.notes{margin-top:30px;border:1px solid var(--pg-line);border-radius:9px;
+  background:var(--pg-card);padding:26px 28px 28px}
+.notes h3{font-family:'Boogaloo',cursive;font-size:25px;margin-bottom:12px}
+.notes p{color:#9aa0ae;font-size:14.5px;max-width:82ch;margin-bottom:10px}
+.notes b{color:#ddd8e8;font-weight:500}
+.notes ul{margin:10px 0 4px 19px}
+.notes li{color:#9aa0ae;font-size:14.5px;margin-bottom:7px}
+.notes li b{color:#e8e3f2}
+.notes code{background:#1e2029;padding:1px 5px;border-radius:4px;font-size:12.5px;color:#c8a8ff}
+
+/* ── reduced motion: freeze in place, nothing vanishes ─────────────── */
+@media (prefers-reduced-motion:reduce){
+  .stage *{animation:none !important;transition:none !important}
+  .stage .qtext .w,.stage .qnum,.stage .scrim{opacity:1 !important;transform:none !important}
+}
+.stage.rm *{animation:none !important;transition:none !important}
+.stage.rm .qtext .w,.stage.rm .qnum,.stage.rm .scrim{opacity:1 !important;transform:none !important}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="pg">
+  <div class="eyebrow">Trivia OS · World 01 · v2 · 2026-07-30</div>
+  <h1>Deep Space — v2</h1>
+  <p>Redesign per Ben's v1 notes. <b>Stars are the hero</b> — 3 size tiers, 5 twinkle groups on primes, per-star color and brightness. <b>Skies are Sonora-structured</b>: 5 night palettes as multi-stop vertical linear ramps, cross-fading on a <code>775s</code> cycle mutually prime with the <code>344s</code> 8-pane loop — 8 × 5 = <b>40 distinct looks</b> that never re-sync. The bottom-left nebula is gone. Planet is half size, on 2 of 8 panes. The question staggers in word-by-word after each pan settles. Transform and opacity only, no <code>requestAnimationFrame</code>.</p>
+</header>
+
+<div class="ctl">
+  <button id="spd" class="on">Speed: 1× (show)</button>
+  <button id="ev">Fire shooting star (ambient)</button>
+  <button id="gf">Fire GIF (punctuation)</button>
+  <div class="sep"></div>
+  <label id="tq" class="on"><input type="checkbox" checked> Question text</label>
+  <label id="tg"><input type="checkbox"> Safe-area guides</label>
+  <label id="tn" class="on"><input type="checkbox" checked> Grain</label>
+  <label id="tr"><input type="checkbox"> Reduced motion</label>
+</div>
+
+<div class="stage" id="stage">
+
+  <!-- palette carrier: 5 vertical ramps, opacity cross-fade, 775s -->
+  <div class="sky">
+    <div class="skyP1"></div>
+    <div class="skyP2"></div>
+    <div class="skyP3"></div>
+    <div class="skyP4"></div>
+    <div class="skyP5"></div>
+  </div>
+
+  <div class="strip" id="strip">
+    <!-- P1 · THE STAR RIVER — dense field + a diagonal star concentration
+         made of actual stars, not a gradient smear -->
+    <div class="pane" style="left:0"><div class="far" id="f1"></div></div>
+
+    <!-- P2 · THE RINGED PLANET — small, upper-right, one drifter -->
+    <div class="pane" style="left:11.1111%">
+      <div class="far" id="f2"></div>
+      <div class="plan"></div><div class="ring"></div>
+      <div class="drifter dr88"></div>
+    </div>
+
+    <!-- P3 · THE VEIL — vertical linear nebula band, left margin -->
+    <div class="pane" style="left:22.2222%">
+      <div class="far" id="f3"></div>
+      <div class="veilcol"></div>
+    </div>
+
+    <!-- P4 · THE CLUSTER — gaussian globular, low-right, core glow -->
+    <div class="pane" style="left:33.3333%">
+      <div class="far" id="f4"></div>
+      <div class="clcore"></div>
+      <div class="far" id="f4c" style="animation:none;inset:0"></div>
+    </div>
+
+    <!-- P5 · THE ASTEROIDS — two dark occluders, one drifter -->
+    <div class="pane" style="left:44.4444%">
+      <div class="far" id="f5"></div>
+      <div class="drifter dr127"></div>
+      <div class="occ rock"></div>
+      <div class="occ rock2"></div>
+    </div>
+
+    <!-- P6 · THE CRESCENT — lit moon rim + soft milky band -->
+    <div class="pane" style="left:55.5556%">
+      <div class="far" id="f6"></div>
+      <div class="milky"></div>
+      <div class="cres"></div>
+    </div>
+
+    <!-- P7 · THE BINARIES — two cross-flare glints, off safe-area -->
+    <div class="pane" style="left:66.6667%">
+      <div class="far" id="f7"></div>
+      <div class="glint gl1" style="left:9%;top:22%"><i></i></div>
+      <div class="glint gl2" style="left:83%;top:64%"><i></i></div>
+    </div>
+
+    <!-- P8 · THE QUIET — sparse deep field under a dark dust lane -->
+    <div class="pane" style="left:77.7778%">
+      <div class="far" id="f8"></div>
+      <div class="dustlane"></div>
+      <div class="drifter dr104"></div>
+    </div>
+
+    <!-- P9 · CLONE OF P1 — same seed, pixel-identical: the seamless wrap -->
+    <div class="pane" style="left:88.8889%"><div class="far" id="f9"></div></div>
+  </div>
+
+  <div class="vig"></div>
+  <div class="grain"></div>
+
+  <!-- event channel payloads -->
+  <div class="shot" id="shot"><div class="sx"><div class="sy"><div class="streak"></div></div></div></div>
+  <div class="gifslot" id="gifslot" style="right:4.5cqw;bottom:7cqh"></div>
+
+  <div class="scrim"></div>
+  <div class="qwrap">
+    <div class="q">
+      <div class="qnum" id="qnum">Round 1 · Question 1</div>
+      <div class="qtext" id="qtext"></div>
+    </div>
+  </div>
+
+  <div class="safe"></div>
+</div>
+
+<div class="readout">
+  <div><h4>The multiplication</h4><p><b>8 panes × 5 palettes = 40 looks.</b> Pane loop 344s (2³·43), palette loop 775s (5²·31) — coprime, never re-sync.</p></div>
+  <div><h4>Periods</h4><p><b>11·13·17·19·23</b>s twinkle, <b>29·31·37·41·43</b>s breathe/glint, drift 88·104·127·310·430·1560s.</p></div>
+  <div><h4>Loop</h4><p><b>344s</b> — 8 panes, 39s flat hold + 4s glide each, wraps 8→1 via a cloned pane 9. Question re-staggers per pane.</p></div>
+  <div><h4>Events</h4><p>Shooting star <b>1/40–120s</b> jittered ±40%, ~560px/s. GIF + sound bite <b>3–4/night</b>, host-fired.</p></div>
+</div>
+
+<div class="notes">
+  <h3>What to look at, and what it's proving</h3>
+  <p><b>Watch from across the room.</b> Calibration is a 55" panel at 15 feet. On a laptop the drift looks too slow and the grain too strong — correct, not a defect. Use 12× to preview the pane and palette cycles.</p>
+  <ul>
+    <li><b>The multiplication is the point.</b> The 344s pane cycle and the 775s palette cycle share no factor, so pane 3 under the ember sky and pane 3 under the teal sky are different rooms. 40 distinct looks from one asset set, zero extra art.</li>
+    <li><b>The sky is Sonora's structure, not Sonora's hues.</b> Each palette is a multi-stop vertical linear ramp — a real color journey top to bottom — never a centered radial blob. That structural swap is why the bottom-left of v1 (the nebula smudge) is gone rather than shrunk: the smudge was a radial-blob problem, not a size problem.</li>
+    <li><b>Stars carry the world now.</b> Three size tiers (dust / mid / bright), five twinkle groups on primes 11–23s, per-star base alpha and a 4-color temperature spread. Dust never animates — that keeps the animated-element count near 800 instead of 2000 on the stick. The bright tier runs hotter than the value law's 0.30–0.55 band on purpose: it's the hero tier, a few per pane, documented here as the sanctioned exception.</li>
+    <li><b>Every pane is nameable.</b> River, planet, veil, cluster, asteroids, crescent, binaries, quiet. A pane that's just "more stars" is a wasted pane — pane 1's density is shaped into a river, and pane 8's sparseness sits under a dust lane, so even the extremes have a reason.</li>
+    <li><b>The wrap is a clone, not a rewind.</b> Pane 9 is seeded with pane 1's exact RNG seed, so the 100%→0% keyframe jump lands on identical pixels. 8 flows into 1 with no backwards pan.</li>
+    <li><b>The question is typography, not a card.</b> Words enter 45ms apart, DM Sans 500, after the pan settles; they leave fast and together when the camera moves. The scrim is a linear band behind the text only — a full-frame wash flattens the art to mush.</li>
+    <li><b>The shooting star tapers.</b> Head-origin scaleX means the tail collapses into the head at death; a linear x run nested inside an ease-in y sag gives the arc without animating anything but transforms.</li>
+  </ul>
+  <p><b>Craft notes honored from the lessons file:</b> every soft glow lives on a <code>border-radius:50%</code> element (box-shadow on a square div is a blurred rectangle); every radial gradient reaches transparent inside its own box with real margin; blur values are static and graduated, never animated; the pane cycle is <code>linear</code> because eased CSS animations re-apply timing per keyframe segment; palette cross-fades are stacked-layer <b>opacity</b>, not animated color variables, because interpolating gradient colors repaints every frame and this layer has to survive 2.5 hours on a cheap stick.</p>
+</div>
+
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────────────
+   STAR FIELDS — generated once at load. Static arrays, not per-frame
+   state. Tiers: 60% dust (static, no animation), 30% mid, 10% bright.
+   Five twinkle groups on primes 11/13/17/19/23 so they never sync.
+   Pane 9 reuses pane 1's seed — pixel-identical for the seamless wrap.
+   ───────────────────────────────────────────────────────────────────── */
+const COLORS = ['#f6efff','#ffeeda','#dce8ff','#ffffff'];
+
+function rng(seed){ let s=seed; return ()=> (s = (s*16807) % 2147483647) / 2147483647; }
+
+function starHTML(x,y,rnd){
+  const t = rnd();
+  const col = COLORS[Math.floor(rnd()*COLORS.length)];
+  let size, lo, hi, cls='', extra='';
+  if (t < .60){                       // dust — static, never animates
+    size = (.6 + rnd()*.5).toFixed(2);
+    extra = `opacity:${(.16 + rnd()*.14).toFixed(2)};`;
+  } else if (t < .90){                // mid — value-law band
+    size = (1.2 + rnd()).toFixed(2);
+    lo = (.30 + rnd()*.15).toFixed(2); hi = (+lo + .06 + rnd()*.02).toFixed(2);
+    cls = 'tw' + (1 + Math.floor(rnd()*5));
+    extra = `--lo:${lo};--hi:${hi};animation-delay:-${(rnd()*23).toFixed(2)}s;`;
+  } else {                            // bright — hero tier (documented exception)
+    size = (2.4 + rnd()*1.1).toFixed(2);
+    lo = (.48 + rnd()*.1).toFixed(2); hi = (+lo + .22 + rnd()*.08).toFixed(2);
+    cls = 'tw' + (1 + Math.floor(rnd()*5));
+    extra = `--lo:${lo};--hi:${hi};animation-delay:-${(rnd()*23).toFixed(2)}s;` +
+            `box-shadow:0 0 6px 1px rgba(200,180,255,.35);`;
+  }
+  return `<i class="star ${cls}" style="left:${x}%;top:${y}%;width:${size}px;height:${size}px;background:${col};${extra}"></i>`;
+}
+
+function seedField(el, n, seed){
+  const rnd = rng(seed); let html='';
+  for (let i=0;i<n;i++) html += starHTML((rnd()*100).toFixed(2),(rnd()*100).toFixed(2),rnd);
+  el.innerHTML += html;
+}
+/* diagonal star river for pane 1/9 — a concentration of real stars */
+function seedRiver(el, n, seed){
+  const rnd = rng(seed); let html='';
+  for (let i=0;i<n;i++){
+    const x = rnd()*100;
+    const y = 30 - x*0.22 + (rnd()*2-1)*7 + 8;   /* stays above the safe band */
+    if (y < -4) continue;
+    html += starHTML(x.toFixed(2), y.toFixed(2), rnd);
+  }
+  el.innerHTML += html;
+}
+/* gaussian cluster for pane 4 */
+function seedCluster(el, n, seed, cx, cy, sp){
+  const rnd = rng(seed); let html='';
+  const g = ()=> (rnd()+rnd()+rnd()-1.5)/1.5;    /* rough gaussian */
+  for (let i=0;i<n;i++)
+    html += starHTML((cx+g()*sp).toFixed(2),(cy+g()*sp*.8).toFixed(2),rnd);
+  el.innerHTML += html;
+}
+
+const SEED1 = 7919;                              /* shared by panes 1 & 9 */
+seedField(document.getElementById('f1'), 210, SEED1);
+seedRiver(document.getElementById('f1'), 90, SEED1*3);
+seedField(document.getElementById('f9'), 210, SEED1);
+seedRiver(document.getElementById('f9'), 90, SEED1*3);
+
+seedField(document.getElementById('f2'), 170, 104729);
+seedField(document.getElementById('f3'), 150, 15485863);
+seedField(document.getElementById('f4'), 150, 32452843);
+seedCluster(document.getElementById('f4c'), 48, 49979687, 79, 74, 7);
+seedField(document.getElementById('f5'), 175, 67867967);
+seedField(document.getElementById('f6'), 165, 86028121);
+seedField(document.getElementById('f7'), 185, 122949823);
+seedField(document.getElementById('f8'), 95, 141650939);   /* the quiet pane */
+
+/* ─────────────────────────────────────────────────────────────────────
+   ONE EPOCH — the strip animation and the question scheduler both key
+   off this instant, so CSS and JS agree on which pane is on screen.
+   Speed changes reset the epoch and restart the strip (preview-only
+   artifact: the loop rewinds to pane 1; the show never changes speed).
+   ───────────────────────────────────────────────────────────────────── */
+const stage = document.getElementById('stage');
+const strip = document.getElementById('strip');
+const qtext = document.getElementById('qtext');
+const qnum  = document.getElementById('qnum');
+
+const LOOP=344000, SEG=43000, HOLD=39000;
+let SPEED=1, epoch=0, qTimer=null;
+
+const QUESTIONS = [
+  ['Round 3 · Question 1','Which planet in our solar system has the most moons?'],
+  ['Round 3 · Question 2','What was the first artificial satellite ever launched into orbit?'],
+  ['Round 3 · Question 3','Which 1975 film was the first ever to gross over $100 million?'],
+  ['Round 3 · Question 4','What is the closest star to Earth other than the Sun?'],
+  ['Round 3 · Question 5','Which Apollo mission was the first to land humans on the Moon?'],
+  ['Round 3 · Question 6','What galaxy is on a collision course with the Milky Way?'],
+  ['Round 3 · Question 7','Which element makes up about 73 percent of the Sun’s mass?'],
+  ['Round 3 · Question 8','What is the name of the largest volcano in the solar system?'],
+];
+
+function phase(){ return ((Date.now()-epoch)*SPEED) % LOOP; }
+
+function setQ(k){
+  const [num, text] = QUESTIONS[k % QUESTIONS.length];
+  qnum.textContent = num;
+  qtext.innerHTML = text.split(' ')
+    .map((w,i)=>`<span class="w" style="transition-delay:${i*45}ms">${w}</span>`)
+    .join(' ');
+}
+function qShow(on){ stage.classList.toggle('qon', on); }
+
+/* chained timeouts on natural boundaries — the sanctioned exception */
+function qLoop(){
+  const p=phase(), seg=Math.floor(p/SEG), t=p-seg*SEG, k=seg%8;
+  if (t < HOLD){
+    setQ(k); qShow(true);
+    qTimer=setTimeout(()=>{ qShow(false); qLoop(); }, (HOLD-t)/SPEED + 20);
+  } else {
+    qShow(false);
+    qTimer=setTimeout(qLoop, (SEG-t)/SPEED + 350);   /* settle beat after the pan */
+  }
+}
+
+function startClock(){
+  clearTimeout(qTimer);
+  strip.style.animation='none';
+  void strip.offsetWidth;
+  strip.style.animation=`paneCycle calc(344s / var(--spd)) linear infinite`;
+  epoch=Date.now();
+  qLoop();
+}
+startClock();
+
+/* ─────────────────────────────────────────────────────────────────────
+   THE EVENT CHANNEL — 1 shooting star per 40–120s, jittered ±40%.
+   GIF + sound bite stay host-fired, 3–4 a night: a GIF on a schedule is
+   ambience; a GIF that lands on Ben's cue is a bit.
+   ───────────────────────────────────────────────────────────────────── */
+const shot    = document.getElementById('shot');
+const gifslot = document.getElementById('gifslot');
+const BASE_MIN=40000, BASE_MAX=120000, JITTER=0.4;
+
+function nextDelay(){
+  const base = BASE_MIN + Math.random()*(BASE_MAX-BASE_MIN);
+  return base * (1 + (Math.random()*2-1)*JITTER);
+}
+function fireShot(){
+  shot.style.top  = (5 + Math.random()*15) + 'cqh';   /* above the safe band */
+  shot.style.left = (2 + Math.random()*26) + 'cqw';
+  shot.style.transform = `rotate(${(10 + Math.random()*16).toFixed(1)}deg)`;
+  shot.classList.remove('fire');
+  void shot.offsetWidth;
+  shot.classList.add('fire');
+}
+function fireGif(){
+  gifslot.innerHTML =
+    '<div style="aspect-ratio:1;border-radius:10px;border:2px dashed rgba(200,170,255,.65);' +
+    'display:flex;align-items:center;justify-content:center;font:700 1cqw/1 DM Sans;' +
+    'letter-spacing:.16em;color:rgba(200,170,255,.85);background:rgba(10,6,26,.55)">GIF</div>';
+  gifslot.classList.remove('fire');
+  void gifslot.offsetWidth;
+  gifslot.classList.add('fire');
+}
+function scheduleEvent(){
+  setTimeout(()=>{
+    if (!stage.classList.contains('rm')) fireShot();
+    scheduleEvent();
+  }, nextDelay()/SPEED);
+}
+scheduleEvent();
+setTimeout(fireShot, 3500);   /* one early, so the channel is visible */
+
+/* ── controls ─────────────────────────────────────────────────────── */
+const spdBtn=document.getElementById('spd'); const SPEEDS=[1,4,12]; let spdIdx=0;
+spdBtn.onclick=()=>{
+  spdIdx=(spdIdx+1)%SPEEDS.length; SPEED=SPEEDS[spdIdx];
+  stage.style.setProperty('--spd',SPEED);
+  spdBtn.textContent = SPEED===1 ? 'Speed: 1× (show)' : `Speed: ${SPEED}× (preview)`;
+  spdBtn.classList.toggle('on', SPEED===1);
+  startClock();
+};
+document.getElementById('ev').onclick=fireShot;
+document.getElementById('gf').onclick=fireGif;
+
+function wire(id, cls, invert){
+  const lab=document.getElementById(id), box=lab.querySelector('input');
+  box.onchange=()=>{
+    stage.classList.toggle(cls, invert ? !box.checked : box.checked);
+    lab.classList.toggle('on', box.checked);
+  };
+}
+wire('tq','noq',true);
+wire('tg','guides',false);
+wire('tn','nograin',true);
+wire('tr','rm',false);
+</script>
+</body>
+</html>

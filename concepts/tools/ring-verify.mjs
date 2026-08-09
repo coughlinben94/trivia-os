@@ -42,6 +42,20 @@
 //    matching `kind === '...'` branch in ringPrimitives.js's makePrim — the exact bug
 //    class that once rendered two stations as empty divs.
 //
+// ─────────────────────────────────────────────────────────────────────────
+// B1 REBASELINE (2026-08-08, gate audit). The prior version of this file
+// gated its seven §1/§2 content checks against CONTENT_BASELINE — an object
+// whose values were the build's OWN measured badness at the moment the
+// two-tier split landed. That is a gate calibrated to its subject: with
+// `headlineInk: 11` recorded, a build where 11 of 12 stations sit outside the
+// spec's 4–9% headline-ink band printed PASS, and headline ink is the exact
+// number ART-DIRECTION-SPEC.md §1 names as the cause of "it feels small."
+// CONTENT_BASELINE is deleted. Every threshold now comes from SPEC below,
+// each entry carrying a `src` citation into the spec text. A target that is
+// genuinely unreachable goes in KNOWN_DEVIATIONS — dated, reasoned, self-
+// expiring, and it downgrades FAIL to WARN, never to PASS.
+// ─────────────────────────────────────────────────────────────────────────
+//
 // Usage:
 //   node concepts/tools/ring-verify.mjs <path-to-html>
 //
@@ -51,7 +65,7 @@
 
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
-import { readFile, readFileSync, readdirSync } from 'node:fs';
+import { readFile, readFileSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -70,43 +84,150 @@ const source = readFileSync(absPath, 'utf8');
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
+// This gate has never once written a screenshot to disk — every PNG it reads
+// was a Playwright buffer that died with the process. Five rounds of
+// "rendered and looked" claims sourced from this file were therefore
+// unverifiable after the fact (2026-08-09 review). Same convention
+// visual-audit.mjs/spot-check.mjs already use: a fresh, gitignored,
+// never-deleted directory per run (concepts/.audit-shots/ — deleting inside
+// concepts/ is blocked for an unattended run, so "write to a new dir" is the
+// actual fix, not a workaround). Printed once at the end of this run.
+const RUN_DIR = path.resolve(REPO_ROOT, 'concepts', '.audit-shots', `ring-verify-${Date.now()}`);
+mkdirSync(RUN_DIR, { recursive: true });
+function saveShot(buf, name) { writeFileSync(path.join(RUN_DIR, `${name}.png`), buf); }
+
 const results = []; // { name, status: PASS|WARN|FAIL, detail, tier: 'regression'|'content' }
 function report(name, status, detail, tier = 'regression') { results.push({ name, status, detail, tier }); }
 
 // ═══════════════════════════════════════════════════════════════════════
-// CONTENT-BUDGET BASELINE — Task 8 hardening pass split the report into two
-// tiers (design-consultant sign-off: "a gate that is permanently red is a
-// gate people stop reading"). The seven checks below (ink-per-station,
-// headline-ink, largest-element mid-share, elements-per-station, bleed,
-// quadrant-rotation, horizontal-balance) are real, known content gaps
-// against ART-DIRECTION-SPEC.md §1/§2's absolute targets — closing them is
-// real design work, out of scope for the verify-gate task itself. Gating
-// the whole script red on them forever just trains people to ignore FAIL.
+// SPEC THRESHOLDS — the only place a number lives.
 //
-// Instead: each metric below is the actual measured badness (station/
-// quadrant count out of band, or points outside the balance band) at the
-// moment this two-tier split landed (2026-08-07, ring-scaffold-absorption,
-// same commit that fixed the mid-share threshold bug — see the midShare
-// section above). The content-budget tier's pass criterion is "not WORSE
-// than this," not "meets the spec target" — the spec target and the real
-// absolute numbers still print in every check's detail string, they just
-// don't gate the tier. Lower is always better for every metric here.
-// Update this object (with a comment explaining why) whenever real content
-// work closes one of these gaps for good — don't bump it to silence a
-// regression.
+// RULE: every value in this object is transcribed from
+// concepts/ART-DIRECTION-SPEC.md and carries a `src` citation naming the
+// file, line and section it came from. NOTHING in here may be derived from,
+// copied out of, or "recorded from" a measurement of the build under test.
+// A gate whose pass criterion is its subject's own current reading cannot
+// detect that its subject is broken — that is the defect this rebaseline
+// exists to remove. See NO-SELF-BASELINE at the foot of this file for the
+// mechanical form of the rule.
 // ═══════════════════════════════════════════════════════════════════════
-const CONTENT_BASELINE = {
-  html: { inkPerStation: 10, headlineInk: 11, midShare: 1, elementsPerStation: 4, bleed: 0, quadrant: 2, balance: 34.3 },
-  'react-live': { inkPerStation: 11, headlineInk: 11, midShare: 1, elementsPerStation: 4, bleed: 0, quadrant: 2, balance: 34.3 },
-};
-// current-badness score is compared against CONTENT_BASELINE[label][key];
-// worse (higher) than the recorded baseline reports FAIL ("regressed"),
-// equal-or-better reports PASS ("no worse than the known backlog").
-function contentReport(P, label, key, name, badness, spec, tier = 'content') {
-  const base = CONTENT_BASELINE[label][key];
-  const status = badness > base ? 'FAIL' : 'PASS';
-  const note = badness > base ? `REGRESSED (baseline ${base}, now ${badness})` : `no worse than baseline (baseline ${base}, now ${badness})`;
-  report(P(name), status, `${spec} — ${note}`, tier);
+// inkPerStation.lo (2026-08-08 amendment to ART-DIRECTION-SPEC.md:55): was a
+// flat 6% floor applied to all twelve stations, on a ring whose entire value
+// arc exists so quiet stations legitimately carry less. `lo` is now the
+// CEILING of a per-station floor — floor(i) = lo * (arc[i]/ENGINE.ARC.hi) —
+// reached only near the arc's loud end; see check 11 below for the formula
+// applied. `hi` (18%) is unchanged and stays flat: no station has ever
+// measured over it, and nothing argues a quiet station should be allowed
+// MORE ink than a loud one.
+const SPEC = Object.freeze({
+  inkPerStation:      { lo: 0.06, hi: 0.18,                 src: 'ART-DIRECTION-SPEC.md:55 §1' },
+  midShare:           { min: 0.55,                          src: 'ART-DIRECTION-SPEC.md:56 §1' },
+  headlineInk:        { lo: 0.04, hi: 0.09,                 src: 'ART-DIRECTION-SPEC.md:59 §1' },
+  elementsPerStation: { lo: 2, hi: 5,                       src: 'ART-DIRECTION-SPEC.md:62 §1' },
+  // p995Max retargeted 72 -> 68 (2026-08-09): st0 measured EXACTLY 72/72 at
+  // the old cap — a threshold shipped with zero headroom is not a
+  // threshold, it's a coin flip against the next content change. warnMargin
+  // makes the gate WARN (not silently PASS) inside 4 points of whatever the
+  // current cap is, so the next zero-headroom ship gets flagged before it
+  // ships, not measured after.
+  safeBox:            { meanMax: 34, p995Max: 68, warnMargin: 4, src: 'ART-DIRECTION-SPEC.md:76 §2' },
+  quadrant:           { lo: 2, hi: 4,                       src: 'ART-DIRECTION-SPEC.md:85 §2' },
+  balance:            { centre: 960, tol: 96,               src: 'ART-DIRECTION-SPEC.md:87 §2' },
+  vertSpread:         { areaFrac: 0.15, minStations: 6,     src: 'ART-DIRECTION-SPEC.md:94 §2' },
+  bleed:              { cropLo: 0.10, cropHi: 0.35, lo: 3, hi: 5, src: 'ART-DIRECTION-SPEC.md:98 §2' },
+  arcBand:            { quietLo: 8, quietHi: 13, loudLo: 26, loudHi: 34, src: 'ART-DIRECTION-SPEC.md:130 §3' },
+  arcSpan:            { lo: 2.2, hi: 4.0,                   src: 'ART-DIRECTION-SPEC.md:131 §3' },
+  // B2-luminance.md sec 4.1: per-station tolerance alone can't catch a
+  // flattened arc — if every station sits within +/-30% of a 3.1x-span
+  // target, the worst PERMISSIBLE rendered span is only 1.67x (barely above
+  // the 1.56x the defect produced). These two are the aggregate checks that
+  // actually gate contrast and ordering, not just per-station level.
+  arcSpanRealised:    { minFrac: 0.80,                      src: 'B2-luminance.md §4.1 (ART-DIRECTION-SPEC.md:131 §3)' },
+  arcRankCorrelation: { min: 0.90,                          src: 'B2-luminance.md §4.1 (ART-DIRECTION-SPEC.md:149 §3)' },
+  adjGap:             { frac: 0.06,                         src: 'ART-DIRECTION-SPEC.md:133 §3' },
+  troughSpread:       { frac: 0.12,                         src: 'ART-DIRECTION-SPEC.md:133 §3' },
+  arcRealised:        { tol: 0.30,                          src: 'ART-DIRECTION-SPEC.md:149 §3' },
+  stars:              { lo: 150, hi: 260,                   src: 'ART-DIRECTION-SPEC.md:214 §5' },
+  // bottomThirdFrac: how many of the 12 stations (by loudness rank, ascending)
+  // are ineligible for a subtractive element. 1/3 matches the rule's own name.
+  occluderPlacement:  { bottomThirdFrac: 1 / 3,              src: 'ART-DIRECTION-SPEC.md:345 §7.2' },
+  // perceptibility, redefined 2026-08-09 (st6 sprite test): median(box) vs
+  // median(surround) is blind to any shape covering less than ~50% of its
+  // own bounding box, by construction of what a median measures — proven,
+  // not inferred: a drawn sprite covering 7.2% of its box at peak luma 194
+  // (vs a glow covering 0.8% at the same peak 194) scored 1.0 vs 0.0 under
+  // the old formula, indistinguishable from noise despite a real 9x
+  // coverage gain. Every glow primitive in this build is similarly sparse in
+  // its own box, so the old metric was blind to all of them, not just the
+  // sprite case — the two numbers below replace it:
+  //   signal: p95(headline box) - median(80px surround) — the box's own
+  //     brightest ~5%, immune to sparse coverage (a shape 1px wide at full
+  //     brightness still registers).
+  //   extent: fraction of the box's pixels brighter than
+  //     median(surround) + k — how much of the box actually carries that
+  //     signal, which is exactly what the old metric couldn't see.
+  // k reuses this same file's own ink-threshold rule (paneMedianLuma + 20,
+  // ART-DIRECTION-SPEC.md §1, used unchanged at the frame-ink check below)
+  // applied to the LOCAL surround instead of the whole frame's median — the
+  // same "how much brighter than its own background counts as ink" rule,
+  // not a new number invented for this check.
+  // No floor is set for either number this round — the old floor=10 doesn't
+  // transfer (p95-median is systematically >= the old median-median value,
+  // so reapplying it would silently pass stations that never improved).
+  // Reported as measurement only until a floor is deliberately re-derived.
+  perceptibility:     { k: 20, marginPx: 80,                 src: 'ART-DIRECTION-SPEC.md:72 §1' },
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// KNOWN DEVIATIONS — the ONLY sanctioned way to not meet a spec target.
+//
+// A deviation never turns a FAIL into a PASS. It turns it into a WARN that
+// prints the reason, the date it was opened, and the date it expires. Past
+// its `review` date it reverts to a hard FAIL automatically, so a deviation
+// cannot quietly become permanent. Add one only where the spec target is
+// genuinely unreachable in this harness — never because the build currently
+// misses it. "The build currently misses it" is what FAIL is for.
+// ═══════════════════════════════════════════════════════════════════════
+// 'react-live/safe-box-cap-no-scrim' (opened 2026-08-07, retired 2026-08-09):
+// RingAmbient.jsx now renders its own scrim (.ring-scrim) — its premise
+// ("deliberately does not render a scrim") is false as of that fix. Removed
+// rather than left to expire naturally: per this file's own rule, a
+// deviation is only for a target genuinely unreachable in this harness,
+// never "the build currently misses it" — and once the premise is false,
+// leaving the entry in place would itself be the self-serving-gate defect
+// this table exists to prevent.
+const KNOWN_DEVIATIONS = {};
+
+// Integrity guards on the two tables above. These run at import time and hard-
+// exit: a malformed threshold table is worse than no gate, because it looks green.
+for (const [k, v] of Object.entries(SPEC)) {
+  if (!v.src || !/:\d+/.test(v.src)) {
+    console.error(`ring-verify: SPEC.${k} has no file:line citation. Every threshold must name where in the spec it came from.`);
+    process.exit(3);
+  }
+}
+const TODAY = new Date();
+for (const [k, d] of Object.entries(KNOWN_DEVIATIONS)) {
+  for (const f of ['opened', 'review', 'spec', 'reason']) {
+    if (!d[f]) { console.error(`ring-verify: KNOWN_DEVIATIONS['${k}'] is missing "${f}".`); process.exit(3); }
+  }
+  d.expired = new Date(d.review) < TODAY;
+}
+
+// specCheck — absolute pass/fail against SPEC. `devKey` optionally names a
+// KNOWN_DEVIATIONS entry; a live (unexpired) deviation downgrades FAIL->WARN
+// and prints the reason. It can never produce PASS.
+function specCheck(P, name, ok, detail, src, tier = 'spec', devKey = null) {
+  const dev = devKey ? KNOWN_DEVIATIONS[devKey] : null;
+  let status = ok ? 'PASS' : 'FAIL';
+  let note = `[${src}]`;
+  if (!ok && dev && !dev.expired) {
+    status = 'WARN';
+    note = `[${src}] KNOWN DEVIATION (opened ${dev.opened}, reverts to FAIL after ${dev.review}): ${dev.reason}`;
+  } else if (!ok && dev && dev.expired) {
+    note = `[${src}] DEVIATION EXPIRED ${dev.review} — reverted to FAIL: ${dev.reason}`;
+  }
+  report(P(name), status, `${detail} ${note}`, tier);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -200,7 +321,7 @@ function histOf(png, x0, y0, x1, y1) {
   return { hist, total };
 }
 function statsFromHist({ hist, total }) {
-  if (total === 0) return { median: 0, mean: 0, p995: 0, total: 0 };
+  if (total === 0) return { median: 0, mean: 0, p95: 0, p995: 0, total: 0 };
   let cum = 0, sum = 0, median = 255, medianSet = false;
   for (let v = 0; v < 256; v++) {
     sum += v * hist[v];
@@ -208,10 +329,13 @@ function statsFromHist({ hist, total }) {
     if (!medianSet && cum >= total / 2) { median = v; medianSet = true; }
   }
   const mean = sum / total;
-  let cum2 = 0, p995 = 255;
+  let cum2 = 0, p95 = 255;
+  const p95Target = total * 0.95;
+  for (let v = 0; v < 256; v++) { cum2 += hist[v]; if (cum2 >= p95Target) { p95 = v; break; } }
+  let cum3 = 0, p995 = 255;
   const p995Target = total * 0.995;
-  for (let v = 0; v < 256; v++) { cum2 += hist[v]; if (cum2 >= p995Target) { p995 = v; break; } }
-  return { median, mean, p995, total };
+  for (let v = 0; v < 256; v++) { cum3 += hist[v]; if (cum3 >= p995Target) { p995 = v; break; } }
+  return { median, mean, p95, p995, total };
 }
 function countAbove({ hist }, threshold) {
   let c = 0;
@@ -318,6 +442,18 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
     report(P('value arc span (target 2.2-4.0x)'), status, `${span.toFixed(2)}x — ARC ${world.ARC.map(v => v.toFixed(1)).join(',')}`);
   }
 
+  // 6a. arc ABSOLUTE band (spec §3): quietest station target 14-22, loudest 40-66.
+  //     Missing from the gate before the 2026-08-08 rebaseline — the span ratio
+  //     alone can be satisfied by an arc that sits entirely in the wrong place.
+  {
+    const S = SPEC.arcBand;
+    const q = Math.min(...world.ARC), l = Math.max(...world.ARC);
+    const ok = q >= S.quietLo && q <= S.quietHi && l >= S.loudLo && l <= S.loudHi;
+    specCheck(P, `arc absolute band (quietest ${S.quietLo}-${S.quietHi}, loudest ${S.loudLo}-${S.loudHi})`, ok,
+      `quietest ${q.toFixed(1)} (want ${S.quietLo}-${S.quietHi}), loudest ${l.toFixed(1)} (want ${S.loudLo}-${S.loudHi})`,
+      S.src);
+  }
+
   // 7. cyclic adjacent-gap (REPLACES the deprecated rank-based no-flat-neighbours
   //    check — see file header). Adjacent stations, checked cyclically, must differ
   //    by >=6% of the arc's own (hi-lo). Plus the trough-3 spread check, which is the
@@ -369,7 +505,13 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
   //    exercised there). ──
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const design = page.locator('#design');
-  const hasScrim = await page.evaluate(() => !!document.getElementById('qScrim'));
+  // #qScrim (html reference build) or .{prefix}scrim (RingAmbient.jsx, which
+  // has no id — see ringDom()'s el() in ringPrimitives.js). Checking only
+  // #qScrim here (pre-2026-08-09) is what let the react-live pass's safe-box
+  // check ride the WARN/KNOWN_DEVIATIONS path after RingAmbient grew a real
+  // scrim — the deviation's premise went false and nothing caught it.
+  const hasScrim = await page.evaluate((prefix) =>
+    !!document.getElementById('qScrim') || !!document.querySelector('.' + prefix + 'scrim'), prefix);
   const stationMetrics = [];
 
   for (let s = 0; s < world.ENGINE.PANES; s++) {
@@ -417,6 +559,7 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
       return {
         scale,
         elementCount: pfEls.length + occEls.length,
+        occCount: occEls.length,
         headline: headlineD,
         starCount,
       };
@@ -424,7 +567,9 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
     const scale = dom.scale;
 
     // screenshot #1: natural composited frame (all layers, resting/frozen state)
-    const pngNatural = PNG.sync.read(await design.screenshot());
+    const pngNaturalBuf = await design.screenshot();
+    saveShot(pngNaturalBuf, `${label}-st${s}-natural`);
+    const pngNatural = PNG.sync.read(pngNaturalBuf);
 
     // screenshot #2: mid-layer only (sky/far/near AND #qLayer hidden) — for the
     // "largest element supplies >=55% of MID-layer ink" rule, which is explicitly
@@ -451,7 +596,9 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
       const qLayer = document.getElementById('qLayer');
       if (qLayer) { qLayer.dataset.ringVerifySavedDisplay = qLayer.style.display; qLayer.style.display = 'none'; }
     }, prefix);
-    const pngMid = PNG.sync.read(await design.screenshot());
+    const pngMidBuf = await design.screenshot();
+    saveShot(pngMidBuf, `${label}-st${s}-mid`);
+    const pngMid = PNG.sync.read(pngMidBuf);
     await page.evaluate((prefix) => {
       [...document.querySelectorAll('#design > .' + prefix + 'lyr')].forEach((l) => {
         l.style.display = l.dataset.ringVerifySavedDisplay || '';
@@ -489,7 +636,9 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
     // custom-property name, browser quirk swallowing the mutation), the cap
     // check would still read PASS and nothing would notice. Comparing this
     // reading against the forced-peak one below is what would catch that.
-    const pngSafeNatural = PNG.sync.read(await design.screenshot());
+    const pngSafeNaturalBuf = await design.screenshot();
+    saveShot(pngSafeNaturalBuf, `${label}-st${s}-safenatural`);
+    const pngSafeNatural = PNG.sync.read(pngSafeNaturalBuf);
 
     await page.evaluate((prefix) => {
       document.querySelectorAll('.' + prefix + 'star').forEach(el => {
@@ -503,7 +652,9 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
         el.style.setProperty('--pa', cs.getPropertyValue('--pa2').trim());
       });
     }, prefix);
-    const pngPeak = PNG.sync.read(await design.screenshot());
+    const pngPeakBuf = await design.screenshot();
+    saveShot(pngPeakBuf, `${label}-st${s}-peak`);
+    const pngPeak = PNG.sync.read(pngPeakBuf);
     await page.evaluate((prefix) => {
       document.querySelectorAll('.' + prefix + 'star').forEach(el => {
         const saved = getComputedStyle(el).getPropertyValue('--ring-verify-ob-save');
@@ -525,7 +676,7 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
     const threshold = frameStatsNatural.median + 20; // spec §1: "paneMedianLuma + 20"
     const inkFrac = countAbove(frameHist, threshold) / frameHist.total;
 
-    let headlineInkFrac = null, midShare = null, bleedFrac = null, centroid = null, quadrant = null;
+    let headlineInkFrac = null, midShare = null, bleedFrac = null, centroid = null, quadrant = null, vertSpreadFrac = null, signal = null, extent = null;
     if (dom.headline) {
       const h = dom.headline;
       const sx0 = Math.max(0, h.x0 * scale), sy0 = Math.max(0, h.y0 * scale);
@@ -574,6 +725,37 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
       const cx = (h.x0 + h.x1) / 2, cy = (h.y0 + h.y1) / 2;
       centroid = { x: cx, y: cy };
       quadrant = (cx < 960 ? 'L' : 'R') + (cy < 540 ? 'T' : 'B');
+
+      // vertical-spread (spec §2): overlap with the horizontal BAND y302-778
+      // only (full frame width) — not the SAFE box's x-range, which is a
+      // separate, narrower rule (the luminance-cap crop above). Presence by
+      // AREA, not centroid, so this can hold simultaneously with the
+      // centroid rule instead of fighting it (spec's own stated reasoning).
+      const bandTop = world.ENGINE.SAFE.y * world.ENGINE.H, bandBot = (world.ENGINE.SAFE.y + world.ENGINE.SAFE.h) * world.ENGINE.H;
+      const vy0 = Math.max(h.y0, bandTop), vy1 = Math.min(h.y1, bandBot);
+      vertSpreadFrac = fullArea > 0 ? (Math.max(0, h.x1 - h.x0) * Math.max(0, vy1 - vy0)) / fullArea : 0;
+
+      // perceptibility (spec §1, redefined 2026-08-09 — see SPEC.perceptibility
+      // above for why median-vs-median was replaced): headline box vs an 80px
+      // band immediately outside it, on the FORCED-PEAK frame (pngPeak — same
+      // peak-forcing the safe-box cap uses below, worst-case brightest
+      // reading). Histograms are additive: surround = (expanded box) -
+      // (headline box itself), same subtraction technique as outsideMeanLuma
+      // above.
+      const mPx = SPEC.perceptibility.marginPx * scale;
+      const ex0 = Math.max(0, sx0 - mPx), ey0 = Math.max(0, sy0 - mPx);
+      const ex1 = Math.min(pngPeak.width, sx1 + mPx), ey1 = Math.min(pngPeak.height, sy1 + mPx);
+      const headHistPeak = histOf(pngPeak, sx0, sy0, sx1, sy1);
+      const expandedHistPeak = histOf(pngPeak, ex0, ey0, ex1, ey1);
+      const surroundHistPeak = {
+        hist: expandedHistPeak.hist.map((v, i) => v - headHistPeak.hist[i]),
+        total: expandedHistPeak.total - headHistPeak.total,
+      };
+      const surroundMedianPeak = statsFromHist(surroundHistPeak).median;
+      signal = statsFromHist(headHistPeak).p95 - surroundMedianPeak;
+      extent = headHistPeak.total > 0
+        ? countAbove(headHistPeak, surroundMedianPeak + SPEC.perceptibility.k) / headHistPeak.total
+        : 0;
     }
 
     // safe box: design x 384-1536, y 302-778 — measured on the FORCED-PEAK frame,
@@ -581,11 +763,71 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
     const safeStats = statsFromHist(histOf(pngPeak, 384 * scale, 302 * scale, 1536 * scale, 778 * scale));
     const safeStatsNatural = statsFromHist(histOf(pngSafeNatural, 384 * scale, 302 * scale, 1536 * scale, 778 * scale));
 
+    // outside-safe-box mean luma (2026-08-08 gate fix): the scrim (spec §2.6)
+    // exists specifically to SUPPRESS contrast under the safe box — measuring
+    // the arc's span/rank-correlation over the whole frame runs the check
+    // through a filter built to cancel exactly what it's measuring. The
+    // luminance CAP stays on the safe box (that's its job); span/rank move
+    // outside it. Histograms are additive, so "outside" = full frame minus
+    // the same safe-box crop the cap check above already uses, on the same
+    // NATURAL frame frameHist itself came from — no new pixel pass needed.
+    const safeBoxHistNatural = histOf(pngNatural, 384 * scale, 302 * scale, 1536 * scale, 778 * scale);
+    const outsideHist = {
+      hist: frameHist.hist.map((v, i) => v - safeBoxHistNatural.hist[i]),
+      total: frameHist.total - safeBoxHistNatural.total,
+    };
+    const outsideStatsNatural = statsFromHist(outsideHist);
+
     stationMetrics.push({
-      s, starCount: dom.starCount, elementCount: dom.elementCount,
-      inkFrac, headlineInkFrac, midShare, bleedFrac, centroid, quadrant, safeStats, safeStatsNatural,
+      s, starCount: dom.starCount, elementCount: dom.elementCount, occCount: dom.occCount,
+      inkFrac, headlineInkFrac, midShare, bleedFrac, centroid, quadrant, vertSpreadFrac, signal, extent, safeStats, safeStatsNatural,
+      meanLuma: frameStatsNatural.mean,
+      outsideMeanLuma: outsideStatsNatural.mean,
       hasHeadline: !!dom.headline,
     });
+  }
+
+  // 9a. scrim boundary alpha (ART-DIRECTION-SPEC.md sec 2, amended
+  //     2026-08-09: "the scrim's alpha must reach exactly zero strictly
+  //     inside its own element bounds, on every axis"). Renders the loudest
+  //     station (peak scrim alpha — worst case for a residual edge, since
+  //     the whole gradient scales linearly with it) twice, scrim shown vs
+  //     hidden, and diffs raw pixels along all four frame edges. This is
+  //     exactly what the prior (2026-08-08) fitted-box geometry failed —
+  //     caught there only by rendering and looking; caught here by a gate
+  //     so it can't ship unnoticed again.
+  if (hasScrim) {
+    const loudestStation = world.ARC.indexOf(Math.max(...world.ARC));
+    await page.evaluate((st) => window.__world.jumpTo(st), loudestStation);
+    await page.waitForTimeout(50);
+    const scrimSelector = await page.evaluate((pfx) =>
+      document.getElementById('qScrim') ? '#qScrim' : '.' + pfx + 'scrim', prefix);
+    const pngScrimOnBuf = await design.screenshot();
+    saveShot(pngScrimOnBuf, `${label}-st${loudestStation}-scrimOn`);
+    const pngScrimOn = PNG.sync.read(pngScrimOnBuf);
+    await page.evaluate((sel) => { document.querySelector(sel).style.display = 'none'; }, scrimSelector);
+    const pngScrimOffBuf = await design.screenshot();
+    saveShot(pngScrimOffBuf, `${label}-st${loudestStation}-scrimOff`);
+    const pngScrimOff = PNG.sync.read(pngScrimOffBuf);
+    await page.evaluate((sel) => { document.querySelector(sel).style.display = ''; }, scrimSelector);
+
+    const bw = pngScrimOn.width, bh = pngScrimOn.height;
+    let maxDiff = 0, worstAt = null;
+    const sample = (x, y) => {
+      const idx = (bw * y + x) << 2;
+      const d = Math.abs(lumaAt(pngScrimOn.data, idx) - lumaAt(pngScrimOff.data, idx));
+      if (d > maxDiff) { maxDiff = d; worstAt = `(${x},${y})`; }
+    };
+    for (let x = 0; x < bw; x++) { sample(x, 0); sample(x, bh - 1); }
+    for (let y = 0; y < bh; y++) { sample(0, y); sample(bw - 1, y); }
+
+    const EPS = 1; // 8-bit rounding tolerance — same convention as the peak-forcing self-check above
+    specCheck(P, `scrim alpha reaches zero at its own element boundary (station ${loudestStation}, peak alpha)`,
+      maxDiff <= EPS,
+      maxDiff <= EPS
+        ? `max boundary luma diff ${maxDiff.toFixed(1)} (scrim on vs off), station ${loudestStation} (peak scrim alpha) — indistinguishable from no scrim at the edge`
+        : `max boundary luma diff ${maxDiff.toFixed(1)} at ${worstAt}, station ${loudestStation} — scrim is still visibly nonzero at its own edge`,
+      'ART-DIRECTION-SPEC.md:88 §2');
   }
 
   // 10. visible stars per frame across all 12 stations, target 150-260
@@ -596,47 +838,166 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
     report(P('visible stars per frame (target 150-260)'), status, `mean ${mean.toFixed(0)} — per-station ${counts.join(',')}`);
   }
 
-  // 11. ink per station: 6-18% of the frame (spec §1) — CONTENT-BUDGET tier:
-  //     gated against the recorded baseline (CONTENT_BASELINE), not the
-  //     absolute spec band — see that object's comment for why.
+  // 11. ink per station (spec §1, amended 2026-08-08 — see SPEC.inkPerStation
+  //     above for the rationale). Lower bound scales with each station's own
+  //     arc target: floor(i) = S.lo * (arc[i] / ENGINE.ARC.hi), i.e. S.lo
+  //     (today's 6%) is the ceiling of the floor, reached only by a station
+  //     at (or near) the arc's own loud end. Upper bound (18%) stays flat —
+  //     no station has ever measured over it, and there's no design reason a
+  //     quiet station should be ALLOWED more ink than a loud one, only less.
   {
-    const bad = stationMetrics.filter(m => m.inkFrac < 0.06 || m.inkFrac > 0.18);
-    const spec = `${stationMetrics.map(m => `st${m.s}=${pct(m.inkFrac)}`).join(' ')}` +
-      (bad.length ? ` — OUT OF SPEC BAND (6-18%): ${bad.map(m => `st${m.s}`).join(',')}` : ' — all in spec band');
-    contentReport(P, label, 'inkPerStation', 'ink per station (6-18% of frame)', bad.length, spec);
+    const S = SPEC.inkPerStation;
+    const floorOf = (m) => S.lo * (world.ARC[m.s] / world.ENGINE.ARC.hi);
+    const bad = stationMetrics.filter(m => m.inkFrac < floorOf(m) || m.inkFrac > S.hi);
+    specCheck(P, `ink per station (floor scales with arc target, ceiling ${pct(S.hi)})`, bad.length === 0,
+      `${stationMetrics.map(m => `st${m.s}=${pct(m.inkFrac)}(floor${pct(floorOf(m))})`).join(' ')}` +
+      (bad.length ? ` — ${bad.length}/12 OUT OF SPEC BAND: ${bad.map(m => `st${m.s}`).join(',')}` : ' — all 12 in spec band'),
+      S.src);
+  }
+
+  // 11a. realised arc (spec §3, "close the loop"): rendered station mean luma
+  //      must land within +/-30% of that station's own arc target. A target
+  //      that is written but never measured is a target that is wrong — this is
+  //      named in the spec as the exact defect that produced world-06's flat
+  //      panes. Enforced by nothing before the 2026-08-08 rebaseline.
+  {
+    const S = SPEC.arcRealised;
+    const rows = stationMetrics.map(m => ({ s: m.s, got: m.meanLuma, want: world.ARC[m.s] }));
+    const bad = rows.filter(r => Math.abs(r.got - r.want) / r.want > S.tol);
+    specCheck(P, 'realised arc: rendered mean luma within +/-30% of arc target', bad.length === 0,
+      `${rows.map(r => `st${r.s}=${r.got.toFixed(1)}/want${r.want.toFixed(1)}`).join(' ')}` +
+      (bad.length ? ` — ${bad.length}/12 OFF TARGET: ${bad.map(r => `st${r.s}(${((r.got - r.want) / r.want * 100).toFixed(0)}%)`).join(',')}` : ''),
+      S.src);
+  }
+
+  // 11b. realised SPAN (B2-luminance.md sec 4.1, gate fix 2026-08-08): the
+  //      check above is a per-station LEVEL check and cannot catch a globally
+  //      flattened arc — if every station individually sits within +/-30% of
+  //      a target whose own span is ~3.1x, the worst PERMISSIBLE rendered
+  //      span is only 1.67x (min*1.30 to max*0.70), barely above the 1.56x
+  //      the original defect produced. This is the check that actually gates
+  //      contrast. Measured OUTSIDE the safe box (outsideMeanLuma), NOT
+  //      frame-wide: the scrim (spec §2.6) exists specifically to suppress
+  //      contrast under the safe box, so a frame-wide measurement runs the
+  //      arc check through a filter built to cancel it. The luminance CAP
+  //      (separate check, above) is correctly measured INSIDE the safe box —
+  //      that's what the scrim is FOR. This check is about what the ring
+  //      itself does outside that box.
+  {
+    const S = SPEC.arcSpanRealised;
+    const lumas = stationMetrics.map(m => m.outsideMeanLuma);
+    const renderedSpan = Math.max(...lumas) / Math.min(...lumas);
+    const targetSpan = Math.max(...world.ARC) / Math.min(...world.ARC);
+    const frac = renderedSpan / targetSpan;
+    specCheck(P, `realised span outside safe box >= ${(S.minFrac * 100).toFixed(0)}% of target span`, frac >= S.minFrac,
+      `rendered ${renderedSpan.toFixed(2)}x / target ${targetSpan.toFixed(2)}x = ${(frac * 100).toFixed(0)}% of intended contrast reaches the screen`,
+      S.src);
+  }
+
+  // 11c. rank correlation (B2-luminance.md sec 4.1, gate fix 2026-08-08):
+  //      guards the span rule above against a build that "buys" span by
+  //      reordering stations instead of genuinely widening contrast — a
+  //      build could satisfy 11b by making the wrong station the brightest.
+  //      Spearman rank correlation between rendered mean luma and arc
+  //      target, per station. Same outside-safe-box measurement as 11b, for
+  //      the same reason. NOTE this check already passes on an unfixed
+  //      build (order reaches the screen even when contrast doesn't) —
+  //      that's expected; it exists to stop 11b's fix from being gamed, not
+  //      to detect the original defect.
+  {
+    const S = SPEC.arcRankCorrelation;
+    const n = stationMetrics.length;
+    const rankOf = (vals) => {
+      const idx = vals.map((v, i) => i).sort((a, b) => vals[a] - vals[b]);
+      const ranks = new Array(n);
+      idx.forEach((origIdx, rank) => { ranks[origIdx] = rank; });
+      return ranks;
+    };
+    const gotRanks = rankOf(stationMetrics.map(m => m.outsideMeanLuma));
+    const wantRanks = rankOf(world.ARC.slice(0, n));
+    const dSquaredSum = gotRanks.reduce((sum, r, i) => sum + (r - wantRanks[i]) ** 2, 0);
+    const rho = 1 - (6 * dSquaredSum) / (n * (n * n - 1));
+    specCheck(P, `Spearman rank correlation (rendered vs arc target) >= ${S.min}`, rho >= S.min,
+      `rho = ${rho.toFixed(3)}`, S.src);
   }
 
   // 12. headline ink, when present: 4-9% of the frame (spec §1) — content-budget.
   {
+    const S = SPEC.headlineInk;
     const withHeadline = stationMetrics.filter(m => m.hasHeadline);
     const missing = stationMetrics.filter(m => !m.hasHeadline);
-    const bad = withHeadline.filter(m => m.headlineInkFrac < 0.04 || m.headlineInkFrac > 0.09);
-    const badness = bad.length + missing.length;
-    const spec = `${withHeadline.map(m => `st${m.s}=${pct(m.headlineInkFrac)}`).join(' ')}` +
-      (bad.length ? ` — OUT OF SPEC BAND (4-9%): ${bad.map(m => `st${m.s}`).join(',')}` : '') +
-      (missing.length ? ` — NO HEADLINE FOUND: ${missing.map(m => `st${m.s}`).join(',')}` : '');
-    contentReport(P, label, 'headlineInk', 'headline ink, when present (4-9% of frame)', badness, spec);
+    const bad = withHeadline.filter(m => m.headlineInkFrac < S.lo || m.headlineInkFrac > S.hi);
+    specCheck(P, 'headline ink, when present (4-9% of frame)', bad.length === 0 && missing.length === 0,
+      `${withHeadline.map(m => `st${m.s}=${pct(m.headlineInkFrac)}`).join(' ')}` +
+      (bad.length ? ` — ${bad.length}/12 OUT OF SPEC BAND: ${bad.map(m => `st${m.s}`).join(',')}` : '') +
+      (missing.length ? ` — NO HEADLINE FOUND: ${missing.map(m => `st${m.s}`).join(',')}` : ''),
+      S.src);
   }
 
   // 13. largest element supplies >=55% of the MID layer's own ink (spec §1) —
   //     content-budget. Threshold bug (natural-frame median applied to the
   //     mid-only screenshot) fixed above — see the midThreshold comment.
   {
+    const S = SPEC.midShare;
     const withHeadline = stationMetrics.filter(m => m.hasHeadline && m.midShare != null);
     const missing = stationMetrics.length - withHeadline.length;
-    const bad = withHeadline.filter(m => m.midShare < 0.55);
-    const badness = bad.length + missing;
-    const spec = `${withHeadline.map(m => `st${m.s}=${pct(m.midShare)}`).join(' ')}` +
-      (bad.length ? ` — BELOW 55%: ${bad.map(m => `st${m.s}`).join(',')}` : '');
-    contentReport(P, label, 'midShare', 'largest element supplies >=55% of mid-layer ink', badness, spec);
+    const bad = withHeadline.filter(m => m.midShare < S.min);
+    specCheck(P, 'largest element supplies >=55% of mid-layer ink', bad.length === 0 && missing === 0,
+      `${withHeadline.map(m => `st${m.s}=${pct(m.midShare)}`).join(' ')}` +
+      (bad.length ? ` — ${bad.length}/12 BELOW 55%: ${bad.map(m => `st${m.s}`).join(',')}` : '') +
+      (missing ? ` — ${missing} station(s) with no measurable largest element` : ''),
+      S.src);
   }
 
   // 14. elements per station, excluding atmosphere: 2-5 (spec §1) — content-budget.
   {
-    const bad = stationMetrics.filter(m => m.elementCount < 2 || m.elementCount > 5);
-    const spec = `${stationMetrics.map(m => `st${m.s}=${m.elementCount}`).join(' ')}` +
-      (bad.length ? ` — OUT OF SPEC BAND (2-5): ${bad.map(m => `st${m.s}(${m.elementCount})`).join(',')}` : '');
-    contentReport(P, label, 'elementsPerStation', 'elements per station, excl. atmosphere (2-5)', bad.length, spec);
+    const S = SPEC.elementsPerStation;
+    const bad = stationMetrics.filter(m => m.elementCount < S.lo || m.elementCount > S.hi);
+    specCheck(P, 'elements per station, excl. atmosphere (2-5)', bad.length === 0,
+      `${stationMetrics.map(m => `st${m.s}=${m.elementCount}`).join(' ')}` +
+      (bad.length ? ` — ${bad.length}/12 OUT OF SPEC BAND: ${bad.map(m => `st${m.s}(${m.elementCount})`).join(',')}` : ''),
+      S.src);
+  }
+
+  // 14a. occluder placement (spec §7.2, amended 2026-08-09): no subtractive
+  //      element on a station in the bottom third of the arc BY LOUDNESS
+  //      RANK. A subtractive element on an already-quiet station is the
+  //      worst pairing available — st6 carried both and rendered/judged as
+  //      an empty pane, not a deliberately quiet one.
+  {
+    const S = SPEC.occluderPlacement;
+    const n = world.ARC.length;
+    const bottomCount = Math.floor(n * S.bottomThirdFrac);
+    const quietestStations = new Set(
+      [...Array(n).keys()].sort((a, b) => world.ARC[a] - world.ARC[b]).slice(0, bottomCount)
+    );
+    const violations = stationMetrics.filter(m => m.occCount > 0 && quietestStations.has(m.s));
+    specCheck(P, `no occluder on a bottom-third-by-arc station (quietest ${bottomCount}/${n})`,
+      violations.length === 0,
+      `quietest stations: ${[...quietestStations].sort((a, b) => a - b).map(s => `st${s}`).join(',')} — occluders: ${stationMetrics.filter(m => m.occCount > 0).map(m => `st${m.s}`).join(',') || 'none'}` +
+      (violations.length ? ` — VIOLATION: ${violations.map(m => `st${m.s}`).join(',')}` : ''),
+      S.src);
+  }
+
+  // 14b. perceptibility (spec §1, redefined 2026-08-09 — see SPEC.perceptibility
+  //      above): signal = p95(box) - median(surround), extent = fraction of
+  //      the box brighter than median(surround)+k. MEASUREMENT ONLY this
+  //      round — no floor is asserted. The old floor (10) doesn't transfer to
+  //      p95-median (systematically >= the old median-median value, so
+  //      reapplying it would silently pass stations that never improved,
+  //      exactly the "moving the threshold" failure mode this project's own
+  //      standing rules forbid). Report tier only; always WARN, never FAIL,
+  //      until a floor is deliberately re-derived against these two numbers.
+  {
+    const S = SPEC.perceptibility;
+    const withHeadline = stationMetrics.filter(m => m.hasHeadline);
+    const missing = stationMetrics.length - withHeadline.length;
+    report(P(`perceptibility (signal=p95(box)-median(surround), extent=%box>median(surround)+${S.k}, ${S.marginPx}px surround) — measurement only, no floor set`),
+      'WARN',
+      `${withHeadline.map(m => `st${m.s}=signal:${m.signal.toFixed(1)},extent:${(m.extent * 100).toFixed(1)}%`).join(' ')}` +
+      (missing ? ` — ${missing} station(s) with no measurable headline` : '') +
+      ` [${S.src}]`,
+      'spec');
   }
 
   // 15a. peak-forcing self-check. The safe box's natural (unforced) luma sits
@@ -668,21 +1029,34 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
         : `peak-forcing had no effect — safe-box measurement is not actually testing peak state. NO EFFECT: ${bad.map(m => `st${m.s}`).join(',')} — ${detail}`);
   }
 
-  // 15. safe-box luminance cap, mean <=34 / p99.5 <=72, measured at forced peak (spec §2)
+  // 15. safe-box luminance cap, mean <=34 / p99.5 <=S.p995Max, measured at
+  //     forced peak (spec §2). Three-tier, not binary (2026-08-09): st0
+  //     shipped once at EXACTLY 72/72, the old cap — zero headroom is not a
+  //     margin, it's a coin flip against the next content change. Any
+  //     passing station within warnMargin points of the cap prints WARN
+  //     (visible, not silently green) instead of PASS; only the cap itself
+  //     is a hard FAIL.
   {
-    const bad = stationMetrics.filter(m => m.safeStats.mean > 34 || m.safeStats.p995 > 72);
+    const S = SPEC.safeBox;
+    const bad = stationMetrics.filter(m => m.safeStats.mean > S.meanMax || m.safeStats.p995 > S.p995Max);
+    const thin = stationMetrics.filter(m =>
+      m.safeStats.mean <= S.meanMax && m.safeStats.p995 <= S.p995Max &&
+      (S.p995Max - m.safeStats.p995 < S.warnMargin || S.meanMax - m.safeStats.mean < S.warnMargin));
     const detail = `${stationMetrics.map(m => `st${m.s}=mean${m.safeStats.mean.toFixed(1)}/p99.5-${m.safeStats.p995}`).join(' ')}` +
-      (bad.length ? ` — OVER CAP: ${bad.map(m => `st${m.s}`).join(',')}` : '');
+      (bad.length ? ` — OVER CAP: ${bad.map(m => `st${m.s}`).join(',')}` : '') +
+      (thin.length ? ` — WITHIN ${S.warnMargin}pt OF CAP: ${thin.map(m => `st${m.s}`).join(',')}` : '');
+    const label = `safe-box luminance cap at breathe/twinkle peak, under scrim (mean<=${S.meanMax}, p99.5<=${S.p995Max})`;
     if (hasScrim) {
-      report(P('safe-box luminance cap at breathe/twinkle peak (mean<=34, p99.5<=72)'), bad.length === 0 ? 'PASS' : 'FAIL', detail);
+      const status = bad.length > 0 ? 'FAIL' : thin.length > 0 ? 'WARN' : 'PASS';
+      report(P(label), status, `[${S.src}] ${detail}`, 'regression');
     } else {
-      // RingAmbient.jsx deliberately does not port qScrim/qLayer/qText — Trivia OS's
-      // real question overlay is a separate component composited elsewhere in
-      // production. Measuring the bare frame here is a genuinely different (and
-      // easier) test than the spec's "under the scrim" — WARN, not PASS/FAIL, so
-      // this doesn't silently read as spec compliance it hasn't earned.
-      report(P('safe-box luminance cap at breathe/twinkle peak (NO SCRIM IN THIS ROUTE — bare-frame approximation)'), 'WARN',
-        `no #qScrim in this route; RingAmbient's question overlay lives in a different component. ${detail}`);
+      // Both builds render a scrim as of 2026-08-09, so this branch shouldn't
+      // fire in practice — a hard FAIL (no accepted deviation) if it ever
+      // does, since a route with no scrim measuring under the spec's
+      // "under the scrim" cap is a real regression, not an unreachable target.
+      specCheck(P, 'safe-box luminance cap at breathe/twinkle peak (NO SCRIM IN THIS ROUTE)', false,
+        `bare-frame approximation, not the spec's under-the-scrim measurement — scrim element missing. ${detail}`,
+        S.src, 'regression');
     }
   }
 
@@ -690,14 +1064,34 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
   //     post-rotation (spec §2). Any station cropped >35% is a real violation
   //     regardless of the 3-5 count. Content-budget.
   {
+    const S = SPEC.bleed;
     const withHeadline = stationMetrics.filter(m => m.hasHeadline);
-    const bleeding = withHeadline.filter(m => m.bleedFrac >= 0.10 && m.bleedFrac <= 0.35);
-    const overCropped = withHeadline.filter(m => m.bleedFrac > 0.35);
-    const bandMiss = bleeding.length < 3 ? 3 - bleeding.length : bleeding.length > 5 ? bleeding.length - 5 : 0;
-    const badness = overCropped.length + bandMiss;
-    const spec = `${withHeadline.map(m => `st${m.s}=${pct(m.bleedFrac)}`).join(' ')} — ${bleeding.length} station(s) in 10-35% band (target 3-5)` +
-      (overCropped.length ? `; ACCIDENTAL CLIP (>35%): ${overCropped.map(m => `st${m.s}`).join(',')}` : '');
-    contentReport(P, label, 'bleed', 'bleed: 3-5/12 stations cropped 10-35% by frame edge', badness, spec);
+    const bleeding = withHeadline.filter(m => m.bleedFrac >= S.cropLo && m.bleedFrac <= S.cropHi);
+    const overCropped = withHeadline.filter(m => m.bleedFrac > S.cropHi);
+    const ok = overCropped.length === 0 && bleeding.length >= S.lo && bleeding.length <= S.hi;
+    specCheck(P, 'bleed: 3-5/12 stations cropped 10-35% by frame edge', ok,
+      `${withHeadline.map(m => `st${m.s}=${pct(m.bleedFrac)}`).join(' ')} — ${bleeding.length} station(s) in 10-35% band (target ${S.lo}-${S.hi})` +
+      (overCropped.length ? `; ACCIDENTAL CLIP (>35%): ${overCropped.map(m => `st${m.s}`).join(',')}` : ''),
+      S.src);
+  }
+
+  // 16a. vertical spread (spec §2): at least 6 of 12 stations must place >=15%
+  //      of their largest element's AREA inside the horizontal band y302-778
+  //      (still governed by the luminance cap above — this only checks
+  //      presence). Missing from the gate until 2026-08-08 — its absence is
+  //      how a full-bbox safe-box exclusion (commit 3304681) shipped a
+  //      structural violation of this rule (measured 1/12 at that commit)
+  //      with nothing catching it. Content-budget: this is a genuine spec
+  //      absolute target, not a tracked-backlog metric, so the baseline is
+  //      "clears the >=6 floor," not "no worse than a known gap."
+  {
+    const S = SPEC.vertSpread;
+    const withHeadline = stationMetrics.filter(m => m.hasHeadline);
+    const meeting = withHeadline.filter(m => m.vertSpreadFrac >= S.areaFrac);
+    specCheck(P, 'vertical spread: >=6/12 stations place >=15% of largest element in y302-778',
+      meeting.length >= S.minStations,
+      `${withHeadline.map(m => `st${m.s}=${pct(m.vertSpreadFrac)}`).join(' ')} — ${meeting.length}/12 stations place >=15% area in band (target >=${S.minStations})`,
+      S.src);
   }
 
   // 17 & 18. quadrant rotation (2-4 per quadrant over 12) + horizontal balance
@@ -708,16 +1102,21 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
     const missing = stationMetrics.length - withHeadline.length;
     const counts = { LT: 0, RT: 0, LB: 0, RB: 0 };
     withHeadline.forEach(m => { counts[m.quadrant] = (counts[m.quadrant] || 0) + 1; });
-    const quadBad = Object.entries(counts).filter(([, c]) => c < 2 || c > 4);
-    const quadBadness = quadBad.length + missing;
-    const quadSpec = `LT=${counts.LT} RT=${counts.RT} LB=${counts.LB} RB=${counts.RB} (target 2-4 each)` +
-      (quadBad.length ? ` — OUT OF BAND: ${quadBad.map(([q, c]) => `${q}=${c}`).join(',')}` : '');
-    contentReport(P, label, 'quadrant', 'quadrant rotation (largest element, 2-4x per quadrant/12)', quadBadness, quadSpec);
+    const Q = SPEC.quadrant;
+    const quadBad = Object.entries(counts).filter(([, c]) => c < Q.lo || c > Q.hi);
+    specCheck(P, 'quadrant rotation (largest element, 2-4x per quadrant/12)',
+      quadBad.length === 0 && missing === 0,
+      `LT=${counts.LT} RT=${counts.RT} LB=${counts.LB} RB=${counts.RB} (target ${Q.lo}-${Q.hi} each)` +
+      (quadBad.length ? ` — OUT OF BAND: ${quadBad.map(([q, c]) => `${q}=${c}`).join(',')}` : '') +
+      (missing ? ` — ${missing} station(s) with no largest element` : ''),
+      Q.src);
 
+    const B = SPEC.balance;
     const meanX = withHeadline.reduce((a, m) => a + m.centroid.x, 0) / withHeadline.length;
-    const balBadness = meanX < 864 ? 864 - meanX : meanX > 1056 ? meanX - 1056 : 0;
-    const balSpec = `mean centroid x = ${meanX.toFixed(1)} (target 864-1056) — per-station ${withHeadline.map(m => `st${m.s}=${m.centroid.x.toFixed(0)}`).join(' ')}`;
-    contentReport(P, label, 'balance', 'horizontal balance (mean centroid x within 960+/-96)', balBadness, balSpec);
+    specCheck(P, 'horizontal balance (mean centroid x within 960+/-96)',
+      Math.abs(meanX - B.centre) <= B.tol,
+      `mean centroid x = ${meanX.toFixed(1)} (target ${B.centre - B.tol}-${B.centre + B.tol}, off by ${Math.max(0, Math.abs(meanX - B.centre) - B.tol).toFixed(1)}px) — per-station ${withHeadline.map(m => `st${m.s}=${m.centroid.x.toFixed(0)}`).join(' ')}`,
+      B.src);
   }
 
   // 19. console clean across the entire pass (arithmetic drive + content measurement)
@@ -826,9 +1225,10 @@ function printTier(label, rows, width) {
 }
 
 function finish() {
+  console.log(`\nscreenshots: ${RUN_DIR}`);
   const width = Math.max(...results.map(r => r.name.length));
   const regression = results.filter(r => r.tier === 'regression');
-  const content = results.filter(r => r.tier === 'content');
+  const content = results.filter(r => r.tier === 'spec');
 
   printTier('REGRESSION TIER — must always be green (structural/engine correctness)', regression, width);
   const regFails = regression.filter(r => r.status === 'FAIL');
@@ -837,14 +1237,45 @@ function finish() {
     ? `\nregression tier: all ${regression.length} checks green (${regWarns.length} WARN)`
     : `\nregression tier: ${regFails.length}/${regression.length} FAIL — ${regFails.map(r => r.name).join(', ')}`);
 
-  printTier('CONTENT-BUDGET TIER — known gaps vs ART-DIRECTION-SPEC.md §1/§2, gated against a recorded baseline, not the absolute target', content, width);
+  printTier('SPEC-CONFORMANCE TIER — absolute targets from ART-DIRECTION-SPEC.md. Every threshold cites its spec line. No value here is derived from a measurement of the build under test.', content, width);
   const contentFails = content.filter(r => r.status === 'FAIL');
+  const contentWarns = content.filter(r => r.status === 'WARN');
   console.log(contentFails.length === 0
-    ? `\ncontent-budget tier: ${content.length} known gap(s), none regressed from baseline`
-    : `\ncontent-budget tier: ${contentFails.length} REGRESSED from baseline — ${contentFails.map(r => r.name).join(', ')}`);
+    ? `\nspec-conformance tier: all ${content.length} checks meet their absolute spec target (${contentWarns.length} known deviation(s))`
+    : `\nspec-conformance tier: ${contentFails.length}/${content.length} BELOW SPEC — ${contentFails.map(r => r.name).join(', ')}`);
 
   const fails = results.filter(r => r.status === 'FAIL');
   const warns = results.filter(r => r.status === 'WARN');
   console.log(`\n${results.length} checks — ${results.length - fails.length - warns.length} PASS, ${warns.length} WARN, ${fails.length} FAIL`);
   process.exit(fails.length > 0 ? 2 : 0);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// NO-SELF-BASELINE — the rule this file exists to enforce on itself.
+//
+//   A gate may never encode, as a pass criterion, a value it obtained by
+//   measuring the artefact it gates.
+//
+// Mechanically enforceable form (three parts, all cheap to check in CI):
+//
+//   1. Every numeric threshold lives in a single frozen SPEC-shaped object,
+//      and every entry carries `src: '<spec-file>:<line> §<section>'`.
+//      Enforced at import time above (exit 3 if a citation is missing).
+//
+//   2. A CI lint rejects any numeric literal used in a comparison inside a
+//      check body. Grep form, run over concepts/tools/*verify*.mjs:
+//        rg -n '(?<![\w.])[<>]=?\s*-?\d' <gate> | rg -v 'SPEC\.'
+//      Any hit is a threshold that escaped the table.
+//
+//   3. A CI lint rejects the words "baseline", "measured", "observed",
+//      "current build", "as of <date>" inside any object literal that feeds
+//      a comparison. The prior CONTENT_BASELINE said so in its own comment
+//      ("the actual measured badness ... at the moment this split landed") —
+//      the defect was legible in plain English for a month and shipped
+//      anyway, because nothing read it.
+//
+// Corollary, for the case that produced the prior defect: "a permanently red
+// gate trains people to ignore FAIL" is a real problem, and the answer to it
+// is KNOWN_DEVIATIONS — dated, reasoned, self-expiring, WARN not PASS — never
+// moving the line to wherever the build happens to stand.
+// ═══════════════════════════════════════════════════════════════════════

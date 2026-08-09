@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>World 02 — Arc Study: FLAT vs RISE vs DIP vs BANK · Trivia OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   WORLD 02 — ARC STUDY · 2026-07-30
+   Ben: "what if we wanted the transition to arc a bit? just to add
+   dimension and depth." A straight translate shows parallax on one axis.
+   A curved camera path shows it on two, which is where depth comes from.
+   Nobody knows which arc shape feels right — this page lets Ben pick
+   with his eyes. Four 16:9 stages, byte-identical world (same seeds,
+   same layers, same sky), one variable: the camera's arc.
+
+     A · FLAT  pure X — the control
+     B · RISE  X + shallow inverted-U lift, peak +5cqh at ~1.0×
+     C · DIP   the mirror — camera swings under the world
+     D · BANK  X + counter-roll (max 2.4° at 1.0×) + small Y drift
+
+   THE DETENT LAW (carried verbatim from world-01's v2 TURN, 820ms —
+   those three fixes are settled, not re-litigated here):
+     1. NO CROSS-FADES. Opacity is constant on every element that takes
+        part in a move. Star twinkle is standing ambience (the value
+        law), not a transition fade — it neither starts nor stops on a
+        detent. Nothing recedes by fading; nothing here recedes at all.
+     2. NO DEAD STOPS. Every keyframe segment moves; the last segment
+        terminates exactly at 100% still easing. No element holds a
+        value early while another is in flight.
+     3. DURATION SCALES WITH DISTANCE. 820ms for 34cqw of fg travel,
+        same beat as world-01: 0–11% (90ms) anticipation at low
+        amplitude · 11–88% (631ms) travel · 88–100% (98ms) settle with
+        a 2% overshoot easing to rest.
+
+   PER-SEGMENT EASING LAW (DESIGN-WORKER-LESSONS): a non-linear
+   animation-timing-function re-applies fresh to EACH keyframe segment.
+   Designed around, not discovered later: the travel is broken at
+   34/52/74% and each stop's X value is pinned to a sampled point on
+   the intended single asymmetric ease-out (cubic-bezier(.16,.62,.28,1)
+   over the 11–88 span), so per-segment re-application can't drift the
+   trajectory. X and Y live in ONE transform per keyframe at shared
+   stops — no cross-property keyframe prediction anywhere. Roll is
+   isolated on its own wrapper (.rot) with its own keyframes at the
+   same stops, so rotation never shares math with translation and its
+   transform-origin (true stage center) never moves.
+
+   MECHANISM, NO rAF: each layer is rot > base > mover.
+     .rot   never translates; carries roll (BANK only); origin is the
+            stage center (122cqw 64cqh in its own oversized box).
+     .base  persistent X offset, wrapped modulo the layer's content
+            period at animationend (same task as class removal — one
+            recalc, no visible jump, keyframes stay static).
+     .mover runs the 820ms detent keyframes, always returning Y and
+            roll to 0 so only X accumulates.
+   Content in each layer repeats at exactly its wrap period (fg 68cqw,
+   mid 32cqw, stars 60cqw), so the wrapped base is always congruent.
+
+   PARALLAX (both axes — this is what makes an arc read as dimension):
+     layer   X travel   Y peak (of camera's)   roll (of camera's)
+     fg      34cqw      1.00                   1.00
+     mid     16cqw      0.48                   0.62
+     stars    6cqw      0.18                   0.29
+     sky      0cqw      0.07                   0.125
+   Sky is horizontally uniform, so its X share is 0 by construction;
+   it still breathes on Y and roll, least of anything.
+
+   AMPLITUDE: one slider (0.5×–2×) scales every arc's Y and roll
+   together via --amp, consumed inside the keyframes with calc() — if
+   the shape is right but the amount is wrong, that's a slider drag,
+   not a rebuild. Bleeds sized for 2×: layers span -72..208cqw and
+   -14..114cqh in stage coords, covering max travel + overshoot + Y at
+   2× + 4.8° of roll with margin.
+
+   LESSONS HONORED: every glow sits on a border-radius:50% element;
+   star gradients reach transparent at 70% of closest-side (real
+   margin); blur is static and graduated (sky/far 1.5px, mid 2.2px,
+   fg 1.6px) on .art wrappers so animated elements stay clean; all
+   silhouettes pass the noun test as one-sentence geometry (flat-top
+   mesa polyline, rounded-top pillar, half-buried ellipse) — nothing
+   figurative is hand-drawn. prefers-reduced-motion freezes twinkle at
+   base opacity and turns a detent into an instant reposition — nothing
+   vanishes. No pane edges: tiles overlap 1cqw on a shared flat
+   baseline, the ground strip is continuous, layers bleed past every
+   stage edge at all amplitudes.
+   ══════════════════════════════════════════════════════════════════════ */
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --text:#ece6ff; --muted:#8878b8;
+  --pg:#0b0c10; --pg-card:#14161d; --pg-line:#262a34;
+  --ys:1;
+}
+
+body{
+  background:var(--pg); color:#ddd8e8;
+  font-family:'DM Sans',system-ui,sans-serif; line-height:1.55;
+  padding:0 0 90px; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1240px;margin:0 auto;padding:0 28px}
+
+header.pg{padding:56px 0 26px;border-bottom:1px solid var(--pg-line);margin-bottom:26px}
+header.pg .eyebrow{font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:#8a7ad0;font-weight:700;margin-bottom:12px}
+header.pg h1{font-family:'Boogaloo',cursive;font-size:clamp(34px,5vw,52px);line-height:1.05;margin-bottom:12px}
+header.pg p{max-width:78ch;color:#9aa0ae;font-size:15px}
+header.pg b{color:#ddd8e8;font-weight:500}
+
+/* ── controls ─────────────────────────────────────────────────────── */
+.ctl{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:0 0 8px}
+.ctl .big{
+  font-size:13.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  background:#2a2140;border:1px solid #8a6ad0;color:#fff;border-radius:8px;
+  padding:11px 26px;cursor:pointer;transition:background .15s,transform .1s;
+}
+.ctl .big:hover{background:#3a2e58}
+.ctl .big:active{transform:translateY(1px) scale(.98)}
+.ampbox{display:flex;align-items:center;gap:10px;
+  background:var(--pg-card);border:1px solid var(--pg-line);border-radius:8px;
+  padding:9px 16px;font-size:12.5px;font-weight:600;color:#b9b3c8}
+.ampbox input{width:220px;accent-color:#8a6ad0}
+.ampbox .val{color:#fff;min-width:46px;font-variant-numeric:tabular-nums}
+.ctl .hint{font-size:12.5px;color:#6f7484}
+
+/* ── the 2×2 grid ─────────────────────────────────────────────────── */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 26px;--amp:1}
+@media (max-width:880px){.grid{grid-template-columns:1fr}}
+.cell{margin-top:22px}
+
+.stghead{display:flex;align-items:baseline;gap:14px;margin:0 2px 8px}
+.stghead h2{font-family:'Boogaloo',cursive;font-size:23px;letter-spacing:.01em;white-space:nowrap}
+.stghead h2 span{color:#8a7ad0;margin-right:8px}
+.stghead .sub{color:#8b91a0;font-size:12px;flex:1;font-variant-numeric:tabular-nums}
+.stghead button{
+  font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  background:#2a2140;border:1px solid #8a6ad0;color:#fff;border-radius:7px;
+  padding:7px 16px;cursor:pointer;transition:background .15s,transform .1s;
+}
+.stghead button:hover{background:#3a2e58}
+.stghead button:active{transform:translateY(1px) scale(.98)}
+
+/* ══ THE STAGE ══════════════════════════════════════════════════════ */
+.stage{
+  position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;
+  border-radius:8px;background:#010107;
+  box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 0 1px var(--pg-line);
+  container-type:size;
+}
+.stage[data-arc="dip"]{--ys:-1}
+
+/* layer chassis: rot (roll only) > base (wrapped X) > mover (detent) */
+.rot{position:absolute;left:-72cqw;top:-14cqh;width:280cqw;height:128cqh;
+  transform-origin:122cqw 64cqh}
+.base,.mover,.art{position:absolute;inset:0}
+
+/* per-layer parallax shares (X literal; Y and roll scale with --amp) */
+.l-sky{--tx:0cqw;  --ty:calc(var(--amp)*0.35cqh); --rz:calc(var(--amp)*0.30deg)}
+.l-far{--tx:6cqw;  --ty:calc(var(--amp)*0.90cqh); --rz:calc(var(--amp)*0.70deg)}
+.l-mid{--tx:16cqw; --ty:calc(var(--amp)*2.40cqh); --rz:calc(var(--amp)*1.50deg)}
+.l-fg {--tx:34cqw; --ty:calc(var(--amp)*5.00cqh); --rz:calc(var(--amp)*2.40deg)}
+
+/* static, graduated blur — on .art so animated wrappers stay clean */
+.l-sky .art{filter:blur(1.5px)}
+.l-far .art{filter:blur(1.5px)}
+.l-mid .art{filter:blur(2.2px)}
+.l-fg  .art{filter:blur(1.6px)}
+
+/* ══ WORLD CONTENT (identical in all four stages, same seeds) ══════ */
+.skyRamp{position:absolute;inset:0;background:linear-gradient(180deg,
+  #050310 0%, #0b0620 16%, #150b34 30%, #251048 42%, #3d1754 51%,
+  #5e2354 58%, #8c3848 63%, #cf6a3c 66%, #f0a058 68.5%, #b0552f 71%,
+  #4a2020 76%, #180b14 84%, #0b0510 100%)}
+
+.star{position:absolute;border-radius:50%;
+  background:radial-gradient(circle closest-side,
+    #fff8ec 0%, rgba(255,244,224,.85) 30%, transparent 70%);
+  animation:tw var(--tp) ease-in-out infinite;animation-delay:var(--td)}
+.star.bright{box-shadow:0 0 .55cqw .08cqw rgba(255,220,170,.35)}
+@keyframes tw{0%,100%{opacity:var(--ob)}50%{opacity:var(--op)}}
+
+.mesa{position:absolute;
+  background:linear-gradient(180deg,#2a1544 0%,#1d0e33 42%,#140924 100%)}
+.gnd{position:absolute;left:0;top:96cqh;width:100%;height:32cqh;
+  background:linear-gradient(180deg,#0d0716 0%,#090512 30%,#060310 100%)}
+.pil,.hum{position:absolute;background:#0a0614}
+.hum{border-radius:50%;background:#0b0716}
+
+/* ══ THE DETENT — 820ms, shared X stops pinned to one ease-out ═════
+   X stops (fraction of --tx): 0 · +.026 · -.55 · -.81 · -.968 · -1.02
+   · -1.00 at 0/11/34/52/74/88/100% — the interior values are samples
+   of cubic-bezier(.16,.62,.28,1) across the 11–88 span, so the split
+   segments reproduce one continuous asymmetric ease-out.            */
+
+.stage[data-arc="flat"].go .mover{animation:mvFlat .82s both}
+.stage[data-arc="rise"].go .mover,
+.stage[data-arc="dip"].go  .mover{animation:mvArc .82s both}
+.stage[data-arc="bank"].go .mover{animation:mvBank .82s both}
+.stage[data-arc="bank"].go .rot  {animation:rollBank .82s both}
+
+@keyframes mvFlat{
+  0%  {transform:translate3d(0,0,0);animation-timing-function:cubic-bezier(.35,0,.65,1)}
+  11% {transform:translate3d(calc(var(--tx)*.026),0,0);animation-timing-function:cubic-bezier(.25,.1,.4,.9)}
+  34% {transform:translate3d(calc(var(--tx)*-.55),0,0);animation-timing-function:cubic-bezier(.35,.15,.55,.95)}
+  52% {transform:translate3d(calc(var(--tx)*-.81),0,0);animation-timing-function:cubic-bezier(.35,.2,.6,1)}
+  74% {transform:translate3d(calc(var(--tx)*-.968),0,0);animation-timing-function:cubic-bezier(.35,.25,.65,1)}
+  88% {transform:translate3d(calc(var(--tx)*-1.02),0,0);animation-timing-function:cubic-bezier(.3,.5,.5,1)}
+  100%{transform:translate3d(calc(var(--tx)*-1),0,0)}
+}
+
+/* RISE uses --ys:1, DIP flips the whole Y story with --ys:-1.
+   Y anticipates against the arc (-.16), crests gently across the
+   34–52 segment, and passes fractionally through zero at 88 so the
+   settle is shared with X — never a flat hold. */
+@keyframes mvArc{
+  0%  {transform:translate3d(0,0,0);animation-timing-function:cubic-bezier(.35,0,.65,1)}
+  11% {transform:translate3d(calc(var(--tx)*.026),calc(var(--ty)*var(--ys)*-.16),0);animation-timing-function:cubic-bezier(.25,.1,.4,.9)}
+  34% {transform:translate3d(calc(var(--tx)*-.55),calc(var(--ty)*var(--ys)*.80),0);animation-timing-function:cubic-bezier(.35,.15,.55,.95)}
+  52% {transform:translate3d(calc(var(--tx)*-.81),calc(var(--ty)*var(--ys)*.98),0);animation-timing-function:cubic-bezier(.35,.2,.6,1)}
+  74% {transform:translate3d(calc(var(--tx)*-.968),calc(var(--ty)*var(--ys)*.45),0);animation-timing-function:cubic-bezier(.35,.25,.65,1)}
+  88% {transform:translate3d(calc(var(--tx)*-1.02),calc(var(--ty)*var(--ys)*-.06),0);animation-timing-function:cubic-bezier(.3,.5,.5,1)}
+  100%{transform:translate3d(calc(var(--tx)*-1),0,0)}
+}
+
+/* BANK: same X spine, small Y drift (≈0.31 of --ty at peak) so it
+   isn't purely rotational. Roll lives on .rot, below. */
+@keyframes mvBank{
+  0%  {transform:translate3d(0,0,0);animation-timing-function:cubic-bezier(.35,0,.65,1)}
+  11% {transform:translate3d(calc(var(--tx)*.026),calc(var(--ty)*-.06),0);animation-timing-function:cubic-bezier(.25,.1,.4,.9)}
+  34% {transform:translate3d(calc(var(--tx)*-.55),calc(var(--ty)*.26),0);animation-timing-function:cubic-bezier(.35,.15,.55,.95)}
+  52% {transform:translate3d(calc(var(--tx)*-.81),calc(var(--ty)*.31),0);animation-timing-function:cubic-bezier(.35,.2,.6,1)}
+  74% {transform:translate3d(calc(var(--tx)*-.968),calc(var(--ty)*.15),0);animation-timing-function:cubic-bezier(.35,.25,.65,1)}
+  88% {transform:translate3d(calc(var(--tx)*-1.02),calc(var(--ty)*-.03),0);animation-timing-function:cubic-bezier(.3,.5,.5,1)}
+  100%{transform:translate3d(calc(var(--tx)*-1),0,0)}
+}
+
+/* the world counter-rotates into a rightward turn (negative = CCW on
+   screen = camera banking clockwise, like an aircraft rolling into a
+   right turn), max bank at 40%, leveling with a +.09 overshoot that
+   is still easing at 100%. */
+@keyframes rollBank{
+  0%  {transform:rotate(0deg);animation-timing-function:cubic-bezier(.35,0,.65,1)}
+  11% {transform:rotate(calc(var(--rz)*.14));animation-timing-function:cubic-bezier(.25,.1,.4,.9)}
+  40% {transform:rotate(calc(var(--rz)*-1));animation-timing-function:cubic-bezier(.35,.2,.6,1)}
+  74% {transform:rotate(calc(var(--rz)*-.38));animation-timing-function:cubic-bezier(.35,.25,.65,1)}
+  88% {transform:rotate(calc(var(--rz)*.09));animation-timing-function:cubic-bezier(.3,.5,.5,1)}
+  100%{transform:rotate(0deg)}
+}
+
+/* reduced motion: twinkle freezes at each star's base opacity (set
+   inline as a fallback), detents are handled in JS as an instant
+   reposition — the world never moves, never vanishes. */
+@media (prefers-reduced-motion:reduce){
+  .mover,.rot,.star{animation:none!important}
+}
+
+/* ── verdict card ─────────────────────────────────────────────────── */
+.verdict{margin-top:44px;background:var(--pg-card);border:1px solid var(--pg-line);
+  border-radius:10px;padding:26px 30px}
+.verdict h3{font-family:'Boogaloo',cursive;font-size:24px;margin-bottom:10px}
+.verdict h3 span{color:#8a7ad0}
+.verdict p{color:#9aa0ae;font-size:14.5px;max-width:88ch;margin-bottom:10px}
+.verdict p:last-child{margin-bottom:0}
+.verdict b{color:#ddd8e8;font-weight:600}
+</style>
+</head>
+<body>
+
+<header class="pg"><div class="wrap">
+  <div class="eyebrow">World 02 · Motion Study</div>
+  <h1>Arc Study — four camera paths, one detent</h1>
+  <p>Ben: <b>"what if we wanted the transition to arc a bit? just to add dimension
+  and depth."</b> A straight translate shows parallax on one axis; a curved camera
+  path shows it on two. Same minimal world in all four stages (same seeds, same
+  layers, same Sonora dusk ramp), same 820ms detent, same easing — the only
+  variable is the arc. Fire <b>Advance all</b> to compare them side by side, then
+  hammer one stage's own button. If a shape is right but the amount is wrong,
+  drag the amplitude slider — it scales every arc's Y and roll together.</p>
+</div></header>
+
+<div class="wrap">
+
+  <div class="ctl">
+    <button class="big" id="advAll">Advance all &#9656;</button>
+    <div class="ampbox">
+      <span>Amplitude</span>
+      <input type="range" id="amp" min="0.5" max="2" step="0.05" value="1">
+      <span class="val" id="ampV">1.00&times;</span>
+    </div>
+    <span class="hint">Numbers below are the camera's (= foreground layer); every other layer scales down.</span>
+  </div>
+
+  <div class="grid" id="grid">
+
+    <div class="cell">
+      <div class="stghead">
+        <h2><span>A</span>FLAT</h2>
+        <div class="sub" id="nFlat"></div>
+        <button data-adv="s-flat">Advance</button>
+      </div>
+      <div class="stage" id="s-flat" data-arc="flat"></div>
+    </div>
+
+    <div class="cell">
+      <div class="stghead">
+        <h2><span>B</span>RISE</h2>
+        <div class="sub" id="nRise"></div>
+        <button data-adv="s-rise">Advance</button>
+      </div>
+      <div class="stage" id="s-rise" data-arc="rise"></div>
+    </div>
+
+    <div class="cell">
+      <div class="stghead">
+        <h2><span>C</span>DIP</h2>
+        <div class="sub" id="nDip"></div>
+        <button data-adv="s-dip">Advance</button>
+      </div>
+      <div class="stage" id="s-dip" data-arc="dip"></div>
+    </div>
+
+    <div class="cell">
+      <div class="stghead">
+        <h2><span>D</span>BANK</h2>
+        <div class="sub" id="nBank"></div>
+        <button data-adv="s-bank">Advance</button>
+      </div>
+      <div class="stage" id="s-bank" data-arc="bank"></div>
+    </div>
+
+  </div>
+
+  <div class="verdict">
+    <h3><span>Verdict:</span> ship RISE, at 0.8–1.0&times;</h3>
+    <p><b>RISE</b> is the one that earns the word "dimension" without spending
+    anything to get it. The lift-and-settle puts parallax on both axes, the
+    horizon stays level, and an upward arc matches what the beat means — moving
+    on to the next thing. At 4–5% of stage height it registers as depth from
+    15 feet without ever displacing the question text's neighborhood enough to
+    notice consciously. It also degrades gracefully: at 0.5&times; it is still
+    a different animation from FLAT; BANK at 0.5&times; is just a wobble.</p>
+    <p><b>BANK gets irritating first.</b> It tilts the horizon and every
+    vertical edge in the frame, and it does so behind question text roughly 100
+    times a night for 2.5 hours. Rotation is the strongest vestibular cue on
+    this list — people who never notice a translate notice a tilt — and a
+    repeated small roll stops reading as "camera banking" and starts reading as
+    "the TV is loose" somewhere around the third round. <b>DIP</b> is subtly
+    wrong rather than irritating: the world sagging under the text carries a
+    faint "drop/error" connotation, and swinging under a grounded desert horizon
+    fights the scene's own gravity. <b>FLAT</b> is the control and the fallback
+    — never wrong, never dimensional; it answers Ben's question with "no."</p>
+  </div>
+
+</div>
+
+<script>
+/* ── deterministic content: same seeds in every stage ─────────────── */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296}}
+
+const PRIMES=[11,13,17,19,23,29];         /* twinkle periods, s */
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* one pattern per layer, generated once, stamped per tile per stage —
+   content MUST repeat at exactly the wrap period or the modulo base
+   would land on non-congruent scenery. */
+function starPattern(){                    /* period 60cqw, tx 6 */
+  const r=mulberry32(4217),p=[];let bright=0;
+  for(let i=0;i<12;i++){
+    const b=bright<2&&r()<.18;if(b)bright++;
+    const per=PRIMES[i%6];
+    p.push({x:r()*60,y:r()*55,s:b?.30+r()*.12:.16+r()*.18,b,
+            ob:b?.80:.30+r()*.20,dv:.05+r()*.03,per,del:-(r()*per)});
+  }return p;
+}
+function mesaPattern(){                    /* period 32cqw, tx 16 */
+  const r=mulberry32(9931),j=()=>(r()-.5)*1.4;
+  /* flat-top mesa + smaller butte; first and last y equal for
+     cross-tile continuity, +1cqw flat overlap so no seam ever shows */
+  return [[0,60],[5,60.6+j()*.3],[8,55.2+j()],[14,55.2+j()],
+          [17,61.2],[21,57.4+j()],[24,57.4+j()],[28,61],[32,60],[33,60]];
+}
+function fgPattern(){                      /* period 68cqw, tx 34 */
+  const r=mulberry32(7717);
+  return {
+    pilA:{x:6+r()*18,  w:2.1+r()*.6, h:15+r()*7},   /* asymmetric pair */
+    pilB:{x:40+r()*20, w:1.2+r()*.5, h:8+r()*5},
+    hum :{x:r()*58,    w:7+r()*4,    h:3+r()*1.6}
+  };
+}
+const STARS=starPattern(),MESA=mesaPattern(),FG=fgPattern();
+
+function el(cls,css){const d=document.createElement('div');
+  if(cls)d.className=cls;if(css)d.style.cssText=css;return d}
+
+/* stage coords → layer coords: layer top-left sits at stage (-72,-14) */
+const LX=x=>(72+x)+'cqw', LY=y=>(14+y)+'cqh';
+
+function buildSky(art){art.appendChild(el('skyRamp'))}
+function buildFar(art){
+  for(let t=-72;t<208;t+=60)for(const s of STARS){
+    const d=el('star'+(s.b?' bright':''));
+    d.style.left=LX(t+s.x);d.style.top=LY(s.y);
+    d.style.width=s.s+'cqw';d.style.height=s.s+'cqw';
+    d.style.opacity=s.ob;                       /* reduced-motion rest */
+    d.style.setProperty('--ob',s.ob);
+    d.style.setProperty('--op',Math.min(s.ob+s.dv,.92));
+    d.style.setProperty('--tp',s.per+'s');
+    d.style.setProperty('--td',s.del+'s');
+    art.appendChild(d);
+  }
+}
+function buildMid(art){
+  const poly=MESA.map(([x,y])=>((x/33*100).toFixed(2))+'% '+
+    (((y-54)/60*100).toFixed(2))+'%').join(',')+',100% 100%,0% 100%';
+  for(let t=-72;t<208;t+=32){
+    const d=el('mesa');
+    d.style.left=LX(t);d.style.top=LY(54);
+    d.style.width='33cqw';d.style.height='60cqh';   /* to layer bottom */
+    d.style.clipPath='polygon('+poly+')';
+    art.appendChild(d);
+  }
+}
+function buildFg(art){
+  art.appendChild(el('gnd'));                        /* continuous ground */
+  for(let t=-72;t<208;t+=68){
+    for(const k of ['pilA','pilB']){const p=FG[k],d=el('pil');
+      d.style.left=LX(t+p.x);d.style.top=LY(82-p.h);
+      d.style.width=p.w+'cqw';d.style.height=(p.h+.5)+'cqh';
+      d.style.borderRadius=(p.w/2)+'cqw '+(p.w/2)+'cqw 0 0';
+      art.appendChild(d);}
+    const h=FG.hum,d=el('hum');
+    d.style.left=LX(t+h.x);d.style.top=LY(82-h.h);
+    d.style.width=h.w+'cqw';d.style.height=(h.h*2)+'cqh';
+    art.appendChild(d);
+  }
+}
+
+const LAYERS=[
+  {cls:'l-sky',tx:0, P:0,  build:buildSky},
+  {cls:'l-far',tx:6, P:60, build:buildFar},
+  {cls:'l-mid',tx:16,P:32, build:buildMid},
+  {cls:'l-fg', tx:34,P:68, build:buildFg},
+];
+
+function buildStage(st){
+  st._layers=[];
+  for(const cfg of LAYERS){
+    const rot=el('rot '+cfg.cls),base=el('base'),mover=el('mover'),art=el('art');
+    mover.appendChild(art);base.appendChild(mover);rot.appendChild(base);
+    st.appendChild(rot);cfg.build(art);
+    st._layers.push({cfg,base,off:0});
+  }
+  /* end of detent: wrap bases and strip the animation in ONE task, so
+     the swap paints exactly once with congruent scenery — no rAF. */
+  st.addEventListener('animationend',e=>{
+    if(!e.target.classList.contains('mover'))return;
+    if(!st.classList.contains('go'))return;      /* first mover only */
+    st.classList.remove('go');settle(st);
+  });
+}
+function settle(st){
+  for(const L of st._layers){
+    if(!L.cfg.P)continue;
+    L.off-=L.cfg.tx;
+    if(L.off<=-L.cfg.P)L.off+=L.cfg.P;
+    L.base.style.transform='translate3d('+L.off+'cqw,0,0)';
+  }
+}
+function advance(st){
+  if(st.classList.contains('go'))return;
+  if(reduced){settle(st);return}                 /* instant reposition */
+  st.classList.add('go');
+  setTimeout(()=>{if(st.classList.contains('go')){ /* belt-and-braces */
+    st.classList.remove('go');settle(st);}},900);
+}
+
+const stages=[...document.querySelectorAll('.stage')];
+stages.forEach(buildStage);
+document.querySelectorAll('[data-adv]').forEach(b=>
+  b.addEventListener('click',()=>advance(document.getElementById(b.dataset.adv))));
+document.getElementById('advAll').addEventListener('click',()=>stages.forEach(advance));
+
+/* amplitude slider — scales every arc's Y and roll together */
+const grid=document.getElementById('grid'),ampIn=document.getElementById('amp');
+function refresh(){
+  const a=+ampIn.value;
+  grid.style.setProperty('--amp',a);
+  document.getElementById('ampV').textContent=a.toFixed(2)+'×';
+  const f=n=>n.toFixed(1);
+  document.getElementById('nFlat').textContent=
+    'X 34cqw · peak Y 0 · roll 0° · 820 ms — the control';
+  document.getElementById('nRise').textContent=
+    'X 34cqw · peak Y +'+f(5*a)+'cqh · roll 0° · 820 ms';
+  document.getElementById('nDip').textContent=
+    'X 34cqw · peak Y −'+f(5*a)+'cqh · roll 0° · 820 ms';
+  document.getElementById('nBank').textContent=
+    'X 34cqw · drift ±'+f(1.55*a)+'cqh · roll '+f(2.4*a)+'° · 820 ms';
+}
+ampIn.addEventListener('input',refresh);
+refresh();
+</script>
+</body>
+</html>

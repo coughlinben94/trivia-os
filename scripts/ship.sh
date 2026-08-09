@@ -20,6 +20,16 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
+# ring-verify.mjs (concepts/ART-DIRECTION-SPEC.md gate) — runs on every ship
+# so it can't silently rot unrun (a gate nobody runs does not exist). NOT
+# blocking yet: RingAmbient.jsx is not mounted in production (dev-only
+# /ambient preview route), and known spec-conformance gaps are open, tracked
+# work (concepts/HANDOFF-ring-thinktank.md order-of-work, steps 5-11).
+# Regression-tier failures (structural/engine correctness, not art-direction
+# polish) are worth eyeballing here even so — this step never fails the ship.
+echo "ship: running ring-verify (non-blocking, see concepts/HANDOFF-ring-thinktank.md)..."
+npm run verify:ring || echo "ship: ring-verify reported FAIL — not blocking ship, see output above"
+
 PREVIEW_PORT=4173
 PREVIEW_URL="http://localhost:${PREVIEW_PORT}"
 

@@ -144,7 +144,7 @@ header.pg b{color:#ddd8e8;font-weight:500}
 .vig{position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(ellipse 150% 140% at 50% 50%,
     transparent 0%, transparent 68%, rgba(1,1,8,.34) 100%)}
-.grain{position:absolute;inset:0;pointer-events:none;opacity:.05;
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.02;
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.55'/></svg>")}
 .stage.noGrain .grain{display:none}
 .guides{position:absolute;left:20%;top:28%;width:60%;height:44%;
@@ -238,7 +238,11 @@ header.pg b{color:#ddd8e8;font-weight:500}
 // el/makePrim/bandY/buildStars call site below goes through the returned
 // `dom` object — no call site ever passes a literal prefix string again.
 import { ringDom, px, hsla, ringCss } from '../client/src/lib/ringPrimitives.js';
-import { rng, lerp } from '../client/src/lib/ringEngine.js';
+import { rng, lerp, skyFromTheme, fillOf } from '../client/src/lib/ringEngine.js';
+import { THEMES } from '../client/src/themes/index.js';
+
+const midnightGalaxyTheme = THEMES.find(t => t.id === 'midnight-galaxy');
+if (!midnightGalaxyTheme) throw new Error('world-07-ring.html: no THEMES entry with id "midnight-galaxy"');
 /* ═══════════════════════════════════════════════════════════════════════
    ENGINE — identical for every theme. A world never sets any of this.
    Every number appears exactly once. Anything derivable is derived by one
@@ -267,7 +271,10 @@ const ENGINE = {
 
   /* value arc — one crest, one trough per turn. The 1.6 exponent is what
      makes most stations quiet and two or three loud. */
-  ARC: { lo:18, hi:52, exp:1.6 },
+  // B2-luminance.md sec 2.1/5.3 — see RingAmbient.jsx's identical ENGINE.ARC
+  // comment for why 18/52 was replaced (physically unreachable frame-mean,
+  // and never reached a pixel pre-fillOf() regardless).
+  ARC: { lo:10, hi:31, exp:1.6, ref:31, fillMin:0.35, fillMax:1.00 },
 
   STAR_ALPHA_FLOOR: 0.28,
   DWELL_MS: 75000,
@@ -297,7 +304,11 @@ const WORLD = {
   type: 'space',
   name: 'Midnight Galaxy',
   phase: 5,                             // where the arc crest falls
-  sky: ['#0b0a20','#07061c','#040313','#010109'],
+  // Was a hardcoded literal here, independent of client/src/worlds/
+  // midnightGalaxy.ring.js's own theme-derived sky — the two drifted
+  // (2026-08-08: this build's stops no longer matched the theme's actual
+  // colors). Both now read the same skyFromTheme(theme) in ringEngine.js.
+  sky: skyFromTheme(midnightGalaxyTheme),
   qColours: ['#e2ccff', '#ffc48a'],
   /* one entry per station. `key` is the nameable thing; `accent` marks the
      stations allowed the one complementary hue. */
@@ -308,7 +319,7 @@ const WORLD = {
     { key:'spiral galaxy',  prim:'lens',   hue:276, accent:false },
     { key:'comet',          prim:'streak', hue:208, accent:false },
     { key:'violet nebula',  prim:'blob',   hue:282, accent:false },
-    { key:'dust ribbon',    prim:'ribbon', hue:264, accent:false },
+    { key:'dust ribbon',    prim:'sprite', hue:264, accent:false },
     { key:'binary pair',    prim:'binary', hue:214, accent:false },
     { key:'rose nebula',    prim:'blob',   hue:330, accent:true  },
     { key:'ringed lens',    prim:'ring',   hue:256, accent:false },
@@ -351,6 +362,9 @@ const ARC = Array.from({length:ENGINE.PANES}, (_,i) => arcAt(i));
 const ARC_MIN = Math.min(...ARC), ARC_MAX = Math.max(...ARC);
 /* 0 at the quietest station, 1 at the loudest — drives size and alpha */
 const loudness = i => (ARC[i] - ARC_MIN) / (ARC_MAX - ARC_MIN);
+/* the arc's absolute value, the channel that actually reaches a pixel —
+   see ringEngine.js's fillOf() for why loudness() above cannot do this. */
+const fill = i => fillOf(ENGINE, ARC, i);
 
 const stage = document.getElementById('stage');
 const design = document.getElementById('design');
@@ -378,8 +392,9 @@ function buildLayerContent(host, L){
       const r = rng(i, 0xFA2);
       const st = WORLD.stations[(i*2) % ENGINE.PANES];
       const lou = loudness((i*2) % ENGINE.PANES);
+      const wfill = fill((i*2) % ENGINE.PANES) * 0.62; // pushed back behind mid (B2 sec 1.3/2.2)
       const w = lerp(620, 900, r()), h = w*(0.52 + r()*0.22);
-      const f = dom.makePrim('blob', w, h, st.hue, lerp(0.16, 0.30, lou), r);
+      const f = dom.makePrim('blob', w, h, st.hue, lerp(0.16, 0.30, lou), r, false, wfill);
       f.style.left = px(i*(period/6) + r()*(period/6 - w));
       f.style.top  = px(dom.bandY(r, h));
       host.appendChild(f); formTotal++;
@@ -460,10 +475,38 @@ function buildLayerContent(host, L){
        instead of reading as one field where a fifth of the stars sprint. */
     starTotal += dom.buildStars(host, period, 40, 1.25, 0xCAFE1);
 
+    /* occlusion eligibility (2026-08-09, spec §7.2 amendment) - see
+       RingAmbient.jsx's identical comment for the full reasoning: a
+       subtractive element paired with an already-quiet station is the
+       worst combination available (st6 measured/rendered/judged as an
+       empty or broken pane, not deliberately quiet). Bottom third BY
+       LOUDNESS RANK excluded; loud two-thirds keep the >=1-in-3 floor via
+       alternating rank instead of the old i%3 cadence. */
+    const byLoudnessDesc = [...Array(ENGINE.PANES).keys()].sort((a,b) => ARC[b]-ARC[a]);
+    const occlusionEligible = byLoudnessDesc.slice(0, ENGINE.PANES - Math.floor(ENGINE.PANES/3));
+    const occluderStations = new Set(occlusionEligible.filter((_,k) => k%2===0));
+
     for (let i=0;i<ENGINE.PANES;i++){
       const st = WORLD.stations[i];
-      const r = rng(i, 0x5EED);
+      /* Each property below draws from its OWN seeded stream, keyed by
+         station index + a distinct per-property constant — not one shared
+         stream read sequentially. Was one `r = rng(i, 0x5EED)` reused by
+         headline, the pair-band coin-flip, companion, and every detail dot
+         in draw order; changing how many draws any ONE of those consumed
+         (e.g. bandY's collapse-vs-drawn branch) silently reshuffled every
+         draw AFTER it in the same station — confirmed 2026-08-08, when a
+         bandY fix changed 4 of 12 stations' companion kind/hue as a pure
+         side effect of consuming a different number of r() calls upstream,
+         with no logical connection between the two. Separate streams make
+         that class of bug structurally impossible: a fix to headline
+         placement cannot move a single companion draw, because companion
+         reads from a stream headline never touches. */
+      const rHeadline = rng(i, 0x5EED1);
+      const rPairBand = rng(i, 0x5EED2); // only the shared upper/lower coin-flip (spec §7.5 — this one draw IS intentionally shared)
+      const rCompanion = rng(i, 0x5EED3);
+      const rDetail = rng(i, 0x5EED4);
       const lou = loudness(i);
+      const sfill = fill(i);
       const x0 = i * ENGINE.W;
 
       /* headline form — 576-880px longest edge, full tier range regardless
@@ -471,12 +514,12 @@ function buildLayerContent(host, L){
          got stuck near the 576 floor, loud ones near 880, so a quiet
          station read as a small/sparse frame instead of "large and dim."
          Loudness now speaks through alpha/detail-count only, below. */
-      const hw = lerp(576, 880, r());
+      const hw = lerp(576, 880, rHeadline());
       const hh = st.prim === 'streak' ? hw*0.30
                : st.prim === 'ribbon' ? hw*0.34
-               : hw*(0.62 + r()*0.26);
+               : hw*(0.62 + rHeadline()*0.26);
       const alpha = lerp(0.34, 0.55, lou);
-      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, r, true); // isHeadline: only per-station breathe (spec §8)
+      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, sfill); // isHeadline: only per-station breathe (spec §8)
       /* was lerp(0.06, 0.44, r()) — capped well below the frame's full
          width, so a centroid can never land right of ~x900. Measured mean
          centroid x = 692 against a frame center of 960 (spec §2, appendix
@@ -484,9 +527,9 @@ function buildLayerContent(host, L){
          against this seed's real render, [0.08, 0.98] lands mean centroid
          x at 920 (within the 960±96 gate) — [0.02,0.92] alone undershot to
          848, just outside the band, so this was iterated per §2's gate. */
-      const pairUpper = r() < 0.5; // shared band draw — see bandY's forceUpper comment (spec §7.5)
-      const headLeft = x0 + lerp(0.08, 0.98, r())*(ENGINE.W - hw);
-      const headTop  = dom.bandY(r, hh, pairUpper);
+      const pairUpper = rPairBand() < 0.5; // shared band draw — see bandY's forceUpper comment (spec §7.5)
+      const headLeft = x0 + lerp(0.08, 0.98, rHeadline())*(ENGINE.W - hw);
+      const headTop  = dom.bandY(rHeadline, hh, pairUpper);
       head.style.left = px(headLeft);
       head.style.top  = px(headTop);
       host.appendChild(head); formTotal++;
@@ -505,15 +548,15 @@ function buildLayerContent(host, L){
          can't carry the pair there — the connecting bridge below does,
          drawn for every station regardless of hue. */
       const others = ['blob','dots','lens','streak'].filter(k => k !== st.prim);
-      const ck = others[Math.floor(r()*others.length)];
-      const cw = lerp(230, 420, r());
-      const ch = ck === 'streak' ? cw*0.30 : cw*(0.60 + r()*0.28);
-      const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, r()));
-      const comp = dom.makePrim(ck, cw, ch, compHue, lerp(0.30, 0.48, lou)*0.8, r);
-      const pairAng = r() * Math.PI * 2, pairRad = lerp(160, 380, r());
+      const ck = others[Math.floor(rCompanion()*others.length)];
+      const cw = lerp(230, 420, rCompanion());
+      const ch = ck === 'streak' ? cw*0.30 : cw*(0.60 + rCompanion()*0.28);
+      const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, rCompanion()));
+      const comp = dom.makePrim(ck, cw, ch, compHue, lerp(0.30, 0.48, lou)*0.8, rCompanion, false, sfill);
+      const pairAng = rCompanion() * Math.PI * 2, pairRad = lerp(160, 380, rCompanion());
       let compCx = headCx + Math.cos(pairAng) * pairRad;
       compCx = Math.min(x0 + ENGINE.W - cw/2, Math.max(x0 + cw/2, compCx));
-      const compTop = dom.bandY(r, ch, pairUpper);
+      const compTop = dom.bandY(rCompanion, ch, pairUpper);
       comp.style.left = px(compCx - cw/2);
       comp.style.top  = px(compTop);
       host.appendChild(comp); formTotal++;
@@ -541,10 +584,10 @@ function buildLayerContent(host, L){
          longer depends on two independent random draws going its way. */
       const dn = Math.round(lerp(1, 4, lou));
       for (let k=0;k<dn;k++){
-        const dw = k === 0 ? lerp(58, 70, r()) : lerp(58, 154, r());
-        const d = dom.makePrim('dots', dw, dw*0.9, st.hue, lerp(0.34,0.60,lou)*0.7, r);
-        d.style.left = px(x0 + r()*(ENGINE.W - dw));
-        d.style.top  = px(dom.bandY(r, dw*0.9));
+        const dw = k === 0 ? lerp(58, 70, rDetail()) : lerp(58, 154, rDetail());
+        const d = dom.makePrim('dots', dw, dw*0.9, st.hue, lerp(0.34,0.60,lou)*0.7, rDetail, false, sfill);
+        d.style.left = px(x0 + rDetail()*(ENGINE.W - dw));
+        d.style.top  = px(dom.bandY(rDetail, dw*0.9));
         host.appendChild(d); formTotal++;
       }
 
@@ -568,7 +611,7 @@ function buildLayerContent(host, L){
          to chance at the smaller size; see concepts/tools/
          ring-occlusion-ablation.mjs for the actual measured before/after
          luminance ratios per station. */
-      if (i % 3 === 0){
+      if (occluderStations.has(i)){
         const orr = rng(i, 0x0CC1);
         const os = lerp(260, 340, orr());
         const ox = x0 + orr() * (ENGINE.W - os);
@@ -670,19 +713,35 @@ const fontsReady=(document.fonts&&document.fonts.ready
                 document.fonts.load('400 40px "Boogaloo"')]).then(()=>document.fonts.ready)
   :Promise.resolve()).then(()=>{fontsOK=true});
 
-/* scrim is an ELLIPSE, never a band — a straight horizontal edge always
-   reads as a horizon or a letterbox. Alpha tracks the station's own
-   brightness so a quiet pane doesn't get a black bruise under it. */
+/* scrim (ART-DIRECTION-SPEC.md sec 2: "alpha must reach exactly zero
+   strictly inside its own element bounds, on every axis"). FULL FRAME, no
+   fitted box — a 2026-08-08 fitted box (-14% inset, y230-850, ~4:1 aspect)
+   clipped the ellipse's own falloff at the box edge before it reached
+   transparent (confirmed by rendering it: a hard horizontal seam, exactly
+   the "dead stripe" the old elliptical-never-a-band rule meant to prevent).
+   A full 1920x1080 element has no boundary inside the frame to expose —
+   its boundary IS the frame's — so the gradient below just needs to fade
+   out before ITS edges, not some inner box's. Alpha tracks the station's
+   own brightness so a quiet pane doesn't get a black bruise under it. */
 function layoutScrim(station){
-  const dr=design.getBoundingClientRect(),qr=qLayer.getBoundingClientRect();
-  const sc=stage.clientWidth/ENGINE.W||1;
-  const top=(qr.top-dr.top)/sc, h=qr.height/sc;
-  const cy=top+h/2, H=h*3.1;
-  const a=Math.max(0.20, Math.min(0.62, 0.20 + 0.006*ARC[station]));
-  qScrim.style.top=px(cy-H/2); qScrim.style.height=px(H);
-  qScrim.style.background=`radial-gradient(ellipse 46% 50% at 50% 50%,
-    rgba(2,2,10,${a.toFixed(2)}) 0%, rgba(2,2,10,${(a*0.7).toFixed(2)}) 42%,
-    rgba(2,2,10,${(a*0.3).toFixed(2)}) 68%, transparent 88%)`;
+  qScrim.style.left='0'; qScrim.style.width=px(ENGINE.W);
+  qScrim.style.top='0'; qScrim.style.height=px(ENGINE.H);
+  // was hardwired to the 18/52 ARC scale (0.006*ARC) — silently drifted the
+  // moment lo/hi changed. loudness() is scale-free by construction, so this
+  // moves with the arc regardless of what lo/hi are (B2-luminance.md sec 5.3).
+  const a=lerp(0.30, 0.68, loudness(station));
+  // ellipse 70%/62% of 1920x1080: radii 1344x670px from centre. Tuned
+  // empirically in two rounds against gates pulling opposite ways — see
+  // RingAmbient.jsx's layoutScrim() comment for the full reasoning. Round 1
+  // (rx 70%, ry 50%, transparent 74%) cleared the frame-edge boundary-alpha
+  // check but landed the safe-box cap at EXACTLY p99.5 72/72 — zero
+  // headroom, which the cap's own 2026-08-09 retarget (<=68, WARN inside
+  // 4pts) exists to catch. ry 50%->62% (round 2, rx/transparent unchanged)
+  // deepens safe-box coverage without reopening the edge check (verified
+  // live both ways): st0 p99.5 72 -> 62, six points of real margin.
+  qScrim.style.background=`radial-gradient(ellipse 70% 62% at 50% 50%,
+    rgba(2,2,10,${a.toFixed(2)}) 0%, rgba(2,2,10,${(a*0.75).toFixed(2)}) 45%,
+    transparent 74%)`;
 }
 let curQ=-1;
 function renderQ(i){

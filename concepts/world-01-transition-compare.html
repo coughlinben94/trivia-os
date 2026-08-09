@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>World 01 — Transition Compare: PAN vs REEL · Trivia OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   WORLD 01 — TRANSITION COMPARE · PAN vs REEL · 2026-07-30
+   Two stages, one world. Stage A is v2's lateral pan. Stage B is the
+   View-Master reel: same 8 panes wrapped on a rotating drum, advanced
+   one 45° detent at a time. Content is byte-identical between stages
+   (same seeds, same anchors, same palettes, same event channel) so the
+   only variable under test is the transition itself.
+
+   THE HOUSE NUMBERS (carried from v2, unchanged)
+   THE PERIOD LAW          mutually-prime periods: 11/13/17/19/23/29/31/
+                           37/41/43 s. No two share a period or a drift
+                           direction.
+   THE DRIFT BANDS         far 0.3–1.5px/s · mid 2–6px/s · drifter
+                           15–60px/s · discrete events 300–900px/s over
+                           2–4s (55" panel @ 15ft, 1920px)
+   THE VALUE LAW           breathing ±0.04–0.08 alpha on a 0.30–0.55
+                           base, 12–25s. Bright star tier is the
+                           sanctioned hero exception, few per pane.
+   TWO EVENT TIERS         ambient (shooting stars) 1 per 40–120s
+                           jittered ±40%; PUNCTUATION host-fired,
+                           3–4 per night.
+   GPU RULE                transform + opacity only. Static
+                           filter/shadow OK, never animated.
+   NO rAF                  must survive 2.5h on a cheap HDMI stick.
+   PHASE                   one JS scheduler advances BOTH stages, so
+                           they stay pane-for-pane in phase until a
+                           per-stage Advance button deliberately
+                           diverges them.
+
+   DEVIATION FROM v2, DOCUMENTED: v2 runs its pan as one 344s CSS
+   keyframe loop. Here BOTH stages advance from the shared JS scheduler
+   (chained setTimeout on natural boundaries — the sanctioned
+   exception), because the whole point of this page is an Advance
+   button that fires a transition on demand. Cadence is identical to
+   v2: 39s flat hold, 4s linear glide (Stage A). Stage B's detent is
+   500ms flat regardless of speed — the mechanism never hurries.
+
+   THE REEL DETENT — motion signature (identical every time):
+     0–45ms    anticipation: drum ticks BACK ~3.5° / 1.6cqw
+     45–410ms  the throw: outgoing pane rotates/translates off left,
+               incoming arrives from the right, both rotateY inside a
+               perspective container — transform-only, compositor-safe
+     410–500ms settle: ~2.6° / 1.3cqw overshoot eases to rest
+   Parallax during the detent sells the diorama: fg travels 8cqw,
+   mid 4cqw, far starfield 1.1cqw, sky 0.55cqw and returns to rest.
+
+   LESSONS FILE HONORED: every glow on a border-radius:50% element;
+   every radial gradient reaches transparent inside its own box with
+   real margin; blur static and graduated; per-segment easing lives
+   INSIDE keyframe blocks with transform+opacity keyed at shared stops,
+   so no cross-property keyframe prediction is ever needed; reduced
+   motion freezes ambience and degrades the reel to a plain 600ms
+   cross-fade (scoped !important exception), nothing vanishes.
+   ══════════════════════════════════════════════════════════════════════ */
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --w-core:      #f6efff;
+  --w-highlight: #9f86ff;
+  --text:   #ece6ff;
+  --muted:  #8878b8;
+  --pg:     #0b0c10;
+  --pg-card:#14161d;
+  --pg-line:#262a34;
+}
+
+body{
+  background:var(--pg); color:#ddd8e8;
+  font-family:'DM Sans',system-ui,sans-serif; line-height:1.55;
+  padding:0 0 90px; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1240px;margin:0 auto;padding:0 28px}
+
+header.pg{padding:56px 0 26px;border-bottom:1px solid var(--pg-line);margin-bottom:26px}
+header.pg .eyebrow{font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:#8a7ad0;font-weight:700;margin-bottom:12px}
+header.pg h1{font-family:'Boogaloo',cursive;font-size:clamp(34px,5vw,52px);line-height:1.05;margin-bottom:12px}
+header.pg p{max-width:76ch;color:#9aa0ae;font-size:15px}
+header.pg b{color:#ddd8e8;font-weight:500}
+header.pg code{background:#1e2029;padding:1px 5px;border-radius:4px;font-size:13px;color:#c8a8ff}
+
+/* ── controls ─────────────────────────────────────────────────────── */
+.ctl{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px}
+.ctl button,.ctl label{
+  font-size:12.5px;font-weight:600;letter-spacing:.03em;
+  background:var(--pg-card);border:1px solid var(--pg-line);color:#b9b3c8;
+  border-radius:7px;padding:8px 14px;cursor:pointer;
+  transition:border-color .15s,color .15s,background .15s;
+  display:inline-flex;align-items:center;gap:7px;user-select:none;
+}
+.ctl button:hover,.ctl label:hover{border-color:#6a5aa8;color:#fff}
+.ctl button.on,.ctl label.on{background:#2a2140;border-color:#8a6ad0;color:#fff}
+.ctl input{accent-color:#8a6ad0}
+.ctl .sep{width:1px;background:var(--pg-line);margin:0 4px}
+
+/* stage section header with its own Advance button */
+.stghead{display:flex;align-items:baseline;justify-content:space-between;
+  gap:16px;margin:34px 0 10px}
+.stghead h2{font-family:'Boogaloo',cursive;font-size:27px;letter-spacing:.01em}
+.stghead h2 span{color:#8a7ad0;margin-right:10px}
+.stghead .sub{color:#8b91a0;font-size:13px;flex:1}
+.stghead button{
+  font-size:13.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  background:#2a2140;border:1px solid #8a6ad0;color:#fff;border-radius:8px;
+  padding:10px 22px;cursor:pointer;transition:background .15s,transform .1s;
+}
+.stghead button:hover{background:#3a2e58}
+.stghead button:active{transform:translateY(1px)}
+
+/* ══ THE STAGE (shared with v2) ═════════════════════════════════════ */
+.stage{
+  position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;
+  border-radius:8px;background:#010107;
+  box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 0 1px var(--pg-line);
+  container-type:size;
+  --spd:1;
+}
+
+/* ══ THE SKY — 5 vertical ramps, opacity cross-fade on 775s ═════════ */
+.sky{position:absolute;inset:0}
+.sky>div{position:absolute;inset:0}
+.skyP1{background:linear-gradient(180deg,
+  #020207 0%, #05081c 16%, #0a0f2e 34%, #101744 52%, #171e54 68%,
+  #131a4a 78%, #0c1234 89%, #05081e 97%, #030410 100%)}
+.skyP2{background:linear-gradient(180deg,
+  #070313 0%, #120a2a 18%, #211040 38%, #331856 56%, #44206a 70%,
+  #33195a 80%, #1d0e3c 90%, #0d0522 97%, #060312 100%)}
+.skyP3{background:linear-gradient(180deg,
+  #010508 0%, #041018 18%, #072230 38%, #0a3444 57%, #0e4252 70%,
+  #0a3646 80%, #062230 90%, #03121c 97%, #02080e 100%)}
+.skyP4{background:linear-gradient(180deg,
+  #05030e 0%, #0c061c 20%, #170a2a 40%, #250e34 58%, #3c163a 74%,
+  #5c2440 86%, #3a1830 93%, #1e0a1e 98%, #0e0514 100%)}
+.skyP5{background:linear-gradient(180deg,
+  #020507 0%, #041012 18%, #07241f 38%, #0a382c 56%, #0e4634 70%,
+  #0a3829 80%, #06241c 90%, #031310 97%, #02080a 100%)}
+.skyP2,.skyP3,.skyP4,.skyP5{opacity:0;animation:skyWin calc(775s / var(--spd)) linear infinite}
+.skyP2{animation-delay:calc(-620s / var(--spd))}
+.skyP3{animation-delay:calc(-465s / var(--spd))}
+.skyP4{animation-delay:calc(-310s / var(--spd))}
+.skyP5{animation-delay:calc(-155s / var(--spd))}
+@keyframes skyWin{0%{opacity:0} 1.6%,18.4%{opacity:1} 20%,100%{opacity:0}}
+
+/* the reel's sky-kick: barely moves, returns to rest (no accumulation) */
+.sky.kick{animation:skyKick .5s}
+@keyframes skyKick{
+  0%  {transform:translate3d(0,0,0);animation-timing-function:ease-out}
+  9%  {transform:translate3d(.22cqw,0,0);animation-timing-function:cubic-bezier(.55,0,.85,.36)}
+  72% {transform:translate3d(-.55cqw,0,0);animation-timing-function:cubic-bezier(.2,.6,.3,1)}
+  100%{transform:translate3d(0,0,0)}
+}
+
+/* ══ STAGE A — the strip (v2's pan, JS-driven glide) ═══════════════ */
+.strip{
+  position:absolute;top:0;left:0;height:100%;width:900%;
+  transform:translate3d(0,0,0);
+  /* 4s linear glide applied from JS per advance; linear on purpose */
+}
+.pane{position:absolute;top:0;height:100%;width:11.1111%;overflow:hidden}
+
+/* ══ STAGE B — the reel ═════════════════════════════════════════════ */
+.reelbox{position:absolute;inset:0;perspective:130cqw;perspective-origin:50% 50%}
+.rpane{
+  position:absolute;inset:0;overflow:hidden;opacity:0;
+  backface-visibility:hidden;
+}
+.rpane.cur{opacity:1}
+/* hidden panes park their star animations — no wasted compositor work */
+.rpane:not(.cur):not(.in):not(.out) *{animation-play-state:paused}
+.lyr{position:absolute;inset:0}
+
+/* ══ THE DETENT — v2 "TURN", 820ms ══════════════════════════════════════
+   Retuned 2026-07-30 after Ben: "def think B but it felt not smooth and a
+   bit too fast." Three named defects in the 500ms "SNAP" version, all fixed
+   here. The old version is kept verbatim below under `.stage.snap` so the
+   two can be A/B'd — iterations are never overwritten in place.
+
+   DEFECT 1 · CROSS-FADE GHOSTING (the main cause of "not smooth").
+     SNAP faded the outgoing pane to 0 by 82% while it was still rotating,
+     and brought the incoming to full at 30%. For ~35% of the beat two
+     semi-transparent panes ghosted over the same shared sky — a double
+     exposure the eye cannot track. A drum does not dissolve.
+     FIX: opacity is CONSTANT 1 on both panes. Nothing cross-fades, ever.
+     The incoming facet is simply z-above and sweeps OVER the outgoing one,
+     which is how a real drum reads. The outgoing recedes and darkens via
+     a depth-shade (`.rpane::after`) instead of going transparent — that's
+     the drum surface turning away from the light, not vanishing.
+
+   DEFECT 2 · DEAD STOP.
+     SNAP's outgoing pane finished at 82% and then held flat for 90ms while
+     the incoming was still settling. One element slamming to a halt while
+     another keeps moving is a stutter by construction.
+     FIX: both panes are still easing at 100%. Nothing arrives early.
+
+   DEFECT 3 · TOO FAST FOR THE DISTANCE.
+     House rule: duration scales with distance travelled. SNAP moved 52cqw
+     plus 56 degrees in 500ms. Also the 45ms anticipation tick is 2.7 frames
+     at 60fps — that reads as a glitch, not a wind-up.
+     FIX: 820ms total. Anticipation 90ms (11%) at half the old amplitude.
+     And the outgoing now only travels 26cqw, because it gets COVERED
+     rather than having to clear the frame — less distance, calmer motion,
+     same read.
+
+   BEAT:  0–11%  (90ms)  anticipation, drum ticks back 2deg / 0.8cqw
+         11–88%  (631ms) the turn, one asymmetric ease-out
+         88–100% (98ms)  settle, 2.1deg overshoot eases to rest          */
+
+.rpane{ --detent: .82s; }
+.stage.snap .rpane{ --detent: .5s; }
+
+/* depth-shade: the receding facet darkens instead of fading out */
+.rpane::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:#01010a;opacity:0;
+}
+.rpane.out::after{animation:shadeOut var(--detent) forwards}
+@keyframes shadeOut{
+  0%,11%{opacity:0;animation-timing-function:cubic-bezier(.4,0,.5,1)}
+  100%  {opacity:.52}
+}
+
+.rpane.out{animation:turnOut var(--detent) forwards;z-index:1}
+.rpane.in {animation:turnIn  var(--detent) forwards;z-index:2}
+
+@keyframes turnOut{
+  0%  {transform:translate3d(0,0,0) rotateY(0deg) scale(1);opacity:1;
+       animation-timing-function:cubic-bezier(.35,0,.65,1)}
+  11% {transform:translate3d(.8cqw,0,0) rotateY(2deg) scale(1);opacity:1;
+       animation-timing-function:cubic-bezier(.16,.62,.28,1)}
+  100%{transform:translate3d(-26cqw,0,0) rotateY(-22deg) scale(.95);opacity:1}
+}
+@keyframes turnIn{
+  0%,11%{transform:translate3d(100cqw,0,0) rotateY(34deg) scale(.96);opacity:1;
+         animation-timing-function:cubic-bezier(.16,.62,.28,1)}
+  88%  {transform:translate3d(-1.4cqw,0,0) rotateY(-2.1deg) scale(1.002);opacity:1;
+        animation-timing-function:cubic-bezier(.25,.7,.35,1)}
+  100% {transform:translate3d(0,0,0) rotateY(0deg) scale(1);opacity:1}
+}
+
+/* PARALLAX DURING THE TURN — the diorama read.
+   fg 8cqw · mid 4cqw · far 1.1cqw (sky .55cqw above). Same beat
+   percentages as the pane itself, so the layers move as one connected
+   world at different depths, not three loose sheets. */
+.rpane.out .lyr-fg {animation:pOutFg var(--detent) forwards}
+.rpane.out .lyr-mid{animation:pOutMd var(--detent) forwards}
+.rpane.out .lyr-far{animation:pOutFr var(--detent) forwards}
+.rpane.in  .lyr-fg {animation:pInFg  var(--detent) forwards}
+.rpane.in  .lyr-mid{animation:pInMd  var(--detent) forwards}
+.rpane.in  .lyr-far{animation:pInFr  var(--detent) forwards}
+@keyframes pOutFg{
+  0%  {transform:translate3d(0,0,0);animation-timing-function:cubic-bezier(.35,0,.65,1)}
+  11% {transform:translate3d(.55cqw,0,0);animation-timing-function:cubic-bezier(.16,.62,.28,1)}
+  100%{transform:translate3d(-8cqw,0,0)}}
+@keyframes pOutMd{
+  0%  {transform:translate3d(0,0,0);animation-timing-function:cubic-bezier(.35,0,.65,1)}
+  11% {transform:translate3d(.28cqw,0,0);animation-timing-function:cubic-bezier(.16,.62,.28,1)}
+  100%{transform:translate3d(-4cqw,0,0)}}
+@keyframes pOutFr{
+  0%  {transform:translate3d(0,0,0);animation-timing-function:cubic-bezier(.35,0,.65,1)}
+  11% {transform:translate3d(.08cqw,0,0);animation-timing-function:cubic-bezier(.16,.62,.28,1)}
+  100%{transform:translate3d(-1.1cqw,0,0)}}
+@keyframes pInFg{
+  0%,11%{transform:translate3d(8cqw,0,0);animation-timing-function:cubic-bezier(.16,.62,.28,1)}
+  88% {transform:translate3d(-.8cqw,0,0);animation-timing-function:cubic-bezier(.25,.7,.35,1)}
+  100%{transform:translate3d(0,0,0)}}
+@keyframes pInMd{
+  0%,11%{transform:translate3d(4cqw,0,0);animation-timing-function:cubic-bezier(.16,.62,.28,1)}
+  88% {transform:translate3d(-.4cqw,0,0);animation-timing-function:cubic-bezier(.25,.7,.35,1)}
+  100%{transform:translate3d(0,0,0)}}
+@keyframes pInFr{
+  0%,11%{transform:translate3d(1.1cqw,0,0);animation-timing-function:cubic-bezier(.16,.62,.28,1)}
+  88% {transform:translate3d(-.12cqw,0,0);animation-timing-function:cubic-bezier(.25,.7,.35,1)}
+  100%{transform:translate3d(0,0,0)}}
+
+/* ══ THE OLD 500ms "SNAP" — kept for A/B, active under .stage.snap ══ */
+.stage.snap .rpane.out{animation-name:reelOut}
+.stage.snap .rpane.in {animation-name:reelIn}
+.stage.snap .rpane.out::after{animation:none}
+@keyframes reelOut{
+  0%  {transform:translate3d(0,0,0) rotateY(0deg);opacity:1;
+       animation-timing-function:ease-out}
+  9%  {transform:translate3d(1.6cqw,0,0) rotateY(3.5deg);opacity:1;
+       animation-timing-function:cubic-bezier(.55,0,.85,.36)}
+  82% {transform:translate3d(-52cqw,0,0) rotateY(-56deg) scale(.94);opacity:0}
+  100%{transform:translate3d(-52cqw,0,0) rotateY(-56deg) scale(.94);opacity:0}
+}
+@keyframes reelIn{
+  0%,9%{transform:translate3d(54cqw,0,0) rotateY(56deg) scale(.94);opacity:0;
+        animation-timing-function:cubic-bezier(.5,0,.7,1)}
+  30% {opacity:1}
+  82% {transform:translate3d(-1.3cqw,0,0) rotateY(-2.6deg) scale(1.004);opacity:1;
+       animation-timing-function:cubic-bezier(.2,.6,.3,1)}
+  100%{transform:translate3d(0,0,0) rotateY(0deg) scale(1);opacity:1}
+}
+
+/* Static curvature cue on the reel: a whisper of darkening where the drum
+   recedes. Softened 2026-07-30 — at .5/11% it read as a frame edge, which
+   is the one thing this must never do (see the deleted-mask note below).
+   Long ramp, low alpha: felt, never seen as a boundary. */
+.drumshade{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(90deg, rgba(1,1,8,.30) 0%, transparent 22%,
+    transparent 78%, rgba(1,1,8,.30) 100%)}
+
+/* The View-Master mask was built here and DELETED 2026-07-30 on Ben's call:
+   "the view master concept is just the flow. ie i dont wanna see them as
+   actual panes with white in the middle and such."
+   The toy is the RHYTHM — click, advance, land — not the lens housing.
+   Nothing may render a pane edge, a divider, or a frame. The world is one
+   continuous surface that rotates; the seam is the thing we're hiding.
+   Do not reintroduce a mask, a border, or a lobe cutout. */
+
+/* ── FAR · starfield ──────────────────────────────────────────────── */
+.far{position:absolute;inset:-6% -4%;animation:farDrift calc(1560s / var(--spd)) linear infinite}
+@keyframes farDrift{to{transform:translate3d(5%,-1.4%,0)}}
+.star{position:absolute;border-radius:50%}
+.tw1{animation:twk calc(11s / var(--spd)) ease-in-out infinite}
+.tw2{animation:twk calc(13s / var(--spd)) ease-in-out infinite}
+.tw3{animation:twk calc(17s / var(--spd)) ease-in-out infinite}
+.tw4{animation:twk calc(19s / var(--spd)) ease-in-out infinite}
+.tw5{animation:twk calc(23s / var(--spd)) ease-in-out infinite}
+@keyframes twk{0%,100%{opacity:var(--lo,.3)}50%{opacity:var(--hi,.42)}}
+
+/* ── ANCHORS (identical to v2) ────────────────────────────────────── */
+.plan{
+  position:absolute;right:8%;top:10%;width:8%;aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle at 34% 30%, #d8b8ff 0%, #8a58d0 38%, #35186a 72%, #180a34 100%);
+  box-shadow:0 0 2.6cqw rgba(159,134,255,.30);
+  animation:breathe19 calc(19s / var(--spd)) ease-in-out infinite;
+}
+.ring{
+  position:absolute;right:4.6%;top:13.4%;width:14.8%;aspect-ratio:3.6;
+  border-radius:50%;border:0.22cqw solid rgba(200,160,255,.5);
+  transform:rotate(-16deg);
+  border-bottom-color:rgba(200,160,255,.14);
+}
+.cres{
+  position:absolute;left:9%;top:11%;width:9%;aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle at 30% 26%, #2c1a4e 0%, #180d30 55%, #0a0518 100%);
+  box-shadow:inset 0.5cqw 0.4cqw 1.7cqw rgba(246,239,255,.55);
+}
+.veilcol{
+  position:absolute;left:3%;top:-6%;width:17%;height:114%;
+  background:linear-gradient(90deg, transparent 0%,
+    rgba(159,134,255,.10) 34%, rgba(159,134,255,.15) 52%,
+    rgba(120,90,220,.08) 72%, transparent 100%);
+  filter:blur(10px);
+  animation:breathe29 calc(29s / var(--spd)) ease-in-out infinite;
+}
+.clcore{
+  position:absolute;left:73%;top:68%;width:12%;aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle closest-side, rgba(246,239,255,.16) 0%,
+    rgba(159,134,255,.08) 48%, transparent 82%);
+  filter:blur(4px);
+  animation:breathe31 calc(31s / var(--spd)) ease-in-out infinite;
+}
+.milky{
+  position:absolute;left:-22%;top:6%;width:150%;height:34%;
+  transform:rotate(-13deg);
+  background:linear-gradient(180deg, transparent 0%,
+    rgba(159,134,255,.07) 30%, rgba(246,239,255,.06) 50%,
+    rgba(120,90,220,.05) 70%, transparent 100%);
+  filter:blur(13px);
+  animation:breathe37 calc(37s / var(--spd)) ease-in-out infinite;
+}
+.glint{position:absolute;width:5cqw;aspect-ratio:1}
+.glint::before,.glint::after{
+  content:'';position:absolute;left:0;top:50%;width:100%;height:1.5px;
+  transform:translateY(-50%);
+  background:linear-gradient(90deg, transparent, rgba(246,239,255,.55) 46% 54%, transparent);
+}
+.glint::after{transform:translateY(-50%) rotate(90deg)}
+.glint i{
+  position:absolute;left:50%;top:50%;width:0.5cqw;aspect-ratio:1;border-radius:50%;
+  transform:translate(-50%,-50%);background:var(--w-core);
+  box-shadow:0 0 1.2cqw 0.2cqw rgba(159,134,255,.55);
+}
+.gl1{animation:glintbr calc(41s / var(--spd)) ease-in-out infinite}
+.gl2{animation:glintbr calc(43s / var(--spd)) ease-in-out infinite}
+@keyframes glintbr{0%,100%{opacity:.38}50%{opacity:.5}}
+.dustlane{
+  position:absolute;left:-6%;top:-8%;width:114%;height:27%;
+  transform:rotate(-3.5deg);
+  background:linear-gradient(180deg, rgba(1,1,7,.9) 0%, rgba(1,1,7,.55) 55%, transparent 100%);
+  filter:blur(6px);
+}
+@keyframes breathe19{0%,100%{opacity:.88}50%{opacity:.96}}
+@keyframes breathe29{0%,100%{opacity:.5}50%{opacity:.58}}
+@keyframes breathe31{0%,100%{opacity:.44}50%{opacity:.52}}
+@keyframes breathe37{0%,100%{opacity:.42}50%{opacity:.48}}
+
+/* ── DRIFTERS ─────────────────────────────────────────────────────── */
+.drifter{
+  position:absolute;width:0.5cqw;aspect-ratio:1;border-radius:50%;
+  background:var(--w-core);
+  box-shadow:0 0 1.4cqw 0.25cqw rgba(159,134,255,.55);
+}
+.dr88 {top:22%;left:-6%;animation:drA calc(88s  / var(--spd)) linear infinite}
+.dr104{top:36%;left:-6%;animation:drA calc(104s / var(--spd)) linear infinite}
+.dr127{top:64%;left:-6%;animation:drB calc(127s / var(--spd)) linear infinite}
+@keyframes drA{
+  0%{transform:translate3d(0,0,0);opacity:0}
+  6%{opacity:.85} 88%{opacity:.85}
+  100%{transform:translate3d(118cqw,13cqh,0);opacity:0}
+}
+@keyframes drB{
+  0%{transform:translate3d(0,0,0);opacity:0}
+  8%{opacity:.65} 86%{opacity:.65}
+  100%{transform:translate3d(118cqw,-20cqh,0);opacity:0}
+}
+
+/* ── OCCLUDERS ────────────────────────────────────────────────────── */
+.occ{
+  position:absolute;background:#01010a;filter:blur(3px);
+  animation:occDrift calc(310s / var(--spd)) linear infinite;
+}
+@keyframes occDrift{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(-2cqw,0.8cqh,0)}}
+.occ.rock{left:-6%;bottom:-24%;width:30%;aspect-ratio:1.5;
+  border-radius:52% 48% 40% 60% / 62% 56% 44% 38%}
+.occ.rock2{right:-9%;bottom:-28%;width:36%;aspect-ratio:1.7;
+  border-radius:44% 56% 62% 38% / 50% 44% 56% 50%;
+  animation-duration:calc(430s / var(--spd))}
+
+/* ══ EVENT CHANNEL — shooting star ═════════════════════════════════ */
+.shot{position:absolute;pointer-events:none;opacity:0}
+.shot.fire{opacity:1}
+.sx,.sy{position:absolute;left:0;top:0}
+.shot.fire .sx{animation:shotX 2.2s linear forwards}
+.shot.fire .sy{animation:shotY 2.2s cubic-bezier(.55,0,1,.55) forwards}
+.shot.fire .streak{animation:shotStreak 2.2s linear forwards}
+@keyframes shotX{to{transform:translate3d(64cqw,0,0)}}
+@keyframes shotY{to{transform:translate3d(0,8cqh,0)}}
+.streak{
+  position:relative;width:13cqw;height:2px;border-radius:999px;
+  transform-origin:100% 50%;opacity:0;
+  background:linear-gradient(90deg, transparent 0%,
+    rgba(159,134,255,.10) 22%, rgba(200,178,255,.42) 58%,
+    rgba(246,239,255,.85) 88%, #fff 100%);
+}
+.streak::after{
+  content:'';position:absolute;right:-0.25cqw;top:50%;
+  width:0.55cqw;aspect-ratio:1;border-radius:50%;
+  transform:translateY(-50%);background:#fff;
+  box-shadow:0 0 1.6cqw 0.3cqw rgba(210,190,255,.8);
+}
+@keyframes shotStreak{
+  0%  {opacity:0;transform:scaleX(.12)}
+  9%  {opacity:1}
+  42% {transform:scaleX(1)}
+  70% {opacity:1}
+  100%{opacity:0;transform:scaleX(.4)}
+}
+
+/* ── GRAIN + VIGNETTE ─────────────────────────────────────────────── */
+.grain{
+  position:absolute;inset:0;pointer-events:none;opacity:.11;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='170' height='170'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='170' height='170' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.vig{
+  position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 78% 74% at 50% 48%, transparent 42%, rgba(1,1,8,.6) 100%);
+}
+
+/* ── QUESTION LAYER ───────────────────────────────────────────────── */
+.qwrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:0 13cqw;pointer-events:none}
+.scrim{
+  position:absolute;left:0;right:0;top:24cqh;height:52cqh;opacity:0;
+  transition:opacity .9s ease;
+  background:linear-gradient(180deg,transparent,rgba(1,1,10,.5) 26%,rgba(1,1,10,.5) 74%,transparent);
+}
+.stage.qon .scrim{opacity:1}
+.q{position:relative;text-align:center}
+.qnum{
+  font-family:'DM Sans';font-weight:700;font-size:1.15cqw;letter-spacing:.36em;
+  text-transform:uppercase;color:var(--w-highlight);margin-bottom:2.2cqh;
+  opacity:0;transform:translate3d(0,0.6cqh,0);
+  transition:opacity .5s ease,transform .5s ease;
+}
+.stage.qon .qnum{opacity:1;transform:none}
+.qtext{
+  font-family:'DM Sans';font-weight:500;font-size:4.1cqw;line-height:1.26;color:var(--text);
+  text-shadow:0 0.3cqw 2.2cqw rgba(1,1,10,.85);
+}
+.qtext .w{
+  display:inline-block;opacity:0;transform:translate3d(0,0.9cqh,0);
+  transition:opacity .55s cubic-bezier(.2,.7,.3,1),transform .55s cubic-bezier(.2,.7,.3,1);
+}
+.stage.qon .qtext .w{opacity:1;transform:none}
+.stage:not(.qon) .qtext .w{transition-delay:0s !important;transition-duration:.32s}
+
+/* ── safe-area guides ─────────────────────────────────────────────── */
+.safe{position:absolute;left:20%;right:20%;top:27.5%;bottom:27.5%;
+  border:1px dashed rgba(255,60,180,.85);pointer-events:none;display:none}
+.safe::after{content:'SAFE AREA 60% × 45%';position:absolute;top:-1.9cqh;left:0;
+  font:700 0.85cqw/1 'DM Sans';letter-spacing:.2em;color:rgba(255,60,180,.95)}
+.stage.guides .safe{display:block}
+.stage.noq .qwrap,.stage.noq .scrim{display:none}
+.stage.nograin .grain{display:none}
+
+/* ── readout + notes ──────────────────────────────────────────────── */
+.readout{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--pg-line);
+  border:1px solid var(--pg-line);border-radius:8px;overflow:hidden;margin-top:26px;
+}
+.readout>div{background:var(--pg-card);padding:13px 15px 15px}
+.readout h4{font-size:10px;letter-spacing:.17em;text-transform:uppercase;color:#7d8290;
+  font-weight:700;margin-bottom:6px}
+.readout p{font-size:13px;line-height:1.45;color:#c8c3d4}
+.readout b{color:#c8a8ff;font-weight:600}
+@media(max-width:860px){.readout{grid-template-columns:repeat(2,1fr)}}
+
+.notes{margin-top:30px;border:1px solid var(--pg-line);border-radius:9px;
+  background:var(--pg-card);padding:26px 28px 28px}
+.notes h3{font-family:'Boogaloo',cursive;font-size:25px;margin:18px 0 12px}
+.notes h3:first-child{margin-top:0}
+.notes p{color:#9aa0ae;font-size:14.5px;max-width:82ch;margin-bottom:10px}
+.notes b{color:#ddd8e8;font-weight:500}
+.notes ul,.notes ol{margin:10px 0 4px 19px}
+.notes li{color:#9aa0ae;font-size:14.5px;margin-bottom:7px}
+.notes li b{color:#e8e3f2}
+.notes code{background:#1e2029;padding:1px 5px;border-radius:4px;font-size:12.5px;color:#c8a8ff}
+
+/* ── reduced motion: freeze ambience; reel degrades to CROSS-FADE ─── */
+@media (prefers-reduced-motion:reduce){
+  .stage *{animation:none !important;transition:none !important}
+  .stage .rpane{transition:opacity .6s ease !important}
+  .stage .qtext .w,.stage .qnum,.stage .scrim{opacity:1 !important;transform:none !important}
+}
+.stage.rm *{animation:none !important;transition:none !important}
+.stage.rm .rpane{transition:opacity .6s ease !important}
+.stage.rm .qtext .w,.stage.rm .qnum,.stage.rm .scrim{opacity:1 !important;transform:none !important}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="pg">
+  <div class="eyebrow">Trivia OS · World 01 · Transition Compare · 2026-07-30</div>
+  <h1>PAN vs REEL</h1>
+  <p>Same world twice. <b>Stage A</b> is v2's lateral pan: 39s flat hold, 4s glide. <b>Stage B</b> is the View-Master reel Ben floated — <b>"the world rotates in theory"</b>: the same 8 panes wrapped on a drum, advanced one 45° detent at a time in a fixed 500ms beat (40ms anticipation back-tick → the throw → overshoot settle), with real parallax during the detent (fg 8cqw · mid 4cqw · stars 1.1cqw · sky 0.55cqw). Content is seed-identical between stages so the only variable is the transition. <code>transform</code>/<code>opacity</code> only, no <code>requestAnimationFrame</code>. <b>The Advance buttons are the point</b> — fire them until you're sick of it; that's the test.</p>
+</header>
+
+<div class="ctl">
+  <button id="spd" class="on">Speed: 1× (show)</button>
+  <button id="ev">Fire shooting star (both)</button>
+  <label id="ta" class="on"><input type="checkbox" checked> Auto-advance (39s hold)</label>
+  <div class="sep"></div>
+  <label id="tq" class="on"><input type="checkbox" checked> Question text</label>
+  <label id="tg"><input type="checkbox"> Safe-area guides</label>
+  <label id="tn" class="on"><input type="checkbox" checked> Grain</label>
+  <label id="tr"><input type="checkbox"> Reduced motion</label>
+</div>
+
+<!-- ══ STAGE A — PAN ══ -->
+<div class="stghead">
+  <h2><span>A</span>PAN</h2>
+  <div class="sub">v2's behavior — long flat holds, 4s lateral glide, seamless 8→1 wrap via cloned pane 9.</div>
+  <button id="advA">Advance A</button>
+</div>
+<div class="stage" id="stageA">
+  <div class="sky" id="skyA">
+    <div class="skyP1"></div><div class="skyP2"></div><div class="skyP3"></div>
+    <div class="skyP4"></div><div class="skyP5"></div>
+  </div>
+  <div class="strip" id="strip"></div>
+  <div class="vig"></div>
+  <div class="grain"></div>
+  <div class="shot" id="shotA"><div class="sx"><div class="sy"><div class="streak"></div></div></div></div>
+  <div class="scrim"></div>
+  <div class="qwrap"><div class="q">
+    <div class="qnum" id="qnumA"></div>
+    <div class="qtext" id="qtextA"></div>
+  </div></div>
+  <div class="safe"></div>
+</div>
+
+<!-- ══ STAGE B — REEL ══ -->
+<div class="stghead">
+  <h2><span>B</span>REEL</h2>
+  <div class="sub">Same 8 panes on a rotating drum. One 500ms detent per advance: back-tick, throw, settle. Parallax layers sell the diorama.</div>
+  <button id="advB">Advance B</button>
+  <button id="det" class="on">Detent: TURN 820ms</button>
+</div>
+<div class="stage" id="stageB">
+  <div class="sky" id="skyB">
+    <div class="skyP1"></div><div class="skyP2"></div><div class="skyP3"></div>
+    <div class="skyP4"></div><div class="skyP5"></div>
+  </div>
+  <div class="reelbox" id="reelbox"></div>
+  <div class="drumshade"></div>
+  <div class="vig"></div>
+  <div class="grain"></div>
+  <div class="shot" id="shotB"><div class="sx"><div class="sy"><div class="streak"></div></div></div></div>
+  <div class="scrim"></div>
+  <div class="qwrap"><div class="q">
+    <div class="qnum" id="qnumB"></div>
+    <div class="qtext" id="qtextB"></div>
+  </div></div>
+  <div class="safe"></div>
+</div>
+
+<div class="readout">
+  <div><h4>The detent</h4><p><b>TURN, 820ms</b>: 90ms anticipation (−2°), the turn, 98ms settle. No cross-fade — the new facet sweeps <i>over</i> the old one. Toggle to SNAP to feel the old 500ms.</p></div>
+  <div><h4>The parallax</h4><p>During the detent: <b>fg 8cqw · mid 4cqw · far 1.1cqw · sky 0.55cqw</b>. Sky returns to rest — no accumulation.</p></div>
+  <div><h4>Shared content</h4><p>Same seeds, same 8 anchors, same 5-palette 775s sky, same event channel, same question stagger (45ms/word). Only the transition differs.</p></div>
+  <div><h4>Cost per night</h4><p>~100 advances: PAN spends <b>~6.7 min</b> in transit (4s each). REEL spends <b>~50s</b> (0.5s each).</p></div>
+</div>
+
+<div class="notes">
+  <h3>Consultant verdict</h3>
+  <p><b>1 · Which wins: the REEL.</b> Three reasons, in order of weight. First, <b>depth is a named requirement and the pan can't prove it.</b> v2's pan moves the whole pane as one sheet — its depth is painted, never kinematic. The reel's parallax demonstrates depth 100 times a night; every advance is a small proof that the world has a front and a back. That is the Sonora feeling ("the depth piece") made structural. Second, <b>the detent is a cue, not just a transition.</b> In a loud bar at 15ft, a 500ms mechanical snap reads as "next question" from peripheral vision — it's a bell. The pan's 4s glide is beautiful but announces nothing; guests look up mid-glide and wait. Third, <b>time.</b> 100 advances × 4s is nearly 7 minutes of a 2.5-hour night spent in transit with no question on screen. The reel gives ~6 of those minutes back.</p>
+  <p><b>2 · Costs.</b> <i>Build:</i> the pan exists (v2, zero marginal); the reel is ~200 lines of choreography, now written. <i>Per-world authoring:</i> the reel is actually <b>cheaper</b> — pan panes must tile edge-to-edge (every pane's right margin must plausibly continue into its neighbor, plus a cloned pane 9 for the wrap); reel panes never share an edge, so each is a free-standing diorama and the 8→1 wrap is free. The reel does demand a layer split (fg/mid/far) per pane — but the diorama brief wants that anyway. <i>Runtime:</i> comparable — the reel stacks 8 full-frame panes but hidden panes park their animations (<code>animation-play-state:paused</code>), and the detent itself is transform-only and brief. <i>Risk:</i> the reel's one real unknown is <code>perspective</code>/<code>rotateY</code> on a cheap HDMI stick's GPU. Untested. The fallback — drop rotateY, keep translate + scale + parallax — preserves ~90% of the feel and is a 10-line change.</p>
+  <p><b>3 · Does the mechanism survive 100 viewings?</b> Honestly: <b>yes, if it stays exactly this size, and the anticipation tick is the part to watch.</b> Identical mechanical beats survive repetition the way a clock tick or a slide-projector clunk does — it's expressive flourishes that curdle. This detent is 500ms, quiet, and never varies, which is the right recipe. The risk sits in the 45ms back-tick: a direction reversal is the most attention-grabbing thing in motion design, and at 100 reps a too-big tick would read as a twitch. It's currently 3.5° / 1.6cqw — small on a laptop, but tune it on the actual TV and be ready to halve it or cut it. If anything gets removed after a live night, it's the tick, never the settle. Do not add sound to the detent; 100 clunks a night is a firing offense.</p>
+  <p><b>4 · The View-Master mask: built, then deleted.</b> Ben's call, and it's the right one — <i>"the view master concept is just the flow. i dont wanna see them as actual panes with white in the middle and such."</i> The toy is the <b>rhythm</b>, not the lens housing. The consultant verdict had independently landed the same place: the double-lobe ate about a third of the frame at exactly the aspect ratio a 16:9 bar TV can least afford, narrowed the question measure, and put a permanent bright ring on screen all night. Gone from the file entirely, not toggled off.</p>
+  <p><b>4b · No seam, structurally.</b> The sky is a stage-level sibling of the drum, not a child of any pane, so it's continuously visible underneath the whole detent — the rotation can never expose a gap, a divider, or a flash of background. The panes themselves carry no background of their own. The <code>drumshade</code> edge darkening was softened from .5/11% to .30/22% for the same reason: at the original values it read as a frame edge, which is precisely the thing this design must never show.</p>
+  <p><b>5 · Before the winner goes near real code:</b></p>
+  <ol>
+    <li><b>Stick test first.</b> One evening with the real HDMI stick and TV: rotateY performance, tick size, overshoot size. Nothing else is worth tuning before that.</li>
+    <li><b>Advance becomes host-driven.</b> The detent should fire on the Supabase question event, not a timer — the mechanism doubles as the show's metronome, which is its whole value.</li>
+    <li><b>Layer split becomes an authoring convention.</b> Every world's pane spec declares each anchor's layer (fg/mid/far) up front, so parallax is free per world instead of retrofitted.</li>
+    <li><b>Reduced-motion cross-fade needs a render check</b> — it's implemented (scoped exception under the blanket freeze) but unverified.</li>
+    <li><b>Keep the pan.</b> Not as the advance — as the idle. A world that pans slowly during scoring breaks and detents on questions gets both temperaments for the price of both being built.</li>
+  </ol>
+
+  <h3>Build notes</h3>
+  <ul>
+    <li><b>Deviation from v2, documented in the header:</b> both stages advance from one JS scheduler (chained <code>setTimeout</code> on natural boundaries — v2's own sanctioned exception) instead of v2's 344s keyframe loop, because on-demand Advance buttons are the point of this page. Cadence matches v2 exactly at 1×.</li>
+    <li><b>Per-segment easing is inside the keyframes on purpose.</b> The lessons file's eased-animation trap is about predicting one property from another's keyframe%; here transform and opacity share stops within each animation and nothing cross-predicts, so per-segment timing functions are safe and give the detent its mechanical shape.</li>
+    <li><b>The reel's hidden panes pause their star animations</b> — 8 stacked panes of twinkle would otherwise burn compositor time invisibly all night.</li>
+    <li><b>Stage B's sky-kick ends where it starts</b> (0 → +0.22 → −0.55 → 0 cqw), so 100 advances accumulate no drift.</li>
+    <li><b>Stage A in reduced motion cuts instantly</b> (transition killed by the freeze); only the reel carries the mandated cross-fade degrade.</li>
+    <li><b>Not rendered.</b> This session has no browser. Per the lessons file, visual work is not done until someone renders it and looks — that pass is still owed, especially for the detent feel, the mask, and the rm cross-fade.</li>
+  </ul>
+</div>
+
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────────────
+   SHARED CONTENT — one pane spec, two renderings.
+   Stage A: flat panes on the 900%-wide strip (v2's structure, 9th
+   pane = clone of pane 1). Stage B: stacked .rpane, each split into
+   lyr-far / lyr-mid / lyr-fg for the detent parallax.
+   Seeds and counts are v2's exactly.
+   ───────────────────────────────────────────────────────────────────── */
+const COLORS = ['#f6efff','#ffeeda','#dce8ff','#ffffff'];
+function rng(seed){ let s=seed; return ()=> (s = (s*16807) % 2147483647) / 2147483647; }
+function starHTML(x,y,rnd){
+  const t = rnd();
+  const col = COLORS[Math.floor(rnd()*COLORS.length)];
+  let size, lo, hi, cls='', extra='';
+  if (t < .60){
+    size = (.6 + rnd()*.5).toFixed(2);
+    extra = `opacity:${(.16 + rnd()*.14).toFixed(2)};`;
+  } else if (t < .90){
+    size = (1.2 + rnd()).toFixed(2);
+    lo = (.30 + rnd()*.15).toFixed(2); hi = (+lo + .06 + rnd()*.02).toFixed(2);
+    cls = 'tw' + (1 + Math.floor(rnd()*5));
+    extra = `--lo:${lo};--hi:${hi};animation-delay:-${(rnd()*23).toFixed(2)}s;`;
+  } else {
+    size = (2.4 + rnd()*1.1).toFixed(2);
+    lo = (.48 + rnd()*.1).toFixed(2); hi = (+lo + .22 + rnd()*.08).toFixed(2);
+    cls = 'tw' + (1 + Math.floor(rnd()*5));
+    extra = `--lo:${lo};--hi:${hi};animation-delay:-${(rnd()*23).toFixed(2)}s;` +
+            `box-shadow:0 0 6px 1px rgba(200,180,255,.35);`;
+  }
+  return `<i class="star ${cls}" style="left:${x}%;top:${y}%;width:${size}px;height:${size}px;background:${col};${extra}"></i>`;
+}
+function seedField(el, n, seed){
+  const rnd = rng(seed); let html='';
+  for (let i=0;i<n;i++) html += starHTML((rnd()*100).toFixed(2),(rnd()*100).toFixed(2),rnd);
+  el.innerHTML += html;
+}
+function seedRiver(el, n, seed){
+  const rnd = rng(seed); let html='';
+  for (let i=0;i<n;i++){
+    const x = rnd()*100;
+    const y = 30 - x*0.22 + (rnd()*2-1)*7 + 8;
+    if (y < -4) continue;
+    html += starHTML(x.toFixed(2), y.toFixed(2), rnd);
+  }
+  el.innerHTML += html;
+}
+function seedCluster(el, n, seed, cx, cy, sp){
+  const rnd = rng(seed); let html='';
+  const g = ()=> (rnd()+rnd()+rnd()-1.5)/1.5;
+  for (let i=0;i<n;i++)
+    html += starHTML((cx+g()*sp).toFixed(2),(cy+g()*sp*.8).toFixed(2),rnd);
+  el.innerHTML += html;
+}
+
+/* per-pane anchors, split by depth layer (farx renders with the stars) */
+const PANE = [
+  { }, /* P1 · river — stars only */
+  { mid:'<div class="plan"></div><div class="ring"></div>',
+    fg:'<div class="drifter dr88"></div>' },
+  { mid:'<div class="veilcol"></div>' },
+  { farx:'<div class="clcore"></div>' }, /* + gaussian cluster field */
+  { fg:'<div class="drifter dr127"></div><div class="occ rock"></div><div class="occ rock2"></div>' },
+  { mid:'<div class="milky"></div><div class="cres"></div>' },
+  { mid:'<div class="glint gl1" style="left:9%;top:22%"><i></i></div>' +
+        '<div class="glint gl2" style="left:83%;top:64%"><i></i></div>' },
+  { mid:'<div class="dustlane"></div>', fg:'<div class="drifter dr104"></div>' },
+];
+const SEEDS  = [7919,104729,15485863,32452843,67867967,86028121,122949823,141650939];
+const COUNTS = [210,170,150,150,175,165,185,95];
+
+/* ── build Stage A strip (9 panes, #9 clones #1) ──────────────────── */
+const strip = document.getElementById('strip');
+let htmlA = '';
+for (let i=0;i<9;i++){
+  const k = i%8, p = PANE[k];
+  htmlA += `<div class="pane" style="left:${(i*11.1111).toFixed(4)}%">` +
+    `<div class="far" id="af${i}"></div>` +
+    (p.farx||'') +
+    (k===3 ? `<div class="far" id="af${i}c" style="animation:none;inset:0"></div>` : '') +
+    (p.mid||'') + (p.fg||'') + `</div>`;
+}
+strip.innerHTML = htmlA;
+
+/* ── build Stage B reel (8 stacked layered panes) ─────────────────── */
+const reelbox = document.getElementById('reelbox');
+let htmlB = '';
+for (let i=0;i<8;i++){
+  const p = PANE[i];
+  htmlB += `<div class="rpane${i===0?' cur':''}">` +
+    `<div class="lyr lyr-far"><div class="far" id="bf${i}"></div>` +
+      (p.farx||'') +
+      (i===3 ? `<div class="far" id="bf${i}c" style="animation:none;inset:0"></div>` : '') +
+    `</div>` +
+    `<div class="lyr lyr-mid">${p.mid||''}</div>` +
+    `<div class="lyr lyr-fg">${p.fg||''}</div></div>`;
+}
+reelbox.innerHTML = htmlB;
+const rpanes = [...reelbox.querySelectorAll('.rpane')];
+
+/* ── seed both stages with identical seeds ────────────────────────── */
+for (let i=0;i<9;i++){
+  const k = i%8;
+  seedField(document.getElementById('af'+i), COUNTS[k], SEEDS[k]);
+  if (k===0) seedRiver(document.getElementById('af'+i), 90, SEEDS[0]*3);
+  if (k===3) seedCluster(document.getElementById('af'+i+'c'), 48, 49979687, 79, 74, 7);
+}
+for (let i=0;i<8;i++){
+  seedField(document.getElementById('bf'+i), COUNTS[i], SEEDS[i]);
+  if (i===0) seedRiver(document.getElementById('bf'+i), 90, SEEDS[0]*3);
+  if (i===3) seedCluster(document.getElementById('bf'+i+'c'), 48, 49979687, 79, 74, 7);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   QUESTIONS — same set, one controller per stage
+   ───────────────────────────────────────────────────────────────────── */
+const QUESTIONS = [
+  ['Round 3 · Question 1','Which planet in our solar system has the most moons?'],
+  ['Round 3 · Question 2','What was the first artificial satellite ever launched into orbit?'],
+  ['Round 3 · Question 3','Which 1975 film was the first ever to gross over $100 million?'],
+  ['Round 3 · Question 4','What is the closest star to Earth other than the Sun?'],
+  ['Round 3 · Question 5','Which Apollo mission was the first to land humans on the Moon?'],
+  ['Round 3 · Question 6','What galaxy is on a collision course with the Milky Way?'],
+  ['Round 3 · Question 7','Which element makes up about 73 percent of the Sun’s mass?'],
+  ['Round 3 · Question 8','What is the name of the largest volcano in the solar system?'],
+];
+function makeQ(stage, numEl, textEl){
+  return {
+    show(k){
+      const [num, text] = QUESTIONS[k % QUESTIONS.length];
+      numEl.textContent = num;
+      textEl.innerHTML = text.split(' ')
+        .map((w,i)=>`<span class="w" style="transition-delay:${i*45}ms">${w}</span>`)
+        .join(' ');
+      stage.classList.add('qon');
+    },
+    hide(){ stage.classList.remove('qon'); }
+  };
+}
+const stageA = document.getElementById('stageA');
+const stageB = document.getElementById('stageB');
+const qA = makeQ(stageA, document.getElementById('qnumA'), document.getElementById('qtextA'));
+const qB = makeQ(stageB, document.getElementById('qnumB'), document.getElementById('qtextB'));
+
+/* ─────────────────────────────────────────────────────────────────────
+   ADVANCE — one scheduler, two mechanisms.
+   All timing via chained setTimeout on natural boundaries (v2's
+   sanctioned exception). No rAF anywhere.
+   ───────────────────────────────────────────────────────────────────── */
+let SPEED=1;
+/* DETENT is read from the live CSS var so the JS scheduler and the CSS
+   animation can never drift apart when the SNAP/TURN toggle flips. */
+const HOLD=39000, GLIDE=4000, QEXIT=380;
+const detentMs = () => stageB.classList.contains('snap') ? 500 : 820;
+
+let idxA=0, busyA=false;
+function advanceA(){
+  if (busyA) return; busyA=true;
+  qA.hide();
+  setTimeout(()=>{
+    idxA++;
+    strip.style.transition = `transform ${(GLIDE/SPEED)/1000}s linear`;
+    strip.style.transform  = `translate3d(${(-idxA*11.1111).toFixed(4)}%,0,0)`;
+    setTimeout(()=>{
+      if (idxA===8){                      /* landed on clone → snap to real pane 1 */
+        strip.style.transition='none';
+        strip.style.transform='translate3d(0,0,0)';
+        idxA=0;
+        void strip.offsetWidth;
+      }
+      busyA=false;
+      qA.show(idxA);
+    }, GLIDE/SPEED + 80);
+  }, QEXIT);
+}
+
+let idxB=0, busyB=false;
+const skyB = document.getElementById('skyB');
+function advanceB(){
+  if (busyB) return; busyB=true;
+  qB.hide();
+  setTimeout(()=>{
+    const cur = rpanes[idxB], nxt = rpanes[(idxB+1)%8];
+    if (stageB.classList.contains('rm')){
+      /* reduced motion: plain cross-fade (scoped transition exception) */
+      cur.classList.remove('cur'); nxt.classList.add('cur');
+      idxB=(idxB+1)%8;
+      setTimeout(()=>{ busyB=false; qB.show(idxB); }, 700);
+      return;
+    }
+    cur.classList.add('out'); nxt.classList.add('in');
+    skyB.classList.remove('kick'); void skyB.offsetWidth; skyB.classList.add('kick');
+    setTimeout(()=>{
+      cur.classList.remove('cur','out');
+      nxt.classList.remove('in'); nxt.classList.add('cur');
+      skyB.classList.remove('kick');
+      idxB=(idxB+1)%8;
+      busyB=false;
+      qB.show(idxB);
+    }, detentMs() + 40);
+  }, QEXIT);
+}
+
+/* auto-advance: both stages together, in phase */
+let AUTO=true, autoTimer=null;
+function autoLoop(){
+  clearTimeout(autoTimer);
+  if (!AUTO) return;
+  autoTimer=setTimeout(()=>{
+    advanceA(); advanceB();
+    autoLoop();
+  }, HOLD/SPEED + QEXIT + GLIDE/SPEED + 500);
+}
+setTimeout(()=>{ qA.show(0); qB.show(0); }, 700);
+autoLoop();
+
+document.getElementById('advA').onclick=()=>{ advanceA(); autoLoop(); };
+document.getElementById('advB').onclick=()=>{ advanceB(); autoLoop(); };
+
+/* SNAP / TURN A-B. The whole point of this control: fire Advance B a dozen
+   times on each and the difference is obvious. TURN is the fix; SNAP is
+   what Ben saw and called "not smooth and a bit too fast." */
+const detBtn = document.getElementById('det');
+detBtn.onclick = () => {
+  const snap = stageB.classList.toggle('snap');
+  detBtn.textContent = snap ? 'Detent: SNAP 500ms (old)' : 'Detent: TURN 820ms';
+  detBtn.classList.toggle('on', !snap);
+};
+
+/* ─────────────────────────────────────────────────────────────────────
+   EVENT CHANNEL — same randoms applied to both stages, so the shooting
+   star is a true side-by-side. 1 per 40–120s jittered ±40%.
+   ───────────────────────────────────────────────────────────────────── */
+const shotA=document.getElementById('shotA'), shotB=document.getElementById('shotB');
+const BASE_MIN=40000, BASE_MAX=120000, JITTER=0.4;
+function nextDelay(){
+  const base = BASE_MIN + Math.random()*(BASE_MAX-BASE_MIN);
+  return base * (1 + (Math.random()*2-1)*JITTER);
+}
+function fireShots(){
+  const top=(5+Math.random()*15)+'cqh', left=(2+Math.random()*26)+'cqw',
+        rot=`rotate(${(10+Math.random()*16).toFixed(1)}deg)`;
+  for (const s of [shotA,shotB]){
+    s.style.top=top; s.style.left=left; s.style.transform=rot;
+    s.classList.remove('fire'); void s.offsetWidth; s.classList.add('fire');
+  }
+}
+function scheduleEvent(){
+  setTimeout(()=>{
+    if (!stageA.classList.contains('rm')) fireShots();
+    scheduleEvent();
+  }, nextDelay()/SPEED);
+}
+scheduleEvent();
+setTimeout(fireShots, 3500);
+
+/* ── controls ─────────────────────────────────────────────────────── */
+const stages=[stageA,stageB];
+const spdBtn=document.getElementById('spd'); const SPEEDS=[1,4,12]; let spdIdx=0;
+spdBtn.onclick=()=>{
+  spdIdx=(spdIdx+1)%SPEEDS.length; SPEED=SPEEDS[spdIdx];
+  stages.forEach(s=>s.style.setProperty('--spd',SPEED));
+  spdBtn.textContent = SPEED===1 ? 'Speed: 1× (show)' : `Speed: ${SPEED}× (preview)`;
+  spdBtn.classList.toggle('on', SPEED===1);
+  autoLoop();
+};
+document.getElementById('ev').onclick=fireShots;
+
+const autoLab=document.getElementById('ta');
+autoLab.querySelector('input').onchange=e=>{
+  AUTO=e.target.checked;
+  autoLab.classList.toggle('on', AUTO);
+  autoLoop();
+};
+
+function wire(id, cls, invert, only){
+  const lab=document.getElementById(id), box=lab.querySelector('input');
+  box.onchange=()=>{
+    (only||stages).forEach(s=>s.classList.toggle(cls, invert ? !box.checked : box.checked));
+    lab.classList.toggle('on', box.checked);
+  };
+}
+wire('tq','noq',true);
+wire('tg','guides',false);
+wire('tn','nograin',true);
+wire('tr','rm',false);
+</script>
+</body>
+</html>

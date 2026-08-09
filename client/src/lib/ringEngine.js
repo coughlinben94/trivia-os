@@ -51,3 +51,52 @@ export function loudnessOf(arc, i) {
   const min = Math.min(...arc), max = Math.max(...arc)
   return (arc[i] - min) / (max - min)
 }
+
+// The arc's absolute value must reach a pixel. loudnessOf() normalises it
+// away (proved 2026-08-08: scaling ARC.lo/hi 10x rendered byte-identical
+// frames at all 12 stations — B2-luminance.md §1.2). `fill` is the channel:
+// it multiplies every primitive's interior gradient alpha and painted
+// extent (see ringPrimitives.js's ALPHA_GAIN/EXTENT_GAIN).
+export function fillOf(engine, arc, i) {
+  const { ref, fillMin, fillMax } = engine.ARC
+  return Math.min(fillMax, Math.max(fillMin, arc[i] / ref))
+}
+
+// Single source for a space world's 4-stop sky ramp, derived from a theme's
+// 2 sky-relevant color stops (bg, bgDeep). Previously duplicated: a literal
+// hardcoded 4-stop array in concepts/world-07-ring.html, and this same
+// mixHex/darken derivation copy-pasted into client/src/worlds/
+// midnightGalaxy.ring.js — the two had already drifted (2026-08-08: the
+// reference build's hardcoded stops no longer matched the theme's actual
+// colors). Both now import this one function instead.
+const mixHex = (a, b, t) => {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16)
+  const ch = (shift) => Math.round((((pa >> shift) & 255) * (1 - t)) + (((pb >> shift) & 255) * t))
+  return `#${[16, 8, 0].map(s => ch(s).toString(16).padStart(2, '0')).join('')}`
+}
+const darken = (hex, t) => mixHex(hex, '#000000', t)
+
+// Multiplies every channel by k (clamped 255) — a flat luma lift, not an
+// interpolation toward a target color (mixHex's job). B2-luminance.md §2.3:
+// the derived ramp sits below where a TV's black floor and a taproom's
+// ambient light swamp it (bg measured luma 3.58, terminal stop 0.5); lifting
+// the whole ramp 1.6x gets it off that floor without carrying the arc's
+// contrast (that's fillOf()'s job, not the sky's — a bigger lift here would
+// compress the arc's span instead, measured in the same section).
+const liftHex = (hex, k) => {
+  const p = parseInt(hex.slice(1), 16)
+  const ch = (shift) => Math.min(255, Math.round(((p >> shift) & 255) * k))
+  return `#${[16, 8, 0].map(s => ch(s).toString(16).padStart(2, '0')).join('')}`
+}
+
+// theme.colors only has 2 sky-relevant stops (bg, bgDeep); a space world's
+// sky is a continuous 4-stop ramp. Duplicating bgDeep for both middle stops
+// renders a flat solid band from 46% to 78% of the gradient radius — a
+// visible regression from a smooth falloff. Interpolating a real midpoint
+// keeps the ramp continuous. Terminal stop darkens toward black relative to
+// bgDeep's own hue (spec §9), not a fixed literal, so it never defaults to
+// blue-black regardless of the theme's actual color.
+export function skyFromTheme(theme) {
+  const ramp = [theme.colors.bg, mixHex(theme.colors.bg, theme.colors.bgDeep, 0.5), theme.colors.bgDeep, darken(theme.colors.bgDeep, 0.75)]
+  return ramp.map(hex => liftHex(hex, 1.6))
+}

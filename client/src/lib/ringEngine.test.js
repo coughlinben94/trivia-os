@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, hash32, rng } from './ringEngine.js'
+import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, fillOf, hash32, rng } from './ringEngine.js'
 
-const ENGINE = { PANES: 12, ARC: { lo: 18, hi: 52, exp: 1.6 } }
+const ENGINE = { PANES: 12, ARC: { lo: 10, hi: 31, exp: 1.6, ref: 31, fillMin: 0.35, fillMax: 1.00 } }
 const LAYERS = [
   { id: 'far', surge: 480, m: 1 },
   { id: 'mid', surge: 1920, m: 1 },
@@ -28,6 +28,18 @@ describe('buildArc', () => {
     const span = Math.max(...arc) / Math.min(...arc)
     expect(span).toBeGreaterThanOrEqual(2.2)
     expect(span).toBeLessThanOrEqual(4.0)
+  })
+})
+
+describe('fillOf', () => {
+  // the arc's absolute value must reach a pixel — proved 2026-08-08 that
+  // loudnessOf() alone throws the units away (scaling ARC.lo/hi 10x
+  // rendered byte-identical frames). fillOf is the channel that carries it.
+  it('clamps to fillMin/fillMax and scales with the arc, not just its rank', () => {
+    const arc = [25, 20, 31]
+    expect(fillOf(ENGINE, arc, 0)).toBeCloseTo(25 / 31, 5) // unclamped, mid-range
+    expect(fillOf(ENGINE, arc, 2)).toBe(1.00) // 31/31, clamped at fillMax
+    expect(fillOf(ENGINE, [10, 20, 31], 0)).toBe(0.35) // 10/31 below fillMin, clamped
   })
 })
 

@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trivia OS — 5 Display Directions (post-ambient)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Press+Start+2P&family=DM+Serif+Display:ital@0;1&family=Archivo:wght@600;800&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   TRIVIA OS — DISPLAY DIRECTION MOCKUPS
+   5 competing answers to: "what keeps the screen alive for 2.5 hours?"
+   Every animation is transform/opacity only. Every stage is 16:9.
+   ═══════════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --page-bg:    #0d0f0e;
+  --page-card:  #161a18;
+  --page-line:  #2a302c;
+  --page-text:  #e6e2d8;
+  --page-muted: #8b9089;
+  --forest:     #004000;
+  --apple:      #e02020;
+  --orchard:    #60a000;
+  --cream:      #f5f0e8;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--page-bg);
+  color: var(--page-text);
+  font-family: 'DM Sans', system-ui, sans-serif;
+  line-height: 1.55;
+  padding: 0 0 120px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── page chrome ───────────────────────────────────────────────── */
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+
+header.page {
+  padding: 72px 0 40px;
+  border-bottom: 1px solid var(--page-line);
+  margin-bottom: 56px;
+}
+header.page .eyebrow {
+  font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--orchard); font-weight: 700; margin-bottom: 14px;
+}
+header.page h1 {
+  font-family: 'Boogaloo', cursive;
+  font-size: clamp(38px, 6vw, 64px);
+  line-height: 1.05; letter-spacing: 0.01em; margin-bottom: 18px;
+}
+header.page p { max-width: 68ch; color: var(--page-muted); font-size: 16px; }
+header.page p + p { margin-top: 12px; }
+header.page b { color: var(--page-text); font-weight: 500; }
+
+.toc {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px;
+}
+.toc a {
+  font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase;
+  font-weight: 700; color: var(--page-muted); text-decoration: none;
+  border: 1px solid var(--page-line); border-radius: 999px;
+  padding: 7px 15px; transition: color .18s, border-color .18s;
+}
+.toc a:hover { color: var(--cream); border-color: var(--orchard); }
+
+/* ── direction block ───────────────────────────────────────────── */
+
+section.dir { margin-bottom: 92px; scroll-margin-top: 24px; }
+
+.dir-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+.dir-num {
+  font-family: 'Boogaloo', cursive; font-size: 46px; line-height: 1;
+  color: var(--orchard); opacity: .85;
+}
+.dir-head h2 {
+  font-family: 'Boogaloo', cursive; font-size: 38px; line-height: 1.1;
+  letter-spacing: .01em;
+}
+.dir-tag {
+  font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+  font-weight: 700; color: var(--page-bg); background: var(--orchard);
+  padding: 4px 10px; border-radius: 4px; align-self: center;
+}
+.dir-sub { color: var(--page-muted); max-width: 76ch; margin-bottom: 22px; font-size: 15.5px; }
+
+/* ── the 16:9 stage ────────────────────────────────────────────── */
+
+.stage {
+  position: relative; width: 100%; aspect-ratio: 16/9;
+  border-radius: 10px; overflow: hidden;
+  background: #000;
+  box-shadow: 0 24px 70px rgba(0,0,0,.6), 0 0 0 1px var(--page-line);
+  container-type: size;
+}
+/* everything inside a stage sizes off container query units so the
+   mock scales exactly like a real TV would. 1cqw = 1% stage width. */
+.stage * { font-kerning: normal; }
+
+.stage-note {
+  display: flex; gap: 10px; align-items: center;
+  margin-top: 10px; font-size: 12.5px; color: var(--page-muted);
+}
+.stage-note .dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--orchard);
+  animation: notePulse 2.4s ease-in-out infinite;
+}
+@keyframes notePulse { 0%,100%{opacity:.35} 50%{opacity:1} }
+
+/* ── notes grid under each stage ───────────────────────────────── */
+
+.notes {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+  background: var(--page-line); border: 1px solid var(--page-line);
+  border-radius: 8px; overflow: hidden; margin-top: 20px;
+}
+.notes > div { background: var(--page-card); padding: 16px 18px 18px; }
+.notes h4 {
+  font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--page-muted); font-weight: 700; margin-bottom: 7px;
+}
+.notes p { font-size: 13.5px; line-height: 1.5; }
+.notes .good { color: #8ecf6a; }
+.notes .warn { color: #e0a020; }
+@media (max-width: 900px) { .notes { grid-template-columns: repeat(2,1fr); } }
+
+/* ═══════════════════════════════════════════════════════════════════
+   1 — THE CABINET
+   Persistent physical frame. The furniture is the brand.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.cab {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 42%, #123a1c 0%, #0a1f11 55%, #050d08 100%);
+}
+/* grain — static, pre-rendered, zero per-frame cost */
+.grain::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  opacity: .16; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* the frame itself — the thing that never changes all night */
+.cab-frame {
+  position: absolute; inset: 2.2cqw 2.2cqw 2.2cqw 2.2cqw;
+  border-radius: 1.1cqw;
+  border: 0.42cqw solid transparent;
+  background:
+    linear-gradient(#0000,#0000) padding-box,
+    linear-gradient(168deg, #d8a949 0%, #7a5a1e 26%, #f2d68c 47%, #6d4f19 70%, #c99f42 100%) border-box;
+  box-shadow:
+    inset 0 0 0 0.12cqw rgba(0,0,0,.55),
+    inset 0 0 6cqw rgba(0,0,0,.5),
+    0 0 3cqw rgba(216,169,73,.13);
+}
+/* marching-ants chase — the Chase-column trick, stroke-dashoffset only */
+.cab-chase { position: absolute; inset: 2.2cqw; pointer-events: none; }
+.cab-chase rect {
+  fill: none; stroke: rgba(245,230,180,.5); stroke-width: 1.6;
+  stroke-dasharray: 26 210; rx: 12;
+  animation: chase 9s linear infinite;
+}
+@keyframes chase { to { stroke-dashoffset: -472; } }
+
+/* persistent furniture — round chip + score bug. never leave the screen. */
+.cab-chip {
+  position: absolute; top: 4.6cqw; left: 5.4cqw;
+  display: flex; align-items: center; gap: 0.8cqw;
+  padding: 0.7cqw 1.5cqw; border-radius: 999px;
+  background: rgba(0,0,0,.5); border: 0.1cqw solid rgba(216,169,73,.4);
+  font-family: 'DM Sans'; font-weight: 700; letter-spacing: .18em;
+  text-transform: uppercase; font-size: 1.35cqw; color: #e9d9a8;
+}
+.cab-chip i {
+  width: 0.7cqw; height: 0.7cqw; border-radius: 50%; background: var(--apple);
+  animation: liveBlink 2.6s ease-in-out infinite; font-style: normal;
+}
+@keyframes liveBlink { 0%,100%{opacity:.3} 50%{opacity:1} }
+
+.cab-bug {
+  position: absolute; top: 4.6cqw; right: 5.4cqw;
+  display: flex; gap: 1.4cqw; padding: 0.7cqw 1.6cqw; border-radius: 0.6cqw;
+  background: rgba(0,0,0,.5); border: 0.1cqw solid rgba(216,169,73,.4);
+}
+.cab-bug div { text-align: right; }
+.cab-bug span {
+  display: block; font-size: 0.95cqw; letter-spacing: .16em; text-transform: uppercase;
+  color: rgba(233,217,168,.6); font-weight: 700;
+}
+.cab-bug b { font-family: 'Boogaloo', cursive; font-size: 2.1cqw; color: #f5e6b4; font-weight: 400; }
+
+/* the card — the ONLY thing that changes between questions */
+.cab-card {
+  position: absolute; left: 12cqw; right: 12cqw; top: 27cqh;
+  padding: 3.4cqw 4cqw;
+  border-radius: 0.9cqw;
+  background: linear-gradient(180deg, rgba(10,26,15,.94), rgba(4,14,8,.97));
+  border: 0.12cqw solid rgba(216,169,73,.3);
+  box-shadow: 0 2cqw 5cqw rgba(0,0,0,.6);
+  text-align: center;
+}
+.cab-qnum {
+  font-family: 'Boogaloo', cursive; font-size: 2.4cqw; color: var(--orchard);
+  letter-spacing: .1em; margin-bottom: 1.2cqw;
+}
+.cab-qtext {
+  font-family: 'DM Sans'; font-weight: 500; font-size: 3.5cqw; line-height: 1.28;
+  color: var(--cream);
+}
+.cab-card.swap { animation: cardSwap 7s ease-in-out infinite; }
+@keyframes cardSwap {
+  0%   { opacity: 0; transform: translateY(2.5cqh) scale(.985); }
+  6%   { opacity: 1; transform: none; }
+  46%  { opacity: 1; transform: none; }
+  52%  { opacity: 0; transform: translateY(-1.4cqh) scale(.99); }
+  53%  { opacity: 0; transform: translateY(2.5cqh) scale(.985); }
+  59%  { opacity: 1; transform: none; }
+  94%  { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-1.4cqh) scale(.99); }
+}
+.cab-card .q2 { position: absolute; inset: 3.4cqw 4cqw auto; animation: q2 7s step-end infinite; opacity: 0; }
+@keyframes q2 { 0%{opacity:0} 52%{opacity:1} 100%{opacity:0} }
+.cab-card .q1 { animation: q1 7s step-end infinite; }
+@keyframes q1 { 0%{opacity:1} 52%{opacity:0} 100%{opacity:1} }
+
+/* ═══════════════════════════════════════════════════════════════════
+   2 — ERA DECKS
+   Genre gist, not IP. Same question, four eras, auto-cycling.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.era { position: absolute; inset: 0; }
+.era-slot { position: absolute; inset: 0; opacity: 0; }
+.era-slot:nth-child(1) { animation: eraCycle 20s ease-in-out infinite;  }
+.era-slot:nth-child(2) { animation: eraCycle 20s ease-in-out infinite -5s; }
+.era-slot:nth-child(3) { animation: eraCycle 20s ease-in-out infinite -10s; }
+.era-slot:nth-child(4) { animation: eraCycle 20s ease-in-out infinite -15s; }
+@keyframes eraCycle {
+  0%   { opacity: 0; }
+  2%   { opacity: 1; }
+  23%  { opacity: 1; }
+  25%  { opacity: 0; }
+  100% { opacity: 0; }
+}
+.era-label {
+  position: absolute; bottom: 3cqw; left: 50%; transform: translateX(-50%);
+  font-family: 'DM Sans'; font-size: 1.1cqw; font-weight: 700;
+  letter-spacing: .3em; text-transform: uppercase; opacity: .55;
+}
+
+/* 2a — 8-bit */
+.e8 { background: #0b1030; }
+.e8::before {
+  content: ''; position: absolute; inset: 0;
+  background:
+    linear-gradient(180deg, #1b2a78 0%, #2f56b8 44%, #4a86d8 62%, #1c6e2c 62.1%, #14521f 100%);
+}
+/* scanlines — static, tiled, free */
+.e8::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(180deg, rgba(0,0,0,.30) 0 2px, transparent 2px 4px);
+}
+.e8-cloud {
+  position: absolute; width: 9cqw; height: 3cqw; background: #dff0ff;
+  box-shadow: 2.2cqw -1.1cqw 0 0 #dff0ff, -2.4cqw -0.8cqw 0 0 #dff0ff;
+  border-radius: 0.4cqw; opacity: .9;
+  animation: e8drift 26s linear infinite;
+}
+.e8-cloud.a { top: 9cqh; left: -14cqw; }
+.e8-cloud.b { top: 21cqh; left: -14cqw; animation-duration: 41s; animation-delay: -12s; transform: scale(.72); }
+@keyframes e8drift { to { transform: translateX(128cqw); } }
+.e8-cloud.b { animation-name: e8driftB; }
+@keyframes e8driftB { from { transform: translateX(0) scale(.72);} to { transform: translateX(128cqw) scale(.72);} }
+/* original 8-bit orchard — a tree, not a character. no IP, all gist. */
+.e8-tree {
+  position: absolute; bottom: 6cqh; width: 7cqw; height: 12cqh;
+  animation: e8bob 3.4s ease-in-out infinite;
+}
+.e8-tree.a { left: 8cqw; } .e8-tree.b { right: 10cqw; animation-delay: -1.7s; }
+.e8-tree i {
+  position: absolute; bottom: 0; left: 42%; width: 16%; height: 45%;
+  background: #6b3b12; font-style: normal;
+}
+.e8-tree u {
+  position: absolute; top: 0; left: 0; width: 100%; height: 62%;
+  background: #2f9c34; border-radius: 0.5cqw;
+  box-shadow: inset 0 -0.5cqw 0 rgba(0,0,0,.22);
+}
+.e8-tree u::after {
+  content: ''; position: absolute; width: 22%; aspect-ratio: 1; border-radius: 50%;
+  background: #e02020; top: 46%; left: 22%;
+  box-shadow: 2.1cqw -0.3cqw 0 0 #e02020;
+}
+@keyframes e8bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-0.5cqh)} }
+.e8-q {
+  position: absolute; left: 14cqw; right: 14cqw; top: 30cqh;
+  font-family: 'Press Start 2P', monospace; font-size: 1.85cqw; line-height: 2.05;
+  color: #fff; text-align: center;
+  text-shadow: 0.3cqw 0.3cqw 0 #12143a;
+}
+.e8-num {
+  position: absolute; top: 5cqh; left: 50%; transform: translateX(-50%);
+  font-family: 'Press Start 2P', monospace; font-size: 1.3cqw; color: #ffd93d;
+  text-shadow: 0.25cqw 0.25cqw 0 #12143a; letter-spacing: .1em;
+}
+.e8 .era-label { color: #ffd93d; font-family:'Press Start 2P'; font-size:.85cqw; letter-spacing:.2em; }
+
+/* 2b — VHS */
+.evhs { background: #0a0612; }
+.evhs::before {
+  content:''; position:absolute; inset:0;
+  background:
+    radial-gradient(ellipse 70% 90% at 30% 20%, rgba(255,0,140,.35), transparent 60%),
+    radial-gradient(ellipse 80% 70% at 78% 78%, rgba(0,220,255,.3), transparent 62%),
+    linear-gradient(160deg, #180b2e, #06030f);
+}
+.evhs-scan {
+  position:absolute; inset:0; pointer-events:none; opacity:.5;
+  background: repeating-linear-gradient(180deg, rgba(255,255,255,.055) 0 1px, transparent 1px 3px);
+}
+.evhs-track {
+  position: absolute; left: 0; right: 0; height: 3.5cqh;
+  background: linear-gradient(180deg, transparent, rgba(255,255,255,.16), transparent);
+  animation: vhsTrack 7.5s linear infinite; opacity: .8;
+}
+@keyframes vhsTrack { 0% { transform: translateY(-6cqh);} 100% { transform: translateY(112cqh);} }
+.evhs-q {
+  position:absolute; left:12cqw; right:12cqw; top:31cqh; text-align:center;
+  font-family:'Archivo', sans-serif; font-weight:800; font-size:4.1cqw; line-height:1.18;
+  color:#f2ecff; letter-spacing:-.01em;
+  text-shadow: -0.18cqw 0 0 rgba(255,0,140,.85), 0.18cqw 0 0 rgba(0,225,255,.85);
+  animation: vhsJitter 5.5s steps(1) infinite;
+}
+@keyframes vhsJitter {
+  0%,88%,100% { transform: translateX(0); }
+  89% { transform: translateX(-0.35cqw); }
+  90% { transform: translateX(0.3cqw); }
+  91% { transform: translateX(0); }
+}
+.evhs-num {
+  position:absolute; top:5cqh; left:6cqw;
+  font-family:'Archivo'; font-weight:800; font-size:1.5cqw; letter-spacing:.28em;
+  color:#00e1ff; text-transform:uppercase;
+}
+.evhs-rec {
+  position:absolute; top:5cqh; right:6cqw; display:flex; align-items:center; gap:.7cqw;
+  font-family:'Archivo'; font-weight:800; font-size:1.5cqw; letter-spacing:.24em; color:#f2ecff;
+}
+.evhs-rec i { width:1cqw; height:1cqw; border-radius:50%; background:var(--apple); font-style:normal;
+  animation: liveBlink 1.6s steps(1) infinite; }
+.evhs .era-label { color:#ff5bb8; }
+
+/* 2c — 70s gameshow */
+.e70 { background: #2a1608; }
+.e70::before {
+  content:''; position:absolute; inset:0;
+  background:
+    radial-gradient(ellipse 80% 80% at 50% 46%, #a8541a 0%, #5c2c0c 52%, #2a1608 100%);
+}
+.e70-wood {
+  position:absolute; inset:0; opacity:.28; pointer-events:none;
+  background: repeating-linear-gradient(94deg,
+    rgba(0,0,0,.5) 0 2px, rgba(255,190,120,.10) 2px 5px, rgba(0,0,0,.28) 5px 11px);
+}
+/* bulb border — the marquee. staggered opacity only. */
+.e70-bulbs { position:absolute; inset:3.4cqw; border-radius:1cqw; }
+.e70-bulbs i {
+  position:absolute; width:1.15cqw; aspect-ratio:1; border-radius:50%;
+  background:#ffdc7a; font-style:normal;
+  box-shadow: 0 0 1.1cqw rgba(255,200,90,.85);
+  animation: bulbChase 1.5s steps(1) infinite;
+}
+@keyframes bulbChase { 0%,32%{opacity:1} 33%,100%{opacity:.24} }
+.e70-q {
+  position:absolute; left:15cqw; right:15cqw; top:32cqh; text-align:center;
+  font-family:'Boogaloo', cursive; font-size:4.6cqw; line-height:1.16; color:#fff6e0;
+  text-shadow: 0 0.35cqw 0 #8a3d10, 0 0.9cqw 1.6cqw rgba(0,0,0,.55);
+}
+.e70-num {
+  position:absolute; top:6.5cqh; left:50%; transform:translateX(-50%);
+  font-family:'Boogaloo', cursive; font-size:2.3cqw; color:#ffdc7a; letter-spacing:.14em;
+}
+.e70 .era-label { color:#ffdc7a; }
+
+/* 2d — noir */
+.enoir { background:#08090c; }
+.enoir::before {
+  content:''; position:absolute; inset:0;
+  background: radial-gradient(ellipse 62% 74% at 50% 40%, #3a3f4a 0%, #14161c 55%, #06070a 100%);
+}
+/* venetian blind gobo — a slow translate, nothing else */
+.enoir-blind {
+  position:absolute; inset:-20% -10%;
+  background: repeating-linear-gradient(174deg,
+     rgba(0,0,0,.72) 0 3.4cqh, rgba(0,0,0,0) 3.4cqh 6.2cqh);
+  animation: blindDrift 24s ease-in-out infinite;
+}
+@keyframes blindDrift { 0%,100%{transform:translateY(-1.6cqh)} 50%{transform:translateY(1.6cqh)} }
+.enoir-q {
+  position:absolute; left:14cqw; right:14cqw; top:31cqh; text-align:center;
+  font-family:'DM Serif Display', serif; font-size:4.3cqw; line-height:1.2; color:#eceff5;
+  text-shadow: 0 0.5cqw 2.4cqw rgba(0,0,0,.9);
+}
+.enoir-num {
+  position:absolute; top:6cqh; left:50%; transform:translateX(-50%);
+  font-family:'DM Serif Display', serif; font-style:italic; font-size:2cqw;
+  color:#c9a227; letter-spacing:.08em;
+}
+.enoir .era-label { color:#c9a227; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   3 — LIGHTING STATES
+   No scene. The room's mood IS the game state.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* registered so the browser INTERPOLATES between lighting cues instead of
+   stepping. un-registered custom props animate discretely — the cross-fade
+   between states is the whole point of this direction, so this matters. */
+@property --lit-a  { syntax: '<color>'; inherits: true; initial-value: #1a4d8f; }
+@property --lit-b  { syntax: '<color>'; inherits: true; initial-value: #0a1626; }
+@property --lit-hi { syntax: '<color>'; inherits: true; initial-value: #6fb3ff; }
+
+.lit {
+  position:absolute; inset:0;
+  --lit-a: #1a4d8f;   /* wash */
+  --lit-b: #0a1626;   /* deep */
+  --lit-hi:#6fb3ff;   /* accent */
+  animation: litState 16s ease-in-out infinite;
+}
+@keyframes litState {
+  /* OPEN — cool, calm, wide */
+  0%,  22%  { --lit-a:#1a4d8f; --lit-b:#0a1626; --lit-hi:#6fb3ff; }
+  /* FINAL 10 — amber closes in */
+  30%, 44%  { --lit-a:#a35c05; --lit-b:#1c0e02; --lit-hi:#ffc247; }
+  /* LOCKED — everything drops out */
+  50%, 60%  { --lit-a:#241f3d; --lit-b:#07060e; --lit-hi:#8f7fd8; }
+  /* CORRECT — the room floods */
+  68%, 84%  { --lit-a:#0f7a2c; --lit-b:#03170a; --lit-hi:#7bf59b; }
+  /* back to open */
+  92%, 100% { --lit-a:#1a4d8f; --lit-b:#0a1626; --lit-hi:#6fb3ff; }
+}
+.lit-wash {
+  position:absolute; inset:0;
+  background: radial-gradient(ellipse 96% 88% at 50% 50%, var(--lit-a) 0%, var(--lit-b) 68%, #000 100%);
+  transition: background 1.1s ease;
+}
+/* edge bars — the periphery is what a non-looking guest still sees */
+.lit-bar { position:absolute; top:0; bottom:0; width:9cqw; }
+.lit-bar.l { left:0;  background: linear-gradient(90deg, var(--lit-hi), transparent); }
+.lit-bar.r { right:0; background: linear-gradient(270deg, var(--lit-hi), transparent); }
+.lit-bar { opacity:.34; animation: litBreath 7s ease-in-out infinite; }
+@keyframes litBreath { 0%,100%{opacity:.22} 50%{opacity:.44} }
+
+.lit-state {
+  position:absolute; top:6cqh; left:50%; transform:translateX(-50%);
+  font-family:'DM Sans'; font-weight:700; font-size:1.25cqw;
+  letter-spacing:.34em; text-transform:uppercase; color:var(--lit-hi);
+}
+.lit-state span { position:absolute; left:50%; transform:translateX(-50%); white-space:nowrap; opacity:0; }
+.lit-state span:nth-child(1){ animation: litLabel 16s steps(1) infinite; }
+.lit-state span:nth-child(2){ animation: litLabel 16s steps(1) infinite -4s; }
+.lit-state span:nth-child(3){ animation: litLabel 16s steps(1) infinite -8s; }
+.lit-state span:nth-child(4){ animation: litLabel 16s steps(1) infinite -12s; }
+@keyframes litLabel { 0%{opacity:1} 25%{opacity:0} 100%{opacity:0} }
+
+.lit-q {
+  position:absolute; left:13cqw; right:13cqw; top:33cqh; text-align:center;
+  font-family:'DM Sans'; font-weight:500; font-size:3.9cqw; line-height:1.26; color:#fff;
+  text-shadow: 0 0.4cqw 2cqw rgba(0,0,0,.7);
+}
+/* timer rail — drains only during the FINAL10 window */
+.lit-rail {
+  position:absolute; left:13cqw; right:13cqw; bottom:12cqh; height:0.75cqh;
+  border-radius:999px; background:rgba(255,255,255,.14); overflow:hidden;
+}
+.lit-rail i {
+  display:block; height:100%; width:100%; border-radius:999px; font-style:normal;
+  background:var(--lit-hi); transform-origin:left center;
+  animation: railDrain 16s linear infinite;
+}
+@keyframes railDrain {
+  0%   { transform:scaleX(1); }
+  22%  { transform:scaleX(.62); }
+  46%  { transform:scaleX(0); }
+  47%,100% { transform:scaleX(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   4 — THE BOARD
+   One persistent game object, marked up all night.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.brd { position:absolute; inset:0; background:
+  radial-gradient(ellipse 90% 80% at 50% 46%, #101c3c 0%, #070c1c 60%, #03050c 100%); }
+.brd-grid {
+  position:absolute; inset:9cqh 8cqw; display:grid;
+  grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(4, 1fr);
+  gap: 1.1cqw;
+}
+.brd-cell {
+  border-radius:0.55cqw; border:0.1cqw solid rgba(120,170,255,.22);
+  background: linear-gradient(180deg, rgba(26,50,110,.85), rgba(12,24,58,.9));
+  display:flex; align-items:center; justify-content:center;
+  font-family:'Boogaloo', cursive; font-size:2.6cqw; color:#a8c8ff;
+}
+.brd-cell.done {
+  background: linear-gradient(180deg, rgba(10,22,48,.9), rgba(5,10,24,.95));
+  border-color: rgba(120,170,255,.1); color: rgba(120,150,200,.3);
+}
+.brd-cell.done::after {
+  content:'✓'; position:absolute; font-size:2cqw; color: var(--orchard); opacity:.75;
+}
+.brd-cell { position:relative; }
+/* the live cell expands into the question, holds, collapses back */
+.brd-cell.live {
+  animation: cellLive 9s cubic-bezier(.23,1,.32,1) infinite;
+  z-index:5; border-color: #ffd93d;
+  box-shadow: 0 0 3cqw rgba(255,217,61,.4);
+}
+@keyframes cellLive {
+  0%   { transform: scale(1); opacity:1; }
+  10%  { transform: scale(1.06); }
+  20%  { transform: scale(1); }
+  100% { transform: scale(1); }
+}
+.brd-zoom {
+  position:absolute; inset:22cqh 10cqw; border-radius:0.9cqw;
+  background: linear-gradient(180deg, rgba(18,36,80,.98), rgba(6,12,30,.99));
+  border:0.14cqw solid #ffd93d;
+  box-shadow: 0 2cqw 6cqw rgba(0,0,0,.7), 0 0 6cqw rgba(255,217,61,.22);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding: 0 6cqw; text-align:center;
+  transform-origin: 30% 30%;
+  animation: zoomIn 9s cubic-bezier(.23,1,.32,1) infinite;
+}
+@keyframes zoomIn {
+  0%   { opacity:0; transform: scale(.18) translate(-52%, -46%); }
+  14%  { opacity:1; transform: none; }
+  78%  { opacity:1; transform: none; }
+  90%  { opacity:0; transform: scale(.18) translate(-52%, -46%); }
+  100% { opacity:0; transform: scale(.18) translate(-52%, -46%); }
+}
+.brd-zoom .cat {
+  font-family:'DM Sans'; font-weight:700; font-size:1.2cqw; letter-spacing:.3em;
+  text-transform:uppercase; color:#ffd93d; margin-bottom:1.6cqh;
+}
+.brd-zoom .q {
+  font-family:'DM Sans'; font-weight:500; font-size:3.6cqw; line-height:1.26; color:#eef4ff;
+}
+.brd-head {
+  position:absolute; top:2.6cqh; left:8cqw; right:8cqw;
+  display:flex; justify-content:space-between; align-items:baseline;
+  font-family:'Boogaloo', cursive; color:#a8c8ff; font-size:2cqw; letter-spacing:.05em;
+}
+.brd-head b { color:#ffd93d; font-weight:400; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   5 — TYPOGRAPHIC STAGE
+   No scene, no frame. The type is the entire design.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.typ { position:absolute; inset:0; background:#0b0c0a; overflow:hidden; }
+.typ::before {
+  content:''; position:absolute; inset:0;
+  background: radial-gradient(ellipse 80% 70% at 50% 46%, #17301c 0%, #0b140d 58%, #050806 100%);
+}
+/* enormous ghost numeral — depth without a scene */
+.typ-ghost {
+  position:absolute; top:50%; left:50%;
+  font-family:'Boogaloo', cursive; font-size:64cqh; line-height:.78;
+  color:#ffffff; opacity:.045; white-space:nowrap;
+  transform:translate(-50%,-50%);
+  animation: ghostDrift 22s ease-in-out infinite;
+}
+@keyframes ghostDrift {
+  0%,100% { transform: translate(-50%,-50%) scale(1); }
+  50%     { transform: translate(-50%,-52%) scale(1.035); }
+}
+.typ-kicker {
+  position:absolute; top:11cqh; left:50%; transform:translateX(-50%);
+  font-family:'DM Sans'; font-weight:700; font-size:1.15cqw; letter-spacing:.42em;
+  text-transform:uppercase; color:var(--orchard);
+  animation: lineIn 8s ease-out infinite;
+}
+.typ-q {
+  position:absolute; left:9cqw; right:9cqw; top:31cqh; text-align:center;
+}
+.typ-q span {
+  display:inline-block; font-family:'DM Sans'; font-weight:700;
+  font-size:5.4cqw; line-height:1.18; color:var(--cream);
+  letter-spacing:-.015em; margin-right:.28em;
+  animation: wordIn 8s cubic-bezier(.23,1,.32,1) infinite;
+}
+/* the stagger IS the design here — words arrive in reading order, ~45ms apart.
+   negative delays so the whole line still completes inside one 8s cycle. */
+.typ-q span:nth-child(1)  { animation-delay: 0s; }
+.typ-q span:nth-child(2)  { animation-delay: .045s; }
+.typ-q span:nth-child(3)  { animation-delay: .09s; }
+.typ-q span:nth-child(4)  { animation-delay: .135s; }
+.typ-q span:nth-child(5)  { animation-delay: .18s; }
+.typ-q span:nth-child(6)  { animation-delay: .225s; }
+.typ-q span:nth-child(7)  { animation-delay: .27s; }
+.typ-q span:nth-child(8)  { animation-delay: .315s; }
+.typ-q span:nth-child(9)  { animation-delay: .36s; }
+.typ-q span:nth-child(10) { animation-delay: .405s; }
+.typ-q span:nth-child(11) { animation-delay: .45s; }
+@keyframes wordIn {
+  0%   { opacity:0; transform: translateY(1.6cqh); }
+  9%   { opacity:1; transform:none; }
+  84%  { opacity:1; transform:none; }
+  92%  { opacity:0; transform: translateY(-0.9cqh); }
+  100% { opacity:0; transform: translateY(1.6cqh); }
+}
+@keyframes lineIn {
+  0%   { opacity:0; transform: translateX(-50%) translateY(0.8cqh); }
+  7%   { opacity:1; transform: translateX(-50%); }
+  86%  { opacity:1; transform: translateX(-50%); }
+  94%  { opacity:0; }
+  100% { opacity:0; transform: translateX(-50%) translateY(0.8cqh); }
+}
+/* one hairline of furniture, bottom — the only chrome that exists */
+.typ-rule {
+  position:absolute; left:9cqw; right:9cqw; bottom:13cqh; height:0.14cqh;
+  background: linear-gradient(90deg, transparent, rgba(96,160,0,.75), transparent);
+  transform-origin:center; animation: ruleIn 8s cubic-bezier(.23,1,.32,1) infinite;
+}
+@keyframes ruleIn {
+  0% { transform: scaleX(0); opacity:0; }
+  12%{ transform: scaleX(1); opacity:1; }
+  86%{ transform: scaleX(1); opacity:1; }
+  96%{ transform: scaleX(1); opacity:0; }
+  100%{ transform: scaleX(0); opacity:0; }
+}
+.typ-foot {
+  position:absolute; bottom:6.5cqh; left:0; right:0; text-align:center;
+  font-family:'DM Sans'; font-weight:500; font-size:1.25cqw; letter-spacing:.3em;
+  text-transform:uppercase; color:rgba(245,240,232,.4);
+}
+
+/* ── verdict block ─────────────────────────────────────────────── */
+
+.verdict {
+  margin-top: 40px; border:1px solid var(--page-line); border-radius:10px;
+  background: linear-gradient(180deg, #131816, #0f1311); padding: 34px 36px 36px;
+}
+.verdict h3 { font-family:'Boogaloo',cursive; font-size:30px; margin-bottom:14px; }
+.verdict p { max-width:78ch; color:var(--page-muted); font-size:15px; margin-bottom:12px; }
+.verdict b { color: var(--page-text); font-weight:500; }
+.verdict ol { margin: 14px 0 4px 20px; }
+.verdict li { margin-bottom: 9px; font-size:15px; color: var(--page-muted); }
+.verdict li b { color: var(--cream); }
+
+.legal {
+  margin-top:26px; padding:18px 20px; border-radius:8px;
+  border:1px solid rgba(224,32,32,.35); background:rgba(224,32,32,.06);
+  font-size:14px; color:#e8bcbc;
+}
+.legal b { color:#ff8b8b; }
+
+/* ── reduced motion — everything freezes, nothing disappears ───── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .era-slot:nth-child(1) { opacity:1; }
+  .cab-card .q2, .lit-state span:nth-child(1) { opacity:0; }
+  .lit-state span:nth-child(1) { opacity:1; }
+  .brd-zoom { opacity:1; transform:none; }
+  .typ-q span, .typ-kicker, .typ-rule { opacity:1; transform:none; }
+  .typ-kicker { transform: translateX(-50%); }
+  .typ-rule { transform: scaleX(1); }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header class="page">
+  <div class="eyebrow">Trivia OS · Display Direction Study · July 2026</div>
+  <h1>Five ways to keep the screen alive<br>after the ambient background</h1>
+  <p><b>The brief:</b> the ambient system is on screen ~100% of the night but reads as wallpaper. Round journeys are the opposite problem — great, and on screen ~1%. Neither is carrying the thing that actually matters, which is <b>the question slide itself</b>. Last year that was black text on white PowerPoint. This year it's the whole game.</p>
+  <p><b>The pivot in all five:</b> stop designing what's <i>behind</i> the question and start designing <i>the question</i>. Broadcast solved this decades ago — CBS once swapped an entire graphics package and kept only the scorebug, and viewers said nothing had changed. The persistent furniture <i>is</i> the identity, not the scenery.</p>
+  <p><b>On "recognizable."</b> The Mario instinct is right and the mechanism is wrong. At 12 feet in a dim room a guest only receives <i>gist</i> — layout, palette, contrast, texture. That channel carries "this is an old NES game" perfectly using entirely original art. It does not require, and legally cannot survive, the actual property. Direction 2 is built on this.</p>
+  <nav class="toc">
+    <a href="#d1">1 · The Cabinet</a>
+    <a href="#d2">2 · Era Decks</a>
+    <a href="#d3">3 · Lighting States</a>
+    <a href="#d4">4 · The Board</a>
+    <a href="#d5">5 · Typographic Stage</a>
+    <a href="#verdict">Verdict</a>
+  </nav>
+</header>
+
+<!-- ══ 1 ═══════════════════════════════════════════════════════════ -->
+<section class="dir" id="d1">
+  <div class="dir-head">
+    <span class="dir-num">1</span>
+    <h2>The Cabinet</h2>
+    <span class="dir-tag">Furniture, not wallpaper</span>
+  </div>
+  <p class="dir-sub">The screen is a physical object, and it never leaves. A built frame with real material — brass, wood, glass — holds a live chip, a score bug, and one card that swaps. The background stops competing and becomes a surface. This is the scorebug lesson taken literally: build the one thing that's on screen every second, and make <i>that</i> the show's signature.</p>
+
+  <div class="stage">
+    <div class="cab grain">
+      <div class="cab-frame"></div>
+      <svg class="cab-chase" viewBox="0 0 400 225" preserveAspectRatio="none">
+        <rect x="1" y="1" width="398" height="223"/>
+      </svg>
+      <div class="cab-chip"><i></i> Round 3 · Movies</div>
+      <div class="cab-bug">
+        <div><span>Question</span><b>7/10</b></div>
+        <div><span>Leader</span><b>142</b></div>
+      </div>
+      <div class="cab-card swap">
+        <div class="q1">
+          <div class="cab-qnum">QUESTION 7</div>
+          <div class="cab-qtext">Which 1975 film was the first ever to gross over $100 million at the box office?</div>
+        </div>
+        <div class="q2">
+          <div class="cab-qnum">QUESTION 8</div>
+          <div class="cab-qtext">What is the only U.S. state whose capital has no McDonald's?</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="stage-note"><span class="dot"></span> Frame, chip and bug are permanent. Only the card animates. Watch the card swap at 7s.</div>
+
+  <div class="notes">
+    <div><h4>What changes all night</h4><p>Only the card and the bug's numbers. The frame is built once.</p></div>
+    <div><h4>Build cost</h4><p class="good">Low. One shell component + card swap. Reuses <code>OverlayLayer</code> coordinate law.</p></div>
+    <div><h4>Theme relationship</h4><p>Themes become <i>frame materials</i> — 21 moods collapse to ~6 materials.</p></div>
+    <div><h4>Risk</h4><p class="warn">A fixed frame eats ~12% of screen. Needs the question box re-measured.</p></div>
+  </div>
+</section>
+
+<!-- ══ 2 ═══════════════════════════════════════════════════════════ -->
+<section class="dir" id="d2">
+  <div class="dir-head">
+    <span class="dir-num">2</span>
+    <h2>Era Decks</h2>
+    <span class="dir-tag">The legal answer to "Mario"</span>
+  </div>
+  <p class="dir-sub">Recognition comes from <b>three cues: typeface, palette, medium artifact.</b> That's it. Chunky pixel type + a hardware-restricted palette + scanlines reads as "old NES game" instantly, with zero borrowed art. Each deck restyles the <i>entire</i> screen — type, color, texture, motion register — so a round change is a genuine scene change, not a hue shift. Six decks covers a season. Every one of them is 100% yours.</p>
+
+  <div class="stage">
+    <div class="era">
+      <!-- 8-BIT -->
+      <div class="era-slot e8">
+        <div class="e8-cloud a"></div><div class="e8-cloud b"></div>
+        <div class="e8-tree a"><u></u><i></i></div>
+        <div class="e8-tree b"><u></u><i></i></div>
+        <div class="e8-num">QUESTION 7</div>
+        <div class="e8-q">WHICH 1975 FILM WAS THE FIRST TO GROSS OVER $100 MILLION?</div>
+        <div class="era-label">8-BIT</div>
+      </div>
+      <!-- VHS -->
+      <div class="era-slot evhs">
+        <div class="evhs-scan"></div>
+        <div class="evhs-track"></div>
+        <div class="evhs-num">QUESTION 7</div>
+        <div class="evhs-rec"><i></i>REC</div>
+        <div class="evhs-q">Which 1975 film was the first to gross over $100 million?</div>
+        <div class="era-label">VHS · 1987</div>
+      </div>
+      <!-- 70s GAMESHOW -->
+      <div class="era-slot e70">
+        <div class="e70-wood"></div>
+        <div class="e70-bulbs" id="bulbs"></div>
+        <div class="e70-num">QUESTION 7</div>
+        <div class="e70-q">Which 1975 film was the first to gross over $100 million?</div>
+        <div class="era-label">SOUNDSTAGE '74</div>
+      </div>
+      <!-- NOIR -->
+      <div class="era-slot enoir">
+        <div class="enoir-blind"></div>
+        <div class="enoir-num">Question Seven</div>
+        <div class="enoir-q">Which 1975 film was the first to gross over $100 million?</div>
+        <div class="era-label">LATE EDITION</div>
+      </div>
+    </div>
+  </div>
+  <div class="stage-note"><span class="dot"></span> Four decks cycling every 5s. Same question, four completely different rooms. No borrowed art anywhere.</div>
+
+  <div class="notes">
+    <div><h4>Why it lands</h4><p>Scene gist resolves in ~150ms from layout + palette + texture — before any detail.</p></div>
+    <div><h4>Build cost</h4><p class="warn">Medium. Each deck = type + palette + one texture + one motif. ~4 hrs each.</p></div>
+    <div><h4>IP exposure</h4><p class="good">Zero, if the rule holds: guests name the <i>era</i>, never the property.</p></div>
+    <div><h4>Risk</h4><p class="warn">Decks must be genuinely distinct or it's 21 themes again with new paint.</p></div>
+  </div>
+</section>
+
+<!-- ══ 3 ═══════════════════════════════════════════════════════════ -->
+<section class="dir" id="d3">
+  <div class="dir-head">
+    <span class="dir-num">3</span>
+    <h2>Lighting States</h2>
+    <span class="dir-tag">Cheapest, highest leverage</span>
+  </div>
+  <p class="dir-sub">Delete the scene entirely. The room's mood is driven by <i>what's happening in the game</i> — one attribute on the root, a handful of semantic color tokens, everything downstream subscribes. Question open is cool and wide. Final ten seconds closes in amber. Lock-in drops out. A correct answer floods the room green. This is stage lighting, and it's the only direction where the visuals are <b>functional</b> — a guest who glances for 1.5 seconds learns the game state from peripheral color alone, without reading a word.</p>
+
+  <div class="stage">
+    <div class="lit">
+      <div class="lit-wash"></div>
+      <div class="lit-bar l"></div><div class="lit-bar r"></div>
+      <div class="lit-state">
+        <span>Question Open</span><span>Final 10 Seconds</span><span>Answers Locked</span><span>Correct</span>
+      </div>
+      <div class="lit-q">Which 1975 film was the first ever to gross over $100 million at the box office?</div>
+      <div class="lit-rail"><i></i></div>
+    </div>
+  </div>
+  <div class="stage-note"><span class="dot"></span> Four game states on a 16s loop. Whole-screen color change is the one cue that works on people who aren't looking at the screen.</div>
+
+  <div class="notes">
+    <div><h4>What changes all night</h4><p>Color, continuously, driven by the show — never by a decorative timer.</p></div>
+    <div><h4>Build cost</h4><p class="good">Lowest of the five. ~20 lines of CSS vars + a state attribute in <code>useShow</code>.</p></div>
+    <div><h4>Habituation</h4><p class="good">Best of the five — the pattern is tied to events, so it never becomes background.</p></div>
+    <div><h4>Risk</h4><p class="warn">On its own it's <i>plain</i>. This is a layer under 1, 2 or 5 — not a whole answer.</p></div>
+  </div>
+</section>
+
+<!-- ══ 4 ═══════════════════════════════════════════════════════════ -->
+<section class="dir" id="d4">
+  <div class="dir-head">
+    <span class="dir-num">4</span>
+    <h2>The Board</h2>
+    <span class="dir-tag">Jeopardy model</span>
+  </div>
+  <p class="dir-sub">The identity is one persistent game object that gets marked up as the night goes. A round is a grid; every question is a cell; the cell expands into the question and collapses back with a check on it. Guests can see, without being told, how far in they are and how much is left. Jeopardy has run on exactly this for forty years — the board <i>is</i> the show's logo. It also quietly solves a real operational problem: "how many more of these are there?"</p>
+
+  <div class="stage">
+    <div class="brd">
+      <div class="brd-head"><span>Round 3 · Movies</span><span>Leader <b>142</b></span></div>
+      <div class="brd-grid">
+        <div class="brd-cell done"></div><div class="brd-cell done"></div><div class="brd-cell done"></div>
+        <div class="brd-cell done"></div><div class="brd-cell done"></div><div class="brd-cell done"></div>
+        <div class="brd-cell live">7</div>
+        <div class="brd-cell">8</div><div class="brd-cell">9</div><div class="brd-cell">10</div>
+        <div class="brd-cell">11</div><div class="brd-cell">12</div><div class="brd-cell">13</div>
+        <div class="brd-cell">14</div><div class="brd-cell">15</div><div class="brd-cell">16</div>
+        <div class="brd-cell">17</div><div class="brd-cell">18</div><div class="brd-cell">19</div>
+        <div class="brd-cell">20</div>
+      </div>
+      <div class="brd-zoom">
+        <div class="cat">Movies · 10 Points</div>
+        <div class="q">Which 1975 film was the first ever to gross over $100 million at the box office?</div>
+      </div>
+    </div>
+  </div>
+  <div class="stage-note"><span class="dot"></span> Cell 7 expands into the question, holds, collapses back. The board is always underneath.</div>
+
+  <div class="notes">
+    <div><h4>What changes all night</h4><p>The board fills in. Visible progress is the visual interest.</p></div>
+    <div><h4>Build cost</h4><p class="warn">Medium-high. Needs round-level slide awareness the renderer doesn't have yet.</p></div>
+    <div><h4>Bonus</h4><p class="good">Kills "how many left?" from the crowd. Doubles as a category board.</p></div>
+    <div><h4>Risk</h4><p class="warn">Reads as school/quiz-app if the type isn't right. Closest to the anti-references.</p></div>
+  </div>
+</section>
+
+<!-- ══ 5 ═══════════════════════════════════════════════════════════ -->
+<section class="dir" id="d5">
+  <div class="dir-head">
+    <span class="dir-num">5</span>
+    <h2>Typographic Stage</h2>
+    <span class="dir-tag">Most premium, least work</span>
+  </div>
+  <p class="dir-sub">No scene, no frame, no board. Enormous type on near-flat, grain-textured color, with the question number ghosted behind at 60% of screen height. All the visual interest lives in scale, arrival and restraint. Fox stripped every ornament off their NFL bug and let a custom typeface carry the whole brand — the creative director's words were "that absence of decoration really made it seem useful." This is also the only direction that is <b>impossible to mistake for AI output</b>, because there's nothing to over-render.</p>
+
+  <div class="stage">
+    <div class="typ grain">
+      <div class="typ-ghost">07</div>
+      <div class="typ-kicker">Round 3 · Movies</div>
+      <div class="typ-q">
+        <span>Which</span><span>1975</span><span>film</span><span>was</span><span>the</span><span>first</span>
+        <span>to</span><span>gross</span><span>over</span><span>$100</span><span>million?</span>
+      </div>
+      <div class="typ-rule"></div>
+      <div class="typ-foot">Baynes Apple Valley</div>
+    </div>
+  </div>
+  <div class="stage-note"><span class="dot"></span> Words arrive staggered, hold, leave. The ghost numeral drifts on a 22s breath. That's the entire system.</div>
+
+  <div class="notes">
+    <div><h4>What changes all night</h4><p>Type scale + arrival choreography. Palette shifts per round.</p></div>
+    <div><h4>Build cost</h4><p class="good">Low. Mostly deleting. Existing <code>autoFitText</code> already does the hard part.</p></div>
+    <div><h4>Legibility</h4><p class="good">Best of the five at 20 feet, by a wide margin. Nothing competes with the text.</p></div>
+    <div><h4>Risk</h4><p class="warn">Zero spectacle. Needs 3 or a round-journey on top or the night feels flat.</p></div>
+  </div>
+</section>
+
+<!-- ══ VERDICT ═════════════════════════════════════════════════════ -->
+<div class="verdict" id="verdict">
+  <h3>What I'd actually do</h3>
+  <p>These aren't five options to pick one from. Three of them stack, and the stack is the recommendation:</p>
+  <ol>
+    <li><b>Direction 3 (Lighting States) as the foundation, always on.</b> It's the cheapest thing here and the only one that's functional rather than decorative. It survives habituation because it's tied to events, not to a loop. Build this first regardless of what else wins.</li>
+    <li><b>Direction 5 (Typographic Stage) as the default question slide.</b> This is the make-or-break surface and it should be the most legible thing in the building. It also makes the shiny/media questions hit harder by contrast — when a full-bleed image finally appears, it's an event.</li>
+    <li><b>Direction 2 (Era Decks) as the per-round skin, ~6 of them.</b> This is the direct answer to what you actually wanted at 2am. It delivers the recognition hit legally, and one deck per round means the room changes character four or five times a night instead of once.</li>
+  </ol>
+  <p><b>Direction 1</b> is the strongest single-choice answer if you want one change instead of three — it's the safest bet and the least disruptive to the existing renderer. <b>Direction 4</b> is the most differentiated but it's the biggest build and the one closest to your own anti-references list.</p>
+  <p><b>On the 21 ambient themes:</b> nothing here requires deleting them. Twelve are already just the breathing gradient, which is exactly what a Lighting-States base layer wants to be. The nine bespoke ones become special-occasion decks. You're not throwing work away — you're demoting it from "the show" to "one deck in the rack."</p>
+
+  <div class="legal">
+    <b>The one hard line.</b> A guest should be able to name the <i>era, format or genre</i> — never the property. Redrawing it yourself makes it a derivative work, not an original one; the 1989 Disney daycare-mural case is the exact fact pattern, and Netflix shut down an unlicensed <i>Stranger Things</i> bar in six weeks. The realistic downside isn't a lawsuit, it's a cease-and-desist that forces a mid-season rebuild. Cost of staying clean here is roughly zero, so there's no reason to take the risk. No character silhouettes, no signature props (question block, TARDIS, Poké Ball), no named locations, no logotypes, no recognizable theme music.
+  </div>
+</div>
+
+</div>
+
+<script>
+// 70s marquee bulbs — generated so the border stays even at any aspect.
+(function () {
+  const box = document.getElementById('bulbs');
+  if (!box) return;
+  const perSide = { x: 16, y: 9 };
+  const mk = (left, top, i) => {
+    const b = document.createElement('i');
+    b.style.left = left; b.style.top = top;
+    b.style.transform = 'translate(-50%,-50%)';
+    b.style.animationDelay = (i % 3) * -0.5 + 's';
+    box.appendChild(b);
+  };
+  let i = 0;
+  for (let n = 0; n <= perSide.x; n++) {
+    const p = (n / perSide.x) * 100 + '%';
+    mk(p, '0%', i++); mk(p, '100%', i++);
+  }
+  for (let n = 1; n < perSide.y; n++) {
+    const p = (n / perSide.y) * 100 + '%';
+    mk('0%', p, i++); mk('100%', p, i++);
+  }
+})();
+</script>
+
+</body>
+</html>

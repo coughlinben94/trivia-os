@@ -1,33 +1,20 @@
 import { THEMES } from '../themes/index.js'
 import { floorContrast } from '../lib/contrast.js'
+import { skyFromTheme } from '../lib/ringEngine.js'
 
 const theme = THEMES.find(t => t.id === 'midnight-galaxy')
 if (!theme) throw new Error('midnightGalaxy.ring.js: no THEMES entry with id "midnight-galaxy"')
-
-// theme.colors only has 2 sky-relevant stops (bg, bgDeep); the reference
-// build's sky is a continuous 4-stop ramp. Duplicating bgDeep for both
-// middle stops (an earlier version of this file did that) renders a flat
-// solid band from 46% to 78% of the gradient radius — a visible regression
-// from the reference's smooth falloff. Interpolating a real midpoint keeps
-// the ramp continuous instead.
-const mixHex = (a, b, t) => {
-  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16)
-  const ch = (shift) => Math.round((((pa >> shift) & 255) * (1 - t)) + (((pb >> shift) & 255) * t))
-  return `#${[16, 8, 0].map(s => ch(s).toString(16).padStart(2, '0')).join('')}`
-}
-// Darken toward black instead of a fixed literal, so the terminal stop
-// tracks bgDeep's own hue (spec §9) rather than defaulting to blue-black.
-const darken = (hex, t) => mixHex(hex, '#000000', t)
 
 export const midnightGalaxyRing = {
   id: 'midnight-galaxy',
   type: 'space',
   name: 'Midnight Galaxy',
   phase: 5,
-  // was a hardcoded 4-stop array in concepts/world-07-ring.html; now derived
-  // from the theme so a host's per-show color override (ThemeProvider's
-  // applyOverrides) reaches this world too, instead of silently no-op'ing.
-  sky: [theme.colors.bg, mixHex(theme.colors.bg, theme.colors.bgDeep, 0.5), theme.colors.bgDeep, darken(theme.colors.bgDeep, 0.75)],
+  // Derived from the theme (ringEngine.js's skyFromTheme — single source,
+  // shared with concepts/world-07-ring.html) so a host's per-show color
+  // override (ThemeProvider's applyOverrides) reaches this world too,
+  // instead of silently no-op'ing.
+  sky: skyFromTheme(theme),
   // Never source question text from theme.colors.accent — it's a UI-surface
   // color (buttons/panels), not tuned for text legibility. For Midnight
   // Galaxy that was #4a1a8f, ~1.8:1 against the display bg. Both colors run
@@ -56,7 +43,7 @@ export const midnightGalaxyRing = {
     { key: 'spiral galaxy', prim: 'lens', hue: 276, accent: false },
     { key: 'comet', prim: 'streak', hue: 208, accent: false },
     { key: 'violet nebula', prim: 'blob', hue: 282, accent: false },
-    { key: 'dust ribbon', prim: 'ribbon', hue: 264, accent: false },
+    { key: 'dust ribbon', prim: 'sprite', hue: 264, accent: false },
     { key: 'binary pair', prim: 'binary', hue: 214, accent: false },
     { key: 'rose nebula', prim: 'blob', hue: 330, accent: true },
     // was 250° — 26° from the violet anchor, 1° outside its own window and
