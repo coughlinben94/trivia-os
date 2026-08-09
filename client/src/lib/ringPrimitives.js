@@ -438,35 +438,60 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
   }
 
   else if (kind === 'ring') {
-    const ring = el('rg-ring')
-    const rw = w * 0.9, rh = h * 0.9
-    ring.style.left = px((w - rw) / 2); ring.style.top = px((h - rh) / 2)
-    ring.style.width = px(rw); ring.style.height = px(rh)
-    ring.style.borderWidth = px(Math.max(4, w * 0.02))
-    ring.style.borderStyle = 'solid'
-    ring.style.borderColor = hsla(hue, 70, 78, 0.55)
-    f.appendChild(ring)
-    // planet body it wraps - reuses .l-disc (position:absolute;inset:0;
-    // border-radius:50%, no lens-specific geometry baked in); the inline
-    // left/top/width/height below fully override its inset:0 default per
-    // the CSS over-constrained-box rule (right/bottom get dropped, verified
-    // empirically, not assumed), so this is a clean reuse, not a coupling.
-    const body = el('l-disc')
-    const bw = w * 0.42, bh = h * 0.42
-    body.style.left = px((w - bw) / 2); body.style.top = px((h - bh) / 2)
-    body.style.width = px(bw); body.style.height = px(bh)
-    body.style.background = `radial-gradient(circle at 38% 38%, ${hsla(hue, 60, 68, A(0.9, fill))} 0%, ${hsla(hue, 50, 40, A(0.7, fill))} 70%, transparent 100%)`
-    f.appendChild(body)
+    // Saturn-style ringed planet. Fixed 2026-08-09 (Ben's call, quality bar
+    // for this round's other objects): the old body (bw=w*0.42) never
+    // overlapped the old ring (inner edge well outside it) — a small disc
+    // floating inside a big circular outline, a bullseye/target, not a
+    // ringed PLANET. Two real fixes:
+    //  - body sized so the ring genuinely wraps around it, and now reuses
+    //    drawPlanetDisc/LIGHT_DEG for a real terminator (was a fixed
+    //    `at 38% 38%` radial gradient with no relationship to the shared
+    //    light convention every other object in this build now follows).
+    //  - the ring is a tilted ellipse split into a back half (appended
+    //    BEFORE the body — paints behind it) and a front half (appended
+    //    AFTER — paints in front) instead of one flat circular border. This
+    //    is what actually makes it pass behind the body; a single ring
+    //    element can't do that regardless of z-order, since it either
+    //    covers the whole body or none of it.
+    const bodySize = Math.min(w, h) * 0.52
+    const cx = w / 2, cy = h / 2
+    const rx = bodySize * 0.98, ry = rx * 0.32
+    const tilt = -10
+    const NS = 'http://www.w3.org/2000/svg'
+    const ringHalf = (sweepFlag, isBack) => {
+      const svg = document.createElementNS(NS, 'svg')
+      svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
+      svg.style.position = 'absolute'; svg.style.inset = '0'
+      svg.style.width = '100%'; svg.style.height = '100%'
+      const path = document.createElementNS(NS, 'path')
+      path.setAttribute('d', `M ${(cx - rx).toFixed(1)},${cy.toFixed(1)} A ${rx.toFixed(1)},${ry.toFixed(1)} 0 0,${sweepFlag} ${(cx + rx).toFixed(1)},${cy.toFixed(1)}`)
+      path.setAttribute('fill', 'none')
+      // back half dimmer (it's behind the lit body, in its own shadow-side
+      // read) and thinner; front half is the bright, full-width edge.
+      path.setAttribute('stroke', hsla(hue, 65, isBack ? 55 : 78, A(isBack ? 0.30 : 0.55, fill)))
+      path.setAttribute('stroke-width', px(Math.max(3, w * (isBack ? 0.010 : 0.016))))
+      path.setAttribute('transform', `rotate(${tilt} ${cx.toFixed(1)} ${cy.toFixed(1)})`)
+      svg.appendChild(path)
+      return svg
+    }
     // outer glow (B2 sec 2.2): `ring` had no glow at all outside its hard
     // border/planet — the whole primitive's painted surface was the
-    // thinnest of the eight kinds measured. A new closest-side wash behind
-    // the ring/planet, scaled by fill same as every other primitive's paint.
+    // thinnest of the eight kinds measured. A closest-side wash behind
+    // everything, scaled by fill same as every other primitive's paint.
     const glow = el('d-glow')
     const gd = w * 0.95
     glow.style.left = px((w - gd) / 2); glow.style.top = px((h - gd) / 2)
     glow.style.width = glow.style.height = px(gd)
     glow.style.background = `radial-gradient(circle closest-side, ${hsla(hue, 55, 70, A(0.30, fill))} 0%, transparent ${E(96, fill).toFixed(0)}%)`
-    f.insertBefore(glow, ring)
+    f.appendChild(glow)
+    f.appendChild(ringHalf(1, true)) // back half — behind the body
+    const bodyContainer = el('')
+    bodyContainer.style.position = 'absolute'
+    bodyContainer.style.left = px(cx - bodySize / 2); bodyContainer.style.top = px(cy - bodySize / 2)
+    bodyContainer.style.width = bodyContainer.style.height = px(bodySize)
+    drawPlanetDisc(el, bodyContainer, bodySize, hue, fill, LIGHT_DEG)
+    f.appendChild(bodyContainer)
+    f.appendChild(ringHalf(0, false)) // front half — in front of the body
   }
 
   else if (kind === 'binary') {
@@ -510,6 +535,127 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
         ${hsla(hue, 25, 97, A(1, fill))} 0%, ${hsla(hue, 60, 72, A(0.55, fill))} 50%, transparent 100%)`
       d.style.boxShadow = `0 0 ${px(s * 2)} ${px(s * 0.3)} ${hsla(hue, 70, 80, A(0.5, fill))}`
       f.appendChild(d)
+    })
+  }
+
+  else if (kind === 'planet') {
+    // headline-tier lit planet (radial-mass family) — same terminator/rim/
+    // glow geometry as the accessory occluder (drawPlanetDisc), sized to
+    // fit inside this kind's w×h box. Kept circular (min(w,h)) rather than
+    // stretched to w×h like blob/lens — a stretched sphere reads as an
+    // ellipse, not a planet. Deliberately NOT the `.occ` class (own inline
+    // position/radius instead): the occlusion-ablation gate does
+    // `document.querySelectorAll('.occ')` and picks the first on-screen
+    // match per station — sharing the class with a much larger headline
+    // element at a station that also happens to carry an accessory
+    // occluder would make that gate silently measure the wrong element.
+    const discSize = Math.min(w, h)
+    const disc = el('')
+    disc.style.position = 'absolute'; disc.style.borderRadius = '50%'
+    disc.style.left = px((w - discSize) / 2); disc.style.top = px((h - discSize) / 2)
+    disc.style.width = disc.style.height = px(discSize)
+    drawPlanetDisc(el, disc, discSize, hue, fill, LIGHT_DEG)
+    f.appendChild(disc)
+  }
+
+  else if (kind === 'asteroidField') {
+    // scattered-cluster family: 3 rocks, each with its own companion glow
+    // = 6 DOM elements (budget, exact). §7 (>=2 separately positioned
+    // parts): trivially satisfied. Presence floor: each rock's own base
+    // fill alpha is constant, never fill-scaled. Fill-driven: each rock's
+    // own glow (A()/E()) and its lit-edge highlight alpha. Light: each
+    // rock's highlight sits on the LIGHT_DEG-facing edge (a linear-gradient
+    // angle computed from LIGHT_DEG, not hand-picked) — same shared
+    // convention the planet's terminator uses.
+    //
+    // Three measured fixes, in order:
+    //  - signal flat (25.0 -> 26.0) with ONE shared central glow: its peak
+    //    luma at fill=1 landed about equal to the rocks' own constant-alpha
+    //    base — a fill-driven region has to clearly out-brighten whatever's
+    //    invariant, not just exist (same lesson as the planet's glow).
+    //  - visually read as one blob with dark bites, not a SCATTERED field:
+    //    that one shared glow visually fused every rock into a single soft
+    //    mass, the opposite of "scattered." Tried per-rock filter:drop-
+    //    shadow next (glows the true clipped silhouette, zero extra DOM) —
+    //    it rendered as literally nothing in Chromium here (screenshot
+    //    confirmed: no halo at either fill level, on any rock), so it's not
+    //    a viable technique in this render path regardless of why.
+    //  - landed on a real sibling glow div per rock (proven — same
+    //    radial-gradient technique every other primitive already uses).
+    //    That costs a DOM element per rock, so rock count came down from 5
+    //    to 3 to stay inside the 6-element budget — still a legitimate
+    //    "field," each rock now separated and independently readable.
+    const cssLightDeg = (LIGHT_DEG + 90) % 360 // my atan2 convention (0=+x) -> CSS gradient convention (0=up)
+    const SECTORS = [{ x: 0.14, y: 0.55 }, { x: 0.50, y: 0.20 }, { x: 0.84, y: 0.58 }]
+    SECTORS.forEach(sec => {
+      const rs = w * (0.14 + r() * 0.09)
+      const cx = sec.x * w + (r() * 0.05 - 0.025) * w, cy = sec.y * h + (r() * 0.05 - 0.025) * h
+      const rx = Math.min(w - rs, Math.max(0, cx - rs / 2)), ry = Math.min(h - rs, Math.max(0, cy - rs / 2))
+      const rockHue = hue - 8 + r() * 16
+      const glow = el('d-glow')
+      const gd = rs * 2.2
+      glow.style.left = px(cx - gd / 2); glow.style.top = px(cy - gd / 2)
+      glow.style.width = glow.style.height = px(gd)
+      glow.style.background = `radial-gradient(circle closest-side, ${hsla(rockHue + 15, 50, 62, A(0.55, fill))} 0%, transparent ${E(80, fill).toFixed(0)}%)`
+      f.appendChild(glow)
+      const rock = el('')
+      rock.style.position = 'absolute'
+      rock.style.left = px(rx); rock.style.top = px(ry)
+      rock.style.width = rock.style.height = px(rs)
+      const pts = Array.from({ length: 6 }, (_, k) => {
+        const ang = k * 60 + (r() * 22 - 11)
+        const rad = 40 + r() * 10
+        return `${(50 + rad * Math.cos(ang * Math.PI / 180)).toFixed(0)}% ${(50 + rad * Math.sin(ang * Math.PI / 180)).toFixed(0)}%`
+      }).join(',')
+      rock.style.clipPath = `polygon(${pts})`
+      // base (presence floor, constant alpha) + lit-edge highlight blended
+      // in via a second, fill-driven gradient layer on top.
+      rock.style.background =
+        `linear-gradient(${cssLightDeg.toFixed(0)}deg, ${hsla(rockHue + 12, 30, 34, A(0.8, fill))} 0%, transparent 55%), ` +
+        `${hsla(rockHue, 16, 19, 0.97)}`
+      f.appendChild(rock)
+    })
+  }
+
+  else if (kind === 'pulsar') {
+    // radiant-burst family, elongated geometry: a compact core + a soft
+    // ambient glow + 2 opposing beams along the shared light axis
+    // (LIGHT_DEG/+180) — not a fresh hand-picked angle, reusing the one
+    // scene-wide direction convention every object in this build agrees on
+    // (channel 4). 4 DOM elements (glow + core + 2 beams), under budget.
+    // Presence floor: the core and a short beam stub are always visible
+    // (fixed base length/alpha); fill drives beam A()/E() reach.
+    //
+    // Measured first pass (core+beams only, no glow): signal barely moved
+    // (11.0 -> 14.0) even though beam LENGTH changed 1.7x, because a beam
+    // this thin (~4px) covers too little of the box's area for a
+    // percentile-based metric to register regardless of how far it
+    // reaches — same lesson twice over now (planet, asteroid field): a
+    // thin/precise identity feature needs a separate large-area glow to
+    // carry the measurable fill response, it can't carry it itself.
+    const glow = el('d-glow')
+    glow.style.background = `radial-gradient(circle closest-side, ${hsla(hue, 40, 78, A(0.45, fill))} 0%, transparent ${E(80, fill).toFixed(0)}%)`
+    f.appendChild(glow)
+    const core = el('s-core')
+    const cs = Math.max(14, w * 0.05)
+    core.style.width = core.style.height = px(cs)
+    core.style.marginLeft = px(-cs / 2); core.style.marginTop = px(-cs / 2)
+    core.style.boxShadow = `0 0 ${px(cs * 2.6)} ${px(cs * 0.9)} ${hsla(hue, 20, 92, A(0.9, fill))}`
+    f.appendChild(core)
+    const beamLen = w * 0.5 // fixed reach for the always-on stub half; E() extends past it below
+    const beamAng = LIGHT_DEG
+    ;[beamAng, beamAng + 180].forEach(ang => {
+      const beam = el('')
+      beam.style.position = 'absolute'
+      beam.style.left = '50%'; beam.style.top = '50%' // anchor at the core's own center, not f's static position
+      const len = beamLen * (0.30 + E(70, fill) / 100) // stub always present, fill throws it further
+      const th = Math.max(3, w * 0.006)
+      beam.style.width = px(len); beam.style.height = px(th)
+      beam.style.marginTop = px(-th / 2)
+      beam.style.transformOrigin = '0 50%'
+      beam.style.transform = `rotate(${ang.toFixed(1)}deg)`
+      beam.style.background = `linear-gradient(90deg, ${hsla(hue, 30, 90, A(0.85, fill))} 0%, transparent 100%)`
+      f.appendChild(beam)
     })
   }
   return f
@@ -589,14 +735,12 @@ let occCounter = 0 // deterministic per-call id for the SVG clipPath — DOM
 // radius from its container box and needs it kept in sync.
 export const RING_OCCLUSION_DISC_FRAC = 1.0
 const GLOW_FRAC = 1.35 // glow container as a multiple of size — overflows the disc's own box on purpose
-function makeOccluder(el, size, hue, fill, lightDeg = LIGHT_DEG) {
-  // required, no default — see makePrim's identical guard for why.
-  // lightDeg keeps a default: it's a genuine scene-wide constant (house
-  // style: "one light direction per scene"), not a per-call value a caller
-  // could silently forget to compute, so defaulting it isn't the same risk.
-  if (fill === undefined) throw new Error('makeOccluder: fill is required')
-  const f = el('occ')
-  f.style.width = f.style.height = px(size)
+// Shared by makeOccluder (accessory-tier occlusion disc) and makePrim's
+// 'planet' kind (headline-tier lit planet, spec task 5) — same terminator/
+// rim/glow geometry, two different callers/sizes/fill-invariance needs.
+// Appends glow + svg (clip/lit/shadow/bands/rim) into `container`, which
+// must already be exactly `size`x`size` (the caller positions/sizes it).
+function drawPlanetDisc(el, container, size, hue, fill, lightDeg) {
   const cx = 50, cy = 50, R = 50 * RING_OCCLUSION_DISC_FRAC
   const Lx = Math.cos(lightDeg * Math.PI / 180), Ly = Math.sin(lightDeg * Math.PI / 180)
 
@@ -620,7 +764,7 @@ function makeOccluder(el, size, hue, fill, lightDeg = LIGHT_DEG) {
   glow.style.left = px((size - gd) / 2); glow.style.top = px((size - gd) / 2)
   glow.style.width = glow.style.height = px(gd)
   glow.style.background = `radial-gradient(circle closest-side, transparent 0%, transparent ${glowInnerPct}%, ${hsla(hue + 10, 55, 72, A(0.55, fill))} ${(Number(glowInnerPct) + 6).toFixed(1)}%, transparent ${E(125, fill).toFixed(0)}%)`
-  f.appendChild(glow)
+  container.appendChild(glow)
 
   const NS = 'http://www.w3.org/2000/svg'
   const svg = document.createElementNS(NS, 'svg')
@@ -689,7 +833,18 @@ function makeOccluder(el, size, hue, fill, lightDeg = LIGHT_DEG) {
   rim.setAttribute('vector-effect', 'non-scaling-stroke')
   svg.appendChild(rim)
 
-  f.appendChild(svg)
+  container.appendChild(svg)
+}
+
+function makeOccluder(el, size, hue, fill, lightDeg = LIGHT_DEG) {
+  // required, no default — see makePrim's identical guard for why.
+  // lightDeg keeps a default: it's a genuine scene-wide constant (house
+  // style: "one light direction per scene"), not a per-call value a caller
+  // could silently forget to compute, so defaulting it isn't the same risk.
+  if (fill === undefined) throw new Error('makeOccluder: fill is required')
+  const f = el('occ')
+  f.style.width = f.style.height = px(size)
+  drawPlanetDisc(el, f, size, hue, fill, lightDeg)
   return f
 }
 

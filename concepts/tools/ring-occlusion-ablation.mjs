@@ -219,6 +219,22 @@ for (const row of rows) {
     sumWith += s.withLum; sumWithout += s.withoutLum;
   }
   const aggRatio = sumWithout > 0 ? sumWith / sumWithout : null;
+  // 2026-08-09: a station where EVERY candidate star sits below the noise
+  // floor never actually measured occlusion — both readings are near-zero
+  // sensor noise, so the "ratio" is an artifact of which side of zero the
+  // noise happened to land on, not a real dimming signal. That's a distinct
+  // outcome from a real FAIL (a station that WAS measured and dimmed too
+  // little) — folding it into the same FAIL count means a number that was
+  // never really measured sits in the same bucket as one that was and
+  // failed. Only a station with >=1 real (non-noise) star gets a PASS/FAIL
+  // verdict; noise-floor-only stations are reported separately and don't
+  // count toward anyFail.
+  const allNoise = row.perStar.every(s => s.withLum < NOISE_FLOOR && s.withoutLum < NOISE_FLOOR);
+  if (allNoise) {
+    console.log(`  INSUFFICIENT SAMPLE: all ${row.perStar.length} candidate star(s) sit below the noise floor (both readings <${NOISE_FLOOR}) — occlusion not measured here, not a FAIL`);
+    console.log('');
+    continue;
+  }
   const pass = aggRatio != null && aggRatio <= 0.5;
   if (!pass) anyFail = true;
   console.log(`  AGGREGATE footprint luminance: unoccluded sum ${sumWithout.toFixed(1)}, occluded sum ${sumWith.toFixed(1)}, ratio ${aggRatio?.toFixed(3)}x — need <=0.5x — ${pass ? 'PASS' : 'FAIL'}`);
