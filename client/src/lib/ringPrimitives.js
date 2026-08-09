@@ -144,7 +144,17 @@ const EXTENT_GAIN = 1.9
 const A = (a, fill) => Math.min(1, a * ALPHA_GAIN * fill)
 const E = (e, fill) => Math.min(100, e * EXTENT_GAIN * fill)
 
-function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill = 1) {
+function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
+  // required, no default: a silent `fill = 1` here is exactly how the same
+  // dropped-parameter bug got shipped 3 separate times (fillOf never wired
+  // into the far-anchor call, makePrim itself defaulting fill away when a
+  // caller forgot it, makeOccluder's own call sites dropping it entirely) —
+  // each one invalidating whatever fill-channel measurement was taken
+  // against it without anyone finding out until it was measured directly.
+  // Every real call site passes fill explicitly, including layer-level
+  // elements not tied to any one station's loudness (those pass 1 on
+  // purpose, not by omission — see world-07-ring.html's far-anchor call).
+  if (fill === undefined) throw new Error(`makePrim('${kind}'): fill is required (pass 1 explicitly if this element isn't loudness-linked)`)
   const f = el(isHeadline ? 'pf pf-breathe' : 'pf')
   f.style.width = px(w); f.style.height = px(h)
   const pb = (47 + Math.floor(r() * 26)) + 's' // 47-72s, already clears the >=30s floor
@@ -502,70 +512,184 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill = 1) {
       f.appendChild(d)
     })
   }
-
-  else if (kind === 'sprite') {
-    // spec §6: a closed opaque path — the noun a gradient can't carry
-    // (Sonora's balloons "read at distance because they're drawn"). Two
-    // wavy edges offset by a constant band-thickness, so the outline can
-    // never self-intersect. 10 hand-authored anchor points (spec: 5-10),
-    // solid fill + a real stroke (non-scaling so it holds >=4px on screen
-    // no matter the element's own w/h tier), one lighter interior band
-    // tracing the centerline. Test case: st6's own noun ("dust ribbon")
-    // drawn instead of glowed, isolating whether opacity — not the arc — is
-    // what perceptibility was missing (B2-luminance.md; the fill/arc gain
-    // is deliberately NOT applied here, since an opaque path has nothing
-    // for A()/E() to scale).
-    const NS = 'http://www.w3.org/2000/svg'
-    const svg = document.createElementNS(NS, 'svg')
-    svg.setAttribute('viewBox', '0 0 100 100')
-    svg.setAttribute('preserveAspectRatio', 'none')
-    svg.style.position = 'absolute'; svg.style.inset = '0'
-    svg.style.width = '100%'; svg.style.height = '100%'
-    const body = document.createElementNS(NS, 'path')
-    body.setAttribute('d', 'M5,45 L30,25 L50,45 L70,25 L95,45 L95,61 L70,41 L50,61 L30,41 L5,61 Z')
-    body.setAttribute('fill', hsla(hue, 62, 52, 1))
-    body.setAttribute('stroke', hsla(hue + 10, 70, 84, 1))
-    body.setAttribute('stroke-width', '4')
-    body.setAttribute('vector-effect', 'non-scaling-stroke')
-    svg.appendChild(body)
-    const band = document.createElementNS(NS, 'path')
-    band.setAttribute('d', 'M8,53 L30,33 L50,53 L70,33 L92,50')
-    band.setAttribute('fill', 'none')
-    band.setAttribute('stroke', hsla(hue - 12, 42, 90, 0.65))
-    band.setAttribute('stroke-width', '2.5')
-    band.setAttribute('vector-effect', 'non-scaling-stroke')
-    svg.appendChild(band)
-    f.appendChild(svg)
-  }
   return f
 }
+// `sprite` kind (deleted 2026-08-09): a single hardcoded zigzag reused
+// verbatim at st6 and st10 — both measured ~16% extent because it was
+// literally the same shape twice. In a space world it read as a chart, not
+// an object (visual audit finding). st6 and st10 are back on their original
+// glow primitives until real objects exist for a headline tier — see
+// concepts/PART-KIT.md for the parametric-part rebuild plan (no generated/
+// vectorized art — hand-coded parts only, clean-room from game-icons.net
+// silhouette reference text notes, per Ben's 2026-08-09 direction change).
+//
+// ═══ LIGHT ═══ one direction for every primitive in the scene (house-style
+// channel 4: "takes a light-direction parameter; terminator, core shadow
+// and rim are COMPUTED from it, never hand-placed"). Standard atan2(dy,dx)
+// convention, degrees: 0=+x, 90=+y (down, since SVG y grows downward),
+// increasing clockwise on screen. 225 = upper-left, matching st9 ring's
+// existing `at 38% 38%` lit-body convention (kept identical so every object
+// in this build agrees on where the sun is).
+const LIGHT_DEG = 225
+function ptOnCircle(cx, cy, r, deg) {
+  const rad = deg * Math.PI / 180
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
+}
 
-// ═══ OCCLUDER ═══ §7.2 (occlusion, measured by ablation) needs a shape that
-// actually blocks what's behind it - every primitive above is a translucent
-// glow that only alpha-blends with the star layer, never truly occludes it.
-// A near-opaque dark disc with a bright rim (same partial-border rim
-// technique as .b-lobe's rim above - two solid edges, two transparent, so
-// it still reads as a shape's edge rather than a flat silhouette) is dark
-// enough to occlude and rimmed enough to still be visible against a dark
-// sky (§6.1: "a dark shape over dark sky is invisible without one").
-function makeOccluder(el, size, hue) {
+// ═══ OCCLUDER / PLANET ═══ §7.2 (occlusion, measured by ablation) needs a
+// shape that actually blocks what's behind it - every primitive above is a
+// translucent glow that only alpha-blends with the star layer, never truly
+// occludes it. Rebuilt 2026-08-09 (visual audit finding: the old flat-black-
+// disc-plus-uniform-border read as an occluder, not an object; then a first
+// pass hand-placed a crescent/rim at fixed coordinates that only coincidentally
+// matched a light direction instead of being derived from one — this pass
+// replaces every hand-placed coordinate with LIGHT_DEG-derived trig, per the
+// house-style light channel) to be a real planet: a lit crescent + terminator
+// (offset shadow circle, the standard technique — no reference image needed,
+// this is pure radial geometry), 2 surface bands, a rim arc peaking on the lit
+// side.
+//
+// Exactly 3 tonal values (house-style rule 7): base (lit crescent), shade
+// (shadow overlay — hue-shifted cooler, not just darker, though at ~3%
+// lightness the shift is subtle by construction: occlusion needs it near-
+// black regardless), rim (bright limb highlight). Bands are 2 interior marks
+// (detail budget: silhouette + <=3 marks). DOM parts: glow, lit circle,
+// shadow circle, bands (1 path, 2 subpaths), rim (1 path) = 5, plus the svg/
+// clipPath/g wrapper every SVG-based primitive needs = 6 total elements.
+// Path nodes: bands 2+2=4, rim 2 — 6 total, well under the 40 budget.
+//
+// Occlusion is preserved by keeping the LIT crescent itself dark (10-18%
+// lightness, not a bright surface) — the visual "planet" read comes from the
+// terminator SHAPE and the thin bright rim line (small area), not from
+// brightening the disc's fill the way a real photo would. Verified against
+// concepts/tools/ring-occlusion-ablation.mjs.
+let occCounter = 0 // deterministic per-call id for the SVG clipPath — DOM
+// plumbing only, not seeded content, so this doesn't touch the no-Math.random
+// rule above (multiple occluders coexist in the DOM at once and each needs
+// its own clip id, or later ones would clip using an earlier one's circle).
+// Disc radius, viewBox units (100-unit box): 50 — the FULL container radius,
+// same coverage the pre-terminator-rebuild flat disc had (the last state
+// station 0's occlusion gate is known to have passed: aggregate 0.296x,
+// keyed on one bright real star at d=66px). Two things were tried and
+// measurably broke that gate before landing here:
+//  - R=36 (72% coverage, freeing glow margin INSIDE the container): station
+//    0's aggregate went 0.296x -> 0.734x FAIL — a much smaller/less reliable
+//    real-star sample.
+//  - R=46 (92%, this file's own inherited value before this session):
+//    0.296x -> 0.588x FAIL — subtler, but the same mechanism: 92% coverage
+//    has a real ~8% radius deficit against what the gate's known-good
+//    baseline actually covered, and it excludes exactly the one strong star
+//    (d=66px, unoccluded=81.1) that carried the old passing aggregate.
+// R=50 has zero inset and exactly touches the 100-unit viewBox's own edges
+// (a circle of radius 50 centered at 50,50) — safe, no overflow risk. The
+// glow's room comes entirely from GLOW_FRAC overflowing the container, not
+// from insetting the disc.
+// RING_OCCLUSION_DISC_FRAC documents disc-radius/container-radius for
+// ring-occlusion-ablation.mjs, which infers this element's true occluding
+// radius from its container box and needs it kept in sync.
+export const RING_OCCLUSION_DISC_FRAC = 1.0
+const GLOW_FRAC = 1.35 // glow container as a multiple of size — overflows the disc's own box on purpose
+function makeOccluder(el, size, hue, fill, lightDeg = LIGHT_DEG) {
+  // required, no default — see makePrim's identical guard for why.
+  // lightDeg keeps a default: it's a genuine scene-wide constant (house
+  // style: "one light direction per scene"), not a per-call value a caller
+  // could silently forget to compute, so defaulting it isn't the same risk.
+  if (fill === undefined) throw new Error('makeOccluder: fill is required')
   const f = el('occ')
   f.style.width = f.style.height = px(size)
-  // The ablation ratio is ~D/S (occluder disc luminance / unoccluded star
-  // luminance) once transmission is this low — raising alpha further
-  // barely moves it, because alpha was never the limiting term. Disc
-  // lightness is: measured L7/4/2 put stations 0 and 9 at 0.46x/0.49x,
-  // a ~2% margin under the <=0.5x ceiling that rode on which stars'
-  // seeded twinkle phase happened to freeze near their trough during
-  // measurement (concepts/tools/ring-occlusion-ablation.mjs) rather than
-  // real coverage. L3/2/1 drops D far enough that every station lands
-  // near 0.18x-0.19x - a real ~2.5x margin, independent of twinkle phase.
-  f.style.background = `radial-gradient(circle at 42% 40%,
-    ${hsla(hue, 20, 3, 0.99)} 0%, ${hsla(hue, 16, 2, 0.985)} 62%, ${hsla(hue, 12, 1, 0.98)} 100%)`
-  f.style.boxShadow = `inset 0 0 ${px(size * 0.2)} ${hsla(hue, 10, 0, 0.55)}`
-  const rim = el('occ-rim')
-  rim.style.setProperty('--rim', hsla(hue + 10, 70, 82, 0.55))
-  f.appendChild(rim)
+  const cx = 50, cy = 50, R = 50 * RING_OCCLUSION_DISC_FRAC
+  const Lx = Math.cos(lightDeg * Math.PI / 180), Ly = Math.sin(lightDeg * Math.PI / 180)
+
+  // fill channel (spec: rim intensity, detail alpha and glow extent scale
+  // with fill; the disc's own occluding silhouette does not — see
+  // presence-floor note below). Outer glow mirrors `ring`'s d-glow/E()
+  // treatment, overflowing the disc's own box (GLOW_FRAC) for real ring room.
+  //
+  // The gradient's bright stop is anchored at the DISC'S OWN EDGE (glowInnerPct
+  // below), not at 0%/center like every other primitive's glow. A center-anchored
+  // stop's brightest ring sits directly under the opaque disc — completely
+  // hidden — so only its already-fading tail was ever visible outside it,
+  // no matter how strong A()/E() made the underlying values (measured: signal
+  // stayed flat at 28.0 across fill=0.35..1.00 with that version, because the
+  // box's own p95 never left the constant-alpha crescent). Anchoring the peak
+  // at the edge instead means fill's E() genuinely controls how far a REAL
+  // bright ring reaches past the disc, which is what moves the box's own p95.
+  const glow = el('d-glow')
+  const gd = size * GLOW_FRAC
+  const glowInnerPct = (R * 2 / GLOW_FRAC).toFixed(1) // disc radius as % of glow's own closest-side radius
+  glow.style.left = px((size - gd) / 2); glow.style.top = px((size - gd) / 2)
+  glow.style.width = glow.style.height = px(gd)
+  glow.style.background = `radial-gradient(circle closest-side, transparent 0%, transparent ${glowInnerPct}%, ${hsla(hue + 10, 55, 72, A(0.55, fill))} ${(Number(glowInnerPct) + 6).toFixed(1)}%, transparent ${E(125, fill).toFixed(0)}%)`
+  f.appendChild(glow)
+
+  const NS = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(NS, 'svg')
+  svg.setAttribute('viewBox', '0 0 100 100')
+  svg.style.position = 'absolute'; svg.style.inset = '0'
+  svg.style.width = '100%'; svg.style.height = '100%'
+  const clipId = `occclip${occCounter++}`
+  const defs = document.createElementNS(NS, 'defs')
+  const clip = document.createElementNS(NS, 'clipPath')
+  clip.setAttribute('id', clipId)
+  const clipCircle = document.createElementNS(NS, 'circle')
+  clipCircle.setAttribute('cx', String(cx)); clipCircle.setAttribute('cy', String(cy)); clipCircle.setAttribute('r', String(R))
+  clip.appendChild(clipCircle)
+  defs.appendChild(clip)
+  svg.appendChild(defs)
+
+  const g = document.createElementNS(NS, 'g')
+  g.setAttribute('clip-path', `url(#${clipId})`)
+  // presence floor: the lit/shadow silhouette's own alpha is CONSTANT,
+  // never scaled by fill — a quiet station still holds a readable disc,
+  // per spec ("no object may be entirely fill-invariant, and none entirely
+  // fill-driven"; this is the invariant half, rim/bands/glow are the driven
+  // half below). Position (not alpha) is what LIGHT_DEG drives.
+  const lit = document.createElementNS(NS, 'circle')
+  lit.setAttribute('cx', String(cx)); lit.setAttribute('cy', String(cy)); lit.setAttribute('r', String(R))
+  lit.setAttribute('fill', hsla(hue, 30, 14, 0.99))
+  g.appendChild(lit)
+  // terminator: a shadow disc offset AWAY from the light (the standard
+  // offset-circle technique) — computed from LIGHT_DEG, not a hand-picked
+  // coordinate. Same near-black tone the old flat disc used, so total light
+  // output stays low enough to still occlude.
+  const shadowOff = R * 0.55, shadowR = R * 1.13
+  const shC = { x: cx - Lx * shadowOff, y: cy - Ly * shadowOff }
+  const shadow = document.createElementNS(NS, 'circle')
+  shadow.setAttribute('cx', shC.x.toFixed(2)); shadow.setAttribute('cy', shC.y.toFixed(2)); shadow.setAttribute('r', shadowR.toFixed(2))
+  shadow.setAttribute('fill', hsla(hue - 12, 22, 3, 0.99))
+  g.appendChild(shadow)
+  // 2 surface bands (detail budget), arcs at decreasing radius centered on
+  // the light angle so they always sit inside the lit crescent regardless
+  // of where LIGHT_DEG points.
+  const bandA = ptOnCircle(cx, cy, R * 0.87, lightDeg - 34), bandB = ptOnCircle(cx, cy, R * 0.87, lightDeg + 8)
+  const bandC = ptOnCircle(cx, cy, R * 0.72, lightDeg - 42), bandD = ptOnCircle(cx, cy, R * 0.72, lightDeg + 14)
+  const bands = document.createElementNS(NS, 'path')
+  bands.setAttribute('d',
+    `M ${bandA.x.toFixed(2)},${bandA.y.toFixed(2)} A ${(R * 0.87).toFixed(2)},${(R * 0.87).toFixed(2)} 0 0,1 ${bandB.x.toFixed(2)},${bandB.y.toFixed(2)} ` +
+    `M ${bandC.x.toFixed(2)},${bandC.y.toFixed(2)} A ${(R * 0.72).toFixed(2)},${(R * 0.72).toFixed(2)} 0 0,1 ${bandD.x.toFixed(2)},${bandD.y.toFixed(2)}`)
+  bands.setAttribute('fill', 'none')
+  bands.setAttribute('stroke', hsla(hue - 15, 25, 20, A(0.6, fill)))
+  bands.setAttribute('stroke-width', '5')
+  bands.setAttribute('vector-effect', 'non-scaling-stroke')
+  g.appendChild(bands)
+  svg.appendChild(g)
+
+  // rim / limb highlight: an open arc over ONLY the lit crescent's outer
+  // edge, centered on LIGHT_DEG (peaks on the lit side, by construction —
+  // there is no other side it could peak on), round-capped so both ends
+  // taper instead of stopping dead. Outside the clip, tracing the disc's
+  // true edge.
+  const rimA = ptOnCircle(cx, cy, R, lightDeg - 48), rimB = ptOnCircle(cx, cy, R, lightDeg + 48)
+  const rim = document.createElementNS(NS, 'path')
+  rim.setAttribute('d', `M ${rimA.x.toFixed(2)},${rimA.y.toFixed(2)} A ${R},${R} 0 0,1 ${rimB.x.toFixed(2)},${rimB.y.toFixed(2)}`)
+  rim.setAttribute('fill', 'none')
+  rim.setAttribute('stroke', hsla(hue + 10, 70, 82, A(0.85, fill)))
+  rim.setAttribute('stroke-width', '4')
+  rim.setAttribute('stroke-linecap', 'round')
+  rim.setAttribute('vector-effect', 'non-scaling-stroke')
+  svg.appendChild(rim)
+
+  f.appendChild(svg)
   return f
 }
 
@@ -620,7 +744,7 @@ export function ringDom(prefix, engine) {
     makePrim: (kind, w, h, hue, alpha, r, isHeadline, fill) => makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill),
     bandY: (r, h, forceUpper) => bandY(engine, r, h, forceUpper),
     buildStars: (host, period, perFrame, sizeMul, seed) => buildStars(el, engine, host, period, perFrame, sizeMul, seed),
-    makeOccluder: (size, hue) => makeOccluder(el, size, hue),
+    makeOccluder: (size, hue, fill) => makeOccluder(el, size, hue, fill),
   }
 }
 

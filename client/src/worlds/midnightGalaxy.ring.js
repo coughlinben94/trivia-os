@@ -43,7 +43,7 @@ export const midnightGalaxyRing = {
     { key: 'spiral galaxy', prim: 'lens', hue: 276, accent: false },
     { key: 'comet', prim: 'streak', hue: 208, accent: false },
     { key: 'violet nebula', prim: 'blob', hue: 282, accent: false },
-    { key: 'dust ribbon', prim: 'sprite', hue: 264, accent: false },
+    { key: 'dust ribbon', prim: 'ribbon', hue: 264, accent: false },
     { key: 'binary pair', prim: 'binary', hue: 214, accent: false },
     { key: 'rose nebula', prim: 'blob', hue: 330, accent: true },
     // was 250° — 26° from the violet anchor, 1° outside its own window and
@@ -51,7 +51,7 @@ export const midnightGalaxyRing = {
     // audit missed. Nudged 6° (imperceptible) to land inside the window
     // with margin instead of introducing a 4th accent for a 1° miss.
     { key: 'ringed lens', prim: 'ring', hue: 256, accent: false },
-    { key: 'open cluster', prim: 'sprite', hue: 224, accent: false },
+    { key: 'open cluster', prim: 'dots', hue: 224, accent: false },
     // was 'green nebula' at 140° — 74° from the nearer (blue) anchor, the
     // spec-coverage audit's flagged outlier. Marking it a 3rd accent isn't
     // available: orange nebula/supernova/rose nebula already fill the

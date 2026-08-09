@@ -319,11 +319,11 @@ const WORLD = {
     { key:'spiral galaxy',  prim:'lens',   hue:276, accent:false },
     { key:'comet',          prim:'streak', hue:208, accent:false },
     { key:'violet nebula',  prim:'blob',   hue:282, accent:false },
-    { key:'dust ribbon',    prim:'sprite', hue:264, accent:false },
+    { key:'dust ribbon',    prim:'ribbon', hue:264, accent:false },
     { key:'binary pair',    prim:'binary', hue:214, accent:false },
     { key:'rose nebula',    prim:'blob',   hue:330, accent:true  },
     { key:'ringed lens',    prim:'ring',   hue:256, accent:false },
-    { key:'open cluster',   prim:'sprite', hue:224, accent:false },
+    { key:'open cluster',   prim:'dots',   hue:224, accent:false },
     { key:'teal filament',  prim:'ribbon', hue:196, accent:false },
   ],
   /* mirrors client/src/worlds/midnightGalaxy.ring.js's hueAnchors — this
@@ -421,7 +421,7 @@ function buildLayerContent(host, L){
       const ar = rng(0, 0xA4C7);
       const AW = 760, AH = Math.round(AW * 0.62);
       const anchorHue = WORLD.hueAnchors[1].deg;
-      const anchor = dom.makePrim('lens', AW, AH, anchorHue, 0.34, ar);
+      const anchor = dom.makePrim('lens', AW, AH, anchorHue, 0.34, ar, false, 1); // layer-level anchor, not tied to any one station's loudness -> explicit fill=1, not a dropped param
       anchor.style.left = px(period * 0.42 - AW/2);
       anchor.style.top  = px(dom.bandY(ar, AH));
       host.appendChild(anchor); formTotal++;
@@ -616,7 +616,7 @@ function buildLayerContent(host, L){
         const os = lerp(260, 340, orr());
         const ox = x0 + orr() * (ENGINE.W - os);
         const oy = dom.bandY(orr, os);
-        const occ = dom.makeOccluder(os, st.hue);
+        const occ = dom.makeOccluder(os, st.hue, fill(i));
         occ.style.left = px(ox);
         occ.style.top  = px(oy);
         host.appendChild(occ); formTotal++;

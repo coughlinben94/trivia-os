@@ -153,7 +153,7 @@ function buildLayerContent(engine, world, arc, host, L) {
       const ar = rng(0, 0xA4C7)
       const AW = 760, AH = Math.round(AW * 0.62)
       const anchorHue = world.hueAnchors[1].deg
-      const anchor = dom.makePrim('lens', AW, AH, anchorHue, 0.34, ar)
+      const anchor = dom.makePrim('lens', AW, AH, anchorHue, 0.34, ar, false, 1) // layer-level anchor, not tied to any one station's loudness -> explicit fill=1, not a dropped param
       anchor.style.left = px(period * 0.42 - AW / 2)
       anchor.style.top = px(dom.bandY(ar, AH))
       host.appendChild(anchor)
@@ -347,7 +347,7 @@ function buildLayerContent(engine, world, arc, host, L) {
         const os = lerp(260, 340, orr())
         const ox = x0 + orr() * (engine.W - os)
         const oy = dom.bandY(orr, os)
-        const occ = dom.makeOccluder(os, st.hue)
+        const occ = dom.makeOccluder(os, st.hue, fill)
         occ.style.left = px(ox)
         occ.style.top = px(oy)
         host.appendChild(occ)

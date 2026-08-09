@@ -35,6 +35,7 @@ import { execSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { RING_OCCLUSION_DISC_FRAC } from '../../client/src/lib/ringPrimitives.js';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
 
@@ -87,7 +88,19 @@ await page.emulateMedia({ reducedMotion: 'reduce' });
 await page.goto(targetUrl, { waitUntil: 'load' });
 await page.waitForFunction(() => window.__world && typeof window.__world.jumpTo === 'function');
 
-const STATIONS = [0, 3, 6, 9];
+// Station 0/3/6/9 was a snapshot of world-07-ring.html's occluderStations
+// output at the time this script was written — occluderStations is actually
+// loudness-driven (ARC-derived, world-07-ring.html's byLoudnessDesc/
+// occlusionEligible), not fixed station indices, and drifts whenever ARC
+// does. Recomputed live from window.__world.ARC each run instead of a stale
+// hardcoded list, so this always checks whatever stations actually carry an
+// occluder right now.
+const STATIONS = await page.evaluate(() => {
+  const { ARC, ENGINE } = window.__world;
+  const byLoudnessDesc = [...Array(ENGINE.PANES).keys()].sort((a, b) => ARC[b] - ARC[a]);
+  const occlusionEligible = byLoudnessDesc.slice(0, ENGINE.PANES - Math.floor(ENGINE.PANES / 3));
+  return occlusionEligible.filter((_, k) => k % 2 === 0);
+});
 const rows = [];
 
 for (const stIdx of STATIONS) {
@@ -112,7 +125,15 @@ for (const stIdx of STATIONS) {
   if (!occInfo) { rows.push({ station: stIdx, error: 'no on-screen occluder found' }); continue; }
 
   const cx = occInfo.left + occInfo.width / 2, cy = occInfo.top + occInfo.height / 2;
-  const radius = occInfo.width / 2; // occluder is a circle inscribed in its own square box
+  // 2026-08-09: the opaque disc no longer fills its own square box (it used
+  // to, hence occInfo.width/2) — it's RING_OCCLUSION_DISC_FRAC (0.72) of it,
+  // with the rest of the box now real margin for the fill-driven glow (see
+  // makeOccluder's comment: a center-anchored glow's brightest ring sat
+  // entirely under the opaque disc and never moved the box's own p95/signal;
+  // fixing that required shrinking the disc to free real margin). Using the
+  // full box width here would credit stars in that margin as "inside the
+  // disc" when the disc's real edge is well short of it.
+  const radius = occInfo.width / 2 * RING_OCCLUSION_DISC_FRAC;
   // stay clear of the occluder's own bright rim (a 5px partial border right
   // at the disc edge, see makeOccluder/.occ-rim) — a star sampled right on
   // it would read brighter WITH the occluder than without, which is a
