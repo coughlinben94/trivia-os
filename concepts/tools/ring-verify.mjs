@@ -68,21 +68,25 @@ import { createServer } from 'node:http';
 import { readFile, readFileSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { PNG } from 'pngjs';
 
 const readFileAsync = promisify(readFile);
 
-const target = process.argv[2];
-if (!target) {
-  console.error('Usage: node ring-verify.mjs <path-to-html>');
-  process.exit(2);
-}
-const absPath = path.resolve(target);
-const source = readFileSync(absPath, 'utf8');
-
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
+
+// 2026-08-09 infra round (Task 1): this module is now IMPORTABLE — a sweep
+// tool calls runChecks()/runStaticChecks() directly instead of forking their
+// logic (the exact bug class that cost a round: a prior ablation script
+// forked the safe-box maths and went stale). Everything that only makes
+// sense as a one-shot CLI invocation (argv parsing, spinning up the static
+// server + vite dev server, launching/closing the one shared browser,
+// printing + process.exit) is guarded behind this check and runs only when
+// the file is executed directly, never on import. pathToFileURL (not a raw
+// `file://${...}` template) handles spaces/special characters in the repo
+// path correctly.
+const isCLI = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 // This gate has never once written a screenshot to disk — every PNG it reads
 // was a Playwright buffer that died with the process. Five rounds of
@@ -100,17 +104,18 @@ const results = []; // { name, status: PASS|WARN|FAIL, detail, tier: 'regression
 function report(name, status, detail, tier = 'regression') { results.push({ name, status, detail, tier }); }
 
 // ═══════════════════════════════════════════════════════════════════════
-// SPEC THRESHOLDS — the only place a number lives.
+// SPEC THRESHOLDS — the only place a number lives, loaded from
+// concepts/tools/ring-spec.lock.json (2026-08-09 split, infra round: every
+// value there is transcribed from concepts/ART-DIRECTION-SPEC.md and
+// carries a `src` citation naming the file, line and section it came from.
+// NOTHING in it may be derived from, copied out of, or "recorded from" a
+// measurement of the build under test — a gate whose pass criterion is its
+// subject's own current reading cannot detect that its subject is broken.
+// See NO-SELF-BASELINE at the foot of this file for the mechanical form of
+// the rule, and the lock file's own `_readme` for "nothing automated writes
+// here." The per-key reasoning below doesn't fit in JSON, so it stays here,
+// keyed to match:
 //
-// RULE: every value in this object is transcribed from
-// concepts/ART-DIRECTION-SPEC.md and carries a `src` citation naming the
-// file, line and section it came from. NOTHING in here may be derived from,
-// copied out of, or "recorded from" a measurement of the build under test.
-// A gate whose pass criterion is its subject's own current reading cannot
-// detect that its subject is broken — that is the defect this rebaseline
-// exists to remove. See NO-SELF-BASELINE at the foot of this file for the
-// mechanical form of the rule.
-// ═══════════════════════════════════════════════════════════════════════
 // inkPerStation.lo (2026-08-08 amendment to ART-DIRECTION-SPEC.md:55): was a
 // flat 6% floor applied to all twelve stations, on a ring whose entire value
 // arc exists so quiet stations legitimately carry less. `lo` is now the
@@ -119,70 +124,58 @@ function report(name, status, detail, tier = 'regression') { results.push({ name
 // applied. `hi` (18%) is unchanged and stays flat: no station has ever
 // measured over it, and nothing argues a quiet station should be allowed
 // MORE ink than a loud one.
-const SPEC = Object.freeze({
-  inkPerStation:      { lo: 0.06, hi: 0.18,                 src: 'ART-DIRECTION-SPEC.md:55 §1' },
-  midShare:           { min: 0.55,                          src: 'ART-DIRECTION-SPEC.md:56 §1' },
-  headlineInk:        { lo: 0.04, hi: 0.09,                 src: 'ART-DIRECTION-SPEC.md:59 §1' },
-  elementsPerStation: { lo: 2, hi: 5,                       src: 'ART-DIRECTION-SPEC.md:62 §1' },
-  // p995Max retargeted 72 -> 68 (2026-08-09): st0 measured EXACTLY 72/72 at
-  // the old cap — a threshold shipped with zero headroom is not a
-  // threshold, it's a coin flip against the next content change. warnMargin
-  // makes the gate WARN (not silently PASS) inside 4 points of whatever the
-  // current cap is, so the next zero-headroom ship gets flagged before it
-  // ships, not measured after.
-  safeBox:            { meanMax: 34, p995Max: 68, warnMargin: 4, src: 'ART-DIRECTION-SPEC.md:76 §2' },
-  quadrant:           { lo: 2, hi: 4,                       src: 'ART-DIRECTION-SPEC.md:85 §2' },
-  balance:            { centre: 960, tol: 96,               src: 'ART-DIRECTION-SPEC.md:87 §2' },
-  vertSpread:         { areaFrac: 0.15, minStations: 6,     src: 'ART-DIRECTION-SPEC.md:94 §2' },
-  bleed:              { cropLo: 0.10, cropHi: 0.35, lo: 3, hi: 5, src: 'ART-DIRECTION-SPEC.md:98 §2' },
-  arcBand:            { quietLo: 8, quietHi: 13, loudLo: 26, loudHi: 34, src: 'ART-DIRECTION-SPEC.md:130 §3' },
-  arcSpan:            { lo: 2.2, hi: 4.0,                   src: 'ART-DIRECTION-SPEC.md:131 §3' },
-  // B2-luminance.md sec 4.1: per-station tolerance alone can't catch a
-  // flattened arc — if every station sits within +/-30% of a 3.1x-span
-  // target, the worst PERMISSIBLE rendered span is only 1.67x (barely above
-  // the 1.56x the defect produced). These two are the aggregate checks that
-  // actually gate contrast and ordering, not just per-station level.
-  arcSpanRealised:    { minFrac: 0.80,                      src: 'B2-luminance.md §4.1 (ART-DIRECTION-SPEC.md:131 §3)' },
-  arcRankCorrelation: { min: 0.90,                          src: 'B2-luminance.md §4.1 (ART-DIRECTION-SPEC.md:149 §3)' },
-  adjGap:             { frac: 0.06,                         src: 'ART-DIRECTION-SPEC.md:133 §3' },
-  troughSpread:       { frac: 0.12,                         src: 'ART-DIRECTION-SPEC.md:133 §3' },
-  arcRealised:        { tol: 0.30,                          src: 'ART-DIRECTION-SPEC.md:149 §3' },
-  stars:              { lo: 150, hi: 260,                   src: 'ART-DIRECTION-SPEC.md:214 §5' },
-  // bottomThirdFrac: how many of the 12 stations (by loudness rank, ascending)
-  // are ineligible for a subtractive element. 1/3 matches the rule's own name.
-  occluderPlacement:  { bottomThirdFrac: 1 / 3,              src: 'ART-DIRECTION-SPEC.md:345 §7.2' },
-  // perceptibility, redefined 2026-08-09 (st6 sprite test): median(box) vs
-  // median(surround) is blind to any shape covering less than ~50% of its
-  // own bounding box, by construction of what a median measures — proven,
-  // not inferred: a drawn sprite covering 7.2% of its box at peak luma 194
-  // (vs a glow covering 0.8% at the same peak 194) scored 1.0 vs 0.0 under
-  // the old formula, indistinguishable from noise despite a real 9x
-  // coverage gain. Every glow primitive in this build is similarly sparse in
-  // its own box, so the old metric was blind to all of them, not just the
-  // sprite case — the two numbers below replace it:
-  //   signal: p95(headline box) - median(80px surround) — the box's own
-  //     brightest ~5%, immune to sparse coverage (a shape 1px wide at full
-  //     brightness still registers).
-  //   extent: fraction of the box's pixels brighter than
-  //     median(surround) + k — how much of the box actually carries that
-  //     signal, which is exactly what the old metric couldn't see.
-  // k reuses this same file's own ink-threshold rule (paneMedianLuma + 20,
-  // ART-DIRECTION-SPEC.md §1, used unchanged at the frame-ink check below)
-  // applied to the LOCAL surround instead of the whole frame's median — the
-  // same "how much brighter than its own background counts as ink" rule,
-  // not a new number invented for this check.
-  // No floor is set for either number this round — the old floor=10 doesn't
-  // transfer (p95-median is systematically >= the old median-median value,
-  // so reapplying it would silently pass stations that never improved).
-  // Reported as measurement only until a floor is deliberately re-derived.
-  perceptibility:     { k: 20, marginPx: 80,                 src: 'ART-DIRECTION-SPEC.md:72 §1' },
-  // drawn-subject: a station's headline primitive must be a drawn (opaque,
-  // closed-path) kind, never one of the seven glow kinds. Rule, not a
-  // per-station patch (ART-DIRECTION-SPEC.md §6.0) — the st6 fix simply
-  // promoted st10 into the same defect's worst slot, because a glow-only
-  // headline structurally covers far less of its own box than a drawn one.
-  drawnSubject:       { kinds: ['sprite', 'ring', 'ground'],  src: 'ART-DIRECTION-SPEC.md:294 §6.0' },
-});
+//
+// safeBox.p995Max retargeted 72 -> 68 (2026-08-09): st0 measured EXACTLY
+// 72/72 at the old cap — a threshold shipped with zero headroom is not a
+// threshold, it's a coin flip against the next content change. warnMargin
+// makes the gate WARN (not silently PASS) inside 4 points of whatever the
+// current cap is, so the next zero-headroom ship gets flagged before it
+// ships, not measured after.
+//
+// arcSpanRealised/arcRankCorrelation (B2-luminance.md sec 4.1): per-station
+// tolerance alone can't catch a flattened arc — if every station sits
+// within +/-30% of a 3.1x-span target, the worst PERMISSIBLE rendered span
+// is only 1.67x (barely above the 1.56x the defect produced). These two are
+// the aggregate checks that actually gate contrast and ordering, not just
+// per-station level.
+//
+// occluderPlacement.bottomThirdFrac: how many of the 12 stations (by
+// loudness rank, ascending) are ineligible for a subtractive element. 1/3
+// matches the rule's own name.
+//
+// perceptibility, redefined 2026-08-09 (st6 sprite test): median(box) vs
+// median(surround) is blind to any shape covering less than ~50% of its own
+// bounding box, by construction of what a median measures — proven, not
+// inferred: a drawn sprite covering 7.2% of its box at peak luma 194 (vs a
+// glow covering 0.8% at the same peak 194) scored 1.0 vs 0.0 under the old
+// formula, indistinguishable from noise despite a real 9x coverage gain.
+// Every glow primitive in this build is similarly sparse in its own box, so
+// the old metric was blind to all of them, not just the sprite case — the
+// two numbers below replace it:
+//   signal: p95(headline box) - median(80px surround) — the box's own
+//     brightest ~5%, immune to sparse coverage (a shape 1px wide at full
+//     brightness still registers).
+//   extent: fraction of the box's pixels brighter than
+//     median(surround) + k — how much of the box actually carries that
+//     signal, which is exactly what the old metric couldn't see.
+// k reuses this same file's own ink-threshold rule (paneMedianLuma + 20,
+// ART-DIRECTION-SPEC.md §1, used unchanged at the frame-ink check below)
+// applied to the LOCAL surround instead of the whole frame's median — the
+// same "how much brighter than its own background counts as ink" rule, not
+// a new number invented for this check.
+// No floor is set for either number this round — the old floor=10 doesn't
+// transfer (p95-median is systematically >= the old median-median value, so
+// reapplying it would silently pass stations that never improved). Reported
+// as measurement only until a floor is deliberately re-derived.
+//
+// drawnSubject: a station's headline primitive must be a drawn (opaque,
+// closed-path) kind, never one of the seven glow kinds. Rule, not a
+// per-station patch (ART-DIRECTION-SPEC.md §6.0) — the st6 fix simply
+// promoted st10 into the same defect's worst slot, because a glow-only
+// headline structurally covers far less of its own box than a drawn one.
+// ═══════════════════════════════════════════════════════════════════════
+const SPEC_LOCK_PATH = fileURLToPath(new URL('./ring-spec.lock.json', import.meta.url));
+const SPEC = Object.freeze(JSON.parse(readFileSync(SPEC_LOCK_PATH, 'utf8')));
 
 // ═══════════════════════════════════════════════════════════════════════
 // KNOWN DEVIATIONS — the ONLY sanctioned way to not meet a spec target.
@@ -207,6 +200,7 @@ const KNOWN_DEVIATIONS = {};
 // Integrity guards on the two tables above. These run at import time and hard-
 // exit: a malformed threshold table is worse than no gate, because it looks green.
 for (const [k, v] of Object.entries(SPEC)) {
+  if (k.startsWith('_')) continue; // ring-spec.lock.json's own _readme, not a threshold
   if (!v.src || !/:\d+/.test(v.src)) {
     console.error(`ring-verify: SPEC.${k} has no file:line citation. Every threshold must name where in the spec it came from.`);
     process.exit(3);
@@ -238,6 +232,14 @@ function specCheck(P, name, ok, detail, src, tier = 'spec', devKey = null) {
 
 // ═══════════════════════════════════════════════════════════════════════
 // STATIC CHECKS — no browser needed, run once regardless of either pass.
+//
+// Exported as runStaticChecks(htmlPath) (2026-08-09 infra round) so a sweep
+// tool imports the SAME check logic instead of forking it — the exact bug
+// class Task 1 exists to close (a prior ablation script forked the safe-box
+// maths and went stale). Still also pushes into the module-level `results`
+// via report()/specCheck(), so the CLI path at the foot of this file is
+// unchanged; the return value is only the increment THIS call added, split
+// by tier, for a caller that wants just that.
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── no stray Math.random() in the HTML reference build's world construction ──
@@ -253,85 +255,95 @@ function functionBody(src, name) {
   }
   return { start: m.index, end: i };
 }
-{
-  const scriptMatch = source.match(/<script[^>]*>([\s\S]*?)<\/script>/);
-  const script = scriptMatch ? scriptMatch[1] : source;
-  const sanctioned = ['spawnShoot', 'shootLoop']
-    .map(n => functionBody(script, n))
-    .filter(Boolean);
-  const randIdx = [];
-  let idx = script.indexOf('Math.random(');
-  while (idx !== -1) { randIdx.push(idx); idx = script.indexOf('Math.random(', idx + 1); }
-  const stray = randIdx.filter(i => !sanctioned.some(s => i >= s.start && i < s.end));
-  report('[static] no-stray-math-random', stray.length === 0 ? 'PASS' : 'FAIL',
-    stray.length === 0
-      ? `all ${randIdx.length} Math.random() call(s) confined to spawnShoot/shootLoop`
-      : `${stray.length} Math.random() call(s) outside spawnShoot/shootLoop (world construction must use the seeded hash)`);
-}
 
-// ── primitive-name parity: every `prim:` value used by any world data file must
-//    have a matching `kind === '...'` branch in ringPrimitives.js's makePrim. Pure
-//    source-text scan, per the task's own explicit sign-off that a regex pass over
-//    the two texts is sufficient (no render needed) — this is the exact bug class
-//    that once rendered a station as an empty div because RingAmbient's OWN copy of
-//    makePrim (before the client/src/lib/ringPrimitives.js extraction) had no branch
-//    for a primitive the world data required. ──
-{
-  const worldsDir = path.join(REPO_ROOT, 'client/src/worlds');
-  const worldFiles = readdirSync(worldsDir).filter(f => f.endsWith('.ring.js'));
-  const primUses = []; // { prim, file }
-  for (const f of worldFiles) {
-    const txt = readFileSync(path.join(worldsDir, f), 'utf8');
-    const re = /\bprim\s*:\s*'([^']+)'/g;
-    let m;
-    while ((m = re.exec(txt))) primUses.push({ prim: m[1], file: f });
-  }
-  const primitivesPath = path.join(REPO_ROOT, 'client/src/lib/ringPrimitives.js');
-  const primitivesSrc = readFileSync(primitivesPath, 'utf8');
-  const branchRe = /\bkind\s*===\s*'([^']+)'/g;
-  const branches = new Set();
-  let bm;
-  while ((bm = branchRe.exec(primitivesSrc))) branches.add(bm[1]);
-  const distinctPrims = [...new Set(primUses.map(u => u.prim))];
-  const missing = distinctPrims.filter(p => !branches.has(p));
-  report('[static] primitive-name parity (world data vs makePrim)',
-    missing.length === 0 ? 'PASS' : 'FAIL',
-    missing.length === 0
-      ? `${distinctPrims.length} distinct prim value(s) across ${worldFiles.length} world file(s) [${distinctPrims.join(',')}] all have a matching kind==='...' branch (${branches.size} branches in ringPrimitives.js)`
-      : `${missing.length} prim value(s) with NO makePrim branch: ${missing.join(',')} — would render as an empty div`);
-}
+export function runStaticChecks(htmlPath) {
+  const startIdx = results.length;
+  const source = readFileSync(htmlPath, 'utf8');
 
-// ── drawn-subject (ART-DIRECTION-SPEC.md §6.0, added 2026-08-09): every
-//    station's headline primitive must be a drawn kind, never glow-only.
-//    Reads st.prim directly per file, in array order (station index =
-//    position in the stations array) — no render needed. Re-parses the world
-//    files rather than reaching into the parity check's block-scoped
-//    `primUses` above (kept as two independent checks on purpose). ──
-{
-  const worldsDir = path.join(REPO_ROOT, 'client/src/worlds');
-  const worldFiles = readdirSync(worldsDir).filter(f => f.endsWith('.ring.js'));
-  const primUses = [];
-  for (const f of worldFiles) {
-    const txt = readFileSync(path.join(worldsDir, f), 'utf8');
-    const re = /\bprim\s*:\s*'([^']+)'/g;
-    let m;
-    while ((m = re.exec(txt))) primUses.push({ prim: m[1], file: f });
+  // no stray Math.random()
+  {
+    const scriptMatch = source.match(/<script[^>]*>([\s\S]*?)<\/script>/);
+    const script = scriptMatch ? scriptMatch[1] : source;
+    const sanctioned = ['spawnShoot', 'shootLoop']
+      .map(n => functionBody(script, n))
+      .filter(Boolean);
+    const randIdx = [];
+    let idx = script.indexOf('Math.random(');
+    while (idx !== -1) { randIdx.push(idx); idx = script.indexOf('Math.random(', idx + 1); }
+    const stray = randIdx.filter(i => !sanctioned.some(s => i >= s.start && i < s.end));
+    report('[static] no-stray-math-random', stray.length === 0 ? 'PASS' : 'FAIL',
+      stray.length === 0
+        ? `all ${randIdx.length} Math.random() call(s) confined to spawnShoot/shootLoop`
+        : `${stray.length} Math.random() call(s) outside spawnShoot/shootLoop (world construction must use the seeded hash)`);
   }
-  const drawnKinds = new Set(SPEC.drawnSubject.kinds);
-  const byFile = {};
-  for (const u of primUses) { (byFile[u.file] ||= []).push(u.prim); }
-  const violations = [];
-  for (const [f, prims] of Object.entries(byFile)) {
-    prims.forEach((prim, i) => { if (!drawnKinds.has(prim)) violations.push(`${f}:st${i}(${prim})`); });
+
+  // primitive-name parity: every `prim:` value used by any world data file must
+  // have a matching `kind === '...'` branch in ringPrimitives.js's makePrim. Pure
+  // source-text scan, per the task's own explicit sign-off that a regex pass over
+  // the two texts is sufficient (no render needed) — this is the exact bug class
+  // that once rendered a station as an empty div because RingAmbient's OWN copy of
+  // makePrim (before the client/src/lib/ringPrimitives.js extraction) had no branch
+  // for a primitive the world data required.
+  {
+    const worldsDir = path.join(REPO_ROOT, 'client/src/worlds');
+    const worldFiles = readdirSync(worldsDir).filter(f => f.endsWith('.ring.js'));
+    const primUses = []; // { prim, file }
+    for (const f of worldFiles) {
+      const txt = readFileSync(path.join(worldsDir, f), 'utf8');
+      const re = /\bprim\s*:\s*'([^']+)'/g;
+      let m;
+      while ((m = re.exec(txt))) primUses.push({ prim: m[1], file: f });
+    }
+    const primitivesPath = path.join(REPO_ROOT, 'client/src/lib/ringPrimitives.js');
+    const primitivesSrc = readFileSync(primitivesPath, 'utf8');
+    const branchRe = /\bkind\s*===\s*'([^']+)'/g;
+    const branches = new Set();
+    let bm;
+    while ((bm = branchRe.exec(primitivesSrc))) branches.add(bm[1]);
+    const distinctPrims = [...new Set(primUses.map(u => u.prim))];
+    const missing = distinctPrims.filter(p => !branches.has(p));
+    report('[static] primitive-name parity (world data vs makePrim)',
+      missing.length === 0 ? 'PASS' : 'FAIL',
+      missing.length === 0
+        ? `${distinctPrims.length} distinct prim value(s) across ${worldFiles.length} world file(s) [${distinctPrims.join(',')}] all have a matching kind==='...' branch (${branches.size} branches in ringPrimitives.js)`
+        : `${missing.length} prim value(s) with NO makePrim branch: ${missing.join(',')} — would render as an empty div`);
   }
-  const total = primUses.length;
-  report(`every station's headline is a drawn primitive (${[...drawnKinds].join('/')})`,
-    violations.length === 0 ? 'PASS' : 'FAIL',
-    (violations.length === 0
-      ? `all ${total} station(s) across ${Object.keys(byFile).length} world file(s) use a drawn headline primitive`
-      : `${violations.length}/${total} station(s) still glow-only: ${violations.join(', ')}`) +
-    ` [${SPEC.drawnSubject.src}]`,
-    'spec');
+
+  // drawn-subject (ART-DIRECTION-SPEC.md §6.0, added 2026-08-09): every
+  // station's headline primitive must be a drawn kind, never glow-only.
+  // Reads st.prim directly per file, in array order (station index =
+  // position in the stations array) — no render needed. Re-parses the world
+  // files rather than reaching into the parity check's own primUses above
+  // (kept as two independent checks on purpose).
+  {
+    const worldsDir = path.join(REPO_ROOT, 'client/src/worlds');
+    const worldFiles = readdirSync(worldsDir).filter(f => f.endsWith('.ring.js'));
+    const primUses = [];
+    for (const f of worldFiles) {
+      const txt = readFileSync(path.join(worldsDir, f), 'utf8');
+      const re = /\bprim\s*:\s*'([^']+)'/g;
+      let m;
+      while ((m = re.exec(txt))) primUses.push({ prim: m[1], file: f });
+    }
+    const drawnKinds = new Set(SPEC.drawnSubject.kinds);
+    const byFile = {};
+    for (const u of primUses) { (byFile[u.file] ||= []).push(u.prim); }
+    const violations = [];
+    for (const [f, prims] of Object.entries(byFile)) {
+      prims.forEach((prim, i) => { if (!drawnKinds.has(prim)) violations.push(`${f}:st${i}(${prim})`); });
+    }
+    const total = primUses.length;
+    report(`every station's headline is a drawn primitive (${[...drawnKinds].join('/')})`,
+      violations.length === 0 ? 'PASS' : 'FAIL',
+      (violations.length === 0
+        ? `all ${total} station(s) across ${Object.keys(byFile).length} world file(s) use a drawn headline primitive`
+        : `${violations.length}/${total} station(s) still glow-only: ${violations.join(', ')}`) +
+      ` [${SPEC.drawnSubject.src}]`,
+      'spec');
+  }
+
+  const mine = results.slice(startIdx);
+  return { regression: mine.filter(r => r.tier === 'regression'), spec: mine.filter(r => r.tier === 'spec') };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -388,7 +400,23 @@ const pct = (x) => (x * 100).toFixed(1) + '%';
 // (HTML reference, live React route), parameterized by `prefix`.
 // ═══════════════════════════════════════════════════════════════════════
 
-async function runDynamicPass({ label, prefix, page, gotoUrl }) {
+// runChecks — the dynamic (real-browser) half of the gate, for one target
+// (HTML reference build or the live React route), parameterized by `prefix`
+// (the CSS class prefix ringDom()/ringCss() use — '' vs 'ring-') and `label`
+// (only a display prefix on check names, e.g. "[html] ..." vs
+// "[react-live] ..."). 2026-08-09 infra round (Task 1): exported and
+// returns {regression, spec} — the increment this call added to the shared
+// `results` array, split by tier — so a sweep tool gets a real return value
+// instead of needing to read a module-level array. Still also pushes into
+// `results` via report()/specCheck() exactly as before, so the CLI path
+// below (which prints the FULL `results` array across both passes) is
+// unchanged. Signature is `{page, label, prefix, gotoUrl}`, not the literal
+// `runChecks(page)` — prefix is load-bearing (which CSS classes every check
+// queries) and there are two real targets (html/react-live) sharing this
+// same logic, so a bare `(page)` can't carry what's needed; every OTHER
+// caller still goes through this one function, which is the actual point.
+export async function runChecks({ page, label, prefix, gotoUrl }) {
+  const startIdx = results.length;
   const P = (name) => `[${label}] ${name}`;
   const consoleErrors = [];
   page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
@@ -399,7 +427,8 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
     await page.waitForFunction(() => !!window.__world, null, { timeout: 8000 });
   } catch {
     report(P('window.__world contract'), 'FAIL', `target does not expose window.__world within 8s — cannot verify (${gotoUrl})`);
-    return;
+    const mine = results.slice(startIdx);
+    return { regression: mine.filter(r => r.tier === 'regression'), spec: mine.filter(r => r.tier === 'spec') };
   }
   await page.waitForTimeout(500);
 
@@ -1207,6 +1236,9 @@ async function runDynamicPass({ label, prefix, page, gotoUrl }) {
   report(P('console clean'), consoleErrors.length === 0 ? 'PASS' : 'FAIL',
     consoleErrors.length === 0 ? 'no console errors or page errors across boot + 36 turns + 12-station measurement pass'
       : consoleErrors.slice(0, 5).join(' | '));
+
+  const mine = results.slice(startIdx);
+  return { regression: mine.filter(r => r.tier === 'regression'), spec: mine.filter(r => r.tier === 'spec') };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1255,51 +1287,67 @@ async function ensureViteServer() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// RUN both passes.
+// RUN both passes — CLI entry point only (see isCLI above). An import never
+// reaches this block: no argv parsing, no server/browser spawned, no
+// process.exit. This is the ONLY place runStaticChecks()/runChecks() get
+// called for their side effect on the shared `results` array for printing —
+// a caller that imports this module calls them directly and uses their
+// return values instead.
 // ═══════════════════════════════════════════════════════════════════════
 
-const browser = await chromium.launch();
-
-// pass 1: the HTML reference build, served over a local static server.
-{
-  const server = await startStaticServer(REPO_ROOT);
-  const port = server.address().port;
-  const relPath = path.relative(REPO_ROOT, absPath).split(path.sep).join('/');
-  const targetUrl = `http://127.0.0.1:${port}/${relPath}`;
-  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
-  try {
-    await runDynamicPass({ label: 'html', prefix: '', page, gotoUrl: targetUrl });
-  } catch (err) {
-    report('[html] pass', 'FAIL', `threw: ${err.message}`);
-  } finally {
-    await page.close();
-    await new Promise((resolve) => server.close(resolve));
+if (isCLI) {
+  const target = process.argv[2];
+  if (!target) {
+    console.error('Usage: node ring-verify.mjs <path-to-html>');
+    process.exit(2);
   }
-}
+  const absPath = path.resolve(target);
 
-// pass 2: the live React route — the code that actually ships. Skippable via
-// RING_VERIFY_SKIP_LIVE=1 for an environment with no vite binary reachable.
-if (process.env.RING_VERIFY_SKIP_LIVE === '1') {
-  report('[react-live] pass', 'WARN', 'skipped — RING_VERIFY_SKIP_LIVE=1');
-} else {
-  let vite = null;
-  try {
-    vite = await ensureViteServer();
+  runStaticChecks(absPath);
+
+  const browser = await chromium.launch();
+
+  // pass 1: the HTML reference build, served over a local static server.
+  {
+    const server = await startStaticServer(REPO_ROOT);
+    const port = server.address().port;
+    const relPath = path.relative(REPO_ROOT, absPath).split(path.sep).join('/');
+    const targetUrl = `http://127.0.0.1:${port}/${relPath}`;
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
     try {
-      await runDynamicPass({ label: 'react-live', prefix: 'ring-', page, gotoUrl: vite.url });
+      await runChecks({ label: 'html', prefix: '', page, gotoUrl: targetUrl });
+    } catch (err) {
+      report('[html] pass', 'FAIL', `threw: ${err.message}`);
     } finally {
       await page.close();
+      await new Promise((resolve) => server.close(resolve));
     }
-  } catch (err) {
-    report('[react-live] pass', 'FAIL', `threw: ${err.message}`);
-  } finally {
-    if (vite && vite.proc) vite.proc.kill();
   }
-}
 
-await browser.close();
-finish();
+  // pass 2: the live React route — the code that actually ships. Skippable via
+  // RING_VERIFY_SKIP_LIVE=1 for an environment with no vite binary reachable.
+  if (process.env.RING_VERIFY_SKIP_LIVE === '1') {
+    report('[react-live] pass', 'WARN', 'skipped — RING_VERIFY_SKIP_LIVE=1');
+  } else {
+    let vite = null;
+    try {
+      vite = await ensureViteServer();
+      const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+      try {
+        await runChecks({ label: 'react-live', prefix: 'ring-', page, gotoUrl: vite.url });
+      } finally {
+        await page.close();
+      }
+    } catch (err) {
+      report('[react-live] pass', 'FAIL', `threw: ${err.message}`);
+    } finally {
+      if (vite && vite.proc) vite.proc.kill();
+    }
+  }
+
+  await browser.close();
+  finish();
+}
 
 function printTier(label, rows, width) {
   console.log(`\n── ${label} ──`);

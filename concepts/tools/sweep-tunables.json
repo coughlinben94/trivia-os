@@ -1,0 +1,4 @@
+{
+  "_readme": "The declared writable surface for concepts/tools/ring-sweep.mjs. This is the ONLY set of parameters a sweep run is permitted to touch — the counterpart to ring-spec.lock.json, which nothing automated may write to. Empty by design: no sweep target exists yet this round (2026-08-09, infrastructure-only round — no objects, no colour, no placement work). A human types entries here per sweep, one array entry per tunable parameter, never a default or an inferred list — see ring-sweep.mjs's allowedToMove requirement. Each entry should name: the file+identifier it controls, its current value, and the coarse grid of values a sweep may try.",
+  "tunables": []
+}

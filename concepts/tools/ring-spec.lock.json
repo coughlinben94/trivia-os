@@ -1,0 +1,23 @@
+{
+  "_readme": "Thresholds, caps, and spec constants for concepts/tools/ring-verify.mjs's checks. Nothing automated ever writes to this file — see that file's NO-SELF-BASELINE section for the rule this exists to enforce, and its SPEC-loading comment for per-key history/reasoning that doesn't fit in JSON. Every entry's `src` names the ART-DIRECTION-SPEC.md (or B2-luminance.md) file:line §section it was transcribed from — never a value derived from measuring the build under test.",
+  "inkPerStation": { "lo": 0.06, "hi": 0.18, "src": "ART-DIRECTION-SPEC.md:55 §1" },
+  "midShare": { "min": 0.55, "src": "ART-DIRECTION-SPEC.md:56 §1" },
+  "headlineInk": { "lo": 0.04, "hi": 0.09, "src": "ART-DIRECTION-SPEC.md:59 §1" },
+  "elementsPerStation": { "lo": 2, "hi": 5, "src": "ART-DIRECTION-SPEC.md:62 §1" },
+  "safeBox": { "meanMax": 34, "p995Max": 68, "warnMargin": 4, "src": "ART-DIRECTION-SPEC.md:76 §2" },
+  "quadrant": { "lo": 2, "hi": 4, "src": "ART-DIRECTION-SPEC.md:85 §2" },
+  "balance": { "centre": 960, "tol": 96, "src": "ART-DIRECTION-SPEC.md:87 §2" },
+  "vertSpread": { "areaFrac": 0.15, "minStations": 6, "src": "ART-DIRECTION-SPEC.md:94 §2" },
+  "bleed": { "cropLo": 0.10, "cropHi": 0.35, "lo": 3, "hi": 5, "src": "ART-DIRECTION-SPEC.md:98 §2" },
+  "arcBand": { "quietLo": 8, "quietHi": 13, "loudLo": 26, "loudHi": 34, "src": "ART-DIRECTION-SPEC.md:130 §3" },
+  "arcSpan": { "lo": 2.2, "hi": 4.0, "src": "ART-DIRECTION-SPEC.md:131 §3" },
+  "arcSpanRealised": { "minFrac": 0.80, "src": "B2-luminance.md §4.1 (ART-DIRECTION-SPEC.md:131 §3)" },
+  "arcRankCorrelation": { "min": 0.90, "src": "B2-luminance.md §4.1 (ART-DIRECTION-SPEC.md:149 §3)" },
+  "adjGap": { "frac": 0.06, "src": "ART-DIRECTION-SPEC.md:133 §3" },
+  "troughSpread": { "frac": 0.12, "src": "ART-DIRECTION-SPEC.md:133 §3" },
+  "arcRealised": { "tol": 0.30, "src": "ART-DIRECTION-SPEC.md:149 §3" },
+  "stars": { "lo": 150, "hi": 260, "src": "ART-DIRECTION-SPEC.md:214 §5" },
+  "occluderPlacement": { "bottomThirdFrac": 0.3333333333333333, "src": "ART-DIRECTION-SPEC.md:345 §7.2" },
+  "perceptibility": { "k": 20, "marginPx": 80, "src": "ART-DIRECTION-SPEC.md:72 §1" },
+  "drawnSubject": { "kinds": ["sprite", "ring", "ground"], "src": "ART-DIRECTION-SPEC.md:294 §6.0" }
+}
