@@ -395,6 +395,37 @@ function countAbove({ hist }, threshold) {
 }
 const pct = (x) => (x * 100).toFixed(1) + '%';
 
+// TASK 1.5 (2026-08-09, instrument eight in FAILURE-LEDGER.md): every check
+// that reads a rendered frame was non-deterministic, including checks that
+// LOOK frozen. page.emulateMedia({reducedMotion:'reduce'}) (still called
+// once, below, before the per-station loop) pauses .star/.pf/.pf-breathe/
+// .shoot via the `animation-play-state:paused` media rule — but Chromium
+// freezes each animation at whatever wall-clock-dependent currentTime it
+// had ALREADY reached when the media query took effect, which itself
+// varies run to run with Node/Playwright round-trip jitter. The safe-box
+// cap mostly hid this (forcing --ob===--op makes opacity a constant
+// function of time, so WHICH frozen instant you land on stops mattering
+// for that one check) — measured 5x on unchanged code: st4's peak number
+// was stable all 5 runs, but st10's moved once (mean6.7/p99.5-84 -> mean
+// 6.8/p99.5-85), proving even the "frozen" state wasn't actually pinned.
+// Every check reading the UNFORCED natural frame (ink-per-station,
+// realised-arc, mid-share, headline-ink, the natural half of the safe-box
+// self-check) has no such lucky invariance and moved on every run.
+//
+// Fix: pin every animation's OWN timeline to a fixed instant (currentTime
+// = 0 — 0ms into that element's own keyframe cycle, honouring its
+// individual negative --td delay same as any other frozen instant would)
+// instead of just pausing wherever real time happened to leave it. One
+// shared helper, called once per station right after jumpTo() and before
+// the FIRST screenshot that station takes — every screenshot after it
+// (natural, mid, safe-natural, peak) inherits the same pinned state, so
+// this is the ONE call site the freeze needs per station, not three.
+async function freezeFrame(page) {
+  await page.evaluate(() => {
+    document.getAnimations().forEach(a => { a.pause(); a.currentTime = 0; });
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // DYNAMIC PASS — everything that needs a real browser. Runs once per target
 // (HTML reference, live React route), parameterized by `prefix`.
@@ -584,6 +615,7 @@ export async function runChecks({ page, label, prefix, gotoUrl }) {
 
   for (let s = 0; s < world.ENGINE.PANES; s++) {
     await page.evaluate((st) => window.__world.jumpTo(st), s);
+    await freezeFrame(page); // TASK 1.5 — pin every animation before ANY screenshot this station takes
 
     const dom = await page.evaluate((prefix) => {
       const designEl = document.getElementById('design');
@@ -903,6 +935,7 @@ export async function runChecks({ page, label, prefix, gotoUrl }) {
     const loudestStation = world.ARC.indexOf(Math.max(...world.ARC));
     await page.evaluate((st) => window.__world.jumpTo(st), loudestStation);
     await page.waitForTimeout(50);
+    await freezeFrame(page); // TASK 1.5 — same pin, before either scrim-on/scrim-off screenshot
     const scrimSelector = await page.evaluate((pfx) =>
       document.getElementById('qScrim') ? '#qScrim' : '.' + pfx + 'scrim', prefix);
     const pngScrimOnBuf = await design.screenshot();
