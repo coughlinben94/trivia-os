@@ -1073,6 +1073,13 @@ export async function runChecks({ page, label, prefix, gotoUrl }) {
   // 13. largest element supplies >=55% of the MID layer's own ink (spec §1) —
   //     content-budget. Threshold bug (natural-frame median applied to the
   //     mid-only screenshot) fixed above — see the midThreshold comment.
+  //
+  //     [react-live] st2 flipped PASS->FAIL under the 2026-08-09 freezeFrame
+  //     fix (55.3% pre-freeze, 54.8% post-freeze, stable across 5 runs
+  //     either side — see FAILURE-LEDGER.md "instrument eight"). That FAIL
+  //     is PRE-EXISTING, previously masked by pre-freeze timing jitter
+  //     landing on the lucky side of the 55% line, not a regression this
+  //     fix caused. Do not read it as new breakage in a later round.
   {
     const S = SPEC.midShare;
     const withHeadline = stationMetrics.filter(m => m.hasHeadline && m.midShare != null);
