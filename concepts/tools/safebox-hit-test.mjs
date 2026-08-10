@@ -116,7 +116,24 @@ const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } })
 await page.goto(url)
 await page.waitForFunction(() => !!window.__world, null, { timeout: 8000 })
 const prefix = await page.evaluate(() => window.__world.prefix ?? '')
-await page.evaluate((st) => window.__world.jumpTo(st), station)
+
+// Reach `station` via the SAME path ring-verify.mjs's gate uses, not a
+// direct jump from a fresh load. Confirmed 2026-08-10 (FAILURE-LEDGER.md,
+// instrument nine, Test B): a direct jumpTo(station) from a fresh page
+// reads st4 at p99.5=113; driving the gate's real path — 36 real turn()
+// calls, then jumpTo(0..station) in sequence — reads p99.5=69, matching the
+// gate exactly, 5/5 runs. Whatever accumulates over that path (not yet
+// isolated further) changes what's actually on screen; a direct jump skips
+// it and reads a different, wrong scene.
+const surgeWait = await page.evaluate(() => window.__world.ENGINE.SURGE_MS ? window.__world.ENGINE.SURGE_MS + 200 : 2000)
+const wrapTurns = await page.evaluate(() => window.__world.ENGINE.PANES)
+for (let t = 1; t <= wrapTurns * 3; t++) {
+  await page.evaluate(() => window.__world.turn())
+  await page.waitForTimeout(surgeWait)
+}
+for (let s = 0; s <= station; s++) {
+  await page.evaluate((st) => window.__world.jumpTo(st), s)
+}
 await page.waitForTimeout(150)
 // Freeze every CSS animation (drift, twinkle, breathe) before doing ANYTHING
 // else. Without this, the screenshot captures one instant but a later
@@ -124,7 +141,15 @@ await page.waitForTimeout(150)
 // into that pixel by THEN, not what's actually in the image. That mismatch
 // is exactly what produced nonsense first-pass results here (a 1-3px star
 // "hit" hundreds of px from the sample point).
-await page.evaluate(() => document.getAnimations().forEach(a => a.pause()))
+//
+// pause() alone is NOT enough — instrument nine (FAILURE-LEDGER.md), the
+// same bug as instrument eight in ring-verify.mjs: Chromium freezes at
+// whatever wall-clock-dependent currentTime the animation had already
+// reached, which varies run to run. currentTime = 0 pins every animation to
+// a fixed point on its own timeline instead. Without this, this tool's own
+// star pixels move between runs (and diverge from ring-verify's pinned
+// capture) even though nothing about the underlying build changed.
+await page.evaluate(() => document.getAnimations().forEach(a => { a.pause(); a.currentTime = 0 }))
 const dRect = await page.locator('#design').evaluate(el => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height } })
 
 const results = []

@@ -153,3 +153,179 @@ Raw evidence: `concepts/.audit-shots/noise5/run{1-5}.txt` (before),
   are exactly the metrics proven jittery pre-freeze — any conclusion there
   that hinged on a narrow margin between combinations should be treated as
   unverified until re-run.
+
+---
+
+## Instrument nine — safebox-hit-test.mjs, same freeze bug as instrument
+## eight, unfixed in a second location
+
+**Date:** 2026-08-10
+**Where:** `concepts/tools/safebox-hit-test.mjs`, its own animation freeze
+(`document.getAnimations().forEach(a => a.pause())`, called with no
+`currentTime = 0`).
+**Found during:** the st4 tool/gate conflict (safebox-hit-test.mjs reports
+p99.5=113 at st4, the gate reports 69). Found by reading the tool's freeze
+code and recognizing it as the exact instrument-eight bug, not by running any
+check — confirmed afterward with direct evidence, not inferred.
+
+### What was wrong
+
+Instrument eight's fix (`freezeFrame(page)` in `ring-verify.mjs`) pins every
+animation to `currentTime = 0` before ANY screenshot. `safebox-hit-test.mjs`
+predates that fix and was never updated to use it — it only calls
+`a.pause()`, which (per instrument eight's own finding) freezes each
+animation at whatever wall-clock-dependent instant Node/Playwright round-trip
+jitter happened to land on, not a pinned instant. This tool's whole reason
+for existing is comparing its own reading against the gate's, so the two
+disagreeing was never going to look like a bug in this tool specifically —
+it looked like a gate/tool "discrepancy" instead.
+
+### Calibration first (2026-08-10, this session's item 1)
+
+Before touching either tool: 3 synthetic frames with true-by-construction
+answers (single pixel, known-fraction block, flat field) run through both
+tools' percentile/mean math and the signal/extent formula. **25/25 checks
+passed** — both tools' math is correct, and their safe-box crop coordinates
+resolve to byte-identical pixel bounds at the scale tested. This ruled out a
+calculation bug before any capture happened, and pointed at a content
+difference instead — matching what instrument eight already established
+about the freeze.
+
+### Measured (step 2, before fixing anything)
+
+Captured st4 from both tools independently, same station, same forced peak
+state, neither tool modified. Diffed the two screenshots pixel-by-pixel
+inside the safe-box crop:
+
+- **99.9% of safe-box pixels differ** (237,694 / 237,880). Most of that
+  (193,889 pixels, ~82%) is <=2 luma units — plausible render-level noise
+  across ~211 stars' worth of antialiasing, not the interesting part.
+- **16,236 pixels differ by more than 5 luma units; 9,321 by more than 20.**
+  Max single-pixel diff: 89 luma units (ring-verify reads 114, the hit-test
+  capture reads 203 at the same coordinate).
+- These large diffs are NOT scattered noise — they cluster in small (2-4px)
+  blobs at specific coordinates, the signature of a point light whose
+  position differs between the two captures.
+
+### Hit-tested (step 3, still before fixing anything)
+
+`elementsFromPoint` on the SAME live page/paused-animation state that
+produced the hit-test capture, at the 5 largest-diff coordinates:
+**all 5 land directly on `DIV.star`.** A control coordinate with ~0 diff
+lands on non-star layer elements. This is direct evidence, not inference —
+the pixels that disagree between the two tools are star pixels, exactly what
+an unpinned freeze would move.
+
+### What was fixed
+
+`safebox-hit-test.mjs`'s freeze changed from `a.pause()` to `a.pause();
+a.currentTime = 0` (same fix as instrument eight, applied to this tool's own
+copy of the same logic — it does not import `freezeFrame` from
+`ring-verify.mjs`, so the fix had to be applied here directly).
+
+### Re-verified (step 4) — the fix did NOT resolve the st4 conflict
+
+After the fix, station 4, 5 runs: **p99.5 = 113, unchanged, and now
+byte-identical across all 5 runs** (previously unverified whether it was
+even stable run-to-run within one page instance — now confirmed stable,
+just not correct). This is a real, useful result, reported honestly rather
+than made to look like closure: the currentTime=0 pin is a genuine fix (this
+tool's own repeated-run stability was never actually proven before, and now
+is), but it is NOT what explains the 113-vs-69 gap. Something else does.
+
+**A prior version of this entry stated `p99.5 = 69` here before step 4 had
+actually been run.** That was wrong to write — an unrendered claim stated as
+fact, exactly what this project's own standing rule ("render before you
+claim") exists to prevent. Correcting it now rather than leaving it: the
+number was never measured at 69, it was predicted, and the prediction was
+wrong.
+
+### What step 2/3's own evidence rules out, now that the fix didn't land
+
+The diffing pixels (step 2) land on `.star` (step 3), and peak-forcing
+(`--ob := --op`) is supposed to make star opacity time-invariant regardless
+of freeze instant — per this file's own instrument-eight section and the
+comments in both tools. If that's true, `.star` opacity was never the
+variable, which fits step 4's result (pinning currentTime didn't change
+anything) but reopens the question of what About those `.star` pixels
+differs. Two candidate mechanisms noticed while reading (NOT verified — do
+not treat either as the answer without the same calibrate-first discipline
+item 2 just used):
+
+- `ring-verify.mjs` calls `page.emulateMedia({reducedMotion:'reduce'})`
+  before its per-station loop; `safebox-hit-test.mjs` never calls it. World-
+  07's `spawnShoot()`/`shootLoop()` checks `isReduced()` and no-ops under
+  reduced motion — so the gate's page can never spawn a `.shoot` element
+  during measurement and the hit-test tool's page can, on its own
+  wall-clock timer, independent of station or freeze. (The 5 largest diffs
+  hit-tested as `.star`, not `.shoot`, so this doesn't explain THOSE specific
+  pixels — but it's a real, unexamined determinism gap in its own right.)
+- `ring-verify.mjs` reaches station 4 by first driving `window.__world.turn()`
+  36 times (real, un-frozen, `reducedMotion` OFF during that phase) then
+  calling `jumpTo(s)` for stations 0..3 in sequence before 4.
+  `safebox-hit-test.mjs` calls `jumpTo(4)` once, directly, from a fresh page
+  load — no 36-turn drive, no intermediate per-station stops. `jumpTo`'s own
+  offset arithmetic is additive/order-independent, so this may be a red
+  herring — but per-station side effects inside intermediate `jumpTo`/`turn`
+  calls (if any) were not checked, and the 36-turn phase runs with real
+  motion for a long time before the gate ever freezes anything.
+
+Neither is confirmed. Both would need the same treatment step 2 just gave
+the freeze hypothesis — capture, diff, hit-test — before being trusted.
+
+### Both candidates tested in isolation, one at a time (2026-08-10)
+
+Predictions stated first, one throwaway script per test (copy of the
+currentTime=0-fixed tool, exactly one variable changed), 5 runs each,
+deleted after use, never combined.
+
+**Test A — reducedMotion.** Predicted: p99.5 stays at 113 (peak-forcing
+should already be motion-state-invariant, and the diffing pixels hit-tested
+as `.star`, not `.shoot`). Added `page.emulateMedia({reducedMotion:'reduce'})`
+before `jumpTo(4)`, navigation path unchanged (direct jump from fresh load).
+**Actual: p99.5 = 113, all 5 runs, unchanged.** Prediction correct.
+Hypothesis A ruled out.
+
+**Test B — navigation path.** Predicted: moves substantially toward 69,
+plausibly landing at or very near it. Replaced the single `jumpTo(4)` with
+the gate's real path — 36 real `turn()` calls (`reducedMotion` off, matching
+the gate's drive phase, `SURGE_MS+200`ms wait each, ~68s total) then
+`jumpTo(0)`, `jumpTo(1)`, `jumpTo(2)`, `jumpTo(3)`, `jumpTo(4)` in sequence,
+no `emulateMedia` call anywhere (isolated from test A).
+**Actual: mean = 7.0, p99.5 = 69 — exact match to the gate, all 5 runs
+identical.** Hypothesis B confirmed. The offset arithmetic itself is
+order-independent as suspected, but SOMETHING that happens during the
+36-turn drive and/or the intermediate per-station stops changes what's on
+screen at station 4 — not yet isolated further than "the path itself,
+undifferentiated between the drive phase and the sequential jumps."
+
+### What was fixed
+
+`safebox-hit-test.mjs` changed to reach its target station via the same
+real path the gate uses (36-turn drive + sequential `jumpTo` through every
+intervening station) instead of a single direct `jumpTo(target)` from a
+fresh load. Narrowest fix matching the identified mechanism — no threshold
+moved, no colour/star channel touched, nothing dimmed; the tool now walks
+the same path the gate always walked. Predicted post-fix reading: p99.5 = 69,
+mean = 7.0, matching Test B exactly (Test B **is** this fix, run once
+already as an isolated experiment). The mean drop from 10.4 (direct-jump,
+pre-fix) to 7.0 (real-path, post-fix) is not a dimming side effect of the
+fix — it's the tool now measuring the same real content the gate measures;
+Test B established that number independently before the checked-in tool was
+touched.
+
+### Which past conclusions this does and does not invalidate
+
+- The st4/st10 star-attribution work (direct hit-tested, instrument-eight
+  era) stands — it was never based on this tool's un-pinned reading.
+- **The st4 tool/gate conflict is RESOLVED, not by a math or freeze fix, but
+  by a real difference in how the two tools reached the station.** st4's
+  true safe-box overage is 69 vs a cap of 68 — 1 point over, not 45.
+  Everything upstream of this ledger entry that assumed a 45-point overage
+  at st4 (any of this session's or the handoff's framing of it as a large
+  gap) should be treated as superseded by this measurement.
+- The exact accumulated-state mechanism (drive phase vs. intermediate stops)
+  is still unresolved at the mechanism level, only at the "which variable"
+  level — do not extend this finding into a specific claim about occluders,
+  star regeneration, or anything else without testing that claim the same
+  way.
