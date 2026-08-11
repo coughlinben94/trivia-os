@@ -216,6 +216,34 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
   }
 
   if (kind === 'blob') {
+    // 2026-08-11 object-fix round (st6, rose nebula — both reviews FAIL/weak,
+    // "dimmest object in the suite... collapses to nothing at distance"):
+    // every alpha in this kind was pure A(x,fill) with no presence floor
+    // (unlike drawPlanetDisc's silhouette or asteroidField's rock base,
+    // which both have one) — at a quiet station's low fill value, alpha
+    // shrinks linearly toward zero with nothing to hold it up. AB() adds a
+    // floor at 55% of each term's own target alpha; only raises low-fill
+    // stations, never lowers high-fill ones (st3's orange nebula, already
+    // fine, is unaffected in practice since its own A(x,fill) already clears
+    // the floor).
+    // Second pass, after blind critique confirmed st6 was still "the
+    // faintest hero... near-invisible at 20ft" post-fix: raised the alpha
+    // floor multiplier 0.55->0.85. AB() is a max(), so this is still safe
+    // at high fill — at fill=1, A(a,1) already exceeds a*0.85, so st3 is
+    // unaffected by construction (re-verified via the gate below anyway).
+    const AB = (a, f2) => Math.max(a * 0.85, A(a, f2))
+    // Measured on a real render (st6, hue=330): the alpha floor alone barely
+    // moved anything visually — rose/magenta has inherently low luma
+    // (0.2126R+0.7152G+0.0722B weights green heavily; magenta is green-
+    // starved at any alpha) so the real lever is LIGHTNESS, not alpha.
+    // FIRST attempt bumped lightness flat/unconditionally (62/46/30 ->
+    // 76/60/42) — verified via the real gate this broke st3 (also `blob`,
+    // already fine): p99.5 went 61->73, a NEW cap violation (68). Corrected
+    // to fill-gated: boost scales with (1-fill), so a loud station (st3,
+    // fill near 1) gets ~0 boost — cap violation confirmed gone on re-run,
+    // not just assumed — while a quiet one (st6) still gets most of it.
+    // Boost multiplier 16->26, same second pass.
+    const LB = (base) => Math.min(95, base + (1 - Math.min(1, fill)) * 26)
     let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity, domRot = 0, domArea = -1
     for (let i = 0; i < 3; i++) {
       const L = el('b-lobe')
@@ -224,8 +252,8 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       L.style.left = px(lx); L.style.top = px(ly)
       L.style.width = px(lw); L.style.height = px(lh)
       L.style.background = `radial-gradient(ellipse ${E(56, fill).toFixed(0)}% ${E(44, fill).toFixed(0)}% at ${40 + r() * 20}% 50%,
-        ${hsla(hue, 72, 62, A(0.42, fill))} 0%, ${hsla(hue - 8, 64, 46, A(0.20, fill))} 40%,
-        ${hsla(hue - 14, 56, 30, A(0.07, fill))} 66%, transparent ${E(82, fill).toFixed(0)}%)`
+        ${hsla(hue, 72, LB(62), AB(0.42, fill))} 0%, ${hsla(hue - 8, 64, LB(46), AB(0.20, fill))} 40%,
+        ${hsla(hue - 14, 56, LB(30), AB(0.07, fill))} 66%, transparent ${E(82, fill).toFixed(0)}%)`
       const rot = -30 + r() * 60
       L.style.transform = `rotate(${rot.toFixed(0)}deg)`
       f.appendChild(L)
@@ -241,8 +269,8 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     const ccx = lerp(bx0, bx1, 0.3 + r() * 0.4), ccy = lerp(by0, by1, 0.3 + r() * 0.4)
     core.style.width = core.style.height = px(cs)
     core.style.left = px(ccx - cs / 2); core.style.top = px(ccy - cs / 2)
-    core.style.background = `radial-gradient(circle, ${hsla(hue, 30, 96, A(0.70, fill))} 0%, ${hsla(hue, 70, 80, A(0.35, fill))} 55%, transparent 100%)`
-    core.style.boxShadow = `0 0 ${px(cs * 2.4)} ${px(cs * 0.8)} ${hsla(hue, 84, 78, A(0.22, fill))}`
+    core.style.background = `radial-gradient(circle, ${hsla(hue, 30, 96, AB(0.70, fill))} 0%, ${hsla(hue, 70, 80, AB(0.35, fill))} 55%, transparent 100%)`
+    core.style.boxShadow = `0 0 ${px(cs * 2.4)} ${px(cs * 0.8)} ${hsla(hue, 84, 78, AB(0.22, fill))}`
     f.appendChild(core)
     // rim: traces the ACTUAL lobe cluster's bounding box, inset to the
     // gradient's own visible radii (56%/44%, matching each lobe's own
@@ -258,11 +286,24 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
   }
 
   else if (kind === 'dots') {
+    // 2026-08-11 object-fix round (st2, star cluster — both blind reviews:
+    // the real cluster idea "buried in a tiny speckle motif... never given
+    // headline weight anywhere"). `dots` is shared between this headline use
+    // and small ambient detail flecks (58-154px boxes elsewhere) — the fixed
+    // 26-48 dot count read fine as a detail fleck but was sparse to the
+    // point of invisibility spread across a 576-880px headline box, and
+    // individually indistinguishable from the real ambient star field
+    // (buildStars) behind it. isHeadline-gated boost: extra dots and a
+    // stronger halo ONLY above w=300px, so detail-scale `dots` elsewhere are
+    // completely unchanged (extra=0 below that size) — this is additive at
+    // headline scale, not a global density change.
     const g = el('d-glow')
+    const glowA = isHeadline ? 0.30 : 0.16, glowA2 = isHeadline ? 0.13 : 0.06
     g.style.background = `radial-gradient(circle closest-side,
-      ${hsla(hue, 58, 66, A(0.16, fill))} 0%, ${hsla(hue, 50, 52, A(0.06, fill))} 48%, transparent ${E(76, fill).toFixed(0)}%)`
+      ${hsla(hue, 58, 66, A(glowA, fill))} 0%, ${hsla(hue, 50, 52, A(glowA2, fill))} 48%, transparent ${E(76, fill).toFixed(0)}%)`
     f.appendChild(g)
-    const n = 26 + Math.floor(r() * 22)
+    const extra = isHeadline ? Math.max(0, Math.round((w - 300) * 0.15)) : 0
+    const n = 26 + Math.floor(r() * 22) + extra
     for (let i = 0; i < n; i++) {
       const a = r() * Math.PI * 2, rad = Math.pow(r(), 0.55) * 0.46
       const s = 2.0 + r() * 3.4
@@ -271,7 +312,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       d.style.top = px((0.5 + Math.sin(a) * rad) * h)
       d.style.width = d.style.height = px(s)
       d.style.background = i % 4 ? '#ffffff' : hsla(hue, 70, 84, 1)
-      d.style.opacity = (0.55 + r() * 0.45).toFixed(2)
+      d.style.opacity = (isHeadline ? 0.70 + r() * 0.30 : 0.55 + r() * 0.45).toFixed(2)
       if (s > 4.2) d.style.boxShadow = `0 0 ${px(s * 2.2)} ${px(s * 0.3)} ${hsla(hue, 70, 80, 0.5)}`
       f.appendChild(d)
     }
@@ -309,12 +350,28 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // top of it). Bounded to roughly the arm cluster's own footprint
     // instead, so it reads as a soft galactic bulge behind the arms, not
     // the dominant shape of the whole primitive.
+    // 2026-08-11 object-fix round (st1, spiral galaxy — both blind reviews
+    // FAIL, "no spiral structure, reads as a bead-chain smudge"): the bulge
+    // was too faint (0.16/0.08 alpha) to read as a galactic core at all, so
+    // the whole primitive collapsed to just its arm lobes — a chain of dots
+    // with nothing for them to visibly wind AROUND. Doubled to make an
+    // unmistakable bright centre.
+    //
+    // CORRECTION, same round, after the first blind-critique pass: the
+    // brightness boost was NOT isHeadline-gated, so `lens` companions (this
+    // kind is also used for other stations' companion element) got brighter
+    // too — both critique agents independently flagged a "bead-chain" prop
+    // now recurring as background dressing at st2/3/4/5, and specifically
+    // that st1's own headline reads as indistinguishable from that dressing.
+    // Gated to isHeadline: companions revert to the original, dimmer values;
+    // only the actual headline (st1) gets the boost.
+    const boost = isHeadline
     const d = el('l-disc')
     const dw = w * 0.60, dh = h * 0.60
     d.style.left = px(w * 0.5 - dw / 2); d.style.top = px(h * 0.5 - dh / 2)
     d.style.width = px(dw); d.style.height = px(dh)
     d.style.background = `radial-gradient(ellipse ${E(62, fill).toFixed(0)}% ${E(62, fill).toFixed(0)}% at 50% 50%,
-      ${hsla(hue, 40, 44, A(0.16, fill))} 0%, ${hsla(hue, 36, 32, A(0.08, fill))} 50%, transparent ${E(80, fill).toFixed(0)}%)`
+      ${hsla(hue, 40, 44, A(boost ? 0.32 : 0.16, fill))} 0%, ${hsla(hue, 36, 32, A(boost ? 0.16 : 0.08, fill))} 50%, transparent ${E(80, fill).toFixed(0)}%)`
     f.appendChild(d)
     // spiral arms: this used to be a straight dust lane across a flattened
     // disc, which fill-black-silhouettes indistinguishable from `ring`'s
@@ -356,10 +413,25 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       // combined arc into a horseshoe/ring silhouette (a §6.2 anatomy
       // collision with `dots`) - same direction + opposite start angles
       // reads as an actual pinwheel/S-spiral instead.
-      const lobes = 6
+      // 2026-08-11, second pass: 6 -> 10 lobes. The touching-but-distinct
+      // ratio (ARM_TARGET_RATIO, spec §6.2's cited 0.7-1.05 band) is NOT
+      // being touched — that's a cited spec threshold, not mine to move.
+      // But diameter is DERIVED from gap distance at that same ratio, so
+      // packing more, smaller lobes into the same arc length shrinks both
+      // lobe size and absolute gap together, reading as a smoother
+      // continuous band at the SAME relative ratio — addressing "discrete
+      // beads" (both blind critiques, independently) without moving the
+      // number that band is defined by.
+      const lobes = 10
       const maxRad = w * (0.30 + r() * 0.08)
       const r0 = maxRad * 0.12 // innermost lobe radius, ln() reference point
-      const pitch = 0.85 + r() * 0.25 // ln(maxRad/r0) ~= 2.12 -> ~103-134deg sweep/arm
+      // 2026-08-11 object-fix round: was 0.85+r()*0.25 (~103-134deg sweep) —
+      // both arms combined never covered enough of a full turn to read as a
+      // pinwheel, just a gentle bend (both blind reviews: "no spiral
+      // structure"). Widened so each arm sweeps ~140-182deg — most of a full
+      // half-turn — the two mirrored arms now visibly wind around the core
+      // instead of reading as two short dot-chains.
+      const pitch = 1.15 + r() * 0.35 // ln(maxRad/r0) ~= 2.12 -> ~140-182deg sweep/arm
       const pos = []
       for (let k = 0; k < lobes; k++) {
         const t = k / (lobes - 1)
@@ -394,9 +466,15 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
         const lobe = el('l-arm')
         lobe.style.width = lobe.style.height = px(Math.max(10, ls))
         lobe.style.left = px(lx - ls / 2); lobe.style.top = px(ly - ls / 2)
+        // 2026-08-11: base alpha 0.42/0.16 -> 0.60/0.28 — arm lobes were too
+        // faint against the (now brighter) bulge and the space background,
+        // part of why the whole primitive read as a flat smudge. isHeadline-
+        // gated (see `boost` above) so companions keep the original values.
+        const loA = boost ? 0.60 - t * 0.20 : 0.42 - t * 0.20
+        const loA2 = boost ? 0.28 - t * 0.08 : 0.16 - t * 0.08
         lobe.style.background = `radial-gradient(circle,
-          ${hsla(hue + ai * 6, 62 - t * 10, 72 - t * 16, A(0.42 - t * 0.20, fill))} 0%,
-          ${hsla(hue, 52, 46, A(0.16 - t * 0.08, fill))} 55%, transparent ${E(82, fill).toFixed(0)}%)`
+          ${hsla(hue + ai * 6, 62 - t * 10, 72 - t * 16, A(loA, fill))} 0%,
+          ${hsla(hue, 52, 46, A(loA2, fill))} 55%, transparent ${E(82, fill).toFixed(0)}%)`
         f.appendChild(lobe)
         // edge highlight rotates to the spiral's local TANGENT, not its
         // radial angle - for r = r0*e^(ang/pitch), tangent-to-radial
@@ -419,11 +497,15 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
         ${hsla(hue + 8, 72, 88, 0.85)} 44%, ${hsla(hue + 8, 72, 88, 0.85)} 56%, transparent 100%)`
       f.appendChild(edge)
     }
+    // 2026-08-11: size 0.036->0.052, glow alpha 0.45->0.75 — the nucleus
+    // the arms wind around needs to read as unmistakably the brightest
+    // point in the primitive, not a faint dot lost among the arm lobes.
+    // isHeadline-gated, same as the rest of this kind's boost.
     const c = el('l-core')
-    const cs = Math.max(11, w * 0.036)
+    const cs = Math.max(14, w * (boost ? 0.052 : 0.036))
     c.style.width = c.style.height = px(cs)
     c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
-    c.style.boxShadow = `0 0 ${px(cs * 2.6)} ${px(cs * 0.7)} ${hsla(hue, 70, 80, A(0.45, fill))}`
+    c.style.boxShadow = `0 0 ${px(cs * 2.6)} ${px(cs * 0.7)} ${hsla(hue, 70, boost ? 85 : 80, A(boost ? 0.75 : 0.45, fill))}`
     f.appendChild(c)
     f.style.transform = `rotate(${(-30 + r() * 24).toFixed(0)}deg)`
   }
@@ -452,36 +534,73 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     const hd = el('k-head')
     hd.style.width = hd.style.height = px(hs); hd.style.marginTop = px(-hs / 2)
     hd.style.background = '#f2fbff'
-    hd.style.boxShadow = `0 0 ${px(hs * 2.2)} ${px(hs * 0.6)} ${hsla(hue, 72, 80, A(0.5, fill))}`
+    // 2026-08-11: boxShadow alpha 0.5 -> 0.65 (st7, comet — Fable-5's
+    // harsher read: cropped off-frame at real distance reads empty; the
+    // milder read called it "basically correct, just faint" — addressing
+    // both).
+    hd.style.boxShadow = `0 0 ${px(hs * 2.2)} ${px(hs * 0.6)} ${hsla(hue, 72, 80, A(0.65, fill))}`
     f.appendChild(hd)
-    f.style.transform = `rotate(${(-26 + r() * 16).toFixed(0)}deg)`
+    // 2026-08-11: rotation range -26..-10deg -> -12..-4deg. .k-head sits at
+    // this box's right edge (top:50% unrotated); for a shallow wide box
+    // (hh=hw*0.30) a -26deg tilt swings the head ~126-193px above the box's
+    // own vertical center, which bandY's own crop allowance (up to 30% of
+    // effective height, by design, for the spec's bleed requirement) could
+    // then legitimately push off the top edge — confirmed on today's
+    // render, the actual defect Fable-5 flagged. Halving the tilt range
+    // roughly halves that displacement without losing the streaked-comet
+    // read.
+    f.style.transform = `rotate(${(-12 + r() * 8).toFixed(0)}deg)`
   }
 
   else if (kind === 'ribbon') {
-    // was 'ellipse 60% 18%' - a headline-sized bounding box (576-880px)
-    // with a visible gradient reading out to only 18% of its own height:
-    // big box, near-nothing inside it ("a scratch on a dark screen" per the
-    // visual review). Box size alone doesn't fix ink (spec §1) - the
-    // gradient's own visible extent has to be big. Widened/heightened to
-    // 94%/42% of the box (nearly the full frame this headline occupies)
-    // and alpha lowered - big AND dim, not small and dim.
-    const b = el('r-body')
-    b.style.background = `radial-gradient(ellipse 94% 42% at 50% 50%,
-      ${hsla(hue, 42, 30, A(0.38, fill))} 0%, ${hsla(hue, 38, 24, A(0.22, fill))} 46%,
-      ${hsla(hue, 34, 18, A(0.09, fill))} 70%, transparent ${E(88, fill).toFixed(0)}%)`
-    f.appendChild(b)
-    // hard edge traces the band's OWN long top edge only (one rim, per
-    // spec's fix suggestion) - a bright horizontal line positioned at the
-    // gradient's own visible top extent (42% ellipse height => the visible
-    // edge sits ~19% of h above center), not a floating full-ellipse ring.
-    const edge = el('r-edge')
-    edge.style.left = '5%'; edge.style.right = '5%'
-    edge.style.top = px(h * 0.5 - h * 0.19)
-    edge.style.height = px(Math.max(4, h * 0.022))
-    edge.style.background = `linear-gradient(90deg, transparent 0%,
-      ${hsla(hue + 6, 60, 76, 0.55)} 20%, ${hsla(hue + 6, 62, 80, 0.65)} 80%, transparent 100%)`
-    f.appendChild(edge)
-    f.style.transform = `rotate(${(-18 + r() * 36).toFixed(0)}deg)`
+    // 2026-08-11 object-fix round (st11, aurora ribbon — FAIL both blind
+    // reviews: "a flat horizontal oval/smear does not read as an aurora
+    // specifically — an aurora reads through an undulating wave/curtain
+    // contour, which this has none of"). Real redesign, not a tweak: the
+    // single flat ellipse is replaced by several soft body segments strung
+    // along a real sine wave (a wavy SILHOUETTE, not just a wavy line), and
+    // the one straight edge highlight is replaced by a genuinely curved SVG
+    // path (chained quadratic beziers approximating the same sine curve —
+    // `ring`'s kind already uses SVG paths in this file, so this isn't a
+    // new technique for the codebase, just a curve instead of an arc).
+    const SEGMENTS = 7, waveAmp = h * 0.16, waveCycles = 1.6
+    for (let i = 0; i < SEGMENTS; i++) {
+      const t = i / (SEGMENTS - 1)
+      const segY = h * 0.5 + Math.sin(t * Math.PI * 2 * waveCycles) * waveAmp
+      const segW = w * (0.20 + 0.02 * r()), segH = h * (0.30 + 0.06 * r())
+      const seg = el('r-body')
+      seg.style.left = px(t * w - segW / 2)
+      seg.style.top = px(segY - segH / 2)
+      seg.style.width = px(segW); seg.style.height = px(segH)
+      seg.style.background = `radial-gradient(ellipse 90% 60% at 50% 50%,
+        ${hsla(hue, 42, 30, A(0.32, fill))} 0%, ${hsla(hue, 38, 24, A(0.18, fill))} 50%,
+        transparent ${E(85, fill).toFixed(0)}%)`
+      f.appendChild(seg)
+    }
+    const NS = 'http://www.w3.org/2000/svg'
+    const svg = document.createElementNS(NS, 'svg')
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
+    svg.style.position = 'absolute'; svg.style.inset = '0'
+    svg.style.width = '100%'; svg.style.height = '100%'
+    const N = 24
+    const pts = Array.from({ length: N + 1 }, (_, k) => {
+      const t = k / N
+      return { x: t * w, y: h * 0.5 + Math.sin(t * Math.PI * 2 * waveCycles) * waveAmp * 0.85 - h * 0.02 }
+    })
+    let d = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
+    for (let k = 1; k < pts.length; k++) {
+      const mx = (pts[k - 1].x + pts[k].x) / 2, my = (pts[k - 1].y + pts[k].y) / 2
+      d += ` Q ${pts[k - 1].x.toFixed(1)},${pts[k - 1].y.toFixed(1)} ${mx.toFixed(1)},${my.toFixed(1)}`
+    }
+    const path = document.createElementNS(NS, 'path')
+    path.setAttribute('d', d)
+    path.setAttribute('fill', 'none')
+    path.setAttribute('stroke', hsla(hue + 6, 62, 80, 0.7))
+    path.setAttribute('stroke-width', px(Math.max(4, h * 0.022)))
+    path.setAttribute('stroke-linecap', 'round')
+    svg.appendChild(path)
+    f.appendChild(svg)
+    f.style.transform = `rotate(${(-14 + r() * 28).toFixed(0)}deg)`
   }
 
   else if (kind === 'ring') {
@@ -545,12 +664,47 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // two unequal bodies + a shared halo - distinct from the unparameterized
     // dots cluster (spec §6.2: an atlas entry must be a recipe, not a bare
     // primitive token).
-    const sizes = [0.62, 0.40] // two unequal bodies, not two identical dots
+    // 2026-08-11 object-fix round (st8 — DIVERGED, Fable-5's harsher FAIL:
+    // "visually identical to generic background stars... no visual cue that
+    // reads as a pair specifically"). Size ratio widened 0.62/0.40 (1.55x)
+    // -> 0.68/0.32 (2.1x) for a clearer big/small read, and a connecting
+    // line added below (the halo alone, at 0.20 alpha, wasn't enough of a
+    // cue). A straight connecting line, not an elliptical orbit — `ring`
+    // already owns the elliptical-orbit anatomy (spec §6.2: two distinct
+    // nouns must not share one), so this stays a different shape family.
+    const sizes = [0.68, 0.32] // two unequal bodies, not two identical dots
     const positions = [[0.38, 0.5], [0.62, 0.5]]
     // halo scoped to the two dots' own span (not .d-glow's inset:0 default,
     // which fills the entire headline box) - unsized it merged the two dots
     // and their oversized halo into one solid oval on a real render, reading
     // as another blob rather than a distinct binary-pair silhouette.
+    // connecting line between the two bodies' centres — the direct pairing
+    // cue Fable-5 found missing. Thin, tapered toward each end (transparent
+    // at both tips so it doesn't read as a third solid shape), positioned
+    // and rotated to span exactly the two dot centres.
+    const p0x = positions[0][0] * w, p0y = positions[0][1] * h
+    const p1x = positions[1][0] * w, p1y = positions[1][1] * h
+    const bdx = p1x - p0x, bdy = p1y - p0y
+    const blen = Math.hypot(bdx, bdy), bang = Math.atan2(bdy, bdx) * 180 / Math.PI
+    // Second pass, after blind critique: both agents independently read the
+    // thin hard-edged line as "a diagram" / "constellation edge" / "barbell"
+    // — mechanical, not a star system. Softened rather than removed (it's
+    // still the pairing cue Fable-5's harsher read said was missing): much
+    // thicker (a soft light-bridge, not a rod), lower peak alpha, wider
+    // transparent fade zones so it reads as shared glow between the two
+    // bodies rather than a drawn connector.
+    const bthick = Math.max(6, w * 0.028)
+    const bridge = el('')
+    bridge.style.position = 'absolute'
+    bridge.style.width = px(blen); bridge.style.height = px(bthick)
+    bridge.style.left = px(p0x); bridge.style.top = px(p0y)
+    bridge.style.marginTop = px(-bthick / 2)
+    bridge.style.transformOrigin = '0 50%'
+    bridge.style.transform = `rotate(${bang.toFixed(1)}deg)`
+    bridge.style.borderRadius = '50%'
+    bridge.style.filter = 'blur(3px)'
+    bridge.style.background = `linear-gradient(90deg, transparent 0%, ${hsla(hue, 55, 75, A(0.24, fill))} 40%, ${hsla(hue, 55, 75, A(0.24, fill))} 60%, transparent 100%)`
+    f.appendChild(bridge)
     const halo = el('d-glow')
     const haloD = w * 0.5
     halo.style.left = px(w * 0.5 - haloD / 2); halo.style.top = px(h * 0.5 - haloD / 2)
@@ -606,9 +760,12 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
   }
 
   else if (kind === 'asteroidField') {
-    // scattered-cluster family: 3 rocks, each with its own companion glow
-    // = 6 DOM elements (budget, exact). §7 (>=2 separately positioned
-    // parts): trivially satisfied. Presence floor: each rock's own base
+    // scattered-cluster family: was 3 rocks (6 DOM elements, exact) — see
+    // the 2026-08-11 comment further down for why this went to 10 rocks
+    // (20 elements) instead; the "exact" budget framing below is the
+    // superseded reasoning, kept for the measured lessons it still records.
+    // §7 (>=2 separately positioned parts): trivially satisfied. Presence
+    // floor: each rock's own base
     // fill alpha is constant, never fill-scaled. Fill-driven: each rock's
     // own glow (A()/E()) and its lit-edge highlight alpha. Light: each
     // rock's highlight sits on the LIGHT_DEG-facing edge (a linear-gradient
@@ -632,18 +789,42 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     //    That costs a DOM element per rock, so rock count came down from 5
     //    to 3 to stay inside the 6-element budget — still a legitimate
     //    "field," each rock now separated and independently readable.
+    // 2026-08-11 object-fix round (st9, asteroid field — PASS/borderline
+    // both reviews, Fable-5: "only three hexagons, wrapped in soft halos
+    // that read as bokeh rather than rock"). Elements-per-station (spec §1,
+    // 2-5 band) counts composed FORMS at the world-07-ring.html/RingAmbient
+    // call-site level (one count per dom.makePrim() call), not this
+    // primitive's own internal DOM nodes — confirmed by reading that check
+    // (ring-verify.mjs #14) before changing this, not assumed — so going
+    // from 3 to 10 sectors here does not touch that budget. Smaller rocks
+    // (rs shrunk ~40%) and a much smaller, dimmer glow per rock (gd
+    // 2.2x->1.4x, alpha 0.55->0.35) so the polygon silhouette itself reads
+    // as the dominant shape instead of its halo.
     const cssLightDeg = (LIGHT_DEG + 90) % 360 // my atan2 convention (0=+x) -> CSS gradient convention (0=up)
-    const SECTORS = [{ x: 0.14, y: 0.55 }, { x: 0.50, y: 0.20 }, { x: 0.84, y: 0.58 }]
+    const SECTORS = [
+      { x: 0.10, y: 0.60 }, { x: 0.24, y: 0.30 }, { x: 0.38, y: 0.68 }, { x: 0.50, y: 0.22 },
+      { x: 0.60, y: 0.55 }, { x: 0.70, y: 0.32 }, { x: 0.80, y: 0.62 }, { x: 0.90, y: 0.40 },
+      { x: 0.18, y: 0.45 }, { x: 0.55, y: 0.75 },
+    ]
     SECTORS.forEach(sec => {
-      const rs = w * (0.14 + r() * 0.09)
+      const rs = w * (0.08 + r() * 0.055)
       const cx = sec.x * w + (r() * 0.05 - 0.025) * w, cy = sec.y * h + (r() * 0.05 - 0.025) * h
       const rx = Math.min(w - rs, Math.max(0, cx - rs / 2)), ry = Math.min(h - rs, Math.max(0, cy - rs / 2))
       const rockHue = hue - 8 + r() * 16
+      // Second pass, after blind critique: the first pass over-corrected
+      // ("wrapped in soft halos that read as bokeh") into "too dark... melts
+      // to faint blobs at 20ft" — both critiques independently. The glow was
+      // never the real problem, the ROCK's OWN fill was: base lightness 19
+      // (near-black) and highlight 34 were both too dark to register at
+      // headline scale. Glow nudged back up partway (1.4x->1.7x,
+      // 0.35->0.42, still well under the original 2.2x/0.55 that read as
+      // bokeh); rock fill lightness raised 19->32 / 34->52 — the actual
+      // silhouette, not its halo, now carries the contrast.
       const glow = el('d-glow')
-      const gd = rs * 2.2
+      const gd = rs * 1.7
       glow.style.left = px(cx - gd / 2); glow.style.top = px(cy - gd / 2)
       glow.style.width = glow.style.height = px(gd)
-      glow.style.background = `radial-gradient(circle closest-side, ${hsla(rockHue + 15, 50, 62, A(0.55, fill))} 0%, transparent ${E(80, fill).toFixed(0)}%)`
+      glow.style.background = `radial-gradient(circle closest-side, ${hsla(rockHue + 15, 50, 62, A(0.42, fill))} 0%, transparent ${E(80, fill).toFixed(0)}%)`
       f.appendChild(glow)
       const rock = el('')
       rock.style.position = 'absolute'
@@ -658,8 +839,8 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       // base (presence floor, constant alpha) + lit-edge highlight blended
       // in via a second, fill-driven gradient layer on top.
       rock.style.background =
-        `linear-gradient(${cssLightDeg.toFixed(0)}deg, ${hsla(rockHue + 12, 30, 34, A(0.8, fill))} 0%, transparent 55%), ` +
-        `${hsla(rockHue, 16, 19, 0.97)}`
+        `linear-gradient(${cssLightDeg.toFixed(0)}deg, ${hsla(rockHue + 12, 30, 52, A(0.8, fill))} 0%, transparent 55%), ` +
+        `${hsla(rockHue, 20, 32, 0.97)}`
       f.appendChild(rock)
     })
   }
@@ -696,7 +877,14 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       beam.style.position = 'absolute'
       beam.style.left = '50%'; beam.style.top = '50%' // anchor at the core's own center, not f's static position
       const len = beamLen * (0.30 + E(70, fill) / 100) // stub always present, fill throws it further
-      const th = Math.max(3, w * 0.006)
+      // 2026-08-11 object-fix round (st5, pulsar — DIVERGED: one review
+      // clean pass, Fable-5 borderline, "beam lines thin enough to vanish
+      // at real 20-foot bar TV distance, leaving a generic star." Fable-5's
+      // own estimate: 5-10x current weight. Went 5x (0.006 -> 0.03) — the
+      // linear-gradient taper (opaque at core, transparent at tip) keeps it
+      // reading as a ray rather than a solid blocky line even at this
+      // weight, since only the near-core end is at full width/alpha.
+      const th = Math.max(6, w * 0.03)
       beam.style.width = px(len); beam.style.height = px(th)
       beam.style.marginTop = px(-th / 2)
       beam.style.transformOrigin = '0 50%'

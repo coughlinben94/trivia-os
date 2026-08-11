@@ -440,7 +440,21 @@ function buildLayerContent(host, L){
       const ar = rng(0, 0xA4C7);
       const AW = 760, AH = Math.round(AW * 0.62);
       const anchorHue = WORLD.hueAnchors[1].deg;
-      const anchor = dom.makePrim('lens', AW, AH, anchorHue, 0.34, ar, false, 1); // layer-level anchor, not tied to any one station's loudness -> explicit fill=1, not a dropped param
+      // 2026-08-11 object-fix round, found on the SECOND (post-rewrite)
+      // blind-critique pass, not the first: this anchor is drawn once per
+      // far-layer period at explicit fill=1 (never scaled down by station
+      // loudness, unlike every headline/companion), so it's constantly at
+      // full intensity across its whole ~5-station visible window. Two
+      // independent Fable-5 critiques, cold, converged on it as the
+      // dominant confound at st1-4 — "the same blue beaded spiral" beating
+      // the actual headline for attention. Not a regression from today's
+      // isHeadline gating (verified: this call already passed
+      // isHeadline=false, so it already used the dim 'lens' values) — the
+      // fill=1 floor alone was enough to make even the dim values read as
+      // a recurring prop. AW (760px, tied to the visibleStations=5.58
+      // arithmetic the comment above cites) is untouched — only alpha,
+      // 0.34 -> 0.15, cut without touching the spec'd sizing.
+      const anchor = dom.makePrim('lens', AW, AH, anchorHue, 0.15, ar, false, 1); // layer-level anchor, not tied to any one station's loudness -> explicit fill=1, not a dropped param
       anchor.style.left = px(period * 0.42 - AW/2);
       anchor.style.top  = px(dom.bandY(ar, AH));
       host.appendChild(anchor); formTotal++;
@@ -632,10 +646,24 @@ function buildLayerContent(host, L){
          luminance ratios per station. */
       if (occluderStations.has(i)){
         const orr = rng(i, 0x0CC1);
-        const os = lerp(260, 340, orr());
+        // 2026-08-11 object-fix round: was 260-340px at fill(i) (loudness-
+        // driven, so loud stations got a bright ~300px disc) — two blind
+        // reviews independently found this the #1 cross-cutting problem,
+        // upstaging the station's own headline noun at st2/st3/st10 (the
+        // occluder shares makeOccluder's drawPlanetDisc geometry with the
+        // `ring`/`planet` headline kinds, so it visually reads as the same
+        // "planet" noun repeated, not a background detail). Shrunk to
+        // 100-140px, fixed low fill (0.30, not loudness-driven) — still
+        // large/dark enough to occlude several real stars for the ablation
+        // gate (concepts/tools/ring-occlusion-ablation.mjs), no longer
+        // competes with the headline for attention. Does not touch
+        // drawPlanetDisc/makeOccluder itself (shared with `ring`/`planet`,
+        // which stay untouched at st0/st4 per that review's explicit
+        // "leave alone" finding).
+        const os = lerp(100, 140, orr());
         const ox = x0 + orr() * (ENGINE.W - os);
         const oy = dom.bandY(orr, os);
-        const occ = dom.makeOccluder(os, st.hue, fill(i));
+        const occ = dom.makeOccluder(os, st.hue, 0.30);
         occ.style.left = px(ox);
         occ.style.top  = px(oy);
         host.appendChild(occ); formTotal++;

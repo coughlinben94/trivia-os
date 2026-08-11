@@ -153,7 +153,9 @@ function buildLayerContent(engine, world, arc, host, L) {
       const ar = rng(0, 0xA4C7)
       const AW = 760, AH = Math.round(AW * 0.62)
       const anchorHue = world.hueAnchors[1].deg
-      const anchor = dom.makePrim('lens', AW, AH, anchorHue, 0.34, ar, false, 1) // layer-level anchor, not tied to any one station's loudness -> explicit fill=1, not a dropped param
+      // 2026-08-11: alpha 0.34 -> 0.15 — see world-07-ring.html's identical
+      // comment (same fix, both builds).
+      const anchor = dom.makePrim('lens', AW, AH, anchorHue, 0.15, ar, false, 1) // layer-level anchor, not tied to any one station's loudness -> explicit fill=1, not a dropped param
       anchor.style.left = px(period * 0.42 - AW / 2)
       anchor.style.top = px(dom.bandY(ar, AH))
       host.appendChild(anchor)
@@ -344,10 +346,13 @@ function buildLayerContent(engine, world, arc, host, L) {
       // luminance ratios per station.
       if (occluderStations.has(i)) {
         const orr = rng(i, 0x0CC1)
-        const os = lerp(260, 340, orr())
+        // 2026-08-11 object-fix round: shrunk from 260-340px/loudness-driven
+        // fill to 100-140px/fixed 0.30 — see world-07-ring.html's identical
+        // comment (same fix, both builds).
+        const os = lerp(100, 140, orr())
         const ox = x0 + orr() * (engine.W - os)
         const oy = dom.bandY(orr, os)
-        const occ = dom.makeOccluder(os, st.hue, fill)
+        const occ = dom.makeOccluder(os, st.hue, 0.30)
         occ.style.left = px(ox)
         occ.style.top = px(oy)
         host.appendChild(occ)
