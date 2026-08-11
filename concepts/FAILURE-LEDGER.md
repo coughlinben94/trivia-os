@@ -583,14 +583,41 @@ three stations, not by a leftover defect.
 before and after this fix.** No check outside the safe-box/peak-forcing
 pair moved.
 
-### Status: still NOT committed
+### Status
 
-Cap-check numbers for st4/st10 are unchanged from the buggy version (the
-real difference is invisible to the gate's own forcing methodology). The
-self-check is genuinely, structurally unable to fully recover given three
-stations now have zero-amplitude ranges by design — whether that's
-acceptable, or whether the self-check itself needs to account for a
-legitimately narrowed/zero range, is explicitly the user's call (per
-their own instruction: check-code edits are theirs to make). Reported,
-not decided. React-live's separate 1-point gap (st4 p99.5=69 vs html's
-68) is also unresolved and untouched this round, per instruction.
+Committed `19acae6` — real fix (inversion eliminated, verified by direct
+property inspection: 26/50 -> 0/50 in-box stars inverted at st4), the
+self-check's partial-recovery numbers, and this file's own two theories
+(wrong, then corrected). St10 stays parked, unchanged, separately scoped.
+
+---
+
+## React-live 1-point gap (st4 p99.5=69 vs html's 68) — one bounded test,
+## ruled out, gap still open
+
+**Date:** 2026-08-10
+
+**Predicted before running:** unlikely to help — the gate calls
+`freezeFrame` immediately after `jumpTo()` with no wait, for react-live
+same as html, so a `requestAnimationFrame`-deferred clamp callback would
+not have fired before measurement.
+
+**Test:** `RingAmbient.jsx`'s `jumpTo()` changed from a synchronous
+`dom.clampSafeBoxStarPeaks(...)` call to `requestAnimationFrame(() =>
+dom.clampSafeBoxStarPeaks(...))`, one attempt, full regression tier re-run.
+
+**Result: st4 react-live mean=6.8, p99.5=69 — numerically IDENTICAL to
+before the change.** Prediction correct. Reverted immediately (not
+committed) — the deferred version adds a real race risk (whether the rAF
+fires before the gate measures) for zero benefit.
+
+**Status: gap still open, cause not diagnosed.** The rAF-timing hypothesis
+is now ruled out, not just unconfirmed. Whatever separates react-live's
+clamp effectiveness from html's — same shared function, same call sites
+relative to `writeOffsets()`/`jumpTo()` — is something else: a genuine
+numeric difference (scale, offset, or rect values differing between the
+two builds) rather than a timing/ordering one. Next place to look, if this
+gets picked up again: diff the actual `--op` values the clamp computes on
+each build at st4, not just the final rendered luma — that would show
+whether the CLAMP disagrees between builds (a real per-build numeric
+difference) or whether something downstream of it does.
