@@ -1,0 +1,422 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Ring review</title>
+<style>
+  body{margin:0;background:#111;color:#eee;font-family:-apple-system,Helvetica,Arial,sans-serif;}
+  #toolbar{position:sticky;top:0;z-index:10;background:#1a1a1a;padding:8px 14px;
+    display:flex;align-items:center;gap:16px;border-bottom:1px solid #333;flex-wrap:wrap;}
+  #progressStrip{display:flex;gap:3px;}
+  .dot{width:13px;height:13px;border-radius:50%;background:#444;display:inline-block;}
+  .dot.marked{background:#e08b2f;}
+  .dot.fine{background:#3fae56;}
+  .dot.current{box-shadow:0 0 0 2px #fff;}
+  #stationLabel{font-size:13px;color:#ccc;min-width:240px;}
+  #brushGroup{display:flex;gap:4px;}
+  #brushGroup button{width:28px;}
+  button{background:#2a2a33;color:#eee;border:1px solid #444;border-radius:4px;
+    padding:5px 8px;cursor:pointer;font-size:12px;}
+  button:hover{background:#33333e;}
+  #brushGroup button.active,#catButtons button.active{outline:2px solid #6cf;}
+  #saveBtn{margin-left:auto;}
+  #saveStatus{font-size:12px;color:#8f8;}
+  #stageWrap{position:relative;width:1460px;max-width:100%;margin:16px auto;}
+  #worldFrame{width:100%;height:1600px;border:0;display:block;background:#000;}
+  #paintCanvas{position:absolute;cursor:crosshair;}
+  #noteCard{position:absolute;width:260px;background:#1e1e26;border:1px solid #444;
+    border-radius:6px;padding:8px;box-shadow:0 4px 18px rgba(0,0,0,.5);z-index:20;}
+  #noteCard.hidden{display:none;}
+  #noteText{width:100%;height:60px;resize:none;background:#111;color:#eee;
+    border:1px solid #333;border-radius:4px;padding:4px;box-sizing:border-box;font:inherit;}
+  #catButtons{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;}
+  #catButtons button{flex:1 1 45%;font-size:11px;padding:4px;}
+  .hint{font-size:10px;color:#888;margin-top:6px;}
+  #helpBar{text-align:center;font-size:12px;color:#888;padding:10px;}
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <div id="progressStrip"></div>
+  <div id="stationLabel">Loading…</div>
+  <div id="brushGroup">
+    <button data-size="S">S</button>
+    <button data-size="M">M</button>
+    <button data-size="L">L</button>
+  </div>
+  <button id="saveBtn">Save</button>
+  <span id="saveStatus"></span>
+</div>
+
+<div id="stageWrap">
+  <iframe id="worldFrame" src="world-07-ring.html"></iframe>
+  <canvas id="paintCanvas"></canvas>
+  <div id="noteCard" class="hidden">
+    <textarea id="noteText" placeholder="note (optional)"></textarea>
+    <div id="catButtons">
+      <button data-cat="shape-wrong">Shape wrong</button>
+      <button data-cat="too-dim">Too dim</button>
+      <button data-cat="contaminated">Contaminated</button>
+      <button data-cat="other">Other</button>
+    </div>
+    <div class="hint">Enter commits &middot; Esc discards</div>
+  </div>
+</div>
+
+<div id="helpBar">&larr;/&rarr; navigate stations &middot; drag on the frame to paint &middot;
+  G = key this station fine (only when it has no marks) &middot; Save writes into concepts/reviews/</div>
+
+<script>
+const worldFrame = document.getElementById('worldFrame');
+const paintCanvas = document.getElementById('paintCanvas');
+const stageWrap = document.getElementById('stageWrap');
+const noteCard = document.getElementById('noteCard');
+const noteText = document.getElementById('noteText');
+const progressStrip = document.getElementById('progressStrip');
+const stationLabel = document.getElementById('stationLabel');
+const saveStatus = document.getElementById('saveStatus');
+const saveBtn = document.getElementById('saveBtn');
+
+let stations = [];
+let currentStation = 0;
+let activeBrush = 'M';
+let drawing = false;
+let currentStroke = null;
+let pendingMark = null;
+let dirty = false;
+let initStarted = false;
+let saving = false;
+let editVersion = 0; // bumped on every commit/G-toggle; lets onSave detect edits made mid-flight
+
+const BRUSH_PX = { S: 6, M: 14, L: 28 };
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function localDateStr() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// Filename-safe timestamp (no colons). One save = one file: a second sitting on the
+// same date no longer overwrites the first — each Save gets its own stamp.
+function localStampStr() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${localDateStr()}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+async function waitForWorld() {
+  for (let i = 0; i < 200; i++) {
+    const w = worldFrame.contentWindow;
+    if (w && w.__world && w.__world.WORLD) return w.__world;
+    await sleep(50);
+  }
+  throw new Error('world-07-ring did not expose window.__world in time');
+}
+
+// world-07-ring's own boot sequence settles content ~400ms after load (font swap,
+// initial station render) — refit the iframe height to its real content a couple
+// times so #stage never sits inside an internally-scrolling iframe (which would
+// break the canvas alignment math below, since it only recomputes on load/resize).
+function fitFrameHeight() {
+  try {
+    const doc = worldFrame.contentDocument;
+    worldFrame.style.height = doc.documentElement.scrollHeight + 'px';
+  } catch {}
+}
+
+// The paint canvas must sit exactly over the iframe's own #stage element, not the
+// whole iframe — #stage lives inside a centered, padded .wrap, not flush with the
+// iframe's top-left corner.
+function recomputeCanvasRect() {
+  const doc = worldFrame.contentDocument;
+  const stageEl = doc.getElementById('stage');
+  if (!stageEl) return;
+  const stageElRect = stageEl.getBoundingClientRect();
+  const frameRect = worldFrame.getBoundingClientRect();
+  const wrapRect = stageWrap.getBoundingClientRect();
+  const left = (frameRect.left - wrapRect.left) + stageElRect.left;
+  const top = (frameRect.top - wrapRect.top) + stageElRect.top;
+  paintCanvas.style.left = left + 'px';
+  paintCanvas.style.top = top + 'px';
+  paintCanvas.style.width = stageElRect.width + 'px';
+  paintCanvas.style.height = stageElRect.height + 'px';
+  // Setting .width/.height clears the buffer — fine, every committed mark is
+  // reconstructed from normalized data in redrawStationOverlay right after.
+  paintCanvas.width = Math.round(stageElRect.width);
+  paintCanvas.height = Math.round(stageElRect.height);
+}
+
+function getStageRectAbs() {
+  const r = paintCanvas.getBoundingClientRect();
+  return { x: r.left, y: r.top, width: r.width, height: r.height };
+}
+
+function brushNr() { return BRUSH_PX[activeBrush] / paintCanvas.width; }
+
+function canvasPointFromEvent(e) {
+  const r = paintCanvas.getBoundingClientRect();
+  return { nx: (e.clientX - r.left) / r.width, ny: (e.clientY - r.top) / r.height };
+}
+
+function drawMarkOnCanvas(ctx, mark, alpha) {
+  const w = paintCanvas.width, h = paintCanvas.height;
+  const rPx = mark.nr * w;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#ff5a36';
+  mark.points.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.nx * w, p.ny * h, rPx, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+function redrawStationOverlay(idx) {
+  const ctx = paintCanvas.getContext('2d');
+  ctx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+  stations[idx].marks.forEach(m => drawMarkOnCanvas(ctx, m, 0.3));
+  if (idx === currentStation) {
+    if (currentStroke) drawMarkOnCanvas(ctx, currentStroke, 0.55);
+    if (pendingMark) drawMarkOnCanvas(ctx, pendingMark, 0.55);
+  }
+}
+
+function bboxFromMark(m) {
+  // m.nr is a fraction of canvas WIDTH (brush stays round on screen). Padding the
+  // y-extent by the same raw fraction understates it whenever width != height —
+  // convert to a height-fraction using the canvas aspect ratio.
+  const nrY = m.nr * (paintCanvas.width / paintCanvas.height);
+  let minX = 1, minY = 1, maxX = 0, maxY = 0;
+  m.points.forEach(p => {
+    minX = Math.min(minX, p.nx - m.nr); maxX = Math.max(maxX, p.nx + m.nr);
+    minY = Math.min(minY, p.ny - nrY); maxY = Math.max(maxY, p.ny + nrY);
+  });
+  minX = Math.max(0, minX); minY = Math.max(0, minY);
+  maxX = Math.min(1, maxX); maxY = Math.min(1, maxY);
+  return [minX, minY, Math.max(0, maxX - minX), Math.max(0, maxY - minY)];
+}
+
+function renderToolbar() {
+  const st = stations[currentStation];
+  stationLabel.textContent = `Station ${currentStation + 1}/12 — ${st.key} (${st.prim})`;
+  Array.from(progressStrip.children).forEach((d, i) => {
+    d.classList.toggle('current', i === currentStation);
+    d.classList.toggle('marked', stations[i].marks.length > 0);
+    d.classList.toggle('fine', stations[i].verdict === 'fine');
+  });
+  document.querySelectorAll('#brushGroup button').forEach(b =>
+    b.classList.toggle('active', b.dataset.size === activeBrush));
+}
+
+function openNoteCard() {
+  const r = paintCanvas.getBoundingClientRect();
+  const wrapR = stageWrap.getBoundingClientRect();
+  const n = pendingMark.points.length;
+  const avg = pendingMark.points.reduce((a, p) => ({ nx: a.nx + p.nx / n, ny: a.ny + p.ny / n }), { nx: 0, ny: 0 });
+  const cx = (r.left - wrapR.left) + avg.nx * r.width;
+  const cy = (r.top - wrapR.top) + avg.ny * r.height;
+  const cardW = 260, cardH = 160;
+  const left = Math.max(4, Math.min(stageWrap.clientWidth - cardW - 4, cx + 16));
+  const top = Math.max(4, Math.min(stageWrap.clientHeight - cardH - 4, cy - cardH / 2));
+  noteCard.style.left = left + 'px';
+  noteCard.style.top = top + 'px';
+  noteCard.classList.remove('hidden');
+  noteText.value = '';
+  document.querySelectorAll('#catButtons button').forEach(b => b.classList.remove('active'));
+  noteText.focus();
+}
+
+function closeNoteCard() { noteCard.classList.add('hidden'); }
+
+function commitCurrentMark() {
+  if (!pendingMark) return;
+  pendingMark.note = noteText.value;
+  pendingMark.id = 'm' + Date.now() + Math.random().toString(36).slice(2, 7);
+  pendingMark.ts = Date.now();
+  pendingMark.key = stations[currentStation].key;
+  pendingMark.prim = stations[currentStation].prim;
+  pendingMark.station = currentStation;
+  pendingMark.bbox = bboxFromMark(pendingMark);
+  stations[currentStation].marks.push(pendingMark);
+  pendingMark = null;
+  closeNoteCard();
+  dirty = true;
+  editVersion++;
+  redrawStationOverlay(currentStation);
+  renderToolbar();
+}
+
+function discardCurrentStroke() {
+  pendingMark = null;
+  closeNoteCard();
+  redrawStationOverlay(currentStation);
+}
+
+async function navigate(idx) {
+  idx = Math.max(0, Math.min(11, idx));
+  if (pendingMark) commitCurrentMark();
+  currentStation = idx;
+  const w = worldFrame.contentWindow;
+  w.__world.jumpTo(idx);
+  await sleep(180);
+  const doc = worldFrame.contentDocument;
+  doc.getAnimations().forEach(a => { a.pause(); a.currentTime = 0; });
+  // .shoot elements remove themselves on 'animationend' (world-07-ring.html ~L901),
+  // which pausing suppresses forever — they'd pile up in the DOM across a session
+  // and can render as a stray streak in evidence PNGs. Not part of what's being
+  // reviewed; strip them on every freeze instead of pinning them.
+  doc.querySelectorAll('.shoot').forEach(el => el.remove());
+  recomputeCanvasRect();
+  redrawStationOverlay(idx);
+  renderToolbar();
+  return getStageRectAbs();
+}
+
+function onMouseDown(e) {
+  if (pendingMark) commitCurrentMark(); // starting a new stroke auto-commits any open card
+  drawing = true;
+  currentStroke = { points: [canvasPointFromEvent(e)], nr: brushNr() };
+  redrawStationOverlay(currentStation);
+}
+function onMouseMove(e) {
+  if (!drawing) return;
+  currentStroke.points.push(canvasPointFromEvent(e));
+  redrawStationOverlay(currentStation);
+}
+function onMouseUp() {
+  if (!drawing) return;
+  drawing = false;
+  // A plain click (no drag) yields a 1-point stroke — not an intentional mark.
+  // Discard silently instead of opening an empty-category note card over it.
+  if (!currentStroke || currentStroke.points.length < 2) { currentStroke = null; redrawStationOverlay(currentStation); return; }
+  pendingMark = currentStroke;
+  pendingMark.category = null;
+  pendingMark.note = '';
+  currentStroke = null;
+  openNoteCard();
+}
+
+function onGlobalKeydown(e) {
+  if (document.activeElement === noteText) return;
+  if (drawing) return;
+  if (e.key === 'ArrowLeft') navigate(currentStation - 1);
+  else if (e.key === 'ArrowRight') navigate(currentStation + 1);
+  else if (e.key === 'g' || e.key === 'G') {
+    const st = stations[currentStation];
+    if (st.marks.length === 0) {
+      st.verdict = st.verdict === 'fine' ? null : 'fine';
+      dirty = true;
+      editVersion++;
+      renderToolbar();
+    }
+  }
+}
+
+function onNoteKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitCurrentMark(); }
+  else if (e.key === 'Escape') { e.preventDefault(); discardCurrentStroke(); }
+  e.stopPropagation();
+}
+
+async function onSave() {
+  if (saving) return; // guards double-click / repeat-keypress re-entrancy — capture drives the live page, two in flight fight each other
+  saving = true;
+  saveBtn.disabled = true;
+  if (pendingMark) commitCurrentMark();
+  const versionAtSave = editVersion;
+  saveStatus.textContent = 'Saving…';
+  const payload = {
+    date: localDateStr(),
+    stamp: localStampStr(),
+    currentStation,
+    stations: stations.map(s => ({
+      index: s.index, key: s.key, prim: s.prim, verdict: s.verdict,
+      marks: s.marks.map(m => ({
+        id: m.id, station: m.station, key: m.key, prim: m.prim,
+        category: m.category, note: m.note, bbox: m.bbox, ts: m.ts
+      }))
+    }))
+  };
+  try {
+    const resp = await fetch('/api/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    const result = await resp.json();
+    if (result.ok) {
+      saveStatus.textContent = `Saved ✓ concepts/${result.jsonPath}` +
+        (result.pngPaths.length ? ` (+${result.pngPaths.length} PNG)` : '');
+      // Only clear dirty if nothing was committed while this save was in flight —
+      // otherwise those marks are on disk nowhere yet and beforeunload must still warn.
+      if (editVersion === versionAtSave) dirty = false;
+    } else {
+      saveStatus.textContent = 'Save failed: ' + result.error;
+    }
+  } catch (err) {
+    saveStatus.textContent = 'Save failed: ' + err.message;
+  } finally {
+    saving = false;
+    saveBtn.disabled = false;
+  }
+}
+
+function onBeforeUnload(e) {
+  if (dirty || pendingMark) { e.preventDefault(); e.returnValue = ''; }
+}
+
+// Exposed for ring-review-server.mjs's Playwright page to drive evidence capture —
+// same navigate() path the interactive UI uses, so the screenshot always matches
+// what's on screen (frozen + strokes) rather than a second, divergent code path.
+window.__reviewTool = {
+  gotoStationForCapture: (idx) => navigate(idx),
+  restore: (idx) => navigate(idx)
+};
+
+async function init() {
+  if (initStarted) return;
+  initStarted = true;
+  stationLabel.textContent = 'Loading world-07-ring…';
+  const world = await waitForWorld();
+  fitFrameHeight();
+  stations = world.WORLD.stations.map((s, i) => ({ index: i, key: s.key, prim: s.prim, verdict: null, marks: [] }));
+  stations.forEach((s, i) => {
+    const d = document.createElement('span');
+    d.className = 'dot';
+    d.title = `Station ${i + 1}: ${s.key}`;
+    progressStrip.appendChild(d);
+  });
+  await navigate(0);
+  await sleep(400); fitFrameHeight(); recomputeCanvasRect(); redrawStationOverlay(currentStation);
+  await sleep(500); fitFrameHeight(); recomputeCanvasRect(); redrawStationOverlay(currentStation);
+
+  document.querySelectorAll('#brushGroup button').forEach(b =>
+    b.addEventListener('click', () => { activeBrush = b.dataset.size; renderToolbar(); }));
+  document.querySelectorAll('#catButtons button').forEach(b =>
+    b.addEventListener('click', () => {
+      if (!pendingMark) return;
+      pendingMark.category = b.dataset.cat;
+      document.querySelectorAll('#catButtons button').forEach(x => x.classList.toggle('active', x === b));
+      noteText.focus(); // clicking a button moves focus off the textarea; onNoteKeydown needs it back or Enter/Esc go dead
+    }));
+  paintCanvas.addEventListener('mousedown', onMouseDown);
+  window.addEventListener('mousemove', onMouseMove);
+  window.addEventListener('mouseup', onMouseUp);
+  document.addEventListener('keydown', onGlobalKeydown);
+  noteText.addEventListener('keydown', onNoteKeydown);
+  saveBtn.addEventListener('click', onSave);
+  window.addEventListener('beforeunload', onBeforeUnload);
+
+  let resizeT;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeT);
+    resizeT = setTimeout(() => { recomputeCanvasRect(); redrawStationOverlay(currentStation); }, 150);
+  });
+
+  window.__reviewToolReady = true;
+}
+
+worldFrame.addEventListener('load', () => { init().catch(err => { stationLabel.textContent = 'Error: ' + err.message; }); });
+</script>
+</body>
+</html>
