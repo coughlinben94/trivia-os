@@ -840,6 +840,7 @@ function land(){
   station = (station+1) % ENGINE.PANES;
   slide++; turns++;
   showQ(slide); status(); busy = false;
+  dom.clampSafeBoxStarPeaks(design); // item 3: re-clamp at rest, new station
   if (queuedTurns > 0) { queuedTurns--; turn(); }
 }
 function jumpTo(target){
@@ -853,6 +854,7 @@ function jumpTo(target){
     station = (station+1) % ENGINE.PANES; slide++;
   }
   stage.classList.remove('go'); writeOffsets(); showQ(slide); status();
+  dom.clampSafeBoxStarPeaks(design); // item 3: re-clamp at rest, new station
 }
 function autoLoop(){ clearTimeout(autoT); if(!autoOn)return;
   autoT=setTimeout(()=>{turn();autoLoop()}, ENGINE.DWELL_MS); }

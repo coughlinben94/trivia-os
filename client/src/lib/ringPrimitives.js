@@ -917,6 +917,12 @@ function buildStars(el, engine, host, period, perFrame, sizeMul, seed) {
     s.setProperty('--sc', TEMP[i % 5])
     s.setProperty('--ob', lo.toFixed(2))
     s.setProperty('--op', hi.toFixed(2))
+    // --opBase: the star's true authored peak, never mutated after this.
+    // clampSafeBoxStarPeaks() below reads FROM this and writes TO --op
+    // (the live value the breathe animation and the gate's peak-forcing
+    // both use) every time the ring moves, so a star that scrolls back out
+    // of the safe box recovers its full peak instead of staying dimmed.
+    s.setProperty('--opBase', hi.toFixed(2))
     s.setProperty('--tp', dur.toFixed(2) + 's')
     s.setProperty('--td', (-r() * dur).toFixed(2) + 's')
     /* glow is a box-shadow, never a blur filter - a blur wider than a
@@ -926,6 +932,62 @@ function buildStars(el, engine, host, period, perFrame, sizeMul, seed) {
   }
   host.appendChild(frag)
   return n
+}
+
+// clampSafeBoxStarPeaks: item 3 (FAILURE-LEDGER.md, st4/st10 regression),
+// SCOPED TO st4 ONLY — st10's overage is dominated by its headline glow,
+// not stars (same ledger entry), and is explicitly NOT touched by this.
+//
+// Reduces --op (the live peak the breathe animation and the gate's
+// peak-forcing both read) for stars whose CURRENT on-screen position falls
+// inside engine.SAFE, ramped by depth from the box edge (RAMP_PX) so there
+// is no visible hard line at the boundary. Only ever lowers toward
+// MAX_SAFE_OP, and only for stars whose own --opBase already exceeds
+// whatever the ramp allows at their current depth — a star already dimmer
+// than the ceiling is untouched, at any depth. Recomputed from --opBase
+// every call (never from the previous --op), so a star that scrolls back
+// out of the box on a later turn recovers its full authored peak instead of
+// staying dimmed. Does not touch density, size, colour, base (--ob) alpha,
+// or timing — the only property this ever writes is --op.
+//
+// Position is read via getBoundingClientRect() (not derived from `offset`
+// arithmetic) so it's correct regardless of layer nesting/repeat-copy
+// structure (surge -> per-copy wrapper -> star) without this function
+// needing to know that structure. All rects are read in one batch before
+// any style writes, so this never interleaves layout reads with writes.
+const MAX_SAFE_OP = 0.30
+const RAMP_PX = 80 // authored (1920-wide) px, matches SPEC.perceptibility.marginPx
+function clampSafeBoxStarPeaks(prefix, engine, designEl) {
+  const dRect = designEl.getBoundingClientRect()
+  const scale = dRect.width / engine.W
+  const bx0 = dRect.left + engine.SAFE.x * engine.W * scale
+  const by0 = dRect.top + engine.SAFE.y * engine.H * scale
+  const bx1 = dRect.left + (engine.SAFE.x + engine.SAFE.w) * engine.W * scale
+  const by1 = dRect.top + (engine.SAFE.y + engine.SAFE.h) * engine.H * scale
+  const rampPx = RAMP_PX * scale
+
+  const stars = designEl.querySelectorAll('.' + prefix + 'star')
+  const reads = Array.from(stars, (el) => ({ el, rect: el.getBoundingClientRect() }))
+
+  for (const { el, rect } of reads) {
+    const cx = (rect.left + rect.right) / 2, cy = (rect.top + rect.bottom) / 2
+    const inside = cx > bx0 && cx < bx1 && cy > by0 && cy < by1
+    const depth = inside ? Math.min(cx - bx0, bx1 - cx, cy - by0, by1 - cy) : 0
+    const rampFactor = Math.min(1, depth / rampPx)
+    const rampCeiling = 1 - rampFactor * (1 - MAX_SAFE_OP)
+    const cs = getComputedStyle(el)
+    const opBase = parseFloat(cs.getPropertyValue('--opBase')) || 1
+    // Never clamp below this star's own --ob (floor): MAX_SAFE_OP (0.30) sits
+    // under STAR_ALPHA_FLOOR's range (--ob is 0.28-0.42), so a plain
+    // min(opBase, rampCeiling) could push --op under --ob and invert the
+    // breathe range — CSS still interpolates between the two numbers
+    // regardless of which one is "low"/"high", so an inverted star's real
+    // peak stays its ORIGINAL --ob, uncapped. max() here means the range can
+    // collapse to zero width but never invert.
+    const ob = parseFloat(cs.getPropertyValue('--ob')) || 0
+    const effectiveCeiling = Math.max(rampCeiling, ob)
+    el.style.setProperty('--op', Math.min(opBase, effectiveCeiling).toFixed(2))
+  }
 }
 
 // ringDom: bind a class prefix + engine once per consumer. Returns el/
@@ -948,6 +1010,7 @@ export function ringDom(prefix, engine) {
     rotatedBandH,
     buildStars: (host, period, perFrame, sizeMul, seed) => buildStars(el, engine, host, period, perFrame, sizeMul, seed),
     makeOccluder: (size, hue, fill) => makeOccluder(el, size, hue, fill),
+    clampSafeBoxStarPeaks: (designEl) => clampSafeBoxStarPeaks(prefix, engine, designEl),
   }
 }
 

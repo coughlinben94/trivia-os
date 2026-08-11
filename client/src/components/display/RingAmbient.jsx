@@ -567,6 +567,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
   // turn drains exactly once busy actually frees up.
   function unlock() {
     busyRef.current = false
+    dom.clampSafeBoxStarPeaks(designElRef.current) // item 3: re-clamp at rest, new station
     if (queuedTurnsRef.current > 0) {
       queuedTurnsRef.current--
       turn()
@@ -627,6 +628,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
     stageElRef.current.classList.remove('go')
     writeOffsets()
     layoutScrim(stationRef.current)
+    dom.clampSafeBoxStarPeaks(designElRef.current) // item 3: re-clamp at rest, new station
   }
 
   // turn/jumpTo close over refs only (stable identities), so the empty dep

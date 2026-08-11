@@ -329,3 +329,268 @@ touched.
   level — do not extend this finding into a specific claim about occluders,
   star regeneration, or anything else without testing that claim the same
   way.
+
+---
+
+## St10 safe-box attribution — hit-test topmost-element claim vs. actual
+## light contribution, not yet reconciled
+
+**Date:** 2026-08-10
+**Where:** `concepts/tools/safebox-hit-test.mjs`'s attribution method, as
+applied to station 10.
+**Found during:** item 3 (star peak luminance clamp), while predicting the
+clamp's expected effect before building it.
+
+### What was measured
+
+Using the now-path-fixed `safebox-hit-test.mjs` machinery (36-turn drive +
+sequential jumpTo, same as the gate), station 10's safe box measured with
+`.star` elements hidden entirely (`display:none`, diagnostic only, nothing
+persisted, page discarded after):
+
+- **st10, stars hidden: mean=6.6, p99.5=81** (cap: mean<=34, p99.5<=68 — 13
+  points over, with ZERO stars present).
+- **st10, stars visible (real numbers going into item 3): mean=6.7,
+  p99.5=84** — only ~3 points higher than the stars-hidden reading.
+
+One of the near-p99.5 sample points (coordinate-verified, `elementsFromPoint`
+at the actual pixel) landed on a 181x181px `svg.d-glow` element — the shared
+glow layer `makePrim()` attaches to drawn headline primitives (blob, spikes,
+lens, dots, ring, etc. — `ringPrimitives.js:1009`), not a star. Station 10's
+own headline primitive is `spikes` (per ring-verify's drawn-primitive check).
+
+### The conflict, stated plainly, not resolved
+
+This directly conflicts with the standing attribution this project has
+carried since instrument-eight-era work: "st10 attributed to stars by
+coordinate-verified hit test (6/8 pixels `.star`)." That attribution is not
+being overturned here — both readings are real measurements, taken by the
+same *kind* of method, and they disagree on what dominates.
+
+**The specific gap, named rather than papered over:** `elementsFromPoint()`
+reports the TOPMOST element at a pixel — which DOM node is hit-testable
+there — not which element is the actual SOURCE of that pixel's brightness
+under CSS's additive/layered compositing. A `.star` can sit visually on top
+of a bright `.d-glow` (a box-shadow or gradient glow paints through/under an
+overlapping element without being hit-testable itself — the same
+box-shadow-invisible-to-elementsFromPoint issue instrument nine's own tool
+comment already half-acknowledges for glow halos) and get reported as "the"
+contributor at a pixel whose brightness is really the glow underneath, or
+partly both. The 6/8-star finding and the 81-with-stars-hidden finding could
+both be locally true at different sample points and still describe a safe
+box whose overall p99.5 is jointly produced by both element classes — the
+existing hit-test method cannot distinguish "sits on top of" from "is the
+source of" without additive-decomposition, which it does not do.
+
+### What this does NOT resolve
+
+- Not re-attributing st10. Not claiming the 6/8-star finding was wrong.
+- Not claiming `.d-glow`/the spikes headline is definitively "the real
+  cause" of the 13-point stars-hidden overage either — only that it is
+  PRESENT and non-star, coordinate-verified at one sample point, and that
+  removing stars entirely leaves most of the overage in place.
+- **A peak-luminance clamp on headline-primitive glow (`.d-glow` or
+  similar), separate from the star clamp, is a distinct, later,
+  separately-scoped item — not authorized as part of this round's
+  star-only clamp, and not started here.**
+
+### Scope for the current round
+
+Item 3 proceeds on **st4 only** — background-alone at st4 measures
+p99.5=68 (right at cap) vs. 69 with stars, meaning stars are the whole
+1-point overage there and a star clamp is sufficient. St10 is left FAIL,
+unresolved, explicitly out of scope for this round.
+
+---
+
+## Item 3 — star peak clamp built, st4/html fixed, two new open issues
+## (react-live gap, peak-forcing self-check regression) — NOT shipped
+
+**Date:** 2026-08-10
+**Where:** `client/src/lib/ringPrimitives.js` (`buildStars` — added `--opBase`;
+new `clampSafeBoxStarPeaks`), `concepts/world-07-ring.html` (`jumpTo`/`land`),
+`client/src/components/display/RingAmbient.jsx` (`jumpTo`/`unlock`).
+
+### Predicted before building
+
+St4 only (st10 explicitly out of scope, see the entry above this one): mean
+stays ~7.0, p99.5 -> 68, matching the stars-hidden diagnostic floor already
+measured. Mechanism: ramped ceiling on `--op` (never `--ob`, never count/
+size/colour), computed from `--opBase` (the true authored peak, written once
+at build and never touched again) every time the ring moves, scoped to stars
+whose CURRENT on-screen position (read via `getBoundingClientRect()`, not
+derived from offset arithmetic) falls inside `engine.SAFE`, ramped over an
+80px (authored-space) margin from the box edge so there's no hard line.
+`MAX_SAFE_OP = 0.30` was a starting guess, stated as a guess, not derived
+analytically — the luma-from-opacity relationship isn't simple linear alpha-
+over-background here (glow box-shadow and layered wash content both
+contribute), so this was always going to need empirical tuning.
+
+### Measured
+
+**St4, html, 5 runs:** mean=6.9, p99.5=68 — matches the prediction exactly,
+first try (no MAX_SAFE_OP retuning needed), stable across all 5 runs.
+
+**St4, react-live, full regression run: mean=6.8, p99.5=69 — still 1 point
+over cap.** The same shared `clampSafeBoxStarPeaks` function is wired into
+RingAmbient.jsx's `unlock()`/`jumpTo()`, same as world-07-ring.html's
+`land()`/`jumpTo()`, but does not fully reproduce the html build's result.
+Not root-caused. Candidate difference (untested): React's render/commit
+timing relative to when `unlock()`/`jumpTo()` fire and when
+`getBoundingClientRect()` is called inside them — if a layout read happens
+before React has committed whatever triggered it, the rect could be stale.
+This is a guess, not a finding — flagging it as the next place to look, not
+as an answer.
+
+**St10 (both builds), side effect of the general (not station-scoped)
+mechanism, not a fix:** html p99.5 84->82, react-live p99.5 83->83
+(unchanged within measurement noise). Still massively over cap (68), exactly
+as scoped — st10 needs the separate, unauthorized headline-glow work noted
+in the entry above this one.
+
+**Mean, all 12 stations, both builds:** largest shift measured was 0.1 luma
+units (e.g. st4 html peak-mean 7.0->6.9), matching instrument eight's own
+documented ~0.1-unit measurement noise floor for continuous checks — not
+distinguishable from noise, not evidence of a global dimming pass. Full
+before/after table checked station-by-station, not spot-checked.
+
+### New regression-tier failure, not present before this round
+
+Full 34-check regression tier (both builds) after the clamp: **4/34 FAIL**
+(previously this round started from what would have been 2/34 — html cap
+and react-live cap, both blaming st4+st10). The safe-box cap checks
+improved (html now blames st10 only; react-live still lists st4+st10 per
+the unresolved react-live gap above). But **`safe-box peak-forcing
+self-check (peak must be measurably brighter than natural)` — previously
+PASS on both builds — now FAILS on both**: html at st4,st6,st8,st11;
+react-live at st4,st5,st6,st8,st11. Natural and forced-peak readings are
+now identical (or, at st8, peak reads slightly DARKER than natural) at
+those stations.
+
+**Mechanism, understood, not yet decided on:** peak-forcing sets `--ob :=`
+whatever `--op` currently computes to. The clamp narrows a station's
+in-box stars' `[--ob, --op]` interpolation range. Each star's animation
+runs from a random NEGATIVE `--td` delay (seeded, per-star) — `freezeFrame`
+pins `currentTime = 0`, which lands each star at an essentially random
+point in its OWN cycle, not necessarily the low end. With the range now
+narrower for clamped stars, it's more likely that a station's specific
+few stars near the cap threshold have their random natural-phase value
+already at or near the (now-lower) clamped ceiling — making forced-peak
+and natural genuinely indistinguishable for the pixels that set the box's
+aggregate mean/p99.5, even though other stars in the same box DID change.
+This is a real structural consequence of narrowing the range, not a silent
+no-op bug (peak-forcing still measurably works at 8 of 12 html stations) —
+but it is a genuine self-check regression this round introduced, and this
+self-check exists specifically to catch "peak-forcing quietly does
+nothing" as a class of failure, which is exactly what it's now correctly
+flagging as *possible*, whether or not it's a real problem for the product.
+
+### Status: NOT committed
+
+Both open issues (react-live's incomplete clamp, the peak-forcing
+self-check regression) are unresolved. Per this project's own standing
+rule (never move a threshold, never paper over a red check), neither gets
+silently absorbed. Reported to the user rather than decided unilaterally —
+this touches how the self-check should treat a narrowed-but-legitimate
+range, and diagnosing the react-live gap needs a decision on how deep to
+go into React-specific timing, both judgment calls beyond "clamp star peak
+luminance inside the safe box."
+
+---
+
+## Item 3 continued — `--op < --ob` inversion bug: wrong theory first,
+## corrected theory, fix applied, self-check only partially recovers
+
+**Date:** 2026-08-10
+**Where:** `client/src/lib/ringPrimitives.js`, `clampSafeBoxStarPeaks`.
+
+### Theory 1 (WRONG) — random phase coincidence
+
+First explanation offered for the peak-forcing self-check regression
+(previous entry): narrowing a star's `[--ob,--op]` range makes it more
+likely its random negative `--td` delay places `currentTime=0` (the
+natural/frozen reading) coincidentally at the same value as the new,
+lower forced peak. Stated as the mechanism at the time. **This was not
+the real cause**, or at least not demonstrated — it was reasoning from
+the check's symptom, not from a direct measurement of the property
+values involved.
+
+### Theory 2 (CORRECTED, measured directly) — `--op` pushed below `--ob`
+
+`STAR_ALPHA_FLOOR = 0.28`; each star's own `--ob` is `0.28 + r()*0.14`,
+range **[0.28, 0.42]**. The clamp's `MAX_SAFE_OP = 0.30` sits BELOW most
+of that range. Checked directly (throwaway diagnostic, station 4, real
+path): **26 of 50 in-box stars had `--op < --ob`** after the original
+(`min(opBase, rampCeiling)`, no floor) clamp — e.g. one sampled star read
+`ob=0.41, op=0.30`. CSS interpolates between whatever two numbers are
+set regardless of which is semantically "low"/"high," so an inverted
+star's real animated peak during normal (non-gate, un-forced) playback is
+its ORIGINAL, uncapped `--ob` — the clamp did not actually reduce that
+star's real peak brightness at all. This is the real mechanism; theory 1
+is superseded, kept here rather than deleted per this file's own
+correction convention.
+
+### Fix
+
+`effectiveCeiling = Math.max(rampCeiling, ob)` — the ramped ceiling can
+still push `--op` down, but never below the star's own `--ob`. Range can
+collapse to zero width (a deep-in-box star ends up with `op === ob`
+exactly, no breathing amplitude) but never inverts.
+
+### Predicted before remeasuring (explicitly stated as a range, not forced)
+
+St4 html: mean ~6.9-7.0, p99.5 likely 68-69. St4 react-live: similar,
+likely 69-70. St10: drifts back toward ~83-84 (less suppression than the
+buggy, over-aggressive clamp). Explicitly not tuned to land on 68.
+
+### Measured
+
+**St4 html: mean=6.9, p99.5=68 — numerically IDENTICAL to the buggy
+version.** St4 react-live: mean=6.8, p99.5=69 — also identical to the
+buggy version. St10: html mean=6.7/p99.5=82, react-live mean=6.6/p99.5=83
+— both within 1-2 points of the buggy version's numbers, not the
+predicted drift back to 83-84 (close, but the cap-check figures barely
+moved at all, in either direction).
+
+**Why the cap-check numbers didn't move despite a real underlying fix:**
+peak-forcing (both in `ring-verify.mjs` and `safebox-hit-test.mjs`) sets
+`--ob := (current computed --op)` — it reads and overwrites based on
+whatever `--op` is AT THAT MOMENT, discarding the star's true original
+`--ob` entirely for measurement purposes. This makes the gate's own peak
+reading structurally blind to whether `--op` and `--ob` were ever
+inverted — it always measures `--op` as "the peak," never surfacing that
+a real, un-forced viewer might see a brighter true peak (`--ob`) for an
+inverted star. The fix is real (verified: no more inverted stars), but it
+is only visible in the NATURAL (un-forced) reading, not in what the cap
+check reports.
+
+**Self-check: partial recovery, not full.** Predicted (previous entry)
+that st4/6/8/11 (html) and st4/5/6/8/11 (react-live) would flip back to
+PASS. Actual: **st6 (html) and st5+st6 (react-live) recovered. St4, st8,
+st11 remain FAIL on both builds** — `NO EFFECT: st4,st8,st11` on both.
+
+**Why those three don't recover, and it isn't a residual bug:** at those
+stations, the deepest in-box stars now hit `effectiveCeiling = ob`
+exactly (since `ob` there exceeds the ramped ceiling), meaning
+`op === ob` — a valid, zero-width range. There is genuinely NO breathing
+amplitude left to force for those specific stars, so natural and
+peak-forced readings are legitimately, correctly identical. The
+self-check's own assumption ("any station with in-box content should
+show a measurable forcing effect") is now violated by design at these
+three stations, not by a leftover defect.
+
+**Spec-conformance tier: unchanged, 19/31 BELOW SPEC, identical list, both
+before and after this fix.** No check outside the safe-box/peak-forcing
+pair moved.
+
+### Status: still NOT committed
+
+Cap-check numbers for st4/st10 are unchanged from the buggy version (the
+real difference is invisible to the gate's own forcing methodology). The
+self-check is genuinely, structurally unable to fully recover given three
+stations now have zero-amplitude ranges by design — whether that's
+acceptable, or whether the self-check itself needs to account for a
+legitimately narrowed/zero range, is explicitly the user's call (per
+their own instruction: check-code edits are theirs to make). Reported,
+not decided. React-live's separate 1-point gap (st4 p99.5=69 vs html's
+68) is also unresolved and untouched this round, per instruction.
