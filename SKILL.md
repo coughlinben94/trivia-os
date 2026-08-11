@@ -26,14 +26,15 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 ## Read Order (mandatory before any display/theme/animation work)
 
 1. `SKILL.md` (this file)
-2. `references/slides.md` — all slide types + data schemas
-3. `references/build-state.md` — BuildMode state machine
-4. `references/brand.md` — visual identity, typography, colors
-5. `references/themes.md` — 21 ambient themes, theme object shape
-6. `references/ambient-design-law.md` — GPU-only animation rules, 3-layer architecture
-7. `references/features.md` — full feature inventory
-8. `references/round-journeys.md` — themed round-transition journey pattern (read before designing any round-intro/round-transition sequence)
-9. Then: `emilkowal-animations` + `emil-design-eng` skills before any Framer Motion work
+2. `references/ring-world-mistakes.md` — read-first ledger of past failures in the ring world-builder (the 12-station-per-theme generated background, `concepts/ART-DIRECTION-SPEC.md`/`ringEngine.js`/`RingAmbient.jsx`) — this is the confirmed active path, current vs superseded rules, each rule's escalation state
+3. `references/ring-world-continuity.md` — session-hygiene rules for ring-world work specifically: reading `concepts/FAILURE-LEDGER.md` and the live HANDOFF (neither is in this list), the commit-timing rule for any plan meant to outlive one session, the two named failure-shape checks to run before proposing a fix, and the STAYS-HUMAN list — read before or during any ring-world session, not just once
+4. `references/slides.md` — all slide types + data schemas
+5. `references/build-state.md` — BuildMode state machine
+6. `references/brand.md` — visual identity, typography, colors
+7. `references/themes.md` — 21 ambient themes, theme object shape, GPU-only animation rules, 3-layer architecture (as of 2026-08-09 this is the single canonical ambient/theme doc — `references/ambient-design-law.md` was merged into it and deleted; if you see anything still pointing at that filename, it's stale)
+8. `references/features.md` — full feature inventory
+9. `references/round-journeys.md` — themed round-transition journey pattern (read before designing any round-intro/round-transition sequence)
+10. Then: `emilkowal-animations` + `emil-design-eng` skills before any Framer Motion work
 
 ---
 
