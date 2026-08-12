@@ -1326,8 +1326,17 @@ function drawPlanetDisc(el, container, size, hue, fill, lightDeg) {
     `M ${bandA.x.toFixed(2)},${bandA.y.toFixed(2)} A ${(R * 0.87).toFixed(2)},${(R * 0.87).toFixed(2)} 0 0,1 ${bandB.x.toFixed(2)},${bandB.y.toFixed(2)} ` +
     `M ${bandC.x.toFixed(2)},${bandC.y.toFixed(2)} A ${(R * 0.72).toFixed(2)},${(R * 0.72).toFixed(2)} 0 0,1 ${bandD.x.toFixed(2)},${bandD.y.toFixed(2)}`)
   bands.setAttribute('fill', 'none')
-  bands.setAttribute('stroke', hsla(hue - 15, 25, 20, A(0.6, fill)))
-  bands.setAttribute('stroke-width', '5')
+  // 2026-08-12 (st0 "too much going on" — bbox-verified against the actual
+  // review mark, not the moon complaint): this quadrant converges the rim
+  // arc, these 2 band strokes, the ring's own crossing, the layer-level
+  // anchor arc, and the pair-bridge line — 5 line elements in one small
+  // area. Only these bands are safely dial-back-able without touching
+  // shared cross-station code (the ring/anchor/bridge are separate
+  // systems/stations). Ben's call: dial back, don't remove — alpha
+  // 0.6->0.28, stroke-width 5->3, so the texture read survives at a
+  // fraction of the visual weight instead of disappearing.
+  bands.setAttribute('stroke', hsla(hue - 15, 25, 20, A(0.28, fill)))
+  bands.setAttribute('stroke-width', '3')
   bands.setAttribute('vector-effect', 'non-scaling-stroke')
   g.appendChild(bands)
   svg.appendChild(g)
