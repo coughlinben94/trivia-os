@@ -603,16 +603,28 @@ function buildLayerContent(host, L){
                : hw*(0.62 + rHeadline()*0.26);
       const alpha = lerp(0.34, 0.55, lou);
       const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, sfill); // isHeadline: only per-station breathe (spec §8)
-      /* was lerp(0.06, 0.44, r()) — capped well below the frame's full
-         width, so a centroid can never land right of ~x900. Measured mean
-         centroid x = 692 against a frame center of 960 (spec §2, appendix
-         #2). Draw range must span >=0.90 of available width; measured
-         against this seed's real render, [0.08, 0.98] lands mean centroid
-         x at 920 (within the 960±96 gate) — [0.02,0.92] alone undershot to
-         848, just outside the band, so this was iterated per §2's gate. */
+      /* History: was lerp(0.06,0.44,r()), then a uniform lerp(0.08,0.98,r())
+         across nearly the full frame width — measured mean centroid x = 920
+         against a frame center of 960 (spec §2 appendix #2's 960±96 gate).
+         2026-08-12, Ben: headline "big planets" need to hug the CORNERS, not
+         just sit somewhere above/below the text-safe box — bandY already
+         keeps a headline out of the safe box vertically (upper/lower band),
+         but a uniform horizontal draw could still land it dead-center,
+         which reads as "top-center," not a corner, and text can run up to
+         ~3/4 of the frame regardless of which vertical band it's in.
+         Replaced the uniform draw with a coin-flip between two edge zones
+         (left ~2-26%, right ~74-98%) — paired with bandY's own upper/lower
+         choice, that's a real 4-corner placement, not 2 vertical bands with
+         free horizontal roam. A symmetric L/R coin flip should still
+         average near frame-center across many draws, but this supersedes
+         the uniform-draw assumption the mean-centroid-x gate above was
+         tuned against — that gate needs a real re-check against this new
+         distribution, not assumed clean off this comment alone. */
+      const cornerLeft = rHeadline() < 0.5;
+      const cornerFrac = cornerLeft ? lerp(0.02, 0.26, rHeadline()) : lerp(0.74, 0.98, rHeadline());
       const headLeft = isSpanningField
         ? (x0 + ENGINE.W) - hw/2  // centered ON the st9/st10 boundary
-        : x0 + lerp(0.08, 0.98, rHeadline())*(ENGINE.W - hw);
+        : x0 + cornerFrac*(ENGINE.W - hw);
       const headTop  = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh));
       head.style.left = px(headLeft);
       head.style.top  = px(headTop);
