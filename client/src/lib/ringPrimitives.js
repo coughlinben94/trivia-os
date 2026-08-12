@@ -345,7 +345,12 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     f.appendChild(sh)
     for (let i = 0; i < 6; i++) {
       const s = el('s-spk')
-      const len = w * (i < 2 ? 0.86 : 0.54)
+      // 2026-08-12 (Ben's review, st10 supernova: "lines need to be
+      // shorter" — literal). Rays spanned most of the headline box at
+      // 0.86w/0.54w, reading as a stretched compass-rose/asterisk rather
+      // than a compact burst. Roughly halved, per Ben's own starting
+      // estimate, then rendered to confirm.
+      const len = w * (i < 2 ? 0.43 : 0.27)
       const th = Math.max(4, w * 0.012) // scales with w, floor 4px
       s.style.width = px(len); s.style.height = px(th)
       s.style.marginLeft = px(-len / 2); s.style.marginTop = px(-th / 2)
