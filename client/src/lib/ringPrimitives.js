@@ -692,46 +692,37 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // nouns must not share one), so this stays a different shape family.
     const sizes = [0.68, 0.32] // two unequal bodies, not two identical dots
     const positions = [[0.38, 0.5], [0.62, 0.5]]
+    // 2026-08-12 (Ben's own review: "looks off" — rendered and confirmed:
+    // the connecting bridge, even softened to a blurred 6px bar, still
+    // reads as a rigid rod joining two circles — a dumbbell/barbell, not a
+    // star system. Deleted entirely, per Ben's explicit fix direction: two
+    // unequal stars with real per-star hue variance, sharing one
+    // overlapping glow, reads as "a pair" through proximity and shared
+    // light — no visible mechanical link needed. This drops the two prior
+    // rounds' "connecting line" premise altogether rather than softening
+    // it a third time.
     // halo scoped to the two dots' own span (not .d-glow's inset:0 default,
     // which fills the entire headline box) - unsized it merged the two dots
     // and their oversized halo into one solid oval on a real render, reading
-    // as another blob rather than a distinct binary-pair silhouette.
-    // connecting line between the two bodies' centres — the direct pairing
-    // cue Fable-5 found missing. Thin, tapered toward each end (transparent
-    // at both tips so it doesn't read as a third solid shape), positioned
-    // and rotated to span exactly the two dot centres.
-    const p0x = positions[0][0] * w, p0y = positions[0][1] * h
-    const p1x = positions[1][0] * w, p1y = positions[1][1] * h
-    const bdx = p1x - p0x, bdy = p1y - p0y
-    const blen = Math.hypot(bdx, bdy), bang = Math.atan2(bdy, bdx) * 180 / Math.PI
-    // Second pass, after blind critique: both agents independently read the
-    // thin hard-edged line as "a diagram" / "constellation edge" / "barbell"
-    // — mechanical, not a star system. Softened rather than removed (it's
-    // still the pairing cue Fable-5's harsher read said was missing): much
-    // thicker (a soft light-bridge, not a rod), lower peak alpha, wider
-    // transparent fade zones so it reads as shared glow between the two
-    // bodies rather than a drawn connector.
-    const bthick = Math.max(6, w * 0.028)
-    const bridge = el('')
-    bridge.style.position = 'absolute'
-    bridge.style.width = px(blen); bridge.style.height = px(bthick)
-    bridge.style.left = px(p0x); bridge.style.top = px(p0y)
-    bridge.style.marginTop = px(-bthick / 2)
-    bridge.style.transformOrigin = '0 50%'
-    bridge.style.transform = `rotate(${bang.toFixed(1)}deg)`
-    bridge.style.borderRadius = '50%'
-    bridge.style.filter = 'blur(3px)'
-    bridge.style.background = `linear-gradient(90deg, transparent 0%, ${hsla(hue, 55, 75, A(0.24, fill))} 40%, ${hsla(hue, 55, 75, A(0.24, fill))} 60%, transparent 100%)`
-    f.appendChild(bridge)
+    // as another blob rather than a distinct binary-pair silhouette. Alpha
+    // raised (0.20->0.28) now that it's the ONLY shared-light pairing cue —
+    // it has to carry what the bridge used to help carry.
     const halo = el('d-glow')
     const haloD = w * 0.5
     halo.style.left = px(w * 0.5 - haloD / 2); halo.style.top = px(h * 0.5 - haloD / 2)
     halo.style.width = halo.style.height = px(haloD)
-    halo.style.background = `radial-gradient(circle closest-side, ${hsla(hue, 60, 70, A(0.20, fill))} 0%, transparent ${E(75, fill).toFixed(0)}%)`
+    halo.style.background = `radial-gradient(circle closest-side, ${hsla(hue, 60, 70, A(0.28, fill))} 0%, transparent ${E(75, fill).toFixed(0)}%)`
     f.appendChild(halo)
+    // per-star hue variance (real binary systems pair a hot and a cool
+    // star): bigger body pushed cooler/bluer, smaller body pushed
+    // warmer/redder — a temperature contrast, not just a size contrast, so
+    // the two dots read as two different STARS rather than one star drawn
+    // twice at different sizes.
+    const starHues = [hue - 14, hue + 24]
     sizes.forEach((sz, i) => {
       const d = el(''); d.style.position = 'absolute'; d.style.borderRadius = '50%'
       const s = w * sz * 0.22
+      const sHue = starHues[i]
       d.style.left = px(positions[i][0] * w - s / 2); d.style.top = px(positions[i][1] * h - s / 2)
       d.style.width = d.style.height = px(s)
       // was a flat `hsla(...,1)` opaque fill - the only fully-opaque flat
@@ -751,8 +742,8 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       // treatment blob/spikes/lens already use for their cores) reads as a
       // glowing star instead of a shadowed planet.
       d.style.background = `radial-gradient(circle at 50% 50%,
-        ${hsla(hue, 25, 97, A(1, fill))} 0%, ${hsla(hue, 60, 72, A(0.55, fill))} 50%, transparent 100%)`
-      d.style.boxShadow = `0 0 ${px(s * 2)} ${px(s * 0.3)} ${hsla(hue, 70, 80, A(0.5, fill))}`
+        ${hsla(sHue, 25, 97, A(1, fill))} 0%, ${hsla(sHue, 60, 72, A(0.55, fill))} 50%, transparent 100%)`
+      d.style.boxShadow = `0 0 ${px(s * 2)} ${px(s * 0.3)} ${hsla(sHue, 70, 80, A(0.5, fill))}`
       f.appendChild(d)
     })
   }
