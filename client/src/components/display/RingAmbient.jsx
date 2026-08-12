@@ -274,11 +274,15 @@ function buildLayerContent(engine, world, arc, host, L) {
       // identical comment (same fix, both builds, /simplify's station-data-
       // flag generalization) and makeNebulaRing's own comment in
       // ringPrimitives.js.
+      // 2026-08-12: synced from world-07-ring.html — uniform 1.30x scale
+      // centered exactly on the blob's own core reads as an eyeball (Ben:
+      // "woah, what is that???? not a fan"). Uneven axis scale + an offset
+      // off-center breaks the concentric iris/pupil read.
       if (st.ring) {
-        const nrW = hw * 1.30, nrH = hh * 1.30
+        const nrW = hw * 1.55, nrH = hh * 0.95
         const nring = dom.makeNebulaRing(nrW, nrH, st.hue, fill)
-        nring.style.left = px(headCx - nrW / 2)
-        nring.style.top = px(headCy - nrH / 2)
+        nring.style.left = px(headCx - nrW / 2 + hw * 0.16)
+        nring.style.top = px(headCy - nrH / 2 - hh * 0.10)
         host.appendChild(nring)
       }
 

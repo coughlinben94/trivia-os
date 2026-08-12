@@ -664,14 +664,25 @@ function buildLayerContent(host, L){
          ringPrimitives.js for why this is a standalone extra layer, not a
          change to the shared `blob` kind (st6's rose nebula also used
          `blob` and needed the opposite: less, not more — now its own
-         `nebulaCloud` kind). Sized 30% larger than the headline box on
-         both axes, centered on the same box so it wraps the existing
-         headline shape. */
+         `nebulaCloud` kind).
+         2026-08-12 (fresh review, Ben: "woah, what is that???? not a fan"):
+         rendered fresh, not assumed — a ring concentric with the blob's own
+         bright core reads as an unmistakable eyeball (iris ring + pupil
+         highlight), not a nebula. Was scaled 1.30x uniformly on both axes
+         and centered exactly on the headline box, which is precisely what
+         makes concentric circles read as an eye. Two changes to break that
+         gestalt without dropping "a ring around it": (1) axes scaled
+         unevenly (1.55x/0.95x, not 1.30x/1.30x) so it reads as a flattened
+         accretion ring viewed at an angle, matching this world's other
+         ring language (st0's Saturn-style tilt) instead of a round halo;
+         (2) offset off the blob's own center so ring and core-glow are no
+         longer concentric — an eye's iris and pupil are always concentric,
+         a real dust ring around an object usually isn't perfectly so. */
       if (st.ring){
-        const nrW = hw*1.30, nrH = hh*1.30;
+        const nrW = hw*1.55, nrH = hh*0.95;
         const nring = dom.makeNebulaRing(nrW, nrH, st.hue, sfill);
-        nring.style.left = px(headCx - nrW/2);
-        nring.style.top  = px(headCy - nrH/2);
+        nring.style.left = px(headCx - nrW/2 + hw*0.16);
+        nring.style.top  = px(headCy - nrH/2 - hh*0.10);
         host.appendChild(nring); formTotal++;
       }
 
