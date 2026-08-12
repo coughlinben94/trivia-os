@@ -349,13 +349,22 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // and the dust-lane band to this exact silhouette, so the dust lane
     // never bleeds past the cloud's own edge.
     const cx = w / 2, cy = h / 2
-    const N = 8
+    // 2026-08-12 (fresh review, st6: "shape looks terrible"): rendered
+    // fresh, not assumed — at N=8 with radius factor 0.52-1.10, the
+    // quadratic-through-midpoints smoothing (same technique `ribbon` uses
+    // for a smooth wave) over-smooths a point count this low into one
+    // continuous rounded outline — reads as a smooth gem/guitar-pick, not
+    // an irregular cloud edge. Real nebula silhouettes are irregular at
+    // more than one visible bump. More points (8->14) and a wider radius
+    // spread (0.52-1.10 -> 0.38-1.22) give the same smoothing more
+    // irregularity to actually preserve instead of averaging away.
+    const N = 14
     const baseRx = w * 0.46, baseRy = h * 0.46
     const pts = []
     let ang = r() * Math.PI * 2
     for (let i = 0; i < N; i++) {
       ang += (Math.PI * 2 / N) * (0.65 + r() * 0.7) // irregular angular step
-      const radF = 0.52 + r() * 0.58 // irregular radius -> uneven lobes
+      const radF = 0.38 + r() * 0.84 // irregular radius -> uneven lobes
       pts.push({ x: cx + Math.cos(ang) * baseRx * radF, y: cy + Math.sin(ang) * baseRy * radF })
     }
     let d = `M ${((pts[0].x + pts[N - 1].x) / 2).toFixed(1)} ${((pts[0].y + pts[N - 1].y) / 2).toFixed(1)}`
