@@ -70,7 +70,7 @@ export const midnightGalaxyRing = {
     { key: 'rose nebula', prim: 'nebulaCloud', hue: 330, accent: true, cornerLeft: false }, // was st8 — asymmetric cloud, 2026-08-12; cornerLeft:false synced from world-07-ring.html (Ben: "needs to be on other bottom corner")
     { key: 'comet', prim: 'streak', hue: 208, accent: false }, // was st4 — elongated streak
     { key: 'binary pair', prim: 'binary', hue: 214, accent: false }, // was st7 — radial mass
-    { key: 'asteroid field', prim: 'asteroidField', hue: 160, accent: false }, // NEW — scattered cluster
+    { key: 'asteroid field', prim: 'asteroidField', hue: 160, accent: false, fillCorner: true }, // NEW — scattered cluster; fillCorner synced from world-07-ring.html (Ben: "need something here" on the bottom-left)
     { key: 'supernova', prim: 'spikes', hue: 36, accent: true, noWash: true }, // was st2 — radiant burst; noWash synced from world-07-ring.html (Ben: "not needed here" on the far-layer wash)
     { key: 'aurora ribbon', prim: 'ribbon', hue: 196, accent: false, bandUpper: false }, // was st11 (unchanged) — elongated streak; bandUpper:false synced from world-07-ring.html (Ben: "move to bottom right")
   ],

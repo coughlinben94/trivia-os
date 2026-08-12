@@ -370,7 +370,7 @@ const WORLD = {
     { key:'rose nebula',    prim:'nebulaCloud',  hue:330, accent:true, cornerLeft:false }, // was st8 — asymmetric cloud, 2026-08-12; cornerLeft:false 2026-08-12 (Ben: "needs to be on other bottom corner" — was landing bottom-left, forced bottom-right)
     { key:'comet',          prim:'streak',       hue:208, accent:false }, // was st4 — elongated streak
     { key:'binary pair',    prim:'binary',       hue:214, accent:false }, // was st7 — radial mass
-    { key:'asteroid field', prim:'asteroidField',hue:160, accent:false }, // NEW — scattered cluster
+    { key:'asteroid field', prim:'asteroidField',hue:160, accent:false, fillCorner:true }, // NEW — scattered cluster; fillCorner 2026-08-12 (Ben: "need something here" on the bottom-left, which the spanning-field's own headline — centered on the st9/st10 boundary — never reaches)
     { key:'supernova',      prim:'spikes',       hue:36,  accent:true, noWash:true }, // was st2 — radiant burst; noWash 2026-08-12 (Ben: "not needed here" / "idk what the cloud is" on the far-layer wash)
     { key:'aurora ribbon',  prim:'ribbon',       hue:196, accent:false, bandUpper:false }, // was st11 (unchanged) — elongated streak; bandUpper:false 2026-08-12 (Ben: "move to bottom right" — was top-right, horizontal already right)
   ],
@@ -676,10 +676,30 @@ function buildLayerContent(host, L){
       const headLeft = isSpanningField
         ? (x0 + ENGINE.W) - hw/2  // centered ON the st9/st10 boundary
         : dom.cornerX(rHeadline, hw, x0, headlineCornerLeft);
-      const headTop  = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh));
+      const headTop  = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh), isSpanningField);
       head.style.left = px(headLeft);
       head.style.top  = px(headTop);
       host.appendChild(head); formTotal++;
+      // 2026-08-12 (round 2, Ben, st10 supernova: "put this more towards
+      // corner" — bbox-measured directly: the FRAME's own edge was already
+      // tight to the corner (cornerX/bandY margin, ~10-30px), but this
+      // kind's bright core+rays are dead-centered in that frame via CSS
+      // left:50%/top:50% — for a wide frame (needed to fit the ray span)
+      // that puts the visible bright point ~200px from the frame edge,
+      // reading as "somewhere in the corner quadrant" rather than
+      // corner-hugged. Not a general fix (every other kind's own visual
+      // mass already sits asymmetrically in its box — blob/lens's own
+      // off-center core, planet's terminator, etc. — only `spikes`
+      // deliberately centers dead-on). Nudges just the core+ray group
+      // toward whichever corner the frame itself was placed in, post-hoc
+      // via inline left/top (overrides the class default, no new params
+      // threaded through makePrim, no RNG stream reordering).
+      if (st.prim === 'spikes') {
+        const cxPct = headlineCornerLeft ? 30 : 70, cyPct = pairUpper ? 30 : 70;
+        head.querySelectorAll('[class*="s-core"], [class*="s-spk"]').forEach(n => {
+          n.style.left = cxPct + '%'; n.style.top = cyPct + '%';
+        });
+      }
       const headCx = headLeft + hw/2, headCy = headTop + hh/2;
 
       /* Any station whose data declares `ring:true` gets a nebula-ring
@@ -798,9 +818,33 @@ function buildLayerContent(host, L){
       for (let k=0;k<dn;k++){
         const dw = k === 0 ? lerp(58, 70, rDetail()) : lerp(58, 154, rDetail());
         const d = dom.makePrim('dots', dw, dw*0.9, st.hue, lerp(0.34,0.60,lou)*0.7, rDetail, false, sfill);
-        d.style.left = px(x0 + rDetail()*(ENGINE.W - dw));
+        // 2026-08-12 (round 2, Ben, st1: "too much going on here" — bbox-
+        // measured directly: this station's companion already occupies the
+        // top-left corner, and a detail speck's own fully-uniform [0,W]
+        // draw landed right on top of it. These were drawn independent of
+        // where headline/companion/occluder already sit, so any of the 4
+        // corners can double up by chance. Keeps specks in the middle 64%
+        // of frame width (clear of both corner zones) instead — they're
+        // meant as light ambient filler, not corner-anchored objects, so
+        // losing the outer margin costs them nothing thematically.
+        d.style.left = px(x0 + lerp(0.18, 0.82, rDetail())*ENGINE.W - dw/2);
         d.style.top  = px(dom.bandY(rDetail, dw*0.9));
         host.appendChild(d); formTotal++;
+      }
+
+      // fillCorner (st9 asteroid field, Ben: "need something here" on the
+      // bottom-left) — the spanning-field headline is centered on the
+      // st9/st10 boundary, so its rocks lean toward st10's side and this
+      // station's own bottom-left corner stays bare. A small explicit
+      // dust cluster, not routed through the random detail-speck loop
+      // above (that loop now deliberately avoids corners for st1's fix) —
+      // this is the one station asking for a corner filled, not avoided.
+      if (st.fillCorner){
+        const fw = lerp(70, 96, rDetail());
+        const fc = dom.makePrim('dots', fw, fw*0.9, st.hue, lerp(0.34,0.50,lou)*0.7, rDetail, false, sfill);
+        fc.style.left = px(x0 + ENGINE.W*0.10 - fw/2);
+        fc.style.top  = px(ENGINE.H*0.84 - fw*0.45);
+        host.appendChild(fc); formTotal++;
       }
 
       /* occlusion (spec §7.2), measured by ablation, on every third

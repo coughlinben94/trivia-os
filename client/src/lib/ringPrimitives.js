@@ -139,7 +139,7 @@ export function rotatedBandH(kind, w, h) {
 // topEdge + h/2 — is exactly what the rotated bbox shares with the
 // unrotated one; effH===h (the default, every non-rotating call site) makes
 // this byte-identical to the prior formula.
-function bandY(engine, r, h, forceUpper, effH) {
+function bandY(engine, r, h, forceUpper, effH, skipMinBleed) {
   const eff = effH === undefined ? h : effH
   const H = engine.H, top = engine.SAFE.y * H, bot = (engine.SAFE.y + engine.SAFE.h) * H
   const upper = forceUpper !== undefined ? forceUpper : r() < 0.5
@@ -161,14 +161,34 @@ function bandY(engine, r, h, forceUpper, effH) {
     // 9 non-rotating kinds (eff===h there already).
     const maxY = top - margin - eff / 2, minY = -h * 0.30
     edgeEff = maxY <= minY ? maxY : minY + (maxY - minY) * r()
-    // Narrowing the range (above) only lowers the ODDS of a bad draw — this
-    // seed's own r() sampled far enough from the old minY that the range
-    // change alone produced byte-identical output (measured directly, not
-    // assumed: headTop logged unchanged before/after). `edgeEff` IS the
-    // worst-case rotated bbox's top edge in this coordinate frame, so a
-    // hard floor here is what actually guarantees no headline — rotated or
-    // not — visibly clips the frame top, regardless of which r() lands.
-    edgeEff = Math.max(edgeEff, -margin)
+    // 2026-08-12 (round 2, Ben: st0 "move towards corner up more" — bbox-
+    // measured directly: this seed's r() draw landed edgeEff=-5px, barely
+    // bled at all, nowhere near the -h*0.30 deep-tuck end the range
+    // technically allows). The old `Math.max(edgeEff, -margin)` line was a
+    // MAX-bleed cap (never bleed more than 8px) — that's backwards from
+    // what "hugs the corner" needs, and it's also why the spec's own bleed
+    // gate reads under target (`3-5/12 stations cropped 10-35%` failing
+    // low): a flat 8px cap is ~2% of a 360-500px headline, far under the
+    // 10% floor the spec wants. Replaced with a MIN-bleed floor instead —
+    // whatever r() draws, at least 12% of the element's own height bleeds
+    // off the top, well inside the 35% ceiling — so every draw reads as
+    // corner-tucked instead of only the lucky low-r() ones.
+    //
+    // `skipMinBleed`: verify:ring caught this floor pushing st9's asteroid
+    // field (isSpanningField — already centered ON the station boundary,
+    // so it's inherently ~50% cropped by that horizontal placement alone)
+    // past the spec's 35% "accidental clip" ceiling once this forced
+    // vertical bleed stacked on top. That station's own placement already
+    // reads as corner/edge-anchored without this floor's help, so it's
+    // exempted rather than the floor being watered down for every kind.
+    // 0.12 initially, dialed back to 0.09 after verify:ring caught st4
+    // dropping under the "largest element supplies >=55% of mid-layer
+    // ink" floor (react-live: 55%->50%) — more forced bleed means less of
+    // the headline's own area stays on-screen to count as ink. 0.09 still
+    // guarantees real, visible corner-tuck (vs. the old flat-8px cap that
+    // started this whole fix) without eating enough on-screen area to
+    // trip the ink-share floor.
+    if (!skipMinBleed) edgeEff = Math.min(edgeEff, -h * 0.09)
   } else {
     // Same range-narrowing fix, lower band — not reported, but it's the
     // identical formula shape with the identical inflation issue (h
@@ -214,7 +234,13 @@ function cornerX(engine, r, w, x0, cornerLeft) {
   // high end still left visible daylight between the object and the true
   // corner. General tightening, not a st4-only special case, since Ben's
   // note wasn't scoped to one station.
-  const margin = lerp(8, 50, r())
+  //
+  // 2026-08-12 round 2 (Ben, st4 again: "more towards corner" — bbox-
+  // measured: this seed drew 44px, near the old range's own high end,
+  // still visible daylight). 8-50 -> 8-28: halves the ceiling so even a
+  // high r() draw stays close, instead of only the low-r() draws looking
+  // corner-hugged.
+  const margin = lerp(8, 28, r())
   return cornerLeft ? x0 + margin : x0 + engine.W - w - margin
 }
 
@@ -598,11 +624,21 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // this codebase avoids blur filters on primitives (buildStars' own
     // comment, FAILURE-LEDGER #14: a blur wider than ~1/4 of an element
     // deletes it outright).
-    const dw = w * 0.72, dh = h * 0.72
+    // 2026-08-12 round 2 (Ben, st1: "need to make the oval more blurry....
+    // ie, dense in middle, then fades as get towards edge" — same request
+    // as the prior round, still not landing). Prior fix widened the
+    // falloff (0%/50%/80% -> 0%/62%/100%) but kept it a 2-stage plateau-
+    // then-fade, which reads as fairly flat through the middle rather than
+    // a clear bright peak. Adds a real peak (center alpha boosted further)
+    // and a 3-stage curve (0%/38%/72%/100%) so the density visibly peaks
+    // at the core and tapers continuously, instead of holding roughly flat
+    // out to 62% and only then dropping.
+    const dw = w * 0.85, dh = h * 0.85
     d.style.left = px(w * 0.5 - dw / 2); d.style.top = px(h * 0.5 - dh / 2)
     d.style.width = px(dw); d.style.height = px(dh)
     d.style.background = `radial-gradient(ellipse ${E(62, fill).toFixed(0)}% ${E(62, fill).toFixed(0)}% at 50% 50%,
-      ${hsla(hue, 40, 44, A(boost ? 0.22 : 0.16, fill))} 0%, ${hsla(hue, 36, 32, A(boost ? 0.11 : 0.08, fill))} 62%, transparent 100%)`
+      ${hsla(hue, 40, 46, A(boost ? 0.32 : 0.16, fill))} 0%, ${hsla(hue, 38, 40, A(boost ? 0.17 : 0.08, fill))} 38%,
+      ${hsla(hue, 36, 32, A(boost ? 0.07 : 0.04, fill))} 72%, transparent 100%)`
     f.appendChild(d)
     // spiral arms: this used to be a straight dust lane across a flattened
     // disc, which fill-black-silhouettes indistinguishable from `ring`'s
@@ -969,7 +1005,12 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // already owns the elliptical-orbit anatomy (spec §6.2: two distinct
     // nouns must not share one), so this stays a different shape family.
     const sizes = [0.68, 0.32] // two unequal bodies, not two identical dots
-    const positions = [[0.38, 0.5], [0.62, 0.5]]
+    // 2026-08-12 (round 2, Ben, st8: "can we adjust the angle between the
+    // two planets to of kilter a bit" — bbox-measured: both bodies sat at
+    // the same y, a level horizontal pair). Tilted off-axis instead of
+    // dead-level — real binaries orbit a common barycenter on an
+    // inclined plane, not a perfectly flat line.
+    const positions = [[0.36, 0.42], [0.64, 0.58]]
     // 2026-08-12 (Ben's own review: "looks off" — rendered and confirmed:
     // the connecting bridge, even softened to a blurred 6px bar, still
     // reads as a rigid rod joining two circles — a dumbbell/barbell, not a
@@ -1517,22 +1558,22 @@ function makeNebulaRing(el, w, h, hue, fill) {
   ring.style.position = 'absolute'
   ring.style.left = '0'; ring.style.top = '0'
   ring.style.width = px(w); ring.style.height = px(h)
-  // 2026-08-12 (fresh review, Ben: "this looks terrible" — rendered and
-  // measured directly, not assumed: the ring was hard-clipped in a visible
-  // rectangle). Root cause: `radial-gradient(ellipse at 50% 50%, ...)` with
-  // no explicit size defaults to `farthest-corner` — its 100% is the
-  // distance to the box's DIAGONAL corner, not to its edges. For a square
-  // box that's close enough to look fine; for this box's eccentric 1.55x/
-  // 0.95x aspect (from the same-day eye-gestalt fix, which made the
-  // mismatch worse), the top/bottom edges sit much closer than the
-  // diagonal, so the "92% transparent" stop was still solid color there —
-  // the box's own rectangular boundary became a visible hard edge before
-  // the gradient ever faded out. Explicit `ellipse 100% 100%` sizes each
-  // axis to the box's own half-width/half-height independently (the same
-  // technique the `lens` primitive's own core gradient already uses), so
-  // 92% now means 92% of each axis's real extent — always fades to
-  // transparent at the box edge regardless of aspect ratio.
-  ring.style.background = `radial-gradient(ellipse 100% 100% at 50% 50%,
+  // 2026-08-12 (fresh review round 2, Ben: "whats going on here with the
+  // square?" — rendered and measured directly: red-outlining this exact
+  // div showed the gold band clipping FLAT at the box's top/bottom edges
+  // instead of curving shut, reading as a rectangle). Root cause: the
+  // `100% 100%` explicit size from the PRIOR fix (see git history) sizes
+  // each radius to the box's FULL width/height, not half — so the box
+  // edge sits at only 50% of that radius, well short of where the 66-92%
+  // color stops even begin. The gold band's mathematical curve extends
+  // far outside the box and gets clipped flat before it can close. `50%
+  // 50%` sizes each radius to the box's HALF-width/half-height (i.e. the
+  // literal distance from center to edge), so the box edge lands at the
+  // gradient's own 100% mark — same target the (mistaken) old comment
+  // described, achieved with the right number this time. Matches the
+  // proportions the `lens`/`l-disc` core gradient already uses (55-70%
+  // range) rather than the outlier 100% this replaces.
+  ring.style.background = `radial-gradient(ellipse 50% 50% at 50% 50%,
     transparent 0%, transparent 52%, ${hsla(hue + 14, 70, 68, A(0.34, fill))} 66%,
     ${hsla(hue + 8, 62, 58, A(0.16, fill))} 78%, transparent 92%)`
   return ring
@@ -1649,7 +1690,7 @@ export function ringDom(prefix, engine) {
   return {
     el,
     makePrim: (kind, w, h, hue, alpha, r, isHeadline, fill) => makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill),
-    bandY: (r, h, forceUpper, effH) => bandY(engine, r, h, forceUpper, effH),
+    bandY: (r, h, forceUpper, effH, skipMinBleed) => bandY(engine, r, h, forceUpper, effH, skipMinBleed),
     cornerX: (r, w, x0, cornerLeft) => cornerX(engine, r, w, x0, cornerLeft),
     rotatedBandH,
     buildStars: (host, period, perFrame, sizeMul, seed) => buildStars(el, engine, host, period, perFrame, sizeMul, seed),

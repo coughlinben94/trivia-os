@@ -295,6 +295,18 @@ function buildLayerContent(engine, world, arc, host, L) {
       head.style.left = px(headLeft)
       head.style.top = px(headTop)
       host.appendChild(head)
+      // 2026-08-12 round 2 (Ben, st10: "put this more towards corner") —
+      // synced from world-07-ring.html. `spikes` centers its core+rays
+      // dead-on at 50%/50% via CSS regardless of where the frame itself
+      // sits, so a corner-tucked frame still reads as "somewhere in the
+      // quadrant." Nudge just the core+ray group toward the frame's own
+      // corner post-hoc — see that file's own comment for the full reasoning.
+      if (st.prim === 'spikes') {
+        const cxPct = headlineCornerLeft ? 30 : 70, cyPct = pairUpper ? 30 : 70
+        head.querySelectorAll('[class*="s-core"], [class*="s-spk"]').forEach((n) => {
+          n.style.left = cxPct + '%'; n.style.top = cyPct + '%'
+        })
+      }
       const headCx = headLeft + hw / 2, headCy = headTop + hh / 2
 
       // 2026-08-12: synced from world-07-ring.html — `greenWash` station-
@@ -378,9 +390,27 @@ function buildLayerContent(engine, world, arc, host, L) {
       for (let k = 0; k < dn; k++) {
         const dw = k === 0 ? lerp(58, 70, rDetail()) : lerp(58, 154, rDetail())
         const d = dom.makePrim('dots', dw, dw * 0.9, st.hue, lerp(0.34, 0.60, lou) * 0.7, rDetail, false, fill)
-        d.style.left = px(x0 + rDetail() * (engine.W - dw))
+        // 2026-08-12 round 2 (Ben, st1: "too much going on") — synced from
+        // world-07-ring.html: keeps ambient detail specks in the middle
+        // 64% of frame width, clear of the corner zones headline/companion/
+        // occluder already occupy, instead of a fully uniform [0,W] draw
+        // that could land right on top of one by chance.
+        d.style.left = px(x0 + lerp(0.18, 0.82, rDetail()) * engine.W - dw / 2)
         d.style.top = px(dom.bandY(rDetail, dw * 0.9))
         host.appendChild(d)
+      }
+
+      // fillCorner (st9 asteroid field, Ben: "need something here" on the
+      // bottom-left) — synced from world-07-ring.html: the spanning-field
+      // headline is centered on the st9/st10 boundary so this station's
+      // own bottom-left corner stays bare; a small explicit dust cluster
+      // fills it, outside the corner-avoiding detail loop above.
+      if (st.fillCorner) {
+        const fw = lerp(70, 96, rDetail())
+        const fc = dom.makePrim('dots', fw, fw * 0.9, st.hue, lerp(0.34, 0.50, lou) * 0.7, rDetail, false, fill)
+        fc.style.left = px(x0 + engine.W * 0.10 - fw / 2)
+        fc.style.top = px(engine.H * 0.84 - fw * 0.45)
+        host.appendChild(fc)
       }
 
       // occlusion (spec §7.2), measured by ablation, on the loud two-thirds
