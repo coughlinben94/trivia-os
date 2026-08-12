@@ -375,7 +375,7 @@ const WORLD = {
     { key:'binary pair',    prim:'binary',       hue:214, accent:false }, // was st7 — radial mass
     { key:'asteroid field', prim:'asteroidField',hue:160, accent:false }, // NEW — scattered cluster
     { key:'supernova',      prim:'spikes',       hue:36,  accent:true, noWash:true }, // was st2 — radiant burst; noWash 2026-08-12 (Ben: "not needed here" / "idk what the cloud is" on the far-layer wash)
-    { key:'aurora ribbon',  prim:'ribbon',       hue:196, accent:false }, // was st11 (unchanged) — elongated streak
+    { key:'aurora ribbon',  prim:'ribbon',       hue:196, accent:false, bandUpper:false }, // was st11 (unchanged) — elongated streak; bandUpper:false 2026-08-12 (Ben: "move to bottom right" — was top-right, horizontal already right)
   ],
   /* mirrors client/src/worlds/midnightGalaxy.ring.js's hueAnchors — this
      file has its own independent WORLD.stations (not driven by that file),
@@ -603,7 +603,13 @@ function buildLayerContent(host, L){
          got stuck near the 576 floor, loud ones near 880, so a quiet
          station read as a small/sparse frame instead of "large and dim."
          Loudness now speaks through alpha/detail-count only, below. */
-      const pairUpper = rPairBand() < 0.5; // shared band draw — see bandY's forceUpper comment (spec §7.5)
+      // 2026-08-12 (st11, Ben: "move to bottom right" — already right per
+      // cornerX, only the vertical band needed forcing). Optional
+      // per-station override, same pattern as `cornerLeft`: the draw still
+      // always happens so the station's rPairBand stream is unaffected
+      // whether overridden or not.
+      const pairBandDraw = rPairBand() < 0.5;
+      const pairUpper = st.bandUpper !== undefined ? st.bandUpper : pairBandDraw; // shared band draw — see bandY's forceUpper comment (spec §7.5)
 
       // 2026-08-12: asteroid field (st9) straddles the boundary into st10 by
       // Ben's request — "half on one slide half on another" — instead of

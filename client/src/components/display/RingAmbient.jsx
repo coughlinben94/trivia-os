@@ -267,7 +267,11 @@ function buildLayerContent(engine, world, arc, host, L) {
       // pixel margin from the frame edge instead of a fraction of
       // remaining space, so the corner-push effect doesn't dilute for wide
       // headlines. See that function's own comment for the full history.
-      const pairUpper = rPairBand() < 0.5 // shared band draw — see bandY's forceUpper comment (spec §7.5)
+      // 2026-08-12: synced from world-07-ring.html — optional per-station
+      // `bandUpper` override (st11, Ben: "move to bottom right"), same
+      // pattern as `cornerLeft`. Draw still always happens.
+      const pairBandDraw = rPairBand() < 0.5
+      const pairUpper = st.bandUpper !== undefined ? st.bandUpper : pairBandDraw // shared band draw — see bandY's forceUpper comment (spec §7.5)
       // Corner choice drawn explicitly (not inside cornerX) so the
       // occluder below can read it and place itself at the opposite corner.
       // 2026-08-12: synced from world-07-ring.html — optional per-station
