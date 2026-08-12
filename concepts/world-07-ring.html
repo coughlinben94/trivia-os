@@ -600,12 +600,18 @@ function buildLayerContent(host, L){
       bridge.style.left = px(headCx); bridge.style.top = px(headCy);
       bridge.style.width = px(Math.hypot(bdx, bdy));
       bridge.style.transform = `rotate(${(Math.atan2(bdy, bdx) * 180/Math.PI).toFixed(1)}deg)`;
-      // was alpha 0.16->0.10, height 3px (ringCss) - dimmer/thinner than the
-      // faintest star, so on accent stations (hue delta ~168 deg, this
-      // bridge is the ONLY declared-pair signal, spec §7.5) the pair read
-      // as unconnected. Bumped to 0.34->0.18 + 5px height, checked against
-      // a real render on an accent station.
-      bridge.style.background = `linear-gradient(90deg, ${hsla(st.hue, 40, 70, 0.34)} 0%, ${hsla(st.hue, 40, 70, 0.18)} 100%)`;
+      // History: was alpha 0.16->0.10 / height 3px, bumped to 0.34->0.18 / 5px
+      // to fix accent-station pairing legibility (spec §7.5) — that bump
+      // overshot. Three independent blind craft reviews (2026-08-12, on live
+      // renders of all 12 stations) each separately flagged what turned out
+      // to be this SAME element as "a stray diagonal line," "looks like a
+      // rendering glitch," on 7 of 12 stations, without knowing what it was —
+      // real evidence the connector itself had become the visible defect
+      // instead of a subtle pairing cue. Split the difference: 0.18->0.07 +
+      // 2px height, re-verified on both an accent station (rose nebula,
+      // hue delta 168deg, the case that motivated the original bump) and a
+      // non-accent station that was called out by name (ringed planet).
+      bridge.style.background = `linear-gradient(90deg, ${hsla(st.hue, 40, 70, 0.18)} 0%, ${hsla(st.hue, 40, 70, 0.07)} 100%)`;
       host.appendChild(bridge); formTotal++;
 
       /* detail-tier specks, count follows loudness. k===0 is forced toward

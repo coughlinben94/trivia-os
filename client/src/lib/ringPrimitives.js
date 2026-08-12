@@ -1275,7 +1275,7 @@ export function ringCss(prefix) {
 
 .${p}rg-ring{position:absolute;border-radius:50%}
 
-.${p}pair-bridge{position:absolute;height:5px;transform-origin:0 50%;pointer-events:none}
+.${p}pair-bridge{position:absolute;height:2px;transform-origin:0 50%;pointer-events:none}
 
 .${p}occ{position:absolute;border-radius:50%}
 .${p}occ-rim{position:absolute;inset:0;border-radius:50%;border:5px solid var(--rim);
