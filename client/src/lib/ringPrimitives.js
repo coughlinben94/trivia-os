@@ -473,19 +473,24 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       ${hsla(hue, 80, 74, A(0.34, fill))} 0%, ${hsla(hue - 10, 70, 58, A(0.16, fill))} 26%,
       ${hsla(hue - 30, 60, 44, A(0.08, fill))} 52%, transparent ${E(76, fill).toFixed(0)}%)`
     f.appendChild(sh)
-    for (let i = 0; i < 6; i++) {
+    // 2026-08-12 (fresh review, st10, second/separate note: "too much
+    // going on" — distinct from the corner-placement note handled
+    // elsewhere). Rays already halved once this session ("lines need to
+    // be shorter"); this is a second, later complaint on the same
+    // station, so a further length trim risked chasing the same lever
+    // twice for diminishing return. Cut ray count 6->4 instead — the
+    // proven pattern this session already used for the identical
+    // complaint at st5 (pulsar's sweep ring was cut outright, not
+    // dimmed further, "too much going on is Ben's single most repeated
+    // complaint," ringPrimitives.js's own pulsar comment).
+    for (let i = 0; i < 4; i++) {
       const s = el('s-spk')
-      // 2026-08-12 (Ben's review, st10 supernova: "lines need to be
-      // shorter" — literal). Rays spanned most of the headline box at
-      // 0.86w/0.54w, reading as a stretched compass-rose/asterisk rather
-      // than a compact burst. Roughly halved, per Ben's own starting
-      // estimate, then rendered to confirm.
       const len = w * (i < 2 ? 0.43 : 0.27)
       const th = Math.max(4, w * 0.012) // scales with w, floor 4px
       s.style.width = px(len); s.style.height = px(th)
       s.style.marginLeft = px(-len / 2); s.style.marginTop = px(-th / 2)
       s.style.background = `linear-gradient(90deg,transparent 0%,${hsla(hue, 86, 86, 0.7)} 50%,transparent 100%)`
-      s.style.transform = `rotate(${i * 30 + (i < 2 ? 0 : 15)}deg)`
+      s.style.transform = `rotate(${i * 45 + (i < 2 ? 0 : 22.5)}deg)`
       f.appendChild(s)
     }
     const c = el('s-core')
