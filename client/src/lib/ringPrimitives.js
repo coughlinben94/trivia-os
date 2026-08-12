@@ -965,18 +965,12 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       beam.style.background = `linear-gradient(90deg, ${hsla(hue, 30, 90, A(0.85, fill))} 0%, ${hsla(hue, 30, 88, A(0.45, fill))} 45%, transparent 100%)`
       f.appendChild(beam)
     })
-    // sweep ring: a thin circle around the core, the classic pulsar-diagram
-    // cue that reads as "the beam is rotating" rather than "a star with two
-    // static lines." One element, low alpha, fill-driven so it doesn't
-    // compete with the core at a quiet station.
-    const sweep = el('')
-    const sd = w * 0.30
-    sweep.style.position = 'absolute'; sweep.style.left = '50%'; sweep.style.top = '50%'
-    sweep.style.width = sweep.style.height = px(sd)
-    sweep.style.marginLeft = px(-sd / 2); sweep.style.marginTop = px(-sd / 2)
-    sweep.style.borderRadius = '50%'
-    sweep.style.border = `${Math.max(1, w * 0.0035).toFixed(1)}px solid ${hsla(hue, 40, 85, A(0.30, fill))}`
-    f.appendChild(sweep)
+    // A thin "sweep ring" around the core (the classic pulsar-diagram
+    // rotation cue) was tried here and cut same-day: the cone beams alone
+    // already read as a pulsar (Fable-5's render review), and "too much
+    // going on" is Ben's single most repeated complaint across this
+    // station suite — the ring's payoff didn't clear that bar. Ben's call,
+    // 2026-08-12.
   }
   return f
 }
