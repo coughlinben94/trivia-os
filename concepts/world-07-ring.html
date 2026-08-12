@@ -110,6 +110,24 @@ header.pg b{color:#ddd8e8;font-weight:500}
    ringPrimitives owns. */
 .stage.go .surge{transition:transform var(--surge-ms) cubic-bezier(.16,.62,.28,1)}
 
+/* ══ TURN COLOR FLARE ══ Ben's ask: the turn had zero color signal — a
+   station carried purple, the next carried green, and nothing marked the
+   handoff, just an instant hard cut. One radial wash, colored from the
+   outgoing station's hue to the incoming one's, flashed in and faded out
+   over the same var(--surge-ms) window the slide itself animates on — see
+   turn() below, which sets the gradient's two hsl() stops from
+   WORLD.stations[].hue right before triggering it. mix-blend-mode:screen so
+   it reads as a light wash over the existing art instead of a flat color
+   card sitting on top of it. pointer-events:none — never intercepts input.
+   Skipped entirely on the wrap turn and under reduced-motion, same as the
+   slide animation itself (see the isReduced()||willWrap branch in turn()) —
+   a flare on an intentionally-invisible jump would announce the exact
+   discontinuity the wrap exists to hide. */
+#turnFlare{position:absolute;inset:0;pointer-events:none;opacity:0;
+  mix-blend-mode:screen;z-index:5}
+.stage.flash #turnFlare{animation:turnFlareFlash var(--surge-ms) ease-out}
+@keyframes turnFlareFlash{0%{opacity:0}18%{opacity:.6}100%{opacity:0}}
+
 /* ══ SHOOTING STAR ══ */
 .shootLane{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 .shootRot{position:absolute;transform:rotate(var(--sa))}
@@ -205,7 +223,9 @@ header.pg b{color:#ddd8e8;font-weight:500}
     <div class="vig"></div>
     <div class="guides"></div>
     <div class="grain"></div>
-  </div></div>
+  </div>
+  <div id="turnFlare"></div>
+  </div>
 
   <div class="notes">
     <h3><span>What changed from world-06.</span> Five measured defects, five fixes.</h3>
@@ -907,6 +927,25 @@ function turn(){
     land();
     return;
   }
+  // color flare: outgoing station's hue -> incoming station's hue, one
+  // radial wash timed to the same turn. `station` here is still the
+  // PRE-turn index (land() below is what advances it), so this is exactly
+  // the outgoing/incoming pair the reviewer asked for ("purple to green,
+  // green to orange").
+  {
+    const fromHue = WORLD.stations[station].hue;
+    const toHue = WORLD.stations[(station+1) % ENGINE.PANES].hue;
+    const flare = document.getElementById('turnFlare');
+    flare.style.background = `radial-gradient(circle at 50% 50%,` +
+      ` hsla(${toHue},75%,62%,0.85) 0%,` +
+      ` hsla(${fromHue},70%,55%,0.5) 45%,` +
+      ` transparent 78%)`;
+    // remove+reflow+add restarts the keyframe animation even if a flare is
+    // already mid-flash from a queued turn landing back-to-back — same
+    // restart pattern the codebase already uses for 'go' at the wrap branch
+    // above (void stage.offsetWidth forces the reflow between remove/add).
+    stage.classList.remove('flash'); void stage.offsetWidth; stage.classList.add('flash');
+  }
   stage.classList.add('go');
   ENGINE.LAYERS.forEach(L=>{ if(L.id!=='sky') offset[L.id] += L.surge; });
   writeOffsets();
@@ -915,7 +954,7 @@ function turn(){
   // this fires, land() has already cleared busy for that new cycle — an
   // unconditional clear here would falsely unlock mid-transition, and an
   // unconditional class removal would cut the new turn's animation short.
-  setTimeout(()=>{ if (gen === turnGen) stage.classList.remove('go'); }, ENGINE.SURGE_MS + 60);
+  setTimeout(()=>{ if (gen === turnGen) { stage.classList.remove('go'); stage.classList.remove('flash'); } }, ENGINE.SURGE_MS + 60);
 }
 function land(){
   station = (station+1) % ENGINE.PANES;
