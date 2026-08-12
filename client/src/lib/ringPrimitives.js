@@ -909,7 +909,8 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // ambient glow + 2 opposing beams along the shared light axis
     // (LIGHT_DEG/+180) — not a fresh hand-picked angle, reusing the one
     // scene-wide direction convention every object in this build agrees on
-    // (channel 4). 4 DOM elements (glow + core + 2 beams), under budget.
+    // (channel 4). 5 DOM elements (glow + core + 2 beams + sweep ring, added
+    // 2026-08-12), still under the planet primitive's 6-element precedent.
     // Presence floor: the core and a short beam stub are always visible
     // (fixed base length/alpha); fill drives beam A()/E() reach.
     //
@@ -1023,11 +1024,19 @@ function ptOnCircle(cx, cy, r, deg) {
 // clipPath/g wrapper every SVG-based primitive needs = 6 total elements.
 // Path nodes: bands 2+2=4, rim 2 — 6 total, well under the 40 budget.
 //
-// Occlusion is preserved by keeping the LIT crescent itself dark (10-18%
-// lightness, not a bright surface) — the visual "planet" read comes from the
-// terminator SHAPE and the thin bright rim line (small area), not from
-// brightening the disc's fill the way a real photo would. Verified against
-// concepts/tools/ring-occlusion-ablation.mjs.
+// Occlusion is preserved by keeping the disc's ALPHA at 0.99 (fully opaque)
+// throughout — that's what actually matters to the ablation gate, which
+// diffs a real star's luminance with/without the occluder present, not the
+// disc's own color. STALE (superseded 2026-08-12, st0 "doesn't look like
+// anything" fix): this comment used to also claim the lit crescent had to
+// stay dark (10-18% lightness) for occlusion to hold, and that the "planet"
+// read had to come from shape/rim alone, never from brightening the fill.
+// That constraint was never actually required by the gate — confirmed by
+// running concepts/tools/ring-occlusion-ablation.mjs before and after
+// giving the lit circle a real bright-limb gradient (up to ~62% lightness
+// at its brightest stop): identical result both times, because every
+// gradient stop stays alpha=1. Coverage, not darkness, is what occlusion
+// needs.
 let occCounter = 0 // deterministic per-call id for the SVG clipPath — DOM
 // plumbing only, not seeded content, so this doesn't touch the no-Math.random
 // rule above (multiple occluders coexist in the DOM at once and each needs
