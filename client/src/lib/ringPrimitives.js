@@ -305,14 +305,33 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     const extra = isHeadline ? Math.max(0, Math.round((w - 300) * 0.15)) : 0
     const n = 26 + Math.floor(r() * 22) + extra
     for (let i = 0; i < n; i++) {
-      const a = r() * Math.PI * 2, rad = Math.pow(r(), 0.55) * 0.46
-      const s = 2.0 + r() * 3.4
+      const a = r() * Math.PI * 2
+      // 2026-08-12 (Ben's review: "not anything" / "too chaotic" x2, still
+      // failing after the 2026-08-11 density boost above): rendered
+      // isolated and confirmed the real problem isn't count, it's
+      // distribution. The old radius draw, Math.pow(r(), 0.55) with an
+      // exponent BELOW 1, biases r() UPWARD (toward 1) before scaling by
+      // the box radius — that pushes MORE dots toward the outer edge, the
+      // literal opposite of "concentrated toward a center." isHeadline-
+      // gated fix (detail-scale dots elsewhere untouched, same pattern as
+      // `extra` above): exponent raised to 2.2 (>1, biases r() toward 0),
+      // so most draws land near the middle with a real sparse falloff
+      // outward — an actual center of mass instead of uniform scatter.
+      const radExp = isHeadline ? 2.2 : 0.55
+      const radMax = isHeadline ? 0.48 : 0.46
+      const rad = Math.pow(r(), radExp) * radMax
+      // size and brightness now fall off with distance from center too (at
+      // headline scale only) — a handful of big bright anchor stars near
+      // the middle, fading to small dim specks outward, instead of every
+      // dot the same size regardless of position.
+      const near = isHeadline ? Math.max(0, 1 - rad / radMax) : 0
+      const s = isHeadline ? (1.6 + r() * 1.3) + near * near * 3.6 : 2.0 + r() * 3.4
       const d = el(''); d.style.position = 'absolute'; d.style.borderRadius = '50%'
       d.style.left = px((0.5 + Math.cos(a) * rad) * w)
       d.style.top = px((0.5 + Math.sin(a) * rad) * h)
       d.style.width = d.style.height = px(s)
       d.style.background = i % 4 ? '#ffffff' : hsla(hue, 70, 84, 1)
-      d.style.opacity = (isHeadline ? 0.70 + r() * 0.30 : 0.55 + r() * 0.45).toFixed(2)
+      d.style.opacity = (isHeadline ? Math.min(1, 0.42 + near * 0.58 + r() * 0.12) : 0.55 + r() * 0.45).toFixed(2)
       if (s > 4.2) d.style.boxShadow = `0 0 ${px(s * 2.2)} ${px(s * 0.3)} ${hsla(hue, 70, 80, 0.5)}`
       f.appendChild(d)
     }
