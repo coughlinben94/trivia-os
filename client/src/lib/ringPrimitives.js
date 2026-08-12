@@ -512,11 +512,22 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // only the actual headline (st1) gets the boost.
     const boost = isHeadline
     const d = el('l-disc')
-    const dw = w * 0.60, dh = h * 0.60
+    // 2026-08-12 (fresh review, st1: "looks worse than earlier, i want the
+    // oval more blurry gradient dimmed"): dims the isHeadline boost back
+    // down (0.32/0.16 -> 0.22/0.11 — a real reduction, not all the way back
+    // to the pre-2026-08-11 0.16/0.08 that caused THAT round's separate
+    // "reads as a bead-chain smudge" complaint, which was about the arms
+    // losing a core to wind around, not about this gradient's brightness).
+    // "More blurry" done as a softer, more gradual falloff (wider box, 0%/
+    // 62%/100% stops instead of 0%/50%/80%) rather than a CSS blur filter —
+    // this codebase avoids blur filters on primitives (buildStars' own
+    // comment, FAILURE-LEDGER #14: a blur wider than ~1/4 of an element
+    // deletes it outright).
+    const dw = w * 0.72, dh = h * 0.72
     d.style.left = px(w * 0.5 - dw / 2); d.style.top = px(h * 0.5 - dh / 2)
     d.style.width = px(dw); d.style.height = px(dh)
     d.style.background = `radial-gradient(ellipse ${E(62, fill).toFixed(0)}% ${E(62, fill).toFixed(0)}% at 50% 50%,
-      ${hsla(hue, 40, 44, A(boost ? 0.32 : 0.16, fill))} 0%, ${hsla(hue, 36, 32, A(boost ? 0.16 : 0.08, fill))} 50%, transparent ${E(80, fill).toFixed(0)}%)`
+      ${hsla(hue, 40, 44, A(boost ? 0.22 : 0.16, fill))} 0%, ${hsla(hue, 36, 32, A(boost ? 0.11 : 0.08, fill))} 62%, transparent 100%)`
     f.appendChild(d)
     // spiral arms: this used to be a straight dust lane across a flattened
     // disc, which fill-black-silhouettes indistinguishable from `ring`'s
