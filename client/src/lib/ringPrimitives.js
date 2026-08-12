@@ -664,51 +664,98 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // 2026-08-11 object-fix round (st11, aurora ribbon — FAIL both blind
     // reviews: "a flat horizontal oval/smear does not read as an aurora
     // specifically — an aurora reads through an undulating wave/curtain
-    // contour, which this has none of"). Real redesign, not a tweak: the
-    // single flat ellipse is replaced by several soft body segments strung
-    // along a real sine wave (a wavy SILHOUETTE, not just a wavy line), and
-    // the one straight edge highlight is replaced by a genuinely curved SVG
-    // path (chained quadratic beziers approximating the same sine curve —
-    // `ring`'s kind already uses SVG paths in this file, so this isn't a
-    // new technique for the codebase, just a curve instead of an arc).
-    const SEGMENTS = 7, waveAmp = h * 0.16, waveCycles = 1.6
-    for (let i = 0; i < SEGMENTS; i++) {
-      const t = i / (SEGMENTS - 1)
-      const segY = h * 0.5 + Math.sin(t * Math.PI * 2 * waveCycles) * waveAmp
-      const segW = w * (0.20 + 0.02 * r()), segH = h * (0.30 + 0.06 * r())
-      const seg = el('r-body')
-      seg.style.left = px(t * w - segW / 2)
-      seg.style.top = px(segY - segH / 2)
-      seg.style.width = px(segW); seg.style.height = px(segH)
-      seg.style.background = `radial-gradient(ellipse 90% 60% at 50% 50%,
-        ${hsla(hue, 42, 30, A(0.32, fill))} 0%, ${hsla(hue, 38, 24, A(0.18, fill))} 50%,
-        transparent ${E(85, fill).toFixed(0)}%)`
-      f.appendChild(seg)
-    }
+    // contour, which this has none of"). Real redesign #1: separate body
+    // segments strung along a sine wave + a curved stroke line.
+    //
+    // 2026-08-12, Ben's own review, still failing: "good idea but needs to
+    // be diff" — rendered and confirmed the segments-on-a-string read as
+    // scattered blobs and the stroke line read as a scribble/wind line, not
+    // a curtain — thin STROKES (a 1-D line, wherever it's drawn) can't
+    // become a 2-D curtain no matter how the segments are arranged; the
+    // wave needs to be the outline of a filled SHAPE, not a line traced
+    // through or over one. Real reconstruction #2, single filled silhouette
+    // this time: a closed path with an independently-wavy TOP edge and
+    // BOTTOM edge (same wave, phase-shifted and damped on the bottom edge
+    // so the band's width breathes rather than staying constant), same
+    // quadratic-through-midpoint smoothing `nebulaCloud`/the old stroke
+    // already use. Filled with a vertical linear-gradient — bright/saturate
+    // at the top edge, feathering to transparent below — the standard
+    // aurora-curtain construction (light hangs down from the top, not
+    // radiating from a center point the way every other primitive's glow
+    // does). `clip-path: path(...)` is not used here (unlike
+    // `nebulaCloud`) because the gradient only needs to run along one
+    // global axis (top-to-bottom), not follow an arbitrary silhouette
+    // interior — a plain filled SVG path with a single background gradient
+    // does the whole job in one element.
     const NS = 'http://www.w3.org/2000/svg'
     const svg = document.createElementNS(NS, 'svg')
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
     svg.style.position = 'absolute'; svg.style.inset = '0'
     svg.style.width = '100%'; svg.style.height = '100%'
-    const N = 24
-    const pts = Array.from({ length: N + 1 }, (_, k) => {
-      const t = k / N
-      return { x: t * w, y: h * 0.5 + Math.sin(t * Math.PI * 2 * waveCycles) * waveAmp * 0.85 - h * 0.02 }
-    })
-    let d = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
-    for (let k = 1; k < pts.length; k++) {
-      const mx = (pts[k - 1].x + pts[k].x) / 2, my = (pts[k - 1].y + pts[k].y) / 2
-      d += ` Q ${pts[k - 1].x.toFixed(1)},${pts[k - 1].y.toFixed(1)} ${mx.toFixed(1)},${my.toFixed(1)}`
+    const N = 10, waveAmp = h * 0.16, waveCycles = 1.4
+    const topY = (t) => h * 0.30 + Math.sin(t * Math.PI * 2 * waveCycles) * waveAmp
+    const botY = (t) => h * 0.30 + h * (0.42 + 0.10 * Math.sin(t * Math.PI * 2 * waveCycles * 0.7 + 1.1))
+      + Math.sin(t * Math.PI * 2 * waveCycles + 0.6) * waveAmp * 0.7
+    const topPts = Array.from({ length: N + 1 }, (_, k) => ({ x: (k / N) * w, y: topY(k / N) }))
+    const botPts = Array.from({ length: N + 1 }, (_, k) => ({ x: (k / N) * w, y: botY(k / N) })).reverse()
+    const smoothPath = (pts) => {
+      let dd = `M ${((pts[0].x + pts[1].x) / 2).toFixed(1)} ${((pts[0].y + pts[1].y) / 2).toFixed(1)}`
+      for (let k = 1; k < pts.length; k++) {
+        const p = pts[k], np = pts[k + 1] || pts[k]
+        dd += ` Q ${p.x.toFixed(1)} ${p.y.toFixed(1)} ${((p.x + np.x) / 2).toFixed(1)} ${((p.y + np.y) / 2).toFixed(1)}`
+      }
+      return dd
     }
-    const path = document.createElementNS(NS, 'path')
-    path.setAttribute('d', d)
-    path.setAttribute('fill', 'none')
-    path.setAttribute('stroke', hsla(hue + 6, 62, 80, 0.7))
-    path.setAttribute('stroke-width', px(Math.max(4, h * 0.022)))
-    path.setAttribute('stroke-linecap', 'round')
-    svg.appendChild(path)
+    const d = `${smoothPath(topPts)} L ${botPts[0].x.toFixed(1)} ${botPts[0].y.toFixed(1)} ${smoothPath(botPts).slice(1)} Z`
+    // gradientTransform / userSpaceOnUse so the gradient runs top-to-bottom
+    // of the whole box regardless of the path's own local wavy bounds —
+    // objectBoundingBox (the default) would stretch it to the path's own
+    // tight bbox, which isn't what "hangs from the top" should mean here.
+    const gradId = `auroraGrad${occCounter++}`
+    const defs = document.createElementNS(NS, 'defs')
+    const grad = document.createElementNS(NS, 'linearGradient')
+    grad.setAttribute('id', gradId)
+    grad.setAttribute('gradientUnits', 'userSpaceOnUse')
+    grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0')
+    grad.setAttribute('x2', '0'); grad.setAttribute('y2', String(h))
+    const stops = [
+      [0, hsla(hue + 14, 68, 66, A(0.55, fill))],
+      [30, hsla(hue, 62, 54, A(0.42, fill))],
+      [65, hsla(hue - 20, 50, 42, A(0.20, fill))],
+      [100, hsla(hue - 20, 50, 30, 0)],
+    ]
+    stops.forEach(([off, color]) => {
+      const stop = document.createElementNS(NS, 'stop')
+      stop.setAttribute('offset', `${off}%`)
+      stop.setAttribute('stop-color', color)
+      grad.appendChild(stop)
+    })
+    defs.appendChild(grad)
+    svg.appendChild(defs)
+    const curtain = document.createElementNS(NS, 'path')
+    curtain.setAttribute('d', d)
+    curtain.setAttribute('fill', `url(#${gradId})`)
+    // A filled SVG path has a crisp geometric edge everywhere the fill
+    // gradient hasn't already faded to zero — rendered and confirmed the
+    // bottom edge (wavy but still a hard boundary) read as a sharp cutoff
+    // rather than "feathered," since the gradient's own fade-to-transparent
+    // zone didn't fully complete before the shape's actual bottom boundary.
+    // A soft blur on the whole path is the simpler, more robust fix than
+    // hand-tuning gradient stops to chase a wavy per-column edge — also
+    // brings this primitive in line with every other one in this file,
+    // none of which use a crisp hard-edged fill.
+    svg.style.filter = `blur(${Math.max(5, w * 0.012).toFixed(1)}px)`
+    svg.appendChild(curtain)
+    // An internal brighter "streak" accent (a rectangular div, independent
+    // of the curtain's own wavy clip and blur) was tried here and removed
+    // same-day: rendered and it showed up as a visible hard-edged rectangle
+    // breaking the curtain's smooth gradient — a real, confirmed defect,
+    // not a matter of taste. The curtain shape alone already reads as an
+    // aurora; re-attempt internal ray texture later by clipping to the same
+    // `d` path (`clip-path: path(...)`, the technique `nebulaCloud` already
+    // uses for its dust lane) rather than a freestanding rectangle.
     f.appendChild(svg)
-    f.style.transform = `rotate(${(-14 + r() * 28).toFixed(0)}deg)`
+    f.style.transform = `rotate(${(-10 + r() * 20).toFixed(0)}deg)`
   }
 
   else if (kind === 'ring') {
