@@ -1,0 +1,327 @@
+{
+  "date": "2026-08-12",
+  "stamp": "2026-08-12-165320",
+  "stations": [
+    {
+      "index": 0,
+      "key": "ringed planet",
+      "prim": "ring",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m178656784098244kj6",
+          "station": 0,
+          "key": "ringed planet",
+          "prim": "ring",
+          "category": "other",
+          "note": "has to get pushed towards a corner",
+          "bbox": [
+            0.511867088607595,
+            0,
+            0.293512658227848,
+            0.48461673699015473
+          ],
+          "ts": 1786567840982
+        },
+        {
+          "id": "m17865678530674eha1",
+          "station": 0,
+          "key": "ringed planet",
+          "prim": "ring",
+          "category": "other",
+          "note": "looks better but needs to be on opposite corner of the big planet",
+          "bbox": [
+            0.5268987341772152,
+            0.7574718706047819,
+            0.14003164556962022,
+            0.19690576652601977
+          ],
+          "ts": 1786567853067
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "key": "spiral galaxy",
+      "prim": "lens",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786567882744aaeev",
+          "station": 1,
+          "key": "spiral galaxy",
+          "prim": "lens",
+          "category": "other",
+          "note": "looks worse than earlier, i want the oval more blurry gradient dimmed",
+          "bbox": [
+            0.569620253164557,
+            0.5690049226441631,
+            0.19145569620253156,
+            0.360056258790436
+          ],
+          "ts": 1786567882744
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "key": "star cluster",
+      "prim": "dots",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786567890544tjrhw",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "move to a corner",
+          "bbox": [
+            0.41060126582278483,
+            0,
+            0.07990506329113922,
+            0.14003164556962025
+          ],
+          "ts": 1786567890544
+        },
+        {
+          "id": "m1786567900515ebnw4",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "cluster and the line look off",
+          "bbox": [
+            0.2697784810126582,
+            0.10346343178621659,
+            0.12104430379746839,
+            0.27988748241912803
+          ],
+          "ts": 1786567900515
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "key": "orange nebula",
+      "prim": "blob",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786567913599eqs5f",
+          "station": 3,
+          "key": "orange nebula",
+          "prim": "blob",
+          "category": "other",
+          "note": "woah, what is that???? not a fan",
+          "bbox": [
+            0,
+            0.35944092827004215,
+            0.4501582278481013,
+            0.6405590717299579
+          ],
+          "ts": 1786567913599
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "key": "lit planet",
+      "prim": "planet",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786567922840timhu",
+          "station": 4,
+          "key": "lit planet",
+          "prim": "planet",
+          "category": "other",
+          "note": "weird line idk why",
+          "bbox": [
+            0.21598101265822783,
+            0.06267580872011252,
+            0.37262658227848094,
+            0.1322081575246132
+          ],
+          "ts": 1786567922840
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "key": "pulsar",
+      "prim": "pulsar",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786567934023ytw4r",
+          "station": 5,
+          "key": "pulsar",
+          "prim": "pulsar",
+          "category": "other",
+          "note": "can be smaller",
+          "bbox": [
+            0.22705696202531644,
+            0.06408227848101267,
+            0.122626582278481,
+            0.1842475386779184
+          ],
+          "ts": 1786567934023
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "key": "rose nebula",
+      "prim": "nebulaCloud",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m178656794053267k2d",
+          "station": 6,
+          "key": "rose nebula",
+          "prim": "nebulaCloud",
+          "category": "other",
+          "note": "shape looks terrible",
+          "bbox": [
+            0.16693037974683544,
+            0.6041666666666666,
+            0.2199367088607595,
+            0.37552742616033763
+          ],
+          "ts": 1786567940532
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "key": "comet",
+      "prim": "streak",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m17865679555034uxnx",
+          "station": 7,
+          "key": "comet",
+          "prim": "streak",
+          "category": "other",
+          "note": "needs a relook at ",
+          "bbox": [
+            0.5490506329113924,
+            0.05564345991561182,
+            0.3773734177215189,
+            0.1490857946554149
+          ],
+          "ts": 1786567955504
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "key": "binary pair",
+      "prim": "binary",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786567971206xs2lk",
+          "station": 8,
+          "key": "binary pair",
+          "prim": "binary",
+          "category": "other",
+          "note": "weird line placement",
+          "bbox": [
+            0.30300632911392406,
+            0.7040260196905767,
+            0.2365506329113924,
+            0.16033755274261607
+          ],
+          "ts": 1786567971207
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "key": "asteroid field",
+      "prim": "asteroidField",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786567979156jaxvw",
+          "station": 9,
+          "key": "asteroid field",
+          "prim": "asteroidField",
+          "category": "other",
+          "note": "weird line placemenet",
+          "bbox": [
+            0.5941455696202532,
+            0.07392756680731363,
+            0.40268987341772144,
+            0.10267229254571028
+          ],
+          "ts": 1786567979156
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "key": "supernova",
+      "prim": "spikes",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786567984902haqs3",
+          "station": 10,
+          "key": "supernova",
+          "prim": "spikes",
+          "category": "other",
+          "note": "move to a corner",
+          "bbox": [
+            0.3552215189873418,
+            0.033139943741209564,
+            0.11471518987341772,
+            0.21940928270042195
+          ],
+          "ts": 1786567984902
+        },
+        {
+          "id": "m1786567989610murlh",
+          "station": 10,
+          "key": "supernova",
+          "prim": "spikes",
+          "category": "other",
+          "note": "too much going on",
+          "bbox": [
+            0.6590189873417722,
+            0.13721870604782,
+            0.110759493670886,
+            0.23769338959212377
+          ],
+          "ts": 1786567989610
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "key": "aurora ribbon",
+      "prim": "ribbon",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786567999480aemq8",
+          "station": 11,
+          "key": "aurora ribbon",
+          "prim": "ribbon",
+          "category": "other",
+          "note": "love this but needs to be moved",
+          "bbox": [
+            0.5379746835443039,
+            0.04579817158931083,
+            0.3710443037974682,
+            0.16174402250351616
+          ],
+          "ts": 1786567999480
+        }
+      ]
+    }
+  ]
+}
