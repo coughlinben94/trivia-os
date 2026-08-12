@@ -1,0 +1,215 @@
+{
+  "date": "2026-08-12",
+  "stamp": "2026-08-12-144739",
+  "stations": [
+    {
+      "index": 0,
+      "key": "ringed planet",
+      "prim": "ring",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m17865603939307ov72",
+          "station": 0,
+          "key": "ringed planet",
+          "prim": "ring",
+          "category": "other",
+          "note": "too close to the planet",
+          "bbox": [
+            0.6281645569620253,
+            0.17585267229254573,
+            0.08702531645569611,
+            0.16455696202531647
+          ],
+          "ts": 1786560393930
+        },
+        {
+          "id": "m1786560403584vzwrj",
+          "station": 0,
+          "key": "ringed planet",
+          "prim": "ring",
+          "category": "other",
+          "note": "still doenst look like anything",
+          "bbox": [
+            0.5625,
+            0.7848540787623066,
+            0.09810126582278478,
+            0.1561181434599156
+          ],
+          "ts": 1786560403584
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "key": "spiral galaxy",
+      "prim": "lens",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m178656041557176e90",
+          "station": 1,
+          "key": "spiral galaxy",
+          "prim": "lens",
+          "category": "other",
+          "note": "too chaotic. split apart",
+          "bbox": [
+            0.4786392405063291,
+            0.5949806610407876,
+            0.2768987341772151,
+            0.39099859353023914
+          ],
+          "ts": 1786560415571
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "key": "star cluster",
+      "prim": "dots",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786560425779uy1cj",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "too chaotic",
+          "bbox": [
+            0.6242088607594938,
+            0.04716068917018284,
+            0.228639240506329,
+            0.2658227848101266
+          ],
+          "ts": 1786560425779
+        },
+        {
+          "id": "m1786560432504kto68",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "doenst look like anything",
+          "bbox": [
+            0.3971518987341772,
+            0,
+            0.10838607594936711,
+            0.1498329817158931
+          ],
+          "ts": 1786560432504
+        },
+        {
+          "id": "m1786560436725h1e4k",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "too chaotic",
+          "bbox": [
+            0.20490506329113925,
+            0,
+            0.19382911392405064,
+            0.3242352320675106
+          ],
+          "ts": 1786560436725
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "key": "orange nebula",
+      "prim": "blob",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786560442596eiwj8",
+          "station": 3,
+          "key": "orange nebula",
+          "prim": "blob",
+          "category": "other",
+          "note": "too chaotic",
+          "bbox": [
+            0.14477848101265822,
+            0.5633350914205344,
+            0.2824367088607595,
+            0.4366649085794656
+          ],
+          "ts": 1786560442596
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "key": "lit planet",
+      "prim": "planet",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m17865604577968hknj",
+          "station": 4,
+          "key": "lit planet",
+          "prim": "planet",
+          "category": "other",
+          "note": "didnt move to a corner like requested",
+          "bbox": [
+            0.37579113924050633,
+            0,
+            0.2832278481012658,
+            0.3664293248945148
+          ],
+          "ts": 1786560457796
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "key": "pulsar",
+      "prim": "pulsar",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 6,
+      "key": "rose nebula",
+      "prim": "blob",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 7,
+      "key": "comet",
+      "prim": "streak",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 8,
+      "key": "binary pair",
+      "prim": "binary",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 9,
+      "key": "asteroid field",
+      "prim": "asteroidField",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 10,
+      "key": "supernova",
+      "prim": "spikes",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 11,
+      "key": "aurora ribbon",
+      "prim": "ribbon",
+      "verdict": null,
+      "marks": []
+    }
+  ]
+}
