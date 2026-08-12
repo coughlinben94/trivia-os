@@ -1064,9 +1064,43 @@ function drawPlanetDisc(el, container, size, hue, fill, lightDeg) {
   // per spec ("no object may be entirely fill-invariant, and none entirely
   // fill-driven"; this is the invariant half, rim/bands/glow are the driven
   // half below). Position (not alpha) is what LIGHT_DEG drives.
+  //
+  // 2026-08-12 (st0 ringed-planet body — "doesn't look like anything," both
+  // review passes): the `lit` circle used to be a FLAT hsla(hue,30,14,0.99)
+  // fill — lightness 14, and the `shadow` circle covering the rest of the
+  // disc is lightness 3. 14 vs 3 is not a visible difference at any viewing
+  // distance; the whole disc read as one near-black void with only a thin
+  // 4px rim stroke for contrast. Root cause: there was no real terminator
+  // GRADIENT, only a flat dark tone plus an offset dark circle. Fixed with a
+  // radialGradient centered toward LIGHT_DEG (the light-facing side of the
+  // disc) — a genuinely bright limb near the light source, fading through
+  // the disc's own mid-tone down to the original near-black value at the
+  // terminator edge, where the `shadow` circle then covers the rest. Same
+  // presence-floor rule preserved: every stop is alpha=1 (opaque), so
+  // occlusion is unaffected — only the color ramps, never the coverage.
+  const litGradId = `occLitGrad${occCounter}`
+  const litGrad = document.createElementNS(NS, 'radialGradient')
+  litGrad.setAttribute('id', litGradId)
+  litGrad.setAttribute('gradientUnits', 'userSpaceOnUse')
+  litGrad.setAttribute('cx', (cx + Lx * R * 0.45).toFixed(2))
+  litGrad.setAttribute('cy', (cy + Ly * R * 0.45).toFixed(2))
+  litGrad.setAttribute('r', (R * 1.35).toFixed(2))
+  const litStops = [
+    [0, hsla(hue + 8, 42, 62, 1)],
+    [38, hsla(hue + 2, 36, 40, 1)],
+    [72, hsla(hue - 4, 32, 22, 1)],
+    [100, hsla(hue, 30, 14, 1)],
+  ]
+  litStops.forEach(([off, color]) => {
+    const stop = document.createElementNS(NS, 'stop')
+    stop.setAttribute('offset', `${off}%`)
+    stop.setAttribute('stop-color', color)
+    litGrad.appendChild(stop)
+  })
+  defs.appendChild(litGrad)
   const lit = document.createElementNS(NS, 'circle')
   lit.setAttribute('cx', String(cx)); lit.setAttribute('cy', String(cy)); lit.setAttribute('r', String(R))
-  lit.setAttribute('fill', hsla(hue, 30, 14, 0.99))
+  lit.setAttribute('fill', `url(#${litGradId})`)
   g.appendChild(lit)
   // terminator: a shadow disc offset AWAY from the light (the standard
   // offset-circle technique) — computed from LIGHT_DEG, not a hand-picked
