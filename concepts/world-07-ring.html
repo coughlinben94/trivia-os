@@ -635,12 +635,18 @@ function buildLayerContent(host, L){
          average near frame-center across many draws, but this supersedes
          the uniform-draw assumption the mean-centroid-x gate above was
          tuned against — that gate needs a real re-check against this new
-         distribution, not assumed clean off this comment alone. */
-      const cornerLeft = rHeadline() < 0.5;
-      const cornerFrac = cornerLeft ? lerp(0.02, 0.26, rHeadline()) : lerp(0.74, 0.98, rHeadline());
+         distribution, not assumed clean off this comment alone.
+         2026-08-12: the coin-flip/fraction formula itself moved to
+         ringPrimitives.js's `cornerX` (see that function's own comment —
+         fraction-of-remaining-space diluted the corner-push for wide
+         headlines, bbox-verified against Ben's fresh review at st0). The
+         corner choice is now drawn here explicitly (not inside cornerX)
+         so the occluder below can read it and place itself at the
+         opposite corner. */
+      const headlineCornerLeft = rHeadline() < 0.5;
       const headLeft = isSpanningField
         ? (x0 + ENGINE.W) - hw/2  // centered ON the st9/st10 boundary
-        : x0 + cornerFrac*(ENGINE.W - hw);
+        : dom.cornerX(rHeadline, hw, x0, headlineCornerLeft);
       const headTop  = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh));
       head.style.left = px(headLeft);
       head.style.top  = px(headTop);
@@ -839,8 +845,15 @@ function buildLayerContent(host, L){
         // fill 0.30 -> 0.40 (still fixed, not loudness-driven — a loud
         // station must not make this brighter than the intentional cap).
         const os = lerp(150, 190, orr());
-        const ox = x0 + orr() * (ENGINE.W - os);
-        const oy = dom.bandY(orr, os);
+        // 2026-08-12: was a uniform draw across the whole frame width —
+        // bbox-verified against Ben's fresh review, this is what st2/st10's
+        // "move to a corner" marks actually hit (elementsFromPoint + SVG
+        // rect enumeration, not guessed), same underlying complaint as the
+        // headline fix above. Now shares the same cornerX helper, forced to
+        // the OPPOSITE corner (both axes) from the headline — st0, Ben:
+        // "needs to be on opposite corner of the big planet."
+        const ox = dom.cornerX(orr, os, x0, !headlineCornerLeft);
+        const oy = dom.bandY(orr, os, !pairUpper);
         const occ = dom.makeOccluder(os, st.hue, 0.40);
         occ.style.left = px(ox);
         occ.style.top  = px(oy);

@@ -155,6 +155,34 @@ function bandY(engine, r, h, forceUpper, effH) {
   return edgeEff + eff / 2 - h / 2
 }
 
+// 2026-08-12: factored out of the headline placement block in both
+// world-07-ring.html and RingAmbient.jsx (identical inline formula, now one
+// source) so makeOccluder's placement call site below can reuse it instead
+// of drifting its own copy.
+//
+// Original formula (superseded, kept here as the record of what was wrong):
+// `x0 + lerp(0.74,0.98,r())*(engine.W - w)` — a FRACTION of the box's own
+// remaining travel room. That coupling is the bug: travel room shrinks as
+// w grows, so the corner-push effect dilutes for exactly the objects that
+// most need it. Measured directly on st0 (bbox-verified against Ben's
+// fresh review): a 739px headline landed 277px (14% of frame width) from
+// the right edge at the zone's own low end — nowhere near "hugs the
+// corner." Replaced with a fixed pixel margin from the frame edge,
+// independent of w: the object's OWN EDGE stays within [20,120]px of the
+// corner regardless of how wide it is. That's what "hugs a corner" is
+// actually about (edge distance to frame boundary), not centroid position.
+//
+// `cornerLeft` is a required, caller-decided boolean (not drawn internally,
+// unlike bandY's optional forceUpper) — the occluder call site needs to
+// know the headline's own corner choice so it can place itself at the
+// opposite corner (Ben, st0: "needs to be on opposite corner of the big
+// planet"), which only works if one shared decision feeds both call sites
+// instead of each drawing its own independent coin flip.
+function cornerX(engine, r, w, x0, cornerLeft) {
+  const margin = lerp(20, 120, r())
+  return cornerLeft ? x0 + margin : x0 + engine.W - w - margin
+}
+
 // ═══ PRIMITIVES ═══ the engine renders these; a world picks one and a hue.
 // Each guarantees a hard edge structurally, so nothing can turn to mush.
 // `el` is a bound element factory (see ringDom below) that already carries
@@ -1521,6 +1549,7 @@ export function ringDom(prefix, engine) {
     el,
     makePrim: (kind, w, h, hue, alpha, r, isHeadline, fill) => makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill),
     bandY: (r, h, forceUpper, effH) => bandY(engine, r, h, forceUpper, effH),
+    cornerX: (r, w, x0, cornerLeft) => cornerX(engine, r, w, x0, cornerLeft),
     rotatedBandH,
     buildStars: (host, period, perFrame, sizeMul, seed) => buildStars(el, engine, host, period, perFrame, sizeMul, seed),
     makeOccluder: (size, hue, fill) => makeOccluder(el, size, hue, fill),

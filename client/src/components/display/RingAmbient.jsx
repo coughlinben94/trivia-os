@@ -251,17 +251,19 @@ function buildLayerContent(engine, world, arc, host, L) {
           : hw * (0.62 + rHeadline() * 0.26)
       const alpha = lerp(0.34, 0.55, lou)
       const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, fill) // isHeadline: only per-station breathe (spec §8)
-      // was lerp(0.06, 0.44, r()) — capped well below the frame's full
-      // width, so a centroid can never land right of ~x900. Measured mean
-      // centroid x = 692 against a frame center of 960 (spec §2, appendix
-      // #2). Draw range must span >=0.90 of available width; measured
-      // against the reference build's real render (same seed/content),
-      // [0.08, 0.98] lands mean centroid x at 920 (within the 960±96
-      // gate) — [0.02, 0.92] alone undershot to 848, just outside the
-      // band, so this was iterated per §2's gate, not shipped on the first
-      // guess.
+      // 2026-08-12: synced from world-07-ring.html — this file was still on
+      // the pre-corner-bias uniform draw ([0.08,0.98] of remaining travel
+      // room, the very formula that measured mean centroid x=920 but still
+      // read as "top-center, not a corner" per Ben's st0 complaint on the
+      // OTHER build). Now shares ringPrimitives.js's `cornerX` — a fixed
+      // pixel margin from the frame edge instead of a fraction of
+      // remaining space, so the corner-push effect doesn't dilute for wide
+      // headlines. See that function's own comment for the full history.
       const pairUpper = rPairBand() < 0.5 // shared band draw — see bandY's forceUpper comment (spec §7.5)
-      const headLeft = x0 + lerp(0.08, 0.98, rHeadline()) * (engine.W - hw)
+      // Corner choice drawn explicitly (not inside cornerX) so the
+      // occluder below can read it and place itself at the opposite corner.
+      const headlineCornerLeft = rHeadline() < 0.5
+      const headLeft = dom.cornerX(rHeadline, hw, x0, headlineCornerLeft)
       const headTop = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh))
       head.style.left = px(headLeft)
       head.style.top = px(headTop)
@@ -376,8 +378,13 @@ function buildLayerContent(engine, world, arc, host, L) {
         // identical comment (same fix, both builds, "doesn't look like
         // anything" on the moon, not the headline body).
         const os = lerp(150, 190, orr())
-        const ox = x0 + orr() * (engine.W - os)
-        const oy = dom.bandY(orr, os)
+        // 2026-08-12: was a uniform draw across the whole frame width —
+        // see world-07-ring.html's identical comment (same fix, both
+        // builds; bbox-verified against Ben's fresh review at st2/st10).
+        // Forced to the OPPOSITE corner (both axes) from the headline —
+        // st0, Ben: "needs to be on opposite corner of the big planet."
+        const ox = dom.cornerX(orr, os, x0, !headlineCornerLeft)
+        const oy = dom.bandY(orr, os, !pairUpper)
         const occ = dom.makeOccluder(os, st.hue, 0.40)
         occ.style.left = px(ox)
         occ.style.top = px(oy)
