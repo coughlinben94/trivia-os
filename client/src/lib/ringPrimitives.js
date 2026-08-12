@@ -621,8 +621,18 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     //    covers the whole body or none of it.
     const bodySize = Math.min(w, h) * 0.52
     const cx = w / 2, cy = h / 2
-    const rx = bodySize * 0.98, ry = rx * 0.32
-    const tilt = -10
+    // 2026-08-12 (st0 — "too close to the planet"): rx=0.98*bodySize gave a
+    // real major-axis gap (rx - bodyRadius = 0.48*bodySize), but ry (the
+    // near-vertical minor-axis reach, rx*0.32=0.31*bodySize) was LESS than
+    // the body's own radius (0.5*bodySize) — the ring's near-vertical
+    // extent fell inside the body's silhouette rather than clearing it, so
+    // it read as slicing through/hugging the body at top and bottom instead
+    // of wrapping around it. rx raised so ry clears bodyRadius with real
+    // margin (ry = 1.34*rx*0.32 ≈ 0.575*bodySize vs 0.5*bodySize body
+    // radius); tilt widened alongside it (-10 -> -16) so the wider ellipse
+    // still reads as a tilted ring, not a near-circular halo.
+    const rx = bodySize * 1.34, ry = rx * 0.32
+    const tilt = -16
     const NS = 'http://www.w3.org/2000/svg'
     const ringHalf = (sweepFlag, isBack) => {
       const svg = document.createElementNS(NS, 'svg')
