@@ -122,8 +122,13 @@ function buildLayerContent(engine, world, arc, host, L) {
     /* slow, dense star field + one wide soft wash per two stations */
     dom.buildStars(host, period, 140, 1.0, 0xA11CE)
     for (let i = 0; i < 6; i++) {
-      const r = rng(i, 0xFA2)
       const st = world.stations[(i * 2) % engine.PANES]
+      // 2026-08-12: synced from world-07-ring.html — opt-out flag (st10,
+      // Ben: "not needed here" / "idk what the cloud is"), same pattern as
+      // `ring`/`accent`/`cornerLeft`. Skipped before the rng draw, costs
+      // nothing, touches no other iteration's stream.
+      if (st.noWash) continue
+      const r = rng(i, 0xFA2)
       const lou = loudnessOf(arc, (i * 2) % engine.PANES)
       const fill = fillOf(engine, arc, (i * 2) % engine.PANES) * 0.62 // pushed back behind mid (B2 sec 1.3/2.2: far out-shouted mid on 7/12 stations)
       const w = lerp(620, 900, r()), h = w * (0.52 + r() * 0.22)

@@ -71,7 +71,7 @@ export const midnightGalaxyRing = {
     { key: 'comet', prim: 'streak', hue: 208, accent: false }, // was st4 — elongated streak
     { key: 'binary pair', prim: 'binary', hue: 214, accent: false }, // was st7 — radial mass
     { key: 'asteroid field', prim: 'asteroidField', hue: 160, accent: false }, // NEW — scattered cluster
-    { key: 'supernova', prim: 'spikes', hue: 36, accent: true }, // was st2 — radiant burst
+    { key: 'supernova', prim: 'spikes', hue: 36, accent: true, noWash: true }, // was st2 — radiant burst; noWash synced from world-07-ring.html (Ben: "not needed here" on the far-layer wash)
     { key: 'aurora ribbon', prim: 'ribbon', hue: 196, accent: false }, // was st11 (unchanged) — elongated streak
   ],
 }

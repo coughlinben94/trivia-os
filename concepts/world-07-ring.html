@@ -374,7 +374,7 @@ const WORLD = {
     { key:'comet',          prim:'streak',       hue:208, accent:false }, // was st4 — elongated streak
     { key:'binary pair',    prim:'binary',       hue:214, accent:false }, // was st7 — radial mass
     { key:'asteroid field', prim:'asteroidField',hue:160, accent:false }, // NEW — scattered cluster
-    { key:'supernova',      prim:'spikes',       hue:36,  accent:true  }, // was st2 — radiant burst
+    { key:'supernova',      prim:'spikes',       hue:36,  accent:true, noWash:true }, // was st2 — radiant burst; noWash 2026-08-12 (Ben: "not needed here" / "idk what the cloud is" on the far-layer wash)
     { key:'aurora ribbon',  prim:'ribbon',       hue:196, accent:false }, // was st11 (unchanged) — elongated streak
   ],
   /* mirrors client/src/worlds/midnightGalaxy.ring.js's hueAnchors — this
@@ -444,8 +444,18 @@ function buildLayerContent(host, L){
        what "far" means. */
     starTotal += dom.buildStars(host, period, 140, 1.0, 0xA11CE);
     for (let i=0;i<6;i++){
-      const r = rng(i, 0xFA2);
       const st = WORLD.stations[(i*2) % ENGINE.PANES];
+      // 2026-08-12 (fresh review, st10: "not needed here" / "idk what the
+      // cloud is" — bbox-verified via direct DOM hit-test, not guessed:
+      // the marks land on this wash, not the headline). st10's own headline
+      // (spikes/supernova) is already a busy radiant burst; its far-layer
+      // wash duplicates visual weight without adding identity — reads as
+      // an unexplained "cloud." Opt-out flag, same pattern as `ring`/
+      // `accent`/`cornerLeft`. Skipped before the rng draw so it costs
+      // nothing and touches no other iteration's random stream (each `i`
+      // seeds its own fresh `rng(i, 0xFA2)`, no shared state to disturb).
+      if (st.noWash) continue;
+      const r = rng(i, 0xFA2);
       const lou = loudness((i*2) % ENGINE.PANES);
       const wfill = fill((i*2) % ENGINE.PANES) * 0.62; // pushed back behind mid (B2 sec 1.3/2.2)
       const w = lerp(620, 900, r()), h = w*(0.52 + r()*0.22);
