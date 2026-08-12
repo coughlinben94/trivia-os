@@ -64,6 +64,7 @@
 </div>
 
 <div id="helpBar">&larr;/&rarr; navigate stations &middot; drag on the frame to paint &middot;
+  Alt+click a mark to delete it &middot;
   G = key this station fine (only when it has no marks) &middot; Save writes into concepts/reviews/</div>
 
 <script>
@@ -233,6 +234,10 @@ function closeNoteCard() { noteCard.classList.add('hidden'); }
 function commitCurrentMark() {
   if (!pendingMark) return;
   pendingMark.note = noteText.value;
+  // Three paths can reach here with no category picked (Enter before clicking
+  // one, auto-commit on a new stroke, auto-commit on navigate/save) — default
+  // rather than let an uncategorized mark reach the evidence file unbucketed.
+  pendingMark.category = pendingMark.category || 'other';
   pendingMark.id = 'm' + Date.now() + Math.random().toString(36).slice(2, 7);
   pendingMark.ts = Date.now();
   pendingMark.key = stations[currentStation].key;
@@ -242,10 +247,37 @@ function commitCurrentMark() {
   stations[currentStation].marks.push(pendingMark);
   pendingMark = null;
   closeNoteCard();
+  // A station G'd 'fine' before this mark existed is no longer fine — clear it
+  // so the dot and the saved verdict stop lying about a now-marked station.
+  stations[currentStation].verdict = null;
   dirty = true;
   editVersion++;
   redrawStationOverlay(currentStation);
   renderToolbar();
+}
+
+// Alt+click deletes the topmost mark under the cursor. Real point-in-circle
+// hit test against each mark's stored points/nr, not just its bbox — two
+// marks' bboxes commonly overlap even when their painted circles don't.
+function deleteMarkAt(pt) {
+  const marks = stations[currentStation].marks;
+  const w = paintCanvas.width, h = paintCanvas.height;
+  for (let i = marks.length - 1; i >= 0; i--) {
+    const m = marks[i];
+    const rPx = m.nr * w;
+    const hit = m.points.some(p => {
+      const dx = (pt.nx - p.nx) * w, dy = (pt.ny - p.ny) * h;
+      return dx * dx + dy * dy <= (rPx + 4) * (rPx + 4);
+    });
+    if (hit) {
+      marks.splice(i, 1);
+      dirty = true;
+      editVersion++;
+      redrawStationOverlay(currentStation);
+      renderToolbar();
+      return;
+    }
+  }
 }
 
 function discardCurrentStroke() {
@@ -275,6 +307,7 @@ async function navigate(idx) {
 }
 
 function onMouseDown(e) {
+  if (e.altKey) { deleteMarkAt(canvasPointFromEvent(e)); return; } // never sets drawing — can't collide with painting
   if (pendingMark) commitCurrentMark(); // starting a new stroke auto-commits any open card
   drawing = true;
   currentStroke = { points: [canvasPointFromEvent(e)], nr: brushNr() };
