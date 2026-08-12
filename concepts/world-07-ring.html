@@ -696,7 +696,16 @@ function buildLayerContent(host, L){
       // whose visible extent runs well past their nominal box (falloff/blur
       // bleeds outward), so "half their box widths" undersells how much
       // clearance is actually needed to read as two separate objects.
-      const pairAng = rCompanion() * Math.PI * 2, pairRad = lerp((hw + cw) * 0.55, (hw + cw) * 0.95, rCompanion());
+      //
+      // 2026-08-12, density/declutter pass: st1 (spiral galaxy) rendered
+      // FRESH, same seed, still shows the headline and companion merged
+      // into one continuous blob with no visible gap — the 0.55 floor
+      // above still wasn't enough at the low end of its own range. Raised
+      // 0.55->0.80 (ceiling left at 0.95 — the ceiling was never the
+      // problem, only the floor). Re-rendered st1 and st3 (the other
+      // station this fix was tuned against) to confirm both actually
+      // separate now, not just st1.
+      const pairAng = rCompanion() * Math.PI * 2, pairRad = lerp((hw + cw) * 0.80, (hw + cw) * 0.95, rCompanion());
       let compCx = headCx + Math.cos(pairAng) * pairRad;
       compCx = Math.min(x0 + ENGINE.W - cw/2, Math.max(x0 + cw/2, compCx));
       const compTop = dom.bandY(rCompanion, ch, pairUpper, dom.rotatedBandH(ck, cw, ch));
