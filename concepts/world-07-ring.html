@@ -128,28 +128,16 @@ header.pg b{color:#ddd8e8;font-weight:500}
 .stage.flash #turnFlare{animation:turnFlareFlash var(--surge-ms) ease-out}
 @keyframes turnFlareFlash{0%{opacity:0}18%{opacity:.6}100%{opacity:0}}
 
-/* ══ SHOOTING STAR ══ */
-.shootLane{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-.shootRot{position:absolute;transform:rotate(var(--sa))}
-.shoot{width:210px;height:2.6px;border-radius:2px;opacity:0;
-  background:linear-gradient(90deg,transparent 0%,rgba(255,246,226,0) 14%,
-    rgba(255,246,226,.6) 72%,#fff8ec 100%);
-  animation:shootGo var(--sdu) linear both}
-/* Ben: "shooting stars are sometimes going the wrong way." Root cause: the
-   gradient above always brightens toward LOCAL x=100% regardless of travel
-   direction, but spawnShoot() below flips the actual translate3d direction
-   via `d` — for a left-going star (d<0), local x=100% is the TRAILING end,
-   not the leading one, so the bright head drags behind the faded tail
-   instead of leading it. Reversed here is the same gradient with its stops
-   mirrored (100-x), applied via .rev when d<0, so the bright end always
-   leads whichever screen direction the star is actually travelling. */
-.shoot.rev{background:linear-gradient(90deg,#fff8ec 0%,
-    rgba(255,246,226,.6) 28%,rgba(255,246,226,0) 86%,transparent 100%)}
-@keyframes shootGo{
-  0%{transform:translate3d(0,0,0);opacity:0}
-  10%{opacity:.95} 74%{opacity:.85}
-  100%{transform:translate3d(var(--sd2),0,0);opacity:0}
-}
+/* ══ SHOOTING STAR ══ CSS moved to ringPrimitives.js's ringCss() 2026-08-12
+   (Ben: "lean more into shooting star concept" — once RingAmbient.jsx also
+   needed this system, hand-duplicating it here would be the exact
+   "went stale between two copies" bug class this module already fixed
+   once for makePrim; see ringCss's own comment for the full history,
+   including the "shooting stars going the wrong way" fix). This file's
+   own `<style id="primStyle">` injects `ringCss('')` — see this file's own
+   note a few lines up — so those rules apply here unprefixed already; the
+   spawnShoot()/shootLoop() JS and shootLane DOM wiring below still belong
+   to each consumer individually. */
 
 /* ══ QUESTION — camera-fixed HUD. ONE gesture, not three beats.
    Out is the whole block in 160ms; the screen is textless across the
@@ -310,7 +298,16 @@ const ENGINE = {
 
   STAR_ALPHA_FLOOR: 0.28,
   DWELL_MS: 75000,
-  SHOOT_MS: [45000, 120000],
+  // 2026-08-12 (Ben: "lean more into shooting star concept"). Was
+  // [45000,120000] — one shoot every ~82s average, most dwells (75s) saw
+  // none at all. Both Fable-5 critiques of this direction (independently
+  // asked for) found no rules conflict: shoots are 2 self-removing DOM
+  // nodes per burst (not headline-tier, not the "glow primitives are
+  // atmosphere only" rule's concern), reduced-motion already short-
+  // circuits spawnShoot() entirely, and the measured perf envelope
+  // (56-59fps at ~5,465 elements) has real headroom. Roughly 3.5x more
+  // frequent — average ~23s, so most dwells now see at least one.
+  SHOOT_MS: [12000, 35000],
 };
 const cylinderOf = L => ENGINE.PANES * L.surge;
 const authorPeriodOf = L => cylinderOf(L) / L.m;

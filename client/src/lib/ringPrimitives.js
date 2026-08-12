@@ -1681,11 +1681,18 @@ export function ringDom(prefix, engine) {
 //     applies it via inline style), not something ringPrimitives owns, and
 //     the transition's easing source differs (HTML hardcodes the curve,
 //     the JSX reads client/src/lib/easings.js's EASE_SURGE).
-//   - the reduced-motion media query - the JSX's is a strict subset (no
-//     `.shoot`, no `.stage.rm` manual-toggle branch, since both belong to
-//     the HTML-only shooting-star/demo-controls systems).
-//   - `.shootLane`/`.shootRot`/`.shoot`/`@keyframes shootGo` - the shooting
-//     star system exists only in the HTML reference build.
+//   - the `.stage.rm` manual-toggle branch - HTML-only demo-controls UI
+//     (a checkbox to force reduced-motion for testing), not a real system
+//     either build needs at runtime.
+//
+// 2026-08-12 (Ben: "lean more into shooting star concept"): the shooting-
+// star rules (`.shootLane`/`.shootRot`/`.shoot`/`@keyframes shootGo`) used
+// to be listed here as HTML-only too - moved IN below instead of hand-
+// duplicating them once a second call site needed them, the exact
+// "hand-duplicated, went stale" bug class this function exists to prevent
+// (see this module's own opening comment). Each consumer still owns its
+// OWN spawnShoot()/shootLoop() JS and shootLane DOM element/host wiring -
+// only the CSS shape moved here.
 //
 // Keyframe names differ by design too (`tw`/`pfBreathe` unprefixed in the
 // HTML vs `ringTw`/`ringPfBreathe` in the JSX, to avoid colliding with
@@ -1700,7 +1707,7 @@ function kfName(prefix, camelName) {
 
 export function ringCss(prefix) {
   const p = prefix
-  const tw = kfName(p, 'Tw'), pfBreathe = kfName(p, 'PfBreathe'), driftMove = kfName(p, 'DriftMove'), rockSpin = kfName(p, 'RockSpin')
+  const tw = kfName(p, 'Tw'), pfBreathe = kfName(p, 'PfBreathe'), driftMove = kfName(p, 'DriftMove'), rockSpin = kfName(p, 'RockSpin'), shootGo = kfName(p, 'ShootGo')
   return `
 .${p}lyr{position:absolute;inset:0;overflow:hidden}
 .${p}surge{position:absolute;left:0;top:0;width:100%;height:100%;
@@ -1753,5 +1760,31 @@ export function ringCss(prefix) {
 
 .${p}rock-spin{animation:${rockSpin} var(--rd) linear infinite}
 @keyframes ${rockSpin}{from{transform:rotate(var(--r0))}to{transform:rotate(calc(var(--r0) + var(--rspin)))}}
+
+.${p}shootLane{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.${p}shootRot{position:absolute;transform:rotate(var(--sa))}
+/* 2026-08-12 (Ben: "lean more into shooting star concept") — trail
+   lengthened 210->270px and thickened 2.6->3.4px, mid-stop brightened
+   .6->.72, alongside a frequency bump in each consumer's own SHOOT_MS. */
+.${p}shoot{width:270px;height:3.4px;border-radius:2px;opacity:0;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,246,226,0) 14%,
+    rgba(255,246,226,.72) 72%,#fff8ec 100%);
+  animation:${shootGo} var(--sdu) linear both}
+/* Ben (earlier): "shooting stars are sometimes going the wrong way." Root
+   cause: the gradient above always brightens toward LOCAL x=100% regardless
+   of travel direction, but each consumer's spawnShoot() flips the actual
+   translate3d direction via its own side variable - for a left-going star
+   (negative side), local x=100% is the TRAILING end, not the leading one,
+   so the bright head drags behind the faded tail instead of leading it.
+   Reversed here is the same gradient with its stops mirrored (100-x),
+   applied via .rev when going left, so the bright end always leads
+   whichever screen direction the star is actually travelling. */
+.${p}shoot.rev{background:linear-gradient(90deg,#fff8ec 0%,
+    rgba(255,246,226,.6) 28%,rgba(255,246,226,0) 86%,transparent 100%)}
+@keyframes ${shootGo}{
+  0%{transform:translate3d(0,0,0);opacity:0}
+  10%{opacity:.95} 74%{opacity:.85}
+  100%{transform:translate3d(var(--sd2),0,0);opacity:0}
+}
 `
 }

@@ -18,11 +18,15 @@
 // Out of scope for this port (see the plan task for the full reasoning):
 // question TEXT rendering (qLayer/qText/renderQ/showQ/hideQ/fitPx/wrapLines/
 // fits — Trivia OS already has its own question-rendering system elsewhere,
-// which composites on top of this component), the reference build's own
+// which composites on top of this component), and the reference build's own
 // demo-page chrome (.notes/.ctl/header/.sub/status line, the safe-box
 // `.guides` overlay, `.vig` vignette and `.grain` texture — none of these
-// appear in the task's explicit "CSS you'll need" class list), and the
-// shooting-star system (spawnShoot/shootLoop/.shootLane).
+// appear in the task's explicit "CSS you'll need" class list).
+//
+// The shooting-star system (spawnShoot/shootLoop/.shootLane) WAS listed
+// here as out of scope too, with no reason given (unlike the two items
+// above, which have real ones) — ported in 2026-08-12 once Ben asked to
+// "lean more into" it; see the build effect below.
 //
 // The SCRIM (qScrim/layoutScrim in the reference build) is IN scope, unlike
 // the rest of the question system: spec §2 requires it under any text this
@@ -40,13 +44,16 @@ import { ringDom, px, hsla, ringCss } from '../../lib/ringPrimitives.js'
 // never sets any of this, same as the reference build's own ENGINE const).
 // SAFE is included (absent from the reference's WORLD-facing exports but
 // present in its own ENGINE object) because bandY() needs it to keep solid
-// forms out of the safe box. Q/DWELL_MS/SHOOT_MS are omitted — they belong
-// to the out-of-scope question and shooting-star systems.
+// forms out of the safe box. Q/DWELL_MS are still omitted — they belong to
+// the out-of-scope question system. SHOOT_MS is now included (2026-08-12,
+// Ben: "lean more into shooting star concept" — that system is no longer
+// out of scope here, see the shooting-star block in the build effect below).
 const ENGINE = {
   W: 1920, H: 1080,
   PANES: 12,
   SURGE_MS: 1700,
   SAFE: { x: 0.20, y: 0.28, w: 0.60, h: 0.44 },
+  SHOOT_MS: [12000, 35000],
   LAYERS: [
     { id: 'sky',  surge: 0,    m: 1 },
     { id: 'far',  surge: 480,  m: 1 },
@@ -81,10 +88,12 @@ const ENGINE = {
 // enough to risk
 // colliding with unrelated app CSS, and the easing here comes from this
 // app's own client/src/lib/easings.js rather than the reference build's
-// hardcoded curve. The reduced-motion query stays local too: it's a
-// deliberate subset of the reference build's (no `.shoot`, no `.stage.rm`
-// manual toggle — both belong to systems out of scope for this port, see
-// the file header). ──
+// hardcoded curve. The reduced-motion query stays local too, but now
+// includes `.ring-shoot` (2026-08-12 — that system is no longer out of
+// scope, see the shooting-star block in the build effect below); still
+// excludes the `.stage.rm` manual-toggle branch, dev-harness-only UI (a
+// checkbox to force reduced-motion for testing) that neither build needs
+// at runtime. ──
 // .ring-scrim: full-frame geometry (left/top/width/height) is fixed once at
 // build time (ART-DIRECTION-SPEC.md sec 2 — see the build effect below for
 // why full-frame, not a fitted box); only the alpha-bearing background is
@@ -98,7 +107,7 @@ ${ringCss('ring-')}
 
 @media (prefers-reduced-motion:reduce){
   .ring-surge{transition:none!important}
-  .ring-star,.ring-pf,.ring-pf-breathe{animation-play-state:paused!important}
+  .ring-star,.ring-pf,.ring-pf-breathe,.ring-shoot{animation-play-state:paused!important}
   .ring-drift{animation-play-state:paused!important}
   .ring-rock-spin{animation-play-state:paused!important}
 }
@@ -447,6 +456,9 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
   const busyRef = useRef(false)
   const queuedTurnsRef = useRef(0)
   const turnTimerRef = useRef(null)
+  const shootLaneRef = useRef(null)
+  const shootSideRef = useRef(1)
+  const shootTimerRef = useRef(null)
 
   // ── build once on mount — never re-run on worldData change. This is the
   // whole point of the task: RingAmbient will eventually live inside
@@ -504,6 +516,15 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
     surgeElsRef.current = surgeEls
     arcRef.current = arc
 
+    // shooting-star lane — 2026-08-12, ported from world-07-ring.html (Ben:
+    // "lean more into shooting star concept"). Appended before the scrim
+    // below, same relative order as the reference build's own
+    // `design.insertBefore(shootLane, qScrim)` — the scrim still dims
+    // shoots the same as every other ring layer.
+    const shootLane = dom.el('shootLane')
+    design.appendChild(shootLane)
+    shootLaneRef.current = shootLane
+
     // scrim (ART-DIRECTION-SPEC.md sec 2: "alpha must reach exactly zero
     // strictly inside its own element bounds, on every axis"). Appended
     // last, so it paints above every ring content layer (matches
@@ -530,6 +551,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
     worldData.sky.forEach((c, i) => stage.style.setProperty('--sky-' + (i + 1), c))
 
     writeOffsets()
+    shootLoop()
 
     // Exposed for concepts/tools/ring-verify.mjs's live-route pass — mirrors the
     // reference build's own window.__world contract (concepts/world-07-ring.html,
@@ -556,6 +578,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
     // built so the second invocation doesn't append a duplicate DOM tree.
     return () => {
       ro.disconnect()
+      clearTimeout(shootTimerRef.current)
       design.replaceChildren()
       if (window.__world && window.__world.WORLD === worldData) delete window.__world
     }
@@ -569,6 +592,31 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
       const surgeEl = surgeEls[L.id]
       if (surgeEl) surgeEl.style.transform = `translate3d(${-offset[L.id]}px,0,0)`
     }
+  }
+
+  // ── SHOOTING STAR ── ported from world-07-ring.html's spawnShoot()/
+  // shootLoop() verbatim (2026-08-12, Ben: "lean more into shooting star
+  // concept"), adapted to refs instead of module-level `let`s/`window.
+  // __shootLane` since this is a React component, not a page script.
+  function spawnShoot() {
+    if (isReduced()) return
+    const lane = shootLaneRef.current
+    if (!lane) return
+    const rot = dom.el('shootRot'), s = dom.el('shoot'), d = shootSideRef.current
+    shootSideRef.current = -d
+    if (d < 0) s.classList.add('rev') // see ringCss's own .shoot.rev comment — keeps the bright head leading
+    rot.style.left = px(d > 0 ? 140 + Math.random() * 500 : 1180 + Math.random() * 500)
+    rot.style.top = px(70 + Math.random() * 760)
+    rot.style.setProperty('--sa', (d > 0 ? 1 : -1) * (14 + Math.random() * 16) + 'deg')
+    s.style.setProperty('--sd2', px((d > 0 ? 1 : -1) * (640 + Math.random() * 380)))
+    s.style.setProperty('--sdu', (1.5 + Math.random() * 1.2) + 's')
+    rot.appendChild(s); lane.appendChild(rot)
+    s.addEventListener('animationend', () => rot.remove())
+  }
+  function shootLoop() {
+    clearTimeout(shootTimerRef.current)
+    const [a, b] = ENGINE.SHOOT_MS
+    shootTimerRef.current = setTimeout(() => { spawnShoot(); shootLoop() }, a + Math.random() * (b - a))
   }
 
   // scrim alpha only — geometry is fixed at mount (full frame, see the
