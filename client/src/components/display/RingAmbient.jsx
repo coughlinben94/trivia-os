@@ -306,17 +306,27 @@ function buildLayerContent(engine, world, arc, host, L) {
       const compCy = compTop + ch / 2
 
       const bdx = compCx - headCx, bdy = compCy - headCy
-      const bridge = dom.el('pair-bridge')
-      bridge.style.left = px(headCx); bridge.style.top = px(headCy)
-      bridge.style.width = px(Math.hypot(bdx, bdy))
-      bridge.style.transform = `rotate(${(Math.atan2(bdy, bdx) * 180 / Math.PI).toFixed(1)}deg)`
-      // was alpha 0.16→0.10, height 3px (ringPrimitives.js) — dimmer/
-      // thinner than the faintest star, so on accent stations (hue delta
-      // ~168°, this bridge is the ONLY declared-pair signal, spec §7.5)
-      // the pair read as unconnected. Bumped to 0.34→0.18 + 5px height,
-      // checked against a real render on an accent station.
-      bridge.style.background = `linear-gradient(90deg, ${hsla(st.hue, 40, 70, 0.34)} 0%, ${hsla(st.hue, 40, 70, 0.18)} 100%)`
-      host.appendChild(bridge)
+      // 2026-08-12: skip for `streak`/`ribbon` headlines — see
+      // world-07-ring.html's identical comment (same fix, both builds; st7
+      // comet, "wtf" x3 blind reviews, root-caused to this bridge running
+      // parallel/adjacent to the comet's own tail).
+      if (st.prim !== 'streak' && st.prim !== 'ribbon') {
+        const bridge = dom.el('pair-bridge')
+        bridge.style.left = px(headCx); bridge.style.top = px(headCy)
+        bridge.style.width = px(Math.hypot(bdx, bdy))
+        bridge.style.transform = `rotate(${(Math.atan2(bdy, bdx) * 180 / Math.PI).toFixed(1)}deg)`
+        // was alpha 0.16→0.10, height 3px (ringPrimitives.js) — dimmer/
+        // thinner than the faintest star, so on accent stations (hue delta
+        // ~168°, this bridge is the ONLY declared-pair signal, spec §7.5)
+        // the pair read as unconnected. Bumped to 0.34→0.18 + 5px height,
+        // checked against a real render on an accent station.
+        // NOTE: world-07-ring.html later dialed this back further (0.18→0.07
+        // + 2px, commit 6eefbb6, "cross-cutting stray line" fix) — that
+        // recalibration was never ported here. Flagging, not silently
+        // applying it as a drive-by inside this unrelated fix.
+        bridge.style.background = `linear-gradient(90deg, ${hsla(st.hue, 40, 70, 0.34)} 0%, ${hsla(st.hue, 40, 70, 0.18)} 100%)`
+        host.appendChild(bridge)
+      }
 
       // detail-tier specks, count follows loudness. k===0 is forced toward
       // the tier floor (spec §7.3 scale ladder): the worst-case headline
