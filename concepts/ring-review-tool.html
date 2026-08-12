@@ -41,7 +41,9 @@
 </head>
 <body>
 <div id="toolbar">
+  <button id="prevBtn" title="Previous station (←)">&#9668;</button>
   <div id="progressStrip"></div>
+  <button id="nextBtn" title="Next station (→)">&#9658;</button>
   <div id="stationLabel">Loading…</div>
   <div id="brushGroup">
     <button data-size="S">S</button>
@@ -498,6 +500,8 @@ async function init() {
       document.querySelectorAll('#catButtons button').forEach(x => x.classList.toggle('active', x === b));
       noteText.focus(); // clicking a button moves focus off the textarea; onNoteKeydown needs it back or Enter/Esc go dead
     }));
+  document.getElementById('prevBtn').addEventListener('click', () => navigate(currentStation - 1));
+  document.getElementById('nextBtn').addEventListener('click', () => navigate(currentStation + 1));
   paintCanvas.addEventListener('mousedown', onMouseDown);
   window.addEventListener('mousemove', onMouseMove);
   window.addEventListener('mouseup', onMouseUp);
