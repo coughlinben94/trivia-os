@@ -557,9 +557,29 @@ function buildLayerContent(host, L){
          got stuck near the 576 floor, loud ones near 880, so a quiet
          station read as a small/sparse frame instead of "large and dim."
          Loudness now speaks through alpha/detail-count only, below. */
-      const hw = lerp(576, 880, rHeadline());
+      const pairUpper = rPairBand() < 0.5; // shared band draw — see bandY's forceUpper comment (spec §7.5)
+
+      // 2026-08-12: asteroid field (st9) straddles the boundary into st10 by
+      // Ben's request — "half on one slide half on another" — instead of
+      // being fully contained in one frame like every other headline. mid
+      // moves exactly one frame per turn (see the layer comment above), so
+      // station i's content lives at a FIXED x = i*ENGINE.W..(i+1)*ENGINE.W
+      // in one continuous strip — nothing stops an element from being wider
+      // than one frame and centered ON the boundary between two stations:
+      // its left half renders inside st9's own frame (visible turning INTO
+      // st9), its right half renders inside st10's frame (visible turning
+      // OUT to st10), same DOM element, no per-station special-casing
+      // needed in the primitive itself (ringPrimitives.js's asteroidField
+      // branch already positions its rocks as fractions of whatever w/h
+      // it's given — it doesn't need to know it's spanning two stations).
+      // Width kept well under 2*ENGINE.W (mid-loud bleed only into st10's
+      // own left edge, not all the way across it) so it doesn't compete
+      // with st10's own headline (supernova) for the whole frame.
+      const isSpanningField = st.prim === 'asteroidField';
+      const hw = isSpanningField ? lerp(900, 1300, rHeadline()) : lerp(576, 880, rHeadline());
       const hh = st.prim === 'streak' ? hw*0.30
                : st.prim === 'ribbon' ? hw*0.34
+               : isSpanningField ? hw*0.42
                : hw*(0.62 + rHeadline()*0.26);
       const alpha = lerp(0.34, 0.55, lou);
       const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, sfill); // isHeadline: only per-station breathe (spec §8)
@@ -570,8 +590,9 @@ function buildLayerContent(host, L){
          against this seed's real render, [0.08, 0.98] lands mean centroid
          x at 920 (within the 960±96 gate) — [0.02,0.92] alone undershot to
          848, just outside the band, so this was iterated per §2's gate. */
-      const pairUpper = rPairBand() < 0.5; // shared band draw — see bandY's forceUpper comment (spec §7.5)
-      const headLeft = x0 + lerp(0.08, 0.98, rHeadline())*(ENGINE.W - hw);
+      const headLeft = isSpanningField
+        ? (x0 + ENGINE.W) - hw/2  // centered ON the st9/st10 boundary
+        : x0 + lerp(0.08, 0.98, rHeadline())*(ENGINE.W - hw);
       const headTop  = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh));
       head.style.left = px(headLeft);
       head.style.top  = px(headTop);
