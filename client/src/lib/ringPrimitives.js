@@ -1022,11 +1022,23 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       glow.style.width = glow.style.height = px(gd)
       glow.style.background = `radial-gradient(circle closest-side, ${hsla(rockHue + 15, 50, 62, A(0.42, fill))} 0%, transparent ${E(80, fill).toFixed(0)}%)`
       f.appendChild(glow)
-      const rock = el('')
+      // 2026-08-12 (Ben's direct chat request: "the asteroids could slowly
+      // be turning, diff rates and diff directions"). `rot` was a single
+      // static angle set once via inline `transform`; now it's the STARTING
+      // angle (`--r0`) for a per-rock CSS animation instead, so each rock
+      // keeps its own independent rotation going. `--rspin` (+-360deg) and
+      // `--rd` (18-40s, seeded so it's reproducible, not Math.random) give
+      // each rock its own rate AND direction — not synchronized, per the
+      // ask. See `.rock-spin`/`@keyframes` in ringCss() for the shared
+      // animation rule, and the reduced-motion blocks (both builds) for
+      // where this joins `.star`/`.pf`/`.drift` on the paused list.
+      const rock = el('rock-spin')
       rock.style.position = 'absolute'
       rock.style.left = px(cx - rw / 2); rock.style.top = px(cy - rh / 2)
       rock.style.width = px(rw); rock.style.height = px(rh)
-      rock.style.transform = `rotate(${rot.toFixed(0)}deg)`
+      rock.style.setProperty('--r0', `${rot.toFixed(0)}deg`)
+      rock.style.setProperty('--rspin', r() < 0.5 ? '360deg' : '-360deg')
+      rock.style.setProperty('--rd', `${(18 + r() * 22).toFixed(1)}s`)
       const n = 5 + Math.floor(r() * 5)                  // 5-9 facets
       const steps = Array.from({ length: n }, () => 0.35 + r()) // min width keeps vertices from coinciding
       const total = steps.reduce((a, b) => a + b, 0)
@@ -1532,7 +1544,7 @@ function kfName(prefix, camelName) {
 
 export function ringCss(prefix) {
   const p = prefix
-  const tw = kfName(p, 'Tw'), pfBreathe = kfName(p, 'PfBreathe'), driftMove = kfName(p, 'DriftMove')
+  const tw = kfName(p, 'Tw'), pfBreathe = kfName(p, 'PfBreathe'), driftMove = kfName(p, 'DriftMove'), rockSpin = kfName(p, 'RockSpin')
   return `
 .${p}lyr{position:absolute;inset:0;overflow:hidden}
 .${p}surge{position:absolute;left:0;top:0;width:100%;height:100%;
@@ -1582,5 +1594,8 @@ export function ringCss(prefix) {
   animation:${driftMove} 480s linear infinite alternate;
   box-shadow:0 0 32px 10px rgba(255,183,110,0.75)}
 @keyframes ${driftMove}{0%{transform:translateX(0)}100%{transform:translateX(3600px)}}
+
+.${p}rock-spin{animation:${rockSpin} var(--rd) linear infinite}
+@keyframes ${rockSpin}{from{transform:rotate(var(--r0))}to{transform:rotate(calc(var(--r0) + var(--rspin)))}}
 `
 }

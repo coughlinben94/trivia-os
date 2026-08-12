@@ -100,6 +100,7 @@ ${ringCss('ring-')}
   .ring-surge{transition:none!important}
   .ring-star,.ring-pf,.ring-pf-breathe{animation-play-state:paused!important}
   .ring-drift{animation-play-state:paused!important}
+  .ring-rock-spin{animation-play-state:paused!important}
 }
 `
 
