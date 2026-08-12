@@ -1485,7 +1485,22 @@ function makeNebulaRing(el, w, h, hue, fill) {
   ring.style.position = 'absolute'
   ring.style.left = '0'; ring.style.top = '0'
   ring.style.width = px(w); ring.style.height = px(h)
-  ring.style.background = `radial-gradient(ellipse at 50% 50%,
+  // 2026-08-12 (fresh review, Ben: "this looks terrible" — rendered and
+  // measured directly, not assumed: the ring was hard-clipped in a visible
+  // rectangle). Root cause: `radial-gradient(ellipse at 50% 50%, ...)` with
+  // no explicit size defaults to `farthest-corner` — its 100% is the
+  // distance to the box's DIAGONAL corner, not to its edges. For a square
+  // box that's close enough to look fine; for this box's eccentric 1.55x/
+  // 0.95x aspect (from the same-day eye-gestalt fix, which made the
+  // mismatch worse), the top/bottom edges sit much closer than the
+  // diagonal, so the "92% transparent" stop was still solid color there —
+  // the box's own rectangular boundary became a visible hard edge before
+  // the gradient ever faded out. Explicit `ellipse 100% 100%` sizes each
+  // axis to the box's own half-width/half-height independently (the same
+  // technique the `lens` primitive's own core gradient already uses), so
+  // 92% now means 92% of each axis's real extent — always fades to
+  // transparent at the box edge regardless of aspect ratio.
+  ring.style.background = `radial-gradient(ellipse 100% 100% at 50% 50%,
     transparent 0%, transparent 52%, ${hsla(hue + 14, 70, 68, A(0.34, fill))} 66%,
     ${hsla(hue + 8, 62, 58, A(0.16, fill))} 78%, transparent 92%)`
   return ring

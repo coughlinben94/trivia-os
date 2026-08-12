@@ -290,31 +290,36 @@ function buildLayerContent(engine, world, arc, host, L) {
       }
 
       // one feature-tier companion — this IS the station's declared pair
-      // (spec §7.5): two elements linked by proximity plus a shared visual
-      // property, not two independent random placements (a collage, not a
-      // pair). Proximity is forced by construction: same vertical band as
-      // the headline (pairUpper — independent draws could land ~470px
-      // apart, the full gap between bands) plus a bounded offset from its
-      // own centroid, not a fresh frame-wide draw. Shared property: hue
-      // echo within ±18° for non-accent stations (inside the spec's 20°
-      // budget); accent stations intentionally push the companion hue
-      // ~168° away (the world's one complementary-accent mechanic), so hue
-      // can't carry the pair there — the connecting bridge below does,
-      // drawn for every station regardless of hue.
+      // (spec §7.5): two elements linked by a shared visual property, not
+      // two independent random placements (a collage, not a pair). Shared
+      // property: hue echo within ±18° for non-accent stations (inside the
+      // spec's 20° budget); accent stations intentionally push the
+      // companion hue ~168° away (the world's one complementary-accent
+      // mechanic), so hue can't carry the pair there — the connecting
+      // bridge does, drawn for accent stations regardless of hue.
+      // 2026-08-12: synced from world-07-ring.html — this file was still on
+      // the old proximity-orbit placement (pairAng/pairRad around the
+      // headline's own centroid), never ported the st1/st3 clearance fix
+      // either. Superseded entirely: Ben, fresh review, generalizing st0's
+      // specific complaint — "two items squished together in the same
+      // corner is no bueno — ie a spiral not by a planet." Once headlines
+      // are corner-anchored, keeping the companion close means jamming two
+      // objects into the same corner. The pairing signal (hue-echo/bridge)
+      // never depended on physical closeness, so companion now takes the
+      // OPPOSITE corner from its headline — same treatment as the
+      // occluder below.
       const others = ['blob', 'dots', 'lens', 'streak'].filter(k => k !== st.prim)
       const ck = others[Math.floor(rCompanion() * others.length)]
       const cw = lerp(230, 420, rCompanion())
       const ch = ck === 'streak' ? cw * 0.30 : cw * (0.60 + rCompanion() * 0.28)
       const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, rCompanion()))
       const comp = dom.makePrim(ck, cw, ch, compHue, lerp(0.30, 0.48, lou) * 0.8, rCompanion, false, fill)
-      const pairAng = rCompanion() * Math.PI * 2, pairRad = lerp(160, 380, rCompanion())
-      let compCx = headCx + Math.cos(pairAng) * pairRad
-      compCx = Math.min(x0 + engine.W - cw / 2, Math.max(x0 + cw / 2, compCx))
-      const compTop = dom.bandY(rCompanion, ch, pairUpper, dom.rotatedBandH(ck, cw, ch))
-      comp.style.left = px(compCx - cw / 2)
+      const compLeft = dom.cornerX(rCompanion, cw, x0, !headlineCornerLeft)
+      const compTop = dom.bandY(rCompanion, ch, !pairUpper, dom.rotatedBandH(ck, cw, ch))
+      comp.style.left = px(compLeft)
       comp.style.top = px(compTop)
       host.appendChild(comp)
-      const compCy = compTop + ch / 2
+      const compCx = compLeft + cw / 2, compCy = compTop + ch / 2
 
       const bdx = compCx - headCx, bdy = compCy - headCy
       // 2026-08-12: synced from world-07-ring.html (was lagging — see that
@@ -388,9 +393,11 @@ function buildLayerContent(engine, world, arc, host, L) {
         // 2026-08-12: was a uniform draw across the whole frame width —
         // see world-07-ring.html's identical comment (same fix, both
         // builds; bbox-verified against Ben's fresh review at st2/st10).
-        // Forced to the OPPOSITE corner (both axes) from the headline —
-        // st0, Ben: "needs to be on opposite corner of the big planet."
-        const ox = dom.cornerX(orr, os, x0, !headlineCornerLeft)
+        // Second pass: the companion just moved to the diagonal-opposite
+        // corner too (see its own comment above) — occluder now takes the
+        // THIRD corner (same horizontal side as the headline, opposite
+        // vertical band) so all three objects land in distinct corners.
+        const ox = dom.cornerX(orr, os, x0, headlineCornerLeft)
         const oy = dom.bandY(orr, os, !pairUpper)
         const occ = dom.makeOccluder(os, st.hue, 0.40)
         occ.style.left = px(ox)

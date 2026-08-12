@@ -695,56 +695,40 @@ function buildLayerContent(host, L){
       }
 
       /* one feature-tier companion — this IS the station's declared pair
-         (spec §7.5): two elements linked by proximity plus a shared visual
-         property, not two independent random placements (a collage, not a
-         pair). Proximity is forced by construction: same vertical band as
-         the headline (pairUpper — independent draws could land ~470px
-         apart, the full gap between bands) plus a bounded offset from its
-         own centroid, not a fresh frame-wide draw. Shared property: hue
-         echo within ±18° for non-accent stations (inside the spec's 20°
-         budget); accent stations intentionally push the companion hue
-         ~168° away (the world's one complementary-accent mechanic), so hue
-         can't carry the pair there — the connecting bridge below does,
-         drawn for every station regardless of hue. */
+         (spec §7.5): two elements linked by a shared visual property, not
+         two independent random placements (a collage, not a pair). Shared
+         property: hue echo within ±18° for non-accent stations (inside the
+         spec's 20° budget); accent stations intentionally push the
+         companion hue ~168° away (the world's one complementary-accent
+         mechanic), so hue can't carry the pair there — the connecting
+         bridge does, drawn for accent stations regardless of hue.
+         2026-08-12 (fresh review, Ben: "two items squished together in the
+         same corner is no bueno — ie a spiral not by a planet," generalizing
+         st0's specific complaint into a standing rule): this used to force
+         PROXIMITY — same vertical band as the headline, positioned at a
+         radius from its centroid — on the theory that closeness was what
+         read as "paired." That's now the wrong instinct: once headlines are
+         corner-anchored (today's earlier cornerX fix), keeping the
+         companion close means jamming two objects into the same corner,
+         exactly what's now named a defect. The pairing SIGNAL (hue-echo or
+         bridge) never depended on physical closeness — it's carried by
+         color and the connecting line either way — so proximity was doing
+         no real work except causing this. Companion now placed at the
+         OPPOSITE corner from its headline, same treatment as the occluder
+         a few fixes up (cornerX + forced-opposite band), instead of
+         orbiting the headline's own centroid. */
       const others = ['blob','dots','lens','streak'].filter(k => k !== st.prim);
       const ck = others[Math.floor(rCompanion()*others.length)];
       const cw = lerp(230, 420, rCompanion());
       const ch = ck === 'streak' ? cw*0.30 : cw*(0.60 + rCompanion()*0.28);
       const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, rCompanion()));
       const comp = dom.makePrim(ck, cw, ch, compHue, lerp(0.30, 0.48, lou)*0.8, rCompanion, false, sfill);
-      // 2026-08-12: this offset used to be a flat lerp(160,380,r()) regardless of
-      // how big the two elements actually are. Headline can run up to 880px,
-      // companion up to 420px — a flat 160-380px gap between CENTROIDS is
-      // routinely smaller than the sum of their two radii, so the companion
-      // lands directly on top of (or mostly behind) the headline. Confirmed on
-      // a real render, station 1 (spiral galaxy): the companion blob sits
-      // almost fully overlapping the beaded arms — exactly the "bunched
-      // together" complaint. Scale the offset off the pair's own combined
-      // size instead of a fixed constant, so bigger elements get real
-      // separation and small ones aren't pushed needlessly far apart.
-      // First attempt (0.30/0.55 multiplier) re-rendered nearly identical to
-      // before — not enough correction, verified by real screenshot diff,
-      // not assumed. Pushing further: both elements are soft-glow shapes
-      // whose visible extent runs well past their nominal box (falloff/blur
-      // bleeds outward), so "half their box widths" undersells how much
-      // clearance is actually needed to read as two separate objects.
-      //
-      // 2026-08-12, density/declutter pass: st1 (spiral galaxy) rendered
-      // FRESH, same seed, still shows the headline and companion merged
-      // into one continuous blob with no visible gap — the 0.55 floor
-      // above still wasn't enough at the low end of its own range. Raised
-      // 0.55->0.80 (ceiling left at 0.95 — the ceiling was never the
-      // problem, only the floor). Re-rendered st1 and st3 (the other
-      // station this fix was tuned against) to confirm both actually
-      // separate now, not just st1.
-      const pairAng = rCompanion() * Math.PI * 2, pairRad = lerp((hw + cw) * 0.80, (hw + cw) * 0.95, rCompanion());
-      let compCx = headCx + Math.cos(pairAng) * pairRad;
-      compCx = Math.min(x0 + ENGINE.W - cw/2, Math.max(x0 + cw/2, compCx));
-      const compTop = dom.bandY(rCompanion, ch, pairUpper, dom.rotatedBandH(ck, cw, ch));
-      comp.style.left = px(compCx - cw/2);
+      const compLeft = dom.cornerX(rCompanion, cw, x0, !headlineCornerLeft);
+      const compTop = dom.bandY(rCompanion, ch, !pairUpper, dom.rotatedBandH(ck, cw, ch));
+      comp.style.left = px(compLeft);
       comp.style.top  = px(compTop);
       host.appendChild(comp); formTotal++;
-      const compCy = compTop + ch/2;
+      const compCx = compLeft + cw/2, compCy = compTop + ch/2;
 
       const bdx = compCx - headCx, bdy = compCy - headCy;
       // 2026-08-12 (st7 comet: 3 independent blind reviews called it "wtf" —
@@ -868,10 +852,17 @@ function buildLayerContent(host, L){
         // bbox-verified against Ben's fresh review, this is what st2/st10's
         // "move to a corner" marks actually hit (elementsFromPoint + SVG
         // rect enumeration, not guessed), same underlying complaint as the
-        // headline fix above. Now shares the same cornerX helper, forced to
-        // the OPPOSITE corner (both axes) from the headline — st0, Ben:
-        // "needs to be on opposite corner of the big planet."
-        const ox = dom.cornerX(orr, os, x0, !headlineCornerLeft);
+        // headline fix above. Now shares the same cornerX helper.
+        // 2026-08-12, second pass: originally forced diagonal-opposite
+        // (both axes) from the headline — but the companion just moved to
+        // that exact corner too (Ben: "two items squished together in the
+        // same corner is no bueno"), which would recreate the same defect
+        // one corner over. Three objects (headline/companion/occluder), 4
+        // corners: occluder now takes the THIRD corner — same horizontal
+        // side as the headline, opposite vertical band — instead of
+        // diagonal-opposite, so all three land in visually distinct
+        // corners rather than two of them sharing one.
+        const ox = dom.cornerX(orr, os, x0, headlineCornerLeft);
         const oy = dom.bandY(orr, os, !pairUpper);
         const occ = dom.makeOccluder(os, st.hue, 0.40);
         occ.style.left = px(ox);
