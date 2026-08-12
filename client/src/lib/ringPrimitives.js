@@ -208,7 +208,13 @@ function bandY(engine, r, h, forceUpper, effH) {
 // planet"), which only works if one shared decision feeds both call sites
 // instead of each drawing its own independent coin flip.
 function cornerX(engine, r, w, x0, cornerLeft) {
-  const margin = lerp(20, 120, r())
+  // 2026-08-12 (fresh review, st4: "move towards corner more"; Ben's own
+  // general framing: "things spaced apart into the corners is key").
+  // Tightened 20-120px -> 8-50px — st4's own render at the old range's
+  // high end still left visible daylight between the object and the true
+  // corner. General tightening, not a st4-only special case, since Ben's
+  // note wasn't scoped to one station.
+  const margin = lerp(8, 50, r())
   return cornerLeft ? x0 + margin : x0 + engine.W - w - margin
 }
 
