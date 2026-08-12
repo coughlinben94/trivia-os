@@ -621,18 +621,26 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     //    covers the whole body or none of it.
     const bodySize = Math.min(w, h) * 0.52
     const cx = w / 2, cy = h / 2
-    // 2026-08-12 (st0 — "too close to the planet"): rx=0.98*bodySize gave a
-    // real major-axis gap (rx - bodyRadius = 0.48*bodySize), but ry (the
-    // near-vertical minor-axis reach, rx*0.32=0.31*bodySize) was LESS than
-    // the body's own radius (0.5*bodySize) — the ring's near-vertical
-    // extent fell inside the body's silhouette rather than clearing it, so
-    // it read as slicing through/hugging the body at top and bottom instead
-    // of wrapping around it. rx raised so ry clears bodyRadius with real
-    // margin (ry = 1.34*rx*0.32 ≈ 0.575*bodySize vs 0.5*bodySize body
-    // radius); tilt widened alongside it (-10 -> -16) so the wider ellipse
-    // still reads as a tilted ring, not a near-circular halo.
-    const rx = bodySize * 1.34, ry = rx * 0.32
-    const tilt = -16
+    // 2026-08-12: an earlier version of this fix tried to widen rx to
+    // 1.34*bodySize so the ring's near-vertical reach (ry) would exceed the
+    // body's own radius. REVERTED — caught by an adversarial render review
+    // (Fable-5), confirmed by re-deriving the arithmetic by hand: (1) that
+    // rx hard-clipped against this function's own SVG box (viewBox 0 0 w h,
+    // no margin) — the arc's true unclipped endpoints landed outside the
+    // box and got cut into dangling ends that never closed the ellipse, a
+    // real regression, not a matter of taste. (2) The clearance goal itself
+    // was geometrically impossible to hit inside this box at this body
+    // size: ry>bodyRadius requires rx > 0.8125*min(w,h), but the box only
+    // has room for rx <= ~0.48*min(w,h) before clipping — no rx value
+    // satisfies both. (3) The premise was likely wrong anyway: a real
+    // shallow-tilt Saturn-ring image DOES show the ring's near-vertical
+    // extent passing behind/through the planet's silhouette — that's
+    // correct perspective, not a defect the front/back-half split (below)
+    // already exists to sell. Net change kept small and box-safe: rx nudged
+    // 0.98->1.08*bodySize (clamped so cx+rx never exceeds the box) for a
+    // slightly more open major-axis gap, without the false clearance claim.
+    const rx = Math.min(bodySize * 1.08, w / 2 - 4), ry = rx * 0.32
+    const tilt = -10
     const NS = 'http://www.w3.org/2000/svg'
     const ringHalf = (sweepFlag, isBack) => {
       const svg = document.createElementNS(NS, 'svg')
@@ -935,14 +943,39 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       // linear-gradient taper (opaque at core, transparent at tip) keeps it
       // reading as a ray rather than a solid blocky line even at this
       // weight, since only the near-core end is at full width/alpha.
-      const th = Math.max(6, w * 0.03)
-      beam.style.width = px(len); beam.style.height = px(th)
-      beam.style.marginTop = px(-th / 2)
+      //
+      // 2026-08-12 (Ben's own review: "wtf is that" — rendered ISOLATED
+      // from the companion/pair-bridge, which the earlier 2026-08-11 blind
+      // reviews never did, confirming this was really this primitive's own
+      // shape, not a neighbouring-element confound): a uniform-width bar
+      // that only tapers in ALPHA reads as a comet tail or a stray line at
+      // any width — a real lighthouse beam's silhouette itself flares
+      // outward from the source, it doesn't stay a constant-width band.
+      // Rebuilt as a triangular CONE via clip-path: a point at the core,
+      // widening to a full-height base at the tip — the actual shape that
+      // reads as "beam sweeping outward," which no amount of bar-thickness
+      // could fix.
+      const tipTh = Math.max(28, w * 0.11)
+      beam.style.width = px(len); beam.style.height = px(tipTh)
+      beam.style.marginTop = px(-tipTh / 2)
       beam.style.transformOrigin = '0 50%'
       beam.style.transform = `rotate(${ang.toFixed(1)}deg)`
-      beam.style.background = `linear-gradient(90deg, ${hsla(hue, 30, 90, A(0.85, fill))} 0%, transparent 100%)`
+      beam.style.clipPath = 'polygon(0% 50%, 100% 0%, 100% 100%)'
+      beam.style.background = `linear-gradient(90deg, ${hsla(hue, 30, 90, A(0.85, fill))} 0%, ${hsla(hue, 30, 88, A(0.45, fill))} 45%, transparent 100%)`
       f.appendChild(beam)
     })
+    // sweep ring: a thin circle around the core, the classic pulsar-diagram
+    // cue that reads as "the beam is rotating" rather than "a star with two
+    // static lines." One element, low alpha, fill-driven so it doesn't
+    // compete with the core at a quiet station.
+    const sweep = el('')
+    const sd = w * 0.30
+    sweep.style.position = 'absolute'; sweep.style.left = '50%'; sweep.style.top = '50%'
+    sweep.style.width = sweep.style.height = px(sd)
+    sweep.style.marginLeft = px(-sd / 2); sweep.style.marginTop = px(-sd / 2)
+    sweep.style.borderRadius = '50%'
+    sweep.style.border = `${Math.max(1, w * 0.0035).toFixed(1)}px solid ${hsla(hue, 40, 85, A(0.30, fill))}`
+    f.appendChild(sweep)
   }
   return f
 }
