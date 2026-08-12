@@ -411,6 +411,17 @@ async function init() {
   initStarted = true;
   stationLabel.textContent = 'Loading world-07-ring…';
   const world = await waitForWorld();
+  // world-07-ring.html ships its own live control bar (Turn/Auto-advance/Jump-to/
+  // Safe-box/Grain/Reduced-motion toggles) inside the iframe, fully clickable and
+  // completely invisible to this tool's navigate()/currentStation state. A click on
+  // its "Turn ▸" advances the world without this tool knowing — currentStation stays
+  // put, redrawStationOverlay never fires, and any painted marks are left sitting on
+  // what's now the WRONG station's art, looking exactly like marks that "followed to
+  // the next screen." This tool only ever needs to read the iframe's state via
+  // window.__world — never click into it — so kill all pointer interaction with the
+  // iframe itself; every mouse event the user makes belongs to paintCanvas or the
+  // parent toolbar instead.
+  worldFrame.style.pointerEvents = 'none';
   fitFrameHeight();
   stations = world.WORLD.stations.map((s, i) => ({ index: i, key: s.key, prim: s.prim, verdict: null, marks: [] }));
   stations.forEach((s, i) => {
