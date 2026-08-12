@@ -308,27 +308,24 @@ function buildLayerContent(engine, world, arc, host, L) {
       const compCy = compTop + ch / 2
 
       const bdx = compCx - headCx, bdy = compCy - headCy
-      // 2026-08-12: skip for elongated/rotated headlines — see
-      // world-07-ring.html's identical comment (same fix, both builds; st7
-      // comet, "wtf" x3 blind reviews, root-caused to this bridge running
-      // parallel/adjacent to the comet's own tail). /simplify: reads
-      // ROTATION_MAX_DEG via `dom.isElongatedKind` instead of a hand list
-      // that missed `lens`.
-      if (!dom.isElongatedKind(st.prim)) {
+      // 2026-08-12: synced from world-07-ring.html (was lagging — see that
+      // file's fuller history comment). Two ports in one pass, both driven
+      // by the same fresh bbox-verified review: (1) alpha dialed back
+      // 0.34/0.18 -> 0.18/0.07 (commit 6eefbb6, "cross-cutting stray line"
+      // — height was already shared/unified via ringCss, only this inline
+      // gradient had drifted); (2) scoped to `st.accent` on top of the
+      // existing elongated-kind skip — st4/st8/st9 (all non-accent) still
+      // read as a stray line even at the reduced alpha, because non-accent
+      // stations already carry a hue-echo pairing signal (compHue above)
+      // and the bridge there was pure redundant clutter, not under-dialed.
+      // Accent stations push companion hue ~168° away specifically so hue
+      // can't carry the signal — bridge stays the sole §7.5 cue there.
+      if (st.accent && !dom.isElongatedKind(st.prim)) {
         const bridge = dom.el('pair-bridge')
         bridge.style.left = px(headCx); bridge.style.top = px(headCy)
         bridge.style.width = px(Math.hypot(bdx, bdy))
         bridge.style.transform = `rotate(${(Math.atan2(bdy, bdx) * 180 / Math.PI).toFixed(1)}deg)`
-        // was alpha 0.16→0.10, height 3px (ringPrimitives.js) — dimmer/
-        // thinner than the faintest star, so on accent stations (hue delta
-        // ~168°, this bridge is the ONLY declared-pair signal, spec §7.5)
-        // the pair read as unconnected. Bumped to 0.34→0.18 + 5px height,
-        // checked against a real render on an accent station.
-        // NOTE: world-07-ring.html later dialed this back further (0.18→0.07
-        // + 2px, commit 6eefbb6, "cross-cutting stray line" fix) — that
-        // recalibration was never ported here. Flagging, not silently
-        // applying it as a drive-by inside this unrelated fix.
-        bridge.style.background = `linear-gradient(90deg, ${hsla(st.hue, 40, 70, 0.34)} 0%, ${hsla(st.hue, 40, 70, 0.18)} 100%)`
+        bridge.style.background = `linear-gradient(90deg, ${hsla(st.hue, 40, 70, 0.18)} 0%, ${hsla(st.hue, 40, 70, 0.07)} 100%)`
         host.appendChild(bridge)
       }
 

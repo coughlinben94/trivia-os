@@ -738,7 +738,22 @@ function buildLayerContent(host, L){
       // (this file's own existing "which kinds rotate" table) already
       // classifies as the same elongated family. Now reads that table via
       // `dom.isElongatedKind` instead of a second, incomplete hand list.
-      if (!dom.isElongatedKind(st.prim)){
+      //
+      // 2026-08-12 (fresh review, bbox-verified): st4/st8/st9 — all
+      // non-accent, all non-elongated — flagged "weird line"/"weird line
+      // placement" even after the 0.18->0.07 dial-back above. No accent
+      // station (st3/st6/st10) drew a line complaint. Root cause: for
+      // non-accent stations the hue echo (compHue = st.hue +/- 18 deg,
+      // above) ALREADY signals the declared pair per spec Sec7.5 ("a
+      // common halo, an aligned axis, a colour echo, a connecting
+      // bridge" are listed as interchangeable) — the bridge there was
+      // pure redundant clutter, not a second dial-back away from
+      // working. Accent stations push companion hue ~168deg away
+      // specifically so hue can't carry the signal, making the bridge
+      // the ONLY cue there (per the alpha-history comment below) — kept.
+      // Scoped to `st.accent` rather than removed outright so Sec7.5 stays
+      // satisfied everywhere it's structurally load-bearing.
+      if (st.accent && !dom.isElongatedKind(st.prim)){
         const bridge = dom.el('pair-bridge');
         bridge.style.left = px(headCx); bridge.style.top = px(headCy);
         bridge.style.width = px(Math.hypot(bdx, bdy));
