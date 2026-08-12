@@ -27,6 +27,10 @@
   #noteCard{position:absolute;width:260px;background:#1e1e26;border:1px solid #444;
     border-radius:6px;padding:8px;box-shadow:0 4px 18px rgba(0,0,0,.5);z-index:20;}
   #noteCard.hidden{display:none;}
+  #captureScrim{position:absolute;inset:0;z-index:15;background:rgba(0,0,0,.35);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;
+    text-shadow:0 1px 3px rgba(0,0,0,.8);}
+  #captureScrim.hidden{display:none;}
   #noteText{width:100%;height:60px;resize:none;background:#111;color:#eee;
     border:1px solid #333;border-radius:4px;padding:4px;box-sizing:border-box;font:inherit;}
   #catButtons{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;}
@@ -51,6 +55,7 @@
 <div id="stageWrap">
   <iframe id="worldFrame" src="world-07-ring.html"></iframe>
   <canvas id="paintCanvas"></canvas>
+  <div id="captureScrim" class="hidden">Capturing evidence — hands off…</div>
   <div id="noteCard" class="hidden">
     <textarea id="noteText" placeholder="note (optional)"></textarea>
     <div id="catButtons">
@@ -87,6 +92,13 @@ let pendingMark = null;
 let dirty = false;
 let initStarted = false;
 let saving = false;
+// Set while ring-review-server.mjs's Playwright driver is stepping this SAME live
+// page through every marked station to capture evidence PNGs (window.__reviewTool
+// below). If the reviewer paints or navigates while that's happening, the mark
+// commits with currentStation pointing at whatever station the CAPTURE loop parked
+// on, not what the reviewer is actually looking at — silent cross-station data
+// corruption, confirmed live. Block input for the duration instead.
+let capturing = false;
 let editVersion = 0; // bumped on every commit/G-toggle; lets onSave detect edits made mid-flight
 
 const BRUSH_PX = { S: 6, M: 14, L: 28 };
@@ -201,7 +213,7 @@ function bboxFromMark(m) {
 
 function renderToolbar() {
   const st = stations[currentStation];
-  stationLabel.textContent = `Station ${currentStation + 1}/12 — ${st.key} (${st.prim})`;
+  stationLabel.textContent = `Station ${currentStation + 1}/${stations.length} — ${st.key} (${st.prim})`;
   Array.from(progressStrip.children).forEach((d, i) => {
     d.classList.toggle('current', i === currentStation);
     d.classList.toggle('marked', stations[i].marks.length > 0);
@@ -287,13 +299,19 @@ function discardCurrentStroke() {
 }
 
 async function navigate(idx) {
-  idx = Math.max(0, Math.min(11, idx));
+  idx = Math.max(0, Math.min(stations.length - 1, idx));
   if (pendingMark) commitCurrentMark();
   currentStation = idx;
   const w = worldFrame.contentWindow;
   w.__world.jumpTo(idx);
   await sleep(180);
   const doc = worldFrame.contentDocument;
+  // A question with more text than earlier stations can grow #stage taller than the
+  // iframe height set at init — fitFrameHeight() only ran at boot, so the iframe
+  // would start scrolling internally and the canvas-to-stage mapping (computed from
+  // #stage's rect) would silently drift off the actual art. Re-fit on every nav,
+  // before measuring, not just once at startup.
+  fitFrameHeight();
   doc.getAnimations().forEach(a => { a.pause(); a.currentTime = 0; });
   // .shoot elements remove themselves on 'animationend' (world-07-ring.html ~L901),
   // which pausing suppresses forever — they'd pile up in the DOM across a session
@@ -307,6 +325,7 @@ async function navigate(idx) {
 }
 
 function onMouseDown(e) {
+  if (capturing) return; // evidence capture owns navigation right now — see `capturing` above
   if (e.altKey) { deleteMarkAt(canvasPointFromEvent(e)); return; } // never sets drawing — can't collide with painting
   if (pendingMark) commitCurrentMark(); // starting a new stroke auto-commits any open card
   drawing = true;
@@ -315,6 +334,12 @@ function onMouseDown(e) {
 }
 function onMouseMove(e) {
   if (!drawing) return;
+  // mouseup is bound on window, but a real mouse-up outside the browser window
+  // (or a fast drag that exits and re-enters) can leave it unfired — drawing stays
+  // true forever, which also makes onGlobalKeydown bail on every key press forever
+  // (see its `if (drawing) return`). e.buttons===0 mid-move means the button is
+  // already up; recover instead of trusting the mouseup event ever arrives.
+  if (e.buttons === 0) { onMouseUp(); return; }
   currentStroke.points.push(canvasPointFromEvent(e));
   redrawStationOverlay(currentStation);
 }
@@ -332,6 +357,7 @@ function onMouseUp() {
 }
 
 function onGlobalKeydown(e) {
+  if (capturing) return; // evidence capture owns navigation right now — see `capturing` above
   if (document.activeElement === noteText) return;
   if (drawing) return;
   if (e.key === 'ArrowLeft') navigate(currentStation - 1);
@@ -348,7 +374,14 @@ function onGlobalKeydown(e) {
 }
 
 function onNoteKeydown(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitCurrentMark(); }
+  // Arrow keys go dead while the note card holds focus (onGlobalKeydown bails on
+  // document.activeElement === noteText) — the reviewer's natural "commit, then
+  // move on" reflex hits a wall with zero feedback, which is exactly the kind of
+  // dead-end that made the iframe's own visible "Turn ▸" look like the way out
+  // last time. Commit-and-navigate directly from here instead of only Enter/Esc.
+  if (e.key === 'ArrowLeft') { e.preventDefault(); commitCurrentMark(); navigate(currentStation - 1); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); commitCurrentMark(); navigate(currentStation + 1); }
+  else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitCurrentMark(); }
   else if (e.key === 'Escape') { e.preventDefault(); discardCurrentStroke(); }
   e.stopPropagation();
 }
@@ -379,7 +412,8 @@ async function onSave() {
     const result = await resp.json();
     if (result.ok) {
       saveStatus.textContent = `Saved ✓ concepts/${result.jsonPath}` +
-        (result.pngPaths.length ? ` (+${result.pngPaths.length} PNG)` : '');
+        (result.pngPaths.length ? ` (+${result.pngPaths.length} PNG)` : '') +
+        (result.pngError ? ` — data saved, evidence PNGs incomplete: ${result.pngError}` : '');
       // Only clear dirty if nothing was committed while this save was in flight —
       // otherwise those marks are on disk nowhere yet and beforeunload must still warn.
       if (editVersion === versionAtSave) dirty = false;
@@ -398,12 +432,21 @@ function onBeforeUnload(e) {
   if (dirty || pendingMark) { e.preventDefault(); e.returnValue = ''; }
 }
 
+function setCapturing(on) {
+  capturing = on;
+  document.getElementById('captureScrim').classList.toggle('hidden', !on);
+}
+
 // Exposed for ring-review-server.mjs's Playwright page to drive evidence capture —
 // same navigate() path the interactive UI uses, so the screenshot always matches
 // what's on screen (frozen + strokes) rather than a second, divergent code path.
+// gotoStationForCapture/restore bracket the whole capture loop with `capturing`
+// (see declaration above) so a reviewer's own paint/nav during that window can't
+// land in the wrong station's data.
 window.__reviewTool = {
-  gotoStationForCapture: (idx) => navigate(idx),
-  restore: (idx) => navigate(idx)
+  gotoStationForCapture: async (idx) => { setCapturing(true); return navigate(idx); },
+  restore: async (idx) => { const r = await navigate(idx); setCapturing(false); return r; },
+  isDirty: () => dirty || !!pendingMark
 };
 
 async function init() {
@@ -422,6 +465,18 @@ async function init() {
   // iframe itself; every mouse event the user makes belongs to paintCanvas or the
   // parent toolbar instead.
   worldFrame.style.pointerEvents = 'none';
+  // pointer-events:none blocks mouse only — the iframe stays in the tab order and
+  // its buttons stay Enter/Space-activatable by keyboard. One Tab from #saveBtn
+  // reaches #btnAdv ("Turn ▸") and Enter fires it — the exact bug above, reachable
+  // without a mouse. Pull the frame out of tab order and disable every control
+  // inside it (disabled removes tab-order membership AND kills activation; a live
+  // world.WORLD.stations count already told us how many stations exist, so this
+  // tool never needs any of these controls).
+  worldFrame.tabIndex = -1;
+  try {
+    const wdoc = worldFrame.contentDocument;
+    wdoc.querySelectorAll('.ctl button, [data-jump]').forEach(b => { b.disabled = true; });
+  } catch {}
   fitFrameHeight();
   stations = world.WORLD.stations.map((s, i) => ({ index: i, key: s.key, prim: s.prim, verdict: null, marks: [] }));
   stations.forEach((s, i) => {
