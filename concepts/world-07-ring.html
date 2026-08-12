@@ -135,6 +135,16 @@ header.pg b{color:#ddd8e8;font-weight:500}
   background:linear-gradient(90deg,transparent 0%,rgba(255,246,226,0) 14%,
     rgba(255,246,226,.6) 72%,#fff8ec 100%);
   animation:shootGo var(--sdu) linear both}
+/* Ben: "shooting stars are sometimes going the wrong way." Root cause: the
+   gradient above always brightens toward LOCAL x=100% regardless of travel
+   direction, but spawnShoot() below flips the actual translate3d direction
+   via `d` — for a left-going star (d<0), local x=100% is the TRAILING end,
+   not the leading one, so the bright head drags behind the faded tail
+   instead of leading it. Reversed here is the same gradient with its stops
+   mirrored (100-x), applied via .rev when d<0, so the bright end always
+   leads whichever screen direction the star is actually travelling. */
+.shoot.rev{background:linear-gradient(90deg,#fff8ec 0%,
+    rgba(255,246,226,.6) 28%,rgba(255,246,226,0) 86%,transparent 100%)}
 @keyframes shootGo{
   0%{transform:translate3d(0,0,0);opacity:0}
   10%{opacity:.95} 74%{opacity:.85}
@@ -996,6 +1006,7 @@ let shootSide=1, shootT=null;
 function spawnShoot(){
   if(isReduced())return;
   const rot=dom.el('shootRot'), s=dom.el('shoot'), d=shootSide; shootSide=-shootSide;
+  if (d<0) s.classList.add('rev'); // see .shoot.rev comment above — keeps the bright head leading
   rot.style.left=px(d>0?140+Math.random()*500:1180+Math.random()*500);
   rot.style.top=px(70+Math.random()*760);
   rot.style.setProperty('--sa',(d>0?1:-1)*(14+Math.random()*16)+'deg');
