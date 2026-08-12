@@ -146,10 +146,39 @@ function bandY(engine, r, h, forceUpper, effH) {
   const margin = 8
   let edgeEff
   if (upper) {
-    const maxY = top - margin - eff / 2, minY = -eff * 0.30
+    // 2026-08-12 (fresh review, st11 aurora ribbon: "love this but needs
+    // to be moved" — bbox-verified the wave crests sit right at/past the
+    // top edge). Root cause: the allowed off-frame bleed was computed as
+    // a fraction of `eff` — but for rotating kinds (lens/streak/ribbon)
+    // `eff` is ALREADY inflated past the element's own real height by
+    // rotatedBandH() to cover the worst-case post-rotation bbox. Sizing
+    // the bleed allowance off that inflated number compounds two
+    // separate margins into one, so a wide rotated shape like ribbon
+    // gets pushed further off-frame than a same-height non-rotating
+    // shape would be. Uses the element's real (pre-rotation) `h` for the
+    // bleed term instead — `eff` still governs the safe-box clearance
+    // above it, only the bleed fraction changes. Byte-identical for the
+    // 9 non-rotating kinds (eff===h there already).
+    const maxY = top - margin - eff / 2, minY = -h * 0.30
     edgeEff = maxY <= minY ? maxY : minY + (maxY - minY) * r()
+    // Narrowing the range (above) only lowers the ODDS of a bad draw — this
+    // seed's own r() sampled far enough from the old minY that the range
+    // change alone produced byte-identical output (measured directly, not
+    // assumed: headTop logged unchanged before/after). `edgeEff` IS the
+    // worst-case rotated bbox's top edge in this coordinate frame, so a
+    // hard floor here is what actually guarantees no headline — rotated or
+    // not — visibly clips the frame top, regardless of which r() lands.
+    edgeEff = Math.max(edgeEff, -margin)
   } else {
-    const minY = bot + margin - eff / 2, maxY = H - eff * 0.70
+    // Same range-narrowing fix, lower band — not reported, but it's the
+    // identical formula shape with the identical inflation issue (h
+    // instead of eff for the bleed term), so left in place it's a
+    // predictable twin bug, not a hypothetical one. No hard-floor clamp
+    // added here: that needs `edgeEff + eff <= H + margin`, not the
+    // simpler `edgeEff >= -margin` the upper branch uses — no measured
+    // failing case to size and verify that against, so left as the
+    // lower-risk range fix only rather than guessing the clamp.
+    const minY = bot + margin - eff / 2, maxY = H - h * 0.70
     edgeEff = minY >= maxY ? minY : minY + (maxY - minY) * r()
   }
   return edgeEff + eff / 2 - h / 2
