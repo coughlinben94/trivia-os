@@ -245,7 +245,10 @@ function buildLayerContent(engine, world, arc, host, L) {
       // got stuck near the 576 floor, loud ones near 880, so a quiet
       // station read as a small/sparse frame instead of "large and dim."
       // Loudness now speaks through alpha/detail-count only, below.
-      const hw = lerp(576, 880, rHeadline())
+      // 2026-08-12: synced from world-07-ring.html — pulsar shrunk 0.78x
+      // (Ben: "can be smaller"). See that file's comment for why scaling
+      // the whole box shrinks the object proportionally in one change.
+      const hw = lerp(576, 880, rHeadline()) * (st.prim === 'pulsar' ? 0.78 : 1)
       const hh = st.prim === 'streak' ? hw * 0.30
         : st.prim === 'ribbon' ? hw * 0.34
           : hw * (0.62 + rHeadline() * 0.26)

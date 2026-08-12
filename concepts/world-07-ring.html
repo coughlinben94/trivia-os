@@ -612,7 +612,15 @@ function buildLayerContent(host, L){
       // own left edge, not all the way across it) so it doesn't compete
       // with st10's own headline (supernova) for the whole frame.
       const isSpanningField = st.prim === 'asteroidField';
-      const hw = isSpanningField ? lerp(900, 1300, rHeadline()) : lerp(576, 880, rHeadline());
+      // 2026-08-12 (fresh review, st5: "can be smaller"): pulsar's glow
+      // (.d-glow, inset:0) fills its ENTIRE headline box same as every
+      // other kind, and its core/beams are all sized as fractions of that
+      // same w — so shrinking the box shrinks the whole object together,
+      // proportions intact, rather than needing a pulsar-specific tweak to
+      // each of its 4 elements individually.
+      const hw = isSpanningField ? lerp(900, 1300, rHeadline())
+               : st.prim === 'pulsar' ? lerp(576, 880, rHeadline()) * 0.78
+               : lerp(576, 880, rHeadline());
       const hh = st.prim === 'streak' ? hw*0.30
                : st.prim === 'ribbon' ? hw*0.34
                : isSpanningField ? hw*0.42
