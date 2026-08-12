@@ -55,7 +55,11 @@ export const midnightGalaxyRing = {
   // all >=3. Also retired: violet nebula (was st5, replaced by lit planet),
   // dust-ribbon/open-cluster (were st6/st10, the zigzag-deletion stopgap,
   // now replaced by asteroid field / supernova's old slot). st0/st3's
-  // orange+rose nebula stay a deliberate duplicate, left for next round.
+  // orange+rose nebula were a deliberate duplicate (`blob` both), left for
+  // "next round" — that round is this one: st3 kept `blob` (fixed by
+  // adding makeNebulaRing around it), st6 moved to its own `nebulaCloud`
+  // kind (2026-08-12, full asymmetric-silhouette reconstruction — see that
+  // branch's own comment in ringPrimitives.js) — no longer the same recipe.
   stations: [
     { key: 'ringed planet', prim: 'ring', hue: 256, accent: false }, // was st9 — radial mass
     { key: 'spiral galaxy', prim: 'lens', hue: 276, accent: false }, // was st3 — spiral/disc
@@ -63,7 +67,7 @@ export const midnightGalaxyRing = {
     { key: 'orange nebula', prim: 'blob', hue: 28, accent: true }, // was st0 — diffuse cloud
     { key: 'lit planet', prim: 'planet', hue: 140, accent: false }, // NEW — radial mass
     { key: 'pulsar', prim: 'pulsar', hue: 120, accent: false }, // NEW — radiant burst
-    { key: 'rose nebula', prim: 'blob', hue: 330, accent: true }, // was st8 — diffuse cloud
+    { key: 'rose nebula', prim: 'nebulaCloud', hue: 330, accent: true }, // was st8 — asymmetric cloud, 2026-08-12
     { key: 'comet', prim: 'streak', hue: 208, accent: false }, // was st4 — elongated streak
     { key: 'binary pair', prim: 'binary', hue: 214, accent: false }, // was st7 — radial mass
     { key: 'asteroid field', prim: 'asteroidField', hue: 160, accent: false }, // NEW — scattered cluster

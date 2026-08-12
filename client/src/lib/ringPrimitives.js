@@ -285,6 +285,90 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     f.appendChild(rim)
   }
 
+  else if (kind === 'nebulaCloud') {
+    // st6 rose nebula ONLY (see world-07-ring.html/RingAmbient.jsx station
+    // wiring). A DISTINCT kind from `blob` on purpose, not a rewrite of it:
+    // `blob` is shared with st3's orange nebula, fixed this same round by
+    // adding a ring layer around the EXISTING blob construction (see
+    // makeNebulaRing) and separately verified — rewriting `blob` itself
+    // would re-open and re-risk that already-verified fix for a station
+    // with an unrelated, already-closed complaint. Ben's review: "too much
+    // going on" — this construction had already failed two prior tuning
+    // rounds (see the alpha-floor/lightness-boost history on `blob` above,
+    // both aimed at THIS station) as a parameter problem; the actual defect
+    // was the recipe itself (3 same-shaped overlapping circles reads as
+    // blobby chaos, not a cloud). Ben's fix direction: "an asymmetric
+    // single-path/multi-lobe silhouette with real internal gradient
+    // variation (a dust-lane dark band, uneven lobe sizes)."
+    //
+    // One continuous organic silhouette (not overlapping circles): N
+    // boundary points at IRREGULAR angle steps and IRREGULAR radius
+    // (uneven lobes by construction), connected with quadratic curves
+    // through each segment's midpoint — same smoothing technique `ribbon`'s
+    // wave path already uses — so the outline reads as a soft asymmetric
+    // gas silhouette, not a faceted rock (that's `asteroidField`'s look,
+    // a deliberately different family) and not a smooth ellipse either.
+    // `clip-path: path(...)` (Chromium-supported) clips both the base fill
+    // and the dust-lane band to this exact silhouette, so the dust lane
+    // never bleeds past the cloud's own edge.
+    const cx = w / 2, cy = h / 2
+    const N = 8
+    const baseRx = w * 0.46, baseRy = h * 0.46
+    const pts = []
+    let ang = r() * Math.PI * 2
+    for (let i = 0; i < N; i++) {
+      ang += (Math.PI * 2 / N) * (0.65 + r() * 0.7) // irregular angular step
+      const radF = 0.52 + r() * 0.58 // irregular radius -> uneven lobes
+      pts.push({ x: cx + Math.cos(ang) * baseRx * radF, y: cy + Math.sin(ang) * baseRy * radF })
+    }
+    let d = `M ${((pts[0].x + pts[N - 1].x) / 2).toFixed(1)} ${((pts[0].y + pts[N - 1].y) / 2).toFixed(1)}`
+    for (let i = 0; i < N; i++) {
+      const p = pts[i], np = pts[(i + 1) % N]
+      d += ` Q ${p.x.toFixed(1)} ${p.y.toFixed(1)} ${((p.x + np.x) / 2).toFixed(1)} ${((p.y + np.y) / 2).toFixed(1)}`
+    }
+    d += ' Z'
+    // same alpha-floor/lightness-boost lesson `blob` learned for this exact
+    // hue family (rose/magenta is green-starved under Rec.709 luma at any
+    // alpha — the real lever is lightness, fill-gated so a loud station
+    // isn't affected): carried over rather than relearned.
+    const AB = (a, f2) => Math.max(a * 0.85, A(a, f2))
+    const LB = (base) => Math.min(95, base + (1 - Math.min(1, fill)) * 26)
+    const cloud = el('')
+    cloud.style.position = 'absolute'; cloud.style.inset = '0'
+    cloud.style.clipPath = `path('${d}')`
+    // off-center bright zone (asymmetric core, not center-anchored) —
+    // avoids the "same-shaped circles" symmetry the old recipe had.
+    const coreXPct = 32 + r() * 24, coreYPct = 28 + r() * 26
+    cloud.style.background = `radial-gradient(ellipse 95% 85% at ${coreXPct.toFixed(0)}% ${coreYPct.toFixed(0)}%,
+      ${hsla(hue + 8, 74, LB(64), AB(0.46, fill))} 0%, ${hsla(hue, 64, LB(46), AB(0.26, fill))} 42%,
+      ${hsla(hue - 10, 55, LB(28), AB(0.10, fill))} 70%, transparent ${E(88, fill).toFixed(0)}%)`
+    f.appendChild(cloud)
+    // dust lane: a dark soft band crossing part of the cloud at a random
+    // angle, clipped to the SAME silhouette — the internal structure/
+    // asymmetry a smooth gradient alone can't give, and the literal
+    // feature Ben's fix direction named.
+    const lane = el('')
+    lane.style.position = 'absolute'; lane.style.inset = '0'
+    lane.style.clipPath = `path('${d}')`
+    const laneAng = -25 + r() * 50
+    const laneMid = 42 + r() * 16
+    lane.style.background = `linear-gradient(${laneAng.toFixed(0)}deg,
+      transparent ${(laneMid - 20).toFixed(0)}%, ${hsla(hue - 22, 45, 8, A(0.55, fill))} ${laneMid.toFixed(0)}%,
+      ${hsla(hue - 22, 45, 8, A(0.55, fill))} ${(laneMid + 10).toFixed(0)}%, transparent ${(laneMid + 30).toFixed(0)}%)`
+    f.appendChild(lane)
+    // hot core, off-center to match the bright-zone position above (not
+    // the box center) — the one small, sharp, bright feature against the
+    // otherwise soft cloud, same core treatment every other primitive uses.
+    const core = el('s-core')
+    const cs = w * (0.07 + r() * 0.04)
+    core.style.left = px((coreXPct / 100) * w - cs / 2)
+    core.style.top = px((coreYPct / 100) * h - cs / 2)
+    core.style.width = core.style.height = px(cs)
+    core.style.background = `radial-gradient(circle, ${hsla(hue + 10, 30, 97, AB(0.75, fill))} 0%, ${hsla(hue, 70, 82, AB(0.35, fill))} 55%, transparent 100%)`
+    core.style.boxShadow = `0 0 ${px(cs * 2.2)} ${px(cs * 0.7)} ${hsla(hue, 84, 78, AB(0.22, fill))}`
+    f.appendChild(core)
+  }
+
   else if (kind === 'dots') {
     // 2026-08-11 object-fix round (st2, star cluster — both blind reviews:
     // the real cluster idea "buried in a tiny speckle motif... never given
