@@ -349,10 +349,14 @@ function buildLayerContent(engine, world, arc, host, L) {
         // 2026-08-11 object-fix round: shrunk from 260-340px/loudness-driven
         // fill to 100-140px/fixed 0.30 — see world-07-ring.html's identical
         // comment (same fix, both builds).
-        const os = lerp(100, 140, orr())
+        // 2026-08-12: nudged again, size 100-140 -> 150-190 / fill 0.30 ->
+        // 0.40 (still fixed, not loudness-driven) — see world-07-ring.html's
+        // identical comment (same fix, both builds, "doesn't look like
+        // anything" on the moon, not the headline body).
+        const os = lerp(150, 190, orr())
         const ox = x0 + orr() * (engine.W - os)
         const oy = dom.bandY(orr, os)
-        const occ = dom.makeOccluder(os, st.hue, 0.30)
+        const occ = dom.makeOccluder(os, st.hue, 0.40)
         occ.style.left = px(ox)
         occ.style.top = px(oy)
         host.appendChild(occ)

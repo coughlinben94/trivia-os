@@ -755,10 +755,23 @@ function buildLayerContent(host, L){
         // drawPlanetDisc/makeOccluder itself (shared with `ring`/`planet`,
         // which stay untouched at st0/st4 per that review's explicit
         // "leave alone" finding).
-        const os = lerp(100, 140, orr());
+        //
+        // 2026-08-12 (Ben's own review, st0: "doesn't look like anything" —
+        // bbox-verified against concepts/reviews/*.json, this small
+        // accessory moon, not the headline body): the 2026-08-11 shrink
+        // fixed "upstages the headline" but overshot into "reads as
+        // nothing." Rendered up close: the drawPlanetDisc shading itself
+        // (b6eaea4) looks fine zoomed in — the real problem is that at
+        // 100-140px the detail collapses to nothing at real distance. Ben's
+        // call: redesign rather than leave subdued. Nudged both knobs a
+        // little, not a lot, to stay clear of re-tripping the "upstages
+        // headline" complaint this same code fixed: size 100-140 -> 150-190,
+        // fill 0.30 -> 0.40 (still fixed, not loudness-driven — a loud
+        // station must not make this brighter than the intentional cap).
+        const os = lerp(150, 190, orr());
         const ox = x0 + orr() * (ENGINE.W - os);
         const oy = dom.bandY(orr, os);
-        const occ = dom.makeOccluder(os, st.hue, 0.30);
+        const occ = dom.makeOccluder(os, st.hue, 0.40);
         occ.style.left = px(ox);
         occ.style.top  = px(oy);
         host.appendChild(occ); formTotal++;
