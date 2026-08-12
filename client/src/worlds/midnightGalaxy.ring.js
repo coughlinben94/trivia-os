@@ -67,7 +67,7 @@ export const midnightGalaxyRing = {
     { key: 'orange nebula', prim: 'blob', hue: 28, accent: true, ring: true }, // was st0 — diffuse cloud, "needs a ring around it" 2026-08-12
     { key: 'lit planet', prim: 'planet', hue: 140, accent: false }, // NEW — radial mass
     { key: 'pulsar', prim: 'pulsar', hue: 120, accent: false }, // NEW — radiant burst
-    { key: 'rose nebula', prim: 'nebulaCloud', hue: 330, accent: true }, // was st8 — asymmetric cloud, 2026-08-12
+    { key: 'rose nebula', prim: 'nebulaCloud', hue: 330, accent: true, cornerLeft: false }, // was st8 — asymmetric cloud, 2026-08-12; cornerLeft:false synced from world-07-ring.html (Ben: "needs to be on other bottom corner")
     { key: 'comet', prim: 'streak', hue: 208, accent: false }, // was st4 — elongated streak
     { key: 'binary pair', prim: 'binary', hue: 214, accent: false }, // was st7 — radial mass
     { key: 'asteroid field', prim: 'asteroidField', hue: 160, accent: false }, // NEW — scattered cluster

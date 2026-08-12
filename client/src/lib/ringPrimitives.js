@@ -448,6 +448,32 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     core.style.background = `radial-gradient(circle, ${hsla(hue + 10, 30, 97, AB(0.75, fill))} 0%, ${hsla(hue, 70, 82, AB(0.35, fill))} 55%, transparent 100%)`
     core.style.boxShadow = `0 0 ${px(cs * 2.2)} ${px(cs * 0.7)} ${hsla(hue, 84, 78, AB(0.22, fill))}`
     f.appendChild(core)
+    // 2026-08-12 (fresh review, st6: "add dust psrticlaes" [sic]). The dust
+    // LANE above is a dark band, not particles — this is a literal scatter
+    // of small specks, clipped to the same silhouette path `d` as the
+    // cloud/lane (one wrapper div carries the clip; children inherit it,
+    // cheaper than clipping each speck individually). Mostly dark/cool
+    // (dust, not stars) with a few warm-lit ones catching the core light,
+    // same "a few bright, most dim" bias every other detail-tier scatter
+    // in this file already uses.
+    const dust = el('')
+    dust.style.position = 'absolute'; dust.style.inset = '0'
+    dust.style.clipPath = `path('${d}')`
+    const dn = 16 + Math.floor(r() * 14)
+    for (let i = 0; i < dn; i++) {
+      const dx = r() * w, dy = r() * h
+      const ds = w * (0.012 + r() * 0.018)
+      const lit = r() < 0.25
+      const p = el('')
+      p.style.position = 'absolute'; p.style.borderRadius = '50%'
+      p.style.left = px(dx - ds / 2); p.style.top = px(dy - ds / 2)
+      p.style.width = p.style.height = px(ds)
+      p.style.background = lit
+        ? hsla(hue + 10, 50, 74, A(0.5 + r() * 0.3, fill))
+        : hsla(hue - 25, 35, 10, A(0.35 + r() * 0.25, fill))
+      dust.appendChild(p)
+    }
+    f.appendChild(dust)
   }
 
   else if (kind === 'dots') {

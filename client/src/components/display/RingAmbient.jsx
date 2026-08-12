@@ -265,7 +265,13 @@ function buildLayerContent(engine, world, arc, host, L) {
       const pairUpper = rPairBand() < 0.5 // shared band draw — see bandY's forceUpper comment (spec §7.5)
       // Corner choice drawn explicitly (not inside cornerX) so the
       // occluder below can read it and place itself at the opposite corner.
-      const headlineCornerLeft = rHeadline() < 0.5
+      // 2026-08-12: synced from world-07-ring.html — optional per-station
+      // `cornerLeft` override (st6, Ben: "needs to be on other bottom
+      // corner"), same pattern as the existing `ring`/`accent` flags. The
+      // draw still always happens so this station's rHeadline stream
+      // count is identical whether or not it's overridden.
+      const cornerDraw = rHeadline() < 0.5
+      const headlineCornerLeft = st.cornerLeft !== undefined ? st.cornerLeft : cornerDraw
       const headLeft = dom.cornerX(rHeadline, hw, x0, headlineCornerLeft)
       const headTop = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh))
       head.style.left = px(headLeft)

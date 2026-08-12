@@ -370,7 +370,7 @@ const WORLD = {
     { key:'orange nebula',  prim:'blob',         hue:28,  accent:true, ring:true }, // was st0 — diffuse cloud, "needs a ring around it" 2026-08-12
     { key:'lit planet',     prim:'planet',       hue:140, accent:false }, // NEW — radial mass
     { key:'pulsar',         prim:'pulsar',       hue:120, accent:false }, // NEW — radiant burst
-    { key:'rose nebula',    prim:'nebulaCloud',  hue:330, accent:true  }, // was st8 — asymmetric cloud, 2026-08-12
+    { key:'rose nebula',    prim:'nebulaCloud',  hue:330, accent:true, cornerLeft:false }, // was st8 — asymmetric cloud, 2026-08-12; cornerLeft:false 2026-08-12 (Ben: "needs to be on other bottom corner" — was landing bottom-left, forced bottom-right)
     { key:'comet',          prim:'streak',       hue:208, accent:false }, // was st4 — elongated streak
     { key:'binary pair',    prim:'binary',       hue:214, accent:false }, // was st7 — radial mass
     { key:'asteroid field', prim:'asteroidField',hue:160, accent:false }, // NEW — scattered cluster
@@ -651,7 +651,15 @@ function buildLayerContent(host, L){
          corner choice is now drawn here explicitly (not inside cornerX)
          so the occluder below can read it and place itself at the
          opposite corner. */
-      const headlineCornerLeft = rHeadline() < 0.5;
+      // 2026-08-12 (st6, Ben: "needs to be on other bottom corner"): a
+      // random coin-flip has no way to satisfy "THIS station, THIS corner"
+      // — added an optional per-station `cornerLeft` override, same
+      // pattern as the existing `ring`/`accent` station-data flags. The
+      // draw still always happens (keeps this station's rHeadline stream
+      // count identical whether or not it's overridden, so no downstream
+      // draw in this station silently shifts depending on the flag).
+      const cornerDraw = rHeadline() < 0.5;
+      const headlineCornerLeft = st.cornerLeft !== undefined ? st.cornerLeft : cornerDraw;
       const headLeft = isSpanningField
         ? (x0 + ENGINE.W) - hw/2  // centered ON the st9/st10 boundary
         : dom.cornerX(rHeadline, hw, x0, headlineCornerLeft);
