@@ -454,7 +454,17 @@ function buildLayerContent(host, L){
       // a recurring prop. AW (760px, tied to the visibleStations=5.58
       // arithmetic the comment above cites) is untouched — only alpha,
       // 0.34 -> 0.15, cut without touching the spec'd sizing.
-      const anchor = dom.makePrim('lens', AW, AH, anchorHue, 0.15, ar, false, 1); // layer-level anchor, not tied to any one station's loudness -> explicit fill=1, not a dropped param
+      // 2026-08-12: cut again, 0.15->0.09. Ben's own fresh critique on both
+      // st1 (spiral galaxy) and st3 (orange nebula) — "nebula close to a
+      // spiral, overshaded by a blue cloud" — traces directly to THIS
+      // anchor drifting through both stations' visible window at a constant
+      // fill=1 intensity; confirmed on real renders of both stations, the
+      // anchor's own beaded-lens shape is plainly visible in both frames.
+      // Previous cut (0.34->0.15, 2026-08-11) was a step in the right
+      // direction but evidently not enough on its own.
+      // First cut to 0.09 was barely perceptible in a real re-render (verified,
+      // not assumed) — pushing further to 0.05.
+      const anchor = dom.makePrim('lens', AW, AH, anchorHue, 0.05, ar, false, 1); // layer-level anchor, not tied to any one station's loudness -> explicit fill=1, not a dropped param
       anchor.style.left = px(period * 0.42 - AW/2);
       anchor.style.top  = px(dom.bandY(ar, AH));
       host.appendChild(anchor); formTotal++;
@@ -586,7 +596,23 @@ function buildLayerContent(host, L){
       const ch = ck === 'streak' ? cw*0.30 : cw*(0.60 + rCompanion()*0.28);
       const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, rCompanion()));
       const comp = dom.makePrim(ck, cw, ch, compHue, lerp(0.30, 0.48, lou)*0.8, rCompanion, false, sfill);
-      const pairAng = rCompanion() * Math.PI * 2, pairRad = lerp(160, 380, rCompanion());
+      // 2026-08-12: this offset used to be a flat lerp(160,380,r()) regardless of
+      // how big the two elements actually are. Headline can run up to 880px,
+      // companion up to 420px — a flat 160-380px gap between CENTROIDS is
+      // routinely smaller than the sum of their two radii, so the companion
+      // lands directly on top of (or mostly behind) the headline. Confirmed on
+      // a real render, station 1 (spiral galaxy): the companion blob sits
+      // almost fully overlapping the beaded arms — exactly the "bunched
+      // together" complaint. Scale the offset off the pair's own combined
+      // size instead of a fixed constant, so bigger elements get real
+      // separation and small ones aren't pushed needlessly far apart.
+      // First attempt (0.30/0.55 multiplier) re-rendered nearly identical to
+      // before — not enough correction, verified by real screenshot diff,
+      // not assumed. Pushing further: both elements are soft-glow shapes
+      // whose visible extent runs well past their nominal box (falloff/blur
+      // bleeds outward), so "half their box widths" undersells how much
+      // clearance is actually needed to read as two separate objects.
+      const pairAng = rCompanion() * Math.PI * 2, pairRad = lerp((hw + cw) * 0.55, (hw + cw) * 0.95, rCompanion());
       let compCx = headCx + Math.cos(pairAng) * pairRad;
       compCx = Math.min(x0 + ENGINE.W - cw/2, Math.max(x0 + cw/2, compCx));
       const compTop = dom.bandY(rCompanion, ch, pairUpper, dom.rotatedBandH(ck, cw, ch));
