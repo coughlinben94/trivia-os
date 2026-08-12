@@ -15,18 +15,17 @@ Invoke these automatically:
 Before doing anything in this project — including answering questions — read these skills in order:
 
 1. `/Users/bencoughlin/Projects/baynes-trivia/trivia-os/SKILL.md` — full project blueprint, architecture, schema, design system, build order. This is the single source of truth.
-2. `~/.agents/skills/emilkowal-animations/SKILL.md` — animation technical reference
-3. `~/.agents/skills/emil-design-eng/SKILL.md` — animation philosophy
-4. `~/.agents/skills/baynes-design/SKILL.md` — Baynes brand identity
+2. `~/.agents/skills/emil-design-eng/SKILL.md` — animation philosophy + technical reference
+3. `~/.agents/skills/baynes-design/SKILL.md` — Baynes brand identity
 
 ## Before Building Any Feature
 - Run `systematic-debugging` skill if fixing a bug
 - Run `writing-plans` skill if starting a new feature
 - Run `verification-before-completion` skill before marking anything done
-- Run `design-review` skill after building any /display component
+- Run `design-audit` skill after building any /display component
 
 ## Before Any Animation Code
-Read both emilkowal-animations and emil-design-eng. No exceptions.
+Read emil-design-eng. No exceptions.
 
 ## Stack
 React + Vite + Tailwind + Supabase + Framer Motion

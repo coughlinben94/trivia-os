@@ -44,8 +44,10 @@ stars ~166 visible per frame  (target 150–260), 1,464 star nodes
    world-06. Fix by adding a small seeded jitter to `arcAt()` — roughly ±10–16%, seeded, never
    `Math.random` — and re-check that span stays inside 2.2–4.0 and steps stay ≥ 8.
 4. **Node count 1,464 stars each running an opacity animation**, extrapolated from Sonora's 22 and
-   never profiled. Target machine is a MacBook driving an HDMI splitter to 3 TVs — **not** a
-   low-power stick, despite what earlier notes claimed. Profile it.
+   never profiled at the time this was written. **[Corrected 2026-08-09:** target is one 1080p TV at
+   ~20ft, not a MacBook-driving-3-TVs setup — that framing was wrong here too. Since measured: 56–59fps
+   at ~5,465 DOM elements. Performance has never been the binding constraint. See
+   `references/ring-world-mistakes.md`.]
 5. Whether the primitives read as their nouns at 15 feet. `blob dots spikes lens streak ribbon`.
 
 ## The rules that keep getting broken

@@ -225,8 +225,10 @@ by reading the data rather than by sampling pixels.
    the very defect the arc exists to prevent. Fix: add a seeded ±10–16% jitter inside `arcAt()`, then
    re-verify span stays in 2.2–4.0 and no-flat-neighbours stays ≥ 8.
 3. **1,464 star nodes each running an opacity animation**, extrapolated from Sonora's 22 and never
-   profiled. Target hardware is a **MacBook driving an HDMI splitter to 3 TVs** — not a low-power
-   stick, despite what earlier notes in this repo claim. Profile before trusting.
+   profiled at the time this was written. **[Corrected 2026-08-09, per the ring-thinktank handoff:**
+   target is one 1080p TV at ~20ft, not a MacBook-driving-3-TVs setup — that framing was wrong here
+   too. It's since been measured: 56–59fps at ~5,465 DOM elements. Performance has never been the
+   binding constraint on this system. See `references/ring-world-mistakes.md`.]
 4. **Nothing has been rendered.** No claim about how any of this looks is worth anything yet.
 5. `formTotal` counts nodes appended, not distinct forms — cosmetic, but the status line overstates.
 

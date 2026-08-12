@@ -34,7 +34,7 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 7. `references/themes.md` — 21 ambient themes, theme object shape, GPU-only animation rules, 3-layer architecture (as of 2026-08-09 this is the single canonical ambient/theme doc — `references/ambient-design-law.md` was merged into it and deleted; if you see anything still pointing at that filename, it's stale)
 8. `references/features.md` — full feature inventory
 9. `references/round-journeys.md` — themed round-transition journey pattern (read before designing any round-intro/round-transition sequence)
-10. Then: `emilkowal-animations` + `emil-design-eng` skills before any Framer Motion work
+10. Then: `emil-design-eng` skill before any Framer Motion work
 
 ---
 
