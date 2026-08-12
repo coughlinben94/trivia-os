@@ -1214,6 +1214,35 @@ function makeOccluder(el, size, hue, fill, lightDeg = LIGHT_DEG) {
   return f
 }
 
+// makeNebulaRing: 2026-08-12, st3 orange nebula only ("doesn't look like a
+// nebula" / "needs a ring around it" — Ben's literal fix direction). NOT
+// added inside makePrim's `blob` branch — `blob` is shared with st6's rose
+// nebula, whose own open complaint ("too much going on") is the opposite
+// direction (needs LESS, a full reconstruction, not another layer bolted
+// on). This is a standalone extra element a caller positions around an
+// existing blob headline, wired only at the st3 call site.
+//
+// Deliberately NOT `ring`'s crisp SVG-stroke ellipse technique — that reads
+// as Saturn-style planetary rings (confirmed the risk two independent
+// reviewers flagged: a hard-edged ring around a round core reads as a
+// planet). A hazy radial-gradient DONUT instead — transparent hole,
+// soft bright band, fading tail — the actual look of a real ring nebula
+// (M57): a glowing gas shell, no hard edges anywhere. Sized as an ellipse
+// that auto-matches the caller's own w:h aspect (CSS radial-gradient
+// defaults to `ellipse` shape sized to the element's own box), so it wraps
+// whatever aspect the blob's own headline box happens to be, not a fixed
+// circle.
+function makeNebulaRing(el, w, h, hue, fill) {
+  const ring = el('')
+  ring.style.position = 'absolute'
+  ring.style.left = '0'; ring.style.top = '0'
+  ring.style.width = px(w); ring.style.height = px(h)
+  ring.style.background = `radial-gradient(ellipse at 50% 50%,
+    transparent 0%, transparent 52%, ${hsla(hue + 14, 70, 68, A(0.34, fill))} 66%,
+    ${hsla(hue + 8, 62, 58, A(0.16, fill))} 78%, transparent 92%)`
+  return ring
+}
+
 // ═══ STARS ═══ every one twinkles, wide swing, 5-13s - the Sonora
 // behaviour Ben named as the bar. NEVER a blur filter on these.
 const TEMP = ['#ffffff', '#f6e6ff', '#ffffff', '#fff3e2', '#eaf0ff']
@@ -1329,6 +1358,7 @@ export function ringDom(prefix, engine) {
     rotatedBandH,
     buildStars: (host, period, perFrame, sizeMul, seed) => buildStars(el, engine, host, period, perFrame, sizeMul, seed),
     makeOccluder: (size, hue, fill) => makeOccluder(el, size, hue, fill),
+    makeNebulaRing: (w, h, hue, fill) => makeNebulaRing(el, w, h, hue, fill),
     clampSafeBoxStarPeaks: (designEl) => clampSafeBoxStarPeaks(prefix, engine, designEl),
   }
 }

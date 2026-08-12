@@ -267,6 +267,17 @@ function buildLayerContent(engine, world, arc, host, L) {
       host.appendChild(head)
       const headCx = headLeft + hw / 2, headCy = headTop + hh / 2
 
+      // st3 orange nebula only — see world-07-ring.html's identical comment
+      // (same fix, both builds) and makeNebulaRing's own comment in
+      // ringPrimitives.js.
+      if (st.key === 'orange nebula') {
+        const nrW = hw * 1.30, nrH = hh * 1.30
+        const nring = dom.makeNebulaRing(nrW, nrH, st.hue, fill)
+        nring.style.left = px(headCx - nrW / 2)
+        nring.style.top = px(headCy - nrH / 2)
+        host.appendChild(nring)
+      }
+
       // one feature-tier companion — this IS the station's declared pair
       // (spec §7.5): two elements linked by proximity plus a shared visual
       // property, not two independent random placements (a collage, not a

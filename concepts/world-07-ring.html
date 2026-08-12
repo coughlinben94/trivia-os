@@ -641,6 +641,21 @@ function buildLayerContent(host, L){
       host.appendChild(head); formTotal++;
       const headCx = headLeft + hw/2, headCy = headTop + hh/2;
 
+      /* st3 orange nebula only ("doesn't look like a nebula" / "needs a
+         ring around it" — Ben's literal fix direction, 2026-08-12). See
+         makeNebulaRing's own comment in ringPrimitives.js for why this is
+         a standalone extra layer, not a change to the shared `blob` kind
+         (st6's rose nebula also uses `blob` and needs the opposite: less,
+         not more). Sized 30% larger than the headline box on both axes,
+         centered on the same box so it wraps the existing blob. */
+      if (st.key === 'orange nebula'){
+        const nrW = hw*1.30, nrH = hh*1.30;
+        const nring = dom.makeNebulaRing(nrW, nrH, st.hue, sfill);
+        nring.style.left = px(headCx - nrW/2);
+        nring.style.top  = px(headCy - nrH/2);
+        host.appendChild(nring); formTotal++;
+      }
+
       /* one feature-tier companion — this IS the station's declared pair
          (spec §7.5): two elements linked by proximity plus a shared visual
          property, not two independent random placements (a collage, not a
