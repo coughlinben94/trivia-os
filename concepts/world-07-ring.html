@@ -768,59 +768,24 @@ function buildLayerContent(host, L){
       comp.style.left = px(compLeft);
       comp.style.top  = px(compTop);
       host.appendChild(comp); formTotal++;
-      const compCx = compLeft + cw/2, compCy = compTop + ch/2;
 
-      const bdx = compCx - headCx, bdy = compCy - headCy;
-      // 2026-08-12 (st7 comet: 3 independent blind reviews called it "wtf" —
-      // rendered full-context and confirmed the comet primitive itself
-      // (`streak`) is clean in isolation; the pair-bridge below runs nearly
-      // parallel and adjacent to the comet's own long tapered tail whenever
-      // the companion lands roughly along the tail's own direction, reading
-      // as a duplicate/offset second stroke rather than a separate pairing
-      // cue). Skipped for elongated/rotated headlines specifically: an
-      // elongated primitive already reads as directional/pointing on its
-      // own, so the bridge is redundant there and uniquely prone to this
-      // collision in a way round/blob-shaped headlines aren't. Every other
-      // headline kind keeps the bridge unchanged.
-      // /simplify (2026-08-12): was a hand-written `st.prim !== 'streak' &&
-      // st.prim !== 'ribbon'` check — missed `lens`, which ROTATION_MAX_DEG
-      // (this file's own existing "which kinds rotate" table) already
-      // classifies as the same elongated family. Now reads that table via
-      // `dom.isElongatedKind` instead of a second, incomplete hand list.
-      //
-      // 2026-08-12 (fresh review, bbox-verified): st4/st8/st9 — all
-      // non-accent, all non-elongated — flagged "weird line"/"weird line
-      // placement" even after the 0.18->0.07 dial-back above. No accent
-      // station (st3/st6/st10) drew a line complaint. Root cause: for
-      // non-accent stations the hue echo (compHue = st.hue +/- 18 deg,
-      // above) ALREADY signals the declared pair per spec Sec7.5 ("a
-      // common halo, an aligned axis, a colour echo, a connecting
-      // bridge" are listed as interchangeable) — the bridge there was
-      // pure redundant clutter, not a second dial-back away from
-      // working. Accent stations push companion hue ~168deg away
-      // specifically so hue can't carry the signal, making the bridge
-      // the ONLY cue there (per the alpha-history comment below) — kept.
-      // Scoped to `st.accent` rather than removed outright so Sec7.5 stays
-      // satisfied everywhere it's structurally load-bearing.
-      if (st.accent && !dom.isElongatedKind(st.prim)){
-        const bridge = dom.el('pair-bridge');
-        bridge.style.left = px(headCx); bridge.style.top = px(headCy);
-        bridge.style.width = px(Math.hypot(bdx, bdy));
-        bridge.style.transform = `rotate(${(Math.atan2(bdy, bdx) * 180/Math.PI).toFixed(1)}deg)`;
-        // History: was alpha 0.16->0.10 / height 3px, bumped to 0.34->0.18 / 5px
-        // to fix accent-station pairing legibility (spec §7.5) — that bump
-        // overshot. Three independent blind craft reviews (2026-08-12, on live
-        // renders of all 12 stations) each separately flagged what turned out
-        // to be this SAME element as "a stray diagonal line," "looks like a
-        // rendering glitch," on 7 of 12 stations, without knowing what it was —
-        // real evidence the connector itself had become the visible defect
-        // instead of a subtle pairing cue. Split the difference: 0.18->0.07 +
-        // 2px height, re-verified on both an accent station (rose nebula,
-        // hue delta 168deg, the case that motivated the original bump) and a
-        // non-accent station that was called out by name (ringed planet).
-        bridge.style.background = `linear-gradient(90deg, ${hsla(st.hue, 40, 70, 0.18)} 0%, ${hsla(st.hue, 40, 70, 0.07)} 100%)`;
-        host.appendChild(bridge); formTotal++;
-      }
+      // Pair-bridge connector: built, tuned (three rounds — accent-only
+      // scoping, alpha dial-backs), then REMOVED OUTRIGHT here, 2026-08-12.
+      // It worked as a short local connector when the companion orbited
+      // near the headline; once the companion moved to the diagonal-
+      // opposite CORNER (Ben: "two items squished together in the same
+      // corner is no bueno"), the same unchanged bridge code started
+      // spanning nearly the full frame diagonal instead. Ben's fresh
+      // batch, rendered and confirmed: "3-4 long lines not needed" — the
+      // st3/st6/st10 accent-station lines were exactly that, a side effect
+      // of the corner-redistribution fix, not a new independent bug.
+      // Flagged, not silently absorbed: this drops accent stations' only
+      // spec Sec7.5 pairing signal (halo/axis/colour/bridge are the four
+      // listed options; accent stations now have none) — Ben's literal
+      // instruction taken over the spec text per this repo's own
+      // aesthetic-acceptance-is-Ben's-call rule, but the gap is real and
+      // named here rather than pretended away, for a future session to
+      // reconcile if it matters.
 
       /* detail-tier specks, count follows loudness. k===0 is forced toward
          the tier floor (spec §7.3 scale ladder): the worst-case headline

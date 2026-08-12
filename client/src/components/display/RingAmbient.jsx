@@ -356,29 +356,16 @@ function buildLayerContent(engine, world, arc, host, L) {
       comp.style.left = px(compLeft)
       comp.style.top = px(compTop)
       host.appendChild(comp)
-      const compCx = compLeft + cw / 2, compCy = compTop + ch / 2
 
-      const bdx = compCx - headCx, bdy = compCy - headCy
-      // 2026-08-12: synced from world-07-ring.html (was lagging — see that
-      // file's fuller history comment). Two ports in one pass, both driven
-      // by the same fresh bbox-verified review: (1) alpha dialed back
-      // 0.34/0.18 -> 0.18/0.07 (commit 6eefbb6, "cross-cutting stray line"
-      // — height was already shared/unified via ringCss, only this inline
-      // gradient had drifted); (2) scoped to `st.accent` on top of the
-      // existing elongated-kind skip — st4/st8/st9 (all non-accent) still
-      // read as a stray line even at the reduced alpha, because non-accent
-      // stations already carry a hue-echo pairing signal (compHue above)
-      // and the bridge there was pure redundant clutter, not under-dialed.
-      // Accent stations push companion hue ~168° away specifically so hue
-      // can't carry the signal — bridge stays the sole §7.5 cue there.
-      if (st.accent && !dom.isElongatedKind(st.prim)) {
-        const bridge = dom.el('pair-bridge')
-        bridge.style.left = px(headCx); bridge.style.top = px(headCy)
-        bridge.style.width = px(Math.hypot(bdx, bdy))
-        bridge.style.transform = `rotate(${(Math.atan2(bdy, bdx) * 180 / Math.PI).toFixed(1)}deg)`
-        bridge.style.background = `linear-gradient(90deg, ${hsla(st.hue, 40, 70, 0.18)} 0%, ${hsla(st.hue, 40, 70, 0.07)} 100%)`
-        host.appendChild(bridge)
-      }
+      // Pair-bridge connector: synced from world-07-ring.html, then
+      // REMOVED OUTRIGHT there in the same pass — see that file's own
+      // comment for the full history. Short version: it worked as a local
+      // connector when the companion orbited near the headline; once the
+      // companion moved to the diagonal-opposite corner, the same bridge
+      // started spanning nearly the full frame diagonal instead. Ben,
+      // fresh batch: "3-4 long lines not needed." Drops accent stations'
+      // only spec §7.5 pairing signal — flagged in the other file, not
+      // repeated here.
 
       // detail-tier specks, count follows loudness. k===0 is forced toward
       // the tier floor (spec §7.3 scale ladder): the worst-case headline
