@@ -365,8 +365,8 @@ const WORLD = {
     { key:'spiral galaxy',  prim:'lens',         hue:170, accent:false }, // was st3 — spiral/disc; hue 276->170 2026-08-12, Ben "still hate the oval purple color" after 2 rounds of shape/brightness fixes — st0/st1/st2 were 3 near-identical purples in a row (256/276/268), moved to green-teal
     { key:'star cluster',   prim:'dots',         hue:268, accent:false }, // was st1 — scattered cluster
     { key:'orange nebula',  prim:'blob',         hue:28,  accent:true, ring:true }, // was st0 — diffuse cloud, "needs a ring around it" 2026-08-12
-    { key:'lit planet',     prim:'planet',       hue:140, accent:false }, // NEW — radial mass
-    { key:'pulsar',         prim:'pulsar',       hue:120, accent:false }, // NEW — radiant burst
+    { key:'lit planet',     prim:'planet',       hue:140, accent:false, greenWash:true }, // NEW — radial mass; greenWash 2026-08-12 (Ben: "green on bottom half of two slides")
+    { key:'pulsar',         prim:'pulsar',       hue:120, accent:false, greenWash:true }, // NEW — radiant burst; greenWash 2026-08-12 (same)
     { key:'rose nebula',    prim:'nebulaCloud',  hue:330, accent:true, cornerLeft:false }, // was st8 — asymmetric cloud, 2026-08-12; cornerLeft:false 2026-08-12 (Ben: "needs to be on other bottom corner" — was landing bottom-left, forced bottom-right)
     { key:'comet',          prim:'streak',       hue:208, accent:false }, // was st4 — elongated streak
     { key:'binary pair',    prim:'binary',       hue:214, accent:false }, // was st7 — radial mass
@@ -707,6 +707,25 @@ function buildLayerContent(host, L){
          (2) offset off the blob's own center so ring and core-glow are no
          longer concentric — an eye's iris and pupil are always concentric,
          a real dust ring around an object usually isn't perfectly so. */
+      /* 2026-08-12 (Ben: "more green and orange... like green on bottom
+         half of two slides, makes it look like a diff galaxy of sorts").
+         st4/st5 (lit planet/pulsar) picked: adjacent stations, both
+         already green-hued (140/120) — the wash reinforces their existing
+         identity instead of clashing with an unrelated object color.
+         Station-data flag, same pattern as `ring`/`accent`/`cornerLeft`.
+         A plain linear-gradient wash, not a `blob` primitive draw — this
+         is atmosphere/mood, not a named object, so it doesn't compete
+         with the noun-uniqueness rules that govern headline/companion
+         primitives. Full station width, fixed green (150) independent of
+         each station's own object hue so the two adjacent slides read as
+         one continuous tinted region, not two separately-tuned greens. */
+      if (st.greenWash){
+        const wash = dom.el('');
+        wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0';
+        wash.style.width = px(ENGINE.W); wash.style.height = px(ENGINE.H);
+        wash.style.background = `linear-gradient(to top, ${hsla(150, 55, 20, 0.34)} 0%, ${hsla(150, 55, 20, 0.16)} 32%, transparent 58%)`;
+        host.appendChild(wash); formTotal++;
+      }
       if (st.ring){
         const nrW = hw*1.55, nrH = hh*0.95;
         const nring = dom.makeNebulaRing(nrW, nrH, st.hue, sfill);

@@ -297,6 +297,19 @@ function buildLayerContent(engine, world, arc, host, L) {
       host.appendChild(head)
       const headCx = headLeft + hw / 2, headCy = headTop + hh / 2
 
+      // 2026-08-12: synced from world-07-ring.html — `greenWash` station-
+      // data flag (Ben: "green on bottom half of two slides, makes it look
+      // like a diff galaxy of sorts"). Plain linear-gradient wash, not a
+      // primitive draw — atmosphere/mood, doesn't compete with noun-
+      // uniqueness rules. See that file's own comment for why st4/st5.
+      if (st.greenWash) {
+        const wash = dom.el('')
+        wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0'
+        wash.style.width = px(engine.W); wash.style.height = px(engine.H)
+        wash.style.background = `linear-gradient(to top, ${hsla(150, 55, 20, 0.34)} 0%, ${hsla(150, 55, 20, 0.16)} 32%, transparent 58%)`
+        host.appendChild(wash)
+      }
+
       // Any station with `ring:true` in its data — see world-07-ring.html's
       // identical comment (same fix, both builds, /simplify's station-data-
       // flag generalization) and makeNebulaRing's own comment in
