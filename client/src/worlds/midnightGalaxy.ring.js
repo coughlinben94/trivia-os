@@ -64,7 +64,7 @@ export const midnightGalaxyRing = {
     { key: 'ringed planet', prim: 'ring', hue: 256, accent: false }, // was st9 — radial mass
     { key: 'spiral galaxy', prim: 'lens', hue: 276, accent: false }, // was st3 — spiral/disc
     { key: 'star cluster', prim: 'dots', hue: 268, accent: false }, // was st1 — scattered cluster
-    { key: 'orange nebula', prim: 'blob', hue: 28, accent: true }, // was st0 — diffuse cloud
+    { key: 'orange nebula', prim: 'blob', hue: 28, accent: true, ring: true }, // was st0 — diffuse cloud, "needs a ring around it" 2026-08-12
     { key: 'lit planet', prim: 'planet', hue: 140, accent: false }, // NEW — radial mass
     { key: 'pulsar', prim: 'pulsar', hue: 120, accent: false }, // NEW — radiant burst
     { key: 'rose nebula', prim: 'nebulaCloud', hue: 330, accent: true }, // was st8 — asymmetric cloud, 2026-08-12

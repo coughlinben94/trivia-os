@@ -202,6 +202,14 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
   // elements not tied to any one station's loudness (those pass 1 on
   // purpose, not by omission — see world-07-ring.html's far-anchor call).
   if (fill === undefined) throw new Error(`makePrim('${kind}'): fill is required (pass 1 explicitly if this element isn't loudness-linked)`)
+  // shared alpha-floor / lightness-boost helpers (rose/magenta and similar
+  // hues are green-starved under Rec.709 luma at any alpha — the real lever
+  // is lightness, fill-gated so a loud station isn't affected). Hoisted
+  // here (was defined byte-identically inside both `blob` and
+  // `nebulaCloud`, /simplify catching the duplication) so any future kind
+  // needing the same treatment reuses this instead of copy-pasting again.
+  const AB = (a, f2) => Math.max(a * 0.85, A(a, f2))
+  const LB = (base) => Math.min(95, base + (1 - Math.min(1, fill)) * 26)
   const f = el(isHeadline ? 'pf pf-breathe' : 'pf')
   f.style.width = px(w); f.style.height = px(h)
   const pb = (47 + Math.floor(r() * 26)) + 's' // 47-72s, already clears the >=30s floor
@@ -231,7 +239,9 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // floor multiplier 0.55->0.85. AB() is a max(), so this is still safe
     // at high fill — at fill=1, A(a,1) already exceeds a*0.85, so st3 is
     // unaffected by construction (re-verified via the gate below anyway).
-    const AB = (a, f2) => Math.max(a * 0.85, A(a, f2))
+    // (AB/LB themselves now hoisted to makePrim's own top scope — see there
+    // for why — this comment block keeps the tuning history that led to
+    // their specific constants.)
     // Measured on a real render (st6, hue=330): the alpha floor alone barely
     // moved anything visually — rose/magenta has inherently low luma
     // (0.2126R+0.7152G+0.0722B weights green heavily; magenta is green-
@@ -243,7 +253,6 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // fill near 1) gets ~0 boost — cap violation confirmed gone on re-run,
     // not just assumed — while a quiet one (st6) still gets most of it.
     // Boost multiplier 16->26, same second pass.
-    const LB = (base) => Math.min(95, base + (1 - Math.min(1, fill)) * 26)
     let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity, domRot = 0, domArea = -1
     for (let i = 0; i < 3; i++) {
       const L = el('b-lobe')
@@ -330,9 +339,9 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // same alpha-floor/lightness-boost lesson `blob` learned for this exact
     // hue family (rose/magenta is green-starved under Rec.709 luma at any
     // alpha — the real lever is lightness, fill-gated so a loud station
-    // isn't affected): carried over rather than relearned.
-    const AB = (a, f2) => Math.max(a * 0.85, A(a, f2))
-    const LB = (base) => Math.min(95, base + (1 - Math.min(1, fill)) * 26)
+    // isn't affected): reuses the AB/LB hoisted at makePrim's top scope
+    // (see `blob`'s own comment for the tuning history) rather than
+    // redefining them here.
     const cloud = el('')
     cloud.style.position = 'absolute'; cloud.style.inset = '0'
     cloud.style.clipPath = `path('${d}')`
@@ -1517,6 +1526,14 @@ export function ringDom(prefix, engine) {
     makeOccluder: (size, hue, fill) => makeOccluder(el, size, hue, fill),
     makeNebulaRing: (w, h, hue, fill) => makeNebulaRing(el, w, h, hue, fill),
     clampSafeBoxStarPeaks: (designEl) => clampSafeBoxStarPeaks(prefix, engine, designEl),
+    // derives from ROTATION_MAX_DEG (the file's own "which kinds rotate
+    // after placement" classification, already used by rotatedBandH) —
+    // exposed so composition-layer call sites (e.g. the pair-bridge skip
+    // for elongated headlines) read the one existing table instead of
+    // hand-writing a second, narrower kind list (/simplify caught the
+    // duplication: an earlier version of the pair-bridge skip listed
+    // 'streak'/'ribbon' only, missing 'lens', which this table already had).
+    isElongatedKind: (kind) => kind in ROTATION_MAX_DEG,
   }
 }
 

@@ -367,7 +367,7 @@ const WORLD = {
     { key:'ringed planet',  prim:'ring',         hue:256, accent:false }, // was st9 — radial mass
     { key:'spiral galaxy',  prim:'lens',         hue:276, accent:false }, // was st3 — spiral/disc
     { key:'star cluster',   prim:'dots',         hue:268, accent:false }, // was st1 — scattered cluster
-    { key:'orange nebula',  prim:'blob',         hue:28,  accent:true  }, // was st0 — diffuse cloud
+    { key:'orange nebula',  prim:'blob',         hue:28,  accent:true, ring:true }, // was st0 — diffuse cloud, "needs a ring around it" 2026-08-12
     { key:'lit planet',     prim:'planet',       hue:140, accent:false }, // NEW — radial mass
     { key:'pulsar',         prim:'pulsar',       hue:120, accent:false }, // NEW — radiant burst
     { key:'rose nebula',    prim:'nebulaCloud',  hue:330, accent:true  }, // was st8 — asymmetric cloud, 2026-08-12
@@ -647,14 +647,21 @@ function buildLayerContent(host, L){
       host.appendChild(head); formTotal++;
       const headCx = headLeft + hw/2, headCy = headTop + hh/2;
 
-      /* st3 orange nebula only ("doesn't look like a nebula" / "needs a
-         ring around it" — Ben's literal fix direction, 2026-08-12). See
-         makeNebulaRing's own comment in ringPrimitives.js for why this is
-         a standalone extra layer, not a change to the shared `blob` kind
-         (st6's rose nebula also uses `blob` and needs the opposite: less,
-         not more). Sized 30% larger than the headline box on both axes,
-         centered on the same box so it wraps the existing blob. */
-      if (st.key === 'orange nebula'){
+      /* Any station whose data declares `ring:true` gets a nebula-ring
+         accessory layer (currently just orange nebula — "doesn't look like
+         a nebula" / "needs a ring around it," Ben's literal fix direction,
+         2026-08-12). Gated on a station-data FLAG, same pattern as
+         `accent`, rather than a hardcoded `st.key === 'orange nebula'`
+         string match (/simplify caught the latter as a special case
+         bolted onto a system that already dispatches generically on
+         station data everywhere else). See makeNebulaRing's own comment in
+         ringPrimitives.js for why this is a standalone extra layer, not a
+         change to the shared `blob` kind (st6's rose nebula also used
+         `blob` and needed the opposite: less, not more — now its own
+         `nebulaCloud` kind). Sized 30% larger than the headline box on
+         both axes, centered on the same box so it wraps the existing
+         headline shape. */
+      if (st.ring){
         const nrW = hw*1.30, nrH = hh*1.30;
         const nring = dom.makeNebulaRing(nrW, nrH, st.hue, sfill);
         nring.style.left = px(headCx - nrW/2);
@@ -721,13 +728,17 @@ function buildLayerContent(host, L){
       // parallel and adjacent to the comet's own long tapered tail whenever
       // the companion lands roughly along the tail's own direction, reading
       // as a duplicate/offset second stroke rather than a separate pairing
-      // cue). Skipped for `streak` (and `ribbon`, same elongated-rotated
-      // family, ROTATION_MAX_DEG above) headlines specifically: an
+      // cue). Skipped for elongated/rotated headlines specifically: an
       // elongated primitive already reads as directional/pointing on its
       // own, so the bridge is redundant there and uniquely prone to this
       // collision in a way round/blob-shaped headlines aren't. Every other
       // headline kind keeps the bridge unchanged.
-      if (st.prim !== 'streak' && st.prim !== 'ribbon'){
+      // /simplify (2026-08-12): was a hand-written `st.prim !== 'streak' &&
+      // st.prim !== 'ribbon'` check — missed `lens`, which ROTATION_MAX_DEG
+      // (this file's own existing "which kinds rotate" table) already
+      // classifies as the same elongated family. Now reads that table via
+      // `dom.isElongatedKind` instead of a second, incomplete hand list.
+      if (!dom.isElongatedKind(st.prim)){
         const bridge = dom.el('pair-bridge');
         bridge.style.left = px(headCx); bridge.style.top = px(headCy);
         bridge.style.width = px(Math.hypot(bdx, bdy));

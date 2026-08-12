@@ -268,10 +268,11 @@ function buildLayerContent(engine, world, arc, host, L) {
       host.appendChild(head)
       const headCx = headLeft + hw / 2, headCy = headTop + hh / 2
 
-      // st3 orange nebula only — see world-07-ring.html's identical comment
-      // (same fix, both builds) and makeNebulaRing's own comment in
+      // Any station with `ring:true` in its data — see world-07-ring.html's
+      // identical comment (same fix, both builds, /simplify's station-data-
+      // flag generalization) and makeNebulaRing's own comment in
       // ringPrimitives.js.
-      if (st.key === 'orange nebula') {
+      if (st.ring) {
         const nrW = hw * 1.30, nrH = hh * 1.30
         const nring = dom.makeNebulaRing(nrW, nrH, st.hue, fill)
         nring.style.left = px(headCx - nrW / 2)
@@ -307,11 +308,13 @@ function buildLayerContent(engine, world, arc, host, L) {
       const compCy = compTop + ch / 2
 
       const bdx = compCx - headCx, bdy = compCy - headCy
-      // 2026-08-12: skip for `streak`/`ribbon` headlines — see
+      // 2026-08-12: skip for elongated/rotated headlines — see
       // world-07-ring.html's identical comment (same fix, both builds; st7
       // comet, "wtf" x3 blind reviews, root-caused to this bridge running
-      // parallel/adjacent to the comet's own tail).
-      if (st.prim !== 'streak' && st.prim !== 'ribbon') {
+      // parallel/adjacent to the comet's own tail). /simplify: reads
+      // ROTATION_MAX_DEG via `dom.isElongatedKind` instead of a hand list
+      // that missed `lens`.
+      if (!dom.isElongatedKind(st.prim)) {
         const bridge = dom.el('pair-bridge')
         bridge.style.left = px(headCx); bridge.style.top = px(headCy)
         bridge.style.width = px(Math.hypot(bdx, bdy))
