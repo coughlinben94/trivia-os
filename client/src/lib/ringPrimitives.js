@@ -364,6 +364,25 @@ function closedSilhouettePath(topPts, botPts) {
   return `${smoothEdgePath(topPts)} L ${botPts[0].x.toFixed(1)} ${botPts[0].y.toFixed(1)} ${smoothEdgePath(botPts).slice(1)} Z`
 }
 
+// localRng (mulberry32): a construction-INTERNAL seeded stream for kinds that
+// add visual detail after their draw counts are already load-bearing. The
+// spikes/lens branches both document the failure this avoids: any extra r()
+// draw inside makePrim reorders the CALLER's own post-makePrim corner/band
+// coin flips (rHeadline stream) for that station — st1's ec37ab3 post-mortem
+// measured bleed moving 28%->45.8% purely from stream drift. New detail
+// elements draw from one of these instead: deterministic (fixed seed, not
+// Math.random — the console-clean/math-random gate forbids that), and
+// structurally unable to touch the shared stream.
+function localRng(seed) {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
 function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
   // required, no default: a silent `fill = 1` here is exactly how the same
   // dropped-parameter bug got shipped 3 separate times (fillOf never wired
@@ -571,10 +590,17 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     //     gradient (no clip needed — its edges are gradient-soft).
     // Rose/magenta luma lesson (AB/LB, hoisted at makePrim top scope)
     // still applies throughout — see `blob`'s comment for that history.
+    // 2026-08-13 live review (Ben, st6: "nothing here??? add something") —
+    // the construction-#3 rework's own shipping caveat ("smaller/quieter
+    // than the old slab; the lever is the puff/heart alphas") confirmed at
+    // real distance. Presence raised through size + brightness, NOT through
+    // any outline: spine/puff footprint up ~18%, central puffs now carry
+    // AB()'s distance floor (fringe puffs keep plain A() so the boundary
+    // still dissolves — the whole point of #3), heart enlarged/brightened.
     const cx = w / 2, cy = h / 2
     const spineAng = r() * Math.PI // spine direction, 0..180deg
     const cosA = Math.cos(spineAng), sinA = Math.sin(spineAng)
-    const spineX = w * 0.34, spineY = h * 0.30 // spine half-extent
+    const spineX = w * 0.48, spineY = h * 0.44 // spine half-extent
     const spineDeg = spineAng * 180 / Math.PI
     // spine is ARCED, not straight (render check on the straight version:
     // a linear chain of spine-aligned puffs with a bright core reads as an
@@ -590,16 +616,20 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       const cen = 1 - Math.abs(t) // 1 at spine center, 0 at ends
       const pxc = cx + cosA * t * spineX - sinA * arcK * t * t / h * w * 0.5 + (r() - 0.5) * w * 0.13
       const pyc = cy + sinA * t * spineY + cosA * arcK * t * t + (r() - 0.5) * h * 0.17
-      const pw = w * (0.24 + 0.30 * cen) * (0.85 + r() * 0.3)
+      const pw = w * (0.38 + 0.38 * cen) * (0.85 + r() * 0.3)
       const ph = pw * (0.62 + r() * 0.30)
       const puff = el('')
       puff.style.position = 'absolute'
       puff.style.left = px(pxc - pw / 2); puff.style.top = px(pyc - ph / 2)
       puff.style.width = px(pw); puff.style.height = px(ph)
       puff.style.transform = `rotate(${(spineDeg - 55 + r() * 110).toFixed(0)}deg)`
+      // central puffs (cen>0.6: the dominant middle of the mass) get AB()'s
+      // floor so the cloud body itself survives distance; fringe puffs stay
+      // plain A() and still fade to true 0 at their own edge.
+      const pA = cen > 0.6 ? AB : A
       puff.style.background = `radial-gradient(ellipse 50% 50% at 50% 50%,
-        ${hsla(hue - 4 + r() * 10, 60 + cen * 10, LB(38 + cen * 18), A(0.13 + cen * 0.13, fill))} 0%,
-        ${hsla(hue - 10, 52, LB(30), A(0.06 + cen * 0.05, fill))} 55%, transparent 100%)`
+        ${hsla(hue - 4 + r() * 10, 60 + cen * 10, LB(42 + cen * 20), pA(0.22 + cen * 0.18, fill))} 0%,
+        ${hsla(hue - 10, 52, LB(32), A(0.09 + cen * 0.07, fill))} 55%, transparent 100%)`
       f.appendChild(puff)
     }
     // heart knot: compact bright ember region riding the spine slightly
@@ -607,14 +637,14 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // stays present at distance even with the fringes now truly fading.
     const heartT = -0.25 + r() * 0.5
     const heartX = cx + cosA * heartT * spineX, heartY = cy + sinA * heartT * spineY
-    const hkW = w * 0.34, hkH = hkW * 0.62
+    const hkW = w * 0.42, hkH = hkW * 0.62
     const heart = el('')
     heart.style.position = 'absolute'
     heart.style.left = px(heartX - hkW / 2); heart.style.top = px(heartY - hkH / 2)
     heart.style.width = px(hkW); heart.style.height = px(hkH)
     heart.style.transform = `rotate(${(spineDeg - 12 + r() * 24).toFixed(0)}deg)`
     heart.style.background = `radial-gradient(ellipse 50% 50% at 50% 50%,
-      ${hsla(hue + 8, 76, LB(72), AB(0.50, fill))} 0%, ${hsla(hue, 66, LB(52), AB(0.24, fill))} 48%, transparent 100%)`
+      ${hsla(hue + 8, 76, LB(74), AB(0.62, fill))} 0%, ${hsla(hue, 66, LB(54), AB(0.30, fill))} 48%, transparent 100%)`
     f.appendChild(heart)
     // dark rift: soft-edged dark band crossing the mass near the heart at
     // an angle oblique to the spine — the internal structure Ben's
@@ -705,10 +735,70 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // glow alpha nudged up (0.16/0.06 -> 0.22/0.09) so the cluster
     // registers regardless of which random draw lands.
     const g = el('d-glow')
+    // 2026-08-13 (Ben, st2: "can this be like the spiral on page 2??" — st1's
+    // lens rework landed and he wants the same CONSTRUCTION quality here, not
+    // a literal spiral: st2 stays a star cluster, its own noun). Rendered
+    // fresh first: the halo was one flat 2-stop ball, and the dots read as
+    // countable confetti with a tight speckle knot at center — nothing
+    // UNRESOLVED holding the middle together, which is what separates st1's
+    // new build (soft continuous glow, hot focal core) from a speckle motif.
+    // Headline-only changes, same pattern as every prior isHeadline gate in
+    // this branch: (1) halo gets a real peaked multi-stop falloff (same
+    // 3-stage curve the lens bulge earned across two review rounds — dense
+    // middle, continuous taper, no plateau); (2) a dense unresolved haze +
+    // hot near-white core (a globular cluster's unresolved center — the
+    // glowing focal point st1 has and this had not); (3) extra faint outskirt
+    // specks from localRng (NOT r() — see localRng's own comment; the
+    // existing loop's draw count is load-bearing for this station's corner/
+    // band flips and stays byte-identical).
     const glowA = isHeadline ? 0.30 : 0.22, glowA2 = isHeadline ? 0.13 : 0.09
-    g.style.background = `radial-gradient(circle closest-side,
+    g.style.background = isHeadline
+      ? `radial-gradient(circle closest-side,
+      ${hsla(hue, 55, 68, A(0.34, fill))} 0%, ${hsla(hue, 50, 56, A(0.16, fill))} 38%,
+      ${hsla(hue, 46, 46, A(0.07, fill))} 72%, transparent 100%)`
+      : `radial-gradient(circle closest-side,
       ${hsla(hue, 58, 66, A(glowA, fill))} 0%, ${hsla(hue, 50, 52, A(glowA2, fill))} 48%, transparent ${E(76, fill).toFixed(0)}%)`
     f.appendChild(g)
+    if (isHeadline) {
+      // unresolved haze — the cluster's dense middle as continuous light,
+      // sitting under the resolved dots (appended before the loop below)
+      const haze = el('l-arm')
+      const hz = Math.min(w, h) * 0.52
+      haze.style.width = haze.style.height = px(hz)
+      haze.style.left = px(w * 0.5 - hz / 2); haze.style.top = px(h * 0.5 - hz / 2)
+      haze.style.background = `radial-gradient(circle,
+        ${hsla(hue, 46, 74, A(0.34, fill))} 0%, ${hsla(hue, 44, 62, A(0.16, fill))} 45%, transparent 72%)`
+      f.appendChild(haze)
+      // hot core — near-white, tighter than the haze (same move as the lens
+      // nucleus: high-lightness monotonic falloff over a dim field can only
+      // brighten, so no rim/disc read is possible)
+      const core = el('l-arm')
+      const cs = Math.min(w, h) * 0.20
+      core.style.width = core.style.height = px(cs)
+      core.style.left = px(w * 0.5 - cs / 2); core.style.top = px(h * 0.5 - cs / 2)
+      core.style.background = `radial-gradient(circle,
+        #fdf7ff 0%, ${hsla(hue, 52, 90, A(0.75, fill))} 16%,
+        ${hsla(hue, 48, 76, A(0.28, fill))} 44%, transparent 70%)`
+      f.appendChild(core)
+      // outskirt specks (addition #3): the cluster's resolved-star halo
+      // extending past the glow's own edge, so the glow doesn't read as the
+      // object's boundary — density and brightness both fall off with
+      // radius, same falloff idea as the main loop's `near` ramp.
+      const lr = localRng(0xC1057E2)
+      for (let i = 0; i < 70; i++) {
+        const a2 = lr() * Math.PI * 2
+        const rad2 = Math.pow(lr(), 1.5) * 0.5
+        const far = rad2 / 0.5
+        const s2 = 1 + lr() * 1.8
+        const d2 = el(''); d2.style.position = 'absolute'; d2.style.borderRadius = '50%'
+        d2.style.left = px((0.5 + Math.cos(a2) * rad2) * w)
+        d2.style.top = px((0.5 + Math.sin(a2) * rad2) * h)
+        d2.style.width = d2.style.height = px(s2)
+        d2.style.background = lr() < 0.75 ? '#ffffff' : hsla(hue, 65, 85, 1)
+        d2.style.opacity = Math.max(0.2, 0.95 - far * 0.6 + lr() * 0.1).toFixed(2)
+        f.appendChild(d2)
+      }
+    }
     const extra = isHeadline ? Math.max(0, Math.round((w - 300) * 0.15)) : 0
     const n = 26 + Math.floor(r() * 22) + extra
     for (let i = 0; i < n; i++) {
@@ -814,11 +904,34 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       s.style.background = `linear-gradient(90deg, ${hsla(hue, 40, 92, 0.9)} 0%, ${hsla(hue, 82, 78, 0.5)} 38%, transparent 96%)`
       f.appendChild(s)
     })
+    // 2026-08-13 second pass (Ben: "fable 5 pass" — refine, not broken).
+    // Rendered fresh: the ray anatomy from earlier today holds up (taper,
+    // unequal lengths, irregular angles all read), but the CORE was the
+    // weak part — `.s-core`'s class default is a solid `#fffaf0` disc, a
+    // flat hard-edged sticker dot sitting at the center of otherwise
+    // credible rays. Replaced inline (class untouched — blob companions
+    // and binary share `.s-core` and keep the solid disc) with a radial
+    // white-hot-to-warm falloff: the element is larger, but its PAINT
+    // peaks at the same near-white center and dies inside the box, so the
+    // core reads as a point of light blooming, not a drawn circle. Peak
+    // luminance is not raised (old disc was already ~#fffaf0 across its
+    // whole area; the new center is the same white over a smaller area) —
+    // deliberate, st10's safe-box p99.5 is already parked FAIL with
+    // `.d-glow` implicated and nothing here may brighten that. boxShadow
+    // bloom kept as-is: it's the accepted ambient halo.
+    // Rendered check on the first version of this fix: keeping the old
+    // boxShadow alongside the gradient left a dark annulus — the shadow
+    // blooms outward from the element's rim while the gradient dies before
+    // reaching it. Shadow removed; one continuous gradient carries both
+    // the hot center and the bloom the shadow used to provide.
     const c = el('s-core')
-    const cs = Math.max(16, w * 0.055)
+    const cs = Math.max(16, w * 0.055) * 3.0
     c.style.width = c.style.height = px(cs)
     c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
-    c.style.boxShadow = `0 0 ${px(cs * 2.4)} ${px(cs * 0.8)} ${hsla(hue, 84, 74, A(0.55, fill))}`
+    c.style.background = `radial-gradient(circle,
+      #fffaf0 0%, ${hsla(hue, 60, 90, 0.9)} 10%,
+      ${hsla(hue, 80, 74, A(0.35, fill))} 26%,
+      ${hsla(hue, 84, 74, A(0.18, fill))} 45%, transparent 70%)`
     f.appendChild(c)
   }
 
@@ -1366,23 +1479,47 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // the nucleus's brightest point. Annulus placement instead: nothing in
     // the innermost ~14% radius, so the white-hot center stays clean, plus
     // a min-distance skip so craters read as separate pocks, not a blob.)
-    const nCr = 6 + Math.floor(r() * 3)
+    // 2026-08-13 second live pass (Ben: "fable 5 on holes"): rendered the
+    // shipped result and the craters under-delivered two ways. (1) COUNT —
+    // the collision check was a skip-not-retry (`continue`), so of the 6-9
+    // attempted craters only ~3 typically survived; each crater now retries
+    // up to 12 placements before giving up, so the drawn count actually
+    // matches the authored count. (2) CONTRAST — divot alphas were faint
+    // enough to vanish at 1x; core/rim alphas raised ~30% and radius up a
+    // notch. Still annulus-placed (hot center stays clean), still soft
+    // radial fades — the head must keep reading as a glowing ball at
+    // distance, textured only up close.
+    // Crater draws come from a construction-internal localRng (module scope,
+    // see its header): the retry loop's draw count varies with collision
+    // outcomes, and variable shared-stream consumption is exactly the
+    // downstream-placement drift localRng exists to prevent. One shared
+    // draw seeds it; everything after is stream-isolated.
+    const crRng = localRng(Math.floor(r() * 4294967296))
+    // (round-3 render caught 7 near-equal craters settling into a RING
+    // around the hot center — a gear/flower pattern, worse than sparse.
+    // Wider radial band + stronger size spread breaks the regularity;
+    // count trimmed so the min-distance check isn't forced to tile them.)
+    const nCr = 6 + Math.floor(crRng() * 2)
     const placed = []
     for (let ci = 0; ci < nCr; ci++) {
-      const ca = r() * Math.PI * 2
-      const cdist = hs * (0.14 + Math.pow(r(), 0.8) * 0.28)
-      const crR = hs * (0.06 + r() * 0.10)
-      const crx = hs / 2 + Math.cos(ca) * cdist, cry = hs / 2 + Math.sin(ca) * cdist
-      if (placed.some(pp => Math.hypot(pp.x - crx, pp.y - cry) < (pp.r + crR) * 0.8)) continue
+      let crx, cry, crR, ok = false
+      for (let tries = 0; tries < 12 && !ok; tries++) {
+        const ca = crRng() * Math.PI * 2
+        const cdist = hs * (0.10 + Math.pow(crRng(), 0.7) * 0.30)
+        crR = hs * (0.05 + crRng() * 0.13)
+        crx = hs / 2 + Math.cos(ca) * cdist; cry = hs / 2 + Math.sin(ca) * cdist
+        ok = !placed.some(pp => Math.hypot(pp.x - crx, pp.y - cry) < (pp.r + crR) * 0.8)
+      }
+      if (!ok) continue
       placed.push({ x: crx, y: cry, r: crR })
       const cr = el('')
       cr.style.position = 'absolute'; cr.style.borderRadius = '50%'
       cr.style.left = px(crx - crR); cr.style.top = px(cry - crR)
       cr.style.width = cr.style.height = px(crR * 2)
       const rim = crR > hs * 0.10
-        ? `, radial-gradient(circle at 62% 64%, transparent 42%, rgba(255,255,255,${(0.10 + r() * 0.06).toFixed(2)}) 58%, transparent 74%)`
+        ? `, radial-gradient(circle at 62% 64%, transparent 42%, rgba(255,255,255,${(0.14 + crRng() * 0.08).toFixed(2)}) 58%, transparent 74%)`
         : ''
-      cr.style.background = `radial-gradient(circle at 42% 38%, ${hsla(hue, 24, 42, A(0.38, fill))} 0%, ${hsla(hue, 26, 54, A(0.20, fill))} 48%, transparent 72%)${rim}`
+      cr.style.background = `radial-gradient(circle at 42% 38%, ${hsla(hue, 24, 38, A(0.50, fill))} 0%, ${hsla(hue, 26, 52, A(0.28, fill))} 48%, transparent 72%)${rim}`
       hd.appendChild(cr)
     }
     f.appendChild(hd)
@@ -1434,11 +1571,77 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     const topY = (t) => h * 0.30 + Math.sin(t * Math.PI * 2 * waveCycles) * waveAmp
     const botY = (t) => h * 0.30 + h * (0.42 + 0.10 * Math.sin(t * Math.PI * 2 * waveCycles * 0.7 + 1.1))
       + Math.sin(t * Math.PI * 2 * waveCycles + 0.6) * waveAmp * 0.7
-    const topPts = Array.from({ length: N + 1 }, (_, k) => ({ x: (k / N) * w, y: topY(k / N) }))
-    const botPts = Array.from({ length: N + 1 }, (_, k) => ({ x: (k / N) * w, y: botY(k / N) })).reverse()
+    // 2026-08-13 (Ben, live review, st11, mark at the bottom-left exit:
+    // "curl it off the screen"). Rendered fresh first and confirmed what he
+    // circled: the band's left end was a flat vertical cut at the SVG box's
+    // own left edge (the box's near edge sits ~86px INSIDE the frame at
+    // st11's seed — cornerX hugs the box, the viewBox clips the path), so
+    // the ribbon visibly ENDED in-frame as a blurred slab, it never exited.
+    // The body's y-as-function-of-x construction can't hook (y(x) is
+    // single-valued), so the tail is a separate PARAMETRIC arc: the band's
+    // travel direction actually rotates ~115° — horizontal, down, curling
+    // back — diving through the frame's bottom edge. Measured before
+    // building: the box bottom sits ~68px BELOW the frame bottom at this
+    // station's seed, so a tip that stays inside the viewBox (no hard clip)
+    // still ends fully off-screen. Body now samples t in [TAIL_T, 1]; the
+    // tail arc replaces (and slightly overlaps, for seam blending under the
+    // shared blur) the cut end. All constants, zero new r() draws — same
+    // stream-reorder guard as the spikes table above.
+    const TAIL_T = 0.12
+    // Rendered check on the first version of this hook: the band's own
+    // half-width (~0.23h) EXCEEDS a tight curl radius, so the inner edge's
+    // offset points crossed the arc center and the fill collapsed into a
+    // disconnected fan ("paddle") with a dark seam at the joint. A fat band
+    // cannot turn tightly without colliding with itself — real brushstrokes
+    // thin before they flick. So the body now tapers toward the tail across
+    // its leftmost ~18% (exactly the zone that used to be the flat cut),
+    // and the hook starts from that thinner cross-section.
+    const squeeze = (t) => {
+      const u = Math.min(1, Math.max(0, (t - TAIL_T) / 0.18))
+      return 0.62 + 0.38 * u * u * (3 - 2 * u)
+    }
+    // Taper anchored to the TOP edge, rendered-and-corrected: a first
+    // version squeezed both edges toward the centerline, which pulled the
+    // top edge DOWN into the vertical gradient's already-faded zone — the
+    // tapered section went dark (a visible notch between band and tail).
+    // The band's identity is its bright top edge ("hangs from the top");
+    // the taper must keep it and raise only the bottom edge.
+    const sqTopY = topY
+    const sqBotY = (t) => topY(t) + (botY(t) - topY(t)) * squeeze(t)
+    const topPts = Array.from({ length: N + 1 }, (_, k) => {
+      const t = TAIL_T + (k / N) * (1 - TAIL_T)
+      return { x: t * w, y: sqTopY(t) }
+    })
+    const botPts = Array.from({ length: N + 1 }, (_, k) => {
+      const t = TAIL_T + (k / N) * (1 - TAIL_T)
+      return { x: t * w, y: sqBotY(t) }
+    }).reverse()
     // shared with 'streak' below — see smoothEdgePath/closedSilhouettePath's
     // own comment, module scope, above makePrim.
     const d = closedSilhouettePath(topPts, botPts)
+    // Tail hook: circular-arc centerline from the body's (tapered) left
+    // cross-section, width tapering further like a brushstroke end. n is
+    // the unit normal (rotate tangent 90°); edges are centerline ± n*halfW.
+    const xJ = TAIL_T * w
+    const halfW0 = (sqBotY(TAIL_T) - sqTopY(TAIL_T)) / 2
+    const yJ = sqTopY(TAIL_T) + halfW0
+    // R raised 0.22h -> 0.27h with the top-anchored taper: the joint now
+    // sits higher, and the smaller radius left the hook's tip hovering AT
+    // the frame's bottom edge instead of past it — ending on-screen is the
+    // exact complaint. 0.27h puts the tip ~50px below the frame edge while
+    // still fitting the viewBox (no visible clip) and keeps the visible
+    // turn ~95° before exit — a real curl, not a bend.
+    const R = h * 0.27, PHI_MAX = 115 * Math.PI / 180, PHI_START = -0.10, TAIL_N = 14
+    const tailTop = [], tailBot = []
+    for (let k = 0; k <= TAIL_N; k++) {
+      const phi = PHI_START + (k / TAIL_N) * (PHI_MAX - PHI_START)
+      const cx2 = xJ - R * Math.sin(phi), cy2 = yJ + R * (1 - Math.cos(phi))
+      const hw2 = halfW0 * (1 - 0.68 * Math.max(0, phi) / PHI_MAX)
+      const nx = -Math.sin(phi), ny = -Math.cos(phi)
+      tailTop.push({ x: cx2 + nx * hw2, y: cy2 + ny * hw2 })
+      tailBot.push({ x: cx2 - nx * hw2, y: cy2 - ny * hw2 })
+    }
+    const dTail = closedSilhouettePath(tailTop, tailBot.slice().reverse())
     // gradientTransform / userSpaceOnUse so the gradient runs top-to-bottom
     // of the whole box regardless of the path's own local wavy bounds —
     // objectBoundingBox (the default) would stretch it to the path's own
@@ -1463,7 +1666,39 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       grad.appendChild(stop)
     })
     defs.appendChild(grad)
+    // Tail hook gradient: the body's vertical "hangs from the top" gradient
+    // is nearly transparent by y≈0.65h — a hook diving to y≈h would fade
+    // out before it ever read as a curl. The tail gets its own linear
+    // gradient aligned along the hook's own travel (joint → tip),
+    // brightness matching the body's mid alpha at the seam and dying
+    // toward the (off-frame) tip.
+    const tailGradId = `auroraTailGrad${occCounter++}`
+    const tGrad = document.createElementNS(NS, 'linearGradient')
+    tGrad.setAttribute('id', tailGradId)
+    tGrad.setAttribute('gradientUnits', 'userSpaceOnUse')
+    tGrad.setAttribute('x1', String(Math.round(xJ)))
+    tGrad.setAttribute('y1', String(Math.round(yJ)))
+    tGrad.setAttribute('x2', String(Math.round(xJ - R * Math.sin(PHI_MAX))))
+    tGrad.setAttribute('y2', String(Math.round(yJ + R * (1 - Math.cos(PHI_MAX)))))
+    ;[
+      [0, hsla(hue + 8, 64, 58, A(0.26, fill))],
+      [45, hsla(hue, 58, 50, A(0.16, fill))],
+      [100, hsla(hue - 15, 50, 40, 0)],
+    ].forEach(([off, color]) => {
+      const stop = document.createElementNS(NS, 'stop')
+      stop.setAttribute('offset', `${off}%`)
+      stop.setAttribute('stop-color', color)
+      tGrad.appendChild(stop)
+    })
+    defs.appendChild(tGrad)
     svg.appendChild(defs)
+    // tail painted first so the body's own left cross-section sits on top
+    // through the shared blur — the small deliberate overlap (PHI_START<0)
+    // blends the seam instead of leaving a gap the smoothing could open.
+    const tail = document.createElementNS(NS, 'path')
+    tail.setAttribute('d', dTail)
+    tail.setAttribute('fill', `url(#${tailGradId})`)
+    svg.appendChild(tail)
     const curtain = document.createElementNS(NS, 'path')
     curtain.setAttribute('d', d)
     curtain.setAttribute('fill', `url(#${gradId})`)
@@ -1806,6 +2041,72 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       { x: 0.60, y: 0.55, s: 1.00 }, { x: 0.70, y: 0.32, s: 1.55 }, { x: 0.80, y: 0.62, s: 0.80 }, { x: 0.90, y: 0.40, s: 0.60 },
       { x: 0.18, y: 0.45, s: 0.50 }, { x: 0.55, y: 0.75, s: 0.75 },
     ]
+    // 2026-08-13 (Ben, st9: "look like other spiral on p1" — st1's lens
+    // rework landed and he wants that construction quality here, not a
+    // literal spiral: st9 stays an asteroid field, its own noun). Rendered
+    // fresh first: ~5 visible rocks read as countable flat-fill polygons
+    // floating in nothing — each wrapped in its own round glow, no material
+    // connecting them, no focal point. What st1 has that this lacked is
+    // CONTINUOUS soft mass with tapered ends. Three additions, all drawn
+    // from localRng (NOT r() — the sector loop below consumes a fixed draw
+    // count that this station's own corner/band flips depend on; see
+    // localRng's comment):
+    //  1. a debris LANE: overlapping soft gradient puffs stepped along a
+    //     gently wavy spine through the sector field, sized/brightened by a
+    //     sin taper so the band swells mid-field and dies to nothing at
+    //     both ends — the same puffs-on-a-spine language nebulaCloud's
+    //     construction #3 already proved, at much lower alpha (dust, not
+    //     cloud). Appended BEFORE the rocks so they float on top of it.
+    //  2. debris SPECKS scattered along that spine (tight near it, sparse
+    //     off it) — the size continuum between "rock" and "dust" that makes
+    //     a field read as a field instead of ten separate objects.
+    //  3. each rock gets a shaded FAR side (second linear-gradient layer
+    //     opposing litDeg) so rocks read as lit volumes, not flat cutouts —
+    //     same one-light-source convention (channel 4) the lit edge uses.
+    const lr = localRng(0xA57E301D)
+    const spineAt = (t) => 0.46 + 0.10 * Math.sin(t * 4.6 + 0.8) // wavy midline through the sector band (y-fractions 0.22-0.75)
+    const NPUFF = 9
+    for (let i = 0; i < NPUFF; i++) {
+      const t = i / (NPUFF - 1)
+      // exponent 0.55 (was 0.8): broader shoulder, so the half of the field
+      // st9's own frame sees (t<0.5 — the box is centered on the st9/st10
+      // boundary) carries real lane presence, not just the tapered tail
+      const taper = Math.pow(Math.sin(Math.PI * t), 0.55) // 0 at both ends, 1 mid-field
+      const pw = w * (0.10 + 0.15 * taper) * (0.85 + lr() * 0.3)
+      const ph = pw * (0.55 + lr() * 0.25)
+      const pxc = (0.02 + 0.96 * t) * w + (lr() - 0.5) * w * 0.04
+      const pyc = spineAt(t) * h + (lr() - 0.5) * h * 0.10
+      const puff = el('l-arm')
+      puff.style.width = px(pw); puff.style.height = px(ph)
+      puff.style.left = px(pxc - pw / 2); puff.style.top = px(pyc - ph / 2)
+      // central puffs carry AB()'s presence floor (first render pass: plain
+      // A() at this station's mid fill left the whole lane invisible — same
+      // melts-at-distance failure the rocks' own base already guards
+      // against with a constant-alpha floor); end puffs stay plain A() so
+      // the band still dies to true nothing at its tips.
+      // second render pass: the whole primitive renders through the
+      // headline pf's own ~0.34-0.55 station alpha, which roughly halves
+      // every value authored here — alphas below are set for the THROUGH-pf
+      // result, not the raw layer, hence higher than they look.
+      const pA = taper > 0.5 ? AB : A
+      puff.style.background = `radial-gradient(ellipse 50% 50% at 50% 50%,
+        ${hsla(hue + 6 + lr() * 8, 40, 62, pA(0.17 + 0.20 * taper, fill))} 0%,
+        ${hsla(hue, 34, 50, A(0.08 + 0.10 * taper, fill))} 55%, transparent 100%)`
+      f.appendChild(puff)
+    }
+    for (let i = 0; i < 46; i++) {
+      const t = lr()
+      const taper = Math.pow(Math.sin(Math.PI * t), 0.8)
+      const off = (lr() + lr() - 1) * (0.06 + 0.10 * taper) // triangular spread, wider mid-field
+      const s = 1.5 + lr() * lr() * 3.2
+      const d = el(''); d.style.position = 'absolute'; d.style.borderRadius = '50%'
+      d.style.left = px((0.02 + 0.96 * t) * w)
+      d.style.top = px((spineAt(t) + off) * h)
+      d.style.width = d.style.height = px(s)
+      d.style.background = lr() < 0.7 ? hsla(hue + 10, 30, 80, 1) : '#ffffff'
+      d.style.opacity = (0.35 + 0.40 * taper + lr() * 0.15).toFixed(2)
+      f.appendChild(d)
+    }
     SECTORS.forEach(sec => {
       const rs = w * (0.075 + r() * 0.03) * sec.s        // ~0.04w shards up to ~0.20w anchors
       const stretch = 1 + r() * r() * 1.1                // 1.0-2.1, skewed toward round
@@ -1863,8 +2164,20 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       // in via a second, fill-driven gradient layer on top. Gradient angle
       // is in the element's own (rotated) frame, hence the -rot.
       const litDeg = ((cssLightDeg - rot) % 360 + 360) % 360
+      // lit edge + shaded far side + base: the far-side layer (addition #3
+      // above) darkens the away-from-light half so the polygon reads as a
+      // volume under the scene light, not a flat pale cutout.
+      // (render pass 3: lit layer at 0-55% coverage washed the whole face
+      // pale-flat — narrowed to a bright lit RIM with the mid face holding
+      // the base tone and a stronger shaded far side, so the rock models as
+      // a volume instead of a putty cutout.)
+      // (pass 4: pass 3's 0.85-alpha/55% dark side pushed the bodies toward
+      // the documented "too dark... melts to faint blobs at 20ft" failure —
+      // pulled halfway back; the lit rim + mid-tone face + soft shadow edge
+      // still model a volume without sinking the silhouette.)
       rock.style.background =
-        `linear-gradient(${litDeg.toFixed(0)}deg, ${hsla(rockHue + 12, 30, 52, A(0.8, fill))} 0%, transparent 55%), ` +
+        `linear-gradient(${litDeg.toFixed(0)}deg, ${hsla(rockHue + 12, 32, 58, A(0.9, fill))} 0%, transparent 42%), ` +
+        `linear-gradient(${((litDeg + 180) % 360).toFixed(0)}deg, ${hsla(rockHue, 26, 8, 0.7)} 0%, transparent 48%), ` +
         `${hsla(rockHue, 20, 32, 0.97)}`
       f.appendChild(rock)
     })
@@ -1894,9 +2207,24 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     const cs = Math.max(14, w * 0.05)
     core.style.width = core.style.height = px(cs)
     core.style.marginLeft = px(-cs / 2); core.style.marginTop = px(-cs / 2)
-    core.style.boxShadow = `0 0 ${px(cs * 2.6)} ${px(cs * 0.9)} ${hsla(hue, 20, 92, A(0.9, fill))}`
+    // 2026-08-13 fresh-eyes pass (same round as the beam-spine change
+    // below): one wide pale shadow made the core read as a soft gray ball.
+    // Two stacked shadows instead (zero extra DOM — box-shadow takes a
+    // list): a tight, hot white-green inner flare plus the original wide
+    // ambient halo, slightly hue-shifted so core and beams share the same
+    // green-white identity.
+    // Proportion (same fresh-eyes pass): the old blur/spread (2.6x/0.9x cs)
+    // plus the d-glow made a ~100px-radius pale ball that swallowed the
+    // near-core half of each beam — the object read "fuzzy star," not
+    // "small hot star throwing long beams." Halo tightened (1.7x/0.55x),
+    // and beams lengthened below, so the beam-to-halo ratio carries the
+    // pulsar read. d-glow itself is untouched: it carries the measurable
+    // fill response per the comment above.
+    core.style.boxShadow =
+      `0 0 ${px(cs * 0.9)} ${px(cs * 0.35)} ${hsla(hue, 45, 96, AB(1, fill))}, ` +
+      `0 0 ${px(cs * 1.7)} ${px(cs * 0.55)} ${hsla(hue, 35, 85, AB(0.9, fill))}`
     f.appendChild(core)
-    const beamLen = w * 0.5 // fixed reach for the always-on stub half; E() extends past it below
+    const beamLen = w * 0.62 // fixed reach for the always-on stub half; E() extends past it below (0.5 -> 0.62, same fresh-eyes pass: longer beams, tighter halo)
     const beamAng = LIGHT_DEG
     ;[beamAng, beamAng + 180].forEach(ang => {
       const beam = el('')
@@ -1928,7 +2256,27 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       beam.style.transformOrigin = '0 50%'
       beam.style.transform = `rotate(${ang.toFixed(1)}deg)`
       beam.style.clipPath = 'polygon(0% 50%, 100% 0%, 100% 100%)'
-      beam.style.background = `linear-gradient(90deg, ${hsla(hue, 30, 90, A(0.85, fill))} 0%, ${hsla(hue, 30, 88, A(0.45, fill))} 45%, transparent 100%)`
+      // 2026-08-13 fresh-eyes pass (Ben: "fable 5 pass" on st5): the cone
+      // silhouette was right but HOLLOW — one flat linear gradient across
+      // the whole cone read as a translucent gray smudge, not light. A real
+      // beam has structure: a hot narrow SPINE along its axis inside a
+      // softer wide sheath. Both live in this one element as stacked
+      // backgrounds (no new DOM): the spine is a flat ellipse gradient
+      // anchored at the core end (wide in x, thin in y — bright ray fading
+      // both along and across the beam), the sheath is the original
+      // full-cone taper, resaturated toward the station hue (30->60 sat,
+      // lightness pulled out of the near-white 84-90 band down to 70-76)
+      // so the pulsar stops reading as colorless gray against a green-wash
+      // station. Alphas use AB() (the same presence-floor helper blob/
+      // nebulaCloud use), not bare A(): this station's frame renders at
+      // --pa ~0.35 (measured live), which multiplies every child — pale
+      // low-alpha gradients double-dilute to nothing, which is exactly why
+      // two prior weight bumps (5x width, cone rebuild) still read faint.
+      // Identity features must run internal alpha near 1 and let the frame
+      // opacity be the only dimmer, same as drawPlanetDisc's opaque stops.
+      beam.style.background =
+        `radial-gradient(ellipse 95% 16% at 0% 50%, ${hsla(hue, 30, 97, AB(0.98, fill))} 0%, ${hsla(hue, 45, 88, AB(0.6, fill))} 45%, transparent 78%), ` +
+        `linear-gradient(90deg, ${hsla(hue, 60, 76, AB(0.85, fill))} 0%, ${hsla(hue, 62, 70, AB(0.5, fill))} 45%, transparent 100%)`
       f.appendChild(beam)
     })
     // A thin "sweep ring" around the core (the classic pulsar-diagram

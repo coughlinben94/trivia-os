@@ -298,6 +298,46 @@ function buildLayerContent(engine, world, arc, host, L) {
       if (st.prim === 'planet') {
         const discInset = (hw - Math.min(hw, hh)) / 2
         headLeft += headlineCornerLeft ? -discInset : discInset
+        // 2026-08-13: synced from world-07-ring.html — the planet's d-glow
+        // halo overflows the disc (GLOW_FRAC=1.35, mirrored here) and its
+        // brightest band crossed the station boundary, painting a bright
+        // arc on the NEIGHBOR station's slide (Ben, st4: "half on one page
+        // half on other"). Soft-mask only the glow at the boundary; see
+        // that file's identical comment for the full reasoning.
+        const discSize = Math.min(hw, hh)
+        const glowLeft = headLeft + (hw - discSize) / 2 + (discSize - discSize * 1.35) / 2
+        const glowW = discSize * 1.35
+        const glowEl2 = head.querySelector('[class*="d-glow"]')
+        if (glowEl2) {
+          const FEATHER = 24
+          if (headlineCornerLeft && glowLeft < x0) {
+            const b = x0 - glowLeft
+            const m = `linear-gradient(to right, transparent ${b.toFixed(0)}px, black ${(b + FEATHER).toFixed(0)}px)`
+            glowEl2.style.maskImage = m; glowEl2.style.webkitMaskImage = m
+          } else if (!headlineCornerLeft && glowLeft + glowW > x0 + ENGINE.W) {
+            const b = (x0 + ENGINE.W) - glowLeft
+            const m = `linear-gradient(to right, black ${(b - FEATHER).toFixed(0)}px, transparent ${b.toFixed(0)}px)`
+            glowEl2.style.maskImage = m; glowEl2.style.webkitMaskImage = m
+          }
+        }
+      }
+      // 2026-08-13: synced from world-07-ring.html — same dead-padding fix
+      // as `planet` above, for `ring` (st0). See that file's identical
+      // comment for the full reasoning.
+      if (st.prim === 'ring') {
+        const ringBodySize = Math.min(hw, hh) * 0.52
+        const ringRx = Math.min(ringBodySize * (st.variant === 'dust' ? 1.22 : 1.08), hw / 2 - 4)
+        const discInset = hw / 2 - ringRx
+        headLeft += headlineCornerLeft ? -discInset : discInset
+      }
+      // 2026-08-13: synced from world-07-ring.html — same dead-padding fix
+      // for `dots` (st2, Ben: "move closer to corner"): the cluster's dense
+      // mass is centered in the box (~0.28*hw reach), so shift the box until
+      // the mass edge, not the box edge, sits at cornerX's margin. See that
+      // file's identical comment for the measurement.
+      if (st.prim === 'dots') {
+        const discInset = hw / 2 - hw * 0.28
+        headLeft += headlineCornerLeft ? -discInset : discInset
       }
       const headTop = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh))
       head.style.left = px(headLeft)
@@ -337,15 +377,23 @@ function buildLayerContent(engine, world, arc, host, L) {
       // 2026-08-13: synced from world-07-ring.html — generalized to a
       // (flag, hue) table instead of one hardcoded green block (Ben: "need
       // more green and orange areas... whole background shifts for a slide
-      // or two"); `orangeWash` set on st8 for now. That file's version also
-      // adds edge-feathering (mask-image) this one never had — not brought
-      // over here, out of scope for this pass, flagged as existing drift.
+      // or two"); `orangeWash` set on st8 for now.
+      // 2026-08-13 round 3+4: synced from world-07-ring.html — switched
+      // linear-gradient rectangle to a radial "half circle" (Ben: "youre
+      // giving it hard line edges" / "round it off"), then widened the box
+      // past one station so the circle's falloff bleeds into the next
+      // station instead of clipping at the boundary (Ben: "overlap them
+      // with like 70% on one page 30% on the next") — see that file's
+      // identical comment for the full math.
+      const washSpanW = engine.W * 1.4
+      const washCxFrac = (0.5 * engine.W / washSpanW) * 100
       for (const wc of WASH_KINDS) {
         if (!st[wc.flag]) continue
         const wash = dom.el('')
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0'
-        wash.style.width = px(engine.W); wash.style.height = px(engine.H)
-        wash.style.background = `linear-gradient(to top, ${hsla(wc.hue, 55, 20, 0.50)} 0%, ${hsla(wc.hue, 55, 20, 0.28)} 32%, transparent 68%)`
+        wash.style.width = px(washSpanW); wash.style.height = px(engine.H)
+        wash.style.background = `radial-gradient(circle ${Math.round(engine.W * 0.62)}px at ${washCxFrac.toFixed(1)}% 100%,
+          ${hsla(wc.hue, 60, 30, 0.55)} 0%, ${hsla(wc.hue, 55, 22, 0.30)} 35%, transparent 70%)`
         host.appendChild(wash)
       }
 

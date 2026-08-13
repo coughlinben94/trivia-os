@@ -703,6 +703,66 @@ function buildLayerContent(host, L){
       if (st.prim === 'planet') {
         const discInset = (hw - Math.min(hw, hh)) / 2;
         headLeft += headlineCornerLeft ? -discInset : discInset;
+        // 2026-08-13 (Ben, st4: "half on one page half on other" —
+        // DOM-measured before assuming: the DISC stays inside its own
+        // station, left edge ~4px in, but drawPlanetDisc's d-glow halo
+        // overflows the disc by GLOW_FRAC and its BRIGHTEST band (the
+        // annulus peak sits at the disc edge +6%) crossed ~43px past the
+        // station boundary — a bright teal arc showing up on st3's slide).
+        // Vertical corner bleed is wanted ("its ok if things bleed off the
+        // corners") — but a horizontal crossing paints onto the NEIGHBOR
+        // page, which is what Ben is flagging. Soft-mask ONLY the glow at
+        // the station boundary (24px feather living entirely inside this
+        // station, mostly under the opaque disc, so the bright rim/limb —
+        // SVG, unmasked — is untouched): nothing paints on the neighbor,
+        // no hard vertical seam mid-turn (that bug class is documented —
+        // "vertical art seams", 2026-08-12). 1.35 mirrors GLOW_FRAC in
+        // ringPrimitives.js's drawPlanetDisc — same mirrored-formula
+        // pattern as the `ring` block below.
+        const discSize = Math.min(hw, hh);
+        const glowLeft = headLeft + (hw - discSize) / 2 + (discSize - discSize * 1.35) / 2;
+        const glowW = discSize * 1.35;
+        const glowEl2 = head.querySelector('[class*="d-glow"]');
+        if (glowEl2) {
+          const FEATHER = 24;
+          if (headlineCornerLeft && glowLeft < x0) {
+            const b = x0 - glowLeft;
+            const m = `linear-gradient(to right, transparent ${b.toFixed(0)}px, black ${(b + FEATHER).toFixed(0)}px)`;
+            glowEl2.style.maskImage = m; glowEl2.style.webkitMaskImage = m;
+          } else if (!headlineCornerLeft && glowLeft + glowW > x0 + ENGINE.W) {
+            const b = (x0 + ENGINE.W) - glowLeft;
+            const m = `linear-gradient(to right, black ${(b - FEATHER).toFixed(0)}px, transparent ${b.toFixed(0)}px)`;
+            glowEl2.style.maskImage = m; glowEl2.style.webkitMaskImage = m;
+          }
+        }
+      }
+      // 2026-08-13 (Ben, live: "again, whe i say move closer to corner,
+      // move closer to corner" — st0). Same class of bug as `planet` above:
+      // cornerX hugs the BOX, but `ring`'s body+ring ellipse (ringPrimitives
+      // .js's `ring` branch) is centered in that box at a radius (`rx`,
+      // capped by Math.min(w,h)) that's smaller than the box's own wider
+      // dimension — real dead space between the visible ring and the true
+      // corner no matter how tight cornerX's own margin is. Same formula
+      // ringPrimitives.js uses to compute rx, mirrored here so the shift
+      // exactly cancels the gap instead of guessing a fixed px nudge.
+      if (st.prim === 'ring') {
+        const ringBodySize = Math.min(hw, hh) * 0.52;
+        const ringRx = Math.min(ringBodySize * (st.variant === 'dust' ? 1.22 : 1.08), hw / 2 - 4);
+        const discInset = hw / 2 - ringRx;
+        headLeft += headlineCornerLeft ? -discInset : discInset;
+      }
+      // 2026-08-13 (Ben, st2: "move closer to corner"). Same class of bug as
+      // `planet`/`ring` above, DOM-measured before assuming: st2's BOX edge
+      // already sat 8px from the corner, but the cluster's dense mass is
+      // centered in the box (mean dot center at box center, p80 dot radius
+      // ~0.25*hw) — ~130px of dead padding cornerX can never remove. Shift
+      // so the mass edge (~0.28*hw from center: p80 dot radius plus the new
+      // unresolved-haze reach) lands at cornerX's own margin; the sparse
+      // outskirt dots bleed off-frame, which is wanted ("its ok if things
+      // bleed off the corners").
+      if (st.prim === 'dots') {
+        const discInset = hw / 2 - hw * 0.28;
+        headLeft += headlineCornerLeft ? -discInset : discInset;
       }
       const headTop  = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh), isSpanningField);
       head.style.left = px(headLeft);
@@ -792,31 +852,37 @@ function buildLayerContent(host, L){
       // stations can pick it up the same way greenWash's st4/st5 pair does.
       // Same alpha/fade/edge-feather logic for every entry — only the flag
       // name and hue differ.
+      // 2026-08-13 round 3 (Ben, live: "when i say color flare, just do a
+      // half circle of a fun diff green gradient color" / "youre giving it
+      // hard line edges" / "round it off"): the linear-gradient rectangle
+      // above was the wrong SHAPE, not just under-tuned alpha — a straight
+      // "to top" fade across the full station width always has a geometric
+      // top edge once alpha is high enough to see, no matter how far out
+      // the transparent stop sits. Switched to a radial gradient centered
+      // at the BOTTOM-CENTER of the station (50% 100%) — only its upper
+      // half is ever visible (the frame's own bottom edge crops the rest),
+      // which is what actually reads as a soft half-circle flare with no
+      // straight edge anywhere, in any direction. This also retires the
+      // old left/right edge-feather masking entirely: that existed only to
+      // hide the rectangle's own hard OUTER edges (the "vertical art seams"
+      // bug) — a radial glow already fades to nothing in every direction on
+      // its own, nothing left to mask.
+      // 2026-08-13 round 4 (Ben, live: "dont make it all on just one page,
+      // overlap them with like 70% on one page 30% on the next"): box
+      // widened past one station so the circle's own falloff can actually
+      // spill into the next station instead of hard-clipping at the
+      // station boundary — the center stays anchored to THIS station's own
+      // midpoint (unchanged from round 3), only the box got wider so that
+      // center's falloff has somewhere to bleed into.
+      const washSpanW = ENGINE.W * 1.4;
+      const washCxFrac = (0.5 * ENGINE.W / washSpanW) * 100;
       for (const wc of WASH_KINDS) {
         if (!st[wc.flag]) continue;
         const wash = dom.el('');
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0';
-        wash.style.width = px(ENGINE.W); wash.style.height = px(ENGINE.H);
-        wash.style.background = `linear-gradient(to top, ${hsla(wc.hue, 55, 20, 0.50)} 0%, ${hsla(wc.hue, 55, 20, 0.28)} 32%, transparent 68%)`;
-        // Ben (live review, 2026-08-12): "vertical art seams" at the 4->5 and
-        // 6->7 turns, showing up twice. Root cause: wash is a flat full-width
-        // rectangle with only a VERTICAL (to top) gradient — no horizontal
-        // fade at its own left/right edges. Adjacent same-wash stations share
-        // an identical fixed color, so their internal boundary is already
-        // seamless — the hard cuts are a same-color block's own OUTER edges.
-        // Feather only the outer edges (mask-image, same technique as the
-        // maskSpots patches above) — skip the shared side entirely when a
-        // neighbor has the SAME wash flag, so multi-station runs stay seamless.
-        const prevWash = WORLD.stations[(i - 1 + ENGINE.PANES) % ENGINE.PANES][wc.flag];
-        const nextWash = WORLD.stations[(i + 1) % ENGINE.PANES][wc.flag];
-        if (!prevWash || !nextWash) {
-          const feather = 0.08;
-          const leftStop = prevWash ? '0%' : `${feather * 100}%`;
-          const rightStop = nextWash ? '100%' : `${(1 - feather) * 100}%`;
-          const edgeMask = `linear-gradient(to right, transparent 0%, black ${leftStop}, black ${rightStop}, transparent 100%)`;
-          wash.style.maskImage = edgeMask;
-          wash.style.webkitMaskImage = edgeMask;
-        }
+        wash.style.width = px(washSpanW); wash.style.height = px(ENGINE.H);
+        wash.style.background = `radial-gradient(circle ${Math.round(ENGINE.W*0.62)}px at ${washCxFrac.toFixed(1)}% 100%,
+          ${hsla(wc.hue, 60, 30, 0.55)} 0%, ${hsla(wc.hue, 55, 22, 0.30)} 35%, transparent 70%)`;
         host.appendChild(wash); formTotal++;
       }
       if (st.ring){
