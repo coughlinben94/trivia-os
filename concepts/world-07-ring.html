@@ -538,7 +538,14 @@ function buildLayerContent(host, L){
       const ds = 14;
       drift.style.width = drift.style.height = px(ds);
       drift.style.left = px(period * 0.12);
-      drift.style.top  = px(dom.bandY(dr, ds));
+      // skipMinBleed: bandY's "upper" branch forces >=20% of the object's
+      // own height off the top edge by design (headline corner-composition
+      // rule) — correct for headlines, wrong for this element, the one
+      // continuously-tracked object meant to stay whole as it drifts across
+      // turns (Ben: likes the drift, but it was getting clipped at the top
+      // when the 50/50 upper-band draw landed). Exempted the same way st9's
+      // asteroid field already is, for its own different reason.
+      drift.style.top  = px(dom.bandY(dr, ds, undefined, undefined, true));
       host.appendChild(drift); formTotal++;
     }
   }
