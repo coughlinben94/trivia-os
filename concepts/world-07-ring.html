@@ -356,22 +356,26 @@ const WORLD = {
   // deletion stopgap, now replaced by asteroid field / supernova's old
   // slot). st0/st3's orange+rose nebula were a deliberate duplicate
   // (`blob` both), left for "next round" per Ben's call — that round is
-  // this one: st3 kept `blob` (fixed by adding makeNebulaRing around it),
-  // st6 moved to its own `nebulaCloud` kind (2026-08-12, full asymmetric-
-  // silhouette reconstruction — see that branch's own comment in
-  // ringPrimitives.js) — no longer the same recipe.
+  // this one: st3 kept `blob` (2026-08-12 first tried adding makeNebulaRing
+  // around it — see that function's own header — but "still three circles"
+  // persisted 2026-08-12 AND 2026-08-13; 2026-08-13 fix removed the ring
+  // layer and merged the core into blob's own dominant lobe instead — see
+  // makePrim's `blob`/isHeadline branch), st6 moved to its own
+  // `nebulaCloud` kind (2026-08-12, full asymmetric-silhouette
+  // reconstruction — see that branch's own comment in ringPrimitives.js) —
+  // no longer the same recipe.
   stations: [
     { key:'ringed planet',  prim:'ring',         hue:256, accent:false, maskSpots:[[0.24050632911392406,0.11818741209563996,0.04984177215189872,0.09282700421940926]] }, // was st9 — radial mass
     { key:'spiral galaxy',  prim:'lens',         hue:170, accent:false }, // was st3 — spiral/disc; hue 276->170 2026-08-12, Ben "still hate the oval purple color" after 2 rounds of shape/brightness fixes — st0/st1/st2 were 3 near-identical purples in a row (256/276/268), moved to green-teal
     { key:'star cluster',   prim:'dots',         hue:268, accent:false, maskSpots:[[0.33781645569620256,0.14912974683544306,0.055379746835443,0.09142053445850912],[0.6637658227848102,0.16319444444444445,0.06645569620253144,0.14064697609001406]] }, // was st1 — scattered cluster
-    { key:'orange nebula',  prim:'blob',         hue:28,  accent:true, ring:true, maskSpots:[[0.10126582278481013,0.15897503516174402,0.03955696202531646,0.08860759493670886],[0.4216772151898734,0.19413677918424754,0.05221518987341778,0.0956399437412096]] }, // was st0 — diffuse cloud, "needs a ring around it" 2026-08-12
+    { key:'orange nebula',  prim:'blob',         hue:28,  accent:true, maskSpots:[[0.10126582278481013,0.15897503516174402,0.03955696202531646,0.08860759493670886],[0.4216772151898734,0.19413677918424754,0.05221518987341778,0.0956399437412096]] }, // was st0 — diffuse cloud; `ring:true` (makeNebulaRing donut layer) removed 2026-08-13, Ben repeated 2026-08-12 AND 2026-08-13: "still three circles, only need one" — three separately-drawn circular elements (this ring donut, blob's own s-core white-ball, blob's lobe cluster) never merged into one nebula no matter how each was tuned. See makePrim's `blob`/isHeadline branch in ringPrimitives.js for the actual fix (core merged into the dominant lobe's own gradient instead of a separate element).
     { key:'lit planet',     prim:'planet',       hue:140, accent:false, greenWash:true }, // NEW — radial mass; greenWash 2026-08-12 (Ben: "green on bottom half of two slides")
     { key:'pulsar',         prim:'pulsar',       hue:120, accent:false, greenWash:true, maskSpots:[[0.4865506329113924,0.8622099156118144,0.060126582278480944,0.1040787623066104],[0.8528481012658229,0.6765559071729957,0.087025316455696,0.18706047819971872]] }, // NEW — radiant burst; greenWash 2026-08-12 (same)
     { key:'rose nebula',    prim:'nebulaCloud',  hue:330, accent:true, cornerLeft:false }, // was st8 — asymmetric cloud, 2026-08-12; cornerLeft:false 2026-08-12 (Ben: "needs to be on other bottom corner" — was landing bottom-left, forced bottom-right)
     { key:'comet',          prim:'streak',       hue:208, accent:false, maskSpots:[[0.5957278481012659,0.13787798874824192,0.04509493670886067,0.07876230661040787]] }, // was st4 — elongated streak
     { key:'binary pair',    prim:'binary',       hue:214, accent:false }, // was st7 — radial mass
     { key:'asteroid field', prim:'asteroidField',hue:160, accent:false, fillCorner:true }, // NEW — scattered cluster; fillCorner 2026-08-12 (Ben: "need something here" on the bottom-left, which the spanning-field's own headline — centered on the st9/st10 boundary — never reaches)
-    { key:'supernova',      prim:'spikes',       hue:36,  accent:true, noWash:true }, // was st2 — radiant burst; noWash 2026-08-12 (Ben: "not needed here" / "idk what the cloud is" on the far-layer wash)
+    { key:'supernova',      prim:'spikes',       hue:36,  accent:true }, // was st2 — radiant burst; noWash flag removed 2026-08-13 — the far-layer wash loop it opted out of is gone entirely now (see buildLayerContent's far-layer removal note), so the flag had nothing left to read
     { key:'aurora ribbon',  prim:'ribbon',       hue:196, accent:false, bandUpper:false }, // was st11 (unchanged) — elongated streak; bandUpper:false 2026-08-12 (Ben: "move to bottom right" — was top-right, horizontal already right)
   ],
   /* mirrors client/src/worlds/midnightGalaxy.ring.js's hueAnchors — this
@@ -440,78 +444,49 @@ function buildLayerContent(host, L){
        far moves 480px/turn, so its content changes slowly — which is
        what "far" means. */
     starTotal += dom.buildStars(host, period, 140, 1.0, 0xA11CE);
-    for (let i=0;i<6;i++){
-      const st = WORLD.stations[(i*2) % ENGINE.PANES];
-      // 2026-08-12 (fresh review, st10: "not needed here" / "idk what the
-      // cloud is" — bbox-verified via direct DOM hit-test, not guessed:
-      // the marks land on this wash, not the headline). st10's own headline
-      // (spikes/supernova) is already a busy radiant burst; its far-layer
-      // wash duplicates visual weight without adding identity — reads as
-      // an unexplained "cloud." Opt-out flag, same pattern as `ring`/
-      // `accent`/`cornerLeft`. Skipped before the rng draw so it costs
-      // nothing and touches no other iteration's random stream (each `i`
-      // seeds its own fresh `rng(i, 0xFA2)`, no shared state to disturb).
-      if (st.noWash) continue;
-      const r = rng(i, 0xFA2);
-      const lou = loudness((i*2) % ENGINE.PANES);
-      const wfill = fill((i*2) % ENGINE.PANES) * 0.62; // pushed back behind mid (B2 sec 1.3/2.2)
-      const w = lerp(620, 900, r()), h = w*(0.52 + r()*0.22);
-      const f = dom.makePrim('blob', w, h, st.hue, lerp(0.16, 0.30, lou), r, false, wfill);
-      f.style.left = px(i*(period/6) + r()*(period/6 - w));
-      f.style.top  = px(dom.bandY(r, h));
-      host.appendChild(f); formTotal++;
-    }
 
-    /* far-layer anchor (spec §7.6): one nameable form, authored ONCE per
-       far-layer author-period (not per-station), sized off the layer's
-       own real arithmetic - visibleStations = (frameWidth + anchorWidth) /
-       farSurge, not a guessed pane count. At AW=760, farSurge=480:
-       (1920+760)/480 = 5.58, so the far layer's own scroll carries it
-       through view for ~5 of the ring's 12 stations as it passes -
-       inside the required 4-6 band. `lens` chosen per this session's own
-       finding that it reads more legibly than the other glow primitives.
-       hueAnchors[1] (214, cool blue), not [0] (276, violet): hueAnchors[0]
-       is the exact hue+primitive station 3 (spiral galaxy) uses as its own
-       headline (lens@276) - the anchor's visible window (stations 1-5,
-       which includes station 3) rendered a second, indistinguishable
-       spiral galaxy at 760px vs the headline's <=576-880px (1.3x apart) -
-       a duplicate, not an anchor (spec §6.2/§7.6 violation). No station
-       uses `lens` at 214 - checked against every entry in
-       midnightGalaxy.ring.js's stations list, not just this anchor's
-       visible window. */
-    {
-      const ar = rng(0, 0xA4C7);
-      const AW = 760, AH = Math.round(AW * 0.62);
-      const anchorHue = WORLD.hueAnchors[1].deg;
-      // 2026-08-11 object-fix round, found on the SECOND (post-rewrite)
-      // blind-critique pass, not the first: this anchor is drawn once per
-      // far-layer period at explicit fill=1 (never scaled down by station
-      // loudness, unlike every headline/companion), so it's constantly at
-      // full intensity across its whole ~5-station visible window. Two
-      // independent Fable-5 critiques, cold, converged on it as the
-      // dominant confound at st1-4 — "the same blue beaded spiral" beating
-      // the actual headline for attention. Not a regression from today's
-      // isHeadline gating (verified: this call already passed
-      // isHeadline=false, so it already used the dim 'lens' values) — the
-      // fill=1 floor alone was enough to make even the dim values read as
-      // a recurring prop. AW (760px, tied to the visibleStations=5.58
-      // arithmetic the comment above cites) is untouched — only alpha,
-      // 0.34 -> 0.15, cut without touching the spec'd sizing.
-      // 2026-08-12: cut again, 0.15->0.09. Ben's own fresh critique on both
-      // st1 (spiral galaxy) and st3 (orange nebula) — "nebula close to a
-      // spiral, overshaded by a blue cloud" — traces directly to THIS
-      // anchor drifting through both stations' visible window at a constant
-      // fill=1 intensity; confirmed on real renders of both stations, the
-      // anchor's own beaded-lens shape is plainly visible in both frames.
-      // Previous cut (0.34->0.15, 2026-08-11) was a step in the right
-      // direction but evidently not enough on its own.
-      // First cut to 0.09 was barely perceptible in a real re-render (verified,
-      // not assumed) — pushing further to 0.05.
-      const anchor = dom.makePrim('lens', AW, AH, anchorHue, 0.05, ar, false, 1); // layer-level anchor, not tied to any one station's loudness -> explicit fill=1, not a dropped param
-      anchor.style.left = px(period * 0.42 - AW/2);
-      anchor.style.top  = px(dom.bandY(ar, AH));
-      host.appendChild(anchor); formTotal++;
-    }
+    // Wide soft wash blobs (6/period, ~620-900px, `blob` primitive) removed
+    // outright 2026-08-13. Root-caused by a fresh customer-role critique
+    // pass: this loop drew the far layer's `blob` washes with the exact same
+    // primitive kind headline nebulae use, so they were visually
+    // indistinguishable from a real object but carried no thematic identity
+    // — and because far scrolls at 480px/turn against mid's 1920px/turn,
+    // each wash drifted across ~5 unrelated stations, never settling near
+    // whatever station "owned" it. Traced as the root cause of most of Ben's
+    // recurring "remove planet" / "random dim circles" / "not needed here"
+    // complaints back to 2026-08-12, not a one-station defect: station 10
+    // already got a one-off `noWash` exemption from this exact loop for the
+    // identical complaint ("not needed here" / "idk what the cloud is") —
+    // that was the same underlying problem recurring, not a coincidence, and
+    // patching it station-by-station was never going to converge. Deleting
+    // the loop (not tuning size/alpha/count again — three prior rounds of
+    // that already happened on other primitives and never addressed the
+    // real complaint, see the occluder-removal note below this station
+    // loop) removes the whole class at once. The far-layer star field two
+    // lines up and the far-layer anchor/drifter directly below are unrelated
+    // and untouched — this only removes the wash loop.
+
+    // far-layer anchor (spec §7.6) removed outright 2026-08-13. Three prior
+    // rounds each re-tuned only alpha — 0.34->0.15 (2026-08-11, two cold
+    // Fable-5 critiques: "the same blue beaded spiral" beating the actual
+    // headline for attention), 0.15->0.09 (2026-08-12, Ben's own critique on
+    // st1/st3: "nebula close to a spiral, overshaded by a blue cloud"),
+    // 0.09->0.05 (2026-08-12, same day, second round) — without ever
+    // changing what the anchor actually was: a `lens` primitive rendered as
+    // l-disc/l-arm "bead spiral" shapes, the identical primitive kind and
+    // render path station 3's own spiral-galaxy headline uses. A fresh
+    // customer-role critique agent (2026-08-13) confirmed it still reads as
+    // a duplicate of that headline even at alpha 0.05 — dimming was never
+    // going to fix a same-shape-as-a-real-headline problem, because the
+    // complaint was never about intensity. This is the same root-cause
+    // pattern as the far-layer wash loop and the mid-layer occluder above:
+    // three tuning rounds on the wrong axis before deleting the object.
+    // spec §7.6 called for one nameable far-layer anchor per author-period;
+    // no replacement is authored here — that's an open spec question for
+    // Ben, not resolved by this removal. concepts/tools/ring-verify.mjs's
+    // own checks (drawn-subject, silhouette-family spacing, etc.) are
+    // unedited (STAYS-HUMAN) and will judge whatever this file now emits on
+    // their existing pass/fail logic, unchanged.
 
     /* one trackable drifter (spec §7.7): the only element in this world
        carrying its own continuous transform, so the up-to-75s gap between

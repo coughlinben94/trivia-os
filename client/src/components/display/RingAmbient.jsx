@@ -128,53 +128,35 @@ function buildLayerContent(engine, world, arc, host, L) {
   const period = authorPeriodOf(engine, L)
 
   if (L.id === 'far') {
-    /* slow, dense star field + one wide soft wash per two stations */
+    /* slow, dense star field */
     dom.buildStars(host, period, 140, 1.0, 0xA11CE)
-    for (let i = 0; i < 6; i++) {
-      const st = world.stations[(i * 2) % engine.PANES]
-      // 2026-08-12: synced from world-07-ring.html — opt-out flag (st10,
-      // Ben: "not needed here" / "idk what the cloud is"), same pattern as
-      // `ring`/`accent`/`cornerLeft`. Skipped before the rng draw, costs
-      // nothing, touches no other iteration's stream.
-      if (st.noWash) continue
-      const r = rng(i, 0xFA2)
-      const lou = loudnessOf(arc, (i * 2) % engine.PANES)
-      const fill = fillOf(engine, arc, (i * 2) % engine.PANES) * 0.62 // pushed back behind mid (B2 sec 1.3/2.2: far out-shouted mid on 7/12 stations)
-      const w = lerp(620, 900, r()), h = w * (0.52 + r() * 0.22)
-      const f = dom.makePrim('blob', w, h, st.hue, lerp(0.16, 0.30, lou), r, false, fill)
-      f.style.left = px(i * (period / 6) + r() * (period / 6 - w))
-      f.style.top = px(dom.bandY(r, h))
-      host.appendChild(f)
-    }
 
-    // far-layer anchor (spec §7.6): one nameable form, authored ONCE per
-    // far-layer author-period (not per-station), sized off the layer's own
-    // real arithmetic — visibleStations = (frameWidth + anchorWidth) /
-    // farSurge, not a guessed pane count. At AW=760, farSurge=480:
-    // (1920+760)/480 = 5.58, so the far layer's own scroll carries it
-    // through view for ~5 of the ring's 12 stations as it passes — inside
-    // the required 4-6 band. `lens` chosen per this session's own finding
-    // that it reads more legibly than the other glow primitives.
-    // hueAnchors[1] (214, cool blue), not [0] (276, violet): hueAnchors[0]
-    // is the exact hue+primitive station 3 (spiral galaxy) uses as its own
-    // headline (lens@276) — the anchor's visible window (stations 1-5,
-    // which includes station 3) rendered a second, indistinguishable
-    // spiral galaxy at 760px vs the headline's <=576-880px (1.3x apart) —
-    // a duplicate, not an anchor (spec §6.2/§7.6 violation). No station
-    // uses `lens` at 214 — checked against every entry in
-    // midnightGalaxy.ring.js's stations list, not just this anchor's
-    // visible window.
-    {
-      const ar = rng(0, 0xA4C7)
-      const AW = 760, AH = Math.round(AW * 0.62)
-      const anchorHue = world.hueAnchors[1].deg
-      // 2026-08-11: alpha 0.34 -> 0.15 — see world-07-ring.html's identical
-      // comment (same fix, both builds).
-      const anchor = dom.makePrim('lens', AW, AH, anchorHue, 0.15, ar, false, 1) // layer-level anchor, not tied to any one station's loudness -> explicit fill=1, not a dropped param
-      anchor.style.left = px(period * 0.42 - AW / 2)
-      anchor.style.top = px(dom.bandY(ar, AH))
-      host.appendChild(anchor)
-    }
+    // Wide soft wash blobs (6/period, ~620-900px, `blob` primitive) removed
+    // entirely 2026-08-13 — see world-07-ring.html's identical removal note
+    // (same fix, both builds) for the full reasoning: a fresh customer-role
+    // critique pass root-caused this loop as most of Ben's recurring
+    // "remove planet" / "random dim circles" / "not needed here" complaints
+    // back to 2026-08-12, because it drew far-layer washes with the same
+    // `blob` primitive kind headline nebulae use — visually indistinguishable
+    // from a real object but with no thematic identity, drifting across ~5
+    // unrelated stations per wash (far's 480px/turn vs mid's 1920px/turn).
+    // Station 10's one-off `noWash` exemption from this same loop, for the
+    // identical complaint, was the same problem recurring, not a coincidence.
+    // The far-layer star field above and the anchor/drifter below are
+    // unrelated and untouched.
+
+    // far-layer anchor (spec §7.6) removed outright 2026-08-13 — see
+    // world-07-ring.html's identical removal note (same fix, both builds)
+    // for the full reasoning. Three prior rounds each re-tuned only alpha
+    // (0.34->0.15 here, further to 0.09->0.05 on the other build) without
+    // ever changing what the anchor actually was: a `lens` primitive
+    // rendered as l-disc/l-arm "bead spiral" shapes — the identical
+    // primitive kind and render path station 3's own spiral-galaxy headline
+    // uses. A fresh customer-role critique agent (2026-08-13) confirmed it
+    // still reads as a duplicate of that headline even at the other build's
+    // alpha 0.05 — dimming was never going to fix a same-shape-as-a-real-
+    // headline problem. No replacement is authored here — open spec
+    // question for Ben, not resolved by this removal.
 
     // one trackable drifter (spec §7.7): the only element in this world
     // carrying its own continuous transform, so the up-to-75s gap between
