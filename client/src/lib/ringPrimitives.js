@@ -139,6 +139,42 @@ export function rotatedBandH(kind, w, h) {
 // topEdge + h/2 — is exactly what the rotated bbox shares with the
 // unrotated one; effH===h (the default, every non-rotating call site) makes
 // this byte-identical to the prior formula.
+// 2026-08-13 (fresh customer-role critique: 8/12 stations' own headline
+// amputated by a frame edge, st4 by top+left at once). Root cause per that
+// critique: the MIN-bleed floor below (introduced 2026-08-12 for legitimate
+// corner-hugging reasons) got tuned up three separate rounds — 0.09->0.12
+// (reverted)->0.20 — chasing "move more towards corner" feedback, each round
+// only checked the spec's regression gates (safe-box luminance, ink-share,
+// the 35% "accidental clip" ceiling), never a plain "does the object still
+// read as whole" look. Nothing capped the deep end (`minY = -h*0.30`) to
+// match — that value predates all three corner-push rounds, tuned once for
+// an unrelated safe-box-luminance bleed regression (see this file's history
+// above), not for this. So the floor kept climbing toward a ceiling that was
+// never re-examined, and by round 3 (0.20 floor, 0.30 ceiling) EVERY upper-
+// band headline was forced into a 20-30% bleed band with no shallower option
+// — bbox-verified directly on st4 (planet, ~29% of its own height off the
+// top edge, plus box-shadow glow bleeding past the ~6px-from-edge left
+// margin cornerX already places it at — cornerX itself measured NOT to push
+// any box past the frame horizontally, so that's glow overflow at a tight
+// margin, not a second placement bug).
+//
+// Both numbers now share one named ceiling instead of drifting independently:
+// MAX_BLEED_FRAC caps how much of the headline's own real height (`h`, same
+// term the floor already uses post-2026-08-12's rotation fix) may bleed past
+// either frame edge — 16%, chosen so the object's own body stays clearly
+// majority on-screen (84%+) even at the deepest allowed draw, the line
+// between "artfully corner-tucked" and "amputated." MIN_BLEED_FRAC reverts to
+// 0.09 — the last value in this file's own history verified NOT to trip the
+// ink-share regression gate (0.12 did, at st4) — rather than inventing an
+// untested number. Both are well inside the spec's own 10%-35% bleed target
+// band (10% floor / 35% accidental-clip ceiling), just narrower than the
+// tuning loop's own uncapped drift had made it. Applies to both the upper
+// and lower band (the lower branch's old `H - h*0.70` was the same
+// unexamined +0.30h ceiling, mirrored here for the same reason, still with
+// no forced floor — no measured case for one, same as before).
+const MAX_BLEED_FRAC = 0.16
+const MIN_BLEED_FRAC = 0.09
+
 function bandY(engine, r, h, forceUpper, effH, skipMinBleed) {
   const eff = effH === undefined ? h : effH
   const H = engine.H, top = engine.SAFE.y * H, bot = (engine.SAFE.y + engine.SAFE.h) * H
@@ -159,7 +195,7 @@ function bandY(engine, r, h, forceUpper, effH, skipMinBleed) {
     // bleed term instead — `eff` still governs the safe-box clearance
     // above it, only the bleed fraction changes. Byte-identical for the
     // 9 non-rotating kinds (eff===h there already).
-    const maxY = top - margin - eff / 2, minY = -h * 0.30
+    const maxY = top - margin - eff / 2, minY = -h * MAX_BLEED_FRAC
     edgeEff = maxY <= minY ? maxY : minY + (maxY - minY) * r()
     // 2026-08-12 (round 2, Ben: st0 "move towards corner up more" — bbox-
     // measured directly: this seed's r() draw landed edgeEff=-5px, barely
@@ -195,7 +231,7 @@ function bandY(engine, r, h, forceUpper, effH, skipMinBleed) {
     // after this and accept/document any new ink-share fallout rather than
     // re-capping blind — see this session's pair-bridge removal for the
     // precedent (Ben's repeated aesthetic call over spec text).
-    if (!skipMinBleed) edgeEff = Math.min(edgeEff, -h * 0.20)
+    if (!skipMinBleed) edgeEff = Math.min(edgeEff, -h * MIN_BLEED_FRAC)
   } else {
     // Same range-narrowing fix, lower band — not reported, but it's the
     // identical formula shape with the identical inflation issue (h
@@ -205,7 +241,7 @@ function bandY(engine, r, h, forceUpper, effH, skipMinBleed) {
     // simpler `edgeEff >= -margin` the upper branch uses — no measured
     // failing case to size and verify that against, so left as the
     // lower-risk range fix only rather than guessing the clamp.
-    const minY = bot + margin - eff / 2, maxY = H - h * 0.70
+    const minY = bot + margin - eff / 2, maxY = H - h * (1 - MAX_BLEED_FRAC)
     edgeEff = minY >= maxY ? minY : minY + (maxY - minY) * r()
   }
   return edgeEff + eff / 2 - h / 2
