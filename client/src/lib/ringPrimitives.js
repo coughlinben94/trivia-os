@@ -362,7 +362,12 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       const lx = (w - lw) * r(), ly = (h - lh) * r()
       L.style.left = px(lx); L.style.top = px(ly)
       L.style.width = px(lw); L.style.height = px(lh)
-      L.style.background = `radial-gradient(ellipse ${E(56, fill).toFixed(0)}% ${E(44, fill).toFixed(0)}% at ${40 + r() * 20}% 50%,
+      // 2026-08-12 round 5: same hard-clip bug as l-disc/makeNebulaRing —
+      // E(56,fill)/E(44,fill) can reach their 100-cap (at fill close to
+      // 1), sizing the radius to the box's FULL dimension instead of its
+      // half, clipping the outer fade before it renders. Halved, same fix.
+      const lRadX = E(56, fill) / 2, lRadY = E(44, fill) / 2
+      L.style.background = `radial-gradient(ellipse ${lRadX.toFixed(0)}% ${lRadY.toFixed(0)}% at ${40 + r() * 20}% 50%,
         ${hsla(hue, 72, LB(62), AB(0.42, fill))} 0%, ${hsla(hue - 8, 64, LB(46), AB(0.20, fill))} 40%,
         ${hsla(hue - 14, 56, LB(30), AB(0.07, fill))} 66%, transparent ${E(82, fill).toFixed(0)}%)`
       const rot = -30 + r() * 60
@@ -387,26 +392,17 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // gradient's own visible radii (56%/44%, matching each lobe's own
     // `ellipse 56% 44%` gradient above), rotated with the dominant lobe.
     //
-    // 2026-08-12 round 4 (Ben, st3: "remove... the curved line assets
-    // behind it" — DOM/CSS-verified: `.b-rim`'s partial border (right/
-    // bottom sides transparent) plus this rotation is exactly what reads
-    // as a smooth curved arc drawn over the nebula, not a subtle contrast
-    // highlight). Gated off isHeadline only — `blob` is currently only
-    // used as a headline at st3, so this removes it there without
-    // touching the smaller, less prominent companion-scale `blob` uses
-    // elsewhere (untested for the same clutter complaint, so left alone).
-    if (isHeadline) {
-      // no-op: rim intentionally skipped for headline-scale blob.
-    } else {
-      const rim = el('b-rim')
-      const rw = (bx1 - bx0) * 0.56, rh = (by1 - by0) * 0.44
-      const rcx = (bx0 + bx1) / 2, rcy = (by0 + by1) / 2
-      rim.style.left = px(rcx - rw / 2); rim.style.top = px(rcy - rh / 2)
-      rim.style.width = px(rw); rim.style.height = px(rh)
-      rim.style.setProperty('--rim', hsla(hue + 6, 90, 82, 0.55))
-      rim.style.transform = `rotate(${domRot.toFixed(0)}deg)`
-      f.appendChild(rim)
-    }
+    // 2026-08-12 round 4 gated this off for headline-scale blob only
+    // (st3's own "remove the curved line" complaint). Round 5 removes it
+    // outright for companion scale too — Ben, repeated 5x, direct: "there
+    // is no fade out as you go further towards the edge... for the ones
+    // surrounding assets." A `border` is a solid CSS line; it cannot fade
+    // by construction regardless of how the underlying glow gradient is
+    // tuned, so as long as this rim exists ANY blob will keep reading as
+    // hard-edged. DOM-verified at st1's own companion (a `blob`) as the
+    // exact element still producing a visible circular outline after the
+    // l-disc/b-lobe gradient sizing fix below — the gradient fix alone
+    // wasn't enough while this coexisted with it.
   }
 
   else if (kind === 'nebulaCloud') {
@@ -668,7 +664,19 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     const dw = w * 0.85, dh = h * 0.85
     d.style.left = px(w * 0.5 - dw / 2); d.style.top = px(h * 0.5 - dh / 2)
     d.style.width = px(dw); d.style.height = px(dh)
-    d.style.background = `radial-gradient(ellipse ${E(62, fill).toFixed(0)}% ${E(62, fill).toFixed(0)}% at 50% 50%,
+    // 2026-08-12 round 5 (Ben, direct, repeated 5x: "there is no fade out
+    // as you go further towards the edge... for the ones surrounding
+    // assets" — DOM-measured on st0's companion: E(62,fill) reached its
+    // 100-cap here, so the radius sized to the box's FULL width/height
+    // instead of its half — the exact same makeNebulaRing hard-clip bug
+    // fixed earlier tonight, never applied here because this is a
+    // different gradient. Box edge landed at only 50% of the gradient's
+    // own scale, clipping the 72%/100% fade stops entirely — the visible
+    // edge shows whatever color sits at the 50% mark, cut off flat, no
+    // fade ever rendering. Halved so the box edge lands at the
+    // gradient's own 100% regardless of what E() returns.
+    const dRadius = E(62, fill) / 2
+    d.style.background = `radial-gradient(ellipse ${dRadius.toFixed(0)}% ${dRadius.toFixed(0)}% at 50% 50%,
       ${hsla(hue, 40, 46, A(boost ? 0.32 : 0.16, fill))} 0%, ${hsla(hue, 38, 40, A(boost ? 0.17 : 0.08, fill))} 38%,
       ${hsla(hue, 36, 32, A(boost ? 0.07 : 0.04, fill))} 72%, transparent 100%)`
     f.appendChild(d)
@@ -1458,9 +1466,21 @@ function drawPlanetDisc(el, container, size, hue, fill, lightDeg) {
   // Peak's own position/value is unchanged (still at +6%, still the
   // number the ablation gate's fill->E() relationship depends on per the
   // comment above) — only how it's approached changed.
+  // 2026-08-12 round 5 (Ben, direct, repeated: "there is no fade out as
+  // you go further towards the edge... for the ones surrounding assets").
+  // The outer half of this gradient was PEAK -> transparent in one
+  // 2-stop jump — mathematically a fade, but with no intermediate stops
+  // the alpha drop reads as sudden rather than gradual, same issue as
+  // makeNebulaRing's outer band. Two intermediate decay stops added
+  // between the peak and the final transparent edge.
   const glowPeak = hsla(hue + 10, 55, 72, A(0.55, fill))
   const glowHalf = hsla(hue + 10, 55, 72, A(0.28, fill))
-  glow.style.background = `radial-gradient(circle closest-side, transparent 0%, transparent ${glowInnerPct}%, ${glowHalf} ${(Number(glowInnerPct) + 3).toFixed(1)}%, ${glowPeak} ${(Number(glowInnerPct) + 6).toFixed(1)}%, transparent ${E(125, fill).toFixed(0)}%)`
+  const peakPct = Number(glowInnerPct) + 6, outerPct = E(125, fill)
+  const q1Pct = peakPct + (outerPct - peakPct) * 0.4
+  const q2Pct = peakPct + (outerPct - peakPct) * 0.72
+  glow.style.background = `radial-gradient(circle closest-side, transparent 0%, transparent ${glowInnerPct}%, ${glowHalf} ${(Number(glowInnerPct) + 3).toFixed(1)}%, ${glowPeak} ${peakPct.toFixed(1)}%,
+    ${hsla(hue + 10, 52, 60, A(0.22, fill))} ${q1Pct.toFixed(1)}%,
+    ${hsla(hue + 10, 48, 50, A(0.08, fill))} ${q2Pct.toFixed(1)}%, transparent ${outerPct.toFixed(0)}%)`
   container.appendChild(glow)
 
   const NS = 'http://www.w3.org/2000/svg'
@@ -1633,10 +1653,22 @@ function makeNebulaRing(el, w, h, hue, fill) {
   // here) lost the planet read entirely). Kept the round-4 ramp-up
   // smoothing (transparent -> half-bright -> peak, instead of a hard
   // jump) since that part WAS a real improvement Ben didn't object to.
+  // 2026-08-12 round 5 (Ben, direct: "there is no fade out as you go
+  // further towards the edge... for the ones surrounding assets" —
+  // repeated after round 4's ramp-up fix, which only addressed the
+  // INNER approach to the peak, not the OUTER fade past it. Measured:
+  // the old 66%->78%->92% outer fade only had ONE intermediate stop
+  // (0.34->0.16 alpha) before an abrupt final drop to transparent over
+  // just 14 points — reads as the color stopping, not fading. Spread
+  // over a much longer distance (66% all the way to 100%, the box's own
+  // edge) with three intermediate stops instead of one, so alpha
+  // decays continuously and visibly rather than holding then dropping.
   ring.style.background = `radial-gradient(ellipse 50% 50% at 50% 50%,
     transparent 0%, transparent 52%, ${hsla(hue + 14, 70, 68, A(0.17, fill))} 59%,
     ${hsla(hue + 14, 70, 68, A(0.34, fill))} 66%,
-    ${hsla(hue + 8, 62, 58, A(0.16, fill))} 78%, transparent 92%)`
+    ${hsla(hue + 10, 66, 62, A(0.20, fill))} 76%,
+    ${hsla(hue + 8, 62, 58, A(0.10, fill))} 86%,
+    ${hsla(hue + 8, 60, 55, A(0.04, fill))} 94%, transparent 100%)`
   return ring
 }
 

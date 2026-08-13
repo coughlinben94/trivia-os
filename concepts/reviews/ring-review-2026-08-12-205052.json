@@ -1,0 +1,137 @@
+{
+  "date": "2026-08-12",
+  "stamp": "2026-08-12-205052",
+  "stations": [
+    {
+      "index": 0,
+      "key": "ringed planet",
+      "prim": "ring",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786582241881h1iv0",
+          "station": 0,
+          "key": "ringed planet",
+          "prim": "ring",
+          "category": "other",
+          "note": "",
+          "bbox": [
+            0.12341772151898733,
+            0.6779623769338959,
+            0.022151898734177222,
+            0.039381153305203975
+          ],
+          "ts": 1786582241881
+        },
+        {
+          "id": "m1786582246489vujiu",
+          "station": 0,
+          "key": "ringed planet",
+          "prim": "ring",
+          "category": "other",
+          "note": "isnt fixed",
+          "bbox": [
+            0.03639240506329114,
+            0.6751494374120957,
+            0.13212025316455697,
+            0.22784810126582278
+          ],
+          "ts": 1786582246489
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "key": "spiral galaxy",
+      "prim": "lens",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786582251765acp7r",
+          "station": 1,
+          "key": "spiral galaxy",
+          "prim": "lens",
+          "category": "other",
+          "note": "isnt fixxed",
+          "bbox": [
+            0.6756329113924051,
+            0.5963871308016877,
+            0.2594936708860759,
+            0.4036128691983123
+          ],
+          "ts": 1786582251765
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "key": "star cluster",
+      "prim": "dots",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 3,
+      "key": "orange nebula",
+      "prim": "blob",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 4,
+      "key": "lit planet",
+      "prim": "planet",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 5,
+      "key": "pulsar",
+      "prim": "pulsar",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 6,
+      "key": "rose nebula",
+      "prim": "nebulaCloud",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 7,
+      "key": "comet",
+      "prim": "streak",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 8,
+      "key": "binary pair",
+      "prim": "binary",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 9,
+      "key": "asteroid field",
+      "prim": "asteroidField",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 10,
+      "key": "supernova",
+      "prim": "spikes",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 11,
+      "key": "aurora ribbon",
+      "prim": "ribbon",
+      "verdict": null,
+      "marks": []
+    }
+  ]
+}
