@@ -779,6 +779,28 @@ function buildLayerContent(host, L){
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0';
         wash.style.width = px(ENGINE.W); wash.style.height = px(ENGINE.H);
         wash.style.background = `linear-gradient(to top, ${hsla(150, 55, 20, 0.34)} 0%, ${hsla(150, 55, 20, 0.16)} 32%, transparent 58%)`;
+        // Ben (live review, 2026-08-12): "vertical art seams" at the 4->5 and
+        // 6->7 turns, showing up twice. Root cause: wash is a flat full-width
+        // rectangle with only a VERTICAL (to top) gradient — no horizontal
+        // fade at its own left/right edges. st4+st5 are adjacent and share
+        // the identical fixed color, so their shared internal boundary was
+        // already seamless (that's not what he saw) — the two hard cuts are
+        // this 2-station-wide block's own OUTER edges: full tint to none
+        // entering before st4, and none to full tint... err, full to none
+        // exiting after st5. Feather only the outer edges (mask-image, same
+        // technique as the maskSpots patches above) — skip the shared side
+        // entirely when a neighbor also has greenWash, so already-seamless
+        // multi-station runs stay exactly as seamless as before.
+        const prevWash = WORLD.stations[(i - 1 + ENGINE.PANES) % ENGINE.PANES].greenWash;
+        const nextWash = WORLD.stations[(i + 1) % ENGINE.PANES].greenWash;
+        if (!prevWash || !nextWash) {
+          const feather = 0.08;
+          const leftStop = prevWash ? '0%' : `${feather * 100}%`;
+          const rightStop = nextWash ? '100%' : `${(1 - feather) * 100}%`;
+          const edgeMask = `linear-gradient(to right, transparent 0%, black ${leftStop}, black ${rightStop}, transparent 100%)`;
+          wash.style.maskImage = edgeMask;
+          wash.style.webkitMaskImage = edgeMask;
+        }
         host.appendChild(wash); formTotal++;
       }
       if (st.ring){
