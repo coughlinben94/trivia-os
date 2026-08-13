@@ -246,12 +246,15 @@ function buildLayerContent(engine, world, arc, host, L) {
       // world-07-ring.html: ribbon's own visual "length" is this width, so
       // it gets a wider tier instead of the shared 576-880 range.
       const hw = st.prim === 'ribbon' ? lerp(760, 1100, rHeadline())
-        : lerp(576, 880, rHeadline()) * (st.prim === 'pulsar' ? 0.78 : 1)
+        // 2026-08-13: synced from world-07-ring.html — streak's visual
+        // length is its width (Ben, st7: "doesn't have a major asset").
+        : st.prim === 'streak' ? lerp(860, 1180, rHeadline())
+          : lerp(576, 880, rHeadline()) * (st.prim === 'pulsar' ? 0.78 : 1)
       const hh = st.prim === 'streak' ? hw * 0.30
         : st.prim === 'ribbon' ? hw * 0.34
           : hw * (0.62 + rHeadline() * 0.26)
       const alpha = lerp(0.34, 0.55, lou)
-      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, fill) // isHeadline: only per-station breathe (spec §8)
+      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, fill, st.variant) // isHeadline: only per-station breathe (spec §8); variant: per-station prim treatment (st3's dust ring)
       // 2026-08-12: synced from world-07-ring.html — this file was still on
       // the pre-corner-bias uniform draw ([0.08,0.98] of remaining travel
       // room, the very formula that measured mean centroid x=920 but still
@@ -353,17 +356,22 @@ function buildLayerContent(engine, world, arc, host, L) {
       // never depended on physical closeness, so companion now takes the
       // OPPOSITE corner from its headline — same treatment as the
       // occluder below.
-      const others = ['blob', 'dots', 'lens', 'streak'].filter(k => k !== st.prim)
-      const ck = others[Math.floor(rCompanion() * others.length)]
-      const cw = lerp(230, 420, rCompanion())
-      const ch = ck === 'streak' ? cw * 0.30 : cw * (0.60 + rCompanion() * 0.28)
-      const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, rCompanion()))
-      const comp = dom.makePrim(ck, cw, ch, compHue, lerp(0.30, 0.48, lou) * 0.8, rCompanion, false, fill)
-      const compLeft = dom.cornerX(rCompanion, cw, x0, !headlineCornerLeft)
-      const compTop = dom.bandY(rCompanion, ch, !pairUpper, dom.rotatedBandH(ck, cw, ch))
-      comp.style.left = px(compLeft)
-      comp.style.top = px(compTop)
-      host.appendChild(comp)
+      // noCompanion (st5 pulsar, 2026-08-13): synced from world-07-ring.html
+      // — see that file's identical comment for the full reasoning (round-6
+      // mis-marked this station's own companion as neighbor bleed).
+      if (!st.noCompanion) {
+        const others = ['blob', 'dots', 'lens', 'streak'].filter(k => k !== st.prim)
+        const ck = others[Math.floor(rCompanion() * others.length)]
+        const cw = lerp(230, 420, rCompanion())
+        const ch = ck === 'streak' ? cw * 0.30 : cw * (0.60 + rCompanion() * 0.28)
+        const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, rCompanion()))
+        const comp = dom.makePrim(ck, cw, ch, compHue, lerp(0.30, 0.48, lou) * 0.8, rCompanion, false, fill)
+        const compLeft = dom.cornerX(rCompanion, cw, x0, !headlineCornerLeft)
+        const compTop = dom.bandY(rCompanion, ch, !pairUpper, dom.rotatedBandH(ck, cw, ch))
+        comp.style.left = px(compLeft)
+        comp.style.top = px(compTop)
+        host.appendChild(comp)
+      }
 
       // Pair-bridge connector: synced from world-07-ring.html, then
       // REMOVED OUTRIGHT there in the same pass — see that file's own

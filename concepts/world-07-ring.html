@@ -356,23 +356,23 @@ const WORLD = {
   // deletion stopgap, now replaced by asteroid field / supernova's old
   // slot). st0/st3's orange+rose nebula were a deliberate duplicate
   // (`blob` both), left for "next round" per Ben's call — that round is
-  // this one: st3 kept `blob` (2026-08-12 first tried adding makeNebulaRing
-  // around it — see that function's own header — but "still three circles"
-  // persisted 2026-08-12 AND 2026-08-13; 2026-08-13 fix removed the ring
-  // layer and merged the core into blob's own dominant lobe instead — see
-  // makePrim's `blob`/isHeadline branch), st6 moved to its own
-  // `nebulaCloud` kind (2026-08-12, full asymmetric-silhouette
-  // reconstruction — see that branch's own comment in ringPrimitives.js) —
-  // no longer the same recipe.
+  // this one: st6 moved to its own `nebulaCloud` kind (2026-08-12, full
+  // asymmetric-silhouette reconstruction — see that branch's own comment
+  // in ringPrimitives.js). st3 cycled through blob-tuning, blob+
+  // makeNebulaRing, and core-merged-into-lobe across 2026-08-12/13 —
+  // every version failed the same "three circles"/"coffee stain" read —
+  // and was finally rebuilt 2026-08-13 as 'amber planet' on the `ring`
+  // kind with variant:'dust' (see its own entry comment below, including
+  // the flagged radial-mass spacing tradeoff).
   stations: [
     { key:'ringed planet',  prim:'ring',         hue:256, accent:false, maskSpots:[[0.24050632911392406,0.11818741209563996,0.04984177215189872,0.09282700421940926]] }, // was st9 — radial mass
     { key:'spiral galaxy',  prim:'lens',         hue:170, accent:false }, // was st3 — spiral/disc; hue 276->170 2026-08-12, Ben "still hate the oval purple color" after 2 rounds of shape/brightness fixes — st0/st1/st2 were 3 near-identical purples in a row (256/276/268), moved to green-teal
     { key:'star cluster',   prim:'dots',         hue:268, accent:false, maskSpots:[[0.33781645569620256,0.14912974683544306,0.055379746835443,0.09142053445850912],[0.6637658227848102,0.16319444444444445,0.06645569620253144,0.14064697609001406]] }, // was st1 — scattered cluster
-    { key:'orange nebula',  prim:'blob',         hue:28,  accent:true, maskSpots:[[0.10126582278481013,0.15897503516174402,0.03955696202531646,0.08860759493670886],[0.4216772151898734,0.19413677918424754,0.05221518987341778,0.0956399437412096]] }, // was st0 — diffuse cloud; `ring:true` (makeNebulaRing donut layer) removed 2026-08-13, Ben repeated 2026-08-12 AND 2026-08-13: "still three circles, only need one" — three separately-drawn circular elements (this ring donut, blob's own s-core white-ball, blob's lobe cluster) never merged into one nebula no matter how each was tuned. See makePrim's `blob`/isHeadline branch in ringPrimitives.js for the actual fix (core merged into the dominant lobe's own gradient instead of a separate element).
+    { key:'amber planet',   prim:'ring',         variant:'dust', hue:28,  accent:true, maskSpots:[[0.10126582278481013,0.15897503516174402,0.03955696202531646,0.08860759493670886],[0.4216772151898734,0.19413677918424754,0.05221518987341778,0.0956399437412096]] }, // was st0, was 'orange nebula'/blob+ring:true — rebuilt 2026-08-13 (Ben: "that saturn like planet needs a reworking... take inspiration from the other planets that weve already shipped"). Every blob-era construction (3 lobes, s-core ball, makeNebulaRing donut) failed the same "three circles"/"coffee stain" critique repeatedly; now uses the SAME `ring` anatomy Ben praised at st0 (drawPlanetDisc body + back/front ring halves) with variant:'dust' — a wide soft gold band, not st0's thin crisp stroke — see makePrim's `ring` branch. KNOWN TRADEOFF, flagged not hidden: radial-mass family was {0,4,8} (all >=3 apart); st3 joining it puts st3-st4 at distance 1 — Ben's explicit ask for a Saturn-like planet here overrode the spacing rule, his call to revisit.
     { key:'lit planet',     prim:'planet',       hue:140, accent:false, greenWash:true }, // NEW — radial mass; greenWash 2026-08-12 (Ben: "green on bottom half of two slides")
-    { key:'pulsar',         prim:'pulsar',       hue:120, accent:false, greenWash:true, maskSpots:[[0.4865506329113924,0.8622099156118144,0.060126582278480944,0.1040787623066104],[0.8528481012658229,0.6765559071729957,0.087025316455696,0.18706047819971872]] }, // NEW — radiant burst; greenWash 2026-08-12 (same)
+    { key:'pulsar',         prim:'pulsar',       hue:120, accent:false, greenWash:true, noCompanion:true }, // NEW — radiant burst; greenWash 2026-08-12 (same); maskSpots removed 2026-08-13 — both were this station's own companion/detail-speck content, not neighbor bleed (round-6 misdiagnosed); noCompanion added instead, see the companion block's own comment
     { key:'rose nebula',    prim:'nebulaCloud',  hue:330, accent:true, cornerLeft:false }, // was st8 — asymmetric cloud, 2026-08-12; cornerLeft:false 2026-08-12 (Ben: "needs to be on other bottom corner" — was landing bottom-left, forced bottom-right)
-    { key:'comet',          prim:'streak',       hue:208, accent:false, maskSpots:[[0.5957278481012659,0.13787798874824192,0.04509493670886067,0.07876230661040787]] }, // was st4 — elongated streak
+    { key:'comet',          prim:'streak',       hue:208, accent:false, cornerLeft:false, maskSpots:[[0.5957278481012659,0.13787798874824192,0.04509493670886067,0.07876230661040787]] }, // was st4 — elongated streak; cornerLeft:false 2026-08-13 — the redesigned streak draws more seeded points (ion tail), which reordered this station's corner draw toward frame-center; a comet head near center risks the safe box, and Ben's standing rule is corners
     { key:'binary pair',    prim:'binary',       hue:214, accent:false }, // was st7 — radial mass
     { key:'asteroid field', prim:'asteroidField',hue:160, accent:false, fillCorner:true }, // NEW — scattered cluster; fillCorner 2026-08-12 (Ben: "need something here" on the bottom-left, which the spanning-field's own headline — centered on the st9/st10 boundary — never reaches)
     { key:'supernova',      prim:'spikes',       hue:36,  accent:true }, // was st2 — radiant burst; noWash flag removed 2026-08-13 — the far-layer wash loop it opted out of is gone entirely now (see buildLayerContent's far-layer removal note), so the flag had nothing left to read
@@ -624,13 +624,18 @@ function buildLayerContent(host, L){
                // width — widened beyond the shared 576-880 tier instead of
                // stretching hh (which would just make it thicker).
                : st.prim === 'ribbon' ? lerp(760, 1100, rHeadline())
+               // 2026-08-13 round 2 (Ben, st7: "doesn't have a major
+               // asset"): streak's visual length IS its width, same logic
+               // as ribbon's own tier above — widened so the comet spans a
+               // real diagonal sweep instead of a corner accent.
+               : st.prim === 'streak' ? lerp(860, 1180, rHeadline())
                : lerp(576, 880, rHeadline());
       const hh = st.prim === 'streak' ? hw*0.30
                : st.prim === 'ribbon' ? hw*0.34
                : isSpanningField ? hw*0.42
                : hw*(0.62 + rHeadline()*0.26);
       const alpha = lerp(0.34, 0.55, lou);
-      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, sfill); // isHeadline: only per-station breathe (spec §8)
+      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, sfill, st.variant); // isHeadline: only per-station breathe (spec §8); variant: per-station prim treatment (st3's dust ring)
       /* History: was lerp(0.06,0.44,r()), then a uniform lerp(0.08,0.98,r())
          across nearly the full frame width — measured mean centroid x = 920
          against a frame center of 960 (spec §2 appendix #2's 960±96 gate).
@@ -806,17 +811,31 @@ function buildLayerContent(host, L){
          OPPOSITE corner from its headline, same treatment as the occluder
          a few fixes up (cornerX + forced-opposite band), instead of
          orbiting the headline's own centroid. */
-      const others = ['blob','dots','lens','streak'].filter(k => k !== st.prim);
-      const ck = others[Math.floor(rCompanion()*others.length)];
-      const cw = lerp(230, 420, rCompanion());
-      const ch = ck === 'streak' ? cw*0.30 : cw*(0.60 + rCompanion()*0.28);
-      const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, rCompanion()));
-      const comp = dom.makePrim(ck, cw, ch, compHue, lerp(0.30, 0.48, lou)*0.8, rCompanion, false, sfill);
-      const compLeft = dom.cornerX(rCompanion, cw, x0, !headlineCornerLeft);
-      const compTop = dom.bandY(rCompanion, ch, !pairUpper, dom.rotatedBandH(ck, cw, ch));
-      comp.style.left = px(compLeft);
-      comp.style.top  = px(compTop);
-      host.appendChild(comp); formTotal++;
+      // noCompanion (st5 pulsar, 2026-08-13): Ben flagged this station's
+      // companion twice — round-6 mis-marked it as neighbor-headline bleed
+      // ("remove planet") and masked it; masking never visibly worked
+      // (confirmed live, "still a background circle" today), and DOM-
+      // tracing just found why — it was never bleed, it's this station's
+      // OWN companion (`left` offset lands inside st5's own x0..x0+W slot).
+      // Masking a same-layer, same-station object was always solving the
+      // wrong problem. Skipped outright rather than re-masked — same
+      // opt-out pattern as the (now-removed) `noWash` flag elsewhere in this
+      // file, and it costs nothing else: rCompanion is its own seeded
+      // stream (not shared with any other property), so skipping its draws
+      // here doesn't reshuffle anything else at this or any other station.
+      if (!st.noCompanion) {
+        const others = ['blob','dots','lens','streak'].filter(k => k !== st.prim);
+        const ck = others[Math.floor(rCompanion()*others.length)];
+        const cw = lerp(230, 420, rCompanion());
+        const ch = ck === 'streak' ? cw*0.30 : cw*(0.60 + rCompanion()*0.28);
+        const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, rCompanion()));
+        const comp = dom.makePrim(ck, cw, ch, compHue, lerp(0.30, 0.48, lou)*0.8, rCompanion, false, sfill);
+        const compLeft = dom.cornerX(rCompanion, cw, x0, !headlineCornerLeft);
+        const compTop = dom.bandY(rCompanion, ch, !pairUpper, dom.rotatedBandH(ck, cw, ch));
+        comp.style.left = px(compLeft);
+        comp.style.top  = px(compTop);
+        host.appendChild(comp); formTotal++;
+      }
 
       // Pair-bridge connector: built, tuned (three rounds — accent-only
       // scoping, alpha dial-backs), then REMOVED OUTRIGHT here, 2026-08-12.
@@ -936,12 +955,20 @@ function buildLayerContent(host, L){
         // standard workaround for that Chromium interaction. mask-image
         // composites the wrapper's fully-rendered contents (blurred child
         // included) as one unit, instead of trying to feather the blur's own
-        // sampling clip. Padding also widened (15% -> 45%) and the alpha
-        // curve's opaque plateau shortened (55% -> 30%) so the fade has room
-        // to reach near-zero opacity well before the box's outer edge, where
-        // Fable-5's "clip line"/"right-angle notch" findings showed the old,
-        // tighter curve was still visibly non-transparent.
-        const padX = mw * 0.45, padY = mh * 0.45;
+        // sampling clip.
+        //
+        // 2026-08-13: Ben, live on the real render, st5: "still a background
+        // circle" — bbox coordinates were copied from his review-tool click
+        // point, which marks where the complaint is WORST, not the object's
+        // full extent. DOM-measured the actual source at that spot: a
+        // 269x210px `d-glow` — 60-80% bigger than the padded box this mask
+        // used to draw (317x384 outer, but only the inner ~30%-radius —
+        // roughly 95px — was fully blurred, the rest just a feather over
+        // still-sharp content). Padding widened 45%->75% and the opaque
+        // plateau widened 30%->55% so most of a same-order-of-magnitude
+        // object actually sits inside the fully-blurred zone instead of the
+        // thin feather ring around it.
+        const padX = mw * 0.75, padY = mh * 0.75;
         const mw2 = mw + padX * 2, mh2 = mh + padY * 2;
         const wrapper = dom.el('');
         wrapper.style.position = 'absolute';
@@ -951,14 +978,14 @@ function buildLayerContent(host, L){
         wrapper.style.height = px(mh2 * ENGINE.H);
         wrapper.style.overflow = 'hidden';
         const alphaCurve = `radial-gradient(ellipse 70% 70% at 50% 50%,
-          black 0%, black 30%, transparent 100%)`;
+          black 0%, black 55%, transparent 100%)`;
         wrapper.style.maskImage = alphaCurve;
         wrapper.style.webkitMaskImage = alphaCurve;
 
-        // Blur strength stays tied to the actual flagged object's own size
-        // (mw/mh, pre-padding), not the padded wrapper box, so widening the
-        // padding above doesn't also blow up how aggressively it defocuses.
-        const blurPx = Math.round(Math.min(mw * ENGINE.W, mh * ENGINE.H) * 0.4);
+        // Blur strength scales off the PADDED box now, not the original
+        // small annotation box — the whole point of the wider padding above
+        // is to reach real object sizes the click-point bbox never captured.
+        const blurPx = Math.round(Math.min(mw2 * ENGINE.W, mh2 * ENGINE.H) * 0.35);
         const blurred = dom.el('');
         blurred.style.position = 'absolute';
         blurred.style.inset = '0';

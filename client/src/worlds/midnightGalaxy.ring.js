@@ -64,11 +64,11 @@ export const midnightGalaxyRing = {
     { key: 'ringed planet', prim: 'ring', hue: 256, accent: false }, // was st9 — radial mass
     { key: 'spiral galaxy', prim: 'lens', hue: 170, accent: false }, // was st3 — spiral/disc; hue 276->170 2026-08-12, synced from world-07-ring.html (Ben: "still hate the oval purple color")
     { key: 'star cluster', prim: 'dots', hue: 268, accent: false }, // was st1 — scattered cluster
-    { key: 'orange nebula', prim: 'blob', hue: 28, accent: true, ring: true }, // was st0 — diffuse cloud, "needs a ring around it" 2026-08-12
+    { key: 'amber planet', prim: 'ring', variant: 'dust', hue: 28, accent: true }, // was st0, was 'orange nebula'/blob+ring:true — rebuilt 2026-08-13 as a dust-ringed planet on st0's `ring` anatomy (Ben: "that saturn like planet needs a reworking"); synced from world-07-ring.html, see that file's st3 comment for the family-spacing tradeoff flag
     { key: 'lit planet', prim: 'planet', hue: 140, accent: false, greenWash: true }, // NEW — radial mass; greenWash synced from world-07-ring.html (Ben: "green on bottom half of two slides")
-    { key: 'pulsar', prim: 'pulsar', hue: 120, accent: false, greenWash: true }, // NEW — radiant burst; greenWash (same)
+    { key: 'pulsar', prim: 'pulsar', hue: 120, accent: false, greenWash: true, noCompanion: true }, // NEW — radiant burst; greenWash (same); noCompanion 2026-08-13 (Ben: "still a background circle" — this station's own companion, mis-marked as bleed by round-6, see world-07-ring.html's identical comment)
     { key: 'rose nebula', prim: 'nebulaCloud', hue: 330, accent: true, cornerLeft: false }, // was st8 — asymmetric cloud, 2026-08-12; cornerLeft:false synced from world-07-ring.html (Ben: "needs to be on other bottom corner")
-    { key: 'comet', prim: 'streak', hue: 208, accent: false }, // was st4 — elongated streak
+    { key: 'comet', prim: 'streak', hue: 208, accent: false, cornerLeft: false }, // was st4 — elongated streak; cornerLeft:false 2026-08-13, synced from world-07-ring.html (redesigned streak reorders the corner draw; comet pinned to the right corner)
     { key: 'binary pair', prim: 'binary', hue: 214, accent: false }, // was st7 — radial mass
     { key: 'asteroid field', prim: 'asteroidField', hue: 160, accent: false, fillCorner: true }, // NEW — scattered cluster; fillCorner synced from world-07-ring.html (Ben: "need something here" on the bottom-left)
     { key: 'supernova', prim: 'spikes', hue: 36, accent: true }, // was st2 — radiant burst; noWash flag removed 2026-08-13, synced from world-07-ring.html — the far-layer wash loop it opted out of is gone entirely now

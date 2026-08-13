@@ -354,7 +354,7 @@ function closedSilhouettePath(topPts, botPts) {
   return `${smoothEdgePath(topPts)} L ${botPts[0].x.toFixed(1)} ${botPts[0].y.toFixed(1)} ${smoothEdgePath(botPts).slice(1)} Z`
 }
 
-function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
+function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
   // required, no default: a silent `fill = 1` here is exactly how the same
   // dropped-parameter bug got shipped 3 separate times (fillOf never wired
   // into the far-anchor call, makePrim itself defaulting fill away when a
@@ -760,6 +760,15 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     f.appendChild(c)
   }
 
+  // 2026-08-13: reverted to the pre-redesign build (same-day) — the
+  // continuous-ribbon rework fixed the discrete-bead "gumball caterpillar"
+  // complaint but introduced a worse one: a hard diagonal clip-cut through
+  // the arms near the core, reading as a corporate logo rather than a
+  // galaxy. Ben, live on the real render: "so wrong... it was right"
+  // before this redesign. Reverting rather than re-tuning the new
+  // construction — the clip-cut is a real geometry defect (confirmed under
+  // brightness boost, not a rendering artifact), not a parameter this
+  // branch's own knobs can fix. Needs a fresh attempt, not a patch.
   else if (kind === 'lens') {
     // was a full inset:0 ellipse spanning the ENTIRE headline box - the
     // literal "flattened ellipse disc" this fix exists to move away from
@@ -824,189 +833,21 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       ${hsla(hue, 40, 46, A(boost ? 0.32 : 0.16, fill))} 0%, ${hsla(hue, 38, 40, A(boost ? 0.17 : 0.08, fill))} 38%,
       ${hsla(hue, 36, 32, A(boost ? 0.07 : 0.04, fill))} 72%, transparent 100%)`
     f.appendChild(d)
-    // spiral arms.
+    // spiral arms: this used to be a straight dust lane across a flattened
+    // disc, which fill-black-silhouettes indistinguishable from `ring`'s
+    // actual hollow ellipse - two nouns, one silhouette. A true curve isn't
+    // in this vocabulary (no path/bezier primitive) - two rotated straight
+    // ellipses were tried first and rendered as a sharp V/boomerang, not a
+    // spiral (confirmed on an isolated render, not assumed). Reused the
+    // technique `blob` already uses to fake an irregular cloud from
+    // circular primitives instead: each arm is 5 soft lobes stepped along a
+    // logarithmic spiral (radius grows, angle advances, size shrinks) out
+    // from the core - a real curve made of overlapping circles, the same
+    // way blob fakes an irregular silhouette from three overlapping
+    // ellipses.
     const cx = w * 0.5, cy = h * 0.5
     const baseAng = r() * Math.PI * 2
-
-    if (isHeadline) {
-    // 2026-08-13 (fresh customer-role critique, "a chain of ~20 shiny teal
-    // marbles in an S-curve, each with its own specular highlight — a
-    // caterpillar made of gumballs," named worst-looking station on the
-    // ring): the discrete-lobe construction below (kept, unchanged, for the
-    // companion/non-headline use of this same `lens` kind at st2-5 — see
-    // `boost` above, this is a genuine one-station rework, not a global
-    // rewrite of `lens`, same discipline `nebulaCloud` used to avoid
-    // re-risking `blob`/st3 while fixing st6) is replaced HERE, headline-
-    // only, with one continuous filled ribbon per arm instead of ~10
-    // separate radial-gradient circles. Root cause of the "marbles" read:
-    // each `l-arm` lobe is its own closed radial gradient (bright center,
-    // transparent falloff) with no shared blend between neighbours — the
-    // §6.2 touching-but-distinct spacing (kept below, untouched, for the
-    // companion path — that's a cited spec band, not this file's to move)
-    // exists precisely so lobes stay individually countable, which is
-    // correct for other uses of the same trick (`blob`) but is exactly what
-    // reads as "beads" on a headline meant to be one continuous dust lane.
-    // No blur filter (this file avoids them — FAILURE-LEDGER #14, a blur
-    // wider than ~1/4 of an element deletes it outright); the blend comes
-    // from the ribbon being one shape with one lengthwise gradient, the same
-    // "smooth curve from a filled silhouette, not a traced line" lesson
-    // `ribbon`'s own st11 rebuild already learned (a 1-D line/chain of dots
-    // can't read as a 2-D band; it has to be the outline of a filled shape).
-    const NS = 'http://www.w3.org/2000/svg'
-    const svg = document.createElementNS(NS, 'svg')
-    svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
-    svg.style.position = 'absolute'; svg.style.inset = '0'
-    svg.style.width = '100%'; svg.style.height = '100%'
-    const defs = document.createElementNS(NS, 'defs')
-    svg.appendChild(defs)
-    const maxRad = w * (0.30 + r() * 0.08)
-    const r0 = maxRad * 0.12
-    const pitch = 1.15 + r() * 0.35 // ln(maxRad/r0) ~= 2.12 -> ~140-182deg sweep/arm
-    const M = 26 // centreline samples — a curve, not discrete beads, so this can be much finer than the old 10-lobe count
-    const smoothEdge = (pts) => {
-      let dd = `${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`
-      for (let k = 1; k < pts.length; k++) {
-        const p = pts[k], np = pts[k + 1] || pts[k]
-        dd += ` Q ${p.x.toFixed(1)} ${p.y.toFixed(1)} ${((p.x + np.x) / 2).toFixed(1)} ${((p.y + np.y) / 2).toFixed(1)}`
-      }
-      return dd
-    }
-    ;[0, Math.PI].forEach((phase, ai) => {
-      const pts = []
-      for (let k = 0; k < M; k++) {
-        const t = k / (M - 1)
-        // same radial/angular distribution the old lobe placement used —
-        // this rework changes HOW the arm is painted, not the underlying
-        // spiral shape already verified to read as a pinwheel/S-curve.
-        const rad = maxRad * (0.12 + 0.88 * Math.pow(t, 0.9))
-        const ang = baseAng + phase + pitch * Math.log(rad / r0)
-        pts.push({ x: cx + Math.cos(ang) * rad, y: cy + Math.sin(ang) * rad * (h / w), t })
-      }
-      // local unit tangent/perpendicular per point, computed once and
-      // shared by every nested layer below (so the layers stay concentric
-      // instead of drifting relative to each other).
-      const norm = pts.map((p, k) => {
-        const p0 = pts[Math.max(0, k - 1)], p1 = pts[Math.min(M - 1, k + 1)]
-        const tx = p1.x - p0.x, ty = p1.y - p0.y
-        const tl = Math.hypot(tx, ty) || 1
-        return { nx: -ty / tl, ny: tx / tl }
-      })
-      // ONE shared, low-frequency undulation (not one jitter per layer, and
-      // NOT one r() draw per point — an earlier version of this line called
-      // r() inside the .map() below, one draw per centerline sample: it
-      // both defeated the "smooth, gentle" intent (a fresh random phase
-      // every ~1/26th of the arc is noise, not a wave) and silently burned
-      // 26x more of the shared seeded-RNG stream per arm than intended.
-      // One draw here, reused as a shared phase for every point) so nested
-      // layers ripple together, not against each other — gentle (a couple
-      // of soft bulges along the whole arm) rather than the higher-
-      // frequency version that shipped first and DOM-rendered as a
-      // scalloped/toothed hard edge ("puzzle piece," own critique before
-      // committing this) instead of a soft dust lane.
-      const wobblePhase = r() * 4
-      const wobble = pts.map(p => 1 + 0.10 * Math.sin(p.t * 3.1 + ai * 1.7 + wobblePhase))
-      // Cross-section softness (a real dust lane's brightness falls off
-      // toward BOTH silhouette edges, not just along its length) can't come
-      // from a single flat-fill path — a vector path edge is always crisp,
-      // and this file avoids blur filters (FAILURE-LEDGER #14). Same
-      // poor-man's-feather trick `l-disc` above and every radial-gradient
-      // primitive in this file already uses (concentric stops, narrower ==
-      // brighter): 4 nested copies of the SAME centerline/tangent/wobble,
-      // at shrinking half-width fractions and rising peak alpha, each with
-      // its own core-to-tip lengthwise fade. Outer-to-inner reads as one
-      // soft-edged glowing band, not 4 visible rings, because each layer's
-      // OWN gradient already fades toward 0 well before the next layer's
-      // edge.
-      // 2026-08-13, measured (not guessed): the first version of this
-      // rework (hwMax=0.062) pushed st1's own [ADVISORY, non-blocking]
-      // bleed check from 28.0% (pre-rework, in-band) to 35.3% — just over
-      // the spec's 35% "accidental clip" ceiling (ART-DIRECTION-SPEC.md
-      // §2). Trimming hwMax to 0.050 here did NOT move that number at all
-      // (still 35.3%, re-verified) — the real cause, found only after
-      // re-checking rather than assuming the first guess was right: this
-      // whole construction now calls the shared seeded `r()` far fewer
-      // times than the old lobe-loop did (~6 vs ~26, once the wobblePhase
-      // fix below stopped drawing r() per-point), which shifts every
-      // r()-consuming decision downstream in the SAME render pass — including
-      // bandY's own corner/edge draw for st1 itself. Confirmed directly:
-      // after that fix, st1 relocated to a different corner and bleed moved
-      // AGAIN, to 45.8%, in the opposite direction from what trimming hwMax
-      // was trying to achieve. This is a known, reported side effect of
-      // reworking this primitive's internals, not something this task
-      // chases further — bandY/corner placement is separately flagged
-      // (HANDOFF-ring-2026-08-12.md) as already mid-tuning by a concurrent
-      // session, and every primitive rework in this file's own history has
-      // shifted downstream r() consumption the same way without anyone
-      // padding the call count to compensate. hwMax is left at the smaller,
-      // measured-safer value regardless, since it's still the right call on
-      // its own terms (the object's real footprint, independent of bleed).
-      const hwMax = w * 0.050, hwMin = w * 0.014
-      // alphas nudged up from the first pass to compensate for the
-      // narrower hwMax above (less area -> less "ink" unless brightness
-      // rises to offset it) — still well short of every stop clamping to
-      // opaque, so the nested-layer softness is unchanged, just a bit
-      // punchier overall.
-      const layers = [
-        { frac: 1.00, a0: 0.18, aMid: 0.09, l0: 60 },
-        { frac: 0.72, a0: 0.30, aMid: 0.15, l0: 66 },
-        { frac: 0.46, a0: 0.48, aMid: 0.24, l0: 74 },
-        { frac: 0.22, a0: 0.68, aMid: 0.34, l0: 86 },
-      ]
-      layers.forEach(({ frac, a0, aMid, l0 }, li) => {
-        const outer = [], inner = []
-        for (let k = 0; k < M; k++) {
-          const hw = (hwMax * Math.pow(1 - pts[k].t, 0.6) + hwMin) * frac * wobble[k]
-          const { nx, ny } = norm[k]
-          outer.push({ x: pts[k].x + nx * hw, y: pts[k].y + ny * hw })
-          inner.push({ x: pts[k].x - nx * hw, y: pts[k].y - ny * hw })
-        }
-        let d = `M ${smoothEdge(outer)}`
-        d += ` L ${inner[M - 1].x.toFixed(1)} ${inner[M - 1].y.toFixed(1)}`
-        d += ` ${smoothEdge(inner.slice().reverse())} Z`
-        // lengthwise gradient (core-bright to tip-faint), userSpaceOnUse so
-        // it runs along the arm's own real axis rather than its local bbox
-        // — same technique `ribbon`'s curtain gradient already uses for the
-        // same reason.
-        const gradId = `spiralArmGrad${occCounter++}`
-        const grad = document.createElementNS(NS, 'linearGradient')
-        grad.setAttribute('id', gradId)
-        grad.setAttribute('gradientUnits', 'userSpaceOnUse')
-        grad.setAttribute('x1', pts[0].x.toFixed(1)); grad.setAttribute('y1', pts[0].y.toFixed(1))
-        grad.setAttribute('x2', pts[M - 1].x.toFixed(1)); grad.setAttribute('y2', pts[M - 1].y.toFixed(1))
-        const stops = [
-          [0, hsla(hue + ai * 6, 60 - li * 4, l0, A(a0, fill))],
-          [40, hsla(hue, 54, l0 - 10, A(aMid, fill))],
-          [100, hsla(hue, 46, l0 - 20, 0)],
-        ]
-        stops.forEach(([off, col]) => {
-          const st = document.createElementNS(NS, 'stop')
-          st.setAttribute('offset', `${off}%`); st.setAttribute('stop-color', col)
-          grad.appendChild(st)
-        })
-        defs.appendChild(grad)
-        const path = document.createElementNS(NS, 'path')
-        path.setAttribute('d', d)
-        path.setAttribute('fill', `url(#${gradId})`)
-        svg.appendChild(path)
-      })
-    })
-    f.appendChild(svg)
-    // 2026-08-11: size 0.036->0.052, glow alpha 0.45->0.75 — the nucleus
-    // the arms wind around needs to read as unmistakably the brightest
-    // point in the primitive, not a faint dot lost among the arm lobes.
-    // isHeadline-gated, same as the rest of this kind's boost.
-    const c = el('l-core')
-    const cs = Math.max(14, w * (boost ? 0.052 : 0.036))
-    c.style.width = c.style.height = px(cs)
-    c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
-    c.style.boxShadow = `0 0 ${px(cs * 2.6)} ${px(cs * 0.7)} ${hsla(hue, 70, boost ? 85 : 80, A(boost ? 0.75 : 0.45, fill))}`
-    f.appendChild(c)
-    f.style.transform = `rotate(${(-30 + r() * 24).toFixed(0)}deg)`
-  } else {
-    // companion-scale `lens` (st2-5 background dressing): ORIGINAL
-    // discrete-lobe construction, untouched by the 2026-08-13 headline
-    // rework above — this kind is shared, and the companion use was never
-    // the complaint (only st1's headline was named).
+    let domEdge = null, domEdgeArea = -1
     // touching-but-distinct band: consecutive lobes' centre-distance /
     // mean-diameter must land in ~0.7-1.05 (spec §6.2 silhouette test) -
     // measured, overlapping enough to read as one continuous curved band,
@@ -1022,7 +863,6 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // ratio - the size follows the geometry instead of fighting it.
     // Verified over 30 seed x aspect-ratio combinations (see PR notes):
     // ratio band [0.71, 0.97], inside 0.7-1.05 throughout.
-    let domEdge = null, domEdgeArea = -1
     const ARM_TARGET_RATIO = 0.85 // midpoint of the required 0.7-1.05 band
     ;[0, Math.PI].forEach((phase, ai) => {
       // 6 lobes stepped along a TRUE logarithmic spiral (angle grows with
@@ -1137,7 +977,6 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     c.style.boxShadow = `0 0 ${px(cs * 2.6)} ${px(cs * 0.7)} ${hsla(hue, 70, boost ? 85 : 80, A(boost ? 0.75 : 0.45, fill))}`
     f.appendChild(c)
     f.style.transform = `rotate(${(-30 + r() * 24).toFixed(0)}deg)`
-    }
   }
 
   else if (kind === 'streak') {
@@ -1158,30 +997,46 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // wedge. Opacity still fades along the same axis via the gradient fill,
     // same stops as the old background-gradient — width and brightness now
     // taper together instead of only the latter.
+    // 2026-08-13 round 2 (Ben: st7 "doesn't have a major asset — make them
+    // bigger/more prominent, redesign like st3"). Rendered first: the head
+    // sat at the box's own right edge (.k-head right:-4px) and cornerX
+    // parks that edge 2-12px from the FRAME edge — half the head and most
+    // of its glow were literally cropped off-frame; the tail read as one
+    // faint straight line. Three real changes, not a size multiplier:
+    //  - head/coma pulled fully INSIDE the box (headCx inset by its own
+    //    diameter) so the brightest element is never amputated by the
+    //    corner-hugging placement every headline shares.
+    //  - dust tail widened + brightened and given a gentle droop curve
+    //    (a dead-straight wedge was half of what read as a stick), and a
+    //    second thinner ION tail added, diverging upward from the same
+    //    head — the two-diverging-tails silhouette is THE comet signature
+    //    and no single-streak recipe can produce it. Both tails reuse the
+    //    same closedSilhouettePath machinery this branch already
+    //    validated today.
+    //  - coma layered (outer envelope + inner bright coma, swept slightly
+    //    tailward) instead of one flat radial.
     const N = 8
-    // tailH: max thickness, at the head end — same formula as before (box's
-    // own paint-grows-inside-unchanged-box budget, untouched).
-    const tailH = Math.max(6, h * 0.14 * EXTENT_GAIN * fill)
-    // tipH: thickness at the far end — never fully zero (a hairline is still
-    // a shape; a literal point invites degenerate-path edge cases in the
-    // smoother for no visual gain).
+    const tailH = Math.max(6, h * 0.20 * EXTENT_GAIN * fill)
     const tipH = Math.max(1.5, tailH * 0.14)
+    const hs = Math.max(20, h * 0.36)
+    const headCx = w - hs * 1.15
+    const tailEnd = headCx - hs * 0.1
     // t in [0,1]: 0 = far end (thin), 1 = head end (thick). Power >1 keeps
-    // most of the length narrow, flaring only in the final stretch before
-    // the coma/head — reads as a fine trail sweeping into a bright source,
-    // not a linear wedge.
+    // most of the length narrow, flaring only near the coma.
     const halfW = (tt) => (tipH + (tailH - tipH) * Math.pow(tt, 1.7)) / 2
+    // dust-tail centerline droops toward the far end (real dust tails arc
+    // away from the orbit line).
+    const yc = (tt) => h / 2 + Math.pow(1 - tt, 2) * h * 0.12
     const topPts = [], botPtsFwd = []
     for (let k = 0; k <= N; k++) {
-      const tt = k / N, x = tt * w, hw = halfW(tt)
+      const tt = k / N, x = tt * tailEnd, hw2 = halfW(tt)
       // noise scales with local half-width so the thin far tip doesn't
       // jitter wider than its own body; top/bottom drawn independently so
-      // the band's thickness itself wobbles a little too, not just its
-      // centerline.
-      const jTop = (r() - 0.5) * hw * 0.7
-      const jBot = (r() - 0.5) * hw * 0.7
-      topPts.push({ x, y: h / 2 - hw + jTop })
-      botPtsFwd.push({ x, y: h / 2 + hw + jBot })
+      // the band's thickness itself wobbles a little too.
+      const jTop = (r() - 0.5) * hw2 * 0.7
+      const jBot = (r() - 0.5) * hw2 * 0.7
+      topPts.push({ x, y: yc(tt) - hw2 + jTop })
+      botPtsFwd.push({ x, y: yc(tt) + hw2 + jBot })
     }
     const d = closedSilhouettePath(topPts, botPtsFwd.slice().reverse())
     const NS = 'http://www.w3.org/2000/svg'
@@ -1189,54 +1044,79 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
     svg.style.position = 'absolute'; svg.style.inset = '0'
     svg.style.width = '100%'; svg.style.height = '100%'
-    const gradId = `cometTailGrad${occCounter++}`
     const defs = document.createElementNS(NS, 'defs')
-    const grad = document.createElementNS(NS, 'linearGradient')
-    grad.setAttribute('id', gradId)
-    grad.setAttribute('gradientUnits', 'userSpaceOnUse')
-    grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0')
-    grad.setAttribute('x2', String(w)); grad.setAttribute('y2', '0')
-    // same stops the old background-gradient used — transparent at the far
-    // (thin) end, brightening toward the head (wide) end.
-    ;[[0, 'transparent'], [18, hsla(hue, 60, 70, A(0.10, fill))],
-      [70, hsla(hue, 66, 78, A(0.32, fill))], [100, hsla(hue, 70, 90, A(0.62, fill))]]
-      .forEach(([off, color]) => {
+    const mkGrad = (stops) => {
+      const gid = `cometTailGrad${occCounter++}`
+      const grad = document.createElementNS(NS, 'linearGradient')
+      grad.setAttribute('id', gid)
+      grad.setAttribute('gradientUnits', 'userSpaceOnUse')
+      grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0')
+      grad.setAttribute('x2', String(tailEnd)); grad.setAttribute('y2', '0')
+      stops.forEach(([off, color]) => {
         const stop = document.createElementNS(NS, 'stop')
         stop.setAttribute('offset', `${off}%`)
         stop.setAttribute('stop-color', color)
         grad.appendChild(stop)
       })
-    defs.appendChild(grad)
+      defs.appendChild(grad)
+      return gid
+    }
+    const dustGrad = mkGrad([[0, 'transparent'], [18, hsla(hue, 60, 70, A(0.14, fill))],
+      [70, hsla(hue, 66, 78, A(0.48, fill))], [100, hsla(hue, 70, 90, A(0.80, fill))]])
+    // ion tail: thinner, straighter, bluer, lower alpha.
+    const ionH = Math.max(3, tailH * 0.38)
+    const ionTip = Math.max(1, ionH * 0.2)
+    const ionHalf = (tt) => (ionTip + (ionH - ionTip) * Math.pow(tt, 1.5)) / 2
+    const yIon = (tt) => h / 2 - (1 - tt) * h * 0.15
+    const iTop = [], iBotFwd = []
+    for (let k = 0; k <= N; k++) {
+      const tt = k / N, x = tt * tailEnd, hw2 = ionHalf(tt)
+      const j = (r() - 0.5) * hw2 * 0.5
+      iTop.push({ x, y: yIon(tt) - hw2 + j })
+      iBotFwd.push({ x, y: yIon(tt) + hw2 + j })
+    }
+    const ionGrad = mkGrad([[0, 'transparent'], [22, hsla(hue + 12, 70, 76, A(0.08, fill))],
+      [75, hsla(hue + 12, 74, 82, A(0.24, fill))], [100, hsla(hue + 12, 78, 90, A(0.46, fill))]])
     svg.appendChild(defs)
-    const tail = document.createElementNS(NS, 'path')
-    tail.setAttribute('d', d)
-    tail.setAttribute('fill', `url(#${gradId})`)
+    const mkTail = (pathD, gid) => {
+      const p = document.createElementNS(NS, 'path')
+      p.setAttribute('d', pathD)
+      p.setAttribute('fill', `url(#${gid})`)
+      svg.appendChild(p)
+    }
+    mkTail(d, dustGrad)
+    mkTail(closedSilhouettePath(iTop, iBotFwd.slice().reverse()), ionGrad)
     // soft blur: masks the smoother's own segment joints and reads as a
     // diffuse dust trail rather than a crisp cut silhouette — same
-    // treatment 'ribbon' already uses on its curtain path for the same
-    // reason.
+    // treatment 'ribbon' already uses on its curtain path.
     svg.style.filter = `blur(${Math.max(2, tailH * 0.10).toFixed(1)}px)`
-    svg.appendChild(tail)
     f.appendChild(svg)
-    // coma: soft glow bigger than the nucleus, marking this as a comet not
-    // a point-source shooting star. Centered on the head's actual position
-    // (.k-head is right:-4px, top:50%, so its center sits at
-    // x = w+4-hs/2).
-    const hs = Math.max(16, h * 0.30)
-    const headCx = w + 4 - hs / 2
-    const comaW = h * 0.7
+    // coma, two layers: a wide soft envelope plus an inner bright coma
+    // swept slightly tailward — marks this as a comet, not a point-source
+    // shooting star.
+    const comaW = h * 0.95
     const coma = el('d-glow')
     coma.style.left = px(headCx - comaW / 2); coma.style.top = '0'; coma.style.width = px(comaW); coma.style.height = '100%'
-    coma.style.background = `radial-gradient(circle, ${hsla(hue, 70, 85, A(0.5, fill))} 0%, transparent ${E(70, fill).toFixed(0)}%)`
+    coma.style.background = `radial-gradient(circle, ${hsla(hue, 70, 85, A(0.35, fill))} 0%, transparent ${E(72, fill).toFixed(0)}%)`
     f.appendChild(coma)
+    const innerD = h * 0.5
+    const inner = el('d-glow')
+    inner.style.left = px(headCx - hs * 0.18 - innerD / 2); inner.style.top = px(h / 2 - innerD / 2)
+    inner.style.width = inner.style.height = px(innerD)
+    inner.style.background = `radial-gradient(circle, ${hsla(hue, 68, 88, A(0.55, fill))} 0%, transparent ${E(70, fill).toFixed(0)}%)`
+    f.appendChild(inner)
     const hd = el('k-head')
+    hd.style.left = px(headCx - hs / 2); hd.style.right = 'auto'
     hd.style.width = hd.style.height = px(hs); hd.style.marginTop = px(-hs / 2)
-    hd.style.background = '#f2fbff'
-    // 2026-08-11: boxShadow alpha 0.5 -> 0.65 (st7, comet — Fable-5's
-    // harsher read: cropped off-frame at real distance reads empty; the
-    // milder read called it "basically correct, just faint" — addressing
-    // both).
-    hd.style.boxShadow = `0 0 ${px(hs * 2.2)} ${px(hs * 0.6)} ${hsla(hue, 72, 80, A(0.65, fill))}`
+    // was a flat #f2fbff disc + one giant box-shadow. Both failed on
+    // render at the new size: the flat fill read as a matte moon, not a
+    // glowing nucleus, and Chromium paints a ~250px-blur box-shadow as a
+    // visible HARD-EDGED SQUARE (isolated by hiding .k-head — the square
+    // vanished with it). Nucleus is a hot-core radial gradient now; the
+    // wide soft glow lives in the coma gradient divs above — the
+    // technique every other primitive in this file already uses.
+    hd.style.background = `radial-gradient(circle, #ffffff 0%, #eaf5ff 34%, ${hsla(hue, 70, 86, A(0.75, fill))} 62%, transparent 100%)`
+    hd.style.boxShadow = `0 0 ${px(hs * 0.9)} ${px(hs * 0.18)} ${hsla(hue, 72, 82, A(0.55, fill))}`
     f.appendChild(hd)
     // 2026-08-11: rotation range -26..-10deg -> -12..-4deg. .k-head sits at
     // this box's right edge (top:50% unrotated); for a shallow wide box
@@ -1378,7 +1258,22 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // already exists to sell. Net change kept small and box-safe: rx nudged
     // 0.98->1.08*bodySize (clamped so cx+rx never exceeds the box) for a
     // slightly more open major-axis gap, without the false clearance claim.
-    const rx = Math.min(bodySize * 1.08, w / 2 - 4), ry = rx * 0.32
+    // variant === 'dust' (2026-08-13, st3 — Ben: "that saturn like planet
+    // needs a reworking... take inspiration from the other planets that
+    // weve already shipped"): st3's old blob+makeNebulaRing construction
+    // never survived a critique pass (three-circles / coffee-stain — see
+    // the `blob` isHeadline comment and makeNebulaRing's header). Rebuilt
+    // on THIS branch's already-accepted anatomy instead (drawPlanetDisc
+    // body + back/front ring halves), differing only in ring treatment so
+    // st0 and st3 don't read as the same object 3 stations apart: st0
+    // keeps its thin crisp stroke; dust gets a WIDE soft gold band
+    // (makeNebulaRing's own approved gold tint, hue+14) with a slight
+    // blur — Saturn's rings as a dust sheet, not a wire. Gated on a new
+    // trailing `variant` param (station-data flag, same dispatch pattern
+    // as `accent`/`greenWash`); every existing call site passes nothing,
+    // so st0 renders byte-identical by construction.
+    const dust = variant === 'dust'
+    const rx = Math.min(bodySize * (dust ? 1.22 : 1.08), w / 2 - 4), ry = rx * 0.32
     const tilt = -10
     const NS = 'http://www.w3.org/2000/svg'
     const ringHalf = (sweepFlag, isBack) => {
@@ -1386,15 +1281,37 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
       svg.style.position = 'absolute'; svg.style.inset = '0'
       svg.style.width = '100%'; svg.style.height = '100%'
-      const path = document.createElementNS(NS, 'path')
-      path.setAttribute('d', `M ${(cx - rx).toFixed(1)},${cy.toFixed(1)} A ${rx.toFixed(1)},${ry.toFixed(1)} 0 0,${sweepFlag} ${(cx + rx).toFixed(1)},${cy.toFixed(1)}`)
-      path.setAttribute('fill', 'none')
+      const arc = (arx, ary) => {
+        const p = document.createElementNS(NS, 'path')
+        p.setAttribute('d', `M ${(cx - arx).toFixed(1)},${cy.toFixed(1)} A ${arx.toFixed(1)},${ary.toFixed(1)} 0 0,${sweepFlag} ${(cx + arx).toFixed(1)},${cy.toFixed(1)}`)
+        p.setAttribute('fill', 'none')
+        p.setAttribute('transform', `rotate(${tilt} ${cx.toFixed(1)} ${cy.toFixed(1)})`)
+        return p
+      }
       // back half dimmer (it's behind the lit body, in its own shadow-side
       // read) and thinner; front half is the bright, full-width edge.
-      path.setAttribute('stroke', hsla(hue, 65, isBack ? 55 : 78, A(isBack ? 0.30 : 0.55, fill)))
-      path.setAttribute('stroke-width', px(Math.max(3, w * (isBack ? 0.010 : 0.016))))
-      path.setAttribute('transform', `rotate(${tilt} ${cx.toFixed(1)} ${cy.toFixed(1)})`)
-      svg.appendChild(path)
+      if (dust) {
+        // two concentric arcs per half: a wide faint sheet plus a narrower
+        // brighter band inside it — Saturn's rings read as banded, and one
+        // uniform blurred tube read flat on a real render (v1, 2026-08-13).
+        const sheet = arc(rx, ry)
+        sheet.setAttribute('stroke', hsla(hue + 14, 70, isBack ? 58 : 68, A(isBack ? 0.20 : 0.36, fill)))
+        sheet.setAttribute('stroke-width', px(Math.max(3, w * (isBack ? 0.040 : 0.048))))
+        svg.appendChild(sheet)
+        const band = arc(rx * 0.90, ry * 0.90)
+        band.setAttribute('stroke', hsla(hue + 18, 74, isBack ? 62 : 74, A(isBack ? 0.26 : 0.48, fill)))
+        band.setAttribute('stroke-width', px(Math.max(2, w * (isBack ? 0.012 : 0.016))))
+        svg.appendChild(band)
+        // blur softens the band's edges into a gas sheet; ~1% of the box,
+        // nowhere near the ledger's "blur wider than 1/4 of an element
+        // deletes it" caution (that was small stars).
+        svg.style.filter = `blur(${Math.max(3, w * 0.010).toFixed(1)}px)`
+      } else {
+        const path = arc(rx, ry)
+        path.setAttribute('stroke', hsla(hue, 65, isBack ? 55 : 78, A(isBack ? 0.30 : 0.55, fill)))
+        path.setAttribute('stroke-width', px(Math.max(3, w * (isBack ? 0.010 : 0.016))))
+        svg.appendChild(path)
+      }
       return svg
     }
     // outer glow (B2 sec 2.2): `ring` had no glow at all outside its hard
@@ -1435,7 +1352,20 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // the same y, a level horizontal pair). Tilted off-axis instead of
     // dead-level — real binaries orbit a common barycenter on an
     // inclined plane, not a perfectly flat line.
-    const positions = [[0.36, 0.42], [0.64, 0.58]]
+    // 2026-08-13 round 2 (Ben: st8 "doesn't have a major asset — make them
+    // bigger/more prominent, redesign like st3"). Earlier cold critique
+    // called this the emptiest station in the ring. Three prior tuning
+    // rounds (size ratio, tilt, bridge added/removed) never satisfied the
+    // complaint — the ceiling was the SCALE and the shared-light cue, not
+    // the anatomy. Body diameter multiplier doubled (0.22 -> 0.44 of box
+    // width: primary now planet-tier, ~0.30w, matching the scale st0/st4's
+    // shipped headline bodies actually occupy), positions spread slightly
+    // to keep clear separation at the new size, and the shared halo
+    // changed from a small circle to an ELLIPSE elongated along the pair's
+    // own tilt axis — a shared envelope of light around both stars, the
+    // pairing cue the deleted bridge was never able to be (soft light, not
+    // a mechanical rod).
+    const positions = [[0.34, 0.42], [0.68, 0.60]]
     // 2026-08-12 (Ben's own review: "looks off" — rendered and confirmed:
     // the connecting bridge, even softened to a blurred 6px bar, still
     // reads as a rigid rod joining two circles — a dumbbell/barbell, not a
@@ -1452,21 +1382,40 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // raised (0.20->0.28) now that it's the ONLY shared-light pairing cue —
     // it has to carry what the bridge used to help carry.
     const halo = el('d-glow')
-    const haloD = w * 0.5
-    halo.style.left = px(w * 0.5 - haloD / 2); halo.style.top = px(h * 0.5 - haloD / 2)
-    halo.style.width = halo.style.height = px(haloD)
-    halo.style.background = `radial-gradient(circle closest-side, ${hsla(hue, 60, 70, A(0.28, fill))} 0%, transparent ${E(75, fill).toFixed(0)}%)`
+    const midX = (positions[0][0] + positions[1][0]) / 2 * w
+    const midY = (positions[0][1] + positions[1][1]) / 2 * h
+    const axDeg = Math.atan2((positions[1][1] - positions[0][1]) * h,
+      (positions[1][0] - positions[0][0]) * w) * 180 / Math.PI
+    const haloW = w * 0.78, haloH = w * 0.36
+    halo.style.left = px(midX - haloW / 2); halo.style.top = px(midY - haloH / 2)
+    halo.style.width = px(haloW); halo.style.height = px(haloH)
+    halo.style.transform = `rotate(${axDeg.toFixed(1)}deg)`
+    halo.style.background = `radial-gradient(ellipse closest-side, ${hsla(hue, 60, 72, A(0.30, fill))} 0%, transparent ${E(78, fill).toFixed(0)}%)`
     f.appendChild(halo)
     // per-star hue variance (real binary systems pair a hot and a cool
     // star): bigger body pushed cooler/bluer, smaller body pushed
     // warmer/redder — a temperature contrast, not just a size contrast, so
     // the two dots read as two different STARS rather than one star drawn
     // twice at different sizes.
-    const starHues = [hue - 14, hue + 24]
+    const starHues = [hue - 18, hue + 28]
     sizes.forEach((sz, i) => {
       const d = el(''); d.style.position = 'absolute'; d.style.borderRadius = '50%'
-      const s = w * sz * 0.22
+      // 0.22 -> 0.44: see the 2026-08-13 comment above — planet-tier scale.
+      const s = w * sz * 0.44
+      // corona as a gradient div, not a giant box-shadow: at this scale a
+      // box-shadow blur of s*2 (~400px) renders as a visible hard-edged
+      // square in Chromium (same defect isolated on the comet's head this
+      // round — hid the element, the square vanished). Primary's corona
+      // brighter and wider than the companion's: a real luminosity
+      // contrast on top of the size/temperature contrast.
       const sHue = starHues[i]
+      const cd = s * (i === 0 ? 2.4 : 2.1)
+      const corona = el('d-glow')
+      corona.style.left = px(positions[i][0] * w - cd / 2)
+      corona.style.top = px(positions[i][1] * h - cd / 2)
+      corona.style.width = corona.style.height = px(cd)
+      corona.style.background = `radial-gradient(circle closest-side, ${hsla(sHue, 70, 80, A(i === 0 ? 0.34 : 0.26, fill))} 0%, transparent ${E(85, fill).toFixed(0)}%)`
+      f.appendChild(corona)
       d.style.left = px(positions[i][0] * w - s / 2); d.style.top = px(positions[i][1] * h - s / 2)
       d.style.width = d.style.height = px(s)
       // was a flat `hsla(...,1)` opaque fill - the only fully-opaque flat
@@ -1486,8 +1435,10 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       // treatment blob/spikes/lens already use for their cores) reads as a
       // glowing star instead of a shadowed planet.
       d.style.background = `radial-gradient(circle at 50% 50%,
-        ${hsla(sHue, 25, 97, A(1, fill))} 0%, ${hsla(sHue, 60, 72, A(0.55, fill))} 50%, transparent 100%)`
-      d.style.boxShadow = `0 0 ${px(s * 2)} ${px(s * 0.3)} ${hsla(sHue, 70, 80, A(0.5, fill))}`
+        ${hsla(sHue, 25, 97, A(1, fill))} 0%, ${hsla(sHue, 60, 72, A(0.55, fill))} 45%, transparent 100%)`
+      // modest shadow only — the wide glow is the corona div above (the
+      // old s*2 blur shadow was the hard-edged-square defect).
+      d.style.boxShadow = `0 0 ${px(s * 0.5)} ${px(s * 0.12)} ${hsla(sHue, 70, 80, A(0.40, fill))}`
       f.appendChild(d)
     })
   }
@@ -2158,7 +2109,7 @@ export function ringDom(prefix, engine) {
   }
   return {
     el,
-    makePrim: (kind, w, h, hue, alpha, r, isHeadline, fill) => makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill),
+    makePrim: (kind, w, h, hue, alpha, r, isHeadline, fill, variant) => makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant),
     bandY: (r, h, forceUpper, effH, skipMinBleed) => bandY(engine, r, h, forceUpper, effH, skipMinBleed),
     cornerX: (r, w, x0, cornerLeft) => cornerX(engine, r, w, x0, cornerLeft),
     rotatedBandH,

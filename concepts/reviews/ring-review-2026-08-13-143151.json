@@ -1,0 +1,154 @@
+{
+  "date": "2026-08-13",
+  "stamp": "2026-08-13-143151",
+  "stations": [
+    {
+      "index": 0,
+      "key": "ringed planet",
+      "prim": "ring",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 1,
+      "key": "spiral galaxy",
+      "prim": "lens",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 2,
+      "key": "star cluster",
+      "prim": "dots",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m17866458360140p2f1",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "move more towards corner",
+          "bbox": [
+            0.07515822784810126,
+            0.09990330520393811,
+            0.2365506329113924,
+            0.2573839662447257
+          ],
+          "ts": 1786645836014
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "key": "orange nebula",
+      "prim": "blob",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m17866458626784vage",
+          "station": 3,
+          "key": "orange nebula",
+          "prim": "blob",
+          "category": "other",
+          "note": "this entire asset needs to be more towards the corner. and the center needs to be redone",
+          "bbox": [
+            0.11471518987341772,
+            0.61889064697609,
+            0.1598101265822785,
+            0.209563994374121
+          ],
+          "ts": 1786645862678
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "key": "lit planet",
+      "prim": "planet",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m178664588129054mqu",
+          "station": 4,
+          "key": "lit planet",
+          "prim": "planet",
+          "category": "other",
+          "note": "move towards corner, needs to be at the 90 degree so it goes on both screens",
+          "bbox": [
+            0.034810126582278486,
+            0,
+            0.2887658227848101,
+            0.3164996483825598
+          ],
+          "ts": 1786645881290
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "key": "pulsar",
+      "prim": "pulsar",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 6,
+      "key": "rose nebula",
+      "prim": "nebulaCloud",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 7,
+      "key": "comet",
+      "prim": "streak",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786645901792dew7q",
+          "station": 7,
+          "key": "comet",
+          "prim": "streak",
+          "category": "other",
+          "note": "nothing up here",
+          "bbox": [
+            0.01819620253164557,
+            0.02043776371308017,
+            0.16772151898734178,
+            0.27707454289732775
+          ],
+          "ts": 1786645901792
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "key": "binary pair",
+      "prim": "binary",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 9,
+      "key": "asteroid field",
+      "prim": "asteroidField",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 10,
+      "key": "supernova",
+      "prim": "spikes",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 11,
+      "key": "aurora ribbon",
+      "prim": "ribbon",
+      "verdict": null,
+      "marks": []
+    }
+  ]
+}
