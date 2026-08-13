@@ -445,11 +445,44 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // fill near 1) gets ~0 boost — cap violation confirmed gone on re-run,
     // not just assumed — while a quiet one (st6) still gets most of it.
     // Boost multiplier 16->26, same second pass.
+    // 2026-08-13 round-2 Fable-5 pass (Ben marked st4's companion "fable 5
+    // pass"; st6's companion carries the logged "idk what this is" — same
+    // object class, `blob` is companion-only at both call sites now).
+    // Rendered fresh first: three CO-EQUAL lobes at independent random
+    // positions/rotations spread into an amorphous two-tone smear — no
+    // dominant mass, no silhouette, "condensation on the lens." Same class
+    // of defect the headline knot-merge fixed (circles, no gestalt), one
+    // level up: the LOBES themselves need hierarchy. Lobe 0 is now the
+    // dominant mass (0.78-1.0 w, roughly centered); lobes 1-2 are small
+    // satellites (0.30-0.46 w) tucked onto the dominant's lower contour, so
+    // the object reads as ONE cloudlet with texture instead of three
+    // strangers. Same six r() draws per lobe in the same order (lw, lh, lx,
+    // ly, grad-pos, rot) — formulas reinterpret the draws, stream count
+    // untouched, so no downstream placement reshuffles (the documented
+    // r()-stream discipline this branch already follows for the core draws).
+    // Round-3 correction (rendered, not assumed): the first hierarchy pass
+    // (big round dominant + satellites tucked at its lower contour) read as
+    // a plain gray ball with two DETACHED teal pills — "a background
+    // circle," the exact read Ben keeps flagging. A soft round mass can't
+    // escape "circle"; the identity that can is ELONGATION. Dominant lobe
+    // is now a thin stretched wisp (~2.5:1, its existing rot draw tilts
+    // it); satellites sit INSIDE its center region (overlap guaranteed
+    // regardless of the dominant's rotation about its own center), adding
+    // lumpy texture, so the whole reads as one tapered gas wisp.
     let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity, domArea = -1, domLobe = null
+    let d0 = null
+    const clampBox = (v, max) => Math.min(Math.max(v, 0), max)
     for (let i = 0; i < 3; i++) {
       const L = el('b-lobe')
-      const lw = w * (0.62 + r() * 0.38), lh = h * (0.55 + r() * 0.45)
-      const lx = (w - lw) * r(), ly = (h - lh) * r()
+      const lw = i === 0 ? w * (0.85 + r() * 0.15) : w * (0.32 + r() * 0.14)
+      const lh = i === 0 ? h * (0.30 + r() * 0.16) : h * (0.20 + r() * 0.14)
+      const lx = i === 0
+        ? (w - lw) * (0.30 + r() * 0.40)
+        : clampBox(d0.lx + d0.lw / 2 + (r() - 0.5) * d0.lw * 0.45 - lw / 2, w - lw)
+      const ly = i === 0
+        ? (h - lh) * (0.30 + r() * 0.40)
+        : clampBox(d0.ly + d0.lh / 2 + (r() - 0.5) * d0.lh * 0.9 - lh / 2, h - lh)
+      if (i === 0) d0 = { lx, ly, lw, lh }
       L.style.left = px(lx); L.style.top = px(ly)
       L.style.width = px(lw); L.style.height = px(lh)
       // 2026-08-12 round 5: same hard-clip bug as l-disc/makeNebulaRing —
@@ -528,12 +561,25 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       // before (r() stream untouched); knot alpha kept below the headline
       // version's (0.55 vs 0.70) — a companion is dressing, its core
       // shouldn't outshine its own cloud the way the old white ball did.
-      const hx = Math.min(85, Math.max(15, (ccx - domLobe.lx) / domLobe.lw * 100))
-      const hy = Math.min(85, Math.max(15, (ccy - domLobe.ly) / domLobe.lh * 100))
-      const hRadX = Math.min(70, Math.max(18, (cs / domLobe.lw) * 100 * 1.4))
-      const hRadY = Math.min(70, Math.max(18, (cs / domLobe.lh) * 100 * 1.4))
+      // Round-4 clamp fix (rendered: the knot showed a hard straight
+      // diagonal edge): a CSS background cannot paint outside its element
+      // box, so a knot ellipse whose 78%-transparent radius crosses the box
+      // edge gets CUT there — and this lobe is thin AND rotated, so the cut
+      // is a visible diagonal line. Position clamped to 30-70 / 35-65 and
+      // radii capped at 38/45 so hx + 0.78*hRadX <= 100 (and the y
+      // equivalent) holds by construction — the fade always completes
+      // inside the box.
+      const hx = Math.min(70, Math.max(30, (ccx - domLobe.lx) / domLobe.lw * 100))
+      const hy = Math.min(65, Math.max(35, (ccy - domLobe.ly) / domLobe.lh * 100))
+      const hRadX = Math.min(38, Math.max(18, (cs / domLobe.lw) * 100 * 1.4))
+      const hRadY = Math.min(45, Math.max(18, (cs / domLobe.lh) * 100 * 1.4))
+      // Round-3 knot retune (same render pass as the wisp hierarchy above):
+      // 34% sat at 92 lightness painted a broad desaturated gray film over
+      // the green cloud — the two-tone mauve/teal mismatch in the rendered
+      // smear. Saturation up, film reined in, so the knot reads as a hot
+      // spot OF the wisp, not a gray veil on it.
       domLobe.node.style.background = `radial-gradient(ellipse ${hRadX.toFixed(0)}% ${hRadY.toFixed(0)}% at ${hx.toFixed(0)}% ${hy.toFixed(0)}%,
-        ${hsla(hue, 34, 92, AB(0.55, fill))} 0%, ${hsla(hue, 70, 78, AB(0.28, fill))} 45%, transparent 80%),
+        ${hsla(hue, 52, 90, AB(0.50, fill))} 0%, ${hsla(hue, 72, 74, AB(0.30, fill))} 45%, transparent 78%),
         ${domLobe.node.style.background}`
     }
     // rim (traced the lobe cluster's bbox as a border) removed outright
@@ -902,6 +948,13 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       // brightness peaks at the core end and dies before the geometric tip,
       // so the point reads as light fading, not a drawn stroke ending
       s.style.background = `linear-gradient(90deg, ${hsla(hue, 40, 92, 0.9)} 0%, ${hsla(hue, 82, 78, 0.5)} 38%, transparent 96%)`
+      // 2026-08-13 third pass ("fable 5 pass" refinement): the clip-path
+      // polygon leaves razor-straight vector edges along every arm — at
+      // 1:1 they read as cut paper strips, not light. A small blur (scaled
+      // to the primitive, ~2px at headline size) softens the silhouette
+      // edge without changing the anatomy. Blur redistributes paint, never
+      // adds it, so this cannot brighten st10's parked safe-box p99.5.
+      s.style.filter = `blur(${Math.max(1, w * 0.0018).toFixed(1)}px)`
       f.appendChild(s)
     })
     // 2026-08-13 second pass (Ben: "fable 5 pass" — refine, not broken).
@@ -1612,6 +1665,16 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       const t = TAIL_T + (k / N) * (1 - TAIL_T)
       return { x: t * w, y: sqTopY(t) }
     })
+    // 2026-08-13, rendered with debug fills (body red / tail green, blur
+    // off): a dark wedge-shaped GAP sat between body and tail at the
+    // joint, wider at the top — smoothEdgePath starts its path at the
+    // MIDPOINT of the first segment, so the body's top-left corner was
+    // retracted ~half a segment (~0.044w), far more than the tail's small
+    // angular overlap covered. Duplicating the first point makes that
+    // first-segment midpoint BE the true corner, so the top edge now
+    // starts exactly at x = TAIL_T*w. (Bottom edge never had the problem —
+    // reversed, it ENDS at its last point, which smoothEdgePath does reach.)
+    topPts.unshift({ ...topPts[0] })
     const botPts = Array.from({ length: N + 1 }, (_, k) => {
       const t = TAIL_T + (k / N) * (1 - TAIL_T)
       return { x: t * w, y: sqBotY(t) }
@@ -1625,13 +1688,22 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     const xJ = TAIL_T * w
     const halfW0 = (sqBotY(TAIL_T) - sqTopY(TAIL_T)) / 2
     const yJ = sqTopY(TAIL_T) + halfW0
-    // R raised 0.22h -> 0.27h with the top-anchored taper: the joint now
-    // sits higher, and the smaller radius left the hook's tip hovering AT
-    // the frame's bottom edge instead of past it — ending on-screen is the
-    // exact complaint. 0.27h puts the tip ~50px below the frame edge while
-    // still fitting the viewBox (no visible clip) and keeps the visible
-    // turn ~95° before exit — a real curl, not a bend.
-    const R = h * 0.27, PHI_MAX = 115 * Math.PI / 180, PHI_START = -0.10, TAIL_N = 14
+    // R raised 0.22h -> 0.27h with the top-anchored taper (tip was
+    // hovering AT the frame edge), then re-tightened 0.27h -> 0.21h with
+    // PHI_MAX extended 115° -> 135° after rendering the wide version: at
+    // 0.27h the centerline leaves the frame after only ~75° of turn, so
+    // what stayed visible read as a gentle swoop, not the "curl" Ben
+    // asked for. The tighter radius keeps ~90° of turn in-frame (a real
+    // quarter-turn hook) and the longer sweep still puts the tip well
+    // below the frame edge (~80px at this station's measured box offset),
+    // so it exits off-screen, never ends in view.
+    // PHI_START deepened -0.10 -> -0.30 in the same seam fix as the
+    // topPts.unshift above: the overlap section is painted UNDER the body
+    // (tail first, body on top), so a generous overlap costs nothing
+    // visually and guards the seam against the tail path's own start-of-
+    // path smoothing retraction (same smoothEdgePath behavior, smaller
+    // magnitude along the arc).
+    const R = h * 0.21, PHI_MAX = 135 * Math.PI / 180, PHI_START = -0.30, TAIL_N = 14
     const tailTop = [], tailBot = []
     for (let k = 0; k <= TAIL_N; k++) {
       const phi = PHI_START + (k / TAIL_N) * (PHI_MAX - PHI_START)
@@ -1676,14 +1748,38 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     const tGrad = document.createElementNS(NS, 'linearGradient')
     tGrad.setAttribute('id', tailGradId)
     tGrad.setAttribute('gradientUnits', 'userSpaceOnUse')
-    tGrad.setAttribute('x1', String(Math.round(xJ)))
-    tGrad.setAttribute('y1', String(Math.round(yJ)))
+    // Gradient line starts at the OVERLAP end, not the joint: rendered
+    // check on the seam fix showed a brighter column at the joint — the
+    // overlap section (before the joint, under the body) sits at negative
+    // projection on a joint-anchored gradient line, and SVG clamps it to
+    // stop 0's full alpha, so body + tail alphas summed there. Anchoring
+    // the line at the overlap's far end and fading IN across the hidden
+    // section (stop 0 near-zero, full strength reached ~where the body's
+    // own edge is) removes the double-paint without dimming the visible
+    // curl.
+    const ox = xJ - R * Math.sin(PHI_START), oy = yJ + R * (1 - Math.cos(PHI_START))
+    tGrad.setAttribute('x1', String(Math.round(ox)))
+    tGrad.setAttribute('y1', String(Math.round(oy)))
     tGrad.setAttribute('x2', String(Math.round(xJ - R * Math.sin(PHI_MAX))))
     tGrad.setAttribute('y2', String(Math.round(yJ + R * (1 - Math.cos(PHI_MAX)))))
+    // Stops retuned 2026-08-13 with the seam fix: the body's vertical
+    // gradient at the joint's depth (~0.58h) is ~hue-15 at ~0.25 alpha —
+    // the old hue+8 start made the hook read as a DIFFERENT, bluer object
+    // ("detached paddle") even where the geometry touched. Start matched
+    // to the body's seam color, and the mid stop raised 0.16 -> 0.20 so
+    // the curl stays legible through the turn instead of dying right
+    // after the joint. Bottom-left corner, outside the safe box — this
+    // brightens nothing inside it.
+    // Final stop pushed 50% -> 68% after another rendered look: with the
+    // fade completing mid-turn, the hook's second half went near-invisible
+    // and the curl read as a short flick. Holding alpha through ~2/3 of
+    // the arc keeps the full quarter-turn legible at frame scale; the
+    // fade-to-zero now finishes in the off-frame stretch.
     ;[
-      [0, hsla(hue + 8, 64, 58, A(0.26, fill))],
-      [45, hsla(hue, 58, 50, A(0.16, fill))],
-      [100, hsla(hue - 15, 50, 40, 0)],
+      [0, hsla(hue - 12, 58, 52, A(0.04, fill))],
+      [16, hsla(hue - 12, 58, 52, A(0.26, fill))],
+      [68, hsla(hue - 16, 54, 46, A(0.18, fill))],
+      [100, hsla(hue - 20, 50, 40, 0)],
     ].forEach(([off, color]) => {
       const stop = document.createElementNS(NS, 'stop')
       stop.setAttribute('offset', `${off}%`)
@@ -2224,7 +2320,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       `0 0 ${px(cs * 0.9)} ${px(cs * 0.35)} ${hsla(hue, 45, 96, AB(1, fill))}, ` +
       `0 0 ${px(cs * 1.7)} ${px(cs * 0.55)} ${hsla(hue, 35, 85, AB(0.9, fill))}`
     f.appendChild(core)
-    const beamLen = w * 0.62 // fixed reach for the always-on stub half; E() extends past it below (0.5 -> 0.62, same fresh-eyes pass: longer beams, tighter halo)
+    const beamLen = w * 0.70 // fixed reach for the always-on stub half; E() extends past it below (0.5 -> 0.62 fresh-eyes pass; 0.62 -> 0.70 round-2 Fable-5 pass, compensating the sheath's new 82% fade-out so the visible shaft stays long)
     const beamAng = LIGHT_DEG
     ;[beamAng, beamAng + 180].forEach(ang => {
       const beam = el('')
@@ -2276,7 +2372,20 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       // opacity be the only dimmer, same as drawPlanetDisc's opaque stops.
       beam.style.background =
         `radial-gradient(ellipse 95% 16% at 0% 50%, ${hsla(hue, 30, 97, AB(0.98, fill))} 0%, ${hsla(hue, 45, 88, AB(0.6, fill))} 45%, transparent 78%), ` +
-        `linear-gradient(90deg, ${hsla(hue, 60, 76, AB(0.85, fill))} 0%, ${hsla(hue, 62, 70, AB(0.5, fill))} 45%, transparent 100%)`
+        `linear-gradient(90deg, ${hsla(hue, 60, 76, AB(0.85, fill))} 0%, ${hsla(hue, 62, 70, AB(0.5, fill))} 40%, transparent 82%)`
+      // 2026-08-13 Fable-5 pass (Ben: "fable 5 pass" on st5, round 2):
+      // rendered fresh — the cone read right near the core but its FAR half
+      // was a large faint triangle with crisp straight clip-path sides and a
+      // flat base: translucent geometry, not light. Two changes, no new DOM:
+      // the sheath above now dies at 82% of the element (was 100%) so the
+      // clip base never renders at any alpha, and a cross-axis mask fades
+      // the cone's long edges (clip-path still bounds the silhouette; the
+      // mask just stops the edge being a hard alpha step). beamLen 0.62 ->
+      // 0.70 compensates for the earlier fade-out so the visible shaft
+      // stays long ("small hot star with LONG beams" is the target read).
+      const bMask = 'linear-gradient(to bottom, transparent 2%, black 32%, black 68%, transparent 98%)'
+      beam.style.maskImage = bMask
+      beam.style.webkitMaskImage = bMask
       f.appendChild(beam)
     })
     // A thin "sweep ring" around the core (the classic pulsar-diagram
