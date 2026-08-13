@@ -262,7 +262,11 @@ function buildLayerContent(engine, world, arc, host, L) {
       // 2026-08-12: synced from world-07-ring.html — pulsar shrunk 0.78x
       // (Ben: "can be smaller"). See that file's comment for why scaling
       // the whole box shrinks the object proportionally in one change.
-      const hw = lerp(576, 880, rHeadline()) * (st.prim === 'pulsar' ? 0.78 : 1)
+      // 2026-08-12 round 3 (Ben, st11: "make longer") — synced from
+      // world-07-ring.html: ribbon's own visual "length" is this width, so
+      // it gets a wider tier instead of the shared 576-880 range.
+      const hw = st.prim === 'ribbon' ? lerp(760, 1100, rHeadline())
+        : lerp(576, 880, rHeadline()) * (st.prim === 'pulsar' ? 0.78 : 1)
       const hh = st.prim === 'streak' ? hw * 0.30
         : st.prim === 'ribbon' ? hw * 0.34
           : hw * (0.62 + rHeadline() * 0.26)
@@ -306,6 +310,18 @@ function buildLayerContent(engine, world, arc, host, L) {
         head.querySelectorAll('[class*="s-core"], [class*="s-spk"]').forEach((n) => {
           n.style.left = cxPct + '%'; n.style.top = cyPct + '%'
         })
+        // 2026-08-12 round 3 (Ben, st10: "two assets, just need one") —
+        // synced from world-07-ring.html: d-glow keeps its CSS `inset:0`
+        // default (centers on the full frame) even after the core+rays
+        // above shift toward the corner, reading as a second star. Recenter
+        // it on the same corner point, same size as before.
+        const glowEl = head.querySelector('[class*="d-glow"]')
+        if (glowEl) {
+          glowEl.style.inset = 'auto'
+          glowEl.style.width = px(hw); glowEl.style.height = px(hh)
+          glowEl.style.left = px(hw * cxPct / 100 - hw / 2)
+          glowEl.style.top = px(hh * cyPct / 100 - hh / 2)
+        }
       }
       const headCx = headLeft + hw / 2, headCy = headTop + hh / 2
 
@@ -406,8 +422,11 @@ function buildLayerContent(engine, world, arc, host, L) {
       // own bottom-left corner stays bare; a small explicit dust cluster
       // fills it, outside the corner-avoiding detail loop above.
       if (st.fillCorner) {
-        const fw = lerp(70, 96, rDetail())
-        const fc = dom.makePrim('dots', fw, fw * 0.9, st.hue, lerp(0.34, 0.50, lou) * 0.7, rDetail, false, fill)
+        // 2026-08-12 round 3 (Ben: "need a planet here") — synced from
+        // world-07-ring.html: swapped the dust speck for makeOccluder's
+        // own small lit-planet disc.
+        const fw = lerp(90, 130, rDetail())
+        const fc = dom.makeOccluder(fw, st.hue + 20, fill)
         fc.style.left = px(x0 + engine.W * 0.10 - fw / 2)
         fc.style.top = px(engine.H * 0.84 - fw * 0.45)
         host.appendChild(fc)

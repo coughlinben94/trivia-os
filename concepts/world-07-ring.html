@@ -633,6 +633,11 @@ function buildLayerContent(host, L){
       // each of its 4 elements individually.
       const hw = isSpanningField ? lerp(900, 1300, rHeadline())
                : st.prim === 'pulsar' ? lerp(576, 880, rHeadline()) * 0.78
+               // 2026-08-12 round 3 (Ben, st11: "make longer"): ribbon reads
+               // as a horizontal band, so its own visual "length" IS this
+               // width — widened beyond the shared 576-880 tier instead of
+               // stretching hh (which would just make it thicker).
+               : st.prim === 'ribbon' ? lerp(760, 1100, rHeadline())
                : lerp(576, 880, rHeadline());
       const hh = st.prim === 'streak' ? hw*0.30
                : st.prim === 'ribbon' ? hw*0.34
@@ -699,6 +704,22 @@ function buildLayerContent(host, L){
         head.querySelectorAll('[class*="s-core"], [class*="s-spk"]').forEach(n => {
           n.style.left = cxPct + '%'; n.style.top = cyPct + '%';
         });
+        // 2026-08-12 round 3 (Ben, st10: "two assets, just need one" / "take
+        // an asset out. the sun?"). Root cause: the fix above only moved the
+        // bright core+rays — d-glow (the ambient halo) keeps its CSS
+        // default `inset:0`, which fills and centers on the FULL frame
+        // regardless. Once the core shifted toward the corner, the still-
+        // centered halo read as a second, dimmer star sitting where the
+        // core used to be — exactly "two assets, need one." Recentres the
+        // halo on the same corner point, same size as before (inset:0 was
+        // already equivalent to a full hw x hh box).
+        const glowEl = head.querySelector('[class*="d-glow"]');
+        if (glowEl){
+          glowEl.style.inset = 'auto';
+          glowEl.style.width = px(hw); glowEl.style.height = px(hh);
+          glowEl.style.left = px(hw*cxPct/100 - hw/2);
+          glowEl.style.top  = px(hh*cyPct/100 - hh/2);
+        }
       }
       const headCx = headLeft + hw/2, headCy = headTop + hh/2;
 
@@ -840,8 +861,13 @@ function buildLayerContent(host, L){
       // above (that loop now deliberately avoids corners for st1's fix) —
       // this is the one station asking for a corner filled, not avoided.
       if (st.fillCorner){
-        const fw = lerp(70, 96, rDetail());
-        const fc = dom.makePrim('dots', fw, fw*0.9, st.hue, lerp(0.34,0.50,lou)*0.7, rDetail, false, sfill);
+        // 2026-08-12 round 3 (Ben: "need a planet here" — a dust speck
+        // wasn't enough of an answer to "need something here"). Swapped
+        // for makeOccluder's own small lit-planet disc, same recipe the
+        // occlusion feature below already uses, at a size between the
+        // detail-tier and full occluder tiers.
+        const fw = lerp(90, 130, rDetail());
+        const fc = dom.makeOccluder(fw, st.hue + 20, sfill);
         fc.style.left = px(x0 + ENGINE.W*0.10 - fw/2);
         fc.style.top  = px(ENGINE.H*0.84 - fw*0.45);
         host.appendChild(fc); formTotal++;

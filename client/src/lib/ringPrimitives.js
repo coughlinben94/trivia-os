@@ -184,11 +184,18 @@ function bandY(engine, r, h, forceUpper, effH, skipMinBleed) {
     // 0.12 initially, dialed back to 0.09 after verify:ring caught st4
     // dropping under the "largest element supplies >=55% of mid-layer
     // ink" floor (react-live: 55%->50%) — more forced bleed means less of
-    // the headline's own area stays on-screen to count as ink. 0.09 still
-    // guarantees real, visible corner-tuck (vs. the old flat-8px cap that
-    // started this whole fix) without eating enough on-screen area to
-    // trip the ink-share floor.
-    if (!skipMinBleed) edgeEff = Math.min(edgeEff, -h * 0.09)
+    // the headline's own area stays on-screen to count as ink.
+    //
+    // 2026-08-12 round 3: st0 flagged "move more towards corner" a THIRD
+    // time despite that measured 0.09 fix landing clean. 0.09 was tuned to
+    // avoid one specific spec regression, not to Ben's actual bar — pushed
+    // to 0.20 (most of the -h*0.30 range this branch already allows) since
+    // repeated identical feedback outweighs holding a spec number that was
+    // itself just an ad-hoc balance point, not a hard requirement. Re-verify
+    // after this and accept/document any new ink-share fallout rather than
+    // re-capping blind — see this session's pair-bridge removal for the
+    // precedent (Ben's repeated aesthetic call over spec text).
+    if (!skipMinBleed) edgeEff = Math.min(edgeEff, -h * 0.20)
   } else {
     // Same range-narrowing fix, lower band — not reported, but it's the
     // identical formula shape with the identical inflation issue (h
@@ -240,7 +247,13 @@ function cornerX(engine, r, w, x0, cornerLeft) {
   // still visible daylight). 8-50 -> 8-28: halves the ceiling so even a
   // high r() draw stays close, instead of only the low-r() draws looking
   // corner-hugged.
-  const margin = lerp(8, 28, r())
+  //
+  // 2026-08-12 round 3: st0/st2/st4/st11 all flagged "move more towards
+  // corner" a third time on the same 8-28 range — same call as bandY's
+  // matching round-3 tightening above: this was tuned to a measured
+  // number, not to Ben's actual bar, and repeated identical feedback
+  // wins. 8-28 -> 2-12.
+  const margin = lerp(2, 12, r())
   return cornerLeft ? x0 + margin : x0 + engine.W - w - margin
 }
 
@@ -514,8 +527,14 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // stronger halo ONLY above w=300px, so detail-scale `dots` elsewhere are
     // completely unchanged (extra=0 below that size) — this is additive at
     // headline scale, not a global density change.
+    // 2026-08-12 round 3 (Ben, st8: "need a star cluster here" — bbox
+    // pointed at exactly where the binary pair's own companion already
+    // sits: a `dots` cluster, just faint enough at companion scale to
+    // read as empty space rather than a deliberate object). Companion
+    // glow alpha nudged up (0.16/0.06 -> 0.22/0.09) so the cluster
+    // registers regardless of which random draw lands.
     const g = el('d-glow')
-    const glowA = isHeadline ? 0.30 : 0.16, glowA2 = isHeadline ? 0.13 : 0.06
+    const glowA = isHeadline ? 0.30 : 0.22, glowA2 = isHeadline ? 0.13 : 0.09
     g.style.background = `radial-gradient(circle closest-side,
       ${hsla(hue, 58, 66, A(glowA, fill))} 0%, ${hsla(hue, 50, 52, A(glowA2, fill))} 48%, transparent ${E(76, fill).toFixed(0)}%)`
     f.appendChild(g)
@@ -737,11 +756,35 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
         // faint against the (now brighter) bulge and the space background,
         // part of why the whole primitive read as a flat smudge. isHeadline-
         // gated (see `boost` above) so companions keep the original values.
-        const loA = boost ? 0.60 - t * 0.20 : 0.42 - t * 0.20
-        const loA2 = boost ? 0.28 - t * 0.08 : 0.16 - t * 0.08
+        //
+        // 2026-08-12 round 3 (Ben: "problems with the spirals. they need
+        // to be blurred as it goes towards the edges of them all" — every
+        // spiral in the world, not just st1's own headline; this same
+        // l-arm code also draws the low-alpha layer-level ambient spiral
+        // that bleeds across most stations, which is why the complaint
+        // showed up tagged to several different stations' edges). The
+        // existing t-based falloff only dimmed outer lobes ~33% by the
+        // tip — still a crisp, solid-edged dot, just a fainter one, so it
+        // never read as "blurring." Two changes: alpha falloff steepened
+        // (0.20/0.08 -> 0.34/0.13, tip lobes much dimmer) AND the
+        // solid-to-transparent gradient stop itself pulls inward with t
+        // (55% -> as low as 33% at the tip), so outer lobes are smaller
+        // solid cores with more of their own radius spent fading — reads
+        // as genuinely softening into the background, not just dimming.
+        const loA = boost ? 0.60 - t * 0.34 : 0.42 - t * 0.34
+        const loA2 = boost ? 0.28 - t * 0.13 : 0.16 - t * 0.13
+        const midStop = 55 - t * 22
         lobe.style.background = `radial-gradient(circle,
           ${hsla(hue + ai * 6, 62 - t * 10, 72 - t * 16, A(loA, fill))} 0%,
-          ${hsla(hue, 52, 46, A(loA2, fill))} 55%, transparent ${E(82, fill).toFixed(0)}%)`
+          ${hsla(hue, 52, 46, A(loA2, fill))} ${midStop.toFixed(0)}%, transparent ${E(82, fill).toFixed(0)}%)`
+        // A gradient-stop shrink alone still leaves a crisp circular
+        // silhouette — dimmer, but not actually soft. A real (small)
+        // blur, scaled to each lobe's OWN size and capped well under the
+        // ~25% ceiling buildStars' own comment names (FAILURE-LEDGER #14:
+        // a blur wider than ~1/4 of an element deletes it outright) —
+        // 15% of diameter at the outermost lobe, 0 at the innermost, so
+        // only the tip genuinely softens into the background.
+        if (t > 0) lobe.style.filter = `blur(${(Math.max(10, ls) * 0.15 * t).toFixed(1)}px)`
         f.appendChild(lobe)
         // edge highlight rotates to the spiral's local TANGENT, not its
         // radial angle - for r = r0*e^(ang/pitch), tangent-to-radial
