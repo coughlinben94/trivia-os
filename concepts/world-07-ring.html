@@ -361,14 +361,14 @@ const WORLD = {
   // silhouette reconstruction — see that branch's own comment in
   // ringPrimitives.js) — no longer the same recipe.
   stations: [
-    { key:'ringed planet',  prim:'ring',         hue:256, accent:false }, // was st9 — radial mass
+    { key:'ringed planet',  prim:'ring',         hue:256, accent:false, maskSpots:[[0.24050632911392406,0.11818741209563996,0.04984177215189872,0.09282700421940926]] }, // was st9 — radial mass
     { key:'spiral galaxy',  prim:'lens',         hue:170, accent:false }, // was st3 — spiral/disc; hue 276->170 2026-08-12, Ben "still hate the oval purple color" after 2 rounds of shape/brightness fixes — st0/st1/st2 were 3 near-identical purples in a row (256/276/268), moved to green-teal
-    { key:'star cluster',   prim:'dots',         hue:268, accent:false }, // was st1 — scattered cluster
-    { key:'orange nebula',  prim:'blob',         hue:28,  accent:true, ring:true }, // was st0 — diffuse cloud, "needs a ring around it" 2026-08-12
+    { key:'star cluster',   prim:'dots',         hue:268, accent:false, maskSpots:[[0.33781645569620256,0.14912974683544306,0.055379746835443,0.09142053445850912],[0.6637658227848102,0.16319444444444445,0.06645569620253144,0.14064697609001406]] }, // was st1 — scattered cluster
+    { key:'orange nebula',  prim:'blob',         hue:28,  accent:true, ring:true, maskSpots:[[0.10126582278481013,0.15897503516174402,0.03955696202531646,0.08860759493670886],[0.4216772151898734,0.19413677918424754,0.05221518987341778,0.0956399437412096]] }, // was st0 — diffuse cloud, "needs a ring around it" 2026-08-12
     { key:'lit planet',     prim:'planet',       hue:140, accent:false, greenWash:true }, // NEW — radial mass; greenWash 2026-08-12 (Ben: "green on bottom half of two slides")
-    { key:'pulsar',         prim:'pulsar',       hue:120, accent:false, greenWash:true }, // NEW — radiant burst; greenWash 2026-08-12 (same)
+    { key:'pulsar',         prim:'pulsar',       hue:120, accent:false, greenWash:true, maskSpots:[[0.4865506329113924,0.8622099156118144,0.060126582278480944,0.1040787623066104],[0.8528481012658229,0.6765559071729957,0.087025316455696,0.18706047819971872]] }, // NEW — radiant burst; greenWash 2026-08-12 (same)
     { key:'rose nebula',    prim:'nebulaCloud',  hue:330, accent:true, cornerLeft:false }, // was st8 — asymmetric cloud, 2026-08-12; cornerLeft:false 2026-08-12 (Ben: "needs to be on other bottom corner" — was landing bottom-left, forced bottom-right)
-    { key:'comet',          prim:'streak',       hue:208, accent:false }, // was st4 — elongated streak
+    { key:'comet',          prim:'streak',       hue:208, accent:false, maskSpots:[[0.5957278481012659,0.13787798874824192,0.04509493670886067,0.07876230661040787]] }, // was st4 — elongated streak
     { key:'binary pair',    prim:'binary',       hue:214, accent:false }, // was st7 — radial mass
     { key:'asteroid field', prim:'asteroidField',hue:160, accent:false, fillCorner:true }, // NEW — scattered cluster; fillCorner 2026-08-12 (Ben: "need something here" on the bottom-left, which the spanning-field's own headline — centered on the st9/st10 boundary — never reaches)
     { key:'supernova',      prim:'spikes',       hue:36,  accent:true, noWash:true }, // was st2 — radiant burst; noWash 2026-08-12 (Ben: "not needed here" / "idk what the cloud is" on the far-layer wash)
@@ -951,6 +951,90 @@ function buildLayerContent(host, L){
         occ.style.top  = px(oy);
         host.appendChild(occ); formTotal++;
       }
+    }
+
+    // 2026-08-12 round 6 (Ben, "remove planet" x7 across st0/st2/st3/
+    // st5/st7 — DOM-verified each one as a NEIGHBORING station's own
+    // headline (b-lobe/l-disc) bleeding in at the frame edge, not a
+    // locally-placed object; confirmed with Ben directly, "they are all
+    // circles... made me think planets"). Fable-5 consulted on how to
+    // honor "just fix these spots" (not a global bleed change, his
+    // explicit choice) given the flagged content belongs to a NEIGHBOR
+    // station, not this one: editing the source object moves the problem
+    // (shrinks/repositions that neighbor's own approved headline, changing
+    // IT and its bleed into its other neighbor too). Verdict: only
+    // coherent as a receiving-side patch — a soft mask at this station's
+    // own flagged region, source objects untouched. `maskSpots` bboxes are
+    // copy-pasted directly from Ben's own review-tool JSON (same
+    // [x,y,w,h] fractional format), padded 15% per side and heavily
+    // feathered so the patch itself doesn't read as a hard rectangular
+    // cutout.
+    //
+    // Run as its OWN pass, after every station's headline/companion/
+    // occluder is already appended — not inline in the loop above. A
+    // neighbor with a higher index builds AFTER an earlier station in that
+    // single loop, so a same-iteration mask painted underneath it: Fable-5
+    // caught this by re-measuring bbox luminance after a gradient-only fix
+    // and finding two spots (st3, st7) completely unchanged — the mask was
+    // there, just painted first and covered over. Running this after the
+    // full loop guarantees the mask paints last, on top of every station's
+    // content, regardless of build order.
+    for (let i=0;i<ENGINE.PANES;i++){
+      const st = WORLD.stations[i];
+      if (!st.maskSpots) continue;
+      const x0 = i * ENGINE.W;
+      st.maskSpots.forEach(([mx, my, mw, mh]) => {
+        // Two prior attempts, both Fable-5-reviewed and rejected:
+        // 1. `var(--sky-1)` flat fill (itself a fix for `WORLD.sky.bg0` being
+        //    undefined — WORLD.sky is an array, not an object — which had
+        //    left every mask fully invisible since round 6's first commit) —
+        //    read as an obvious dark box against nebula/wash backgrounds it
+        //    didn't match (st00, st05).
+        // 2. `backdrop-filter: blur()` + `mask-image` on the SAME element —
+        //    fixed the color-clash, but Chromium doesn't feather a
+        //    backdrop-filter's blur *sampling region* via mask-image on its
+        //    own element; the blur itself still hard-clips at the box edge
+        //    underneath the alpha fade, so nearby bright glow (st07's beam,
+        //    st03's nebula) smeared into a visible lighter patch — same
+        //    "visible box" problem, opposite polarity.
+        //
+        // Fix: split into a masked WRAPPER (mask-image only, no filter) and
+        // a blurred CHILD filling it (backdrop-filter only, no mask) — the
+        // standard workaround for that Chromium interaction. mask-image
+        // composites the wrapper's fully-rendered contents (blurred child
+        // included) as one unit, instead of trying to feather the blur's own
+        // sampling clip. Padding also widened (15% -> 45%) and the alpha
+        // curve's opaque plateau shortened (55% -> 30%) so the fade has room
+        // to reach near-zero opacity well before the box's outer edge, where
+        // Fable-5's "clip line"/"right-angle notch" findings showed the old,
+        // tighter curve was still visibly non-transparent.
+        const padX = mw * 0.45, padY = mh * 0.45;
+        const mw2 = mw + padX * 2, mh2 = mh + padY * 2;
+        const wrapper = dom.el('');
+        wrapper.style.position = 'absolute';
+        wrapper.style.left = px(x0 + (mx - padX) * ENGINE.W);
+        wrapper.style.top = px((my - padY) * ENGINE.H);
+        wrapper.style.width = px(mw2 * ENGINE.W);
+        wrapper.style.height = px(mh2 * ENGINE.H);
+        wrapper.style.overflow = 'hidden';
+        const alphaCurve = `radial-gradient(ellipse 70% 70% at 50% 50%,
+          black 0%, black 30%, transparent 100%)`;
+        wrapper.style.maskImage = alphaCurve;
+        wrapper.style.webkitMaskImage = alphaCurve;
+
+        // Blur strength stays tied to the actual flagged object's own size
+        // (mw/mh, pre-padding), not the padded wrapper box, so widening the
+        // padding above doesn't also blow up how aggressively it defocuses.
+        const blurPx = Math.round(Math.min(mw * ENGINE.W, mh * ENGINE.H) * 0.4);
+        const blurred = dom.el('');
+        blurred.style.position = 'absolute';
+        blurred.style.inset = '0';
+        blurred.style.backdropFilter = `blur(${blurPx}px)`;
+        blurred.style.webkitBackdropFilter = `blur(${blurPx}px)`;
+        wrapper.appendChild(blurred);
+
+        host.appendChild(wrapper); formTotal++;
+      });
     }
   }
 
