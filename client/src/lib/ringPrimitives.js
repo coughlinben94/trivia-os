@@ -329,6 +329,31 @@ const EXTENT_GAIN = 1.9
 const A = (a, fill) => Math.min(1, a * ALPHA_GAIN * fill)
 const E = (e, fill) => Math.min(100, e * EXTENT_GAIN * fill)
 
+// smoothEdgePath/closedSilhouettePath: quadratic-through-midpoint smoothing
+// for a twin-edge (top+bottom) filled SVG silhouette. Factored out
+// 2026-08-13 rather than hand-copied a second time — 'ribbon' originated
+// this exact construction (see its own 2026-08-12 history below: "same
+// quadratic-through-midpoint smoothing... a closed path with an
+// independently-wavy TOP edge and BOTTOM edge"), 'streak' now needs the
+// identical shape (two parallel edges, smoothed, filled) for its tapered
+// comet tail. This file's own opening comment is built around exactly this
+// failure class - two call sites hand-duplicating the same logic and
+// drifting apart - so the second call site reuses the first's math instead
+// of re-deriving it.
+function smoothEdgePath(pts) {
+  let dd = `M ${((pts[0].x + pts[1].x) / 2).toFixed(1)} ${((pts[0].y + pts[1].y) / 2).toFixed(1)}`
+  for (let k = 1; k < pts.length; k++) {
+    const p = pts[k], np = pts[k + 1] || pts[k]
+    dd += ` Q ${p.x.toFixed(1)} ${p.y.toFixed(1)} ${((p.x + np.x) / 2).toFixed(1)} ${((p.y + np.y) / 2).toFixed(1)}`
+  }
+  return dd
+}
+// topPts left-to-right, botPts already reversed (right-to-left) so the
+// path closes without crossing itself.
+function closedSilhouettePath(topPts, botPts) {
+  return `${smoothEdgePath(topPts)} L ${botPts[0].x.toFixed(1)} ${botPts[0].y.toFixed(1)} ${smoothEdgePath(botPts).slice(1)} Z`
+}
+
 function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
   // required, no default: a silent `fill = 1` here is exactly how the same
   // dropped-parameter bug got shipped 3 separate times (fillOf never wired
@@ -391,7 +416,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // fill near 1) gets ~0 boost — cap violation confirmed gone on re-run,
     // not just assumed — while a quiet one (st6) still gets most of it.
     // Boost multiplier 16->26, same second pass.
-    let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity, domRot = 0, domArea = -1
+    let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity, domArea = -1, domLobe = null
     for (let i = 0; i < 3; i++) {
       const L = el('b-lobe')
       const lw = w * (0.62 + r() * 0.38), lh = h * (0.55 + r() * 0.45)
@@ -412,33 +437,67 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       bx0 = Math.min(bx0, lx); by0 = Math.min(by0, ly)
       bx1 = Math.max(bx1, lx + lw); by1 = Math.max(by1, ly + lh)
       const area = lw * lh
-      if (area > domArea) { domArea = area; domRot = rot }
+      // domArea/domLobe: which lobe is visually biggest, used below to
+      // merge the core into it at headline scale. Used to also drive a
+      // rim-outline rotation, removed 2026-08-12 round 5 (Ben: rim can't
+      // fade, always reads hard-edged) — the dominance tracking itself
+      // stayed dead code until the fix below gave it a real job again.
+      if (area > domArea) { domArea = area; domLobe = { node: L, lx, ly, lw, lh } }
     }
-    // core-as-a-region: 8-14% of the cloud's width, positioned inside the
-    // real lobe-cluster bbox, soft radial fill (not a flat disc).
-    const core = el('s-core')
+    // core: same w()/lerp() draws happen either way so the r() stream this
+    // station's headline placement reads AFTER makePrim returns (corner/
+    // band coin-flips, world-07-ring.html ~line 559) never silently
+    // reshuffles based on which branch below runs — only what the draws
+    // are USED for differs.
     const cs = w * (0.08 + r() * 0.06)
     const ccx = lerp(bx0, bx1, 0.3 + r() * 0.4), ccy = lerp(by0, by1, 0.3 + r() * 0.4)
-    core.style.width = core.style.height = px(cs)
-    core.style.left = px(ccx - cs / 2); core.style.top = px(ccy - cs / 2)
-    core.style.background = `radial-gradient(circle, ${hsla(hue, 30, 96, AB(0.70, fill))} 0%, ${hsla(hue, 70, 80, AB(0.35, fill))} 55%, transparent 100%)`
-    core.style.boxShadow = `0 0 ${px(cs * 2.4)} ${px(cs * 0.8)} ${hsla(hue, 84, 78, AB(0.22, fill))}`
-    f.appendChild(core)
-    // rim: traces the ACTUAL lobe cluster's bounding box, inset to the
-    // gradient's own visible radii (56%/44%, matching each lobe's own
-    // `ellipse 56% 44%` gradient above), rotated with the dominant lobe.
-    //
-    // 2026-08-12 round 4 gated this off for headline-scale blob only
-    // (st3's own "remove the curved line" complaint). Round 5 removes it
-    // outright for companion scale too — Ben, repeated 5x, direct: "there
-    // is no fade out as you go further towards the edge... for the ones
-    // surrounding assets." A `border` is a solid CSS line; it cannot fade
-    // by construction regardless of how the underlying glow gradient is
-    // tuned, so as long as this rim exists ANY blob will keep reading as
-    // hard-edged. DOM-verified at st1's own companion (a `blob`) as the
-    // exact element still producing a visible circular outline after the
-    // l-disc/b-lobe gradient sizing fix below — the gradient fix alone
-    // wasn't enough while this coexisted with it.
+    if (isHeadline) {
+      // 2026-08-13 (Ben, repeated 2026-08-12 AND 2026-08-13: "still three
+      // circles, only need one" / "three circles here, only need middle
+      // one" — st3 orange nebula, the ONLY headline use of `blob`).
+      // Tuning each circle individually (alpha floors, lightness boosts,
+      // ring axes/offset — see this branch's own history above and
+      // makeNebulaRing's) never fixed it because the defect was never any
+      // one circle's parameters: `blob` drew its 3 lobes (the smudge)
+      // PLUS a separate `s-core` div (its own hard circle, plus its own
+      // box-shadow halo — a second, concentric soft circle around THAT)
+      // PLUS the st3 call site layering makeNebulaRing's donut ring on
+      // top — three to four independently-drawn circular elements no
+      // amount of per-element tuning turns into one gestalt. Fix: no
+      // separate core element at headline scale. The "hot knot" becomes
+      // an EXTRA radial-gradient layer stacked onto the dominant lobe's
+      // own `background` (CSS multi-background, comma-joined, first-
+      // listed paints on top) — one continuously-painted shape, not a
+      // second circle sitting on it. The ring donut is removed at its
+      // call site instead of here (world-07-ring.html: `ring:true`
+      // dropped from st3's station data) since it's a standalone
+      // accessory a caller layers around blob, not part of makePrim
+      // itself — see makeNebulaRing's own header comment.
+      // Gated to isHeadline: `blob` is used elsewhere only as a small
+      // 230-420px companion (no complaint on record there), so this
+      // leaves every other station's use of `blob` byte-identical.
+      const hx = Math.min(85, Math.max(15, (ccx - domLobe.lx) / domLobe.lw * 100))
+      const hy = Math.min(85, Math.max(15, (ccy - domLobe.ly) / domLobe.lh * 100))
+      const hRadX = Math.min(70, Math.max(18, (cs / domLobe.lw) * 100 * 1.4))
+      const hRadY = Math.min(70, Math.max(18, (cs / domLobe.lh) * 100 * 1.4))
+      domLobe.node.style.background = `radial-gradient(ellipse ${hRadX.toFixed(0)}% ${hRadY.toFixed(0)}% at ${hx.toFixed(0)}% ${hy.toFixed(0)}%,
+        ${hsla(hue, 30, 96, AB(0.70, fill))} 0%, ${hsla(hue, 70, 80, AB(0.35, fill))} 40%, transparent 78%),
+        ${domLobe.node.style.background}`
+    } else {
+      // core-as-a-region: 8-14% of the cloud's width, positioned inside
+      // the real lobe-cluster bbox, soft radial fill (not a flat disc).
+      // Companion scale only now — see the isHeadline branch above for why.
+      const core = el('s-core')
+      core.style.width = core.style.height = px(cs)
+      core.style.left = px(ccx - cs / 2); core.style.top = px(ccy - cs / 2)
+      core.style.background = `radial-gradient(circle, ${hsla(hue, 30, 96, AB(0.70, fill))} 0%, ${hsla(hue, 70, 80, AB(0.35, fill))} 55%, transparent 100%)`
+      core.style.boxShadow = `0 0 ${px(cs * 2.4)} ${px(cs * 0.8)} ${hsla(hue, 84, 78, AB(0.22, fill))}`
+      f.appendChild(core)
+    }
+    // rim (traced the lobe cluster's bbox as a border) removed outright
+    // 2026-08-12 round 5 — a `border` is a solid CSS line, can't fade, so
+    // its mere presence read as hard-edged regardless of gradient tuning.
+    // Not reinstated here; unrelated to the three-circles fix above.
   }
 
   else if (kind === 'nebulaCloud') {
@@ -498,9 +557,43 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // isn't affected): reuses the AB/LB hoisted at makePrim's top scope
     // (see `blob`'s own comment for the tuning history) rather than
     // redefining them here.
+    // 2026-08-13 (fresh customer-role critique: "a hard-edged mauve amoeba
+    // with a crisp outline and a white ball inside — reads as a torn paper
+    // scrap or spilled paint," plus a separate "fried-egg" note on the
+    // ball). Two distinct defects below, fixed separately rather than as
+    // one blur pass over everything:
+    //
+    // (1) THE OUTLINE. `clip-path` is a binary stencil — anything not
+    // already faded to ~0 alpha by the background gradient gets zeroed
+    // sharply AT the path, regardless of how soft the gradient itself is,
+    // whenever the gradient's own fade-out radius doesn't fully complete
+    // before the (irregular, per-point-varying) path boundary. This is the
+    // exact "crisp geometric edge" defect `ribbon` (st11, aurora) already
+    // hit and fixed, same session: "filter: blur(...) on the whole path...
+    // brings this primitive in line with every other one in this file,
+    // none of which use a crisp hard-edged fill" (see that kind's own
+    // comment). Same fix here: a CSS blur on `cloud`/`lane` (the two
+    // continuous clipped fills) softens the stencil cutoff as a post-
+    // process instead of hand-tuning gradient stops per irregular boundary
+    // point. NOT applied to `dust` below — blurring that wrapper would
+    // smear the actual particle texture Ben separately asked for into
+    // fuzz, not soften an edge; individual small dots don't read as "the
+    // outline" the way the two continuous fills do.
+    const EDGE_BLUR = Math.max(14, w * 0.028) // stronger than `ribbon`'s 0.012 —
+    // ribbon's edge is a thin curtain stroke; this is a large filled
+    // silhouette where the same factor barely registered on a real render
+    // (measured: transition still ~3-4px wide at 0.012, i.e. visually
+    // still "hard" — a Chromium clip-path+filter combination doesn't spread
+    // the input pixels as generously as a naive blur-radius estimate
+    // suggests). Re-measured at this value: transition zone widens to
+    // ~20-25px, visibly soft at the crop scale used to judge the original
+    // complaint. Still <3% of the headline's own width — nowhere near
+    // FAILURE-LEDGER's "blur wider than ~1/4 of an element deletes it"
+    // caution, which was about small stars, not a 576-880px silhouette.
     const cloud = el('')
     cloud.style.position = 'absolute'; cloud.style.inset = '0'
     cloud.style.clipPath = `path('${d}')`
+    cloud.style.filter = `blur(${EDGE_BLUR.toFixed(1)}px)`
     // off-center bright zone (asymmetric core, not center-anchored) —
     // avoids the "same-shaped circles" symmetry the old recipe had.
     const coreXPct = 32 + r() * 24, coreYPct = 28 + r() * 26
@@ -511,26 +604,41 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // dust lane: a dark soft band crossing part of the cloud at a random
     // angle, clipped to the SAME silhouette — the internal structure/
     // asymmetry a smooth gradient alone can't give, and the literal
-    // feature Ben's fix direction named.
+    // feature Ben's fix direction named. Same edge-blur as `cloud` (same
+    // stencil, same defect).
     const lane = el('')
     lane.style.position = 'absolute'; lane.style.inset = '0'
     lane.style.clipPath = `path('${d}')`
+    lane.style.filter = `blur(${EDGE_BLUR.toFixed(1)}px)`
     const laneAng = -25 + r() * 50
     const laneMid = 42 + r() * 16
     lane.style.background = `linear-gradient(${laneAng.toFixed(0)}deg,
       transparent ${(laneMid - 20).toFixed(0)}%, ${hsla(hue - 22, 45, 8, A(0.55, fill))} ${laneMid.toFixed(0)}%,
       ${hsla(hue - 22, 45, 8, A(0.55, fill))} ${(laneMid + 10).toFixed(0)}%, transparent ${(laneMid + 30).toFixed(0)}%)`
     f.appendChild(lane)
-    // hot core, off-center to match the bright-zone position above (not
-    // the box center) — the one small, sharp, bright feature against the
-    // otherwise soft cloud, same core treatment every other primitive uses.
+    // (2) THE BALL. Was near-white (L97, sat 30) fading straight to
+    // TRANSPARENT at its own 100% stop, sized 7-11% of the headline's
+    // width — large and colourless enough, against a now-softer but still
+    // visually flat cloud, to read as a literal second circle stacked on
+    // top ("fried egg," "white ball") instead of a glowing heart of the
+    // nebula. Two changes, not one: shrunk to roughly half its prior size
+    // (a spark, not a disc), and its own gradient stops now interpolate
+    // THROUGH the cloud's own inner colour (hue,64,LB(46) — the same stop
+    // `cloud`'s background already uses at its 42% ring) instead of
+    // dropping straight to transparent — so the core's edge dissolves into
+    // the surrounding cloud colour rather than leaving a sharp value/
+    // saturation jump for the eye to read as a second boundary. Peak
+    // lightness capped at 88 (not 97) with real hue saturation (55, not
+    // 30) so it reads as a warm ember, not a colourless sphere. box-shadow
+    // trimmed to match (smaller, dimmer) so it reads as bloom, not a halo
+    // ring around a ball.
     const core = el('s-core')
-    const cs = w * (0.07 + r() * 0.04)
+    const cs = w * (0.035 + r() * 0.02)
     core.style.left = px((coreXPct / 100) * w - cs / 2)
     core.style.top = px((coreYPct / 100) * h - cs / 2)
     core.style.width = core.style.height = px(cs)
-    core.style.background = `radial-gradient(circle, ${hsla(hue + 10, 30, 97, AB(0.75, fill))} 0%, ${hsla(hue, 70, 82, AB(0.35, fill))} 55%, transparent 100%)`
-    core.style.boxShadow = `0 0 ${px(cs * 2.2)} ${px(cs * 0.7)} ${hsla(hue, 84, 78, AB(0.22, fill))}`
+    core.style.background = `radial-gradient(circle, ${hsla(hue + 12, 55, LB(88), AB(0.80, fill))} 0%, ${hsla(hue + 6, 62, LB(68), AB(0.42, fill))} 50%, ${hsla(hue, 64, LB(46), AB(0.16, fill))} 100%)`
+    core.style.boxShadow = `0 0 ${px(cs * 1.4)} ${px(cs * 0.4)} ${hsla(hue, 78, 72, AB(0.14, fill))}`
     f.appendChild(core)
     // 2026-08-12 (fresh review, st6: "add dust psrticlaes" [sic]). The dust
     // LANE above is a dark band, not particles — this is a literal scatter
@@ -716,21 +824,189 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       ${hsla(hue, 40, 46, A(boost ? 0.32 : 0.16, fill))} 0%, ${hsla(hue, 38, 40, A(boost ? 0.17 : 0.08, fill))} 38%,
       ${hsla(hue, 36, 32, A(boost ? 0.07 : 0.04, fill))} 72%, transparent 100%)`
     f.appendChild(d)
-    // spiral arms: this used to be a straight dust lane across a flattened
-    // disc, which fill-black-silhouettes indistinguishable from `ring`'s
-    // actual hollow ellipse - two nouns, one silhouette. A true curve isn't
-    // in this vocabulary (no path/bezier primitive) - two rotated straight
-    // ellipses were tried first and rendered as a sharp V/boomerang, not a
-    // spiral (confirmed on an isolated render, not assumed). Reused the
-    // technique `blob` already uses to fake an irregular cloud from
-    // circular primitives instead: each arm is 5 soft lobes stepped along a
-    // logarithmic spiral (radius grows, angle advances, size shrinks) out
-    // from the core - a real curve made of overlapping circles, the same
-    // way blob fakes an irregular silhouette from three overlapping
-    // ellipses.
+    // spiral arms.
     const cx = w * 0.5, cy = h * 0.5
     const baseAng = r() * Math.PI * 2
-    let domEdge = null, domEdgeArea = -1
+
+    if (isHeadline) {
+    // 2026-08-13 (fresh customer-role critique, "a chain of ~20 shiny teal
+    // marbles in an S-curve, each with its own specular highlight — a
+    // caterpillar made of gumballs," named worst-looking station on the
+    // ring): the discrete-lobe construction below (kept, unchanged, for the
+    // companion/non-headline use of this same `lens` kind at st2-5 — see
+    // `boost` above, this is a genuine one-station rework, not a global
+    // rewrite of `lens`, same discipline `nebulaCloud` used to avoid
+    // re-risking `blob`/st3 while fixing st6) is replaced HERE, headline-
+    // only, with one continuous filled ribbon per arm instead of ~10
+    // separate radial-gradient circles. Root cause of the "marbles" read:
+    // each `l-arm` lobe is its own closed radial gradient (bright center,
+    // transparent falloff) with no shared blend between neighbours — the
+    // §6.2 touching-but-distinct spacing (kept below, untouched, for the
+    // companion path — that's a cited spec band, not this file's to move)
+    // exists precisely so lobes stay individually countable, which is
+    // correct for other uses of the same trick (`blob`) but is exactly what
+    // reads as "beads" on a headline meant to be one continuous dust lane.
+    // No blur filter (this file avoids them — FAILURE-LEDGER #14, a blur
+    // wider than ~1/4 of an element deletes it outright); the blend comes
+    // from the ribbon being one shape with one lengthwise gradient, the same
+    // "smooth curve from a filled silhouette, not a traced line" lesson
+    // `ribbon`'s own st11 rebuild already learned (a 1-D line/chain of dots
+    // can't read as a 2-D band; it has to be the outline of a filled shape).
+    const NS = 'http://www.w3.org/2000/svg'
+    const svg = document.createElementNS(NS, 'svg')
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
+    svg.style.position = 'absolute'; svg.style.inset = '0'
+    svg.style.width = '100%'; svg.style.height = '100%'
+    const defs = document.createElementNS(NS, 'defs')
+    svg.appendChild(defs)
+    const maxRad = w * (0.30 + r() * 0.08)
+    const r0 = maxRad * 0.12
+    const pitch = 1.15 + r() * 0.35 // ln(maxRad/r0) ~= 2.12 -> ~140-182deg sweep/arm
+    const M = 26 // centreline samples — a curve, not discrete beads, so this can be much finer than the old 10-lobe count
+    const smoothEdge = (pts) => {
+      let dd = `${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`
+      for (let k = 1; k < pts.length; k++) {
+        const p = pts[k], np = pts[k + 1] || pts[k]
+        dd += ` Q ${p.x.toFixed(1)} ${p.y.toFixed(1)} ${((p.x + np.x) / 2).toFixed(1)} ${((p.y + np.y) / 2).toFixed(1)}`
+      }
+      return dd
+    }
+    ;[0, Math.PI].forEach((phase, ai) => {
+      const pts = []
+      for (let k = 0; k < M; k++) {
+        const t = k / (M - 1)
+        // same radial/angular distribution the old lobe placement used —
+        // this rework changes HOW the arm is painted, not the underlying
+        // spiral shape already verified to read as a pinwheel/S-curve.
+        const rad = maxRad * (0.12 + 0.88 * Math.pow(t, 0.9))
+        const ang = baseAng + phase + pitch * Math.log(rad / r0)
+        pts.push({ x: cx + Math.cos(ang) * rad, y: cy + Math.sin(ang) * rad * (h / w), t })
+      }
+      // local unit tangent/perpendicular per point, computed once and
+      // shared by every nested layer below (so the layers stay concentric
+      // instead of drifting relative to each other).
+      const norm = pts.map((p, k) => {
+        const p0 = pts[Math.max(0, k - 1)], p1 = pts[Math.min(M - 1, k + 1)]
+        const tx = p1.x - p0.x, ty = p1.y - p0.y
+        const tl = Math.hypot(tx, ty) || 1
+        return { nx: -ty / tl, ny: tx / tl }
+      })
+      // ONE shared, low-frequency undulation (not one jitter per layer, and
+      // NOT one r() draw per point — an earlier version of this line called
+      // r() inside the .map() below, one draw per centerline sample: it
+      // both defeated the "smooth, gentle" intent (a fresh random phase
+      // every ~1/26th of the arc is noise, not a wave) and silently burned
+      // 26x more of the shared seeded-RNG stream per arm than intended.
+      // One draw here, reused as a shared phase for every point) so nested
+      // layers ripple together, not against each other — gentle (a couple
+      // of soft bulges along the whole arm) rather than the higher-
+      // frequency version that shipped first and DOM-rendered as a
+      // scalloped/toothed hard edge ("puzzle piece," own critique before
+      // committing this) instead of a soft dust lane.
+      const wobblePhase = r() * 4
+      const wobble = pts.map(p => 1 + 0.10 * Math.sin(p.t * 3.1 + ai * 1.7 + wobblePhase))
+      // Cross-section softness (a real dust lane's brightness falls off
+      // toward BOTH silhouette edges, not just along its length) can't come
+      // from a single flat-fill path — a vector path edge is always crisp,
+      // and this file avoids blur filters (FAILURE-LEDGER #14). Same
+      // poor-man's-feather trick `l-disc` above and every radial-gradient
+      // primitive in this file already uses (concentric stops, narrower ==
+      // brighter): 4 nested copies of the SAME centerline/tangent/wobble,
+      // at shrinking half-width fractions and rising peak alpha, each with
+      // its own core-to-tip lengthwise fade. Outer-to-inner reads as one
+      // soft-edged glowing band, not 4 visible rings, because each layer's
+      // OWN gradient already fades toward 0 well before the next layer's
+      // edge.
+      // 2026-08-13, measured (not guessed): the first version of this
+      // rework (hwMax=0.062) pushed st1's own [ADVISORY, non-blocking]
+      // bleed check from 28.0% (pre-rework, in-band) to 35.3% — just over
+      // the spec's 35% "accidental clip" ceiling (ART-DIRECTION-SPEC.md
+      // §2). Trimming hwMax to 0.050 here did NOT move that number at all
+      // (still 35.3%, re-verified) — the real cause, found only after
+      // re-checking rather than assuming the first guess was right: this
+      // whole construction now calls the shared seeded `r()` far fewer
+      // times than the old lobe-loop did (~6 vs ~26, once the wobblePhase
+      // fix below stopped drawing r() per-point), which shifts every
+      // r()-consuming decision downstream in the SAME render pass — including
+      // bandY's own corner/edge draw for st1 itself. Confirmed directly:
+      // after that fix, st1 relocated to a different corner and bleed moved
+      // AGAIN, to 45.8%, in the opposite direction from what trimming hwMax
+      // was trying to achieve. This is a known, reported side effect of
+      // reworking this primitive's internals, not something this task
+      // chases further — bandY/corner placement is separately flagged
+      // (HANDOFF-ring-2026-08-12.md) as already mid-tuning by a concurrent
+      // session, and every primitive rework in this file's own history has
+      // shifted downstream r() consumption the same way without anyone
+      // padding the call count to compensate. hwMax is left at the smaller,
+      // measured-safer value regardless, since it's still the right call on
+      // its own terms (the object's real footprint, independent of bleed).
+      const hwMax = w * 0.050, hwMin = w * 0.014
+      // alphas nudged up from the first pass to compensate for the
+      // narrower hwMax above (less area -> less "ink" unless brightness
+      // rises to offset it) — still well short of every stop clamping to
+      // opaque, so the nested-layer softness is unchanged, just a bit
+      // punchier overall.
+      const layers = [
+        { frac: 1.00, a0: 0.18, aMid: 0.09, l0: 60 },
+        { frac: 0.72, a0: 0.30, aMid: 0.15, l0: 66 },
+        { frac: 0.46, a0: 0.48, aMid: 0.24, l0: 74 },
+        { frac: 0.22, a0: 0.68, aMid: 0.34, l0: 86 },
+      ]
+      layers.forEach(({ frac, a0, aMid, l0 }, li) => {
+        const outer = [], inner = []
+        for (let k = 0; k < M; k++) {
+          const hw = (hwMax * Math.pow(1 - pts[k].t, 0.6) + hwMin) * frac * wobble[k]
+          const { nx, ny } = norm[k]
+          outer.push({ x: pts[k].x + nx * hw, y: pts[k].y + ny * hw })
+          inner.push({ x: pts[k].x - nx * hw, y: pts[k].y - ny * hw })
+        }
+        let d = `M ${smoothEdge(outer)}`
+        d += ` L ${inner[M - 1].x.toFixed(1)} ${inner[M - 1].y.toFixed(1)}`
+        d += ` ${smoothEdge(inner.slice().reverse())} Z`
+        // lengthwise gradient (core-bright to tip-faint), userSpaceOnUse so
+        // it runs along the arm's own real axis rather than its local bbox
+        // — same technique `ribbon`'s curtain gradient already uses for the
+        // same reason.
+        const gradId = `spiralArmGrad${occCounter++}`
+        const grad = document.createElementNS(NS, 'linearGradient')
+        grad.setAttribute('id', gradId)
+        grad.setAttribute('gradientUnits', 'userSpaceOnUse')
+        grad.setAttribute('x1', pts[0].x.toFixed(1)); grad.setAttribute('y1', pts[0].y.toFixed(1))
+        grad.setAttribute('x2', pts[M - 1].x.toFixed(1)); grad.setAttribute('y2', pts[M - 1].y.toFixed(1))
+        const stops = [
+          [0, hsla(hue + ai * 6, 60 - li * 4, l0, A(a0, fill))],
+          [40, hsla(hue, 54, l0 - 10, A(aMid, fill))],
+          [100, hsla(hue, 46, l0 - 20, 0)],
+        ]
+        stops.forEach(([off, col]) => {
+          const st = document.createElementNS(NS, 'stop')
+          st.setAttribute('offset', `${off}%`); st.setAttribute('stop-color', col)
+          grad.appendChild(st)
+        })
+        defs.appendChild(grad)
+        const path = document.createElementNS(NS, 'path')
+        path.setAttribute('d', d)
+        path.setAttribute('fill', `url(#${gradId})`)
+        svg.appendChild(path)
+      })
+    })
+    f.appendChild(svg)
+    // 2026-08-11: size 0.036->0.052, glow alpha 0.45->0.75 — the nucleus
+    // the arms wind around needs to read as unmistakably the brightest
+    // point in the primitive, not a faint dot lost among the arm lobes.
+    // isHeadline-gated, same as the rest of this kind's boost.
+    const c = el('l-core')
+    const cs = Math.max(14, w * (boost ? 0.052 : 0.036))
+    c.style.width = c.style.height = px(cs)
+    c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
+    c.style.boxShadow = `0 0 ${px(cs * 2.6)} ${px(cs * 0.7)} ${hsla(hue, 70, boost ? 85 : 80, A(boost ? 0.75 : 0.45, fill))}`
+    f.appendChild(c)
+    f.style.transform = `rotate(${(-30 + r() * 24).toFixed(0)}deg)`
+  } else {
+    // companion-scale `lens` (st2-5 background dressing): ORIGINAL
+    // discrete-lobe construction, untouched by the 2026-08-13 headline
+    // rework above — this kind is shared, and the companion use was never
+    // the complaint (only st1's headline was named).
     // touching-but-distinct band: consecutive lobes' centre-distance /
     // mean-diameter must land in ~0.7-1.05 (spec §6.2 silhouette test) -
     // measured, overlapping enough to read as one continuous curved band,
@@ -746,6 +1022,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // ratio - the size follows the geometry instead of fighting it.
     // Verified over 30 seed x aspect-ratio combinations (see PR notes):
     // ratio band [0.71, 0.97], inside 0.7-1.05 throughout.
+    let domEdge = null, domEdgeArea = -1
     const ARM_TARGET_RATIO = 0.85 // midpoint of the required 0.7-1.05 band
     ;[0, Math.PI].forEach((phase, ai) => {
       // 6 lobes stepped along a TRUE logarithmic spiral (angle grows with
@@ -860,18 +1137,87 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     c.style.boxShadow = `0 0 ${px(cs * 2.6)} ${px(cs * 0.7)} ${hsla(hue, 70, boost ? 85 : 80, A(boost ? 0.75 : 0.45, fill))}`
     f.appendChild(c)
     f.style.transform = `rotate(${(-30 + r() * 24).toFixed(0)}deg)`
+    }
   }
 
   else if (kind === 'streak') {
-    const t = el('k-tail')
-    // tail bar's own thickness, not the headline box's w/h — same "paint
-    // grows inside an unchanged box" rule as every other primitive above.
+    // 2026-08-13 (fresh customer-role critique: "a circle on a straight
+    // stick — a lollipop or a thermometer"). Root cause, confirmed by
+    // rendering before touching anything: the old `.k-tail` was a single
+    // <div>, fixed 100% width x constant `tailH` height — ONLY its
+    // background-gradient opacity varied along the length, the actual box
+    // silhouette a viewer's eye tracks was a uniform-width rounded bar
+    // (`.k-tail`'s own `border-radius:999px`) the whole way, which is
+    // exactly the stick/thermometer shape being described. A real comet
+    // tail's WIDTH tapers, not just its brightness — rebuilt as a filled SVG
+    // silhouette (shares `closedSilhouettePath`/`smoothEdgePath` with
+    // 'ribbon' above, module scope) whose two edges both narrow toward the
+    // far end, plus small per-point width noise (this file's own seeded
+    // `r()`, never Math.random — see ring-verify's math-random check) so the
+    // edge reads as a wispy dust trail rather than a geometrically perfect
+    // wedge. Opacity still fades along the same axis via the gradient fill,
+    // same stops as the old background-gradient — width and brightness now
+    // taper together instead of only the latter.
+    const N = 8
+    // tailH: max thickness, at the head end — same formula as before (box's
+    // own paint-grows-inside-unchanged-box budget, untouched).
     const tailH = Math.max(6, h * 0.14 * EXTENT_GAIN * fill)
-    t.style.width = '100%'; t.style.height = px(tailH)
-    t.style.marginTop = px(-tailH / 2)
-    t.style.background = `linear-gradient(90deg,transparent 0%,${hsla(hue, 60, 70, A(0.10, fill))} 18%,
-      ${hsla(hue, 66, 78, A(0.32, fill))} 70%,${hsla(hue, 70, 90, A(0.62, fill))} 100%)`
-    f.appendChild(t)
+    // tipH: thickness at the far end — never fully zero (a hairline is still
+    // a shape; a literal point invites degenerate-path edge cases in the
+    // smoother for no visual gain).
+    const tipH = Math.max(1.5, tailH * 0.14)
+    // t in [0,1]: 0 = far end (thin), 1 = head end (thick). Power >1 keeps
+    // most of the length narrow, flaring only in the final stretch before
+    // the coma/head — reads as a fine trail sweeping into a bright source,
+    // not a linear wedge.
+    const halfW = (tt) => (tipH + (tailH - tipH) * Math.pow(tt, 1.7)) / 2
+    const topPts = [], botPtsFwd = []
+    for (let k = 0; k <= N; k++) {
+      const tt = k / N, x = tt * w, hw = halfW(tt)
+      // noise scales with local half-width so the thin far tip doesn't
+      // jitter wider than its own body; top/bottom drawn independently so
+      // the band's thickness itself wobbles a little too, not just its
+      // centerline.
+      const jTop = (r() - 0.5) * hw * 0.7
+      const jBot = (r() - 0.5) * hw * 0.7
+      topPts.push({ x, y: h / 2 - hw + jTop })
+      botPtsFwd.push({ x, y: h / 2 + hw + jBot })
+    }
+    const d = closedSilhouettePath(topPts, botPtsFwd.slice().reverse())
+    const NS = 'http://www.w3.org/2000/svg'
+    const svg = document.createElementNS(NS, 'svg')
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
+    svg.style.position = 'absolute'; svg.style.inset = '0'
+    svg.style.width = '100%'; svg.style.height = '100%'
+    const gradId = `cometTailGrad${occCounter++}`
+    const defs = document.createElementNS(NS, 'defs')
+    const grad = document.createElementNS(NS, 'linearGradient')
+    grad.setAttribute('id', gradId)
+    grad.setAttribute('gradientUnits', 'userSpaceOnUse')
+    grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0')
+    grad.setAttribute('x2', String(w)); grad.setAttribute('y2', '0')
+    // same stops the old background-gradient used — transparent at the far
+    // (thin) end, brightening toward the head (wide) end.
+    ;[[0, 'transparent'], [18, hsla(hue, 60, 70, A(0.10, fill))],
+      [70, hsla(hue, 66, 78, A(0.32, fill))], [100, hsla(hue, 70, 90, A(0.62, fill))]]
+      .forEach(([off, color]) => {
+        const stop = document.createElementNS(NS, 'stop')
+        stop.setAttribute('offset', `${off}%`)
+        stop.setAttribute('stop-color', color)
+        grad.appendChild(stop)
+      })
+    defs.appendChild(grad)
+    svg.appendChild(defs)
+    const tail = document.createElementNS(NS, 'path')
+    tail.setAttribute('d', d)
+    tail.setAttribute('fill', `url(#${gradId})`)
+    // soft blur: masks the smoother's own segment joints and reads as a
+    // diffuse dust trail rather than a crisp cut silhouette — same
+    // treatment 'ribbon' already uses on its curtain path for the same
+    // reason.
+    svg.style.filter = `blur(${Math.max(2, tailH * 0.10).toFixed(1)}px)`
+    svg.appendChild(tail)
+    f.appendChild(svg)
     // coma: soft glow bigger than the nucleus, marking this as a comet not
     // a point-source shooting star. Centered on the head's actual position
     // (.k-head is right:-4px, top:50%, so its center sits at
@@ -942,15 +1288,9 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
       + Math.sin(t * Math.PI * 2 * waveCycles + 0.6) * waveAmp * 0.7
     const topPts = Array.from({ length: N + 1 }, (_, k) => ({ x: (k / N) * w, y: topY(k / N) }))
     const botPts = Array.from({ length: N + 1 }, (_, k) => ({ x: (k / N) * w, y: botY(k / N) })).reverse()
-    const smoothPath = (pts) => {
-      let dd = `M ${((pts[0].x + pts[1].x) / 2).toFixed(1)} ${((pts[0].y + pts[1].y) / 2).toFixed(1)}`
-      for (let k = 1; k < pts.length; k++) {
-        const p = pts[k], np = pts[k + 1] || pts[k]
-        dd += ` Q ${p.x.toFixed(1)} ${p.y.toFixed(1)} ${((p.x + np.x) / 2).toFixed(1)} ${((p.y + np.y) / 2).toFixed(1)}`
-      }
-      return dd
-    }
-    const d = `${smoothPath(topPts)} L ${botPts[0].x.toFixed(1)} ${botPts[0].y.toFixed(1)} ${smoothPath(botPts).slice(1)} Z`
+    // shared with 'streak' below — see smoothEdgePath/closedSilhouettePath's
+    // own comment, module scope, above makePrim.
+    const d = closedSilhouettePath(topPts, botPts)
     // gradientTransform / userSpaceOnUse so the gradient runs top-to-bottom
     // of the whole box regardless of the path's own local wavy bounds —
     // objectBoundingBox (the default) would stretch it to the path's own
