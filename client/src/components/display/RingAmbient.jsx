@@ -221,22 +221,18 @@ function buildLayerContent(engine, world, arc, host, L) {
        too, not just from differential motion. */
     dom.buildStars(host, period, 40, 1.25, 0xCAFE1)
 
-    // occlusion eligibility (2026-08-09, spec §7.2 amendment): a subtractive
-    // element (occluder) paired with an already-quiet station is the worst
-    // combination available — st6 carried both the arc's own local trough
-    // AND a large dark occluder, and rendered/judged as an empty or broken
-    // pane, not a deliberately quiet one (this is about presence, which is
-    // never the arc's job; the arc only ever says how bright). Bottom third
-    // BY LOUDNESS RANK (not by absolute arc value, which would vary in
-    // count seed-to-seed on a peaked, non-uniform arc) is excluded from
-    // occlusion; the remaining loud two-thirds keep the >=1-in-3 floor
-    // (spec §7.2) via alternating rank instead of the old i%3 cadence,
-    // which never looked at loudness at all.
-    const byLoudnessDesc = [...Array(engine.PANES).keys()].sort((a, b) => arc[b] - arc[a])
-    const occlusionEligible = byLoudnessDesc.slice(0, engine.PANES - Math.floor(engine.PANES / 3))
-    // 2026-08-12 round 4 (Ben, st3: "remove the other circle") — synced
-    // from world-07-ring.html: excludes st3's occluder outright.
-    const occluderStations = new Set(occlusionEligible.filter((_, k) => k % 2 === 0).filter((i) => i !== 3))
+    // Occlusion eligibility + occluderStations (spec §7.2's >=1-in-3
+    // subtractive-disc floor) removed entirely 2026-08-13, Ben's explicit
+    // call — see world-07-ring.html's identical removal note (same fix,
+    // both builds). Three prior rounds each re-tuned size/fill/position
+    // without addressing the actual complaint: makeOccluder always draws
+    // drawPlanetDisc's planet-silhouette geometry regardless of the host
+    // station's own theme, so it read as a stray planet on non-planet
+    // stations no matter how it was tuned. concepts/tools/ring-verify.mjs
+    // check #14a and ring-occlusion-ablation.mjs will fail/no-op against a
+    // floor this component no longer tries to clear — that check's own
+    // pass/fail logic is unedited (STAYS-HUMAN), needs Ben's own follow-up
+    // if the floor itself should retire.
 
     for (let i = 0; i < engine.PANES; i++) {
       const st = world.stations[i]
@@ -434,51 +430,9 @@ function buildLayerContent(engine, world, arc, host, L) {
         host.appendChild(fc)
       }
 
-      // occlusion (spec §7.2), measured by ablation, on the loud two-thirds
-      // only (occluderStations, computed above — 4 of 12, the required
-      // >=1-in-3 floor). Every primitive
-      // above is a translucent glow that only alpha-blends with what's
-      // behind it; this is a genuinely dark, rimmed disc (makeOccluder,
-      // reusing the b-lobe rim's partial-border contrast treatment) placed
-      // to dim REAL star content behind it — far/mid/near's own real
-      // `.star` elements from buildStars, never synthetic ones injected
-      // just for the measurement. (An earlier version spawned 6 fake
-      // `.occ-star` dots inside the occluder's own box so the ablation
-      // test always had something to find — they were never visible in the
-      // real render, always covered, and sat on the occluder's own plane
-      // with no real parallax relationship to it. That made the ablation
-      // number pass without proving anything about actual content.) Sized
-      // up from the original 150-210px band to 260-340px — large enough
-      // that real star density (measured ~214 visible stars/frame across
-      // far+mid+near, concepts/tools/ring-verify.mjs check #10) reliably
-      // puts several real stars under the footprint instead of leaving it
-      // to chance at the smaller size; see concepts/tools/
-      // ring-occlusion-ablation.mjs for the actual measured before/after
-      // luminance ratios per station.
-      if (occluderStations.has(i)) {
-        const orr = rng(i, 0x0CC1)
-        // 2026-08-11 object-fix round: shrunk from 260-340px/loudness-driven
-        // fill to 100-140px/fixed 0.30 — see world-07-ring.html's identical
-        // comment (same fix, both builds).
-        // 2026-08-12: nudged again, size 100-140 -> 150-190 / fill 0.30 ->
-        // 0.40 (still fixed, not loudness-driven) — see world-07-ring.html's
-        // identical comment (same fix, both builds, "doesn't look like
-        // anything" on the moon, not the headline body).
-        const os = lerp(150, 190, orr())
-        // 2026-08-12: was a uniform draw across the whole frame width —
-        // see world-07-ring.html's identical comment (same fix, both
-        // builds; bbox-verified against Ben's fresh review at st2/st10).
-        // Second pass: the companion just moved to the diagonal-opposite
-        // corner too (see its own comment above) — occluder now takes the
-        // THIRD corner (same horizontal side as the headline, opposite
-        // vertical band) so all three objects land in distinct corners.
-        const ox = dom.cornerX(orr, os, x0, headlineCornerLeft)
-        const oy = dom.bandY(orr, os, !pairUpper)
-        const occ = dom.makeOccluder(os, st.hue, 0.40)
-        occ.style.left = px(ox)
-        occ.style.top = px(oy)
-        host.appendChild(occ)
-      }
+      // Spec §7.2 occlusion disc (the >=1-in-3-station subtractive planet-
+      // disc) removed 2026-08-13, Ben's explicit call — see the
+      // occluderStations removal note above this station loop for why.
     }
   }
 

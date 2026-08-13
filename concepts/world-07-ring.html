@@ -568,23 +568,20 @@ function buildLayerContent(host, L){
        instead of reading as one field where a fifth of the stars sprint. */
     starTotal += dom.buildStars(host, period, 40, 1.25, 0xCAFE1);
 
-    /* occlusion eligibility (2026-08-09, spec §7.2 amendment) - see
-       RingAmbient.jsx's identical comment for the full reasoning: a
-       subtractive element paired with an already-quiet station is the
-       worst combination available (st6 measured/rendered/judged as an
-       empty or broken pane, not deliberately quiet). Bottom third BY
-       LOUDNESS RANK excluded; loud two-thirds keep the >=1-in-3 floor via
-       alternating rank instead of the old i%3 cadence. */
-    const byLoudnessDesc = [...Array(ENGINE.PANES).keys()].sort((a,b) => ARC[b]-ARC[a]);
-    const occlusionEligible = byLoudnessDesc.slice(0, ENGINE.PANES - Math.floor(ENGINE.PANES/3));
-    // 2026-08-12 round 4 (Ben, st3: "remove the other circle" — bbox/DOM-
-    // verified as this station's occluder, sitting right next to the
-    // nebula's own halo and reading as visual clutter, not a deliberate
-    // second object). st3 excluded outright rather than repositioned —
-    // Ben's direction was to remove it, not move it. Still clears the
-    // spec's own >=1-in-3 (4/12) occlusion floor: 6 stations were
-    // eligible before this exclusion, 5 after.
-    const occluderStations = new Set(occlusionEligible.filter((_,k) => k%2===0).filter(i => i !== 3));
+    // Occlusion eligibility + occluderStations (spec §7.2's >=1-in-3
+    // subtractive-disc floor) removed entirely 2026-08-13, Ben's explicit
+    // call. Three prior rounds (2026-08-11 shrink, 2026-08-12 redesign,
+    // 2026-08-12 round 4's st3 exclusion) each re-tuned size/fill/position
+    // without addressing the actual complaint: makeOccluder always draws
+    // drawPlanetDisc's planet-silhouette geometry regardless of the host
+    // station's own theme, so it read as a stray planet on non-planet
+    // stations (st2 star cluster, st9 asteroid field, st10 supernova) no
+    // matter how it was tuned. concepts/tools/ring-verify.mjs check #14a
+    // (spec §7.2, occluder placement) and ring-occlusion-ablation.mjs will
+    // fail/no-op against a floor this file no longer tries to clear — that
+    // check's own pass/fail logic is unedited (STAYS-HUMAN), so it needs
+    // Ben's own follow-up if the floor itself should retire, not a
+    // silent workaround here.
 
     for (let i=0;i<ENGINE.PANES;i++){
       const st = WORLD.stations[i];
@@ -909,77 +906,9 @@ function buildLayerContent(host, L){
         host.appendChild(fc); formTotal++;
       }
 
-      /* occlusion (spec §7.2), measured by ablation, on every third
-         station (4 of 12 — the required >=1-in-3 floor). Every primitive
-         above is a translucent glow that only alpha-blends with what's
-         behind it; this is a genuinely dark, rimmed disc (makeOccluder,
-         reusing the b-lobe rim's partial-border contrast treatment) placed
-         to dim REAL star content behind it — far/mid/near's own real
-         `.star` elements from buildStars, never synthetic ones injected
-         just for the measurement. (An earlier version spawned 6 fake
-         `.occ-star` dots inside the occluder's own box so the ablation
-         test always had something to find — they were never visible in the
-         real render, always covered, and sat on the occluder's own plane
-         with no real parallax relationship to it. That made the ablation
-         number pass without proving anything about actual content.) Sized
-         up from the original 150-210px band to 260-340px — large enough
-         that real star density (measured ~214 visible stars/frame across
-         far+mid+near, concepts/tools/ring-verify.mjs check #10) reliably
-         puts several real stars under the footprint instead of leaving it
-         to chance at the smaller size; see concepts/tools/
-         ring-occlusion-ablation.mjs for the actual measured before/after
-         luminance ratios per station. */
-      if (occluderStations.has(i)){
-        const orr = rng(i, 0x0CC1);
-        // 2026-08-11 object-fix round: was 260-340px at fill(i) (loudness-
-        // driven, so loud stations got a bright ~300px disc) — two blind
-        // reviews independently found this the #1 cross-cutting problem,
-        // upstaging the station's own headline noun at st2/st3/st10 (the
-        // occluder shares makeOccluder's drawPlanetDisc geometry with the
-        // `ring`/`planet` headline kinds, so it visually reads as the same
-        // "planet" noun repeated, not a background detail). Shrunk to
-        // 100-140px, fixed low fill (0.30, not loudness-driven) — still
-        // large/dark enough to occlude several real stars for the ablation
-        // gate (concepts/tools/ring-occlusion-ablation.mjs), no longer
-        // competes with the headline for attention. Does not touch
-        // drawPlanetDisc/makeOccluder itself (shared with `ring`/`planet`,
-        // which stay untouched at st0/st4 per that review's explicit
-        // "leave alone" finding).
-        //
-        // 2026-08-12 (Ben's own review, st0: "doesn't look like anything" —
-        // bbox-verified against concepts/reviews/*.json, this small
-        // accessory moon, not the headline body): the 2026-08-11 shrink
-        // fixed "upstages the headline" but overshot into "reads as
-        // nothing." Rendered up close: the drawPlanetDisc shading itself
-        // (b6eaea4) looks fine zoomed in — the real problem is that at
-        // 100-140px the detail collapses to nothing at real distance. Ben's
-        // call: redesign rather than leave subdued. Nudged both knobs a
-        // little, not a lot, to stay clear of re-tripping the "upstages
-        // headline" complaint this same code fixed: size 100-140 -> 150-190,
-        // fill 0.30 -> 0.40 (still fixed, not loudness-driven — a loud
-        // station must not make this brighter than the intentional cap).
-        const os = lerp(150, 190, orr());
-        // 2026-08-12: was a uniform draw across the whole frame width —
-        // bbox-verified against Ben's fresh review, this is what st2/st10's
-        // "move to a corner" marks actually hit (elementsFromPoint + SVG
-        // rect enumeration, not guessed), same underlying complaint as the
-        // headline fix above. Now shares the same cornerX helper.
-        // 2026-08-12, second pass: originally forced diagonal-opposite
-        // (both axes) from the headline — but the companion just moved to
-        // that exact corner too (Ben: "two items squished together in the
-        // same corner is no bueno"), which would recreate the same defect
-        // one corner over. Three objects (headline/companion/occluder), 4
-        // corners: occluder now takes the THIRD corner — same horizontal
-        // side as the headline, opposite vertical band — instead of
-        // diagonal-opposite, so all three land in visually distinct
-        // corners rather than two of them sharing one.
-        const ox = dom.cornerX(orr, os, x0, headlineCornerLeft);
-        const oy = dom.bandY(orr, os, !pairUpper);
-        const occ = dom.makeOccluder(os, st.hue, 0.40);
-        occ.style.left = px(ox);
-        occ.style.top  = px(oy);
-        host.appendChild(occ); formTotal++;
-      }
+      // Spec §7.2 occlusion disc (the >=1-in-3-station subtractive planet-
+      // disc) removed 2026-08-13, Ben's explicit call — see the
+      // occluderStations removal note above this station loop for why.
     }
 
     // 2026-08-12 round 6 (Ben, "remove planet" x7 across st0/st2/st3/
