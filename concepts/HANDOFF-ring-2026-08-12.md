@@ -135,3 +135,36 @@ await page.locator('#design').screenshot({ path: '...' })
 
 Serve `concepts/world-07-ring.html` from the repo root (it imports
 `../client/src/...`), not from `concepts/`.
+
+## Addendum 2026-08-13 — st6/st7 response to the -160726 review (subagent session)
+
+Worked only st6 (rose nebula) and st7 (comet) from
+`concepts/reviews/ring-review-2026-08-13-160726.json`; a concurrent peer
+session handled other stations from the same review (MIN_BLEED_FRAC raise,
+st1 spiral rework, wash changes — its own edits, not described here).
+
+- **st6 "idk what this is" — bbox-verified, and it is NOT the nebula.**
+  The mark (bbox x 0.036, y 0.038, w 0.05) lands on a small green wisp at
+  the TOP-LEFT corner. DOM-enumerated at that rect: 3 green `b-lobe`s +
+  `s-core` — a companion-scale `blob`, hue ~138. That is st6's OWN accent
+  companion (accent stations flip companion hue +168°: 330+168=138; the
+  opposite-corner placement rule puts it top-left). With the pair-bridge
+  removed (2026-08-12), accent stations have no pairing signal, so the
+  green blob floats unexplained — which is presumably exactly why Ben
+  can't tell what it is. **NOT acted on — Ben's call:** options are
+  `noCompanion` (st5 precedent), a companion-legibility pass on
+  small-scale `blob`, or restoring some pairing signal.
+- **st6 nebula body reworked anyway** (construction #3 in
+  `ringPrimitives.js`'s `nebulaCloud` branch) — the standing adversarial
+  critique ("flat hard-edged purple mass / spilled paint") was accurate on
+  render. clip-path silhouette retired after three failed passes; mass is
+  now hierarchical soft gradient puffs on an arced spine + AB-floored
+  heart + dark rift + specks. Full pass history in the branch comment.
+- **st7 "put holes in it like a moon"** — crater divots added to the
+  comet nucleus (`streak` branch): annulus placement sparing the white-hot
+  center, min-distance skip, consistent upper-left shading + bright rim
+  arcs on larger pocks. Head still reads glowing at frame scale.
+- No station-data flags added; no world/midnightGalaxy edits needed.
+  `npm run build` passes. Lock-file check (report only, not edited):
+  `drawnSubject.kinds = [ground, nebulaCloud, ring, sprite]` — st6's
+  `nebulaCloud` is an allowed headline kind, st7's `streak` still is not.

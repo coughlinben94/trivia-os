@@ -123,6 +123,13 @@ ${ringCss('ring-')}
 // shared with concepts/world-07-ring.html.
 const dom = ringDom('ring-', ENGINE)
 
+// Background-wash color table (2026-08-13) — synced from world-07-ring.html.
+// Station-data flag -> wash hue; see the per-station wash loop below.
+const WASH_KINDS = [
+  { flag: 'greenWash', hue: 150 },
+  { flag: 'orangeWash', hue: 30 },
+]
+
 // ═══ BUILD ═══ dispatches per-layer content building.
 function buildLayerContent(engine, world, arc, host, L) {
   const period = authorPeriodOf(engine, L)
@@ -245,7 +252,11 @@ function buildLayerContent(engine, world, arc, host, L) {
       // 2026-08-12 round 3 (Ben, st11: "make longer") — synced from
       // world-07-ring.html: ribbon's own visual "length" is this width, so
       // it gets a wider tier instead of the shared 576-880 range.
-      const hw = st.prim === 'ribbon' ? lerp(760, 1100, rHeadline())
+      // 2026-08-13 round 2: synced from world-07-ring.html — widened past
+      // frame width (Ben: "make it go longer but ends off screen") so the
+      // far end actually exits the frame instead of just reading longer
+      // within it — see that file's identical comment for the full math.
+      const hw = st.prim === 'ribbon' ? lerp(1600, 2000, rHeadline())
         // 2026-08-13: synced from world-07-ring.html — streak's visual
         // length is its width (Ben, st7: "doesn't have a major asset").
         : st.prim === 'streak' ? lerp(860, 1180, rHeadline())
@@ -277,7 +288,17 @@ function buildLayerContent(engine, world, arc, host, L) {
       // count is identical whether or not it's overridden.
       const cornerDraw = rHeadline() < 0.5
       const headlineCornerLeft = st.cornerLeft !== undefined ? st.cornerLeft : cornerDraw
-      const headLeft = dom.cornerX(rHeadline, hw, x0, headlineCornerLeft)
+      let headLeft = dom.cornerX(rHeadline, hw, x0, headlineCornerLeft)
+      // 2026-08-13: synced from world-07-ring.html — `planet` centers its
+      // min(w,h) disc in a wider box, leaving ~(hw-hh)/2 of dead horizontal
+      // inset between the box edge (which cornerX corner-hugs) and the
+      // visible disc edge. Shift the box by that inset so the DISC edge
+      // lands at cornerX's own margin (Ben, st4: "more towards corner").
+      // See that file's identical comment for the full reasoning.
+      if (st.prim === 'planet') {
+        const discInset = (hw - Math.min(hw, hh)) / 2
+        headLeft += headlineCornerLeft ? -discInset : discInset
+      }
       const headTop = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh))
       head.style.left = px(headLeft)
       head.style.top = px(headTop)
@@ -313,11 +334,18 @@ function buildLayerContent(engine, world, arc, host, L) {
       // like a diff galaxy of sorts"). Plain linear-gradient wash, not a
       // primitive draw — atmosphere/mood, doesn't compete with noun-
       // uniqueness rules. See that file's own comment for why st4/st5.
-      if (st.greenWash) {
+      // 2026-08-13: synced from world-07-ring.html — generalized to a
+      // (flag, hue) table instead of one hardcoded green block (Ben: "need
+      // more green and orange areas... whole background shifts for a slide
+      // or two"); `orangeWash` set on st8 for now. That file's version also
+      // adds edge-feathering (mask-image) this one never had — not brought
+      // over here, out of scope for this pass, flagged as existing drift.
+      for (const wc of WASH_KINDS) {
+        if (!st[wc.flag]) continue
         const wash = dom.el('')
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0'
         wash.style.width = px(engine.W); wash.style.height = px(engine.H)
-        wash.style.background = `linear-gradient(to top, ${hsla(150, 55, 20, 0.34)} 0%, ${hsla(150, 55, 20, 0.16)} 32%, transparent 58%)`
+        wash.style.background = `linear-gradient(to top, ${hsla(wc.hue, 55, 20, 0.50)} 0%, ${hsla(wc.hue, 55, 20, 0.28)} 32%, transparent 68%)`
         host.appendChild(wash)
       }
 

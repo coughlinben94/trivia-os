@@ -173,7 +173,17 @@ export function rotatedBandH(kind, w, h) {
 // unexamined +0.30h ceiling, mirrored here for the same reason, still with
 // no forced floor — no measured case for one, same as before).
 const MAX_BLEED_FRAC = 0.16
-const MIN_BLEED_FRAC = 0.09
+// 2026-08-13: raised 0.09 -> 0.14 (near the 0.16 ceiling). Ben flagged st0/
+// st2/st3/st4 "more towards corner" again today, on top of this same
+// complaint's own repeated history (see cornerX's matching comment below —
+// three prior tightening rounds before today). This time paired with an
+// explicit standing principle, not just a repeated nudge: "its ok if things
+// bleed off the corners. it gives more space for the question itself." The
+// ceiling this morning's fix added (MAX_BLEED_FRAC, preventing true
+// amputation) makes it safe to push the floor close to it — every headline
+// now reliably bleeds close to the max allowed, instead of a wide low-to-
+// high random range that only looked corner-hugged on the lucky high draws.
+const MIN_BLEED_FRAC = 0.14
 
 function bandY(engine, r, h, forceUpper, effH, skipMinBleed) {
   const eff = effH === undefined ? h : effH
@@ -474,8 +484,9 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       // accessory a caller layers around blob, not part of makePrim
       // itself — see makeNebulaRing's own header comment.
       // Gated to isHeadline: `blob` is used elsewhere only as a small
-      // 230-420px companion (no complaint on record there), so this
-      // leaves every other station's use of `blob` byte-identical.
+      // 230-420px companion (no complaint on record there AT THE TIME —
+      // superseded 2026-08-13, Ben's review marked st4's blob companion;
+      // the else branch below now carries the same core-merge fix).
       const hx = Math.min(85, Math.max(15, (ccx - domLobe.lx) / domLobe.lw * 100))
       const hy = Math.min(85, Math.max(15, (ccy - domLobe.ly) / domLobe.lh * 100))
       const hRadX = Math.min(70, Math.max(18, (cs / domLobe.lw) * 100 * 1.4))
@@ -484,15 +495,27 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
         ${hsla(hue, 30, 96, AB(0.70, fill))} 0%, ${hsla(hue, 70, 80, AB(0.35, fill))} 40%, transparent 78%),
         ${domLobe.node.style.background}`
     } else {
-      // core-as-a-region: 8-14% of the cloud's width, positioned inside
-      // the real lobe-cluster bbox, soft radial fill (not a flat disc).
-      // Companion scale only now — see the isHeadline branch above for why.
-      const core = el('s-core')
-      core.style.width = core.style.height = px(cs)
-      core.style.left = px(ccx - cs / 2); core.style.top = px(ccy - cs / 2)
-      core.style.background = `radial-gradient(circle, ${hsla(hue, 30, 96, AB(0.70, fill))} 0%, ${hsla(hue, 70, 80, AB(0.35, fill))} 55%, transparent 100%)`
-      core.style.boxShadow = `0 0 ${px(cs * 2.4)} ${px(cs * 0.8)} ${hsla(hue, 84, 78, AB(0.22, fill))}`
-      f.appendChild(core)
+      // 2026-08-13 (Ben's live review, st4 — bbox-verified to THIS
+      // companion, not the station's planet headline: a marked "relook at"
+      // on the bottom-right green smudge, which hit-tested as 3 .b-lobe +
+      // this .s-core). The "no complaint on record there" note above is no
+      // longer true: at companion scale the separate hard-edged s-core ball
+      // (own div + its own box-shadow halo) reads as a stray bright pearl
+      // sitting ON a smudge — the exact "circles + core, no gestalt" defect
+      // the isHeadline branch above already fixed for st3. Same fix,
+      // mirrored: the hot knot becomes an extra radial-gradient layer
+      // stacked onto the dominant lobe's own background (one continuously-
+      // painted shape), no separate element. Same cs/ccx/ccy draws as
+      // before (r() stream untouched); knot alpha kept below the headline
+      // version's (0.55 vs 0.70) — a companion is dressing, its core
+      // shouldn't outshine its own cloud the way the old white ball did.
+      const hx = Math.min(85, Math.max(15, (ccx - domLobe.lx) / domLobe.lw * 100))
+      const hy = Math.min(85, Math.max(15, (ccy - domLobe.ly) / domLobe.lh * 100))
+      const hRadX = Math.min(70, Math.max(18, (cs / domLobe.lw) * 100 * 1.4))
+      const hRadY = Math.min(70, Math.max(18, (cs / domLobe.lh) * 100 * 1.4))
+      domLobe.node.style.background = `radial-gradient(ellipse ${hRadX.toFixed(0)}% ${hRadY.toFixed(0)}% at ${hx.toFixed(0)}% ${hy.toFixed(0)}%,
+        ${hsla(hue, 34, 92, AB(0.55, fill))} 0%, ${hsla(hue, 70, 78, AB(0.28, fill))} 45%, transparent 80%),
+        ${domLobe.node.style.background}`
     }
     // rim (traced the lobe cluster's bbox as a border) removed outright
     // 2026-08-12 round 5 — a `border` is a solid CSS line, can't fade, so
@@ -512,110 +535,102 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // rounds (see the alpha-floor/lightness-boost history on `blob` above,
     // both aimed at THIS station) as a parameter problem; the actual defect
     // was the recipe itself (3 same-shaped overlapping circles reads as
-    // blobby chaos, not a cloud). Ben's fix direction: "an asymmetric
-    // single-path/multi-lobe silhouette with real internal gradient
-    // variation (a dust-lane dark band, uneven lobe sizes)."
-    //
-    // One continuous organic silhouette (not overlapping circles): N
-    // boundary points at IRREGULAR angle steps and IRREGULAR radius
-    // (uneven lobes by construction), connected with quadratic curves
-    // through each segment's midpoint — same smoothing technique `ribbon`'s
-    // wave path already uses — so the outline reads as a soft asymmetric
-    // gas silhouette, not a faceted rock (that's `asteroidField`'s look,
-    // a deliberately different family) and not a smooth ellipse either.
-    // `clip-path: path(...)` (Chromium-supported) clips both the base fill
-    // and the dust-lane band to this exact silhouette, so the dust lane
-    // never bleeds past the cloud's own edge.
+    // blobby chaos, not a cloud). Ben's fix direction at the time: "an
+    // asymmetric single-path/multi-lobe silhouette with real internal
+    // gradient variation (a dust-lane dark band, uneven lobe sizes)" —
+    // attempted in full as construction #2 below and retired after three
+    // failed render passes; the internal-variation half of that direction
+    // (dark rift, uneven lobes, real density hierarchy) survives in
+    // construction #3, the single-path half is what kept failing.
+    // CONSTRUCTION HISTORY, kept so no retired recipe gets re-attempted:
+    //  #1 (as `blob`): 3 same-size overlapping circles + core dot — Ben:
+    //     "blobby chaos / too much going on." Retired.
+    //  #2 (2026-08-12/13, three sub-passes): one irregular closed
+    //     silhouette + clip-path, first hard-edged ("gem/guitar-pick" at
+    //     N=8, then "torn paper scrap / spilled paint" at N=14), then
+    //     blur-softened (adversarial critique: still "a large, flat,
+    //     hard-edged lumpy purple mass"), then multi-knot fill + restored
+    //     size + unclipped spill-puffs (better, but the clip boundary
+    //     remained ONE continuous traceable curve — the final render read
+    //     as a face-in-profile splat; Ben's live review the same day:
+    //     "idk what this is" on the station). The structural lesson from
+    //     all three: any single clip-path yields a single closed contour,
+    //     and a single closed contour reads as an OBJECT cut-out, not gas
+    //     — no edge treatment changes that.
+    //  #3 (2026-08-13, this build): no clip-path at all. The mass is a
+    //     hierarchy of soft elliptical gradient puffs along a randomly-
+    //     angled spine — one dominant + shrinking flanks, each fading to
+    //     true 0 alpha inside its own box — so the union's boundary is
+    //     ragged and nowhere traceable as one curve. #1's real defect
+    //     was never overlap itself but the LACK OF HIERARCHY (same size,
+    //     same alpha, uniform random placement); this keeps overlap and
+    //     fixes the hierarchy. Heart knot + spark keep AB()'s distance-
+    //     presence floor (the "collapses to nothing at 20ft" history);
+    //     fringe puffs use plain A() so they genuinely vanish outward.
+    //     Dark rift crosses the middle as its own soft-edged rotated
+    //     gradient (no clip needed — its edges are gradient-soft).
+    // Rose/magenta luma lesson (AB/LB, hoisted at makePrim top scope)
+    // still applies throughout — see `blob`'s comment for that history.
     const cx = w / 2, cy = h / 2
-    // 2026-08-12 (fresh review, st6: "shape looks terrible"): rendered
-    // fresh, not assumed — at N=8 with radius factor 0.52-1.10, the
-    // quadratic-through-midpoints smoothing (same technique `ribbon` uses
-    // for a smooth wave) over-smooths a point count this low into one
-    // continuous rounded outline — reads as a smooth gem/guitar-pick, not
-    // an irregular cloud edge. Real nebula silhouettes are irregular at
-    // more than one visible bump. More points (8->14) and a wider radius
-    // spread (0.52-1.10 -> 0.38-1.22) give the same smoothing more
-    // irregularity to actually preserve instead of averaging away.
-    const N = 14
-    const baseRx = w * 0.46, baseRy = h * 0.46
-    const pts = []
-    let ang = r() * Math.PI * 2
-    for (let i = 0; i < N; i++) {
-      ang += (Math.PI * 2 / N) * (0.65 + r() * 0.7) // irregular angular step
-      const radF = 0.38 + r() * 0.84 // irregular radius -> uneven lobes
-      pts.push({ x: cx + Math.cos(ang) * baseRx * radF, y: cy + Math.sin(ang) * baseRy * radF })
+    const spineAng = r() * Math.PI // spine direction, 0..180deg
+    const cosA = Math.cos(spineAng), sinA = Math.sin(spineAng)
+    const spineX = w * 0.34, spineY = h * 0.30 // spine half-extent
+    const spineDeg = spineAng * 180 / Math.PI
+    // spine is ARCED, not straight (render check on the straight version:
+    // a linear chain of spine-aligned puffs with a bright core reads as an
+    // edge-on GALAXY — a noun collision with st1's spiral galaxy, which
+    // the >=3-stations-apart silhouette-family rule exists to prevent).
+    // The bend displaces each puff perpendicular to the spine by t^2, so
+    // the mass bows like a cumulus bank instead of lining up.
+    const arcSign = r() < 0.5 ? -1 : 1
+    const arcK = h * (0.14 + r() * 0.10) * arcSign
+    const NP = 6
+    for (let i = 0; i < NP; i++) {
+      const t = (i / (NP - 1)) * 2 - 1 // -1..1 along the spine
+      const cen = 1 - Math.abs(t) // 1 at spine center, 0 at ends
+      const pxc = cx + cosA * t * spineX - sinA * arcK * t * t / h * w * 0.5 + (r() - 0.5) * w * 0.13
+      const pyc = cy + sinA * t * spineY + cosA * arcK * t * t + (r() - 0.5) * h * 0.17
+      const pw = w * (0.24 + 0.30 * cen) * (0.85 + r() * 0.3)
+      const ph = pw * (0.62 + r() * 0.30)
+      const puff = el('')
+      puff.style.position = 'absolute'
+      puff.style.left = px(pxc - pw / 2); puff.style.top = px(pyc - ph / 2)
+      puff.style.width = px(pw); puff.style.height = px(ph)
+      puff.style.transform = `rotate(${(spineDeg - 55 + r() * 110).toFixed(0)}deg)`
+      puff.style.background = `radial-gradient(ellipse 50% 50% at 50% 50%,
+        ${hsla(hue - 4 + r() * 10, 60 + cen * 10, LB(38 + cen * 18), A(0.13 + cen * 0.13, fill))} 0%,
+        ${hsla(hue - 10, 52, LB(30), A(0.06 + cen * 0.05, fill))} 55%, transparent 100%)`
+      f.appendChild(puff)
     }
-    let d = `M ${((pts[0].x + pts[N - 1].x) / 2).toFixed(1)} ${((pts[0].y + pts[N - 1].y) / 2).toFixed(1)}`
-    for (let i = 0; i < N; i++) {
-      const p = pts[i], np = pts[(i + 1) % N]
-      d += ` Q ${p.x.toFixed(1)} ${p.y.toFixed(1)} ${((p.x + np.x) / 2).toFixed(1)} ${((p.y + np.y) / 2).toFixed(1)}`
-    }
-    d += ' Z'
-    // same alpha-floor/lightness-boost lesson `blob` learned for this exact
-    // hue family (rose/magenta is green-starved under Rec.709 luma at any
-    // alpha — the real lever is lightness, fill-gated so a loud station
-    // isn't affected): reuses the AB/LB hoisted at makePrim's top scope
-    // (see `blob`'s own comment for the tuning history) rather than
-    // redefining them here.
-    // 2026-08-13 (fresh customer-role critique: "a hard-edged mauve amoeba
-    // with a crisp outline and a white ball inside — reads as a torn paper
-    // scrap or spilled paint," plus a separate "fried-egg" note on the
-    // ball). Two distinct defects below, fixed separately rather than as
-    // one blur pass over everything:
-    //
-    // (1) THE OUTLINE. `clip-path` is a binary stencil — anything not
-    // already faded to ~0 alpha by the background gradient gets zeroed
-    // sharply AT the path, regardless of how soft the gradient itself is,
-    // whenever the gradient's own fade-out radius doesn't fully complete
-    // before the (irregular, per-point-varying) path boundary. This is the
-    // exact "crisp geometric edge" defect `ribbon` (st11, aurora) already
-    // hit and fixed, same session: "filter: blur(...) on the whole path...
-    // brings this primitive in line with every other one in this file,
-    // none of which use a crisp hard-edged fill" (see that kind's own
-    // comment). Same fix here: a CSS blur on `cloud`/`lane` (the two
-    // continuous clipped fills) softens the stencil cutoff as a post-
-    // process instead of hand-tuning gradient stops per irregular boundary
-    // point. NOT applied to `dust` below — blurring that wrapper would
-    // smear the actual particle texture Ben separately asked for into
-    // fuzz, not soften an edge; individual small dots don't read as "the
-    // outline" the way the two continuous fills do.
-    const EDGE_BLUR = Math.max(14, w * 0.028) // stronger than `ribbon`'s 0.012 —
-    // ribbon's edge is a thin curtain stroke; this is a large filled
-    // silhouette where the same factor barely registered on a real render
-    // (measured: transition still ~3-4px wide at 0.012, i.e. visually
-    // still "hard" — a Chromium clip-path+filter combination doesn't spread
-    // the input pixels as generously as a naive blur-radius estimate
-    // suggests). Re-measured at this value: transition zone widens to
-    // ~20-25px, visibly soft at the crop scale used to judge the original
-    // complaint. Still <3% of the headline's own width — nowhere near
-    // FAILURE-LEDGER's "blur wider than ~1/4 of an element deletes it"
-    // caution, which was about small stars, not a 576-880px silhouette.
-    const cloud = el('')
-    cloud.style.position = 'absolute'; cloud.style.inset = '0'
-    cloud.style.clipPath = `path('${d}')`
-    cloud.style.filter = `blur(${EDGE_BLUR.toFixed(1)}px)`
-    // off-center bright zone (asymmetric core, not center-anchored) —
-    // avoids the "same-shaped circles" symmetry the old recipe had.
-    const coreXPct = 32 + r() * 24, coreYPct = 28 + r() * 26
-    cloud.style.background = `radial-gradient(ellipse 95% 85% at ${coreXPct.toFixed(0)}% ${coreYPct.toFixed(0)}%,
-      ${hsla(hue + 8, 74, LB(64), AB(0.46, fill))} 0%, ${hsla(hue, 64, LB(46), AB(0.26, fill))} 42%,
-      ${hsla(hue - 10, 55, LB(28), AB(0.10, fill))} 70%, transparent ${E(88, fill).toFixed(0)}%)`
-    f.appendChild(cloud)
-    // dust lane: a dark soft band crossing part of the cloud at a random
-    // angle, clipped to the SAME silhouette — the internal structure/
-    // asymmetry a smooth gradient alone can't give, and the literal
-    // feature Ben's fix direction named. Same edge-blur as `cloud` (same
-    // stencil, same defect).
-    const lane = el('')
-    lane.style.position = 'absolute'; lane.style.inset = '0'
-    lane.style.clipPath = `path('${d}')`
-    lane.style.filter = `blur(${EDGE_BLUR.toFixed(1)}px)`
-    const laneAng = -25 + r() * 50
-    const laneMid = 42 + r() * 16
-    lane.style.background = `linear-gradient(${laneAng.toFixed(0)}deg,
-      transparent ${(laneMid - 20).toFixed(0)}%, ${hsla(hue - 22, 45, 8, A(0.55, fill))} ${laneMid.toFixed(0)}%,
-      ${hsla(hue - 22, 45, 8, A(0.55, fill))} ${(laneMid + 10).toFixed(0)}%, transparent ${(laneMid + 30).toFixed(0)}%)`
-    f.appendChild(lane)
+    // heart knot: compact bright ember region riding the spine slightly
+    // off-center — the one piece that keeps AB()'s floor so the station
+    // stays present at distance even with the fringes now truly fading.
+    const heartT = -0.25 + r() * 0.5
+    const heartX = cx + cosA * heartT * spineX, heartY = cy + sinA * heartT * spineY
+    const hkW = w * 0.34, hkH = hkW * 0.62
+    const heart = el('')
+    heart.style.position = 'absolute'
+    heart.style.left = px(heartX - hkW / 2); heart.style.top = px(heartY - hkH / 2)
+    heart.style.width = px(hkW); heart.style.height = px(hkH)
+    heart.style.transform = `rotate(${(spineDeg - 12 + r() * 24).toFixed(0)}deg)`
+    heart.style.background = `radial-gradient(ellipse 50% 50% at 50% 50%,
+      ${hsla(hue + 8, 76, LB(72), AB(0.50, fill))} 0%, ${hsla(hue, 66, LB(52), AB(0.24, fill))} 48%, transparent 100%)`
+    f.appendChild(heart)
+    // dark rift: soft-edged dark band crossing the mass near the heart at
+    // an angle oblique to the spine — the internal structure Ben's
+    // original fix direction named ("a dust-lane dark band"). A rotated
+    // ellipse gradient, so its edges are inherently soft — the clipped
+    // linear-gradient band this replaces needed the (now retired) stencil.
+    const riftW = w * 0.52, riftH = w * 0.10
+    const rift = el('')
+    rift.style.position = 'absolute'
+    rift.style.left = px(heartX - riftW / 2 + (r() - 0.5) * w * 0.08)
+    rift.style.top = px(heartY - riftH / 2 + (r() - 0.5) * h * 0.10)
+    rift.style.width = px(riftW); rift.style.height = px(riftH)
+    rift.style.transform = `rotate(${(spineDeg + 20 + r() * 30).toFixed(0)}deg)`
+    rift.style.background = `radial-gradient(ellipse 50% 50% at 50% 50%,
+      ${hsla(hue - 22, 45, 8, A(0.42, fill))} 0%, ${hsla(hue - 22, 45, 8, A(0.22, fill))} 55%, transparent 100%)`
+    f.appendChild(rift)
     // (2) THE BALL. Was near-white (L97, sat 30) fading straight to
     // TRANSPARENT at its own 100% stop, sized 7-11% of the headline's
     // width — large and colourless enough, against a now-softer but still
@@ -634,27 +649,30 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // ring around a ball.
     const core = el('s-core')
     const cs = w * (0.035 + r() * 0.02)
-    core.style.left = px((coreXPct / 100) * w - cs / 2)
-    core.style.top = px((coreYPct / 100) * h - cs / 2)
+    core.style.left = px(heartX - cs / 2)
+    core.style.top = px(heartY - cs / 2)
     core.style.width = core.style.height = px(cs)
     core.style.background = `radial-gradient(circle, ${hsla(hue + 12, 55, LB(88), AB(0.80, fill))} 0%, ${hsla(hue + 6, 62, LB(68), AB(0.42, fill))} 50%, ${hsla(hue, 64, LB(46), AB(0.16, fill))} 100%)`
     core.style.boxShadow = `0 0 ${px(cs * 1.4)} ${px(cs * 0.4)} ${hsla(hue, 78, 72, AB(0.14, fill))}`
     f.appendChild(core)
     // 2026-08-12 (fresh review, st6: "add dust psrticlaes" [sic]). The dust
-    // LANE above is a dark band, not particles — this is a literal scatter
-    // of small specks, clipped to the same silhouette path `d` as the
-    // cloud/lane (one wrapper div carries the clip; children inherit it,
-    // cheaper than clipping each speck individually). Mostly dark/cool
-    // (dust, not stars) with a few warm-lit ones catching the core light,
-    // same "a few bright, most dim" bias every other detail-tier scatter
-    // in this file already uses.
+    // RIFT above is a dark band, not particles — this is a literal scatter
+    // of small specks. Construction #3 has no clip path to inherit, so the
+    // scatter is kept inside the visible mass by drawing each speck's
+    // position along the spine itself (uniform t, perpendicular jitter)
+    // instead of uniformly over the box and clipping the strays. Mostly
+    // dark/cool (dust, not stars) with a few warm-lit ones catching the
+    // core light, same "a few bright, most dim" bias every other
+    // detail-tier scatter in this file already uses.
     const dust = el('')
     dust.style.position = 'absolute'; dust.style.inset = '0'
-    dust.style.clipPath = `path('${d}')`
     const dn = 16 + Math.floor(r() * 14)
     for (let i = 0; i < dn; i++) {
-      const dx = r() * w, dy = r() * h
-      const ds = w * (0.012 + r() * 0.018)
+      const dt = r() * 2 - 1 // -1..1 along the spine
+      const dPerp = (r() - 0.5) * 2 // perpendicular spread
+      const dx = cx + cosA * dt * spineX - sinA * dPerp * h * 0.16
+      const dy = cy + sinA * dt * spineY + cosA * dPerp * h * 0.16
+      const ds = w * (0.009 + r() * 0.013)
       const lit = r() < 0.25
       const p = el('')
       p.style.position = 'absolute'; p.style.borderRadius = '50%'
@@ -742,16 +760,60 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // complaint at st5 (pulsar's sweep ring was cut outright, not
     // dimmed further, "too much going on is Ben's single most repeated
     // complaint," ringPrimitives.js's own pulsar comment).
-    for (let i = 0; i < 4; i++) {
+    //
+    // 2026-08-13 (fresh review, st10: "look at sun rays"; standing critique
+    // on record: "8 clean spikes... slightly clip-arty"). Rendered fresh and
+    // confirmed still true: each "ray" was a full-length CONSTANT-THICKNESS
+    // bar through the center (4 bars = 8 symmetric tips at perfectly even
+    // 45/22.5 angles), which is the anatomy of an asterisk dingbat, not
+    // light. Three properties separate a real radiant burst from clip-art,
+    // all three now built in: (1) TAPER — each ray is its own single-sided
+    // arm, widest at the core, clipped to a point at the tip (same clip-path
+    // move that fixed st5's "wtf is that" beam — alpha fade alone never
+    // changes the silhouette); (2) UNEQUAL LENGTHS — one dominant opposing
+    // pair plus shorter minors, like a diffraction flare, instead of
+    // long/long/short/short symmetry; (3) BROKEN ANGULAR REGULARITY — hand-
+    // authored irregular angles (slightly off 180° for the main pair). The
+    // table is deliberately constants, not r() draws: this branch previously
+    // consumed zero r() in the loop, and new draws here would silently
+    // reshuffle the caller's own post-makePrim corner/band coin flips
+    // (rHeadline stream) for whichever station uses `spikes` — the exact
+    // stream-reorder bug class this file warns about at the `blob` core
+    // draws. 7 single-sided arms vs the old 8 bar-tips: slightly FEWER
+    // visible rays, each with less painted area, so this does not re-open
+    // the "too much going on" complaint the 6->4 cut above addressed.
+    // Round 2, same session, rendered-and-looked: the first table's 8°/192°
+    // dominant pair sat only 4° off true opposition — near-collinear, so the
+    // two longest rays fused into ONE straight line running through the
+    // star, the exact "weird line" read Ben has flagged repeatedly on other
+    // stations. Main pair now 8°/205° (25° off opposition — clearly two rays
+    // from one source, not a rod through it), the second-longest minor
+    // shortened to keep the hierarchy. Tip clip also fixed: the first
+    // trapezoid (42%-58% at the tip) left a flat squared end — now a true
+    // point. Bases thickened so the taper is actually visible at distance
+    // instead of collapsing back into a uniform stick.
+    ;[
+      { ang: 8,   len: 0.46, th: 0.027 },
+      { ang: 205, len: 0.34, th: 0.022 },
+      { ang: 52,  len: 0.24, th: 0.016 },
+      { ang: 118, len: 0.17, th: 0.013 },
+      { ang: 240, len: 0.20, th: 0.014 },
+      { ang: 305, len: 0.28, th: 0.017 },
+      { ang: 158, len: 0.12, th: 0.012 },
+    ].forEach(({ ang, len, th }) => {
       const s = el('s-spk')
-      const len = w * (i < 2 ? 0.43 : 0.27)
-      const th = Math.max(4, w * 0.012) // scales with w, floor 4px
-      s.style.width = px(len); s.style.height = px(th)
-      s.style.marginLeft = px(-len / 2); s.style.marginTop = px(-th / 2)
-      s.style.background = `linear-gradient(90deg,transparent 0%,${hsla(hue, 86, 86, 0.7)} 50%,transparent 100%)`
-      s.style.transform = `rotate(${i * 45 + (i < 2 ? 0 : 22.5)}deg)`
+      const L = w * len, T = Math.max(5, w * th)
+      s.style.width = px(L); s.style.height = px(T)
+      s.style.marginTop = px(-T / 2)
+      s.style.transformOrigin = '0 50%' // pivot at the core end, not the bar's own center
+      s.style.transform = `rotate(${ang}deg)`
+      // widest at the core, sharp point at the tip — the actual ray shape
+      s.style.clipPath = 'polygon(0% 0%, 100% 50%, 0% 100%)'
+      // brightness peaks at the core end and dies before the geometric tip,
+      // so the point reads as light fading, not a drawn stroke ending
+      s.style.background = `linear-gradient(90deg, ${hsla(hue, 40, 92, 0.9)} 0%, ${hsla(hue, 82, 78, 0.5)} 38%, transparent 96%)`
       f.appendChild(s)
-    }
+    })
     const c = el('s-core')
     const cs = Math.max(16, w * 0.055)
     c.style.width = c.style.height = px(cs)
@@ -847,6 +909,164 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // ellipses.
     const cx = w * 0.5, cy = h * 0.5
     const baseAng = r() * Math.PI * 2
+
+    if (isHeadline) {
+      // 2026-08-13, third construction for the st1 headline, built from BOTH
+      // prior failures rather than re-attempting either:
+      //  - discrete 10-lobe arms (the construction kept below for companions)
+      //    read as "a caterpillar made of gumballs" — countable solid
+      //    spheres, not a dust lane. Reverted-to, then re-flagged same day.
+      //  - the 2026-08-13 continuous-ribbon rework (ec37ab3, reverted in
+      //    7c0534a) fixed the beads but introduced a hard diagonal clip-cut
+      //    near the core. Root cause, read from that commit's own code, not
+      //    guessed: each arm's closed path ends in a straight cross-section
+      //    edge at the CORE end (the `Z` closure), and its lengthwise
+      //    gradient put PEAK alpha (up to 0.68) at the 0% stop right on that
+      //    edge — a fully-bright straight vector edge, x4 nested layers x2
+      //    arms = the "corporate logo" cut. The tip end had the identical
+      //    straight closure but its 100% stop was alpha 0, which is exactly
+      //    why the cut only ever showed near the core.
+      // This version keeps what worked in the ribbon attempt (continuous
+      // filled band, 4 nested feather layers, quadratic-smoothed edges) and
+      // removes the defect structurally, two ways at once:
+      //  1. band WIDTH tapers to ~0 at BOTH ends (sin-bump profile peaking
+      //     ~40% along) — there is no cross-section edge left to see;
+      //  2. the lengthwise gradient's 0% stop is TRANSPARENT (fade-in from
+      //     the core, peak at ~24%, fade-out to the tip) — so userSpaceOnUse
+      //     chord-projection clamping (any point projecting before x1,y1)
+      //     clamps to invisible, never to bright. Arms now emerge from the
+      //     bulge's glow the way real spiral arms do, instead of butting
+      //     into the core at full brightness.
+      // RNG parity: this branch consumes exactly the same number of r()
+      // draws as the companion construction below (baseAng above; per arm:
+      // maxRad, pitch, 10 jitter draws; rotation at the bottom of the kind)
+      // — the ec37ab3 rework's own post-mortem measured that changing this
+      // count relocates st1 and shifts every downstream r() consumer
+      // (bleed moved 28%->45.8% purely from stream drift). Deliberately
+      // matched so placement stays exactly where the current build puts it.
+      const NS = 'http://www.w3.org/2000/svg'
+      const svg = document.createElementNS(NS, 'svg')
+      svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
+      svg.style.position = 'absolute'; svg.style.inset = '0'
+      svg.style.width = '100%'; svg.style.height = '100%'
+      const defs = document.createElementNS(NS, 'defs')
+      svg.appendChild(defs)
+      const M = 26
+      ;[0, Math.PI].forEach((phase, ai) => {
+        const maxRad = w * (0.30 + r() * 0.08)
+        const r0 = maxRad * 0.12
+        const pitch = 1.15 + r() * 0.35 // ~140-182deg sweep/arm, same as companions
+        // 10 draws, matching the companion loop's per-lobe ls draw count
+        // exactly (see RNG parity note above). Two are used as wobble
+        // phases; the rest exist only to keep the stream aligned.
+        const jit = []
+        for (let k = 0; k < 10; k++) jit.push(r())
+        const pts = []
+        for (let k = 0; k < M; k++) {
+          const t = k / (M - 1)
+          const rad = maxRad * (0.12 + 0.88 * Math.pow(t, 0.9))
+          const ang = baseAng + phase + pitch * Math.log(rad / r0)
+          pts.push({ x: cx + Math.cos(ang) * rad, y: cy + Math.sin(ang) * rad * (h / w), t })
+        }
+        const norm = pts.map((p, k) => {
+          const p0 = pts[Math.max(0, k - 1)], p1 = pts[Math.min(M - 1, k + 1)]
+          const tx = p1.x - p0.x, ty = p1.y - p0.y
+          const tl = Math.hypot(tx, ty) || 1
+          return { nx: -ty / tl, ny: tx / tl }
+        })
+        // one shared low-frequency undulation per arm (two soft bulges over
+        // the whole length — the ribbon attempt already learned that
+        // per-point jitter reads as a scalloped hard edge, not dust)
+        const wobble = pts.map(p =>
+          1 + 0.10 * Math.sin(p.t * 3.1 + jit[0] * 4) + 0.06 * Math.sin(p.t * 5.7 + jit[1] * 4))
+        // width profile: zero at both ends, peak ~40% along. This is fix #1
+        // — the closed path's two end "cross-sections" have ~zero width, so
+        // the straight L/Z closures that cut the ec37ab3 version are
+        // sub-pixel points here, structurally incapable of reading as edges.
+        const hwMax = w * 0.055, hwMin = w * 0.006
+        const prof = (t) => Math.pow(Math.max(0, t), 0.45) * Math.pow(Math.max(0, 1 - t), 0.62)
+        const profPeak = prof(0.42)
+        // 7-layer ramp instead of ec37ab3's 4: with lengthwise-only
+        // gradients there is no cross-band falloff INSIDE a layer, so each
+        // layer boundary is a crisp vector edge — at 4 layers the alpha
+        // steps were big enough to read as concentric stripes (rendered and
+        // seen, first pass of this rework: each arm read as a glossy
+        // 4-band "swoosh"). More, closer layers shrink each step below
+        // what reads as a boundary; total stacked center alpha kept in the
+        // same ballpark, and the innermost layer stops short of the
+        // near-white l0=86 the swoosh version peaked at.
+        // (second render pass: 7 layers still showed fine contour striping
+        // up close — every layer edge is a crisp vector boundary, so the
+        // real requirement is that no single layer's alpha step exceeds
+        // what the eye picks out as a line, ~0.05. 12 layers, each <=0.16
+        // peak alpha, steps of ~0.01 between neighbours: brightness comes
+        // from the stack, not any one layer.)
+        const layers = []
+        for (let li = 0; li < 12; li++) {
+          const u = li / 11
+          layers.push({
+            frac: 1 - 0.90 * Math.pow(u, 0.9),
+            aPk: 0.05 + 0.11 * Math.pow(u, 1.4),
+            l0: 58 + 20 * u,
+          })
+        }
+        layers.forEach(({ frac, aPk, l0 }, li) => {
+          const outer = [], inner = []
+          for (let k = 0; k < M; k++) {
+            const hw = (hwMin + hwMax * prof(pts[k].t) / profPeak) * frac * wobble[k]
+            const { nx, ny } = norm[k]
+            outer.push({ x: pts[k].x + nx * hw, y: pts[k].y + ny * hw })
+            inner.push({ x: pts[k].x - nx * hw, y: pts[k].y - ny * hw })
+          }
+          const d = closedSilhouettePath(outer, inner.slice().reverse())
+          const gradId = `spiralArmGrad${occCounter++}`
+          const grad = document.createElementNS(NS, 'linearGradient')
+          grad.setAttribute('id', gradId)
+          grad.setAttribute('gradientUnits', 'userSpaceOnUse')
+          grad.setAttribute('x1', pts[0].x.toFixed(1)); grad.setAttribute('y1', pts[0].y.toFixed(1))
+          grad.setAttribute('x2', pts[M - 1].x.toFixed(1)); grad.setAttribute('y2', pts[M - 1].y.toFixed(1))
+          // fix #2: 0% stop is transparent. Chord-projection clamp regions
+          // (anything before x1,y1 on the gradient axis — which for this
+          // spiral is exactly the near-core region) render invisible.
+          // (pass 6, rendered: peak at 24% left each arm's visible start too
+          // far from center — two disconnected crescents with a dead gap
+          // where the galaxy's middle should be. Peak moved to 10%: arms now
+          // visibly emerge near the bulge. Still transparent AT 0%, so the
+          // ec37ab3 clip-cut can't return — and the width taper already
+          // makes the closure edge sub-pixel there regardless.)
+          const stops = [
+            [0, hsla(hue + ai * 6, 58 - li * 4, l0, 0)],
+            [10, hsla(hue + ai * 6, 58 - li * 4, l0, A(aPk, fill))],
+            [55, hsla(hue, 52, l0 - 10, A(aPk * 0.6, fill))],
+            [100, hsla(hue, 46, l0 - 20, 0)],
+          ]
+          stops.forEach(([off, col]) => {
+            const st = document.createElementNS(NS, 'stop')
+            st.setAttribute('offset', `${off}%`); st.setAttribute('stop-color', col)
+            grad.appendChild(st)
+          })
+          defs.appendChild(grad)
+          const path = document.createElementNS(NS, 'path')
+          path.setAttribute('d', d)
+          path.setAttribute('fill', `url(#${gradId})`)
+          svg.appendChild(path)
+        })
+      })
+      f.appendChild(svg)
+      // nucleus: a soft hot-center glow ABOVE the arms, small relative to
+      // the bulge. Placed here (not an l-core element) after two rendered
+      // failures with core discs — see the l-core comment below. The bulge
+      // behind this spot is dim mid-teal, so a high-lightness monotonic
+      // falloff can only brighten — no rim, no shaded-sphere read.
+      const nuc = el('l-arm')
+      const ns = w * 0.30
+      nuc.style.width = nuc.style.height = px(ns)
+      nuc.style.left = px(cx - ns / 2); nuc.style.top = px(cy - ns / 2)
+      nuc.style.background = `radial-gradient(circle,
+        #fff3e0 0%, ${hsla(hue, 55, 88, A(0.75, fill))} 12%,
+        ${hsla(hue, 48, 70, A(0.28, fill))} 38%, transparent 68%)`
+      f.appendChild(nuc)
+    } else {
     let domEdge = null, domEdgeArea = -1
     // touching-but-distinct band: consecutive lobes' centre-distance /
     // mean-diameter must land in ~0.7-1.05 (spec §6.2 silhouette test) -
@@ -966,16 +1186,29 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
         ${hsla(hue + 8, 72, 88, 0.85)} 44%, ${hsla(hue + 8, 72, 88, 0.85)} 56%, transparent 100%)`
       f.appendChild(edge)
     }
+    } // end companion-only discrete-lobe construction
     // 2026-08-11: size 0.036->0.052, glow alpha 0.45->0.75 — the nucleus
     // the arms wind around needs to read as unmistakably the brightest
     // point in the primitive, not a faint dot lost among the arm lobes.
     // isHeadline-gated, same as the rest of this kind's boost.
-    const c = el('l-core')
-    const cs = Math.max(14, w * (boost ? 0.052 : 0.036))
-    c.style.width = c.style.height = px(cs)
-    c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
-    c.style.boxShadow = `0 0 ${px(cs * 2.6)} ${px(cs * 0.7)} ${hsla(hue, 70, boost ? 85 : 80, A(boost ? 0.75 : 0.45, fill))}`
-    f.appendChild(c)
+    // 2026-08-13 headline rework: NO separate l-core element on the
+    // headline. Rendered and seen, two failed variants in this session
+    // alone: the shared .l-core class is a SOLID #fff6e6 disc (reads as a
+    // hard-edged pearl — the one surviving gumball of the old bead
+    // construction), and a semi-transparent radial replacement composited
+    // DARKER than the bulge's own bright center behind it, reading as a
+    // shaded sphere with a rim. The bulge (l-disc, tuned across three
+    // 2026-08-12 rounds to peak dense-in-middle) already supplies a bright
+    // nucleus at the exact same spot — a galaxy's core is a glow, and the
+    // glow is already there. Companions keep their small solid core.
+    if (!boost) {
+      const c = el('l-core')
+      const cs = Math.max(14, w * 0.036)
+      c.style.width = c.style.height = px(cs)
+      c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
+      c.style.boxShadow = `0 0 ${px(cs * 2.6)} ${px(cs * 0.7)} ${hsla(hue, 70, 80, A(0.45, fill))}`
+      f.appendChild(c)
+    }
     f.style.transform = `rotate(${(-30 + r() * 24).toFixed(0)}deg)`
   }
 
@@ -1117,6 +1350,41 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // technique every other primitive in this file already uses.
     hd.style.background = `radial-gradient(circle, #ffffff 0%, #eaf5ff 34%, ${hsla(hue, 70, 86, A(0.75, fill))} 62%, transparent 100%)`
     hd.style.boxShadow = `0 0 ${px(hs * 0.9)} ${px(hs * 0.18)} ${hsla(hue, 72, 82, A(0.55, fill))}`
+    // 2026-08-13 live review (Ben, st7: "put holes in it like a moon") —
+    // crater pockmarks on the nucleus. Each crater is a soft radial divot:
+    // a darker off-center core (offset toward upper-left, a consistent
+    // fake-relief light direction across all craters — uniform-random
+    // shading would read as dirt smudges, not depth) fading out before its
+    // own edge, plus for the larger craters a faint bright rim arc on the
+    // opposite side. Alphas kept low and every divot placed within the
+    // inner ~62% of the head's radius, where its gradient is still bright
+    // — so at distance the head stays a glowing ball and the craters read
+    // as surface mottling, not as dimming the core (per the same "bright
+    // at distance, textured up close" balance the task named).
+    // (first render: center-biased placement piled the divots into one
+    // connected beige clump on the hot core — read as a smudge, and dulled
+    // the nucleus's brightest point. Annulus placement instead: nothing in
+    // the innermost ~14% radius, so the white-hot center stays clean, plus
+    // a min-distance skip so craters read as separate pocks, not a blob.)
+    const nCr = 6 + Math.floor(r() * 3)
+    const placed = []
+    for (let ci = 0; ci < nCr; ci++) {
+      const ca = r() * Math.PI * 2
+      const cdist = hs * (0.14 + Math.pow(r(), 0.8) * 0.28)
+      const crR = hs * (0.06 + r() * 0.10)
+      const crx = hs / 2 + Math.cos(ca) * cdist, cry = hs / 2 + Math.sin(ca) * cdist
+      if (placed.some(pp => Math.hypot(pp.x - crx, pp.y - cry) < (pp.r + crR) * 0.8)) continue
+      placed.push({ x: crx, y: cry, r: crR })
+      const cr = el('')
+      cr.style.position = 'absolute'; cr.style.borderRadius = '50%'
+      cr.style.left = px(crx - crR); cr.style.top = px(cry - crR)
+      cr.style.width = cr.style.height = px(crR * 2)
+      const rim = crR > hs * 0.10
+        ? `, radial-gradient(circle at 62% 64%, transparent 42%, rgba(255,255,255,${(0.10 + r() * 0.06).toFixed(2)}) 58%, transparent 74%)`
+        : ''
+      cr.style.background = `radial-gradient(circle at 42% 38%, ${hsla(hue, 24, 42, A(0.38, fill))} 0%, ${hsla(hue, 26, 54, A(0.20, fill))} 48%, transparent 72%)${rim}`
+      hd.appendChild(cr)
+    }
     f.appendChild(hd)
     // 2026-08-11: rotation range -26..-10deg -> -12..-4deg. .k-head sits at
     // this box's right edge (top:50% unrotated); for a shallow wide box

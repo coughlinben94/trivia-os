@@ -373,7 +373,7 @@ const WORLD = {
     { key:'pulsar',         prim:'pulsar',       hue:120, accent:false, greenWash:true, noCompanion:true }, // NEW — radiant burst; greenWash 2026-08-12 (same); maskSpots removed 2026-08-13 — both were this station's own companion/detail-speck content, not neighbor bleed (round-6 misdiagnosed); noCompanion added instead, see the companion block's own comment
     { key:'rose nebula',    prim:'nebulaCloud',  hue:330, accent:true, cornerLeft:false }, // was st8 — asymmetric cloud, 2026-08-12; cornerLeft:false 2026-08-12 (Ben: "needs to be on other bottom corner" — was landing bottom-left, forced bottom-right)
     { key:'comet',          prim:'streak',       hue:208, accent:false, cornerLeft:false, maskSpots:[[0.5957278481012659,0.13787798874824192,0.04509493670886067,0.07876230661040787]] }, // was st4 — elongated streak; cornerLeft:false 2026-08-13 — the redesigned streak draws more seeded points (ion tail), which reordered this station's corner draw toward frame-center; a comet head near center risks the safe box, and Ben's standing rule is corners
-    { key:'binary pair',    prim:'binary',       hue:214, accent:false }, // was st7 — radial mass
+    { key:'binary pair',    prim:'binary',       hue:214, accent:false, orangeWash:true }, // was st7 — radial mass; orangeWash 2026-08-13 (Ben: "orange flare???" / "need more green and orange areas... whole background shifts for a slide or two" — new wash color, same mechanism as greenWash, see WASH_KINDS)
     { key:'asteroid field', prim:'asteroidField',hue:160, accent:false, fillCorner:true }, // NEW — scattered cluster; fillCorner 2026-08-12 (Ben: "need something here" on the bottom-left, which the spanning-field's own headline — centered on the st9/st10 boundary — never reaches)
     { key:'supernova',      prim:'spikes',       hue:36,  accent:true }, // was st2 — radiant burst; noWash flag removed 2026-08-13 — the far-layer wash loop it opted out of is gone entirely now (see buildLayerContent's far-layer removal note), so the flag had nothing left to read
     { key:'aurora ribbon',  prim:'ribbon',       hue:196, accent:false, bandUpper:false }, // was st11 (unchanged) — elongated streak; bandUpper:false 2026-08-12 (Ben: "move to bottom right" — was top-right, horizontal already right)
@@ -435,6 +435,12 @@ new ResizeObserver(fit).observe(stage); fit();
 /* ═══ BUILD ═══ */
 const surgeEls = {};
 let starTotal = 0, formTotal = 0;
+// Background-wash color table (2026-08-13) — station-data flag -> wash hue.
+// See buildLayerContent's per-station wash loop for how these get drawn.
+const WASH_KINDS = [
+  { flag: 'greenWash',  hue: 150 },
+  { flag: 'orangeWash', hue: 30 },
+];
 
 function buildLayerContent(host, L){
   const period = authorPeriodOf(L);
@@ -623,7 +629,15 @@ function buildLayerContent(host, L){
                // as a horizontal band, so its own visual "length" IS this
                // width — widened beyond the shared 576-880 tier instead of
                // stretching hh (which would just make it thicker).
-               : st.prim === 'ribbon' ? lerp(760, 1100, rHeadline())
+               // 2026-08-13 round 2 (Ben, st11: "make it go longer but ends
+               // off screen" — paired with a standing principle stated the
+               // same session: corner-bleed is wanted, it frees center-frame
+               // space for the question text). headLeft anchors this box's
+               // NEAR edge 2-12px from a corner (cornerX); the FAR edge
+               // needs w > ~1908px to actually exit the 1920px frame at all
+               // — 760-1100 never did. Widened past frame width so the far
+               // end reliably runs off-screen, not just "longer within it."
+               : st.prim === 'ribbon' ? lerp(1600, 2000, rHeadline())
                // 2026-08-13 round 2 (Ben, st7: "doesn't have a major
                // asset"): streak's visual length IS its width, same logic
                // as ribbon's own tier above — widened so the comet spans a
@@ -669,9 +683,27 @@ function buildLayerContent(host, L){
       // draw in this station silently shifts depending on the flag).
       const cornerDraw = rHeadline() < 0.5;
       const headlineCornerLeft = st.cornerLeft !== undefined ? st.cornerLeft : cornerDraw;
-      const headLeft = isSpanningField
+      let headLeft = isSpanningField
         ? (x0 + ENGINE.W) - hw/2  // centered ON the st9/st10 boundary
         : dom.cornerX(rHeadline, hw, x0, headlineCornerLeft);
+      // 2026-08-13 (Ben, st4: "more towards corner", third such note on this
+      // station). Bbox-measured root cause this round: `planet` draws its
+      // disc as min(w,h) CENTERED in a wider w×h box (hh = 0.62-0.88×hw
+      // always, so the disc inherits ~(hw-hh)/2 ≈ 100-160px of dead
+      // horizontal inset on each side). cornerX puts the BOX edge 2-12px
+      // from the frame corner, but the visible disc edge still sat ~130px
+      // in — pushing cornerX harder can never fix an inset that lives
+      // inside the box. Shift the whole box toward its corner by exactly
+      // that inset so the DISC edge (not the box edge) lands at cornerX's
+      // own 2-12px margin. The box's far side sticks further out of frame;
+      // the disc itself stays fully on-screen horizontally, so this is
+      // corner-hugging, not amputation (Ben, same session: "its ok if
+      // things bleed off the corners"). Same post-hoc call-site pattern as
+      // the `spikes` nudge below — makePrim itself stays corner-agnostic.
+      if (st.prim === 'planet') {
+        const discInset = (hw - Math.min(hw, hh)) / 2;
+        headLeft += headlineCornerLeft ? -discInset : discInset;
+      }
       const headTop  = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh), isSpanningField);
       head.style.left = px(headLeft);
       head.style.top  = px(headTop);
@@ -751,25 +783,32 @@ function buildLayerContent(host, L){
          primitives. Full station width, fixed green (150) independent of
          each station's own object hue so the two adjacent slides read as
          one continuous tinted region, not two separately-tuned greens. */
-      if (st.greenWash){
+      // 2026-08-13: generalized to a small (flag, wash-hue) table instead of
+      // one hardcoded greenWash block, so a second color doesn't mean a
+      // second hand-copied 30-line block (Ben: "need more green and orange
+      // areas... like the whole background shifts for a slide or two" — a
+      // real second family, not a one-off). `orangeWash` set on st8 only for
+      // now (his "orange flare???" note landed there specifically); more
+      // stations can pick it up the same way greenWash's st4/st5 pair does.
+      // Same alpha/fade/edge-feather logic for every entry — only the flag
+      // name and hue differ.
+      for (const wc of WASH_KINDS) {
+        if (!st[wc.flag]) continue;
         const wash = dom.el('');
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0';
         wash.style.width = px(ENGINE.W); wash.style.height = px(ENGINE.H);
-        wash.style.background = `linear-gradient(to top, ${hsla(150, 55, 20, 0.34)} 0%, ${hsla(150, 55, 20, 0.16)} 32%, transparent 58%)`;
+        wash.style.background = `linear-gradient(to top, ${hsla(wc.hue, 55, 20, 0.50)} 0%, ${hsla(wc.hue, 55, 20, 0.28)} 32%, transparent 68%)`;
         // Ben (live review, 2026-08-12): "vertical art seams" at the 4->5 and
         // 6->7 turns, showing up twice. Root cause: wash is a flat full-width
         // rectangle with only a VERTICAL (to top) gradient — no horizontal
-        // fade at its own left/right edges. st4+st5 are adjacent and share
-        // the identical fixed color, so their shared internal boundary was
-        // already seamless (that's not what he saw) — the two hard cuts are
-        // this 2-station-wide block's own OUTER edges: full tint to none
-        // entering before st4, and none to full tint... err, full to none
-        // exiting after st5. Feather only the outer edges (mask-image, same
-        // technique as the maskSpots patches above) — skip the shared side
-        // entirely when a neighbor also has greenWash, so already-seamless
-        // multi-station runs stay exactly as seamless as before.
-        const prevWash = WORLD.stations[(i - 1 + ENGINE.PANES) % ENGINE.PANES].greenWash;
-        const nextWash = WORLD.stations[(i + 1) % ENGINE.PANES].greenWash;
+        // fade at its own left/right edges. Adjacent same-wash stations share
+        // an identical fixed color, so their internal boundary is already
+        // seamless — the hard cuts are a same-color block's own OUTER edges.
+        // Feather only the outer edges (mask-image, same technique as the
+        // maskSpots patches above) — skip the shared side entirely when a
+        // neighbor has the SAME wash flag, so multi-station runs stay seamless.
+        const prevWash = WORLD.stations[(i - 1 + ENGINE.PANES) % ENGINE.PANES][wc.flag];
+        const nextWash = WORLD.stations[(i + 1) % ENGINE.PANES][wc.flag];
         if (!prevWash || !nextWash) {
           const feather = 0.08;
           const leftStop = prevWash ? '0%' : `${feather * 100}%`;
