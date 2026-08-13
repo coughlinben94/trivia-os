@@ -386,14 +386,27 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
     // rim: traces the ACTUAL lobe cluster's bounding box, inset to the
     // gradient's own visible radii (56%/44%, matching each lobe's own
     // `ellipse 56% 44%` gradient above), rotated with the dominant lobe.
-    const rim = el('b-rim')
-    const rw = (bx1 - bx0) * 0.56, rh = (by1 - by0) * 0.44
-    const rcx = (bx0 + bx1) / 2, rcy = (by0 + by1) / 2
-    rim.style.left = px(rcx - rw / 2); rim.style.top = px(rcy - rh / 2)
-    rim.style.width = px(rw); rim.style.height = px(rh)
-    rim.style.setProperty('--rim', hsla(hue + 6, 90, 82, 0.55))
-    rim.style.transform = `rotate(${domRot.toFixed(0)}deg)`
-    f.appendChild(rim)
+    //
+    // 2026-08-12 round 4 (Ben, st3: "remove... the curved line assets
+    // behind it" — DOM/CSS-verified: `.b-rim`'s partial border (right/
+    // bottom sides transparent) plus this rotation is exactly what reads
+    // as a smooth curved arc drawn over the nebula, not a subtle contrast
+    // highlight). Gated off isHeadline only — `blob` is currently only
+    // used as a headline at st3, so this removes it there without
+    // touching the smaller, less prominent companion-scale `blob` uses
+    // elsewhere (untested for the same clutter complaint, so left alone).
+    if (isHeadline) {
+      // no-op: rim intentionally skipped for headline-scale blob.
+    } else {
+      const rim = el('b-rim')
+      const rw = (bx1 - bx0) * 0.56, rh = (by1 - by0) * 0.44
+      const rcx = (bx0 + bx1) / 2, rcy = (by0 + by1) / 2
+      rim.style.left = px(rcx - rw / 2); rim.style.top = px(rcy - rh / 2)
+      rim.style.width = px(rw); rim.style.height = px(rh)
+      rim.style.setProperty('--rim', hsla(hue + 6, 90, 82, 0.55))
+      rim.style.transform = `rotate(${domRot.toFixed(0)}deg)`
+      f.appendChild(rim)
+    }
   }
 
   else if (kind === 'nebulaCloud') {
@@ -757,34 +770,19 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill) {
         // part of why the whole primitive read as a flat smudge. isHeadline-
         // gated (see `boost` above) so companions keep the original values.
         //
-        // 2026-08-12 round 3 (Ben: "problems with the spirals. they need
-        // to be blurred as it goes towards the edges of them all" — every
-        // spiral in the world, not just st1's own headline; this same
-        // l-arm code also draws the low-alpha layer-level ambient spiral
-        // that bleeds across most stations, which is why the complaint
-        // showed up tagged to several different stations' edges). The
-        // existing t-based falloff only dimmed outer lobes ~33% by the
-        // tip — still a crisp, solid-edged dot, just a fainter one, so it
-        // never read as "blurring." Two changes: alpha falloff steepened
-        // (0.20/0.08 -> 0.34/0.13, tip lobes much dimmer) AND the
-        // solid-to-transparent gradient stop itself pulls inward with t
-        // (55% -> as low as 33% at the tip), so outer lobes are smaller
-        // solid cores with more of their own radius spent fading — reads
-        // as genuinely softening into the background, not just dimming.
-        const loA = boost ? 0.60 - t * 0.34 : 0.42 - t * 0.34
-        const loA2 = boost ? 0.28 - t * 0.13 : 0.16 - t * 0.13
-        const midStop = 55 - t * 22
+        // 2026-08-12 round 3: tried steepening this same falloff + a small
+        // per-lobe blur here, aimed at "spirals need to blur towards their
+        // edges." Reverted (round 4) — Ben clarified what he actually meant
+        // was the RING/HALO bands around objects (drawPlanetDisc's glow,
+        // makeNebulaRing) jumping straight to full brightness instead of
+        // ramping up, not these individual bead-dots. See makeNebulaRing
+        // and drawPlanetDisc's own comments for the fix that actually
+        // targets what he described.
+        const loA = boost ? 0.60 - t * 0.20 : 0.42 - t * 0.20
+        const loA2 = boost ? 0.28 - t * 0.08 : 0.16 - t * 0.08
         lobe.style.background = `radial-gradient(circle,
           ${hsla(hue + ai * 6, 62 - t * 10, 72 - t * 16, A(loA, fill))} 0%,
-          ${hsla(hue, 52, 46, A(loA2, fill))} ${midStop.toFixed(0)}%, transparent ${E(82, fill).toFixed(0)}%)`
-        // A gradient-stop shrink alone still leaves a crisp circular
-        // silhouette — dimmer, but not actually soft. A real (small)
-        // blur, scaled to each lobe's OWN size and capped well under the
-        // ~25% ceiling buildStars' own comment names (FAILURE-LEDGER #14:
-        // a blur wider than ~1/4 of an element deletes it outright) —
-        // 15% of diameter at the outermost lobe, 0 at the innermost, so
-        // only the tip genuinely softens into the background.
-        if (t > 0) lobe.style.filter = `blur(${(Math.max(10, ls) * 0.15 * t).toFixed(1)}px)`
+          ${hsla(hue, 52, 46, A(loA2, fill))} 55%, transparent ${E(82, fill).toFixed(0)}%)`
         f.appendChild(lobe)
         // edge highlight rotates to the spiral's local TANGENT, not its
         // radial angle - for r = r0*e^(ang/pitch), tangent-to-radial
@@ -1450,7 +1448,19 @@ function drawPlanetDisc(el, container, size, hue, fill, lightDeg) {
   const glowInnerPct = (R * 2 / GLOW_FRAC).toFixed(1) // disc radius as % of glow's own closest-side radius
   glow.style.left = px((size - gd) / 2); glow.style.top = px((size - gd) / 2)
   glow.style.width = glow.style.height = px(gd)
-  glow.style.background = `radial-gradient(circle closest-side, transparent 0%, transparent ${glowInnerPct}%, ${hsla(hue + 10, 55, 72, A(0.55, fill))} ${(Number(glowInnerPct) + 6).toFixed(1)}%, transparent ${E(125, fill).toFixed(0)}%)`
+  // 2026-08-12 round 4 (Ben: "ovals and circles of pure color around the
+  // asset" need to fade from the center out, not read as a solid ring).
+  // transparent -> transparent -> BRIGHT in one 6%-wide jump was a hard
+  // edge — the glow appeared instantly at full strength instead of
+  // ramping up, which is what read as a "pure color" band rather than a
+  // fade. Added a half-bright stop partway through that same 6% window
+  // (a real ramp, not just a wider gap) so the peak comes up gradually.
+  // Peak's own position/value is unchanged (still at +6%, still the
+  // number the ablation gate's fill->E() relationship depends on per the
+  // comment above) — only how it's approached changed.
+  const glowPeak = hsla(hue + 10, 55, 72, A(0.55, fill))
+  const glowHalf = hsla(hue + 10, 55, 72, A(0.28, fill))
+  glow.style.background = `radial-gradient(circle closest-side, transparent 0%, transparent ${glowInnerPct}%, ${glowHalf} ${(Number(glowInnerPct) + 3).toFixed(1)}%, ${glowPeak} ${(Number(glowInnerPct) + 6).toFixed(1)}%, transparent ${E(125, fill).toFixed(0)}%)`
   container.appendChild(glow)
 
   const NS = 'http://www.w3.org/2000/svg'
@@ -1616,8 +1626,16 @@ function makeNebulaRing(el, w, h, hue, fill) {
   // described, achieved with the right number this time. Matches the
   // proportions the `lens`/`l-disc` core gradient already uses (55-70%
   // range) rather than the outlier 100% this replaces.
+  // 2026-08-12 round 4 (Ben, mocked both options side by side: "option a
+  // looks like nothing, b looks like an actual planet. keep b" — the
+  // hollow ring/donut shape reads correctly as a Saturn-style planetary
+  // ring, not a defect; a solid continuous glow (option A, briefly tried
+  // here) lost the planet read entirely). Kept the round-4 ramp-up
+  // smoothing (transparent -> half-bright -> peak, instead of a hard
+  // jump) since that part WAS a real improvement Ben didn't object to.
   ring.style.background = `radial-gradient(ellipse 50% 50% at 50% 50%,
-    transparent 0%, transparent 52%, ${hsla(hue + 14, 70, 68, A(0.34, fill))} 66%,
+    transparent 0%, transparent 52%, ${hsla(hue + 14, 70, 68, A(0.17, fill))} 59%,
+    ${hsla(hue + 14, 70, 68, A(0.34, fill))} 66%,
     ${hsla(hue + 8, 62, 58, A(0.16, fill))} 78%, transparent 92%)`
   return ring
 }

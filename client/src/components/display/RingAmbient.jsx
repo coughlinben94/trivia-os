@@ -234,7 +234,9 @@ function buildLayerContent(engine, world, arc, host, L) {
     // which never looked at loudness at all.
     const byLoudnessDesc = [...Array(engine.PANES).keys()].sort((a, b) => arc[b] - arc[a])
     const occlusionEligible = byLoudnessDesc.slice(0, engine.PANES - Math.floor(engine.PANES / 3))
-    const occluderStations = new Set(occlusionEligible.filter((_, k) => k % 2 === 0))
+    // 2026-08-12 round 4 (Ben, st3: "remove the other circle") — synced
+    // from world-07-ring.html: excludes st3's occluder outright.
+    const occluderStations = new Set(occlusionEligible.filter((_, k) => k % 2 === 0).filter((i) => i !== 3))
 
     for (let i = 0; i < engine.PANES; i++) {
       const st = world.stations[i]

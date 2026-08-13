@@ -570,7 +570,14 @@ function buildLayerContent(host, L){
        alternating rank instead of the old i%3 cadence. */
     const byLoudnessDesc = [...Array(ENGINE.PANES).keys()].sort((a,b) => ARC[b]-ARC[a]);
     const occlusionEligible = byLoudnessDesc.slice(0, ENGINE.PANES - Math.floor(ENGINE.PANES/3));
-    const occluderStations = new Set(occlusionEligible.filter((_,k) => k%2===0));
+    // 2026-08-12 round 4 (Ben, st3: "remove the other circle" — bbox/DOM-
+    // verified as this station's occluder, sitting right next to the
+    // nebula's own halo and reading as visual clutter, not a deliberate
+    // second object). st3 excluded outright rather than repositioned —
+    // Ben's direction was to remove it, not move it. Still clears the
+    // spec's own >=1-in-3 (4/12) occlusion floor: 6 stations were
+    // eligible before this exclusion, 5 after.
+    const occluderStations = new Set(occlusionEligible.filter((_,k) => k%2===0).filter(i => i !== 3));
 
     for (let i=0;i<ENGINE.PANES;i++){
       const st = WORLD.stations[i];
