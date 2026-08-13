@@ -1146,7 +1146,16 @@ function fitPx(t){const B=ENGINE.Q.BOX;
   let lo=B.minPx,hi=B.maxPx;
   for(let i=0;i<9;i++){const m=(lo+hi)/2;
     if(fits(t,m,B.w,B.h,B.maxLines))lo=m;else hi=m}
-  return Math.max(B.minPx,lo)}
+  const px=Math.max(B.minPx,lo);
+  // Same fix as client/src/lib/autoFitText.js's fitToBox (2026-08-13) — this
+  // harness hand-duplicates that algorithm (see this function's own history),
+  // so the bug and the fix both need to land in both copies or they drift.
+  // Falls back to B.minPx unverified when nothing satisfies maxLines even at
+  // the floor; minPx is still the right number, this only adds a dev warning
+  // so it's not silently invisible.
+  if(!fits(t,px,B.w,B.h,B.maxLines))
+    console.warn(`[fitPx] "${String(t).slice(0,60)}${t.length>60?'…':''}" doesn't fit its box even at the ${B.minPx}px floor (${B.w}×${B.h}, max ${B.maxLines} lines). Rendering at floor size anyway.`);
+  return px}
 
 const qLayer=document.getElementById('qLayer'),qText=document.getElementById('qText'),
       qScrim=document.getElementById('qScrim');
