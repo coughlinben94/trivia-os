@@ -915,13 +915,32 @@ function buildLayerContent(host, L){
       //    reach math above) must land at <=60% of frame height so the top
       //    40% stays untouched purple. ry clamped directly to that.
       //  - HORIZONTAL SPLIT: center pulled left of this station's own true
-      //    midpoint (0.42W instead of 0.5W) and rx brought down from 1.75W
-      //    so the portion crossing the page boundary reads as a minority
-      //    tail rather than reaching the NEXT station's own far edge. Not
-      //    exact algebra (the box's own left-edge clip at x0 eats into the
-      //    "page 1 half" unevenly) — tuned by rendering both pages and
-      //    checking the crossing genuinely reads as the smaller share.
-      const washCxFrac = (0.42 * ENGINE.W / washSpanW) * 100;
+      //    midpoint (0.42W instead of 0.5W) for the asymmetry.
+      // 2026-08-14 round 2 (Ben: "i only saw green on one slide" — PIXEL-
+      // SAMPLED, not eyeballed: station 5's lower-mid region measured
+      // byte-identical to base purple, zero bleed reaching it at all).
+      // Root cause: this round's FIRST attempt shrank rx 1.75W->1.40W
+      // *on top of* the center shift, and the two compounded — effective
+      // reach past the page boundary dropped to ~0.40W, entirely inside
+      // the first ~40% of the next station's own width, short of every
+      // sample point a viewer's eye actually lands on. rx restored to
+      // 1.75W (the version measured/confirmed reaching well into the next
+      // station, see the commit two rounds back); the 75/25 asymmetry
+      // comes from the center shift alone, not from also starving the
+      // radius — "75/25" was never meant to mean "barely visible," it
+      // meant "clearly the minority share," and a minority share still
+      // has to be visible to read as gliding into the next slide at all.
+      // 2026-08-14 round 3: pixel-sampled again after the rx restore — the
+      // bleed reaches station5 (measured: G channel +10-12 near its own
+      // left edge, fading to zero by ~40% in) but that's WITHIN the
+      // gradient's 35%-70% linear fade-to-transparent zone, i.e. the weak
+      // tail of the curve, not its body. Center nudged right (0.42W ->
+      // 0.46W, still left of true-middle 0.5W so page 1 stays the majority
+      // share) so more of the gradient's own STRONG 0-35% zone lands past
+      // the boundary, and alpha nudged back up partway (0.34/0.18 ->
+      // 0.40/0.22 — still well under the original "too heavy" 0.55/0.30).
+      const rxScale = 1.75;
+      const washCxFrac = (0.46 * ENGINE.W / washSpanW) * 100;
       const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14; // +-7% of span
       const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16; // +-8%, above/below the true edge
       const washTallSide = (i % 2 === 0) ? 1.32 : 0.78; // which axis reads "taller"
@@ -944,7 +963,7 @@ function buildLayerContent(host, L){
         const wash = dom.el('');
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0';
         wash.style.width = px(washSpanW); wash.style.height = px(ENGINE.H);
-        const rx = Math.round(ENGINE.W * 1.40);
+        const rx = Math.round(ENGINE.W * rxScale);
         const ry = Math.min(Math.round(rx * washTallSide), WASH_MAX_RY);
         // fromTop (Ben: "flip it so half circle lives on top rail, where
         // green is bottom") — same box (top:0, full frame height), only the
@@ -952,7 +971,7 @@ function buildLayerContent(host, L){
         // to whichever half is on-screen, same mechanism both ways.
         const cy = wc.fromTop ? (0 - washJitterY) : (100 + washJitterY);
         wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${cy.toFixed(1)}%,
-          ${hsla(wc.hue, 60, 30, 0.34)} 0%, ${hsla(wc.hue, 55, 22, 0.18)} 35%, transparent 70%)`;
+          ${hsla(wc.hue, 60, 30, 0.40)} 0%, ${hsla(wc.hue, 55, 22, 0.22)} 35%, transparent 70%)`;
         host.appendChild(wash); formTotal++;
       }
       if (st.ring){

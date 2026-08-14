@@ -397,10 +397,20 @@ function buildLayerContent(engine, world, arc, host, L) {
       // ~0.1W in, see that file's identical comment for the math.
       // 2026-08-14: synced from world-07-ring.html — height cap (WASH_MAX_RY,
       // "max is only 60% up the screen, so the purple still lives at the
-      // top") and horizontal 75/25 split (center pulled to 0.42W, rx down
-      // from 1.75W to 1.40W), see that file's identical comment for the math.
+      // top") and horizontal 75/25 split (center pulled to 0.42W).
+      // 2026-08-14 round 2: synced — rx restored to 1.75W (a prior pass had
+      // shrunk it to 1.40W on top of the center shift, and the two
+      // compounded into a bleed too short to reach any of the next
+      // station's actual sample points — pixel-measured byte-identical to
+      // base purple). See that file's identical comment.
+      // 2026-08-14 round 3: synced — center nudged 0.42W -> 0.46W and alpha
+      // 0.34/0.18 -> 0.40/0.22 (still under the original "too heavy"
+      // 0.55/0.30) — the bleed reached station5 but landed in the
+      // gradient's own weak fade-tail (35%-70% zone), pixel-measured too
+      // faint to read. See that file's identical comment.
+      const rxScale = 1.75
       const washSpanW = engine.W * 2.8
-      const washCxFrac = (0.42 * engine.W / washSpanW) * 100
+      const washCxFrac = (0.46 * engine.W / washSpanW) * 100
       const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14
       const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16
       const washTallSide = (i % 2 === 0) ? 1.32 : 0.78
@@ -417,11 +427,11 @@ function buildLayerContent(engine, world, arc, host, L) {
         const wash = dom.el('')
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0'
         wash.style.width = px(washSpanW); wash.style.height = px(engine.H)
-        const rx = Math.round(engine.W * 1.40)
+        const rx = Math.round(engine.W * rxScale)
         const ry = Math.min(Math.round(rx * washTallSide), WASH_MAX_RY)
         const cy = wc.fromTop ? (0 - washJitterY) : (100 + washJitterY)
         wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${cy.toFixed(1)}%,
-          ${hsla(wc.hue, 60, 30, 0.34)} 0%, ${hsla(wc.hue, 55, 22, 0.18)} 35%, transparent 70%)`
+          ${hsla(wc.hue, 60, 30, 0.40)} 0%, ${hsla(wc.hue, 55, 22, 0.22)} 35%, transparent 70%)`
         host.appendChild(wash)
       }
 
