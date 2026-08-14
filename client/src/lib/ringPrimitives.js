@@ -1664,10 +1664,27 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     grad.setAttribute('gradientUnits', 'userSpaceOnUse')
     grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0')
     grad.setAttribute('x2', '0'); grad.setAttribute('y2', String(h))
+    // 2026-08-14 round 4 (Ben, fresh render: "i want the gradient of the
+    // ribbon to flow and end off screen"). Rendered first and confirmed:
+    // with the old stops ([0]0.55 / [30]0.42 / [65]0.20 / [100]0) the
+    // band's TOP EDGE — which the wave sweeps across 0.14h..0.46h of this
+    // box-space gradient — read a0.49 at wave crests but only ~a0.32 in
+    // troughs, so brightness tracked absolute frame-Y, not position along
+    // the band: one bright patch at the crest, dim everywhere the wave
+    // dips (including the entire lower-left run into the tail, which is
+    // why the band seemed to peter out in-frame despite the tail's
+    // geometry exiting — re-measured this session via getPointAtLength +
+    // getScreenCTM: tip ~98px below the frame line, no left-clip contact,
+    // 48b4b81's geometric claim still holds at this placement). Fix is
+    // constants-only: hold near-full brightness through 46% (the wave's
+    // deepest topY), so the top edge reads uniformly bright along the
+    // whole wave — the curtain's cross-width feather still happens below
+    // it (46%→75%→0 at 100%), just measured from wherever the edge
+    // locally is instead of from the frame's own y-axis.
     const stops = [
       [0, hsla(hue + 14, 68, 66, A(0.55, fill))],
-      [30, hsla(hue, 62, 54, A(0.42, fill))],
-      [65, hsla(hue - 20, 50, 42, A(0.20, fill))],
+      [46, hsla(hue + 4, 64, 58, A(0.50, fill))],
+      [75, hsla(hue - 20, 50, 42, A(0.18, fill))],
       [100, hsla(hue - 20, 50, 30, 0)],
     ]
     stops.forEach(([off, color]) => {
@@ -1684,10 +1701,12 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // (offset 100%) continues the body's bright top edge around the
     // turn; the inner side feathers out the way the body feathers
     // downward. Stop offsets/colors are the body gradient evaluated at
-    // the seam (deterministic, derived 2026-08-14, verified numerically):
-    //   seam top edge y=0.4392h  -> radius R+halfW0 (100%): hue-8/57/49 a0.33
-    //   body 65% stop  y=0.65h   -> 46%:                    hue-20/50/42 a0.20
-    //   seam bot edge y=0.7423h  -> radius R-halfW0 (23%):  hue-20/50/39 a0.15
+    // the seam (deterministic; re-derived 2026-08-14 round 4 when the
+    // body stops were compressed for the flow fix above — same radii,
+    // new colors/alphas so the two fills still match by construction):
+    //   seam top edge y=0.4392h  -> radius R+halfW0 (100%): hue+4/64/58 a0.50
+    //   y=0.65h                  -> 46%:                    hue-12/55/48 a0.29
+    //   seam bot edge y=0.7423h  -> radius R-halfW0 (23%):  hue-19/50/42 a0.19
     // No fade-to-zero stop: the tip is off-frame, and every prior
     // attempt to fade "before the tip" ended up fading in view.
     const tailGradId = `auroraTailGrad${occCounter++}`
@@ -1698,9 +1717,9 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     tGrad.setAttribute('cy', String(Math.round(yJ + R)))
     tGrad.setAttribute('r', String(Math.round(R + halfW0)))
     ;[
-      [23, hsla(hue - 20, 50, 39, A(0.15, fill))],
-      [46, hsla(hue - 20, 50, 42, A(0.20, fill))],
-      [100, hsla(hue - 8, 57, 49, A(0.33, fill))],
+      [23, hsla(hue - 19, 50, 42, A(0.19, fill))],
+      [46, hsla(hue - 12, 55, 48, A(0.29, fill))],
+      [100, hsla(hue + 4, 64, 58, A(0.50, fill))],
     ].forEach(([off, color]) => {
       const stop = document.createElementNS(NS, 'stop')
       stop.setAttribute('offset', `${off}%`)
