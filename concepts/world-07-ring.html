@@ -366,7 +366,7 @@ const WORLD = {
   // the flagged radial-mass spacing tradeoff).
   stations: [
     { key:'ringed planet',  prim:'ring',         hue:256, accent:false, maskSpots:[[0.24050632911392406,0.11818741209563996,0.04984177215189872,0.09282700421940926]] }, // was st9 — radial mass
-    { key:'spiral galaxy',  prim:'lens',         hue:170, accent:false }, // was st3 — spiral/disc; hue 276->170 2026-08-12, Ben "still hate the oval purple color" after 2 rounds of shape/brightness fixes — st0/st1/st2 were 3 near-identical purples in a row (256/276/268), moved to green-teal
+    { key:'spiral galaxy',  prim:'lens',         hue:170, accent:false, companionKind:'dots' }, // was st3 — spiral/disc; hue 276->170 2026-08-12, Ben "still hate the oval purple color" after 2 rounds of shape/brightness fixes — st0/st1/st2 were 3 near-identical purples in a row (256/276/268), moved to green-teal; companionKind 2026-08-13 (Ben: "cluster of random blue shapes... trashed and redone" — rolled companion was 'blob', forced to 'dots')
     { key:'star cluster',   prim:'dots',         hue:268, accent:false, maskSpots:[[0.33781645569620256,0.14912974683544306,0.055379746835443,0.09142053445850912],[0.6637658227848102,0.16319444444444445,0.06645569620253144,0.14064697609001406]] }, // was st1 — scattered cluster
     { key:'amber planet',   prim:'ring',         variant:'dust', hue:28,  accent:true, maskSpots:[[0.10126582278481013,0.15897503516174402,0.03955696202531646,0.08860759493670886],[0.4216772151898734,0.19413677918424754,0.05221518987341778,0.0956399437412096]] }, // was st0, was 'orange nebula'/blob+ring:true — rebuilt 2026-08-13 (Ben: "that saturn like planet needs a reworking... take inspiration from the other planets that weve already shipped"). Every blob-era construction (3 lobes, s-core ball, makeNebulaRing donut) failed the same "three circles"/"coffee stain" critique repeatedly; now uses the SAME `ring` anatomy Ben praised at st0 (drawPlanetDisc body + back/front ring halves) with variant:'dust' — a wide soft gold band, not st0's thin crisp stroke — see makePrim's `ring` branch. KNOWN TRADEOFF, flagged not hidden: radial-mass family was {0,4,8} (all >=3 apart); st3 joining it puts st3-st4 at distance 1 — Ben's explicit ask for a Saturn-like planet here overrode the spacing rule, his call to revisit.
     { key:'lit planet',     prim:'planet',       hue:140, accent:false, greenWash:true }, // NEW — radial mass; greenWash 2026-08-12 (Ben: "green on bottom half of two slides")
@@ -947,7 +947,15 @@ function buildLayerContent(host, L){
       // here doesn't reshuffle anything else at this or any other station.
       if (!st.noCompanion) {
         const others = ['blob','dots','lens','streak'].filter(k => k !== st.prim);
-        const ck = others[Math.floor(rCompanion()*others.length)];
+        const rolled = others[Math.floor(rCompanion()*others.length)];
+        // companionKind (st1, 2026-08-13, Ben: "cluster of random blue
+        // shapes... just needs to be trashed and redone"): the roll had
+        // landed on 'blob' for this station, which for a spiral-galaxy
+        // headline reads as leftover mush next to the lens's own clean
+        // construction. Forced to 'dots' (the same clean-scatter kind
+        // already praised as st2's headline) rather than tuning blob's
+        // shape, which is used correctly elsewhere.
+        const ck = st.companionKind || rolled;
         const cw = lerp(230, 420, rCompanion());
         const ch = ck === 'streak' ? cw*0.30 : cw*(0.60 + rCompanion()*0.28);
         const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, rCompanion()));

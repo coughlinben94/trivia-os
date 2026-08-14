@@ -62,7 +62,7 @@ export const midnightGalaxyRing = {
   // branch's own comment in ringPrimitives.js) — no longer the same recipe.
   stations: [
     { key: 'ringed planet', prim: 'ring', hue: 256, accent: false }, // was st9 — radial mass
-    { key: 'spiral galaxy', prim: 'lens', hue: 170, accent: false }, // was st3 — spiral/disc; hue 276->170 2026-08-12, synced from world-07-ring.html (Ben: "still hate the oval purple color")
+    { key: 'spiral galaxy', prim: 'lens', hue: 170, accent: false, companionKind: 'dots' }, // was st3 — spiral/disc; hue 276->170 2026-08-12, synced from world-07-ring.html (Ben: "still hate the oval purple color"); companionKind 2026-08-13 synced (Ben: "cluster of random blue shapes... trashed and redone")
     { key: 'star cluster', prim: 'dots', hue: 268, accent: false }, // was st1 — scattered cluster
     { key: 'amber planet', prim: 'ring', variant: 'dust', hue: 28, accent: true }, // was st0, was 'orange nebula'/blob+ring:true — rebuilt 2026-08-13 as a dust-ringed planet on st0's `ring` anatomy (Ben: "that saturn like planet needs a reworking"); synced from world-07-ring.html, see that file's st3 comment for the family-spacing tradeoff flag
     { key: 'lit planet', prim: 'planet', hue: 140, accent: false, greenWash: true }, // NEW — radial mass; greenWash synced from world-07-ring.html (Ben: "green on bottom half of two slides")
