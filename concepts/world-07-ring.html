@@ -371,8 +371,8 @@ const WORLD = {
     { key:'amber planet',   prim:'ring',         variant:'dust', hue:28,  accent:true, maskSpots:[[0.10126582278481013,0.15897503516174402,0.03955696202531646,0.08860759493670886],[0.4216772151898734,0.19413677918424754,0.05221518987341778,0.0956399437412096]] }, // was st0, was 'orange nebula'/blob+ring:true — rebuilt 2026-08-13 (Ben: "that saturn like planet needs a reworking... take inspiration from the other planets that weve already shipped"). Every blob-era construction (3 lobes, s-core ball, makeNebulaRing donut) failed the same "three circles"/"coffee stain" critique repeatedly; now uses the SAME `ring` anatomy Ben praised at st0 (drawPlanetDisc body + back/front ring halves) with variant:'dust' — a wide soft gold band, not st0's thin crisp stroke — see makePrim's `ring` branch. KNOWN TRADEOFF, flagged not hidden: radial-mass family was {0,4,8} (all >=3 apart); st3 joining it puts st3-st4 at distance 1 — Ben's explicit ask for a Saturn-like planet here overrode the spacing rule, his call to revisit.
     { key:'lit planet',     prim:'planet',       hue:140, accent:false, greenWash:true }, // NEW — radial mass; greenWash 2026-08-12 (Ben: "green on bottom half of two slides")
     { key:'pulsar',         prim:'pulsar',       hue:120, accent:false, greenWash:true, noCompanion:true }, // NEW — radiant burst; greenWash 2026-08-12 (same); maskSpots removed 2026-08-13 — both were this station's own companion/detail-speck content, not neighbor bleed (round-6 misdiagnosed); noCompanion added instead, see the companion block's own comment
-    { key:'rose nebula',    prim:'nebulaCloud',  hue:330, accent:true, cornerLeft:false }, // was st8 — asymmetric cloud, 2026-08-12; cornerLeft:false 2026-08-12 (Ben: "needs to be on other bottom corner" — was landing bottom-left, forced bottom-right)
-    { key:'comet',          prim:'streak',       hue:208, accent:false, cornerLeft:false, maskSpots:[[0.5957278481012659,0.13787798874824192,0.04509493670886067,0.07876230661040787]] }, // was st4 — elongated streak; cornerLeft:false 2026-08-13 — the redesigned streak draws more seeded points (ion tail), which reordered this station's corner draw toward frame-center; a comet head near center risks the safe box, and Ben's standing rule is corners
+    { key:'rose nebula',    prim:'nebulaCloud',  hue:330, accent:true, cornerLeft:false, companionBoost:true }, // was st8 — asymmetric cloud, 2026-08-12; cornerLeft:false 2026-08-12 (Ben: "needs to be on other bottom corner" — was landing bottom-left, forced bottom-right); companionBoost 2026-08-13 (Ben: "too blank, add something" — this station sits near the ARC trough, lou≈0.15, so its companion rendered as a barely-visible wisp; see the companion block)
+    { key:'comet',          prim:'streak',       hue:208, accent:false, cornerLeft:false, companionBoost:true, companionKind:'lens', maskSpots:[[0.5957278481012659,0.13787798874824192,0.04509493670886067,0.07876230661040787]] }, // was st4 — elongated streak; cornerLeft:false 2026-08-13 — the redesigned streak draws more seeded points (ion tail), which reordered this station's corner draw toward frame-center; a comet head near center risks the safe box, and Ben's standing rule is corners; companionBoost 2026-08-13 (Ben: "need something else bottom left" — this is the ARC's quietest station, lou=0, companion alpha bottomed out invisible; see the companion block); companionKind:'lens' same date — the roll landed on 'dots', whose 3-4px specks + dim halo stay illegible at frame scale even boosted (rendered and confirmed, round 2); forced to the defined-shape lens instead, st1-companionKind precedent
     { key:'binary pair',    prim:'binary',       hue:214, accent:false, orangeWash:true }, // was st7 — radial mass; orangeWash 2026-08-13 (Ben: "orange flare???" / "need more green and orange areas... whole background shifts for a slide or two" — new wash color, same mechanism as greenWash, see WASH_KINDS)
     { key:'asteroid field', prim:'asteroidField',hue:160, accent:false, fillCorner:true }, // NEW — scattered cluster; fillCorner 2026-08-12 (Ben: "need something here" on the bottom-left, which the spanning-field's own headline — centered on the st9/st10 boundary — never reaches)
     { key:'supernova',      prim:'spikes',       hue:36,  accent:true }, // was st2 — radiant burst; noWash flag removed 2026-08-13 — the far-layer wash loop it opted out of is gone entirely now (see buildLayerContent's far-layer removal note), so the flag had nothing left to read
@@ -956,10 +956,30 @@ function buildLayerContent(host, L){
         // already praised as st2's headline) rather than tuning blob's
         // shape, which is used correctly elsewhere.
         const ck = st.companionKind || rolled;
-        const cw = lerp(230, 420, rCompanion());
+        // companionBoost (st6/st7, 2026-08-13, Ben: st6 "too blank, add
+        // something" / st7 "need something else bottom left"): both sit at
+        // the ARC trough (st7 IS the quietest station, lou=0; st6 ~0.15),
+        // so the loudness-driven alpha bottomed out at ~0.24 and the size
+        // roll could land at 230px — rendered, the companion read as a
+        // barely-there smudge, i.e. the corner opposite the headline looked
+        // empty. Per-station floors (size and alpha applied AFTER the
+        // seeded rolls — same rCompanion() call count, so no other draw at
+        // this or any station reshuffles) rather than raising the global
+        // lerp floor, which would visibly change 10 already-approved
+        // companions. The 0.55 alpha floor deliberately exceeds the normal
+        // ceiling (0.48*0.8=0.384): these two companions must carry a
+        // corner alone at the world's dimmest stations. (0.42/340 was
+        // round 1 — rendered, the boosted companion was confirmed applied
+        // via DOM inspection yet still read as a faint smudge; the blob-
+        // family kinds' internal gradient stops multiply the element alpha
+        // well down, so the floor has to sit higher than intuition says.)
+        const cwRoll = lerp(230, 420, rCompanion());
+        const cw = st.companionBoost ? Math.max(cwRoll, 380) : cwRoll;
         const ch = ck === 'streak' ? cw*0.30 : cw*(0.60 + rCompanion()*0.28);
         const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, rCompanion()));
-        const comp = dom.makePrim(ck, cw, ch, compHue, lerp(0.30, 0.48, lou)*0.8, rCompanion, false, sfill);
+        const compAlphaRoll = lerp(0.30, 0.48, lou)*0.8;
+        const compAlpha = st.companionBoost ? Math.max(compAlphaRoll, 0.55) : compAlphaRoll;
+        const comp = dom.makePrim(ck, cw, ch, compHue, compAlpha, rCompanion, false, sfill);
         const compLeft = dom.cornerX(rCompanion, cw, x0, !headlineCornerLeft);
         const compTop = dom.bandY(rCompanion, ch, !pairUpper, dom.rotatedBandH(ck, cw, ch));
         comp.style.left = px(compLeft);

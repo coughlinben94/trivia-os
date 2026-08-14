@@ -451,10 +451,18 @@ function buildLayerContent(engine, world, arc, host, L) {
         // forces st1's companion to 'dots' instead of the rolled 'blob',
         // see that file's identical comment.
         const ck = st.companionKind || rolled
-        const cw = lerp(230, 420, rCompanion())
+        // companionBoost (st6/st7, 2026-08-13): synced from
+        // world-07-ring.html — see that file's identical comment. Both
+        // stations sit at the ARC trough, so the loudness-driven alpha
+        // bottomed out invisible; floors applied AFTER the seeded rolls
+        // (same rCompanion() call count, no stream reshuffle).
+        const cwRoll = lerp(230, 420, rCompanion())
+        const cw = st.companionBoost ? Math.max(cwRoll, 380) : cwRoll
         const ch = ck === 'streak' ? cw * 0.30 : cw * (0.60 + rCompanion() * 0.28)
         const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, rCompanion()))
-        const comp = dom.makePrim(ck, cw, ch, compHue, lerp(0.30, 0.48, lou) * 0.8, rCompanion, false, fill)
+        const compAlphaRoll = lerp(0.30, 0.48, lou) * 0.8
+        const compAlpha = st.companionBoost ? Math.max(compAlphaRoll, 0.55) : compAlphaRoll
+        const comp = dom.makePrim(ck, cw, ch, compHue, compAlpha, rCompanion, false, fill)
         const compLeft = dom.cornerX(rCompanion, cw, x0, !headlineCornerLeft)
         const compTop = dom.bandY(rCompanion, ch, !pairUpper, dom.rotatedBandH(ck, cw, ch))
         comp.style.left = px(compLeft)
