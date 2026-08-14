@@ -558,7 +558,6 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
   const queuedTurnsRef = useRef(0)
   const turnTimerRef = useRef(null)
   const shootLaneRef = useRef(null)
-  const shootSideRef = useRef(1)
   const shootTimerRef = useRef(null)
 
   // ── build once on mount — never re-run on worldData change. This is the
@@ -699,12 +698,22 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
   // shootLoop() verbatim (2026-08-12, Ben: "lean more into shooting star
   // concept"), adapted to refs instead of module-level `let`s/`window.
   // __shootLane` since this is a React component, not a page script.
+  // 2026-08-14 (Ben, live on the world-07-ring.html harness: "shoting stars
+  // are going all at once... all going same direction" — synced here since
+  // this is a verbatim port): shootSideRef used to flip every call, so
+  // consecutive shoots alternated travel direction by design; fixed to a
+  // constant. See that file's identical comment.
+  const SHOOT_DIR = 1
   function spawnShoot() {
     if (isReduced()) return
     const lane = shootLaneRef.current
     if (!lane) return
-    const rot = dom.el('shootRot'), s = dom.el('shoot'), d = shootSideRef.current
-    shootSideRef.current = -d
+    // lane cleared before adding — see world-07-ring.html's identical
+    // comment (a stray shoot whose animationend never fired, e.g. a
+    // backgrounded/throttled tab, would otherwise linger and resume
+    // alongside a later one, reading as "several at once").
+    lane.replaceChildren()
+    const rot = dom.el('shootRot'), s = dom.el('shoot'), d = SHOOT_DIR
     if (d < 0) s.classList.add('rev') // see ringCss's own .shoot.rev comment — keeps the bright head leading
     rot.style.left = px(d > 0 ? 140 + Math.random() * 500 : 1180 + Math.random() * 500)
     rot.style.top = px(70 + Math.random() * 760)

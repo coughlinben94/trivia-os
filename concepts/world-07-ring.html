@@ -1416,10 +1416,28 @@ function autoLoop(){ clearTimeout(autoT); if(!autoOn)return;
   autoT=setTimeout(()=>{turn();autoLoop()}, ENGINE.DWELL_MS); }
 
 /* ═══ SHOOTING STAR ═══ */
-let shootSide=1, shootT=null;
+let shootT=null;
+// 2026-08-14 (Ben, live: "shoting stars are going all at once. they should
+// be staggered slighty timing wise, all going same direction"): `d` used to
+// flip (shootSide=-shootSide) every call, so consecutive shoots alternated
+// travel direction by design — that's the "not all going same direction"
+// half of the report. Fixed to a constant direction; nothing else in this
+// function depends on shootSide varying (the .rev class below only needs
+// SOME fixed value of d, not an alternating one).
+const SHOOT_DIR = 1;
 function spawnShoot(){
   if(isReduced())return;
-  const rot=dom.el('shootRot'), s=dom.el('shoot'), d=shootSide; shootSide=-shootSide;
+  // "going all at once" (Ben, live): each shoot's only removal path was its
+  // own `animationend` — a single DOM event with no guaranteed-fire fallback
+  // (backgrounded/throttled tabs can pause a running CSS animation without
+  // ever completing it, so the event never lands). Any stray leftover from
+  // that never gets cleaned up, and if several accumulate they all resume/
+  // repaint together the next time the tab's actually visible — exactly
+  // "several at once" with no code path that spawned them simultaneously.
+  // Clearing the lane before adding the new one caps this at one visible
+  // shoot, always, regardless of whether a past animationend ever fired.
+  window.__shootLane.replaceChildren();
+  const rot=dom.el('shootRot'), s=dom.el('shoot'), d=SHOOT_DIR;
   if (d<0) s.classList.add('rev'); // see .shoot.rev comment above — keeps the bright head leading
   rot.style.left=px(d>0?140+Math.random()*500:1180+Math.random()*500);
   rot.style.top=px(70+Math.random()*760);
