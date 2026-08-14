@@ -1617,7 +1617,32 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // stays a fat band instead of a pinched wisp, and the tail gradient
     // (below) holds alpha to 90% so the fade-to-zero completes past the
     // frame line instead of ~2/3 of the way through the visible curl.
-    const R = h * 0.24, PHI_MAX = 150 * Math.PI / 180, PHI_START = -0.30, TAIL_N = 14
+    // 2026-08-14 round 3 (Ben, live screenshot: the curl "doesn't look
+    // visually consistent with the rest of the ribbon"). Rendered before
+    // touching anything, plus a debug pass (body red / tail green, blur
+    // off): the GEOMETRY is fine — taper, seam, and off-frame exit all
+    // hold. The mismatch is paint: the body's identity is a bright top
+    // edge feathering downward (its vertical gradient), but the tail's
+    // along-travel LINEAR gradient was flat across the band's width and
+    // tuned to the body's MID alpha — so at the joint the bright edge
+    // died abruptly (a soft vertical seam) and the whole curl read
+    // dimmer, flatter, and grayer than the band above it. Fix: the tail
+    // gradient is now RADIAL, centered on the arc's own center
+    // (xJ, yJ+R), so "distance from center" IS the curl's cross-width
+    // axis — the bright rim follows the OUTER edge around the turn,
+    // continuing the body's top edge, and feathers inward exactly like
+    // the body feathers downward. Stop radii/colors are derived from the
+    // body gradient at the seam (all deterministic — no r() draws in the
+    // wave functions), so the two fills match by construction where they
+    // meet. No along-travel fade anymore: the tip exits the frame bottom
+    // (verified on the debug render), so the viewer never sees the end —
+    // fading earlier was exactly the "band dims out in view" defect.
+    // PHI_START eased -0.30 -> -0.15: the old generous overlap was safe
+    // only because the linear gradient faded IN across it; with no
+    // fade-in, body+tail alphas sum in the overlap, so it's kept just
+    // wide (~0.15 rad > the ~0.10 rad half-segment smoothing retraction
+    // it guards) enough to cover the seam under the shared blur.
+    const R = h * 0.24, PHI_MAX = 150 * Math.PI / 180, PHI_START = -0.15, TAIL_N = 14
     const tailTop = [], tailBot = []
     for (let k = 0; k <= TAIL_N; k++) {
       const phi = PHI_START + (k / TAIL_N) * (PHI_MAX - PHI_START)
@@ -1652,57 +1677,30 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       grad.appendChild(stop)
     })
     defs.appendChild(grad)
-    // Tail hook gradient: the body's vertical "hangs from the top" gradient
-    // is nearly transparent by y≈0.65h — a hook diving to y≈h would fade
-    // out before it ever read as a curl. The tail gets its own linear
-    // gradient aligned along the hook's own travel (joint → tip),
-    // brightness matching the body's mid alpha at the seam and dying
-    // toward the (off-frame) tip.
+    // Tail hook gradient — RADIAL since 2026-08-14 round 3 (see the
+    // PHI_START comment above for the full diagnosis; earlier linear
+    // versions and their stop history live in git). Centered on the arc
+    // center so radius = the curl's cross-width axis: the outer rim
+    // (offset 100%) continues the body's bright top edge around the
+    // turn; the inner side feathers out the way the body feathers
+    // downward. Stop offsets/colors are the body gradient evaluated at
+    // the seam (deterministic, derived 2026-08-14, verified numerically):
+    //   seam top edge y=0.4392h  -> radius R+halfW0 (100%): hue-8/57/49 a0.33
+    //   body 65% stop  y=0.65h   -> 46%:                    hue-20/50/42 a0.20
+    //   seam bot edge y=0.7423h  -> radius R-halfW0 (23%):  hue-20/50/39 a0.15
+    // No fade-to-zero stop: the tip is off-frame, and every prior
+    // attempt to fade "before the tip" ended up fading in view.
     const tailGradId = `auroraTailGrad${occCounter++}`
-    const tGrad = document.createElementNS(NS, 'linearGradient')
+    const tGrad = document.createElementNS(NS, 'radialGradient')
     tGrad.setAttribute('id', tailGradId)
     tGrad.setAttribute('gradientUnits', 'userSpaceOnUse')
-    // Gradient line starts at the OVERLAP end, not the joint: rendered
-    // check on the seam fix showed a brighter column at the joint — the
-    // overlap section (before the joint, under the body) sits at negative
-    // projection on a joint-anchored gradient line, and SVG clamps it to
-    // stop 0's full alpha, so body + tail alphas summed there. Anchoring
-    // the line at the overlap's far end and fading IN across the hidden
-    // section (stop 0 near-zero, full strength reached ~where the body's
-    // own edge is) removes the double-paint without dimming the visible
-    // curl.
-    const ox = xJ - R * Math.sin(PHI_START), oy = yJ + R * (1 - Math.cos(PHI_START))
-    tGrad.setAttribute('x1', String(Math.round(ox)))
-    tGrad.setAttribute('y1', String(Math.round(oy)))
-    tGrad.setAttribute('x2', String(Math.round(xJ - R * Math.sin(PHI_MAX))))
-    tGrad.setAttribute('y2', String(Math.round(yJ + R * (1 - Math.cos(PHI_MAX)))))
-    // Stops retuned 2026-08-13 with the seam fix: the body's vertical
-    // gradient at the joint's depth (~0.58h) is ~hue-15 at ~0.25 alpha —
-    // the old hue+8 start made the hook read as a DIFFERENT, bluer object
-    // ("detached paddle") even where the geometry touched. Start matched
-    // to the body's seam color, and the mid stop raised 0.16 -> 0.20 so
-    // the curl stays legible through the turn instead of dying right
-    // after the joint. Bottom-left corner, outside the safe box — this
-    // brightens nothing inside it.
-    // Final stop pushed 50% -> 68% after another rendered look: with the
-    // fade completing mid-turn, the hook's second half went near-invisible
-    // and the curl read as a short flick. Holding alpha through ~2/3 of
-    // the arc keeps the full quarter-turn legible at frame scale; the
-    // fade-to-zero now finishes in the off-frame stretch.
-    // 2026-08-14 round 2 (see the R comment above): 68% wasn't actually
-    // off-frame — projecting the frame-bottom crossing onto the gradient
-    // line lands at ~73-91% of it, so most of the 68->100 fade-to-zero
-    // happened in view and read as the band dimming out before the edge.
-    // Hold stop pushed 68 -> 90 (and its alpha 0.18 -> 0.20) so on-screen
-    // the band keeps near-seam brightness; the 90->100 fade now lives in
-    // the strip below the frame line (the box's own bottom clip is also
-    // off-frame, so whatever the fade doesn't finish, the viewer never
-    // sees).
+    tGrad.setAttribute('cx', String(Math.round(xJ)))
+    tGrad.setAttribute('cy', String(Math.round(yJ + R)))
+    tGrad.setAttribute('r', String(Math.round(R + halfW0)))
     ;[
-      [0, hsla(hue - 12, 58, 52, A(0.04, fill))],
-      [16, hsla(hue - 12, 58, 52, A(0.26, fill))],
-      [90, hsla(hue - 16, 54, 46, A(0.20, fill))],
-      [100, hsla(hue - 20, 50, 40, 0)],
+      [23, hsla(hue - 20, 50, 39, A(0.15, fill))],
+      [46, hsla(hue - 20, 50, 42, A(0.20, fill))],
+      [100, hsla(hue - 8, 57, 49, A(0.33, fill))],
     ].forEach(([off, color]) => {
       const stop = document.createElementNS(NS, 'stop')
       stop.setAttribute('offset', `${off}%`)
