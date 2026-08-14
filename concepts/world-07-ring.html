@@ -874,14 +874,31 @@ function buildLayerContent(host, L){
       // station boundary — the center stays anchored to THIS station's own
       // midpoint (unchanged from round 3), only the box got wider so that
       // center's falloff has somewhere to bleed into.
+      // 2026-08-13 round 5 (Ben, live: "the color splurges need to look
+      // more natural and not just a half circle... make one side taller
+      // and off center the circle and such"): a perfect circle centered
+      // dead-on the station's own midpoint reads as geometric no matter how
+      // soft its edge is — real haze isn't symmetric. Switched circle->
+      // ellipse with unequal axes (one side genuinely taller than it is
+      // wide) and both the center's x AND y nudged off the "true" midpoint/
+      // bottom-edge, so the visible shape reads as one lopsided glow, not a
+      // radius drawn from a single centered point. Station index feeds a
+      // small deterministic offset (not the primitive RNG stream — this is
+      // outside makePrim, no per-station draw-count parity to protect)
+      // so adjacent wash stations don't all clone the exact same silhouette.
       const washSpanW = ENGINE.W * 1.4;
       const washCxFrac = (0.5 * ENGINE.W / washSpanW) * 100;
+      const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14; // +-7% of span
+      const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16; // +-8%, above/below the true edge
+      const washTallSide = (i % 2 === 0) ? 1.32 : 0.78; // which axis reads "taller"
       for (const wc of WASH_KINDS) {
         if (!st[wc.flag]) continue;
         const wash = dom.el('');
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0';
         wash.style.width = px(washSpanW); wash.style.height = px(ENGINE.H);
-        wash.style.background = `radial-gradient(circle ${Math.round(ENGINE.W*0.62)}px at ${washCxFrac.toFixed(1)}% 100%,
+        const rx = Math.round(ENGINE.W * 0.60);
+        const ry = Math.round(rx * washTallSide);
+        wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${(100 + washJitterY).toFixed(1)}%,
           ${hsla(wc.hue, 60, 30, 0.55)} 0%, ${hsla(wc.hue, 55, 22, 0.30)} 35%, transparent 70%)`;
         host.appendChild(wash); formTotal++;
       }

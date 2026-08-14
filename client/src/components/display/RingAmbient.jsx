@@ -385,14 +385,23 @@ function buildLayerContent(engine, world, arc, host, L) {
       // station instead of clipping at the boundary (Ben: "overlap them
       // with like 70% on one page 30% on the next") — see that file's
       // identical comment for the full math.
+      // 2026-08-13 round 5: synced from world-07-ring.html — circle ->
+      // ellipse with unequal axes plus a per-station center jitter (Ben:
+      // "look more natural... make one side taller and off center the
+      // circle") — see that file's identical comment for the full math.
       const washSpanW = engine.W * 1.4
       const washCxFrac = (0.5 * engine.W / washSpanW) * 100
+      const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14
+      const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16
+      const washTallSide = (i % 2 === 0) ? 1.32 : 0.78
       for (const wc of WASH_KINDS) {
         if (!st[wc.flag]) continue
         const wash = dom.el('')
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0'
         wash.style.width = px(washSpanW); wash.style.height = px(engine.H)
-        wash.style.background = `radial-gradient(circle ${Math.round(engine.W * 0.62)}px at ${washCxFrac.toFixed(1)}% 100%,
+        const rx = Math.round(engine.W * 0.60)
+        const ry = Math.round(rx * washTallSide)
+        wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${(100 + washJitterY).toFixed(1)}%,
           ${hsla(wc.hue, 60, 30, 0.55)} 0%, ${hsla(wc.hue, 55, 22, 0.30)} 35%, transparent 70%)`
         host.appendChild(wash)
       }

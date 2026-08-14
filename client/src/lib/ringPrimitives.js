@@ -1018,9 +1018,20 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // too — both critique agents independently flagged a "bead-chain" prop
     // now recurring as background dressing at st2/3/4/5, and specifically
     // that st1's own headline reads as indistinguishable from that dressing.
-    // Gated to isHeadline: companions revert to the original, dimmer values;
-    // only the actual headline (st1) gets the boost.
-    const boost = isHeadline
+    // Gated to isHeadline at the time: companions reverted to the original,
+    // dimmer values.
+    //
+    // 2026-08-13, un-gated: the whole reason for that gate was the OLD
+    // discrete-lobe construction reading as a "bead-chain smudge" no matter
+    // the brightness — boosting it just made a brighter smudge. st1's
+    // headline has since been rebuilt from scratch (continuous tapered
+    // ribbon arms, transparent-at-core gradient, glowing nucleus — see the
+    // construction below) specifically to fix that. Ben, live, after
+    // seeing it: "cant all the spirals look like the spiral on the second
+    // page" — the old two-tier split (good headline / bead-chain
+    // companions) is gone; every `lens` draw now uses the same
+    // construction and the same boost values, headline or companion.
+    const boost = true
     const d = el('l-disc')
     // 2026-08-12 (fresh review, st1: "looks worse than earlier, i want the
     // oval more blurry gradient dimmed"): dims the isHeadline boost back
@@ -1076,12 +1087,15 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     const cx = w * 0.5, cy = h * 0.5
     const baseAng = r() * Math.PI * 2
 
-    if (isHeadline) {
-      // 2026-08-13, third construction for the st1 headline, built from BOTH
-      // prior failures rather than re-attempting either:
-      //  - discrete 10-lobe arms (the construction kept below for companions)
-      //    read as "a caterpillar made of gumballs" — countable solid
-      //    spheres, not a dust lane. Reverted-to, then re-flagged same day.
+    {
+      // 2026-08-13, third construction, originally for the st1 HEADLINE
+      // only, built from BOTH prior failures rather than re-attempting
+      // either:
+      //  - discrete 10-lobe arms (this file's own git history — the
+      //    construction this section replaced entirely on 2026-08-13,
+      //    un-gated from isHeadline the same day per the `boost` comment
+      //    above) read as "a caterpillar made of gumballs" — countable
+      //    solid spheres, not a dust lane.
       //  - the 2026-08-13 continuous-ribbon rework (ec37ab3, reverted in
       //    7c0534a) fixed the beads but introduced a hard diagonal clip-cut
       //    near the core. Root cause, read from that commit's own code, not
@@ -1232,149 +1246,24 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
         #fff3e0 0%, ${hsla(hue, 55, 88, A(0.75, fill))} 12%,
         ${hsla(hue, 48, 70, A(0.28, fill))} 38%, transparent 68%)`
       f.appendChild(nuc)
-    } else {
-    let domEdge = null, domEdgeArea = -1
-    // touching-but-distinct band: consecutive lobes' centre-distance /
-    // mean-diameter must land in ~0.7-1.05 (spec §6.2 silhouette test) -
-    // measured, overlapping enough to read as one continuous curved band,
-    // separated enough to still be individual lobes. Sizing lobes off a
-    // formula unrelated to how far apart they actually land (the prior
-    // approach: radius from a t^0.9 falloff, diameter from an independent
-    // linear taper) put NO radius band in range - inner lobes clumped
-    // (ratio 0.32-0.5, tangential spacing tiny relative to their own size)
-    // while outer lobes gapped (ratio 0.9-1.5, tangential spacing (r*dTheta)
-    // grows with radius while the independent taper kept shrinking
-    // diameter). Fix: compute lobe POSITIONS first, then derive each
-    // lobe's diameter from its actual neighbouring gap distances / a target
-    // ratio - the size follows the geometry instead of fighting it.
-    // Verified over 30 seed x aspect-ratio combinations (see PR notes):
-    // ratio band [0.71, 0.97], inside 0.7-1.05 throughout.
-    const ARM_TARGET_RATIO = 0.85 // midpoint of the required 0.7-1.05 band
-    ;[0, Math.PI].forEach((phase, ai) => {
-      // 6 lobes stepped along a TRUE logarithmic spiral (angle grows with
-      // ln(radius), not linearly with k). Both arms sweep the SAME
-      // rotational direction now - no dir=+1/-1 sign flip - and start
-      // pi apart (opposite sides of the core). Two arms mirroring sweep
-      // *direction* from the same start angle used to close a ~206-264deg
-      // combined arc into a horseshoe/ring silhouette (a §6.2 anatomy
-      // collision with `dots`) - same direction + opposite start angles
-      // reads as an actual pinwheel/S-spiral instead.
-      // 2026-08-11, second pass: 6 -> 10 lobes. The touching-but-distinct
-      // ratio (ARM_TARGET_RATIO, spec §6.2's cited 0.7-1.05 band) is NOT
-      // being touched — that's a cited spec threshold, not mine to move.
-      // But diameter is DERIVED from gap distance at that same ratio, so
-      // packing more, smaller lobes into the same arc length shrinks both
-      // lobe size and absolute gap together, reading as a smoother
-      // continuous band at the SAME relative ratio — addressing "discrete
-      // beads" (both blind critiques, independently) without moving the
-      // number that band is defined by.
-      const lobes = 10
-      const maxRad = w * (0.30 + r() * 0.08)
-      const r0 = maxRad * 0.12 // innermost lobe radius, ln() reference point
-      // 2026-08-11 object-fix round: was 0.85+r()*0.25 (~103-134deg sweep) —
-      // both arms combined never covered enough of a full turn to read as a
-      // pinwheel, just a gentle bend (both blind reviews: "no spiral
-      // structure"). Widened so each arm sweeps ~140-182deg — most of a full
-      // half-turn — the two mirrored arms now visibly wind around the core
-      // instead of reading as two short dot-chains.
-      const pitch = 1.15 + r() * 0.35 // ln(maxRad/r0) ~= 2.12 -> ~140-182deg sweep/arm
-      const pos = []
-      for (let k = 0; k < lobes; k++) {
-        const t = k / (lobes - 1)
-        const rad = maxRad * (0.12 + 0.88 * Math.pow(t, 0.9))
-        // ang grows with ln(rad/r0) instead of a constant per-lobe step:
-        // tangential spacing (rad * dAng) now tracks radial spacing
-        // instead of ballooning with radius, so the gap-derived diameter
-        // below tapers toward the tip for free. A post-hoc multiplier on
-        // diam alone was tried first and rejected - shrinking diameter
-        // without also shrinking gap pushes the ratio straight out of the
-        // 0.7-1.05 band near the tip (verified by hand, see PR notes).
-        const ang = baseAng + phase + pitch * Math.log(rad / r0)
-        pos.push({ x: cx + Math.cos(ang) * rad, y: cy + Math.sin(ang) * rad * (h / w), ang, t })
-      }
-      // gap[k] = centre distance between lobe k and lobe k+1 along the curve.
-      const gap = []
-      for (let k = 0; k < lobes - 1; k++) {
-        gap.push(Math.hypot(pos[k + 1].x - pos[k].x, pos[k + 1].y - pos[k].y))
-      }
-      // diameter derived from the neighbouring gap(s), not tuned
-      // independently - guarantees the ratio lands near target regardless
-      // of the maxRad/pitch jitter above (unchanged mechanism from the
-      // prior fix - do not decouple this from the geometry above it).
-      const diam = pos.map((_, k) => {
-        const g0 = gap[k - 1], g1 = gap[k]
-        const avg = (g0 !== undefined && g1 !== undefined) ? (g0 + g1) / 2 : (g0 ?? g1)
-        return avg / ARM_TARGET_RATIO
-      })
-      pos.forEach((p, k) => {
-        const { x: lx, y: ly, t, ang } = p
-        const ls = diam[k] * (0.9 + r() * 0.2)
-        const lobe = el('l-arm')
-        lobe.style.width = lobe.style.height = px(Math.max(10, ls))
-        lobe.style.left = px(lx - ls / 2); lobe.style.top = px(ly - ls / 2)
-        // 2026-08-11: base alpha 0.42/0.16 -> 0.60/0.28 — arm lobes were too
-        // faint against the (now brighter) bulge and the space background,
-        // part of why the whole primitive read as a flat smudge. isHeadline-
-        // gated (see `boost` above) so companions keep the original values.
-        //
-        // 2026-08-12 round 3: tried steepening this same falloff + a small
-        // per-lobe blur here, aimed at "spirals need to blur towards their
-        // edges." Reverted (round 4) — Ben clarified what he actually meant
-        // was the RING/HALO bands around objects (drawPlanetDisc's glow,
-        // makeNebulaRing) jumping straight to full brightness instead of
-        // ramping up, not these individual bead-dots. See makeNebulaRing
-        // and drawPlanetDisc's own comments for the fix that actually
-        // targets what he described.
-        const loA = boost ? 0.60 - t * 0.20 : 0.42 - t * 0.20
-        const loA2 = boost ? 0.28 - t * 0.08 : 0.16 - t * 0.08
-        lobe.style.background = `radial-gradient(circle,
-          ${hsla(hue + ai * 6, 62 - t * 10, 72 - t * 16, A(loA, fill))} 0%,
-          ${hsla(hue, 52, 46, A(loA2, fill))} 55%, transparent ${E(82, fill).toFixed(0)}%)`
-        f.appendChild(lobe)
-        // edge highlight rotates to the spiral's local TANGENT, not its
-        // radial angle - for r = r0*e^(ang/pitch), tangent-to-radial
-        // offset is atan(pitch) (~40-48deg here). Using the raw radial
-        // `ang` pointed the highlight across the arm instead of along it.
-        if (k <= 1 && ls > domEdgeArea) { domEdgeArea = ls; domEdge = { lx, ly, ls, ang: ang + Math.atan(pitch) } }
-      })
-    })
-    // bright inner edge: hugs whichever lobe came out biggest AND closest
-    // to the core (across both arms) - same hug-the-actual-glow approach as
-    // blob's rim (sized/rotated to that lobe's own visible extent), not a
-    // floating shape placed elsewhere in the frame.
-    if (domEdge) {
-      const edge = el('l-arm-edge')
-      const es = domEdge.ls * 0.60
-      edge.style.width = px(es); edge.style.height = px(Math.max(4, es * 0.22))
-      edge.style.left = px(domEdge.lx - es / 2); edge.style.top = px(domEdge.ly - es * 0.11)
-      edge.style.transform = `rotate(${(domEdge.ang * 180 / Math.PI).toFixed(0)}deg)`
-      edge.style.background = `linear-gradient(90deg, transparent 0%,
-        ${hsla(hue + 8, 72, 88, 0.85)} 44%, ${hsla(hue + 8, 72, 88, 0.85)} 56%, transparent 100%)`
-      f.appendChild(edge)
     }
-    } // end companion-only discrete-lobe construction
-    // 2026-08-11: size 0.036->0.052, glow alpha 0.45->0.75 — the nucleus
-    // the arms wind around needs to read as unmistakably the brightest
-    // point in the primitive, not a faint dot lost among the arm lobes.
-    // isHeadline-gated, same as the rest of this kind's boost.
-    // 2026-08-13 headline rework: NO separate l-core element on the
-    // headline. Rendered and seen, two failed variants in this session
-    // alone: the shared .l-core class is a SOLID #fff6e6 disc (reads as a
-    // hard-edged pearl — the one surviving gumball of the old bead
-    // construction), and a semi-transparent radial replacement composited
-    // DARKER than the bulge's own bright center behind it, reading as a
-    // shaded sphere with a rim. The bulge (l-disc, tuned across three
-    // 2026-08-12 rounds to peak dense-in-middle) already supplies a bright
-    // nucleus at the exact same spot — a galaxy's core is a glow, and the
-    // glow is already there. Companions keep their small solid core.
-    if (!boost) {
-      const c = el('l-core')
-      const cs = Math.max(14, w * 0.036)
-      c.style.width = c.style.height = px(cs)
-      c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
-      c.style.boxShadow = `0 0 ${px(cs * 2.6)} ${px(cs * 0.7)} ${hsla(hue, 70, 80, A(0.45, fill))}`
-      f.appendChild(c)
-    }
+    /* removed 2026-08-13: the companion-only discrete-lobe construction that
+       used to live here (10 solid bead-lobes per arm, a `.l-core` pearl, an
+       edge-highlight strip) — the exact "gumball caterpillar" shape the
+       headline rework above replaced, un-gated the same day so every `lens`
+       draw (headline or companion) shares one construction. Deleted rather
+       than left dead: RNG draw-count parity between the two constructions
+       (documented in the construction above) was the ONLY reason this old
+       branch could ever run again safely, and now nothing calls it. */
+    // No separate `.l-core` pearl element (removed 2026-08-13 along with the
+    // discrete-lobe construction above): rendered and seen, two failed
+    // variants — a SOLID disc reads as a hard-edged pearl (the one
+    // surviving gumball of the old bead construction), and a semi-
+    // transparent replacement composited darker than the bulge's own
+    // bright center behind it, reading as a shaded sphere with a rim. The
+    // bulge (`l-disc`, tuned to peak dense-in-middle) plus the `nuc` glow
+    // in the construction above already supply a bright nucleus at the
+    // same spot — a galaxy's core is a glow, and the glow is already there.
     f.style.transform = `rotate(${(-30 + r() * 24).toFixed(0)}deg)`
   }
 
