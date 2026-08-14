@@ -698,22 +698,19 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
   // shootLoop() verbatim (2026-08-12, Ben: "lean more into shooting star
   // concept"), adapted to refs instead of module-level `let`s/`window.
   // __shootLane` since this is a React component, not a page script.
-  // 2026-08-14 (Ben, live on the world-07-ring.html harness: "shoting stars
-  // are going all at once... all going same direction" — synced here since
-  // this is a verbatim port): shootSideRef used to flip every call, so
-  // consecutive shoots alternated travel direction by design; fixed to a
-  // constant. See that file's identical comment.
-  const SHOOT_DIR = 1
-  function spawnShoot() {
+  // 2026-08-14 (Ben, live on the world-07-ring.html harness — synced here
+  // since this is a verbatim port; see that file's identical comment for
+  // the full back-and-forth): two distinct event types, not one behavior.
+  // A lone spawnShoot() picks its own random direction every call, same as
+  // before this whole round. A separate, rarer spawnMeteorShower() fires
+  // 3-4 staggered shoots that all share ONE direction picked once per burst
+  // ("i was speaking only in terms of a meteor shower where three play back
+  // to back to back. the others can be any direction").
+  function spawnShoot(forceDir) {
     if (isReduced()) return
     const lane = shootLaneRef.current
     if (!lane) return
-    // lane cleared before adding — see world-07-ring.html's identical
-    // comment (a stray shoot whose animationend never fired, e.g. a
-    // backgrounded/throttled tab, would otherwise linger and resume
-    // alongside a later one, reading as "several at once").
-    lane.replaceChildren()
-    const rot = dom.el('shootRot'), s = dom.el('shoot'), d = SHOOT_DIR
+    const rot = dom.el('shootRot'), s = dom.el('shoot'), d = forceDir ?? (Math.random() < 0.5 ? 1 : -1)
     if (d < 0) s.classList.add('rev') // see ringCss's own .shoot.rev comment — keeps the bright head leading
     rot.style.left = px(d > 0 ? 140 + Math.random() * 500 : 1180 + Math.random() * 500)
     rot.style.top = px(70 + Math.random() * 760)
@@ -723,10 +720,27 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
     rot.appendChild(s); lane.appendChild(rot)
     s.addEventListener('animationend', () => rot.remove())
   }
+  // Meteor shower: 3-4 shoots, one shared direction, staggered ~250-550ms
+  // apart — close enough to feel like one event, far enough to read as
+  // distinct streaks.
+  function spawnMeteorShower() {
+    if (isReduced()) return
+    const dir = Math.random() < 0.5 ? 1 : -1
+    const n = 3 + Math.round(Math.random()) // 3-4
+    for (let k = 0; k < n; k++) {
+      setTimeout(() => spawnShoot(dir), k * (250 + Math.random() * 300))
+    }
+  }
+  // ~1 in 5 cycles is a shower instead of a lone shoot — see
+  // world-07-ring.html's identical SHOWER_CHANCE comment.
+  const SHOWER_CHANCE = 0.20
   function shootLoop() {
     clearTimeout(shootTimerRef.current)
     const [a, b] = ENGINE.SHOOT_MS
-    shootTimerRef.current = setTimeout(() => { spawnShoot(); shootLoop() }, a + Math.random() * (b - a))
+    shootTimerRef.current = setTimeout(() => {
+      if (Math.random() < SHOWER_CHANCE) spawnMeteorShower(); else spawnShoot()
+      shootLoop()
+    }, a + Math.random() * (b - a))
   }
 
   // scrim alpha only — geometry is fixed at mount (full frame, see the
