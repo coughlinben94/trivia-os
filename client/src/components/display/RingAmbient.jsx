@@ -407,6 +407,13 @@ function buildLayerContent(engine, world, arc, host, L) {
       const WASH_MAX_RY = Math.round(0.6 * engine.H / 0.7)
       for (const wc of WASH_KINDS) {
         if (!st[wc.flag]) continue
+        // 2026-08-14: synced from world-07-ring.html — a same-flag run of
+        // wash stations draws ONE dome (its first station's), whose own
+        // rightward bleed covers the rest; later stations in the run skip
+        // instead of stacking a second independently-centered dome. See
+        // that file's identical comment.
+        const prevSt = world.stations[(i - 1 + engine.PANES) % engine.PANES]
+        if (prevSt[wc.flag]) continue
         const wash = dom.el('')
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0'
         wash.style.width = px(washSpanW); wash.style.height = px(engine.H)

@@ -928,6 +928,19 @@ function buildLayerContent(host, L){
       const WASH_MAX_RY = Math.round(0.6 * ENGINE.H / 0.7);
       for (const wc of WASH_KINDS) {
         if (!st[wc.flag]) continue;
+        // 2026-08-14 (Ben, live: "sldies 5-6 the green isnt connected. its
+        // 2 speerate circles... should be one and it flows from slide 5-6
+        // when i transition" / "same with the orange"): adjacent stations
+        // sharing a wash flag each drew their OWN full dome anchored to
+        // their own midpoint — two independently-centered circles that
+        // merely overlapped at the boundary. The first station's dome
+        // already bleeds rightward into the next (washSpanW/rx math above),
+        // so a same-flag run only needs its FIRST station to draw; later
+        // stations in the run skip and show the previous dome's bleed
+        // instead. Per-WASH_KINDS-entry, color-agnostic — orange behaves
+        // identically if it ever spans two stations. Geometry untouched.
+        const prevSt = WORLD.stations[(i - 1 + ENGINE.PANES) % ENGINE.PANES];
+        if (prevSt[wc.flag]) continue;
         const wash = dom.el('');
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0';
         wash.style.width = px(washSpanW); wash.style.height = px(ENGINE.H);
