@@ -408,9 +408,13 @@ function buildLayerContent(engine, world, arc, host, L) {
       // 0.55/0.30) — the bleed reached station5 but landed in the
       // gradient's own weak fade-tail (35%-70% zone), pixel-measured too
       // faint to read. See that file's identical comment.
+      // 2026-08-14 round 4: synced — center back to true-middle (0.50W) and
+      // alpha back near the original strong values. Three rounds of small
+      // nudges each still measured/read too weak; see that file's identical
+      // comment.
       const rxScale = 1.75
       const washSpanW = engine.W * 2.8
-      const washCxFrac = (0.46 * engine.W / washSpanW) * 100
+      const washCxFrac = (0.50 * engine.W / washSpanW) * 100
       const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14
       const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16
       const washTallSide = (i % 2 === 0) ? 1.32 : 0.78
@@ -431,7 +435,7 @@ function buildLayerContent(engine, world, arc, host, L) {
         const ry = Math.min(Math.round(rx * washTallSide), WASH_MAX_RY)
         const cy = wc.fromTop ? (0 - washJitterY) : (100 + washJitterY)
         wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${cy.toFixed(1)}%,
-          ${hsla(wc.hue, 60, 30, 0.40)} 0%, ${hsla(wc.hue, 55, 22, 0.22)} 35%, transparent 70%)`
+          ${hsla(wc.hue, 60, 30, 0.50)} 0%, ${hsla(wc.hue, 55, 22, 0.28)} 35%, transparent 70%)`
         host.appendChild(wash)
       }
 
@@ -751,6 +755,13 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
     s.style.setProperty('--sd2', px((d > 0 ? 1 : -1) * (640 + Math.random() * 380)))
     s.style.setProperty('--sdu', (1.5 + Math.random() * 1.2) + 's')
     rot.appendChild(s); lane.appendChild(rot)
+    // 2026-08-14: synced from world-07-ring.html — setTimeout fallback
+    // removal (animationend has no guaranteed fire; a backgrounded/
+    // throttled tab can pause a running animation before it completes, and
+    // a shower spawning 3-4 at once turns a few stalled events into "10 on
+    // screen"). See that file's identical comment.
+    const dur = parseFloat(s.style.getPropertyValue('--sdu')) * 1000
+    setTimeout(() => rot.remove(), dur + 800)
     s.addEventListener('animationend', () => rot.remove())
   }
   // Meteor shower: 3-4 shoots, one shared direction, staggered ~250-550ms

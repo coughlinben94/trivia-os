@@ -939,8 +939,13 @@ function buildLayerContent(host, L){
       // share) so more of the gradient's own STRONG 0-35% zone lands past
       // the boundary, and alpha nudged back up partway (0.34/0.18 ->
       // 0.40/0.22 — still well under the original "too heavy" 0.55/0.30).
+      // 2026-08-14 round 4 (Ben: "the coloir splurges are still only on one
+      // screen... again idk why" — three rounds of small nudges each still
+      // came back too weak. Stopping the incremental math here: center back
+      // to true-middle (0.50W, maximizes reach) and alpha below goes back
+      // near the original strong values, not another partial step.
       const rxScale = 1.75;
-      const washCxFrac = (0.46 * ENGINE.W / washSpanW) * 100;
+      const washCxFrac = (0.50 * ENGINE.W / washSpanW) * 100;
       const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14; // +-7% of span
       const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16; // +-8%, above/below the true edge
       const washTallSide = (i % 2 === 0) ? 1.32 : 0.78; // which axis reads "taller"
@@ -971,7 +976,7 @@ function buildLayerContent(host, L){
         // to whichever half is on-screen, same mechanism both ways.
         const cy = wc.fromTop ? (0 - washJitterY) : (100 + washJitterY);
         wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${cy.toFixed(1)}%,
-          ${hsla(wc.hue, 60, 30, 0.40)} 0%, ${hsla(wc.hue, 55, 22, 0.22)} 35%, transparent 70%)`;
+          ${hsla(wc.hue, 60, 30, 0.50)} 0%, ${hsla(wc.hue, 55, 22, 0.28)} 35%, transparent 70%)`;
         host.appendChild(wash); formTotal++;
       }
       if (st.ring){
@@ -1511,6 +1516,24 @@ function spawnShoot(forceDir){
   s.style.setProperty('--sd2',px((d>0?1:-1)*(640+Math.random()*380)));
   s.style.setProperty('--sdu',(1.5+Math.random()*1.2)+'s');
   rot.appendChild(s); window.__shootLane.appendChild(rot);
+  // 2026-08-14 (Ben: "the star things are still sporatic. just had like 10
+  // on the screen at once"): the meteor-shower rework (this same session)
+  // deliberately removed the old "clear the lane before adding" cap, since
+  // that would delete a shower's own earlier stars the moment a later one
+  // in the same burst spawns. That re-exposed the ORIGINAL fragility this
+  // whole system has always had: `animationend` is this element's ONLY
+  // removal path, and it's a single DOM event with no guaranteed fire — a
+  // backgrounded/throttled tab can pause a running CSS animation before it
+  // completes, so the event never lands and the element lingers forever.
+  // A shower spawns 3-4 at once instead of 1, so a few stalled showers over
+  // a long session is enough to reach "~10 on screen." Fixed at the root
+  // this time instead of papering over it with a cap: a plain setTimeout
+  // fallback removal, comfortably past the animation's own max duration
+  // (1.5-2.7s), fires regardless of whether animationend ever does.
+  // rot.remove() on an already-removed node is a silent no-op, so this is
+  // safe to race against the normal animationend path.
+  const dur = parseFloat(s.style.getPropertyValue('--sdu')) * 1000;
+  setTimeout(()=>rot.remove(), dur + 800);
   s.addEventListener('animationend',()=>rot.remove());
 }
 // Meteor shower: 3-4 shoots, one shared direction, staggered ~250-550ms
