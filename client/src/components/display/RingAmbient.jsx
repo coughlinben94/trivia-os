@@ -405,8 +405,11 @@ function buildLayerContent(engine, world, arc, host, L) {
         wash.style.width = px(washSpanW); wash.style.height = px(engine.H)
         const rx = Math.round(engine.W * 1.75)
         const ry = Math.round(rx * washTallSide)
+        // 2026-08-14: synced from world-07-ring.html — alpha cut ~40% (Ben:
+        // "too heavy... only supposed to be accents, purple is the main").
+        // rx/reach unchanged, only intensity.
         wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${(100 + washJitterY).toFixed(1)}%,
-          ${hsla(wc.hue, 60, 30, 0.55)} 0%, ${hsla(wc.hue, 55, 22, 0.30)} 35%, transparent 70%)`
+          ${hsla(wc.hue, 60, 30, 0.34)} 0%, ${hsla(wc.hue, 55, 22, 0.18)} 35%, transparent 70%)`
         host.appendChild(wash)
       }
 
@@ -506,7 +509,11 @@ function buildLayerContent(engine, world, arc, host, L) {
         // occluder already occupy, instead of a fully uniform [0,W] draw
         // that could land right on top of one by chance.
         d.style.left = px(x0 + lerp(0.18, 0.82, rDetail()) * engine.W - dw / 2)
-        d.style.top = px(dom.bandY(rDetail, dw * 0.9))
+        // 2026-08-14: synced from world-07-ring.html — skipMinBleed opts
+        // these small ambient specks out of bandY's headline corner-bleed
+        // floor (Ben: "star clusters... really close to the borders...
+        // brought into the scene a little more"). See that file's comment.
+        d.style.top = px(dom.bandY(rDetail, dw * 0.9, undefined, undefined, true))
         host.appendChild(d)
       }
 

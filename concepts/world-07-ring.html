@@ -913,8 +913,14 @@ function buildLayerContent(host, L){
         wash.style.width = px(washSpanW); wash.style.height = px(ENGINE.H);
         const rx = Math.round(ENGINE.W * 1.75);
         const ry = Math.round(rx * washTallSide);
+        // 2026-08-14 (Ben, live, right after the rx enlargement above: "the
+        // green and orange slides are toooo heavy. they are only supposed
+        // to be accents, purple is the main. tone down a bit"): the reach
+        // (rx) was correct — that's what made it "flow onto the next page"
+        // — the reported problem is intensity, not size, so only the alpha
+        // stops move here, not rx. Peak cut ~40% (0.55->0.34, 0.30->0.18).
         wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${(100 + washJitterY).toFixed(1)}%,
-          ${hsla(wc.hue, 60, 30, 0.55)} 0%, ${hsla(wc.hue, 55, 22, 0.30)} 35%, transparent 70%)`;
+          ${hsla(wc.hue, 60, 30, 0.34)} 0%, ${hsla(wc.hue, 55, 22, 0.18)} 35%, transparent 70%)`;
         host.appendChild(wash); formTotal++;
       }
       if (st.ring){
@@ -1049,7 +1055,17 @@ function buildLayerContent(host, L){
         // meant as light ambient filler, not corner-anchored objects, so
         // losing the outer margin costs them nothing thematically.
         d.style.left = px(x0 + lerp(0.18, 0.82, rDetail())*ENGINE.W - dw/2);
-        d.style.top  = px(dom.bandY(rDetail, dw*0.9));
+        // 2026-08-14 (Ben, live: "the star clusters seem to be all really
+        // close to the borders. can they all be brought into the scene a
+        // litlte more" / "not a ton but a good bit"): bandY's MIN_BLEED_FRAC
+        // floor exists so HEADLINE objects reliably corner-hug — these are
+        // small ambient filler specks, never meant to bleed at all (the
+        // comment above already keeps them out of the corner ZONES
+        // horizontally; they were still inheriting the headline bleed floor
+        // vertically by calling the same shared function with its default
+        // args). skipMinBleed opts them out of that floor while keeping the
+        // same safe-box-clearance/edge-margin logic otherwise.
+        d.style.top  = px(dom.bandY(rDetail, dw*0.9, undefined, undefined, true));
         host.appendChild(d); formTotal++;
       }
 
