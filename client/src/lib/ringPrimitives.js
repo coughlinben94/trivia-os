@@ -1599,12 +1599,30 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // visible rounded cap instead of exiting off-screen. R raised further
     // and the sweep extended so the tip travels measurably lower/further
     // left than the frame edge at this station's current box position.
-    const R = h * 0.34, PHI_MAX = 150 * Math.PI / 180, PHI_START = -0.30, TAIL_N = 14
+    // 2026-08-14 round 2 (Ben, third report after two "verified" fixes:
+    // "again the ribbon doesnt go off screen on the bottom left... i dont
+    // want to see the end of it"). Measured this time instead of re-tuned:
+    // at st11's current placement the SVG box's LEFT edge sits ~57px INSIDE
+    // the frame, so the path is viewBox-clipped there and can never exit
+    // frame-left — the band's only real exit is the BOTTOM edge (box bottom
+    // sits ~65px below the frame). At R=0.34h the curl travels so far left
+    // that its outer edge crossed the box's own left clip edge from ~52° of
+    // turn onward — an in-frame flat cut, smeared by this svg's ~22px blur
+    // into a dim stepped fade that reads as the band petering out. The
+    // previous fix's direction (MORE radius) made that worse, not better:
+    // more radius = more horizontal travel into the clip edge. Reversed —
+    // R brought down 0.34h -> 0.24h so the arc's centerline stays ~70 local
+    // units inside the box when it crosses the frame-bottom line (no left
+    // clip contact), width taper eased 0.68 -> 0.55 so the visible exit
+    // stays a fat band instead of a pinched wisp, and the tail gradient
+    // (below) holds alpha to 90% so the fade-to-zero completes past the
+    // frame line instead of ~2/3 of the way through the visible curl.
+    const R = h * 0.24, PHI_MAX = 150 * Math.PI / 180, PHI_START = -0.30, TAIL_N = 14
     const tailTop = [], tailBot = []
     for (let k = 0; k <= TAIL_N; k++) {
       const phi = PHI_START + (k / TAIL_N) * (PHI_MAX - PHI_START)
       const cx2 = xJ - R * Math.sin(phi), cy2 = yJ + R * (1 - Math.cos(phi))
-      const hw2 = halfW0 * (1 - 0.68 * Math.max(0, phi) / PHI_MAX)
+      const hw2 = halfW0 * (1 - 0.55 * Math.max(0, phi) / PHI_MAX)
       const nx = -Math.sin(phi), ny = -Math.cos(phi)
       tailTop.push({ x: cx2 + nx * hw2, y: cy2 + ny * hw2 })
       tailBot.push({ x: cx2 - nx * hw2, y: cy2 - ny * hw2 })
@@ -1671,10 +1689,19 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // and the curl read as a short flick. Holding alpha through ~2/3 of
     // the arc keeps the full quarter-turn legible at frame scale; the
     // fade-to-zero now finishes in the off-frame stretch.
+    // 2026-08-14 round 2 (see the R comment above): 68% wasn't actually
+    // off-frame — projecting the frame-bottom crossing onto the gradient
+    // line lands at ~73-91% of it, so most of the 68->100 fade-to-zero
+    // happened in view and read as the band dimming out before the edge.
+    // Hold stop pushed 68 -> 90 (and its alpha 0.18 -> 0.20) so on-screen
+    // the band keeps near-seam brightness; the 90->100 fade now lives in
+    // the strip below the frame line (the box's own bottom clip is also
+    // off-frame, so whatever the fade doesn't finish, the viewer never
+    // sees).
     ;[
       [0, hsla(hue - 12, 58, 52, A(0.04, fill))],
       [16, hsla(hue - 12, 58, 52, A(0.26, fill))],
-      [68, hsla(hue - 16, 54, 46, A(0.18, fill))],
+      [90, hsla(hue - 16, 54, 46, A(0.20, fill))],
       [100, hsla(hue - 20, 50, 40, 0)],
     ].forEach(([off, color]) => {
       const stop = document.createElementNS(NS, 'stop')
