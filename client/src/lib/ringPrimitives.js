@@ -1592,7 +1592,14 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // visually and guards the seam against the tail path's own start-of-
     // path smoothing retraction (same smoothEdgePath behavior, smaller
     // magnitude along the arc).
-    const R = h * 0.21, PHI_MAX = 135 * Math.PI / 180, PHI_START = -0.30, TAIL_N = 14
+    // 2026-08-14 (Ben, live, fresh screenshot: "make the band go off screen
+    // so it looks like it doesnt just stop") — this station's placement has
+    // shifted since the R/PHI_MAX values above were tuned (bandUpper:false
+    // moved the box), and the curl's tip now lands inside the frame as a
+    // visible rounded cap instead of exiting off-screen. R raised further
+    // and the sweep extended so the tip travels measurably lower/further
+    // left than the frame edge at this station's current box position.
+    const R = h * 0.34, PHI_MAX = 150 * Math.PI / 180, PHI_START = -0.30, TAIL_N = 14
     const tailTop = [], tailBot = []
     for (let k = 0; k <= TAIL_N; k++) {
       const phi = PHI_START + (k / TAIL_N) * (PHI_MAX - PHI_START)

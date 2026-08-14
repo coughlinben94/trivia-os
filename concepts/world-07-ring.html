@@ -886,7 +886,22 @@ function buildLayerContent(host, L){
       // small deterministic offset (not the primitive RNG stream — this is
       // outside makePrim, no per-station draw-count parity to protect)
       // so adjacent wash stations don't all clone the exact same silhouette.
-      const washSpanW = ENGINE.W * 1.4;
+      // 2026-08-14 (Ben, live: "for the color flares... take up half the
+      // screen. then it flows onto the next page, where it turns back to
+      // purple after the green dispands" / "same thing with orange on p9"):
+      // rx was 0.60*W — the ellipse's own 70%-transparent stop landed at
+      // 0.7*rx = 0.42W from center, and center sits at THIS station's own
+      // midpoint (0.5W from its left edge), so the visible glow died only
+      // ~0.1W into the NEXT station — nowhere near "flows onto the next
+      // page." Raised so the fade completes near the far edge of the NEXT
+      // station instead: center-to-next-station-end is 1.5W (own half-width
+      // + full next-station width), so 0.7*rx ~= 1.5W => rx ~= 2.1W; rounded
+      // up for margin. "Turns back to purple" needs no separate treatment —
+      // the base sky IS the purple/indigo ground this fades down to, so a
+      // complete fade-to-transparent by then already reads as "back to
+      // purple." washSpanW widened to comfortably contain the bigger
+      // ellipse's box without clipping its own falloff.
+      const washSpanW = ENGINE.W * 2.8;
       const washCxFrac = (0.5 * ENGINE.W / washSpanW) * 100;
       const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14; // +-7% of span
       const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16; // +-8%, above/below the true edge
@@ -896,7 +911,7 @@ function buildLayerContent(host, L){
         const wash = dom.el('');
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0';
         wash.style.width = px(washSpanW); wash.style.height = px(ENGINE.H);
-        const rx = Math.round(ENGINE.W * 0.60);
+        const rx = Math.round(ENGINE.W * 1.75);
         const ry = Math.round(rx * washTallSide);
         wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${(100 + washJitterY).toFixed(1)}%,
           ${hsla(wc.hue, 60, 30, 0.55)} 0%, ${hsla(wc.hue, 55, 22, 0.30)} 35%, transparent 70%)`;

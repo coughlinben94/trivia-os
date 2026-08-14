@@ -389,7 +389,11 @@ function buildLayerContent(engine, world, arc, host, L) {
       // ellipse with unequal axes plus a per-station center jitter (Ben:
       // "look more natural... make one side taller and off center the
       // circle") — see that file's identical comment for the full math.
-      const washSpanW = engine.W * 1.4
+      // 2026-08-14: synced from world-07-ring.html — rx/washSpanW raised so
+      // the flare dominates its own station ("half the screen") and its
+      // fade completes near the far edge of the NEXT station instead of
+      // ~0.1W in, see that file's identical comment for the math.
+      const washSpanW = engine.W * 2.8
       const washCxFrac = (0.5 * engine.W / washSpanW) * 100
       const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14
       const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16
@@ -399,7 +403,7 @@ function buildLayerContent(engine, world, arc, host, L) {
         const wash = dom.el('')
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0'
         wash.style.width = px(washSpanW); wash.style.height = px(engine.H)
-        const rx = Math.round(engine.W * 0.60)
+        const rx = Math.round(engine.W * 1.75)
         const ry = Math.round(rx * washTallSide)
         wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${(100 + washJitterY).toFixed(1)}%,
           ${hsla(wc.hue, 60, 30, 0.55)} 0%, ${hsla(wc.hue, 55, 22, 0.30)} 35%, transparent 70%)`

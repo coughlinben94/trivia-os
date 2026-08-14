@@ -1,0 +1,106 @@
+{
+  "date": "2026-08-14",
+  "stamp": "2026-08-14-082009",
+  "stations": [
+    {
+      "index": 0,
+      "key": "ringed planet",
+      "prim": "ring",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 1,
+      "key": "spiral galaxy",
+      "prim": "lens",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 2,
+      "key": "star cluster",
+      "prim": "dots",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 3,
+      "key": "amber planet",
+      "prim": "ring",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 4,
+      "key": "lit planet",
+      "prim": "planet",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 5,
+      "key": "pulsar",
+      "prim": "pulsar",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 6,
+      "key": "rose nebula",
+      "prim": "nebulaCloud",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 7,
+      "key": "comet",
+      "prim": "streak",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786709956206czmxn",
+          "station": 7,
+          "key": "comet",
+          "prim": "streak",
+          "category": "other",
+          "note": "the random streak above the comet needs to go away",
+          "bbox": [
+            0.5640822784810127,
+            0.2307049929676512,
+            0.16455696202531644,
+            0.0478199718706048
+          ],
+          "ts": 1786709956206
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "key": "binary pair",
+      "prim": "binary",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 9,
+      "key": "asteroid field",
+      "prim": "asteroidField",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 10,
+      "key": "supernova",
+      "prim": "spikes",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 11,
+      "key": "aurora ribbon",
+      "prim": "ribbon",
+      "verdict": null,
+      "marks": []
+    }
+  ]
+}
