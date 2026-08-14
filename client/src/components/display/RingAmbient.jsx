@@ -125,9 +125,11 @@ const dom = ringDom('ring-', ENGINE)
 
 // Background-wash color table (2026-08-13) — synced from world-07-ring.html.
 // Station-data flag -> wash hue; see the per-station wash loop below.
+// fromTop 2026-08-14: synced from world-07-ring.html — orange hangs its
+// dome from the top edge instead of rising from the bottom.
 const WASH_KINDS = [
-  { flag: 'greenWash', hue: 150 },
-  { flag: 'orangeWash', hue: 30 },
+  { flag: 'greenWash', hue: 150, fromTop: false },
+  { flag: 'orangeWash', hue: 30, fromTop: true },
 ]
 
 // ═══ BUILD ═══ dispatches per-layer content building.
@@ -393,22 +395,25 @@ function buildLayerContent(engine, world, arc, host, L) {
       // the flare dominates its own station ("half the screen") and its
       // fade completes near the far edge of the NEXT station instead of
       // ~0.1W in, see that file's identical comment for the math.
+      // 2026-08-14: synced from world-07-ring.html — height cap (WASH_MAX_RY,
+      // "max is only 60% up the screen, so the purple still lives at the
+      // top") and horizontal 75/25 split (center pulled to 0.42W, rx down
+      // from 1.75W to 1.40W), see that file's identical comment for the math.
       const washSpanW = engine.W * 2.8
-      const washCxFrac = (0.5 * engine.W / washSpanW) * 100
+      const washCxFrac = (0.42 * engine.W / washSpanW) * 100
       const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14
       const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16
       const washTallSide = (i % 2 === 0) ? 1.32 : 0.78
+      const WASH_MAX_RY = Math.round(0.6 * engine.H / 0.7)
       for (const wc of WASH_KINDS) {
         if (!st[wc.flag]) continue
         const wash = dom.el('')
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0'
         wash.style.width = px(washSpanW); wash.style.height = px(engine.H)
-        const rx = Math.round(engine.W * 1.75)
-        const ry = Math.round(rx * washTallSide)
-        // 2026-08-14: synced from world-07-ring.html — alpha cut ~40% (Ben:
-        // "too heavy... only supposed to be accents, purple is the main").
-        // rx/reach unchanged, only intensity.
-        wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${(100 + washJitterY).toFixed(1)}%,
+        const rx = Math.round(engine.W * 1.40)
+        const ry = Math.min(Math.round(rx * washTallSide), WASH_MAX_RY)
+        const cy = wc.fromTop ? (0 - washJitterY) : (100 + washJitterY)
+        wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${cy.toFixed(1)}%,
           ${hsla(wc.hue, 60, 30, 0.34)} 0%, ${hsla(wc.hue, 55, 22, 0.18)} 35%, transparent 70%)`
         host.appendChild(wash)
       }

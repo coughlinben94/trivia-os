@@ -153,6 +153,17 @@
 
 <div id="stageWrap">
   <iframe id="worldFrame" src="world-07-ring.html"></iframe>
+  <!-- 2026-08-14: src's nocache busts the OUTER page only — the browser
+       caches the iframe's own request by ITS OWN url, so a stale
+       world-07-ring.html could keep loading here even right after a fresh
+       reload of this page (Ben re-reported an already-fixed st11 ribbon
+       defect that a direct render confirmed was working — this is why).
+       Script below rewrites the iframe src with its own cache-buster on
+       every load, not just once at file-write time, so this survives even
+       without editing this file again. -->
+  <script>
+    document.getElementById('worldFrame').src = 'world-07-ring.html?nocache=' + Date.now();
+  </script>
   <canvas id="paintCanvas"></canvas>
   <div id="captureScrim" class="hidden">Capturing evidence — hands off…</div>
   <div id="noteCard" class="hidden">

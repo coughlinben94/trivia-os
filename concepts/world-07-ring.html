@@ -437,9 +437,13 @@ const surgeEls = {};
 let starTotal = 0, formTotal = 0;
 // Background-wash color table (2026-08-13) — station-data flag -> wash hue.
 // See buildLayerContent's per-station wash loop for how these get drawn.
+// fromTop (2026-08-14, Ben: "same with orange, but flip it so half circle
+// lives on top rail, where green is bottom") — orange hangs its dome from
+// the top edge instead of rising from the bottom, so the two accent colors
+// read as distinct bands rather than stacking in the same place.
 const WASH_KINDS = [
-  { flag: 'greenWash',  hue: 150 },
-  { flag: 'orangeWash', hue: 30 },
+  { flag: 'greenWash',  hue: 150, fromTop: false },
+  { flag: 'orangeWash', hue: 30,  fromTop: true },
 ];
 
 function buildLayerContent(host, L){
@@ -902,24 +906,39 @@ function buildLayerContent(host, L){
       // purple." washSpanW widened to comfortably contain the bigger
       // ellipse's box without clipping its own falloff.
       const washSpanW = ENGINE.W * 2.8;
-      const washCxFrac = (0.5 * ENGINE.W / washSpanW) * 100;
+      // 2026-08-14 (Ben, live: "think like a half circle of green gradient
+      // like you already have. but the max is only 60% up the screen, so
+      // teh purple still lievs at the top. and 75% of the half circle on
+      // one page, rest on the other"): two separate caps, not a re-tune of
+      // the whole shape —
+      //  - HEIGHT: the visible edge (70% stop, same as the horizontal
+      //    reach math above) must land at <=60% of frame height so the top
+      //    40% stays untouched purple. ry clamped directly to that.
+      //  - HORIZONTAL SPLIT: center pulled left of this station's own true
+      //    midpoint (0.42W instead of 0.5W) and rx brought down from 1.75W
+      //    so the portion crossing the page boundary reads as a minority
+      //    tail rather than reaching the NEXT station's own far edge. Not
+      //    exact algebra (the box's own left-edge clip at x0 eats into the
+      //    "page 1 half" unevenly) — tuned by rendering both pages and
+      //    checking the crossing genuinely reads as the smaller share.
+      const washCxFrac = (0.42 * ENGINE.W / washSpanW) * 100;
       const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14; // +-7% of span
       const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16; // +-8%, above/below the true edge
       const washTallSide = (i % 2 === 0) ? 1.32 : 0.78; // which axis reads "taller"
+      const WASH_MAX_RY = Math.round(0.6 * ENGINE.H / 0.7);
       for (const wc of WASH_KINDS) {
         if (!st[wc.flag]) continue;
         const wash = dom.el('');
         wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0';
         wash.style.width = px(washSpanW); wash.style.height = px(ENGINE.H);
-        const rx = Math.round(ENGINE.W * 1.75);
-        const ry = Math.round(rx * washTallSide);
-        // 2026-08-14 (Ben, live, right after the rx enlargement above: "the
-        // green and orange slides are toooo heavy. they are only supposed
-        // to be accents, purple is the main. tone down a bit"): the reach
-        // (rx) was correct — that's what made it "flow onto the next page"
-        // — the reported problem is intensity, not size, so only the alpha
-        // stops move here, not rx. Peak cut ~40% (0.55->0.34, 0.30->0.18).
-        wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${(100 + washJitterY).toFixed(1)}%,
+        const rx = Math.round(ENGINE.W * 1.40);
+        const ry = Math.min(Math.round(rx * washTallSide), WASH_MAX_RY);
+        // fromTop (Ben: "flip it so half circle lives on top rail, where
+        // green is bottom") — same box (top:0, full frame height), only the
+        // gradient's own center-y flips; the box's own edges already crop
+        // to whichever half is on-screen, same mechanism both ways.
+        const cy = wc.fromTop ? (0 - washJitterY) : (100 + washJitterY);
+        wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${cy.toFixed(1)}%,
           ${hsla(wc.hue, 60, 30, 0.34)} 0%, ${hsla(wc.hue, 55, 22, 0.18)} 35%, transparent 70%)`;
         host.appendChild(wash); formTotal++;
       }
