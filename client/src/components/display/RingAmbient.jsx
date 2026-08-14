@@ -481,7 +481,11 @@ function buildLayerContent(engine, world, arc, host, L) {
         const compAlpha = boostComp ? Math.max(compAlphaRoll, 0.55) : compAlphaRoll
         const comp = dom.makePrim(ck, cw, ch, compHue, compAlpha, rCompanion, false, fill)
         const compLeft = dom.cornerX(rCompanion, cw, x0, !headlineCornerLeft)
-        const compTop = dom.bandY(rCompanion, ch, !pairUpper, dom.rotatedBandH(ck, cw, ch))
+        // companionUpper (st2, 2026-08-14): synced from world-07-ring.html —
+        // per-station band override (true = upper); unset keeps !pairUpper,
+        // the diagonal-opposite standing rule. See that file's comment.
+        const compUpper = st.companionUpper !== undefined ? st.companionUpper : !pairUpper
+        const compTop = dom.bandY(rCompanion, ch, compUpper, dom.rotatedBandH(ck, cw, ch))
         comp.style.left = px(compLeft)
         comp.style.top = px(compTop)
         host.appendChild(comp)
