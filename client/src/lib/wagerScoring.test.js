@@ -19,12 +19,15 @@ describe('WAGER_TIERS', () => {
       ['sun', 30, 0.9],
     ])
   })
-  it('carries an escalating emoji per tier — candle, fire, sun', () => {
+  it('carries an escalating emoji per tier — candle, fire, plain sun', () => {
     // There is no matchstick emoji in Unicode (verified by a full-codespace
-    // name scan for "MATCH"), so the small-flame step is U+1F56F CANDLE plus
-    // the U+FE0F variation selector that forces emoji presentation. Without
-    // VS16 it renders as a monochrome text glyph on some phones.
-    expect(WAGER_TIERS.map(t => t.emoji)).toEqual(['\u{1F56F}\u{FE0F}', '\u{1F525}', '\u{1F31E}'])
+    // name scan for "MATCH"), so the small-flame step is U+1F56F CANDLE. The
+    // sun is the FACELESS U+2600, not U+1F31E SUN WITH FACE. Both of those are
+    // text-presentation by default and carry the U+FE0F variation selector
+    // that forces emoji presentation — drop VS16 and some phones render a flat
+    // monochrome glyph. This test is here to catch exactly that kind of silent
+    // codepoint drift.
+    expect(WAGER_TIERS.map(t => t.emoji)).toEqual(['\u{1F56F}\u{FE0F}', '\u{1F525}', '\u{2600}\u{FE0F}'])
   })
 
   it('falls back to safe for an unknown or missing tier id', () => {

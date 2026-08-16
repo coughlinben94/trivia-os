@@ -10,12 +10,15 @@ import { normalizeRoundScore } from './scoreboardMath.js'
 // Emoji note: there is no matchstick emoji in Unicode (verified by scanning
 // every assigned codepoint's name for "MATCH" — zero hits). U+1F56F CANDLE is
 // the closest small-flame glyph, so the escalation reads candle → fire → sun.
-// It needs the VS16 selector (U+FE0F) to render in emoji presentation, which
-// is why the string below is '\u{1F56F}\u{FE0F}' and not the bare codepoint.
+// The sun is the plain faceless U+2600, Ben's pick over U+1F31E SUN WITH FACE.
+// Both the candle and the plain sun are text-presentation by default and need
+// the VS16 selector (U+FE0F) appended, or some phones render them as flat
+// monochrome glyphs instead of emoji. The fire (U+1F525) is emoji by default
+// and takes no selector. Codepoints are asserted in wagerScoring.test.js.
 export const WAGER_TIERS = [
   { id: 'safe', emoji: '🕯️', label: 'Play It Safe',         points: 10, threshold: 0.50 },
   { id: 'fire', emoji: '🔥', label: 'Play With Fire',        points: 20, threshold: 0.75 },
-  { id: 'sun',  emoji: '🌞', label: 'Fly Close To The Sun',  points: 30, threshold: 0.90 },
+  { id: 'sun',  emoji: '☀️', label: 'Fly Close To The Sun',  points: 30, threshold: 0.90 },
 ]
 
 // Safe is the implicit no-risk default: a team that never picked a tier (joined

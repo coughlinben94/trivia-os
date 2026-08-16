@@ -11,7 +11,7 @@ counterpart, and every deliberate divergence is called out.
 
 1. **Blind wager.** Before the question text is shown anywhere, each team picks a
    risk tier on their phone: 🕯️ Play It Safe (10 pts) / 🔥 Play With Fire (20) /
-   🌞 Fly Close To The Sun (30). Each card shows exactly three things — emoji,
+   ☀️ Fly Close To The Sun (30). Each card shows exactly three things — emoji,
    name, points — plus the win bar stated as a head count ("Beat 6 of 11
    teams"), computed live from tonight's registered team count. Nothing about
    the question itself.
