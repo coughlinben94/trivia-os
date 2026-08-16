@@ -38,7 +38,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, fillOf, rng, lerp } from '../../lib/ringEngine.js'
 import { EASE_SURGE } from '../../lib/easings.js'
-import { ringDom, px, hsla, ringCss } from '../../lib/ringPrimitives.js'
+import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, applySkyTints } from '../../lib/ringPrimitives.js'
 
 // ENGINE — engine-fixed, identical for every world; never a prop (a world
 // never sets any of this, same as the reference build's own ENGINE const).
@@ -123,14 +123,16 @@ ${ringCss('ring-')}
 // shared with concepts/world-07-ring.html.
 const dom = ringDom('ring-', ENGINE)
 
-// Background-wash color table (2026-08-13) — synced from world-07-ring.html.
-// Station-data flag -> wash hue; see the per-station wash loop below.
-// fromTop 2026-08-14: synced from world-07-ring.html — orange hangs its
-// dome from the top edge instead of rising from the bottom.
-const WASH_KINDS = [
-  { flag: 'greenWash', hue: 150, fromTop: false },
-  { flag: 'orangeWash', hue: 30, fromTop: true },
-]
+// The per-station background-wash table (WASH_KINDS / greenWash /
+// orangeWash, 2026-08-13..14) is GONE as of 2026-08-16 — synced from
+// world-07-ring.html, same deletion in both builds. Replaced by the sky-
+// region system in ringPrimitives.js (SKY_REGIONS / skyRegionWeights /
+// applySkyTints / makeSourceGlow); see that module's own block comment for
+// the full reasoning. Short version: the wash was an object riding the
+// mid-layer surge, so its color arrived WITH the pan as a wipe, and four
+// rounds of geometry/alpha tuning never touched that. Nothing colored
+// slides with the pan any more — the sky itself leans, on its own slower
+// clock, with the region's own headline object visibly lighting it.
 
 // ═══ BUILD ═══ dispatches per-layer content building.
 function buildLayerContent(engine, world, arc, host, L) {
@@ -371,73 +373,37 @@ function buildLayerContent(engine, world, arc, host, L) {
       }
       const headCx = headLeft + hw / 2, headCy = headTop + hh / 2
 
-      // 2026-08-12: synced from world-07-ring.html — `greenWash` station-
-      // data flag (Ben: "green on bottom half of two slides, makes it look
-      // like a diff galaxy of sorts"). Plain linear-gradient wash, not a
-      // primitive draw — atmosphere/mood, doesn't compete with noun-
-      // uniqueness rules. See that file's own comment for why st4/st5.
-      // 2026-08-13: synced from world-07-ring.html — generalized to a
-      // (flag, hue) table instead of one hardcoded green block (Ben: "need
-      // more green and orange areas... whole background shifts for a slide
-      // or two"); `orangeWash` set on st8 for now.
-      // 2026-08-13 round 3+4: synced from world-07-ring.html — switched
-      // linear-gradient rectangle to a radial "half circle" (Ben: "youre
-      // giving it hard line edges" / "round it off"), then widened the box
-      // past one station so the circle's falloff bleeds into the next
-      // station instead of clipping at the boundary (Ben: "overlap them
-      // with like 70% on one page 30% on the next") — see that file's
-      // identical comment for the full math.
-      // 2026-08-13 round 5: synced from world-07-ring.html — circle ->
-      // ellipse with unequal axes plus a per-station center jitter (Ben:
-      // "look more natural... make one side taller and off center the
-      // circle") — see that file's identical comment for the full math.
-      // 2026-08-14: synced from world-07-ring.html — rx/washSpanW raised so
-      // the flare dominates its own station ("half the screen") and its
-      // fade completes near the far edge of the NEXT station instead of
-      // ~0.1W in, see that file's identical comment for the math.
-      // 2026-08-14: synced from world-07-ring.html — height cap (WASH_MAX_RY,
-      // "max is only 60% up the screen, so the purple still lives at the
-      // top") and horizontal 75/25 split (center pulled to 0.42W).
-      // 2026-08-14 round 2: synced — rx restored to 1.75W (a prior pass had
-      // shrunk it to 1.40W on top of the center shift, and the two
-      // compounded into a bleed too short to reach any of the next
-      // station's actual sample points — pixel-measured byte-identical to
-      // base purple). See that file's identical comment.
-      // 2026-08-14 round 3: synced — center nudged 0.42W -> 0.46W and alpha
-      // 0.34/0.18 -> 0.40/0.22 (still under the original "too heavy"
-      // 0.55/0.30) — the bleed reached station5 but landed in the
-      // gradient's own weak fade-tail (35%-70% zone), pixel-measured too
-      // faint to read. See that file's identical comment.
-      // 2026-08-14 round 4: synced — center back to true-middle (0.50W) and
-      // alpha back near the original strong values. Three rounds of small
-      // nudges each still measured/read too weak; see that file's identical
-      // comment.
-      const rxScale = 1.75
-      const washSpanW = engine.W * 2.8
-      const washCxFrac = (0.50 * engine.W / washSpanW) * 100
-      const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14
-      const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16
-      const washTallSide = (i % 2 === 0) ? 1.32 : 0.78
-      const WASH_MAX_RY = Math.round(0.6 * engine.H / 0.7)
-      for (const wc of WASH_KINDS) {
-        if (!st[wc.flag]) continue
-        // 2026-08-14: synced from world-07-ring.html — a same-flag run of
-        // wash stations draws ONE dome (its first station's), whose own
-        // rightward bleed covers the rest; later stations in the run skip
-        // instead of stacking a second independently-centered dome. See
-        // that file's identical comment.
-        const prevSt = world.stations[(i - 1 + engine.PANES) % engine.PANES]
-        if (prevSt[wc.flag]) continue
-        const wash = dom.el('')
-        wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0'
-        wash.style.width = px(washSpanW); wash.style.height = px(engine.H)
-        const rx = Math.round(engine.W * rxScale)
-        const ry = Math.min(Math.round(rx * washTallSide), WASH_MAX_RY)
-        const cy = wc.fromTop ? (0 - washJitterY) : (100 + washJitterY)
-        wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${cy.toFixed(1)}%,
-          ${hsla(wc.hue, 60, 30, 0.50)} 0%, ${hsla(wc.hue, 55, 22, 0.28)} 35%, transparent 70%)`
-        host.appendChild(wash)
+      // ── SKY-REGION SOURCE GLOW (2026-08-16) ── synced from
+      // world-07-ring.html. Only the region's own `regionSource` station
+      // draws one: an enlarged, low-alpha light-field centred on that
+      // station's headline object and inserted BEFORE it, so the object
+      // (and every element appended after it) silhouettes in front of the
+      // light instead of being painted over by it. This is the "why is the
+      // sky green here" half of the region — the sky tint itself lives on
+      // the never-transformed sky layer (see the mount effect below).
+      // Station-box sized + edge-feathered inside makeSourceGlow so a
+      // corner-anchored headline's glow can't spill onto the neighbouring
+      // slide (the mask also stops it painting over the PREVIOUS station's
+      // objects, which sharing this mid-layer host would otherwise allow).
+      if (st.regionSource && SKY_REGIONS[st.region]) {
+        // Visual centre, not box centre: `spikes` re-centres its core+rays
+        // (and its own d-glow) on the corner point above, so the light has
+        // to follow them or it reads as a second, offset source.
+        let gcx = headCx, gcy = headCy
+        if (st.prim === 'spikes') {
+          gcx = headLeft + hw * (headlineCornerLeft ? 0.30 : 0.70)
+          gcy = headTop + hh * (pairUpper ? 0.30 : 0.70)
+        }
+        host.insertBefore(dom.makeSourceGlow(st.region, x0, gcx, gcy, Math.max(hw, hh)), head)
       }
+
+      // The per-station wash block that used to sit here (radial ellipse
+      // dome, `greenWash`/`orangeWash`, four rounds of geometry/alpha
+      // tuning) is DELETED 2026-08-16 in both builds — full history in git,
+      // reasoning in ringPrimitives.js's SKY_REGIONS comment. Do not
+      // reintroduce a colored box on the mid layer: that layer is exactly
+      // what made the color slide in with the pan instead of settling after
+      // it.
 
       // Any station with `ring:true` in its data — see world-07-ring.html's
       // identical comment (same fix, both builds, /simplify's station-data-
@@ -596,6 +562,17 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
   const turnTimerRef = useRef(null)
   const shootLaneRef = useRef(null)
   const shootTimerRef = useRef(null)
+  const skyTintsRef = useRef(null)
+  const skyWeightsRef = useRef(null)
+
+  // One choke point so turn()/jumpTo() can't drift on the animate flag —
+  // turns animate (that's the whole effect), jumps snap (authoritative
+  // resync, and the only path ring-verify.mjs drives; see applySkyTints).
+  function writeSkyTints(station, animate) {
+    if (skyTintsRef.current && skyWeightsRef.current) {
+      applySkyTints(skyTintsRef.current, skyWeightsRef.current, station, animate)
+    }
+  }
 
   // ── build once on mount — never re-run on worldData change. This is the
   // whole point of the task: RingAmbient will eventually live inside
@@ -616,11 +593,20 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
 
     const arc = buildArc(ENGINE, worldData)
 
-    // sky layer — bare, never transformed, never offset
+    // sky layer — bare, never transformed, never offset. The region tint
+    // layers live HERE, above .void and below every content layer, which is
+    // the entire mechanism: the sky is the one thing that doesn't slide with
+    // the pan, so a color change on it can't arrive as a wipe. Its own
+    // opacity transition is the "own slower clock" (ringPrimitives.js's
+    // SKY_TINT_IN_MS/OUT_MS).
     const sky = dom.el('lyr')
     const skyInner = dom.el('surge')
     skyInner.style.transition = 'none'
     skyInner.appendChild(dom.el('void'))
+    const skyTints = dom.makeSkyTints()
+    for (const t of Object.values(skyTints)) skyInner.appendChild(t)
+    skyTintsRef.current = skyTints
+    skyWeightsRef.current = skyRegionWeights(worldData.stations)
     sky.appendChild(skyInner)
     design.appendChild(sky)
 
@@ -683,6 +669,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
     design.appendChild(scrim)
     scrimElRef.current = scrim
     layoutScrim(stationRef.current)
+    writeSkyTints(stationRef.current, false) // initial state snaps, same as the scrim's
 
     stage.style.setProperty('--surge-ms', ENGINE.SURGE_MS + 'ms')
     worldData.sky.forEach((c, i) => stage.style.setProperty('--sky-' + (i + 1), c))
@@ -899,6 +886,12 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
       void stage.offsetWidth
       stationRef.current = (stationRef.current + 1) % ENGINE.PANES
       layoutScrim(stationRef.current)
+      // Still animated on the wrap branch: the wrap snaps the PAN (a rewind
+      // across a whole cylinder would read as one), but the sky is decoupled
+      // from the pan by design — the ember region fading out across the
+      // 11 -> 0 boundary is a real transition, not part of the jump the wrap
+      // exists to hide.
+      writeSkyTints(stationRef.current, !isReduced())
       unlock()
       return
     }
@@ -908,6 +901,12 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
     writeOffsets()
     stationRef.current = (stationRef.current + 1) % ENGINE.PANES
     layoutScrim(stationRef.current)
+    // Fired in the same tick the pan starts, but on a longer duration and a
+    // milder curve, so the sky is still settling ~900ms after the pan lands.
+    // Retargeting (a queued/rapid Stream-Deck turn landing mid-fade) is free
+    // — it's a CSS transition, so it re-aims from wherever it currently is
+    // rather than stacking a second animation.
+    writeSkyTints(stationRef.current, true)
     turnTimerRef.current = setTimeout(() => {
       stage.classList.remove('go')
       unlock()
@@ -934,6 +933,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
     stageElRef.current.classList.remove('go')
     writeOffsets()
     layoutScrim(stationRef.current)
+    writeSkyTints(stationRef.current, false) // snap — see applySkyTints on why a jump must not leave a transition in flight
     dom.clampSafeBoxStarPeaks(designElRef.current) // item 3: re-clamp at rest, new station
   }
 

@@ -621,3 +621,66 @@ gets picked up again: diff the actual `--op` values the clamp computes on
 each build at st4, not just the final rendered luma — that would show
 whether the CLAMP disagrees between builds (a real per-build numeric
 difference) or whether something downstream of it does.
+
+---
+
+## Instrument ten — `ring-verify.mjs`'s react-live pass silently measures whatever is on port 5173, including another worktree
+
+**Date:** 2026-08-16
+**Where:** `concepts/tools/ring-verify.mjs`, `ensureViteServer()` (~line 1315).
+**Found during:** the `ring-sky-lean` branch (sky-region rework replacing the
+per-station wash), while taking the mandatory before/after gate readings.
+
+### What was wrong
+
+`ensureViteServer()` reuses an already-running dev server if anything answers
+`http://localhost:5173/`, and only spawns its own if nothing does:
+
+```js
+if (await isUp(base + '/')) return { proc: null, url: base + '/ambient?ring=1' };
+```
+
+It never checks that the server it found is serving **this** checkout. This
+repo routinely has several git worktrees open at once (13 live at the time of
+writing) and a dev server left running in any one of them wins the port. In
+this session the responder on 5173 was the MAIN checkout, sitting on branch
+`ring-scaffold-absorption` — whose ring files differ from `origin/main`,
+`client/src/worlds/midnightGalaxy.ring.js` among them. So every
+`[react-live]` number in both the "before" and the "after" run described a
+codebase neither run had edited. The `[html]` pass is unaffected: it takes an
+explicit file path argument, so it always reads the file it was pointed at.
+
+This is the same family as instruments 1-9 — the number was wrong because the
+instrument was measuring the wrong thing, not because the design was wrong.
+The specific hazard here is that it fails **silently and plausibly**: a
+foreign worktree's ring code produces numbers in the same range, so nothing
+in the output looks off. It only surfaced because the borrowed server
+happened to throw (`window.__world` never appeared within 8s) and the pass
+reported `[react-live] pass FAIL — threw: Cannot read properties of undefined
+(reading 'station')` instead of quietly returning plausible values.
+
+### How this session worked around it, without editing the gate
+
+Editing the gate is STAYS-HUMAN (`references/ring-world-continuity.md` §4:
+check code, thresholds, allowlists). Instead, the react-live pass was re-run
+against a vite server started in the correct worktree on port 5174, by
+**importing** `runChecks` from `ring-verify.mjs` rather than forking any of
+its logic (`ring-world-mistakes.md`: "a sweep/tuning tool must import the
+exact same check code the gate runs, never a fork"). Same checks, same
+prefix (`ring-`), different `gotoUrl`.
+
+### Open for Ben — not decided here
+
+Options, none applied:
+
+1. Have `ensureViteServer()` verify the responder belongs to this checkout
+   (e.g. fetch a known source file through the dev server and compare it to
+   the on-disk copy) and refuse rather than borrow it.
+2. Always spawn its own server on an ephemeral port and never reuse 5173.
+3. Leave it and make the reuse loud — print which server it attached to and
+   whether it spawned it.
+
+All three change check code, so they need Ben's sign-off. Until one lands,
+**anyone taking a react-live reading in a worktree must confirm nothing else
+holds 5173 first** (`lsof -nP -iTCP:5173 -sTCP:LISTEN`), or point `runChecks`
+at their own port as above.
