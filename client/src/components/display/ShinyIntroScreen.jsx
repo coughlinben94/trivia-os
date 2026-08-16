@@ -70,7 +70,9 @@ export default function ShinyIntroScreen({ slide, theme }) {
     })
     return () => { cancelled = true }
   }, [slide.id])
-  const photoUrl = randomPhotoUrl || data.hostPhotoUrl
+  // A host-picked photo is a deliberate choice for this specific slide and
+  // wins over the random pool — the pool is the default, not an override.
+  const photoUrl = data.hostPhotoUrl || randomPhotoUrl
 
   // Replay key — same idiom as QuestionSlide.jsx's flash reset: a multi-part
   // series keeps the same slide.id across parts, only currentPart changes as
