@@ -264,7 +264,7 @@ export function runStaticChecks(htmlPath) {
   {
     const scriptMatch = source.match(/<script[^>]*>([\s\S]*?)<\/script>/);
     const script = scriptMatch ? scriptMatch[1] : source;
-    const sanctioned = ['spawnShoot', 'shootLoop']
+    const sanctioned = ['spawnShoot', 'shootLoop', 'spawnMeteorShower']
       .map(n => functionBody(script, n))
       .filter(Boolean);
     const randIdx = [];

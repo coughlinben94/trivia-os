@@ -11,9 +11,13 @@ export const midnightGalaxyRing = {
   name: 'Midnight Galaxy',
   phase: 5,
   // Derived from the theme (ringEngine.js's skyFromTheme — single source,
-  // shared with concepts/world-07-ring.html) so a host's per-show color
-  // override (ThemeProvider's applyOverrides) reaches this world too,
-  // instead of silently no-op'ing.
+  // shared with concepts/world-07-ring.html) so the sky palette isn't a
+  // second hand-copied set of hex values.
+  // This does NOT make per-show color overrides reach the ring: the
+  // `THEMES.find` above runs once at module load, and ThemeProvider's
+  // applyOverrides returns a new spread object without mutating THEMES, so
+  // an override resolved later never reaches this value. Ring worlds are
+  // palette-fixed by design — see references/themes.md ("palette-fixed").
   sky: skyFromTheme(theme),
   // Never source question text from theme.colors.accent — it's a UI-surface
   // color (buttons/panels), not tuned for text legibility. For Midnight

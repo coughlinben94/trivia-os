@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
+import ErrorBoundary from '../ErrorBoundary.jsx'
 import { getTheme } from '../../themes/index.js'
 import BreathingGradient from './BreathingGradient'
 import RingAmbient from './RingAmbient.jsx'
@@ -1224,11 +1225,29 @@ export default function ParticleBackground({ theme, slideKey }) {
     <>
       <style>{KEYFRAMES}</style>
       <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 1 }} aria-hidden>
-        {gradientMood
-          ? <BreathingGradient palette={theme.colors} mood={gradientMood} />
-          : ringWorld
-            ? <RingAmbient worldData={ringWorld} slideKey={slideKey} />
-            : AmbientComponent && <AmbientComponent tint={tint} />}
+        {/* Crash boundary around the ambient slot ONLY — deliberately NO `key`,
+            so it never resets and never re-mounts the ambient on slide change
+            (Display.jsx keeps <ParticleBackground> outside its own keyed
+            boundary for exactly that reason; this one is inside it, not a
+            replacement for it). RingAmbient's mount effect runs buildArc()/
+            buildLayerContent() and dynamic primitive dispatch through the
+            ~2,900-line ringPrimitives.js — a throw in there used to blank the
+            whole /display route for every theme. fallback={null}: the
+            background silently disappears, question text/scoreboard survive.
+            Caveat: this cannot catch a throw at MODULE load (e.g.
+            midnightGalaxy.ring.js's THEMES.find guard) — that fails while the
+            chunk evaluates, before React renders anything.
+            fallback is an empty fragment, NOT literal null: ErrorBoundary
+            tests `if (this.props.fallback)`, so a falsy null would fall
+            through to its default full-screen "Something went wrong" panel
+            and cover the show. */}
+        <ErrorBoundary fallback={<></>}>
+          {gradientMood
+            ? <BreathingGradient palette={theme.colors} mood={gradientMood} />
+            : ringWorld
+              ? <RingAmbient worldData={ringWorld} slideKey={slideKey} />
+              : AmbientComponent && <AmbientComponent tint={tint} />}
+        </ErrorBoundary>
         <Vignette
           r={v.r ?? 0}
           g={v.g ?? 0}
