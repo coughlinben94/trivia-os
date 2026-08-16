@@ -34,6 +34,16 @@ export async function listHostPhotos(showId) {
   return listAt(`${showId}/host-photos`)
 }
 
+// ShinyIntroScreen fully unmounts/remounts every time a host steps back or
+// forward over the intro beat (data.introDone flips), re-running its fetch
+// effect each time — without a cache that's a fresh Storage .list() call on
+// every step, even though the shared pool almost never changes mid-show.
+// ponytail: plain in-memory cache, no TTL/invalidation — worst case is a
+// stale list until the next page load, fine for a "laugh folder"; add
+// invalidation if photos ever need to update live during a show.
+let sharedPhotosCache = null
+
 export async function listSharedHostPhotos() {
-  return listAt(SHARED_PREFIX)
+  if (!sharedPhotosCache) sharedPhotosCache = listAt(SHARED_PREFIX)
+  return sharedPhotosCache
 }

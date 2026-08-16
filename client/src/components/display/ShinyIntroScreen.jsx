@@ -58,7 +58,8 @@ export default function ShinyIntroScreen({ slide, theme }) {
   // Draws from the SHARED cross-show pool (Ben's explicit call, 2026-08-16),
   // not a per-show folder — a per-show pool would go silently empty on any
   // duplicated or brand-new show, since storage objects aren't copied along
-  // with the show row. show?.id is intentionally unused here now.
+  // with the show row. No `show` prop needed here — the shared pool doesn't
+  // key off which show is live.
   const [randomPhotoUrl, setRandomPhotoUrl] = useState(null)
   useEffect(() => {
     let cancelled = false
@@ -97,19 +98,24 @@ export default function ShinyIntroScreen({ slide, theme }) {
   return (
     <div key={replayKey} className="w-full h-full relative overflow-hidden flex items-center justify-center">
       {/* Sunrise glow — theme-colored wash, not a full-screen fill, so the
-          ambient background still shows through around the edges. The string
-          'easeOut' takes Framer's WAAPI-accelerated path, where the ease
-          warps the WHOLE iteration's progress (same mechanism as the
-          IMPACT_EASE note above) — dragging the `times` offsets earlier, so
-          the glow actually ramps in ~0.89–1.19s, mid-spin, well before
-          LAND_T. That matches the prototype, whose effect-level ease-out
-          produced the same early ramp; final look matches the always-on
-          wash this screen shipped with. */}
+          ambient background still shows through around the edges. Ramps in
+          ~0.89–1.19s, mid-spin, well before LAND_T — matches the prototype's
+          early ramp and this screen's always-on wash.
+          Uses IMPACT_EASE (function-form) + literal `times` matching that
+          real visual window, same mechanism as the burst/sparks below —
+          NOT the string 'easeOut', which would take Framer's WAAPI-
+          accelerated path and silently warp these `times` offsets earlier
+          via an internal engine-selection heuristic (see IMPACT_EASE's own
+          comment). Pinning both to the function form means the ramp timing
+          is a stated fact of this spec, not a side effect of which code
+          path Framer happens to pick — and stays consistent with the
+          burst/sparks if a future framer-motion version changes that
+          heuristic. */}
       <motion.div
         aria-hidden
         initial={{ opacity: 0 }}
         animate={reduce ? { opacity: 1 } : { opacity: [0, 0, 1, 1] }}
-        transition={reduce ? { duration: 0.3 } : { duration: LAND_T + 0.26, times: [0, 0.68, 0.8, 1], ease: 'easeOut' }}
+        transition={reduce ? { duration: 0.3 } : { duration: LAND_T + 0.26, times: [0, 0.448, 0.599, 1], ease: IMPACT_EASE }}
         className="absolute inset-0 pointer-events-none"
         style={{
           background: `radial-gradient(ellipse 85% 65% at 50% 62%, ${SHINY_GOLD_GLOW}4d 0%, ${SHINY_GOLD_GLOW}22 38%, transparent 72%)`,

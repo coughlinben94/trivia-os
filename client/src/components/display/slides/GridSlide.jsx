@@ -14,7 +14,7 @@ function Tile({ tile, size, reduce }) {
   return <div style={{ ...common, background: tile?.color ?? '#222' }} />
 }
 
-export default function GridSlide({ slide, show }) {
+export default function GridSlide({ slide }) {
   const { theme } = useTheme()
   const { data } = slide
 
