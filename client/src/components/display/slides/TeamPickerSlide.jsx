@@ -312,7 +312,15 @@ export default function TeamPickerSlide({ slide, show }) {
       if (c.reduce) {
         warp = 0.12;
       } else {
-        const warpTarget = c.seq[c.targetIdx]?.kind === 'landed' ? 0 : 1;
+        // While the entrance sheet is still descending (!c.covered), ease
+        // toward the same 0.12 idle reduced-motion pins forever — proven not
+        // to bloom the additive star trails — instead of ramping straight to
+        // 1. Ramping to 1 immediately put warp at ~0.9 by the time the sheet
+        // lands (0.955^51 frames), putting hyperspace at full speed before
+        // the intro text even starts — inverting the approved text-then-
+        // hyperspace order. The sheet still arrives with visible drift, not
+        // as a static card; it just isn't already at full speed underneath.
+        const warpTarget = !c.covered ? 0.12 : (c.seq[c.targetIdx]?.kind === 'landed' ? 0 : 1);
         warp += (warpTarget - warp) * 0.045 * dtn;
       }
       // Settled = we're resting on 'landed' with nothing pending AND the star
@@ -354,10 +362,10 @@ export default function TeamPickerSlide({ slide, show }) {
       dctx.fillStyle = vg; dctx.fillRect(0, 0, W, H);
 
       const item = c.seq[c.displayedIdx];
-      // `c.covered` gates TEXT only — the warp ramp above is untouched, so the
-      // star field still eases up from a standstill on its own from frame one
-      // (a warp pinned at exactly 0 would also let the stationary stars
-      // accumulate under `lighter` compositing and bloom into blobs).
+      // `c.covered` gates TEXT here, and (see above) holds warp to a gentle
+      // idle rather than 0 or full speed while the sheet is still landing —
+      // so the sheet arrives already alive with soft drift, ramps to full
+      // hyperspace only once the text has room to read against it.
       if (item && c.covered && phase !== 'done' && item.kind !== 'landed') {
         const A = (c.reduce ? 900 : 1050), E = 620;
         pt += dt;
