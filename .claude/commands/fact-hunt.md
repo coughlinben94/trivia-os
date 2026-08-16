@@ -14,7 +14,7 @@ If `FACT-HUNT-PROGRESS.md` already exists in cwd: this is a **resume**, not a fr
 
 - The **last** `running count: N/T` header in the file is authoritative; earlier round headers and prose notes are historical. If the last round shows N ≥ T, do NOT silently start more research — ask Ben: build the Word doc for that round, or open a new round?
 - If the Taste Profile section is complete, do NOT redo Phase 1 — load the skills (Phase 0) and jump to Phase 2 from the authoritative tally.
-- Rebuild the dedupe corpus as: bank answers + feed answers + **every accepted answer already in the progress file + every tombstoned answer**. It lives in `FACT-HUNT-DEDUPE.md` in cwd (fixed name, never /tmp) — re-pull only if that file is absent.
+- Rebuild the dedupe corpus as: bank answers + **every accepted answer already in the progress file + every tombstoned answer**. It lives in `FACT-HUNT-DEDUPE.md` in cwd (fixed name, never /tmp) — re-pull only if that file is absent.
 - **Concurrency guard:** if the progress file's last entry is younger than ~1 hour and this session didn't write it, another `/fact-hunt` session may be live — stop and ask Ben before dispatching anything (two sessions racing one ledger already happened 2026-07-22; 4 collisions).
 - Start fresh only if the file is absent or Ben says "fresh hunt" (archive the old file as `FACT-HUNT-PROGRESS-<date>.md` first).
 
@@ -30,8 +30,6 @@ Create a TodoWrite list mirroring the phases below. Create `FACT-HUNT-PROGRESS.m
 
 Supabase project `qwtbgusqfoypvehnungr`, table `questions` (~1,900 rows). Real usable columns: `type, text, answer, is_bonus, is_shiny, shiny_format_name, questions_data`. `category`/`used_on`/`round_type` are effectively empty — do NOT use them (per trivia-questions skill).
 
-Accelerator: if `~/Desktop/Trivia/Fact Feed/Trivia Corpus Analysis - July 2026.md` exists, read it first — it's a measured docx-archive analysis (topic shares, anatomy stats) and can seed the profile. Still sample live rows to confirm and to quote current examples; the analysis ages as the bank grows.
-
 This phase is the point of the command. **Read the actual question text at scale — hundreds of rows, not a 20-row sample.** Pull in pages (`select id, type, text, answer from questions order by id limit 300 offset N;`) until you've read enough that new pages stop teaching you anything (expect to read 800+ rows; read all ~1,900 if context allows — dispatch an Explore/general-purpose subagent per page-range and merge findings if needed).
 
 Build a written **Taste Profile** in `FACT-HUNT-PROGRESS.md` covering, with real examples quoted from the bank:
@@ -41,7 +39,7 @@ Build a written **Taste Profile** in `FACT-HUNT-PROGRESS.md` covering, with real
 3. **Anatomy stats:** roughly how often questions open with a hook, carry a trailing wink, use "shares its name with…" vs. "you could ask X…" bridge phrasings — the moves, with three quoted examples of each.
 4. **Texture habits:** how he deploys numbers/years/proper nouns; typical question length; spoken-rhythm patterns (em-dashes, ellipses, ALL-CAPS sound effects).
 5. **Answer-familiarity calibration:** how famous is a typical answer? Quote five typical answers and five deepest-cut answers to bracket the range.
-6. **Dedupe corpus:** all answers (`select id, answer from questions;`) held for collision checks — the repeat-guard for Phase 2. **Also read `~/Desktop/Trivia/Fact Feed/facts.js`** and add every feed fact's answer/subject to the same corpus — the hunt must not re-find anything already in the feed. (If the file is missing, note it in the progress file and continue.)
+6. **Dedupe corpus:** all answers (`select id, answer from questions;`) held for collision checks — the repeat-guard for Phase 2.
 7. **Answer-frequency:** `select lower(answer), count(*) from questions group by 1 having count(*) > 1 order by 2 desc;` — 2+ appearances = hard-avoid this session (plus the skill's known-repeat list: Ludicrous, Apothecary, Headless Horseman, Kenny Loggins, Regina George, Jack Nicholson).
 8. **Gap read:** domains/wells that are thin relative to what plays well — thin spots get extra quota in Phase 2.
 
@@ -53,7 +51,7 @@ Target: **100 accepted facts per round**. Work in waves (2–3 subagents × ~10-
 
 **Domain wheel** — spread across, weighted by the Taste Profile's actual topic fingerprint (match his proportions **compressed under the ~15/domain cap; overflow quota goes to the thin spots**): history · science/nature · sports · music · film/TV · geography · food/drink/brands · words/etymology · Michigan/local · records/onlys/firsts/misc.
 
-**Hunting grounds** (from the skill's fact-source habits): IG Nobel Prizes, origin stories of names/brands/bands, "only/first/last" record lists, secret-service code names, word etymologies with modern crossovers, LEGO/game Easter eggs, production trivia and deleted scenes, obscure institutional datasets, kangaroo words, diner slang, this-month's news/deaths/sports for topical hooks. Search these corners — not "50 amazing facts" listicles.
+**Hunting grounds** (from the skill's fact-source habits): IG Nobel Prizes, origin stories of names/brands/bands, "only/first/last" record lists, secret-service code names, word etymologies with modern crossovers, LEGO/game Easter eggs, production trivia and deleted scenes, obscure institutional datasets, kangaroo words, diner slang, this-month's news/deaths/sports for topical hooks. Search these corners — not "50 amazing facts" listicles. **Reddit (via `agent-reach`):** r/todayilearned, r/interestingasfuck, r/AskHistorians, r/AskScience — especially strong for the thin domains (sports, food/drink, games/toys); top comments often hand you a bridge for free. Raw material only — never count the thread as one of the two verification sources, trace the claim to what it cites or find an independent one.
 
 **Per-candidate gates** (all must pass before verification is even attempted):
 - Familiar destination — answer producible by a bar table by ear.
@@ -67,13 +65,16 @@ Target: **100 accepted facts per round**. Work in waves (2–3 subagents × ~10-
 
 **Crash hardening (a real run stalled here 2026-07-22 mid-hunt):** append accepted entries to `FACT-HUNT-PROGRESS.md` after EVERY wave, not at the end — the progress file is the only thing that survives. Keep the dedupe corpus in `FACT-HUNT-DEDUPE.md` in cwd (fixed name — not `/tmp`, not context) and pass subagents only the answer list, not the full question text. If context is running low mid-hunt, stop dispatching, flush everything accepted so far to the progress file, and tell Ben to rerun `/fact-hunt` to resume — a partial bank that resumes beats a full bank that never lands.
 
+**Dedupe-file sync (mandatory, every wave, not optional):** `FACT-HUNT-DEDUPE.md` is a collision corpus, not a report — a round that finishes without updating it silently sets up the *next* round to re-find and re-verify the same facts. Every time you flush accepted entries to `FACT-HUNT-PROGRESS.md`, in the same step append that wave's newly accepted answers to `FACT-HUNT-DEDUPE.md` (Edit, not Write — never overwrite what's there). This applies whether the round finishes clean or gets cut short by context limits — a partial flush to the progress file with no matching dedupe update is an incomplete flush.
+
 ## Phase 3 — Verification (every fact, no exceptions)
 
-- Verify the setup fact AND each bridge **independently** via web search: Wikipedia + one non-listicle independent source. Two sources disagree = fact dead (or the dispute IS the question — flag it as such).
+- Verify the setup fact AND each bridge **independently** via web search: Wikipedia + one non-listicle independent source. Two sources disagree = fact dead (or the dispute IS the question — flag it as such). If the fact has a clean encyclopedic anchor (person/event/org/work), prefer `mcp__wikipedia__*` and `mcp__wikidata__*` (SPARQL for structured claims like dates or "first/only" records) over prose re-reading.
 - Never verify against another listicle.
 - Superlatives/"current/most/latest" claims: verify as of today, and stamp a re-verify-by date in the entry.
-- A fact that fails verification does not count toward 100 and gets a one-line tombstone in the progress file (prevents re-hunting it).
-- Append each accepted entry to `FACT-HUNT-PROGRESS.md` immediately.
+- Record each source as a real URL (not just an outlet name) — the entry must be traceable back to the page that verified it.
+- A fact that fails verification does not count toward 100. If it's a widely-believed claim that just turned out false, write it up as a `myth-bust` entry instead of discarding it (tag it `myth-bust` in Fits) — the correction is often better material than the myth. Otherwise it gets a one-line tombstone in the progress file (prevents re-hunting it).
+- Append each accepted entry to `FACT-HUNT-PROGRESS.md` immediately, and its answer to `FACT-HUNT-DEDUPE.md` in the same step.
 
 ## Phase 4 — Word doc
 
@@ -86,7 +87,8 @@ Only now load Word tooling (docx skill if available, else pandoc/python-docx via
 > **N. [ANSWER]** — *[domain]*
 > **Fact:** [verified surprising fact, with concrete texture — numbers, years, proper nouns]
 > **Bridges:** [every independent route found, stacked one per line]
-> **Sources:** [≥2; note which source verifies which bridge]
+> **Sources:** [≥2 URLs; note which source verifies which bridge]
+> **Tags:** [lowercase tags, reused across rounds where possible: food-drink, games-toys, michigan, myth-bust, brands, history, music, words, science, sports, records, movies, tv, geography]
 > **Fits:** [regular / shiny-seed / swing-seed / PYL-seed / bonus-tier]
 > **Staleness:** [none | re-verify by DATE]
 
@@ -95,6 +97,6 @@ Only now load Word tooling (docx skill if available, else pandoc/python-docx via
 
 ## Phase 5 — Verify before done
 
-Load `verification-before-completion`. Confirm: doc exists and opens, entry count = the round's target, every entry has ≥1 bridge + ≥2 sources, zero answers collide with the bank corpus, progress file matches doc. Spot-read 10 random entries against the Taste Profile — is this a fact Ben would have jotted on his notes page? Only then report done, with the doc path and a 5-line highlight reel of the best finds.
+Load `verification-before-completion`. Confirm: doc exists and opens, entry count = the round's target, every entry has ≥1 bridge + ≥2 URL sources, zero answers collide with the bank corpus, progress file matches doc, and every accepted answer this round is present in `FACT-HUNT-DEDUPE.md` (grep the doc's answer list against it — any miss is an incomplete flush, fix before reporting done). Spot-read 10 random entries against the Taste Profile — is this a fact Ben would have jotted on his notes page? Only then report done, with the doc path and a 5-line highlight reel of the best finds.
 
 **Do NOT draft questions.** The deliverable is raw material in notes-page shape — Ben writes the questions himself. Facts + stacked bridges only.

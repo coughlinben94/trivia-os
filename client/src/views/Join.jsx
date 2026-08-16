@@ -690,12 +690,15 @@ function LandscapePrompt() {
           exit={pref ? { opacity: 0 } : { y: '100%', opacity: 0 }}
           transition={pref ? { duration: 0.2 } : { ease: EASE_PANEL, duration: 0.35 }}
           style={{
-            position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 600,
+            // Sits above the bottom nav bar (its ~88px fixed height + safe
+            // area, see the BOTTOM BAR block below) instead of at bottom:0 —
+            // both are fixed to the same edge, so bottom:0 here fully
+            // covered the nav's Scores/powerup buttons while this was shown.
+            position: 'fixed', bottom: 'calc(5.75rem + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, zIndex: 600,
             background: 'rgba(5,5,5,0.96)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
             borderTop: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '20px 20px 0 0',
+            borderRadius: 20,
             padding: 'clamp(1.25rem,4vw,1.75rem) 1.5rem',
-            paddingBottom: 'calc(clamp(1.25rem,4vw,1.75rem) + env(safe-area-inset-bottom, 0px))',
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem',
           }}
         >
