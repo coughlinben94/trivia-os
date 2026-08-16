@@ -2914,7 +2914,14 @@ export function ringCss(prefix) {
 /* 2026-08-12 (Ben: "lean more into shooting star concept") — trail
    lengthened 210->270px and thickened 2.6->3.4px, mid-stop brightened
    .6->.72, alongside a frequency bump in each consumer's own SHOOT_MS. */
-.${p}shoot{width:270px;height:3.4px;border-radius:2px;opacity:0;
+/* 2026-08-16 (rendering-based audit — "every meteor in the sky is the same
+   meteor" was the actual mechanical-feeling culprit, more than placement or
+   timing): width/height and the two opacity keyframe stops now read from
+   per-instance custom properties, defaulting to the original fixed values
+   above so anything that doesn't set them renders identically to before.
+   spawnShoot() now sets these per spawn from a weighted tier table (see
+   that file's SHOOT_TIERS) instead of every shoot being visually identical. */
+.${p}shoot{width:var(--sw,270px);height:var(--sh,3.4px);border-radius:2px;opacity:0;
   background:linear-gradient(90deg,transparent 0%,rgba(255,246,226,0) 14%,
     rgba(255,246,226,.72) 72%,#fff8ec 100%);
   animation:${shootGo} var(--sdu) linear both}
@@ -2931,7 +2938,7 @@ export function ringCss(prefix) {
     rgba(255,246,226,.6) 28%,rgba(255,246,226,0) 86%,transparent 100%)}
 @keyframes ${shootGo}{
   0%{transform:translate3d(0,0,0);opacity:0}
-  10%{opacity:.95} 74%{opacity:.85}
+  10%{opacity:var(--s-op1,.95)} 74%{opacity:var(--s-op2,.85)}
   100%{transform:translate3d(var(--sd2),0,0);opacity:0}
 }
 `
