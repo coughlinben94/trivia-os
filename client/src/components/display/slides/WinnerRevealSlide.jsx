@@ -4,14 +4,14 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../../lib/scoreboardMath.js'
 import { fitToBox, REVEAL_BOX } from '../../../lib/autoFitText.js'
-import { EASE_OUT, EASE_EXIT, EASE_DROP } from '../../../lib/easings.js'
+import { EASE_OUT, EASE_EXIT } from '../../../lib/easings.js'
 
 // Cinematic sequence:
 //   'drumroll' — 4.2s MP3 plays; vignette closes in, spotlight + kicker breathe (tension build)
 //   'hold'     — 450ms of silence AFTER the roll ends; everything recedes to near-black (anticipation)
 //   'reveal'   — name slams in with weight (scale 2.6→1 + settle), impact flash + shake,
-//                flares bloom, light rays rotate; confetti cannons fire ~480ms AFTER the
-//                impact (celebration follows the hit, never simultaneous with it)
+//                flares bloom, light rays rotate; the fireworks show launches ~480ms
+//                AFTER the impact (celebration follows the hit, never simultaneous with it)
 const HOLD_MS = 450
 
 // ─── Drum roll (MP3) ──────────────────────────────────────────────────────
@@ -30,11 +30,11 @@ function playDrumRoll(onReveal, reduced) {
   }
 }
 
-// ─── Canvas confetti — corner cannons + drifting rain ─────────────────────
+// ─── Canvas fireworks — a staged ~6s aerial show ──────────────────────────
 
-const CONFETTI_BASE = ['#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#f97316', '#ec4899', '#84cc16', '#fde047', '#ffffff']
+const FIREWORK_BASE = ['#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#f97316', '#ec4899', '#84cc16', '#fde047', '#ffffff']
 
-function Confetti({ active, themeColors = [] }) {
+function Fireworks({ active, themeColors = [] }) {
   const canvasRef = useRef(null)
   const rafRef    = useRef(null)
 
@@ -48,80 +48,136 @@ function Confetti({ active, themeColors = [] }) {
     const W = canvas.width
     const H = canvas.height
 
-    // Theme colors weighted in so the burst belongs to tonight's theme
-    const palette = [...CONFETTI_BASE, ...themeColors, ...themeColors]
+    // Theme colors weighted in so the show belongs to tonight's theme
+    const palette = [...FIREWORK_BASE, ...themeColors, ...themeColors]
 
     const rand = (a, b) => a + Math.random() * (b - a)
     const pick = arr => arr[Math.floor(Math.random() * arr.length)]
 
-    // Two cannons at the bottom corners arc up through the frame — a launch,
-    // not a drizzle. A lighter rain from the top sustains the moment after.
-    const cannon = Array.from({ length: 150 }, (_, i) => {
-      const left = i % 2 === 0
-      return {
-        x:    left ? W * rand(0.02, 0.1) : W * rand(0.9, 0.98),
-        y:    H + rand(0, 30),
-        w:    rand(7, 16),
-        h:    rand(4, 10),
-        vx:   (left ? 1 : -1) * rand(2, 8),
-        vy:   -rand(18, 28),
-        rot:  rand(0, Math.PI * 2),
-        rotV: rand(-0.22, 0.22),
-        color: pick(palette),
-        alpha: 1,
-        delay: rand(0, 0.18),
-        drag:  0.992,
+    // Show plan, paced like a real display: two openers, a three-shell build,
+    // a five-shell finale flurry, one oversized closer. Launches span 0–3.9s;
+    // with ~0.7–0.9s of ascent per shell, bursts land ~0.8s→4.7s and the last
+    // sparks burn out just past 6s.
+    const schedule = [
+      { at: 0.0,  x: rand(0.28, 0.40), power: rand(6.0, 7.5), sparks: 60 },
+      { at: 0.45, x: rand(0.60, 0.72), power: rand(6.0, 7.5), sparks: 60 },
+      { at: 1.1,  x: rand(0.15, 0.30), power: rand(5.0, 6.5), sparks: 50 },
+      { at: 1.5,  x: rand(0.45, 0.55), power: rand(5.5, 7.0), sparks: 55 },
+      { at: 1.9,  x: rand(0.70, 0.85), power: rand(5.0, 6.5), sparks: 50 },
+      { at: 2.4,  x: rand(0.20, 0.35), power: rand(5.0, 7.0), sparks: 45 },
+      { at: 2.6,  x: rand(0.55, 0.70), power: rand(5.0, 7.0), sparks: 45 },
+      { at: 2.85, x: rand(0.35, 0.50), power: rand(5.0, 7.0), sparks: 45 },
+      { at: 3.1,  x: rand(0.65, 0.80), power: rand(5.0, 7.0), sparks: 45 },
+      { at: 3.35, x: rand(0.15, 0.30), power: rand(5.0, 7.0), sparks: 45 },
+      { at: 3.9,  x: rand(0.42, 0.58), power: rand(8.0, 9.0), sparks: 90 },
+    ].map(s => ({ ...s, color: pick(palette), launched: false }))
+
+    const rockets = []
+    const sparks  = []
+    const GRAV_ROCKET = 0.12
+    const GRAV_SPARK  = 0.055
+
+    function launch(s) {
+      const targetY = H * rand(0.22, 0.42)
+      const flight  = rand(40, 55) // frames — ~0.7–0.9s ascent
+      const dist    = (H + 10) - targetY
+      rockets.push({
+        x: s.x * W, y: H + 10,
+        vx: rand(-0.5, 0.5),
+        // arrive at targetY decelerating, still moving — bursts feel airborne
+        vy: -(dist / flight + 0.5 * GRAV_ROCKET * flight),
+        targetY, color: s.color, power: s.power, count: s.sparks,
+      })
+    }
+
+    function burst(r) {
+      for (let i = 0; i < r.count; i++) {
+        const angle = (i / r.count) * Math.PI * 2 + rand(-0.12, 0.12)
+        const speed = r.power * (0.35 + Math.random() * 0.65)
+        sparks.push({
+          x: r.x, y: r.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          color: Math.random() < 0.18 ? '#ffffff' : r.color, // white-hot core fragments
+          life: 0, maxLife: rand(60, 100),
+          flicker: Math.random() < 0.3,
+        })
       }
-    })
-    const rain = Array.from({ length: 90 }, () => ({
-      x:    rand(0, W),
-      y:    -rand(24, 160),
-      w:    rand(6, 13),
-      h:    rand(3, 8),
-      vx:   rand(-2, 2),
-      vy:   rand(2.5, 6),
-      rot:  rand(0, Math.PI * 2),
-      rotV: rand(-0.14, 0.14),
-      color: pick(palette),
-      alpha: 1,
-      delay: rand(0.5, 1.8),
-      drag:  1,
-    }))
-    const particles = [...cannon, ...rain]
+    }
 
     // ponytail: per-frame physics assumes ~60fps like the rest of the display canvases
     let start = null
+    let doneFade = 0
     function draw(ts) {
       if (!start) start = ts
       const elapsed = (ts - start) / 1000
-      ctx.clearRect(0, 0, W, H)
-      let anyAlive = false
-      for (const p of particles) {
-        if (elapsed < p.delay) { anyAlive = true; continue }
-        p.vx  *= p.drag
-        p.x   += p.vx
-        p.y   += p.vy
-        p.rot += p.rotV
-        p.vy  += 0.26
-        if (elapsed > 3.4) p.alpha = Math.max(0, p.alpha - 0.009)
-        if (p.y < H + 60 && p.alpha > 0.01) {
-          anyAlive = true
-          ctx.save()
-          ctx.globalAlpha = p.alpha
-          ctx.translate(p.x, p.y)
-          ctx.rotate(p.rot)
-          ctx.fillStyle = p.color
-          ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h)
-          ctx.restore()
-        }
+
+      // Fade last frame toward transparent instead of clearing — every rocket
+      // and spark leaves a glowing trail for free, drawn additively below.
+      ctx.globalCompositeOperation = 'destination-out'
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.16)'
+      ctx.fillRect(0, 0, W, H)
+      ctx.globalCompositeOperation = 'lighter'
+      ctx.lineCap = 'round'
+      ctx.lineWidth = 2.4
+
+      for (const s of schedule) {
+        if (!s.launched && elapsed >= s.at) { s.launched = true; launch(s) }
       }
-      if (anyAlive) rafRef.current = requestAnimationFrame(draw)
+
+      for (let i = rockets.length - 1; i >= 0; i--) {
+        const r = rockets[i]
+        r.x += r.vx
+        r.y += r.vy
+        r.vy += GRAV_ROCKET
+        if (r.y <= r.targetY || r.vy >= -1) {
+          burst(r)
+          ctx.globalAlpha = 0.35 // one-frame flash at the burst point
+          ctx.fillStyle = '#ffffff'
+          ctx.beginPath(); ctx.arc(r.x, r.y, r.power * 3.5, 0, Math.PI * 2); ctx.fill()
+          rockets.splice(i, 1)
+          continue
+        }
+        ctx.globalAlpha = 0.9
+        ctx.fillStyle = r.color
+        ctx.beginPath(); ctx.arc(r.x, r.y, 2.2, 0, Math.PI * 2); ctx.fill()
+      }
+
+      for (let i = sparks.length - 1; i >= 0; i--) {
+        const p = sparks[i]
+        const px = p.x, py = p.y
+        p.vx  = p.vx * 0.985
+        p.vy  = p.vy * 0.985 + GRAV_SPARK
+        p.x  += p.vx
+        p.y  += p.vy
+        p.life++
+        const t = p.life / p.maxLife
+        if (t >= 1 || p.y > H + 20) { sparks.splice(i, 1); continue }
+        let a = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4
+        if (p.flicker && t > 0.4) a *= 0.55 + Math.random() * 0.45 // embers twinkle as they die
+        ctx.globalAlpha = a
+        ctx.strokeStyle = p.color
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(p.x, p.y); ctx.stroke()
+      }
+      ctx.globalAlpha = 1
+
+      const pending = schedule.some(s => !s.launched)
+      if (pending || rockets.length || sparks.length) {
+        rafRef.current = requestAnimationFrame(draw)
+      } else if (doneFade < 45) {
+        doneFade++ // let leftover trail glow fade fully before stopping
+        rafRef.current = requestAnimationFrame(draw)
+      } else {
+        ctx.clearRect(0, 0, W, H)
+      }
     }
     rafRef.current = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(rafRef.current)
   }, [active])
 
-  return <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 30 }} />
+  // zIndex 5 — below the kicker/name (zIndex 10) so the winner stays legible
+  // on top of the show (the old confetti sat at 30 and painted over the name)
+  return <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 5 }} />
 }
 
 // ─── WinnerRevealSlide ─────────────────────────────────────────────────────
@@ -131,7 +187,7 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
   const reduce = useReducedMotion()
   const [winner, setWinner] = useState(null)
   const [phase,  setPhase]  = useState('drumroll')   // 'drumroll' → 'hold' → 'reveal'
-  const [celebrate, setCelebrate] = useState(false)  // confetti fires AFTER the impact lands
+  const [celebrate, setCelebrate] = useState(false)  // fireworks launch AFTER the impact lands
   const audioCtxRef = useRef(null)
   const holdTimerRef = useRef(null)
 
@@ -192,7 +248,7 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
       if (cancelled) return
 
       // Zero teams ever scored (empty show, or both fetches came back empty) —
-      // skip the drumroll/confetti build-up and go straight to a graceful
+      // skip the drumroll/fireworks build-up and go straight to a graceful
       // fallback instead of leaving three TVs on "And the winner is…" forever.
       if (!ranked.length) {
         setWinner({ noData: true })
@@ -214,8 +270,8 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
     }
   }, [show.id])
 
-  // Celebration follows the impact: cannons fire ~480ms after the slam starts
-  // (right as the name settles), never simultaneously with it.
+  // Celebration follows the impact: the first shells launch ~480ms after the
+  // slam starts (right as the name settles), never simultaneously with it.
   useEffect(() => {
     if (phase !== 'reveal' || isPreview || reduce || winner?.noData) return
     const t = setTimeout(() => setCelebrate(true), 480)
@@ -223,7 +279,9 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
   }, [phase, winner?.noData])
 
   const hl = theme.colors.highlight
-  const ac = theme.colors.accent
+  // shinyAccent, NOT accent — across the 21 themes `accent` is a dark backdrop
+  // color (near-black on most), `shinyAccent` is the bright secondary
+  const ac = theme.colors.shinyAccent
   const revealed = phase === 'reveal'
   const impact   = revealed && !winner?.noData && !isPreview && !reduce
 
@@ -262,7 +320,9 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
         transition={
           phase === 'drumroll' && !reduce
             ? { duration: 1.15, repeat: Infinity, ease: 'easeInOut' }
-            : { duration: 0.35, ease: EASE_EXIT }
+            // hold-phase recession must finish fast so most of the 450ms beat
+            // is genuinely still
+            : { duration: phase === 'hold' ? 0.2 : 0.35, ease: EASE_EXIT }
         }
         style={{
           zIndex: 1,
@@ -270,6 +330,53 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
           pointerEvents: 'none',
         }}
       />
+
+      {/* Vignette — closes in during the roll, hits its darkest in the held
+          beat, lifts (but stays) once the celebration starts */}
+      <motion.div
+        className="absolute inset-0"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: phase === 'drumroll' ? 0.55 : phase === 'hold' ? 0.85 : 0.3 }}
+        transition={{ duration: phase === 'hold' ? 0.2 : 1.1, ease: phase === 'hold' ? EASE_EXIT : EASE_OUT }}
+        style={{
+          zIndex: 3,
+          background: 'radial-gradient(ellipse 72% 62% at 50% 50%, transparent 42%, rgba(0,0,0,0.85) 100%)',
+          pointerEvents: 'none',
+        }}
+      />
+
+      <Fireworks active={celebrate} themeColors={[hl, ac]} />
+
+      {/* Impact flash — a single frame-of-light the instant the name lands
+          (~180ms in): fast attack peaking right at the landing, slow decay */}
+      {impact && (
+        <motion.div
+          className="absolute inset-0 pointer-events-none"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0, 0.85, 0] }}
+          transition={{ delay: 0.16, duration: 0.55, times: [0, 0.05, 1], ease: 'easeOut' }}
+          style={{
+            zIndex: 40,
+            background: `radial-gradient(circle at 50% 50%, rgba(255,255,255,0.95) 0%, ${hl}66 40%, transparent 75%)`,
+            mixBlendMode: 'screen',
+          }}
+        />
+      )}
+
+      {/* Shaken frame — rays + kicker + name jolt together on impact so it
+          reads as "the screen shook", not "the text wobbled". Content here is
+          all transparent overlay over the full-bleed ambient background, so
+          the translation can't expose a stage edge (no pre-scale needed). */}
+      <motion.div
+        className="absolute inset-0 flex flex-col items-center justify-center"
+        animate={impact
+          // 7 keyframes over 260ms ≈ 12Hz — reads as a jolt, not a wobble;
+          // the small rotate component sells the hit at TV distance
+          ? { x: [0, -14, 10, -6, 3, -1, 0], y: [0, 8, -5, 3, -1, 1, 0], rotate: [0, -0.5, 0.35, -0.15, 0, 0, 0] }
+          : { x: 0, y: 0, rotate: 0 }}
+        transition={impact ? { delay: 0.18, duration: 0.26, ease: 'linear' } : undefined}
+        style={{ zIndex: 10 }}
+      >
 
       {/* Rotating light rays — sustained celebration behind the name */}
       {revealed && !winner?.noData && (
@@ -296,37 +403,6 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
         />
       )}
 
-      {/* Vignette — closes in during the roll, hits its darkest in the held
-          beat, lifts (but stays) once the celebration starts */}
-      <motion.div
-        className="absolute inset-0"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: phase === 'drumroll' ? 0.55 : phase === 'hold' ? 0.85 : 0.3 }}
-        transition={{ duration: phase === 'hold' ? 0.35 : 1.1, ease: phase === 'hold' ? EASE_EXIT : EASE_OUT }}
-        style={{
-          zIndex: 3,
-          background: 'radial-gradient(ellipse 72% 62% at 50% 50%, transparent 42%, rgba(0,0,0,0.85) 100%)',
-          pointerEvents: 'none',
-        }}
-      />
-
-      <Confetti active={celebrate} themeColors={[hl, ac]} />
-
-      {/* Impact flash — a single frame-of-light the instant the name lands */}
-      {impact && (
-        <motion.div
-          className="absolute inset-0 pointer-events-none"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: [0, 0.85, 0] }}
-          transition={{ delay: 0.32, duration: 0.7, times: [0, 0.18, 1], ease: 'easeOut' }}
-          style={{
-            zIndex: 40,
-            background: `radial-gradient(circle at 50% 50%, rgba(255,255,255,0.95) 0%, ${hl}66 40%, transparent 75%)`,
-            mixBlendMode: 'screen',
-          }}
-        />
-      )}
-
       {/* Kicker — breathes with the drumroll, recedes into the dark for the
           held beat, then returns softly beneath the celebration for context */}
       <motion.p
@@ -342,7 +418,7 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
         }
         transition={
           phase === 'hold'
-            ? { duration: 0.3, ease: EASE_EXIT }
+            ? { duration: 0.2, ease: EASE_EXIT }
             : revealed && !winner?.noData
               ? { delay: 0.9, duration: 0.6, ease: EASE_OUT }
               : { duration: 0.55, ease: EASE_OUT }
@@ -364,18 +440,16 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
           animate={phase === 'drumroll' && !reduce && !isPreview ? { scale: [1, 1.03, 1] } : { scale: 1 }}
           transition={phase === 'drumroll' && !reduce && !isPreview ? { duration: 1.15, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
         >
-          {winner?.noData ? 'Let’s see how everyone did…' : winner?.isTie ? "It's a tie!" : 'And the winner is…'}
+          {/* Tie text only once revealed — announcing it during the drumroll
+              spoils the outcome before the suspense finishes */}
+          {winner?.noData ? 'Let’s see how everyone did…' : winner?.isTie && revealed ? "It's a tie!" : 'And the winner is…'}
         </motion.span>
       </motion.p>
 
       <AnimatePresence>
         {revealed && winner && (
-          <motion.div
-            // Impact shake — a short decaying jolt the moment the name lands
-            animate={impact ? { x: [0, -9, 7, -4, 2, 0], y: [0, 5, -4, 2, -1, 0] } : { x: 0, y: 0 }}
-            transition={impact ? { delay: 0.34, duration: 0.42, ease: 'linear' } : undefined}
-            style={{ position: 'relative', zIndex: 10, textAlign: 'center' }}
-          >
+          // shake lives on the shared wrapper above, not here
+          <div style={{ position: 'relative', zIndex: 10, textAlign: 'center' }}>
             {winner.noData ? (
               <motion.p
                 initial={{ opacity: 0, y: 16 }}
@@ -394,15 +468,17 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
             ) : (
               <>
                 <motion.p
-                  // The slam: arrives huge and fast, compresses just past
-                  // rest, settles — weight, not a fade
+                  // The slam: linear constant-speed approach (size perception
+                  // is ~logarithmic, so linear reads consistent) lands at a
+                  // predictable ~180ms, squashes visibly to 0.93, settles —
+                  // flash and shake are timed to meet that landing
                   initial={{ opacity: 0, scale: reduce ? 1 : 2.6 }}
-                  animate={reduce ? { opacity: 1, scale: 1 } : { opacity: [0, 1], scale: [2.6, 0.98, 1] }}
+                  animate={reduce ? { opacity: 1, scale: 1 } : { opacity: [0, 1], scale: [2.6, 0.93, 1] }}
                   transition={reduce
                     ? { duration: 0.5, ease: EASE_OUT }
                     : {
-                        opacity: { duration: 0.3, ease: 'linear' },
-                        scale:   { duration: 0.55, times: [0, 0.62, 1], ease: [EASE_DROP, 'easeOut'] },
+                        opacity: { duration: 0.12, ease: 'linear' },
+                        scale:   { duration: 0.40, times: [0, 0.45, 1], ease: ['linear', EASE_OUT] },
                       }}
                   style={{
                     color: theme.colors.highlight,
@@ -419,7 +495,7 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: reduce ? 0.3 : 0.95, duration: 0.5, ease: EASE_OUT }}
                   style={{
-                    color: theme.colors.accent,
+                    color: theme.colors.text, // accent is a dark backdrop color — unreadable here
                     fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
                     fontSize: 'clamp(1.4rem, 2.5cqw, 2.2rem)',
                     fontWeight: 700,
@@ -430,9 +506,11 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
                 </motion.p>
               </>
             )}
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
+
+      </motion.div>
     </div>
   )
 }
