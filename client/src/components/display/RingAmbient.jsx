@@ -766,17 +766,39 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
   // 3-4 staggered shoots that all share ONE direction picked once per burst
   // ("i was speaking only in terms of a meteor shower where three play back
   // to back to back. the others can be any direction").
+  // Three visual tiers instead of one fixed recipe — a rendering-based audit
+  // (2026-08-16) found position/timing genuinely random but size/brightness/
+  // speed identical on every single spawn, and named THAT (not placement) as
+  // the actual "every meteor is the same meteor" mechanical-feeling culprit.
+  // Weighted so most stays unobtrusive background motion and only a few per
+  // hour actually grab a look. distMul/durMul scale the existing random
+  // ranges rather than replacing them, so each tier still has its own spread.
+  const SHOOT_TIERS = [
+    { weight: 0.60, w: 150, h: 2.2, opPeak: 0.55, opMid: 0.45, durMul: 0.72, distMul: 0.65 },
+    { weight: 0.35, w: 270, h: 3.4, opPeak: 0.95, opMid: 0.85, durMul: 1.00, distMul: 1.00 },
+    { weight: 0.05, w: 480, h: 5.6, opPeak: 1.00, opMid: 0.95, durMul: 1.55, distMul: 1.35 },
+  ]
+  function pickShootTier() {
+    let r = Math.random()
+    for (const t of SHOOT_TIERS) { r -= t.weight; if (r <= 0) return t }
+    return SHOOT_TIERS[SHOOT_TIERS.length - 1]
+  }
   function spawnShoot(forceDir) {
     if (isReduced()) return
     const lane = shootLaneRef.current
     if (!lane) return
+    const tier = pickShootTier()
     const rot = dom.el('shootRot'), s = dom.el('shoot'), d = forceDir ?? (Math.random() < 0.5 ? 1 : -1)
     if (d < 0) s.classList.add('rev') // see ringCss's own .shoot.rev comment — keeps the bright head leading
     rot.style.left = px(d > 0 ? 140 + Math.random() * 500 : 1180 + Math.random() * 500)
     rot.style.top = px(70 + Math.random() * 760)
     rot.style.setProperty('--sa', (d > 0 ? 1 : -1) * (14 + Math.random() * 16) + 'deg')
-    s.style.setProperty('--sd2', px((d > 0 ? 1 : -1) * (640 + Math.random() * 380)))
-    s.style.setProperty('--sdu', (1.5 + Math.random() * 1.2) + 's')
+    s.style.setProperty('--sd2', px((d > 0 ? 1 : -1) * (640 + Math.random() * 380) * tier.distMul))
+    s.style.setProperty('--sdu', ((1.5 + Math.random() * 1.2) * tier.durMul) + 's')
+    s.style.setProperty('--sw', tier.w + 'px')
+    s.style.setProperty('--sh', tier.h + 'px')
+    s.style.setProperty('--s-op1', tier.opPeak)
+    s.style.setProperty('--s-op2', tier.opMid)
     rot.appendChild(s); lane.appendChild(rot)
     // 2026-08-14: synced from world-07-ring.html — setTimeout fallback
     // removal (animationend has no guaranteed fire; a backgrounded/
