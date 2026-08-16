@@ -17,6 +17,7 @@ import { EASE_OUT } from '../lib/easings.js'
 function ShowPicker({ loadShow, listShows, createShow }) {
   const [shows, setShows] = useState(null)
   const [working, setWorking] = useState(null)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     listShows().then(setShows)
@@ -24,14 +25,28 @@ function ShowPicker({ loadShow, listShows, createShow }) {
 
   async function handleLoad(id) {
     setWorking(id)
-    await loadShow(id)
-    // useShow reacts to the load — Host re-renders into BuildMode automatically
+    setError(null)
+    try {
+      await loadShow(id)
+      // useShow reacts to the load — Host re-renders into BuildMode automatically
+    } catch (e) {
+      setError(e.message?.includes('row-level security') ? 'Not authenticated — enter the host PIN at /questions first, then come back.' : e.message)
+    } finally {
+      setWorking(null)
+    }
   }
 
   async function handleNew() {
     setWorking('new')
+    setError(null)
     const today = new Date().toISOString().slice(0, 10)
-    await createShow('New Show', today, null)
+    try {
+      await createShow('New Show', today, null)
+    } catch (e) {
+      setError(e.message?.includes('row-level security') ? 'Not authenticated — enter the host PIN at /questions first, then come back.' : e.message)
+    } finally {
+      setWorking(null)
+    }
   }
 
   return (
@@ -78,6 +93,7 @@ function ShowPicker({ loadShow, listShows, createShow }) {
         >
           {working === 'new' ? 'Creating…' : '+ New show'}
         </button>
+        {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
       </div>
     </div>
   )
