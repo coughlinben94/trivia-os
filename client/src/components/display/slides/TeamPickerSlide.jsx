@@ -25,7 +25,10 @@ const SETTLED_WARP = 0.02;
 // Ceremonial reveal, not a UI transition — deliberately slower than the
 // app's 150-250ms interaction range. EASE_PANEL is this repo's drawer/sheet
 // curve, which is exactly what this motion is: a black sheet sliding away.
-const REVEAL_S = 0.85;
+// Exported because SlideRenderer runs this exact duration backwards as the
+// slide's ENTRANCE (sheet drops in from the same top edge to cover) — the
+// two halves are one mechanic, so they read one constant.
+export const REVEAL_S = 0.85;
 const REVEAL_VARIANTS = {
   here: { transform: 'translateY(0%)', opacity: 1 },
   gone: {
@@ -191,7 +194,7 @@ export default function TeamPickerSlide({ slide, show }) {
   const spriteCache = useRef(new Map());
   // Both start equal to currentPart (not 0) so a page reload mid-reveal
   // replays the current item's approach instead of flash-exiting a wrong one.
-  const ctl = useRef({ seq, theme, reduce, displayedIdx: currentPart, targetIdx: currentPart });
+  const ctl = useRef({ seq, theme, reduce, displayedIdx: currentPart, targetIdx: currentPart, covered: reduce });
   const [hudIdx, setHudIdx] = useState(currentPart);
   // settled: warp has actually decayed to a stop (see SETTLED_WARP) — starts
   // the reveal. revealed: the black canvas has finished sliding away — starts
@@ -218,6 +221,24 @@ export default function TeamPickerSlide({ slide, show }) {
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [settled]);
+
+  // Hold the first item's approach until the entrance wipe has landed.
+  // SlideRenderer drops this whole panel in from the top edge over REVEAL_S
+  // (SLIDE_ANIMATIONS['team-picker'] — the exit reveal run backwards). The
+  // draw loop starts on mount, and the intro text is at full opacity 126ms
+  // in (`op = pt / (A * 0.12)`), so without this hold the text rides down
+  // with the sheet already fully formed instead of popping once the stage
+  // is covered. Reduced motion gets no wipe (SlideRenderer's reduce branch
+  // hands it a dissolve, itself neutralized by the opacity lock), so it
+  // starts covered and holds nothing.
+  // ponytail: timed off mount, not wired to the parent's onAnimationComplete
+  // — both start on the same mount, and a real handle would mean threading a
+  // callback prop down through SlideRenderer for one 850ms wait.
+  useEffect(() => {
+    if (reduce) return;
+    const t = setTimeout(() => { ctl.current.covered = true; }, REVEAL_S * 1000);
+    return () => clearTimeout(t);
+  }, [reduce]);
 
   useEffect(() => { ctl.current.seq = seq; }, [seq]);
   useEffect(() => { ctl.current.theme = theme; spriteCache.current.clear(); }, [theme]);
@@ -333,7 +354,11 @@ export default function TeamPickerSlide({ slide, show }) {
       dctx.fillStyle = vg; dctx.fillRect(0, 0, W, H);
 
       const item = c.seq[c.displayedIdx];
-      if (item && phase !== 'done' && item.kind !== 'landed') {
+      // `c.covered` gates TEXT only — the warp ramp above is untouched, so the
+      // star field still eases up from a standstill on its own from frame one
+      // (a warp pinned at exactly 0 would also let the stationary stars
+      // accumulate under `lighter` compositing and bloom into blobs).
+      if (item && c.covered && phase !== 'done' && item.kind !== 'landed') {
         const A = (c.reduce ? 900 : 1050), E = 620;
         pt += dt;
         let disp = 1, op = 1;
