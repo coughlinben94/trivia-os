@@ -74,7 +74,7 @@ function mergeLocalDelta(baseline, outgoing, remote) {
 // the overlay passes a callback that advances the show instead. Both absent on
 // the /music manager page, which restores the original standalone behavior
 // minus the handoff.
-export default function Jukebox({ onLogout, initialLib, onExitToShow }) {
+export default function Jukebox({ onLogout, initialLib, onExitToShow, ringMode = false }) {
   const [sets, setSets] = useState(loadSets)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -1578,6 +1578,12 @@ const [newSetName, setNewSetName] = useState('')
           onEntranceStart={onEntranceStart}
           onRegisterTransition={registerTransitionHandler}
           onTransitionAudioStart={onTransitionAudioStart}
+          ringMode={ringMode}
+          // Gated on ringMode so the standalone app keeps a constant 0 —
+          // position ticks every 300ms, and an every-tick progress prop would
+          // defeat LiveScreen's memo() (see its header comment) for a layer
+          // that isn't even mounted there.
+          progress={ringMode && player.duration ? player.position / player.duration : 0}
         />
       )}
 

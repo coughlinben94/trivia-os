@@ -7,6 +7,7 @@ import { motion, useAnimation } from 'framer-motion'
 // adapted for the app's current 2-color-max picker-driven model (see that
 // file's header for the full history and what was fixed vs. the original).
 import GradientBackground from './AlbumGradientMesh'
+import StationRingLayer from './StationRingLayer'
 import { usePalette } from '../hooks/usePalette'
 import { displayName } from '../lib/track'
 
@@ -158,7 +159,7 @@ function Tonearm({ controls }) {
 // forcing a re-render of everything under Jukebox. None of this component's props
 // change on that cadence, so memo() keeps it from redoing its render work — title-fit
 // measurement, palette lookups, the whole record/tonearm JSX tree — 3.3x/second for nothing.
-function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey, onUpcomingTrack, entranceSong, onEntranceStart, onRegisterTransition, onTransitionAudioStart }) {
+function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey, onUpcomingTrack, entranceSong, onEntranceStart, onRegisterTransition, onTransitionAudioStart, ringMode = false, progress = 0 }) {
   // entranceSong (2026-08-04): the chosen first song, handed down BEFORE
   // Spotify is asked to play it (see Jukebox.jsx's startShuffle) — falls
   // back to currentTrack for the tuning screen and any other caller that
@@ -964,6 +965,13 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
           removing it from api/palette.js would change server output and need
           another PALETTE_VERSION bump. */}
       <GradientBackground colors={palette.colors} nextColors={upcomingPalette.colors} active={true} shuffleKey={shuffleKey} entranceActive={entranceActive} />
+      {/* ringMode (2026-08-16, grading-break "Station Thirteen" fusion):
+          additive ring-world decoration over the album wash — star field,
+          groove-ring halo, progress-driven needle comet, pulsar rim-spikes.
+          Ben confirmed the album wash itself stays exactly as-is ("album wash
+          on s13 alone"); only JukeboxBreakOverlay ever turns ringMode on, so
+          the standalone /music tree is untouched. */}
+      {ringMode && <StationRingLayer active={!!shown} colors={palette.colors} progress={progress} />}
 
       {/* Entrance black cover (2026-08-04, owner spec), scoped ONLY to
           entranceActive (true exactly once, the very first song of a
