@@ -4,18 +4,24 @@
 
 ---
 
-## ⚠️ Two ambient systems now (July 2026 rework)
+## ⚠️ Three ambient systems now (July 2026 rework + Aug 2026 ring mount)
 
-The 21 themes split into two rendering paths:
-- **9 BESPOKE** (keep their hand-built ambient scene, governed by The Law / Recipe / gate below): `pure-michigan`, `midnight-galaxy`, `autumn-harvest`, `sunset-boulevard`, `sand-dune-chill`, `halloween`, `sonora-balloons`, `under-the-sea`, `meteor-shower`.
+The 21 themes split into three rendering paths:
+- **8 BESPOKE** (keep their hand-built ambient scene, governed by The Law / Recipe / gate below): `pure-michigan`, `autumn-harvest`, `sunset-boulevard`, `sand-dune-chill`, `halloween`, `sonora-balloons`, `under-the-sea`, `meteor-shower`.
+- **1 RING** (renders the `RingAmbient` engine from a `worldData` module): `midnight-galaxy`.
 - **12 GRADIENT** (bespoke scene retired, render the shared `BreathingGradient` engine): `medieval-tavern`, `dive-bar`, `drive-in-movie`, `wine-cellar`, `eighties-night`, `retro-arcade`, `firefly-summer`, `jazz-club`, `neon-tokyo`, `western-showdown`, `northern-lights`, `christmas-eve`.
 
-**The Law / Recipe / Acceptance Gate / motion vocabulary in this doc apply to the 9 bespoke themes only.** The 12 gradient themes have no scene to build — they get their identity from the breathing gradient + question styling + hero animations (team intro, PYL).
+**The Law / Recipe / Acceptance Gate / motion vocabulary in this doc apply to the 8 bespoke themes only.** The 12 gradient themes have no scene to build — they get their identity from the breathing gradient + question styling + hero animations (team intro, PYL). Ring themes are governed by the ring-world docs instead (see below).
 
 ### BreathingGradient engine
 `client/src/components/display/BreathingGradient.jsx` — WAAPI 5-layer breathing gradient. Draws from `theme.colors` (bg/bgDeep = base wash, accent = mid glow bodies, highlight = highlight glow). One `mood` prop (`calm`/`warm`/`electric`) sets breath speed + spread. NO angle rotation — stop-shift + intensity pulse only. Always-present, the only continuous layer. Per-keyframe `ease-in-out` (NOT options-level — options-level puts peak velocity at the opacity crest and throbs). Test route: `/gradient`.
 
-Routing lives in `ParticleBackground.jsx`: a `GRADIENT_MOODS` map keys the 12 theme ids → mood. Render is `const gradientMood = GRADIENT_MOODS[theme.id]; gradientMood ? <BreathingGradient palette={theme.colors} mood={gradientMood}/> : AMBIENT_MAP[theme.id]`. Moods: calm = wine-cellar/drive-in-movie/medieval-tavern/western-showdown/firefly-summer; warm = dive-bar/jazz-club/christmas-eve; electric = retro-arcade/eighties-night/neon-tokyo/northern-lights.
+Routing lives in `ParticleBackground.jsx` and is a **three-way branch** over three sibling registries — `GRADIENT_MOODS` (12 ids → mood), `RING_WORLDS` (ring ids → worldData module), `AMBIENT_MAP` (8 ids → bespoke component). Render is `gradientMood ? <BreathingGradient palette={theme.colors} mood={gradientMood}/> : ringWorld ? <RingAmbient worldData={ringWorld} slideKey={slideKey}/> : AmbientComponent && <AmbientComponent tint={tint}/>`. Gradient wins first, ring second, bespoke last; a theme id must appear in at most one registry (a dev-only `console.warn` at module load flags any overlap). Moods: calm = wine-cellar/drive-in-movie/medieval-tavern/western-showdown/firefly-summer; warm = dive-bar/jazz-club/christmas-eve; electric = retro-arcade/eighties-night/neon-tokyo/northern-lights.
+
+### Ring-world engine
+`client/src/components/display/RingAmbient.jsx` — canvas-free DOM ring renderer driven by a `worldData` module in `client/src/worlds/*.ring.js` (currently only `midnightGalaxy.ring.js`). Takes `{ worldData, slideKey }`: it builds once on mount, then advances one station per *question* via its internal `turn()` whenever `slideKey` changes to a new distinct value (`undefined`/`null` = no real question yet, no turn). Adding a world is **one import + one `RING_WORLDS` entry** in `ParticleBackground.jsx` — provided the new world reuses the shared frame geometry: `ENGINE` (frame size, layer config, `SURGE_MS`) is module-scoped inside `RingAmbient.jsx`, not derived per-world, so a world that needs *different* geometry is a real change to `RingAmbient.jsx`, not a registry line. Full rules live in the `ring-world-continuity` skill + `concepts/`.
+
+**Ring worlds are palette-fixed by design.** They render their own fixed palette (per-station hues) from the worldData module and take no `tint`, so a host's per-show highlight/accent override does **not** retint a ring theme's ambient — it did with the old bespoke midnight-galaxy component, and that is an accepted trade-off of the Aug 2026 swap, not a bug. Threading `theme.colors` into ring rendering is a possible future task; it is not done here.
 
 ### Fixed-gold shiny signal
 Shiny question/title = **FIXED GOLD** `#f0d890` fill / `#d4820c` glow, constant across ALL themes (gold IS the shiny signal — not per-theme `shinyAccent` anymore). Plain question = theme text color. State of the Union = **fixed red-white-blue**, ignores `theme.colors`. The `grid` slide (Color Schemes) uses this fixed gold for its glow / ✨ badge / column-number chips.
@@ -292,18 +298,18 @@ not a wrong pipeline. Full background and worked examples:
      - **Carry color to the edges:** a lone centered dome fades the corners to black (rejected). Layer a wide low base ellipse under it — `radial-gradient(ellipse 135% 32% at 50% 105%, …)` — so color still reaches the corners while the center rises.
      - **Curve the light, keep the ground flat:** dome a glow / light pool (dance floor, horizon bloom); keep literal terrain (sand, ground) a flat gradient — a raised terrain mound reads as a weird hill (rejected on the sunset beach).
 
-`ParticleBackground` takes `{ theme }`. For the 12 gradient themes it renders `<BreathingGradient>` (see the rework section at top); for the 10 bespoke themes it looks up `AMBIENT_MAP[theme.id]`. Components render under one `absolute inset-0` wrapper.
+`ParticleBackground` takes `{ theme, slideKey }`. For the 12 gradient themes it renders `<BreathingGradient>`; for a ring theme it renders `<RingAmbient>` with that theme's worldData plus `slideKey`; for the 8 bespoke themes it looks up `AMBIENT_MAP[theme.id]` (see the rework section at top). Components render under one `absolute inset-0` wrapper.
 
 ---
 
-## The Themes (10 bespoke + 12 gradient)
+## The Themes (8 bespoke + 1 ring + 12 gradient)
 
 Defined in `themes/index.js`, in this order:
 
 | Theme ID | Path | Character | Signature anchor |
 |----------|------|-----------|------------------|
 | `pure-michigan` ★ | Bespoke | Dark lake night | Green firefly pulse dots over lake glow |
-| `midnight-galaxy` ✓ | Bespoke | Deep space | Purple + magenta nebula clouds + star field |
+| `midnight-galaxy` | Ring | Deep space | `RingAmbient` + `midnightGalaxy.ring.js` — orbital ring world, advances one station per question |
 | `autumn-harvest` ★ | Bespoke | Forest fire evening | Falling leaves + embers + hearth flicker |
 | `northern-lights` | Gradient | Arctic sky | Wavy SVG aurora curtains |
 | `medieval-tavern` | Gradient | Stone tavern | Torch side-glows + hearth flicker |
@@ -324,7 +330,7 @@ Defined in `themes/index.js`, in this order:
 | `meteor-shower` ✓ | Bespoke | Clear night sky | Star field + meteor streaks |
 | `eighties-night` | Gradient | Retrowave | Pink top + teal bottom + grid lines |
 
-★ = confirmed-good, leave alone. ✓ = bland-pass rework shipped. ⟳ = rework in progress. Unmarked = bland-pass queue. **These markers apply to the 9 BESPOKE themes only** — the 12 GRADIENT themes retired their bespoke scene in the July 2026 rework and carry no rework status; see the Path column.
+★ = confirmed-good, leave alone. ✓ = bland-pass rework shipped. ⟳ = rework in progress. Unmarked = bland-pass queue. **These markers apply to the 8 BESPOKE themes only** — the 12 GRADIENT themes retired their bespoke scene in the July 2026 rework, and midnight-galaxy moved to the RING path in Aug 2026; neither carries a rework status. See the Path column.
 
 > **Count note:** the pre-audit "29" was wrong — eight themes (`speakeasy`, `solar-flare`, `nebula-dreams`, `vinyl-night`, `haunted-mansion`, `karaoke-night`, `aurora-borealis`, `oktoberfest`) were **merged** into neighbors, not cut. The real count is **21**, sourced from `themes/index.js`.
 

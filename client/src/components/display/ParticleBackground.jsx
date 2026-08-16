@@ -1155,8 +1155,14 @@ const AMBIENT_MAP = {
 // Plug-and-play: every ring-based ambient (built on RingAmbient.jsx +
 // ringEngine.js/ringPrimitives.js, the same way midnightGalaxyRing was)
 // registers here by theme id -> its worldData module. Adding a new one is
-// exactly one entry, no other change in this file — RING_WORLDS[theme.id]
-// below is what routes a theme to RingAmbient instead of AMBIENT_MAP.
+// one import + one registry entry, no other change in this file —
+// RING_WORLDS[theme.id] below is what routes a theme to RingAmbient
+// instead of AMBIENT_MAP.
+// Caveat on "plug-and-play": ENGINE (frame geometry, layer config,
+// SURGE_MS) is module-scoped inside RingAmbient.jsx, not derived per-world.
+// A world that reuses that geometry really is a two-line drop-in; one that
+// needs different geometry is a change to RingAmbient.jsx, not just a
+// registry entry.
 const RING_WORLDS = {
   'midnight-galaxy': midnightGalaxyRing,
 }
@@ -1181,6 +1187,18 @@ const GRADIENT_MOODS = {
   'eighties-night':   'electric',
   'neon-tokyo':       'electric',
   'northern-lights':  'electric',
+}
+
+// Dev-only: the render branch below is ordered gradient > ring > bespoke, so
+// a theme id listed in two registries silently renders the earlier one and
+// the later entry looks broken for no visible reason. Warn once at module
+// load; `import.meta.env.DEV` is statically false in the prod build, so this
+// whole block is dropped by the bundler.
+if (import.meta.env.DEV) {
+  const overlaps = Object.keys(RING_WORLDS).filter(id => AMBIENT_MAP[id] || GRADIENT_MOODS[id])
+  if (overlaps.length) {
+    console.warn('[ParticleBackground] theme id in more than one ambient registry — only the first branch renders:', overlaps)
+  }
 }
 
 // ─── Main Export ──────────────────────────────────────────────────────────

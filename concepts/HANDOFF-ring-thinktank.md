@@ -187,7 +187,7 @@ to 73.
 
 `ringPrimitives.js:640-643` ships "one trackable drifter" at **3,600px over 480s = 7.5 px/s** on a
 **14px** object. The approved band (`S2-engine.md:222`) is **2–5 drifters, ≥22px, crossing frame in
-60–150s**. The shipped `MidnightGalaxyAmbient` satellite it replaced is ~5× faster.
+60–150s**. The `MidnightGalaxyAmbient` satellite it replaced was ~5× faster (that component was deleted 2026-08-14 when midnight-galaxy moved to the ring renderer).
 
 Cause is a two-spec conflict: `ART-DIRECTION-SPEC.md:325-326` says 4–12 minutes;
 `S2-engine.md:588` explicitly names that figure superseded. Both files are live. Resolve it and delete
