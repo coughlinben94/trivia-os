@@ -21,13 +21,29 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 # ring-verify.mjs (concepts/ART-DIRECTION-SPEC.md gate) — runs on every ship
-# so it can't silently rot unrun (a gate nobody runs does not exist). NOT
-# blocking yet: RingAmbient.jsx is not mounted in production (dev-only
-# /ambient preview route), and known spec-conformance gaps are open, tracked
-# work (concepts/HANDOFF-ring-thinktank.md order-of-work, steps 5-11).
-# Regression-tier failures (structural/engine correctness, not art-direction
-# polish) are worth eyeballing here even so — this step never fails the ship.
-echo "ship: running ring-verify (non-blocking, see concepts/HANDOFF-ring-thinktank.md)..."
+# so it can't silently rot unrun (a gate nobody runs does not exist).
+#
+# 2026-08-16: RingAmbient IS now mounted in production (client/src/views/
+# Display.jsx -> ParticleBackground.jsx's RING_WORLDS registry, midnight-
+# galaxy theme) — the "dev-only /ambient preview route" reason this step
+# used to be non-blocking no longer applies. A ring-verify regression is now
+# a real production-visible bug on any live show using that theme, not
+# dev-only noise.
+#
+# STILL NOT BLOCKING, for a different reason: a real run at mount time found
+# the REGRESSION tier itself (the "must always be green" structural-
+# correctness tier, not the separate spec-conformance/art-direction tier
+# covered by HANDOFF-ring-thinktank.md's tracked order-of-work) is currently
+# failing — 5/34 regression-tier checks red, incl. the safe-box luminance
+# cap on 2 of 12 stations (st0, st11) and a stray-Math.random() static
+# check. Confirmed pre-existing (not introduced by the mount — matched
+# within 1-3pts against the pre-mount build) but genuinely broken, not
+# flaky. Flipping this to blocking today would fail EVERY future `npm run
+# ship` — for any change, ring-related or not — until those are fixed.
+# Leave non-blocking until Ben has made a call on those 2 stations; flip to
+# blocking once the regression tier is actually green, so it becomes a real
+# gate instead of a gate that's already red on day one.
+echo "ship: running ring-verify (non-blocking — see this step's own comment for why)..."
 npm run verify:ring || echo "ship: ring-verify reported FAIL — not blocking ship, see output above"
 
 PREVIEW_PORT=4173
