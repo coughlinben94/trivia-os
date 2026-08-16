@@ -56,6 +56,27 @@ const BG_FIXED = '#000000'
 const STAR_ACCENT_FIXED = '#3a3a3a'
 const STAR_HIGHLIGHT_FIXED = '#e8e8e8'
 
+// Deterministic seeded shuffle (mulberry32 + Fisher-Yates) — same seed
+// always produces the same order, so a reload or Stream Deck back/forward
+// over the sequence doesn't reshuffle teams the host has already announced.
+function seededShuffle(arr, seedStr) {
+  let seed = 0;
+  for (const ch of String(seedStr)) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  const rand = () => {
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 function hexToRgb(hex) {
   const n = parseInt(String(hex).replace('#', ''), 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
@@ -120,15 +141,23 @@ export default function TeamPickerSlide({ slide, show }) {
     a.play().catch(() => {});
   }, []);
 
-  // live from teams table, baked on mount (everyone who scanned the QR)
+  // live from teams table, baked on mount (everyone who scanned the QR).
+  // Shuffled, not registration order — reading them off in signup order
+  // isn't the point, a shuffle is. Seeded off slide.id so the order is
+  // stable across a reload or Stream Deck back/forward instead of
+  // reshuffling every time this effect re-runs.
   useEffect(() => {
     if (!show?.id) return;
     let ok = true;
     supabase.from('teams').select('name').eq('show_id', show.id)
       .order('registered_at', { ascending: true })
-      .then(({ data }) => { if (ok) setTeams((data || []).map((r) => r.name).filter(Boolean)); });
+      .then(({ data }) => {
+        if (!ok) return;
+        const names = (data || []).map((r) => r.name).filter(Boolean);
+        setTeams(seededShuffle(names, slide?.id ?? show.id));
+      });
     return () => { ok = false; };
-  }, [show?.id]);
+  }, [show?.id, slide?.id]);
 
   useEffect(() => {
     let ok = true;
