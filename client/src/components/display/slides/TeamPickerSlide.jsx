@@ -1,10 +1,50 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { supabase } from '../../../lib/supabase.js';
 import { useTheme } from '../../shared/ThemeProvider.jsx';
+import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js';
 import BaynesWatermark from '../BaynesWatermark.jsx';
 
 const DISP_CAP = 150, SS = 1.6;
 const CAP = DISP_CAP * SS, MAXW = 1520 * SS;
+
+// ─── Ring-world reveal ─────────────────────────────────────────────────────
+// Once the warp has decelerated to a real stop, the black canvas itself lifts
+// off the top of the stage, revealing the ring-world ambient that has been
+// running full-viewport behind this slide the whole time (already on its
+// default station — nothing is jumped or re-aimed). "Round 1" then lands as
+// its own announcement beat over the revealed world.
+//
+// SETTLED_WARP: `warp` is eased toward 0 by 0.045/frame once the target item
+// is 'landed', so it decays asymptotically and never actually hits 0. Below
+// 0.02 the star field is visually stopped (the draw loop itself already
+// switches streaks back to dots under 0.03). Read live off the loop rather
+// than timed from `landed` — `landed` fires when the outro text finishes
+// exiting, ~0.8s BEFORE the stars have actually come to rest.
+const SETTLED_WARP = 0.02;
+// Ceremonial reveal, not a UI transition — deliberately slower than the
+// app's 150-250ms interaction range. EASE_PANEL is this repo's drawer/sheet
+// curve, which is exactly what this motion is: a black sheet sliding away.
+const REVEAL_S = 0.85;
+const REVEAL_VARIANTS = {
+  here: { transform: 'translateY(0%)', opacity: 1 },
+  gone: {
+    transform: 'translateY(-100%)',
+    opacity: 0,
+    transition: {
+      transform: { duration: REVEAL_S, ease: EASE_PANEL },
+      // Fades only on the tail of the wipe — a full-length crossfade would
+      // muddy the world showing through a half-transparent black panel.
+      opacity: { duration: 0.3, delay: REVEAL_S - 0.3, ease: 'linear' },
+    },
+  },
+};
+// Reduced motion: the reveal still has to happen (it carries real
+// information — the show is moving on), just without the vertical travel.
+const REVEAL_VARIANTS_REDUCE = {
+  here: { opacity: 1 },
+  gone: { opacity: 0, transition: { duration: 0.45, ease: EASE_OUT } },
+};
 
 // Background + starfield are fixed regardless of show theme — black
 // background, grayscale-to-white stars — so the warp intro reads as a
@@ -106,14 +146,24 @@ export default function TeamPickerSlide({ slide, show }) {
   // replays the current item's approach instead of flash-exiting a wrong one.
   const ctl = useRef({ seq, theme, reduce, displayedIdx: currentPart, targetIdx: currentPart });
   const [hudIdx, setHudIdx] = useState(currentPart);
-  const [landed, setLanded] = useState(seq[currentPart]?.kind === 'landed');
+  // settled: warp has actually decayed to a stop (see SETTLED_WARP) — starts
+  // the reveal. revealed: the black canvas has finished sliding away — starts
+  // the Round 1 beat and lets the draw loop shut down.
+  const [settled, setSettled] = useState(false);
+  const [revealed, setRevealed] = useState(false);
 
   useEffect(() => { ctl.current.seq = seq; }, [seq]);
   useEffect(() => { ctl.current.theme = theme; spriteCache.current.clear(); }, [theme]);
   // Authoritative target from Supabase — the draw loop below reacts to this
   // changing (in either direction) by exiting whatever's on screen and
   // approaching the new target once the exit completes.
-  useEffect(() => { ctl.current.targetIdx = Math.min(currentPart, seq.length - 1); }, [currentPart, seq.length]);
+  // `restart` is a no-op unless the loop shut itself down after the reveal —
+  // backing out of 'landed' (Stream Deck back) has to bring the star field
+  // and the canvas back, so the loop can't be a one-way door.
+  useEffect(() => {
+    ctl.current.targetIdx = Math.min(currentPart, seq.length - 1);
+    ctl.current.restart?.();
+  }, [currentPart, seq.length]);
 
   const getSprite = (it) => {
     const th = ctl.current.theme;
@@ -143,6 +193,7 @@ export default function TeamPickerSlide({ slide, show }) {
     const S0 = 0.03;
     const easeInOut = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
     let phase = 'approach', pt = 0, warp = c.reduce ? 0.12 : 0, last = performance.now(), raf;
+    let settledFired = false;
     const beginItem = () => { phase = 'approach'; pt = 0; };
 
     const draw = (now) => {
@@ -158,7 +209,6 @@ export default function TeamPickerSlide({ slide, show }) {
         if (c.seq[c.displayedIdx]?.kind === 'landed') {
           c.displayedIdx = c.targetIdx;
           setHudIdx(c.displayedIdx);
-          setLanded(false);
           beginItem();
         } else if (phase !== 'exit') { phase = 'exit'; pt = 0; }
       }
@@ -176,6 +226,18 @@ export default function TeamPickerSlide({ slide, show }) {
       } else {
         const warpTarget = c.seq[c.targetIdx]?.kind === 'landed' ? 0 : 1;
         warp += (warpTarget - warp) * 0.045 * dtn;
+      }
+      // Settled = we're resting on 'landed' with nothing pending AND the star
+      // field has actually stopped. Under reduced motion warp is pinned at
+      // 0.12 forever, so 'landed' alone is the signal there. Checking the
+      // displayed item (not `phase`) also covers a reload straight into the
+      // landed part, where `phase` never passes through 'done'.
+      const atRest = c.seq[c.displayedIdx]?.kind === 'landed' && c.targetIdx === c.displayedIdx;
+      const nowSettled = atRest && (c.reduce || warp < SETTLED_WARP);
+      if (nowSettled !== settledFired) {
+        settledFired = nowSettled;
+        setSettled(nowSettled);
+        if (!nowSettled) setRevealed(false);
       }
       const base = 0.019 * warp;
       dctx.fillStyle = `rgba(${bg.r},${bg.g},${bg.b},${c.reduce ? 1 : 0.30})`;
@@ -220,8 +282,8 @@ export default function TeamPickerSlide({ slide, show }) {
           if (q >= 1) {
             c.displayedIdx = c.targetIdx;
             setHudIdx(c.displayedIdx);
-            if (c.seq[c.displayedIdx]?.kind === 'landed') { phase = 'done'; setLanded(true); }
-            else { setLanded(false); beginItem(); }
+            if (c.seq[c.displayedIdx]?.kind === 'landed') phase = 'done';
+            else beginItem();
           }
         }
         if (c.reduce) { disp = 1; op = Math.min(1, pt / 260); }
@@ -232,25 +294,105 @@ export default function TeamPickerSlide({ slide, show }) {
           dctx.globalAlpha = 1;
         }
       }
+      if (!c.stopped) raf = requestAnimationFrame(draw);
+    };
+    // Painting a canvas nobody can see costs the ring world frames for the
+    // rest of the Round 1 beat — `c.stopped` is set once the reveal finishes
+    // and cleared by `restart` if the host backs out of 'landed'.
+    c.restart = () => {
+      if (!c.stopped) return;
+      c.stopped = false;
+      last = performance.now();
       raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
+    return () => { cancelAnimationFrame(raf); c.restart = null; };
   }, []); // eslint-disable-line
 
   const cur = seq[hudIdx];
 
   return (
     <div className="absolute inset-0 overflow-hidden">
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
-      {landed ? (
-        <div className="absolute bottom-10 inset-x-0 text-center" style={{ fontFamily: font, letterSpacing: 5, color: theme.colors.highlight, opacity: 0.35, fontSize: 24, textTransform: 'uppercase' }}>Round 1</div>
+      {/* The canvas keeps its own fixed 1920x1080 backing store and CSS
+          fill — the wrapper only ever moves/fades, so none of that sizing
+          logic is disturbed. */}
+      <motion.div
+        className="absolute inset-0"
+        initial={false}
+        animate={settled ? 'gone' : 'here'}
+        variants={reduce ? REVEAL_VARIANTS_REDUCE : REVEAL_VARIANTS}
+        onAnimationComplete={() => {
+          if (!settled) return;
+          setRevealed(true);
+          ctl.current.stopped = true;
+        }}
+      >
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+      </motion.div>
+      {revealed ? (
+        <RoundOneBeat theme={theme} font={font} reduce={reduce} />
       ) : cur?.kind === 'team' ? (
         <div className="absolute bottom-10 inset-x-0 text-center" style={{ fontFamily: font, letterSpacing: 4, color: theme.colors.highlight, opacity: 0.5, fontSize: 26 }}>
           {String(hudIdx).padStart(2, '0')} / {String(teamCount).padStart(2, '0')}
         </div>
       ) : null}
       <BaynesWatermark />
+    </div>
+  );
+}
+
+// The "Round 1" beat that replaces the old quiet bottom-corner label. Timing
+// and motion are lifted from RoundIntroSlide (spring slam on the number, a
+// kicker sliding up behind it) so a round starting looks the same here as it
+// does when a real round-intro slide does it — see that file, this is
+// deliberately its visual language, not a third one. What it does NOT copy is
+// that slide's opaque themed background and logo: this beat plays ON TOP of
+// the ring world we just revealed, so it stays transparent and leans on a
+// dark radial scrim for legibility over whatever the world is doing.
+// ponytail: "Round 1" is hardcoded, exactly as the label it replaces was —
+// this slide has no round data of its own, and the team intro only ever
+// precedes round 1.
+function RoundOneBeat({ theme, font, reduce }) {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+      <motion.div
+        className="absolute inset-0"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.45, ease: EASE_OUT }}
+        style={{ background: 'radial-gradient(ellipse 58% 62% at 50% 50%, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.26) 46%, transparent 78%)' }}
+      />
+      <motion.div
+        initial={reduce ? { opacity: 0 } : { opacity: 0, transform: 'translateY(26px)' }}
+        animate={{ opacity: 0.75, transform: 'translateY(0px)' }}
+        transition={{ duration: 0.3, ease: EASE_OUT }}
+        className="relative z-10"
+        style={{ fontFamily: font, color: theme.colors.text, fontSize: 'clamp(1.4rem, 2.4vw, 2.4rem)', letterSpacing: '0.42em', textIndent: '0.42em', textTransform: 'uppercase' }}
+      >
+        Round
+      </motion.div>
+      <motion.div
+        initial={reduce ? { opacity: 0 } : { opacity: 0, transform: 'scale(2.6)' }}
+        animate={{ opacity: 1, transform: 'scale(1)' }}
+        transition={reduce
+          ? { duration: 0.3, delay: 0.1, ease: EASE_OUT }
+          // Spring on the scale only — springing the opacity too would ramp
+          // it in over the spring's whole settle, and the number would read
+          // as fading up rather than landing.
+          : { default: { type: 'spring', duration: 0.5, bounce: 0.25, delay: 0.12 }, opacity: { duration: 0.18, delay: 0.12, ease: EASE_OUT } }}
+        className="relative z-10"
+        style={{
+          fontFamily: font,
+          color: theme.colors.highlight,
+          fontSize: 'clamp(6rem, 20vw, 18rem)',
+          lineHeight: 0.9,
+          fontWeight: 700,
+          letterSpacing: '-0.04em',
+          textShadow: `0 0 48px ${theme.colors.accent}, 0 0 120px ${theme.colors.accent}88`,
+        }}
+      >
+        1
+      </motion.div>
     </div>
   );
 }

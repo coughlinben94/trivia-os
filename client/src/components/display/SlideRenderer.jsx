@@ -164,11 +164,19 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
 
   return (
     <>
-      {/* Background — locked, never animates, instant color update */}
-      <div
-        className="absolute inset-0"
-        style={{ background: theme.colors.bgDeep, zIndex: 0 }}
-      />
+      {/* Background — locked, never animates, instant color update.
+          team-picker is the one exception: it paints its own opaque black
+          canvas over the whole stage, and at the end of its sequence that
+          canvas slides away to reveal the ambient world running behind the
+          stage. An opaque layer here would be what gets revealed instead of
+          the world, so this slide type gets no locked background — nothing
+          else about the ambient mount changes. */}
+      {slide?.type !== 'team-picker' && (
+        <div
+          className="absolute inset-0"
+          style={{ background: theme.colors.bgDeep, zIndex: 0 }}
+        />
+      )}
 
       {/* Content — animates in/out over the locked background */}
       <motion.div
