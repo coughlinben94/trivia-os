@@ -13,7 +13,7 @@ import JukeboxBreakOverlay from '../components/display/JukeboxBreakOverlay.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import StageFrame from '../display/StageFrame.jsx'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
-import { resolveShinyPart } from '../lib/shinySeries.js'
+import { resolveShinyPart, isWagerShiny } from '../lib/shinySeries.js'
 import { EASE_OUT } from '../lib/easings.js'
 import { resolvePreviewShow } from '../lib/previewSlide.js'
 
@@ -262,9 +262,16 @@ function AnswerRevealOverlay({ show, currentSlide }) {
   // this specific part doesn't have its own — see resolveShinyPart.
   const answer = currentSlide ? resolveShinyPart(currentSlide.data).answer : null
 
+  // A wager question's `answer` is the true NUMBER every guess is scored
+  // against, and it must not appear before the host locks and reveals — an
+  // accidental Stream Deck "A" during the blind-wager beat would spoil the
+  // whole round. The mechanic has its own reveal, so this generic overlay is
+  // suppressed on wager slides outright rather than merely phase-gated.
+  const suppressed = currentSlide ? isWagerShiny(currentSlide.data) : false
+
   return (
     <AnimatePresence>
-      {visible && answer && (
+      {visible && answer && !suppressed && (
         <motion.div
           key="answer-overlay"
           initial={{ opacity: 0 }}

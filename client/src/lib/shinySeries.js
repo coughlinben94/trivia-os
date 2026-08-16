@@ -59,3 +59,7 @@ export function isVideoShiny(data) {
 export function isMatchingShiny(data) {
   return data.shinyInputSchema?.type === 'matching'
 }
+
+export function isWagerShiny(data) {
+  return data.shinyInputSchema?.type === 'wager'
+}

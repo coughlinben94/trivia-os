@@ -5,8 +5,9 @@ import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
-import { resolveShinyPart, isMatchingShiny } from '../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny, isWagerShiny } from '../lib/shinySeries.js'
 import MatchingBoard from '../components/join/MatchingBoard.jsx'
+import WagerBoard from '../components/join/WagerBoard.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
 import { EASE_OUT, EASE_PANEL, EASE_BAR } from '../lib/easings.js'
@@ -359,6 +360,12 @@ function SlideContent({ slide, show, theme, team }) {
       }
       if (d.isShiny && isMatchingShiny(d)) {
         return <MatchingBoard slide={slide} team={team} theme={theme} />
+      }
+      // WagerBoard owns the whole question surface, including the prompt —
+      // it must not fall through to the plain text render below, or the
+      // question would be readable during the blind-wager phase.
+      if (d.isShiny && isWagerShiny(d)) {
+        return <WagerBoard slide={slide} team={team} theme={theme} />
       }
       const part = resolveShinyPart(d)
       return (

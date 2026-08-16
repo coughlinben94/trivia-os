@@ -270,7 +270,11 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
         // multi-slot shape for audio/video formats that never got migrated
         // to concurrent.
         const totalSlots = selectedShinyFmt.input_schema?.slots ?? 1
-        const isMultiSlot = totalSlots > 1
+        // A wager question is always one prompt and one true number, so it
+        // stays on the flat shape no matter what asset count the format
+        // carries. The multi-slot `parts` shape would leave WagerBoard and
+        // ShinyWagerQuestion reading an empty data.text.
+        const isMultiSlot = totalSlots > 1 && selectedShinyFmt.input_schema?.type !== 'wager'
         data = {
           questionNumber:   qNum,
           questionLabel:    `Q${qNum}`,

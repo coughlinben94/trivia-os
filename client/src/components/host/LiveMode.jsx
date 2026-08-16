@@ -1,12 +1,13 @@
 import { useEffect, useCallback, useState } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
-import { resolveShinyPart, isMatchingShiny } from '../../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny, isWagerShiny } from '../../lib/shinySeries.js'
 import ScorePanel from './ScorePanel.jsx'
 import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
 import { supabase } from '../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
 import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
+import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 
 const SLIDE_META = {
   'title':             { label: 'Title',       color: 'bg-purple-100 text-purple-700' },
@@ -25,6 +26,14 @@ const SLIDE_META = {
 
 function typeMeta(type) {
   return SLIDE_META[type] ?? { label: type, color: 'bg-gray-100 text-gray-600' }
+}
+
+// Which scoreboard column a phone-scored slide folds into — its own round, or
+// the bonus column if the slide somehow has no round. Same rule the matching
+// lock uses inline; shared here so both phone mechanics can't drift apart.
+function roundKeyFor(show, slide) {
+  const round = show.rounds.find(r => r.id === slide.roundId)
+  return round ? `r_${round.id}` : 'bonus'
 }
 
 function counterLabel(slide, index, total, show) {
@@ -186,6 +195,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [pylPickerBusy, setPylPickerBusy] = useState(false)
   const [matchingBusy, setMatchingBusy] = useState(false)
   const [matchingScoreError, setMatchingScoreError] = useState(null)
+  const [wagerBusy, setWagerBusy] = useState(false)
+  const [wagerError, setWagerError] = useState(null)
 
   const slides = sortedSlides(show)
   const currentIndex = show.showState.currentSlideIndex ?? 0
@@ -280,6 +291,111 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true, matchingRevealed: true } })
     } finally {
       setMatchingBusy(false)
+    }
+  }
+
+  // ── Wager question: two locks, in order ────────────────────────────────
+  //
+  // Lock 1 (wagers) is what makes the blind wager real. It SNAPSHOTS every
+  // team's chosen tier onto the slide, and scoring below reads only that
+  // snapshot — never the live phone_answers row. phone_answers is
+  // public-update by design (it's the phone's own data), so without the
+  // snapshot a team could rewrite its tier after seeing the question and the
+  // host would score the rewrite. A team with no snapshot entry (joined late,
+  // never wagered) is scored at Safe, the spec's implicit no-risk default.
+  async function handleLockWagers(slide) {
+    setWagerBusy(true)
+    setWagerError(null)
+    try {
+      const { data: answers, error } = await supabase
+        .from('phone_answers')
+        .select('team_id, answer')
+        .eq('slide_id', slide.id)
+      if (error) { console.error('phone_answers fetch failed:', error); setWagerError('Couldn’t read wagers — check connection and retry'); return }
+
+      const wagerTiers = {}
+      for (const row of answers ?? []) {
+        if (row.answer?.tier) wagerTiers[row.team_id] = row.answer.tier
+      }
+      await actions.updateSlide(slide.id, { data: { ...slide.data, wagerTiersLocked: true, wagerTiers } })
+    } finally {
+      setWagerBusy(false)
+    }
+  }
+
+  // Lock 2 (guesses) closes submissions and scores. Same shape as the matching
+  // lock: the lock flag is written first and stays written even if scoring
+  // fails, and the button stays available as "Retry Scoring" until the slide
+  // is revealed, so a transient failure never strands the slide.
+  async function handleLockAndScoreWagers(slide) {
+    setWagerBusy(true)
+    setWagerError(null)
+    try {
+      if (parseWagerNumber(slide.data.answer) == null) {
+        setWagerError('This slide’s Answer isn’t a number — fix it in the slide editor, then score')
+        return
+      }
+      if (!slide.data.wagerGuessesLocked) {
+        await actions.updateSlide(slide.id, { data: { ...slide.data, wagerGuessesLocked: true } })
+      }
+
+      const { data: answers, error: fetchError } = await supabase
+        .from('phone_answers')
+        .select('team_id, answer')
+        .eq('slide_id', slide.id)
+      if (fetchError) { console.error('phone_answers fetch failed:', fetchError); setWagerError('Scoring failed — check connection and retry'); return }
+
+      const { data: teams, error: teamsError } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('show_id', show.id)
+      if (teamsError) { console.error('teams fetch failed:', teamsError); setWagerError('Scoring failed — check connection and retry'); return }
+
+      const { data: scoreboardTeams, error: sbError } = await supabase
+        .from('scoreboard_teams')
+        .select('id, show_id, name, scores, sort_order')
+        .eq('show_id', show.id)
+      if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); setWagerError('Scoring failed — check connection and retry'); return }
+
+      // Every registered team gets an entry, not just the ones that submitted
+      // — a team that never guessed is a real 0 that should be written to the
+      // scoreboard and shown in the reveal, not silently skipped.
+      const guessByTeam = new Map((answers ?? []).map(r => [r.team_id, r.answer?.guess]))
+      const tierSnapshot = slide.data.wagerTiers ?? {}
+      const entries = (teams ?? []).map(t => ({
+        teamId: t.id,
+        teamName: t.name,
+        tier: tierSnapshot[t.id] ?? DEFAULT_TIER_ID,
+        guess: guessByTeam.get(t.id),
+      }))
+
+      const results = scoreWagerRound({ entries, correctAnswer: slide.data.answer })
+      const updates = computeWagerScoreUpdates({ results, teams, scoreboardTeams, roundKey: roundKeyFor(show, slide) })
+
+      if (entries.length > 0 && updates.length === 0) {
+        setWagerError('No teams could be matched to the scoreboard — check team names match, then retry')
+        return
+      }
+
+      if (updates.length > 0) {
+        const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
+        if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setWagerError('Scoring failed — check connection and retry'); return }
+      }
+
+      await actions.updateSlide(slide.id, {
+        data: {
+          ...slide.data,
+          wagerGuessesLocked: true,
+          wagerRevealed: true,
+          // What the TV reveal renders. Kept deliberately small — no team ids,
+          // no beatFraction — so the slides jsonb doesn't bloat.
+          wagerResults: results.map(r => ({
+            teamName: r.teamName, guess: r.guess, tier: r.tier, points: r.points, won: r.won,
+          })),
+        },
+      })
+    } finally {
+      setWagerBusy(false)
     }
   }
 
@@ -439,6 +555,38 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
               </button>
               {matchingScoreError && (
                 <p className="text-xs text-red-600 mt-2 text-center">{matchingScoreError}</p>
+              )}
+            </div>
+          )}
+
+          {currentSlide?.type === 'question' && isWagerShiny(currentSlide?.data) && !currentSlide?.data?.wagerRevealed && (
+            <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
+              <p className="text-xs text-gray-400 mb-3">
+                {!currentSlide?.data?.wagerTiersLocked
+                  ? 'Wager question — teams are picking a risk tier. The question is hidden everywhere until you lock.'
+                  : 'Wagers locked — the question is up and teams are entering numbers.'}
+              </p>
+              <button
+                onClick={() => (currentSlide?.data?.wagerTiersLocked
+                  ? handleLockAndScoreWagers(currentSlide)
+                  : handleLockWagers(currentSlide))}
+                disabled={wagerBusy}
+                className={`w-full py-3 rounded-xl border-2 font-semibold text-sm transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
+                  wagerBusy
+                    ? 'border-gray-100 text-gray-300 cursor-not-allowed'
+                    : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'
+                }`}
+              >
+                {wagerBusy
+                  ? 'Working…'
+                  : !currentSlide?.data?.wagerTiersLocked
+                    ? '🎲 Lock Wagers & Reveal Question'
+                    : currentSlide?.data?.wagerGuessesLocked
+                      ? '🔁 Retry Scoring'
+                      : '🔒 Lock Answers & Score'}
+              </button>
+              {wagerError && (
+                <p className="text-xs text-red-600 mt-2 text-center">{wagerError}</p>
               )}
             </div>
           )}

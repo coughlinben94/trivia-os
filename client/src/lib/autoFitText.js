@@ -63,6 +63,12 @@ export const REVEAL_CEIL  = 10
 export const VISUAL_CAPTION_FLOOR = 1.5
 export const VISUAL_CAPTION_CEIL  = 3.5
 
+// A wager question's prompt — the only content on the screen during the guess
+// phase (the tier strip and submitted-count are chrome), so it can run larger
+// than an ordinary question, but it's a full sentence, not a title.
+export const WAGER_Q_FLOOR = 1.8
+export const WAGER_Q_CEIL  = 4.6
+
 /* ── font-agnostic measure-to-fit ──────────────────────────────────────────
    Measures real glyph width instead of counting chars, so it snaps correctly
    for ANY display font. Retires the per-surface *_TIERS tables. */
