@@ -9,7 +9,7 @@ import { resolveShinyPart, isMatchingShiny } from '../lib/shinySeries.js'
 import MatchingBoard from '../components/join/MatchingBoard.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
-import { EASE_OUT, EASE_PANEL } from '../lib/easings.js'
+import { EASE_OUT, EASE_PANEL, EASE_BAR } from '../lib/easings.js'
 
 // ─── localStorage ─────────────────────────────────────────────────────────────
 function getTeamKey(showId) { return `trivia-os:team:${showId}` }
@@ -477,6 +477,12 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
 
   const myNameNorm = (myTeamName ?? '').trim().toLowerCase()
 
+  // Bar length IS the score — every bar is measured against the current
+  // leader's, so the leader's is always full and everyone else reads as a
+  // fraction of it at a glance. Phone stays team + total only (no round
+  // breakdown) — that's the TV board's job.
+  const leaderTotal = Math.max(1, ...teams.map(t => t.total ?? 0))
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -555,39 +561,92 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
               </p>
             )
             : teams.map((t, i) => {
-                const isMe   = t.name.trim().toLowerCase() === myNameNorm
-                const medal  = MEDALS[i] ?? null
+                const isMe     = t.name.trim().toLowerCase() === myNameNorm
+                const medal    = MEDALS[i] ?? null
+                const isLeader = i === 0
+                // A 2% floor keeps a zero-score row from reading as a render
+                // bug — it's a nub, not a bar.
+                const pct = Math.max(2, ((t.total ?? 0) / leaderTotal) * 100)
 
                 return (
                   <motion.div
                     key={t.id}
+                    // `layout="position"` = the pass. When a fetch reorders the
+                    // list, rows slide past each other instead of teleporting.
+                    // Position-only so the animated bar width inside never gets
+                    // scale-corrected by the projection.
+                    layout={pref ? false : 'position'}
                     initial={pref ? { opacity: 0 } : { y: 12, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: pref ? 0 : 0.055 * i, duration: 0.22, ease: EASE_OUT }}
+                    transition={{
+                      delay: pref ? 0 : 0.055 * i, duration: 0.22, ease: EASE_OUT,
+                      layout: { duration: 0.45, ease: EASE_PANEL },
+                    }}
                     style={{
                       borderRadius: 10, padding: '0.75rem 0.875rem',
                       background: isMe ? `${accent}25` : 'rgba(255,255,255,0.05)',
                       border: `1px solid ${isMe ? `#f5c842` : 'transparent'}`,
                       boxShadow: isMe ? `0 0 0 1px #f5c84222` : 'none',
                       position: 'relative', overflow: 'hidden',
+                      // Row sits in a flex-column scroll container. Without this,
+                      // the browser's default flex-shrink:1 crushes every row to
+                      // fit the visible area instead of letting the container
+                      // scroll — on any phone short on vertical room (most of
+                      // them, with >8 teams) every row's text and score collapse
+                      // into an illegible, overlapping mess. flexShrink: 0 forces
+                      // rows to their natural height and lets overflowY: auto do
+                      // its actual job.
+                      flexShrink: 0,
                     }}
                   >
+                    {/* The bar. Transparent at the left, bright at the right —
+                        the fade IS the comet trail; the leader gets the head. */}
+                    <motion.div
+                      aria-hidden
+                      initial={pref ? false : { width: 0 }}
+                      animate={{ width: `${pct}%` }}
+                      transition={pref ? { duration: 0 } : { duration: 0.6, ease: EASE_BAR, delay: 0.08 + 0.05 * i }}
+                      style={{
+                        position: 'absolute', left: 0, top: 0, bottom: 0,
+                        borderRadius: 10,
+                        background: isLeader
+                          ? `linear-gradient(90deg, ${accent}00 0%, ${accent}b3 50%, ${highlight}99 100%)`
+                          : `linear-gradient(90deg, ${accent}00 0%, ${accent}80 100%)`,
+                        boxShadow: isLeader ? `0 0 20px ${highlight}44` : 'none',
+                      }}
+                    >
+                      {isLeader && !pref && (
+                        <motion.span
+                          animate={{ opacity: [0.4, 1, 0.4] }}
+                          transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                          style={{
+                            position: 'absolute', right: -3, top: 0, bottom: 0, width: 9,
+                            borderRadius: 9, background: highlight, filter: 'blur(3px)',
+                          }}
+                        />
+                      )}
+                    </motion.div>
+
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'relative' }}>
                       <span style={{ fontSize: '1.05rem', width: 24, textAlign: 'center', flexShrink: 0 }}>
-                        {medal ?? <span style={{ color: `${text}30`, fontSize: '0.8rem', fontWeight: 700 }}>{i + 1}</span>}
+                        {/* Bumped from 30 → 70: the rank now sits on top of a
+                            bar instead of flat panel and got lost against it. */}
+                        {medal ?? <span style={{ color: `${text}70`, fontSize: '0.8rem', fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{i + 1}</span>}
                       </span>
                       <span style={{
                         flex: 1, color: isMe ? '#f5c842' : `${text}f2`,
                         fontSize: '0.9375rem', fontWeight: isMe ? 700 : 400,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         fontFamily: 'DM Sans, sans-serif',
+                        textShadow: '0 1px 3px rgba(0,0,0,0.55)',
                       }}>
                         {t.name.length > 22 ? `${t.name.slice(0, 21)}…` : t.name}
                         {isMe && <span style={{ color: '#f5c84266', fontSize: '0.72rem', fontWeight: 400, marginLeft: '0.4rem' }}>← you</span>}
                       </span>
                       <span style={{
                         fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '1.05rem', flexShrink: 0,
-                        color: i === 0 ? '#f5c842' : isMe ? '#f5c842' : `${text}8c`,
+                        color: i === 0 ? '#f5c842' : isMe ? '#f5c842' : `${text}f2`,
+                        textShadow: '0 1px 3px rgba(0,0,0,0.55)',
                       }}>
                         {t.total}
                       </span>
@@ -673,17 +732,16 @@ function LandscapePrompt() {
   )
 }
 
-// ─── Grading popup ────────────────────────────────────────────────────────────
-// Shown instead of the scores drawer when a team tries to peek at the
-// scoreboard while the host is mid-grading-break — auto-dismisses, no button.
-function GradingPopup({ visible, onDismiss }) {
+// ─── Scores-locked popup ───────────────────────────────────────────────────
+// Shown instead of the scores drawer while ScoreboardModal.jsx is open on
+// /host — that component owns show.scores_locked_at (a timestamp refreshed
+// every 2 minutes while open, cleared on close), so `visible` here is a
+// direct read of whether that timestamp is fresh (see isScoresLocked below),
+// not a guess based on which slide happens to be showing. No dismiss
+// button: it goes away on its own once Ben closes the modal or the lock
+// ages out, same as it appeared.
+function ScoresLockedPopup({ visible }) {
   const pref = useReducedMotion()
-
-  useEffect(() => {
-    if (!visible) return
-    const t = setTimeout(onDismiss, 2600)
-    return () => clearTimeout(t)
-  }, [visible, onDismiss])
 
   return (
     <AnimatePresence>
@@ -705,10 +763,10 @@ function GradingPopup({ visible, onDismiss }) {
         >
           <div>
             <p style={{ fontFamily: 'Boogaloo, sans-serif', fontSize: '1.2rem', color: '#fff', margin: 0, lineHeight: 1.2 }}>
-              Ben is grading right now — calm your pants 👖
+              Ben is currently updating the scores. Hold your pants.
             </p>
             <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.82rem', margin: '0.25rem 0 0', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.4 }}>
-              Scores will be back up once grading wraps
+              Scores will be back up in a moment
             </p>
           </div>
         </motion.div>
@@ -1022,9 +1080,27 @@ export default function Join() {
   const [scoresDrawerOpen, setScoresDrawerOpen]   = useState(false)
   const [scoresDrawerTeams, setScoresDrawerTeams] = useState([])
   const [scoresDrawerLoading, setScoresDrawerLoading] = useState(false)
-  const [gradingPopup, setGradingPopup]           = useState(false)
 
   const theme = useMemo(() => show?.theme_id ? getTheme(show.theme_id) : null, [show?.theme_id])
+
+  // scores_locked_at is a timestamp, not a boolean — ScoreboardModal.jsx
+  // refreshes it every 2 minutes while open, so a lock older than 10
+  // minutes means the host's session ended without a clean close (crash,
+  // sleep, lost wifi) rather than that scoring is still genuinely in
+  // progress. A plain derivation from `show` alone would never notice that
+  // expiry on its own (nothing else changes once the crashed host stops
+  // sending updates), so a 30s tick forces a re-check independent of
+  // whether a new realtime update ever arrives.
+  const [lockCheckTick, setLockCheckTick] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setLockCheckTick(Date.now()), 30000)
+    return () => clearInterval(t)
+  }, [])
+  const scoresLocked = useMemo(() => {
+    const lockedAt = show?.scores_locked_at
+    if (!lockedAt) return false
+    return lockCheckTick - new Date(lockedAt).getTime() < 10 * 60 * 1000
+  }, [show?.scores_locked_at, lockCheckTick])
 
   // ── Mount: fetch show + restore session ───────────────────────────────
   useEffect(() => {
@@ -1095,13 +1171,15 @@ export default function Join() {
   // ── Keep viewedIndex ≤ host (handled inside LiveView) ─────────────────
 
   // ── Scoreboard drawer live updates ───────────────────────────────────
+  // `scoreboard_teams` was added to the `supabase_realtime` publication
+  // 2026-08-16, so this subscription actually fires now.
   useEffect(() => {
     if (!scoresDrawerOpen || !show?.id) return
     const channel = supabase
       .channel(`scores-drawer:${show.id}`)
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'scoreboard_teams', filter: `show_id=eq.${show.id}` },
-        () => { openScoresDrawer() }
+        () => { refreshScores() }
       )
       .subscribe()
     return () => supabase.removeChannel(channel)
@@ -1193,14 +1271,9 @@ export default function Join() {
   }
 
   // ── Scores drawer ─────────────────────────────────────────────────────
-  async function openScoresDrawer() {
-    const currentSlide = show?.slides?.find(s => s.id === show.current_slide_id)
-    if (currentSlide?.type === 'grading-break') {
-      setGradingPopup(true)
-      return
-    }
-    setScoresDrawerOpen(true)
-    setScoresDrawerLoading(true)
+  // Quiet refetch — no loading flag. A live refresh must not flash the spinner
+  // and remount the rows, or the rank-change pass animation never gets to run.
+  async function refreshScores() {
     try {
       const { data } = await supabase
         .from('scoreboard_teams')
@@ -1214,10 +1287,23 @@ export default function Join() {
       setScoresDrawerTeams(withTotals)
     } catch {
       setScoresDrawerTeams([])
-    } finally {
-      setScoresDrawerLoading(false)
     }
   }
+
+  async function openScoresDrawer() {
+    if (scoresLocked) return
+    setScoresDrawerOpen(true)
+    setScoresDrawerLoading(true)
+    await refreshScores()
+    setScoresDrawerLoading(false)
+  }
+
+  // Forces the drawer closed if Ben starts editing while a team already has
+  // it open — the lock engaging mid-view shouldn't leave mid-edit numbers
+  // on screen just because the drawer opened before the lock did.
+  useEffect(() => {
+    if (scoresLocked && scoresDrawerOpen) setScoresDrawerOpen(false)
+  }, [scoresLocked])
 
   // ── Render ────────────────────────────────────────────────────────────
   const disconnected = connStatus === 'CHANNEL_ERROR' || connStatus === 'TIMED_OUT' || connStatus === 'CLOSED'
@@ -1239,7 +1325,7 @@ export default function Join() {
   return (
     <>
       <ReconnectingBanner visible={disconnected} />
-      <GradingPopup visible={gradingPopup} onDismiss={() => setGradingPopup(false)} />
+      <ScoresLockedPopup visible={scoresLocked} />
       {phase === 'register' && <RegistrationScreen onRegister={handleRegister} show={show} theme={theme} />}
       {phase === 'waiting'  && (
         <>

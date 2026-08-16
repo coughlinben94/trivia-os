@@ -1,111 +1,165 @@
-import { useState, useEffect } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { useState, useEffect, useRef } from 'react'
+import { AnimatePresence, motion, useReducedMotion, animate } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { deriveRoundCols, computeTotal, normalizeRoundScore, MEDALS } from '../../lib/scoreboardMath.js'
 import { EASE_OUT, EASE_DROP } from '../../lib/easings.js'
 
+// ─── Layout math ───────────────────────────────────────────────────────────
+// The stage is a `container-type: size` box (see StageFrame), so every size
+// here is in cqw/cqh and scales with the TV instead of assuming 1080p.
+// Chrome above the rows: title block + column header + bottom padding.
+const CHROME_CQH = 23
+const MAX_ROW_CQH = 9      // few teams shouldn't become giant bars
+
+// Rows shrink to fit however many teams there are, with no floor: a small,
+// still-legible row beats a row that got clipped off the bottom of the TV.
+function gridMetrics(teamCount) {
+  const n = Math.max(teamCount, 1)
+  const row = Math.min(MAX_ROW_CQH, (100 - CHROME_CQH) / n)
+  return {
+    row,
+    name: row * 0.46,
+    cell: row * 0.40,
+    total: row * 0.58,
+  }
+}
+
+// ─── Count-up total ────────────────────────────────────────────────────────
+// A live score edit while the board is up should read as the number climbing,
+// not a silent swap. Snaps when the user prefers reduced motion.
+function CountUp({ value, reduce, style }) {
+  const [display, setDisplay] = useState(value)
+  const prev = useRef(value)
+
+  useEffect(() => {
+    if (reduce || prev.current === value) {
+      prev.current = value
+      setDisplay(value)
+      return
+    }
+    const from = prev.current
+    prev.current = value
+    const controls = animate(from, value, {
+      duration: 0.7,
+      ease: EASE_OUT,
+      onUpdate: v => setDisplay(Math.round(v)),
+    })
+    return () => controls.stop()
+  }, [value, reduce])
+
+  return <span style={style}>{display}</span>
+}
+
 // ─── Single team row ───────────────────────────────────────────────────────
-function TeamRow({ team, rank, cols, delay, isTop, reduce }) {
+function TeamRow({ team, rank, cols, template, metrics, delay, isTop, zebra, reduce }) {
   const { theme } = useTheme()
+  const c = theme.colors
   const medal = MEDALS[rank - 1] ?? null
+
+  // Flash the row when this team's total moves (host grading a round live).
+  const [bumped, setBumped] = useState(false)
+  const prevTotal = useRef(team.total)
+  useEffect(() => {
+    if (prevTotal.current === team.total) return
+    prevTotal.current = team.total
+    if (reduce) return
+    setBumped(true)
+    const t = setTimeout(() => setBumped(false), 850)
+    return () => clearTimeout(t)
+  }, [team.total, reduce])
+
+  const cellFont = `'${theme.fonts.body}', 'DM Sans', sans-serif`
+  const displayFont = `'${theme.fonts.display}', 'Boogaloo', sans-serif`
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: reduce ? 0 : 20 }}
+      layout={reduce ? false : 'position'}
+      initial={{ opacity: 0, y: reduce ? 0 : 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.38, ease: EASE_OUT }}
-      className="flex items-center gap-4 px-5 py-3 rounded-2xl"
+      transition={{ delay, duration: 0.34, ease: EASE_OUT, layout: { duration: 0.5, ease: EASE_DROP } }}
       style={{
-        background: isTop
-          ? `linear-gradient(135deg, rgba(251,191,36,0.18) 0%, rgba(245,158,11,0.08) 100%)`
-          : 'rgba(255,255,255,0.06)',
-        boxShadow: isTop
-          ? '0 0 28px rgba(251,191,36,0.15), inset 0 1px 0 rgba(251,191,36,0.2)'
-          : 'inset 0 1px 0 rgba(255,255,255,0.04)',
-        border: isTop
-          ? '1px solid rgba(251,191,36,0.3)'
-          : '1px solid rgba(255,255,255,0.07)',
-        // GPU-only scale for top team — no layout props
-        transform: isTop ? 'scale(1.02)' : 'scale(1)',
+        display: 'grid',
+        gridTemplateColumns: template,
+        alignItems: 'center',
+        height: `${metrics.row}cqh`,
+        position: 'relative',
+        background: isTop ? `${c.accent}38` : zebra ? `${c.text}09` : 'transparent',
+        borderLeft: isTop ? `0.35cqw solid ${c.highlight}` : `0.35cqw solid transparent`,
+        borderBottom: `1px solid ${c.text}0f`,
       }}
     >
+      {/* Live-score flash — overlay so it never fights the zebra/leader fill */}
+      <motion.div
+        aria-hidden
+        initial={false}
+        animate={{ opacity: bumped ? 0.3 : 0 }}
+        transition={{ duration: bumped ? 0.12 : 0.65, ease: EASE_OUT }}
+        style={{ position: 'absolute', inset: 0, background: c.highlight, pointerEvents: 'none' }}
+      />
+
       {/* Rank / medal */}
-      <div
-        className="shrink-0 flex items-center justify-center"
-        style={{ width: '2.2rem', fontSize: isTop ? '1.5rem' : '1.1rem' }}
-      >
-        {medal ? (
-          <span>{medal}</span>
-        ) : (
-          <span
-            style={{
-              fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-              color: 'rgba(255,255,255,0.35)',
-              fontWeight: 700,
-              fontSize: '1rem',
-            }}
-          >
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: `${metrics.name}cqh`, position: 'relative',
+      }}>
+        {medal ?? (
+          <span style={{ fontFamily: cellFont, color: `${c.textMuted}`, fontWeight: 700, fontSize: `${metrics.cell * 0.9}cqh` }}>
             {rank}
           </span>
         )}
       </div>
 
       {/* Team name */}
-      <div className="flex-1 min-w-0">
-        <p
-          className="truncate"
-          style={{
-            fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
-            fontSize: isTop ? '1.5rem' : '1.2rem',
-            color: isTop ? '#fbbf24' : 'rgba(255,255,255,0.9)',
-            lineHeight: 1.2,
-          }}
-        >
+      <div style={{ minWidth: 0, paddingLeft: '0.8cqw', position: 'relative' }}>
+        <p style={{
+          fontFamily: displayFont,
+          fontSize: `${metrics.name * (isTop ? 1.14 : 1)}cqh`,
+          color: isTop ? c.highlight : c.text,
+          lineHeight: 1.1,
+          margin: 0,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
           {team.name || '(unnamed)'}
         </p>
       </div>
 
-      {/* Round score pills */}
-      <div className="shrink-0 hidden xl:flex items-center gap-1.5">
-        {cols.map(col => {
-          const { written, phone } = normalizeRoundScore(team.scores?.[col.key])
-          const total = written + phone
-          if (total === 0) return null
-          return (
-            <span
-              key={col.key}
-              style={{
-                fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-                fontSize: '0.7rem',
-                fontWeight: 600,
-                color: 'rgba(255,255,255,0.55)',
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                padding: '1px 7px',
-                borderRadius: '999px',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {col.label} {total}
-            </span>
-          )
-        })}
-      </div>
+      {/* One cell per round — always rendered, zeros included. A blank cell
+          would break the grid's whole promise: every box means something. */}
+      {cols.map(col => {
+        const { written, phone } = normalizeRoundScore(team.scores?.[col.key])
+        const total = written + phone
+        return (
+          <div key={col.key} style={{
+            textAlign: 'center', position: 'relative',
+            borderLeft: `1px solid ${c.text}0d`,
+            fontFamily: cellFont,
+            fontVariantNumeric: 'tabular-nums',
+            fontWeight: 600,
+            fontSize: `${metrics.cell}cqh`,
+            color: total === 0 ? `${c.textMuted}a6` : `${c.text}dd`,
+          }}>
+            {total}
+          </div>
+        )
+      })}
 
       {/* Total */}
-      <div className="shrink-0 text-right" style={{ minWidth: '3.5rem' }}>
-        <span
+      <div style={{
+        textAlign: 'right', paddingRight: '0.9cqw', position: 'relative',
+        borderLeft: `1px solid ${c.highlight}40`,
+      }}>
+        <CountUp
+          value={team.total}
+          reduce={reduce}
           style={{
-            fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
-            fontSize: isTop ? '1.9rem' : '1.5rem',
-            color: isTop ? '#fbbf24' : '#f59e0b',
-            fontWeight: 700,
+            fontFamily: displayFont,
+            fontVariantNumeric: 'tabular-nums',
+            fontSize: `${metrics.total * (isTop ? 1.12 : 1)}cqh`,
+            color: isTop ? c.highlight : c.text,
             lineHeight: 1,
           }}
-        >
-          {team.total}
-        </span>
+        />
       </div>
     </motion.div>
   )
@@ -114,33 +168,62 @@ function TeamRow({ team, rank, cols, delay, isTop, reduce }) {
 // ─── Inner scoreboard (fetches + renders) ──────────────────────────────────
 function ScoreboardContent({ show }) {
   const { theme } = useTheme()
+  const c = theme.colors
   const reduce = useReducedMotion()
   const [ranked, setRanked] = useState([])
   const cols = deriveRoundCols(show)
+  // load() is a closure created once per show.id (see the effect's deps
+  // below, kept narrow on purpose so the realtime channel doesn't
+  // resubscribe on every show change) — reading `cols` straight from that
+  // closure would freeze the Total column at whatever rounds existed when
+  // the board first mounted, disagreeing with the fresh per-render `cols`
+  // used in the round columns below. A ref keeps every load() call —
+  // including the 4s poll — reading the live show.
+  const showRef = useRef(show)
+  useEffect(() => { showRef.current = show }, [show])
 
   useEffect(() => {
+    let cancelled = false
     async function load() {
       const { data } = await supabase
         .from('scoreboard_teams')
         .select('*')
         .eq('show_id', show.id)
         .order('sort_order')
-      if (!data) return
+      if (!data || cancelled) return
+      const liveCols = deriveRoundCols(showRef.current)
       const sorted = data
-        .map(t => ({ ...t, total: computeTotal(t.scores, cols) }))
+        .map(t => ({ ...t, total: computeTotal(t.scores, liveCols) }))
         .sort((a, b) => b.total - a.total)
       setRanked(sorted)
     }
     load()
+
+    // The board used to be a snapshot taken when it opened — a host grading a
+    // round with the scoreboard up on the TV changed nothing on screen, so the
+    // count-up/reorder motion below would never have anything to react to.
+    // `scoreboard_teams` was added to the `supabase_realtime` publication
+    // 2026-08-16, so this subscription actually fires now — no poll needed.
+    const channel = supabase
+      .channel(`scoreboard-tv:${show.id}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'scoreboard_teams', filter: `show_id=eq.${show.id}` },
+        () => { load() }
+      )
+      .subscribe()
+
+    return () => { cancelled = true; supabase.removeChannel(channel) }
   }, [show.id])
 
-  const useTwo = ranked.length > 8
-  const half = Math.ceil(ranked.length / 2)
-  const leftCol = useTwo ? ranked.slice(0, half) : ranked
-  const rightCol = useTwo ? ranked.slice(half) : []
+  const m = gridMetrics(ranked.length)
+  // rank | team name | one per round | total. The round columns share whatever
+  // the name column doesn't need (1fr each) so the numbers stay spread evenly
+  // across the board instead of huddling at the right with dead space beside
+  // the names — the width is the same however many rounds a show has.
+  const template = `3.4cqw minmax(0, 33cqw) repeat(${cols.length}, minmax(0, 1fr)) 9cqw`
 
-  // Base delay per item (staggered per column independently)
-  const itemDelay = (i) => 0.18 + i * 0.06
+  const displayFont = `'${theme.fonts.display}', 'Boogaloo', sans-serif`
+  const bodyFont = `'${theme.fonts.body}', 'DM Sans', sans-serif`
 
   return (
     <motion.div
@@ -150,89 +233,116 @@ function ScoreboardContent({ show }) {
       transition={{ duration: 0.25, ease: EASE_OUT }}
       className="absolute inset-0 flex flex-col"
       style={{
-        background: 'rgba(0,0,0,0.92)',
+        background: c.bgDeep,
         backgroundImage: `
-          radial-gradient(ellipse 70% 50% at 50% 0%, rgba(251,191,36,0.08) 0%, transparent 60%),
-          radial-gradient(ellipse 40% 60% at 20% 100%, rgba(26,107,74,0.15) 0%, transparent 50%)
+          radial-gradient(ellipse 80% 55% at 50% 0%, ${c.accent}55 0%, transparent 62%),
+          radial-gradient(ellipse 60% 50% at 15% 100%, ${c.accent}33 0%, transparent 55%)
         `,
       }}
     >
-      {/* Header */}
+      {/* Title bar */}
       <motion.div
-        initial={{ opacity: 0, y: reduce ? 0 : -16 }}
+        initial={{ opacity: 0, y: reduce ? 0 : -14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: EASE_DROP, delay: 0.05 }}
-        className="shrink-0 flex items-center justify-center pt-10 pb-6 px-16"
+        className="shrink-0 flex items-baseline justify-between"
+        style={{ padding: '4cqh 4cqw 2.2cqh' }}
       >
-        <h1
-          style={{
-            fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
-            fontSize: 'clamp(2.5rem, 5cqw, 4.5rem)',
-            color: '#fbbf24',
-            letterSpacing: '0.02em',
-            lineHeight: 1,
-            textShadow: '0 0 40px rgba(251,191,36,0.4)',
-          }}
-        >
-          📊 SCOREBOARD
+        <h1 style={{
+          fontFamily: displayFont,
+          fontSize: '7.5cqh',
+          color: c.highlight,
+          letterSpacing: '0.02em',
+          lineHeight: 1,
+          margin: 0,
+          textShadow: `0 0 4cqh ${c.highlight}55`,
+        }}>
+          SCOREBOARD
         </h1>
+        <span style={{
+          fontFamily: bodyFont,
+          fontSize: '2.2cqh',
+          letterSpacing: '0.18em',
+          textTransform: 'uppercase',
+          color: c.textMuted,
+        }}>
+          {ranked.length} {ranked.length === 1 ? 'Team' : 'Teams'}
+        </span>
       </motion.div>
 
-      {/* Divider */}
-      <motion.div
-        initial={{ scaleX: 0, opacity: 0 }}
-        animate={{ scaleX: 1, opacity: 1 }}
-        transition={{ duration: 0.45, ease: EASE_OUT, delay: 0.12 }}
-        className="shrink-0 mx-16 mb-6"
-        style={{
-          height: 1,
-          background: 'linear-gradient(90deg, transparent 0%, rgba(251,191,36,0.4) 20%, rgba(251,191,36,0.4) 80%, transparent 100%)',
-          transformOrigin: 'center',
-        }}
-      />
+      {/* The grid — centered when the rows don't need the whole stage */}
+      <div style={{ flex: 1, minHeight: 0, margin: '0 4cqw 4cqh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+      <div style={{
+        flex: '0 1 auto', minHeight: 0, maxHeight: '100%',
+        display: 'flex', flexDirection: 'column',
+        border: `1px solid ${c.text}1c`,
+        borderRadius: '1.4cqh',
+        overflow: 'hidden',
+        background: `${c.bg}cc`,
+      }}>
+        {/* Column header */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3, ease: EASE_OUT, delay: 0.1 }}
+          className="shrink-0"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: template,
+            alignItems: 'center',
+            height: '5.2cqh',
+            background: `${c.accent}44`,
+            borderBottom: `1px solid ${c.highlight}55`,
+            fontFamily: bodyFont,
+            fontSize: '2cqh',
+            fontWeight: 700,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            color: c.textMuted,
+            borderLeft: '0.35cqw solid transparent',
+          }}
+        >
+          <span />
+          <span style={{ paddingLeft: '0.8cqw' }}>Team</span>
+          {cols.map(col => (
+            <span key={col.key} style={{ textAlign: 'center', borderLeft: `1px solid ${c.text}0d` }}>
+              {col.label}
+            </span>
+          ))}
+          <span style={{ textAlign: 'right', paddingRight: '0.9cqw', color: c.highlight, borderLeft: `1px solid ${c.highlight}40` }}>
+            Total
+          </span>
+        </motion.div>
 
-      {/* Team rows */}
-      <div className="flex-1 overflow-hidden px-10 pb-10 flex gap-6">
-        {/* Left column (or single column) */}
-        <div className="flex-1 flex flex-col gap-2 overflow-hidden">
-          {leftCol.map((team, i) => (
+        {/* Rows — one column, always. The stage is full-width now, and row
+            height auto-fits the team count, so the old >8-team split into two
+            half-width columns (which can't fit N round columns twice) is gone. */}
+        <div style={{
+          flex: '0 1 auto', minHeight: 0, overflow: 'hidden',
+          display: 'flex', flexDirection: 'column',
+        }}>
+          {ranked.map((team, i) => (
             <TeamRow
               key={team.id}
               team={team}
               rank={i + 1}
               cols={cols}
-              delay={itemDelay(i)}
+              template={template}
+              metrics={m}
+              delay={0.14 + i * 0.035}
               isTop={i === 0}
+              zebra={i % 2 === 1}
               reduce={reduce}
             />
           ))}
         </div>
-
-        {/* Right column (2-col layout for > 8 teams) */}
-        {useTwo && (
-          <div className="flex-1 flex flex-col gap-2 overflow-hidden">
-            {rightCol.map((team, i) => {
-              const globalRank = half + i + 1
-              return (
-                <TeamRow
-                  key={team.id}
-                  team={team}
-                  rank={globalRank}
-                  cols={cols}
-                  delay={itemDelay(i)}
-                  isTop={false}
-                  reduce={reduce}
-                />
-              )
-            })}
-          </div>
-        )}
+      </div>
       </div>
     </motion.div>
   )
 }
 
-// ─── Export — right-side panel that slides from the stage edge ────────────
+// ─── Export — full-stage panel that sweeps in from the stage edge ─────────
 export default function ScoreboardOverlay({ show }) {
   const visible = show.scoreboard_visible ?? show.showState?.scoreboardVisible ?? false
   const reduce = useReducedMotion()
@@ -246,11 +356,8 @@ export default function ScoreboardOverlay({ show }) {
           animate={reduce ? { opacity: 1 } : { x: 0 }}
           exit={reduce ? { opacity: 0 } : { x: '100%' }}
           transition={{ duration: 0.38, ease: EASE_OUT }}
-          className="absolute top-0 right-0 bottom-0 z-[60]"
-          style={{
-            width: '52%',
-            boxShadow: '-24px 0 48px rgba(0,0,0,0.6)',
-          }}
+          className="absolute inset-0 z-[60]"
+          style={{ boxShadow: '-24px 0 48px rgba(0,0,0,0.6)' }}
         >
           <ScoreboardContent show={show} />
         </motion.div>

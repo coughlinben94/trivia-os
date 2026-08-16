@@ -257,6 +257,27 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
       .then(({ data }) => { setTeams(data ?? []); setLoading(false) })
   }, [show.id])
 
+  // Locks the phone scoreboard (Join.jsx) for as long as this modal is open —
+  // Ben's own words: teams shouldn't see mid-edit numbers while he's typing.
+  // A timestamp, not a boolean: Join.jsx treats a lock older than 10 minutes
+  // as expired, so a hard crash/tab-close/lost-wifi that skips the unmount
+  // write below self-heals instead of locking phones out for the rest of
+  // the night. The 2-minute heartbeat is what keeps a normal long scoring
+  // session from expiring out from under a host who's still actively using
+  // it — refresh well inside the 10-minute window, never right at its edge.
+  // supabase-js query builders are lazy thenables — the request never
+  // actually fires unless something consumes it (.then/await); the exact
+  // bug this file's own `save()` already found and fixed once, 17 lines below.
+  useEffect(() => {
+    const lock = () => supabase.from('shows').update({ scores_locked_at: new Date().toISOString() }).eq('id', show.id).then()
+    lock()
+    const heartbeat = setInterval(lock, 2 * 60 * 1000)
+    return () => {
+      clearInterval(heartbeat)
+      supabase.from('shows').update({ scores_locked_at: null }).eq('id', show.id).then()
+    }
+  }, [show.id])
+
   function save(team, fieldKey) {
     clearTimeout(saveTimers.current[team.id])
     const cellKey = `${team.id}:${fieldKey}`
