@@ -92,9 +92,14 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
   return (
     <div key={replayKey} className="w-full h-full relative overflow-hidden flex items-center justify-center">
       {/* Sunrise glow — theme-colored wash, not a full-screen fill, so the
-          ambient background still shows through around the edges. Punches in
-          at the landing instant (prototype's glow beat); final look matches
-          the always-on wash this screen shipped with. */}
+          ambient background still shows through around the edges. The string
+          'easeOut' takes Framer's WAAPI-accelerated path, where the ease
+          warps the WHOLE iteration's progress (same mechanism as the
+          IMPACT_EASE note above) — dragging the `times` offsets earlier, so
+          the glow actually ramps in ~0.89–1.19s, mid-spin, well before
+          LAND_T. That matches the prototype, whose effect-level ease-out
+          produced the same early ramp; final look matches the always-on
+          wash this screen shipped with. */}
       <motion.div
         aria-hidden
         initial={{ opacity: 0 }}
@@ -144,30 +149,35 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
       )}
 
       {/* Host photo — lower-left, rockets up from below the frame AFTER the
-          title lands, overshoots with a rotate wobble (prototype "ben" track) */}
-      {photoUrl && (
-        <motion.img
-          src={photoUrl}
-          alt=""
-          initial={reduce ? { opacity: 0, y: '0%', rotate: 0 } : { opacity: 0, y: '85%', rotate: -6 }}
-          animate={
-            reduce
-              ? { opacity: 1, y: '0%', rotate: 0 }
-              : {
-                  opacity: [0, 0, 1, 1, 1],
-                  y: ['85%', '85%', '-18%', '6%', '0%'],
-                  rotate: [-6, -6, 4, -2, 0],
-                }
-          }
-          transition={
-            reduce
-              ? { delay: 0.15, duration: 0.4, ease: EASE_OUT }
-              : { duration: LAND_T + 0.65, times: [0, 0.68, 0.82, 0.91, 1], ease: 'linear' }
-          }
-          className="absolute bottom-0 left-0 z-10 pointer-events-none"
-          style={{ height: '56%', maxWidth: '100%', objectFit: 'contain', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.4))' }}
-        />
-      )}
+          title lands, overshoots with a rotate wobble (prototype "ben" track).
+          Always mounted, even before the random-photo fetch resolves (most
+          slides have no fixed data.hostPhotoUrl, so photoUrl is briefly
+          undefined): gating the mount on photoUrl would start this track's
+          timeline at fetch-resolve time, landing the photo late and
+          network-dependent instead of on the card's shared beat. A src-less
+          <img> paints nothing, so the empty element animating is invisible;
+          src swaps in-place whenever the URL arrives. */}
+      <motion.img
+        src={photoUrl || undefined}
+        alt=""
+        initial={reduce ? { opacity: 0, y: '0%', rotate: 0 } : { opacity: 0, y: '85%', rotate: -6 }}
+        animate={
+          reduce
+            ? { opacity: 1, y: '0%', rotate: 0 }
+            : {
+                opacity: [0, 0, 1, 1, 1],
+                y: ['85%', '85%', '-18%', '6%', '0%'],
+                rotate: [-6, -6, 4, -2, 0],
+              }
+        }
+        transition={
+          reduce
+            ? { delay: 0.15, duration: 0.4, ease: EASE_OUT }
+            : { duration: LAND_T + 0.65, times: [0, 0.68, 0.82, 0.91, 1], ease: 'linear' }
+        }
+        className="absolute bottom-0 left-0 z-10 pointer-events-none"
+        style={{ height: '56%', maxWidth: '100%', objectFit: 'contain', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.4))' }}
+      />
 
       {/* Format icon badge — lower-right, stamps in hard right after landing
           with its own overshoot wobble (prototype "iconBadge" track) */}
