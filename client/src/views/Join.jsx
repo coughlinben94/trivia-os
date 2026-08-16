@@ -734,10 +734,12 @@ function LandscapePrompt() {
 
 // ─── Scores-locked popup ───────────────────────────────────────────────────
 // Shown instead of the scores drawer while ScoreboardModal.jsx is open on
-// /host — that component owns show.scores_locked (true on mount, false on
-// close), so `visible` here is a direct read of that flag, not a timer or a
-// guess based on which slide happens to be showing. No dismiss button: it
-// goes away on its own the moment Ben closes the modal, same as it appeared.
+// /host — that component owns show.scores_locked_at (a timestamp refreshed
+// every 2 minutes while open, cleared on close), so `visible` here is a
+// direct read of whether that timestamp is fresh (see isScoresLocked below),
+// not a guess based on which slide happens to be showing. No dismiss
+// button: it goes away on its own once Ben closes the modal or the lock
+// ages out, same as it appeared.
 function ScoresLockedPopup({ visible }) {
   const pref = useReducedMotion()
 
@@ -1081,6 +1083,25 @@ export default function Join() {
 
   const theme = useMemo(() => show?.theme_id ? getTheme(show.theme_id) : null, [show?.theme_id])
 
+  // scores_locked_at is a timestamp, not a boolean — ScoreboardModal.jsx
+  // refreshes it every 2 minutes while open, so a lock older than 10
+  // minutes means the host's session ended without a clean close (crash,
+  // sleep, lost wifi) rather than that scoring is still genuinely in
+  // progress. A plain derivation from `show` alone would never notice that
+  // expiry on its own (nothing else changes once the crashed host stops
+  // sending updates), so a 30s tick forces a re-check independent of
+  // whether a new realtime update ever arrives.
+  const [lockCheckTick, setLockCheckTick] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setLockCheckTick(Date.now()), 30000)
+    return () => clearInterval(t)
+  }, [])
+  const scoresLocked = useMemo(() => {
+    const lockedAt = show?.scores_locked_at
+    if (!lockedAt) return false
+    return lockCheckTick - new Date(lockedAt).getTime() < 10 * 60 * 1000
+  }, [show?.scores_locked_at, lockCheckTick])
+
   // ── Mount: fetch show + restore session ───────────────────────────────
   useEffect(() => {
     if (!showParam) { setPhase('no-show'); return }
@@ -1270,7 +1291,7 @@ export default function Join() {
   }
 
   async function openScoresDrawer() {
-    if (show?.scores_locked) return
+    if (scoresLocked) return
     setScoresDrawerOpen(true)
     setScoresDrawerLoading(true)
     await refreshScores()
@@ -1278,11 +1299,11 @@ export default function Join() {
   }
 
   // Forces the drawer closed if Ben starts editing while a team already has
-  // it open — scores_locked engaging mid-view shouldn't leave mid-edit
-  // numbers on screen just because the drawer opened before the lock did.
+  // it open — the lock engaging mid-view shouldn't leave mid-edit numbers
+  // on screen just because the drawer opened before the lock did.
   useEffect(() => {
-    if (show?.scores_locked && scoresDrawerOpen) setScoresDrawerOpen(false)
-  }, [show?.scores_locked])
+    if (scoresLocked && scoresDrawerOpen) setScoresDrawerOpen(false)
+  }, [scoresLocked])
 
   // ── Render ────────────────────────────────────────────────────────────
   const disconnected = connStatus === 'CHANNEL_ERROR' || connStatus === 'TIMED_OUT' || connStatus === 'CLOSED'
@@ -1304,7 +1325,7 @@ export default function Join() {
   return (
     <>
       <ReconnectingBanner visible={disconnected} />
-      <ScoresLockedPopup visible={!!show?.scores_locked} />
+      <ScoresLockedPopup visible={scoresLocked} />
       {phase === 'register' && <RegistrationScreen onRegister={handleRegister} show={show} theme={theme} />}
       {phase === 'waiting'  && (
         <>
