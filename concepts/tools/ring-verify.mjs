@@ -1306,24 +1306,73 @@ function startStaticServer(rootDir) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// LIVE VITE DEV SERVER for the react-live pass — reuses one already running on
-// vite.config.js's configured port 5173 if present, otherwise spawns one and
-// tears it down when this script exits.
+// LIVE VITE DEV SERVER for the react-live pass.
+//
+// 2026-08-16 (real bug, hit twice in one night by two different agents):
+// this used to reuse ANY server already answering on port 5173, with no
+// check that it was serving THIS worktree. With many worktrees open at
+// once — the normal state of this repo during a multi-branch session —
+// whichever one happened to have `npm run dev` running "won" port 5173,
+// and every other worktree's [react-live] pass silently measured that
+// foreign codebase instead of its own. Both false alarms that night
+// traced back to exactly this. Fix: before trusting a server on 5173,
+// fetch a real source file through it and diff the bytes against the
+// same file on disk in REPO_ROOT. Only reuse on a match; otherwise spin
+// up a dedicated server on a free port scoped to this run.
 // ═══════════════════════════════════════════════════════════════════════
 
 const VITE_PORT = 5173;
+// Any file guaranteed to exist and be served as-is (no transform) works —
+// this one is imported by the ring system itself, so it's never absent.
+const IDENTITY_FILE = 'client/src/lib/ringPrimitives.js';
+
 async function isUp(url) { try { const r = await fetch(url); return r.ok; } catch { return false; } }
-async function ensureViteServer() {
-  const base = `http://localhost:${VITE_PORT}`;
-  if (await isUp(base + '/')) return { proc: null, url: base + '/ambient?ring=1' };
-  const proc = spawn('npx', ['vite', '--port', String(VITE_PORT), '--strictPort'], { cwd: REPO_ROOT, stdio: 'ignore' });
+
+async function serverMatchesThisWorktree(base) {
+  try {
+    const [served, onDisk] = await Promise.all([
+      fetch(base + '/' + IDENTITY_FILE).then(r => r.ok ? r.text() : null),
+      readFileAsync(path.join(REPO_ROOT, IDENTITY_FILE), 'utf8'),
+    ]);
+    return served !== null && served === onDisk;
+  } catch {
+    return false;
+  }
+}
+
+async function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+    srv.on('error', reject);
+  });
+}
+
+async function spawnViteOn(port) {
+  const base = `http://localhost:${port}`;
+  const proc = spawn('npx', ['vite', '--port', String(port), '--strictPort'], { cwd: REPO_ROOT, stdio: 'ignore' });
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
     if (await isUp(base + '/')) return { proc, url: base + '/ambient?ring=1' };
     await new Promise(r => setTimeout(r, 400));
   }
   proc.kill();
-  throw new Error(`vite dev server on port ${VITE_PORT} did not become ready within 20s`);
+  throw new Error(`vite dev server on port ${port} did not become ready within 20s`);
+}
+
+async function ensureViteServer() {
+  const base = `http://localhost:${VITE_PORT}`;
+  if (await isUp(base + '/') && await serverMatchesThisWorktree(base)) {
+    return { proc: null, url: base + '/ambient?ring=1' };
+  }
+  // Either nothing's on 5173, or something is but it's serving a different
+  // worktree — either way, don't touch it. Get our own port instead of
+  // guessing whether 5173 is free enough to grab with --strictPort.
+  const port = await findFreePort();
+  return spawnViteOn(port);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
