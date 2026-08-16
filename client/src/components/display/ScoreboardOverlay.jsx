@@ -172,6 +172,15 @@ function ScoreboardContent({ show }) {
   const reduce = useReducedMotion()
   const [ranked, setRanked] = useState([])
   const cols = deriveRoundCols(show)
+  // load() is a closure created once per show.id (see the effect's deps
+  // below, kept narrow on purpose so the realtime channel doesn't
+  // resubscribe on every show change) — reading `cols` straight from that
+  // closure would freeze the Total column at whatever rounds existed when
+  // the board first mounted, disagreeing with the fresh per-render `cols`
+  // used in the round columns below. A ref keeps every load() call —
+  // including the 4s poll — reading the live show.
+  const showRef = useRef(show)
+  useEffect(() => { showRef.current = show }, [show])
 
   useEffect(() => {
     let cancelled = false
@@ -182,8 +191,9 @@ function ScoreboardContent({ show }) {
         .eq('show_id', show.id)
         .order('sort_order')
       if (!data || cancelled) return
+      const liveCols = deriveRoundCols(showRef.current)
       const sorted = data
-        .map(t => ({ ...t, total: computeTotal(t.scores, cols) }))
+        .map(t => ({ ...t, total: computeTotal(t.scores, liveCols) }))
         .sort((a, b) => b.total - a.total)
       setRanked(sorted)
     }
