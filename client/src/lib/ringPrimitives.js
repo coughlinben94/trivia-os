@@ -101,6 +101,15 @@ export function hsla(h, s, l, a) { return `hsla(${h},${s}%,${l}%,${a})` }
 // ribbon below, each from a fixed per-kind range, not a fresh draw per call.
 // Keep in sync with those three rotate() calls if their ranges ever change.
 const ROTATION_MAX_DEG = { lens: 30, streak: 26, ribbon: 18 }
+// Per-kind breathe-PEAK multiplier (--pa2 = alpha * mult). Default 1.6 —
+// unchanged for every kind not listed. 2026-08-16 (safe-box luminance cap,
+// st11 aurora): the curtain's NATURAL frame reads p99.5 ~51 in the safe box
+// (fine) but the breathe peak pushed it to 72-73 against the 68 cap —
+// ablation-measured as entirely the curtain svg (stars/glow hidden: no
+// change; curtain hidden: 72 -> 6). The overage is breathe amplitude, not
+// the (separately reviewed) body/tail gradient paint, so the fix narrows
+// this kind's peak swing instead of dimming the curtain's resting look.
+const PA2_MULT = { ribbon: 1.25 }
 
 // Worst-case post-rotation bounding-box height for a kind that may rotate
 // after placement — closes the KNOWN GAP bandY's own history above flagged
@@ -408,7 +417,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
   const pd = (-r() * 40).toFixed(1) + 's'
   if (isHeadline) {
     f.style.setProperty('--pa', alpha.toFixed(3))
-    f.style.setProperty('--pa2', Math.min(alpha * 1.6, 1).toFixed(3))
+    f.style.setProperty('--pa2', Math.min(alpha * (PA2_MULT[kind] ?? 1.6), 1).toFixed(3))
     f.style.setProperty('--pb', pb)
     f.style.setProperty('--pd', pd)
   } else {
@@ -1846,8 +1855,16 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
         // deletes it" caution (that was small stars).
         svg.style.filter = `blur(${Math.max(3, w * 0.010).toFixed(1)}px)`
       } else {
+        // 2026-08-16 (safe-box luminance cap, st0): the FRONT arc crosses the
+        // safe box's top edge at this station's corner placement, and
+        // ablation measured the two ring-half svgs as the largest single
+        // contributor to the box's p99.5 overage (75 -> 50 with them hidden;
+        // the terminator/disc gradient measured ZERO contribution, 75 -> 75).
+        // Front stroke dialed back (l 78 -> 70, a 0.55 -> 0.40) — same
+        // dial-back-don't-remove treatment as the disc's surface bands.
+        // Back half untouched (already dim, mostly behind the body).
         const path = arc(rx, ry)
-        path.setAttribute('stroke', hsla(hue, 65, isBack ? 55 : 78, A(isBack ? 0.30 : 0.55, fill)))
+        path.setAttribute('stroke', hsla(hue, 65, isBack ? 55 : 70, A(isBack ? 0.30 : 0.40, fill)))
         path.setAttribute('stroke-width', px(Math.max(3, w * (isBack ? 0.010 : 0.016))))
         svg.appendChild(path)
       }
@@ -1861,7 +1878,12 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     const gd = w * 0.95
     glow.style.left = px((w - gd) / 2); glow.style.top = px((h - gd) / 2)
     glow.style.width = glow.style.height = px(gd)
-    glow.style.background = `radial-gradient(circle closest-side, ${hsla(hue, 55, 70, A(0.30, fill))} 0%, transparent ${E(96, fill).toFixed(0)}%)`
+    // 2026-08-16 (safe-box cap, st0): glow is the second measured contributor
+    // to st0's safe-box p99.5 overage (75 -> 59 with .d-glow hidden) — its
+    // wash overlaps the front arc inside the box and the two sum. Dialed back
+    // for the crisp-stroke variant only; the dust variant (st3) keeps 0.30 so
+    // its approved 2026-08-13 look stays byte-identical.
+    glow.style.background = `radial-gradient(circle closest-side, ${hsla(hue, 55, 70, A(dust ? 0.30 : 0.22, fill))} 0%, transparent ${E(96, fill).toFixed(0)}%)`
     f.appendChild(glow)
     f.appendChild(ringHalf(1, true)) // back half — behind the body
     const bodyContainer = el('')
