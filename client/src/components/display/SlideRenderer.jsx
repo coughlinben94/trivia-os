@@ -12,10 +12,10 @@ import PylRevealSlide from './slides/PylRevealSlide.jsx'
 import StateOfUnionSlide from './slides/StateOfUnionSlide.jsx'
 import WinnerRevealSlide from './slides/WinnerRevealSlide.jsx'
 import TeamPreviewSlide from './slides/TeamPreviewSlide.jsx'
-import TeamPickerSlide from './slides/TeamPickerSlide.jsx'
+import TeamPickerSlide, { REVEAL_S } from './slides/TeamPickerSlide.jsx'
 import GridSlide from './slides/GridSlide.jsx'
 import OverlayLayer from './OverlayLayer.jsx'
-import { EASE_OUT, EASE_DROP, EASE_EXIT } from '../../lib/easings.js'
+import { EASE_OUT, EASE_DROP, EASE_EXIT, EASE_PANEL } from '../../lib/easings.js'
 
 // Per-slide content animation config — tune these without touching component logic
 const SLIDE_ANIMATIONS = {
@@ -79,14 +79,38 @@ const TRANSITIONS = {
   'assemble': { initial: { opacity: 1 }, animate: { opacity: 1, transition: { duration: 0 } }, exit: { opacity: 0, transition: { duration: 0.16, ease: EASE_EXIT } } },
 }
 
-// team-picker and state-of-union both default to the zoom burst-from-center
-// instead of a plain fade — they're the show's ceremonial pre-round beats
-// (patriotic address / team intro) and deserve a deliberate entrance, not
-// the same bland fade a generic 'title' slide gets. (Their opacity gets
-// neutralized to a constant 1 further down, regardless of this or any
-// other transition assigned to them — see the comment there for why.)
-SLIDE_ANIMATIONS['team-picker'] = TRANSITIONS.zoom
+// state-of-union defaults to the zoom burst-from-center instead of a plain
+// fade — the show's patriotic-address beat deserves a deliberate entrance,
+// not the same bland fade a generic 'title' slide gets. (Its opacity gets
+// neutralized to a constant 1 further down, regardless of this or any other
+// transition assigned to it — see the comment there for why.)
 SLIDE_ANIMATIONS['state-of-union'] = TRANSITIONS.zoom
+// team-picker's entrance is its own exit reveal, run backwards. At the end of
+// that slide the black canvas lifts off the TOP of the stage (translateY
+// 0% -> -100%, REVEAL_S, EASE_PANEL — see REVEAL_VARIANTS in
+// TeamPickerSlide.jsx) to reveal the ring world that has been running behind
+// the stage all along. Entering, the same sheet drops in from that same top
+// edge to COVER it: same axis, same edge, same duration, same curve,
+// opposite direction and opposite job. One mechanic with two halves, not two
+// separately-tuned ideas that happen to rhyme.
+//
+// translateY only, no opacity: an arriving sheet is opaque for every frame
+// of its travel, so the world behind it is either covered or not — never
+// seen through it. (The exit's tail-only opacity fade has no counterpart
+// here for the same reason it exists there: a half-transparent black panel
+// over the ring world is the exact thing that read badly.) The canvas is
+// created with `{ alpha: false }`, so the sheet is opaque black from its
+// first painted frame — nothing shows through the leading edge.
+SLIDE_ANIMATIONS['team-picker'] = {
+  initial: { transform: 'translateY(-100%)' },
+  animate: { transform: 'translateY(0%)', transition: { duration: REVEAL_S, ease: EASE_PANEL } },
+  // Nothing to slide out: by the time this slide is left, its black sheet has
+  // already wiped away and what's on screen is the Round 1 beat over the bare
+  // ring world. Sliding THAT off would be a third, unrelated motion, so the
+  // slide just yields (its opacity is locked to 1 below, which is why the old
+  // dissolve exit here was a 160ms wait with nothing visibly happening).
+  exit: { transform: 'translateY(0%)', transition: { duration: 0 } },
+}
 
 const TRANSITION_KEYS = Object.keys(TRANSITIONS).filter(k => k !== 'assemble')
 let lastRandomKey = null
@@ -143,15 +167,29 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
     }
   }
 
-  // team-picker and state-of-union are fixed, theme-independent designs
-  // sitting on top of this component's permanently-opaque locked background
-  // (theme.colors.bgDeep, rendered below). ANY transition that fades this
-  // content's own opacity from/to 0 — the default zoom, a transition
-  // manually picked from the editor's dropdown, even the reduced-motion
-  // dissolve fallback above — briefly exposes that real theme color through
-  // the semi-transparent content, reading as "shows the theme, then snaps
-  // to the fixed design." Neutralize opacity here regardless of which
-  // branch produced `variants`, keeping whatever scale/y/timing it chose.
+  // These three are fixed, theme-independent designs that must never be
+  // caught half-transparent. ANY transition that fades this content's own
+  // opacity from/to 0 — the default assigned above, a transition manually
+  // picked from the editor's dropdown, even the reduced-motion dissolve
+  // fallback — would show whatever sits behind the slide straight through
+  // it. Neutralize opacity here regardless of which branch produced
+  // `variants`, keeping whatever transform/scale/timing it chose.
+  //
+  // state-of-union and grid sit on this component's permanently-opaque
+  // locked background (theme.colors.bgDeep, rendered below), so a fade
+  // exposes the real theme color and reads as "shows the theme, then snaps
+  // to the fixed design."
+  //
+  // team-picker no longer has that locked background at all (see the
+  // exclusion below), so for it the thing showing through is the ring-world
+  // ambient — which its exit wipe reveals deliberately, and which its
+  // entrance wipe exists to cover. A fade would leak the world through a
+  // half-transparent black sheet at both ends, the exact read the exit's
+  // tail-only opacity fade was shaped to avoid. Its own entrance/exit
+  // (assigned above) are translateY-only and so are unaffected by this
+  // lock; what the lock still catches is a dropdown-picked transition or
+  // the reduced-motion dissolve, which for this slide become a hard cut to
+  // black instead of a fade-up through the world.
   if (slide?.type === 'team-picker' || slide?.type === 'state-of-union' || slide?.type === 'grid') {
     variants = {
       initial: { ...variants.initial, opacity: 1 },
@@ -164,11 +202,21 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
 
   return (
     <>
-      {/* Background — locked, never animates, instant color update */}
-      <div
-        className="absolute inset-0"
-        style={{ background: theme.colors.bgDeep, zIndex: 0 }}
-      />
+      {/* Background — locked, never animates, instant color update.
+          team-picker is the one exception: it paints its own opaque black
+          canvas over the whole stage, and that canvas is what covers the
+          ambient world on the way in and slides away to reveal it again on
+          the way out. An opaque layer here would sit between the two — it,
+          not the world, is what the reveal would uncover, and it would make
+          the entrance wipe cover something already covered. So this slide
+          type gets no locked background; nothing else about the ambient
+          mount changes. */}
+      {slide?.type !== 'team-picker' && (
+        <div
+          className="absolute inset-0"
+          style={{ background: theme.colors.bgDeep, zIndex: 0 }}
+        />
+      )}
 
       {/* Content — animates in/out over the locked background */}
       <motion.div

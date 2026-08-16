@@ -1,10 +1,53 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { supabase } from '../../../lib/supabase.js';
 import { useTheme } from '../../shared/ThemeProvider.jsx';
+import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js';
 import BaynesWatermark from '../BaynesWatermark.jsx';
 
 const DISP_CAP = 150, SS = 1.6;
 const CAP = DISP_CAP * SS, MAXW = 1520 * SS;
+
+// ─── Ring-world reveal ─────────────────────────────────────────────────────
+// Once the warp has decelerated to a real stop, the black canvas itself lifts
+// off the top of the stage, revealing the ring-world ambient that has been
+// running full-viewport behind this slide the whole time (already on its
+// default station — nothing is jumped or re-aimed). "Round 1" then lands as
+// its own announcement beat over the revealed world.
+//
+// SETTLED_WARP: `warp` is eased toward 0 by 0.045/frame once the target item
+// is 'landed', so it decays asymptotically and never actually hits 0. Below
+// 0.02 the star field is visually stopped (the draw loop itself already
+// switches streaks back to dots under 0.03). Read live off the loop rather
+// than timed from `landed` — `landed` fires when the outro text finishes
+// exiting, ~0.8s BEFORE the stars have actually come to rest.
+const SETTLED_WARP = 0.02;
+// Ceremonial reveal, not a UI transition — deliberately slower than the
+// app's 150-250ms interaction range. EASE_PANEL is this repo's drawer/sheet
+// curve, which is exactly what this motion is: a black sheet sliding away.
+// Exported because SlideRenderer runs this exact duration backwards as the
+// slide's ENTRANCE (sheet drops in from the same top edge to cover) — the
+// two halves are one mechanic, so they read one constant.
+export const REVEAL_S = 0.85;
+const REVEAL_VARIANTS = {
+  here: { transform: 'translateY(0%)', opacity: 1 },
+  gone: {
+    transform: 'translateY(-100%)',
+    opacity: 0,
+    transition: {
+      transform: { duration: REVEAL_S, ease: EASE_PANEL },
+      // Fades only on the tail of the wipe — a full-length crossfade would
+      // muddy the world showing through a half-transparent black panel.
+      opacity: { duration: 0.3, delay: REVEAL_S - 0.3, ease: 'linear' },
+    },
+  },
+};
+// Reduced motion: the reveal still has to happen (it carries real
+// information — the show is moving on), just without the vertical travel.
+const REVEAL_VARIANTS_REDUCE = {
+  here: { opacity: 1 },
+  gone: { opacity: 0, transition: { duration: 0.45, ease: EASE_OUT } },
+};
 
 // Background + starfield are fixed regardless of show theme — black
 // background, grayscale-to-white stars — so the warp intro reads as a
@@ -15,6 +58,27 @@ const CAP = DISP_CAP * SS, MAXW = 1520 * SS;
 const BG_FIXED = '#000000'
 const STAR_ACCENT_FIXED = '#3a3a3a'
 const STAR_HIGHLIGHT_FIXED = '#e8e8e8'
+
+// Deterministic seeded shuffle (mulberry32 + Fisher-Yates) — same seed
+// always produces the same order, so a reload or Stream Deck back/forward
+// over the sequence doesn't reshuffle teams the host has already announced.
+function seededShuffle(arr, seedStr) {
+  let seed = 0;
+  for (const ch of String(seedStr)) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  const rand = () => {
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
 
 function hexToRgb(hex) {
   const n = parseInt(String(hex).replace('#', ''), 16);
@@ -62,15 +126,41 @@ export default function TeamPickerSlide({ slide, show }) {
   const [teams, setTeams] = useState([]);
   const [fontsReady, setFontsReady] = useState(false);
 
-  // live from teams table, baked on mount (everyone who scanned the QR)
+  // Background theme (loop lives in public/, not bundled — a fixed 45s
+  // native-loop AAC clip, same "always the same ceremony" reasoning as the
+  // fixed BG_FIXED/STAR_*_FIXED colors above). Starts on mount; fades out
+  // over REVEAL_S once the ring-world reveal begins so the music finishes
+  // exactly as the wipe does, not with a hard cut. Autoplay-with-sound can
+  // be blocked by the browser without a prior user gesture — this is a
+  // kiosk `/display` page a host has already navigated to, so the common
+  // case has one, but `.play()` rejection is swallowed either way rather
+  // than surfaced, since there's no UI here to show an error in.
+  const audioRef = useRef(null);
+  const AUDIO_VOL = 0.55;
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    a.volume = AUDIO_VOL;
+    a.play().catch(() => {});
+  }, []);
+
+  // live from teams table, baked on mount (everyone who scanned the QR).
+  // Shuffled, not registration order — reading them off in signup order
+  // isn't the point, a shuffle is. Seeded off slide.id so the order is
+  // stable across a reload or Stream Deck back/forward instead of
+  // reshuffling every time this effect re-runs.
   useEffect(() => {
     if (!show?.id) return;
     let ok = true;
     supabase.from('teams').select('name').eq('show_id', show.id)
       .order('registered_at', { ascending: true })
-      .then(({ data }) => { if (ok) setTeams((data || []).map((r) => r.name).filter(Boolean)); });
+      .then(({ data }) => {
+        if (!ok) return;
+        const names = (data || []).map((r) => r.name).filter(Boolean);
+        setTeams(seededShuffle(names, slide?.id ?? show.id));
+      });
     return () => { ok = false; };
-  }, [show?.id]);
+  }, [show?.id, slide?.id]);
 
   useEffect(() => {
     let ok = true;
@@ -104,16 +194,64 @@ export default function TeamPickerSlide({ slide, show }) {
   const spriteCache = useRef(new Map());
   // Both start equal to currentPart (not 0) so a page reload mid-reveal
   // replays the current item's approach instead of flash-exiting a wrong one.
-  const ctl = useRef({ seq, theme, reduce, displayedIdx: currentPart, targetIdx: currentPart });
+  const ctl = useRef({ seq, theme, reduce, displayedIdx: currentPart, targetIdx: currentPart, covered: reduce });
   const [hudIdx, setHudIdx] = useState(currentPart);
-  const [landed, setLanded] = useState(seq[currentPart]?.kind === 'landed');
+  // settled: warp has actually decayed to a stop (see SETTLED_WARP) — starts
+  // the reveal. revealed: the black canvas has finished sliding away — starts
+  // the Round 1 beat and lets the draw loop shut down.
+  const [settled, setSettled] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+
+  // Fades the loop out in step with REVEAL_VARIANTS' wipe (REVEAL_S) rather
+  // than a fixed timer — settled flipping back to false (Stream Deck back
+  // out of 'landed') cancels the fade and snaps volume back up instead of
+  // leaving the music silent for a resumed sequence.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (!settled) { a.volume = AUDIO_VOL; return; }
+    const startVol = a.volume, t0 = performance.now();
+    let raf;
+    const step = (now) => {
+      const p = Math.min(1, (now - t0) / (REVEAL_S * 1000));
+      a.volume = startVol * (1 - p);
+      if (p < 1) raf = requestAnimationFrame(step);
+      else a.pause();
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [settled]);
+
+  // Hold the first item's approach until the entrance wipe has landed.
+  // SlideRenderer drops this whole panel in from the top edge over REVEAL_S
+  // (SLIDE_ANIMATIONS['team-picker'] — the exit reveal run backwards). The
+  // draw loop starts on mount, and the intro text is at full opacity 126ms
+  // in (`op = pt / (A * 0.12)`), so without this hold the text rides down
+  // with the sheet already fully formed instead of popping once the stage
+  // is covered. Reduced motion gets no wipe (SlideRenderer's reduce branch
+  // hands it a dissolve, itself neutralized by the opacity lock), so it
+  // starts covered and holds nothing.
+  // ponytail: timed off mount, not wired to the parent's onAnimationComplete
+  // — both start on the same mount, and a real handle would mean threading a
+  // callback prop down through SlideRenderer for one 850ms wait.
+  useEffect(() => {
+    if (reduce) return;
+    const t = setTimeout(() => { ctl.current.covered = true; }, REVEAL_S * 1000);
+    return () => clearTimeout(t);
+  }, [reduce]);
 
   useEffect(() => { ctl.current.seq = seq; }, [seq]);
   useEffect(() => { ctl.current.theme = theme; spriteCache.current.clear(); }, [theme]);
   // Authoritative target from Supabase — the draw loop below reacts to this
   // changing (in either direction) by exiting whatever's on screen and
   // approaching the new target once the exit completes.
-  useEffect(() => { ctl.current.targetIdx = Math.min(currentPart, seq.length - 1); }, [currentPart, seq.length]);
+  // `restart` is a no-op unless the loop shut itself down after the reveal —
+  // backing out of 'landed' (Stream Deck back) has to bring the star field
+  // and the canvas back, so the loop can't be a one-way door.
+  useEffect(() => {
+    ctl.current.targetIdx = Math.min(currentPart, seq.length - 1);
+    ctl.current.restart?.();
+  }, [currentPart, seq.length]);
 
   const getSprite = (it) => {
     const th = ctl.current.theme;
@@ -143,6 +281,7 @@ export default function TeamPickerSlide({ slide, show }) {
     const S0 = 0.03;
     const easeInOut = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
     let phase = 'approach', pt = 0, warp = c.reduce ? 0.12 : 0, last = performance.now(), raf;
+    let settledFired = false;
     const beginItem = () => { phase = 'approach'; pt = 0; };
 
     const draw = (now) => {
@@ -158,7 +297,6 @@ export default function TeamPickerSlide({ slide, show }) {
         if (c.seq[c.displayedIdx]?.kind === 'landed') {
           c.displayedIdx = c.targetIdx;
           setHudIdx(c.displayedIdx);
-          setLanded(false);
           beginItem();
         } else if (phase !== 'exit') { phase = 'exit'; pt = 0; }
       }
@@ -174,8 +312,28 @@ export default function TeamPickerSlide({ slide, show }) {
       if (c.reduce) {
         warp = 0.12;
       } else {
-        const warpTarget = c.seq[c.targetIdx]?.kind === 'landed' ? 0 : 1;
+        // While the entrance sheet is still descending (!c.covered), ease
+        // toward the same 0.12 idle reduced-motion pins forever — proven not
+        // to bloom the additive star trails — instead of ramping straight to
+        // 1. Ramping to 1 immediately put warp at ~0.9 by the time the sheet
+        // lands (0.955^51 frames), putting hyperspace at full speed before
+        // the intro text even starts — inverting the approved text-then-
+        // hyperspace order. The sheet still arrives with visible drift, not
+        // as a static card; it just isn't already at full speed underneath.
+        const warpTarget = !c.covered ? 0.12 : (c.seq[c.targetIdx]?.kind === 'landed' ? 0 : 1);
         warp += (warpTarget - warp) * 0.045 * dtn;
+      }
+      // Settled = we're resting on 'landed' with nothing pending AND the star
+      // field has actually stopped. Under reduced motion warp is pinned at
+      // 0.12 forever, so 'landed' alone is the signal there. Checking the
+      // displayed item (not `phase`) also covers a reload straight into the
+      // landed part, where `phase` never passes through 'done'.
+      const atRest = c.seq[c.displayedIdx]?.kind === 'landed' && c.targetIdx === c.displayedIdx;
+      const nowSettled = atRest && (c.reduce || warp < SETTLED_WARP);
+      if (nowSettled !== settledFired) {
+        settledFired = nowSettled;
+        setSettled(nowSettled);
+        if (!nowSettled) setRevealed(false);
       }
       const base = 0.019 * warp;
       dctx.fillStyle = `rgba(${bg.r},${bg.g},${bg.b},${c.reduce ? 1 : 0.30})`;
@@ -204,7 +362,11 @@ export default function TeamPickerSlide({ slide, show }) {
       dctx.fillStyle = vg; dctx.fillRect(0, 0, W, H);
 
       const item = c.seq[c.displayedIdx];
-      if (item && phase !== 'done' && item.kind !== 'landed') {
+      // `c.covered` gates TEXT here, and (see above) holds warp to a gentle
+      // idle rather than 0 or full speed while the sheet is still landing —
+      // so the sheet arrives already alive with soft drift, ramps to full
+      // hyperspace only once the text has room to read against it.
+      if (item && c.covered && phase !== 'done' && item.kind !== 'landed') {
         const A = (c.reduce ? 900 : 1050), E = 620;
         pt += dt;
         let disp = 1, op = 1;
@@ -220,8 +382,8 @@ export default function TeamPickerSlide({ slide, show }) {
           if (q >= 1) {
             c.displayedIdx = c.targetIdx;
             setHudIdx(c.displayedIdx);
-            if (c.seq[c.displayedIdx]?.kind === 'landed') { phase = 'done'; setLanded(true); }
-            else { setLanded(false); beginItem(); }
+            if (c.seq[c.displayedIdx]?.kind === 'landed') phase = 'done';
+            else beginItem();
           }
         }
         if (c.reduce) { disp = 1; op = Math.min(1, pt / 260); }
@@ -232,25 +394,106 @@ export default function TeamPickerSlide({ slide, show }) {
           dctx.globalAlpha = 1;
         }
       }
+      if (!c.stopped) raf = requestAnimationFrame(draw);
+    };
+    // Painting a canvas nobody can see costs the ring world frames for the
+    // rest of the Round 1 beat — `c.stopped` is set once the reveal finishes
+    // and cleared by `restart` if the host backs out of 'landed'.
+    c.restart = () => {
+      if (!c.stopped) return;
+      c.stopped = false;
+      last = performance.now();
       raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
+    return () => { cancelAnimationFrame(raf); c.restart = null; };
   }, []); // eslint-disable-line
 
   const cur = seq[hudIdx];
 
   return (
     <div className="absolute inset-0 overflow-hidden">
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
-      {landed ? (
-        <div className="absolute bottom-10 inset-x-0 text-center" style={{ fontFamily: font, letterSpacing: 5, color: theme.colors.highlight, opacity: 0.35, fontSize: 24, textTransform: 'uppercase' }}>Round 1</div>
+      <audio ref={audioRef} src="/audio/lightspeed-theme-loop.m4a" loop preload="auto" />
+      {/* The canvas keeps its own fixed 1920x1080 backing store and CSS
+          fill — the wrapper only ever moves/fades, so none of that sizing
+          logic is disturbed. */}
+      <motion.div
+        className="absolute inset-0"
+        initial={false}
+        animate={settled ? 'gone' : 'here'}
+        variants={reduce ? REVEAL_VARIANTS_REDUCE : REVEAL_VARIANTS}
+        onAnimationComplete={() => {
+          if (!settled) return;
+          setRevealed(true);
+          ctl.current.stopped = true;
+        }}
+      >
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+      </motion.div>
+      {revealed ? (
+        <RoundOneBeat theme={theme} font={font} reduce={reduce} />
       ) : cur?.kind === 'team' ? (
         <div className="absolute bottom-10 inset-x-0 text-center" style={{ fontFamily: font, letterSpacing: 4, color: theme.colors.highlight, opacity: 0.5, fontSize: 26 }}>
           {String(hudIdx).padStart(2, '0')} / {String(teamCount).padStart(2, '0')}
         </div>
       ) : null}
       <BaynesWatermark />
+    </div>
+  );
+}
+
+// The "Round 1" beat that replaces the old quiet bottom-corner label. Timing
+// and motion are lifted from RoundIntroSlide (spring slam on the number, a
+// kicker sliding up behind it) so a round starting looks the same here as it
+// does when a real round-intro slide does it — see that file, this is
+// deliberately its visual language, not a third one. What it does NOT copy is
+// that slide's opaque themed background and logo: this beat plays ON TOP of
+// the ring world we just revealed, so it stays transparent and leans on a
+// dark radial scrim for legibility over whatever the world is doing.
+// ponytail: "Round 1" is hardcoded, exactly as the label it replaces was —
+// this slide has no round data of its own, and the team intro only ever
+// precedes round 1.
+function RoundOneBeat({ theme, font, reduce }) {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+      <motion.div
+        className="absolute inset-0"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.45, ease: EASE_OUT }}
+        style={{ background: 'radial-gradient(ellipse 58% 62% at 50% 50%, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.26) 46%, transparent 78%)' }}
+      />
+      <motion.div
+        initial={reduce ? { opacity: 0 } : { opacity: 0, transform: 'translateY(26px)' }}
+        animate={{ opacity: 0.75, transform: 'translateY(0px)' }}
+        transition={{ duration: 0.3, ease: EASE_OUT }}
+        className="relative z-10"
+        style={{ fontFamily: font, color: theme.colors.text, fontSize: 'clamp(1.4rem, 2.4vw, 2.4rem)', letterSpacing: '0.42em', textIndent: '0.42em', textTransform: 'uppercase' }}
+      >
+        Round
+      </motion.div>
+      <motion.div
+        initial={reduce ? { opacity: 0 } : { opacity: 0, transform: 'scale(2.6)' }}
+        animate={{ opacity: 1, transform: 'scale(1)' }}
+        transition={reduce
+          ? { duration: 0.3, delay: 0.1, ease: EASE_OUT }
+          // Spring on the scale only — springing the opacity too would ramp
+          // it in over the spring's whole settle, and the number would read
+          // as fading up rather than landing.
+          : { default: { type: 'spring', duration: 0.5, bounce: 0.25, delay: 0.12 }, opacity: { duration: 0.18, delay: 0.12, ease: EASE_OUT } }}
+        className="relative z-10"
+        style={{
+          fontFamily: font,
+          color: theme.colors.highlight,
+          fontSize: 'clamp(6rem, 20vw, 18rem)',
+          lineHeight: 0.9,
+          fontWeight: 700,
+          letterSpacing: '-0.04em',
+          textShadow: `0 0 48px ${theme.colors.accent}, 0 0 120px ${theme.colors.accent}88`,
+        }}
+      >
+        1
+      </motion.div>
     </div>
   );
 }
