@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion, useReducedMotion, cubicBezier } from 'framer-motion'
 import { EASE_OUT } from '../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../lib/shinyGold.js'
+import { listHostPhotos } from '../../lib/hostPhotos.js'
 
 // Every shiny question/grid gets a standalone beat before its content — a pure
 // announcement, no question/answer/media yet, giving the host room to set
@@ -43,11 +44,27 @@ const LAND_T = 1.725 // s — moment of impact; every other element keys off thi
 // Ben watched actually fired it early. Flagged for Ben's sign-off.
 const IMPACT_EASE = cubicBezier(0.16, 1, 0.3, 1)
 
-export default function ShinyIntroScreen({ slide, theme }) {
+export default function ShinyIntroScreen({ slide, theme, show }) {
   const { data } = slide
   const reduce = useReducedMotion()
   const title = data.seriesTheme || data.shinyFormatName || 'Shiny Question'
   const icon = data.shinyFormatIcon || '✨'
+
+  // Host photo — a random pick from the show's uploaded host-photo library,
+  // chosen once per slide mount (not per re-render), so each intro card can
+  // surprise with a different Ben. Falls back to the slide's fixed
+  // data.hostPhotoUrl while the list loads or when the show has no uploads.
+  const [randomPhotoUrl, setRandomPhotoUrl] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    setRandomPhotoUrl(null)
+    listHostPhotos(show?.id).then(photos => {
+      if (cancelled || photos.length === 0) return
+      setRandomPhotoUrl(photos[Math.floor(Math.random() * photos.length)].url)
+    })
+    return () => { cancelled = true }
+  }, [show?.id, slide.id])
+  const photoUrl = randomPhotoUrl || data.hostPhotoUrl
 
   // Replay key — same idiom as QuestionSlide.jsx's flash reset: a multi-part
   // series keeps the same slide.id across parts, only currentPart changes as
@@ -128,9 +145,9 @@ export default function ShinyIntroScreen({ slide, theme }) {
 
       {/* Host photo — lower-left, rockets up from below the frame AFTER the
           title lands, overshoots with a rotate wobble (prototype "ben" track) */}
-      {data.hostPhotoUrl && (
+      {photoUrl && (
         <motion.img
-          src={data.hostPhotoUrl}
+          src={photoUrl}
           alt=""
           initial={reduce ? { opacity: 0, y: '0%', rotate: 0 } : { opacity: 0, y: '85%', rotate: -6 }}
           animate={

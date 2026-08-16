@@ -795,7 +795,7 @@ export default function QuestionSlide({ slide, show, transitionKey }) {
   const { data } = slide
 
   if (data.isShiny && !data.introDone) {
-    return <ShinyIntroScreen slide={slide} theme={theme} />
+    return <ShinyIntroScreen slide={slide} theme={theme} show={show} />
   }
 
   const part = resolveShinyPart(data)

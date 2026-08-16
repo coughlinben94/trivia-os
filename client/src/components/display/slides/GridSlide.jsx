@@ -14,12 +14,12 @@ function Tile({ tile, size, reduce }) {
   return <div style={{ ...common, background: tile?.color ?? '#222' }} />
 }
 
-export default function GridSlide({ slide }) {
+export default function GridSlide({ slide, show }) {
   const { theme } = useTheme()
   const { data } = slide
 
   if (data.isShiny && !data.introDone) {
-    return <ShinyIntroScreen slide={slide} theme={theme} />
+    return <ShinyIntroScreen slide={slide} theme={theme} show={show} />
   }
 
   return <GridContent slide={slide} theme={theme} />
