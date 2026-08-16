@@ -8,6 +8,8 @@ import HostPhotoLibrary from './HostPhotoLibrary.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
 import SlideCanvasEditor from './SlideCanvasEditor.jsx'
 import MatchingBoard from '../join/MatchingBoard.jsx'
+import WagerBoard from '../join/WagerBoard.jsx'
+import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 
@@ -734,6 +736,29 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
             </>
           )}
 
+          {/* Wager builder — the tiers are fixed by the format, so there is
+              nothing to author here but the question and the true number
+              (the shared Answer field below). This panel exists to state the
+              rules the host is signing up for and to catch the one way this
+              question type can be published broken: an Answer that isn't a
+              number to measure guesses against. */}
+          {schema.type === 'wager' && (
+            <>
+              <WagerBuilder answer={data.answer} />
+              <div className="flex flex-col gap-2">
+                <label className="block text-xs font-medium text-gray-700">Phone preview — the blind wager teams see first</label>
+                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
+                  <WagerBoard
+                    preview
+                    theme={theme}
+                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
+                    slide={{ id: slide.id, showId: show?.id, data: { ...data, wagerTiersLocked: false, wagerGuessesLocked: false } }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
           {/* Question text — not for list or matching types */}
           {schema.type !== 'list' && schema.type !== 'matching' && (
             <Field label="Question Text">
@@ -741,9 +766,18 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
             </Field>
           )}
 
-          {/* Answer — all shiny types */}
-          <Field label="Answer">
-            <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="The answer…" />
+          {/* Answer — all shiny types. For a wager question this field is not
+              just the reveal text, it's the number every guess is measured
+              against, so it says so. */}
+          <Field
+            label={schema.type === 'wager' ? 'Answer — the true number' : 'Answer'}
+            hint={schema.type === 'wager' ? 'Every guess is scored by how close it lands to this. Must be a number.' : undefined}
+          >
+            <TextInput
+              value={data.answer ?? ''}
+              onChange={v => onChange('answer', v)}
+              placeholder={schema.type === 'wager' ? 'e.g. 412' : 'The answer…'}
+            />
           </Field>
         </>
       )}
@@ -1046,6 +1080,46 @@ function MatchingBuilder({ pairs, pointsPerMatch, onChangePairs, onChangePoints 
           className="w-16 border border-gray-200 rounded px-2 py-1.5 text-sm text-center text-gray-900 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
         />
       </div>
+    </div>
+  )
+}
+
+function WagerBuilder({ answer }) {
+  const trueNumber = parseWagerNumber(answer)
+  const hasAnswer = (answer ?? '').toString().trim().length > 0
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">Wager tiers</label>
+        <p className="text-xs text-gray-400">
+          Fixed for every wager question. Teams pick one before the question is shown, then guess a
+          number. Guesses are ranked against each other — not against a fixed margin — and a team
+          only scores if it beat enough of the rest of the room. Miss your tier and you get nothing.
+        </p>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {WAGER_TIERS.map(t => (
+          <div key={t.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+            <span className="text-lg leading-none">{t.emoji}</span>
+            <span className="text-sm font-medium text-gray-800 flex-1">{t.label}</span>
+            <span className="text-sm font-semibold text-gray-900 tabular-nums">{t.points} pts</span>
+            <span className="text-xs text-gray-400 w-32 text-right">
+              beat {Math.round(t.threshold * 100)}% of the room
+            </span>
+          </div>
+        ))}
+      </div>
+      {!hasAnswer ? (
+        <p className="text-xs text-amber-600">
+          ⚠️ Add the true number in the Answer field below — without it this question can't be scored.
+        </p>
+      ) : trueNumber == null ? (
+        <p className="text-xs text-red-600">
+          ⚠️ “{String(answer)}” isn't a number. Scoring needs a single number (e.g. 412) to measure guesses against.
+        </p>
+      ) : (
+        <p className="text-xs text-gray-400">Guesses will be scored against <strong>{trueNumber}</strong>.</p>
+      )}
     </div>
   )
 }
