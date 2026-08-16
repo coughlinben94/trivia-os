@@ -1,12 +1,39 @@
+import { useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { THEMES, getTheme } from '../themes/index.js'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import BaynesWatermark from '../components/display/BaynesWatermark.jsx'
+import RingAmbient from '../components/display/RingAmbient.jsx'
+import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 
 export default function AmbientAudit() {
   const [params] = useSearchParams()
   const themeId = params.get('theme')
   const theme = themeId ? getTheme(themeId) : null
+  const ringMode = params.get('ring') === '1'
+  const ringRef = useRef(null)
+  // Display-only counter — independent of RingAmbient's own internal
+  // station ref, so clicking Turn re-renders THIS button without ever
+  // passing a station-shaped prop into RingAmbient (which must never
+  // re-render/remount; see that component's own header comment).
+  const [displayStation, setDisplayStation] = useState(0)
+
+  if (ringMode) {
+    return (
+      <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
+        <RingAmbient ref={ringRef} worldData={midnightGalaxyRing} />
+        <button
+          onClick={() => {
+            ringRef.current?.turn()
+            setDisplayStation(ringRef.current?.station ?? 0)
+          }}
+          style={{ position: 'absolute', top: 24, left: 24, zIndex: 30, padding: '10px 20px' }}
+        >
+          Turn ▶ (station {displayStation})
+        </button>
+      </div>
+    )
+  }
 
   if (theme) {
     return (

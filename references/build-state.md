@@ -45,7 +45,7 @@
 - `PreShowScreen` — QR code, ambient, Baynes watermark, Ben photo (the ticker editor was removed as dead code — see TICK-1; no render site ever existed for it)
 - `SlideRenderer.jsx` — routes to per-type components; 10 named transitions (incl. `assemble`) + Random + reduced-motion crossfade
 - 15 slide types in `SLIDE_COMPONENTS`: TitleSlide, RoundIntroSlide (also `swing-round-intro`), QuestionSlide, GradingBreakSlide, ScoreboardRevealSlide, CustomSlide, StateOfUnionSlide, MultiQuestionSlide, PixelateSeriesSlide, PylRevealSlide, WinnerRevealSlide, GridSlide, TeamPreviewSlide, TeamPickerSlide — see `references/slides.md`
-- `ParticleBackground.jsx` — 9 bespoke ambient scenes + 12 shared BreathingGradient themes (July 2026 rework, see `references/themes.md`), 3-layer architecture
+- `ParticleBackground.jsx` — three-way routing: 8 bespoke ambient scenes (`AMBIENT_MAP`) + 1 ring world (`RING_WORLDS` → `RingAmbient`, midnight-galaxy) + 12 shared BreathingGradient themes (`GRADIENT_MOODS`) — July 2026 rework + Aug 2026 ring mount, see `references/themes.md`; 3-layer architecture
 - Answer reveal overlay on QuestionSlide (A key / `answer_reveal` flag)
 
 ### Winner Reveal + Final Break (shipped 2026-06-30)
@@ -102,7 +102,7 @@
 - Every shiny slide (question AND grid) gets a shared `ShinyIntroScreen` beat before content, gated on `data.introDone`, with an optional per-instance `data.introSubtitle` line (2026-07-05)
 
 ### 21 Ambient Themes
-- July 2026 rework split them into 9 bespoke (hand-built scene) + 12 shared BreathingGradient themes. Per-theme bland-pass status, anchors/drifters, and the bespoke/gradient split live in `references/themes.md` now — don't duplicate that tracking here, it drifts.
+- July 2026 rework split them into 9 bespoke (hand-built scene) + 12 shared BreathingGradient themes; Aug 2026 moved midnight-galaxy off the bespoke path to the ring renderer, leaving 8 bespoke + 1 ring + 12 gradient. Per-theme bland-pass status, anchors/drifters, and the full path split live in `references/themes.md` now — don't duplicate that tracking here, it drifts.
 - 3-layer architecture enforced; GPU-only; tinted vignette system
 
 ---

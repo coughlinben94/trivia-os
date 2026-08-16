@@ -1,6 +1,9 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
+import ErrorBoundary from '../ErrorBoundary.jsx'
 import { getTheme } from '../../themes/index.js'
 import BreathingGradient from './BreathingGradient'
+import RingAmbient from './RingAmbient.jsx'
+import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
 import { deriveTint, hexToRgba } from '../../lib/colorTint.js'
 
 // ─── Keyframes ────────────────────────────────────────────────────────────
@@ -147,12 +150,6 @@ const KEYFRAMES = `
     0%,100% { transform: translateX(0); }
     50%     { transform: translateX(var(--fx,10vw)); }
   }
-  @keyframes ambientBloom {
-    0%   { opacity: 0; transform: translate(0,0); }
-    18%  { opacity: var(--hi,.55); }
-    78%  { opacity: calc(var(--hi,.55)*.72); }
-    100% { opacity: 0; transform: translate(var(--bx,5vw), var(--by,-3vh)); }
-  }
   @keyframes ambientStretchY {
     0%,100% { transform: scaleY(1); }
     50%     { transform: scaleY(var(--sy,1.05)); }
@@ -184,7 +181,6 @@ const KEYFRAMES = `
     @keyframes streakOnce { 0%,100% { opacity: 0; } }
     @keyframes ambientFloatY { 0%,100% { transform: none; } }
     @keyframes ambientFloatX { 0%,100% { transform: none; } }
-    @keyframes ambientBloom  { 0%,100% { opacity: var(--hi,.55); } }
     @keyframes ambientStretchY { 0%,100% { transform: none; } }
     @keyframes ambientSway     { 0%,100% { transform: none; } }
   }
@@ -345,203 +341,6 @@ function PureMichiganAmbient({ tint }) {
         lo={0.45} wander={true} wanderDur={f.wDur} wanderDelay={f.wDelay}
       />
     ))}
-  </>
-}
-
-// ─── 2. MIDNIGHT GALAXY ───────────────────────────────────────────────────
-
-// Nebula bloomers re-roll their position/travel/duration on every
-// animationiteration — the CSS loop boundary, which for ambientBloom always
-// lands at opacity 0, so the reposition is invisible. Same per-cycle
-// re-roll philosophy as rollMeteorShower, just event-driven instead of
-// timer-driven since this is a continuous loop, not a fire-then-wait burst.
-// Center is rejected out of the core's home quadrant (upper-right) so blooms
-// never compete with the anchor.
-function rollBloomCenter() {
-  let x = 0, y = 0, tries = 0
-  do {
-    x = Math.random() * 100
-    y = Math.random() * 100
-    tries++
-  } while (x > 50 && y < 42 && tries < 30)
-  return {
-    x, y,
-    bx: `${(-6 + Math.random() * 12).toFixed(1)}vw`,
-    by: `${(-4 + Math.random() * 8).toFixed(1)}vh`,
-    dur: `${(14 + Math.random() * 12).toFixed(1)}s`,
-  }
-}
-
-function NebulaBloomer({ color, w, h, blur, initialDur, initialDelay }) {
-  // First mount uses the prescribed clock + stagger; every reroll after that
-  // gets a fresh random duration and delay:'0s' so the restart lands exactly
-  // on the keyframe's 0% (opacity 0) instead of skipping ahead into
-  // visibility — keeping every reposition invisible, not just the first.
-  const [roll, setRoll] = useState(() => ({ ...rollBloomCenter(), dur: initialDur, delay: initialDelay }))
-  // The reduced-motion override only freezes opacity — the animation still
-  // loops and still fires animationiteration, which would otherwise keep
-  // silently teleporting the bloom while it's fully (not invisibly) visible.
-  // Stop rerolling once reduced motion is on, so it holds one place for good.
-  const reroll = () => {
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    setRoll({ ...rollBloomCenter(), delay: '0s' })
-  }
-  return (
-    <div aria-hidden
-      onAnimationIteration={reroll}
-      style={{
-        position: 'absolute', left: `${roll.x}%`, top: `${roll.y}%`,
-        width: w, height: h,
-        // Centered via margin, not transform — ambientBloom's own keyframe
-        // drives transform (0,0 → bx,by) and would wipe out a competing
-        // static translate() the instant the animation starts.
-        marginLeft: `calc(${w} / -2)`, marginTop: `calc(${h} / -2)`,
-        pointerEvents: 'none', willChange: 'opacity,transform', borderRadius: '50%',
-        filter: `blur(${blur}px)`,
-        background: `radial-gradient(ellipse, ${color}, transparent 70%)`,
-        '--hi': 0.55, '--bx': roll.bx, '--by': roll.by,
-        animation: `ambientBloom ${roll.dur} ease-in-out ${roll.delay} infinite`,
-      }}
-    />
-  )
-}
-
-function midnightRollSatellite() {
-  return {
-    top: `${(6 + Math.random() * 72).toFixed(1)}%`,
-    rot: `${(-12 + Math.random() * 24).toFixed(1)}deg`,
-    reverse: Math.random() < 0.5,
-    dur: `${(38 + Math.random() * 25).toFixed(1)}s`,
-  }
-}
-
-function GalaxySatellite({ tint }) {
-  const [roll, setRoll] = useState(midnightRollSatellite)
-  // Same reasoning as NebulaBloomer: ambientDriftAcross's reduced-motion
-  // override only freezes opacity, so without this guard the dot would keep
-  // re-pathing to a new row/angle in full view instead of holding still.
-  const reroll = () => {
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    setRoll(midnightRollSatellite())
-  }
-  return (
-    <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', transform: `rotate(${roll.rot})` }}>
-      <div
-        aria-hidden
-        onAnimationIteration={reroll}
-        style={{
-          position: 'absolute', top: roll.top, left: 0, width: 3, height: 3, borderRadius: '50%',
-          pointerEvents: 'none', willChange: 'transform,opacity',
-          // pure-white dot is the satellite's sanctioned exception (spec: heart + satellite only);
-          // its glow is a static box-shadow, no tail — directional streaks belong to meteor-shower
-          background: 'rgba(255,255,255,1)',
-          boxShadow: `0 0 5px rgba(255,255,255,0.95), 0 0 10px ${tint('rgba(192,96,255,0.6)')}`,
-          '--hi': 0.85,
-          animation: `ambientDriftAcross ${roll.dur} linear infinite ${roll.reverse ? 'reverse' : 'normal'}`,
-        }}
-      />
-    </div>
-  )
-}
-
-function MidnightGalaxyAmbient({ tint }) {
-  // Base star field — min-distance placement (aspect-corrected for 16:9,
-  // since raw % distance is axis-relative and would let stars clump on the
-  // wider axis) so the scatter never bunches up. Up to 40 tries per star
-  // before just accepting the last roll.
-  const stars = useMemo(() => {
-    const placed = []
-    for (let i = 0; i < 85; i++) {
-      let x = 0, y = 0, tries = 0, ok = false
-      while (tries < 40) {
-        x = Math.random() * 100
-        y = Math.random() * 100
-        ok = placed.every(p => {
-          const dx = (x - p.x) * 1.78
-          const dy = y - p.y
-          return dx * dx + dy * dy > 49
-        })
-        tries++
-        if (ok) break
-      }
-      const hi = 0.35 + Math.random() * 0.5
-      const dur = 3 + Math.random() * 5
-      placed.push({
-        x, y, size: 1 + Math.random() * 1.6,
-        highlightColored: Math.random() < 0.20,
-        hi, lo: hi * 0.25,
-        dur: `${dur.toFixed(1)}s`, delay: `-${(Math.random() * dur).toFixed(1)}s`,
-      })
-    }
-    return placed
-  }, [])
-
-  // Star-cluster band — dense dust lane along the core's tilted axis.
-  // Deliberately clustered, not min-distance: jitter around a straight line
-  // from (62%,-6%) to (106%,30%).
-  const clusterStars = useMemo(() => Array.from({ length: 61 }, () => {
-    const t = Math.random()
-    const bx = 62 + t * 44
-    const by = -6 + t * 36
-    const hi = 0.35 + Math.random() * 0.5
-    const dur = 2.5 + Math.random() * 4.5
-    return {
-      left: `${(bx + (Math.random() * 10 - 5)).toFixed(2)}%`,
-      top: `${(by + (Math.random() * 10 - 5)).toFixed(2)}%`,
-      size: 1 + Math.random() * 1.4,
-      highlightColored: Math.random() < 0.20,
-      hi, lo: hi * 0.25,
-      dur: `${dur.toFixed(1)}s`, delay: `-${(Math.random() * dur).toFixed(1)}s`,
-    }
-  }), [])
-
-  return <>
-    {/* 1. Base wash — deep space, lifting slightly indigo toward the bottom */}
-    <div aria-hidden style={{
-      position: 'absolute', inset: 0, pointerEvents: 'none',
-      background: `linear-gradient(180deg, ${tint('rgba(4,0,16,1)')} 0%, ${tint('rgba(8,0,26,1)')} 55%, ${tint('rgba(48,28,92,0.55)')} 100%)`,
-    }}/>
-    {/* 2. Corner accent wash */}
-    <GlowLayer lo={0.4} hi={0.62} duration="19s" style={{
-      inset: 0, background: `radial-gradient(ellipse 95% 62% at 12% 88%, ${tint('rgba(74,26,143,0.5)')}, transparent)`,
-    }}/>
-    {/* 3. Nebula bloomers — reposition each cycle, always rejected out of the core's quadrant */}
-    <NebulaBloomer color={tint('rgba(74,26,143,0.42)')}  w="37vw" h="17vh" blur={14} initialDur="15s" initialDelay="-3s"/>
-    <NebulaBloomer color={tint('rgba(74,26,143,0.38)')}  w="29vw" h="21vh" blur={16} initialDur="17s" initialDelay="-9s"/>
-    <NebulaBloomer color={tint('rgba(36,16,78,0.44)')}   w="32vw" h="13vh" blur={18} initialDur="20s" initialDelay="-13s"/>
-    <NebulaBloomer color={tint('rgba(192,96,255,0.30)')} w="23vw" h="19vh" blur={15} initialDur="24s" initialDelay="-5s"/>
-    {/* 4. Base star field — pure-white twinkle, ~20% highlight-tinted (sanctioned near-white exception) */}
-    {stars.map((s, i) => (
-      <div key={i} aria-hidden style={{
-        position: 'absolute', left: `${s.x.toFixed(2)}%`, top: `${s.y.toFixed(2)}%`, pointerEvents: 'none',
-        width: s.size, height: s.size, borderRadius: '50%', willChange: 'opacity',
-        background: s.highlightColored ? tint('rgba(192,96,255,0.9)') : `rgba(255,255,255,${s.hi})`,
-        '--lo': s.lo, '--hi': s.hi,
-        animation: `ambientBreathe ${s.dur} ${s.delay} ease infinite`,
-      }}/>
-    ))}
-    {/* 5. Anchor — galactic core, top-right */}
-    <div aria-hidden style={{
-      position: 'absolute', top: '-8%', right: '-10%', width: '48vw', height: '36vh',
-      transform: 'rotate(-19deg)', pointerEvents: 'none', willChange: 'opacity', borderRadius: '50%',
-      filter: 'blur(2px)',
-      // near-white heart is the sanctioned hot-core exception; the rest is in-family highlight
-      background: `radial-gradient(ellipse, rgba(255,255,255,0.95) 0%, ${tint('rgba(192,96,255,0.65)')} 13%, ${tint('rgba(192,96,255,0.24)')} 34%, transparent 72%)`,
-      '--lo': 0.78, '--hi': 1,
-      animation: 'ambientBreathe 13s ease-in-out infinite',
-    }}/>
-    {/* 6. Star-cluster band — dust lane along the core's axis, sits in front of it */}
-    {clusterStars.map((s, i) => (
-      <div key={i} aria-hidden style={{
-        position: 'absolute', left: s.left, top: s.top, pointerEvents: 'none',
-        width: s.size, height: s.size, borderRadius: '50%', willChange: 'opacity',
-        background: s.highlightColored ? tint('rgba(192,96,255,0.9)') : `rgba(255,255,255,${s.hi})`,
-        '--lo': s.lo, '--hi': s.hi,
-        animation: `ambientBreathe ${s.dur} ${s.delay} ease infinite`,
-      }}/>
-    ))}
-    {/* 7. Satellite — single dot, no tail, re-paths every crossing */}
-    <GalaxySatellite tint={tint}/>
   </>
 }
 
@@ -1344,7 +1143,6 @@ function MeteorShowerAmbient({ tint }) {
 // ─── Registry ─────────────────────────────────────────────────────────────
 const AMBIENT_MAP = {
   'pure-michigan':      PureMichiganAmbient,
-  'midnight-galaxy':    MidnightGalaxyAmbient,
   'autumn-harvest':     AutumnHarvestAmbient,
   'sunset-boulevard':   SunsetBoulevardAmbient,
   'sand-dune-chill':    SandDuneChillAmbient,
@@ -1354,13 +1152,29 @@ const AMBIENT_MAP = {
   'meteor-shower':      MeteorShowerAmbient,
 }
 
+// ─── Ring-world registry ──────────────────────────────────────────────────
+// Plug-and-play: every ring-based ambient (built on RingAmbient.jsx +
+// ringEngine.js/ringPrimitives.js, the same way midnightGalaxyRing was)
+// registers here by theme id -> its worldData module. Adding a new one is
+// one import + one registry entry, no other change in this file —
+// RING_WORLDS[theme.id] below is what routes a theme to RingAmbient
+// instead of AMBIENT_MAP.
+// Caveat on "plug-and-play": ENGINE (frame geometry, layer config,
+// SURGE_MS) is module-scoped inside RingAmbient.jsx, not derived per-world.
+// A world that reuses that geometry really is a two-line drop-in; one that
+// needs different geometry is a change to RingAmbient.jsx, not just a
+// registry entry.
+const RING_WORLDS = {
+  'midnight-galaxy': midnightGalaxyRing,
+}
+
 // ─── Gradient-collapse routing ──────────────────────────────────────────
 // These 12 themes retired their bespoke ambient scene in favor of the shared
 // BreathingGradient (fed theme.colors + a mood) and are no longer routed
 // through AMBIENT_MAP. Their old *Ambient functions have already been
-// deleted (confirmed 2026-07-05 — AMBIENT_MAP above has exactly the 9
-// bespoke entries, no orphaned components remain). The other 9 themes keep
-// their bespoke ambient via AMBIENT_MAP.
+// deleted (confirmed 2026-07-05 — AMBIENT_MAP above holds only live
+// entries, no orphaned components remain). 8 themes keep their bespoke
+// ambient via AMBIENT_MAP; midnight-galaxy moved to RING_WORLDS.
 const GRADIENT_MOODS = {
   'wine-cellar':      'calm',
   'drive-in-movie':   'calm',
@@ -1376,10 +1190,23 @@ const GRADIENT_MOODS = {
   'northern-lights':  'electric',
 }
 
+// Dev-only: the render branch below is ordered gradient > ring > bespoke, so
+// a theme id listed in two registries silently renders the earlier one and
+// the later entry looks broken for no visible reason. Warn once at module
+// load; `import.meta.env.DEV` is statically false in the prod build, so this
+// whole block is dropped by the bundler.
+if (import.meta.env.DEV) {
+  const overlaps = Object.keys(RING_WORLDS).filter(id => AMBIENT_MAP[id] || GRADIENT_MOODS[id])
+  if (overlaps.length) {
+    console.warn('[ParticleBackground] theme id in more than one ambient registry — only the first branch renders:', overlaps)
+  }
+}
+
 // ─── Main Export ──────────────────────────────────────────────────────────
-export default function ParticleBackground({ theme }) {
+export default function ParticleBackground({ theme, slideKey }) {
   const gradientMood = GRADIENT_MOODS[theme.id]
   const AmbientComponent = gradientMood ? null : AMBIENT_MAP[theme.id]
+  const ringWorld = RING_WORLDS[theme.id]
   const v = theme.vignette ?? {}
   const baseTheme = getTheme(theme.id)
 
@@ -1398,9 +1225,29 @@ export default function ParticleBackground({ theme }) {
     <>
       <style>{KEYFRAMES}</style>
       <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 1 }} aria-hidden>
-        {gradientMood
-          ? <BreathingGradient palette={theme.colors} mood={gradientMood} />
-          : AmbientComponent && <AmbientComponent tint={tint} />}
+        {/* Crash boundary around the ambient slot ONLY — deliberately NO `key`,
+            so it never resets and never re-mounts the ambient on slide change
+            (Display.jsx keeps <ParticleBackground> outside its own keyed
+            boundary for exactly that reason; this one is inside it, not a
+            replacement for it). RingAmbient's mount effect runs buildArc()/
+            buildLayerContent() and dynamic primitive dispatch through the
+            ~2,900-line ringPrimitives.js — a throw in there used to blank the
+            whole /display route for every theme. fallback={null}: the
+            background silently disappears, question text/scoreboard survive.
+            Caveat: this cannot catch a throw at MODULE load (e.g.
+            midnightGalaxy.ring.js's THEMES.find guard) — that fails while the
+            chunk evaluates, before React renders anything.
+            fallback is an empty fragment, NOT literal null: ErrorBoundary
+            tests `if (this.props.fallback)`, so a falsy null would fall
+            through to its default full-screen "Something went wrong" panel
+            and cover the show. */}
+        <ErrorBoundary fallback={<></>}>
+          {gradientMood
+            ? <BreathingGradient palette={theme.colors} mood={gradientMood} />
+            : ringWorld
+              ? <RingAmbient worldData={ringWorld} slideKey={slideKey} />
+              : AmbientComponent && <AmbientComponent tint={tint} />}
+        </ErrorBoundary>
         <Vignette
           r={v.r ?? 0}
           g={v.g ?? 0}

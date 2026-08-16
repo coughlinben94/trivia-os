@@ -1,0 +1,18 @@
+{
+  "verdict": "PASS",
+  "reason": "[sample 1: PASS] Scattered soft-glow white dots across the upper ~55% purple gradient sky read immediately as a starry night sky; irregular distribution and glow halos avoid any grid or hard-edge tell, and the flat-illustration register matches the treeline/fire/water below. [sample 2: PASS] Top quarter of the frame carries ~20 irregularly placed circular points of light with genuine brightness variation (brightest at x≈1165,y≈205 and x≈485,y≈100, faintest at x≈65,y≈230), reading unambiguously as stars over a deep indigo night gradient; halos fall off radially with no square glow edge or sprite seam, and the flat register matches the treeline and flame around it. Only weakness is the bare band between y≈26% and the treeline at y≈60%, which the mid-frame violet horizon glow adequately explains. [sample 3: PASS] Scattered glowing points in upper sky (y2-26% band) read immediately as stars. Bright enough to register at a glance (addresses named defect #1). Soft halos, no box-tells, palette/placement coherent with night-sky atmosphere.",
+  "category": "glow-light",
+  "motion": "NOT_APPLICABLE",
+  "checkedFile": "concepts/campfire-sing-along-v1.html",
+  "timestamp": "2026-07-27T22:03:57.615Z",
+  "sampleVotes": {
+    "pass": 3,
+    "fail": 0,
+    "total": 3
+  },
+  "panel": [
+    "sonnet",
+    "opus",
+    "haiku"
+  ]
+}

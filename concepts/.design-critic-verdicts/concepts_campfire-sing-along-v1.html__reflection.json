@@ -1,0 +1,18 @@
+{
+  "verdict": "FAIL",
+  "reason": "[sample 1: FAIL] Bottom third of the frame has a thin, near-straight highlight line running almost the full width beneath the main glow, reading as a stray edge/stroke rather than part of the water's shimmer, even though the overall wavy amber band otherwise reads as firelight on water. [sample 2: FAIL] The band is a single uniform full-width taupe/grey smear with no localized bright core under any fire source and no resolvable ripple streaks — the three shimmer ellipses are blurred into one continuous wash, and the warm hue reads desaturated-grey through the center with a cool blue cast in the right third. A hard straight horizontal seam runs the full width at y~12% (top edge), a visible div tell. [sample 3: PASS] Horizontal wavy band with soft undulating edges reads clearly as firelight reflected/shimmering on water; warm peachy/golden tones reinforce the reflection effect; blur and shimmer blobs appropriate for background-plane liquid; no hard edges or div tells.",
+  "category": "liquid-surface",
+  "motion": "NOT_APPLICABLE",
+  "checkedFile": "concepts/campfire-sing-along-v1.html",
+  "timestamp": "2026-07-27T22:07:48.146Z",
+  "sampleVotes": {
+    "pass": 1,
+    "fail": 2,
+    "total": 3
+  },
+  "panel": [
+    "sonnet",
+    "opus",
+    "haiku"
+  ]
+}

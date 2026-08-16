@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>World 03 — Space: stars first, one curve · Trivia OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   WORLD 03 — SPACE · 2026-07-30 · rebuild of world-02-married
+   Engine carried over unchanged: one continuous layered world, camera
+   detent, object persistence via strips tiling at exact wrap periods,
+   seamless 8→1 wrap-modulo at animationend, corner hue fields, RISE
+   arc on a slider, five theme token sets, no rAF ever.
+
+   THE SEVEN FIXES (each a hard acceptance criterion):
+   1  CENTRED QUESTION — .qLayer anchors at top:50cqh with
+      translateY(-50%), so the block's own centre IS 50cqh at any
+      length. No top-anchored growth.
+   2  SAFE AREA — text can never exit stage 28–72cqh. Eyebrow budget
+      5.2cqh + text box budget 38.8cqh = 44cqh max block height; a
+      centred 44cqh block spans exactly 28–72. Enforced by fit, not
+      hoped for.
+   3  MEASURE-TO-FIT — binary-search fit (port of the real app's
+      client/src/lib/autoFitText.js): canvas measureText on real
+      glyphs, greedy word-wrap, largest size in [floor,ceil] whose
+      wrapped lines fit boxW × boxH at ≤4 lines. Gated behind
+      document.fonts.ready so metrics are DM Sans, not the fallback.
+   4  SCRIM FOLLOWS TEXT — after layout the scrim band is positioned
+      from the question block's measured rect (+2cqh pad, +5cqh
+      feather each side). Soft linear band, never a full-frame wash.
+   5  STARS ARE THE HERO — 64 stars per 48cqw wrap period (320 nodes
+      across the strip): 3 size tiers, 4 hero stars with static glow,
+      per-star brightness (.18–.95 base) and 3 colour temperatures,
+      5 twinkle groups on mutually-prime 11/13/17/29/31 s.
+   6  SMALL CLEAN PLANETS — two bodies ≤6.5cqw, both fully inside
+      frame, nothing clipped by an edge. The big top-edge asteroid
+      masses are gone. Hue fields kept dark + saturated; the orange
+      field's alpha cut so purple/orange never mix into brown at
+      similar strength.
+   7  ONE CURVE — the detent is TWO keyframe stops on X (0/100) under
+      a single asymmetric ease-out cubic-bezier(.16,.62,.28,1), and
+      THREE stops on Y (0 / peak at 42% / 100) — a symmetric arc whose
+      per-segment ease-in-out has zero slope at the peak on both
+      sides, so velocity is continuous. X and Y live on nested movers;
+      every layer shares the same two curves and the same 1.2 s, only
+      amplitude differs, so no layer can separate mid-move. Wrap
+      recalc still happens in the same task as class removal — one
+      paint, no hitch. world-02's six chained curves are gone.
+   8  CONTINUOUS DRIFT (2026-07-30 root-cause fix) — the "no flow /
+      nothing stays" cause was the 9 s dead hold between detents, not
+      the detent curve. Every layer now drifts slowly forever (linear,
+      one period per loop, prime durations 331/337/347 s); the detent
+      is a surge on top of ever-present motion, and the text exit
+      overlaps the camera move — one gesture, not three serial beats.
+
+   HOUSE LAWS (unchanged): transform + opacity only; static
+   filter/shadow never animated; mutually-prime periods everywhere
+   (twinkle 11/13/17/29/31 · hue breath 29/37/43 · hue drift
+   149/181/211 · nebula 23 · theme 73 · shooting star 40–120 s
+   jittered); static pre-rendered grain; reduced motion freezes,
+   never vanishes; no ground, no horizon, nothing rests on anything;
+   glows only on border-radius:50%; gradients reach transparent well
+   inside their own box; blur graduated, never uniform.
+   ══════════════════════════════════════════════════════════════════ */
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --text:#ece6ff; --muted:#8878b8;
+  --pg:#0b0c10; --pg-card:#14161d; --pg-line:#262a34;
+}
+
+body{
+  background:var(--pg); color:#ddd8e8;
+  font-family:'DM Sans',system-ui,sans-serif; line-height:1.55;
+  padding:0 0 90px; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1240px;margin:0 auto;padding:0 28px}
+
+header.pg{padding:56px 0 26px;border-bottom:1px solid var(--pg-line);margin-bottom:26px}
+header.pg .eyebrow{font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:#8a7ad0;font-weight:700;margin-bottom:12px}
+header.pg h1{font-family:'Boogaloo',cursive;font-size:clamp(34px,5vw,52px);line-height:1.05;margin-bottom:12px}
+header.pg p{max-width:78ch;color:#9aa0ae;font-size:15px}
+header.pg b{color:#ddd8e8;font-weight:500}
+
+/* ── controls ─────────────────────────────────────────────────────── */
+.ctl{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px}
+.ctl button,.ctl label{
+  font-size:12.5px;font-weight:600;letter-spacing:.03em;
+  background:var(--pg-card);border:1px solid var(--pg-line);color:#b9b3c8;
+  border-radius:7px;padding:8px 14px;cursor:pointer;
+  transition:border-color .15s,color .15s,background .15s;
+  display:inline-flex;align-items:center;gap:7px;user-select:none;
+}
+.ctl button:hover,.ctl label:hover{border-color:#6a5aa8;color:#fff}
+.ctl button.on,.ctl label.on{background:#2a2140;border-color:#8a6ad0;color:#fff}
+.ctl .big{
+  font-size:13.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  background:#2a2140;border:1px solid #8a6ad0;color:#fff;border-radius:8px;
+  padding:10px 24px;
+}
+.ctl .big:hover{background:#3a2e58}
+.ctl .big:active{transform:translateY(1px)}
+.ctl .sep{width:1px;align-self:stretch;background:var(--pg-line);margin:0 4px}
+.ampbox{display:flex;align-items:center;gap:10px;
+  background:var(--pg-card);border:1px solid var(--pg-line);border-radius:8px;
+  padding:8px 14px;font-size:12.5px;font-weight:600;color:#b9b3c8}
+.ampbox input{width:170px;accent-color:#8a6ad0}
+.ampbox .val{color:#fff;min-width:44px;font-variant-numeric:tabular-nums}
+.sub{color:#8b91a0;font-size:13px;margin:0 0 14px;font-variant-numeric:tabular-nums}
+.sub b{color:#ddd8e8;font-weight:600}
+
+/* ══ THE STAGE ══════════════════════════════════════════════════════ */
+.stage{
+  position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;
+  border-radius:10px;background:#010107;
+  box-shadow:0 24px 70px rgba(0,0,0,.6),0 0 0 1px var(--pg-line);
+  container-type:size;
+  --amp:1;
+}
+
+/* ══ THEME TOKENS ══ purple bottom-left (hA), orange top-right (hB),
+   cooler wanderer (hC). FIX 6: orange alphas cut well below purple's
+   so the two complementaries never sit at similar strength — that
+   equal-alpha overlap is exactly what reads as brown sludge. */
+.stage.th-mg{--t-bg:#08001a;--t-deep:#040010;--t-accent:#4a1a8f;--t-hl:#c060ff;--t-text:#e8d0ff;
+  --hA:rgba(150,60,255,.42);--hA-mid:rgba(120,42,220,.16);
+  --hB:rgba(255,132,48,.18);--hB-mid:rgba(230,100,40,.06);
+  --hC:rgba(80,90,255,.20); --hC-mid:rgba(70,70,210,.07)}
+.stage.th-ms{--t-bg:#020408;--t-deep:#010306;--t-accent:#101828;--t-hl:#e0f0ff;--t-text:#f0f8ff;
+  --hA:rgba(90,120,190,.30); --hA-mid:rgba(60,88,150,.12);
+  --hB:rgba(220,232,255,.14);--hB-mid:rgba(170,196,240,.05);
+  --hC:rgba(40,70,130,.20);  --hC-mid:rgba(30,52,100,.07)}
+.stage.th-hw{--t-bg:#060008;--t-deep:#030005;--t-accent:#380858;--t-hl:#a000ff;--t-text:#e0c0f8;
+  --hA:rgba(150,0,255,.38);  --hA-mid:rgba(112,8,180,.15);
+  --hB:rgba(255,104,0,.20);  --hB-mid:rgba(210,74,0,.07);
+  --hC:rgba(60,10,90,.24);   --hC-mid:rgba(44,6,66,.09)}
+.stage.th-us{--t-bg:#000c18;--t-deep:#000810;--t-accent:#003848;--t-hl:#00d8c0;--t-text:#b0f0f0;
+  --hA:rgba(0,150,170,.32);  --hA-mid:rgba(0,104,124,.12);
+  --hB:rgba(80,220,190,.16); --hB-mid:rgba(50,160,140,.06);
+  --hC:rgba(0,60,110,.24);   --hC-mid:rgba(0,42,80,.09)}
+.stage.th-sb{--t-bg:#1c0c2a;--t-deep:#120722;--t-accent:#e06a28;--t-hl:#ffb84d;--t-text:#ffeeda;
+  --hA:rgba(160,60,190,.36); --hA-mid:rgba(120,42,140,.14);
+  --hB:rgba(255,150,60,.22); --hB-mid:rgba(224,106,40,.08);
+  --hC:rgba(190,60,110,.18); --hC-mid:rgba(140,40,80,.06)}
+
+/* layer chassis: base (wrapped X) > mvX (detent X) > mvY (detent arc)
+   > art (blur home). Layer box at stage (−40,−16); bleed covers max
+   travel + Y at 2× amplitude. */
+.lyr{position:absolute;left:-40cqw;top:-16cqh;width:600cqw;height:132cqh}
+.base,.mvX,.mvY,.drift,.art{position:absolute;inset:0}
+
+/* ══ CONTINUOUS DRIFT — the flow itself (2026-07-30 restructure) ══
+   Root cause of "no flow / nothing stays": the world was STATIC for
+   the whole 9 s hold, then jumped 16cqw in under a second. A starfield
+   is statistically uniform — after a fast jump the new frame looks
+   like any other frame, so every arrival read as a cut, not travel.
+   No amount of detent-curve tuning fixes that, because the problem is
+   the 0-motion hold, not the motion.
+
+   Fix: each layer drifts continuously, dead slow, linear, infinite —
+   one full period per loop so the wrap point is invisible (content is
+   period-tiled). Speeds scale with depth like the detent amplitudes.
+   Durations 331/337/347 s are primes — mutually prime with every
+   ambient clock. The detent still rides on top (nested mover), now a
+   gentle surge over the ever-present drift instead of a lurch out of
+   stillness. Sky stays still — it is at infinity. */
+.l-str .drift{--P:48cqw; animation:driftGo 347s linear infinite}
+.l-mid .drift{--P:64cqw; animation:driftGo 337s linear infinite}
+.l-fg  .drift{--P:128cqw;animation:driftGo 331s linear infinite}
+@keyframes driftGo{
+  0%  {transform:translate3d(0,0,0)}
+  100%{transform:translate3d(calc(var(--P)*-1),0,0)}
+}
+
+/* per-layer parallax shares (arc-study ratios, unchanged) */
+/* ══ PER-STATION TRAVEL — halved 2026-07-30 ══
+   Ben: "the screen that comes second third fourth etc is always a
+   completely new screen from the one before it. nothing stays at all."
+   and "there is absolutely no flow."
+
+   Root cause was distance, not motion. fg travelled 34cqw per advance
+   — a THIRD of the 100cqw frame — so two-thirds of the foreground was
+   replaced every question. Combined with only 5 masses per 272cqw and
+   2 planets per 128cqw, most stations contained no identifiable object
+   at all, and any that did lasted about three advances. Nothing to
+   recognise, so every arrival read as a new place; nothing to track,
+   so there was no flow.
+
+   Travel halved and object counts roughly tripled (below). At 16cqw a
+   6.5cqw planet now crosses the frame over ~12 advances: you approach
+   it, watch it pass, and it leaves. That IS the flow. Periods stay
+   locked at 8 × travel so the 8→1 wrap is still seamless.
+   Sky stays at 0 deliberately — it is at infinity; its life comes from
+   the hue fields' own drift, not from parallax.                      */
+.l-sky{--tx:0cqw; --ty:calc(var(--amp)*0.35cqh)}
+.l-str{--tx:6cqw; --ty:calc(var(--amp)*0.90cqh)}
+.l-mid{--tx:8cqw; --ty:calc(var(--amp)*2.40cqh)}
+.l-fg {--tx:16cqw;--ty:calc(var(--amp)*5.00cqh)}
+
+/* static, graduated blur — on .art so animated wrappers stay clean */
+.l-sky .art{filter:blur(1.5px)}
+.l-str .art{filter:blur(1.5px)}
+.l-mid .art{filter:blur(2.2px)}
+.l-fg  .art{filter:blur(1.7px)}
+
+/* base void — dark, saturated, no vertical structure */
+.void{position:absolute;inset:0;
+  background:radial-gradient(ellipse 130% 120% at 50% 50%,
+    var(--t-bg,#08001a) 0%, var(--t-deep,#040010) 62%, #010007 100%);
+  transition:background 6s linear}
+
+/* ══ CORNER HUE FIELDS ══ each gradient reaches transparent at 72–74%
+   of its own box (real margin per DESIGN-WORKER-LESSONS), breathing on
+   29/37/43 s, drifting on 149/181/211 s — all mutually prime. */
+/* ══ DIAGONAL SWEEP BANDS, not corner blobs ══
+   Corrected 2026-07-30 against Recraft reference plates. Radial blobs
+   were wrong twice over: (a) two overlapping ellipses meet at their
+   BRIGHTEST point in the middle of frame, and purple over orange at
+   similar alpha mixes to brown — that is the "murk" defect; (b) the
+   overlap lands exactly where the question text sits, so the text bed
+   was the lightest part of the screen instead of the darkest.
+
+   Every reference plate does the same thing instead: purple SWEEPS in
+   from the lower-left, amber SWEEPS in from the upper-right, a cool
+   band crosses between them, and they never touch — they're separated
+   by a near-black diagonal gap running through frame centre. That gap
+   is what keeps both hues saturated AND hands the text a dark bed for
+   free. Structure, not tuning.
+
+   So: linear-gradient bands on a diagonal axis, each reaching
+   transparent BEFORE frame centre. Breathing 29/37/43s, drifting
+   149/181/211s — all mutually prime, composite never repeats. */
+.hue{position:absolute;pointer-events:none;transition:background 6s linear}
+/* purple, lower-left → stops die by 46% so centre stays black */
+.hA{background:linear-gradient(38deg,
+      var(--hA) 0%, var(--hA) 12%, var(--hA-mid) 30%, transparent 46%);
+    animation:hueBrA 29s ease-in-out infinite, hueDrA 149s ease-in-out infinite}
+/* amber, upper-right → mirrored, dies by 46% from its own end */
+.hB{background:linear-gradient(218deg,
+      var(--hB) 0%, var(--hB) 11%, var(--hB-mid) 29%, transparent 46%);
+    animation:hueBrB 37s ease-in-out infinite, hueDrB 181s ease-in-out infinite}
+/* cool band crossing between them — narrow, offset, never centred */
+.hC{background:linear-gradient(38deg,
+      transparent 30%, var(--hC-mid) 42%, var(--hC) 52%,
+      var(--hC-mid) 62%, transparent 74%);
+    animation:hueBrC 43s ease-in-out infinite, hueDrC 211s ease-in-out infinite}
+@keyframes hueBrA{0%,100%{opacity:.86}50%{opacity:1}}
+@keyframes hueBrB{0%,100%{opacity:.80}50%{opacity:.96}}
+@keyframes hueBrC{0%,100%{opacity:.74}50%{opacity:.90}}
+@keyframes hueDrA{0%,100%{transform:translate3d(0,0,0) scale(1)}
+                  50%{transform:translate3d(4cqw,-3cqh,0) scale(1.06)}}
+@keyframes hueDrB{0%,100%{transform:translate3d(0,0,0) scale(1)}
+                  50%{transform:translate3d(-5cqw,3.4cqh,0) scale(1.05)}}
+@keyframes hueDrC{0%,100%{transform:translate3d(0,0,0) scale(1)}
+                  50%{transform:translate3d(3cqw,4cqh,0) scale(1.08)}}
+
+/* ══ STARFIELD — THE HERO (fix 5) ══
+   3 size tiers · 3 colour temperatures · per-star base brightness ·
+   5 twinkle groups on 11/13/17/29/31 s · 4 hero stars with static
+   glow (border-radius:50%, so the shadow is a halo, not a rectangle) */
+.star{position:absolute;border-radius:50%;
+  background:radial-gradient(circle closest-side,
+    var(--sc1) 0%, var(--sc2) 30%, transparent 70%);
+  animation:tw var(--tp) ease-in-out infinite;animation-delay:var(--td)}
+.st-w{--sc1:#fff2dc;--sc2:rgba(255,226,180,.85)}
+.st-n{--sc1:#ffffff;--sc2:rgba(240,242,255,.85)}
+.st-c{--sc1:#e8f1ff;--sc2:rgba(190,214,255,.85)}
+.star.hero{box-shadow:0 0 .9cqw .12cqw rgba(255,238,208,.34)}
+@keyframes tw{0%,100%{opacity:var(--ob)}50%{opacity:var(--op)}}
+
+/* nebula breath — faint cool diagonal band, 23 s */
+.nebula{position:absolute;left:0;right:0;top:0;height:70cqh;
+  background:linear-gradient(115deg,transparent 30%,rgba(150,130,255,.10) 46%,
+    rgba(150,130,255,.10) 54%,transparent 70%);
+  opacity:.40;animation:brNeb 23s ease-in-out infinite}
+@keyframes brNeb{0%,100%{opacity:.40}50%{opacity:.48}}
+
+/* ══ SPACE OBJECTS — one-sentence geometry only ══
+   FIX 6: planets ≤6.5cqw, fully inside the frame. No big clipped
+   masses anywhere. Nothing rests on anything; no bottom edges. */
+.planet{position:absolute;border-radius:50%;
+  background:radial-gradient(circle at 33% 29%,
+    var(--pl-hi,#d8b8ff) 0%, var(--pl-md,#7a4cc0) 34%,
+    var(--pl-lo,#2a1050) 70%, #100626 100%)}
+.planet.glow{box-shadow:0 0 2.4cqw rgba(176,112,255,.18)}
+.pring{position:absolute;border-radius:50%;
+  border:.30cqw solid rgba(206,176,255,.32);
+  border-bottom-color:rgba(206,176,255,.08);
+  transform:rotate(-17deg)}
+.neb{position:absolute;border-radius:50%;
+  background:radial-gradient(ellipse 62% 48% at 48% 50%,
+    var(--nb,rgba(150,110,255,.22)) 0%,
+    rgba(150,110,255,.08) 46%, transparent 74%)}
+.dust{position:absolute;border-radius:50%;background:rgba(228,214,255,.5)}
+
+/* ══ SHOOTING STAR — one channel, 40–120 s ±40%, alternating dir ══ */
+.shootLane{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.shootRot{position:absolute;transform:rotate(var(--sa))}
+.shoot{width:9cqw;height:.24cqh;border-radius:.5cqh;opacity:0;
+  filter:blur(1.5px);
+  background:linear-gradient(90deg,transparent 0%,rgba(255,244,224,0) 12%,
+    rgba(255,244,224,.55) 70%,#fff8ec 100%);
+  animation:shootGo var(--sdu) linear both}
+@keyframes shootGo{
+  0%  {transform:translate3d(0,0,0);opacity:0}
+  12% {opacity:.9}
+  72% {opacity:.8}
+  100%{transform:translate3d(var(--sd),0,0);opacity:0}
+}
+
+/* ══ THE DETENT — fix 7. ONE curve, minimum stops. 1.2 s (lengthened
+   from 860 ms when continuous drift landed: 16cqw in 0.86 s out of a
+   dead stop peaked at ~50× the drift speed and read as a lurch; the
+   same travel over 1.2 s atop visible drift reads as a surge).
+   X: 2 stops. The whole travel rides a single asymmetric ease-out,
+      cubic-bezier(.16,.62,.28,1) — quick launch, long deceleration.
+      With only one segment, the per-segment easing law is moot: the
+      curve applies once, whole, to every layer identically.
+   Y: 3 stops. The arc NEEDS a mid stop (a 2-stop transform cannot go
+      up and come back). Peak at 42% so the lift crests during X's
+      fast phase; ease-in-out on both halves has zero slope at the
+      peak from both sides, so vertical velocity is continuous — no
+      corner, no chop. Both movers share the 1.2 s and reach rest
+      only at 100%, together, on every layer. Opacity untouched. */
+.stage.go .mvX{animation:goX 1.2s cubic-bezier(.16,.62,.28,1) both}
+.stage.go .mvY{animation:goY 1.2s both}
+@keyframes goX{
+  0%  {transform:translate3d(0,0,0)}
+  100%{transform:translate3d(calc(var(--tx)*-1),0,0)}
+}
+/* camera rises → world translates down (+y); RISE signs verbatim */
+@keyframes goY{
+  0%  {transform:translate3d(0,0,0);animation-timing-function:ease-in-out}
+  42% {transform:translate3d(0,var(--ty),0);animation-timing-function:ease-in-out}
+  100%{transform:translate3d(0,0,0)}
+}
+
+/* ══ QUESTION — fixes 1/2/3/4 ══
+   Centre-anchored: the block's own centre is 50cqh at ANY length.
+   Font size comes from the measure-to-fit pass in JS; the CSS size
+   here is only the pre-fit placeholder. */
+.qScrim{position:absolute;left:0;right:0;
+  opacity:0;transition:opacity .4s ease;pointer-events:none}
+.qScrim.on{opacity:1}
+.qLayer{position:absolute;left:20cqw;width:60cqw;
+  top:50cqh;transform:translateY(-50%);
+  text-align:center;pointer-events:none}
+.qLayer .eyeb{font-family:'Boogaloo',cursive;font-size:3.2cqh;line-height:1.1;
+  letter-spacing:.22em;text-transform:uppercase;color:var(--t-hl,#c060ff);
+  margin-bottom:1.7cqh}
+.qLayer .qtext{font-family:'DM Sans',sans-serif;font-weight:500;
+  font-size:5.5cqh;line-height:1.3;color:var(--t-text,#e8d0ff)}
+.qLayer .w{display:inline-block;opacity:0;will-change:transform}
+@keyframes wIn{
+  0%  {opacity:0;transform:translate3d(0,.55em,0)}
+  100%{opacity:1;transform:translate3d(0,0,0)}
+}
+@keyframes wOut{
+  0%  {opacity:1;transform:translate3d(0,0,0)}
+  100%{opacity:0;transform:translate3d(0,-.4em,0)}
+}
+.stage.hideQ .qLayer,.stage.hideQ .qScrim{display:none}
+
+/* ══ OVERLAYS ══ */
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.06;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.55'/></svg>")}
+.stage.noGrain .grain{display:none}
+.guides{position:absolute;left:20%;top:27.5%;width:60%;height:45%;
+  border:1.5px dashed rgba(160,200,255,.55);border-radius:6px;
+  pointer-events:none;display:none}
+.guides::after{content:'safe area · 60% × 45%';position:absolute;left:8px;top:6px;
+  font-size:1.3cqw;letter-spacing:.1em;color:rgba(160,200,255,.7);
+  font-family:'DM Sans',sans-serif;font-weight:600}
+.stage.showGuides .guides{display:block}
+
+/* ══ REDUCED MOTION — freeze, never vanish ══ */
+@media (prefers-reduced-motion:reduce){
+  .mvX,.mvY,.drift,.star,.shoot,.hue,.nebula{animation:none!important}
+}
+.stage.rm .mvX,.stage.rm .mvY,.stage.rm .drift,.stage.rm .star,
+.stage.rm .shoot,.stage.rm .hue,.stage.rm .nebula{animation:none!important}
+
+/* ── notes card ───────────────────────────────────────────────────── */
+.notes{margin-top:40px;background:var(--pg-card);border:1px solid var(--pg-line);
+  border-radius:10px;padding:26px 30px}
+.notes h3{font-family:'Boogaloo',cursive;font-size:24px;margin-bottom:10px}
+.notes h3 span{color:#8a7ad0}
+.notes p{color:#9aa0ae;font-size:14.5px;max-width:88ch;margin-bottom:10px}
+.notes p:last-child{margin-bottom:0}
+.notes b{color:#ddd8e8;font-weight:600}
+</style>
+</head>
+<body>
+
+<header class="pg"><div class="wrap">
+  <div class="eyebrow">World 03 · Space</div>
+  <h1>Space — stars first, one curve</h1>
+  <p>Rebuild of world-02. Same engine — one continuous world, 8 stations,
+  seamless wrap, object persistence. Seven fixes: the question block is
+  <b>centred on 50cqh</b> and <b>measure-fit</b> into the 28–72cqh safe band;
+  the scrim <b>follows the measured text</b>; the starfield is now the
+  <b>primary content</b> (320 stars, 3 tiers, 4 heroes, 5 twinkle clocks);
+  planets are small and whole; and the detent is <b>one asymmetric ease-out
+  across the whole travel</b> instead of six chained curves.</p>
+</div></header>
+
+<div class="wrap">
+
+  <div class="ctl">
+    <button class="big" id="btnAdv">Advance &#9656;</button>
+    <button id="btnAuto">Auto-advance</button>
+    <span class="sep"></span>
+    <button class="on" data-spd="1">1&times;</button>
+    <button data-spd="4">4&times;</button>
+    <button data-spd="12">12&times;</button>
+    <span class="sep"></span>
+    <div class="ampbox">
+      <span>Arc</span>
+      <input type="range" id="amp" min="0" max="2" step="0.05" value="1">
+      <span class="val" id="ampV">1.00&times;</span>
+    </div>
+    <span class="sep"></span>
+    <button class="on" id="tQ">Question</button>
+    <button id="tG">Guides</button>
+    <button class="on" id="tN">Grain</button>
+    <button id="tR">Reduced motion</button>
+  </div>
+  <div class="sub" id="status"></div>
+
+  <div class="stage th-mg" id="stage">
+    <!-- layers injected by JS before the scrim -->
+    <div class="qScrim" id="qScrim"></div>
+    <div class="qLayer" id="qLayer">
+      <div class="qtext" id="qText"></div>
+    </div>
+    <div class="guides"></div>
+    <div class="grain"></div>
+  </div>
+
+  <div class="notes">
+    <h3><span>What changed.</span> The engine stayed; the feel got rebuilt.</h3>
+    <p><b>The detent:</b> world-02 split the travel at 0/11/34/52/74/88/100 with
+    a different timing function per segment — six chained curves pretending to
+    be one, and it read as chop. Here X has two stops under one asymmetric
+    ease-out and Y has three (the arc's mid peak at 42%, ease-in-out both
+    halves, zero slope at the crest from both sides). Every layer shares the
+    same two curves and the same 1.2&thinsp;s; only amplitude differs. Wrap
+    modulo still lands in the same task as class removal — one paint.
+    <b>And the world never stops:</b> each layer also drifts continuously
+    (linear, prime loop durations 331/337/347&thinsp;s), so the detent is a
+    surge over ever-present motion instead of a lurch out of stillness, and
+    the question exit rides on the move instead of preceding it.</p>
+    <p><b>The text:</b> binary-search measure-to-fit (canvas
+    <code>measureText</code>, real glyphs, behind <code>fonts.ready</code>)
+    picks the largest size at which the question wraps into 60cqw&nbsp;×&nbsp;38.8cqh
+    at ≤4 lines. The block centre-anchors at 50cqh, so worst case it spans
+    exactly 28–72cqh. The scrim is placed from the block's measured rect
+    every time the question changes or the stage resizes.</p>
+  </div>
+
+</div>
+
+<!-- questions from the parallel content worker; inline fallback below -->
+<script src="world-03-content.js"></script>
+<script>
+'use strict';
+/* ── deterministic rng ────────────────────────────────────────────── */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296}}
+
+const stage=document.getElementById('stage');
+const mediaRM=matchMedia('(prefers-reduced-motion: reduce)');
+let manualRM=false;
+const isReduced=()=>mediaRM.matches||manualRM;
+
+/* layer box sits at stage (−40,−16): stage y = layer y − 16 */
+const SY=y=>y+16;
+function el(cls,css){const d=document.createElement('div');
+  if(cls)d.className=cls;if(css)d.style.cssText=css;return d}
+
+/* ══ SKY — corner hue fields, never a vertical ramp ══ */
+function buildSky(art){
+  art.appendChild(el('void'));
+  const FIELDS=[
+    {c:'hue hA', css:'left:-26cqw;top:34cqh;width:104cqw;height:96cqh'},
+    {c:'hue hB', css:'left:44cqw;top:-30cqh;width:96cqw;height:88cqh'},
+    {c:'hue hC', css:'left:8cqw;top:6cqh;width:88cqw;height:82cqh'},
+  ];
+  FIELDS.forEach(f=>art.appendChild(el(f.c,f.css)));
+}
+
+/* ══ STARS — THE HERO ══
+   Density raised 64 → 170 per 48cqw period (≈354 visible in frame at
+   once, 850 nodes total) on 2026-07-30, after the Recraft reference
+   plates. The prior build read as "about eight dots" on a real TV:
+   too few AND too dim. Both were wrong.
+
+   Base brightness floors raised across every tier — the previous small
+   tier bottomed out at 0.18, which is below the calibrated visibility
+   floor for a dim bar at 15 ft (themes.md's own alpha table says never
+   drop a star below 0.25). Small tier now floors at 0.30.
+
+   Only the 6 hero stars carry a glow, and they stay off the safe band
+   (stage 28–72cqh) so nothing bright ever fights the question. ══ */
+const TW=[11,13,17,29,31];
+function starPattern(){
+  const r=mulberry32(9137),p=[];
+  for(let i=0;i<170;i++){
+    const tier=i<6?2:(i<48?1:0);                     /* 6 hero · 42 mid · 122 small */
+    let sy;
+    if(tier===2){sy=(i%2? 3+r()*18 : 76+r()*16)}      /* heroes off the safe band */
+    else sy=-2+r()*100;
+    const s=tier===2?(.44+r()*.18):tier===1?(.22+r()*.11):(.10+r()*.10);
+    const t=r(), temp=t<.34?'w':t<.67?'n':'c';
+    /* alpha floors: hero .86 · mid .46 · small .30 (themes.md floor) */
+    const ob=tier===2?(.86+r()*.10):tier===1?(.46+r()*.32):(.30+r()*.28);
+    const dv=tier===2?.06:(.10+r()*.10);
+    const per=tier===2?TW[3+(i%2)]:TW[i%5];           /* heroes on 29/31 only */
+    /* perf: only heroes, mids and 1-in-3 smalls twinkle. 610 small
+       animated nodes was real compositor load on a cheap HDMI stick;
+       a static small star is indistinguishable at 15 ft. */
+    const tw=tier>0||i%3===0;
+    p.push({x:r()*48,sy,s,tier,temp,ob,dv,per,del:-(r()*per),tw});
+  }
+  return p;
+}
+function buildStars(art){
+  const P=starPattern();
+  /* strip lengthened 240→288cqw: base wrap (−48) + continuous drift
+     (−48) + detent (−6) can now shift −102cqw; 288−102=186 still
+     covers the stage window's right edge at 140. */
+  for(let t=0;t<288;t+=48)for(const s of P){
+    const d=el('star st-'+s.temp+(s.tier===2?' hero':''));
+    d.style.left=(t+s.x)+'cqw';d.style.top=SY(s.sy)+'cqh';
+    d.style.width=s.s+'cqw';d.style.height=s.s+'cqw';
+    d.style.opacity=s.ob;                              /* reduced-motion rest */
+    if(!s.tw)d.style.animation='none';
+    d.style.setProperty('--ob',s.ob);
+    d.style.setProperty('--op',Math.min(s.ob+s.dv,1));
+    d.style.setProperty('--tp',s.per+'s');
+    d.style.setProperty('--td',s.del+'s');
+    art.appendChild(d);
+  }
+  art.appendChild(el('nebula'));
+}
+
+/* ══ MID · period 64cqw ══ LANDMARK DENSITY (2026-07-30)
+   Was 2 planets per 128cqw — with a 100cqw frame that meant most
+   stations showed no identifiable body at all. Now 4 bodies + 4 banks
+   per 64cqw, so the frame always holds roughly 6 bodies at varied
+   size and depth. At 8cqw travel each one lingers ~12 advances: it
+   enters, drifts across, exits. Something is always mid-journey, which
+   is what makes an arrival read as "further along" rather than "new". */
+function buildMid(art){
+  const r=mulberry32(3181);
+  const BODIES=[
+    {x:  9, d: 6.5, y:  6, ring:true,  hi:'#d8b8ff', md:'#7a4cc0', lo:'#2a1050'},
+    {x: 26, d: 2.6, y: 82, ring:false, hi:'#cfe0ff', md:'#5566b0', lo:'#141a3c'},
+    {x: 41, d: 4.4, y: 77, ring:false, hi:'#bfe4ff', md:'#4c78c0', lo:'#101c44'},
+    {x: 55, d: 3.4, y: 11, ring:false, hi:'#ffd8c0', md:'#b06a48', lo:'#3a1a12'},
+  ];
+  const BANKS=[
+    {x: -2, w: 34, h: 26, y:  1, a:.22},
+    {x: 18, w: 30, h: 24, y: 68, a:.18},
+    {x: 38, w: 32, h: 22, y:  4, a:.15},
+    {x: 52, w: 28, h: 25, y: 64, a:.13},
+  ];
+  for(let t=0;t<576;t+=64){
+    BANKS.forEach(b=>{
+      const d=el('neb');
+      d.style.left=(t+b.x)+'cqw'; d.style.top=SY(b.y)+'cqh';
+      d.style.width=b.w+'cqw';    d.style.height=b.h+'cqh';
+      d.style.setProperty('--nb','rgba(150,110,255,'+b.a+')');
+      art.appendChild(d);
+    });
+    BODIES.forEach(p=>{
+      const d=el('planet glow');
+      d.style.left=(t+p.x)+'cqw'; d.style.top=SY(p.y)+'cqh';
+      d.style.width=p.d+'cqw';    d.style.height=p.d+'cqw';
+      d.style.setProperty('--pl-hi',p.hi);
+      d.style.setProperty('--pl-md',p.md);
+      d.style.setProperty('--pl-lo',p.lo);
+      art.appendChild(d);
+      if(p.ring){
+        const gw=p.d*1.8, g=el('pring');
+        g.style.left=(t+p.x-(gw-p.d)/2)+'cqw';
+        g.style.top=SY(p.y+p.d*0.30)+'cqh';
+        g.style.width=gw+'cqw'; g.style.height=(p.d*0.50)+'cqw';
+        art.appendChild(g);
+      }
+    });
+    for(let i=0;i<7;i++){
+      const s=el('dust');
+      const sz=(.16+r()*.2).toFixed(2);
+      s.style.left=(t+r()*64)+'cqw';  s.style.top=SY(r()*92)+'cqh';
+      s.style.width=sz+'cqw'; s.style.height=sz+'cqw';
+      s.style.opacity=(.2+r()*.2).toFixed(2);
+      art.appendChild(s);
+    }
+  }
+}
+
+/* ══ FG · period 128cqw ══ near dust only — sells parallax speed.
+   FIX 6: the huge clipped asteroid masses are gone entirely. */
+function buildFg(art){
+  const r=mulberry32(8447);
+  for(let t=0;t<640;t+=128){
+    for(let i=0;i<22;i++){
+      const s=el('dust');
+      const sz=(.22+r()*.34).toFixed(2);
+      s.style.left=(t+r()*128)+'cqw'; s.style.top=SY(r()*92)+'cqh';
+      s.style.width=sz+'cqw'; s.style.height=sz+'cqw';
+      s.style.opacity=(.28+r()*.3).toFixed(2);
+      art.appendChild(s);
+    }
+  }
+}
+
+const LAYERS=[
+  {cls:'l-sky',tx:0, P:0,  build:buildSky},
+  {cls:'l-str',tx:6, P:48, build:buildStars},
+  {cls:'l-mid',tx:8, P:64, build:buildMid},
+  {cls:'l-fg', tx:16,P:128,build:buildFg},
+];
+
+const shootLane=el('shootLane');
+const layerState=[];
+(function build(){
+  const anchor=document.getElementById('qScrim');
+  for(const cfg of LAYERS){
+    const lyr=el('lyr '+cfg.cls),base=el('base'),
+          mvX=el('mvX'),mvY=el('mvY'),drift=el('drift'),art=el('art');
+    drift.appendChild(art);mvY.appendChild(drift);mvX.appendChild(mvY);
+    base.appendChild(mvX);lyr.appendChild(base);
+    stage.insertBefore(lyr,anchor);
+    cfg.build(art);
+    layerState.push({cfg,base,off:0});
+  }
+  stage.insertBefore(shootLane,stage.querySelector('.l-mid'));
+})();
+
+/* ══ QUESTIONS — content worker first, fallback second ══ */
+const FALLBACK=[
+  {q:'What’s the only U.S. state that grows coffee commercially?'},
+  {q:'Which planet in our solar system spins so slowly that its day outlasts its year — the only one where that happens?'},
+  {q:'Which Beatles album cover shows the band on a crosswalk?'},
+  {q:'What’s the tallest animal walking the Earth today?'},
+  {q:'Which country actually invented the croissant — not France?'},
+  {q:'How many bones are in an adult human body — 106, 206, or 306?'},
+  {q:'What mythical creature is the national animal of Scotland?'},
+  {q:'In poker, which hand wins — a flush or a full house?'}
+];
+function normalizeQ(list){
+  if(!Array.isArray(list)||list.length<8)return null;
+  const out=list.slice(0,8).map(it=>typeof it==='string'?{q:it}:
+    (it&&(it.q||it.question)?{q:it.q||it.question}:null));
+  return out.every(Boolean)?out:null;
+}
+const EXT=window.WORLD03_CONTENT||window.WORLD03||null;
+const QUESTIONS=normalizeQ(EXT&&(EXT.questions||EXT.QUESTIONS||EXT))||FALLBACK;
+
+const qLayer=document.getElementById('qLayer'),
+      qText=document.getElementById('qText'),
+      qScrim=document.getElementById('qScrim');
+
+/* ══ MEASURE-TO-FIT (fix 3) — port of client/src/lib/autoFitText.js.
+   Binary-searches the largest px size whose greedy word-wrap fits
+   boxW × boxH at ≤ maxLines, measuring REAL glyph widths on a canvas.
+   Never counts characters. Gated behind document.fonts.ready. ══ */
+let _mc=null;
+function _ctx(){if(!_mc)_mc=document.createElement('canvas').getContext('2d');return _mc}
+function wrapToWidth(text,font,sizePx,maxW){
+  const c=_ctx();c.font=font.replace('{S}',sizePx);
+  const words=String(text).split(/\s+/).filter(Boolean);
+  if(!words.length)return[''];
+  const lines=[];let line=words[0];
+  for(let i=1;i<words.length;i++){
+    const t=line+' '+words[i];
+    if(c.measureText(t).width<=maxW)line=t;
+    else{lines.push(line);line=words[i]}
+  }
+  lines.push(line);return lines;
+}
+function _fits(text,font,sizePx,boxW,boxH,maxLines,lh){
+  const lines=wrapToWidth(text,font,sizePx,boxW);
+  if(lines.length>maxLines)return false;
+  const c=_ctx();c.font=font.replace('{S}',sizePx);
+  for(const ln of lines)if(c.measureText(ln).width>boxW)return false;
+  return lines.length*sizePx*lh<=boxH;
+}
+function fitToBox(text,{font,boxW,boxH,floorPx,ceilPx,maxLines=4,lh=1.3}){
+  if(!String(text).trim())return ceilPx;
+  if(_fits(text,font,ceilPx,boxW,boxH,maxLines,lh))return ceilPx;
+  let lo=floorPx,hi=ceilPx;
+  for(let i=0;i<8;i++){
+    const mid=(lo+hi)/2;
+    if(_fits(text,font,mid,boxW,boxH,maxLines,lh))lo=mid;else hi=mid;
+  }
+  return Math.max(floorPx,lo);
+}
+
+/* fonts gate — measuring before webfonts load gives fallback metrics */
+let fontsOK=false;
+const fontsReady=(document.fonts&&document.fonts.ready
+  ?Promise.all([
+      document.fonts.load('500 32px "DM Sans"'),
+      document.fonts.load('400 32px "Boogaloo"'),
+    ]).then(()=>document.fonts.ready)
+  :Promise.resolve()).then(()=>{fontsOK=true});
+
+/* SAFE-AREA BUDGET (fix 2): safe band is stage 28–72cqh = 44cqh.
+   Eyebrow (3.2cqh × 1.1 line + 1.7cqh margin ≈ 5.2cqh) is reserved;
+   text box = 38.8cqh × 60cqw. Block centre-anchors at 50cqh, so a
+   full-budget block spans exactly 28–72cqh — it cannot exit. */
+function fitQuestion(text){
+  const H=stage.clientHeight,W=stage.clientWidth;
+  if(!H||!W)return;
+  const px=fitToBox(text,{
+    font:'500 {S}px "DM Sans"',
+    boxW:W*0.60, boxH:H*0.388,
+    floorPx:H*0.030, ceilPx:H*0.062,
+    maxLines:4, lh:1.3,
+  });
+  qText.style.fontSize=px+'px';
+}
+
+/* SCRIM FOLLOWS TEXT (fix 4): band = measured block rect + 2cqh pad
+   + 5cqh feather each side; the flat plateau starts pad above the
+   block, so every text pixel sits under full scrim strength. Linear
+   band only — never a full-frame wash. */
+function layoutScrim(){
+  const sr=stage.getBoundingClientRect(),qr=qLayer.getBoundingClientRect();
+  const H=sr.height;if(!H)return;
+  const pad=H*0.02,fe=H*0.05;
+  const top=(qr.top-sr.top)-pad-fe, h=qr.height+2*(pad+fe);
+  const p=(fe/h*100).toFixed(2);
+  qScrim.style.top=top+'px';qScrim.style.height=h+'px';
+  qScrim.style.background='linear-gradient(180deg,transparent 0%,'+
+    'rgba(2,2,12,.60) '+p+'%,rgba(2,2,12,.60) '+(100-p)+'%,transparent 100%)';
+}
+
+let curQ=-1;
+function renderQ(idx){
+  fitQuestion(QUESTIONS[idx].q);
+  qText.textContent='';
+  const words=QUESTIONS[idx].q.split(' ');
+  words.forEach((w,i)=>{
+    const s=document.createElement('span');s.className='w';s.textContent=w;
+    if(isReduced()){s.style.opacity=1}
+    else{s.style.animation='wIn .38s cubic-bezier(.2,.7,.3,1) both';
+         s.style.animationDelay=(i*45)+'ms'}
+    qText.appendChild(s);
+    if(i<words.length-1)qText.appendChild(document.createTextNode(' '));
+  });
+  layoutScrim();                       /* rect valid: spans occupy layout */
+  qScrim.classList.add('on');
+}
+function showQ(idx){
+  curQ=idx;
+  if(fontsOK)renderQ(idx);
+  else fontsReady.then(()=>{if(curQ===idx)renderQ(idx)});
+}
+function hideQ(){
+  qScrim.classList.remove('on');
+  const ws=qText.querySelectorAll('.w');
+  ws.forEach((s,i)=>{
+    if(isReduced()){s.style.opacity=0;return}
+    s.style.animation='wOut .22s cubic-bezier(.4,0,.7,1) both';
+    s.style.animationDelay=(i*24)+'ms';
+  });
+  return isReduced()?0:(220+Math.max(0,ws.length-1)*24);
+}
+/* refit + re-scrim on stage resize (ResizeObserver, not rAF) */
+new ResizeObserver(()=>{
+  if(curQ<0||!fontsOK)return;
+  fitQuestion(QUESTIONS[curQ].q);layoutScrim();
+}).observe(stage);
+
+/* ══ SCHEDULER — chained setTimeout only, never rAF ══ */
+let station=0,busy=false,speed=1,autoOn=false,autoT=null,failT=null,pendDone=null;
+
+function settle(){
+  for(const L of layerState){
+    if(!L.cfg.P)continue;
+    L.off-=L.cfg.tx;
+    if(L.off<=-L.cfg.P)L.off+=L.cfg.P;
+    L.base.style.transform='translate3d('+L.off+'cqw,0,0)';
+  }
+}
+/* end of detent: wrap bases + strip animation in ONE task — the swap
+   paints exactly once with congruent scenery, so no late-frame hitch */
+stage.addEventListener('animationend',e=>{
+  if(e.animationName!=='goX')return;               /* one event per move */
+  if(!stage.classList.contains('go'))return;
+  clearTimeout(failT);
+  stage.classList.remove('go');settle();land();
+});
+function land(){
+  station=(station+1)%8;
+  showQ(station);status();
+  busy=false;
+  const d=pendDone;pendDone=null;if(d)d();
+}
+/* ONE GESTURE (2026-07-30 restructure). The old sequence was three
+   beats in a row — words out (~0.7 s), THEN camera (0.86 s), THEN
+   words in (~1.2 s): ~2.8 s of serial events with dead stage between
+   them. That serial choreography IS the "choppy" read — three
+   separate things happening instead of one. Now the text exit rides
+   ON the camera move: both start together, the exit (≤0.73 s)
+   finishes inside the 1.2 s travel, and the new question enters as
+   the world settles. One event, two overlapping voices. */
+function advance(done){
+  if(busy){if(done)done();return}
+  busy=true;pendDone=done||null;
+  hideQ();
+  if(isReduced()){settle();land();return}          /* instant reposition */
+  stage.classList.add('go');
+  failT=setTimeout(()=>{                           /* belt-and-braces */
+    if(stage.classList.contains('go')){
+      stage.classList.remove('go');settle();land();
+    }
+  },1600);
+}
+
+function holdMs(){return 9000/speed}
+function autoLoop(){
+  clearTimeout(autoT);
+  if(!autoOn)return;
+  autoT=setTimeout(()=>advance(autoLoop),holdMs());
+}
+
+/* ══ THEME CYCLE — 73 s, mutually prime with the station cycle ══ */
+const THEMES=[
+  {cls:'th-mg',name:'Midnight Galaxy'},
+  {cls:'th-ms',name:'Meteor Shower'},
+  {cls:'th-hw',name:'Halloween'},
+  {cls:'th-us',name:'Under the Sea'},
+  {cls:'th-sb',name:'Sonora Balloons'},
+];
+let themeIdx=0,themeT=null;
+function applyTheme(i){
+  themeIdx=i;
+  THEMES.forEach(t=>stage.classList.remove(t.cls));
+  stage.classList.add(THEMES[i].cls);
+  status();
+}
+function themeLoop(){
+  clearTimeout(themeT);
+  themeT=setTimeout(()=>{
+    applyTheme((themeIdx+1)%THEMES.length);themeLoop();
+  },73000/speed);
+}
+
+/* ══ SHOOTING STAR — 40–120 s ±40%, alternating direction ══ */
+let shootDir=1,shootT=null;
+const rnd=Math.random;
+function spawnShoot(){
+  if(isReduced())return;
+  const rot=el('shootRot'),s=el('shoot');
+  const dir=shootDir;shootDir=-shootDir;
+  rot.style.left=(dir>0?8+rnd()*30:60+rnd()*30)+'cqw';
+  rot.style.top=(4+rnd()*18)+'cqh';                /* stays above the safe band */
+  rot.style.setProperty('--sa',(dir>0?1:-1)*(16+rnd()*14)+'deg');
+  s.style.setProperty('--sd',(dir>0?1:-1)*(48+rnd()*22)+'cqw');
+  s.style.setProperty('--sdu',(2+rnd()*1.6)+'s');
+  rot.appendChild(s);shootLane.appendChild(rot);
+  s.addEventListener('animationend',()=>rot.remove());
+}
+function shootLoop(){
+  clearTimeout(shootT);
+  const base=(40+rnd()*80)*1000, iv=base*(0.6+rnd()*0.8);
+  shootT=setTimeout(()=>{spawnShoot();shootLoop()},iv/speed);
+}
+
+/* ══ CONTROLS ══ */
+const status=()=>{document.getElementById('status').innerHTML=
+  '<b>Station '+(station+1)+' / 8</b> &nbsp;·&nbsp; theme: <b>'+
+  THEMES[themeIdx].name+'</b> &nbsp;·&nbsp; fg detent '+
+  ((station)*16)+'cqw of the 128cqw loop, drifting always &nbsp;·&nbsp; '+
+  'detent 1.2 s, holds '+(holdMs()/1000).toFixed(2)+' s'};
+
+document.getElementById('btnAdv').addEventListener('click',()=>advance());
+const autoBtn=document.getElementById('btnAuto');
+autoBtn.addEventListener('click',()=>{
+  autoOn=!autoOn;autoBtn.classList.toggle('on',autoOn);
+  if(autoOn)autoLoop();else clearTimeout(autoT);
+});
+document.querySelectorAll('[data-spd]').forEach(b=>
+  b.addEventListener('click',()=>{
+    speed=+b.dataset.spd;
+    document.querySelectorAll('[data-spd]').forEach(x=>
+      x.classList.toggle('on',x===b));
+    if(autoOn)autoLoop();themeLoop();shootLoop();status();
+  }));
+
+const ampIn=document.getElementById('amp');
+ampIn.addEventListener('input',()=>{
+  stage.style.setProperty('--amp',ampIn.value);
+  document.getElementById('ampV').textContent=(+ampIn.value).toFixed(2)+'×';
+});
+
+function toggle(id,cls,invert){
+  const b=document.getElementById(id);
+  b.addEventListener('click',()=>{
+    b.classList.toggle('on');
+    const on=b.classList.contains('on');
+    stage.classList.toggle(cls,invert?!on:on);
+    if(cls==='rm')manualRM=on;
+  });
+}
+toggle('tQ','hideQ',true);
+toggle('tG','showGuides',false);
+toggle('tN','noGrain',true);
+toggle('tR','rm',false);
+
+/* ══ BOOT ══ */
+applyTheme(0);
+themeLoop();
+shootLoop();
+setTimeout(()=>showQ(0),600);
+status();
+</script>
+</body>
+</html>

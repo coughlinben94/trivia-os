@@ -1,0 +1,326 @@
+{
+  "date": "2026-08-13",
+  "stamp": "2026-08-13-172710",
+  "stations": [
+    {
+      "index": 0,
+      "key": "ringed planet",
+      "prim": "ring",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786656266966q42tj",
+          "station": 0,
+          "key": "ringed planet",
+          "prim": "ring",
+          "category": "other",
+          "note": "closer to corner",
+          "bbox": [
+            0.7254746835443039,
+            0.10412271448663854,
+            0.26582278481012644,
+            0.2011251758087201
+          ],
+          "ts": 1786656266966
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "key": "spiral galaxy",
+      "prim": "lens",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m17866562756083j7w0",
+          "station": 1,
+          "key": "spiral galaxy",
+          "prim": "lens",
+          "category": "other",
+          "note": "looks much better!!!",
+          "bbox": [
+            0.7420886075949368,
+            0.7454729254571026,
+            0.16060126582278467,
+            0.18424753867791843
+          ],
+          "ts": 1786656275608
+        },
+        {
+          "id": "m1786656283629bri9x",
+          "station": 1,
+          "key": "spiral galaxy",
+          "prim": "lens",
+          "category": "other",
+          "note": "another fable 5 pass",
+          "bbox": [
+            0.045094936708860764,
+            0.00004395218002813117,
+            0.12658227848101267,
+            0.1729957805907173
+          ],
+          "ts": 1786656283629
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "key": "star cluster",
+      "prim": "dots",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786656295228zell4",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "can this be like the spiral on page 2??",
+          "bbox": [
+            0.875,
+            0.6765559071729957,
+            0.07832278481012656,
+            0.21378340365682147
+          ],
+          "ts": 1786656295228
+        },
+        {
+          "id": "m178665630166968ey2",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "move closer to corner",
+          "bbox": [
+            0.09572784810126582,
+            0.11537447257383968,
+            0.22784810126582278,
+            0.3305203938115331
+          ],
+          "ts": 1786656301669
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "key": "amber planet",
+      "prim": "ring",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 4,
+      "key": "lit planet",
+      "prim": "planet",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m17866563157618kh62",
+          "station": 4,
+          "key": "lit planet",
+          "prim": "planet",
+          "category": "other",
+          "note": "half on one page half on other",
+          "bbox": [
+            0.011075949367088608,
+            0,
+            0.26582278481012656,
+            0.3446290436005626
+          ],
+          "ts": 1786656315761
+        },
+        {
+          "id": "m1786656320783dga69",
+          "station": 4,
+          "key": "lit planet",
+          "prim": "planet",
+          "category": "other",
+          "note": "fable 5 pass",
+          "bbox": [
+            0.8488924050632912,
+            0.6821817862165963,
+            0.09968354430379733,
+            0.16033755274261607
+          ],
+          "ts": 1786656320783
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "key": "pulsar",
+      "prim": "pulsar",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786656369651spygf",
+          "station": 5,
+          "key": "pulsar",
+          "prim": "pulsar",
+          "category": "other",
+          "note": "fable 5 pass",
+          "bbox": [
+            0.06170886075949367,
+            0,
+            0.2223101265822785,
+            0.4444883966244726
+          ],
+          "ts": 1786656369651
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "key": "rose nebula",
+      "prim": "nebulaCloud",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786656380802bbmmh",
+          "station": 6,
+          "key": "rose nebula",
+          "prim": "nebulaCloud",
+          "category": "other",
+          "note": " nothing here??? add something",
+          "bbox": [
+            0.014240506329113924,
+            0.030986286919831227,
+            0.1661392405063291,
+            0.30520393811533053
+          ],
+          "ts": 1786656380802
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "key": "comet",
+      "prim": "streak",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786656388585x205h",
+          "station": 7,
+          "key": "comet",
+          "prim": "streak",
+          "category": "other",
+          "note": "fable 5 on hoples",
+          "bbox": [
+            0.893987341772152,
+            0.12521976090014067,
+            0.07594936708860744,
+            0.12939521800281292
+          ],
+          "ts": 1786656388585
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "key": "binary pair",
+      "prim": "binary",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m17866564000976cb1j",
+          "station": 8,
+          "key": "binary pair",
+          "prim": "binary",
+          "category": "other",
+          "note": "still hard edges, round off",
+          "bbox": [
+            0.002373417721518988,
+            0.3882296061884669,
+            0.9596518987341771,
+            0.6117703938115331
+          ],
+          "ts": 1786656400097
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "key": "asteroid field",
+      "prim": "asteroidField",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786656412419gfuez",
+          "station": 9,
+          "key": "asteroid field",
+          "prim": "asteroidField",
+          "category": "other",
+          "note": "look like other spiral on p1",
+          "bbox": [
+            0.8678797468354431,
+            0.8157964135021097,
+            0.10680379746835433,
+            0.09282700421940926
+          ],
+          "ts": 1786656412419
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "key": "supernova",
+      "prim": "spikes",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786656417904xp1sw",
+          "station": 10,
+          "key": "supernova",
+          "prim": "spikes",
+          "category": "other",
+          "note": "fable 5 pass",
+          "bbox": [
+            0.8330696202531646,
+            0.025360407876230666,
+            0.11392405063291133,
+            0.16033755274261602
+          ],
+          "ts": 1786656417904
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "key": "aurora ribbon",
+      "prim": "ribbon",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m17866564258693vneo",
+          "station": 11,
+          "key": "aurora ribbon",
+          "prim": "ribbon",
+          "category": "other",
+          "note": "curl it off the screen",
+          "bbox": [
+            0.04430379746835443,
+            0.7215629395218003,
+            0.06882911392405064,
+            0.2784370604781997
+          ],
+          "ts": 1786656425869
+        },
+        {
+          "id": "m17866564295519qjtp",
+          "station": 11,
+          "key": "aurora ribbon",
+          "prim": "ribbon",
+          "category": "other",
+          "note": "fable 5 pass",
+          "bbox": [
+            0.0435126582278481,
+            0.030986286919831227,
+            0.06329113924050633,
+            0.07172995780590717
+          ],
+          "ts": 1786656429551
+        }
+      ]
+    }
+  ]
+}

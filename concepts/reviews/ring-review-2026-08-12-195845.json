@@ -1,0 +1,340 @@
+{
+  "date": "2026-08-12",
+  "stamp": "2026-08-12-195845",
+  "stations": [
+    {
+      "index": 0,
+      "key": "ringed planet",
+      "prim": "ring",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786578920875khhdq",
+          "station": 0,
+          "key": "ringed planet",
+          "prim": "ring",
+          "category": "other",
+          "note": "move more towards corner",
+          "bbox": [
+            0.6558544303797469,
+            0.04786392405063291,
+            0.3148734177215189,
+            0.3248945147679325
+          ],
+          "ts": 1786578920875
+        },
+        {
+          "id": "m1786578929363zikcz",
+          "station": 0,
+          "key": "ringed planet",
+          "prim": "ring",
+          "category": "other",
+          "note": "needs to fade out from center out",
+          "bbox": [
+            0.026107594936708858,
+            0.7060917721518987,
+            0.1518987341772152,
+            0.1898734177215191
+          ],
+          "ts": 1786578929364
+        },
+        {
+          "id": "m1786578941033cvb54",
+          "station": 0,
+          "key": "ringed planet",
+          "prim": "ring",
+          "category": "other",
+          "note": "move this mroe towards top left corner",
+          "bbox": [
+            0.1518987341772152,
+            0.04786392405063291,
+            0.16613924050632914,
+            0.26441631504922647
+          ],
+          "ts": 1786578941033
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "key": "spiral galaxy",
+      "prim": "lens",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786578953079wopt5",
+          "station": 1,
+          "key": "spiral galaxy",
+          "prim": "lens",
+          "category": "other",
+          "note": "needs to be blurred on edges",
+          "bbox": [
+            0.022151898734177212,
+            0.012702180028129395,
+            0.1764240506329114,
+            0.37130801687763715
+          ],
+          "ts": 1786578953079
+        },
+        {
+          "id": "m1786578962562y9dkx",
+          "station": 1,
+          "key": "spiral galaxy",
+          "prim": "lens",
+          "category": "other",
+          "note": "blurred as it gets closer to edge",
+          "bbox": [
+            0.6732594936708861,
+            0.6610847398030942,
+            0.2808544303797468,
+            0.33891526019690577
+          ],
+          "ts": 1786578962562
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "key": "star cluster",
+      "prim": "dots",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786578974910i7dxj",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "blurred as closer to edge",
+          "bbox": [
+            0.8077531645569621,
+            0.6779623769338959,
+            0.16772151898734167,
+            0.279887482419128
+          ],
+          "ts": 1786578974910
+        },
+        {
+          "id": "m178657898268385c5g",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "move more towards corner",
+          "bbox": [
+            0.10759493670886075,
+            0.0267668776371308,
+            0.26344936708860756,
+            0.45288326300984527
+          ],
+          "ts": 1786578982683
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "key": "orange nebula",
+      "prim": "blob",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786578992904rnptr",
+          "station": 3,
+          "key": "orange nebula",
+          "prim": "blob",
+          "category": "other",
+          "note": "better but still needs lots of work",
+          "bbox": [
+            0.0490506329113924,
+            0.4726177918424754,
+            0.31645569620253167,
+            0.5260196905766525
+          ],
+          "ts": 1786578992904
+        },
+        {
+          "id": "m1786579002566sklak",
+          "station": 3,
+          "key": "orange nebula",
+          "prim": "blob",
+          "category": "other",
+          "note": "blur towards out",
+          "bbox": [
+            0.826740506329114,
+            0.04927039381153305,
+            0.1273734177215189,
+            0.23347398030942337
+          ],
+          "ts": 1786579002566
+        },
+        {
+          "id": "m17865790099753vnhj",
+          "station": 3,
+          "key": "orange nebula",
+          "prim": "blob",
+          "category": "other",
+          "note": "two assets, just need one",
+          "bbox": [
+            0.36550632911392406,
+            0.03801863572433193,
+            0.23101265822784806,
+            0.25035161744022505
+          ],
+          "ts": 1786579009975
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "key": "lit planet",
+      "prim": "planet",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786579044541bgd05",
+          "station": 4,
+          "key": "lit planet",
+          "prim": "planet",
+          "category": "other",
+          "note": "more towards corner",
+          "bbox": [
+            0.08227848101265822,
+            0,
+            0.24525316455696206,
+            0.44026898734177217
+          ],
+          "ts": 1786579044541
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "key": "pulsar",
+      "prim": "pulsar",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m17865790563469qs4t",
+          "station": 5,
+          "key": "pulsar",
+          "prim": "pulsar",
+          "category": "other",
+          "note": "try to rotate this on axis? slowly?",
+          "bbox": [
+            0.09335443037974683,
+            0.03239275668073137,
+            0.1463607594936709,
+            0.21237693389592122
+          ],
+          "ts": 1786579056346
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "key": "rose nebula",
+      "prim": "nebulaCloud",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 7,
+      "key": "comet",
+      "prim": "streak",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 8,
+      "key": "binary pair",
+      "prim": "binary",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786579084129r3gl6",
+          "station": 8,
+          "key": "binary pair",
+          "prim": "binary",
+          "category": "other",
+          "note": "need a star cluster here",
+          "bbox": [
+            0.768987341772152,
+            0.008482770745428976,
+            0.22784810126582267,
+            0.3924050632911393
+          ],
+          "ts": 1786579084129
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "key": "asteroid field",
+      "prim": "asteroidField",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786579093433y2u74",
+          "station": 9,
+          "key": "asteroid field",
+          "prim": "asteroidField",
+          "category": "other",
+          "note": "need a planet here",
+          "bbox": [
+            0.034810126582278486,
+            0.7257823488045007,
+            0.18433544303797467,
+            0.27421765119549935
+          ],
+          "ts": 1786579093433
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "key": "supernova",
+      "prim": "spikes",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786579107079okcrz",
+          "station": 10,
+          "key": "supernova",
+          "prim": "spikes",
+          "category": "other",
+          "note": "take an asset out. the sun?",
+          "bbox": [
+            0.7001582278481013,
+            0.03661216596343179,
+            0.23259493670886067,
+            0.3220815752461322
+          ],
+          "ts": 1786579107079
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "key": "aurora ribbon",
+      "prim": "ribbon",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m17865791223541nn4q",
+          "station": 11,
+          "key": "aurora ribbon",
+          "prim": "ribbon",
+          "category": "other",
+          "note": "move towards coerner mrope, make longer",
+          "bbox": [
+            0.6313291139240507,
+            0.6343618143459916,
+            0.34493670886075944,
+            0.26300984528832627
+          ],
+          "ts": 1786579122354
+        }
+      ]
+    }
+  ]
+}

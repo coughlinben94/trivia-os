@@ -123,7 +123,26 @@ export function fitToBox(text, {
     if (_fits(text, family, mid, boxW, boxH, maxLines, lineHeight, letterSpacing)) lo = mid
     else hi = mid
   }
-  return Math.max(floorPx, lo)
+  const px = Math.max(floorPx, lo)
+  // Bug (found 2026-08-13, auditing real question lengths against display
+  // sizing): when nothing in [floorPx, ceilPx] satisfies maxLines even at
+  // the floor, `lo` never moves off its initial floorPx value and this
+  // returned it anyway, unverified. floorPx is still the right number —
+  // it's the readability floor, and since a bigger size never needs FEWER
+  // lines for the same text/width, nothing larger would pass either — the
+  // fix isn't a different size, it's not silently pretending this one was
+  // confirmed to fit when it wasn't. Surfaced as a dev warning so a
+  // pathologically long question gets caught by whoever wrote it, not
+  // discovered by chance on a live TV (confirmed real: 1 of 1514 questions
+  // in the current DB hits this, and it's real prose, not a data error).
+  if (!_fits(text, family, px, boxW, boxH, maxLines, lineHeight, letterSpacing)) {
+    console.warn(
+      `[autoFitText] "${String(text).slice(0, 60)}${text.length > 60 ? '…' : ''}" ` +
+      `doesn't fit its box even at the ${floorPx}px floor (${boxW}×${boxH}, max ${maxLines} lines). ` +
+      `Rendering at floor size anyway — it'll run past the intended box.`
+    )
+  }
+  return px
 }
 
 // Title-card box (State of the Union). Fixed area — adjust the two dims if the

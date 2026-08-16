@@ -1,0 +1,18 @@
+{
+  "verdict": "FAIL",
+  "reason": "[sample 1: FAIL] Right ~15% of the silhouette (roughly the last 100-150px of the 2000px-wide image) shows a stippled/dotted texture fill instead of the solid black fill used everywhere else in the treeline, creating a visible seam/box-tell where a different layer or asset boundary shows through the silhouette shape. [sample 2: FAIL] Roughly half the shapes are as wide as or wider than they are tall (the broad triangle near x≈960-1120, the blunt-topped mound at x≈240-320, the wide pair at x≈1300-1400), which reads as a hill/ridge profile rather than conifers; every silhouette edge across the full width is a perfectly straight base-to-apex line with no crown notching or overlapping-canopy irregularity, producing a sawtooth ridge instead of a forest edge. [sample 3: PASS] Jagged silhouette with real valleys and mixed conifer/crown profiles reads unmistakably as a distant tree line / forest along the shore; crisp SVG edges, no box-tells, coherent with the scene's depth register.",
+  "category": "organic-contour",
+  "motion": "NOT_APPLICABLE",
+  "checkedFile": "concepts/campfire-sing-along-v1.html",
+  "timestamp": "2026-07-27T22:06:17.173Z",
+  "sampleVotes": {
+    "pass": 1,
+    "fail": 2,
+    "total": 3
+  },
+  "panel": [
+    "sonnet",
+    "opus",
+    "haiku"
+  ]
+}

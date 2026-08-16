@@ -12,7 +12,7 @@ function hexToRgb(hex) {
   }
 }
 
-function relativeLuminance({ r, g, b }) {
+function relativeLuminanceOfRgb({ r, g, b }) {
   const [rs, gs, bs] = [r, g, b].map(v => {
     const s = v / 255
     return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
@@ -20,9 +20,14 @@ function relativeLuminance({ r, g, b }) {
   return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs
 }
 
+// WCAG 2 relative luminance, 0 (black) to 1 (white).
+export function relativeLuminance(hex) {
+  return relativeLuminanceOfRgb(hexToRgb(hex))
+}
+
 export function contrastRatio(hex1, hex2) {
-  const l1 = relativeLuminance(hexToRgb(hex1))
-  const l2 = relativeLuminance(hexToRgb(hex2))
+  const l1 = relativeLuminanceOfRgb(hexToRgb(hex1))
+  const l2 = relativeLuminanceOfRgb(hexToRgb(hex2))
   const [hi, lo] = l1 > l2 ? [l1, l2] : [l2, l1]
   return (hi + 0.05) / (lo + 0.05)
 }

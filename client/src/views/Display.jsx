@@ -337,7 +337,7 @@ function DisplayInner({ show, direction, isPreview = false }) {
       style={{ background: theme.colors.bg }}
     >
       {/* ParticleBackground lives OUTSIDE the ErrorBoundary — it must never re-mount */}
-      <ParticleBackground theme={theme} />
+      <ParticleBackground theme={theme} slideKey={currentSlide?.id} />
 
       {/* StageFrame: 85% viewport, centered, overflow:hidden — all slide content clips here.
           ParticleBackground stays OUTSIDE (full-viewport behind the stage). */}

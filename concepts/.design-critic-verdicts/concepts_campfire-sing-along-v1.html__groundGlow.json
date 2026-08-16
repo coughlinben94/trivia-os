@@ -1,0 +1,18 @@
+{
+  "verdict": "FAIL",
+  "reason": "[sample 1: FAIL] The glow is a uniform radial gradient filling the entire frame with no horizon or ground-plane cue, so it reads as generic ambient light rather than firelight specifically illuminating a sand surface — nothing in the image establishes 'sand' as opposed to sky or backdrop. [sample 2: FAIL] No ground pool is discernible: the bottom third of the crop beneath the log X is a uniform mid-brown identical to the far-left and far-right edges, with no value break marking lit vs. unlit ground, and the dark log bars sit on top of the center-bottom wedge where the pool should read. There is also no sand-toned surface anywhere near the fire for the glow to land on, so 'firelight on the sand' has nothing to read against. [sample 3: PASS] Elliptical warm-orange glow with soft blurred edges reads as firelight pooled on sand. No box-tells, clean fade, sits at correct ground-plane position below fire/logs structure. Colors and intensity consistent with scene lighting.",
+  "category": "ground-decor",
+  "motion": "NOT_APPLICABLE",
+  "checkedFile": "concepts/campfire-sing-along-v1.html",
+  "timestamp": "2026-07-27T22:09:31.640Z",
+  "sampleVotes": {
+    "pass": 1,
+    "fail": 2,
+    "total": 3
+  },
+  "panel": [
+    "sonnet",
+    "opus",
+    "haiku"
+  ]
+}

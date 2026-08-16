@@ -1,0 +1,265 @@
+{
+  "date": "2026-08-12",
+  "stamp": "2026-08-12-150647",
+  "stations": [
+    {
+      "index": 0,
+      "key": "ringed planet",
+      "prim": "ring",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786561502055gmz5j",
+          "station": 0,
+          "key": "ringed planet",
+          "prim": "ring",
+          "category": "other",
+          "note": "still doesnt look like anything",
+          "bbox": [
+            0.5617088607594938,
+            0.7658667369901547,
+            0.08860759493670867,
+            0.17580872011251758
+          ],
+          "ts": 1786561502055
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "key": "spiral galaxy",
+      "prim": "lens",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786561526678dxh07",
+          "station": 1,
+          "key": "spiral galaxy",
+          "prim": "lens",
+          "category": "other",
+          "note": "just looks like a circle of color, needs to have blurs and dims",
+          "bbox": [
+            0.43037974683544306,
+            0.539425105485232,
+            0.27927215189873406,
+            0.4275668073136428
+          ],
+          "ts": 1786561526678
+        },
+        {
+          "id": "m1786561533729ewcri",
+          "station": 1,
+          "key": "spiral galaxy",
+          "prim": "lens",
+          "category": "other",
+          "note": "just random ovals",
+          "bbox": [
+            0.6835443037974684,
+            0.7039820675105485,
+            0.16218354430379733,
+            0.28551336146272865
+          ],
+          "ts": 1786561533729
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "key": "star cluster",
+      "prim": "dots",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786561545316rhdaf",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "too much going on",
+          "bbox": [
+            0.25712025316455694,
+            0.08794831223628694,
+            0.11313291139240511,
+            0.2376933895921238
+          ],
+          "ts": 1786561545316
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "key": "orange nebula",
+      "prim": "blob",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786561551358ixdi1",
+          "station": 3,
+          "key": "orange nebula",
+          "prim": "blob",
+          "category": "other",
+          "note": "looks terrible",
+          "bbox": [
+            0.1495253164556962,
+            0.51832805907173,
+            0.2840189873417721,
+            0.47538677918424754
+          ],
+          "ts": 1786561551358
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "key": "lit planet",
+      "prim": "planet",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786561559278qhch4",
+          "station": 4,
+          "key": "lit planet",
+          "prim": "planet",
+          "category": "other",
+          "note": "too big in this place",
+          "bbox": [
+            0.37104430379746833,
+            0,
+            0.2594936708860759,
+            0.41706223628691985
+          ],
+          "ts": 1786561559278
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "key": "pulsar",
+      "prim": "pulsar",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786561564895ijpb8",
+          "station": 5,
+          "key": "pulsar",
+          "prim": "pulsar",
+          "category": "other",
+          "note": "wtf is that",
+          "bbox": [
+            0.20569620253164556,
+            0.02184423347398031,
+            0.23022151898734178,
+            0.42194092827004226
+          ],
+          "ts": 1786561564895
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "key": "rose nebula",
+      "prim": "blob",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m17865615699157aib7",
+          "station": 6,
+          "key": "rose nebula",
+          "prim": "blob",
+          "category": "other",
+          "note": "shit",
+          "bbox": [
+            0.4050632911392405,
+            0.5464574542897328,
+            0.18987341772151894,
+            0.3628691983122363
+          ],
+          "ts": 1786561569915
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "key": "comet",
+      "prim": "streak",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786561575657f7831",
+          "station": 7,
+          "key": "comet",
+          "prim": "streak",
+          "category": "other",
+          "note": "looks bad",
+          "bbox": [
+            0.27056962025316456,
+            0.023250703234880453,
+            0.45094936708860756,
+            0.15189873417721517
+          ],
+          "ts": 1786561575657
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "key": "binary pair",
+      "prim": "binary",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786561585194wirtn",
+          "station": 8,
+          "key": "binary pair",
+          "prim": "binary",
+          "category": "other",
+          "note": "bad placement",
+          "bbox": [
+            0.310126582278481,
+            0.7321114627285513,
+            0.20569620253164556,
+            0.16174402250351616
+          ],
+          "ts": 1786561585194
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "key": "asteroid field",
+      "prim": "asteroidField",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 10,
+      "key": "supernova",
+      "prim": "spikes",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 11,
+      "key": "aurora ribbon",
+      "prim": "ribbon",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786561604661uu0di",
+          "station": 11,
+          "key": "aurora ribbon",
+          "prim": "ribbon",
+          "category": "other",
+          "note": "too much going on here",
+          "bbox": [
+            0.0490506329113924,
+            0.0007471870604782022,
+            0.5007911392405062,
+            0.3909985935302391
+          ],
+          "ts": 1786561604661
+        }
+      ]
+    }
+  ]
+}

@@ -227,6 +227,17 @@ lean on them before trying anything new."
   keyframe-percentage math stayed reliable.) See Established Conventions below for the
   generalized versions of both new findings.
 
+- 2026-08-09: **This entry's mechanism finding (rounds 2-3 above) is now the canonical rule, not
+  scoped to this one scrim.** `ART-DIRECTION-SPEC.md`'s ring-world scrim rule independently
+  shipped the SAME defect in the other geometric form: not a band this time, but an ellipse sized
+  off a box far wider than tall, clipped at the box edge before its own falloff completed — same
+  abrupt discontinuity, confirmed by rendering it. The two rules (that file's old "elliptical,
+  never a band" and this file's "switch to linear") were both narrower phrasings of one fact:
+  **the scrim's alpha must reach exactly zero strictly inside its own element bounds, on every
+  axis.** That single rule now lives at `ART-DIRECTION-SPEC.md`'s scrim entry (§2) and is the
+  citable one going forward; this entry stays as the mechanism proof and incident history, not a
+  live rule in its own right.
+
 - 2026-07-27 (round 4): **Flame reopened — the 2026-07-27 "closed out, 3/3 PASS" entry above did
   not hold.** A later independent critic pass (3 samples) came back 2/3 FAIL on the same
   hand-drawn flame, all three converging on one root defect: two near-mirrored outer paths plus

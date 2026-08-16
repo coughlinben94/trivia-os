@@ -1,0 +1,22 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+body{margin:0;background:#000}
+.box{position:relative;width:440px;height:440px;display:inline-block;background:#000}
+</style></head>
+<body>
+<div class="box" id="lo"></div><div class="box" id="hi"></div>
+<script type="module">
+import { ringDom, ringCss } from '../../client/src/lib/ringPrimitives.js';
+const style = document.createElement('style');
+style.textContent = ringCss('');
+document.head.appendChild(style);
+const dom = ringDom('', { W: 1920, H: 1080, PANES: 12, SAFE: { x:0.2,y:0.28,w:0.6,h:0.44 } });
+const lo = dom.makeOccluder(300, 260, 0.35);
+lo.style.left = lo.style.top = '70px';
+document.getElementById('lo').appendChild(lo);
+const hi = dom.makeOccluder(300, 260, 1.00);
+hi.style.left = hi.style.top = '70px';
+document.getElementById('hi').appendChild(hi);
+window.__ready = true;
+</script>
+</body></html>

@@ -1,0 +1,281 @@
+{
+  "date": "2026-08-13",
+  "stamp": "2026-08-13-195318",
+  "stations": [
+    {
+      "index": 0,
+      "key": "ringed planet",
+      "prim": "ring",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786665049240yjilv",
+          "station": 0,
+          "key": "ringed planet",
+          "prim": "ring",
+          "category": "other",
+          "note": "move more towards top left corner",
+          "bbox": [
+            0.3322784810126582,
+            0,
+            0.03639240506329117,
+            0.06755450070323488
+          ],
+          "ts": 1786665049240
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "key": "spiral galaxy",
+      "prim": "lens",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786665099546uons0",
+          "station": 1,
+          "key": "spiral galaxy",
+          "prim": "lens",
+          "category": "other",
+          "note": "fable pass again. looks worse",
+          "bbox": [
+            0.05458860759493671,
+            0.02114099859353024,
+            0.10680379746835443,
+            0.13080168776371306
+          ],
+          "ts": 1786665099546
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "key": "star cluster",
+      "prim": "dots",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786665107223vxypq",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "nebula fix",
+          "bbox": [
+            0.8473101265822786,
+            0.6906206047819972,
+            0.094145569620253,
+            0.19268635724331928
+          ],
+          "ts": 1786665107223
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "key": "amber planet",
+      "prim": "ring",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786665114189illpo",
+          "station": 3,
+          "key": "amber planet",
+          "prim": "ring",
+          "category": "other",
+          "note": "something here",
+          "bbox": [
+            0.8386075949367089,
+            0.025360407876230666,
+            0.13370253164556956,
+            0.17580872011251755
+          ],
+          "ts": 1786665114190
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "key": "lit planet",
+      "prim": "planet",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786665135081nr7tw",
+          "station": 4,
+          "key": "lit planet",
+          "prim": "planet",
+          "category": "other",
+          "note": "needs to look natrual, offcenter the green",
+          "bbox": [
+            0.5474683544303798,
+            0.7525052742616034,
+            0.23496835443037967,
+            0.2474947257383966
+          ],
+          "ts": 1786665135081
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "key": "pulsar",
+      "prim": "pulsar",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786665146182qu6o4",
+          "station": 5,
+          "key": "pulsar",
+          "prim": "pulsar",
+          "category": "other",
+          "note": "orange, push to top right",
+          "bbox": [
+            0.41060126582278483,
+            0.7131241209563994,
+            0.22863924050632906,
+            0.2784810126582279
+          ],
+          "ts": 1786665146182
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "key": "rose nebula",
+      "prim": "nebulaCloud",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786665157185zv5um",
+          "station": 6,
+          "key": "rose nebula",
+          "prim": "nebulaCloud",
+          "category": "other",
+          "note": "missing something here",
+          "bbox": [
+            0.09414556962025317,
+            0,
+            0.28639240506329117,
+            0.37416490857946555
+          ],
+          "ts": 1786665157185
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "key": "comet",
+      "prim": "streak",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m17866651638264wdti",
+          "station": 7,
+          "key": "comet",
+          "prim": "streak",
+          "category": "other",
+          "note": "unneded streak",
+          "bbox": [
+            0.5901898734177216,
+            0.2307049929676512,
+            0.161392405063291,
+            0.05625879043600565
+          ],
+          "ts": 1786665163826
+        },
+        {
+          "id": "m1786665168010nf5w1",
+          "station": 7,
+          "key": "comet",
+          "prim": "streak",
+          "category": "other",
+          "note": "need a cluster here",
+          "bbox": [
+            0.049841772151898736,
+            0.699059423347398,
+            0.09414556962025315,
+            0.300940576652602
+          ],
+          "ts": 1786665168010
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "key": "binary pair",
+      "prim": "binary",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786665177662xkw9p",
+          "station": 8,
+          "key": "binary pair",
+          "prim": "binary",
+          "category": "other",
+          "note": "offcenter the color, make it bigger",
+          "bbox": [
+            0.45332278481012656,
+            0.6273294655414908,
+            0.21518987341772144,
+            0.3726705344585092
+          ],
+          "ts": 1786665177662
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "key": "asteroid field",
+      "prim": "asteroidField",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786665185447b40hd",
+          "station": 9,
+          "key": "asteroid field",
+          "prim": "asteroidField",
+          "category": "other",
+          "note": "fix spiral",
+          "bbox": [
+            0.8710443037974684,
+            0.8214222925457102,
+            0.09731012658227833,
+            0.088607594936709
+          ],
+          "ts": 1786665185447
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "key": "supernova",
+      "prim": "spikes",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 11,
+      "key": "aurora ribbon",
+      "prim": "ribbon",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786665196310ic1ng",
+          "station": 11,
+          "key": "aurora ribbon",
+          "prim": "ribbon",
+          "category": "other",
+          "note": "push off screen",
+          "bbox": [
+            0.07753164556962025,
+            0.7609440928270041,
+            0.15110759493670886,
+            0.23905590717299585
+          ],
+          "ts": 1786665196310
+        }
+      ]
+    }
+  ]
+}

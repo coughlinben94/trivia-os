@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>World 04 — 360°: the torus camera · Trivia OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   WORLD 04 — 360° · 2026-07-30 · supersedes world-03-space
+
+   THE MODEL (client spec, verbatim intent): the viewer is inside a 360°
+   world; each slide is a 45° window onto it; an advance rotates the
+   camera 45° in a fixed direction. 8 × 45° = 360°, so eight advances
+   return you EXACTLY to slide 1 — a real loop, no hidden seam.
+
+   THE TORUS: each parallax layer is ONE tile of art repeating in BOTH
+   axes (star tile 48×48cq, mid 64×64, fg 96×96). A layer's travel per
+   advance is exactly tile-period ÷ 8, so any direction wraps seamlessly
+   and six advances always sum to a whole number of tile periods per
+   axis — including the spiral, where eight 45°-rotated unit vectors sum
+   to zero by trigonometric identity. The ENGINE IS FIXED; the only
+   weekly variable is the direction vector (--dx/--dy), one config line
+   (WEEK_DIRECTION below). No new art, ever.
+
+   THE 45° WINDOW — stated plainly: this is a FLAT proportional mapping,
+   not spherical projection. 45° of rotation = 1/8 of each layer's tile
+   period of translation; parallax between layers is what sells the
+   rotation. No 3D engine — the target is a cheap HDMI stick. The one
+   curvature hint is a STATIC corner vignette (never animated, soft
+   falloff only — not a pane edge or frame): the frame reads as a
+   porthole onto something bigger at zero compositor cost.
+
+   FLOW (root-cause fix carried from world-03's last revision, verified
+   present here):
+   · CONTINUOUS DRIFT along the travel axis, always, linear, infinite,
+     per-layer prime durations 331/337/347s, speed scaled by depth.
+     The world never stops.
+   · The 45° advance is a SURGE over motion already happening — detent
+     1.2s, one asymmetric ease-out on the travel axis, arced lift on
+     the perpendicular.
+   · ONE GESTURE: text exit starts WITH the camera move (≤0.73s inside
+     the 1.2s travel); new text enters at settle. Never exit→wait→
+     move→enter.
+   · Drift offsets are folded into the base wrap at every settle AND on
+     a 20s idle timer (chained setTimeout, never rAF), so strips stay
+     small: base is always within ±half a period, drift residual under
+     ~6cq. That is what keeps a 2-axis tiling affordable.
+
+   HOUSE LAWS: transform + opacity only; static filter/shadow never
+   animated; no rAF anywhere; mutually-prime periods (twinkle
+   11/13/17/29/31 · hue breath 29/37/43 · hue drift 149/181/211 ·
+   nebula 23 · theme 73 · drift 331/337/347 · shooting star 40–120s
+   jittered); deep space — no ground, no horizon, nothing rests on
+   anything; static pre-rendered grain; reduced motion freezes, never
+   vanishes; glows only on border-radius:50%; gradients reach
+   transparent well inside their own box; blur graduated, never
+   uniform. Per DESIGN-WORKER-LESSONS: radial margins computed, not
+   eyeballed; eased keyframes re-apply timing per segment (linear
+   exempt — drift and shooting star are linear on purpose).
+   ══════════════════════════════════════════════════════════════════ */
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --text:#ece6ff; --muted:#8878b8;
+  --pg:#0b0c10; --pg-card:#14161d; --pg-line:#262a34;
+}
+
+body{
+  background:var(--pg); color:#ddd8e8;
+  font-family:'DM Sans',system-ui,sans-serif; line-height:1.55;
+  padding:0 0 90px; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1240px;margin:0 auto;padding:0 28px}
+
+header.pg{padding:56px 0 26px;border-bottom:1px solid var(--pg-line);margin-bottom:26px}
+header.pg .eyebrow{font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:#8a7ad0;font-weight:700;margin-bottom:12px}
+header.pg h1{font-family:'Boogaloo',cursive;font-size:clamp(34px,5vw,52px);line-height:1.05;margin-bottom:12px}
+header.pg p{max-width:78ch;color:#9aa0ae;font-size:15px}
+header.pg b{color:#ddd8e8;font-weight:500}
+
+/* ── controls ─────────────────────────────────────────────────────── */
+.ctl{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px}
+.ctl button,.ctl label{
+  font-size:12.5px;font-weight:600;letter-spacing:.03em;
+  background:var(--pg-card);border:1px solid var(--pg-line);color:#b9b3c8;
+  border-radius:7px;padding:8px 14px;cursor:pointer;
+  transition:border-color .15s,color .15s,background .15s;
+  display:inline-flex;align-items:center;gap:7px;user-select:none;
+}
+.ctl button:hover,.ctl label:hover{border-color:#6a5aa8;color:#fff}
+.ctl button.on,.ctl label.on{background:#2a2140;border-color:#8a6ad0;color:#fff}
+.ctl .big{
+  font-size:13.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  background:#2a2140;border:1px solid #8a6ad0;color:#fff;border-radius:8px;
+  padding:10px 24px;
+}
+.ctl .big:hover{background:#3a2e58}
+.ctl .big:active{transform:translateY(1px)}
+.ctl .sep{width:1px;align-self:stretch;background:var(--pg-line);margin:0 4px}
+.ctl .grpLabel{font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:#7a7f90;font-weight:700;padding:0 2px}
+.ampbox{display:flex;align-items:center;gap:10px;
+  background:var(--pg-card);border:1px solid var(--pg-line);border-radius:8px;
+  padding:8px 14px;font-size:12.5px;font-weight:600;color:#b9b3c8}
+.ampbox input{width:150px;accent-color:#8a6ad0}
+.ampbox .val{color:#fff;min-width:44px;font-variant-numeric:tabular-nums}
+.sub{color:#8b91a0;font-size:13px;margin:0 0 14px;font-variant-numeric:tabular-nums}
+.sub b{color:#ddd8e8;font-weight:600}
+
+/* ══ THE STAGE ══════════════════════════════════════════════════════ */
+.stage{
+  position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;
+  border-radius:10px;background:#010107;
+  box-shadow:0 24px 70px rgba(0,0,0,.6),0 0 0 1px var(--pg-line);
+  container-type:size;
+  --amp:1;
+  /* direction vector — camera travel in screen coords (north = −y).
+     JS keeps these in sync with the picker; keyframes read them live
+     at each (re)start. World translation is the NEGATIVE of these. */
+  --dx:1; --dy:0;
+  /* arc unit vector — perpendicular of the (normalized) direction */
+  --ax:0; --ay:1;
+}
+
+/* ══ THEME TOKENS ══ carried from world-03: purple sweeps from lower-
+   left, amber from upper-right, cool band between; orange alpha cut
+   well below purple's so complementaries never mix to brown. */
+.stage.th-mg{--t-bg:#08001a;--t-deep:#040010;--t-accent:#4a1a8f;--t-hl:#c060ff;--t-text:#e8d0ff;
+  --hA:rgba(150,60,255,.42);--hA-mid:rgba(120,42,220,.16);
+  --hB:rgba(255,132,48,.18);--hB-mid:rgba(230,100,40,.06);
+  --hC:rgba(80,90,255,.20); --hC-mid:rgba(70,70,210,.07)}
+.stage.th-ms{--t-bg:#020408;--t-deep:#010306;--t-accent:#101828;--t-hl:#e0f0ff;--t-text:#f0f8ff;
+  --hA:rgba(90,120,190,.30); --hA-mid:rgba(60,88,150,.12);
+  --hB:rgba(220,232,255,.14);--hB-mid:rgba(170,196,240,.05);
+  --hC:rgba(40,70,130,.20);  --hC-mid:rgba(30,52,100,.07)}
+.stage.th-hw{--t-bg:#060008;--t-deep:#030005;--t-accent:#380858;--t-hl:#a000ff;--t-text:#e0c0f8;
+  --hA:rgba(150,0,255,.38);  --hA-mid:rgba(112,8,180,.15);
+  --hB:rgba(255,104,0,.20);  --hB-mid:rgba(210,74,0,.07);
+  --hC:rgba(60,10,90,.24);   --hC-mid:rgba(44,6,66,.09)}
+.stage.th-us{--t-bg:#000c18;--t-deep:#000810;--t-accent:#003848;--t-hl:#00d8c0;--t-text:#b0f0f0;
+  --hA:rgba(0,150,170,.32);  --hA-mid:rgba(0,104,124,.12);
+  --hB:rgba(80,220,190,.16); --hB-mid:rgba(50,160,140,.06);
+  --hC:rgba(0,60,110,.24);   --hC-mid:rgba(0,42,80,.09)}
+.stage.th-sb{--t-bg:#1c0c2a;--t-deep:#120722;--t-accent:#e06a28;--t-hl:#ffb84d;--t-text:#ffeeda;
+  --hA:rgba(160,60,190,.36); --hA-mid:rgba(120,42,140,.14);
+  --hB:rgba(255,150,60,.22); --hB-mid:rgba(224,106,40,.08);
+  --hC:rgba(190,60,110,.18); --hC-mid:rgba(140,40,80,.06)}
+
+/* ══ LAYER CHASSIS ══ base (wrapped offset, JS-written, static between
+   moves) > mvX (detent travel) > mvY (detent arc) > drift (continuous)
+   > art (blur home). Tiled art extends past the layer box in every
+   direction; the stage's overflow:hidden is the only clip. */
+.lyr{position:absolute;left:0;top:0;width:100cqw;height:100cqh}
+.l-sky{left:-8cqw;top:-8cqh;width:116cqw;height:116cqh}
+.base,.mvX,.mvY,.drift,.art{position:absolute;inset:0}
+
+/* ══ TORUS NUMBERS ══ per layer: --stp = travel per advance (cq),
+   --P = tile period (cq) = 8 × --stp exactly, so eight advances are one
+   whole tile in ANY direction — the loop is structural, not tuned.
+   Vertical uses the same numbers in cqh: the tile repeats both axes. */
+.l-sky{--stp:0; --P:0;  --aA:0.35}
+.l-str{--stp:6; --P:48; --aA:0.90}
+.l-mid{--stp:8; --P:64; --aA:2.40}
+.l-fg {--stp:12;--P:96; --aA:5.00}
+
+/* ══ CONTINUOUS DRIFT — the flow itself ══
+   Always running, linear, infinite, one full tile period per loop, in
+   the current travel direction. Prime durations 347/337/331s give
+   depth-scaled speeds (fg ~0.29cq/s, mid ~0.18, stars ~0.14) that are
+   mutually prime with every ambient clock. Direction changes never
+   restart this mid-flight blind: JS bakes the current drift offset
+   into the base wrap first, so there is never a visible jump. Sky has
+   no drift — it is at infinity; its life is the hue fields' own drift. */
+.l-str .drift{animation:driftGo 347s linear infinite}
+.l-mid .drift{animation:driftGo 337s linear infinite}
+.l-fg  .drift{animation:driftGo 331s linear infinite}
+@keyframes driftGo{
+  0%  {transform:translate3d(0,0,0)}
+  100%{transform:translate3d(calc(var(--P)*var(--dx)*-1cqw),
+                             calc(var(--P)*var(--dy)*-1cqh),0)}
+}
+
+/* static, graduated blur — on .art so animated wrappers stay clean */
+.l-sky .art{filter:blur(1.5px)}
+.l-str .art{filter:blur(1.5px)}
+.l-mid .art{filter:blur(2.2px)}
+.l-fg  .art{filter:blur(1.7px)}
+
+/* base void — dark, saturated, no vertical structure */
+.void{position:absolute;inset:0;
+  background:radial-gradient(ellipse 130% 120% at 50% 50%,
+    var(--t-bg,#08001a) 0%, var(--t-deep,#040010) 62%, #010007 100%);
+  transition:background 6s linear}
+
+/* ══ DIAGONAL SWEEP HUE BANDS (carried) ══ linear bands separated by a
+   near-black gap through frame centre — never radial blobs (blobs meet
+   brightest at centre, mix to brown, and light the text bed). Breathing
+   29/37/43s, drifting 149/181/211s — all mutually prime. */
+.hue{position:absolute;pointer-events:none;transition:background 6s linear}
+.hA{background:linear-gradient(38deg,
+      var(--hA) 0%, var(--hA) 12%, var(--hA-mid) 30%, transparent 46%);
+    animation:hueBrA 29s ease-in-out infinite, hueDrA 149s ease-in-out infinite}
+.hB{background:linear-gradient(218deg,
+      var(--hB) 0%, var(--hB) 11%, var(--hB-mid) 29%, transparent 46%);
+    animation:hueBrB 37s ease-in-out infinite, hueDrB 181s ease-in-out infinite}
+.hC{background:linear-gradient(38deg,
+      transparent 30%, var(--hC-mid) 42%, var(--hC) 52%,
+      var(--hC-mid) 62%, transparent 74%);
+    animation:hueBrC 43s ease-in-out infinite, hueDrC 211s ease-in-out infinite}
+@keyframes hueBrA{0%,100%{opacity:.86}50%{opacity:1}}
+@keyframes hueBrB{0%,100%{opacity:.80}50%{opacity:.96}}
+@keyframes hueBrC{0%,100%{opacity:.74}50%{opacity:.90}}
+@keyframes hueDrA{0%,100%{transform:translate3d(0,0,0) scale(1)}
+                  50%{transform:translate3d(4cqw,-3cqh,0) scale(1.06)}}
+@keyframes hueDrB{0%,100%{transform:translate3d(0,0,0) scale(1)}
+                  50%{transform:translate3d(-5cqw,3.4cqh,0) scale(1.05)}}
+@keyframes hueDrC{0%,100%{transform:translate3d(0,0,0) scale(1)}
+                  50%{transform:translate3d(3cqw,4cqh,0) scale(1.08)}}
+
+/* ══ STARFIELD — THE HERO ══ 72 stars per 48×48 tile (~312 in frame):
+   3 size tiers, 3 colour temperatures, alpha floors .30/.46/.86,
+   5 twinkle clocks 11/13/17/29/31s. Only heroes, mids and 1-in-3
+   smalls twinkle — the rest sit static at base opacity (compositor
+   load on a cheap HDMI stick). Heroes CAN cross the text band under
+   vertical travel; the scrim owns legibility, so hero glow stays soft. */
+.star{position:absolute;border-radius:50%;
+  background:radial-gradient(circle closest-side,
+    var(--sc1) 0%, var(--sc2) 30%, transparent 70%);
+  animation:tw var(--tp) ease-in-out infinite;animation-delay:var(--td)}
+.st-w{--sc1:#fff2dc;--sc2:rgba(255,226,180,.85)}
+.st-n{--sc1:#ffffff;--sc2:rgba(240,242,255,.85)}
+.st-c{--sc1:#e8f1ff;--sc2:rgba(190,214,255,.85)}
+.star.hero{box-shadow:0 0 .9cqw .12cqw rgba(255,238,208,.28)}
+@keyframes tw{0%,100%{opacity:var(--ob)}50%{opacity:var(--op)}}
+
+/* nebula breath — faint cool diagonal band, 23s, lives on the SKY
+   layer (at infinity) so it never has to tile */
+.nebula{position:absolute;
+  background:linear-gradient(115deg,transparent 30%,rgba(150,130,255,.10) 46%,
+    rgba(150,130,255,.10) 54%,transparent 70%);
+  opacity:.40;animation:brNeb 23s ease-in-out infinite}
+@keyframes brNeb{0%,100%{opacity:.40}50%{opacity:.48}}
+
+/* ══ SPACE OBJECTS — one-sentence geometry only ══ planets ≤6.5cq,
+   whole, nothing clipped, nothing resting on anything. */
+.planet{position:absolute;border-radius:50%;
+  background:radial-gradient(circle at 33% 29%,
+    var(--pl-hi,#d8b8ff) 0%, var(--pl-md,#7a4cc0) 34%,
+    var(--pl-lo,#2a1050) 70%, #100626 100%)}
+.planet.glow{box-shadow:0 0 2.4cqw rgba(176,112,255,.18)}
+.pring{position:absolute;border-radius:50%;
+  border:.30cqw solid rgba(206,176,255,.32);
+  border-bottom-color:rgba(206,176,255,.08);
+  transform:rotate(-17deg)}
+.neb{position:absolute;border-radius:50%;
+  background:radial-gradient(ellipse 62% 48% at 48% 50%,
+    var(--nb,rgba(150,110,255,.22)) 0%,
+    rgba(150,110,255,.08) 46%, transparent 74%)}
+.dust{position:absolute;border-radius:50%;background:rgba(228,214,255,.5)}
+
+/* ══ SHOOTING STAR — one channel, 40–120s ±40%, alternating dir ══ */
+.shootLane{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.shootRot{position:absolute;transform:rotate(var(--sa))}
+.shoot{width:9cqw;height:.24cqh;border-radius:.5cqh;opacity:0;
+  filter:blur(1.5px);
+  background:linear-gradient(90deg,transparent 0%,rgba(255,244,224,0) 12%,
+    rgba(255,244,224,.55) 70%,#fff8ec 100%);
+  animation:shootGo var(--sdu) linear both}
+@keyframes shootGo{
+  0%  {transform:translate3d(0,0,0);opacity:0}
+  12% {opacity:.9}
+  72% {opacity:.8}
+  100%{transform:translate3d(var(--sd),0,0);opacity:0}
+}
+
+/* ══ THE DETENT — the 45° surge ══ 1.2s, riding on visible drift.
+   Travel: 2 stops under ONE asymmetric ease-out — quick launch, long
+   deceleration — along the direction vector; every layer shares the
+   curve and the duration, only --stp differs, so no layer separates.
+   Arc: 3 stops (a 2-stop transform cannot go out and come back), peak
+   at 42% so the lift crests during the fast phase; ease-in-out both
+   halves has zero slope at the peak from both sides — velocity stays
+   continuous. Arc rides the PERPENDICULAR of travel (--ax/--ay), so a
+   vertical week arcs sideways instead of fighting its own axis. */
+.stage.go .mvX{animation:goT 1.2s cubic-bezier(.16,.62,.28,1) both}
+.stage.go .mvY{animation:goA 1.2s both}
+@keyframes goT{
+  0%  {transform:translate3d(0,0,0)}
+  100%{transform:translate3d(calc(var(--stp)*var(--dx)*-1cqw),
+                             calc(var(--stp)*var(--dy)*-1cqh),0)}
+}
+@keyframes goA{
+  0%  {transform:translate3d(0,0,0);animation-timing-function:ease-in-out}
+  42% {transform:translate3d(calc(var(--aA)*var(--amp)*var(--ax)*1cqw),
+                             calc(var(--aA)*var(--amp)*var(--ay)*1cqh),0);
+       animation-timing-function:ease-in-out}
+  100%{transform:translate3d(0,0,0)}
+}
+
+/* ══ QUESTION ══ centre-anchored: the block's own centre IS 50cqh at
+   any length; measure-to-fit sizes it into 60cqw × 38.8cqh at ≤4
+   lines, so worst case it spans exactly 28–72cqh. It cannot exit. */
+.qScrim{position:absolute;left:0;right:0;
+  opacity:0;transition:opacity .4s ease;pointer-events:none}
+.qScrim.on{opacity:1}
+.qLayer{position:absolute;left:20cqw;width:60cqw;
+  top:50cqh;transform:translateY(-50%);
+  text-align:center;pointer-events:none}
+.qLayer .qtext{font-family:'DM Sans',sans-serif;font-weight:500;
+  font-size:5.5cqh;line-height:1.3;color:var(--t-text,#e8d0ff)}
+.qLayer .w{display:inline-block;opacity:0;will-change:transform}
+@keyframes wIn{
+  0%  {opacity:0;transform:translate3d(0,.55em,0)}
+  100%{opacity:1;transform:translate3d(0,0,0)}
+}
+@keyframes wOut{
+  0%  {opacity:1;transform:translate3d(0,0,0)}
+  100%{opacity:0;transform:translate3d(0,-.4em,0)}
+}
+.stage.hideQ .qLayer,.stage.hideQ .qScrim{display:none}
+
+/* ══ OVERLAYS ══ */
+/* static corner vignette — the cheap curvature hint. Never animated,
+   no edge line, just a soft radial falloff that darkens the extreme
+   corners; the flat translation underneath then reads as a rotating
+   view through a round-ish window. Alpha kept low on purpose. */
+.vig{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 148% 138% at 50% 50%,
+    transparent 0%, transparent 66%, rgba(1,1,8,.30) 100%)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.06;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.55'/></svg>")}
+.stage.noGrain .grain{display:none}
+.guides{position:absolute;left:20%;top:27.5%;width:60%;height:45%;
+  border:1.5px dashed rgba(160,200,255,.55);border-radius:6px;
+  pointer-events:none;display:none}
+.guides::after{content:'safe area · 60% × 45%';position:absolute;left:8px;top:6px;
+  font-size:1.3cqw;letter-spacing:.1em;color:rgba(160,200,255,.7);
+  font-family:'DM Sans',sans-serif;font-weight:600}
+.stage.showGuides .guides{display:block}
+
+/* ══ REDUCED MOTION — freeze, never vanish ══ */
+@media (prefers-reduced-motion:reduce){
+  .mvX,.mvY,.drift,.star,.shoot,.hue,.nebula{animation:none!important}
+}
+.stage.rm .mvX,.stage.rm .mvY,.stage.rm .drift,.stage.rm .star,
+.stage.rm .shoot,.stage.rm .hue,.stage.rm .nebula{animation:none!important}
+
+/* ── notes card ───────────────────────────────────────────────────── */
+.notes{margin-top:40px;background:var(--pg-card);border:1px solid var(--pg-line);
+  border-radius:10px;padding:26px 30px}
+.notes h3{font-family:'Boogaloo',cursive;font-size:24px;margin-bottom:10px}
+.notes h3 span{color:#8a7ad0}
+.notes p{color:#9aa0ae;font-size:14.5px;max-width:88ch;margin-bottom:10px}
+.notes p:last-child{margin-bottom:0}
+.notes b{color:#ddd8e8;font-weight:600}
+</style>
+</head>
+<body>
+
+<header class="pg"><div class="wrap">
+  <div class="eyebrow">World 04 · 360°</div>
+  <h1>360° — the torus camera</h1>
+  <p>The viewer sits inside a 360° world; each slide is a <b>45° window</b>;
+  an advance rotates the camera 45° in a fixed direction, and eight advances
+  return you <b>exactly</b> to slide 1 — a structural loop, not a strip with
+  a hidden seam. The world is a <b>torus</b>: one tile per layer, repeating
+  in both axes, so travel is just a direction vector and <b>every</b>
+  direction wraps with zero special-casing. The engine is fixed; the only
+  weekly variable is the direction of travel — one config line, or the
+  picker below.</p>
+</div></header>
+
+<div class="wrap">
+
+  <div class="ctl">
+    <button class="big" id="btnAdv">Advance &#9656;</button>
+    <button id="btnAuto">Auto-advance</button>
+    <span class="sep"></span>
+    <button class="on" data-spd="1">1&times;</button>
+    <button data-spd="4">4&times;</button>
+    <button data-spd="12">12&times;</button>
+  </div>
+  <div class="ctl">
+    <span class="grpLabel">Direction</span>
+    <button class="on" data-dir="e">&#8594; L&#8594;R</button>
+    <button data-dir="w">&#8592; R&#8594;L</button>
+    <button data-dir="n">&#8593; North</button>
+    <button data-dir="s">&#8595; South</button>
+    <button data-dir="ne">&#8599; Diagonal</button>
+    <button data-dir="spiral">&#10227; Spiral</button>
+    <span class="sep"></span>
+    <div class="ampbox">
+      <span>Arc</span>
+      <input type="range" id="amp" min="0" max="2" step="0.05" value="1">
+      <span class="val" id="ampV">1.00&times;</span>
+    </div>
+    <span class="sep"></span>
+    <button class="on" id="tQ">Question</button>
+    <button id="tG">Guides</button>
+    <button class="on" id="tN">Grain</button>
+    <button id="tR">Reduced motion</button>
+  </div>
+  <div class="sub" id="status"></div>
+
+  <div class="stage th-mg" id="stage">
+    <!-- layers injected by JS before the scrim -->
+    <div class="qScrim" id="qScrim"></div>
+    <div class="qLayer" id="qLayer">
+      <div class="qtext" id="qText"></div>
+    </div>
+    <div class="vig"></div>
+    <div class="guides"></div>
+    <div class="grain"></div>
+  </div>
+
+  <div class="notes">
+    <h3><span>How the torus works.</span> Fixed engine, one weekly knob.</h3>
+    <p><b>The wrap:</b> each layer is one tile of art repeated in both axes
+    (stars 48&times;48cq, mid 64&times;64, fg 96&times;96). Travel per advance is
+    exactly one-sixth of the tile period, so six advances are one whole tile in
+    any direction and the wrap-modulo lands you where you started — left, right,
+    up, down, diagonal, or a spiral (eight 45°-rotated vectors sum to zero, so even
+    the spiral closes its loop). <b>The direction</b> is a single vector in two
+    CSS variables; <code>WEEK_DIRECTION</code> at the top of the script is the
+    one line that changes week to week. No new art, no new code paths.</p>
+    <p><b>Drift + surge:</b> every layer drifts along the travel axis forever
+    (linear, prime durations 331/337/347&thinsp;s, speed scaled by depth), so the
+    world never stops; the 1.2&thinsp;s detent is a surge over that motion, one
+    asymmetric ease-out on travel plus a perpendicular arc with a continuous-velocity
+    crest. The question's exit rides ON the move and the new question enters at
+    settle — one gesture. Drift is folded into the base offset at every settle and
+    on a 20&thinsp;s idle clock, which is what keeps a two-axis tiling small enough
+    for a cheap HDMI stick.</p>
+    <p><b>The 45° window is a flat mapping, stated plainly:</b> no spherical
+    projection, no 3D. Rotation is sold by parallax between depths plus a static
+    corner vignette that makes the frame read as a porthole. Real edge curvature
+    needs per-pixel warp — wrong trade for the target hardware.</p>
+  </div>
+
+</div>
+
+<!-- questions from the content worker; inline fallback below -->
+<script src="world-03-content.js"></script>
+<script>
+'use strict';
+
+/* ════════════════════════════════════════════════════════════════════
+   THE ONE WEEKLY CONFIG LINE.
+   'e' → left-to-right (+1,0)   'w' → right-to-left (−1,0)
+   'n' → pan north (0,−1)       's' → pan south (0,+1)
+   'ne'→ diagonal (+1,−1)       'spiral' → vector rotates 45°/advance
+   ════════════════════════════════════════════════════════════════════ */
+const WEEK_DIRECTION = 'e';
+
+/* ── deterministic rng ────────────────────────────────────────────── */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296}}
+
+const stage=document.getElementById('stage');
+const mediaRM=matchMedia('(prefers-reduced-motion: reduce)');
+let manualRM=false;
+const isReduced=()=>mediaRM.matches||manualRM;
+
+function el(cls,css){const d=document.createElement('div');
+  if(cls)d.className=cls;if(css)d.style.cssText=css;return d}
+
+/* ══ SKY — at infinity; hue bands + nebula live here so they never
+   tile. Sky box is stage(−8,−8)→(108,108): +8 converts stage→local. */
+function buildSky(art){
+  art.appendChild(el('void'));
+  const F=[
+    {c:'hue hA', css:'left:-18cqw;top:42cqh;width:104cqw;height:96cqh'},
+    {c:'hue hB', css:'left:52cqw;top:-22cqh;width:96cqw;height:88cqh'},
+    {c:'hue hC', css:'left:16cqw;top:14cqh;width:88cqw;height:82cqh'},
+  ];
+  F.forEach(f=>art.appendChild(el(f.c,f.css)));
+  art.appendChild(el('nebula','left:8cqw;top:8cqh;width:100cqw;height:70cqh'));
+}
+
+/* ══ STARS ══ 72 per 48×48 tile → ~312 in frame. Tiers: 2 hero ·
+   16 mid · 54 small. Alpha floors .86/.46/.30 (themes.md floor).
+   Twinkle: heroes+mids+1-in-3 smalls only; the rest are static divs. */
+const TW=[11,13,17,29,31];
+function starPattern(){
+  const r=mulberry32(9137),p=[];
+  for(let i=0;i<72;i++){
+    const tier=i<2?2:(i<18?1:0);
+    const s=tier===2?(.44+r()*.18):tier===1?(.22+r()*.11):(.10+r()*.10);
+    const t=r(), temp=t<.34?'w':t<.67?'n':'c';
+    const ob=tier===2?(.86+r()*.10):tier===1?(.46+r()*.32):(.30+r()*.28);
+    const dv=tier===2?.06:(.10+r()*.10);
+    const per=tier===2?TW[3+(i%2)]:TW[i%5];   /* heroes on 29/31 only */
+    const tw=tier>0||i%3===0;
+    p.push({x:r()*48,y:r()*48,s,tier,temp,ob,dv,per,del:-(r()*per),tw});
+  }
+  return p;
+}
+function buildStars(art,tiles){
+  const P=starPattern();
+  for(const tx of tiles)for(const ty of tiles)for(const s of P){
+    const d=el('star st-'+s.temp+(s.tier===2?' hero':''));
+    d.style.left=(tx+s.x)+'cqw';d.style.top=(ty+s.y)+'cqh';
+    d.style.width=s.s+'cqw';d.style.height=s.s+'cqw';
+    d.style.opacity=s.ob;                     /* reduced-motion rest */
+    if(!s.tw)d.style.animation='none';
+    d.style.setProperty('--ob',s.ob);
+    d.style.setProperty('--op',Math.min(s.ob+s.dv,1));
+    d.style.setProperty('--tp',s.per+'s');
+    d.style.setProperty('--td',s.del+'s');
+    art.appendChild(d);
+  }
+}
+
+/* ══ MID · 64×64 tile ══ (was 60×60; retiled for the 8-slide loop, so
+   the period is 8 × 8cq exactly). 3 whole bodies + 4 nebula banks + 5
+   dust per tile → ~6 bodies in frame at varied size, always something
+   mid-journey. At 8cq/advance a 6cq planet lingers ~12 advances: it
+   enters, crosses, leaves. That crossing is what makes an arrival read
+   as "further along the same world" instead of a new screen. */
+function buildMid(art,tiles){
+  const r=mulberry32(3181);
+  const BODIES=[
+    {x:  8, d:6.0, y: 7, ring:true,  hi:'#d8b8ff', md:'#7a4cc0', lo:'#2a1050'},
+    {x: 36, d:3.2, y:38, ring:false, hi:'#bfe4ff', md:'#4c78c0', lo:'#101c44'},
+    {x: 52, d:4.2, y:14, ring:false, hi:'#ffd8c0', md:'#b06a48', lo:'#3a1a12'},
+  ];
+  const BANKS=[
+    {x: 2, w:26, h:20, y: 3, a:.20},
+    {x:30, w:24, h:18, y:40, a:.15},
+    {x:14, w:22, h:16, y:22, a:.12},
+    {x:46, w:25, h:19, y:46, a:.13},
+  ];
+  const DUST=[];
+  for(let i=0;i<5;i++)DUST.push({x:r()*64,y:r()*64,
+    s:(.16+r()*.2),o:(.2+r()*.2)});
+  for(const tx of tiles)for(const ty of tiles){
+    BANKS.forEach(b=>{
+      const d=el('neb');
+      d.style.left=(tx+b.x)+'cqw'; d.style.top=(ty+b.y)+'cqh';
+      d.style.width=b.w+'cqw';     d.style.height=b.h+'cqh';
+      d.style.setProperty('--nb','rgba(150,110,255,'+b.a+')');
+      art.appendChild(d);
+    });
+    BODIES.forEach(p=>{
+      const d=el('planet glow');
+      d.style.left=(tx+p.x)+'cqw'; d.style.top=(ty+p.y)+'cqh';
+      d.style.width=p.d+'cqw';     d.style.height=p.d+'cqw';
+      d.style.setProperty('--pl-hi',p.hi);
+      d.style.setProperty('--pl-md',p.md);
+      d.style.setProperty('--pl-lo',p.lo);
+      art.appendChild(d);
+      if(p.ring){
+        const gw=p.d*1.8, g=el('pring');
+        g.style.left=(tx+p.x-(gw-p.d)/2)+'cqw';
+        g.style.top=(ty+p.y+p.d*0.30)+'cqh';
+        g.style.width=gw+'cqw'; g.style.height=(p.d*0.50)+'cqw';
+        art.appendChild(g);
+      }
+    });
+    DUST.forEach(s=>{
+      const d=el('dust');
+      d.style.left=(tx+s.x)+'cqw'; d.style.top=(ty+s.y)+'cqh';
+      d.style.width=s.s.toFixed(2)+'cqw'; d.style.height=s.s.toFixed(2)+'cqw';
+      d.style.opacity=s.o.toFixed(2);
+      art.appendChild(d);
+    });
+  }
+}
+
+/* ══ FG · 96×96 tile ══ near dust only — sells parallax speed. */
+function buildFg(art,tiles){
+  const r=mulberry32(8447);
+  const DUST=[];
+  for(let i=0;i<16;i++)DUST.push({x:r()*96,y:r()*96,
+    s:(.22+r()*.34),o:(.28+r()*.3)});
+  for(const tx of tiles)for(const ty of tiles)DUST.forEach(s=>{
+    const d=el('dust');
+    d.style.left=(tx+s.x)+'cqw'; d.style.top=(ty+s.y)+'cqh';
+    d.style.width=s.s.toFixed(2)+'cqw'; d.style.height=s.s.toFixed(2)+'cqw';
+    d.style.opacity=s.o.toFixed(2);
+    art.appendChild(d);
+  });
+}
+
+/* ══ LAYERS ══ tile lists cover base(±P/2) + detent(±P/8) + drift
+   residual (≤20s of drift; see idle bake) + the 100cq window, for
+   BOTH signs of every direction — computed, not hoped:
+   stars  P48: need [−35,135] → tiles −48..96  (4×4)
+   mid    P60: need [−44,144] → tiles −60..120 (4×4)
+   fg     P96: need [−70,170] → tiles −96..96  (3×3)               */
+const LAYERS=[
+  {cls:'l-sky',step:0, P:0,  tiles:[0],            build:buildSky},
+  {cls:'l-str',step:8, P:48, tiles:[-48,0,48,96],  build:buildStars},
+  {cls:'l-mid',step:10,P:60, tiles:[-60,0,60,120], build:buildMid},
+  {cls:'l-fg', step:16,P:96, tiles:[-96,0,96],     build:buildFg},
+];
+
+const shootLane=el('shootLane');
+const layerState=[];
+(function build(){
+  const anchor=document.getElementById('qScrim');
+  for(const cfg of LAYERS){
+    const lyr=el('lyr '+cfg.cls),base=el('base'),
+          mvX=el('mvX'),mvY=el('mvY'),drift=el('drift'),art=el('art');
+    drift.appendChild(art);mvY.appendChild(drift);mvX.appendChild(mvY);
+    base.appendChild(mvX);lyr.appendChild(base);
+    stage.insertBefore(lyr,anchor);
+    cfg.build(art,cfg.tiles);
+    layerState.push({cfg,base,drift,ox:0,oy:0});
+  }
+  stage.insertBefore(shootLane,stage.querySelector('.l-mid'));
+})();
+
+/* ══ DIRECTION — the one weekly variable ══
+   dir = camera travel in screen coords (north = −y). World translation
+   is the negative. Arc rides the perpendicular (−dy,dx)/|d|.
+   The spiral rotates the vector 45° per advance; eight rotations sum to
+   zero, so the spiral's 8-advance loop closes exactly like the rest. */
+const DIRS={
+  e:     {v:[ 1, 0], label:'left-to-right →'},
+  w:     {v:[-1, 0], label:'right-to-left ←'},
+  n:     {v:[ 0,-1], label:'pan north ↑'},
+  s:     {v:[ 0, 1], label:'pan south ↓'},
+  ne:    {v:[ 1,-1], label:'diagonal ↗'},
+  spiral:{spin:true, label:'spiral ⟳'},
+};
+let dirKey='e', dir={x:1,y:0}, spiralAng=0, pendDir=null;
+function spiralVec(){
+  const a=spiralAng*Math.PI/180;
+  return {x:Math.cos(a), y:-Math.sin(a)};
+}
+function applyDirVars(){
+  const len=Math.hypot(dir.x,dir.y)||1;
+  stage.style.setProperty('--dx',dir.x);
+  stage.style.setProperty('--dy',dir.y);
+  stage.style.setProperty('--ax',-dir.y/len);
+  stage.style.setProperty('--ay', dir.x/len);
+}
+
+/* ══ DRIFT BOOKKEEPING ══
+   readDrift: current animated offset of a layer's drift wrapper, px.
+   foldDrift: bake every layer's live drift offset into its base wrap,
+   run an optional mid-step (direction change), restart drift from 0 —
+   all in one task, one paint, zero visible jump. Called at every
+   settle, at every direction change, and on a 20s idle clock so drift
+   residual stays tiny and the tile lists above stay honest. */
+function readDrift(L){
+  const t=getComputedStyle(L.drift).transform;
+  if(!t||t==='none')return{x:0,y:0};
+  const p=t.slice(t.indexOf('(')+1,-1).split(',');
+  return t.startsWith('matrix3d')
+    ? {x:+p[12],y:+p[13]} : {x:+p[4],y:+p[5]};
+}
+function wrapL(L){
+  const P=L.cfg.P;
+  L.ox=((L.ox%P)+P)%P; if(L.ox>P/2)L.ox-=P;
+  L.oy=((L.oy%P)+P)%P; if(L.oy>P/2)L.oy-=P;
+}
+function writeBase(L){
+  L.base.style.transform='translate3d('+L.ox+'cqw,'+L.oy+'cqh,0)';
+}
+function foldDrift(mid){
+  const W=stage.clientWidth/100||1,H=stage.clientHeight/100||1;
+  for(const L of layerState){
+    if(!L.cfg.P)continue;
+    const d=readDrift(L);
+    L.ox+=d.x/W; L.oy+=d.y/H;
+    wrapL(L);writeBase(L);
+    L.drift.style.animation='none';
+  }
+  void stage.offsetWidth;                     /* one reflow, one paint */
+  if(mid)mid();
+  for(const L of layerState)if(L.cfg.P)L.drift.style.animation='';
+}
+
+/* ══ QUESTIONS — content worker first, fallback second ══ */
+const FALLBACK=[
+  {q:'What’s the only U.S. state that grows coffee commercially?'},
+  {q:'Which planet spins so slowly its day outlasts its year?'},
+  {q:'Which Beatles album cover shows the band on a crosswalk?'},
+  {q:'What’s the tallest animal walking the Earth today?'},
+  {q:'Which country actually invented the croissant — not France?'},
+  {q:'How many bones are in an adult human body — 106, 206, or 306?'},
+  {q:'What mythical creature is the national animal of Scotland?'},
+  {q:'In poker, which hand wins — a flush or a full house?'}
+];
+function normalizeQ(list){
+  if(!Array.isArray(list)||list.length<6)return null;
+  const out=list.map(it=>typeof it==='string'?{q:it}:
+    (it&&(it.q||it.question)?{q:it.q||it.question}:null));
+  return out.every(Boolean)?out:null;
+}
+const EXT=window.WORLD03_CONTENT||window.WORLD03||null;
+const QUESTIONS=normalizeQ(EXT&&(EXT.questions||EXT.QUESTIONS||EXT))||FALLBACK;
+
+const qLayer=document.getElementById('qLayer'),
+      qText=document.getElementById('qText'),
+      qScrim=document.getElementById('qScrim');
+
+/* ══ MEASURE-TO-FIT — port of client/src/lib/autoFitText.js. Binary-
+   searches the largest px size whose greedy word-wrap fits the box at
+   ≤4 lines, measuring REAL glyph widths on a canvas. Gated behind
+   document.fonts.ready so metrics are DM Sans, not the fallback. ══ */
+let _mc=null;
+function _ctx(){if(!_mc)_mc=document.createElement('canvas').getContext('2d');return _mc}
+function wrapToWidth(text,font,sizePx,maxW){
+  const c=_ctx();c.font=font.replace('{S}',sizePx);
+  const words=String(text).split(/\s+/).filter(Boolean);
+  if(!words.length)return[''];
+  const lines=[];let line=words[0];
+  for(let i=1;i<words.length;i++){
+    const t=line+' '+words[i];
+    if(c.measureText(t).width<=maxW)line=t;
+    else{lines.push(line);line=words[i]}
+  }
+  lines.push(line);return lines;
+}
+function _fits(text,font,sizePx,boxW,boxH,maxLines,lh){
+  const lines=wrapToWidth(text,font,sizePx,boxW);
+  if(lines.length>maxLines)return false;
+  const c=_ctx();c.font=font.replace('{S}',sizePx);
+  for(const ln of lines)if(c.measureText(ln).width>boxW)return false;
+  return lines.length*sizePx*lh<=boxH;
+}
+function fitToBox(text,{font,boxW,boxH,floorPx,ceilPx,maxLines=4,lh=1.3}){
+  if(!String(text).trim())return ceilPx;
+  if(_fits(text,font,ceilPx,boxW,boxH,maxLines,lh))return ceilPx;
+  let lo=floorPx,hi=ceilPx;
+  for(let i=0;i<8;i++){
+    const mid=(lo+hi)/2;
+    if(_fits(text,font,mid,boxW,boxH,maxLines,lh))lo=mid;else hi=mid;
+  }
+  return Math.max(floorPx,lo);
+}
+
+/* fonts gate */
+let fontsOK=false;
+const fontsReady=(document.fonts&&document.fonts.ready
+  ?Promise.all([
+      document.fonts.load('500 32px "DM Sans"'),
+      document.fonts.load('400 32px "Boogaloo"'),
+    ]).then(()=>document.fonts.ready)
+  :Promise.resolve()).then(()=>{fontsOK=true});
+
+/* SAFE-AREA BUDGET: text box 60cqw × 38.8cqh, centre-anchored at
+   50cqh → a full-budget block spans exactly 28–72cqh. */
+function fitQuestion(text){
+  const H=stage.clientHeight,W=stage.clientWidth;
+  if(!H||!W)return;
+  const px=fitToBox(text,{
+    font:'500 {S}px "DM Sans"',
+    boxW:W*0.60, boxH:H*0.388,
+    floorPx:H*0.030, ceilPx:H*0.062,
+    maxLines:4, lh:1.3,
+  });
+  qText.style.fontSize=px+'px';
+}
+
+/* SCRIM FOLLOWS TEXT: band = measured block rect + 2cqh pad + 5cqh
+   feather each side. Linear band only — never a full-frame wash. */
+function layoutScrim(){
+  const sr=stage.getBoundingClientRect(),qr=qLayer.getBoundingClientRect();
+  const H=sr.height;if(!H)return;
+  const pad=H*0.02,fe=H*0.05;
+  const top=(qr.top-sr.top)-pad-fe, h=qr.height+2*(pad+fe);
+  const p=(fe/h*100).toFixed(2);
+  qScrim.style.top=top+'px';qScrim.style.height=h+'px';
+  qScrim.style.background='linear-gradient(180deg,transparent 0%,'+
+    'rgba(2,2,12,.60) '+p+'%,rgba(2,2,12,.60) '+(100-p)+'%,transparent 100%)';
+}
+
+let curQ=-1;
+function renderQ(idx){
+  fitQuestion(QUESTIONS[idx].q);
+  qText.textContent='';
+  const words=QUESTIONS[idx].q.split(' ');
+  words.forEach((w,i)=>{
+    const s=document.createElement('span');s.className='w';s.textContent=w;
+    if(isReduced()){s.style.opacity=1}
+    else{s.style.animation='wIn .38s cubic-bezier(.2,.7,.3,1) both';
+         s.style.animationDelay=(i*45)+'ms'}
+    qText.appendChild(s);
+    if(i<words.length-1)qText.appendChild(document.createTextNode(' '));
+  });
+  layoutScrim();
+  qScrim.classList.add('on');
+}
+function showQ(idx){
+  curQ=idx;
+  if(fontsOK)renderQ(idx);
+  else fontsReady.then(()=>{if(curQ===idx)renderQ(idx)});
+}
+function hideQ(){
+  qScrim.classList.remove('on');
+  const ws=qText.querySelectorAll('.w');
+  ws.forEach((s,i)=>{
+    if(isReduced()){s.style.opacity=0;return}
+    s.style.animation='wOut .22s cubic-bezier(.4,0,.7,1) both';
+    s.style.animationDelay=(i*24)+'ms';
+  });
+}
+new ResizeObserver(()=>{
+  if(curQ<0||!fontsOK)return;
+  fitQuestion(QUESTIONS[curQ].q);layoutScrim();
+}).observe(stage);
+
+/* ══ SCHEDULER — chained setTimeout only, never rAF ══ */
+let station=0,qIdx=0,busy=false,speed=1,autoOn=false,
+    autoT=null,failT=null,pendDone=null;
+
+/* SETTLE — end of detent, ONE task, one paint: bake live drift, absorb
+   the detent step into the base wrap, apply any pending / spiral
+   direction rotation, restart drift in the (possibly new) direction. */
+function settle(){
+  const W=stage.clientWidth/100||1,H=stage.clientHeight/100||1;
+  for(const L of layerState){
+    if(!L.cfg.P)continue;
+    const d=readDrift(L);
+    L.ox+=d.x/W; L.oy+=d.y/H;
+    L.ox-=dir.x*L.cfg.step; L.oy-=dir.y*L.cfg.step;
+    wrapL(L);writeBase(L);
+    L.drift.style.animation='none';
+  }
+  void stage.offsetWidth;
+  if(dirKey==='spiral'){spiralAng=(spiralAng+45)%360;dir=spiralVec()}
+  if(pendDir){setDirNow(pendDir);pendDir=null}
+  applyDirVars();
+  for(const L of layerState)if(L.cfg.P)L.drift.style.animation='';
+}
+function setDirNow(key){
+  dirKey=key;
+  if(key==='spiral'){spiralAng=0;dir=spiralVec()}
+  else dir={x:DIRS[key].v[0],y:DIRS[key].v[1]};
+  document.querySelectorAll('[data-dir]').forEach(b=>
+    b.classList.toggle('on',b.dataset.dir===key));
+}
+
+stage.addEventListener('animationend',e=>{
+  if(e.animationName!=='goT')return;          /* one event per move */
+  if(!stage.classList.contains('go'))return;
+  clearTimeout(failT);
+  stage.classList.remove('go');settle();land();
+});
+function land(){
+  station=(station+1)%8;
+  qIdx=(qIdx+1)%QUESTIONS.length;
+  showQ(qIdx);status();
+  busy=false;
+  const d=pendDone;pendDone=null;if(d)d();
+}
+/* ONE GESTURE: text exit starts WITH the camera move (exit ≤0.73s
+   finishes inside the 1.2s travel); new text enters at settle. */
+function advance(done){
+  if(busy){if(done)done();return}
+  busy=true;pendDone=done||null;
+  hideQ();
+  if(isReduced()){settle();land();return}
+  stage.classList.add('go');
+  failT=setTimeout(()=>{                      /* belt-and-braces */
+    if(stage.classList.contains('go')){
+      stage.classList.remove('go');settle();land();
+    }
+  },1600);
+}
+
+function holdMs(){return 9000/speed}
+function autoLoop(){
+  clearTimeout(autoT);
+  if(!autoOn)return;
+  autoT=setTimeout(()=>advance(autoLoop),holdMs());
+}
+
+/* idle bake — keeps drift residual under one bake-interval of travel
+   so the tile coverage math above stays valid even when nobody
+   advances for an hour. Chained setTimeout, never rAF. */
+function idleBake(){
+  if(!isReduced()&&!busy&&!stage.classList.contains('go'))foldDrift();
+  setTimeout(idleBake,20000);
+}
+setTimeout(idleBake,20000);
+
+/* ══ THEME CYCLE — 73s, mutually prime with everything ══ */
+const THEMES=[
+  {cls:'th-mg',name:'Midnight Galaxy'},
+  {cls:'th-ms',name:'Meteor Shower'},
+  {cls:'th-hw',name:'Halloween'},
+  {cls:'th-us',name:'Under the Sea'},
+  {cls:'th-sb',name:'Sonora Balloons'},
+];
+let themeIdx=0,themeT=null;
+function applyTheme(i){
+  themeIdx=i;
+  THEMES.forEach(t=>stage.classList.remove(t.cls));
+  stage.classList.add(THEMES[i].cls);
+  status();
+}
+function themeLoop(){
+  clearTimeout(themeT);
+  themeT=setTimeout(()=>{
+    applyTheme((themeIdx+1)%THEMES.length);themeLoop();
+  },73000/speed);
+}
+
+/* ══ SHOOTING STAR — 40–120s ±40%, alternating direction ══ */
+let shootDir=1,shootT=null;
+const rnd=Math.random;
+function spawnShoot(){
+  if(isReduced())return;
+  const rot=el('shootRot'),s=el('shoot');
+  const d=shootDir;shootDir=-shootDir;
+  rot.style.left=(d>0?8+rnd()*30:60+rnd()*30)+'cqw';
+  rot.style.top=(4+rnd()*18)+'cqh';
+  rot.style.setProperty('--sa',(d>0?1:-1)*(16+rnd()*14)+'deg');
+  s.style.setProperty('--sd',(d>0?1:-1)*(48+rnd()*22)+'cqw');
+  s.style.setProperty('--sdu',(2+rnd()*1.6)+'s');
+  rot.appendChild(s);shootLane.appendChild(rot);
+  s.addEventListener('animationend',()=>rot.remove());
+}
+function shootLoop(){
+  clearTimeout(shootT);
+  const base=(40+rnd()*80)*1000, iv=base*(0.6+rnd()*0.8);
+  shootT=setTimeout(()=>{spawnShoot();shootLoop()},iv/speed);
+}
+
+/* ══ CONTROLS ══ */
+const status=()=>{document.getElementById('status').innerHTML=
+  '<b>Slide '+(station+1)+' / 8</b> ('+(station*45)+'° of 360°)'+
+  ' &nbsp;·&nbsp; direction: <b>'+DIRS[dirKey].label+'</b>'+
+  ' &nbsp;·&nbsp; theme: <b>'+THEMES[themeIdx].name+'</b>'+
+  ' &nbsp;·&nbsp; detent 1.2 s over continuous drift, holds '+
+  (holdMs()/1000).toFixed(2)+' s'};
+
+document.getElementById('btnAdv').addEventListener('click',()=>advance());
+const autoBtn=document.getElementById('btnAuto');
+autoBtn.addEventListener('click',()=>{
+  autoOn=!autoOn;autoBtn.classList.toggle('on',autoOn);
+  if(autoOn)autoLoop();else clearTimeout(autoT);
+});
+document.querySelectorAll('[data-spd]').forEach(b=>
+  b.addEventListener('click',()=>{
+    speed=+b.dataset.spd;
+    document.querySelectorAll('[data-spd]').forEach(x=>
+      x.classList.toggle('on',x===b));
+    if(autoOn)autoLoop();themeLoop();shootLoop();status();
+  }));
+
+/* DIRECTION PICKER — the deliverable's proof. Mid-detent requests are
+   deferred to the settle; otherwise the change is a fold-and-restart:
+   bake current drift, swap the vector, restart drift — no jump. */
+document.querySelectorAll('[data-dir]').forEach(b=>
+  b.addEventListener('click',()=>{
+    const key=b.dataset.dir;
+    if(key===dirKey)return;
+    if(busy||stage.classList.contains('go')){pendDir=key;
+      document.querySelectorAll('[data-dir]').forEach(x=>
+        x.classList.toggle('on',x===b));
+      return}
+    foldDrift(()=>{setDirNow(key);applyDirVars()});
+    status();
+  }));
+
+const ampIn=document.getElementById('amp');
+ampIn.addEventListener('input',()=>{
+  stage.style.setProperty('--amp',ampIn.value);
+  document.getElementById('ampV').textContent=(+ampIn.value).toFixed(2)+'×';
+});
+
+function toggle(id,cls,invert){
+  const b=document.getElementById(id);
+  b.addEventListener('click',()=>{
+    b.classList.toggle('on');
+    const on=b.classList.contains('on');
+    if(cls==='rm'){
+      /* bake drift BEFORE the freeze so nothing jumps to zero */
+      if(on&&!busy)foldDrift();
+      manualRM=on;
+    }
+    stage.classList.toggle(cls,invert?!on:on);
+  });
+}
+toggle('tQ','hideQ',true);
+toggle('tG','showGuides',false);
+toggle('tN','noGrain',true);
+toggle('tR','rm',false);
+
+/* ══ BOOT ══ */
+setDirNow(DIRS[WEEK_DIRECTION]?WEEK_DIRECTION:'e');
+applyDirVars();
+applyTheme(0);
+themeLoop();
+shootLoop();
+setTimeout(()=>showQ(0),600);
+status();
+</script>
+</body>
+</html>

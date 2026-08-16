@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>World 06 — rotating panes · Trivia OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════════
+   WORLD 06 — ROTATING PANES · 2026-07-30
+
+   WHAT THIS IS: a 360 view of the night sky. Each slide is one pane of it.
+   Advancing turns the view to the next pane. Stars drift the whole time
+   underneath, which is what makes it one sky rather than a slideshow.
+   Every other pane holds a feature - a nebula, a supernova, a comet, a
+   cluster. The panes between them are just stars, so the features land.
+
+   Question text alternates purple / orange, slide to slide.
+
+   HOW IT WORKS
+   · The sky is one long strip. A pane is exactly one frame wide.
+   · Advance = slide the strip by exactly one pane. That is the rotation.
+   · TWO STAR LAYERS drift continuously at different speeds. The drift is
+     the glue: the sky is always alive, so a turn reads as a turn rather
+     than a cut, and the depth difference gives the panorama some body.
+   · 12 panes = one full turn. After 12 you are back where you started,
+     which is what makes it a 360 rather than a strip.
+   · FEATURES: 6 across the turn, on even panes. Odd panes are open sky.
+
+   DRIFT AND SURGE LIVE ON SEPARATE ELEMENTS AND NEVER FIGHT.
+   .rail carries the continuous drift. .surge carries the pane turn. They
+   compose by nesting, so there is no settle step and no moment where two
+   numbers must agree. That is what produced the pop in world-04: travel
+   was declared in CSS as --stp:6/8/12 AND in JS as step:8/10/16, so the
+   animation used one value and the settle used the other. Every constant
+   here is declared exactly once, in CONFIG, and written out to CSS.
+
+   NOTHING IN THIS FILE CAN MAKE A HORIZON. All colour is radial and
+   cornered. An earlier revision used linear colour bands whose edges
+   landed near-horizontal and read as ground.
+
+   NO BLUR ON STARS, EVER. A blur wider than about a quarter of an element
+   deletes it rather than softening it - which is how an earlier build
+   turned "stars are the hero" into grey noise.
+
+   HOUSE LAW: transform + opacity only; static filter/box-shadow never
+   animated; no requestAnimationFrame; reduced motion freezes rather than
+   vanishes; mutually prime clocks; the centre 60x44 box stays clear and
+   nothing crossing it may brighten it.
+
+   DESIGN SPACE: true pixels on a 1920x1080 stage, CSS-scaled to fit.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--pg:#0b0c10;--pg-card:#14161d;--pg-line:#262a34}
+body{background:var(--pg);color:#ddd8e8;font-family:'DM Sans',system-ui,sans-serif;
+  line-height:1.55;padding:0 0 80px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1320px;margin:0 auto;padding:0 28px}
+header.pg{padding:48px 0 22px;border-bottom:1px solid var(--pg-line);margin-bottom:22px}
+header.pg .eyebrow{font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:#8a7ad0;font-weight:700;margin-bottom:10px}
+header.pg h1{font-family:'Boogaloo',cursive;font-size:clamp(32px,5vw,48px);line-height:1.05;margin-bottom:10px}
+header.pg p{max-width:80ch;color:#9aa0ae;font-size:14.5px}
+header.pg b{color:#ddd8e8;font-weight:500}
+.ctl{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px}
+.ctl button{font-size:12.5px;font-weight:600;letter-spacing:.03em;
+  background:var(--pg-card);border:1px solid var(--pg-line);color:#b9b3c8;
+  border-radius:7px;padding:8px 14px;cursor:pointer;
+  transition:border-color .15s,color .15s,background .15s;user-select:none}
+.ctl button:hover{border-color:#6a5aa8;color:#fff}
+.ctl button.on{background:#2a2140;border-color:#8a6ad0;color:#fff}
+.ctl .big{font-size:13.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  background:#2a2140;border:1px solid #8a6ad0;color:#fff;border-radius:8px;padding:10px 24px}
+.ctl .big:hover{background:#3a2e58}
+.ctl .sep{width:1px;align-self:stretch;background:var(--pg-line);margin:0 4px}
+.ctl .grpLabel{font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:#7a7f90;font-weight:700;padding:0 2px}
+.sub{color:#8b91a0;font-size:12.5px;margin:0 0 14px;font-variant-numeric:tabular-nums}
+.sub b{color:#ddd8e8;font-weight:600}
+
+.stage{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;
+  border-radius:10px;background:#01010a;
+  box-shadow:0 24px 70px rgba(0,0,0,.6),0 0 0 1px var(--pg-line)}
+.design{position:absolute;left:0;top:0;width:1920px;height:1080px;
+  transform-origin:0 0;overflow:hidden}
+
+/* ══ LAYER CHASSIS ══ .lyr clips (never transformed, bounds the raster)
+   > .rail drifts > .surge turns > content. Separate elements, so drift
+   and turn can never disagree. Nothing to pop. */
+.lyr{position:absolute;inset:0}
+.rail,.surge{position:absolute;inset:0;will-change:transform}
+@keyframes railGo{
+  from{transform:translate3d(0,0,0)}
+  to  {transform:translate3d(calc(var(--dist) * -1px),0,0)}
+}
+.l-sf .rail{animation:railGo var(--sf-dur) linear infinite}
+.l-sn .rail{animation:railGo var(--sn-dur) linear infinite}
+.l-ft .rail{animation:railGo var(--ft-dur) linear infinite}
+
+/* THE TURN — one curve, one duration, every layer. Only the distance
+   differs, which is what holds the depth relationship rigid through the
+   move so the layers cannot tear against each other. */
+.stage.go .surge{animation:surgeGo var(--surge-ms) cubic-bezier(.16,.62,.28,1) both}
+@keyframes surgeGo{
+  from{transform:translate3d(0,0,0)}
+  to  {transform:translate3d(calc(var(--sd) * -1px),0,0)}
+}
+
+/* ══ THE VOID ══ radial only. No vertical structure anywhere, because a
+   vertical ramp always implies a horizon. */
+.void{position:absolute;inset:0;
+  background:radial-gradient(ellipse 142% 132% at 50% 46%,
+    #0b0a20 0%, #06061a 44%, #030312 76%, #010109 100%)}
+.haze{position:absolute;left:-26%;bottom:-32%;width:88%;height:88%;
+  border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle closest-side,
+    rgba(92,56,182,.22) 0%, rgba(70,42,144,.09) 44%, transparent 74%);
+  animation:hazeBreathe 43s ease-in-out infinite}
+@keyframes hazeBreathe{0%,100%{opacity:.70}50%{opacity:1}}
+
+/* ══ STARS ══ two depths. No blur, ever. */
+.star{position:absolute;border-radius:50%;background:var(--sc)}
+.star.tw{animation:tw var(--tp) ease-in-out infinite;animation-delay:var(--td)}
+.star.hero{box-shadow:0 0 10px 1.5px var(--sg)}
+@keyframes tw{0%,100%{opacity:var(--ob)}50%{opacity:var(--op)}}
+
+/* ══ FEATURES ══ one per even pane. Each is placed clear of the centre
+   60x44 box, and nothing here is bright enough to lift the text bed. ══ */
+.feat{position:absolute;pointer-events:none}
+
+/* nebula — soft cloud, two lobes, one hard little core so it isn't mush */
+.neb-cloud{position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(ellipse 58% 44% at 46% 52%,
+    var(--n1) 0%, var(--n2) 38%, var(--n3) 62%, transparent 80%);
+  transform:rotate(-18deg)}
+.neb-cloud2{position:absolute;inset:12% 6% 18% 14%;border-radius:50%;
+  background:radial-gradient(ellipse 50% 40% at 56% 44%,
+    var(--n4) 0%, var(--n5) 46%, transparent 74%);
+  transform:rotate(24deg)}
+.neb-core{position:absolute;left:44%;top:48%;width:9px;height:9px;border-radius:50%;
+  background:#fff0d4;box-shadow:0 0 22px 6px var(--n6)}
+.feat.breathe{animation:featBreathe var(--fb) ease-in-out infinite}
+@keyframes featBreathe{0%,100%{opacity:.82}50%{opacity:1}}
+
+/* supernova — bright core, shell, and four spikes. The one loud thing. */
+.sn-shell{position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle closest-side,
+    rgba(255,246,224,.30) 0%, rgba(255,180,110,.16) 26%,
+    rgba(210,90,160,.10) 52%, transparent 76%)}
+.sn-core{position:absolute;left:50%;top:50%;width:22px;height:22px;
+  margin:-11px 0 0 -11px;border-radius:50%;background:#fffaf0;
+  box-shadow:0 0 40px 14px rgba(255,214,150,.55)}
+.sn-spike{position:absolute;left:50%;top:50%;background:
+  linear-gradient(90deg,transparent 0%,rgba(255,230,190,.42) 50%,transparent 100%)}
+.sn-h{width:78%;height:2.5px;margin-left:-39%;margin-top:-1.25px}
+.sn-v{width:2.5px;height:62%;margin-left:-1.25px;margin-top:-31%;
+  background:linear-gradient(180deg,transparent 0%,rgba(255,230,190,.34) 50%,transparent 100%)}
+.sn-d1{width:56%;height:2px;margin-left:-28%;transform:rotate(38deg)}
+.sn-d2{width:56%;height:2px;margin-left:-28%;transform:rotate(-38deg)}
+
+/* comet — head plus a tail that fades to nothing */
+.cm-tail{position:absolute;left:0;top:50%;height:6px;margin-top:-3px;width:100%;
+  border-radius:3px;
+  background:linear-gradient(90deg,transparent 0%,rgba(190,230,255,.10) 22%,
+    rgba(214,240,255,.30) 76%,rgba(240,250,255,.55) 100%)}
+.cm-head{position:absolute;right:-6px;top:50%;width:16px;height:16px;
+  margin-top:-8px;border-radius:50%;background:#eaf8ff;
+  box-shadow:0 0 26px 8px rgba(170,220,255,.45)}
+
+/* cluster — a tight knot of small stars with a glow behind */
+.cl-glow{position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle closest-side,
+    rgba(200,214,255,.16) 0%, rgba(150,170,240,.06) 48%, transparent 74%)}
+
+/* dust lane — a dark diagonal ribbon that occludes stars behind it */
+.dl-band{position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(ellipse 62% 22% at 50% 50%,
+    rgba(6,4,18,.82) 0%, rgba(10,6,26,.46) 46%, transparent 76%);
+  transform:rotate(var(--dl-rot))}
+
+/* binary — two bright companions sharing one halo */
+.bn-star{position:absolute;width:15px;height:15px;border-radius:50%;
+  background:#fff4e0;box-shadow:0 0 26px 7px rgba(255,214,160,.45)}
+.bn-star.bn-b{width:11px;height:11px;background:#dfeaff;
+  box-shadow:0 0 20px 5px rgba(170,205,255,.40)}
+
+/* galaxy — a tilted disc with two arms and a hot core */
+.gx-disc{position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(ellipse 54% 22% at 50% 50%,
+    rgba(224,208,255,.20) 0%, rgba(158,132,232,.10) 44%, transparent 74%)}
+.gx-arm{position:absolute;left:50%;top:50%;width:88%;height:26%;
+  margin:-13% 0 0 -44%;border-radius:50%;
+  background:radial-gradient(ellipse 50% 50% at 50% 50%,
+    rgba(206,190,255,.16) 0%, transparent 70%);
+  transform:rotate(12deg)}
+.gx-arm.gx-a2{transform:rotate(-14deg) scale(.82)}
+.gx-core{position:absolute;left:50%;top:50%;width:13px;height:13px;
+  margin:-6.5px 0 0 -6.5px;border-radius:50%;background:#fff6e6;
+  box-shadow:0 0 28px 8px rgba(255,226,180,.42)}
+
+/* ══ SHOOTING STAR ══ */
+.shootLane{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.shootRot{position:absolute;transform:rotate(var(--sa))}
+.shoot{width:190px;height:2.4px;border-radius:2px;opacity:0;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,246,226,0) 14%,
+    rgba(255,246,226,.55) 72%,#fff8ec 100%);
+  animation:shootGo var(--sdu) linear both}
+@keyframes shootGo{
+  0%{transform:translate3d(0,0,0);opacity:0}
+  10%{opacity:.95} 74%{opacity:.85}
+  100%{transform:translate3d(var(--sd2),0,0);opacity:0}
+}
+
+/* ══ QUESTION — camera-fixed HUD, colour alternates purple / orange ══ */
+.qScrim{position:absolute;left:0;right:0;opacity:0;
+  transition:opacity .45s ease;pointer-events:none}
+.qScrim.on{opacity:1}
+.qLayer{position:absolute;left:384px;width:1152px;top:540px;
+  transform:translateY(-50%);text-align:center;pointer-events:none}
+.qLayer .qtext{font-family:'DM Sans',sans-serif;font-weight:500;
+  line-height:1.3;color:var(--q-col);transition:color .6s ease}
+.qLayer .w{display:inline-block;opacity:0}
+@keyframes wIn {from{opacity:0;transform:translate3d(0,22px,0)}
+                to  {opacity:1;transform:translate3d(0,0,0)}}
+@keyframes wOut{from{opacity:1;transform:translate3d(0,0,0)}
+                to  {opacity:0;transform:translate3d(0,-16px,0)}}
+.stage.hideQ .qLayer,.stage.hideQ .qScrim{display:none}
+
+.vig{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 148% 138% at 50% 50%,
+    transparent 0%, transparent 66%, rgba(1,1,8,.36) 100%)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.05;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='0.55'/></svg>")}
+.stage.noGrain .grain{display:none}
+.guides{position:absolute;left:20%;top:28%;width:60%;height:44%;
+  border:2px dashed rgba(160,200,255,.5);border-radius:6px;pointer-events:none;display:none}
+.guides::after{content:'safe area · 60% × 44%';position:absolute;left:10px;top:8px;
+  font-size:15px;letter-spacing:.1em;color:rgba(160,200,255,.7);font-weight:600}
+.stage.showGuides .guides{display:block}
+
+@media (prefers-reduced-motion:reduce){
+  .rail,.surge,.star,.haze,.feat,.shoot{animation-play-state:paused!important}
+}
+.stage.rm .rail,.stage.rm .surge,.stage.rm .star,
+.stage.rm .haze,.stage.rm .feat,.stage.rm .shoot{animation-play-state:paused!important}
+
+.notes{margin-top:34px;background:var(--pg-card);border:1px solid var(--pg-line);
+  border-radius:10px;padding:24px 28px}
+.notes h3{font-family:'Boogaloo',cursive;font-size:23px;margin-bottom:10px}
+.notes h3 span{color:#8a7ad0}
+.notes p{color:#9aa0ae;font-size:14px;max-width:92ch;margin-bottom:9px}
+.notes p:last-child{margin-bottom:0}
+.notes b{color:#ddd8e8;font-weight:600}
+.notes code{background:#0e1017;padding:1px 5px;border-radius:4px;font-size:13px}
+</style>
+</head>
+<body>
+<header class="pg"><div class="wrap">
+  <div class="eyebrow">World 06 · rotating panes</div>
+  <h1>Rotating panes</h1>
+  <p>A 360&deg; view of the sky. <b>Each slide is one pane</b>; advancing turns the
+  view to the next. Stars drift the whole time underneath, so a turn reads as a
+  turn and not a cut. <b>Every other pane holds something</b> — a nebula, a
+  supernova, a comet, a cluster, a dust lane — and the panes between them are
+  open sky, so the features land. Twelve panes make a full turn. Text alternates
+  purple and orange.</p>
+</div></header>
+
+<div class="wrap">
+  <div class="ctl">
+    <button class="big" id="btnAdv">Turn &#9656;</button>
+    <button id="btnAuto">Auto-advance</button>
+    <button id="btnShoot">Shooting star</button>
+    <span class="sep"></span>
+    <span class="grpLabel">Time</span>
+    <button class="on" data-spd="1">1&times;</button>
+    <button data-spd="10">10&times;</button>
+    <button data-spd="60">60&times;</button>
+    <span class="sep"></span>
+    <button class="on" id="tQ">Question</button>
+    <button id="tG">Safe area</button>
+    <button class="on" id="tN">Grain</button>
+    <button id="tR">Reduced motion</button>
+  </div>
+  <div class="sub" id="status"></div>
+  <div class="stage" id="stage"><div class="design" id="design">
+    <div class="qScrim" id="qScrim"></div>
+    <div class="qLayer" id="qLayer"><div class="qtext" id="qText"></div></div>
+    <div class="vig"></div>
+    <div class="guides"></div>
+    <div class="grain"></div>
+  </div></div>
+
+  <div class="notes">
+    <h3><span>How it works.</span> Twelve panes, six features, one turn.</h3>
+    <p><b>A pane is exactly one frame wide</b>, and a turn slides the sky by
+    exactly one pane. Twelve panes bring you back to where you started, so it is a
+    real 360 rather than a strip with a hidden join.</p>
+    <p><b>The drift is the glue.</b> Two star layers move continuously at
+    different speeds, so the sky is never frozen and the turn lands on something
+    already alive. Without it, a turn between two still frames reads as a cut —
+    that was the diagnosis on the previous four attempts.</p>
+    <p><b>Features on even panes only.</b> Six across the turn. If every pane had
+    something, nothing would feel like an arrival; the open panes are what make
+    the nebula land when it comes round.</p>
+    <p><b>No jolt, by construction.</b> Drift runs on <code>.rail</code>, the turn
+    runs on <code>.surge</code>, and they nest. There is no settle step, so there
+    is no moment where two numbers have to agree — which is exactly what produced
+    the pop before.</p>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ═══ CONFIG — the only place any number is declared ═══════════════════ */
+const CONFIG = {
+  W:1920, H:1080,
+  panes: 12,             // 12 panes = one full turn = 360
+  /* A turn moves a FULL pane — one whole screen, not a nudge. At a full
+     screen of travel the move needs room to breathe, so 1.7s rather than
+     the 1.2s a short move would take. */
+  surgeMs: 1700,
+  dwellMs: 75000,
+  slides: 30,
+  turns: 1,              // one turn of sky; 12 panes brings you back round
+  drift: { sf:0.4, sn:1.8, ft:0.9 },   // px/s per layer, continuous
+  perFrame: { sf:95, sn:22 },          // stars visible at once, per layer
+  shootEveryMs: [45000, 120000],
+};
+const PANE_W = CONFIG.W;
+
+function hash32(x,seed){let h=(x|0)^(seed|0);
+  h=Math.imul(h^(h>>>16),2246822507);h=Math.imul(h^(h>>>13),3266489909);
+  return((h^(h>>>16))>>>0)}
+function rngAt(i,seed){let n=hash32(i,seed);
+  return()=>{n=hash32(n,0x9E3779B9);return n/4294967296}}
+
+const stage=document.getElementById('stage'), design=document.getElementById('design');
+function fit(){design.style.transform='scale('+(stage.clientWidth/CONFIG.W)+')'}
+new ResizeObserver(fit).observe(stage); fit();
+function el(c){const d=document.createElement('div'); if(c)d.className=c; return d}
+
+/* strip length: enough panes for the whole night, plus a frame of margin */
+const STRIP = PANE_W * CONFIG.panes * CONFIG.turns + CONFIG.W;
+
+/* ══ STARS ══ two depths, no blur ever */
+/* Matched to the Sonora Balloons sky (ParticleBackground.jsx SbStars):
+   EVERY star twinkles, the swing is wide (0.25 → 0.85, not a nudge), the
+   cycle is short (5–13s), and the tint is the warm violet-white #f6e6ff.
+   An earlier version twinkled 1 star in 6 by ±0.26 over 11–31s, which is
+   why it read as a dead field. Added on top of Sonora: a real SIZE
+   spread, since a sky where every star is the same size reads as noise —
+   most are small, a handful are big enough to notice, and the biggest
+   few carry a soft glow. */
+const TEMP=['#f6e6ff','#ffffff','#fff3e2','#eaf0ff','#ffffff'];
+const TIER={
+  sf:{ small:[1.0,1.3], mid:[1.8,1.1], big:[3.0,1.4], pBig:.06, pMid:.24, glowAt:3.6 },
+  sn:{ small:[2.0,1.4], mid:[3.2,1.6], big:[5.0,2.2], pBig:.16, pMid:.34, glowAt:4.4 },
+};
+function buildStars(surge,id,seed){
+  const t=TIER[id], n=Math.round(CONFIG.perFrame[id]*(STRIP/CONFIG.W));
+  const frag=document.createDocumentFragment();
+  for(let i=0;i<n;i++){
+    const r=rngAt(i,seed);
+    const roll=r();
+    const band = roll < t.pBig ? t.big : roll < t.pBig + t.pMid ? t.mid : t.small;
+    const size = band[0] + r()*band[1];
+    // Sonora's range, jittered per star so the field doesn't pulse together
+    const lo = 0.20 + r()*0.14;
+    const hi = Math.min(lo + 0.42 + r()*0.26, 1);
+    const dur = 5 + r()*8;
+    const c = TEMP[i%5];
+    const d = el('star tw' + (size >= t.glowAt ? ' hero' : '')), s = d.style;
+    s.left = (r()*STRIP).toFixed(1)+'px';
+    s.top  = (r()*CONFIG.H).toFixed(1)+'px';
+    s.width = s.height = size.toFixed(2)+'px';
+    s.setProperty('--sc', c);
+    if (size >= t.glowAt) s.setProperty('--sg', c);
+    s.setProperty('--ob', lo.toFixed(2));
+    s.setProperty('--op', hi.toFixed(2));
+    s.setProperty('--tp', dur.toFixed(2)+'s');
+    s.setProperty('--td', (-r()*dur).toFixed(2)+'s');
+    frag.appendChild(d);
+  }
+  surge.appendChild(frag); return n;
+}
+
+/* ══ FEATURES ══
+   EVERY PANE HAS SOMETHING. Twelve panes, twelve different places. The
+   point is to show the guests they are in a WORLD, so turning the view
+   must always land you somewhere - never on empty sky. Each pane also
+   carries a smaller companion, so a pane reads as a place rather than one
+   object floating alone. Everything is placed in an upper or lower band,
+   clear of the centre box, and nothing is bright enough to lift the text
+   bed. */
+const FEATURES = [
+  { kind:'nebula-orange', w:470, h:330 },
+  { kind:'cluster',       w:360, h:360 },
+  { kind:'supernova',     w:420, h:420 },
+  { kind:'nebula-teal',   w:520, h:360 },
+  { kind:'comet',         w:520, h:120 },
+  { kind:'nebula-violet', w:560, h:380 },
+  { kind:'dustlane',      w:760, h:300 },
+  { kind:'binary',        w:300, h:200 },
+  { kind:'nebula-rose',   w:490, h:340 },
+  { kind:'galaxy',        w:420, h:300 },
+  { kind:'cluster',       w:410, h:410 },
+  { kind:'nebula-green',  w:530, h:350 },
+];
+/* the smaller companion on each pane, so a pane is a place and not a
+   single object in a void */
+const COMPANIONS = [
+  { kind:'cluster',      w:190, h:190 },
+  { kind:'nebula-violet',w:300, h:210 },
+  { kind:'binary',       w:210, h:150 },
+  { kind:'galaxy',       w:250, h:180 },
+  { kind:'nebula-rose',  w:290, h:200 },
+  { kind:'cluster',      w:220, h:220 },
+];
+const NEB_PALETTE = {
+  'nebula-orange':{n1:'rgba(255,164,74,.34)',n2:'rgba(226,116,46,.17)',n3:'rgba(150,60,40,.07)',
+                   n4:'rgba(255,196,120,.22)',n5:'rgba(214,104,52,.09)',n6:'rgba(255,178,96,.45)'},
+  'nebula-teal'  :{n1:'rgba(74,214,208,.26)',n2:'rgba(46,150,170,.13)',n3:'rgba(30,80,120,.06)',
+                   n4:'rgba(150,240,232,.17)',n5:'rgba(52,150,164,.07)',n6:'rgba(140,240,232,.38)'},
+  'nebula-violet':{n1:'rgba(168,110,255,.30)',n2:'rgba(120,66,204,.15)',n3:'rgba(70,36,130,.06)',
+                   n4:'rgba(206,168,255,.19)',n5:'rgba(126,74,200,.08)',n6:'rgba(198,150,255,.40)'},
+  'nebula-rose'  :{n1:'rgba(255,120,170,.26)',n2:'rgba(200,66,120,.13)',n3:'rgba(120,34,72,.06)',
+                   n4:'rgba(255,178,208,.18)',n5:'rgba(206,80,132,.07)',n6:'rgba(255,166,200,.38)'},
+  'nebula-green' :{n1:'rgba(120,226,150,.24)',n2:'rgba(64,160,104,.12)',n3:'rgba(30,90,60,.05)',
+                   n4:'rgba(180,246,200,.16)',n5:'rgba(74,170,116,.07)',n6:'rgba(168,246,190,.36)'},
+};
+function makeFeature(spec, r){
+  const f = el('feat breathe');
+  f.style.width = spec.w+'px'; f.style.height = spec.h+'px';
+  f.style.setProperty('--fb', (53 + Math.floor(r()*30)) + 's');
+  const k = spec.kind;
+  if (k.startsWith('nebula')){
+    const p = NEB_PALETTE[k];
+    Object.entries(p).forEach(([key,v]) => f.style.setProperty('--'+key, v));
+    f.appendChild(el('neb-cloud')); f.appendChild(el('neb-cloud2')); f.appendChild(el('neb-core'));
+  } else if (k === 'supernova'){
+    f.appendChild(el('sn-shell'));
+    f.appendChild(el('sn-spike sn-h')); f.appendChild(el('sn-spike sn-v'));
+    f.appendChild(el('sn-spike sn-d1')); f.appendChild(el('sn-spike sn-d2'));
+    f.appendChild(el('sn-core'));
+  } else if (k === 'comet'){
+    f.style.transform = 'rotate(' + (-22 + r()*10).toFixed(0) + 'deg)';
+    f.appendChild(el('cm-tail')); f.appendChild(el('cm-head'));
+  } else if (k === 'cluster'){
+    f.appendChild(el('cl-glow'));
+    for (let i=0;i<34;i++){
+      const d = el('star'), s = d.style;
+      const a = r()*Math.PI*2, rad = Math.pow(r(),0.6)*0.44;
+      s.left = ((0.5 + Math.cos(a)*rad)*spec.w).toFixed(1)+'px';
+      s.top  = ((0.5 + Math.sin(a)*rad)*spec.h).toFixed(1)+'px';
+      const sz = 1.8 + r()*2.4;
+      s.width = s.height = sz.toFixed(1)+'px';
+      s.setProperty('--sc', TEMP[i%5]);
+      s.opacity = (0.5 + r()*0.45).toFixed(2);
+      f.appendChild(d);
+    }
+  } else if (k === 'dustlane'){
+    f.style.setProperty('--dl-rot', (-16 + r()*32).toFixed(0)+'deg');
+    f.appendChild(el('dl-band'));
+  } else if (k === 'binary'){
+    const a = el('bn-star'), b = el('bn-star bn-b');
+    a.style.left = '14%'; a.style.top = '38%';
+    b.style.left = '68%'; b.style.top = '52%';
+    f.appendChild(el('cl-glow')); f.appendChild(a); f.appendChild(b);
+  } else if (k === 'galaxy'){
+    f.style.transform = 'rotate(' + (-28 + r()*22).toFixed(0) + 'deg)';
+    f.appendChild(el('gx-disc')); f.appendChild(el('gx-arm'));
+    f.appendChild(el('gx-arm gx-a2')); f.appendChild(el('gx-core'));
+  }
+  return f;
+}
+/* upper band 0..24% or lower band 76..100% of stage height — never the
+   centre 28..72 where the question lives */
+function featureY(where, h){
+  const H = CONFIG.H;
+  return where < 0.5 ? 0.02 * H + Math.random() * 0.10 * H
+                     : H - h - (0.02 * H + Math.random() * 0.08 * H);
+}
+function buildFeatures(surge, seed){
+  let count = 0;
+  const total = CONFIG.panes * CONFIG.turns;
+  for (let p = 0; p < total; p++){
+    const r = rngAt(p, seed);
+    const idx = p % CONFIG.panes;                 // same pane, same place
+
+    // the pane's headline element
+    const spec = FEATURES[idx % FEATURES.length];
+    const f = makeFeature(spec, r);
+    const upper = r() < 0.5;
+    f.style.left = (p * PANE_W + (0.10 + r()*0.46) * (PANE_W - spec.w)).toFixed(0) + 'px';
+    f.style.top  = featureY(upper ? 0.2 : 0.8, spec.h).toFixed(0) + 'px';
+    surge.appendChild(f); count++;
+
+    // a smaller companion in the opposite band, so every pane reads as a
+    // place in a world rather than one object floating in a void
+    const cspec = COMPANIONS[(idx + 2) % COMPANIONS.length];
+    const c = makeFeature(cspec, rngAt(p + 977, seed));
+    c.style.opacity = '.72';
+    c.style.left = (p * PANE_W + (0.10 + r()*0.52) * (PANE_W - cspec.w)).toFixed(0) + 'px';
+    c.style.top  = featureY(upper ? 0.8 : 0.2, cspec.h).toFixed(0) + 'px';
+    surge.appendChild(c); count++;
+  }
+  return count;
+}
+
+/* ══ BUILD ══ */
+const railEls = {};
+let starTotal = 0, featTotal = 0;
+const shootLane = el('shootLane');
+
+(function build(){
+  const before = document.getElementById('qScrim');
+  const sky = el('lyr l-sky');
+  sky.appendChild(el('void')); sky.appendChild(el('haze'));
+  design.insertBefore(sky, before);
+
+  // far stars → features → near stars, so features sit between the depths
+  const order = [
+    { id:'sf', build: s => { starTotal += buildStars(s,'sf',0x5EED); } },
+    { id:'ft', build: s => { featTotal  = buildFeatures(s, 0xBEEF); } },
+    { id:'sn', build: s => { starTotal += buildStars(s,'sn',0x1CE5); } },
+  ];
+  order.forEach(o => {
+    const lyr = el('lyr l-'+o.id), rail = el('rail'), surge = el('surge');
+    rail.appendChild(surge); lyr.appendChild(rail);
+    design.insertBefore(lyr, before);
+    o.build(surge);
+    // ONE declaration each, JS → CSS. Never restated in the stylesheet.
+    lyr.style.setProperty('--dist', STRIP.toFixed(0));
+    lyr.style.setProperty('--sd', PANE_W);           // a turn = one pane
+    stage.style.setProperty('--'+o.id+'-dur', (STRIP/CONFIG.drift[o.id]).toFixed(1)+'s');
+    railEls[o.id] = rail;
+  });
+  design.insertBefore(shootLane, before);
+  stage.style.setProperty('--surge-ms', CONFIG.surgeMs+'ms');
+})();
+
+/* ══ QUESTIONS — purple / orange, alternating ══ */
+const Q_COLOURS = ['#e2ccff', '#ffc48a'];
+const QUESTIONS = [
+  'Gordon Lightfoot sang about the Edmund Fitzgerald. Which Great Lake took her down?',
+  'What is the only U.S. state that grows coffee commercially?',
+  'Which planet spins so slowly that its day outlasts its year?',
+  'What is the tallest animal walking the Earth today?',
+  'Which country invented the croissant, and it was not France?',
+  'What mythical creature is the national animal of Scotland?',
+  'In poker, which hand wins: a flush or a full house?',
+  'Which Beatles album cover shows the band on a crosswalk?',
+  'What is the smallest country in the world by land area?',
+  'Which element gives Mars its red colour?',
+];
+let _mc=null; const ctx2=()=>(_mc||(_mc=document.createElement('canvas').getContext('2d')));
+function wrapLines(t,px,maxW){const c=ctx2();c.font='500 '+px+'px "DM Sans"';
+  const w=String(t).split(/\s+/).filter(Boolean); if(!w.length)return[''];
+  const L=[];let l=w[0];
+  for(let i=1;i<w.length;i++){const s=l+' '+w[i];
+    if(c.measureText(s).width<=maxW)l=s;else{L.push(l);l=w[i]}}
+  L.push(l);return L}
+function fits(t,px,bw,bh,ml){const L=wrapLines(t,px,bw); if(L.length>ml)return false;
+  const c=ctx2();c.font='500 '+px+'px "DM Sans"';
+  for(const ln of L)if(c.measureText(ln).width>bw)return false;
+  return L.length*px*1.3<=bh}
+function fitPx(t,bw,bh,fl,ce,ml){if(fits(t,ce,bw,bh,ml))return ce;
+  let lo=fl,hi=ce; for(let i=0;i<9;i++){const m=(lo+hi)/2;
+    if(fits(t,m,bw,bh,ml))lo=m;else hi=m} return Math.max(fl,lo)}
+
+const qLayer=document.getElementById('qLayer'),qText=document.getElementById('qText'),
+      qScrim=document.getElementById('qScrim');
+let fontsOK=false;
+const fontsReady=(document.fonts&&document.fonts.ready
+  ?Promise.all([document.fonts.load('500 40px "DM Sans"'),
+                document.fonts.load('400 40px "Boogaloo"')]).then(()=>document.fonts.ready)
+  :Promise.resolve()).then(()=>{fontsOK=true});
+/* The scrim is an ELLIPSE, not a band. A linear band has two straight
+   horizontal edges, and a straight horizontal edge always reads as a
+   horizon or a letterbox — visible in the first render of this file. A
+   radial falloff cannot produce an edge at any opacity. Sized from the
+   text block's measured rect so it follows the question instead of
+   sitting at a fixed height. */
+function layoutScrim(){
+  const dr=design.getBoundingClientRect(),qr=qLayer.getBoundingClientRect();
+  const sc=stage.clientWidth/CONFIG.W||1;
+  const top=(qr.top-dr.top)/sc, h=qr.height/sc;
+  const cy=top+h/2, H=h*3.1, T=cy-H/2;
+  qScrim.style.top=T.toFixed(0)+'px'; qScrim.style.height=H.toFixed(0)+'px';
+  qScrim.style.background='radial-gradient(ellipse 46% 50% at 50% 50%,'+
+    'rgba(2,2,10,.62) 0%, rgba(2,2,10,.44) 42%, rgba(2,2,10,.18) 68%, transparent 88%)';
+}
+let curQ=-1;
+function renderQ(i){
+  const text=QUESTIONS[i%QUESTIONS.length];
+  stage.style.setProperty('--q-col',Q_COLOURS[i%2]);
+  qText.style.fontSize=fitPx(text,1152,420,34,68,4)+'px';
+  qText.textContent='';
+  const words=text.split(' ');
+  words.forEach((w,k)=>{const s=document.createElement('span');
+    s.className='w';s.textContent=w;
+    if(isReduced())s.style.opacity=1;
+    else{s.style.animation='wIn .42s cubic-bezier(.23,1,.32,1) both';
+         s.style.animationDelay=(k*42)+'ms'}
+    qText.appendChild(s);
+    if(k<words.length-1)qText.appendChild(document.createTextNode(' '))});
+  layoutScrim(); qScrim.classList.add('on');
+}
+function showQ(i){curQ=i; if(fontsOK)renderQ(i); else fontsReady.then(()=>{if(curQ===i)renderQ(i)})}
+function hideQ(){qScrim.classList.remove('on');
+  qText.querySelectorAll('.w').forEach((s,k)=>{
+    if(isReduced()){s.style.opacity=0;return}
+    s.style.animation='wOut .26s cubic-bezier(.4,0,.7,1) both';
+    s.style.animationDelay=(k*20)+'ms'})}
+
+/* ══ THE TURN ══ drift is never touched, restarted or re-based. The turn
+   is baked into its own element in ONE synchronous task, so no frame can
+   paint between removing the animation and writing the offset. */
+const mediaRM=matchMedia('(prefers-reduced-motion: reduce)');
+let manualRM=false; const isReduced=()=>mediaRM.matches||manualRM;
+let slide=0,pane=0,busy=false,speed=1,autoOn=false,autoT=null,failT=null;
+let baked=0;
+function bakeTurn(){
+  baked += PANE_W;
+  Object.values(railEls).forEach(r=>{
+    r.firstElementChild.style.transform='translate3d('+(-baked)+'px,0,0)'});
+}
+function land(){
+  slide=(slide+1)%CONFIG.slides; pane=(pane+1)%CONFIG.panes;
+  showQ(slide); status(); busy=false;
+}
+function advance(){
+  if(busy)return; busy=true; hideQ();
+  if(isReduced()){bakeTurn();land();return}
+  stage.classList.add('go');
+  failT=setTimeout(finishTurn,CONFIG.surgeMs+400);
+}
+function finishTurn(){
+  if(!stage.classList.contains('go'))return;
+  clearTimeout(failT); stage.classList.remove('go'); bakeTurn(); land();
+}
+stage.addEventListener('animationend',e=>{
+  if(e.animationName==='surgeGo'&&e.target.parentElement===railEls.sn)finishTurn()});
+function autoLoop(){clearTimeout(autoT); if(!autoOn)return;
+  autoT=setTimeout(()=>{advance();autoLoop()},CONFIG.dwellMs/speed)}
+
+/* ══ SHOOTING STAR ══ */
+let shootSide=1,shootT=null;
+function spawnShoot(){
+  if(isReduced())return;
+  const rot=el('shootRot'),s=el('shoot'),d=shootSide; shootSide=-shootSide;
+  rot.style.left=(d>0?140+Math.random()*500:1180+Math.random()*500)+'px';
+  rot.style.top=(70+Math.random()*760)+'px';
+  rot.style.setProperty('--sa',(d>0?1:-1)*(14+Math.random()*16)+'deg');
+  s.style.setProperty('--sd2',(d>0?1:-1)*(620+Math.random()*360)+'px');
+  s.style.setProperty('--sdu',(1.5+Math.random()*1.2)+'s');
+  rot.appendChild(s); shootLane.appendChild(rot);
+  s.addEventListener('animationend',()=>rot.remove());
+}
+function shootLoop(){clearTimeout(shootT);
+  const[a,b]=CONFIG.shootEveryMs;
+  shootT=setTimeout(()=>{spawnShoot();shootLoop()},(a+Math.random()*(b-a))/speed)}
+
+/* playbackRate, never animationDuration — duration re-maps elapsed time
+   and snaps position mid-flight. */
+function applySpeed(){Object.values(railEls).forEach(r=>
+  r.getAnimations().forEach(a=>{a.playbackRate=speed}))}
+
+/* ══ CONTROLS ══ */
+const FEATNAME=['orange nebula','supernova','comet','teal nebula','star cluster','dust lane'];
+function status(){
+  const onFeature = pane % 2 === 0;
+  const which = FEATNAME[((pane/2)|0) % FEATNAME.length];
+  document.getElementById('status').innerHTML=
+    '<b>Pane '+(pane+1)+' / '+CONFIG.panes+'</b> ('+(pane*(360/CONFIG.panes))+'&deg; of 360&deg;)'+
+    ' &nbsp;·&nbsp; '+(onFeature?'showing the <b>'+which+'</b>':'<b>open sky</b>')+
+    ' &nbsp;·&nbsp; slide '+(slide+1)+' &nbsp;·&nbsp; text <b>'+(slide%2?'orange':'purple')+'</b>'+
+    ' &nbsp;·&nbsp; '+starTotal.toLocaleString()+' stars, '+featTotal+' features'+
+    ' &nbsp;·&nbsp; time <b>'+speed+'×</b>';
+}
+document.getElementById('btnAdv').addEventListener('click',()=>advance());
+document.getElementById('btnShoot').addEventListener('click',spawnShoot);
+const autoBtn=document.getElementById('btnAuto');
+autoBtn.addEventListener('click',()=>{autoOn=!autoOn;autoBtn.classList.toggle('on',autoOn);
+  if(autoOn)autoLoop();else clearTimeout(autoT)});
+document.querySelectorAll('[data-spd]').forEach(b=>
+  b.addEventListener('click',()=>{speed=+b.dataset.spd;
+    document.querySelectorAll('[data-spd]').forEach(x=>x.classList.toggle('on',x===b));
+    applySpeed(); if(autoOn)autoLoop(); shootLoop(); status()}));
+function toggle(id,cls,invert){const b=document.getElementById(id);
+  b.addEventListener('click',()=>{b.classList.toggle('on');
+    const on=b.classList.contains('on'); if(cls==='rm')manualRM=on;
+    stage.classList.toggle(cls,invert?!on:on)})}
+toggle('tQ','hideQ',true); toggle('tG','showGuides',false);
+toggle('tN','noGrain',true); toggle('tR','rm',false);
+new ResizeObserver(()=>{if(curQ>=0&&fontsOK)renderQ(curQ)}).observe(stage);
+
+/* ══ BOOT ══ */
+stage.style.setProperty('--q-col',Q_COLOURS[0]);
+applySpeed(); shootLoop();
+setTimeout(()=>showQ(0),500);
+status();
+</script>
+</body>
+</html>

@@ -69,7 +69,8 @@
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "node .claude/hooks/design-done-gate.mjs" }
+          { "type": "command", "command": "node .claude/hooks/design-done-gate.mjs" },
+          { "type": "command", "command": "node .claude/hooks/plan-commit-gate.mjs" }
         ]
       }
     ],

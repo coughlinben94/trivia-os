@@ -1,0 +1,33 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+body{margin:0;background:#000;display:flex}
+.box{position:relative;background:#000}
+</style></head>
+<body>
+<div class="box" id="lo"></div>
+<div class="box" id="hi"></div>
+<script type="module">
+import { ringDom, ringCss } from '../../client/src/lib/ringPrimitives.js';
+const style = document.createElement('style');
+style.textContent = ringCss('');
+document.head.appendChild(style);
+const dom = ringDom('', { W: 1920, H: 1080, PANES: 12, SAFE: { x:0.2,y:0.28,w:0.6,h:0.44 } });
+const params = new URLSearchParams(location.search);
+const kind = params.get('kind') || 'planet';
+const hue = Number(params.get('hue') || 150);
+const w = Number(params.get('w') || 700);
+const h = Number(params.get('h') || Math.round(w * 0.62));
+const pad = 80;
+document.getElementById('lo').style.width = document.getElementById('hi').style.width = px(w + pad * 2);
+document.getElementById('lo').style.height = document.getElementById('hi').style.height = px(h + pad * 2);
+function px(n) { return n + 'px'; }
+function rngFixed(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+const lo = dom.makePrim(kind, w, h, hue, 0.5, rngFixed(1), false, 0.35);
+lo.style.left = px(pad); lo.style.top = px(pad);
+document.getElementById('lo').appendChild(lo);
+const hi = dom.makePrim(kind, w, h, hue, 0.5, rngFixed(1), false, 1.00);
+hi.style.left = px(pad); hi.style.top = px(pad);
+document.getElementById('hi').appendChild(hi);
+window.__ready = true;
+</script>
+</body></html>

@@ -1,0 +1,18 @@
+{
+  "verdict": "PASS",
+  "reason": "[sample 1: PASS] Teardrop silhouette tapering to a rounded point at top with a pinched base reads clearly as a campfire flame; layered orange-to-cream inner tongues curve continuously with no rectangular cutoffs, and the warm gradient matches the surrounding firelight scene. [sample 2: PASS] The center-third silhouette is a pointed, asymmetrically-lobed teardrop widening to a base seated on the crossed logs — reads as a campfire flame on contour alone, with hot cream core at y≈50-90% and no rectangular cutoff or seam anywhere on its outline. [sample 3: PASS] Silhouette reads unmistakably as a campfire flame—asymmetric pointed-top teardrop with correct proportions. No box-tells or hard edges. Sits coherently in scene above logs with matching color register and glow treatment.",
+  "category": "iconic-geometry",
+  "motion": "NOT_APPLICABLE",
+  "checkedFile": "concepts/campfire-sing-along-v1.html",
+  "timestamp": "2026-07-27T22:13:50.043Z",
+  "sampleVotes": {
+    "pass": 3,
+    "fail": 0,
+    "total": 3
+  },
+  "panel": [
+    "sonnet",
+    "opus",
+    "haiku"
+  ]
+}

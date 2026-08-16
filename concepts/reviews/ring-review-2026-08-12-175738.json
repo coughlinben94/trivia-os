@@ -1,0 +1,263 @@
+{
+  "date": "2026-08-12",
+  "stamp": "2026-08-12-175738",
+  "stations": [
+    {
+      "index": 0,
+      "key": "ringed planet",
+      "prim": "ring",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m17865717303439zap6",
+          "station": 0,
+          "key": "ringed planet",
+          "prim": "ring",
+          "category": "other",
+          "note": "that spiral and planet wouldnt be close to each other in theory. move spiral down to bottom right corner. move planet up more towards top right corner",
+          "bbox": [
+            0.8710443037974684,
+            0.17093002812939523,
+            0.08306962025316444,
+            0.17158931082981715
+          ],
+          "ts": 1786571730343
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "key": "spiral galaxy",
+      "prim": "lens",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786571747099ji5qo",
+          "station": 1,
+          "key": "spiral galaxy",
+          "prim": "lens",
+          "category": "other",
+          "note": "still hate the oval purple color",
+          "bbox": [
+            0.6811708860759494,
+            0.6575685654008439,
+            0.29984177215189856,
+            0.34243143459915615
+          ],
+          "ts": 1786571747099
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "key": "star cluster",
+      "prim": "dots",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m178657175959101bqd",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "idk what the coloring is",
+          "bbox": [
+            0.9786392405063291,
+            0.5007471870604782,
+            0.02136075949367089,
+            0.35443037974683556
+          ],
+          "ts": 1786571759591
+        },
+        {
+          "id": "m1786571768170mliwi",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "idk what the clouds are here",
+          "bbox": [
+            0.6511075949367089,
+            0.12943917018284107,
+            0.13607594936708856,
+            0.2236286919831224
+          ],
+          "ts": 1786571768170
+        },
+        {
+          "id": "m17865717733114xarg",
+          "station": 2,
+          "key": "star cluster",
+          "prim": "dots",
+          "category": "other",
+          "note": "this jsut looks badf",
+          "bbox": [
+            0.17721518987341772,
+            0.06896097046413502,
+            0.247626582278481,
+            0.41068917018284107
+          ],
+          "ts": 1786571773311
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "key": "orange nebula",
+      "prim": "blob",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m178657178469492r9d",
+          "station": 3,
+          "key": "orange nebula",
+          "prim": "blob",
+          "category": "other",
+          "note": "this looks terrible",
+          "bbox": [
+            0,
+            0.4599595639943741,
+            0.47072784810126583,
+            0.5105485232067511
+          ],
+          "ts": 1786571784694
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "key": "lit planet",
+      "prim": "planet",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786571796007uvxkp",
+          "station": 4,
+          "key": "lit planet",
+          "prim": "planet",
+          "category": "other",
+          "note": "move towards corner more",
+          "bbox": [
+            0.12737341772151897,
+            0.0014504219409282731,
+            0.15268987341772153,
+            0.5133614627285513
+          ],
+          "ts": 1786571796007
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "key": "pulsar",
+      "prim": "pulsar",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 6,
+      "key": "rose nebula",
+      "prim": "nebulaCloud",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786571816327rfgcg",
+          "station": 6,
+          "key": "rose nebula",
+          "prim": "nebulaCloud",
+          "category": "other",
+          "note": "needs to be on other bottom corner, add dust psrticlaes",
+          "bbox": [
+            0.15348101265822783,
+            0.7328146976090014,
+            0.16772151898734178,
+            0.2671853023909986
+          ],
+          "ts": 1786571816327
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "key": "comet",
+      "prim": "streak",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 8,
+      "key": "binary pair",
+      "prim": "binary",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 9,
+      "key": "asteroid field",
+      "prim": "asteroidField",
+      "verdict": null,
+      "marks": []
+    },
+    {
+      "index": 10,
+      "key": "supernova",
+      "prim": "spikes",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786571837315dx4h0",
+          "station": 10,
+          "key": "supernova",
+          "prim": "spikes",
+          "category": "other",
+          "note": "not needed here",
+          "bbox": [
+            0.14082278481012658,
+            0.609045358649789,
+            0.20648734177215192,
+            0.1547116736990155
+          ],
+          "ts": 1786571837315
+        },
+        {
+          "id": "m17865718441312qdfa",
+          "station": 10,
+          "key": "supernova",
+          "prim": "spikes",
+          "category": "other",
+          "note": "idk what the cloud is",
+          "bbox": [
+            0.1985759493670886,
+            0.6920270745428974,
+            0.11946202531645572,
+            0.16315049226441636
+          ],
+          "ts": 1786571844131
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "key": "aurora ribbon",
+      "prim": "ribbon",
+      "verdict": null,
+      "marks": [
+        {
+          "id": "m1786571851239004vo",
+          "station": 11,
+          "key": "aurora ribbon",
+          "prim": "ribbon",
+          "category": "other",
+          "note": "move to bottom right",
+          "bbox": [
+            0.5862341772151899,
+            0.1308456399437412,
+            0.36867088607594933,
+            0.170182841068917
+          ],
+          "ts": 1786571851239
+        }
+      ]
+    }
+  ]
+}

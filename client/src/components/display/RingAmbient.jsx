@@ -1,0 +1,966 @@
+// RingAmbient — the DOM-building half of the "ring" ambient model.
+// Ported from concepts/world-07-ring.html, which remains the source of
+// truth (see client/src/lib/ringEngine.js for the pure-math half). This
+// component is NOT wired into production — it exists in isolation until a
+// later task mounts it in the dev-only /ambient preview route.
+//
+// Architectural constraint (matches ParticleBackground.jsx's own "never
+// re-mounts" rule, see that file's Critical Rules comment and the repo
+// SKILL.md): the station index must NEVER arrive as a React prop, because
+// this component will eventually live inside ParticleBackground, which
+// mounts once per show. So the entire DOM tree is built exactly once in a
+// mount-only useEffect (mirroring the reference build's own top-level
+// `(function build(){...})()` IIFE), and turn()/jumpTo() are exposed
+// imperatively via useImperativeHandle. Both mutate `surge.style.transform`
+// directly — never React state/props — so calling them never triggers a
+// re-render of this subtree.
+//
+// Out of scope for this port (see the plan task for the full reasoning):
+// question TEXT rendering (qLayer/qText/renderQ/showQ/hideQ/fitPx/wrapLines/
+// fits — Trivia OS already has its own question-rendering system elsewhere,
+// which composites on top of this component), and the reference build's own
+// demo-page chrome (.notes/.ctl/header/.sub/status line, the safe-box
+// `.guides` overlay, `.vig` vignette and `.grain` texture — none of these
+// appear in the task's explicit "CSS you'll need" class list).
+//
+// The shooting-star system (spawnShoot/shootLoop/.shootLane) WAS listed
+// here as out of scope too, with no reason given (unlike the two items
+// above, which have real ones) — ported in 2026-08-12 once Ben asked to
+// "lean more into" it; see the build effect below.
+//
+// The SCRIM (qScrim/layoutScrim in the reference build) is IN scope, unlike
+// the rest of the question system: spec §2 requires it under any text this
+// safe box carries, RingAmbient shipping without it is a real legibility
+// regression (station 0 measured p99.5 99 against a 72 cap — bright content
+// with nothing dimming it), and its geometry/alpha don't depend on knowing
+// anything about the app's actual question text or its show/hide timing —
+// only on the current station. See layoutScrim() below.
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, fillOf, rng, lerp } from '../../lib/ringEngine.js'
+import { EASE_SURGE } from '../../lib/easings.js'
+import { ringDom, px, hsla, ringCss } from '../../lib/ringPrimitives.js'
+
+// ENGINE — engine-fixed, identical for every world; never a prop (a world
+// never sets any of this, same as the reference build's own ENGINE const).
+// SAFE is included (absent from the reference's WORLD-facing exports but
+// present in its own ENGINE object) because bandY() needs it to keep solid
+// forms out of the safe box. Q/DWELL_MS are still omitted — they belong to
+// the out-of-scope question system. SHOOT_MS is now included (2026-08-12,
+// Ben: "lean more into shooting star concept" — that system is no longer
+// out of scope here, see the shooting-star block in the build effect below).
+const ENGINE = {
+  W: 1920, H: 1080,
+  PANES: 12,
+  SURGE_MS: 1700,
+  SAFE: { x: 0.20, y: 0.28, w: 0.60, h: 0.44 },
+  SHOOT_MS: [12000, 35000],
+  LAYERS: [
+    { id: 'sky',  surge: 0,    m: 1 },
+    { id: 'far',  surge: 480,  m: 1 },
+    { id: 'mid',  surge: 1920, m: 1 },
+    { id: 'near', surge: 2880, m: 3 },
+  ],
+  // B2-luminance.md sec 2.1/5.3: {18,52} was frame-mean luma outside what the
+  // spec's own alpha/placement caps can physically reach (ceiling ~28-30 at
+  // legal peak alpha) — unreachable at any ink level the spec permits, and
+  // pre-fillOf() the value never reached a pixel anyway (proved: scaling it
+  // 10x rendered byte-identical frames). ref/fillMin/fillMax feed fillOf()
+  // below, the channel that DOES reach a pixel.
+  ARC: { lo: 10, hi: 31, exp: 1.6, ref: 31, fillMin: 0.35, fillMax: 1.00 },
+  STAR_ALPHA_FLOOR: 0.28,
+}
+
+// ── CSS — the chassis/primitive/star rules (.ring-lyr, .ring-surge,
+// .ring-void, .ring-star, .ring-pf, .ring-b-lobe, .ring-b-rim, .ring-d-glow,
+// .ring-s-core, .ring-s-spk, .ring-l-disc, .ring-l-arm, .ring-l-arm-edge,
+// .ring-l-core, .ring-k-tail, .ring-k-head, .ring-r-body, .ring-r-edge,
+// .ring-rg-ring, @keyframes
+// ringTw/ringPfBreathe) now come from client/src/lib/ringPrimitives.js's
+// ringCss('ring-') — the same source concepts/world-07-ring.html's
+// unprefixed <style> injects via ringCss(''). These were hand-duplicated
+// against that page's <style> block (in sync, but nothing enforced that —
+// the same bug class the makePrim extraction already fixed once).
+//
+// `.ring-stage` and its `.go` transition trigger stay local — that class
+// isn't part of the ring-verify.mjs contract (only #design, .ring-void,
+// .ring-star, .ring-surge, window.__world are — see the mount effect below
+// for this component's own window.__world exposure), "stage" is generic
+// enough to risk
+// colliding with unrelated app CSS, and the easing here comes from this
+// app's own client/src/lib/easings.js rather than the reference build's
+// hardcoded curve. The reduced-motion query stays local too, but now
+// includes `.ring-shoot` (2026-08-12 — that system is no longer out of
+// scope, see the shooting-star block in the build effect below); still
+// excludes the `.stage.rm` manual-toggle branch, dev-harness-only UI (a
+// checkbox to force reduced-motion for testing) that neither build needs
+// at runtime. ──
+// .ring-scrim: full-frame geometry (left/top/width/height) is fixed once at
+// build time (ART-DIRECTION-SPEC.md sec 2 — see the build effect below for
+// why full-frame, not a fitted box); only the alpha-bearing background is
+// per-station (see layoutScrim below). position:absolute only — no CSS
+// transition, this component owns no question-visibility state to animate
+// against.
+const RING_CSS = `
+${ringCss('ring-')}
+.ring-stage.go .ring-surge{transition:transform var(--surge-ms) cubic-bezier(${EASE_SURGE.join(',')})}
+.ring-scrim{position:absolute;pointer-events:none}
+
+@media (prefers-reduced-motion:reduce){
+  .ring-surge{transition:none!important}
+  .ring-star,.ring-pf,.ring-pf-breathe,.ring-shoot{animation-play-state:paused!important}
+  .ring-drift{animation-play-state:paused!important}
+  .ring-rock-spin{animation-play-state:paused!important}
+}
+`
+
+// dom.el/dom.makePrim/dom.bandY/dom.buildStars (and the plain px export)
+// come from client/src/lib/ringPrimitives.js's ringDom('ring-', ENGINE)
+// call below. ENGINE (unlike worldData) is module-scoped, not a prop, so
+// dom can be too — every call site in this file, in buildLayerContent and
+// in the mount effect, goes through it rather than ever passing the
+// "ring-" prefix by hand. See that module for the full primitive-rendering
+// logic (blob/dots/spikes/lens/streak/ribbon/ring/binary) — one source now
+// shared with concepts/world-07-ring.html.
+const dom = ringDom('ring-', ENGINE)
+
+// Background-wash color table (2026-08-13) — synced from world-07-ring.html.
+// Station-data flag -> wash hue; see the per-station wash loop below.
+// fromTop 2026-08-14: synced from world-07-ring.html — orange hangs its
+// dome from the top edge instead of rising from the bottom.
+const WASH_KINDS = [
+  { flag: 'greenWash', hue: 150, fromTop: false },
+  { flag: 'orangeWash', hue: 30, fromTop: true },
+]
+
+// ═══ BUILD ═══ dispatches per-layer content building.
+function buildLayerContent(engine, world, arc, host, L) {
+  const period = authorPeriodOf(engine, L)
+
+  if (L.id === 'far') {
+    /* slow, dense star field */
+    dom.buildStars(host, period, 140, 1.0, 0xA11CE)
+
+    // Wide soft wash blobs (6/period, ~620-900px, `blob` primitive) removed
+    // entirely 2026-08-13 — see world-07-ring.html's identical removal note
+    // (same fix, both builds) for the full reasoning: a fresh customer-role
+    // critique pass root-caused this loop as most of Ben's recurring
+    // "remove planet" / "random dim circles" / "not needed here" complaints
+    // back to 2026-08-12, because it drew far-layer washes with the same
+    // `blob` primitive kind headline nebulae use — visually indistinguishable
+    // from a real object but with no thematic identity, drifting across ~5
+    // unrelated stations per wash (far's 480px/turn vs mid's 1920px/turn).
+    // Station 10's one-off `noWash` exemption from this same loop, for the
+    // identical complaint, was the same problem recurring, not a coincidence.
+    // The far-layer star field above and the anchor/drifter below are
+    // unrelated and untouched.
+
+    // far-layer anchor (spec §7.6) removed outright 2026-08-13 — see
+    // world-07-ring.html's identical removal note (same fix, both builds)
+    // for the full reasoning. Three prior rounds each re-tuned only alpha
+    // (0.34->0.15 here, further to 0.09->0.05 on the other build) without
+    // ever changing what the anchor actually was: a `lens` primitive
+    // rendered as l-disc/l-arm "bead spiral" shapes — the identical
+    // primitive kind and render path station 3's own spiral-galaxy headline
+    // uses. A fresh customer-role critique agent (2026-08-13) confirmed it
+    // still reads as a duplicate of that headline even at the other build's
+    // alpha 0.05 — dimming was never going to fix a same-shape-as-a-real-
+    // headline problem. No replacement is authored here — open spec
+    // question for Ben, not resolved by this removal.
+
+    // one trackable drifter (spec §7.7): the only element in this world
+    // carrying its own continuous transform, so the up-to-75s gap between
+    // turns isn't a freeze-frame with only twinkle for company. The
+    // transform lives on THIS element (.ring-drift's own CSS animation,
+    // see ringCss) nested INSIDE far's already-transformed .ring-surge —
+    // never a second transform on the layer itself. A rail-style layer
+    // transform was deliberately deleted earlier this session for causing
+    // visible pops at turn boundaries; this can't reintroduce that bug
+    // class because .ring-surge's own transform is never touched here.
+    // 3600px/480s = 7.5px/s (was 1800px/480s = 3.75px/s — technically
+    // above the 2.7px/s floor but too subtle to notice unprompted;
+    // doubling the travel at the same duration clears the floor with real
+    // margin), crossing time = 3600/7.5 = 480s = 8min, unchanged and still
+    // inside the 4-12min band; linear+alternate so it reverses cleanly at
+    // each end instead of snapping back to the start. Size bumped 9->14px
+    // and given a warmer color + a bigger/stronger glow than any star can
+    // reach (far-layer stars top out at size 8 with box-shadow blur
+    // 17.6px/spread 2.4px — see ringPrimitives.js's .drift, blur
+    // 32px/spread 10px) so it reads as an object, not one more star.
+    {
+      const dr = rng(0, 0xD817)
+      const drift = dom.el('drift')
+      const ds = 14
+      drift.style.width = drift.style.height = px(ds)
+      drift.style.left = px(period * 0.12)
+      drift.style.top = px(dom.bandY(dr, ds))
+      host.appendChild(drift)
+    }
+  }
+
+  else if (L.id === 'mid') {
+    /* THE COMPOSITION LAYER. mid moves exactly one frame per turn, so
+       station i is authored into the frame at x = i*W and lands there
+       every single time. */
+
+    /* third star layer (spec §5: >=3 star layers, surge distances
+       differing per §0's ratio) — see concepts/world-07-ring.html's
+       identical comment for the reasoning: mid's surge (1920) already
+       sits between far (480) and near (2880) in the engine's 1:4:6
+       ratio family, so reusing it needs no new surge value.
+       sizeMul 1.25 (not far's 1.0): far:mid:near size ramps 1.0:1.25:1.5
+       against the 1:4:6 speed ramp, so depth reads from a static frame
+       too, not just from differential motion. */
+    dom.buildStars(host, period, 40, 1.25, 0xCAFE1)
+
+    // Occlusion eligibility + occluderStations (spec §7.2's >=1-in-3
+    // subtractive-disc floor) removed entirely 2026-08-13, Ben's explicit
+    // call — see world-07-ring.html's identical removal note (same fix,
+    // both builds). Three prior rounds each re-tuned size/fill/position
+    // without addressing the actual complaint: makeOccluder always draws
+    // drawPlanetDisc's planet-silhouette geometry regardless of the host
+    // station's own theme, so it read as a stray planet on non-planet
+    // stations no matter how it was tuned. concepts/tools/ring-verify.mjs
+    // check #14a and ring-occlusion-ablation.mjs will fail/no-op against a
+    // floor this component no longer tries to clear — that check's own
+    // pass/fail logic is unedited (STAYS-HUMAN), needs Ben's own follow-up
+    // if the floor itself should retire.
+
+    for (let i = 0; i < engine.PANES; i++) {
+      const st = world.stations[i]
+      // Each property below draws from its OWN seeded stream, keyed by
+      // station index + a distinct per-property constant — not one shared
+      // stream read sequentially. See concepts/world-07-ring.html's
+      // identical comment for why (2026-08-08: a bandY fix reshuffled 4 of
+      // 12 stations' companion kind/hue as a pure side effect of consuming
+      // a different number of r() calls upstream, with no logical
+      // connection between the two — separate streams make that class of
+      // bug structurally impossible).
+      const rHeadline = rng(i, 0x5EED1)
+      const rPairBand = rng(i, 0x5EED2) // only the shared upper/lower coin-flip (spec §7.5 — this one draw IS intentionally shared)
+      const rCompanion = rng(i, 0x5EED3)
+      const rDetail = rng(i, 0x5EED4)
+      const lou = loudnessOf(arc, i)
+      const fill = fillOf(engine, arc, i)
+      const x0 = i * engine.W
+
+      // headline form — 576-880px longest edge, full tier range regardless
+      // of loudness (was lerp(576,880, lou*0.75+r()*0.25) — quiet stations
+      // got stuck near the 576 floor, loud ones near 880, so a quiet
+      // station read as a small/sparse frame instead of "large and dim."
+      // Loudness now speaks through alpha/detail-count only, below.
+      // 2026-08-12: synced from world-07-ring.html — pulsar shrunk 0.78x
+      // (Ben: "can be smaller"). See that file's comment for why scaling
+      // the whole box shrinks the object proportionally in one change.
+      // 2026-08-12 round 3 (Ben, st11: "make longer") — synced from
+      // world-07-ring.html: ribbon's own visual "length" is this width, so
+      // it gets a wider tier instead of the shared 576-880 range.
+      // 2026-08-13 round 2: synced from world-07-ring.html — widened past
+      // frame width (Ben: "make it go longer but ends off screen") so the
+      // far end actually exits the frame instead of just reading longer
+      // within it — see that file's identical comment for the full math.
+      const hw = st.prim === 'ribbon' ? lerp(1600, 2000, rHeadline())
+        // 2026-08-13: synced from world-07-ring.html — streak's visual
+        // length is its width (Ben, st7: "doesn't have a major asset").
+        : st.prim === 'streak' ? lerp(860, 1180, rHeadline())
+          : lerp(576, 880, rHeadline()) * (st.prim === 'pulsar' ? 0.78 : 1)
+      const hh = st.prim === 'streak' ? hw * 0.30
+        : st.prim === 'ribbon' ? hw * 0.34
+          : hw * (0.62 + rHeadline() * 0.26)
+      const alpha = lerp(0.34, 0.55, lou)
+      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, fill, st.variant) // isHeadline: only per-station breathe (spec §8); variant: per-station prim treatment (st3's dust ring)
+      // 2026-08-12: synced from world-07-ring.html — this file was still on
+      // the pre-corner-bias uniform draw ([0.08,0.98] of remaining travel
+      // room, the very formula that measured mean centroid x=920 but still
+      // read as "top-center, not a corner" per Ben's st0 complaint on the
+      // OTHER build). Now shares ringPrimitives.js's `cornerX` — a fixed
+      // pixel margin from the frame edge instead of a fraction of
+      // remaining space, so the corner-push effect doesn't dilute for wide
+      // headlines. See that function's own comment for the full history.
+      // 2026-08-12: synced from world-07-ring.html — optional per-station
+      // `bandUpper` override (st11, Ben: "move to bottom right"), same
+      // pattern as `cornerLeft`. Draw still always happens.
+      const pairBandDraw = rPairBand() < 0.5
+      const pairUpper = st.bandUpper !== undefined ? st.bandUpper : pairBandDraw // shared band draw — see bandY's forceUpper comment (spec §7.5)
+      // Corner choice drawn explicitly (not inside cornerX) so the
+      // occluder below can read it and place itself at the opposite corner.
+      // 2026-08-12: synced from world-07-ring.html — optional per-station
+      // `cornerLeft` override (st6, Ben: "needs to be on other bottom
+      // corner"), same pattern as the existing `ring`/`accent` flags. The
+      // draw still always happens so this station's rHeadline stream
+      // count is identical whether or not it's overridden.
+      const cornerDraw = rHeadline() < 0.5
+      const headlineCornerLeft = st.cornerLeft !== undefined ? st.cornerLeft : cornerDraw
+      let headLeft = dom.cornerX(rHeadline, hw, x0, headlineCornerLeft)
+      // 2026-08-13: synced from world-07-ring.html — `planet` centers its
+      // min(w,h) disc in a wider box, leaving ~(hw-hh)/2 of dead horizontal
+      // inset between the box edge (which cornerX corner-hugs) and the
+      // visible disc edge. Shift the box by that inset so the DISC edge
+      // lands at cornerX's own margin (Ben, st4: "more towards corner").
+      // See that file's identical comment for the full reasoning.
+      if (st.prim === 'planet') {
+        const discInset = (hw - Math.min(hw, hh)) / 2
+        headLeft += headlineCornerLeft ? -discInset : discInset
+        // 2026-08-13: synced from world-07-ring.html — the planet's d-glow
+        // halo overflows the disc (GLOW_FRAC=1.35, mirrored here) and its
+        // brightest band crossed the station boundary, painting a bright
+        // arc on the NEIGHBOR station's slide (Ben, st4: "half on one page
+        // half on other"). Soft-mask only the glow at the boundary; see
+        // that file's identical comment for the full reasoning.
+        const discSize = Math.min(hw, hh)
+        const glowLeft = headLeft + (hw - discSize) / 2 + (discSize - discSize * 1.35) / 2
+        const glowW = discSize * 1.35
+        const glowEl2 = head.querySelector('[class*="d-glow"]')
+        if (glowEl2) {
+          const FEATHER = 24
+          if (headlineCornerLeft && glowLeft < x0) {
+            const b = x0 - glowLeft
+            const m = `linear-gradient(to right, transparent ${b.toFixed(0)}px, black ${(b + FEATHER).toFixed(0)}px)`
+            glowEl2.style.maskImage = m; glowEl2.style.webkitMaskImage = m
+          } else if (!headlineCornerLeft && glowLeft + glowW > x0 + ENGINE.W) {
+            const b = (x0 + ENGINE.W) - glowLeft
+            const m = `linear-gradient(to right, black ${(b - FEATHER).toFixed(0)}px, transparent ${b.toFixed(0)}px)`
+            glowEl2.style.maskImage = m; glowEl2.style.webkitMaskImage = m
+          }
+        }
+      }
+      // 2026-08-13: synced from world-07-ring.html — same dead-padding fix
+      // as `planet` above, for `ring` (st0). See that file's identical
+      // comment for the full reasoning.
+      if (st.prim === 'ring') {
+        const ringBodySize = Math.min(hw, hh) * 0.52
+        const ringRx = Math.min(ringBodySize * (st.variant === 'dust' ? 1.22 : 1.08), hw / 2 - 4)
+        const discInset = hw / 2 - ringRx
+        headLeft += headlineCornerLeft ? -discInset : discInset
+      }
+      // 2026-08-13: synced from world-07-ring.html — same dead-padding fix
+      // for `dots` (st2, Ben: "move closer to corner"): the cluster's dense
+      // mass is centered in the box (~0.28*hw reach), so shift the box until
+      // the mass edge, not the box edge, sits at cornerX's margin. See that
+      // file's identical comment for the measurement.
+      if (st.prim === 'dots') {
+        const discInset = hw / 2 - hw * 0.28
+        headLeft += headlineCornerLeft ? -discInset : discInset
+      }
+      const headTop = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh))
+      head.style.left = px(headLeft)
+      head.style.top = px(headTop)
+      host.appendChild(head)
+      // 2026-08-12 round 2 (Ben, st10: "put this more towards corner") —
+      // synced from world-07-ring.html. `spikes` centers its core+rays
+      // dead-on at 50%/50% via CSS regardless of where the frame itself
+      // sits, so a corner-tucked frame still reads as "somewhere in the
+      // quadrant." Nudge just the core+ray group toward the frame's own
+      // corner post-hoc — see that file's own comment for the full reasoning.
+      if (st.prim === 'spikes') {
+        const cxPct = headlineCornerLeft ? 30 : 70, cyPct = pairUpper ? 30 : 70
+        head.querySelectorAll('[class*="s-core"], [class*="s-spk"]').forEach((n) => {
+          n.style.left = cxPct + '%'; n.style.top = cyPct + '%'
+        })
+        // 2026-08-12 round 3 (Ben, st10: "two assets, just need one") —
+        // synced from world-07-ring.html: d-glow keeps its CSS `inset:0`
+        // default (centers on the full frame) even after the core+rays
+        // above shift toward the corner, reading as a second star. Recenter
+        // it on the same corner point, same size as before.
+        const glowEl = head.querySelector('[class*="d-glow"]')
+        if (glowEl) {
+          glowEl.style.inset = 'auto'
+          glowEl.style.width = px(hw); glowEl.style.height = px(hh)
+          glowEl.style.left = px(hw * cxPct / 100 - hw / 2)
+          glowEl.style.top = px(hh * cyPct / 100 - hh / 2)
+        }
+      }
+      const headCx = headLeft + hw / 2, headCy = headTop + hh / 2
+
+      // 2026-08-12: synced from world-07-ring.html — `greenWash` station-
+      // data flag (Ben: "green on bottom half of two slides, makes it look
+      // like a diff galaxy of sorts"). Plain linear-gradient wash, not a
+      // primitive draw — atmosphere/mood, doesn't compete with noun-
+      // uniqueness rules. See that file's own comment for why st4/st5.
+      // 2026-08-13: synced from world-07-ring.html — generalized to a
+      // (flag, hue) table instead of one hardcoded green block (Ben: "need
+      // more green and orange areas... whole background shifts for a slide
+      // or two"); `orangeWash` set on st8 for now.
+      // 2026-08-13 round 3+4: synced from world-07-ring.html — switched
+      // linear-gradient rectangle to a radial "half circle" (Ben: "youre
+      // giving it hard line edges" / "round it off"), then widened the box
+      // past one station so the circle's falloff bleeds into the next
+      // station instead of clipping at the boundary (Ben: "overlap them
+      // with like 70% on one page 30% on the next") — see that file's
+      // identical comment for the full math.
+      // 2026-08-13 round 5: synced from world-07-ring.html — circle ->
+      // ellipse with unequal axes plus a per-station center jitter (Ben:
+      // "look more natural... make one side taller and off center the
+      // circle") — see that file's identical comment for the full math.
+      // 2026-08-14: synced from world-07-ring.html — rx/washSpanW raised so
+      // the flare dominates its own station ("half the screen") and its
+      // fade completes near the far edge of the NEXT station instead of
+      // ~0.1W in, see that file's identical comment for the math.
+      // 2026-08-14: synced from world-07-ring.html — height cap (WASH_MAX_RY,
+      // "max is only 60% up the screen, so the purple still lives at the
+      // top") and horizontal 75/25 split (center pulled to 0.42W).
+      // 2026-08-14 round 2: synced — rx restored to 1.75W (a prior pass had
+      // shrunk it to 1.40W on top of the center shift, and the two
+      // compounded into a bleed too short to reach any of the next
+      // station's actual sample points — pixel-measured byte-identical to
+      // base purple). See that file's identical comment.
+      // 2026-08-14 round 3: synced — center nudged 0.42W -> 0.46W and alpha
+      // 0.34/0.18 -> 0.40/0.22 (still under the original "too heavy"
+      // 0.55/0.30) — the bleed reached station5 but landed in the
+      // gradient's own weak fade-tail (35%-70% zone), pixel-measured too
+      // faint to read. See that file's identical comment.
+      // 2026-08-14 round 4: synced — center back to true-middle (0.50W) and
+      // alpha back near the original strong values. Three rounds of small
+      // nudges each still measured/read too weak; see that file's identical
+      // comment.
+      const rxScale = 1.75
+      const washSpanW = engine.W * 2.8
+      const washCxFrac = (0.50 * engine.W / washSpanW) * 100
+      const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14
+      const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16
+      const washTallSide = (i % 2 === 0) ? 1.32 : 0.78
+      const WASH_MAX_RY = Math.round(0.6 * engine.H / 0.7)
+      for (const wc of WASH_KINDS) {
+        if (!st[wc.flag]) continue
+        // 2026-08-14: synced from world-07-ring.html — a same-flag run of
+        // wash stations draws ONE dome (its first station's), whose own
+        // rightward bleed covers the rest; later stations in the run skip
+        // instead of stacking a second independently-centered dome. See
+        // that file's identical comment.
+        const prevSt = world.stations[(i - 1 + engine.PANES) % engine.PANES]
+        if (prevSt[wc.flag]) continue
+        const wash = dom.el('')
+        wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0'
+        wash.style.width = px(washSpanW); wash.style.height = px(engine.H)
+        const rx = Math.round(engine.W * rxScale)
+        const ry = Math.min(Math.round(rx * washTallSide), WASH_MAX_RY)
+        const cy = wc.fromTop ? (0 - washJitterY) : (100 + washJitterY)
+        wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${cy.toFixed(1)}%,
+          ${hsla(wc.hue, 60, 30, 0.50)} 0%, ${hsla(wc.hue, 55, 22, 0.28)} 35%, transparent 70%)`
+        host.appendChild(wash)
+      }
+
+      // Any station with `ring:true` in its data — see world-07-ring.html's
+      // identical comment (same fix, both builds, /simplify's station-data-
+      // flag generalization) and makeNebulaRing's own comment in
+      // ringPrimitives.js.
+      // 2026-08-12: synced from world-07-ring.html — uniform 1.30x scale
+      // centered exactly on the blob's own core reads as an eyeball (Ben:
+      // "woah, what is that???? not a fan"). Uneven axis scale + an offset
+      // off-center breaks the concentric iris/pupil read.
+      if (st.ring) {
+        const nrW = hw * 1.55, nrH = hh * 0.95
+        const nring = dom.makeNebulaRing(nrW, nrH, st.hue, fill)
+        nring.style.left = px(headCx - nrW / 2 + hw * 0.16)
+        nring.style.top = px(headCy - nrH / 2 - hh * 0.10)
+        host.appendChild(nring)
+      }
+
+      // one feature-tier companion — this IS the station's declared pair
+      // (spec §7.5): two elements linked by a shared visual property, not
+      // two independent random placements (a collage, not a pair). Shared
+      // property: hue echo within ±18° for non-accent stations (inside the
+      // spec's 20° budget); accent stations intentionally push the
+      // companion hue ~168° away (the world's one complementary-accent
+      // mechanic), so hue can't carry the pair there — the connecting
+      // bridge does, drawn for accent stations regardless of hue.
+      // 2026-08-12: synced from world-07-ring.html — this file was still on
+      // the old proximity-orbit placement (pairAng/pairRad around the
+      // headline's own centroid), never ported the st1/st3 clearance fix
+      // either. Superseded entirely: Ben, fresh review, generalizing st0's
+      // specific complaint — "two items squished together in the same
+      // corner is no bueno — ie a spiral not by a planet." Once headlines
+      // are corner-anchored, keeping the companion close means jamming two
+      // objects into the same corner. The pairing signal (hue-echo/bridge)
+      // never depended on physical closeness, so companion now takes the
+      // OPPOSITE corner from its headline — same treatment as the
+      // occluder below.
+      // noCompanion (st5 pulsar, 2026-08-13): synced from world-07-ring.html
+      // — see that file's identical comment for the full reasoning (round-6
+      // mis-marked this station's own companion as neighbor bleed).
+      if (!st.noCompanion) {
+        const others = ['blob', 'dots', 'lens', 'streak'].filter(k => k !== st.prim)
+        const rolled = others[Math.floor(rCompanion() * others.length)]
+        // companionKind (st1, 2026-08-13): synced from world-07-ring.html —
+        // forces st1's companion to 'dots' instead of the rolled 'blob',
+        // see that file's identical comment.
+        const ck = st.companionKind || rolled
+        // companionBoost (st6/st7, 2026-08-13): synced from
+        // world-07-ring.html — see that file's identical comment. Both
+        // stations sit at the ARC trough, so the loudness-driven alpha
+        // bottomed out invisible; floors applied AFTER the seeded rolls
+        // (same rCompanion() call count, no stream reshuffle).
+        // 2026-08-13 round 2: same floors extended to EVERY lens companion
+        // (`ck === 'lens'`), synced from world-07-ring.html — see that
+        // file's identical comment. Math.max is idempotent, so st7
+        // (flag + lens) doesn't double-apply.
+        const cwRoll = lerp(230, 420, rCompanion())
+        const boostComp = st.companionBoost || ck === 'lens'
+        const cw = boostComp ? Math.max(cwRoll, 380) : cwRoll
+        const ch = ck === 'streak' ? cw * 0.30 : cw * (0.60 + rCompanion() * 0.28)
+        const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, rCompanion()))
+        const compAlphaRoll = lerp(0.30, 0.48, lou) * 0.8
+        const compAlpha = boostComp ? Math.max(compAlphaRoll, 0.55) : compAlphaRoll
+        const comp = dom.makePrim(ck, cw, ch, compHue, compAlpha, rCompanion, false, fill)
+        const compLeft = dom.cornerX(rCompanion, cw, x0, !headlineCornerLeft)
+        // companionUpper (st2, 2026-08-14): synced from world-07-ring.html —
+        // per-station band override (true = upper); unset keeps !pairUpper,
+        // the diagonal-opposite standing rule. See that file's comment.
+        const compUpper = st.companionUpper !== undefined ? st.companionUpper : !pairUpper
+        const compTop = dom.bandY(rCompanion, ch, compUpper, dom.rotatedBandH(ck, cw, ch))
+        comp.style.left = px(compLeft)
+        comp.style.top = px(compTop)
+        host.appendChild(comp)
+      }
+
+      // Pair-bridge connector: synced from world-07-ring.html, then
+      // REMOVED OUTRIGHT there in the same pass — see that file's own
+      // comment for the full history. Short version: it worked as a local
+      // connector when the companion orbited near the headline; once the
+      // companion moved to the diagonal-opposite corner, the same bridge
+      // started spanning nearly the full frame diagonal instead. Ben,
+      // fresh batch: "3-4 long lines not needed." Drops accent stations'
+      // only spec §7.5 pairing signal — flagged in the other file, not
+      // repeated here.
+
+      // detail-tier specks, count follows loudness. k===0 is forced toward
+      // the tier floor (spec §7.3 scale ladder): the worst-case headline
+      // (576px) divided by a detail element that happened to draw near the
+      // old ceiling (154px) measured at 3.7x — under the required >=6x.
+      // Forcing one detail element per station into [58,70] guarantees
+      // 576/70 = 8.2x even in the worst-case headline draw; the ladder no
+      // longer depends on two independent random draws going its way.
+      const dn = Math.round(lerp(1, 4, lou))
+      for (let k = 0; k < dn; k++) {
+        const dw = k === 0 ? lerp(58, 70, rDetail()) : lerp(58, 154, rDetail())
+        const d = dom.makePrim('dots', dw, dw * 0.9, st.hue, lerp(0.34, 0.60, lou) * 0.7, rDetail, false, fill)
+        // 2026-08-12 round 2 (Ben, st1: "too much going on") — synced from
+        // world-07-ring.html: keeps ambient detail specks in the middle
+        // 64% of frame width, clear of the corner zones headline/companion/
+        // occluder already occupy, instead of a fully uniform [0,W] draw
+        // that could land right on top of one by chance.
+        d.style.left = px(x0 + lerp(0.18, 0.82, rDetail()) * engine.W - dw / 2)
+        // 2026-08-14: synced from world-07-ring.html — skipMinBleed opts
+        // these small ambient specks out of bandY's headline corner-bleed
+        // floor (Ben: "star clusters... really close to the borders...
+        // brought into the scene a little more"). See that file's comment.
+        d.style.top = px(dom.bandY(rDetail, dw * 0.9, undefined, undefined, true))
+        host.appendChild(d)
+      }
+
+      // fillCorner (st9 asteroid field, Ben: "need something here" on the
+      // bottom-left) — synced from world-07-ring.html: the spanning-field
+      // headline is centered on the st9/st10 boundary so this station's
+      // own bottom-left corner stays bare; a small explicit dust cluster
+      // fills it, outside the corner-avoiding detail loop above.
+      if (st.fillCorner) {
+        // 2026-08-12 round 3 (Ben: "need a planet here") — synced from
+        // world-07-ring.html: swapped the dust speck for makeOccluder's
+        // own small lit-planet disc.
+        const fw = lerp(90, 130, rDetail())
+        const fc = dom.makeOccluder(fw, st.hue + 20, fill)
+        fc.style.left = px(x0 + engine.W * 0.10 - fw / 2)
+        fc.style.top = px(engine.H * 0.84 - fw * 0.45)
+        host.appendChild(fc)
+      }
+
+      // Spec §7.2 occlusion disc (the >=1-in-3-station subtractive planet-
+      // disc) removed 2026-08-13, Ben's explicit call — see the
+      // occluderStations removal note above this station loop for why.
+    }
+  }
+
+  else if (L.id === 'near') {
+    /* fast and anonymous — the layer that sells the turn */
+    dom.buildStars(host, period, 26, 1.5, 0xBEEF)
+  }
+}
+
+const isReduced = () =>
+  typeof window !== 'undefined' && window.matchMedia &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+// worldData shape: { id, type, name, phase, sky: [4 hex], qColours: [2 hex],
+// stations: [12 x {key,prim,hue,accent}] } — see concepts/world-07-ring.html's
+// own WORLD literal. qColours is accepted but unused here (question-colour
+// styling belongs to the out-of-scope question-rendering system).
+const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref) {
+  const stageElRef = useRef(null)
+  const designElRef = useRef(null)
+  const surgeElsRef = useRef({})
+  const scrimElRef = useRef(null)
+  const arcRef = useRef(null)
+  const offsetRef = useRef({})
+  const stationRef = useRef(0)
+  const busyRef = useRef(false)
+  const queuedTurnsRef = useRef(0)
+  const turnTimerRef = useRef(null)
+  const shootLaneRef = useRef(null)
+  const shootTimerRef = useRef(null)
+
+  // ── build once on mount — never re-run on worldData change. This is the
+  // whole point of the task: RingAmbient will eventually live inside
+  // ParticleBackground, which mounts once per show and must never rebuild
+  // its DOM mid-session. ──
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const stage = stageElRef.current
+    const design = designElRef.current
+    if (!stage || !design) return
+
+    function fit() {
+      design.style.transform = `scale(${stage.clientWidth / ENGINE.W})`
+    }
+    const ro = new ResizeObserver(fit)
+    ro.observe(stage)
+    fit()
+
+    const arc = buildArc(ENGINE, worldData)
+
+    // sky layer — bare, never transformed, never offset
+    const sky = dom.el('lyr')
+    const skyInner = dom.el('surge')
+    skyInner.style.transition = 'none'
+    skyInner.appendChild(dom.el('void'))
+    sky.appendChild(skyInner)
+    design.appendChild(sky)
+
+    const surgeEls = {}
+    for (const L of ENGINE.LAYERS) {
+      if (L.id === 'sky') continue
+      const cyl = cylinderOf(ENGINE, L)
+      const period = authorPeriodOf(ENGINE, L)
+      const lyr = dom.el('lyr')
+      const surge = dom.el('surge')
+      surge.style.width = px(cyl + ENGINE.W)
+      lyr.appendChild(surge)
+      design.appendChild(lyr)
+
+      // author one period, then repeat it m+1 times. The extra copy covers
+      // the window that hangs past the cylinder just before it wraps.
+      const proto = dom.el(''); proto.style.position = 'absolute'; proto.style.inset = '0'
+      buildLayerContent(ENGINE, worldData, arc, proto, L)
+      for (let k = 0; k <= L.m; k++) {
+        const copy = k === 0 ? proto : proto.cloneNode(true)
+        copy.style.position = 'absolute'
+        copy.style.left = px(k * period)
+        copy.style.top = '0'
+        copy.style.width = px(period)
+        surge.appendChild(copy)
+      }
+      surgeEls[L.id] = surge
+      offsetRef.current[L.id] = 0
+    }
+    surgeElsRef.current = surgeEls
+    arcRef.current = arc
+
+    // shooting-star lane — 2026-08-12, ported from world-07-ring.html (Ben:
+    // "lean more into shooting star concept"). Appended before the scrim
+    // below, same relative order as the reference build's own
+    // `design.insertBefore(shootLane, qScrim)` — the scrim still dims
+    // shoots the same as every other ring layer.
+    const shootLane = dom.el('shootLane')
+    design.appendChild(shootLane)
+    shootLaneRef.current = shootLane
+
+    // scrim (ART-DIRECTION-SPEC.md sec 2: "alpha must reach exactly zero
+    // strictly inside its own element bounds, on every axis"). Appended
+    // last, so it paints above every ring content layer (matches
+    // world-07-ring.html's own insertBefore(layer, qScrim) ordering — every
+    // layer lands before the scrim in DOM order, this component just gets
+    // there by being last to append instead). FULL FRAME, no fitted box —
+    // a 2026-08-08 fitted box (-14% inset, y230-850, ~4:1 aspect) clipped
+    // the ellipse's own falloff at the box edge before it reached
+    // transparent (confirmed by rendering it: a hard horizontal seam,
+    // exactly the "dead stripe" the old elliptical-never-a-band rule meant
+    // to prevent). A full 1920x1080 element has no boundary inside the
+    // frame to expose — its boundary IS the frame's — so the gradient
+    // below just needs to fade out before ITS edges, not some inner box's.
+    const scrim = dom.el('scrim')
+    scrim.style.left = '0'
+    scrim.style.top = '0'
+    scrim.style.width = px(ENGINE.W)
+    scrim.style.height = px(ENGINE.H)
+    design.appendChild(scrim)
+    scrimElRef.current = scrim
+    layoutScrim(stationRef.current)
+
+    stage.style.setProperty('--surge-ms', ENGINE.SURGE_MS + 'ms')
+    worldData.sky.forEach((c, i) => stage.style.setProperty('--sky-' + (i + 1), c))
+
+    writeOffsets()
+    shootLoop()
+
+    // Exposed for concepts/tools/ring-verify.mjs's live-route pass — mirrors the
+    // reference build's own window.__world contract (concepts/world-07-ring.html,
+    // bottom of its <script>) so the gate can drive/measure the component that
+    // actually ships instead of only the standalone HTML file. turn/jumpTo are
+    // function declarations elsewhere in this component body (hoisted, so they
+    // exist by the time this effect runs); station/offset stay live getters so the
+    // gate always reads current state, not a snapshot from mount time.
+    // cylinderOf/authorPeriodOf are re-curried to the reference build's own
+    // single-argument shape (`cylinderOf(L)`, closing over ENGINE) rather than
+    // exposed as ringEngine.js's real two-argument `(engine, layer)` signature —
+    // the gate calls `w.cylinderOf(L)` identically against both passes, and this
+    // is the one place that has to bridge the difference, not the gate.
+    window.__world = {
+      ENGINE, WORLD: worldData, ARC: arc,
+      cylinderOf: (L) => cylinderOf(ENGINE, L),
+      authorPeriodOf: (L) => authorPeriodOf(ENGINE, L),
+      get station() { return stationRef.current },
+      get offset() { return offsetRef.current },
+      jumpTo, turn,
+    }
+
+    // React 18 StrictMode double-invokes this effect in dev; clear what we
+    // built so the second invocation doesn't append a duplicate DOM tree.
+    return () => {
+      ro.disconnect()
+      clearTimeout(shootTimerRef.current)
+      // turn()'s in-flight unlock timer (~SURGE_MS+60) would otherwise fire
+      // post-unmount and call unlock() on null refs, throwing inside
+      // dom.clampSafeBoxStarPeaks(designElRef.current).
+      clearTimeout(turnTimerRef.current)
+      design.replaceChildren()
+      if (window.__world && window.__world.WORLD === worldData) delete window.__world
+    }
+  }, [])
+
+  // Advances one station per question change. Separate from the mount-only
+  // build effect above — this only ever calls turn() (imperative mutation of
+  // existing DOM/refs), never rebuilds anything, so it's safe to depend on a
+  // prop that changes every question. Guards on the last slideKey actually
+  // seen rather than a first-run boolean, so StrictMode's dev double-invoke
+  // of this effect can't fire a spurious turn. The null branch returns
+  // *before* writing the ref, so a null `prev` means only "no real question
+  // has ever been on screen", and no turn fires before the first one.
+  const lastSlideKeyRef = useRef(slideKey)
+  useEffect(() => {
+    // == null: also catches an explicit null from a future call site, not just undefined
+    if (slideKey == null) return
+    const prev = lastSlideKeyRef.current
+    lastSlideKeyRef.current = slideKey
+    if (prev == null || prev === slideKey) return
+    turn()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slideKey])
+
+  function writeOffsets() {
+    const surgeEls = surgeElsRef.current
+    const offset = offsetRef.current
+    for (const L of ENGINE.LAYERS) {
+      if (L.id === 'sky') continue
+      const surgeEl = surgeEls[L.id]
+      if (surgeEl) surgeEl.style.transform = `translate3d(${-offset[L.id]}px,0,0)`
+    }
+  }
+
+  // ── SHOOTING STAR ── ported from world-07-ring.html's spawnShoot()/
+  // shootLoop() verbatim (2026-08-12, Ben: "lean more into shooting star
+  // concept"), adapted to refs instead of module-level `let`s/`window.
+  // __shootLane` since this is a React component, not a page script.
+  // 2026-08-14 (Ben, live on the world-07-ring.html harness — synced here
+  // since this is a verbatim port; see that file's identical comment for
+  // the full back-and-forth): two distinct event types, not one behavior.
+  // A lone spawnShoot() picks its own random direction every call, same as
+  // before this whole round. A separate, rarer spawnMeteorShower() fires
+  // 3-4 staggered shoots that all share ONE direction picked once per burst
+  // ("i was speaking only in terms of a meteor shower where three play back
+  // to back to back. the others can be any direction").
+  function spawnShoot(forceDir) {
+    if (isReduced()) return
+    const lane = shootLaneRef.current
+    if (!lane) return
+    const rot = dom.el('shootRot'), s = dom.el('shoot'), d = forceDir ?? (Math.random() < 0.5 ? 1 : -1)
+    if (d < 0) s.classList.add('rev') // see ringCss's own .shoot.rev comment — keeps the bright head leading
+    rot.style.left = px(d > 0 ? 140 + Math.random() * 500 : 1180 + Math.random() * 500)
+    rot.style.top = px(70 + Math.random() * 760)
+    rot.style.setProperty('--sa', (d > 0 ? 1 : -1) * (14 + Math.random() * 16) + 'deg')
+    s.style.setProperty('--sd2', px((d > 0 ? 1 : -1) * (640 + Math.random() * 380)))
+    s.style.setProperty('--sdu', (1.5 + Math.random() * 1.2) + 's')
+    rot.appendChild(s); lane.appendChild(rot)
+    // 2026-08-14: synced from world-07-ring.html — setTimeout fallback
+    // removal (animationend has no guaranteed fire; a backgrounded/
+    // throttled tab can pause a running animation before it completes, and
+    // a shower spawning 3-4 at once turns a few stalled events into "10 on
+    // screen"). See that file's identical comment.
+    const dur = parseFloat(s.style.getPropertyValue('--sdu')) * 1000
+    setTimeout(() => rot.remove(), dur + 800)
+    s.addEventListener('animationend', () => rot.remove())
+  }
+  // Meteor shower: 3-4 shoots, one shared direction, staggered ~250-550ms
+  // apart — close enough to feel like one event, far enough to read as
+  // distinct streaks.
+  function spawnMeteorShower() {
+    if (isReduced()) return
+    const dir = Math.random() < 0.5 ? 1 : -1
+    const n = 3 + Math.round(Math.random()) // 3-4
+    for (let k = 0; k < n; k++) {
+      setTimeout(() => spawnShoot(dir), k * (250 + Math.random() * 300))
+    }
+  }
+  // ~1 in 5 cycles is a shower instead of a lone shoot — see
+  // world-07-ring.html's identical SHOWER_CHANCE comment.
+  const SHOWER_CHANCE = 0.20
+  function shootLoop() {
+    clearTimeout(shootTimerRef.current)
+    const [a, b] = ENGINE.SHOOT_MS
+    shootTimerRef.current = setTimeout(() => {
+      if (Math.random() < SHOWER_CHANCE) spawnMeteorShower(); else spawnShoot()
+      shootLoop()
+    }, a + Math.random() * (b - a))
+  }
+
+  // scrim alpha only — geometry is fixed at mount (full frame, see the
+  // build effect). Alpha formula mirrors world-07-ring.html's layoutScrim()
+  // exactly: scale-free via loudnessOf(), so it moves with the arc
+  // regardless of what ENGINE.ARC.lo/hi are.
+  //
+  // Ellipse 70%/62% of a 1920x1080 box: radii 1344x670px from centre.
+  // Tuned empirically in two rounds against gates pulling opposite ways —
+  // not derived from one formula, and not stable at either round-1 value:
+  //   - rx (70%, unchanged since round 1) and the transparent stop (74%,
+  //     994px) hold the frame-edge boundary-alpha check (must reach zero
+  //     strictly inside the element's own 1920x1080 bounds — verified live,
+  //     diff 0.9-1.0) while getting the safe box's own corner pixels
+  //     (which sit past the 45% stop) into the gradient's reach at all.
+  //   - ry alone (round 1: 50%, ry=540) got the OLD cap (p99.5<=72) to
+  //     EXACTLY 72/72 — zero headroom, which is what the cap's own
+  //     2026-08-09 retarget (<=68, WARN inside 4pts) exists to catch. 50%
+  //     couldn't be pushed further without more room: it already equalled
+  //     the frame's own half-height. Growing to 62% (670px, 130px past the
+  //     frame's own 540px half-height on that axis) needs no compensating
+  //     change to the transparent stop — the STOP is a fraction of ry too,
+  //     so growing ry alone deepens near-safe-box coverage without moving
+  //     where the vertical falloff completes in absolute pixels enough to
+  //     threaten that axis's own edge (still verified live, not assumed).
+  //     Round 2 measured: st0 p99.5 72 -> 62, six points of real margin
+  //     under the new 68 cap, same bandY-style zero-headroom caveat this
+  //     project has been burned by before — don't let a future change eat
+  //     it back to zero without re-measuring.
+  function layoutScrim(station) {
+    const scrim = scrimElRef.current, arc = arcRef.current
+    if (!scrim || !arc) return
+    const a = lerp(0.30, 0.68, loudnessOf(arc, station))
+    scrim.style.background = `radial-gradient(ellipse 70% 62% at 50% 50%,
+      rgba(2,2,10,${a.toFixed(2)}) 0%, rgba(2,2,10,${(a * 0.75).toFixed(2)}) 45%,
+      transparent 74%)`
+  }
+
+  // Offsets wrap modulo the layer's cylinder, and because every cylinder is
+  // exactly 12 surges, all layers return to phase 0 together on turn 12.
+  // At the wrap we jump rather than animate: sliding back across a whole
+  // cylinder would read as a rewind, and because the content at phase 0 is
+  // identical to phase cylinder, the jump is invisible.
+  //
+  // Deliberate deviation from the reference build: the reference increments
+  // `station` (and unlocks `busy`) inside land(), which the wrap branch
+  // calls immediately but the animate branch defers via a SECOND setTimeout
+  // at ENGINE.Q.IN_START_MS (1150ms, ahead of the SURGE_MS+60 one) — timed
+  // so the question text swap lands mid-transition, and unlocking `busy`
+  // ~550ms before the CSS transition visually finishes. With the question
+  // system out of scope for this component, there is no such constant to
+  // defer to, so here `station` updates synchronously with `offset`, and
+  // `busy` unlocks once, when the transition actually completes
+  // (SURGE_MS+60) — a caller-initiated turn during that window queues (see
+  // below) rather than starting a second transition mid-animation. The
+  // wrap-modulo math and the +1-mod-PANES increment itself are unchanged
+  // from the reference.
+  // A turn() received while busy queues instead of vanishing — the ring's
+  // whole model depends on station always equaling slideIndex % PANES, so a
+  // rapid double-advance (a real thing a host does) must never drop a turn
+  // silently. See concepts/ART-DIRECTION-SPEC.md §8. unlock() is the single
+  // choke point both busy-clearing sites below call through, so a queued
+  // turn drains exactly once busy actually frees up.
+  function unlock() {
+    busyRef.current = false
+    dom.clampSafeBoxStarPeaks(designElRef.current) // item 3: re-clamp at rest, new station
+    if (queuedTurnsRef.current > 0) {
+      queuedTurnsRef.current--
+      turn()
+    }
+  }
+
+  function turn() {
+    if (busyRef.current) { queuedTurnsRef.current++; return }
+    busyRef.current = true
+    const stage = stageElRef.current
+    const offset = offsetRef.current
+    const willWrap = ENGINE.LAYERS.some(L => L.id !== 'sky' &&
+      offset[L.id] + L.surge >= cylinderOf(ENGINE, L))
+
+    if (isReduced() || willWrap) {
+      ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] = (offset[L.id] + L.surge) % cylinderOf(ENGINE, L) })
+      stage.classList.remove('go')
+      writeOffsets()
+      // unlock() may drain a queued turn and re-add 'go' in this same
+      // tick; without a forced reflow between the remove and that re-add,
+      // the browser coalesces both writes into one paint and the wrap
+      // animates as a visible rewind instead of snapping.
+      void stage.offsetWidth
+      stationRef.current = (stationRef.current + 1) % ENGINE.PANES
+      layoutScrim(stationRef.current)
+      unlock()
+      return
+    }
+
+    stage.classList.add('go')
+    ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] += L.surge })
+    writeOffsets()
+    stationRef.current = (stationRef.current + 1) % ENGINE.PANES
+    layoutScrim(stationRef.current)
+    turnTimerRef.current = setTimeout(() => {
+      stage.classList.remove('go')
+      unlock()
+    }, ENGINE.SURGE_MS + 60)
+  }
+
+  function jumpTo(target) {
+    // Authoritative resync: cancels any turn() this jump is interrupting
+    // (and drops anything queued behind it), so a jump made mid-transition
+    // can't be overshot by that turn still landing afterward.
+    clearTimeout(turnTimerRef.current)
+    busyRef.current = false
+    queuedTurnsRef.current = 0
+    // stationRef only ever holds 0..PANES-1 — normalize first, or an
+    // out-of-range/non-integer target (a raw slide index from a future
+    // caller, an off-by-one, a stray float) never equals stationRef.current
+    // and this loop spins forever.
+    target = ((Math.trunc(target) % ENGINE.PANES) + ENGINE.PANES) % ENGINE.PANES
+    const offset = offsetRef.current
+    while (stationRef.current !== target) {
+      ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] = (offset[L.id] + L.surge) % cylinderOf(ENGINE, L) })
+      stationRef.current = (stationRef.current + 1) % ENGINE.PANES
+    }
+    stageElRef.current.classList.remove('go')
+    writeOffsets()
+    layoutScrim(stationRef.current)
+    dom.clampSafeBoxStarPeaks(designElRef.current) // item 3: re-clamp at rest, new station
+  }
+
+  // turn/jumpTo close over refs only (stable identities), so the empty dep
+  // array is safe — the handle never needs to be recomputed after mount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useImperativeHandle(ref, () => ({
+    turn,
+    jumpTo,
+    get station() { return stationRef.current },
+  }), [])
+
+  return (
+    <div
+      ref={stageElRef}
+      className="ring-stage"
+      aria-hidden
+      style={{ position: 'absolute', inset: 0, aspectRatio: '16/9', overflow: 'hidden', background: '#01010a', pointerEvents: 'none' }}
+    >
+      <style>{RING_CSS}</style>
+      <div
+        ref={designElRef}
+        id="design"
+        style={{ position: 'absolute', left: 0, top: 0, width: ENGINE.W, height: ENGINE.H, transformOrigin: '0 0', overflow: 'hidden' }}
+      />
+    </div>
+  )
+})
+
+export default RingAmbient
