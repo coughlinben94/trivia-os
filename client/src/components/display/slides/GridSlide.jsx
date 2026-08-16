@@ -19,7 +19,7 @@ export default function GridSlide({ slide, show }) {
   const { data } = slide
 
   if (data.isShiny && !data.introDone) {
-    return <ShinyIntroScreen slide={slide} theme={theme} show={show} />
+    return <ShinyIntroScreen slide={slide} theme={theme} />
   }
 
   return <GridContent slide={slide} theme={theme} />

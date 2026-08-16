@@ -5,18 +5,35 @@ import { supabase } from './supabase.js'
 // owns the bucket name, path shape, and extension filter.
 export const HOST_PHOTOS_BUCKET = 'trivia-host-photos'
 
+// Shared, cross-show "laugh folder" prefix — Ben's explicit call (2026-08-16):
+// the shiny-intro random photo should draw from ONE pool used every show,
+// not a per-show folder (which also silently loses its photos whenever a
+// show is duplicated, since storage objects aren't copied with the row).
+// Per-show host-photo picking (listHostPhotos below) is untouched and still
+// used by the other slide types (round intro, grading break, etc.) that
+// let a host hand-pick one fixed photo per show.
+const SHARED_PREFIX = '_shared/host-photos'
+
+function listAt(path) {
+  return supabase.storage
+    .from(HOST_PHOTOS_BUCKET)
+    .list(path, { sortBy: { column: 'created_at', order: 'desc' } })
+    .then(({ data, error }) => {
+      if (error || !data) return []
+      return data
+        .filter(f => f.name && /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name))
+        .map(f => ({
+          url: supabase.storage.from(HOST_PHOTOS_BUCKET).getPublicUrl(`${path}/${f.name}`).data.publicUrl,
+          filename: f.name,
+        }))
+    })
+}
+
 export async function listHostPhotos(showId) {
   if (!showId) return []
-  const { data, error } = await supabase.storage
-    .from(HOST_PHOTOS_BUCKET)
-    .list(`${showId}/host-photos`, { sortBy: { column: 'created_at', order: 'desc' } })
-  if (error || !data) return []
-  return data
-    .filter(f => f.name && /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name))
-    .map(f => ({
-      url: supabase.storage
-        .from(HOST_PHOTOS_BUCKET)
-        .getPublicUrl(`${showId}/host-photos/${f.name}`).data.publicUrl,
-      filename: f.name,
-    }))
+  return listAt(`${showId}/host-photos`)
+}
+
+export async function listSharedHostPhotos() {
+  return listAt(SHARED_PREFIX)
 }
