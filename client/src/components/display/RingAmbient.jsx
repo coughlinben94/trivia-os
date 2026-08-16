@@ -583,7 +583,7 @@ const isReduced = () =>
 // stations: [12 x {key,prim,hue,accent}] } — see concepts/world-07-ring.html's
 // own WORLD literal. qColours is accepted but unused here (question-colour
 // styling belongs to the out-of-scope question-rendering system).
-const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
+const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref) {
   const stageElRef = useRef(null)
   const designElRef = useRef(null)
   const surgeElsRef = useRef({})
@@ -720,6 +720,25 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData }, ref) {
       if (window.__world && window.__world.WORLD === worldData) delete window.__world
     }
   }, [])
+
+  // Advances one station per question change. Separate from the mount-only
+  // build effect above — this only ever calls turn() (imperative mutation of
+  // existing DOM/refs), never rebuilds anything, so it's safe to depend on a
+  // prop that changes every question. Guards on the last slideKey actually
+  // seen rather than a first-run boolean, so StrictMode's dev double-invoke
+  // of this effect can't fire a spurious turn. The ref starts at the
+  // mount-time slideKey, and the undefined branch returns *before* writing
+  // it — so `prev === undefined` means only "no real question has ever been
+  // on screen", and no turn fires before the first one.
+  const lastSlideKeyRef = useRef(slideKey)
+  useEffect(() => {
+    if (slideKey === undefined) return
+    const prev = lastSlideKeyRef.current
+    lastSlideKeyRef.current = slideKey
+    if (prev === undefined || prev === slideKey) return
+    turn()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slideKey])
 
   function writeOffsets() {
     const surgeEls = surgeElsRef.current
