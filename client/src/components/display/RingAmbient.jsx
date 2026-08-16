@@ -824,8 +824,15 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
     if (isReduced()) return
     const dir = Math.random() < 0.5 ? 1 : -1
     const n = 3 + Math.round(Math.random()) // 3-4
+    // 2026-08-16 (Ben, direct spec: "staggered 2-3 seconds apart"): was
+    // k * (250 + rand*300) — a fresh random PER star instead of an
+    // accumulating gap, so consecutive stars could land as close as ~144ms
+    // apart (a hyper-critique measured this live) and read as a glitch, not
+    // a shower. `delay` now accumulates a real 2-3s gap between each star.
+    let delay = 0
     for (let k = 0; k < n; k++) {
-      setTimeout(() => spawnShoot(dir), k * (250 + Math.random() * 300))
+      setTimeout(() => spawnShoot(dir), delay)
+      delay += 2000 + Math.random() * 1000
     }
   }
   // ~1 in 5 cycles is a shower instead of a lone shoot — see
