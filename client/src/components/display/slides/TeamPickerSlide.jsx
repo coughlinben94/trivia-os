@@ -102,6 +102,24 @@ export default function TeamPickerSlide({ slide, show }) {
   const [teams, setTeams] = useState([]);
   const [fontsReady, setFontsReady] = useState(false);
 
+  // Background theme (loop lives in public/, not bundled — a fixed 45s
+  // native-loop AAC clip, same "always the same ceremony" reasoning as the
+  // fixed BG_FIXED/STAR_*_FIXED colors above). Starts on mount; fades out
+  // over REVEAL_S once the ring-world reveal begins so the music finishes
+  // exactly as the wipe does, not with a hard cut. Autoplay-with-sound can
+  // be blocked by the browser without a prior user gesture — this is a
+  // kiosk `/display` page a host has already navigated to, so the common
+  // case has one, but `.play()` rejection is swallowed either way rather
+  // than surfaced, since there's no UI here to show an error in.
+  const audioRef = useRef(null);
+  const AUDIO_VOL = 0.55;
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    a.volume = AUDIO_VOL;
+    a.play().catch(() => {});
+  }, []);
+
   // live from teams table, baked on mount (everyone who scanned the QR)
   useEffect(() => {
     if (!show?.id) return;
@@ -151,6 +169,26 @@ export default function TeamPickerSlide({ slide, show }) {
   // the Round 1 beat and lets the draw loop shut down.
   const [settled, setSettled] = useState(false);
   const [revealed, setRevealed] = useState(false);
+
+  // Fades the loop out in step with REVEAL_VARIANTS' wipe (REVEAL_S) rather
+  // than a fixed timer — settled flipping back to false (Stream Deck back
+  // out of 'landed') cancels the fade and snaps volume back up instead of
+  // leaving the music silent for a resumed sequence.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (!settled) { a.volume = AUDIO_VOL; return; }
+    const startVol = a.volume, t0 = performance.now();
+    let raf;
+    const step = (now) => {
+      const p = Math.min(1, (now - t0) / (REVEAL_S * 1000));
+      a.volume = startVol * (1 - p);
+      if (p < 1) raf = requestAnimationFrame(step);
+      else a.pause();
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [settled]);
 
   useEffect(() => { ctl.current.seq = seq; }, [seq]);
   useEffect(() => { ctl.current.theme = theme; spriteCache.current.clear(); }, [theme]);
@@ -313,6 +351,7 @@ export default function TeamPickerSlide({ slide, show }) {
 
   return (
     <div className="absolute inset-0 overflow-hidden">
+      <audio ref={audioRef} src="/audio/lightspeed-theme-loop.m4a" loop preload="auto" />
       {/* The canvas keeps its own fixed 1920x1080 backing store and CSS
           fill — the wrapper only ever moves/fades, so none of that sizing
           logic is disturbed. */}
