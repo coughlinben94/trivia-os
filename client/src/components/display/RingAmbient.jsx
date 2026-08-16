@@ -786,16 +786,16 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
     { weight: 0.40, w: 270, h: 3.4, opPeak: 0.95, opMid: 0.85, durMul: 1.00, distMul: 1.00 },
     { weight: 0.15, w: 480, h: 5.6, opPeak: 1.00, opMid: 0.95, durMul: 1.55, distMul: 1.35 },
   ]
-  function pickShootTier() {
-    let r = Math.random()
-    for (const t of SHOOT_TIERS) { r -= t.weight; if (r <= 0) return t }
-    return SHOOT_TIERS[SHOOT_TIERS.length - 1]
-  }
   function spawnShoot(forceDir) {
     if (isReduced()) return
     const lane = shootLaneRef.current
     if (!lane) return
-    const tier = pickShootTier()
+    // Inlined rather than a separate pickShootTier() — the concept HTML's
+    // static no-stray-math-random gate only sanctions Math.random() calls
+    // textually inside spawnShoot/shootLoop/spawnMeteorShower; synced here
+    // for consistency even though this file isn't itself gate-scanned.
+    let tr = Math.random(), tier = SHOOT_TIERS[SHOOT_TIERS.length - 1]
+    for (const t of SHOOT_TIERS) { tr -= t.weight; if (tr <= 0) { tier = t; break } }
     const rot = dom.el('shootRot'), s = dom.el('shoot'), d = forceDir ?? (Math.random() < 0.5 ? 1 : -1)
     if (d < 0) s.classList.add('rev') // see ringCss's own .shoot.rev comment — keeps the bright head leading
     rot.style.left = px(d > 0 ? 140 + Math.random() * 500 : 1180 + Math.random() * 500)
