@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import QRCode from 'qrcode'
@@ -9,6 +9,7 @@ import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import BaynesWatermark from '../components/display/BaynesWatermark.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
+import JukeboxBreakOverlay from '../components/display/JukeboxBreakOverlay.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import StageFrame from '../display/StageFrame.jsx'
 import BenPhoto from '../components/shared/BenPhoto.jsx'
@@ -306,12 +307,73 @@ function AnswerRevealOverlay({ show, currentSlide }) {
   )
 }
 
+// ─── Break advance (the one display-side nav write) ────────────────────────
+// Same logic the ?from=jukebox return path has always run: normally +1, but if
+// the show's last slide is a winner-reveal and no grading breaks remain, jump
+// straight to it (hands-off show close — see SKILL.md "Final Break"). Now also
+// called by the in-app break overlay's b-hold exit.
+// advance_show is a SECURITY DEFINER RPC (supabase/migrations/20260706001000) —
+// the TV browser has no PIN session, so a raw shows UPDATE gets silently
+// RLS-denied (0 rows). The RPC is the one nav write anon may perform, and it
+// reports success explicitly so a denial can't be silent again.
+async function advanceAfterBreak(showRow) {
+  const sorted = [...(showRow.slides ?? [])].sort((a, b) => a.order - b.order)
+  const cur = showRow.current_slide_index ?? 0
+  const lastSlideIsWinner = sorted[sorted.length - 1]?.type === 'winner-reveal'
+  const noMoreGradingBreaks = !sorted.slice(cur + 1).some(s => s.type === 'grading-break')
+  const next = (lastSlideIsWinner && noMoreGradingBreaks)
+    ? sorted.length - 1
+    : Math.min(cur + 1, sorted.length - 1)
+  if (next <= cur) return { advanced: false, denied: false }
+  const nextSlide = sorted[next]
+  const { data: advanced, error } = await supabase.rpc('advance_show', {
+    p_show_id: showRow.id,
+    p_slide_id: nextSlide?.id ?? null,
+    p_slide_index: next,
+  })
+  if (error || advanced !== true) {
+    console.error('[Display] break advance denied:', error ?? '0 rows')
+    return { advanced: false, denied: true }
+  }
+  return { advanced: true, next, nextSlide, denied: false }
+}
+
 // ─── Live display ──────────────────────────────────────────────────────────
 
-function DisplayInner({ show, direction, isPreview = false }) {
+function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
   const { theme } = useTheme()
   const sortedSlides = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
   const currentSlide = sortedSlides[show.current_slide_index ?? 0] ?? null
+
+  // ── Grading-break music overlay ──
+  // The break lifecycle lives here now, not in GradingBreakSlide (which used to
+  // full-page-navigate to the standalone jukebox app and is pure visual again).
+  // Tracked as "which slide id has been activated" rather than a bare boolean so
+  // a second consecutive grading-break slide re-arms the countdown by itself.
+  const [activeBreakId, setActiveBreakId] = useState(null)
+  // Never in the host's preview window — that pane would start playing music.
+  const breakEligible = currentSlide?.type === 'grading-break' && !isPreview
+  const breakActive = breakEligible && activeBreakId === currentSlide?.id
+
+  // Auto-open after 5s (Ben's timing — the break screen reads, then music takes
+  // the TV). Space/ArrowRight skip the wait, unchanged from the old slide
+  // behavior: those keys were already claimed by the break slide, and RLS-D-1's
+  // "no keyboard nav on /display" removal explicitly carved this out as the
+  // exception. Once the overlay is up the listener is gone — Jukebox owns Space.
+  useEffect(() => {
+    if (!breakEligible || breakActive) return
+    const id = currentSlide?.id
+    const timer = setTimeout(() => setActiveBreakId(id), 5000)
+    const onKey = (e) => {
+      if (e.code === 'Space' || e.code === 'ArrowRight') {
+        e.preventDefault()
+        clearTimeout(timer)
+        setActiveBreakId(id)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => { clearTimeout(timer); window.removeEventListener('keydown', onKey) }
+  }, [breakEligible, breakActive, currentSlide?.id])
 
   const slideFallback = (
     <div style={{
@@ -365,6 +427,23 @@ function DisplayInner({ show, direction, isPreview = false }) {
       <QuestionCounter slide={currentSlide} show={show} />
       <AnswerRevealOverlay show={show} currentSlide={currentSlide} />
       <BaynesWatermark />
+
+      {/* Break music — above everything except the nav-denied banner (z-200).
+          Teardown on external advance is automatic: the host advancing from
+          /host changes currentSlide, breakActive goes false, the overlay
+          unmounts, and useSpotifyPlayer's cleanup (player.disconnect()) stops
+          audio.
+          ponytail: unmount-disconnect cuts audio without a fade on host-side
+          advance; the b-hold path (the normal gesture) keeps the full exit
+          animation + fade. Add a pre-unmount fade only if Ben ever advances
+          breaks from /host in practice. */}
+      {breakActive && (
+        <JukeboxBreakOverlay
+          key={currentSlide.id}
+          lib={currentSlide?.data?.jukeboxLib ?? 'random'}
+          onExit={onBreakAdvance}
+        />
+      )}
     </div>
   )
 }
@@ -388,6 +467,21 @@ export default function Display() {
   // successfully) or a later nav write succeeds. Guard the RESULT, not the
   // cause: any 0-row/error outcome must surface, including unknown future ones.
   const [navDenied, setNavDenied] = useState(false)
+
+  // Jukebox has already run its exit animation + fade + flushed pending
+  // Supabase writes before calling this (its 'b'-hold path awaits EXIT_TOTAL_MS
+  // + flushPendingWrite). Advance the show; the realtime UPDATE flips
+  // currentSlide, which unmounts the overlay.
+  // Identity must stay stable: it lands in Jukebox's b-hold effect deps, and
+  // that effect's cleanup clears the in-flight hold timer — a re-created
+  // callback (any Display re-render, e.g. an S-key scoreboard toggle mid-break)
+  // would silently cancel a hold in progress. Read the show through a ref.
+  const showRef = useRef(null)
+  showRef.current = show
+  const handleBreakAdvance = useCallback(async () => {
+    const res = await advanceAfterBreak(showRef.current)
+    if (res.denied) setNavDenied(true)
+  }, [])
 
   // Capture Chrome's install prompt — only fires when not already installed
   useEffect(() => {
@@ -430,6 +524,10 @@ export default function Display() {
       if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {})
     }
     function onKey(e) {
+      // The break overlay's library UI has text inputs (song search, set names);
+      // /display had none before, so this handler never needed a target check.
+      // Without it, typing an "f" into the jukebox toggles fullscreen.
+      if (e.target?.closest?.('input, textarea, [contenteditable]')) return
       if (e.key === 'f' || e.key === 'F') {
         document.fullscreenElement ? document.exitFullscreen() : enter()
       }
@@ -482,34 +580,15 @@ export default function Display() {
       }
 
       if (data) {
-        // Jukebox return: advance past grading-break; auto-jump to winner-reveal if last slide and no more grading breaks
+        // Jukebox return: the standalone-app fallback round trip (Ben opens
+        // trivia-jukebox.vercel.app by hand if the in-app overlay misbehaves).
+        // Same advance the in-app break exit runs — one function, one behavior.
         if (searchParams.get('from') === 'jukebox') {
-          const sorted = [...(data.slides ?? [])].sort((a, b) => a.order - b.order)
-          const cur = data.current_slide_index ?? 0
-          const lastSlideIsWinner = sorted[sorted.length - 1]?.type === 'winner-reveal'
-          const noMoreGradingBreaks = !sorted.slice(cur + 1).some(s => s.type === 'grading-break')
-          const next = (lastSlideIsWinner && noMoreGradingBreaks)
-            ? sorted.length - 1
-            : Math.min(cur + 1, sorted.length - 1)
-          if (next > cur) {
-            const nextSlide = sorted[next]
-            // advance_show is a SECURITY DEFINER RPC (see supabase/migrations/
-            // 20260706001000) — the TV browser has no PIN session, so a raw
-            // shows UPDATE gets silently RLS-denied (0 rows). The RPC is the
-            // one nav write anon may perform, and it reports success
-            // explicitly so a denial can't be silent again.
-            const { data: advanced, error } = await supabase.rpc('advance_show', {
-              p_show_id: data.id,
-              p_slide_id: nextSlide?.id ?? null,
-              p_slide_index: next,
-            })
-            if (error || advanced !== true) {
-              console.error('[Display] jukebox-return advance denied:', error ?? '0 rows')
-              setNavDenied(true)
-            } else {
-              setNavDenied(false)
-              data = { ...data, current_slide_index: next, current_slide_id: nextSlide?.id ?? null }
-            }
+          const res = await advanceAfterBreak(data)
+          if (res.denied) setNavDenied(true)
+          else if (res.advanced) {
+            setNavDenied(false)
+            data = { ...data, current_slide_index: res.next, current_slide_id: res.nextSlide?.id ?? null }
           }
           const url = new URL(window.location.href)
           url.searchParams.delete('from')
@@ -652,6 +731,7 @@ export default function Display() {
             rounds: [], showState: { isLive: true }, audio_playing: null,
           }}
           direction={1}
+          onBreakAdvance={() => {}}
         />
       </ThemeProvider>
     )
@@ -677,7 +757,7 @@ export default function Display() {
   return (
     <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
       {show.is_live && show.current_slide_id !== null ? (
-        <DisplayInner show={show} direction={direction} />
+        <DisplayInner show={show} direction={direction} onBreakAdvance={handleBreakAdvance} />
       ) : (
         <PreShowScreen show={show} onInstall={canInstall ? handleInstall : null} />
       )}

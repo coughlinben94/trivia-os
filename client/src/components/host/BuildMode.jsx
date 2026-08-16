@@ -87,6 +87,7 @@ const CARD_STYLE = {
   'pyl':           'bg-gradient-to-br from-teal-50   to-blue-100    border-teal-200   hover:border-teal-400',
   'data':          'bg-gradient-to-br from-purple-50 to-violet-100  border-purple-200 hover:border-purple-400',
   'shows':         'bg-gradient-to-br from-slate-50  to-blue-100    border-slate-200  hover:border-blue-400',
+  'music':         'bg-gradient-to-br from-indigo-50 to-purple-100  border-indigo-200 hover:border-indigo-400',
 }
 
 // Shiny questions get a distinct blue/yellow card so they stand out from
@@ -107,7 +108,7 @@ const REST_STATE_BOX_ORDER_KEY = 'trivia-os:rest-state-box-order'
 function defaultRestStateBoxOrder() {
   return [
     ...TYPE_CARDS.filter(c => !c.hidden).map(c => c.type),
-    'theme', 'swing', 'pyl', 'shiny', 'database', 'ticker', 'data', 'shows',
+    'theme', 'swing', 'pyl', 'shiny', 'database', 'ticker', 'data', 'shows', 'music',
   ]
 }
 
@@ -620,6 +621,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                       ticker:   { icon: '👥', name: 'Team List', desc: 'Show all team names on screen', styleKey: 'ticker', onClick: () => openAddModal({ type: 'team-preview', roundId: activeRoundId }) },
                       data:     { icon: '📊', name: 'Data', desc: 'Shows history & analytics', styleKey: 'data', onClick: () => window.open('/dashboard', '_blank') },
                       shows:    { icon: '📋', name: 'My Shows', desc: 'Browse past shows', styleKey: 'shows', onClick: () => window.open('/shows', '_blank') },
+                      music:    { icon: '🎵', name: 'Music Library', desc: 'Jukebox songs, sets & trim points', styleKey: 'music', onClick: () => window.open('/music', '_blank') },
                     }
 
                     return restBoxOrder.map(id => {

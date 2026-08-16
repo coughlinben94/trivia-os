@@ -12,6 +12,8 @@ const AddQuestions = lazy(() => import('./views/AddQuestions.jsx'))
 const Shows       = lazy(() => import('./views/Shows.jsx'))
 const ShowDetail  = lazy(() => import('./views/ShowDetail.jsx'))
 const Dashboard   = lazy(() => import('./views/Dashboard.jsx'))
+const SpotifyCallback = lazy(() => import('./views/SpotifyCallback.jsx'))
+const Music       = lazy(() => import('./views/Music.jsx'))
 
 function RouteShell({ children }) {
   return (
@@ -37,6 +39,8 @@ export default function App() {
           <Route path="/shows" element={<Shows />} />
           <Route path="/shows/:showId" element={<ShowDetail />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/spotify-callback" element={<SpotifyCallback />} />
+          <Route path="/music" element={<Music />} />
           <Route path="*" element={<Navigate to="/host" replace />} />
         </Routes>
       </RouteShell>
