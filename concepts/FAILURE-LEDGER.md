@@ -684,3 +684,92 @@ All three change check code, so they need Ben's sign-off. Until one lands,
 **anyone taking a react-live reading in a worktree must confirm nothing else
 holds 5173 first** (`lsof -nP -iTCP:5173 -sTCP:LISTEN`), or point `runChecks`
 at their own port as above.
+
+---
+
+## St9 bleed, html 50% vs react-live 14% — NOT an instrument bug: a real,
+## single-station content drift (the spanning asteroid field never synced)
+
+**Date:** 2026-08-16
+**Where:** `client/src/components/display/RingAmbient.jsx`, the station loop's
+headline block.
+
+### The disagreement, as reported
+
+`npm run verify:ring` on `origin/main` (576b814): `[html] st9=50.0%` bleed,
+flagged `ACCIDENTAL CLIP (>35%)`, centroid x=1920; `[react-live] st9=14.0%`,
+in band, centroid x=327. Same station, same shared `ringPrimitives.js`, same
+`midnightGalaxy.ring.js` station data, opposite sides of the frame. Carried
+for several sessions as "measurement tools disagreeing," never investigated.
+
+### Root cause — read, then rendered, then confirmed by construction
+
+`concepts/world-07-ring.html` has an `isSpanningField` branch (added
+2026-08-12, Ben: "half on one slide half on another") that touches the st9
+headline in FOUR places: `hw = lerp(900,1300,rHeadline())` (line 630),
+`hh = hw*0.42` (653), `headLeft = (x0+ENGINE.W) - hw/2` (690, centred ON the
+st9/st10 boundary), and `bandY(..., isSpanningField)` as `skipMinBleed` (771 —
+bandY's own comment already documents this exemption by name). **None of the
+four ever reached `RingAmbient.jsx`.** Every other flag from that same round
+(cornerLeft, bandUpper, greenWash, companionBoost, fillCorner…) did, each with
+a "synced from world-07-ring.html" comment. This one branch was missed.
+
+So the two builds were drawing genuinely different objects at st9: html a
+986x414 field straddling the boundary, react-live a 641x438 corner-hugged
+field at the top-LEFT. Confirmed by rendering both at rest on st9 and looking
+at the PNGs, not by reading code alone — react-live additionally stacked the
+`fillCorner` planet directly under its own headline (that filler exists
+*because* the spanning field vacates st9's bottom-left; without the spanning
+field it just crowds the same corner), leaving the right half of the frame
+bare. Zero-indexed throughout: st9 = `stations[9]` = `asteroid field`.
+
+### Which number is right
+
+**Neither instrument is wrong.** Both passes measured, correctly, what their
+own build actually renders. Independently re-derived with a throwaway script
+that does its own bbox/clip math (not `ring-verify.mjs`'s), same drive path,
+same freeze: html cx=1920.0 / 50.0%, react-live cx=327.1 / 14.0% — exact
+match to the gate on both. All ELEVEN other stations report byte-identical
+bleed AND centroid across the two passes on `origin/main`; only st9 differs.
+A coordinate-space or timing bug in one pass could not be that selective.
+
+Also worth naming: the 50% is not a defect either. `ART-DIRECTION-SPEC.md:134`
+says "any crop outside that band **or outside a declared bleed** is an
+accidental clip" and §12's element schema carries a `bleed?` field — but
+`ring-verify.mjs` check 16 has no declared-bleed path, so a deliberately
+spanning element can only ever print `ACCIDENTAL CLIP`. Adding that path is
+gate pass/fail logic — **STAYS HUMAN**, not touched here.
+
+### The fix
+
+The four-part branch ported verbatim into `RingAmbient.jsx`, including the two
+properties that matter for reasons other than geometry: the spanning `hh`
+consumes NO `rHeadline()` draw and `headLeft` bypasses `cornerX()` — get
+either wrong and st9's whole downstream seeded stream desyncs from the
+reference build (the 2026-08-08 bandY/companion bug, same shape).
+
+**Measured, all 12 stations, both builds, pre- and post-fix:** exactly one
+line moves. `react-live st9 [6.4,-61.3,647.8,376.5] cx=327.1 bleed=14.0%` ->
+`[1427,35.9,2413.1,450] cx=1920.0 bleed=50.0%` — byte-identical to the html
+build's own st9 box. No other station's headline box changes by a single
+pixel, in either build. Screenshots re-taken after the fix: the two builds'
+st9 frames now read the same.
+
+### Instrument ten — a concurrent session's vite silently swapped the
+### [react-live] pass's target mid-run
+
+A first post-fix `verify:ring` run showed react-live numbers moving at st0,
+st3, st7, st10, st11 — stations the fix cannot reach. Cause: `verify:ring`'s
+`ensureViteServer()` **reuses whatever is already listening on the hardcoded
+port 5173**, whoever started it. Another Claude Code session in a different
+worktree ran `pkill -f "vite --port 5173"` and started its own; the gate's
+react-live pass then measured THAT worktree's `RingAmbient.jsx`, logging only
+5 `ERR_CONNECTION_REFUSED` lines (caught by `console clean`, which is the only
+reason this was noticed at all) as evidence. The `[html]` pass is immune — it
+serves the file over its own ephemeral-port static server.
+
+Not fixed here (changing the gate's server plumbing wasn't this task's scope,
+and port selection interacts with `ship.sh`). Stated so it is not rediscovered
+as "react-live is nondeterministic": **if a `[react-live]` result shifts at
+stations your change cannot touch, check `pgrep -fl "vite --port 5173"` for
+another session before believing the numbers.**

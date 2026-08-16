@@ -260,13 +260,25 @@ function buildLayerContent(engine, world, arc, host, L) {
       // frame width (Ben: "make it go longer but ends off screen") so the
       // far end actually exits the frame instead of just reading longer
       // within it — see that file's identical comment for the full math.
-      const hw = st.prim === 'ribbon' ? lerp(1600, 2000, rHeadline())
+      // 2026-08-16: synced from world-07-ring.html (2026-08-12, Ben: "half
+      // on one slide half on another"). This branch never made it across
+      // when the rest of that round was synced, so st9's asteroid field
+      // shipped as an ordinary corner-hugged headline here while the
+      // reviewed build had it spanning the st9/st10 boundary. Ported
+      // verbatim — including the fact that the spanning `hh` consumes NO
+      // rHeadline() draw and `headLeft` bypasses cornerX(), which is what
+      // keeps this station's seeded stream in step with the other build.
+      // See that file's own comment for the full reasoning.
+      const isSpanningField = st.prim === 'asteroidField'
+      const hw = isSpanningField ? lerp(900, 1300, rHeadline())
+        : st.prim === 'ribbon' ? lerp(1600, 2000, rHeadline())
         // 2026-08-13: synced from world-07-ring.html — streak's visual
         // length is its width (Ben, st7: "doesn't have a major asset").
         : st.prim === 'streak' ? lerp(860, 1180, rHeadline())
           : lerp(576, 880, rHeadline()) * (st.prim === 'pulsar' ? 0.78 : 1)
       const hh = st.prim === 'streak' ? hw * 0.30
         : st.prim === 'ribbon' ? hw * 0.34
+        : isSpanningField ? hw * 0.42
           : hw * (0.62 + rHeadline() * 0.26)
       const alpha = lerp(0.34, 0.55, lou)
       const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, fill, st.variant) // isHeadline: only per-station breathe (spec §8); variant: per-station prim treatment (st3's dust ring)
@@ -292,7 +304,9 @@ function buildLayerContent(engine, world, arc, host, L) {
       // count is identical whether or not it's overridden.
       const cornerDraw = rHeadline() < 0.5
       const headlineCornerLeft = st.cornerLeft !== undefined ? st.cornerLeft : cornerDraw
-      let headLeft = dom.cornerX(rHeadline, hw, x0, headlineCornerLeft)
+      let headLeft = isSpanningField
+        ? (x0 + engine.W) - hw / 2 // centered ON the st9/st10 boundary
+        : dom.cornerX(rHeadline, hw, x0, headlineCornerLeft)
       // 2026-08-13: synced from world-07-ring.html — `planet` centers its
       // min(w,h) disc in a wider box, leaving ~(hw-hh)/2 of dead horizontal
       // inset between the box edge (which cornerX corner-hugs) and the
@@ -343,7 +357,7 @@ function buildLayerContent(engine, world, arc, host, L) {
         const discInset = hw / 2 - hw * 0.28
         headLeft += headlineCornerLeft ? -discInset : discInset
       }
-      const headTop = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh))
+      const headTop = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh), isSpanningField)
       head.style.left = px(headLeft)
       head.style.top = px(headTop)
       host.appendChild(head)
