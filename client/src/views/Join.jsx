@@ -732,17 +732,14 @@ function LandscapePrompt() {
   )
 }
 
-// ─── Grading popup ────────────────────────────────────────────────────────────
-// Shown instead of the scores drawer when a team tries to peek at the
-// scoreboard while the host is mid-grading-break — auto-dismisses, no button.
-function GradingPopup({ visible, onDismiss }) {
+// ─── Scores-locked popup ───────────────────────────────────────────────────
+// Shown instead of the scores drawer while ScoreboardModal.jsx is open on
+// /host — that component owns show.scores_locked (true on mount, false on
+// close), so `visible` here is a direct read of that flag, not a timer or a
+// guess based on which slide happens to be showing. No dismiss button: it
+// goes away on its own the moment Ben closes the modal, same as it appeared.
+function ScoresLockedPopup({ visible }) {
   const pref = useReducedMotion()
-
-  useEffect(() => {
-    if (!visible) return
-    const t = setTimeout(onDismiss, 2600)
-    return () => clearTimeout(t)
-  }, [visible, onDismiss])
 
   return (
     <AnimatePresence>
@@ -764,10 +761,10 @@ function GradingPopup({ visible, onDismiss }) {
         >
           <div>
             <p style={{ fontFamily: 'Boogaloo, sans-serif', fontSize: '1.2rem', color: '#fff', margin: 0, lineHeight: 1.2 }}>
-              Ben is grading right now — calm your pants 👖
+              Ben is currently updating the scores. Hold your pants.
             </p>
             <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.82rem', margin: '0.25rem 0 0', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.4 }}>
-              Scores will be back up once grading wraps
+              Scores will be back up in a moment
             </p>
           </div>
         </motion.div>
@@ -1081,7 +1078,6 @@ export default function Join() {
   const [scoresDrawerOpen, setScoresDrawerOpen]   = useState(false)
   const [scoresDrawerTeams, setScoresDrawerTeams] = useState([])
   const [scoresDrawerLoading, setScoresDrawerLoading] = useState(false)
-  const [gradingPopup, setGradingPopup]           = useState(false)
 
   const theme = useMemo(() => show?.theme_id ? getTheme(show.theme_id) : null, [show?.theme_id])
 
@@ -1274,16 +1270,19 @@ export default function Join() {
   }
 
   async function openScoresDrawer() {
-    const currentSlide = show?.slides?.find(s => s.id === show.current_slide_id)
-    if (currentSlide?.type === 'grading-break') {
-      setGradingPopup(true)
-      return
-    }
+    if (show?.scores_locked) return
     setScoresDrawerOpen(true)
     setScoresDrawerLoading(true)
     await refreshScores()
     setScoresDrawerLoading(false)
   }
+
+  // Forces the drawer closed if Ben starts editing while a team already has
+  // it open — scores_locked engaging mid-view shouldn't leave mid-edit
+  // numbers on screen just because the drawer opened before the lock did.
+  useEffect(() => {
+    if (show?.scores_locked && scoresDrawerOpen) setScoresDrawerOpen(false)
+  }, [show?.scores_locked])
 
   // ── Render ────────────────────────────────────────────────────────────
   const disconnected = connStatus === 'CHANNEL_ERROR' || connStatus === 'TIMED_OUT' || connStatus === 'CLOSED'
@@ -1305,7 +1304,7 @@ export default function Join() {
   return (
     <>
       <ReconnectingBanner visible={disconnected} />
-      <GradingPopup visible={gradingPopup} onDismiss={() => setGradingPopup(false)} />
+      <ScoresLockedPopup visible={!!show?.scores_locked} />
       {phase === 'register' && <RegistrationScreen onRegister={handleRegister} show={show} theme={theme} />}
       {phase === 'waiting'  && (
         <>

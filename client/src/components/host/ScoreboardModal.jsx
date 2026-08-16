@@ -257,6 +257,19 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
       .then(({ data }) => { setTeams(data ?? []); setLoading(false) })
   }, [show.id])
 
+  // Locks the phone scoreboard (Join.jsx) for as long as this modal is open —
+  // Ben's own words: teams shouldn't see mid-edit numbers while he's typing.
+  // Mount/unmount is the right lifetime: opening this modal IS "starting to
+  // update scores", closing it (via the X, Escape, or navigating away) IS
+  // "done". Known gap: a hard crash/tab-close skips the unmount cleanup and
+  // leaves phones locked for the rest of the night — acceptable risk for a
+  // laptop that stays open through a 2-3hr show; not worth a beforeunload
+  // handler (unreliable for async writes anyway) for that edge.
+  useEffect(() => {
+    supabase.from('shows').update({ scores_locked: true }).eq('id', show.id)
+    return () => { supabase.from('shows').update({ scores_locked: false }).eq('id', show.id) }
+  }, [show.id])
+
   function save(team, fieldKey) {
     clearTimeout(saveTimers.current[team.id])
     const cellKey = `${team.id}:${fieldKey}`
