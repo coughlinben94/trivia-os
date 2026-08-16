@@ -773,10 +773,18 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
   // Weighted so most stays unobtrusive background motion and only a few per
   // hour actually grab a look. distMul/durMul scale the existing random
   // ranges rather than replacing them, so each tier still has its own spread.
+  // 2026-08-16 rebalance: the first pass (60/35/5 @ 150px/0.55 spark) traded
+  // away overall presence for variety — a hyper-critique measured its
+  // weighted visible-mass proxy (w*h*opacity) at ~63% of the pre-tier
+  // baseline, directly against Ben's earlier "lean more into shooting star
+  // concept" (2026-08-12). He confirmed tonight: wants variety AND
+  // visibility, not a trade-off. Spark boosted and reweighted toward the
+  // brighter tiers — same proxy math now lands ~105% of baseline while
+  // keeping three genuinely distinct tiers (364 / 872 / 2688).
   const SHOOT_TIERS = [
-    { weight: 0.60, w: 150, h: 2.2, opPeak: 0.55, opMid: 0.45, durMul: 0.72, distMul: 0.65 },
-    { weight: 0.35, w: 270, h: 3.4, opPeak: 0.95, opMid: 0.85, durMul: 1.00, distMul: 1.00 },
-    { weight: 0.05, w: 480, h: 5.6, opPeak: 1.00, opMid: 0.95, durMul: 1.55, distMul: 1.35 },
+    { weight: 0.45, w: 200, h: 2.6, opPeak: 0.70, opMid: 0.58, durMul: 0.78, distMul: 0.70 },
+    { weight: 0.40, w: 270, h: 3.4, opPeak: 0.95, opMid: 0.85, durMul: 1.00, distMul: 1.00 },
+    { weight: 0.15, w: 480, h: 5.6, opPeak: 1.00, opMid: 0.95, durMul: 1.55, distMul: 1.35 },
   ]
   function pickShootTier() {
     let r = Math.random()
