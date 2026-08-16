@@ -149,12 +149,6 @@ const KEYFRAMES = `
     0%,100% { transform: translateX(0); }
     50%     { transform: translateX(var(--fx,10vw)); }
   }
-  @keyframes ambientBloom {
-    0%   { opacity: 0; transform: translate(0,0); }
-    18%  { opacity: var(--hi,.55); }
-    78%  { opacity: calc(var(--hi,.55)*.72); }
-    100% { opacity: 0; transform: translate(var(--bx,5vw), var(--by,-3vh)); }
-  }
   @keyframes ambientStretchY {
     0%,100% { transform: scaleY(1); }
     50%     { transform: scaleY(var(--sy,1.05)); }
@@ -186,7 +180,6 @@ const KEYFRAMES = `
     @keyframes streakOnce { 0%,100% { opacity: 0; } }
     @keyframes ambientFloatY { 0%,100% { transform: none; } }
     @keyframes ambientFloatX { 0%,100% { transform: none; } }
-    @keyframes ambientBloom  { 0%,100% { opacity: var(--hi,.55); } }
     @keyframes ambientStretchY { 0%,100% { transform: none; } }
     @keyframes ambientSway     { 0%,100% { transform: none; } }
   }
