@@ -1,0 +1,113 @@
+/* Ported from trivia-jukebox src/index.css — keyframes, entrance utilities,
+   and the scrubber styling the jukebox components depend on. Tokens live in
+   tailwind.config.js; --color-accent is also needed as a raw CSS var because
+   SongDetailModal/Player build inline linear-gradients from it. */
+:root {
+  --color-accent: #7b8cff;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-fade-up {
+  animation: fade-up 200ms var(--ease-out) both;
+}
+
+.animate-fade-in {
+  animation: fade-in 200ms var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up {
+    animation: fade-in 150ms ease both;
+  }
+}
+
+/* Equalizer bars */
+@keyframes equalizer {
+  from { transform: scaleY(0.2) }
+  to   { transform: scaleY(1)   }
+}
+
+/* Live screen transitions */
+@keyframes live-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Waiting-state platter — slow breathing pulse so the empty-turntable screen
+   reads as "loading" rather than frozen/broken while the SDK delivers the
+   first track. */
+@keyframes platter-shimmer {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1;    }
+}
+
+
+/* Scrubber */
+.player-scrubber {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 20px;          /* tall enough for the thumb — track is styled separately */
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+  display: block;
+}
+
+.player-scrubber::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+  margin-top: -4.5px;   /* center 12px thumb on 3px track */
+  transition: transform 120ms ease-out;
+}
+
+.player-scrubber:hover::-webkit-slider-thumb {
+  transform: scale(1.3);
+}
+
+.player-scrubber::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  border: none;
+  cursor: pointer;
+}
+
+.player-scrubber::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--color-accent) 0%,
+    var(--color-accent) var(--progress, 0%),
+    rgba(255,255,255,0.12) var(--progress, 0%),
+    rgba(255,255,255,0.12) 100%
+  );
+}
+
+.player-scrubber::-moz-range-track {
+  height: 3px;
+  border-radius: 9999px;
+  background: rgba(255,255,255,0.12);
+}
