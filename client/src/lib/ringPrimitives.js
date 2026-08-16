@@ -1818,7 +1818,9 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // (makeNebulaRing's own approved gold tint, hue+14) with a slight
     // blur — Saturn's rings as a dust sheet, not a wire. Gated on a new
     // trailing `variant` param (station-data flag, same dispatch pattern
-    // as `accent`/`greenWash`); every existing call site passes nothing,
+    // as `accent`/`region`; `greenWash`, the flag originally named here,
+    // was retired 2026-08-16 — see the SKY_REGIONS block); every existing
+    // call site passes nothing,
     // so st0 renders byte-identical by construction.
     const dust = variant === 'dust'
     const rx = Math.min(bodySize * (dust ? 1.22 : 1.08), w / 2 - 4), ry = rx * 0.32
@@ -2781,6 +2783,166 @@ function clampSafeBoxStarPeaks(prefix, engine, designEl) {
   }
 }
 
+// ═══ SKY REGIONS ═══ (2026-08-16) replaces the retired per-station wash
+// (`WASH_KINDS` / `greenWash` / `orangeWash`, deleted from both builds in
+// the same change). Ben, over several days: "I still don't think the green
+// and orange color shifts are done particularly well" / "I didn't love the
+// green and orange things anyways" — after four rounds of geometry/alpha
+// re-tuning on the wash itself. Root cause named in the accepted rework
+// proposal, not another re-tune: the wash was an OBJECT (a paintable,
+// pointable-at radial box) riding the same mid-layer surge as everything
+// else, so its color arrived WITH the pan as a wipe. Atmosphere that works
+// is the opposite - you feel the world go green without being able to point
+// at the green thing.
+//
+// Two mechanisms replace it, both anchored, neither free-floating (an
+// unanchored soft shape on the far layer is a documented removed failure -
+// see RingAmbient.jsx's "far-layer wash" removal note):
+//
+//  1. THE SKY ITSELF leans toward the region hue. One always-present layer
+//     per region, parked inside the never-transformed sky layer (so it does
+//     NOT slide with the pan), bottom-weighted (`to top`, transparent by
+//     ~58% of frame height) so it reads as a region of sky rather than a
+//     filter over the frame. Its OPACITY is the station's region weight,
+//     CSS-transitioned on its own slower clock (see SKY_TINT_*_MS) - a
+//     transition, never a keyframe, precisely so a Stream-Deck-fast run of
+//     turns retargets smoothly instead of stacking in-flight animations
+//     (emil-design-eng: "transitions retarget, keyframes restart from
+//     zero").
+//  2. A SOURCE GLOW anchored to the region's own headline object (the
+//     pulsar, the supernova) and inserted UNDER it in paint order, so the
+//     object and everything drawn after it silhouette in front of the
+//     light. This is what makes the color have a visible reason.
+//
+// Station data carries `region: 'aurora'|'ember'` on member stations and
+// `regionSource: true` on the one station whose object is the light source.
+// Shoulder weights are DERIVED from index distance (skyRegionWeights below),
+// never hand-authored per station.
+export const SKY_REGIONS = {
+  // Hues match the objects that cause them: aurora sits on the lit
+  // planet (140) / pulsar (120) pair, ember on the supernova (36).
+  aurora: { hue: 152, tintSat: 60, tintLight: 27, srcSat: 55, srcLight: 56 },
+  ember: { hue: 26, tintSat: 66, tintLight: 28, srcSat: 62, srcLight: 56 },
+}
+
+// "Weather, not a light switch" — a continuous weight curve across station
+// index, not an on/off flag. Asymmetric on purpose: the approach station
+// gets a quarter-strength preview, the exit station holds half strength so
+// the region thins out while sharing the sky with whatever comes next,
+// rather than switching off at the boundary.
+const REGION_W_APPROACH = 0.25
+const REGION_W_EXIT = 0.50
+
+// -> array[stationIndex] = { aurora: w, ember: w }. Cyclic (station 11
+// neighbours station 0, same wrap rule the noun-uniqueness spacing uses).
+// Every region is scored at every station, so two regions overlapping a
+// shoulder just stack their two layers' opacities instead of one clobbering
+// the other.
+export function skyRegionWeights(stations) {
+  const n = stations.length
+  const keys = Object.keys(SKY_REGIONS)
+  return stations.map((_, i) => {
+    const w = {}
+    for (const k of keys) {
+      w[k] = stations[i].region === k ? 1
+        : stations[(i - 1 + n) % n].region === k ? REGION_W_EXIT
+          : stations[(i + 1) % n].region === k ? REGION_W_APPROACH
+            : 0
+    }
+    return w
+  })
+}
+
+// The turn is SURGE_MS (1700ms). These are deliberately longer and on their
+// own clock: the lean starts when the turn starts but is still visibly
+// settling ~900ms after the pan has landed ("like eyes adjusting to a
+// differently-lit room"), and decays slower still on the way out. Curve is a
+// mild ease-out, NOT one of the strong UI curves - a strong ease-out at this
+// duration is ~97% complete before the pan even lands, which would put the
+// whole settle back inside the turn and undo the decoupling. Measured
+// against this curve: ~88% at pan-land, the last ~12% over the following
+// 900ms.
+export const SKY_TINT_IN_MS = 2600
+export const SKY_TINT_OUT_MS = 3800
+export const SKY_TINT_EASE = 'cubic-bezier(.25,.46,.45,.94)'
+
+// Bottom-weighted: deepest at the very bottom edge, gone by 58% of frame
+// height, so the top ~40% of sky stays the world's own midnight purple.
+// Guardrail against the "filter over the screen" failure this replaces - a
+// uniform full-frame tint reads as a filter, a bottom-weighted one with a
+// visible resident cause reads as place.
+function skyTintBackground(cfg) {
+  return `linear-gradient(to top,
+    ${hsla(cfg.hue, cfg.tintSat, cfg.tintLight, 0.62)} 0%,
+    ${hsla(cfg.hue, cfg.tintSat - 6, cfg.tintLight - 5, 0.30)} 22%,
+    ${hsla(cfg.hue, cfg.tintSat - 12, cfg.tintLight - 8, 0.10)} 40%,
+    transparent 58%)`
+}
+
+function makeSkyTints(el) {
+  const tints = {}
+  for (const key of Object.keys(SKY_REGIONS)) {
+    const t = el('sky-tint')
+    t.style.background = skyTintBackground(SKY_REGIONS[key])
+    t.style.opacity = '0'
+    tints[key] = t
+  }
+  return tints
+}
+
+// Drives the tint layers to the target station's weights. `animate:false`
+// snaps with the transition disabled - used by jumpTo(), which is an
+// authoritative resync, and which is also the ONLY way concepts/tools/
+// ring-verify.mjs drives stations. That matters: the gate calls
+// freezeFrame() (`getAnimations().forEach(a => a.currentTime = 0)`)
+// immediately after jumpTo, which would rewind an in-flight CSS transition
+// to its PRE-jump value and silently measure the wrong station's sky.
+// Snapping on jump means there is no transition object for it to rewind.
+export function applySkyTints(tints, weights, station, animate) {
+  const w = weights[station] || {}
+  for (const key of Object.keys(tints)) {
+    const t = tints[key]
+    const next = w[key] || 0
+    const cur = parseFloat(t.style.opacity) || 0
+    t.style.transitionDuration = !animate ? '0ms'
+      : (next < cur ? SKY_TINT_OUT_MS : SKY_TINT_IN_MS) + 'ms'
+    t.style.opacity = next.toFixed(3)
+  }
+}
+
+// Feather width at the station's own left/right boundary. The headline this
+// glow belongs to is corner-anchored, so an unmasked glow spills into the
+// NEIGHBOUR station's frame - the exact complaint that already forced a
+// boundary mask onto the planet's own d-glow (Ben, st4: "half on one page
+// half on other"). Masking to the station box also means this element can
+// never paint over the previous station's objects, which appending it into
+// the shared mid-layer host would otherwise allow.
+const SRC_FEATHER_PX = 220
+
+// One additional low-alpha radial glow, station-box sized so it cannot
+// bleed, centred on the headline object's own visual centre. The caller
+// inserts it BEFORE the headline element, so the object - and every element
+// drawn after it - occludes it. Deliberately NOT a new free-floating
+// primitive: an unanchored soft shape on this system is a documented,
+// already-removed failure mode.
+function makeSourceGlow(el, engine, regionKey, x0, cx, cy, size) {
+  const cfg = SKY_REGIONS[regionKey]
+  const g = el('sky-src')
+  g.style.left = px(x0); g.style.top = '0'
+  g.style.width = px(engine.W); g.style.height = px(engine.H)
+  const rx = Math.round(size * 1.25), ry = Math.round(size * 1.05)
+  const cxPct = (((cx - x0) / engine.W) * 100).toFixed(1)
+  const cyPct = ((cy / engine.H) * 100).toFixed(1)
+  g.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${cxPct}% ${cyPct}%,
+    ${hsla(cfg.hue, cfg.srcSat, cfg.srcLight, 0.17)} 0%,
+    ${hsla(cfg.hue, cfg.srcSat, cfg.srcLight - 12, 0.09)} 40%,
+    transparent 74%)`
+  const m = `linear-gradient(to right, transparent 0px, black ${SRC_FEATHER_PX}px,` +
+    ` black calc(100% - ${SRC_FEATHER_PX}px), transparent 100%)`
+  g.style.maskImage = m; g.style.webkitMaskImage = m
+  return g
+}
+
 // ringDom: bind a class prefix + engine once per consumer. Returns el/
 // makePrim/bandY/buildStars ready to call with no prefix/engine argument to
 // ever get wrong - see the module comment above for the bug this replaces.
@@ -2812,6 +2974,8 @@ export function ringDom(prefix, engine) {
     // duplication: an earlier version of the pair-bridge skip listed
     // 'streak'/'ribbon' only, missing 'lens', which this table already had).
     isElongatedKind: (kind) => kind in ROTATION_MAX_DEG,
+    makeSkyTints: () => makeSkyTints(el),
+    makeSourceGlow: (regionKey, x0, cx, cy, size) => makeSourceGlow(el, engine, regionKey, x0, cx, cy, size),
   }
 }
 
@@ -2864,6 +3028,17 @@ export function ringCss(prefix) {
 .${p}void{position:absolute;inset:0;
   background:radial-gradient(ellipse 138% 128% at 50% 48%,
     var(--sky-1) 0%, var(--sky-2) 46%, var(--sky-3) 78%, var(--sky-4) 100%)}
+
+/* Sky-region tint (see SKY_REGIONS above). Lives inside the never-
+   transformed sky layer, so it never slides with the pan. Only the
+   DURATION is written per-call (applySkyTints, asymmetric in/out) - the
+   property and curve stay here so nothing but timing varies. Opacity-only
+   transition: cheap, compositor-friendly, and interruptible/retargetable,
+   which is what makes a fast Stream-Deck run of turns smooth instead of a
+   stack of competing animations. */
+.${p}sky-tint{position:absolute;inset:0;pointer-events:none;opacity:0;
+  transition:opacity ${SKY_TINT_IN_MS}ms ${SKY_TINT_EASE}}
+.${p}sky-src{position:absolute;pointer-events:none}
 
 .${p}star{position:absolute;border-radius:50%;background:var(--sc);
   animation:${tw} var(--tp) ease-in-out infinite;animation-delay:var(--td)}

@@ -257,7 +257,7 @@ header.pg b{color:#ddd8e8;font-weight:500}
 // consumes (with the "ring-" prefix) drives this reference build too. Every
 // el/makePrim/bandY/buildStars call site below goes through the returned
 // `dom` object — no call site ever passes a literal prefix string again.
-import { ringDom, px, hsla, ringCss } from '../client/src/lib/ringPrimitives.js';
+import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, applySkyTints } from '../client/src/lib/ringPrimitives.js';
 import { rng, lerp, skyFromTheme, fillOf } from '../client/src/lib/ringEngine.js';
 import { THEMES } from '../client/src/themes/index.js';
 
@@ -369,13 +369,13 @@ const WORLD = {
     { key:'spiral galaxy',  prim:'lens',         hue:170, accent:false, companionKind:'dots' }, // was st3 — spiral/disc; hue 276->170 2026-08-12, Ben "still hate the oval purple color" after 2 rounds of shape/brightness fixes — st0/st1/st2 were 3 near-identical purples in a row (256/276/268), moved to green-teal; companionKind 2026-08-13 (Ben: "cluster of random blue shapes... trashed and redone" — rolled companion was 'blob', forced to 'dots')
     { key:'star cluster',   prim:'dots',         hue:268, accent:false, companionUpper:true, maskSpots:[[0.33781645569620256,0.14912974683544306,0.055379746835443,0.09142053445850912],[0.6637658227848102,0.16319444444444445,0.06645569620253144,0.14064697609001406]] }, // was st1 — scattered cluster; companionUpper 2026-08-14 (Ben: "move the spiral bottom right to top right" — companion joins the headline's top band, still the opposite corner; see the companion block)
     { key:'amber planet',   prim:'ring',         variant:'dust', hue:28,  accent:true, maskSpots:[[0.10126582278481013,0.15897503516174402,0.03955696202531646,0.08860759493670886],[0.4216772151898734,0.19413677918424754,0.05221518987341778,0.0956399437412096]] }, // was st0, was 'orange nebula'/blob+ring:true — rebuilt 2026-08-13 (Ben: "that saturn like planet needs a reworking... take inspiration from the other planets that weve already shipped"). Every blob-era construction (3 lobes, s-core ball, makeNebulaRing donut) failed the same "three circles"/"coffee stain" critique repeatedly; now uses the SAME `ring` anatomy Ben praised at st0 (drawPlanetDisc body + back/front ring halves) with variant:'dust' — a wide soft gold band, not st0's thin crisp stroke — see makePrim's `ring` branch. KNOWN TRADEOFF, flagged not hidden: radial-mass family was {0,4,8} (all >=3 apart); st3 joining it puts st3-st4 at distance 1 — Ben's explicit ask for a Saturn-like planet here overrode the spacing rule, his call to revisit.
-    { key:'lit planet',     prim:'planet',       hue:140, accent:false, greenWash:true }, // NEW — radial mass; greenWash 2026-08-12 (Ben: "green on bottom half of two slides")
-    { key:'pulsar',         prim:'pulsar',       hue:120, accent:false, greenWash:true, noCompanion:true }, // NEW — radiant burst; greenWash 2026-08-12 (same); maskSpots removed 2026-08-13 — both were this station's own companion/detail-speck content, not neighbor bleed (round-6 misdiagnosed); noCompanion added instead, see the companion block's own comment
+    { key:'lit planet',     prim:'planet',       hue:140, accent:false, region:'aurora' }, // NEW — radial mass; `region` replaces greenWash 2026-08-16 — see ringPrimitives.js's SKY_REGIONS block for why the wash was retired outright instead of re-tuned a fifth time
+    { key:'pulsar',         prim:'pulsar',       hue:120, accent:false, region:'aurora', regionSource:true, noCompanion:true }, // NEW — radiant burst; region:'aurora' 2026-08-16 + regionSource: the pulsar IS the light source the aurora sky leans toward, so it carries the anchored light-field; maskSpots removed 2026-08-13 — both were this station's own companion/detail-speck content, not neighbor bleed (round-6 misdiagnosed); noCompanion added instead, see the companion block's own comment
     { key:'rose nebula',    prim:'nebulaCloud',  hue:330, accent:true, cornerLeft:false, companionBoost:true }, // was st8 — asymmetric cloud, 2026-08-12; cornerLeft:false 2026-08-12 (Ben: "needs to be on other bottom corner" — was landing bottom-left, forced bottom-right); companionBoost 2026-08-13 (Ben: "too blank, add something" — this station sits near the ARC trough, lou≈0.15, so its companion rendered as a barely-visible wisp; see the companion block)
     { key:'comet',          prim:'streak',       hue:208, accent:false, cornerLeft:false, companionBoost:true, companionKind:'lens', maskSpots:[[0.5957278481012659,0.13787798874824192,0.04509493670886067,0.07876230661040787]] }, // was st4 — elongated streak; cornerLeft:false 2026-08-13 — the redesigned streak draws more seeded points (ion tail), which reordered this station's corner draw toward frame-center; a comet head near center risks the safe box, and Ben's standing rule is corners; companionBoost 2026-08-13 (Ben: "need something else bottom left" — this is the ARC's quietest station, lou=0, companion alpha bottomed out invisible; see the companion block); companionKind:'lens' same date — the roll landed on 'dots', whose 3-4px specks + dim halo stay illegible at frame scale even boosted (rendered and confirmed, round 2); forced to the defined-shape lens instead, st1-companionKind precedent
-    { key:'binary pair',    prim:'binary',       hue:214, accent:false, orangeWash:true }, // was st7 — radial mass; orangeWash 2026-08-13 (Ben: "orange flare???" / "need more green and orange areas... whole background shifts for a slide or two" — new wash color, same mechanism as greenWash, see WASH_KINDS)
+    { key:'binary pair',    prim:'binary',       hue:214, accent:false }, // was st7 — radial mass; orangeWash REMOVED 2026-08-16: an orange wash over a BLUE object had no visible cause, which is precisely why it read as a filter rather than a place. The warm region moved to st10, whose own object (the supernova) is already amber — a data-level fix, not another alpha re-tune
     { key:'asteroid field', prim:'asteroidField',hue:160, accent:false, fillCorner:true }, // NEW — scattered cluster; fillCorner 2026-08-12 (Ben: "need something here" on the bottom-left, which the spanning-field's own headline — centered on the st9/st10 boundary — never reaches)
-    { key:'supernova',      prim:'spikes',       hue:36,  accent:true }, // was st2 — radiant burst; noWash flag removed 2026-08-13 — the far-layer wash loop it opted out of is gone entirely now (see buildLayerContent's far-layer removal note), so the flag had nothing left to read
+    { key:'supernova',      prim:'spikes',       hue:36,  accent:true, region:'ember', regionSource:true }, // was st2 — radiant burst; region:'ember' 2026-08-16 — an actual exploding star is an undeniable source for a warm sky; single-station core, so st9 previews at 0.25 and st11 fades out at 0.5 (skyRegionWeights derives both from index distance); noWash flag removed 2026-08-13 — the far-layer wash loop it opted out of is gone entirely now (see buildLayerContent's far-layer removal note), so the flag had nothing left to read
     { key:'aurora ribbon',  prim:'ribbon',       hue:196, accent:false, bandUpper:false }, // was st11 (unchanged) — elongated streak; bandUpper:false 2026-08-12 (Ben: "move to bottom right" — was top-right, horizontal already right)
   ],
   /* mirrors client/src/worlds/midnightGalaxy.ring.js's hueAnchors — this
@@ -435,16 +435,17 @@ new ResizeObserver(fit).observe(stage); fit();
 /* ═══ BUILD ═══ */
 const surgeEls = {};
 let starTotal = 0, formTotal = 0;
-// Background-wash color table (2026-08-13) — station-data flag -> wash hue.
-// See buildLayerContent's per-station wash loop for how these get drawn.
-// fromTop (2026-08-14, Ben: "same with orange, but flip it so half circle
-// lives on top rail, where green is bottom") — orange hangs its dome from
-// the top edge instead of rising from the bottom, so the two accent colors
-// read as distinct bands rather than stacking in the same place.
-const WASH_KINDS = [
-  { flag: 'greenWash',  hue: 150, fromTop: false },
-  { flag: 'orangeWash', hue: 30,  fromTop: true },
-];
+// The background-wash color table (WASH_KINDS, 2026-08-13..14) is GONE as
+// of 2026-08-16 — same deletion in RingAmbient.jsx, both builds. Replaced
+// by the sky-region system in ringPrimitives.js (SKY_REGIONS /
+// skyRegionWeights / applySkyTints / makeSourceGlow); see that module's own
+// block comment for the reasoning. Short version: the wash was an object on
+// the mid layer, so its color arrived WITH the pan as a wipe, and four
+// rounds of geometry/alpha tuning never touched that. Nothing colored slides
+// with the pan now — the sky itself leans, on its own slower clock, lit by
+// the region's own headline object.
+const skyTints = {};                          // region key -> tint layer, built in build() below
+const skyWeights = skyRegionWeights(WORLD.stations);
 
 function buildLayerContent(host, L){
   const period = authorPeriodOf(L);
@@ -810,6 +811,34 @@ function buildLayerContent(host, L){
       }
       const headCx = headLeft + hw/2, headCy = headTop + hh/2;
 
+      /* ── SKY-REGION SOURCE GLOW (2026-08-16) ── same block in
+         RingAmbient.jsx, both builds. Only the region's own `regionSource`
+         station draws one: an enlarged low-alpha light-field centred on that
+         station's headline object and inserted BEFORE it, so the object —
+         and every element appended after it — silhouettes in FRONT of the
+         light rather than being painted over by it. This is the "why is the
+         sky green here" half of the region; the sky tint itself lives on the
+         never-transformed sky layer (see build() below).
+         Station-box sized and edge-feathered inside makeSourceGlow, so a
+         corner-anchored headline's glow can't spill onto the neighbouring
+         slide (Ben's "half on one page half on other" complaint already
+         forced the same mask onto the planet's own d-glow), and can't paint
+         over the PREVIOUS station's objects either, which sharing this mid-
+         layer host would otherwise allow. */
+      if (st.regionSource && SKY_REGIONS[st.region]){
+        /* Visual centre, not box centre: `spikes` re-centres its core+rays
+           (and its own d-glow) on the corner point above, so the light has to
+           follow them or it reads as a second, offset source. */
+        let gcx = headCx, gcy = headCy;
+        if (st.prim === 'spikes'){
+          gcx = headLeft + hw * (headlineCornerLeft ? 0.30 : 0.70);
+          gcy = headTop  + hh * (pairUpper ? 0.30 : 0.70);
+        }
+        host.insertBefore(dom.makeSourceGlow(st.region, x0, gcx, gcy, Math.max(hw,hh)), head);
+        formTotal++;
+      }
+
+
       /* Any station whose data declares `ring:true` gets a nebula-ring
          accessory layer (currently just orange nebula — "doesn't look like
          a nebula" / "needs a ring around it," Ben's literal fix direction,
@@ -835,164 +864,13 @@ function buildLayerContent(host, L){
          (2) offset off the blob's own center so ring and core-glow are no
          longer concentric — an eye's iris and pupil are always concentric,
          a real dust ring around an object usually isn't perfectly so. */
-      /* 2026-08-12 (Ben: "more green and orange... like green on bottom
-         half of two slides, makes it look like a diff galaxy of sorts").
-         st4/st5 (lit planet/pulsar) picked: adjacent stations, both
-         already green-hued (140/120) — the wash reinforces their existing
-         identity instead of clashing with an unrelated object color.
-         Station-data flag, same pattern as `ring`/`accent`/`cornerLeft`.
-         A plain linear-gradient wash, not a `blob` primitive draw — this
-         is atmosphere/mood, not a named object, so it doesn't compete
-         with the noun-uniqueness rules that govern headline/companion
-         primitives. Full station width, fixed green (150) independent of
-         each station's own object hue so the two adjacent slides read as
-         one continuous tinted region, not two separately-tuned greens. */
-      // 2026-08-13: generalized to a small (flag, wash-hue) table instead of
-      // one hardcoded greenWash block, so a second color doesn't mean a
-      // second hand-copied 30-line block (Ben: "need more green and orange
-      // areas... like the whole background shifts for a slide or two" — a
-      // real second family, not a one-off). `orangeWash` set on st8 only for
-      // now (his "orange flare???" note landed there specifically); more
-      // stations can pick it up the same way greenWash's st4/st5 pair does.
-      // Same alpha/fade/edge-feather logic for every entry — only the flag
-      // name and hue differ.
-      // 2026-08-13 round 3 (Ben, live: "when i say color flare, just do a
-      // half circle of a fun diff green gradient color" / "youre giving it
-      // hard line edges" / "round it off"): the linear-gradient rectangle
-      // above was the wrong SHAPE, not just under-tuned alpha — a straight
-      // "to top" fade across the full station width always has a geometric
-      // top edge once alpha is high enough to see, no matter how far out
-      // the transparent stop sits. Switched to a radial gradient centered
-      // at the BOTTOM-CENTER of the station (50% 100%) — only its upper
-      // half is ever visible (the frame's own bottom edge crops the rest),
-      // which is what actually reads as a soft half-circle flare with no
-      // straight edge anywhere, in any direction. This also retires the
-      // old left/right edge-feather masking entirely: that existed only to
-      // hide the rectangle's own hard OUTER edges (the "vertical art seams"
-      // bug) — a radial glow already fades to nothing in every direction on
-      // its own, nothing left to mask.
-      // 2026-08-13 round 4 (Ben, live: "dont make it all on just one page,
-      // overlap them with like 70% on one page 30% on the next"): box
-      // widened past one station so the circle's own falloff can actually
-      // spill into the next station instead of hard-clipping at the
-      // station boundary — the center stays anchored to THIS station's own
-      // midpoint (unchanged from round 3), only the box got wider so that
-      // center's falloff has somewhere to bleed into.
-      // 2026-08-13 round 5 (Ben, live: "the color splurges need to look
-      // more natural and not just a half circle... make one side taller
-      // and off center the circle and such"): a perfect circle centered
-      // dead-on the station's own midpoint reads as geometric no matter how
-      // soft its edge is — real haze isn't symmetric. Switched circle->
-      // ellipse with unequal axes (one side genuinely taller than it is
-      // wide) and both the center's x AND y nudged off the "true" midpoint/
-      // bottom-edge, so the visible shape reads as one lopsided glow, not a
-      // radius drawn from a single centered point. Station index feeds a
-      // small deterministic offset (not the primitive RNG stream — this is
-      // outside makePrim, no per-station draw-count parity to protect)
-      // so adjacent wash stations don't all clone the exact same silhouette.
-      // 2026-08-14 (Ben, live: "for the color flares... take up half the
-      // screen. then it flows onto the next page, where it turns back to
-      // purple after the green dispands" / "same thing with orange on p9"):
-      // rx was 0.60*W — the ellipse's own 70%-transparent stop landed at
-      // 0.7*rx = 0.42W from center, and center sits at THIS station's own
-      // midpoint (0.5W from its left edge), so the visible glow died only
-      // ~0.1W into the NEXT station — nowhere near "flows onto the next
-      // page." Raised so the fade completes near the far edge of the NEXT
-      // station instead: center-to-next-station-end is 1.5W (own half-width
-      // + full next-station width), so 0.7*rx ~= 1.5W => rx ~= 2.1W; rounded
-      // up for margin. "Turns back to purple" needs no separate treatment —
-      // the base sky IS the purple/indigo ground this fades down to, so a
-      // complete fade-to-transparent by then already reads as "back to
-      // purple." washSpanW widened to comfortably contain the bigger
-      // ellipse's box without clipping its own falloff.
-      const washSpanW = ENGINE.W * 2.8;
-      // 2026-08-14 (Ben, live: "think like a half circle of green gradient
-      // like you already have. but the max is only 60% up the screen, so
-      // teh purple still lievs at the top. and 75% of the half circle on
-      // one page, rest on the other"): two separate caps, not a re-tune of
-      // the whole shape —
-      //  - HEIGHT: the visible edge (70% stop, same as the horizontal
-      //    reach math above) must land at <=60% of frame height so the top
-      //    40% stays untouched purple. ry clamped directly to that.
-      //  - HORIZONTAL SPLIT: center pulled left of this station's own true
-      //    midpoint (0.42W instead of 0.5W) for the asymmetry.
-      // 2026-08-14 round 2 (Ben: "i only saw green on one slide" — PIXEL-
-      // SAMPLED, not eyeballed: station 5's lower-mid region measured
-      // byte-identical to base purple, zero bleed reaching it at all).
-      // Root cause: this round's FIRST attempt shrank rx 1.75W->1.40W
-      // *on top of* the center shift, and the two compounded — effective
-      // reach past the page boundary dropped to ~0.40W, entirely inside
-      // the first ~40% of the next station's own width, short of every
-      // sample point a viewer's eye actually lands on. rx restored to
-      // 1.75W (the version measured/confirmed reaching well into the next
-      // station, see the commit two rounds back); the 75/25 asymmetry
-      // comes from the center shift alone, not from also starving the
-      // radius — "75/25" was never meant to mean "barely visible," it
-      // meant "clearly the minority share," and a minority share still
-      // has to be visible to read as gliding into the next slide at all.
-      // 2026-08-14 round 3: pixel-sampled again after the rx restore — the
-      // bleed reaches station5 (measured: G channel +10-12 near its own
-      // left edge, fading to zero by ~40% in) but that's WITHIN the
-      // gradient's 35%-70% linear fade-to-transparent zone, i.e. the weak
-      // tail of the curve, not its body. Center nudged right (0.42W ->
-      // 0.46W, still left of true-middle 0.5W so page 1 stays the majority
-      // share) so more of the gradient's own STRONG 0-35% zone lands past
-      // the boundary, and alpha nudged back up partway (0.34/0.18 ->
-      // 0.40/0.22 — still well under the original "too heavy" 0.55/0.30).
-      // 2026-08-14 round 4 (Ben: "the coloir splurges are still only on one
-      // screen... again idk why" — three rounds of small nudges each still
-      // came back too weak. Stopping the incremental math here: center back
-      // to true-middle (0.50W, maximizes reach) and alpha below goes back
-      // near the original strong values, not another partial step.
-      const rxScale = 1.75;
-      // 2026-08-16 (rendering-based audit, not eyeballed at rest — the seam
-      // only shows while the wash is animating in): the box's LEFT edge sat
-      // only 0.5W from the wash's own center, but the gradient's `70%`
-      // transparent stop doesn't land until 0.7*rx = 1.225W out. CSS clips
-      // a background at its element's box — so the box's left edge cut the
-      // gradient off mid-fade (~0.37 alpha, measured), a hard vertical line
-      // that swept across the frame as the box rode its layer's transform
-      // during a turn. Extending the box further left gives the same
-      // gradient room to reach ~0 alpha before hitting that edge — same fix
-      // shape as the right-side "flows onto the next page" work above, just
-      // the edge nobody had widened for yet. Geometry only: rx, alpha, ry,
-      // and colors below are untouched.
-      const washLeftMargin = Math.max(0, Math.round(ENGINE.W * rxScale * 0.78 - 0.50 * ENGINE.W));
-      const washBoxW = washSpanW + washLeftMargin;
-      const washCxFrac = ((0.50 * ENGINE.W + washLeftMargin) / washBoxW) * 100;
-      const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14; // +-7% of span
-      const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16; // +-8%, above/below the true edge
-      const washTallSide = (i % 2 === 0) ? 1.32 : 0.78; // which axis reads "taller"
-      const WASH_MAX_RY = Math.round(0.6 * ENGINE.H / 0.7);
-      for (const wc of WASH_KINDS) {
-        if (!st[wc.flag]) continue;
-        // 2026-08-14 (Ben, live: "sldies 5-6 the green isnt connected. its
-        // 2 speerate circles... should be one and it flows from slide 5-6
-        // when i transition" / "same with the orange"): adjacent stations
-        // sharing a wash flag each drew their OWN full dome anchored to
-        // their own midpoint — two independently-centered circles that
-        // merely overlapped at the boundary. The first station's dome
-        // already bleeds rightward into the next (washSpanW/rx math above),
-        // so a same-flag run only needs its FIRST station to draw; later
-        // stations in the run skip and show the previous dome's bleed
-        // instead. Per-WASH_KINDS-entry, color-agnostic — orange behaves
-        // identically if it ever spans two stations. Geometry untouched.
-        const prevSt = WORLD.stations[(i - 1 + ENGINE.PANES) % ENGINE.PANES];
-        if (prevSt[wc.flag]) continue;
-        const wash = dom.el('');
-        wash.style.position = 'absolute'; wash.style.left = px(x0 - washLeftMargin); wash.style.top = '0';
-        wash.style.width = px(washBoxW); wash.style.height = px(ENGINE.H);
-        const rx = Math.round(ENGINE.W * rxScale);
-        const ry = Math.min(Math.round(rx * washTallSide), WASH_MAX_RY);
-        // fromTop (Ben: "flip it so half circle lives on top rail, where
-        // green is bottom") — same box (top:0, full frame height), only the
-        // gradient's own center-y flips; the box's own edges already crop
-        // to whichever half is on-screen, same mechanism both ways.
-        const cy = wc.fromTop ? (0 - washJitterY) : (100 + washJitterY);
-        wash.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${(washCxFrac + washJitterX).toFixed(1)}% ${cy.toFixed(1)}%,
-          ${hsla(wc.hue, 60, 30, 0.50)} 0%, ${hsla(wc.hue, 55, 22, 0.28)} 35%, transparent 70%)`;
-        host.appendChild(wash); formTotal++;
-      }
+      /* The per-station wash block that used to sit here (radial ellipse
+         dome, `greenWash`/`orangeWash`, four rounds of geometry/alpha
+         tuning) is DELETED 2026-08-16 in both builds — full history in git,
+         reasoning in ringPrimitives.js's SKY_REGIONS comment. Do not
+         reintroduce a colored box on the mid layer: that layer is exactly
+         what made the color slide in with the pan instead of settling after
+         it. */
       if (st.ring){
         const nrW = hw*1.55, nrH = hh*0.95;
         const nring = dom.makeNebulaRing(nrW, nrH, st.hue, sfill);
@@ -1276,10 +1154,17 @@ function buildLayerContent(host, L){
 (function build(){
   const before = document.getElementById('qScrim');
 
+  /* The region tint layers live HERE, above .void and below every content
+     layer — that placement IS the mechanism. The sky layer is the one thing
+     that never gets a transform, so a color change on it cannot arrive as a
+     wipe riding the pan. Its own opacity transition is the "own slower
+     clock" (ringPrimitives.js's SKY_TINT_IN_MS/OUT_MS). */
   const sky = dom.el('lyr');
   const skyInner = dom.el('surge');
   skyInner.style.transition = 'none';
   skyInner.appendChild(dom.el('void'));
+  Object.assign(skyTints, dom.makeSkyTints());
+  for (const t of Object.values(skyTints)) skyInner.appendChild(t);
   sky.appendChild(skyInner);
   design.insertBefore(sky, before);
 
@@ -1311,6 +1196,7 @@ function buildLayerContent(host, L){
   window.__shootLane = shootLane;
   stage.style.setProperty('--surge-ms', ENGINE.SURGE_MS + 'ms');
   WORLD.sky.forEach((c,i) => stage.style.setProperty('--sky-'+(i+1), c));
+  applySkyTints(skyTints, skyWeights, 0, false); // initial state snaps, same as the scrim's
 })();
 
 /* ═══ QUESTIONS ═══ */
@@ -1440,6 +1326,16 @@ function turn(){
   const willWrap = ENGINE.LAYERS.some(L => L.id!=='sky' &&
       offset[L.id] + L.surge >= cylinderOf(L));
 
+  /* Sky region — fired in the same tick the pan starts, but on a longer
+     duration and a milder curve (SKY_TINT_IN_MS/OUT_MS), so the sky is still
+     visibly settling ~900ms after the pan lands. Keyed off the INCOMING
+     station because `station` only advances in land(), which for an animated
+     turn is deferred to Q.IN_START_MS — reading it there would start the
+     lean 1150ms late and re-couple it to the pan. Retargeting is
+     free — it's a CSS transition, so a rapid Stream-Deck run re-aims from
+     wherever it currently is instead of stacking animations. */
+  applySkyTints(skyTints, skyWeights, (station+1) % ENGINE.PANES, !isReduced());
+
   if (isReduced()){
     /* reduced motion: snap, no glide — wrap and non-wrap turns alike.
        land() (called next) may itself drain a queued turn and re-add
@@ -1547,6 +1443,7 @@ function jumpTo(target){
   ENGINE.LAYERS.forEach(L=>{ if(L.id!=='sky')
     offset[L.id] %= cylinderOf(L); });
   stage.classList.remove('go'); writeOffsets(); showQ(slide); status();
+  applySkyTints(skyTints, skyWeights, station, false); // snap — see applySkyTints on why a jump must not leave a transition in flight
   dom.clampSafeBoxStarPeaks(design); // item 3: re-clamp at rest, new station
 }
 function autoLoop(){ clearTimeout(autoT); if(!autoOn)return;
