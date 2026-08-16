@@ -1154,15 +1154,10 @@ export default function Join() {
   // ── Keep viewedIndex ≤ host (handled inside LiveView) ─────────────────
 
   // ── Scoreboard drawer live updates ───────────────────────────────────
-  // `scoreboard_teams` is not in the `supabase_realtime` publication (checked
-  // 2026-08-16), so this subscription has never actually fired — the drawer has
-  // been a snapshot from the moment it opened. Poll alongside it until the
-  // table is published; the subscription then takes over for free.
-  // ponytail: 4s poll while the drawer is open; drop it once realtime covers
-  // the table. Same note in ScoreboardOverlay.jsx.
+  // `scoreboard_teams` was added to the `supabase_realtime` publication
+  // 2026-08-16, so this subscription actually fires now.
   useEffect(() => {
     if (!scoresDrawerOpen || !show?.id) return
-    const poll = setInterval(refreshScores, 4000)
     const channel = supabase
       .channel(`scores-drawer:${show.id}`)
       .on('postgres_changes',
@@ -1170,7 +1165,7 @@ export default function Join() {
         () => { refreshScores() }
       )
       .subscribe()
-    return () => { clearInterval(poll); supabase.removeChannel(channel) }
+    return () => supabase.removeChannel(channel)
   }, [scoresDrawerOpen, show?.id])
 
   // ── visibilitychange ──────────────────────────────────────────────────

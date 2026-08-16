@@ -202,17 +202,8 @@ function ScoreboardContent({ show }) {
     // The board used to be a snapshot taken when it opened — a host grading a
     // round with the scoreboard up on the TV changed nothing on screen, so the
     // count-up/reorder motion below would never have anything to react to.
-    //
-    // `scoreboard_teams` is NOT in the `supabase_realtime` publication (checked
-    // 2026-08-16 — only shows/teams/team_scores/jukebox_state/shiny_formats
-    // are), so a postgres_changes subscription on it never fires. Join.jsx's
-    // scores drawer has had one of those since it shipped and it has never
-    // worked. Adding the table to the publication is a one-line prod migration
-    // and the real fix; until Ben signs that off, poll. The subscription stays
-    // alongside so the board goes instant the moment the publication changes.
-    // ponytail: 4s poll while the panel is up; delete it once the table is
-    // published to realtime.
-    const poll = setInterval(load, 4000)
+    // `scoreboard_teams` was added to the `supabase_realtime` publication
+    // 2026-08-16, so this subscription actually fires now — no poll needed.
     const channel = supabase
       .channel(`scoreboard-tv:${show.id}`)
       .on('postgres_changes',
@@ -221,7 +212,7 @@ function ScoreboardContent({ show }) {
       )
       .subscribe()
 
-    return () => { cancelled = true; clearInterval(poll); supabase.removeChannel(channel) }
+    return () => { cancelled = true; supabase.removeChannel(channel) }
   }, [show.id])
 
   const m = gridMetrics(ranked.length)
