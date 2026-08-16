@@ -4,6 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import BaynesWatermark from '../BaynesWatermark.jsx'
 import { fitToBox, TITLE_CARD_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
+import DEFAULT_PHOTO from '../../../assets/state-of-union-photo.png'
 
 // Fixed RWB palette — deliberately NOT theme.colors, anywhere in this
 // component. "State of the Union" is patriotic by identity; it must read
@@ -135,10 +136,13 @@ export default function StateOfUnionSlide({ slide }) {
       }} />
 
       <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
-        {/* Optional Ben photo */}
-        {slide.data?.photoUrl && (
+        {/* Ben photo — defaults to the flag photo (client/src/assets/state-of-union-photo.png)
+            so it's there more often than not without being hardcoded; a host can override
+            with a different slide.data.photoUrl, or set it to `false` to hide it entirely
+            for one instance of this slide. */}
+        {slide.data?.photoUrl !== false && (
           <motion.img
-            src={slide.data.photoUrl}
+            src={slide.data?.photoUrl || DEFAULT_PHOTO}
             alt="Host"
             className="mb-10 rounded-2xl object-cover"
             style={{ height: '28vh', width: 'auto', maxWidth: '100%', opacity: 0.85 }}
