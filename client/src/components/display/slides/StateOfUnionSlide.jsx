@@ -138,9 +138,12 @@ export default function StateOfUnionSlide({ slide }) {
       <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
         {/* Ben photo — defaults to the flag photo (client/src/assets/state-of-union-photo.png)
             so it's there more often than not without being hardcoded; a host can override
-            with a different slide.data.photoUrl, or set it to `false` to hide it entirely
-            for one instance of this slide. */}
-        {slide.data?.photoUrl !== false && (
+            with a different slide.data.photoUrl. HostPhotoLibrary's "remove photo" affordance
+            writes `null` (never `false` — no host surface writes that), so hiding has to key
+            off null/empty, not falsy-vs-set: an unset key means "use the default", an
+            explicitly-cleared one means "show nothing", and treating both the same was the bug
+            (clearing a photo silently showed the default instead of hiding it). */}
+        {slide.data?.photoUrl !== null && slide.data?.photoUrl !== '' && (
           <motion.img
             src={slide.data?.photoUrl || DEFAULT_PHOTO}
             alt="Host"
