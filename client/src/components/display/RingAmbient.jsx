@@ -716,6 +716,10 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
     return () => {
       ro.disconnect()
       clearTimeout(shootTimerRef.current)
+      // turn()'s in-flight unlock timer (~SURGE_MS+60) would otherwise fire
+      // post-unmount and call unlock() on null refs, throwing inside
+      // dom.clampSafeBoxStarPeaks(designElRef.current).
+      clearTimeout(turnTimerRef.current)
       design.replaceChildren()
       if (window.__world && window.__world.WORLD === worldData) delete window.__world
     }
@@ -726,16 +730,16 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
   // existing DOM/refs), never rebuilds anything, so it's safe to depend on a
   // prop that changes every question. Guards on the last slideKey actually
   // seen rather than a first-run boolean, so StrictMode's dev double-invoke
-  // of this effect can't fire a spurious turn. The ref starts at the
-  // mount-time slideKey, and the undefined branch returns *before* writing
-  // it — so `prev === undefined` means only "no real question has ever been
-  // on screen", and no turn fires before the first one.
+  // of this effect can't fire a spurious turn. The null branch returns
+  // *before* writing the ref, so a null `prev` means only "no real question
+  // has ever been on screen", and no turn fires before the first one.
   const lastSlideKeyRef = useRef(slideKey)
   useEffect(() => {
-    if (slideKey === undefined) return
+    // == null: also catches an explicit null from a future call site, not just undefined
+    if (slideKey == null) return
     const prev = lastSlideKeyRef.current
     lastSlideKeyRef.current = slideKey
-    if (prev === undefined || prev === slideKey) return
+    if (prev == null || prev === slideKey) return
     turn()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideKey])
