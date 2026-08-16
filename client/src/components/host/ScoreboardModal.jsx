@@ -261,13 +261,16 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
   // Ben's own words: teams shouldn't see mid-edit numbers while he's typing.
   // Mount/unmount is the right lifetime: opening this modal IS "starting to
   // update scores", closing it (via the X, Escape, or navigating away) IS
-  // "done". Known gap: a hard crash/tab-close skips the unmount cleanup and
-  // leaves phones locked for the rest of the night — acceptable risk for a
-  // laptop that stays open through a 2-3hr show; not worth a beforeunload
-  // handler (unreliable for async writes anyway) for that edge.
+  // "done". supabase-js query builders are lazy thenables — the request
+  // never actually fires unless something consumes it (.then/await); the
+  // exact bug this file's own `save()` already found and fixed once, 17
+  // lines below. Known gap: a hard crash/tab-close skips the unmount
+  // cleanup and leaves phones locked for the rest of the night — acceptable
+  // risk for a laptop that stays open through a 2-3hr show; not worth a
+  // beforeunload handler (unreliable for async writes anyway) for that edge.
   useEffect(() => {
-    supabase.from('shows').update({ scores_locked: true }).eq('id', show.id)
-    return () => { supabase.from('shows').update({ scores_locked: false }).eq('id', show.id) }
+    supabase.from('shows').update({ scores_locked: true }).eq('id', show.id).then()
+    return () => { supabase.from('shows').update({ scores_locked: false }).eq('id', show.id).then() }
   }, [show.id])
 
   function save(team, fieldKey) {
