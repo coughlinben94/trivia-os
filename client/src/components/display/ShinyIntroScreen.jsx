@@ -12,24 +12,35 @@ import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../lib/shinyGold.js'
 // ParticleBackground mounted behind every slide (Display.jsx) should still
 // read through around the edges, not get covered by a flat color block.
 //
-// Entrance choreography ported 1:1 from the approved WAAPI prototype
+// Entrance choreography ported from the approved WAAPI prototype
 // (shiny-spin-land-drop.html, Ben-approved after two slow-down corrections):
 // title spins in through ~1 tame rotation while scaling up, lands at
 // LAND_T with a two-oscillation spring "boing", a gold burst ring + 8
 // sparks fire at impact, then the format icon stamps in and the host photo
-// rockets up from below the frame — sequenced, not simultaneous. All
-// keyframe offsets/durations below are the prototype's numbers verbatim
-// (WAAPI linear easing across explicit keyframes — the "ease" lives in the
-// keyframe spacing, same technique here via Framer's times arrays).
+// rockets up from below the frame — sequenced, not simultaneous. Keyframe
+// values, offsets, and durations are the prototype's numbers (linear-eased
+// tracks map exactly via Framer's times arrays). Two deliberate
+// divergences: the burst/sparks fire AT the landing instant rather than
+// the prototype's early-warped timing (see IMPACT_EASE note below), and
+// the glow settles at full opacity to match this screen's shipped
+// always-on wash instead of the prototype's 0.55.
 //
 // Shared by QuestionSlide.jsx (question type) and GridSlide.jsx (grid type)
 // — any isShiny slide type can gate its content on `data.introDone` and
 // render this first.
 
 const LAND_T = 1.725 // s — moment of impact; every other element keys off this (prototype's 1725ms, 1.5x slow, Ben's call)
-// Prototype burst/spark easing. NOTE: must be a function, not a [x1,y1,x2,y2]
-// array — with keyframe values Framer reads an ease array as per-segment
-// eases, silently breaking the curve.
+// Burst/spark easing — same bezier the prototype used, but the FORM matters:
+// passing the raw [0.16,1,0.3,1] array routes Framer through its
+// WAAPI-accelerated path, where (like the prototype's effect-level `easing`)
+// the bezier warps the WHOLE iteration's progress — dragging the `times`
+// offsets earlier, so the burst would fire ~290ms in, mid-spin. Passing a
+// cubicBezier() FUNCTION forces main-thread pre-generated keyframes where
+// the ease applies per-segment and `times` stay literal — burst fires
+// ~1.4s, on the title's overshoot peak. We deliberately keep the function
+// form: burst-on-impact is what the prototype's own beat sheet describes
+// ("Impact. A gold burst ring flashes"), even though the prototype file
+// Ben watched actually fired it early. Flagged for Ben's sign-off.
 const IMPACT_EASE = cubicBezier(0.16, 1, 0.3, 1)
 
 export default function ShinyIntroScreen({ slide, theme }) {
