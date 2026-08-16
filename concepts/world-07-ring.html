@@ -945,7 +945,21 @@ function buildLayerContent(host, L){
       // to true-middle (0.50W, maximizes reach) and alpha below goes back
       // near the original strong values, not another partial step.
       const rxScale = 1.75;
-      const washCxFrac = (0.50 * ENGINE.W / washSpanW) * 100;
+      // 2026-08-16 (rendering-based audit, not eyeballed at rest — the seam
+      // only shows while the wash is animating in): the box's LEFT edge sat
+      // only 0.5W from the wash's own center, but the gradient's `70%`
+      // transparent stop doesn't land until 0.7*rx = 1.225W out. CSS clips
+      // a background at its element's box — so the box's left edge cut the
+      // gradient off mid-fade (~0.37 alpha, measured), a hard vertical line
+      // that swept across the frame as the box rode its layer's transform
+      // during a turn. Extending the box further left gives the same
+      // gradient room to reach ~0 alpha before hitting that edge — same fix
+      // shape as the right-side "flows onto the next page" work above, just
+      // the edge nobody had widened for yet. Geometry only: rx, alpha, ry,
+      // and colors below are untouched.
+      const washLeftMargin = Math.max(0, Math.round(ENGINE.W * rxScale * 0.78 - 0.50 * ENGINE.W));
+      const washBoxW = washSpanW + washLeftMargin;
+      const washCxFrac = ((0.50 * ENGINE.W + washLeftMargin) / washBoxW) * 100;
       const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14; // +-7% of span
       const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16; // +-8%, above/below the true edge
       const washTallSide = (i % 2 === 0) ? 1.32 : 0.78; // which axis reads "taller"
@@ -966,8 +980,8 @@ function buildLayerContent(host, L){
         const prevSt = WORLD.stations[(i - 1 + ENGINE.PANES) % ENGINE.PANES];
         if (prevSt[wc.flag]) continue;
         const wash = dom.el('');
-        wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0';
-        wash.style.width = px(washSpanW); wash.style.height = px(ENGINE.H);
+        wash.style.position = 'absolute'; wash.style.left = px(x0 - washLeftMargin); wash.style.top = '0';
+        wash.style.width = px(washBoxW); wash.style.height = px(ENGINE.H);
         const rx = Math.round(ENGINE.W * rxScale);
         const ry = Math.min(Math.round(rx * washTallSide), WASH_MAX_RY);
         // fromTop (Ben: "flip it so half circle lives on top rail, where

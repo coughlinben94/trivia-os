@@ -414,7 +414,19 @@ function buildLayerContent(engine, world, arc, host, L) {
       // comment.
       const rxScale = 1.75
       const washSpanW = engine.W * 2.8
-      const washCxFrac = (0.50 * engine.W / washSpanW) * 100
+      // 2026-08-16 (rendering-based audit, not eyeballed at rest — the seam
+      // only shows while the wash is animating in): synced from
+      // world-07-ring.html — the box's LEFT edge sat only 0.5W from the
+      // wash's own center, but the gradient's `70%` transparent stop
+      // doesn't land until 0.7*rx = 1.225W out. CSS clips a background at
+      // its element's box — so the box's left edge cut the gradient off
+      // mid-fade (~0.37 alpha, measured), a hard vertical line that swept
+      // across the frame as the box rode its layer's transform during a
+      // turn. Extending the box further left gives the same gradient room
+      // to reach ~0 alpha before hitting that edge. Geometry only.
+      const washLeftMargin = Math.max(0, Math.round(engine.W * rxScale * 0.78 - 0.50 * engine.W))
+      const washBoxW = washSpanW + washLeftMargin
+      const washCxFrac = ((0.50 * engine.W + washLeftMargin) / washBoxW) * 100
       const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14
       const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16
       const washTallSide = (i % 2 === 0) ? 1.32 : 0.78
@@ -429,8 +441,8 @@ function buildLayerContent(engine, world, arc, host, L) {
         const prevSt = world.stations[(i - 1 + engine.PANES) % engine.PANES]
         if (prevSt[wc.flag]) continue
         const wash = dom.el('')
-        wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0'
-        wash.style.width = px(washSpanW); wash.style.height = px(engine.H)
+        wash.style.position = 'absolute'; wash.style.left = px(x0 - washLeftMargin); wash.style.top = '0'
+        wash.style.width = px(washBoxW); wash.style.height = px(engine.H)
         const rx = Math.round(engine.W * rxScale)
         const ry = Math.min(Math.round(rx * washTallSide), WASH_MAX_RY)
         const cy = wc.fromTop ? (0 - washJitterY) : (100 + washJitterY)
