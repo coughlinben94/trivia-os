@@ -10,6 +10,12 @@ export default function SpotifyCallback() {
   useEffect(() => {
     const code = new URLSearchParams(window.location.search).get('code')
     if (!code) { window.location.replace('/music'); return }
+    // Strip ?code= before the exchange completes, same as the source app —
+    // a PKCE code is single-use, so a refresh or a restored tab landing back
+    // on this URL after the exchange already ran would resend a consumed
+    // code and dead-end on the error screen with no way forward but typing
+    // /music by hand.
+    window.history.replaceState({}, '', '/spotify-callback')
     handleCallback(code)
       .then(() => {
         const returnTo = sessionStorage.getItem('oauth_return') ?? '/music'
