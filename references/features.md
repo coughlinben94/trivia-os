@@ -280,13 +280,13 @@ Managed via `HostPhotoLibrary.jsx`. Host can upload photos to a reusable library
 
 ## Trivia Jukebox Integration
 
-Trivia Jukebox is a separate React/Vite/Spotify app at `https://trivia-jukebox.vercel.app`. Plays music during grading breaks.
+Trivia Jukebox was originally a separate React/Vite/Spotify app; as of the 2026-08-16 jukebox integration it's folded directly into Trivia OS — no separate deploy, no full-page navigation. Plays music during grading breaks via an in-app overlay.
 
-**Grading break → Jukebox:** After ~10s on the grading break slide (Space/ArrowRight skips), `transitionToJukebox` runs `window.location.href = 'https://trivia-jukebox.vercel.app'`. This is GradingBreakSlide's own scoped keydown handler — /display has no OTHER, generic keyboard slide-advance handler. One used to exist (Space/ArrowRight/ArrowLeft, focus-window-to-advance) but was removed entirely in `db02b59` (RLS-D-1): it was redundant with the host's own controls and double-fired with this exact grading-break handler, racing a slide-advance write against the page navigating away (DK-1). Navigation authority on /display is now exactly one path — this jukebox-return handoff.
+**Grading break → Jukebox:** `Display.jsx` tracks `activeBreakId`; 5s after a `grading-break` slide becomes current (`breakEligible`), a timer flips it active and `JukeboxBreakOverlay` mounts as a fixed `z-[70]` layer over the still-live grading-break slide (`client/src/components/display/JukeboxBreakOverlay.jsx`). It wraps a ported `Jukebox.jsx` (same component the standalone `/music` host-dashboard route uses) behind a `SpotifyConnectGate` — if Spotify isn't connected, a quiet non-blocking banner shows instead and the break just stays on the grading-break slide; the show is never stuck waiting on it.
 
-**Jukebox → back:** Jukebox's `b` keydown handler navigates to `trivia-os.vercel.app/display?from=jukebox`. Display.jsx detects `from=jukebox` and auto-detects the show's final grading break structurally — if the show's last slide is a `winner-reveal` AND no `grading-break` slides remain after the current position, it jumps `current_slide_index` to `sorted.length - 1`; otherwise advances by 1. Param stripped via `history.replaceState`. (No per-slide flag involved — there is no manual toggle for this.)
+**Jukebox → back:** The `b`-hold keydown handler inside `Jukebox.jsx` now fires `onExitToShow()` instead of navigating anywhere. `Display.jsx`'s `advanceAfterBreak()` then calls the `advance_show` Supabase RPC (SECURITY DEFINER, `supabase/migrations/20260706001000`), which auto-detects the show's final grading break structurally — if the show's last slide is a `winner-reveal` AND no `grading-break` slides remain after the current position, it jumps straight to the last slide; otherwise advances by 1. Same structural-detection logic as before, just triggered by a callback instead of a URL param.
 
-**No iframe.** Spotify refuses iframe embedding. Full-page navigation is the only integration path.
+**No iframe, still.** Spotify refuses iframe embedding — that's exactly why this is a same-app overlay (real DOM, real origin) rather than an embedded frame, not a full-page redirect anymore. Song data, scrub/trim points, and QuickAdd (`/add`, Ben's personal phone tool for adding songs — not guest-facing) are unaffected; the standalone `trivia-jukebox.vercel.app` deploy still exists as a manual fallback if the in-app overlay ever misbehaves, per a comment in `Display.jsx`.
 
 ---
 
