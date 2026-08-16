@@ -488,6 +488,7 @@ export default function RoundSidebar({
 
 function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, onDelete, onGripDown, indent }) {
   const meta  = SLIDE_TYPE_META[slide.type] ?? { icon: '📄', label: slide.type }
+  const icon  = slide.data?.isShiny ? '✨' : meta.icon
   const label = slideLabel(slide)
 
   return (
@@ -512,7 +513,7 @@ function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, 
       >
         ⠿
       </span>
-      <span className="text-sm shrink-0 leading-none">{meta.icon}</span>
+      <span className="text-sm shrink-0 leading-none">{icon}</span>
       <span className={`text-sm flex-1 truncate ${selected ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
         {label}
       </span>
