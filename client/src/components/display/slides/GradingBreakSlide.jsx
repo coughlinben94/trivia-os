@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { fitToBox, GRADING_BREAK_BOX } from '../../../lib/autoFitText.js'
@@ -22,33 +22,11 @@ export default function GradingBreakSlide({ slide, isPreview = false }) {
   const [fontsReady, setFontsReady] = useState(false)
   useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
 
-  const autoTimerRef = useRef(null)
-
-  function transitionToJukebox() {
-    clearTimeout(autoTimerRef.current)
-    const lib = data.jukeboxLib ?? 'random'
-    window.location.href = `https://trivia-jukebox.vercel.app?lib=${encodeURIComponent(lib)}`
-  }
-
-  // 10s auto-advance to Jukebox — disabled in editor preview
-  useEffect(() => {
-    if (isPreview) return
-    autoTimerRef.current = setTimeout(transitionToJukebox, 10000)
-    return () => clearTimeout(autoTimerRef.current)
-  }, [isPreview])
-
-  // Space / ArrowRight — skip the wait — disabled in editor preview
-  useEffect(() => {
-    if (isPreview) return
-    const handler = (e) => {
-      if (e.code === 'Space' || e.code === 'ArrowRight') {
-        e.preventDefault()
-        transitionToJukebox()
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [isPreview])
+  // Pure visual as of the 2026-08-16 jukebox integration. The break lifecycle
+  // — the 5s countdown, the Space/ArrowRight skip, and handing the screen to
+  // the music — moved to Display.jsx, which mounts JukeboxBreakOverlay in the
+  // same tab instead of full-page-navigating to trivia-jukebox.vercel.app.
+  // Nothing here navigates or listens for keys any more.
 
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ background: 'transparent' }}>
