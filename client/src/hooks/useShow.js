@@ -5,10 +5,10 @@ import { DEFAULT_THEME_ID } from '../themes/index.js'
 import { deriveRoundCols, computeTotal, roundScoreTotal } from '../lib/scoreboardMath.js'
 import { renumberRoundQuestions } from '../lib/questionNumbering.js'
 import { trackWrite } from '../lib/writeTracking.js'
+import { HOST_PHOTOS_BUCKET, listHostPhotos } from '../lib/hostPhotos.js'
 
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 const SHOW_MEDIA_BUCKET = 'trivia-show-media'
-const HOST_PHOTOS_BUCKET = 'trivia-host-photos'
 const FONT_BUCKET = 'trivia-fonts'
 
 function normalizeShow(row) {
@@ -506,19 +506,7 @@ export function useShow() {
   }
 
   async function getHostPhotos() {
-    if (!show) return []
-    const { data, error } = await supabase.storage
-      .from(HOST_PHOTOS_BUCKET)
-      .list(`${show.id}/host-photos`, { sortBy: { column: 'created_at', order: 'desc' } })
-    if (error || !data) return []
-    return data
-      .filter(f => f.name && /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name))
-      .map(f => ({
-        url: supabase.storage
-          .from(HOST_PHOTOS_BUCKET)
-          .getPublicUrl(`${show.id}/host-photos/${f.name}`).data.publicUrl,
-        filename: f.name,
-      }))
+    return listHostPhotos(show?.id)
   }
 
   // --- Live Mode navigation ---
