@@ -414,7 +414,19 @@ function buildLayerContent(engine, world, arc, host, L) {
       // comment.
       const rxScale = 1.75
       const washSpanW = engine.W * 2.8
-      const washCxFrac = (0.50 * engine.W / washSpanW) * 100
+      // 2026-08-16 (rendering-based audit, not eyeballed at rest — the seam
+      // only shows while the wash is animating in): synced from
+      // world-07-ring.html — the box's LEFT edge sat only 0.5W from the
+      // wash's own center, but the gradient's `70%` transparent stop
+      // doesn't land until 0.7*rx = 1.225W out. CSS clips a background at
+      // its element's box — so the box's left edge cut the gradient off
+      // mid-fade (~0.37 alpha, measured), a hard vertical line that swept
+      // across the frame as the box rode its layer's transform during a
+      // turn. Extending the box further left gives the same gradient room
+      // to reach ~0 alpha before hitting that edge. Geometry only.
+      const washLeftMargin = Math.max(0, Math.round(engine.W * rxScale * 0.78 - 0.50 * engine.W))
+      const washBoxW = washSpanW + washLeftMargin
+      const washCxFrac = ((0.50 * engine.W + washLeftMargin) / washBoxW) * 100
       const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14
       const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16
       const washTallSide = (i % 2 === 0) ? 1.32 : 0.78
@@ -429,8 +441,8 @@ function buildLayerContent(engine, world, arc, host, L) {
         const prevSt = world.stations[(i - 1 + engine.PANES) % engine.PANES]
         if (prevSt[wc.flag]) continue
         const wash = dom.el('')
-        wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0'
-        wash.style.width = px(washSpanW); wash.style.height = px(engine.H)
+        wash.style.position = 'absolute'; wash.style.left = px(x0 - washLeftMargin); wash.style.top = '0'
+        wash.style.width = px(washBoxW); wash.style.height = px(engine.H)
         const rx = Math.round(engine.W * rxScale)
         const ry = Math.min(Math.round(rx * washTallSide), WASH_MAX_RY)
         const cy = wc.fromTop ? (0 - washJitterY) : (100 + washJitterY)
@@ -848,13 +860,21 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
 
   // Offsets wrap modulo the layer's cylinder, and because every cylinder is
   // exactly 12 surges, all layers return to phase 0 together on turn 12.
-  // At the wrap we jump rather than animate: sliding back across a whole
-  // cylinder would read as a rewind, and because the content at phase 0 is
-  // identical to phase cylinder, the jump is invisible.
+  // 2026-08-16: the 12th turn (station 11 -> 0) GLIDES like the other 11.
+  // The old wrap branch snapped offsets to 0 in a single frame — "content
+  // at phase 0 is identical to phase cylinder" is true of the RESET but was
+  // being applied to the TRAVEL (a rendering audit sampled 125-190
+  // intermediate frames on every normal turn and exactly zero on the 12th).
+  // Now the wrap animates to the un-modded target (offset + surge ===
+  // cylinder — real content exists there; each layer's DOM is built
+  // cyl + ENGINE.W wide with an m+1th content copy precisely to cover the
+  // window hanging past the cylinder), and the modulo reset happens after
+  // the transition completes, where the snap is genuinely invisible.
+  // Reduced motion still snaps every turn, wrap included.
   //
   // Deliberate deviation from the reference build: the reference increments
-  // `station` (and unlocks `busy`) inside land(), which the wrap branch
-  // calls immediately but the animate branch defers via a SECOND setTimeout
+  // `station` (and unlocks `busy`) inside land(), which the reduced-motion
+  // branch calls immediately but the animate branch defers via a SECOND setTimeout
   // at ENGINE.Q.IN_START_MS (1150ms, ahead of the SURGE_MS+60 one) — timed
   // so the question text swap lands mid-transition, and unlocking `busy`
   // ~550ms before the CSS transition visually finishes. With the question
@@ -888,7 +908,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
     const willWrap = ENGINE.LAYERS.some(L => L.id !== 'sky' &&
       offset[L.id] + L.surge >= cylinderOf(ENGINE, L))
 
-    if (isReduced() || willWrap) {
+    if (isReduced()) {
       ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] = (offset[L.id] + L.surge) % cylinderOf(ENGINE, L) })
       stage.classList.remove('go')
       writeOffsets()
@@ -910,6 +930,18 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
     layoutScrim(stationRef.current)
     turnTimerRef.current = setTimeout(() => {
       stage.classList.remove('go')
+      if (willWrap) {
+        // Invisible reset: the transition is over and 'go' was removed in
+        // this same tick, so this transform write snaps rather than
+        // animates. Forced reflow before unlock() — a drained queued turn
+        // may re-add 'go' in the same tick (same coalescing hazard as the
+        // reduced-motion branch above). busy stayed locked for the whole
+        // glide, so a queued turn can never stack its surge on top of an
+        // un-modded cylinder offset.
+        ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] %= cylinderOf(ENGINE, L) })
+        writeOffsets()
+        void stage.offsetWidth
+      }
       unlock()
     }, ENGINE.SURGE_MS + 60)
   }
@@ -931,6 +963,11 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
       ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] = (offset[L.id] + L.surge) % cylinderOf(ENGINE, L) })
       stationRef.current = (stationRef.current + 1) % ENGINE.PANES
     }
+    // A jump that interrupts a wrap glide before its deferred modulo reset
+    // can arrive here with offset === cylinder (legit mid-wrap state). Left
+    // un-modded, the NEXT turn() would misread it as another wrap. No-op in
+    // every other case (offsets already < cylinder).
+    ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] %= cylinderOf(ENGINE, L) })
     stageElRef.current.classList.remove('go')
     writeOffsets()
     layoutScrim(stationRef.current)

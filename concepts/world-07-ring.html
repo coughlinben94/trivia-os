@@ -945,7 +945,21 @@ function buildLayerContent(host, L){
       // to true-middle (0.50W, maximizes reach) and alpha below goes back
       // near the original strong values, not another partial step.
       const rxScale = 1.75;
-      const washCxFrac = (0.50 * ENGINE.W / washSpanW) * 100;
+      // 2026-08-16 (rendering-based audit, not eyeballed at rest — the seam
+      // only shows while the wash is animating in): the box's LEFT edge sat
+      // only 0.5W from the wash's own center, but the gradient's `70%`
+      // transparent stop doesn't land until 0.7*rx = 1.225W out. CSS clips
+      // a background at its element's box — so the box's left edge cut the
+      // gradient off mid-fade (~0.37 alpha, measured), a hard vertical line
+      // that swept across the frame as the box rode its layer's transform
+      // during a turn. Extending the box further left gives the same
+      // gradient room to reach ~0 alpha before hitting that edge — same fix
+      // shape as the right-side "flows onto the next page" work above, just
+      // the edge nobody had widened for yet. Geometry only: rx, alpha, ry,
+      // and colors below are untouched.
+      const washLeftMargin = Math.max(0, Math.round(ENGINE.W * rxScale * 0.78 - 0.50 * ENGINE.W));
+      const washBoxW = washSpanW + washLeftMargin;
+      const washCxFrac = ((0.50 * ENGINE.W + washLeftMargin) / washBoxW) * 100;
       const washJitterX = (((i * 53) % 100) / 100 - 0.5) * 14; // +-7% of span
       const washJitterY = (((i * 31) % 100) / 100 - 0.5) * 16; // +-8%, above/below the true edge
       const washTallSide = (i % 2 === 0) ? 1.32 : 0.78; // which axis reads "taller"
@@ -966,8 +980,8 @@ function buildLayerContent(host, L){
         const prevSt = WORLD.stations[(i - 1 + ENGINE.PANES) % ENGINE.PANES];
         if (prevSt[wc.flag]) continue;
         const wash = dom.el('');
-        wash.style.position = 'absolute'; wash.style.left = px(x0); wash.style.top = '0';
-        wash.style.width = px(washSpanW); wash.style.height = px(ENGINE.H);
+        wash.style.position = 'absolute'; wash.style.left = px(x0 - washLeftMargin); wash.style.top = '0';
+        wash.style.width = px(washBoxW); wash.style.height = px(ENGINE.H);
         const rx = Math.round(ENGINE.W * rxScale);
         const ry = Math.min(Math.round(rx * washTallSide), WASH_MAX_RY);
         // fromTop (Ben: "flip it so half circle lives on top rail, where
@@ -1426,11 +1440,8 @@ function turn(){
   const willWrap = ENGINE.LAYERS.some(L => L.id!=='sky' &&
       offset[L.id] + L.surge >= cylinderOf(L));
 
-  if (isReduced() || willWrap){
-    /* at the wrap we jump rather than animate: sliding back across a
-       whole cylinder would be a rewind. Because the content at phase 0
-       is identical to the content at phase cylinder, the jump is
-       invisible — that is the entire point of closing the ring.
+  if (isReduced()){
+    /* reduced motion: snap, no glide — wrap and non-wrap turns alike.
        land() (called next) may itself drain a queued turn and re-add
        'go' in the same tick; without a forced reflow between the remove
        and that re-add, the browser coalesces both style writes into one
@@ -1443,6 +1454,18 @@ function turn(){
     land();
     return;
   }
+  /* 2026-08-16: the 12th turn (station 11 -> 0) now GLIDES like the other
+     11 instead of snapping. The old wrap branch reset offsets to 0 in a
+     single frame — the comment justifying it ("content at phase 0 is
+     identical to phase cylinder, the jump is invisible") is true of the
+     RESET but was being applied to the TRAVEL: a rendering audit sampled
+     125-190 intermediate frames on every normal turn and exactly zero on
+     the 12th. The fix: animate to the un-modded target (offset + surge ===
+     cylinder — real content exists there; each layer's DOM is built
+     cyl + ENGINE.W wide with an m+1th content copy precisely to cover the
+     window hanging past the cylinder), then do the modulo reset AFTER the
+     transition completes (in the SURGE_MS+60 timeout below), where the
+     snap is genuinely invisible. */
   // color flare: outgoing station's hue -> incoming station's hue, one
   // radial wash timed to the same turn. `station` here is still the
   // PRE-turn index (land() below is what advances it), so this is exactly
@@ -1465,18 +1488,46 @@ function turn(){
   stage.classList.add('go');
   ENGINE.LAYERS.forEach(L=>{ if(L.id!=='sky') offset[L.id] += L.surge; });
   writeOffsets();
-  landTimer = setTimeout(land, ENGINE.Q.IN_START_MS);
+  /* the wrap turn's question swap fires at IN_START_MS like every other
+     turn, but busy stays locked until the deferred modulo reset below — a
+     queued turn draining at land() would add its surge on top of an
+     un-modded cylinder offset and glide into territory past the layer's
+     last content copy. */
+  landTimer = setTimeout(willWrap ? advance : land, ENGINE.Q.IN_START_MS);
   // gen-guarded: if a queued turn already started a new cycle by the time
   // this fires, land() has already cleared busy for that new cycle — an
   // unconditional clear here would falsely unlock mid-transition, and an
   // unconditional class removal would cut the new turn's animation short.
-  setTimeout(()=>{ if (gen === turnGen) { stage.classList.remove('go'); stage.classList.remove('flash'); } }, ENGINE.SURGE_MS + 60);
+  // (On a wrap turn busy stays locked through this timeout, so only
+  // jumpTo() can bump turnGen before it fires — and jumpTo normalizes
+  // offsets itself, so skipping the reset here is safe.)
+  setTimeout(()=>{ if (gen !== turnGen) return;
+    stage.classList.remove('go'); stage.classList.remove('flash');
+    if (willWrap){
+      /* invisible reset: the transition is over and 'go' was removed in
+         this same tick, so this transform write snaps rather than
+         animates. Forced reflow before the queue drain below may re-add
+         'go' in the same tick (same coalescing hazard as the
+         reduced-motion branch above). */
+      ENGINE.LAYERS.forEach(L=>{ if(L.id!=='sky')
+        offset[L.id] %= cylinderOf(L); });
+      writeOffsets();
+      void stage.offsetWidth;
+      dom.clampSafeBoxStarPeaks(design); // re-clamp: different DOM copies now sit in-box
+      busy = false;
+      if (queuedTurns > 0) { queuedTurns--; turn(); }
+    }
+  }, ENGINE.SURGE_MS + 60);
 }
-function land(){
+function advance(){
   station = (station+1) % ENGINE.PANES;
   slide++; turns++;
-  showQ(slide); status(); busy = false;
+  showQ(slide); status();
   dom.clampSafeBoxStarPeaks(design); // item 3: re-clamp at rest, new station
+}
+function land(){
+  advance();
+  busy = false;
   if (queuedTurns > 0) { queuedTurns--; turn(); }
 }
 function jumpTo(target){
@@ -1489,6 +1540,12 @@ function jumpTo(target){
       offset[L.id] = (offset[L.id] + L.surge) % cylinderOf(L); });
     station = (station+1) % ENGINE.PANES; slide++;
   }
+  // A jump that interrupts a wrap glide before its deferred modulo reset
+  // can arrive here with offset === cylinder (legit mid-wrap state). Left
+  // un-modded, the NEXT turn() would misread it as another wrap. No-op in
+  // every other case (offsets already < cylinder).
+  ENGINE.LAYERS.forEach(L=>{ if(L.id!=='sky')
+    offset[L.id] %= cylinderOf(L); });
   stage.classList.remove('go'); writeOffsets(); showQ(slide); status();
   dom.clampSafeBoxStarPeaks(design); // item 3: re-clamp at rest, new station
 }
