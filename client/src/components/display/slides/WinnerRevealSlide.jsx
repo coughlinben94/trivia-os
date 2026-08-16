@@ -43,8 +43,17 @@ function Fireworks({ active, themeColors = [] }) {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
-    canvas.width  = window.innerWidth
-    canvas.height = window.innerHeight
+    // Size to the canvas's own rendered CSS box (absolute inset-0 within
+    // StageFrame's ~85%-viewport stage), not window.innerWidth/Height — a
+    // hyper-critique found the old version rasterized the full viewport
+    // for a box only 85% that size, and worse, physics constants below are
+    // all in raw device pixels with nothing clamping DPR, so a TV
+    // self-reporting a 4K viewport would drive 4x the fill cost for a show
+    // rendered at half its intended visual size. This is the same box the
+    // rest of the app's display surfaces measure against.
+    const rect = canvas.getBoundingClientRect()
+    canvas.width  = rect.width
+    canvas.height = rect.height
     const W = canvas.width
     const H = canvas.height
 
