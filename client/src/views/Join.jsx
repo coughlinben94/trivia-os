@@ -588,6 +588,15 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
                       border: `1px solid ${isMe ? `#f5c842` : 'transparent'}`,
                       boxShadow: isMe ? `0 0 0 1px #f5c84222` : 'none',
                       position: 'relative', overflow: 'hidden',
+                      // Row sits in a flex-column scroll container. Without this,
+                      // the browser's default flex-shrink:1 crushes every row to
+                      // fit the visible area instead of letting the container
+                      // scroll — on any phone short on vertical room (most of
+                      // them, with >8 teams) every row's text and score collapse
+                      // into an illegible, overlapping mess. flexShrink: 0 forces
+                      // rows to their natural height and lets overflowY: auto do
+                      // its actual job.
+                      flexShrink: 0,
                     }}
                   >
                     {/* The bar. Transparent at the left, bright at the right —
