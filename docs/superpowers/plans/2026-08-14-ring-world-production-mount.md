@@ -209,7 +209,13 @@ If any agent reports a real defect: render it yourself to confirm, fix it with t
 Run: `npm run build`
 Run: `node concepts/tools/ring-verify.mjs` if it supports checking the live-mounted component (check its CLI flags/usage first — `HANDOFF-ring-2026-08-12.md` references a "live pass" mode); if it only checks the standalone harness, note that as a gap rather than skipping verification silently.
 
-- [ ] **Step 2: Push the branch**
+- [ ] **Step 2: Update scripts/ship.sh's now-stale ring-verify comment (future-world "reuploading" ask)**
+
+`scripts/ship.sh` runs `npm run verify:ring` on every ship but currently treats it as **non-blocking**, with a comment explaining why: *"RingAmbient.jsx is not mounted in production (dev-only /ambient preview route)"*. That's no longer true once this plan lands — Ring is now live behind real slides, so a ring-verify regression is a real production-visible bug, not dev-only noise. Ben's explicit ask (2026-08-16): future changes to this or any other ring world need to be able to ship confidently through the normal pipeline (`npm run ship` → build → smoke test → `git push origin main` → Vercel auto-deploy) — this comment/behavior is what stands between "confident reship" and "silently-broken-in-prod reship."
+
+Update the comment in `scripts/ship.sh` (search for `"ship: running ring-verify"`) to reflect the new reality, and make the ring-verify step **blocking** (remove the `|| echo "... not blocking ship ..."` fallback, let a non-zero exit from `npm run verify:ring` fail the ship like the build/smoke-test steps do) — UNLESS `ring-verify.mjs` is known to have false-positive failures unrelated to this mount (check recent runs / the HANDOFF docs before flipping this; if it's flaky, say so and leave it non-blocking with an updated comment explaining why, rather than blocking ship on a flaky gate).
+
+- [ ] **Step 3: Push the branch**
 
 ```bash
 git push
