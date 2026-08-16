@@ -605,8 +605,11 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                   </div>
                 )}
 
-                {/* 4-4-4-1 grid: all 15 boxes flat, drag the ⠿ grip to reorder */}
-                <div className="flex flex-wrap gap-3 justify-center">
+                {/* 5-5-3 grid: all 13 boxes flat, drag the ⠿ grip to reorder.
+                    5-wide (not 4) so the last row holds 3 tiles instead of a
+                    single orphaned one — 13 has no clean divisor, but a
+                    3-wide remainder row centers far better than a lone tile. */}
+                <div className="flex flex-wrap gap-2.5 justify-center">
                   {(() => {
                     const restBoxContent = {
                       ...Object.fromEntries(TYPE_CARDS.filter(c => !c.hidden).map(card => [card.type, {
@@ -633,12 +636,12 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                           key={id}
                           data-rest-box-id={id}
                           onClick={box.onClick}
-                          className={`relative w-[calc(25%-9px)] flex flex-col items-center justify-center gap-2 p-4 rounded-xl border text-center min-h-[120px] ${BTN} ${
+                          className={`relative w-[calc(20%-8px)] flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border text-center min-h-[100px] ${BTN} ${
                             CARD_STYLE[box.styleKey] ?? 'bg-white border-gray-200 hover:border-gray-400'
                           } ${dropTarget ? 'ring-2 ring-[#1a6b4a] ring-offset-1' : ''}`}
                         >
                           <RestGripHandle id={id} />
-                          <span className="text-3xl leading-none">{box.icon}</span>
+                          <span className="text-2xl leading-none">{box.icon}</span>
                           <span className="text-sm font-semibold text-gray-800 leading-tight">{box.name}</span>
                           <span className="text-xs text-gray-500 leading-snug">{box.desc}</span>
                         </button>
