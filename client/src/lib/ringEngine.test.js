@@ -29,6 +29,25 @@ describe('buildArc', () => {
     expect(span).toBeGreaterThanOrEqual(2.2)
     expect(span).toBeLessThanOrEqual(4.0)
   })
+
+  // ART-DIRECTION-SPEC §3 / ring-verify.mjs check 7. This is the guard on
+  // separateArc(): before it existed the arc met this floor only by luck of
+  // the jitter seed, and at PANES=13 7 of 13 cyclic pairs were under it.
+  // Swept across every PANES/phase the engine could plausibly take, not just
+  // the shipped one — the previous version passed at PANES=12 and silently
+  // stopped holding the day PANES became 13.
+  it('separates every cyclic adjacent pair by at least 6% of hi-lo', () => {
+    const floor = 0.06 * (ENGINE.ARC.hi - ENGINE.ARC.lo)
+    for (let panes = 8; panes <= 16; panes++) {
+      for (let phase = 0; phase < panes; phase++) {
+        const arc = buildArc({ ...ENGINE, PANES: panes }, { phase })
+        for (let i = 0; i < panes; i++) {
+          const gap = Math.abs(arc[i] - arc[(i + 1) % panes])
+          expect(gap, `PANES=${panes} phase=${phase} pair ${i}->${(i + 1) % panes}`).toBeGreaterThanOrEqual(floor - 1e-9)
+        }
+      }
+    }
+  })
 })
 
 describe('fillOf', () => {

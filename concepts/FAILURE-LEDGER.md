@@ -1018,3 +1018,152 @@ session should not re-litigate options 2-4 without new information.
   (weight the non-source member below the source) but trades against
   station 4's own already-under-target realised-arc number — aesthetic call,
   Ben's, not applied.
+
+---
+
+## The last two regression-tier reds, cleared — one real arc defect, one
+## instrument fault (instrument twelve)
+
+**Date:** 2026-08-17
+**Where:** `client/src/lib/ringEngine.js` (`separateArc`, new; `buildArc`),
+`concepts/world-07-ring.html` (its duplicate `arcAt` deleted),
+`concepts/tools/ring-verify.mjs` (check 15a + the forcing block it reads).
+**Why now:** Ben, explicitly — "invoke opus 5 as a second opinion and fix
+both," which is also the sign-off the STAYS-HUMAN list (§4 of
+`references/ring-world-continuity.md`) otherwise requires for touching check
+pass/fail logic. Both reds had been carried as known baseline debt since
+2026-08-16.
+
+Starting state, measured not assumed: **regression tier 4/34 FAIL** — cyclic
+adjacent-gap and safe-box peak-forcing self-check, each once per build. Full
+gate 42 PASS / 2 WARN / 21 FAIL.
+
+### 1. cyclic adjacent-gap — REAL, and the jitter was causing it, not curing it
+
+7 of 13 cyclic pairs sat under the 1.26 floor (6% of hi-lo). Pure arithmetic
+on the authored `ARC`, no rendered frame involved, byte-stable run to run —
+so, unlike instruments 8-11, there was never an instrument to suspect here.
+
+The measured cause inverts the obvious story. The cosine base at PANES=13 /
+phase=5 has only **three** genuinely flat cyclic pairs (base deltas 0.00 at
+1->2, 0.22 at 7->8 and 8->9); every other pair is already >=1.59 against a
+1.26 floor. The seeded jitter's own swing is +/-14% of range = **+/-2.94** —
+larger than those healthy separations. So an unlucky draw destroyed four
+pairs the cosine had already separated while fixing none of the three it
+exists for: **the jitter was creating more flat neighbours than it broke.**
+The 2026-08-16 PANES 12->13 change is what re-rolled the draw; the seed
+`0x1234` had been empirically picked against the 12-pane arc (this file and
+both builds' own comments say so outright), i.e. the check had only ever
+passed on luck, and the luck ran out.
+
+Fixed by enforcing the floor instead of hoping for it: `separateArc()`, a
+bounded deterministic cyclic relaxation that pushes only the pairs actually
+short, by exactly what they are short, split between the two stations, ties
+broken by index parity. No RNG, no seed to re-tune when PANES/phase moves
+again. It separates to 1.02x the floor — **not a threshold change; the spec
+floor and the gate both still read 6%.** The first run landed gaps at exactly
+1.26 and 3 of 13 still printed FAIL, because the gate's test is a strict
+`delta < floor` and binary-float rounding straddles it. Same reasoning as the
+safe-box cap's own `warnMargin`: zero headroom is a coin flip.
+
+Deliberately does not throw when it fails to settle — this runs at module load
+on the live display, and a black screen mid-show is worse than a flat arc.
+Check 7 measures the arc this returns, so a non-settling case fails the gate
+loudly. `PASS_CAP=128` is ~2.7x the worst case measured across PANES 8-16 at
+every phase (47).
+
+Same change deletes `world-07-ring.html`'s byte-copy of `arcAt()` — it now
+imports `buildArc()`, so the reference build and `RingAmbient.jsx` cannot
+drift on the arc the way st9's spanning-field branch drifted on geometry
+(2026-08-16, this file). Guard left behind: `ringEngine.test.js` asserts the
+floor across PANES 8-16 at every phase, not just the shipped pair — the
+previous arrangement passed at 12 and silently stopped holding at 13.
+
+### 2. peak-forcing self-check — INSTRUMENT TWELVE, and the ledger's own
+### previous explanation of it was wrong
+
+Reported as: `NO EFFECT: st1,st2,st4,st12`, both builds. (Not st4/st8/st11 —
+the 2026-08-10 entry above records those station numbers against a different
+tree; do not carry that list forward.)
+
+**The 2026-08-10 diagnosis — "the clamp collapses those stations' in-box star
+range to `op === ob`, so there is genuinely nothing to force" — is wrong.**
+Measured directly, gate drive path, all 13 stations: every station has 43-62
+stars inside the safe box with mean breathe amplitude **0.09-0.17** and about
+half of them non-zero, plus at least one `.pf-breathe` element overlapping the
+box with amplitude 0.10-0.44. There was always something to force.
+
+What is actually true, measured by ablating the two element classes separately
+and reading the safe-box mean at full precision: **forcing raises the box mean
+at every one of the 13 stations** — but by only **+0.003 to +0.006** at st1,
+st2, st4 and st12, under the check's `EPS = 0.01`. Nearly all of the effect at
+the stations that did clear it comes from one `.pf-breathe` headline glow
+reaching into the box (st11 **+0.90**, st3 **+0.20**, st0 +0.09); the ~50
+in-box stars together only ever contribute +0.001 to +0.03, because spec §2's
+scrim sits on exactly those pixels. **Whether a station's headline glow happens
+to overlap the safe box is a composition fact, not evidence about the forcing
+mechanism.** So `EPS` was operating as a magnitude bar, which its own comment
+said it must not be — and it would false-PASS just as readily: a typo reaching
+1 star of 500 still moves the mean at a station whose glow is in the box.
+
+Fixed on the instrument side, because the instrument is what was wrong. The
+check now asserts the thing it always claimed to: the forcing block reads back,
+in the same page context that wrote them, that every targeted element has
+`--ob === --op` and `--pa === --pa2` afterwards, and reports the counts
+(`forced 2626/2626 star, 26/26 pf`). A selector typo (total 0), a wrong
+property name, or a swallowed mutation each fail loudly and specifically —
+strictly stronger than the luma proxy for the exact failure class the check was
+written to catch. The screenshot delta survives only as a direction guard
+(forcing must never DARKEN the box), with `EPS` back in the float-tie role it
+was always documented as. **No threshold was moved to make anything pass; the
+old numeric bar was deleted, not loosened.**
+
+Nothing in `ringPrimitives.js` was touched. `clampSafeBoxStarPeaks` and its
+`--op < --ob` inversion fix stand exactly as committed in `19acae6`.
+
+### Result
+
+**Regression tier 4/34 -> 0/34.** Full gate 42/2/21 -> 45 PASS / 2 WARN / 18
+FAIL. `npm run test:unit` 184/184. `npm run build` clean.
+
+Spec tier is unchanged at 17/31 BELOW SPEC, but one check flipped each way and
+both are stated rather than netted out:
+
+- `[html] largest element supplies >=55% of mid-layer ink` FAIL -> PASS (st9
+  54.8% -> 55.4%). Marginal, and st9 was already the only station under.
+- `[react-live] realised span outside safe box >= 80% of target span` PASS ->
+  FAIL, 82% -> 77%. **This is a denominator move, not a rendering regression:**
+  rendered span is 2.35x -> 2.34x (i.e. flat), while the arc's TARGET span grew
+  2.85x -> 3.04x because `separateArc` widened the authored contrast. The same
+  check on `[html]` was already FAIL and moved the same way (79% -> 73%). This
+  is the metric the three-agent think-tank above already adjudicated on
+  2026-08-17 as a raw max/min ratio sampling 2 of 13 stations, accepted as-is
+  by Ben; it is spec-tier and `scripts/ship.sh` does not gate on it.
+
+### Instrument ten, a second shape: HMR from a concurrent session in the SAME
+### checkout, not a foreign worktree
+
+The full gate's `[react-live]` pass failed `all layers hit phase 0 together` on
+3 of 4 runs, at wrap points this change cannot reach (offsets are computed from
+`ENGINE.LAYERS` surge/cylinder alone; `buildArc`'s output only ever feeds
+`fillOf`/`loudnessOf`/scrim alpha). One run printed the tell —
+`threw: page.evaluate: Execution context was destroyed, most likely because of
+a navigation`. Cause: another Claude Code session was editing this same
+checkout throughout, and each save fires a Vite HMR full-reload on the gate's
+own dev server, resetting `offset` mid-drive.
+
+Distinct from the 2026-08-16 entry: that one is a FOREIGN server holding 5173,
+and `lsof -nP -iTCP:5173` catches it. This one is the gate's OWN correctly
+spawned server, on the right checkout, reloading underneath it. `lsof` shows
+nothing wrong.
+
+Confirmed by re-running the identical `[react-live]` pass — `runChecks`
+imported, never forked — against a `vite preview` production build on a
+private port, which has no HMR: **0/16 regression FAIL, twice, on the same
+code.** The `[html]` pass is immune both times (it is served from a file
+snapshot) and read 16/16 PASS on every run.
+
+Not fixed here. `ensureViteServer()` remains STAYS-HUMAN, and this adds a
+fourth option to the three the 2026-08-16 entry left open for Ben: serve the
+react-live pass from a production preview build rather than a dev server, which
+removes HMR from the gate's blast radius entirely.

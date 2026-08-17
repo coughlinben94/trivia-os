@@ -78,8 +78,65 @@ export function arcAt(engine, world, i) {
   return Math.max(1, base + jitter)
 }
 
+// ART-DIRECTION-SPEC §3 / ring-verify.mjs check 7: adjacent stations, checked
+// CYCLICALLY, must differ by >=6% of the arc's own (hi-lo). The seeded jitter
+// above cannot deliver that — it only ever satisfied it by luck, and at
+// PANES=13 the luck ran out (7/13 pairs below the floor, 2026-08-17).
+//
+// The measured reason is the opposite of the intuition: the cosine base has
+// only THREE genuinely flat cyclic pairs at this PANES/phase (base deltas
+// 0.00 at 1->2 and 0.22 at 7->8 / 8->9; every other pair is already >=1.59
+// against a 1.26 floor). The jitter's own +/-14%-of-range swing (+/-2.94) is
+// larger than those healthy base separations, so an unlucky draw DESTROYS
+// four pairs that the cosine had already separated — the jitter was creating
+// more flat neighbours than it broke.
+//
+// So the floor is enforced directly instead of hoped for: a bounded cyclic
+// relaxation that pushes only the pairs that are actually too close, by
+// exactly the amount they are short, split evenly between the two stations.
+// Ties (two stations at an identical value, which the trough/peak plateau
+// produces by construction at some phases) break by index parity so the pass
+// is fully deterministic — no RNG, no seed to re-tune when PANES/phase moves.
+//
+// Deliberately does NOT throw if it fails to settle: this runs at module load
+// on the live display, and a black screen mid-show is worse than a slightly
+// flat arc. ring-verify.mjs's check 7 is the guard — it measures the arc this
+// returns, so a non-settling case fails the gate loudly instead of silently.
+// PASS_CAP=128 is ~2.7x the worst case measured across PANES 8-16 at every
+// phase (47), and the loop costs 13 floats.
+//
+// HEADROOM=1.02 is not a threshold change — the spec floor stays 6% and the
+// gate still measures 6%. It separates TO 6.12% so the arc does not sit on a
+// knife edge: the gate's test is a strict `delta < floor`, and a pass that
+// lands on exactly 1.26 straddles it on binary-float rounding alone (it did,
+// first run: 3 of 13 pairs "below" the floor at exactly 1.26). Same reasoning
+// as the safe-box cap's own warnMargin — zero headroom is a coin flip.
+const PASS_CAP = 128
+const HEADROOM = 1.02
+export function separateArc(engine, arc) {
+  const { lo, hi } = engine.ARC
+  const floor = 0.06 * (hi - lo) * HEADROOM
+  const out = arc.slice()
+  const n = out.length
+  for (let pass = 0; pass < PASS_CAP; pass++) {
+    let moved = false
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n
+      const delta = out[j] - out[i]
+      const short = floor - Math.abs(delta)
+      if (short <= 1e-9) continue
+      const dir = Math.abs(delta) < 1e-9 ? (i % 2 ? -1 : 1) : Math.sign(delta)
+      out[i] -= dir * short / 2
+      out[j] += dir * short / 2
+      moved = true
+    }
+    if (!moved) break
+  }
+  return out.map(v => Math.max(1, v))
+}
+
 export function buildArc(engine, world) {
-  return Array.from({ length: engine.PANES }, (_, i) => arcAt(engine, world, i))
+  return separateArc(engine, Array.from({ length: engine.PANES }, (_, i) => arcAt(engine, world, i)))
 }
 
 export function loudnessOf(arc, i) {

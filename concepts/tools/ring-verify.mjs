@@ -752,17 +752,30 @@ export async function runChecks({ page, label, prefix, gotoUrl }) {
     saveShot(pngSafeNaturalBuf, `${label}-st${s}-safenatural`);
     const pngSafeNatural = PNG.sync.read(pngSafeNaturalBuf);
 
-    await page.evaluate((prefix) => {
-      document.querySelectorAll('.' + prefix + 'star').forEach(el => {
+    // The forcing writes, then READS BACK what actually landed — see check 15a
+    // for why the read-back is the self-check and the screenshot delta is not.
+    const forceProbe = await page.evaluate((prefix) => {
+      const stars = [...document.querySelectorAll('.' + prefix + 'star')];
+      stars.forEach(el => {
         const cs = getComputedStyle(el);
         el.style.setProperty('--ring-verify-ob-save', cs.getPropertyValue('--ob'));
         el.style.setProperty('--ob', cs.getPropertyValue('--op').trim());
       });
-      document.querySelectorAll('.' + prefix + 'pf-breathe').forEach(el => {
+      const pfs = [...document.querySelectorAll('.' + prefix + 'pf-breathe')];
+      pfs.forEach(el => {
         const cs = getComputedStyle(el);
         el.style.setProperty('--ring-verify-pa-save', cs.getPropertyValue('--pa'));
         el.style.setProperty('--pa', cs.getPropertyValue('--pa2').trim());
       });
+      const landed = (els, low, high) => els.filter(el => {
+        const cs = getComputedStyle(el);
+        const a = parseFloat(cs.getPropertyValue(low)), b = parseFloat(cs.getPropertyValue(high));
+        return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) < 1e-6;
+      }).length;
+      return {
+        starTotal: stars.length, starForced: landed(stars, '--ob', '--op'),
+        pfTotal: pfs.length, pfForced: landed(pfs, '--pa', '--pa2'),
+      };
     }, prefix);
     const pngPeakBuf = await design.screenshot();
     saveShot(pngPeakBuf, `${label}-st${s}-peak`);
@@ -915,7 +928,7 @@ export async function runChecks({ page, label, prefix, gotoUrl }) {
 
     stationMetrics.push({
       s, starCount: dom.starCount, elementCount: dom.elementCount, occCount: dom.occCount,
-      inkFrac, headlineInkFrac, midShare, bleedFrac, centroid, quadrant, vertSpreadFrac, signal, extent, contaminatedBy, safeStats, safeStatsNatural,
+      inkFrac, headlineInkFrac, midShare, bleedFrac, centroid, quadrant, vertSpreadFrac, signal, extent, contaminatedBy, safeStats, safeStatsNatural, forceProbe,
       meanLuma: frameStatsNatural.mean,
       outsideMeanLuma: outsideStatsNatural.mean,
       hasHeadline: !!dom.headline,
@@ -1162,24 +1175,51 @@ export async function runChecks({ page, label, prefix, gotoUrl }) {
   //      brighter than the natural one at the identical crop/qLayer-masking,
   //      so a silently-broken forcing mechanism fails loud instead of quiet.
   //
-  //      EPS is deliberately tiny (float-tie guard only), NOT a magnitude
-  //      bar: the safe box is mostly static, non-animated background (sky
-  //      wash + companion/detail primitives with no breathe animation), so
-  //      only a handful of stars plus, at some stations, a sliver of the
-  //      one animated headline element actually respond to forcing — real,
-  //      confirmed-working forcing only moves the box's aggregate MEAN by
-  //      ~0.1-0.7 luma (measured directly: an isolated .pf-breathe element's
-  //      own opacity jumps from a resting 0.78 to a forced 0.88, exactly its
-  //      --pa2 peak, every time — see 2026-08-07 review notes). An EPS of 1+
-  //      would false-FAIL on that genuine small effect and defeat the point.
+  //      MEASURES THE MUTATION, NOT THE SCREENSHOT (2026-08-17). This check
+  //      used to assert `peak.mean > natural.mean + 0.01` and read that as
+  //      "the forcing worked". It is the wrong instrument for its own stated
+  //      purpose, in both directions:
+  //
+  //        - It false-FAILS on working forcing. Measured directly on the html
+  //          build (all 13 stations, gate drive path, per-element ablation):
+  //          forcing raises the safe-box mean at EVERY station, but by only
+  //          +0.003 to +0.006 luma at st1/st2/st4/st12 — below the 0.01 guard.
+  //          Almost all of the effect at the stations that did clear it comes
+  //          from ONE `.pf-breathe` headline glow overlapping the box (st11
+  //          +0.90, st3 +0.20); the ~50 in-box stars only ever contribute
+  //          +0.001-0.03 between them, because the scrim spec §2 requires is
+  //          sitting on top of exactly these pixels. Whether a station's
+  //          headline glow happens to reach into the safe box is a composition
+  //          fact, not evidence about the forcing mechanism. The old EPS was
+  //          therefore a magnitude bar in practice, which its own comment
+  //          said it must not be.
+  //        - It would also false-PASS. A typo that reached 1 of 500 stars
+  //          would still move the mean at a station whose headline glow is in
+  //          the box, and this check would print green.
+  //
+  //      So it now asserts the thing it actually claims: every element the
+  //      forcing targets read back with its low custom property equal to its
+  //      high one afterwards (`--ob === --op`, `--pa === --pa2`), captured in
+  //      the same page context that performed the write. A selector typo
+  //      (starTotal 0), a wrong property name, or a mutation the browser
+  //      swallowed all fail loudly and specifically. The screenshot delta is
+  //      kept only as a direction guard — forcing must never DARKEN the box —
+  //      with EPS back to the float-tie role it was always documented as.
   {
     const EPS = 0.01;
-    const bad = stationMetrics.filter(m => m.safeStats.mean <= m.safeStatsNatural.mean + EPS);
-    const detail = `${stationMetrics.map(m => `st${m.s}=natural(mean${m.safeStatsNatural.mean.toFixed(1)}/p99.5-${m.safeStatsNatural.p995})->peak(mean${m.safeStats.mean.toFixed(1)}/p99.5-${m.safeStats.p995})`).join(' ')}`;
-    report(P('safe-box peak-forcing self-check (peak must be measurably brighter than natural)'),
+    const probeBad = stationMetrics.filter(m =>
+      m.forceProbe.starTotal === 0 || m.forceProbe.starForced < m.forceProbe.starTotal ||
+      m.forceProbe.pfTotal === 0 || m.forceProbe.pfForced < m.forceProbe.pfTotal);
+    const darker = stationMetrics.filter(m => m.safeStats.mean < m.safeStatsNatural.mean - EPS);
+    const detail = `${stationMetrics.map(m => `st${m.s}=natural(mean${m.safeStatsNatural.mean.toFixed(1)}/p99.5-${m.safeStatsNatural.p995})->peak(mean${m.safeStats.mean.toFixed(1)}/p99.5-${m.safeStats.p995})[forced ${m.forceProbe.starForced}/${m.forceProbe.starTotal} star,${m.forceProbe.pfForced}/${m.forceProbe.pfTotal} pf]`).join(' ')}`;
+    const bad = [...new Set([...probeBad, ...darker])];
+    report(P('safe-box peak-forcing self-check (every targeted element reads back at its forced peak)'),
       bad.length === 0 ? 'PASS' : 'FAIL',
-      bad.length === 0 ? `peak-forcing measurably raises safe-box luma at every station — ${detail}`
-        : `peak-forcing had no effect — safe-box measurement is not actually testing peak state. NO EFFECT: ${bad.map(m => `st${m.s}`).join(',')} — ${detail}`);
+      bad.length === 0 ? `every .star --ob and .pf-breathe --pa read back at its peak after forcing, at every station — ${detail}`
+        : `peak-forcing did not land — safe-box measurement is not actually testing peak state.` +
+          (probeBad.length ? ` NOT FORCED: ${probeBad.map(m => `st${m.s}`).join(',')}.` : '') +
+          (darker.length ? ` FORCING DARKENED THE BOX: ${darker.map(m => `st${m.s}`).join(',')}.` : '') +
+          ` — ${detail}`);
   }
 
   // 15. safe-box luminance cap, mean <=34 / p99.5 <=S.p995Max, measured at

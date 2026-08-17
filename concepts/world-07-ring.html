@@ -260,7 +260,7 @@ header.pg b{color:#ddd8e8;font-weight:500}
 // el/makePrim/bandY/buildStars call site below goes through the returned
 // `dom` object — no call site ever passes a literal prefix string again.
 import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, applySkyTints } from '../client/src/lib/ringPrimitives.js';
-import { rng, lerp, skyFromTheme, fillOf } from '../client/src/lib/ringEngine.js';
+import { rng, lerp, skyFromTheme, fillOf, buildArc } from '../client/src/lib/ringEngine.js';
 import { THEMES } from '../client/src/themes/index.js';
 
 const midnightGalaxyTheme = THEMES.find(t => t.id === 'midnight-galaxy');
@@ -415,26 +415,14 @@ const WORLD = {
   ],
 };
 
-/* target mean luma per station — the arc. A seeded jitter (never Math.random)
-   breaks up the cosine trough's flat neighbourhood — without it, stations
-   6-8 all round to brightness 18 (S1 defect: "nothing is a moment").
-   The trough is symmetric by construction (stations 6 and 8, either side of
-   the minimum at 7, get an IDENTICAL base before jitter). A ±10% multiplier
-   ON BASE was tried first and passed the numeric gate (span/no-flat-
-   neighbours) while leaving the defect intact — near the trough base is
-   only ~18, so ±10% is ~±1.8, not enough to separate two already-identical
-   values on an 18-52 range; loudness at 6/7/8 stayed ~0.14/0/0.04, still
-   visually flat. Scaling the jitter to the ARC's own range (hi-lo) instead
-   of to the local base is what actually breaks the symmetry: seed 0x1234 at
-   ±14% of range gives loudness 0.149/0.000/0.073 — real separation. */
-function arcAt(i){
-  const { lo, hi, exp } = ENGINE.ARC;
-  const t = 0.5 - 0.5*Math.cos(2*Math.PI*(i + WORLD.phase)/ENGINE.PANES);
-  const base = lo + (hi-lo)*Math.pow(t, exp);
-  const jitter = lerp(-0.14, 0.14, rng(i, 0x1234)()) * (hi-lo);
-  return Math.max(1, base + jitter);
-}
-const ARC = Array.from({length:ENGINE.PANES}, (_,i) => arcAt(i));
+/* target mean luma per station — the arc: a cosine base, a seeded jitter
+   (never Math.random) to break the trough's symmetric flat neighbourhood,
+   then separateArc()'s cyclic adjacent-gap floor. This file used to carry its
+   own byte-copy of arcAt() alongside ringEngine.js's; it now imports
+   buildArc() so the reference build and RingAmbient.jsx cannot drift — the
+   same one-fact-one-home fix skyFromTheme()/fillOf() already got. See
+   ringEngine.js for the full reasoning on each of the three stages. */
+const ARC = buildArc(ENGINE, WORLD);
 const ARC_MIN = Math.min(...ARC), ARC_MAX = Math.max(...ARC);
 /* 0 at the quietest station, 1 at the loudest — drives size and alpha */
 const loudness = i => (ARC[i] - ARC_MIN) / (ARC_MAX - ARC_MIN);
