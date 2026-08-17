@@ -474,7 +474,28 @@ export default function SlideCanvasEditor({
       const r = el.getBoundingClientRect()
       const id = el.dataset.slideRegion
       const rt = (data._regionTransforms ?? {})[id] ?? {}
-      return { id, field: el.dataset.slideField, x: r.left - oRect.left, y: r.top - oRect.top, w: r.width, h: r.height, baselineDx: rt.dx ?? 0, baselineDy: rt.dy ?? 0, baselineRotate: rt.rotate ?? 0 }
+      // Store the region's BASE geometry — as if dx/dy/rotate/scale were all
+      // zero — and let the render pass apply the FULL current transform on
+      // top. getBoundingClientRect() is the axis-aligned bounding box of the
+      // ALREADY-transformed element: rotate inflates it and scale bakes
+      // itself in, so snapshotting it raw and then re-applying curScale /
+      // curRot in the render pass drew the box at scale² size (2× resize →
+      // 4× box) and double-rotated after every release (2026-08-17, Ben:
+      // "resize windows are so wonky — size wise, moving to different
+      // areas"). Rotate/scale pivot on the element's center, so the AABB
+      // center minus the current dx/dy shift IS the base center; the base
+      // size comes from offsetWidth/Height (layout size, transform-free)
+      // whenever a rotate/scale is active. When neither is active the AABB
+      // already equals the base box, so keep it — offsetWidth on plain
+      // inline text spans (no transform → no inline-block from xf()) can
+      // misreport wrapped lines.
+      const dx = rt.dx ?? 0, dy = rt.dy ?? 0
+      const hasRotScale = !!(rt.rotate || (rt.scale && rt.scale !== 1))
+      const w = hasRotScale ? el.offsetWidth * dynScale : r.width
+      const h = hasRotScale ? el.offsetHeight * dynScale : r.height
+      const cx = (r.left + r.right) / 2 - oRect.left - dx * dynScale
+      const cy = (r.top + r.bottom) / 2 - oRect.top - dy * dynScale
+      return { id, field: el.dataset.slideField, x: cx - w / 2, y: cy - h / 2, w, h }
     }))
   }
 
@@ -513,8 +534,11 @@ export default function SlideCanvasEditor({
     const rt = data._regionTransforms ?? {}
     const curDx = rt[region.id]?.dx ?? 0
     const curDy = rt[region.id]?.dy ?? 0
-    const extraX = (curDx - region.baselineDx) * dynScale
-    const extraY = (curDy - region.baselineDy) * dynScale
+    // region.x/y/w/h are BASE geometry (see detectRegions); the live center
+    // is the base center shifted by the full current dx/dy — rotate/scale
+    // pivot on it, so they never move it.
+    const extraX = curDx * dynScale
+    const extraY = curDy * dynScale
     const cx = oRect.left + region.x + extraX + region.w / 2
     const cy = oRect.top + region.y + extraY + region.h / 2
     const startR = rt[region.id]?.rotate ?? 0
@@ -557,8 +581,10 @@ export default function SlideCanvasEditor({
     const rt = data._regionTransforms ?? {}
     const curDx = rt[region.id]?.dx ?? 0
     const curDy = rt[region.id]?.dy ?? 0
-    const extraX = (curDx - region.baselineDx) * dynScale
-    const extraY = (curDy - region.baselineDy) * dynScale
+    // Same base-geometry + full-current-dx/dy center math as the rotate
+    // handle above.
+    const extraX = curDx * dynScale
+    const extraY = curDy * dynScale
     const cx = oRect.left + region.x + extraX + region.w / 2
     const cy = oRect.top + region.y + extraY + region.h / 2
     const startDist = Math.hypot(e.clientX - cx, e.clientY - cy) || 1
@@ -814,17 +840,18 @@ export default function SlideCanvasEditor({
               const curDy = rt[region.id]?.dy ?? 0
               const curRot = rt[region.id]?.rotate ?? 0
               const curScale = rt[region.id]?.scale ?? 1
-              const extraX = (curDx - region.baselineDx) * dynScale
-              const extraY = (curDy - region.baselineDy) * dynScale
-              // Selection box didn't track a live resize (2026-08-17, Ben:
-              // "the window around the image constantly moves to diff
-              // locations, doesn't stay consistent") — region.w/h come from
-              // the last detectRegions() snapshot, which only re-runs 50ms
-              // after pointerup, so the box stayed the OLD size through the
-              // whole drag and snapped afterward. The real element scales
-              // from its own center (transformOrigin: center in xf()), so
-              // the box now scales the same way here: grow/shrink around
-              // the same center point rather than from a fixed corner.
+              // region.x/y/w/h are BASE (transform-free) geometry — see
+              // detectRegions. Apply the FULL current transform here, the
+              // same way the slide's own xf() does on the real element:
+              // shift by dx/dy, scale/rotate around the box center. Because
+              // the snapshot is transform-free, this is correct BOTH live
+              // mid-gesture (fix of 2026-08-17, "box didn't track a live
+              // resize") AND after the post-release re-measure — the old
+              // AABB snapshot re-applied curScale/curRot on top of an
+              // already-scaled/rotated measurement, drawing the box at
+              // scale² size and double-rotated.
+              const extraX = curDx * dynScale
+              const extraY = curDy * dynScale
               const boxW = region.w * curScale
               const boxH = region.h * curScale
               const scaleOffsetX = (region.w - boxW) / 2
