@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 
 const SLIDE_TYPE_META = {
+  'pre-show':          { label: 'Pre-Show',         icon: '📱' },
   'title':             { label: 'Title Slide',      icon: '📢' },
   'state-of-union':    { label: 'State of the Union', icon: '🇺🇸' },
   'team-picker':       { label: 'Team Intro',          icon: '🚀' },
