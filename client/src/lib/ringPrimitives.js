@@ -2954,29 +2954,69 @@ export const SKY_REGIONS = {
 }
 
 // "Weather, not a light switch" — a continuous weight curve across station
-// index, not an on/off flag. Asymmetric on purpose: the approach station
-// gets a quarter-strength preview, the exit station holds half strength so
-// the region thins out while sharing the sky with whatever comes next,
-// rather than switching off at the boundary.
+// index, not an on/off flag. Asymmetric on purpose: the station being
+// approached gets a quarter-strength preview, the one just left holds half
+// strength, so a region thins out while sharing the sky with whatever comes
+// next rather than switching off at the boundary.
+//
+// 2026-08-16: these two numbers stopped being a two-entry lookup table and
+// became the PER-STEP RATIO of a geometric falloff (skyRegionWeights, below).
+// Same magnitudes, same asymmetry — one station out still reads exactly 0.25
+// ahead / 0.50 behind — but the curve now keeps going instead of dropping to
+// a hard zero at step two. The lookup left four of the thirteen stations
+// (st1, st2, st7, st8) with no sky colour from any region at all, in two
+// contiguous dead-air gaps; Ben, on the sky work generally: panning must
+// "ALWAYS feel connected."
 const REGION_W_APPROACH = 0.25
 const REGION_W_EXIT = 0.50
 
-// -> array[stationIndex] = { aurora: w, ember: w }. Cyclic (station 11
-// neighbours station 0, same wrap rule the noun-uniqueness spacing uses).
-// Every region is scored at every station, so two regions overlapping a
-// shoulder just stack their two layers' opacities instead of one clobbering
-// the other.
+// Signed cyclic station distance from `i` to `j` on a ring of `n`. Positive
+// = j is AHEAD of i (approaching it), negative = BEHIND (already passed).
+// Splits at the antipode, so a 13-station ring reaches 6 ahead / 6 behind and
+// every station has a defined distance to every other one. Same wrap rule the
+// noun-uniqueness spacing uses (the last station neighbours station 0).
+function cyclicOffset(i, j, n) {
+  const raw = (j - i + n) % n
+  return raw * 2 <= n ? raw : raw - n
+}
+
+// -> array[stationIndex] = { aurora: w, ember: w, disco: w }.
+//
+// Geometric falloff in signed cyclic distance, asymmetric by direction:
+// REGION_W_APPROACH per step ahead, REGION_W_EXIT per step behind, so
+//   w(0) = 1,  w(+d) = 0.25^d,  w(-d) = 0.50^d.
+// At |d| <= 1 that is numerically identical to the step lookup it replaced —
+// every value that lookup ever produced is preserved exactly. Past that it
+// decays instead of cutting to zero, and an exponential never reaches zero,
+// so no station is ever colourless: on the shipped 13-station layout the
+// quietest station (st8) totals ~0.19 across the three regions where it used
+// to total exactly 0.
+//
+// A multi-station region takes the MAX over its members, not the sum —
+// summing would make a two-station region (aurora, st4-5) brighter at its own
+// core than a one-station region, which is a density artefact rather than
+// intent. Regions are still scored independently OF EACH OTHER, so
+// overlapping shoulders stack the layers' opacities as before (st11 carries
+// disco's exit and ember's approach at the same time).
+//
+// Deliberately NOT normalized to a constant per-station total. Flattening the
+// total would pull the quiet stations up to near core strength, which is the
+// "uniform tint reads as a filter over the screen" failure the SKY_REGIONS
+// block above exists to avoid, and would dim a core purely because a
+// neighbouring region's shoulder happens to overlap it. Whether the ring
+// should trade core contrast for a flatter total is an aesthetic call, not
+// this function's to make.
 export function skyRegionWeights(stations) {
   const n = stations.length
-  const keys = Object.keys(SKY_REGIONS)
   return stations.map((_, i) => {
     const w = {}
-    for (const k of keys) {
-      w[k] = stations[i].region === k ? 1
-        : stations[(i - 1 + n) % n].region === k ? REGION_W_EXIT
-          : stations[(i + 1) % n].region === k ? REGION_W_APPROACH
-            : 0
-    }
+    for (const k of Object.keys(SKY_REGIONS)) w[k] = 0
+    stations.forEach((st, j) => {
+      if (!st.region || !(st.region in w)) return
+      const d = cyclicOffset(i, j, n)
+      const ratio = d >= 0 ? REGION_W_APPROACH : REGION_W_EXIT
+      w[st.region] = Math.max(w[st.region], ratio ** Math.abs(d))
+    })
     return w
   })
 }
@@ -3019,19 +3059,45 @@ function makeSkyTints(el) {
 }
 
 // Drives the tint layers to the target station's weights. `animate:false`
-// snaps with the transition disabled - used by jumpTo(), which is an
-// authoritative resync, and which is also the ONLY way concepts/tools/
-// ring-verify.mjs drives stations. That matters: the gate calls
-// freezeFrame() (`getAnimations().forEach(a => a.currentTime = 0)`)
-// immediately after jumpTo, which would rewind an in-flight CSS transition
-// to its PRE-jump value and silently measure the wrong station's sky.
-// Snapping on jump means there is no transition object for it to rewind.
+// snaps - used by jumpTo(), which is an authoritative resync, and which is
+// also the ONLY way concepts/tools/ring-verify.mjs drives stations. That
+// matters: the gate calls freezeFrame() (`getAnimations().forEach(a =>
+// a.currentTime = 0)`) immediately after jumpTo, which rewinds any in-flight
+// CSS transition to its PRE-jump value and silently measures the wrong
+// station's sky.
+//
+// The snap therefore has to CANCEL a running transition, not merely set a
+// 0ms duration for the next one. Two separate reasons, both real:
+//
+//  1. Per CSS Transitions, changing `transition-duration` has no effect on a
+//     transition already running - the running one keeps its original timing.
+//     Setting the property to a value it is already at starts no new
+//     transition either, so it leaves the old one alive. That is exactly the
+//     case a resync hits most often: the animated turn already wrote the
+//     target as the element's inline value, and the jump then targets the
+//     same number. Reproduced 2026-08-16 against world-07-ring.html - the
+//     gate read ember=0.5 at stations 0-8 where the true value was 0, because
+//     the surviving 0.5->0 transition got rewound to 0.5 under the freeze.
+//     This function's own comment previously claimed "there is no transition
+//     object for it to rewind"; on that path the claim was false.
+//  2. `transition-property: none` DOES cancel a running transition (the
+//     property stops being transitionable), which is what makes the snap
+//     authoritative regardless of whether the value changes.
+//
+// Production was never affected - nothing calls freezeFrame at runtime, and
+// the visible end state was always correct either way. Only gate measurements
+// taken through this path were wrong, which is worse, not better: an
+// instrument reading a stale frame is this project's most expensive recurring
+// failure (FAILURE-LEDGER.md, instruments eight and nine, same shape).
 export function applySkyTints(tints, weights, station, animate) {
   const w = weights[station] || {}
   for (const key of Object.keys(tints)) {
     const t = tints[key]
     const next = w[key] || 0
     const cur = parseFloat(t.style.opacity) || 0
+    // '' restores the stylesheet's own `transition: opacity ...` shorthand;
+    // 'none' cancels whatever is in flight for the duration of the snap.
+    t.style.transitionProperty = animate ? '' : 'none'
     t.style.transitionDuration = !animate ? '0ms'
       : (next < cur ? SKY_TINT_OUT_MS : SKY_TINT_IN_MS) + 'ms'
     t.style.opacity = next.toFixed(3)

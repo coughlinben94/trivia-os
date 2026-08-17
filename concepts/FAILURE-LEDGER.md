@@ -773,3 +773,199 @@ and port selection interacts with `ship.sh`). Stated so it is not rediscovered
 as "react-live is nondeterministic": **if a `[react-live]` result shifts at
 stations your change cannot touch, check `pgrep -fl "vite --port 5173"` for
 another session before believing the numbers.**
+
+---
+
+## Instrument eleven — `applySkyTints`'s `animate:false` snap never cancelled
+## an in-flight CSS transition, so `freezeFrame()` rewound station 0's sky
+
+**Date:** 2026-08-16
+**Where:** `client/src/lib/ringPrimitives.js`, `applySkyTints()`.
+**Found during:** the `ring-integration` branch (merging `ring-station-13` +
+`jukebox-ring-fusion` onto `origin/main`, then reworking `skyRegionWeights`).
+Found by reading the function's own comment and disbelieving it, then
+reproducing it — not by noticing a bad number first.
+
+### What was wrong
+
+The function's comment claimed: *"Snapping on jump means there is no
+transition object for it to rewind."* On the path that matters, that claim was
+false. The snap branch set `transition-duration: 0ms` and wrote the target
+opacity. Neither of those cancels a transition that is already running:
+
+- Per CSS Transitions, changing `transition-duration` has no effect on a
+  transition already in flight — the running one keeps its original timing.
+- Writing a property the element is already at (which is the normal case on a
+  resync, because the preceding animated turn already wrote the target as the
+  element's inline value) starts no new transition either, so nothing displaces
+  the old one.
+
+`ring-verify.mjs`'s `freezeFrame()` then does `getAnimations().forEach(a => {
+a.pause(); a.currentTime = 0 })` — which rewinds the surviving transition to
+its PRE-transition value and screenshots that. Same family as instruments eight
+and nine: the number was wrong because the instrument measured the wrong frame.
+
+**Production was never affected** — nothing calls `freezeFrame` at runtime, and
+the settled visual end state was always correct. Only gate measurements taken
+through this path were wrong.
+
+### Reproduced first, in isolation, before any fix
+
+Headless Chromium, one `.sky-tint` div carrying the real shipped CSS
+(`transition: opacity 2600ms`), no ring world involved:
+
+1. snap to 0.5, settle → computed 0.5
+2. animated call to 0.0 → transition 0.5→0 in flight, inline value already
+   `'0.000'`; computed mid-flight 0.428
+3. `applySkyTints(..., animate:false)` to the SAME target 0
+4. `freezeFrame()`
+
+**Before the fix: computed opacity 0.5, expected 0** — 1 live transition
+survived. **After: 0, expected 0** — 0 live transitions.
+
+### Measured on the gate's own drive path, 13 stations
+
+Separate throwaway diagnostic (36 real animated turns, `emulateMedia`
+reduced-motion, then sequential `jumpTo` + `freezeFrame` per station — the
+gate's real path), reading every `.sky-tint` layer's computed opacity and
+diffing it against `skyRegionWeights()`'s intended value:
+
+| tree | stations misread |
+|---|---|
+| post-merge baseline (old step-lookup curve, unfixed) | **st0 only** — ember measured **0.944**, intended 0.500 |
+| new continuous curve, still unfixed | **st0 only** — ember **0.948** (want 0.500), disco **0.328** (want 0.125) |
+| new curve + fix | **none — 13/13 exact** |
+
+Exactly one station, and always the same one: station 0 is the only station the
+gate reaches with an animated transition still in flight, because it is the
+first `jumpTo` after the 36-turn drive phase. Every later station is entered
+from a previous snap, which leaves nothing running. **This is narrower than the
+report that prompted the work** (which described stations 0-8 reading a stale
+`ember = 0.5`); on this tree and this drive path it is st0 alone, measured, not
+inferred.
+
+### What was fixed
+
+`t.style.transitionProperty = animate ? '' : 'none'`. Setting
+`transition-property: none` makes the property non-transitionable, which
+cancels the running transition — the one thing that actually makes a snap
+authoritative regardless of whether the value changes. The animate branch
+restores `''` so the stylesheet's own shorthand takes over again; verified in
+the same browser harness that an animated turn immediately after a snap still
+transitions (mid-flight 0.105 heading to 0.5, 1 live transition).
+
+Guard left behind: two cases in `client/src/lib/skyRegions.test.js`
+(`applySkyTints transition handling`) asserting the snap writes
+`transition-property: none` and the animated path restores `''`. They are
+structural, not visual — jsdom cannot run a real transition — so the browser
+repro above is the real evidence and these only catch the cancel being dropped
+again.
+
+### Which gate numbers this moves, stated rather than absorbed
+
+Station 0's baseline readings were inflated by a sky tint nearly twice its
+true strength. Directly attributable, `[html]`: ink per station st0
+**19.6% → 9.2%** (back inside its 5.6% floor / 18.0% ceiling band, so that
+check's out-of-band list shrank), realised arc st0 **18.1 → 15.5**. Any earlier
+conclusion that leaned on station 0 being one of the ring's brightest stations
+was leaning on a measurement artefact.
+
+No regression-tier verdict changed in either direction (still 4/34 FAIL, same
+four checks).
+
+---
+
+## Sky-region weights — continuous cyclic falloff replaces the neighbour
+## lookup; the arc-vs-atmosphere trade it exposes is Ben's call
+
+**Date:** 2026-08-16
+**Where:** `client/src/lib/ringPrimitives.js`, `skyRegionWeights()`.
+Ben, on the direction: *"I'm on the side of spatial and ensuring panning
+always, ALWAYS, feels connected... continue down that road."*
+
+### What changed
+
+The old weight table was a three-branch neighbour lookup — core 1, previous
+station 0.50, next station 0.25, everything else a hard 0. On the 13-station
+ring that left **st1, st2, st7 and st8 at zero weight from every region**: two
+contiguous stretches where the sky carried no region colour at all, so turning
+into them was a colour cliff rather than a flow.
+
+Replaced with a geometric falloff in signed cyclic index distance, asymmetric
+by direction, reusing the two existing constants as per-step ratios rather than
+as table entries:
+
+```
+w(0) = 1        w(+d) = REGION_W_APPROACH^d = 0.25^d   (region ahead)
+                w(-d) = REGION_W_EXIT^d     = 0.50^d   (region behind)
+```
+
+At `|d| <= 1` this is numerically identical to the lookup it replaced — every
+value that lookup ever produced survives byte-for-byte (aurora st3/4/5/6 =
+0.25/1/1/0.5, ember st11/12/0 = 0.25/1/0.5, disco st9/10/11 = 0.25/1/0.5).
+Past that it decays instead of cutting out, and an exponential never reaches
+zero. A multi-station region takes the max over its members (summing would make
+a two-station region brighter at its own core, a density artefact). Regions are
+still scored independently of each other, so overlapping shoulders stack.
+
+Per-station totals across the three regions, shipped layout:
+
+```
+st       0     1     2     3     4     5     6     7     8     9    10    11    12
+was    0.50  0.00  0.00  0.25  1.00  1.00  0.50  0.00  0.00  0.25  1.00  0.75  1.00
+now    0.63  0.33  0.22  0.33  1.03  1.02  0.50  0.27  0.19  0.33  1.09  0.77  1.25
+```
+
+**Deliberately NOT normalized to a constant per-station total**, despite that
+being part of the proposal that motivated the work. Flattening the total pulls
+the quiet stations up toward core strength, which is the "uniform tint reads as
+a filter over the screen" failure the `SKY_REGIONS` block says this system
+exists to avoid, and it dims a core purely because a neighbouring region's
+shoulder overlaps it (a constant-sum normalization takes ember's st12 core from
+1.00 to 0.80 for exactly that reason). Naming the conflict instead of picking
+a side: **a continuous falloff cannot be both "core reads as core" and
+"constant total around the ring."**
+
+### The real cost, measured, not hidden
+
+Filling the dead air raises the quietest stations' rendered luma, which eats
+into the value arc. One check flipped **PASS → FAIL** as a direct result:
+
+`[html] realised span outside safe box >= 80% of target span`: **103% → 79%**
+(floor 80%). `[react-live]` moved the same way but survives: 113% → 82%.
+
+Attribution, from the per-station realised-arc numbers rather than from
+reasoning: the ring's rendered **minimum rose from 8.6 (st7) to 11.1** while the
+**maximum is unchanged at 20.8 (st5)** — the span compressed from the floor up,
+which is the dead-air fill, not the instrument-eleven st0 correction above (st0
+is mid-rank in this metric and its correction moves it DOWN, which would widen
+the span, not narrow it).
+
+Several checks improved in the same run: `[html] ink per station` 5/12 → 4/12
+out of band, `[html] headline ink` 8/12 → 7/12, `[react-live] ink per station`
+9/12 → 6/12, `[react-live] realised arc` 9/12 → 7/12 off target.
+
+Full gate: **43 PASS / 2 WARN / 20 FAIL → 42 PASS / 2 WARN / 21 FAIL.**
+Regression tier unchanged (4/34 FAIL, same four checks). Spec tier 16/31 → 17/31
+BELOW SPEC, the one addition being the realised-span check above.
+
+### STAYS HUMAN — open for Ben, nothing applied
+
+The arc and the atmosphere now pull against each other, and every lever that
+would buy the arc back is a threshold or an aesthetic decision, so none was
+touched:
+
+1. Accept the softer arc — atmosphere everywhere is what was asked for, and
+   the realised-span floor (80%) was itself set before the sky had any
+   always-on layer.
+2. Lower the tint's own alpha (`skyTintBackground`'s 0.62 top stop) so a faint
+   shoulder contributes less luma while still being visible. Changes the
+   palette's weight, not the curve.
+3. Steepen the falloff (a smaller ahead/behind ratio) so shoulders die off
+   faster. Re-opens dead air at the far stations, which is the thing this
+   change was made to remove.
+4. Normalize per-station totals after all, accepting dimmer cores.
+
+Not decided here: which of these, if any. Per
+`references/ring-world-continuity.md` §4, threshold choice and aesthetic
+acceptance are Ben's.
