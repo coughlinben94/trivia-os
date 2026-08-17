@@ -1,5 +1,13 @@
 # Ring Station 13 (Music Slot) Implementation Plan
 
+> **SUPERSEDED DETAIL, 2026-08-16 (same day, follow-up commit on this branch):** every
+> "station 12 / index 12 / `MUSIC_STATION = 12`" below is the plan as executed, but the
+> record was then SWAPPED to **station 10** (trading places with the supernova, now
+> st12) to resolve the radial-mass spacing tradeoff this plan itself flagged — Ben:
+> "it can just flip it with another station, correct?". `MUSIC_STATION = 10` now.
+> See the record entry's comment in `concepts/world-07-ring.html` for the full
+> spacing arithmetic. PANES=13, the wrap point, and everything else here stand.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give the jukebox grading-break its own dedicated 13th stop in the ring's rotation — a real drawn `record` object with its own sky region — instead of consuming an arbitrary one of the existing 12 stations and hiding it under an opaque overlay.

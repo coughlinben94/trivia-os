@@ -32,29 +32,33 @@ describe('skyRegionWeights', () => {
     expect(w[1].ember).toBe(0.25)
   })
 
-  it('matches the shipped Midnight Galaxy layout (aurora st4-5, ember st10, disco st12)', () => {
+  // Record/supernova swap 2026-08-16 (same day the record landed at st12):
+  // the record moved st12 -> st10 for silhouette-family spacing, the
+  // supernova st10 -> st12. Disco follows the record; ember follows the
+  // supernova. See the station entries' own comments for the arithmetic.
+  it('matches the shipped Midnight Galaxy layout (aurora st4-5, disco st10, ember st12)', () => {
     const w = skyRegionWeights(midnightGalaxyRing.stations)
     expect(midnightGalaxyRing.stations).toHaveLength(13)
     expect(w.map(x => x.aurora)).toEqual([0, 0, 0, 0.25, 1, 1, 0.5, 0, 0, 0, 0, 0, 0])
-    expect(w.map(x => x.ember)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0.25, 1, 0.5, 0])
-    expect(w.map(x => x.disco)).toEqual([0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.25, 1])
+    expect(w.map(x => x.ember)).toEqual([0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.25, 1])
+    expect(w.map(x => x.disco)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0.25, 1, 0.5, 0])
   })
 
   // Ben, 2026-08-16: "ensure that the color wiring on s13 is noticeable and
-  // fun." The disco region is what delivers that, and its exit shoulder is
-  // also what breaks up the ring's flattest colour stretch — station 0 used
-  // to carry zero weight from any region.
-  it('gives the music station its own region, and lights st11 and st0 on the way through', () => {
+  // fun." The disco region is what delivers that. Station 0's colour now
+  // comes from ember's exit shoulder (the supernova at st12 wraps into it) —
+  // st0 used to carry zero weight from any region.
+  it('gives the music station its own region, and lights st9 and st11 on the way through', () => {
     const w = skyRegionWeights(midnightGalaxyRing.stations)
-    expect(w[12].disco).toBe(1)    // core — the record is its own light source
-    expect(w[11].disco).toBe(0.25) // approach
-    expect(w[0].disco).toBe(0.5)   // exit, wrapping past the end of the array
-    expect(midnightGalaxyRing.stations[12]).toMatchObject({
+    expect(w[10].disco).toBe(1)    // core — the record is its own light source
+    expect(w[9].disco).toBe(0.25)  // approach
+    expect(w[11].disco).toBe(0.5)  // exit — stacks with ember's 0.25 approach
+    expect(midnightGalaxyRing.stations[10]).toMatchObject({
       key: 'record', prim: 'record', hue: 300, region: 'disco', regionSource: true,
     })
   })
 
-  it('station 0 is no longer colourless now that disco exits into it', () => {
+  it('station 0 is no longer colourless now that ember wraps its exit into it', () => {
     const w = skyRegionWeights(midnightGalaxyRing.stations)
     const total = Object.values(w[0]).reduce((a, b) => a + b, 0)
     expect(total).toBeGreaterThan(0)

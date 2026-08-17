@@ -52,7 +52,8 @@ const ENGINE = {
   W: 1920, H: 1080,
   // 12 -> 13 on 2026-08-16: the jukebox grading-break got its own dedicated
   // stop (Ben: "it needs to have its own ring slot") — the `record` station,
-  // index 12, appended in midnightGalaxy.ring.js and world-07-ring.html.
+  // appended at index 12 in midnightGalaxy.ring.js and world-07-ring.html,
+  // then swapped to index 10 the same day for silhouette-family spacing.
   // This is NOT an additive change: arcAt() is cos(2*PI*(i+phase)/PANES), so
   // every station's loudness/fill/ink moves, not just the new one. It also
   // moves the wrap point from 11->0 to 12->0; both new legs are covered by
@@ -760,9 +761,9 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
 
   // ── Station override: the jukebox grading-break's dedicated slot ──
   // Every other caller advances the ring by exactly one station per slide.
-  // The break is the one moment that must land on a SPECIFIC station (12, the
-  // record) no matter where the rotation happens to be, so it is the one
-  // caller that jumps instead of turning.
+  // The break is the one moment that must land on a SPECIFIC station (10, the
+  // record — see Display.jsx's MUSIC_STATION) no matter where the rotation
+  // happens to be, so it is the one caller that jumps instead of turning.
   //
   // jumpTo() snaps rather than glides, and that is deliberate rather than a
   // shortcut: each layer's pan cylinder is authored exactly `cylinder +
@@ -775,9 +776,9 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
   // uses.
   //
   // Contract for the jukebox-side layer (jukebox-ring-fusion branch): by the
-  // time that overlay paints, stationRef is 12, the record is the station in
-  // frame, and the disco sky tint is at full weight (snapped, not
-  // transitioning — jumpTo passes animate:false, see applySkyTints).
+  // time that overlay paints, stationRef is MUSIC_STATION (10), the record is
+  // the station in frame, and the disco sky tint is at full weight (snapped,
+  // not transitioning — jumpTo passes animate:false, see applySkyTints).
   useEffect(() => {
     if (stationOverride == null) return
     jumpTo(stationOverride)

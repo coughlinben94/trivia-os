@@ -1898,9 +1898,11 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
   }
 
   else if (kind === 'record') {
-    // Station 12's music object (2026-08-16, Ben: the jukebox break "needs to
-    // have its own ring slot" + "add things to s13 to make it look like an
-    // actual slide that fits into the world").
+    // The music object (2026-08-16, Ben: the jukebox break "needs to have its
+    // own ring slot" + "add things to s13 to make it look like an actual
+    // slide that fits into the world"). Added at station 12, swapped to
+    // station 10 the same day for silhouette-family spacing — this branch is
+    // index-agnostic; Display.jsx's MUSIC_STATION carries the routing index.
     //
     // Built on `ring`'s already-accepted anatomy rather than a new visual
     // grammar: same SVG-arc-in-a-viewBox idiom, same tilt (-10deg), same
@@ -2929,8 +2931,9 @@ export const SKY_REGIONS = {
   // the record (300).
   aurora: { hue: 152, tintSat: 60, tintLight: 27, srcSat: 55, srcLight: 56 },
   ember: { hue: 26, tintSat: 66, tintLight: 28, srcSat: 62, srcLight: 56 },
-  // 2026-08-16, station 12 (Ben: "ensure that the color wiring on s13 is
-  // noticeable and fun"). Deliberately the most saturated of the three
+  // 2026-08-16, the record station — st12 at first, st10 since the same-day
+  // silhouette swap (Ben: "ensure that the color wiring on s13 is noticeable
+  // and fun"). Deliberately the most saturated of the three
   // (tintSat 74 vs 60/66, one lightness step up) — this is the party moment,
   // and the only region whose source is a manufactured object rather than an
   // astronomical one, so it is allowed to be the loudest.
@@ -2943,7 +2946,10 @@ export const SKY_REGIONS = {
   //
   // Side effect worth knowing before judging it live: station 0 previously
   // carried zero region weight (the ring's flattest stretch was st0-st2).
-  // It now carries disco at 0.5 on the way out of the music station.
+  // It now carries ember at 0.5 on the way out of the supernova (st12 since
+  // the 2026-08-16 record/supernova swap); disco's own shoulders are st9
+  // (0.25 preview) and st11 (0.5 exit), where st11 also carries the ember
+  // preview at 0.25 — overlapping shoulders stack, see skyRegionWeights.
   disco: { hue: 300, tintSat: 74, tintLight: 30, srcSat: 70, srcLight: 60 },
 }
 
@@ -3192,7 +3198,8 @@ export function ringCss(prefix) {
 
 .${p}rg-ring{position:absolute;border-radius:50%}
 
-/* record (station 12). Only the sheen needs a class — the disc/grooves/label
+/* record (the music station — st10 since the 2026-08-16 swap). Only the sheen
+   needs a class — the disc/grooves/label
    are SVG ellipses styled inline. mix-blend-mode:screen so the highlight adds
    light to the grooves underneath instead of flatly covering them, which is
    what separates a specular sweep from a grey smear. */
