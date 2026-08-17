@@ -368,6 +368,16 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         setWagerError('This slide’s Answer isn’t a number — fix it in the slide editor, then score')
         return
       }
+      // Defensive: this handler only makes sense once handleLockWagers has
+      // actually written a tier snapshot. Reaching it without one (shouldn't
+      // happen now that the button dispatch above branches on wagerTiers
+      // presence rather than the lock flag — see that fix's comment for
+      // exactly the trap this closes) would score every team at the Safe
+      // default silently. Refuse instead.
+      if (slide.data.wagerTiers == null) {
+        setWagerError('Wagers were never locked — tap Lock Wagers first')
+        return
+      }
       if (!slide.data.wagerGuessesLocked) {
         // Same fake-await problem as the tier lock above — flush the real
         // write and give phones a moment to actually receive the lock
@@ -624,12 +634,12 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           {currentSlide?.type === 'question' && isWagerShiny(currentSlide?.data) && !currentSlide?.data?.wagerRevealed && (
             <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
               <p className="text-xs text-gray-400 mb-3">
-                {!currentSlide?.data?.wagerTiersLocked
+                {currentSlide?.data?.wagerTiers == null
                   ? 'Wager question — teams are picking a risk tier. The question is hidden everywhere until you lock.'
                   : 'Wagers locked — the question is up and teams are entering numbers.'}
               </p>
               <button
-                onClick={() => (currentSlide?.data?.wagerTiersLocked
+                onClick={() => (currentSlide?.data?.wagerTiers != null
                   ? handleLockAndScoreWagers(currentSlide)
                   : handleLockWagers(currentSlide))}
                 disabled={wagerBusy}
@@ -641,7 +651,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
               >
                 {wagerBusy
                   ? 'Working…'
-                  : !currentSlide?.data?.wagerTiersLocked
+                  : currentSlide?.data?.wagerTiers == null
                     ? '🎲 Lock Wagers & Reveal Question'
                     : currentSlide?.data?.wagerGuessesLocked
                       ? '🔁 Retry Scoring'

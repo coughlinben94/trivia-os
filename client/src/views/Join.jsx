@@ -1411,16 +1411,30 @@ export default function Join() {
             setPhase(fetchedShow.is_live ? 'live' : 'waiting')
             return
           }
-          // Token spent/expired/failed — NOT a hard error. A phone that
-          // already has a working stored session (the common case: it
-          // reauthed successfully earlier and is just reloading a stale
-          // URL) should fall through to the normal restore path below and
-          // carry on, not get stopped cold by a link that already did its
-          // job once.
+          // Token spent/expired/failed — falling through to the normal
+          // restore path below is only safe when this phone already has a
+          // working stored session (the common case: it reauthed
+          // successfully earlier and is just reloading a stale URL). A
+          // phone with NO stored session is, by definition, the one this
+          // whole flow exists for — silently falling through would drop it
+          // into 'register' with zero indication the reauth failed, where
+          // it would almost certainly collide with the name the ORIGINAL
+          // phone already holds. Only degrade silently when there's a real
+          // session to fall back on.
+          if (!loadStoredTeam(fetchedShow.id)?.id) {
+            setInitError('That reauth link is expired or already used — ask Ben for a fresh one.')
+            setPhase('error')
+            return
+          }
         } catch {
           // network error minting a session or calling the RPC — same
-          // reasoning, fall through rather than strand a phone that has a
-          // perfectly good stored session already.
+          // reasoning as above: only safe to fall through silently if this
+          // phone already has a working stored session.
+          if (!loadStoredTeam(fetchedShow.id)?.id) {
+            setInitError("Couldn't pair your phone — check your connection and ask Ben for a fresh link.")
+            setPhase('error')
+            return
+          }
         }
       }
 

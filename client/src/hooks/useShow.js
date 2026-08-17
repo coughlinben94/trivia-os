@@ -391,9 +391,17 @@ export function useShow() {
       // Read slidesRef.current inside the chained callback (not here) so a write
       // that had to wait its turn still sends whatever is truly latest at send
       // time, not a stale snapshot from when its timer fired.
+      //
+      // .catch() here is load-bearing, not decorative: this ref is a promise
+      // CHAIN — every future write (debounced or flushSlides) links onto
+      // whatever this resolves to. An uncaught rejection would poison the
+      // ref permanently, silently killing every slide save for the rest of
+      // the show while the UI keeps showing optimistic local updates.
+      // updateShowRow itself never rejects (it resolves {error} rather than
+      // throwing), so this is defense against a future change, not a live bug.
       slidesSaveChainRef.current = slidesSaveChainRef.current.then(() =>
         updateShowRow(showIdRef.current, { slides: slidesRef.current })
-      )
+      ).catch(() => {})
     }, 600)
   }
 
@@ -418,7 +426,10 @@ export function useShow() {
     const run = slidesSaveChainRef.current.then(() =>
       updateShowRow(showIdRef.current, { slides: slidesRef.current })
     )
-    slidesSaveChainRef.current = run
+    // Same poisoned-chain guard as the debounced path above — the ref stores
+    // the CAUGHT version so a rejection can't kill every later save, while
+    // the caller still gets the real (uncaught) `run` to await/inspect.
+    slidesSaveChainRef.current = run.catch(() => {})
     return run
   }
 
@@ -549,7 +560,14 @@ export function useShow() {
     if (currentPart !== undefined && (slide.data?.parts?.length ?? 0) > 1 && (slide.data.currentPart ?? 0) !== currentPart) {
       patch.currentPart = currentPart
     }
-    if (introDone !== undefined && slide.data?.isShiny && !!slide.data.introDone !== introDone) {
+    // Same guard as the Prev-key handler below: never regress introDone to
+    // false on a wager/matching slide that's already locked — jumping away
+    // from an in-progress locked question and back to it (Go Live's "jump
+    // to a slide" picker, reachable after exiting Live Mode) would otherwise
+    // blank every phone back to the teaser screen with no way to submit.
+    const wouldRegressLockedQuestion = introDone === false &&
+      (slide.data?.wagerTiersLocked || slide.data?.wagerGuessesLocked || slide.data?.matchingLocked)
+    if (introDone !== undefined && slide.data?.isShiny && !!slide.data.introDone !== introDone && !wouldRegressLockedQuestion) {
       patch.introDone = introDone
     }
     if (Object.keys(patch).length === 0) return slides
@@ -717,8 +735,14 @@ export function useShow() {
       }
     }
 
-    // Back to the intro beat before moving to the previous slide.
-    if (data?.isShiny && data.introDone) {
+    // Back to the intro beat before moving to the previous slide — but NOT
+    // for a wager/matching slide that's already locked. Regressing introDone
+    // there blanks every phone back to "Next question incoming…" (Join.jsx
+    // gates the WagerBoard/MatchingBoard mount on introDone, so the board
+    // unmounts entirely) with no data loss but no way to submit until the
+    // host presses Next again — and Prev is one keystroke/Stream Deck press
+    // away, the single most likely accidental trigger of this regression.
+    if (data?.isShiny && data.introDone && !(data.wagerTiersLocked || data.wagerGuessesLocked || data.matchingLocked)) {
       const newSlides = show.slides.map(s =>
         s.id === curSlide.id ? { ...s, data: { ...s.data, introDone: false } } : s
       )
