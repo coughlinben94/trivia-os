@@ -478,6 +478,21 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
     return result
   }
 
+  // Bulk fill — drop N screenshots at once instead of opening each part and
+  // uploading one at a time (2026-08-17, Ben: "i just need an area to attach
+  // 4 images or drag screenshots"). File order = part order; extra files
+  // past data.parts.length are dropped silently (the dropzone's own label
+  // states the count so there's no surprise). A failed upload just leaves
+  // that part's media untouched rather than aborting the whole batch.
+  async function uploadBulkImages(files) {
+    const targets = Array.from(files).slice(0, data.parts.length)
+    const results = await Promise.all(targets.map(f => uploadMedia(f)))
+    const parts = data.parts.map((p, i) =>
+      results[i]?.url ? { ...p, mediaSlots: [{ url: results[i].url, type: results[i].type }] } : p
+    )
+    onBatchChange({ parts })
+  }
+
   // ── Mode selector ──────────────────────────────────────────────────────
   if (!mode) {
     return (
@@ -828,6 +843,10 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
             <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="Leave blank for per-part answers" />
           </Field>
 
+          {schema.type === 'image' && (
+            <BulkImageDropzone count={data.parts.length} onFiles={uploadBulkImages} />
+          )}
+
           <Divider label="Previewing part" />
           <div className="flex flex-wrap gap-1.5">
             {data.parts.map((p, i) => (
@@ -905,6 +924,48 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
         />
       )}
     </>
+  )
+}
+
+function BulkImageDropzone({ count, onFiles }) {
+  const [dragging, setDragging] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const inputRef = useRef(null)
+
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList).filter(f => f.type.startsWith('image/'))
+    if (!files.length) return
+    setUploading(true)
+    try { await onFiles(files) } finally { setUploading(false) }
+  }
+
+  return (
+    <div
+      onDragOver={e => { e.preventDefault(); setDragging(true) }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={e => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files) }}
+      onClick={() => inputRef.current?.click()}
+      className={`relative border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
+        dragging ? 'border-baynes-forest bg-green-50' : 'border-gray-200 hover:border-baynes-forest hover:bg-gray-50'
+      } ${uploading ? 'pointer-events-none' : ''}`}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".jpg,.jpeg,.png,.gif,.webp"
+        multiple
+        onChange={e => { handleFiles(e.target.files); e.target.value = '' }}
+        className="hidden"
+      />
+      {uploading ? (
+        <p className="text-xs text-gray-500">Uploading…</p>
+      ) : (
+        <>
+          <p className="text-xs font-medium text-gray-600">📎 Drop {count} screenshots here, or click to browse</p>
+          <p className="text-xs text-gray-400 mt-0.5">Fills parts 1–{count} in order — replaces per-part images below</p>
+        </>
+      )}
+    </div>
   )
 }
 
