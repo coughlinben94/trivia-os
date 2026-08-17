@@ -518,6 +518,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                       placeholder="1"
                       className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
+                    <p className="text-[11px] text-gray-400 mt-1">Each one is a separate question (its own Q-number, its own sidebar row).</p>
                   </div>
                   {/* The format presets its asset count — only prompt here when
                       it's left blank on the format. */}
@@ -533,6 +534,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                         onChange={e => setAssetCount(Math.max(1, parseInt(e.target.value) || 1))}
                         className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
+                      <p className="text-[11px] text-gray-400 mt-1">All stay on ONE question — step through them with Next during the show.</p>
                     </div>
                   )}
                 </div>
