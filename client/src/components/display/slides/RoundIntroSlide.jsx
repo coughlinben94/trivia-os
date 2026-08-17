@@ -43,7 +43,10 @@ export default function RoundIntroSlide({ slide, show }) {
         <img
           src="/baynes-logo.svg"
           alt=""
-          style={{ height: 56, maxWidth: '100%', filter: 'brightness(0) invert(1)' }}
+          // Same fix as BaynesWatermark.jsx — brightness(0) crushed the
+          // badge's white interior lettering along with its black disc,
+          // collapsing the logo into one flat shape. invert(1) alone reads.
+          style={{ height: 56, maxWidth: '100%', filter: 'invert(1)' }}
         />
       </motion.div>
 
@@ -105,14 +108,22 @@ export default function RoundIntroSlide({ slide, show }) {
         </span>
       )}
 
-      {/* Ben photo — swing rounds get it more prominently */}
+      {/* Ben photo — swing rounds get it more prominently.
+          Pulled in from the frame's bottom-right corner (was `right: 48`) to
+          flank the centred round-number/title stack instead (2026-08-17, Ben:
+          the photo belongs near the middle of the asset it accompanies). A
+          frame-relative `%` rather than a pixel inset so it holds the same
+          relationship to the centred stack at any output resolution.
+          Not centred outright: the swing-round theme pill already owns
+          bottom-centre, and the photo sits low enough that colliding with it
+          would bury the round's own label. */}
       {data.hostPhotoUrl && (
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: isSwing ? 0.75 : 0.55, scale: 1 }}
           transition={{ delay: 0.35, duration: 0.4, ease: EASE_OUT }}
           className="absolute pointer-events-none"
-          style={{ bottom: 32, right: 48 }}
+          style={{ bottom: 32, right: '20%' }}
         >
           <img
             src={data.hostPhotoUrl}
