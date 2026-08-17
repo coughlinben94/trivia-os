@@ -511,6 +511,7 @@ export default function RoundSidebar({
                           groupCount: group.items.length,
                           groupExpanded: expanded,
                           onToggleGroup: () => toggleGroup(groupId),
+                          labelOverride: shinySiblingLabel(leadSlide, 1),
                         })}
                         {expanded && group.items.slice(1).map(({ slide, idx }, i) =>
                           rowFor(slide, idx, { doubleIndent: true, labelOverride: shinySiblingLabel(slide, i + 2) })
@@ -548,7 +549,7 @@ export default function RoundSidebar({
 
 function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, onDelete, onGripDown, indent, doubleIndent, groupCount, groupExpanded, onToggleGroup, labelOverride }) {
   const meta  = SLIDE_TYPE_META[slide.type] ?? { icon: '📄', label: slide.type }
-  const icon  = slide.data?.isShiny ? '✨' : meta.icon
+  const icon  = meta.icon
   const label = labelOverride ?? slideLabel(slide)
 
   return (
