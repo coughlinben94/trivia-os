@@ -204,6 +204,10 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const nextSlides = slides.slice(currentIndex + 1, currentIndex + 3)
   const atStart = currentIndex === 0
   const atEnd = currentIndex >= slides.length - 1
+  // Jump-to-QR — a late team scans in mid-show. Only shown if the show
+  // actually has a Pre-Show slide; jumps the TV there without touching the
+  // current slide index otherwise (host navigates back manually after).
+  const preShowIndex = slides.findIndex(s => s.type === 'pre-show')
 
   const theme = getTheme(show.theme ?? show.theme_id)
 
@@ -439,6 +443,16 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
             Edit
           </button>
           <NavButton onClick={actions.prevSlide} disabled={atStart} label="◀ Prev" title="Previous (←)" />
+          {preShowIndex !== -1 && (
+            <button
+              onClick={() => actions.goLiveFrom(preShowIndex)}
+              disabled={currentIndex === preShowIndex}
+              title="Show the join QR code again for a late team"
+              className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+            >
+              📱 QR
+            </button>
+          )}
         </div>
 
         {/* Center: slide counter + answer-live badge */}

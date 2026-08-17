@@ -12,7 +12,7 @@ import { loadYoutubeIframeApi } from '../../host/YoutubeClipEditor.jsx'
 // slide so it's not just a one-time pre-show gate. Host can place it as the
 // first slide, or return to it any time (e.g. a late-arriving team scans
 // while the show is already running a round).
-export default function PreShowSlide({ slide, show }) {
+export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
   const { theme } = useTheme()
   const [teams, setTeams] = useState([])
   const [qrDataUrl, setQrDataUrl] = useState(null)
@@ -66,6 +66,11 @@ export default function PreShowSlide({ slide, show }) {
                   if (step >= FADE_STEPS) {
                     clearInterval(fadeTimer)
                     ytPlayerRef.current?.pauseVideo()
+                    // Walkout song ending is the show's real "go" moment —
+                    // advance off Pre-Show automatically right after the
+                    // fade completes. Never in preview (would advance the
+                    // real live show from the host's preview pane).
+                    if (!isPreview) onAdvance?.()
                   }
                 }, FADE_MS / FADE_STEPS)
                 ytWatchIntervalRef.current = fadeTimer
@@ -82,7 +87,10 @@ export default function PreShowSlide({ slide, show }) {
       try { ytPlayerRef.current?.destroy() } catch { /* already gone */ }
       ytPlayerRef.current = null
     }
-  }, [walkoutSong?.videoId, walkoutSong?.start, walkoutSong?.end])
+    // isPreview/onAdvance intentionally excluded — both are stable for the
+    // life of one mount (onAdvance is a useCallback from Display.jsx),
+    // re-running this effect on their identity would remount the player.
+  }, [walkoutSong?.videoId, walkoutSong?.start, walkoutSong?.end]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const joinUrl = `${window.location.origin}/join?show=${show.id}`
 

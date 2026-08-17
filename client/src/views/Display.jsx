@@ -422,6 +422,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
                 show={show}
                 direction={direction}
                 isPreview={isPreview}
+                onAdvance={onBreakAdvance}
               />
             )}
           </AnimatePresence>

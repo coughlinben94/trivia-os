@@ -148,7 +148,7 @@ const SLIDE_COMPONENTS = {
   'pre-show':          PreShowSlide,
 }
 
-export default function SlideRenderer({ slide, show, direction, isPreview = false }) {
+export default function SlideRenderer({ slide, show, direction, isPreview = false, onAdvance }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const isShiny = slide?.data?.isShiny
@@ -230,7 +230,7 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
         animate="animate"
         exit="exit"
       >
-        <SlideComponent slide={slide} show={show} transitionKey={transitionKey} isPreview={isPreview} />
+        <SlideComponent slide={slide} show={show} transitionKey={transitionKey} isPreview={isPreview} onAdvance={onAdvance} />
         {/* Type-agnostic — every slide type gets this, no per-type branch.
             Rides this motion.div's enter/exit transition for free. */}
         <OverlayLayer overlays={slide.data?.overlays} theme={theme} />
