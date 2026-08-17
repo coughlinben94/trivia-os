@@ -434,6 +434,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
         theme={theme}
         slideKey={currentSlide?.id}
         stationOverride={breakActive ? MUSIC_STATION : null}
+        showStationDebug={isPreview}
       />
 
       {/* StageFrame: 85% viewport, centered, overflow:hidden — all slide content clips here.

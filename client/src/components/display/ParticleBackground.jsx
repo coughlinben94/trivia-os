@@ -1203,7 +1203,7 @@ if (import.meta.env.DEV) {
 }
 
 // ─── Main Export ──────────────────────────────────────────────────────────
-export default function ParticleBackground({ theme, slideKey, stationOverride }) {
+export default function ParticleBackground({ theme, slideKey, stationOverride, showStationDebug = false }) {
   const gradientMood = GRADIENT_MOODS[theme.id]
   const AmbientComponent = gradientMood ? null : AMBIENT_MAP[theme.id]
   const ringWorld = RING_WORLDS[theme.id]
@@ -1245,7 +1245,7 @@ export default function ParticleBackground({ theme, slideKey, stationOverride })
           {gradientMood
             ? <BreathingGradient palette={theme.colors} mood={gradientMood} />
             : ringWorld
-              ? <RingAmbient worldData={ringWorld} slideKey={slideKey} stationOverride={stationOverride} />
+              ? <RingAmbient worldData={ringWorld} slideKey={slideKey} stationOverride={stationOverride} showStationDebug={showStationDebug} />
               : AmbientComponent && <AmbientComponent tint={tint} />}
         </ErrorBoundary>
         <Vignette

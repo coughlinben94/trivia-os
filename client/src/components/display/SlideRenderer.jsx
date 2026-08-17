@@ -152,6 +152,18 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const isShiny = slide?.data?.isShiny
+  // ShinyIntroScreen (the announce beat before a shiny question/grid's real
+  // content) is explicitly designed to be non-opaque — "ambient rather than
+  // full-bleed" per its own file header — so the ring-world/particle
+  // background reads through it, same spirit as team-picker/pre-show below.
+  // That intent was dead on arrival: the locked background this component
+  // paints behind every OTHER slide type sat behind it too, hiding the
+  // ambient world completely except the StageFrame's own 15% margin (2026-08-17,
+  // Ben: "i cant see the background"). Scoped tightly to the intro beat only
+  // — once introDone flips and real question/grid content mounts, that
+  // content DOES want the opaque backdrop (theme.colors.shinyBg etc, for
+  // legibility over detailed ambient art), so this must not outlive introDone.
+  const isShinyIntroBeat = isShiny && !slide?.data?.introDone && (slide?.type === 'question' || slide?.type === 'grid')
 
   let transitionKey = null
   let variants
@@ -219,7 +231,7 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
           the entrance wipe cover something already covered. So this slide
           type gets no locked background; nothing else about the ambient
           mount changes. */}
-      {slide?.type !== 'team-picker' && slide?.type !== 'pre-show' && (
+      {slide?.type !== 'team-picker' && slide?.type !== 'pre-show' && !isShinyIntroBeat && (
         <div
           className="absolute inset-0"
           style={{ background: theme.colors.bgDeep, zIndex: 0 }}

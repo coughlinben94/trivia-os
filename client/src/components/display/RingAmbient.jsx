@@ -589,7 +589,7 @@ const isReduced = () =>
 // stations: [PANES x {key,prim,hue,accent}] } — see concepts/world-07-ring.html's
 // own WORLD literal. qColours is accepted but unused here (question-colour
 // styling belongs to the out-of-scope question-rendering system).
-const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stationOverride }, ref) {
+const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stationOverride, showStationDebug = false }, ref) {
   const stageElRef = useRef(null)
   const designElRef = useRef(null)
   const surgeElsRef = useRef({})
@@ -1096,18 +1096,25 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
           imperatively at the same 3 sites stationRef.current itself is
           written (turn()'s reduced/normal branches, jumpTo()), never React
           state — same "never a prop, never a re-render" rule as everything
-          else on this component. Not gated behind a debug flag: he wants it
-          on to visually confirm transitions during tomorrow's show. */}
-      <div
-        ref={debugLabelRef}
-        style={{
-          position: 'absolute', top: 8, left: 8, zIndex: 999,
-          fontFamily: 'monospace', fontSize: 13, color: 'rgba(255,255,255,0.55)',
-          textShadow: '0 1px 2px rgba(0,0,0,0.9)', pointerEvents: 'none',
-        }}
-      >
-        S0
-      </div>
+          else on this component.
+          Gated on showStationDebug (2026-08-17, Ben: doesn't want it visible
+          during the actual show) — Display.jsx passes this only when
+          isPreview is true, i.e. only in the host's own Preview tab, never on
+          the venue TV route the audience actually sees. Safe to not mount at
+          all otherwise: every imperative write to debugLabelRef.current
+          above is already null-guarded (`if (debugLabelRef.current)`). */}
+      {showStationDebug && (
+        <div
+          ref={debugLabelRef}
+          style={{
+            position: 'absolute', top: 8, left: 8, zIndex: 999,
+            fontFamily: 'monospace', fontSize: 13, color: 'rgba(255,255,255,0.55)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.9)', pointerEvents: 'none',
+          }}
+        >
+          S0
+        </div>
+      )}
     </div>
   )
 })
