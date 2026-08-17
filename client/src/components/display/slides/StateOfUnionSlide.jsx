@@ -135,26 +135,29 @@ export default function StateOfUnionSlide({ slide }) {
         background: 'radial-gradient(ellipse 72% 62% at 50% 55%, rgba(0,0,0,0.48) 0%, rgba(0,0,0,0.18) 55%, rgba(0,0,0,0.03) 100%)',
       }} />
 
-      <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
-        {/* Ben photo — defaults to the flag photo (client/src/assets/state-of-union-photo.png)
-            so it's there more often than not without being hardcoded; a host can override
-            with a different slide.data.photoUrl. HostPhotoLibrary's "remove photo" affordance
-            writes `null` (never `false` — no host surface writes that), so hiding has to key
-            off null/empty, not falsy-vs-set: an unset key means "use the default", an
-            explicitly-cleared one means "show nothing", and treating both the same was the bug
-            (clearing a photo silently showed the default instead of hiding it). */}
-        {slide.data?.photoUrl !== null && slide.data?.photoUrl !== '' && (
-          <motion.img
-            src={slide.data?.photoUrl || DEFAULT_PHOTO}
-            alt="Host"
-            className="mb-10 rounded-2xl object-cover"
-            style={{ height: '28vh', width: 'auto', maxWidth: '100%', opacity: 0.85 }}
-            initial={{ opacity: 0, scale: 1.06 }}
-            animate={{ opacity: 0.85, scale: 1 }}
-            transition={{ duration: 0.4, ease: EASE_OUT }}
-          />
-        )}
+      {/* Ben photo — defaults to the flag photo (client/src/assets/state-of-union-photo.png)
+          so it's there more often than not without being hardcoded; a host can override
+          with a different slide.data.photoUrl. HostPhotoLibrary's "remove photo" affordance
+          writes `null` (never `false` — no host surface writes that), so hiding has to key
+          off null/empty, not falsy-vs-set: an unset key means "use the default", an
+          explicitly-cleared one means "show nothing", and treating both the same was the bug
+          (clearing a photo silently showed the default instead of hiding it).
+          Pulled out of the centered message column (2026-08-17, Ben: message needs to be
+          dead-center, photo goes elsewhere) — bottom-left corner, clear of the vignette's
+          brightest center and the watermark's bottom-right. */}
+      {slide.data?.photoUrl !== null && slide.data?.photoUrl !== '' && (
+        <motion.img
+          src={slide.data?.photoUrl || DEFAULT_PHOTO}
+          alt="Host"
+          className="rounded-2xl object-cover"
+          style={{ position: 'absolute', bottom: 40, left: '6%', height: '24vh', width: 'auto', maxWidth: '100%', opacity: 0.85, zIndex: 2 }}
+          initial={{ opacity: 0, scale: 1.06 }}
+          animate={{ opacity: 0.85, scale: 1 }}
+          transition={{ duration: 0.4, ease: EASE_OUT }}
+        />
+      )}
 
+      <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
         {/* Message — RWB gradient text, springs in tilted like a campaign sign */}
         <span data-slide-region="message" data-slide-field="message" style={xf('message')}>
           <motion.p
