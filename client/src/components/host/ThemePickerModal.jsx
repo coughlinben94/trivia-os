@@ -141,7 +141,7 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
-          <h2 className="text-sm font-semibold text-gray-800">Choose theme</h2>
+          <h2 className="text-sm font-semibold text-gray-800">Choose world</h2>
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-sm"
@@ -154,7 +154,13 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Theme list */}
           <div className="w-56 shrink-0 border-r border-gray-100 overflow-y-auto py-2">
-            {THEMES.map(t => {
+            {/* Only Midnight Galaxy is a real, finished "world" right now —
+                the other 20 legacy themes stay defined in THEMES (nothing
+                deleted, still fully customizable via ThemeCustomizeControls
+                below if a show is already on one of them) but aren't
+                surfaced as pickable options until they get the same
+                ring-world treatment. */}
+            {THEMES.filter(t => t.id === 'midnight-galaxy' || t.id === show.theme).map(t => {
               const isActive = t.id === show.theme
               const isPreviewing = t.id === previewId
               return (

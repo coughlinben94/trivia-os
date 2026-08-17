@@ -619,7 +619,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                         icon: card.icon, name: card.name, desc: card.desc, styleKey: card.type,
                         onClick: () => openAddModal({ type: card.type, roundId: activeRoundId }),
                       }])),
-                      theme:    { icon: '🎨', name: 'Theme', desc: 'Change the display look', styleKey: 'theme', onClick: () => setShowThemePicker(true) },
+                      theme:    { icon: '🌌', name: 'World', desc: 'Change the display world', styleKey: 'theme', onClick: () => setShowThemePicker(true) },
                       swing:    { icon: '🎷', name: 'Swing Round', desc: 'Bulk-add all swing questions at once', styleKey: 'swing', onClick: () => setShowSwingWizard(true) },
                       pyl:      { icon: '🎰', name: 'Press Your Luck!', desc: 'Set up PYL themes and slides', styleKey: 'pyl', onClick: () => setShowPylWizard(true) },
                       shiny:    { icon: '✨', name: 'Shiny Formats', desc: 'Add or edit shiny question styles', styleKey: 'shiny', onClick: () => setShowFormatLibrary(true) },

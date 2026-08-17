@@ -548,13 +548,17 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                 className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 <span className="w-3 h-3 rounded-full shrink-0" style={{ background: theme.colors.highlight }} />
-                Theme
+                World
               </button>
               {themePickerOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setThemePickerOpen(false)} />
                   <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-52 max-h-72 overflow-y-auto">
-                    {THEMES.map(t => (
+                    {/* Only Midnight Galaxy is a real, finished "world" right
+                        now — the other 20 legacy themes stay defined in
+                        THEMES (nothing deleted) but aren't surfaced as live
+                        options until they get the same ring-world treatment. */}
+                    {THEMES.filter(t => t.id === 'midnight-galaxy').map(t => (
                       <button
                         key={t.id}
                         onClick={() => { onThemeChange(t.id); setThemePickerOpen(false) }}
