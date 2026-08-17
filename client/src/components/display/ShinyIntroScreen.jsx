@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion, useReducedMotion, cubicBezier } from 'framer-motion'
 import { EASE_OUT } from '../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../lib/shinyGold.js'
-import { listSharedHostPhotos } from '../../lib/hostPhotos.js'
+import { listSharedHostPhotos, pickUnshownRandomPhoto } from '../../lib/hostPhotos.js'
 
 // Every shiny question/grid gets a standalone beat before its content — a pure
 // announcement, no question/answer/media yet, giving the host room to set
@@ -103,7 +103,8 @@ export default function ShinyIntroScreen({ slide, theme }) {
     setRandomPhotoUrl(null)
     listSharedHostPhotos().then(photos => {
       if (cancelled || photos.length === 0) return
-      setRandomPhotoUrl(photos[Math.floor(Math.random() * photos.length)].url)
+      const pick = pickUnshownRandomPhoto(photos)
+      if (pick) setRandomPhotoUrl(pick.url)
     })
     return () => { cancelled = true }
   }, [slide.id])

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { analyzeAudioGain } from '../../lib/audioNormalize.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
+import { getUsedHostPhotoUrls } from '../../lib/hostPhotos.js'
 import MediaUpload from './MediaUpload.jsx'
 import YoutubeClipEditor from './YoutubeClipEditor.jsx'
 import HostPhotoLibrary from './HostPhotoLibrary.jsx'
@@ -120,6 +121,11 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
   // Questions in same round (for grading-break back link)
   const roundSlides = show.slides.filter(s => s.roundId === slide.roundId && s.type === 'question')
 
+  // Which host photos are already assigned elsewhere in this show — every
+  // HostPhotoLibrary picker badges these so a host doesn't accidentally
+  // reuse the same specific photo on two different slides.
+  const usedPhotoUrls = useMemo(() => getUsedHostPhotoUrls(show, slide.id), [show.slides, slide.id])
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex flex-1 min-h-0">
@@ -148,18 +154,18 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
               {slide.type === 'title' && <TitleEditor data={data} onChange={change} />}
               {(slide.type === 'round-intro' || slide.type === 'swing-round-intro') && (
                 <RoundIntroEditor data={data} onChange={change} isSwing={slide.type === 'swing-round-intro'}
-                  uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
+                  uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} usedPhotoUrls={usedPhotoUrls} />
               )}
               {slide.type === 'question' && (
                 // Keyed by slide.id so per-slot local UI state (which audio
                 // slots are in "YouTube" mode, the format-library modal, etc.)
                 // resets when switching to a different question slide instead
                 // of leaking across slides that share this same component type.
-                <QuestionEditor key={slide.id} data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} theme={theme} show={show} slide={slide} />
+                <QuestionEditor key={slide.id} data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} theme={theme} show={show} slide={slide} usedPhotoUrls={usedPhotoUrls} />
               )}
               {slide.type === 'grading-break' && (
                 <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
-                  uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} theme={theme} />
+                  uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} theme={theme} usedPhotoUrls={usedPhotoUrls} />
               )}
               {slide.type === 'scoreboard-reveal' && (
                 <ScoreboardRevealEditor data={data} onChange={change} show={show} />
@@ -177,14 +183,14 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
                 <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} theme={theme} />
               )}
               {slide.type === 'state-of-union' && (
-                <StateOfUnionEditor data={data} onChange={change} getHostPhotos={getHostPhotos} uploadMedia={uploadMedia} />
+                <StateOfUnionEditor data={data} onChange={change} getHostPhotos={getHostPhotos} uploadMedia={uploadMedia} usedPhotoUrls={usedPhotoUrls} />
               )}
               {slide.type === 'team-picker' && (
                 <TeamPickerEditor data={data} onChange={change} />
               )}
               {slide.type === 'grid' && (
                 <GridEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload}
-                  uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} />
+                  uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} usedPhotoUrls={usedPhotoUrls} />
               )}
               {slide.type === 'winner-reveal' && (
                 <WinnerRevealEditor data={data} onChange={change} />
@@ -346,7 +352,7 @@ function TitleEditor({ data, onChange }) {
   )
 }
 
-function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos }) {
+function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos, usedPhotoUrls }) {
   return (
     <>
       <div className="grid grid-cols-2 gap-4">
@@ -363,6 +369,7 @@ function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos 
       )}
       <Divider label="Ben Photo" />
       <HostPhotoLibrary
+        usedPhotoUrls={usedPhotoUrls}
         getHostPhotos={getHostPhotos}
         uploadMedia={uploadMedia}
         currentPhotoUrl={data.hostPhotoUrl}
@@ -372,7 +379,7 @@ function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos 
   )
 }
 
-function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPhotos, theme, show, slide }) {
+function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPhotos, theme, show, slide, usedPhotoUrls }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
   const { formats: shinyFormats, loading: shinyFormatsLoading } = useShinyFormats()
 
@@ -623,6 +630,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
             <TextInput value={data.introSubtitle ?? ''} onChange={v => onChange('introSubtitle', v)} placeholder="Optional subtitle…" />
           </Field>
           <HostPhotoLibrary
+            usedPhotoUrls={usedPhotoUrls}
             getHostPhotos={getHostPhotos}
             uploadMedia={uploadMedia}
             currentPhotoUrl={data.hostPhotoUrl}
@@ -1213,7 +1221,7 @@ function WagerBuilder({ answer }) {
   )
 }
 
-function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostPhotos, jukeboxLibs }) {
+function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostPhotos, jukeboxLibs, usedPhotoUrls }) {
   return (
     <>
       <Field label="Message">
@@ -1256,6 +1264,7 @@ function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostP
       <Divider label="Ben Photo" />
 
       <HostPhotoLibrary
+        usedPhotoUrls={usedPhotoUrls}
         getHostPhotos={getHostPhotos}
         uploadMedia={uploadMedia}
         currentPhotoUrl={data.hostPhotoUrl}
@@ -1296,7 +1305,7 @@ function PreShowEditor({ data, onChange }) {
   )
 }
 
-function StateOfUnionEditor({ data, onChange, getHostPhotos, uploadMedia }) {
+function StateOfUnionEditor({ data, onChange, getHostPhotos, uploadMedia, usedPhotoUrls }) {
   return (
     <>
       <Field label="Message">
@@ -1309,6 +1318,7 @@ function StateOfUnionEditor({ data, onChange, getHostPhotos, uploadMedia }) {
       </Field>
       <Divider label="Ben Photo" />
       <HostPhotoLibrary
+        usedPhotoUrls={usedPhotoUrls}
         getHostPhotos={getHostPhotos}
         uploadMedia={uploadMedia}
         currentPhotoUrl={data.photoUrl}
@@ -1463,7 +1473,7 @@ function MultiQuestionEditor({ data, onChange, setData, scheduleSave }) {
   )
 }
 
-function GridEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uploadMedia, getHostPhotos }) {
+function GridEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uploadMedia, getHostPhotos, usedPhotoUrls }) {
   const columns = Array.isArray(data.columns) ? data.columns : []
 
   function writeTile(ci, ri, patch) {
@@ -1511,6 +1521,7 @@ function GridEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uplo
             <TextInput value={data.introSubtitle ?? ''} onChange={v => onChange('introSubtitle', v)} placeholder="Optional subtitle…" />
           </Field>
           <HostPhotoLibrary
+            usedPhotoUrls={usedPhotoUrls}
             getHostPhotos={getHostPhotos}
             uploadMedia={uploadMedia}
             currentPhotoUrl={data.hostPhotoUrl}
