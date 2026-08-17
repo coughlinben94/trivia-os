@@ -672,10 +672,18 @@ export default function SlideCanvasEditor({
     // matched neither the photo nor anything else on screen, and text boxes
     // "moved around constantly" while clicking between slides — both are
     // this same stale-snapshot window, not a per-slide-type bug.
+    //
+    // data.introDone/data.currentPart added the same day, same bug class:
+    // switching the "Previewing" tabs (Intro vs a numbered part) swaps the
+    // canvas between genuinely different DOM (ShinyIntroScreen vs the part's
+    // own content) WITHOUT slide.id/slide.type changing — same slide object,
+    // different beat. The box from whichever beat was last detected stayed
+    // on screen, at that beat's coordinates, over the new beat's real
+    // content (Ben: "the window jumps to a diff part of the screen").
     setRegions([])
     detectTimerRef.current = setTimeout(detectRegions, 350)
     return () => clearTimeout(detectTimerRef.current)
-  }, [slide.id, slide.type])
+  }, [slide.id, slide.type, data.introDone, data.currentPart])
 
   // Panel resize alone (same slide) just needs boxes re-measured at the new
   // scale — no slide switch happened, so no stale-geometry risk, and
