@@ -23,12 +23,44 @@ describe('skyRegionWeights', () => {
   it('scores every region independently so shoulders can overlap', () => {
     const stations = [{ region: 'aurora' }, {}, { region: 'ember' }]
     const w = skyRegionWeights(stations)
-    expect(w[1]).toEqual({ aurora: 0.5, ember: 0.25 })
+    // Asserted per-key rather than as a whole-object match: every region in
+    // SKY_REGIONS is scored at every station (that's the point — overlapping
+    // shoulders stack instead of clobbering), so a whole-object equality here
+    // breaks every time a region is added, which is not what this test is
+    // about. It broke exactly that way when `disco` landed 2026-08-16.
+    expect(w[1].aurora).toBe(0.5)
+    expect(w[1].ember).toBe(0.25)
   })
 
-  it('matches the shipped Midnight Galaxy layout (aurora st4-5, ember st10)', () => {
+  // Record/supernova swap 2026-08-16 (same day the record landed at st12):
+  // the record moved st12 -> st10 for silhouette-family spacing, the
+  // supernova st10 -> st12. Disco follows the record; ember follows the
+  // supernova. See the station entries' own comments for the arithmetic.
+  it('matches the shipped Midnight Galaxy layout (aurora st4-5, disco st10, ember st12)', () => {
     const w = skyRegionWeights(midnightGalaxyRing.stations)
-    expect(w.map(x => x.aurora)).toEqual([0, 0, 0, 0.25, 1, 1, 0.5, 0, 0, 0, 0, 0])
-    expect(w.map(x => x.ember)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0.25, 1, 0.5])
+    expect(midnightGalaxyRing.stations).toHaveLength(13)
+    expect(w.map(x => x.aurora)).toEqual([0, 0, 0, 0.25, 1, 1, 0.5, 0, 0, 0, 0, 0, 0])
+    expect(w.map(x => x.ember)).toEqual([0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.25, 1])
+    expect(w.map(x => x.disco)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0.25, 1, 0.5, 0])
+  })
+
+  // Ben, 2026-08-16: "ensure that the color wiring on s13 is noticeable and
+  // fun." The disco region is what delivers that. Station 0's colour now
+  // comes from ember's exit shoulder (the supernova at st12 wraps into it) —
+  // st0 used to carry zero weight from any region.
+  it('gives the music station its own region, and lights st9 and st11 on the way through', () => {
+    const w = skyRegionWeights(midnightGalaxyRing.stations)
+    expect(w[10].disco).toBe(1)    // core — the record is its own light source
+    expect(w[9].disco).toBe(0.25)  // approach
+    expect(w[11].disco).toBe(0.5)  // exit — stacks with ember's 0.25 approach
+    expect(midnightGalaxyRing.stations[10]).toMatchObject({
+      key: 'record', prim: 'record', hue: 300, region: 'disco', regionSource: true,
+    })
+  })
+
+  it('station 0 is no longer colourless now that ember wraps its exit into it', () => {
+    const w = skyRegionWeights(midnightGalaxyRing.stations)
+    const total = Object.values(w[0]).reduce((a, b) => a + b, 0)
+    expect(total).toBeGreaterThan(0)
   })
 })

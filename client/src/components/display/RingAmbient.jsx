@@ -36,7 +36,7 @@
 // anything about the app's actual question text or its show/hide timing —
 // only on the current station. See layoutScrim() below.
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
-import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, fillOf, rng, lerp } from '../../lib/ringEngine.js'
+import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, fillOf, rng, lerp, assertLayerPeriods } from '../../lib/ringEngine.js'
 import { EASE_SURGE } from '../../lib/easings.js'
 import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, applySkyTints } from '../../lib/ringPrimitives.js'
 
@@ -50,7 +50,15 @@ import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, applySkyTints } fr
 // out of scope here, see the shooting-star block in the build effect below).
 const ENGINE = {
   W: 1920, H: 1080,
-  PANES: 12,
+  // 12 -> 13 on 2026-08-16: the jukebox grading-break got its own dedicated
+  // stop (Ben: "it needs to have its own ring slot") — the `record` station,
+  // appended at index 12 in midnightGalaxy.ring.js and world-07-ring.html,
+  // then swapped to index 10 the same day for silhouette-family spacing.
+  // This is NOT an additive change: arcAt() is cos(2*PI*(i+phase)/PANES), so
+  // every station's loudness/fill/ink moves, not just the new one. It also
+  // moves the wrap point from 11->0 to 12->0; both new legs are covered by
+  // ringEngine.test.js's 13-pane wrap-glide suite.
+  PANES: 13,
   SURGE_MS: 1700,
   SAFE: { x: 0.20, y: 0.28, w: 0.60, h: 0.44 },
   SHOOT_MS: [12000, 35000],
@@ -69,6 +77,12 @@ const ENGINE = {
   ARC: { lo: 10, hi: 31, exp: 1.6, ref: 31, fillMin: 0.35, fillMax: 1.00 },
   STAR_ALPHA_FLOOR: 0.28,
 }
+
+// Fails loudly at import if a future PANES/surge/m edit stops a layer's
+// authored strip tiling its cylinder in whole pixels — the seam that would
+// otherwise appear at the wrap is the kind of defect nobody traces back to
+// the arithmetic. See ringEngine.js for why this replaced 'm divides PANES'.
+assertLayerPeriods(ENGINE)
 
 // ── CSS — the chassis/primitive/star rules (.ring-lyr, .ring-surge,
 // .ring-void, .ring-star, .ring-pf, .ring-b-lobe, .ring-b-rim, .ring-d-glow,
@@ -560,10 +574,10 @@ const isReduced = () =>
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 // worldData shape: { id, type, name, phase, sky: [4 hex], qColours: [2 hex],
-// stations: [12 x {key,prim,hue,accent}] } — see concepts/world-07-ring.html's
+// stations: [PANES x {key,prim,hue,accent}] } — see concepts/world-07-ring.html's
 // own WORLD literal. qColours is accepted but unused here (question-colour
 // styling belongs to the out-of-scope question-rendering system).
-const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref) {
+const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stationOverride }, ref) {
   const stageElRef = useRef(null)
   const designElRef = useRef(null)
   const surgeElsRef = useRef({})
@@ -744,6 +758,32 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey }, ref
     turn()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideKey])
+
+  // ── Station override: the jukebox grading-break's dedicated slot ──
+  // Every other caller advances the ring by exactly one station per slide.
+  // The break is the one moment that must land on a SPECIFIC station (10, the
+  // record — see Display.jsx's MUSIC_STATION) no matter where the rotation
+  // happens to be, so it is the one caller that jumps instead of turning.
+  //
+  // jumpTo() snaps rather than glides, and that is deliberate rather than a
+  // shortcut: each layer's pan cylinder is authored exactly `cylinder +
+  // ENGINE.W` wide — ONE spare frame, which is what makes the 12->0 wrap able
+  // to glide to an un-modded target. Travelling an arbitrary 0-12 stations
+  // has no authored content to glide across, so a "smooth" multi-station
+  // version would pan over blank cylinder. Display.jsx flips this prop in the
+  // same React commit that mounts the opaque JukeboxBreakOverlay, so the snap
+  // lands under cover — the same trick turn()'s own post-wrap modulo reset
+  // uses.
+  //
+  // Contract for the jukebox-side layer (jukebox-ring-fusion branch): by the
+  // time that overlay paints, stationRef is MUSIC_STATION (10), the record is
+  // the station in frame, and the disco sky tint is at full weight (snapped,
+  // not transitioning — jumpTo passes animate:false, see applySkyTints).
+  useEffect(() => {
+    if (stationOverride == null) return
+    jumpTo(stationOverride)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stationOverride])
 
   function writeOffsets() {
     const surgeEls = surgeElsRef.current

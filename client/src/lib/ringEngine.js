@@ -20,6 +20,41 @@ export const lerp = (a, b, t) => a + (b - a) * t
 export const cylinderOf = (engine, layer) => engine.PANES * layer.surge
 export const authorPeriodOf = (engine, layer) => cylinderOf(engine, layer) / layer.m
 
+// The real layer-period invariant. Replaces "m must divide PANES", which was
+// concepts/world-07-ring.html's stated rule and was only ever accurate while
+// PANES was 12 — station 13 (2026-08-16) took PANES to 13, and near's m=3
+// does not divide 13.
+//
+// What actually has to hold is pixel-exact tiling: each layer's authored
+// strip must be a whole number of pixels AND repeat m times into exactly one
+// cylinder. Otherwise the offset's modulo wrap lands mid-content and the
+// repeat shows a seam. At PANES=13 near still satisfies both — 13*2880/3 =
+// 12480 exactly, and 3*12480 = 37440 = the cylinder.
+//
+// The turn count per repeat (PANES/m = 4.333 at 13 panes) does NOT have to be
+// an integer, and the old wording conflated the two. It would matter only for
+// a layer whose content is station-keyed, and m>1 is permitted solely on
+// anonymous layers — near is 26 unnamed stars, which is why the original
+// comment's own next clause says "m>1 only where content is anonymous,
+// because an anonymous repeat is invisible."
+//
+// Called once at module scope by RingAmbient.jsx so a future PANES/surge/m
+// edit that breaks tiling fails loudly at import instead of rendering a seam
+// nobody attributes to the arithmetic.
+export function assertLayerPeriods(engine) {
+  for (const L of engine.LAYERS) {
+    if (L.surge === 0) continue // sky never pans; cylinder 0, period undefined
+    const period = authorPeriodOf(engine, L)
+    // ponytail: integrality IS the whole rule. A "period * m === cylinder"
+    // check reads like a second, stronger guard but is unreachable — period
+    // is DEFINED as cylinder/m, so once it's a whole number the product is
+    // exact by construction. One check, not two that look like two.
+    if (!Number.isInteger(period)) {
+      throw new Error(`ringEngine: layer "${L.id}" strip ${period}px does not tile its ${cylinderOf(engine, L)}px cylinder in whole pixels (PANES=${engine.PANES}, surge=${L.surge}, m=${L.m})`)
+    }
+  }
+}
+
 // Seeded jitter breaks up the cosine trough's flat neighbourhood — see
 // concepts/world-07-ring.html's arcAt() comment for why (S1 defect: "nothing
 // is a moment," reproducible at stations 6-8 without it).

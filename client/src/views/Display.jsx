@@ -347,6 +347,17 @@ async function advanceAfterBreak(showRow) {
 
 // ─── Live display ──────────────────────────────────────────────────────────
 
+// The ring's dedicated music slot — index 10, the `record` station added
+// 2026-08-16 at index 12 and swapped to 10 the same day for silhouette-family
+// spacing (see client/src/worlds/midnightGalaxy.ring.js's record entry). Ben:
+// the jukebox grading-break "needs to have its own ring slot" rather than
+// consuming an arbitrary station and hiding it under the overlay, which is
+// what it did before. Declared here rather than imported from the world module
+// so a non-ring theme still compiles — the value is simply never used unless a
+// ring world is mounted. This constant must always point at the station whose
+// prim is 'record' — the routing contract follows the record, not the index.
+const MUSIC_STATION = 10
+
 function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
   const { theme } = useTheme()
   const sortedSlides = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
@@ -406,7 +417,16 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
       style={{ background: theme.colors.bg }}
     >
       {/* ParticleBackground lives OUTSIDE the ErrorBoundary — it must never re-mount */}
-      <ParticleBackground theme={theme} slideKey={currentSlide?.id} />
+      {/* stationOverride: the grading break is the one slide that must land on
+          a specific ring station rather than just advancing by one. It flips
+          in the same commit that mounts JukeboxBreakOverlay below, so the
+          ring's snap onto the record happens under that overlay's own paint.
+          Inert on non-ring themes, which have no stations at all. */}
+      <ParticleBackground
+        theme={theme}
+        slideKey={currentSlide?.id}
+        stationOverride={breakActive ? MUSIC_STATION : null}
+      />
 
       {/* StageFrame: 85% viewport, centered, overflow:hidden — all slide content clips here.
           ParticleBackground stays OUTSIDE (full-viewport behind the stage). */}
