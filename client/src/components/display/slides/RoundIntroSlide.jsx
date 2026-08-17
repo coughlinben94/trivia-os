@@ -10,7 +10,7 @@ export default function RoundIntroSlide({ slide, show }) {
   const { data } = slide
   const isSwing = slide.type === 'swing-round-intro'
   const rt = data._regionTransforms ?? {}
-  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
+  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg) scale(${t.scale??1})`, transformOrigin: 'center', display: 'inline-block' } : {} }
 
   // fitToBox measures via canvas — a first paint before web fonts load
   // measures fallback-font metrics. This flips once fonts are ready purely
@@ -100,24 +100,29 @@ export default function RoundIntroSlide({ slide, show }) {
           bottom-centre, and the photo sits low enough that colliding with it
           would bury the round's own label. */}
       {data.hostPhotoUrl && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: isSwing ? 0.75 : 0.55, scale: 1 }}
-          transition={{ delay: 0.35, duration: 0.4, ease: EASE_OUT }}
+        <span
+          data-slide-region="photo"
+          data-slide-field="photo"
           className="absolute pointer-events-none"
-          style={{ bottom: 32, right: '20%' }}
+          style={{ bottom: 32, right: '20%', ...xf('photo') }}
         >
-          <img
-            src={data.hostPhotoUrl}
-            alt=""
-            style={{
-              height: isSwing ? 220 : 160,
-              maxWidth: '100%',
-              objectFit: 'contain',
-              filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.6))',
-            }}
-          />
-        </motion.div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: isSwing ? 0.75 : 0.55, scale: 1 }}
+            transition={{ delay: 0.35, duration: 0.4, ease: EASE_OUT }}
+          >
+            <img
+              src={data.hostPhotoUrl}
+              alt=""
+              style={{
+                height: isSwing ? 220 : 160,
+                maxWidth: '100%',
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.6))',
+              }}
+            />
+          </motion.div>
+        </span>
       )}
 
       {/* Swing round: extra theatrical theme label */}

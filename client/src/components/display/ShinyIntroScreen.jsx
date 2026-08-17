@@ -44,11 +44,43 @@ const LAND_T = 1.725 // s — moment of impact; every other element keys off thi
 // Ben watched actually fired it early. Flagged for Ben's sign-off.
 const IMPACT_EASE = cubicBezier(0.16, 1, 0.3, 1)
 
+// Settle easings for the overshoot tails (title / icon badge / host photo).
+//
+// The three wobble tracks below used to pass a single `ease: 'linear'` across
+// their whole multi-keyframe transition. Framer applies one easing per keyframe
+// SEGMENT, so 'linear' meant every segment ran at constant velocity with an
+// instantaneous velocity reversal at each peak — and, worse, the FINAL segment
+// arrived at its rest value still travelling at full speed and then stopped
+// dead. A real damped spring passes through zero velocity at every extremum and
+// coasts into rest. That hard terminal stop is what read as mechanical.
+//
+// Fix: pass an ARRAY of eases (one per segment, length = keyframes - 1). Sine
+// curves are used deliberately — a damped oscillation between two extrema IS a
+// half-sinusoid, so easeOutSine/easeInOutSine are the literal shape, not an
+// approximation.
+//
+// These stay cubicBezier() FUNCTIONS for the same reason IMPACT_EASE does:
+// isWaapiSupportedEasing() rejects an array of functions, which pins the
+// animation to Framer's main-thread keyframe generator where `times` are
+// literal. (An array of raw [a,b,c,d] tuples would PASS that check and reroute
+// through WAAPI, warping every offset. Keep the function form.)
+const HOLD = cubicBezier(0.25, 0.25, 0.75, 0.75) // exact identity — preserves the approved spin/hold segments unchanged
+const SETTLE_ARRIVE = cubicBezier(0.39, 0.575, 0.565, 1) // easeOutSine — moving fast, decelerate to a standstill at the peak
+const SETTLE_SWING = cubicBezier(0.445, 0.05, 0.55, 0.95) // easeInOutSine — extremum to extremum, zero velocity at both ends
+
 export default function ShinyIntroScreen({ slide, theme }) {
   const { data } = slide
   const reduce = useReducedMotion()
   const title = data.seriesTheme || data.shinyFormatName || 'Shiny Question'
   const icon = data.shinyFormatIcon || '✨'
+
+  // Same drag/rotate/resize region system StateOfUnionSlide's photo already
+  // uses (SlideCanvasEditor's [data-slide-region] detection — generic, no
+  // per-slide registration needed). Composed onto the wrapper's existing
+  // `translateX(-80%)` anchor rather than replacing it, so the entrance
+  // choreography on the <motion.img> inside stays untouched.
+  const photoRt = data._regionTransforms?.photo
+  const photoRegionTransform = `translateX(-80%) translate(${photoRt?.dx ?? 0}px,${photoRt?.dy ?? 0}px) rotate(${photoRt?.rotate ?? 0}deg) scale(${photoRt?.scale ?? 1})`
 
   // Host photo — a random pick from the show's uploaded host-photo library,
   // chosen once per slide mount (not per re-render), so each intro card can
@@ -188,8 +220,10 @@ export default function ShinyIntroScreen({ slide, theme }) {
           parent) and so the y-track's `%` offsets, which are relative to the
           image's own height, keep their original travel. */}
       <div
+        data-slide-region="photo"
+        data-slide-field="photo"
         className="absolute bottom-0 left-1/2 z-10 pointer-events-none"
-        style={{ height: '56%', transform: 'translateX(-80%)' }}
+        style={{ height: '56%', transform: photoRegionTransform }}
       >
         {/* Always mounted, even before the random-photo fetch resolves (most
           slides have no fixed data.hostPhotoUrl, so photoUrl is briefly
@@ -214,7 +248,15 @@ export default function ShinyIntroScreen({ slide, theme }) {
         transition={
           reduce
             ? { delay: 0.15, duration: 0.4, ease: EASE_OUT }
-            : { duration: LAND_T + 0.65, times: [0, 0.68, 0.82, 0.91, 1], ease: 'linear' }
+            : {
+                duration: LAND_T + 0.65,
+                times: [0, 0.68, 0.82, 0.91, 1],
+                // Values left alone — this track already decays (y -18% → +6%, rotate
+                // +4 → -2) at a constant ~214ms half-period. Only the hard stop at rest
+                // needed fixing, and it mattered most here: it's the largest element on
+                // screen, so a dead-stop at full speed is the most visible.
+                ease: [HOLD, SETTLE_ARRIVE, SETTLE_SWING, SETTLE_SWING],
+              }
         }
         className="block pointer-events-none"
         style={{ height: '100%', objectFit: 'contain', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.4))' }}
@@ -237,7 +279,15 @@ export default function ShinyIntroScreen({ slide, theme }) {
         transition={
           reduce
             ? { delay: 0.3, duration: 0.4, ease: EASE_OUT }
-            : { duration: LAND_T + 0.5, times: [0, 0.72, 0.82, 0.9, 0.96, 1], ease: 'linear' }
+            : {
+                duration: LAND_T + 0.5,
+                times: [0, 0.72, 0.82, 0.9, 0.96, 1],
+                // Amplitudes here already decay (rotate 10 → 4 → 2), so only the
+                // easing needed fixing: 'linear' made the badge arrive at rest still
+                // moving and stop dead. SETTLE_ARRIVE keeps the stamp punchy (max
+                // velocity off the mark, decelerating into the 1.35 peak).
+                ease: [HOLD, SETTLE_ARRIVE, SETTLE_SWING, SETTLE_SWING, SETTLE_SWING],
+              }
         }
         className="absolute bottom-10 right-10 z-10 flex items-center justify-center rounded-2xl"
         style={{
@@ -260,14 +310,34 @@ export default function ShinyIntroScreen({ slide, theme }) {
             ? { opacity: 1, scale: 1, rotate: -6 }
             : {
                 opacity: [0, 1, 1, 1, 1, 1, 1, 1],
-                scale: [0.05, 0.05, 0.42, 0.85, 1.22, 0.9, 1.08, 1],
-                rotate: [0, 0, 196, 336, 366, 350, 358, 354],
+                // Bounce amplitudes now DECAY geometrically toward rest instead of
+                // stalling. Measured from the rest values (rotate 354, scale 1):
+                //   rotate  +12 → -4 → +1.5   (ratio ~0.35 each half-cycle)
+                //   scale  +0.22 → -0.09 → +0.04 (ratio ~0.42)
+                // The old third bounce was +4 / +0.08 — the SAME size as the second
+                // (12 → 4 → 4), so the card ticked back and forth at a constant
+                // amplitude and then stopped, which is a ratchet, not a spring.
+                scale: [0.05, 0.05, 0.42, 0.85, 1.22, 0.91, 1.04, 1],
+                rotate: [0, 0, 196, 336, 366, 350, 355.5, 354],
               }
         }
         transition={
           reduce
             ? { duration: 0.3, ease: EASE_OUT }
-            : { duration: LAND_T, times: [0, 0.03, 0.42, 0.68, 0.8, 0.9, 0.96, 1], ease: 'linear' }
+            : {
+                duration: LAND_T,
+                // Tail offsets equalised: the old 0.9 / 0.96 / 1 gave half-periods of
+                // 172ms → 104ms → 69ms, so the wobble sped UP as it died — a real
+                // spring holds a constant frequency while only the amplitude shrinks.
+                // The last beat was also only ~4 frames at 60fps, too short to read as
+                // motion at all. 0.8 (the impact peak, which the burst/spark tracks key
+                // off) is untouched; only the two post-impact offsets moved.
+                times: [0, 0.03, 0.42, 0.68, 0.8, 0.867, 0.934, 1],
+                // One ease per segment (7 for 8 keyframes). Spin/hold segments keep the
+                // approved constant-velocity feel via the exact identity curve; only
+                // the four post-impact segments change.
+                ease: [HOLD, HOLD, HOLD, SETTLE_ARRIVE, SETTLE_SWING, SETTLE_SWING, SETTLE_SWING],
+              }
         }
         className="relative z-10 text-center px-20"
         style={{
