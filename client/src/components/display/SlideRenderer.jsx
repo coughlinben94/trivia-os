@@ -210,7 +210,7 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
   // lock; what the lock still catches is a dropdown-picked transition or
   // the reduced-motion dissolve, which for this slide become a hard cut to
   // black instead of a fade-up through the world.
-  if (slide?.type === 'team-picker' || slide?.type === 'state-of-union' || slide?.type === 'grid' || slide?.type === 'pre-show') {
+  if (slide?.type === 'team-picker' || slide?.type === 'state-of-union' || slide?.type === 'grid' || slide?.type === 'pre-show' || slide?.type === 'round-intro' || slide?.type === 'swing-round-intro') {
     variants = {
       initial: { ...variants.initial, opacity: 1 },
       animate: { ...variants.animate, opacity: 1 },
@@ -231,7 +231,7 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
           the entrance wipe cover something already covered. So this slide
           type gets no locked background; nothing else about the ambient
           mount changes. */}
-      {slide?.type !== 'team-picker' && slide?.type !== 'pre-show' && !isShinyIntroBeat && (
+      {slide?.type !== 'team-picker' && slide?.type !== 'pre-show' && slide?.type !== 'round-intro' && slide?.type !== 'swing-round-intro' && !isShinyIntroBeat && (
         <div
           className="absolute inset-0"
           style={{ background: theme.colors.bgDeep, zIndex: 0 }}

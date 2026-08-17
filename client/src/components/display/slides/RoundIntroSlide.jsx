@@ -22,7 +22,6 @@ export default function RoundIntroSlide({ slide, show }) {
   return (
     <div
       className="w-full h-full relative flex flex-col items-center justify-center overflow-hidden"
-      style={{ background: theme.colors.bg }}
     >
       {/* Ambient backdrop glow */}
       <div
