@@ -136,14 +136,27 @@ export default function TeamPickerSlide({ slide, show }) {
   // than surfaced, since there's no UI here to show an error in.
   const audioRef = useRef(null);
   const AUDIO_VOL = 0.55;
-  // 3s hold before the music starts (2026-08-17, Ben) — lets the slide's own
-  // entrance land first instead of music hitting on the same frame as the pop-up.
+  // 3s hold before the music starts, then a slow fade-in rather than
+  // snapping straight to AUDIO_VOL (2026-08-17, Ben: "way longer", it was
+  // instant) — lets the slide's own entrance land first, then the music
+  // builds instead of hitting all at once.
+  const FADE_IN_MS = 4000;
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-    a.volume = AUDIO_VOL;
-    const t = setTimeout(() => { a.play().catch(() => {}); }, 3000);
-    return () => clearTimeout(t);
+    a.volume = 0;
+    let raf;
+    const t = setTimeout(() => {
+      a.play().catch(() => {});
+      const t0 = performance.now();
+      const step = (now) => {
+        const p = Math.min(1, (now - t0) / FADE_IN_MS);
+        a.volume = AUDIO_VOL * p;
+        if (p < 1) raf = requestAnimationFrame(step);
+      };
+      raf = requestAnimationFrame(step);
+    }, 3000);
+    return () => { clearTimeout(t); cancelAnimationFrame(raf); };
   }, []);
 
   // live from teams table, baked on mount (everyone who scanned the QR).
