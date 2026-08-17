@@ -254,7 +254,15 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     setMatchingScoreError(null)
     try {
       if (!slide.data.matchingLocked) {
-        await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true } })
+        // updateSlide is a debounced 600ms write, not a real await — without
+        // flushSlides + a buffer here, the phone_answers read below used to
+        // run BEFORE the lock had even reached the database, let alone the
+        // phones over Realtime. A pair tapped in that gap saved successfully
+        // and stayed colored on the phone, but was invisible to this fetch —
+        // silently unscored while the phone showed it as submitted.
+        actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true } })
+        await actions.flushSlides()
+        await new Promise(r => setTimeout(r, 700))
       }
 
       const { data: answers, error: fetchError } = await supabase
@@ -314,6 +322,23 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     setWagerBusy(true)
     setWagerError(null)
     try {
+      // Lock BEFORE reading, not after — the old order read phone_answers
+      // first and only wrote the lock once the snapshot was built, so a tier
+      // tapped in the ~600-900ms gap before that write actually reached the
+      // database (updateSlide's debounce) and phones (Realtime lag) landed
+      // in phone_answers but never made it into the snapshot below, while
+      // the team's own phone kept showing it as their picked tier — a
+      // contradiction the reveal/popup would later surface as "you played
+      // it safe" on a phone that clearly shows a different tier. Locking
+      // first, flushing the real write, and giving Realtime a moment to
+      // deliver it shrinks that window to roughly just propagation lag
+      // instead of debounce+lag combined.
+      if (!slide.data.wagerTiersLocked) {
+        actions.updateSlide(slide.id, { data: { ...slide.data, wagerTiersLocked: true } })
+        await actions.flushSlides()
+        await new Promise(r => setTimeout(r, 700))
+      }
+
       const { data: answers, error } = await supabase
         .from('phone_answers')
         .select('team_id, answer')
@@ -325,6 +350,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         if (row.answer?.tier) wagerTiers[row.team_id] = row.answer.tier
       }
       await actions.updateSlide(slide.id, { data: { ...slide.data, wagerTiersLocked: true, wagerTiers } })
+      await actions.flushSlides()
     } finally {
       setWagerBusy(false)
     }
@@ -343,7 +369,13 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         return
       }
       if (!slide.data.wagerGuessesLocked) {
-        await actions.updateSlide(slide.id, { data: { ...slide.data, wagerGuessesLocked: true } })
+        // Same fake-await problem as the tier lock above — flush the real
+        // write and give phones a moment to actually receive the lock
+        // before reading what they submitted, instead of racing the read
+        // against a write that hadn't left the browser yet.
+        actions.updateSlide(slide.id, { data: { ...slide.data, wagerGuessesLocked: true } })
+        await actions.flushSlides()
+        await new Promise(r => setTimeout(r, 700))
       }
 
       const { data: answers, error: fetchError } = await supabase

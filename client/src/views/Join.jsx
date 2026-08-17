@@ -1336,22 +1336,31 @@ export default function Join() {
     if (!showParam) { setPhase('no-show'); return }
 
     async function init() {
-      // Show fetch — hard network failure → error screen, not register
+      // Show fetch — hard network failure → error screen, not "no show".
+      // Same dead-catch issue as the session restore below: supabase-js
+      // resolves {data: null, error} on a network failure rather than
+      // throwing, so this try/catch never actually fired — a wifi blip and
+      // a genuinely-nonexistent show both fell through to the same "No show
+      // running right now" message, telling a team to wait for a show that
+      // was already live.
       let fetchedShow = null
-      try {
-        if (showParam === 'live') {
-          const { data } = await supabase.from('shows').select('*').eq('is_live', true).single()
-          fetchedShow = data
+      let showFetchError = null
+      if (showParam === 'live') {
+        const { data, error } = await supabase.from('shows').select('*').eq('is_live', true).single()
+        fetchedShow = data; showFetchError = error
+      } else {
+        const { data, error } = await supabase.from('shows').select('*').eq('id', showParam).single()
+        fetchedShow = data; showFetchError = error
+      }
+      if (!fetchedShow) {
+        if (showFetchError && showFetchError.code !== 'PGRST116') {
+          setInitError("Can't reach the show right now — check your connection and refresh.")
+          setPhase('error')
         } else {
-          const { data } = await supabase.from('shows').select('*').eq('id', showParam).single()
-          fetchedShow = data
+          setPhase('no-show')
         }
-      } catch {
-        setInitError("Can't reach the show right now — check your connection and refresh.")
-        setPhase('error')
         return
       }
-      if (!fetchedShow) { setPhase('no-show'); return }
       setShow(fetchedShow)
 
       // A host-generated reauth link (LateTeamPopover.jsx) always wins over
@@ -1415,21 +1424,33 @@ export default function Join() {
         }
       }
 
-      // Session restore — verify team still exists
+      // Session restore — verify team still exists.
+      //
+      // supabase-js does NOT throw on a network failure — a dropped fetch
+      // resolves as {data: null, error: {...}}, same shape as a genuine "row
+      // doesn't exist" — so a try/catch here was dead code, and ANY failure
+      // (bar wifi hiccup included) fell straight through to clearing
+      // localStorage and dumping the team into 'register', where they'd
+      // immediately collide with their own already-taken name. Branch on the
+      // actual error instead: only a real "no rows" (PGRST116) means the
+      // team is genuinely gone; anything else keeps the stored session and
+      // surfaces a retryable error instead of destroying it.
       const stored = loadStoredTeam(fetchedShow.id)
       if (stored?.id) {
-        try {
-          const { data: teamRow } = await supabase.from('teams').select('id, name, color, powerup_used').eq('id', stored.id).single()
-          if (teamRow) {
-            setTeam({ ...stored, ...teamRow })
-            setPowerupUsed(teamRow.powerup_used ?? false)
-            setPhase(fetchedShow.is_live ? 'live' : 'waiting')
-            return
-          }
-        } catch {
-          // network error on session restore — treat as stale, fall through to register
+        const { data: teamRow, error: restoreError } = await supabase
+          .from('teams').select('id, name, color, powerup_used').eq('id', stored.id).single()
+        if (teamRow) {
+          setTeam({ ...stored, ...teamRow })
+          setPowerupUsed(teamRow.powerup_used ?? false)
+          setPhase(fetchedShow.is_live ? 'live' : 'waiting')
+          return
         }
-        // stale or unreachable — clear dead entry so it doesn't retry next time
+        if (restoreError?.code !== 'PGRST116') {
+          setInitError("Couldn't reach the show — check your connection and try again.")
+          setPhase('error')
+          return
+        }
+        // Genuinely gone — clear the dead entry so it doesn't retry forever.
         localStorage.removeItem(getTeamKey(fetchedShow.id))
       }
       setPhase('register')

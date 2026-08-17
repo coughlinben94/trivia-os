@@ -397,6 +397,31 @@ export function useShow() {
     }, 600)
   }
 
+  // updateSlide is NOT awaitable in any meaningful sense — it's a void
+  // function around a 600ms-debounced write, so every `await
+  // actions.updateSlide(...)` call site in the codebase was really `await
+  // undefined`, resolving instantly while the real write still hadn't left
+  // the browser. LiveMode's lock-then-score handlers (wager tiers, wager
+  // guesses, matching) all did exactly that: lock, "await" it, then
+  // immediately fetch phone_answers — reading the DB before the lock had
+  // even been written, let alone delivered to phones over Realtime. A team
+  // that submits in that window gets scored as a non-answerer while their
+  // own phone shows a successful, locked-in submission.
+  //
+  // flushSlides forces whatever slides write is currently pending (or
+  // in-flight from a prior flush) to actually happen now, and returns a
+  // promise that resolves only once it has — a real await, not a fake one.
+  // Chained through the same slidesSaveChainRef ordering the debounced path
+  // already relies on, so this can't race a write that's already in flight.
+  function flushSlides() {
+    clearTimeout(debounceTimers.current['slides'])
+    const run = slidesSaveChainRef.current.then(() =>
+      updateShowRow(showIdRef.current, { slides: slidesRef.current })
+    )
+    slidesSaveChainRef.current = run
+    return run
+  }
+
   async function deleteSlide(id) {
     if (!show) return
     const newSlides = renumberRoundQuestions(show.slides.filter(s => s.id !== id))
@@ -815,6 +840,7 @@ export function useShow() {
     deleteRound,
     addSiblingSlides,
     updateSlide,
+    flushSlides,
     deleteSlide,
     reorderSlides,
     reorderRounds,

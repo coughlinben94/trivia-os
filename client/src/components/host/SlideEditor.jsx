@@ -159,22 +159,22 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
               )}
               {slide.type === 'grading-break' && (
                 <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
-                  uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} />
+                  uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} theme={theme} />
               )}
               {slide.type === 'scoreboard-reveal' && (
                 <ScoreboardRevealEditor data={data} onChange={change} show={show} />
               )}
               {slide.type === 'custom' && (
-                <CustomEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} />
+                <CustomEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} theme={theme} />
               )}
               {slide.type === 'pixelate-series' && (
-                <PixelateSeriesEditor data={data} onChange={change} onStageUpload={handleStageUpload} />
+                <PixelateSeriesEditor data={data} onChange={change} onStageUpload={handleStageUpload} theme={theme} />
               )}
               {slide.type === 'multi-question' && (
-                <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
+                <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} theme={theme} />
               )}
               {slide.type === 'pyl-reveal' && (
-                <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
+                <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} theme={theme} />
               )}
               {slide.type === 'state-of-union' && (
                 <StateOfUnionEditor data={data} onChange={change} getHostPhotos={getHostPhotos} uploadMedia={uploadMedia} />
@@ -776,6 +776,14 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
           {schema.type !== 'list' && schema.type !== 'matching' && (
             <Field label="Question Text">
               <TextArea value={data.text} onChange={v => onChange('text', v)} placeholder="Write the question here…" rows={3} />
+              {/* Same check + box as the plain-mode question editor — QuestionSlide.jsx
+                  renders every shiny part's text through QUESTION_BOX too, regardless
+                  of whether the slide is shiny or plain. */}
+              {overflowsBox(data.text, { ...QUESTION_BOX, family: theme.fonts.body }) && (
+                <p className="text-xs text-amber-600 mt-1.5 leading-relaxed">
+                  ⚠️ This question is too long to fit the display — it'll run past its box on the TV. Shorten it.
+                </p>
+              )}
             </Field>
           )}
 
@@ -843,6 +851,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
                 part={part}
                 index={i}
                 schemaType={schema.type}
+                theme={theme}
                 onChange={next => updatePart(i, next)}
                 onRemove={() => removePart(i)}
                 onUploadMedia={file => uploadPartMedia(i, file)}
@@ -898,7 +907,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
   )
 }
 
-function ShinyPartEditor({ part, index, schemaType, onChange, onRemove, onUploadMedia, canRemove }) {
+function ShinyPartEditor({ part, index, schemaType, theme, onChange, onRemove, onUploadMedia, canRemove }) {
   const media = part.mediaSlots?.[0]
   // Same upload-vs-YouTube toggle as the top-level Audio slots block, scoped
   // to this part. Derived once from whatever's already on the part; this
@@ -983,6 +992,11 @@ function ShinyPartEditor({ part, index, schemaType, onChange, onRemove, onUpload
       {schemaType !== 'list' && (
         <Field label="Question Text">
           <TextArea value={part.text} onChange={v => onChange({ ...part, text: v })} placeholder="Write the question here…" rows={2} />
+          {overflowsBox(part.text, { ...QUESTION_BOX, family: theme?.fonts?.body ?? 'DM Sans' }) && (
+            <p className="text-xs text-amber-600 mt-1.5 leading-relaxed">
+              ⚠️ This part's text is too long to fit the display — it'll run past its box on the TV. Shorten it.
+            </p>
+          )}
         </Field>
       )}
       <Field label="Answer">
