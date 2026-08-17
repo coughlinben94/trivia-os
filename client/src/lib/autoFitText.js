@@ -151,6 +151,22 @@ export function fitToBox(text, {
   return px
 }
 
+// Same "does it fit even at the floor" check fitToBox's own dev-console
+// warning uses, exposed as a plain boolean with no console side effect —
+// for a host-facing UI hint (SlideEditor's Question Text field) instead of
+// a warning that only ever reaches someone with DevTools open, which this
+// app's actual hosts never do. Deliberately re-derives via the same _fits
+// call fitToBox uses internally rather than calling fitToBox and checking
+// its return size, so this has zero risk of silently drifting from
+// fitToBox's own real fit logic — one fit check, two call sites.
+export function overflowsBox(text, {
+  family, boxW, boxH, floorPx,
+  maxLines = 4, lineHeight = 1.12, letterSpacing = 0,
+}) {
+  if (!String(text).trim()) return false
+  return !_fits(text, family, floorPx, boxW, boxH, maxLines, lineHeight, letterSpacing)
+}
+
 // Title-card box (State of the Union). Fixed area — adjust the two dims if the
 // real region differs. rem→px at 16px root, matching the shipped TITLE_CARD floor/ceil.
 export const TITLE_CARD_BOX = {

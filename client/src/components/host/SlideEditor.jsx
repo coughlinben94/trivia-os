@@ -11,6 +11,7 @@ import MatchingBoard from '../join/MatchingBoard.jsx'
 import WagerBoard from '../join/WagerBoard.jsx'
 import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
+import { overflowsBox, QUESTION_BOX } from '../../lib/autoFitText.js'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 
 export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos }) {
@@ -526,6 +527,15 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
         </div>
         <Field label="Question Text">
           <TextArea value={data.text} onChange={v => onChange('text', v)} placeholder="Write the full question here…" rows={4} />
+          {/* SIM-REPORT P1 (2026-08-16): fitToBox already detects this exact
+              case and warns — but only to a console nobody on this team ever
+              opens during a show. Same check, surfaced where Ben can
+              actually see it before it's live on the TV. */}
+          {overflowsBox(data.text, { ...QUESTION_BOX, family: theme.fonts.body }) && (
+            <p className="text-xs text-amber-600 mt-1.5 leading-relaxed">
+              ⚠️ This question is too long to fit the display — it'll run past its box on the TV. Shorten it.
+            </p>
+          )}
         </Field>
         <Field label="Answer">
           <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="The answer…" />
