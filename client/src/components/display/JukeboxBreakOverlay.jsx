@@ -43,7 +43,7 @@ export default function JukeboxBreakOverlay({ lib, onExit }) {
     <div className="fixed inset-0 z-[70]">
       <SpotifyConnectGate renderDisconnected={disconnectedBanner}>
         <div className="absolute inset-0 bg-black">
-          <Jukebox initialLib={lib} onExitToShow={onExit} onLogout={() => {}} />
+          <Jukebox initialLib={lib} onExitToShow={onExit} onLogout={() => {}} ringMode />
         </div>
       </SpotifyConnectGate>
     </div>
