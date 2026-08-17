@@ -259,7 +259,7 @@ function ShinyVisualQuestion({ slide, theme }) {
               src={part.mediaUrl}
               onLoad={handleImageLoad}
               alt=""
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
             />
           </motion.div>
           <motion.div
@@ -290,7 +290,7 @@ function ShinyVisualQuestion({ slide, theme }) {
             src={part.mediaUrl}
             onLoad={handleImageLoad}
             alt=""
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
             initial={{ scale: 1.08, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.05, duration: 0.28, ease: EASE_OUT }}
@@ -325,13 +325,6 @@ function ShinyVisualQuestion({ slide, theme }) {
         </>
       )}
 
-      {/* ✨ indicator badge — top-left */}
-      <div
-        className="absolute top-5 left-5 z-20 text-2xl"
-        style={{ filter: `drop-shadow(0 0 8px ${SHINY_GOLD_GLOW})` }}
-      >
-        ✨
-      </div>
     </div>
   )
 }
