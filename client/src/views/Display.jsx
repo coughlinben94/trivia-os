@@ -12,7 +12,7 @@ import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
 import JukeboxBreakOverlay from '../components/display/JukeboxBreakOverlay.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import StageFrame from '../display/StageFrame.jsx'
-import BenPhoto from '../components/shared/BenPhoto.jsx'
+import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
 import { resolveShinyPart, isWagerShiny } from '../lib/shinySeries.js'
 import { EASE_OUT } from '../lib/easings.js'
 import { resolvePreviewShow } from '../lib/previewSlide.js'
@@ -184,17 +184,29 @@ function PreShowScreen({ show, onInstall }) {
             }}>Scan to join</span>
           </div>
         </div>
-      </div>
 
-      {/* Ben photo — bottom-left corner */}
-      <div style={{
-        position: 'absolute',
-        bottom: 40,
-        left: 40,
-        zIndex: 10,
-        opacity: 0.7,
-      }}>
-        <BenPhoto size={120} />
+        {/* Ben — centred under the QR, arms up, pointing at the code. Same
+            block as PreShowSlide.jsx (this is the automatic pre-show gate,
+            that one is the addable slide version); keep the two in step or
+            the screen visibly changes when the host re-shows it mid-show.
+            Rationale for the pin, the `contain` fit, the negative margin and
+            the bottom fade is documented there and on PRESHOW_BEN_PHOTO.
+            vh here vs cqh there is deliberate, not drift: this gate renders
+            full-viewport, that slide renders inside StageFrame's 85% stage.
+            Both land on ~410px at 1080p. */}
+        <img
+          src={PRESHOW_BEN_PHOTO}
+          alt=""
+          style={{
+            height: '38vh',
+            maxWidth: '100%',
+            objectFit: 'contain',
+            marginTop: '-3rem',
+            filter: 'drop-shadow(0 10px 30px rgba(0,0,0,0.55))',
+            WebkitMaskImage: 'linear-gradient(to bottom, #000 60%, transparent 82%)',
+            maskImage: 'linear-gradient(to bottom, #000 60%, transparent 82%)',
+          }}
+        />
       </div>
 
       {onInstall && (

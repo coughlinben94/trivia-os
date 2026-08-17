@@ -167,9 +167,31 @@ export default function ShinyIntroScreen({ slide, theme }) {
         </>
       )}
 
-      {/* Host photo — lower-left, rockets up from below the frame AFTER the
-          title lands, overshoots with a rotate wobble (prototype "ben" track).
-          Always mounted, even before the random-photo fetch resolves (most
+      {/* Host photo — rockets up from below the frame AFTER the title lands,
+          overshoots with a rotate wobble (prototype "ben" track).
+
+          Positioning wrapper (2026-08-17, Ben: photos must sit near the middle
+          of the asset they accompany, not in a frame corner). It used to hang
+          off `left: 0`, which anchors to the FRAME edge — and because these
+          cutouts sit centred inside their own mostly-transparent canvas, the
+          narrower the photo the further from the title it landed. Anchoring at
+          `left: 50%` and pulling back 80% of the photo's own width instead
+          puts it just left of the title card's centre for ANY aspect ratio:
+          its centre lands at 50% - 0.3w, close enough to read as part of the
+          title card, still clear of the title's core (which paints over it —
+          the title is later in DOM at the same z-10).
+
+          The wrapper is deliberately STATIC: every motion prop below is
+          unchanged, so the approved entrance choreography and its documented
+          timing are untouched. It carries the 56% height so the img's
+          `height: 100%` still resolves (percentage heights need a resolved
+          parent) and so the y-track's `%` offsets, which are relative to the
+          image's own height, keep their original travel. */}
+      <div
+        className="absolute bottom-0 left-1/2 z-10 pointer-events-none"
+        style={{ height: '56%', transform: 'translateX(-80%)' }}
+      >
+        {/* Always mounted, even before the random-photo fetch resolves (most
           slides have no fixed data.hostPhotoUrl, so photoUrl is briefly
           undefined): gating the mount on photoUrl would start this track's
           timeline at fetch-resolve time, landing the photo late and
@@ -194,9 +216,10 @@ export default function ShinyIntroScreen({ slide, theme }) {
             ? { delay: 0.15, duration: 0.4, ease: EASE_OUT }
             : { duration: LAND_T + 0.65, times: [0, 0.68, 0.82, 0.91, 1], ease: 'linear' }
         }
-        className="absolute bottom-0 left-0 z-10 pointer-events-none"
-        style={{ height: '56%', maxWidth: '100%', objectFit: 'contain', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.4))' }}
+        className="block pointer-events-none"
+        style={{ height: '100%', objectFit: 'contain', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.4))' }}
       />
+      </div>
 
       {/* Format icon badge — lower-right, stamps in hard right after landing
           with its own overshoot wobble (prototype "iconBadge" track) */}

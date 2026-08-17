@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import BaynesWatermark from '../BaynesWatermark.jsx'
-import BenPhoto from '../../shared/BenPhoto.jsx'
+import { PRESHOW_BEN_PHOTO } from '../../shared/BenPhoto.jsx'
 import { supabase } from '../../../lib/supabase.js'
 import { loadYoutubeIframeApi } from '../../host/YoutubeClipEditor.jsx'
 
@@ -204,16 +204,44 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
             }}>Scan to join</span>
           </div>
         </div>
-      </div>
 
-      <div style={{
-        position: 'absolute',
-        bottom: 40,
-        left: 40,
-        zIndex: 10,
-        opacity: 0.7,
-      }}>
-        <BenPhoto size={120} />
+        {/* Ben — pinned to one specific cutout (see PRESHOW_BEN_PHOTO), not a
+            random pool pick, and sat on the centre axis directly under the QR
+            block instead of the old 120px circle in the bottom-left corner.
+            The cutout's pose does the work: both arms are raised, so from here
+            he reads as pointing up at the QR code he's asking the room to
+            scan. Rendered `contain` on a transparent PNG rather than
+            BenPhoto's `cover`-into-a-circle, which would centre-crop this
+            1920x1080 canvas and cut the hands off.
+            marginTop pulls him up against the QR: the PNG carries ~17% empty
+            headroom above the hands, so the flex `gap` alone left an optical
+            hole the geometry doesn't show. */}
+        <img
+          src={PRESHOW_BEN_PHOTO}
+          alt=""
+          style={{
+            // cqh, not vh: this renderer draws inside StageFrame's
+            // `container-type: size` box (85% of viewport, so 918px on a 1080p
+            // TV) AND inside the host editor's `transform: scale()` preview
+            // canvas, where vh would resolve against the whole browser window
+            // and blow the photo up. 45cqh of an 918px stage ≈ 410px, matching
+            // the size validated on a 1920x1080 render. Display.jsx's copy of
+            // this block uses 38vh for the identical 410px because the
+            // automatic pre-show gate renders full-viewport, outside the stage.
+            height: '45cqh',
+            maxWidth: '100%',
+            objectFit: 'contain',
+            marginTop: '-3rem',
+            filter: 'drop-shadow(0 10px 30px rgba(0,0,0,0.55))',
+            // The cutout ends in a hard horizontal cut across the torso — the
+            // old 120px circle crop hid it, at this size it reads as a badly
+            // scissored sticker floating in mid-air. Fading the bottom out
+            // lets him rise out of the ambient background instead. Verified
+            // against a 1920x1080 render, not eyeballed.
+            WebkitMaskImage: 'linear-gradient(to bottom, #000 60%, transparent 82%)',
+            maskImage: 'linear-gradient(to bottom, #000 60%, transparent 82%)',
+          }}
+        />
       </div>
 
       <BaynesWatermark />
