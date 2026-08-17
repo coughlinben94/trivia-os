@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
-import { WAGER_TIERS, wagerOddsLine, parseWagerNumber } from '../../lib/wagerScoring.js'
+import { WAGER_TIERS, wagerOddsLine, wagerTierReachable, parseWagerNumber } from '../../lib/wagerScoring.js'
 
 // Tier signal colors are FIXED across all 21 themes, the same way SHINY_GOLD
 // is and the same way MatchingBoard's pair palette is: the escalation from
@@ -111,6 +111,10 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
 
   function pickTier(id) {
     if (tiersLocked || guessesLocked) return
+    // A tier the collision bump (wagerTierBar) has pushed past what this
+    // room can ever reach cannot pay out no matter the guess — never let a
+    // team commit to a tier that's a guaranteed zero with no way to know it.
+    if (!wagerTierReachable(id, teamCount)) return
     setTier(id)
     save(id, digits)
   }
@@ -157,21 +161,29 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
-            {WAGER_TIERS.map((t, i) => (
+            {WAGER_TIERS.map((t, i) => {
+              const reachable = wagerTierReachable(t.id, teamCount)
+              return (
               <motion.button
                 key={t.id}
                 onClick={() => pickTier(t.id)}
+                disabled={!reachable}
                 initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: 'translateY(10px)' }}
-                animate={{ opacity: 1, transform: 'translateY(0px)' }}
+                animate={{ opacity: reachable ? 1 : 0.4, transform: 'translateY(0px)' }}
                 transition={{ duration: 0.24, delay: i * 0.05, ease: [0.23, 1, 0.32, 1] }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '0.85rem',
                   width: '100%', minHeight: 74, padding: '0.85rem 1rem',
-                  borderRadius: 16, textAlign: 'left', cursor: 'pointer',
+                  borderRadius: 16, textAlign: 'left',
+                  cursor: reachable ? 'pointer' : 'not-allowed',
                   fontFamily: 'DM Sans, sans-serif',
                   WebkitTapHighlightColor: 'transparent',
                   // Weight escalates with risk: the safe card is a hairline,
-                  // the sun card is the loudest thing on the screen.
+                  // the sun card is the loudest thing on the screen. A tier
+                  // this room can't reach (see wagerTierReachable) never
+                  // gets that treatment regardless of which one it is —
+                  // dimmed via the animate opacity above, same as any other
+                  // disabled control.
                   border: tier === t.id
                     ? `2px solid ${TIER_STYLE[t.id].tint}`
                     : `1px solid ${TIER_STYLE[t.id].tint}55`,
@@ -181,7 +193,7 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
                   boxShadow: tier === t.id ? `0 0 18px ${TIER_STYLE[t.id].glow}` : 'none',
                   transition: 'transform 140ms cubic-bezier(0.23,1,0.32,1)',
                 }}
-                onPointerDown={e => { e.currentTarget.style.transform = 'scale(0.97)' }}
+                onPointerDown={e => { if (reachable) e.currentTarget.style.transform = 'scale(0.97)' }}
                 onPointerUp={e => { e.currentTarget.style.transform = 'scale(1)' }}
                 onPointerLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
               >
@@ -198,14 +210,15 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
                   <span style={{ color: TIER_STYLE[t.id].tint, fontSize: '0.9rem', fontWeight: 700 }}>
                     {t.points} pts
                   </span>
-                  {wagerOddsLine(t.threshold, teamCount) && (
+                  {wagerOddsLine(t.id, teamCount) && (
                     <span style={{ color: `${text}70`, fontSize: '0.78rem' }}>
-                      {wagerOddsLine(t.threshold, teamCount)}
+                      {wagerOddsLine(t.id, teamCount)}
                     </span>
                   )}
                 </span>
               </motion.button>
-            ))}
+              )
+            })}
           </div>
 
           <p style={{ color: `${text}55`, fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
@@ -228,7 +241,7 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
               <span style={{ display: 'flex', flexDirection: 'column' }}>
                 <span style={{ color: text, fontSize: '0.9rem', fontWeight: 700 }}>{chosen.label}</span>
                 <span style={{ color: `${text}70`, fontSize: '0.75rem' }}>
-                  {chosen.points} pts{wagerOddsLine(chosen.threshold, teamCount) ? ` · ${wagerOddsLine(chosen.threshold, teamCount)}` : ''}
+                  {chosen.points} pts{wagerOddsLine(chosen.id, teamCount) ? ` · ${wagerOddsLine(chosen.id, teamCount)}` : ''}
                 </span>
               </span>
             </div>

@@ -4,6 +4,8 @@ import {
   getWagerTier,
   parseWagerNumber,
   teamsToBeat,
+  wagerTierBar,
+  wagerTierReachable,
   wagerOddsLine,
   scoreWagerRound,
   computeWagerScoreUpdates,
@@ -53,16 +55,26 @@ describe('teamsToBeat — the one threshold rule shared by the picker copy and s
   })
 
   it('is the exact integer restatement of the fraction the scorer uses', () => {
-    // For every room size and tier, the team that beat exactly teamsToBeat
+    // For every room size and tier, the team that beat exactly wagerTierBar
     // others must WIN, and the team one short of it must LOSE. If these two
     // ever disagreed, the picker would promise a bar the scorer does not use.
     for (let n = 2; n <= 30; n++) {
       for (const tier of WAGER_TIERS) {
-        const need = teamsToBeat(tier.threshold, n)
+        const need = wagerTierBar(tier.id, n)
         // Build a room of n teams with distinct distances 0..n-1, all on this
         // tier. The team at index i beats (n - 1 - i) others.
         const entries = Array.from({ length: n }, (_, i) => ({ teamId: `t${i}`, tier: tier.id, guess: i }))
         const results = scoreWagerRound({ entries, correctAnswer: 0 })
+        // A bar that got pushed past what's reachable in this room (see the
+        // wagerTierBar collision tests below) has no team AT the bar — nobody
+        // COULD have beaten that many others out of n-1. But that's exactly
+        // the property that matters most here: every team on this tier must
+        // still cleanly LOSE, not crash, not win by some off-by-one in the
+        // comparison. Assert that instead of skipping the room entirely.
+        if (need > n - 1) {
+          expect(results.every(r => !r.won)).toBe(true)
+          continue
+        }
         const atBar = results.find(r => r.beaten === need)
         expect(atBar.won).toBe(true)
         if (need > 0) {
@@ -74,21 +86,87 @@ describe('teamsToBeat — the one threshold rule shared by the picker copy and s
   })
 })
 
+describe('wagerTierBar — collision resolution, Ben 2026-08-16: always push the harder tier up', () => {
+  it('separates Fire and Sun when their raw ceilings collide in a small room', () => {
+    // 4 teams (3 others): raw teamsToBeat gives Fire ceil(.75*3)=3 and
+    // Sun ceil(.9*3)=3 — identical, making Fire a dominated tier (same bar,
+    // lower payout). wagerTierBar must keep them apart.
+    expect(teamsToBeat(0.75, 4)).toBe(3)
+    expect(teamsToBeat(0.9, 4)).toBe(3)
+    expect(wagerTierBar('fire', 4)).toBe(3)
+    expect(wagerTierBar('sun', 4)).toBe(4)
+  })
+
+  it('never lowers a tier below its own raw ceiling — only pushes harder ones up', () => {
+    // 12 teams: raw ceilings are already 6/9/10, no collision — bars must
+    // match teamsToBeat exactly, unchanged.
+    expect(wagerTierBar('safe', 12)).toBe(6)
+    expect(wagerTierBar('fire', 12)).toBe(9)
+    expect(wagerTierBar('sun', 12)).toBe(10)
+  })
+
+  it('is strictly increasing safe < fire < sun for every room size, including tiny ones', () => {
+    for (let n = 2; n <= 30; n++) {
+      const safe = wagerTierBar('safe', n)
+      const fire = wagerTierBar('fire', n)
+      const sun = wagerTierBar('sun', n)
+      expect(fire).toBeGreaterThan(safe)
+      expect(sun).toBeGreaterThan(fire)
+    }
+  })
+
+  it('keeps the lone-team shortcut — every tier stays at 0 with nobody to beat', () => {
+    expect(wagerTierBar('safe', 1)).toBe(0)
+    expect(wagerTierBar('fire', 1)).toBe(0)
+    expect(wagerTierBar('sun', 1)).toBe(0)
+    expect(wagerTierBar('sun', 0)).toBe(0)
+    expect(wagerTierBar('sun', undefined)).toBe(0)
+  })
+
+  it('can push Sun past what a tiny room can ever reach — that is the intended tradeoff', () => {
+    // 3 teams (2 others): Fire raw=ceil(.75*2)=2, Sun raw=ceil(.9*2)=2 — same
+    // collision. Bumped Sun bar is 3, but only 2 others exist to beat, so
+    // Sun is unreachable in a 3-team room. Ben's explicit call: better an
+    // occasionally-impossible top tier than a dominated Fire tier.
+    expect(wagerTierBar('fire', 3)).toBe(2)
+    expect(wagerTierBar('sun', 3)).toBe(3)
+  })
+})
+
 describe('wagerOddsLine — the picker copy', () => {
   it('states the bar as a head count of other teams, never a percentage', () => {
-    expect(wagerOddsLine(0.5, 12)).toBe('Beat 6 of 11 teams')
-    expect(wagerOddsLine(0.75, 12)).toBe('Beat 9 of 11 teams')
-    expect(wagerOddsLine(0.9, 12)).toBe('Beat 10 of 11 teams')
+    expect(wagerOddsLine('safe', 12)).toBe('Beat 6 of 11 teams to win')
+    expect(wagerOddsLine('fire', 12)).toBe('Beat 9 of 11 teams to win')
+    expect(wagerOddsLine('sun', 12)).toBe('Beat 10 of 11 teams to win')
   })
   it('singularizes a two-team room', () => {
-    expect(wagerOddsLine(0.9, 2)).toBe('Beat 1 of 1 team')
+    expect(wagerOddsLine('safe', 2)).toBe('Beat 1 of 1 team to win')
+  })
+  it('says a bumped-past-reach bar in words instead of an impossible fraction', () => {
+    // 2 teams, 1 other: safe/fire/sun raw ceilings all collide at 1, so the
+    // collision bump pushes fire to 2 and sun to 3 — both past the only
+    // 1 other team that exists. "Beat 3 of 1 team" would be nonsense.
+    expect(wagerTierBar('fire', 2)).toBe(2)
+    expect(wagerTierBar('sun', 2)).toBe(3)
+    expect(wagerOddsLine('fire', 2)).toBe('Not in play tonight — too few teams')
+    expect(wagerOddsLine('sun', 2)).toBe('Not in play tonight — too few teams')
+    expect(wagerTierReachable('fire', 2)).toBe(false)
+    expect(wagerTierReachable('sun', 2)).toBe(false)
+    expect(wagerTierReachable('safe', 2)).toBe(true)
   })
   it('handles the one-team room', () => {
-    expect(wagerOddsLine(0.9, 1)).toBe('Only team here — any wager pays')
+    expect(wagerOddsLine('sun', 1)).toBe('Only team here — any wager pays')
   })
   it('returns null while the team count is still unknown, so nothing wrong renders', () => {
-    expect(wagerOddsLine(0.5, 0)).toBe(null)
-    expect(wagerOddsLine(0.5, undefined)).toBe(null)
+    expect(wagerOddsLine('safe', 0)).toBe(null)
+    expect(wagerOddsLine('safe', undefined)).toBe(null)
+  })
+  it('reflects the collision-bumped bar, matching what the scorer will actually require', () => {
+    // Fire's bumped bar (3) still fits inside a 4-team room (3 others) — a
+    // real, printable fraction. Sun's bumped bar (4) exceeds it, so it falls
+    // to the long-shot phrasing instead of a nonsense "4 of 3".
+    expect(wagerOddsLine('fire', 4)).toBe('Beat 3 of 3 teams to win')
+    expect(wagerOddsLine('sun', 4)).toBe('Not in play tonight — too few teams')
   })
 })
 
