@@ -415,6 +415,21 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         .eq('show_id', show.id)
       if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); setWagerError('Scoring failed — check connection and retry'); return }
 
+      // Unlike matching, entries here come from `teams`, not `answers` — every
+      // registered team gets scored regardless of whether the fetch above
+      // actually returned anything. That's correct for a team that genuinely
+      // never guessed (a real 0), but it means an EMPTY answers fetch (RLS
+      // hiccup, a Realtime/PostgREST blip, anything that returns
+      // success-with-no-rows) is indistinguishable from "nobody guessed" —
+      // every team silently scores 0 and the room gets a reveal where no one
+      // won, no error, no retry path. Refuse instead when teams exist but the
+      // fetch came back suspicious-empty; matching has an equivalent guard
+      // for its own empty-fetch shape (answers exist but can't be matched).
+      if ((answers?.length ?? 0) === 0 && (teams?.length ?? 0) > 0) {
+        setWagerError('No wager answers came back — check connection and retry before scoring')
+        return
+      }
+
       // Every registered team gets an entry, not just the ones that submitted
       // — a team that never guessed is a real 0 that should be written to the
       // scoreboard and shown in the reveal, not silently skipped.
