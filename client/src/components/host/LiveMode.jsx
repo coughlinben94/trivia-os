@@ -3,6 +3,7 @@ import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
 import { resolveShinyPart, isMatchingShiny, isWagerShiny } from '../../lib/shinySeries.js'
 import ScorePanel from './ScorePanel.jsx'
+import LateTeamPopover from './LateTeamPopover.jsx'
 import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
 import { supabase } from '../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
@@ -191,6 +192,7 @@ function UpNextCard({ slide, offset }) {
 // ─── LiveMode ──────────────────────────────────────────────────────────────
 
 export default function LiveMode({ show, actions, onExitLive, onThemeChange, onOpenScoreboard, scoreboardModalOpen }) {
+  const [lateTeamPopoverOpen, setLateTeamPopoverOpen] = useState(false)
   const [scorePanelOpen, setScorePanelOpen] = useState(false)
   const [themePickerOpen, setThemePickerOpen] = useState(false)
   const [pylPickerBusy, setPylPickerBusy] = useState(false)
@@ -392,10 +394,15 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           ...slide.data,
           wagerGuessesLocked: true,
           wagerRevealed: true,
-          // What the TV reveal renders. Kept deliberately small — no team ids,
-          // no beatFraction — so the slides jsonb doesn't bloat.
+          // What the TV reveal renders, plus the phone-side result popup's
+          // own lookup (Join.jsx). teamId IS included — unlike the original
+          // "no team ids, no beatFraction, so the jsonb doesn't bloat" call,
+          // a short id string per team is not meaningful bloat, and without
+          // it two teams whose names normalize identically would show EACH
+          // OTHER's win/lose result on the popup (same ambiguity class as
+          // the scoring fold-in's name matching, just now user-visible).
           wagerResults: results.map(r => ({
-            teamName: r.teamName, guess: r.guess, tier: r.tier, points: r.points, won: r.won,
+            teamId: r.teamId, teamName: r.teamName, guess: r.guess, tier: r.tier, points: r.points, won: r.won,
           })),
         },
       })
@@ -445,14 +452,22 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           </button>
           <NavButton onClick={actions.prevSlide} disabled={atStart} label="◀ Prev" title="Previous (←)" />
           {preShowIndex !== -1 && (
-            <button
-              onClick={() => actions.goLiveFrom(preShowIndex)}
-              disabled={currentIndex === preShowIndex}
-              title="Show the join QR code again for a late team"
-              className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-            >
-              📱 QR
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setLateTeamPopoverOpen(v => !v)}
+                title="A team showed up late — add them as new, or reauth a phone that lost its session"
+                className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                📱 Late Team
+              </button>
+              {lateTeamPopoverOpen && (
+                <LateTeamPopover
+                  show={show}
+                  onShowJoinQr={() => actions.goLiveFrom(preShowIndex)}
+                  onClose={() => setLateTeamPopoverOpen(false)}
+                />
+              )}
+            </div>
           )}
         </div>
 

@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
 import { resolveShinyPart, isMatchingShiny, isWagerShiny } from '../lib/shinySeries.js'
+import { getWagerTier } from '../lib/wagerScoring.js'
 import MatchingBoard from '../components/join/MatchingBoard.jsx'
 import WagerBoard from '../components/join/WagerBoard.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
@@ -871,6 +872,73 @@ function ReconnectingBanner({ visible }) {
   )
 }
 
+// ─── Wager result popup ──────────────────────────────────────────────────────
+// Shown once a wager reveals — win/lose and points only, never the correct
+// answer (Ben announces that out loud after the round; slide.data.answer is
+// technically already on the phone in `show`, this component just never
+// reads it). Dismiss-to-close, tap-outside also closes.
+function WagerResultPopup({ result, theme, onDismiss }) {
+  const pref = useReducedMotion()
+  const text = theme?.colors?.text ?? '#ffffff'
+  const highlight = theme?.colors?.highlight ?? '#f5c842'
+  const won = !!result.won
+  const tier = result.tier ? getWagerTier(result.tier) : null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 700,
+        background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem',
+      }}
+      onClick={onDismiss}
+    >
+      <motion.div
+        initial={pref ? { opacity: 0 } : { scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={pref ? { duration: 0.2 } : { type: 'spring', duration: 0.4, bounce: 0.3 }}
+        style={{
+          background: won ? `${highlight}20` : 'rgba(255,255,255,0.06)',
+          border: `2px solid ${won ? highlight : 'rgba(255,255,255,0.16)'}`,
+          borderRadius: 20, padding: '2rem 1.75rem', maxWidth: 320, width: '100%',
+          textAlign: 'center', fontFamily: 'DM Sans, sans-serif',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <span style={{ fontSize: '2.75rem', display: 'block', marginBottom: '0.5rem', lineHeight: 1 }}>
+          {won ? '🎉' : '😬'}
+        </span>
+        <p style={{ fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '1.6rem', color: won ? highlight : text, margin: 0, letterSpacing: '-0.01em' }}>
+          {won ? 'You won your wager!' : "Didn't hit this one"}
+        </p>
+        {tier && (
+          <p style={{ color: `${text}80`, fontSize: '0.9rem', margin: '0.5rem 0 0' }}>
+            {tier.label}{won && result.points ? ` · +${result.points} pts` : ''}
+          </p>
+        )}
+        {result.guess != null && (
+          <p style={{ color: `${text}55`, fontSize: '0.8rem', margin: '0.35rem 0 0' }}>
+            Your guess: {result.guess}
+          </p>
+        )}
+        <button
+          onClick={onDismiss}
+          style={{
+            marginTop: '1.25rem', background: 'rgba(255,255,255,0.09)', border: 'none',
+            borderRadius: 10, color: `${text}90`, fontSize: '0.85rem', fontWeight: 600,
+            padding: '0.65rem 1.5rem', cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+            fontFamily: 'DM Sans, sans-serif', minHeight: 44,
+          }}
+        >
+          Got it
+        </button>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 // ─── Live view ────────────────────────────────────────────────────────────────
 function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScores }) {
   const [viewedIndex, setViewedIndex]         = useState(0)
@@ -935,6 +1003,31 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
 
   const forceInteractive = liveSlideIsInteractive && !interactiveSatisfied
 
+  // This team's own wager outcome, once revealed — win/lose and points only,
+  // matched by name against wagerResults the same way scoring itself does
+  // (no id link between `teams` and the snapshot LiveMode wrote). Never reads
+  // liveSlide.data.answer — the correct number is announced out loud, not
+  // shown here, by design.
+  const [dismissedWagerSlideId, setDismissedWagerSlideId] = useState(null)
+  const wagerResult = useMemo(() => {
+    if (!(liveSlide?.type === 'question' && liveSlide.data?.isShiny && isWagerShiny(liveSlide.data) && liveSlide.data?.wagerRevealed)) return null
+    const results = liveSlide.data.wagerResults ?? []
+    // Match by team id first — exact, no collision risk. Falls back to the
+    // old name-match only for a slide revealed before teamId started being
+    // written into this snapshot.
+    const myNorm = (team?.name ?? '').trim().toLowerCase()
+    const found = results.find(r => r.teamId != null && r.teamId === team?.id)
+      ?? results.find(r => r.teamId == null && (r.teamName ?? '').trim().toLowerCase() === myNorm)
+      ?? null
+    // scoreWagerRound writes a row for EVERY registered team, including ones
+    // that never submitted a guess (scored 0/lost by default) — a team that
+    // joined late, had no phone, or just didn't answer must not be told
+    // "Didn't hit this one" for a question it never actually played.
+    if (!found || found.guess == null) return null
+    return found
+  }, [liveSlide, team?.name])
+  const showWagerResultPopup = !!wagerResult && dismissedWagerSlideId !== liveSlide?.id
+
   // Follow Along always tracks the host. Stay on Slide lets a team browse at
   // its own pace on ordinary slides — but a phone-interactive slide (wager,
   // matching) overrides BOTH modes: it's not something a team can silently
@@ -993,6 +1086,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   }
 
   return (
+    <>
     <div style={{ minHeight: '100dvh', background: `linear-gradient(180deg, ${bg} 0%, ${bgDeep} 100%)`, display: 'flex', flexDirection: 'column', fontFamily: 'DM Sans, sans-serif' }}>
 
       {/* TOP BAR — paddingTop accounts for Dynamic Island / notch when viewport-fit=cover */}
@@ -1187,6 +1281,17 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
       </div>
       )}
     </div>
+
+    <AnimatePresence>
+      {showWagerResultPopup && (
+        <WagerResultPopup
+          result={wagerResult}
+          theme={theme}
+          onDismiss={() => setDismissedWagerSlideId(liveSlide?.id)}
+        />
+      )}
+    </AnimatePresence>
+    </>
   )
 }
 
@@ -1248,6 +1353,67 @@ export default function Join() {
       }
       if (!fetchedShow) { setPhase('no-show'); return }
       setShow(fetchedShow)
+
+      // A host-generated reauth link (LateTeamPopover.jsx) always wins over
+      // whatever's in localStorage — a struggling phone following this link
+      // should end up paired to the team the host picked, not to a stale or
+      // absent local entry. redeem_reauth_token mints an anon session first
+      // if this phone doesn't have one (same as a fresh registration would),
+      // then writes that session onto the team's row server-side — this
+      // phone's own RLS can't do that itself, which is the whole reason this
+      // exists as a host-initiated flow instead of a self-service one.
+      const reauthToken = searchParams.get('reauth')
+      if (reauthToken) {
+        try {
+          let ownerUid = (await supabase.auth.getSession()).data.session?.user?.id
+          if (!ownerUid) {
+            // Same burst-of-joins-on-shared-wifi 429 the registration flow
+            // below already retries once for — a reauth is if anything MORE
+            // likely to land mid-show, after other phones have already
+            // spent some of the venue IP's hourly budget.
+            for (let attempt = 0; attempt < 2; attempt++) {
+              const { data, error } = await supabase.auth.signInAnonymously()
+              if (!error) { ownerUid = data.user.id; break }
+              if (attempt === 0 && error.status !== 429) break
+              if (attempt === 0) await new Promise(r => setTimeout(r, 2500))
+            }
+          }
+          const { data: result } = ownerUid
+            ? await supabase.rpc('redeem_reauth_token', { p_token: reauthToken })
+            : { data: null }
+          // Belt-and-braces: the RPC itself doesn't check which show the
+          // redeeming client is actually on (nothing in the normal UI flow
+          // can produce a mismatch — the QR is always built from the SAME
+          // show.id the token's team belongs to — but nothing enforces it
+          // server-side either). Filing a session under result.show_id while
+          // the rest of this page runs off fetchedShow would strand the team
+          // in a phase the next reload never reads back correctly.
+          if (result && result.show_id === fetchedShow.id) {
+            // Strip the token from the URL — it's single-use, and a phone
+            // that locks/backgrounds/reloads on this same URL (routine at a
+            // bar over a multi-hour show) would otherwise re-run this branch
+            // on an already-spent token and hard-error a phone that's
+            // actually fine.
+            window.history.replaceState({}, '', `/join?show=${result.show_id}`)
+            const newTeam = { id: result.id, name: result.name, color: result.color, showId: result.show_id }
+            setTeam(newTeam)
+            saveStoredTeam(result.show_id, newTeam)
+            setPowerupUsed(result.powerup_used ?? false)
+            setPhase(fetchedShow.is_live ? 'live' : 'waiting')
+            return
+          }
+          // Token spent/expired/failed — NOT a hard error. A phone that
+          // already has a working stored session (the common case: it
+          // reauthed successfully earlier and is just reloading a stale
+          // URL) should fall through to the normal restore path below and
+          // carry on, not get stopped cold by a link that already did its
+          // job once.
+        } catch {
+          // network error minting a session or calling the RPC — same
+          // reasoning, fall through rather than strand a phone that has a
+          // perfectly good stored session already.
+        }
+      }
 
       // Session restore — verify team still exists
       const stored = loadStoredTeam(fetchedShow.id)
