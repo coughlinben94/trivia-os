@@ -15,7 +15,7 @@ import { useTheme } from '../shared/ThemeProvider.jsx'
 import { overflowsBox, QUESTION_BOX } from '../../lib/autoFitText.js'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 
-export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos }) {
+export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos }) {
   const { theme } = useTheme()
   const [data, setData] = useState(slide.data)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -40,6 +40,18 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
     setData(slide.data); setConfirmingDelete(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slide.id])
+
+  // A sidebar sub-row for a specific part was clicked directly — jump the
+  // "Previewing part" state to it. Keyed on both slide.id and initialPart so
+  // this fires both on a fresh slide-select-with-part AND on clicking a
+  // different part's sub-row while this same slide is already open. Runs
+  // after the slide-sync effect above (declaration order), so it overrides
+  // that effect's plain slide.data reset rather than being clobbered by it.
+  useEffect(() => {
+    if (initialPart == null) return
+    change('currentPart', initialPart)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slide.id, initialPart])
 
   // questionLabel/questionNumber are auto-recomputed by renumberRoundQuestions
   // (useShow.js) whenever this round's question order or bonus-status changes

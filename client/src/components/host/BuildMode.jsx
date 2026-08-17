@@ -260,6 +260,13 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
   const [showThemePicker, setShowThemePicker] = useState(false)
   const [mode, setMode] = useState('wizard')
   const [selectedSlide, setSelectedSlide] = useState(null)
+  // Which part to jump the editor's "Previewing part" state to on entry —
+  // set when a sidebar sub-row for a specific part is clicked directly,
+  // rather than the slide's own row (2026-08-17, Ben: sidebar sub-rows for
+  // a shiny question's parts must exist and be clickable, one image/audio
+  // format or many). null means "leave wherever the slide's own currentPart
+  // already is."
+  const [initialPart, setInitialPart] = useState(null)
   const [viewingRoundId, setViewingRoundId] = useState(null)  // round view mode
   const [addModalData, setAddModalData] = useState(null)  // null = modal closed
   const [wizardPickedType, setWizardPickedType] = useState(null)
@@ -436,8 +443,9 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
     setWizardPickedType(null)
   }
 
-  function enterEditing(slide) {
+  function enterEditing(slide, partIndex = null) {
     setSelectedSlide(slide)
+    setInitialPart(partIndex)
     setMode('editing')
   }
 
@@ -539,6 +547,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
           selectedSlideId={syncedSelectedSlide?.id ?? null}
           viewingRoundId={viewingRoundId}
           onSelectSlide={slide => enterEditing(slide)}
+          onSelectPart={(slide, partIndex) => enterEditing(slide, partIndex)}
           onSelectRound={enterRoundView}
           onAddRound={handleAddRound}
           onUpdateRound={actions.updateRound}
@@ -555,6 +564,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
           {mode === 'editing' && syncedSelectedSlide ? (
             <SlideEditor
               slide={syncedSelectedSlide}
+              initialPart={initialPart}
               show={show}
               onUpdateSlide={actions.updateSlide}
               onDeleteSlide={async (id) => {

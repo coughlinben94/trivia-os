@@ -65,6 +65,7 @@ export default function RoundSidebar({
   selectedSlideId,
   viewingRoundId,
   onSelectSlide,
+  onSelectPart,
   onSelectRound,
   onAddRound,
   onUpdateRound,
@@ -473,33 +474,64 @@ export default function RoundSidebar({
                   {groupSeriesRuns(slides).map(group => {
                     const draggedSlideIdx = dragged ? slides.findIndex(s => s.id === dragged.id) : -1
 
-                    function rowFor(slide, slideIdx, extraProps) {
+                    function rowFor(slide, slideIdx, extraProps = {}) {
                       const tIdx = blocks.findIndex(bl => bl.slides.some(s => s.id === slide.id))
                       const over = dragOverId === slide.id && dragOverType === 'slide'
                       // Within-round: block indices are equal, compare position inside the round instead
                       const withinRound = draggedBIdx === tIdx && draggedSlideIdx !== -1
                       const before = over && (withinRound ? draggedSlideIdx > slideIdx : draggedBIdx > tIdx)
                       const after  = over && (withinRound ? draggedSlideIdx < slideIdx : draggedBIdx < tIdx)
+                      const { onSelect, key: rowKey, selected: selectedOverride, ...rest } = extraProps
                       return (
                         <SlideRow
-                          key={slide.id}
+                          key={rowKey ?? slide.id}
                           slide={slide}
-                          selected={slide.id === selectedSlideId}
+                          selected={selectedOverride ?? (selectedSlideId === slide.id)}
                           dragging={dragged?.id === slide.id}
                           dragBefore={before}
                           dragAfter={after}
-                          onSelect={() => onSelectSlide(slide)}
+                          onSelect={onSelect ?? (() => onSelectSlide(slide))}
                           onDelete={() => onDeleteSlide(slide.id)}
                           onGripDown={e => handleGripDown(e, slide.id, 'slide')}
                           indent
-                          {...extraProps}
+                          {...rest}
                         />
                       )
                     }
 
                     if (group.items.length === 1) {
                       const { slide, idx } = group.items[0]
-                      return rowFor(slide, idx)
+                      // A single shiny question ALSO always shows its part(s)
+                      // as sub-rows, even with just one part (Ben, 2026-08-17:
+                      // "there will always be subslides... whether it's a one
+                      // question shiny or multi part shiny") — the slide's own
+                      // row is the title card, each part gets its own sub-row
+                      // below it, wired to jump the editor straight to that
+                      // part via onSelectPart.
+                      const parts = slide.data?.isShiny && Array.isArray(slide.data.parts) ? slide.data.parts : null
+                      if (!parts) return rowFor(slide, idx)
+
+                      const groupId = slide.id
+                      const expanded = expandedGroups.has(groupId)
+                      const activePart = selectedSlideId === slide.id ? (slide.data.currentPart ?? 0) : -1
+                      return (
+                        <div key={groupId}>
+                          {rowFor(slide, idx, {
+                            groupCount: parts.length,
+                            groupExpanded: expanded,
+                            onToggleGroup: () => toggleGroup(groupId),
+                          })}
+                          {expanded && parts.map((_, i) => (
+                            rowFor(slide, idx, {
+                              key: `${slide.id}:${i}`,
+                              doubleIndent: true,
+                              labelOverride: shinySiblingLabel(slide, i + 1),
+                              selected: activePart === i,
+                              onSelect: () => onSelectPart(slide, i),
+                            })
+                          ))}
+                        </div>
+                      )
                     }
 
                     const groupId = group.leadSlide.id
