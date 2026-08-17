@@ -498,6 +498,22 @@ export default function SlideCanvasEditor({
       return { id, field: el.dataset.slideField, x: cx - w / 2, y: cy - h / 2, w, h }
     }))
   }
+  // Always the LATEST detectRegions, not whichever render's closure a
+  // gesture handler happened to capture at pointer-down (bug fixed
+  // 2026-08-17, caught by review, not live): every setTimeout(detectRegions,
+  // 50) below reads `detectRegions` from the render where the gesture
+  // STARTED — stale by the time it fires if `data._regionTransforms`
+  // changed mid-gesture (it does, every pointermove). On the FIRST
+  // rotate/resize of a region (identity -> transformed), that stale
+  // closure's own `rt` still reads the PRE-gesture transform, so
+  // `hasRotScale` comes back false and it measures the region as if it
+  // were still untransformed -- reintroducing the exact scale/rotate
+  // double-apply this whole detectRegions rewrite exists to fix, but only
+  // on a region's first-ever transform (later gestures happen to read a
+  // fresher closure by coincidence of render timing, which is why this
+  // slipped through testing).
+  const detectRegionsRef = useRef(detectRegions)
+  detectRegionsRef.current = detectRegions
 
   function startRegionMove(e, region) {
     const rt = data._regionTransforms ?? {}
@@ -513,7 +529,7 @@ export default function SlideCanvasEditor({
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
       document.removeEventListener('pointercancel', onUp)
-      setTimeout(detectRegions, 50)
+      setTimeout(() => detectRegionsRef.current(), 50)
     }
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
@@ -562,7 +578,7 @@ export default function SlideCanvasEditor({
       document.removeEventListener('pointerup', onUp)
       document.removeEventListener('pointercancel', onUp)
       setRotatingAngle(null)
-      setTimeout(detectRegions, 50)
+      setTimeout(() => detectRegionsRef.current(), 50)
     }
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
@@ -598,7 +614,7 @@ export default function SlideCanvasEditor({
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
       document.removeEventListener('pointercancel', onUp)
-      setTimeout(detectRegions, 50)
+      setTimeout(() => detectRegionsRef.current(), 50)
     }
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
@@ -645,7 +661,7 @@ export default function SlideCanvasEditor({
       // straight back into edit mode instead of just selecting it.
       setEditingRegionId(null)
       setSelectedRegionId(null)
-      setTimeout(detectRegions, 50)
+      setTimeout(() => detectRegionsRef.current(), 50)
     }
     function onBlur() { finish(true) }
     function onKeyDown(ev) {
@@ -897,7 +913,7 @@ export default function SlideCanvasEditor({
                   )}
                   {isSelReg && hasTransform && (
                     <div title="Reset position & rotation" style={{ position: 'absolute', top: -20, left: -20, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', border: '2px solid white', cursor: 'pointer', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'white', fontWeight: 700, pointerEvents: 'auto' }}
-                      onPointerDown={e => { e.stopPropagation(); const c = data._regionTransforms ?? {}; const { [region.id]: _drop, ...rest } = c; change('_regionTransforms', rest); setTimeout(detectRegions, 50) }}>×</div>
+                      onPointerDown={e => { e.stopPropagation(); const c = data._regionTransforms ?? {}; const { [region.id]: _drop, ...rest } = c; change('_regionTransforms', rest); setTimeout(() => detectRegionsRef.current(), 50) }}>×</div>
                   )}
                   {/* Resize — media regions only (text sizes off content). Radial
                       drag from any corner, rotation-invariant like the overlay

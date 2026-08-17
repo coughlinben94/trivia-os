@@ -32,24 +32,30 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
     return () => { alive = false }
   }, [])
 
-  // Sync local data when the selected slide changes. Flush first so any pending
-  // edit to the slide we're leaving is persisted before its data is swapped out
-  // (scheduleSave captured that slide's id, so the write still targets it).
+  // Sync local data when the selected slide (or the part to jump to within
+  // it) changes. Flush first so any pending edit to the slide/part we're
+  // leaving is persisted before its data is swapped out (scheduleSave
+  // captured that slide's id, so the write still targets it).
+  //
+  // Bug fixed 2026-08-17 (caught by review, not live): this used to be TWO
+  // separate effects — a slide.id-only reset via setData(slide.data), then
+  // a second effect calling change('currentPart', initialPart), where
+  // change() builds its next value from the CLOSURE's `data`. Both effects
+  // fire in the same commit on a slide switch; effect order runs the first
+  // before the second, but setData() doesn't update the `data` const inside
+  // this render — so the second effect's change() call read the OUTGOING
+  // slide's data, not the incoming one, and silently saved it onto the NEW
+  // slide.id 600ms later. Clicking a sidebar part sub-row for any slide
+  // other than the one already open overwrote that slide's real content
+  // with whatever the previously-open slide's data happened to be.
+  // One effect, always basing the next value on `slide.data` (the fresh
+  // prop, never stale) fixes it — there's no second closure to go stale.
   useEffect(() => {
     flushSave()
-    setData(slide.data); setConfirmingDelete(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slide.id])
-
-  // A sidebar sub-row for a specific part was clicked directly — jump the
-  // "Previewing part" state to it. Keyed on both slide.id and initialPart so
-  // this fires both on a fresh slide-select-with-part AND on clicking a
-  // different part's sub-row while this same slide is already open. Runs
-  // after the slide-sync effect above (declaration order), so it overrides
-  // that effect's plain slide.data reset rather than being clobbered by it.
-  useEffect(() => {
-    if (initialPart == null) return
-    change('currentPart', initialPart)
+    const next = initialPart != null ? { ...slide.data, currentPart: initialPart } : slide.data
+    setData(next)
+    setConfirmingDelete(false)
+    if (initialPart != null) scheduleSave({ data: next })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slide.id, initialPart])
 
@@ -504,10 +510,14 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
   // files, expect 4 parts — previously capped at the EXISTING part count
   // and silently dropped the rest) rather than requiring "+ Add part" to be
   // clicked first. A failed upload just leaves that part's media untouched
-  // rather than aborting the whole batch.
+  // rather than aborting the whole batch — Promise.allSettled, not
+  // Promise.all (bug fixed 2026-08-17, caught by review, not live: the
+  // comment already promised this, but Promise.all rejects the WHOLE batch
+  // on the first failed upload, silently dropping every file after it too).
   async function uploadBulkImages(files) {
     const targets = Array.from(files)
-    const results = await Promise.all(targets.map(f => uploadMedia(f)))
+    const settled = await Promise.allSettled(targets.map(f => uploadMedia(f)))
+    const results = settled.map(r => r.status === 'fulfilled' ? r.value : null)
     const parts = Array.from({ length: Math.max(data.parts.length, targets.length) }, (_, i) => {
       const existing = data.parts[i] ?? { label: '', text: '', answer: '', mediaSlots: [] }
       return results[i]?.url ? { ...existing, mediaSlots: [{ url: results[i].url, type: results[i].type }] } : existing
@@ -571,7 +581,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
               "N. " number prefix included (QuestionSlide.jsx prepends it
               automatically for non-shiny questions) so this warning matches
               what's actually rendered, not the raw typed text. */}
-          {overflowsBox(`${data.questionNumber ? `${data.questionNumber}. ` : ''}${data.text}`, { ...QUESTION_BOX, family: theme.fonts.body }) && (
+          {overflowsBox(`${!data.isBonus && data.questionNumber ? `${data.questionNumber}. ` : ''}${data.text}`, { ...QUESTION_BOX, family: theme.fonts.body }) && (
             <p className="text-xs text-amber-600 mt-1.5 leading-relaxed">
               ⚠️ This question is too long to fit the display — it'll run past its box on the TV. Shorten it.
             </p>
@@ -866,20 +876,28 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
             <TextInput value={data.seriesTheme} onChange={v => onChange('seriesTheme', v)} placeholder="Hear Me Roar" />
           </Field>
 
-          {/* Shared Answer / bulk dropzone / part-picker chips only mean
-              anything once there's more than one part on THIS slide (Ben,
-              2026-08-17: "too complex" — these were showing even for the
-              common one-image-per-slide case, where they're pure clutter
-              since there's nothing to share/pick/bulk-fill). */}
+          {/* Bulk dropzone stays reachable at 1 part — it's the GROW
+              mechanism itself (drop N files, get N parts), not just a bulk
+              refill for parts that already exist. Bug fixed 2026-08-17
+              (caught by review, not live): this used to be gated behind
+              parts.length > 1 alongside Shared Answer/chips below, which
+              made it unreachable from the exact 1-part state it exists to
+              grow out of — you'd need 2+ parts to see the control that gets
+              you to 2+ parts. */}
+          {schema.type === 'image' && (
+            <BulkImageDropzone count={data.parts.length} onFiles={uploadBulkImages} />
+          )}
+
+          {/* Shared Answer / part-picker chips only mean anything once
+              there's more than one part on THIS slide (Ben, 2026-08-17:
+              "too complex" — these were showing even for the common
+              one-image-per-slide case, where they're pure clutter since
+              there's nothing to share/pick). */}
           {data.parts.length > 1 && (
             <>
               <Field label="Shared Answer (optional)" hint="Leave blank — each part below gets its own answer. Only fill this in if every part shares ONE answer.">
                 <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="Leave blank for per-part answers" />
               </Field>
-
-              {schema.type === 'image' && (
-                <BulkImageDropzone count={data.parts.length} onFiles={uploadBulkImages} />
-              )}
 
               <Divider label="Previewing part" />
               <div className="flex flex-wrap gap-1.5">
@@ -997,8 +1015,8 @@ function BulkImageDropzone({ count, onFiles }) {
         <p className="text-xs text-gray-500">Uploading…</p>
       ) : (
         <>
-          <p className="text-xs font-medium text-gray-600">📎 Drop {count} screenshots here, or click to browse</p>
-          <p className="text-xs text-gray-400 mt-0.5">Fills parts 1–{count} in order — replaces per-part images below</p>
+          <p className="text-xs font-medium text-gray-600">📎 Drop screenshots here, or click to browse</p>
+          <p className="text-xs text-gray-400 mt-0.5">Fills part 1, 2, 3… in order — adds more parts if you drop more than {count} already here</p>
         </>
       )}
     </div>

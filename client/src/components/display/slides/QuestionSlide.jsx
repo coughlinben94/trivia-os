@@ -27,7 +27,15 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
   // "1. "/"2. " into the question text itself and wanted it wired in
   // instead. Shiny questions skip this — they get their own series
   // banner/title treatment and the QuestionCounter corner badge instead.
-  const displayText = !data.isShiny && data.questionNumber ? `${data.questionNumber}. ${part.text}` : part.text
+  // Bug fixed 2026-08-17 (caught by review, not live): questionNumber is
+  // per-TRACK, not per-round — bonus questions number 1,2,3... on their OWN
+  // sequence (renumberRoundQuestions, questionNumbering.js), separate from
+  // the regular Q1,Q2,... track. A bonus question after 5 regular ones has
+  // questionNumber === 1, so this would print "1. ..." on the TV — reading
+  // as the actual first question of the round. Bonus questions already get
+  // their own "B1"-style label in QuestionCounter's corner badge; they just
+  // don't get a number folded into the question text itself.
+  const displayText = !data.isShiny && !data.isBonus && data.questionNumber ? `${data.questionNumber}. ${part.text}` : part.text
 
   // Uniform sizing across the round (Ben, 2026-08-17: "I want the font
   // sizes to be as close to each other as possible" — Q4 fit its own
@@ -39,28 +47,41 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
   // slide in this round is measured with fitToBox individually (each still
   // gets its own real display text/prefix); the smallest of those wins and
   // every question in the round renders at that one size.
+  // Bug fixed 2026-08-17 (caught by review, not live): the pool included
+  // EVERY question-type slide in the round regardless of shiny status, but
+  // shiny list/wager/matching/visual/audio questions never actually render
+  // through THIS component's QUESTION_BOX/fitToBox call — they each have
+  // their own independent sizing elsewhere. A long shiny question's text
+  // could drag Math.min down and shrink every REGULAR question in the round
+  // to fit a box it's never even measured against. Scoped to non-shiny
+  // questions only, same split displayText already uses above.
   const roundQuestionTexts = useMemo(() => {
     if (!show?.slides) return [displayText]
     return show.slides
-      .filter(s => s.type === 'question' && s.roundId === slide.roundId)
+      .filter(s => s.type === 'question' && !s.data?.isShiny && s.roundId === slide.roundId)
       .map(s => {
         const p = resolveShinyPart(s.data)
-        return !s.data?.isShiny && s.data?.questionNumber ? `${s.data.questionNumber}. ${p.text}` : p.text
+        return !s.data?.isBonus && s.data?.questionNumber ? `${s.data.questionNumber}. ${p.text}` : p.text
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show?.slides, slide.roundId])
+  // fitToBox measures via canvas — a first paint before the body font loads
+  // measures fallback-font metrics. This flips once web fonts are ready to
+  // force uniformFontSize below to recompute with real glyph metrics.
+  // Bug fixed 2026-08-17 (caught by review, not live): fontsReady used to
+  // just force a re-render, back when fitToBox was called inline in the
+  // render body (so any re-render re-ran it). It's now behind a useMemo —
+  // a re-render alone doesn't recompute a memo, only a changed dependency
+  // does, so this was a permanently-stale fallback-font measurement until
+  // the slide itself changed. fontsReady is now an explicit dependency.
+  const [fontsReady, setFontsReady] = useState(false)
+  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+
   const uniformFontSize = useMemo(() => {
     const sizes = roundQuestionTexts.map(t => fitToBox(t, { ...QUESTION_BOX, family: theme.fonts.body }))
     return sizes.length ? Math.min(...sizes) : fitToBox(displayText, { ...QUESTION_BOX, family: theme.fonts.body })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roundQuestionTexts, theme.fonts.body])
-
-  // fitToBox measures via canvas — a first paint before the body font loads
-  // measures fallback-font metrics. This flips once web fonts are ready purely
-  // to force the re-render that re-runs the inline fitToBox call below with
-  // real glyph metrics; the value itself is never read.
-  const [fontsReady, setFontsReady] = useState(false)
-  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+  }, [roundQuestionTexts, theme.fonts.body, fontsReady])
 
   const banner = isAssemble
     ? { initial: { opacity: 0, y: -40 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.42, delay: 0.04, ease: EASE_OUT } }

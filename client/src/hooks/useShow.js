@@ -747,7 +747,15 @@ export function useShow() {
     // unmounts entirely) with no data loss but no way to submit until the
     // host presses Next again — and Prev is one keystroke/Stream Deck press
     // away, the single most likely accidental trigger of this regression.
-    if (data?.isShiny && data.introDone && !(data.wagerTiersLocked || data.wagerGuessesLocked || data.matchingLocked)) {
+    // ALSO not for a non-lead shiny-series sibling (bug fixed 2026-08-17,
+    // caught by review, not live): nextSlide() skips resetting introDone
+    // for these — they never show their own intro card, they share the
+    // lead slide's. This branch didn't know that, so one Prev on Q4/Q5/Q6
+    // played the full spin-in title card it was never supposed to have,
+    // and it took a SECOND Prev to actually move back a slide.
+    const prevInOrder = sorted[cur - 1]
+    const isAutoSkippedSibling = prevInOrder && isShinySeriesSibling(prevInOrder, curSlide)
+    if (data?.isShiny && data.introDone && !isAutoSkippedSibling && !(data.wagerTiersLocked || data.wagerGuessesLocked || data.matchingLocked)) {
       const newSlides = show.slides.map(s =>
         s.id === curSlide.id ? { ...s, data: { ...s.data, introDone: false } } : s
       )

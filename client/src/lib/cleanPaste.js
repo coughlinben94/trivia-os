@@ -18,12 +18,12 @@ const ANSWER_ARROW_RE = /^\s*(→|»|>{1,2})\s*/
 // uses for its Wingdings/Symbol bullet fonts — those render as a tofu/box
 // icon in a normal font (no matching glyph), which is exactly the stray
 // icon that shows up at the start of a pasted question.
-const BULLET_RE = /^\s*[•●▪◦‣∙▸►--]\s*/
+const BULLET_RE = /^\s*[•●▪◦‣∙▸►-]\s*/
 
 export function cleanPastedText(raw, { multiline = false } = {}) {
   let text = raw
     .replace(/\r\n?/g, '\n')
-    .replace(/[  ]/g, ' ')            // non-breaking space variants
+    .replace(/[   ]/g, ' ')            // non-breaking space variants
     .replace(/[​-‍﻿]/g, '')       // zero-width chars, BOM
     .split('\n').map(line => line.replace(BULLET_RE, '')).join('\n')
   return multiline

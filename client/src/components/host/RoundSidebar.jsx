@@ -508,7 +508,12 @@ export default function RoundSidebar({
                       // row is the title card, each part gets its own sub-row
                       // below it, wired to jump the editor straight to that
                       // part via onSelectPart.
-                      const parts = slide.data?.isShiny && Array.isArray(slide.data.parts) ? slide.data.parts : null
+                      // Array.isArray alone lets a genuinely empty parts: []
+                      // through (truthy check on the array itself, not its
+                      // length) — bug fixed 2026-08-17 (caught by review,
+                      // not live): would have rendered an expand caret with
+                      // a "0" count badge and nothing underneath it.
+                      const parts = slide.data?.isShiny && Array.isArray(slide.data.parts) && slide.data.parts.length > 0 ? slide.data.parts : null
                       if (!parts) return rowFor(slide, idx)
 
                       const groupId = slide.id
