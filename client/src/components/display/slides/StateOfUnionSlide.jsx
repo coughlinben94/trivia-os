@@ -112,7 +112,6 @@ function WavingGradient({ reduce }) {
 export default function StateOfUnionSlide({ slide, isPreview }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
-  const message = slide.data?.message ?? "Welcome to Trivia Night at Baynes Apple Valley. Let's get into it."
   const rt = slide.data?._regionTransforms ?? {}
   const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
 
@@ -211,40 +210,28 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
           dead-center, photo goes elsewhere) — bottom-left corner, clear of the vignette's
           brightest center and the watermark's bottom-right. */}
       {slide.data?.photoUrl !== null && slide.data?.photoUrl !== '' && (
-        <motion.img
-          src={slide.data?.photoUrl || DEFAULT_PHOTO}
-          alt="Host"
-          className="rounded-2xl object-cover"
-          style={{ position: 'absolute', bottom: 40, left: '6%', height: '24vh', width: 'auto', maxWidth: '100%', opacity: 0.85, zIndex: 2 }}
-          initial={{ opacity: 0, scale: 1.06 }}
-          animate={{ opacity: 0.85, scale: 1 }}
-          transition={{ duration: 0.4, ease: EASE_OUT }}
-        />
+        <span
+          data-slide-region="photo"
+          data-slide-field="photo"
+          style={{ position: 'absolute', bottom: 40, left: '6%', zIndex: 2, ...xf('photo') }}
+        >
+          <motion.img
+            src={slide.data?.photoUrl || DEFAULT_PHOTO}
+            alt="Host"
+            className="rounded-2xl object-cover"
+            style={{ display: 'block', height: '24vh', width: 'auto', maxWidth: '100%', opacity: 0.85 }}
+            initial={{ opacity: 0, scale: 1.06 }}
+            animate={{ opacity: 0.85, scale: 1 }}
+            transition={{ duration: 0.4, ease: EASE_OUT }}
+          />
+        </span>
       )}
 
       <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
-        {/* Fixed title — always reads "State of the Union" regardless of the
-            editable message below (2026-08-17, Ben: the slide wasn't saying
-            it anywhere on screen). Not slide.data-driven, same way a shiny
-            question's format label isn't host-editable. */}
-        <motion.div
-          initial={{ opacity: 0, y: -12 }}
-          animate={{ opacity: 0.85, y: 0 }}
-          transition={{ duration: 0.4, ease: EASE_OUT }}
-          style={{
-            fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-            fontSize: '1.1rem',
-            fontWeight: 700,
-            letterSpacing: '0.28em',
-            textTransform: 'uppercase',
-            color: RWB_WHITE,
-            marginBottom: '1rem',
-          }}
-        >
-          State of the Union
-        </motion.div>
-
-        {/* Message — RWB gradient text, springs in tilted like a campaign sign */}
+        {/* The only text on screen (2026-08-17, Ben: "state of the union are
+            the only 4 words on the screen, centered, on that angle") — fixed,
+            not the editable message field, same big tilted RWB-gradient
+            treatment the message used to own. */}
         <span data-slide-region="message" data-slide-field="message" style={xf('message')}>
           <motion.p
             initial={{ opacity: 0, scale: reduce ? 1 : 0.85, rotate: reduce ? -6 : -14 }}
@@ -253,7 +240,7 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
             style={{
               fontFamily: `'${theme.fonts.display}', sans-serif`,
               fontWeight: 700,
-              fontSize: fitToBox(message, { ...TITLE_CARD_BOX, family: theme.fonts.display }),
+              fontSize: fitToBox('State of the Union', { ...TITLE_CARD_BOX, family: theme.fonts.display }),
               lineHeight: 1.15,
               textAlign: 'center',
               textWrap: 'balance',
@@ -267,7 +254,7 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
             }}>
-              {message}
+              State of the Union
             </span>
           </motion.p>
         </span>
