@@ -487,17 +487,20 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
 
   // Bulk fill — drop N screenshots at once instead of opening each part and
   // uploading one at a time (2026-08-17, Ben: "i just need an area to attach
-  // 4 images or drag screenshots"). File order = part order; extra files
-  // past data.parts.length are dropped silently (the dropzone's own label
-  // states the count so there's no surprise). A failed upload just leaves
-  // that part's media untouched rather than aborting the whole batch.
+  // 4 images or drag screenshots"). File order = part order. Grows
+  // data.parts to fit however many files land here (2026-08-17, Ben: drop 4
+  // files, expect 4 parts — previously capped at the EXISTING part count
+  // and silently dropped the rest) rather than requiring "+ Add part" to be
+  // clicked first. A failed upload just leaves that part's media untouched
+  // rather than aborting the whole batch.
   async function uploadBulkImages(files) {
-    const targets = Array.from(files).slice(0, data.parts.length)
+    const targets = Array.from(files)
     const results = await Promise.all(targets.map(f => uploadMedia(f)))
-    const parts = data.parts.map((p, i) =>
-      results[i]?.url ? { ...p, mediaSlots: [{ url: results[i].url, type: results[i].type }] } : p
-    )
-    onBatchChange({ parts })
+    const parts = Array.from({ length: Math.max(data.parts.length, targets.length) }, (_, i) => {
+      const existing = data.parts[i] ?? { label: '', text: '', answer: '', mediaSlots: [] }
+      return results[i]?.url ? { ...existing, mediaSlots: [{ url: results[i].url, type: results[i].type }] } : existing
+    })
+    onBatchChange({ parts, currentPart: 0 })
   }
 
   // ── Mode selector ──────────────────────────────────────────────────────
