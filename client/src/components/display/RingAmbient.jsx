@@ -840,7 +840,15 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
     { weight: 0.40, w: 270, h: 3.4, opPeak: 0.95, opMid: 0.85, durMul: 1.00, distMul: 1.00 },
     { weight: 0.15, w: 480, h: 5.6, opPeak: 1.00, opMid: 0.95, durMul: 1.55, distMul: 1.35 },
   ]
-  function spawnShoot(forceDir) {
+  // anchorPos: undefined for a lone spawnShoot (full-frame random, as
+  // before). A meteor shower passes the FIRST star's own landed position as
+  // the anchor for every star after it (2026-08-17, Ben, live: "the
+  // shooting stars weren't tightly grouped together enough... starting
+  // point like 15% circle around the first one") — sqrt(random) for an
+  // area-uniform pick inside the circle, not a linear radius (linear would
+  // bunch points near the center). Returns the position it landed on so the
+  // caller can thread it forward as the next star's anchor.
+  function spawnShoot(forceDir, anchorPos) {
     if (isReduced()) return
     const lane = shootLaneRef.current
     if (!lane) return
@@ -852,8 +860,19 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
     for (const t of SHOOT_TIERS) { tr -= t.weight; if (tr <= 0) { tier = t; break } }
     const rot = dom.el('shootRot'), s = dom.el('shoot'), d = forceDir ?? (Math.random() < 0.5 ? 1 : -1)
     if (d < 0) s.classList.add('rev') // see ringCss's own .shoot.rev comment — keeps the bright head leading
-    rot.style.left = px(d > 0 ? 140 + Math.random() * 500 : 1180 + Math.random() * 500)
-    rot.style.top = px(70 + Math.random() * 760)
+    let left, top
+    if (anchorPos) {
+      const radius = ENGINE.W * 0.15
+      const ang = Math.random() * Math.PI * 2
+      const r = Math.sqrt(Math.random()) * radius
+      left = anchorPos.left + Math.cos(ang) * r
+      top = anchorPos.top + Math.sin(ang) * r
+    } else {
+      left = d > 0 ? 140 + Math.random() * 500 : 1180 + Math.random() * 500
+      top = 70 + Math.random() * 760
+    }
+    rot.style.left = px(left)
+    rot.style.top = px(top)
     rot.style.setProperty('--sa', (d > 0 ? 1 : -1) * (14 + Math.random() * 16) + 'deg')
     s.style.setProperty('--sd2', px((d > 0 ? 1 : -1) * (640 + Math.random() * 380) * tier.distMul))
     s.style.setProperty('--sdu', ((1.5 + Math.random() * 1.2) * tier.durMul) + 's')
@@ -870,6 +889,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
     const dur = parseFloat(s.style.getPropertyValue('--sdu')) * 1000
     setTimeout(() => rot.remove(), dur + 800)
     s.addEventListener('animationend', () => rot.remove())
+    return { left, top }
   }
   // Meteor shower: 3-4 shoots, one shared direction, staggered ~250-550ms
   // apart — close enough to feel like one event, far enough to read as
@@ -883,9 +903,18 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
     // accumulating gap, so consecutive stars could land as close as ~144ms
     // apart (a hyper-critique measured this live) and read as a glitch, not
     // a shower. `delay` now accumulates a real 2-3s gap between each star.
+    // 2026-08-17 (Ben, live: "the shooting stars weren't tightly grouped
+    // together enough... within the same like area"): position was never
+    // shared, only direction — each star picked its own full-frame spot.
+    // First star still picks freely; anchorPos threads its landed position
+    // forward so every star after it clusters within a 15%-of-frame-width
+    // circle around the first (see spawnShoot's own comment). Safe under
+    // the accumulating 2-3s delay because each timeout only fires once the
+    // previous one has already run and reassigned anchorPos.
     let delay = 0
+    let anchorPos
     for (let k = 0; k < n; k++) {
-      setTimeout(() => spawnShoot(dir), delay)
+      setTimeout(() => { anchorPos = spawnShoot(dir, anchorPos) }, delay)
       delay += 2000 + Math.random() * 1000
     }
   }

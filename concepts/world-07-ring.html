@@ -1484,7 +1484,14 @@ const SHOOT_TIERS=[
   {weight:0.40,w:270,h:3.4,opPeak:0.95,opMid:0.85,durMul:1.00,distMul:1.00},
   {weight:0.15,w:480,h:5.6,opPeak:1.00,opMid:0.95,durMul:1.55,distMul:1.35},
 ];
-function spawnShoot(forceDir){
+// anchorPos: undefined for a lone spawnShoot (full-frame random, as
+// before). A meteor shower passes the FIRST star's own landed position as
+// the anchor for every star after it (2026-08-17, Ben, live: "the shooting
+// stars weren't tightly grouped together enough... starting point like 15%
+// circle around the first one") — synced from RingAmbient.jsx. sqrt(random)
+// for an area-uniform pick inside the circle, not a linear radius. Returns
+// the landed position so the caller can thread it forward.
+function spawnShoot(forceDir, anchorPos){
   if(isReduced())return;
   // Inlined rather than a separate pickShootTier() helper — the static
   // no-stray-math-random gate only sanctions Math.random() calls textually
@@ -1495,8 +1502,19 @@ function spawnShoot(forceDir){
   for(const t of SHOOT_TIERS){ tr-=t.weight; if(tr<=0){ tier=t; break; } }
   const rot=dom.el('shootRot'), s=dom.el('shoot'), d=forceDir ?? (Math.random()<0.5?1:-1);
   if (d<0) s.classList.add('rev'); // see .shoot.rev comment above — keeps the bright head leading
-  rot.style.left=px(d>0?140+Math.random()*500:1180+Math.random()*500);
-  rot.style.top=px(70+Math.random()*760);
+  let left, top;
+  if (anchorPos) {
+    const radius = ENGINE.W * 0.15;
+    const ang = Math.random() * Math.PI * 2;
+    const r = Math.sqrt(Math.random()) * radius;
+    left = anchorPos.left + Math.cos(ang) * r;
+    top = anchorPos.top + Math.sin(ang) * r;
+  } else {
+    left = d>0?140+Math.random()*500:1180+Math.random()*500;
+    top = 70+Math.random()*760;
+  }
+  rot.style.left=px(left);
+  rot.style.top=px(top);
   rot.style.setProperty('--sa',(d>0?1:-1)*(14+Math.random()*16)+'deg');
   s.style.setProperty('--sd2',px((d>0?1:-1)*(640+Math.random()*380)*tier.distMul));
   s.style.setProperty('--sdu',((1.5+Math.random()*1.2)*tier.durMul)+'s');
@@ -1524,6 +1542,7 @@ function spawnShoot(forceDir){
   const dur = parseFloat(s.style.getPropertyValue('--sdu')) * 1000;
   setTimeout(()=>rot.remove(), dur + 800);
   s.addEventListener('animationend',()=>rot.remove());
+  return { left, top };
 }
 // Meteor shower: 3-4 shoots, one shared direction, staggered ~250-550ms
 // apart (Ben: "staggered slighty timing wise" — close enough to feel like
@@ -1537,9 +1556,15 @@ function spawnMeteorShower(){
   // 2026-08-16 (Ben, direct spec: "staggered 2-3 seconds apart") — synced
   // from RingAmbient.jsx; was a fresh random per star instead of an
   // accumulating gap, could land ~144ms apart, read as a glitch not a shower.
+  // 2026-08-17 (Ben, live: "tightly grouped... within the same like area")
+  // — synced from RingAmbient.jsx: anchorPos threads the first star's
+  // landed position forward so the rest cluster around it instead of each
+  // picking its own full-frame spot. Safe under the accumulating delay
+  // since each timeout only fires once the previous one has already run.
   let delay = 0;
+  let anchorPos;
   for (let k=0;k<n;k++){
-    setTimeout(()=>spawnShoot(dir), delay);
+    setTimeout(()=>{ anchorPos = spawnShoot(dir, anchorPos); }, delay);
     delay += 2000 + Math.random()*1000;
   }
 }
