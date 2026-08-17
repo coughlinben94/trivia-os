@@ -31,12 +31,31 @@ export function deriveRoundCols(show) {
 // the one place that ambiguity gets resolved — every consumer of a round
 // value, read or write, must go through this first. Never read
 // `scores[key]` directly anywhere else in the codebase.
+//
+// `phone` itself has the same legacy/current split, one level down: either a
+// plain number (every phone score written before 2026-08-17) or an object
+// keyed by slide id (current — one entry per phone-scored question in the
+// round, so a second wager/matching question in the same round adds instead
+// of overwriting the first — see computeWagerScoreUpdates/
+// computeMatchingScoreUpdates). `phoneBySlide` is the bucket a fold-in should
+// merge its own slide's entry into and write back whole, so a legacy flat
+// number never gets silently dropped when it's touched again — it's wrapped
+// under a `__legacy` key rather than discarded.
 export function normalizeRoundScore(raw) {
   if (raw != null && typeof raw === 'object') {
-    return { written: Number(raw.written) || 0, phone: Number(raw.phone) || 0 }
+    const rawPhone = raw.phone
+    let phoneBySlide
+    if (rawPhone != null && typeof rawPhone === 'object') {
+      phoneBySlide = rawPhone
+    } else {
+      const legacy = Number(rawPhone) || 0
+      phoneBySlide = legacy > 0 ? { __legacy: legacy } : {}
+    }
+    const phone = Object.values(phoneBySlide).reduce((sum, v) => sum + (Number(v) || 0), 0)
+    return { written: Number(raw.written) || 0, phone, phoneBySlide }
   }
   const n = Number(raw)
-  return { written: Number.isFinite(n) ? n : 0, phone: 0 }
+  return { written: Number.isFinite(n) ? n : 0, phone: 0, phoneBySlide: {} }
 }
 
 // Single-round scalar for display (history chips, exports) — same shape

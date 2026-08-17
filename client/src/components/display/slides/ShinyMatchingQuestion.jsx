@@ -13,21 +13,24 @@ export default function ShinyMatchingQuestion({ slide, theme }) {
   const [submittedCount, setSubmittedCount] = useState(0)
   const shouldReduceMotion = useReducedMotion()
 
+  // Polled, not a postgres_changes subscription — phone_answers' SELECT
+  // policy (tightened 2026-08-17) only allows the owning team or a
+  // host_verified session to read a row, and Supabase Realtime enforces that
+  // same RLS check before delivering a change event, not just on initial
+  // fetch. /display is neither (it never goes through the host PIN gate,
+  // same reason advance_show() exists as its own RPC) — a postgres_changes
+  // subscription here would silently never fire. The count itself comes
+  // from phone_answers_count(), a SECURITY DEFINER RPC that returns only the
+  // aggregate this component actually needs, not raw rows.
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const { count } = await supabase
-        .from('phone_answers')
-        .select('id', { count: 'exact', head: true })
-        .eq('slide_id', slide.id)
+      const { data: count } = await supabase.rpc('phone_answers_count', { p_slide_id: slide.id })
       if (!cancelled) setSubmittedCount(count ?? 0)
     }
     load()
-    const channel = supabase
-      .channel(`phone_answers:${slide.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'phone_answers', filter: `slide_id=eq.${slide.id}` }, load)
-      .subscribe()
-    return () => { cancelled = true; supabase.removeChannel(channel) }
+    const interval = setInterval(load, 2000)
+    return () => { cancelled = true; clearInterval(interval) }
   }, [slide.id])
 
   const text = theme.colors.text

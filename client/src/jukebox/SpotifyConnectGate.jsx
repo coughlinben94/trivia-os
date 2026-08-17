@@ -22,8 +22,13 @@ export default function SpotifyConnectGate({ children, returnTo = '/music', rend
   }, [])
 
   if (loading) {
+    // renderDisconnected is only passed by JukeboxBreakOverlay — skip the
+    // opaque bg-base there so the still-visible grading-break slide shows
+    // through during the brief getToken() round-trip instead of being
+    // blacked out. The standalone /music page (no renderDisconnected) keeps
+    // its normal full-screen background.
     return (
-      <div className="min-h-screen bg-base flex items-center justify-center">
+      <div className={`min-h-screen flex items-center justify-center ${renderDisconnected ? '' : 'bg-base'}`}>
         <div className="w-5 h-5 border-[1.5px] border-white/10 border-t-accent rounded-full animate-spin" />
       </div>
     )

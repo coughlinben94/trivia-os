@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { seededShuffle, buildMatchAnswer } from '../../lib/matchingScoring.js'
 
@@ -9,7 +9,7 @@ const PALETTE = ['#e02020', '#3aa0e0', '#e0a020', '#8050c0', '#20a060', '#e05090
 // the host can see the interaction, but nothing is written to or read from
 // Supabase, since there's no real team/slide behind a preview render. See
 // docs/superpowers/plans/2026-07-28-phone-answer-scoring-implementation.md.
-export default function MatchingBoard({ slide, team, theme, preview = false }) {
+export default function MatchingBoard({ slide, team, theme, preview = false, onAnswered }) {
   const { data } = slide
   const pairs = data.pairs ?? []
   const locked = !!data.matchingLocked
@@ -21,6 +21,12 @@ export default function MatchingBoard({ slide, team, theme, preview = false }) {
   // "right p0" apart and a wrong match collapses into a same-id correct one.
   // A completed pair exists once a left key and a right key share a colorIndex.
   const [connections, setConnections] = useState({})
+  // `connections` is the instant tap for visual feedback; `committedConnections`
+  // only advances once submit() confirms the write landed — same split as
+  // WagerBoard's tier/committedTier, and for the same reason: onAnswered must
+  // gate on a CONFIRMED save, or a team that finishes on dead wifi gets
+  // released from force-delivery with nothing actually in phone_answers.
+  const [committedConnections, setCommittedConnections] = useState({})
   const [pendingSide, setPendingSide] = useState(null) // { side: 'left'|'right', itemId } — first tap of a pair, waiting for the second
   const [saveFailed, setSaveFailed] = useState(false)
 
@@ -36,15 +42,38 @@ export default function MatchingBoard({ slide, team, theme, preview = false }) {
     setPendingSide(null)
   }, [preview, pairIdsKey])
 
-  const submit = useCallback(async (nextConnections) => {
-    if (preview) return
+  // Chained rather than fired-and-forgotten so two rapid taps (match, then a
+  // quick untap) can't land out of order — same class of bug WagerBoard's
+  // saveChainRef guards against, applied here to phone_answers writes.
+  const saveChainRef = useRef(Promise.resolve())
+
+  const submit = useCallback((nextConnections) => {
+    if (preview) return Promise.resolve(true)
     const answer = buildMatchAnswer(nextConnections)
-    const { error } = await supabase.from('phone_answers').upsert(
-      { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer },
-      { onConflict: 'slide_id,team_id' }
-    )
-    if (error) console.error('[MatchingBoard] answer save failed:', error)
-    setSaveFailed(!!error)
+    const run = saveChainRef.current.then(async () => {
+      const upsert = supabase.from('phone_answers').upsert(
+        { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer },
+        { onConflict: 'slide_id,team_id' }
+      )
+      // Raced against a timeout, not just awaited — a request that never
+      // settles would otherwise wedge every save queued behind it in the
+      // chain. The abandoned fetch may still resolve later; nothing awaits
+      // it by then, which is fine — we've already moved on.
+      let error
+      try {
+        ;({ error } = await Promise.race([
+          upsert,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('matching save timed out')), 8000)),
+        ]))
+      } catch (err) {
+        error = err
+      }
+      if (error) console.error('[MatchingBoard] answer save failed:', error)
+      setSaveFailed(!!error)
+      return !error
+    })
+    saveChainRef.current = run.catch(() => false)
+    return run
   }, [preview, slide.id, slide.showId, team.id, team.showId])
 
   function tapItem(side, itemId) {
@@ -59,7 +88,7 @@ export default function MatchingBoard({ slide, team, theme, preview = false }) {
       const next = { ...connections }
       Object.keys(next).forEach(k => { if (next[k] === color) delete next[k] })
       setConnections(next)
-      submit(next)
+      submit(next).then(ok => { if (ok) setCommittedConnections(next) })
       return
     }
     if (!pendingSide) {
@@ -75,7 +104,7 @@ export default function MatchingBoard({ slide, team, theme, preview = false }) {
     const next = { ...connections, [`${pendingSide.side}:${pendingSide.itemId}`]: nextColor, [key]: nextColor }
     setConnections(next)
     setPendingSide(null)
-    submit(next)
+    submit(next).then(ok => { if (ok) setCommittedConnections(next) })
   }
 
   useEffect(() => {
@@ -94,13 +123,28 @@ export default function MatchingBoard({ slide, team, theme, preview = false }) {
           restored[`left:${pair.leftId}`] = i
           restored[`right:${pair.rightId}`] = i
         })
+        // A restored row IS a confirmed write by definition — it came from
+        // the DB, not a local guess — so both states advance together here.
         setConnections(restored)
+        setCommittedConnections(restored)
       })
     return () => { cancelled = true }
   }, [preview, slide.id, team.id])
 
+  // Reports "every pair matched" upward so LiveView can release a team back
+  // to free browsing once they've finished — same contract as WagerBoard.
+  // Gated on committedConnections, not the instant connections state: a team
+  // that finishes on dead wifi must not be released before the save actually
+  // lands, or they'd be free to browse away with nothing recorded.
+  useEffect(() => {
+    if (!onAnswered) return
+    onAnswered(pairs.length > 0 && buildMatchAnswer(committedConnections).length >= pairs.length)
+  }, [onAnswered, committedConnections, pairs.length])
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    // maxWidth keeps the two tile columns from stretching wide and sparse on
+    // an iPad's ~560px content column — a no-op on phone widths.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 480, width: '100%', margin: '0 auto' }}>
       <div style={{ display: 'flex', gap: '0.75rem' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', flex: 1 }}>
           {pairs.map(p => (

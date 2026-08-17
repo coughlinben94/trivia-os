@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
 import { WAGER_TIERS, wagerOddsLine, wagerTierReachable, parseWagerNumber } from '../../lib/wagerScoring.js'
@@ -36,7 +36,7 @@ const MAX_DIGITS = 12
 // after the reveal changes nothing. phone_answers is public-update by design
 // (it's the phone's own data), so a disabled button alone would be a request,
 // not a rule.
-export default function WagerBoard({ slide, team, theme, preview = false }) {
+export default function WagerBoard({ slide, team, theme, preview = false, onAnswered }) {
   const { data } = slide
   const tiersLocked = !!data.wagerTiersLocked
   const guessesLocked = !!data.wagerGuessesLocked
@@ -45,6 +45,12 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
   const shouldReduceMotion = useReducedMotion()
 
   const [tier, setTier] = useState(null)
+  // `tier` is the immediate tap for visual feedback (button highlight,
+  // "Wager placed" copy); `committedTier` is only set once save() confirms
+  // the write landed — same split as digits/committed below, and what
+  // onAnswered's force-delivery release actually gates on, so a failed save
+  // can't release a team with no tier actually recorded.
+  const [committedTier, setCommittedTier] = useState(null)
   // `digits` is what the keypad has built so far; `committed` is what was
   // actually written to phone_answers. They differ whenever a team has tapped
   // something it hasn't locked in yet — that gap is what enables the explicit
@@ -53,20 +59,47 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
   const [committed, setCommitted] = useState(null)
   const [teamCount, setTeamCount] = useState(0)
   const [saveFailed, setSaveFailed] = useState(false)
+  const [saving, setSaving] = useState(false)
 
-  const save = useCallback(async (nextTier, nextGuess) => {
-    if (preview) return
-    const { error } = await supabase.from('phone_answers').upsert(
-      {
-        show_id: slide.showId ?? team.showId,
-        slide_id: slide.id,
-        team_id: team.id,
-        answer: { tier: nextTier, guess: parseWagerNumber(nextGuess) },
-      },
-      { onConflict: 'slide_id,team_id' }
-    )
-    if (error) console.error('[WagerBoard] wager save failed:', error)
-    setSaveFailed(!!error)
+  // Chained rather than fired-and-forgotten so two rapid taps (tier switch,
+  // or a guess edited faster than the network round-trip) can't land out of
+  // order — the same class of bug useShow.js's slidesSaveChainRef already
+  // guards against for slide saves, applied here to phone_answers writes.
+  const saveChainRef = useRef(Promise.resolve())
+
+  const save = useCallback((nextTier, nextGuess) => {
+    if (preview) return Promise.resolve(true)
+    const run = saveChainRef.current.then(async () => {
+      const upsert = supabase.from('phone_answers').upsert(
+        {
+          show_id: slide.showId ?? team.showId,
+          slide_id: slide.id,
+          team_id: team.id,
+          answer: { tier: nextTier, guess: parseWagerNumber(nextGuess) },
+        },
+        { onConflict: 'slide_id,team_id' }
+      )
+      // Raced against a timeout, not just awaited — a request that never
+      // settles (dead wifi, captive portal) would otherwise leave `saving`
+      // stuck true forever (button dead, team pinned by forceInteractive
+      // with no escape) AND wedge every save queued behind it in the chain.
+      // The abandoned fetch may still resolve later; nothing awaits it by
+      // then, which is fine — we've already moved on.
+      let error
+      try {
+        ;({ error } = await Promise.race([
+          upsert,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('wager save timed out')), 8000)),
+        ]))
+      } catch (err) {
+        error = err
+      }
+      if (error) console.error('[WagerBoard] wager save failed:', error)
+      setSaveFailed(!!error)
+      return !error
+    })
+    saveChainRef.current = run.catch(() => false)
+    return run
   }, [preview, slide.id, slide.showId, team.id, team.showId])
 
   // Restore this team's own row so a phone that reloads mid-question keeps
@@ -82,7 +115,7 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
       .maybeSingle()
       .then(({ data: row }) => {
         if (cancelled || !row?.answer) return
-        if (row.answer.tier) setTier(row.answer.tier)
+        if (row.answer.tier) { setTier(row.answer.tier); setCommittedTier(row.answer.tier) }
         if (row.answer.guess != null) {
           setDigits(String(row.answer.guess))
           setCommitted(String(row.answer.guess))
@@ -116,7 +149,11 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
     // team commit to a tier that's a guaranteed zero with no way to know it.
     if (!wagerTierReachable(id, teamCount)) return
     setTier(id)
-    save(id, digits)
+    // Only treat the tier as officially picked once the write is confirmed —
+    // an optimistic commit here would release a team from force-delivery via
+    // onAnswered before anything was actually saved. On failure, saveFailed
+    // already shows and the pick stays retriable (tap the tier again).
+    save(id, digits).then(ok => { if (ok) setCommittedTier(id) })
   }
 
   // ponytail: whole non-negative numbers only. Every wager question is a
@@ -133,18 +170,38 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
   }
 
   function lockInGuess() {
-    if (guessesLocked || !dirty) return
-    setCommitted(digits)
-    save(tier, digits)
+    if (guessesLocked || !dirty || saving) return
+    setSaving(true)
+    save(tier, digits).then(ok => {
+      setSaving(false)
+      // Only mark it committed once the write actually landed — an
+      // optimistic commit here used to disable the button and claim
+      // "Guess Locked In" on a failed save, leaving no way to retry.
+      if (ok) setCommitted(digits)
+    })
   }
 
-  const chosen = WAGER_TIERS.find(t => t.id === tier) ?? null
+  // Reports to the parent whether THIS phase's required input is satisfied —
+  // tier picked during the blind wager, guess locked in once the question is
+  // revealed — so LiveView can release a team back to free browsing the
+  // instant they've done what's currently asked of them, and re-claim them
+  // if the phase changes underneath them (tiers lock, guess still missing).
+  useEffect(() => {
+    if (!onAnswered) return
+    onAnswered(tiersLocked ? committed != null : committedTier != null)
+  }, [onAnswered, tiersLocked, committed, committedTier])
+
+  const chosen = WAGER_TIERS.find(t => t.id === committedTier) ?? null
   // Nothing is written until the team taps the button, so "dirty" is what
   // makes the submit button live.
   const dirty = digits !== '' && digits !== committed
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+    // maxWidth caps tier cards and the numeric keypad at a comfortable
+    // thumb-reach width — a no-op on phone widths (already narrower than
+    // this), but without it the 3-column keypad grid stretches its keys
+    // into wide, awkward rectangles on an iPad's ~560px content column.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: 420, width: '100%', margin: '0 auto' }}>
 
       {!tiersLocked ? (
         <>
@@ -184,13 +241,23 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
                   // gets that treatment regardless of which one it is —
                   // dimmed via the animate opacity above, same as any other
                   // disabled control.
-                  border: tier === t.id
+                  // Confirmed (committedTier) gets the full solid treatment.
+                  // Picked-but-not-yet-confirmed (tapped, save still in
+                  // flight or failed) gets a dashed border instead of solid —
+                  // visibly different from "actually recorded," so a failed
+                  // save doesn't look identical to a successful one with
+                  // only a small red line below as the sole tell.
+                  border: committedTier === t.id
                     ? `2px solid ${TIER_STYLE[t.id].tint}`
-                    : `1px solid ${TIER_STYLE[t.id].tint}55`,
-                  background: tier === t.id
+                    : tier === t.id
+                      ? `2px dashed ${TIER_STYLE[t.id].tint}`
+                      : `1px solid ${TIER_STYLE[t.id].tint}55`,
+                  background: committedTier === t.id
                     ? `${TIER_STYLE[t.id].tint}22`
-                    : 'rgba(255,255,255,0.05)',
-                  boxShadow: tier === t.id ? `0 0 18px ${TIER_STYLE[t.id].glow}` : 'none',
+                    : tier === t.id
+                      ? `${TIER_STYLE[t.id].tint}10`
+                      : 'rgba(255,255,255,0.05)',
+                  boxShadow: committedTier === t.id ? `0 0 18px ${TIER_STYLE[t.id].glow}` : 'none',
                   transition: 'transform 140ms cubic-bezier(0.23,1,0.32,1)',
                 }}
                 onPointerDown={e => { if (reachable) e.currentTarget.style.transform = 'scale(0.97)' }}
@@ -222,7 +289,11 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
           </div>
 
           <p style={{ color: `${text}55`, fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
-            {tier ? 'Wager placed — you can still change it until Ben locks it' : 'Tap a wager to place it'}
+            {committedTier
+              ? 'Wager placed — you can still change it until Ben locks it'
+              : tier
+                ? (saveFailed ? "Couldn't save — tap it again" : 'Saving your wager…')
+                : 'Tap a wager to place it'}
           </p>
         </>
       ) : (
@@ -302,8 +373,8 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
 
               <button
                 onClick={lockInGuess}
-                disabled={!dirty}
-                onPointerDown={e => { if (dirty) e.currentTarget.style.transform = 'scale(0.97)' }}
+                disabled={!dirty || saving}
+                onPointerDown={e => { if (dirty && !saving) e.currentTarget.style.transform = 'scale(0.97)' }}
                 onPointerUp={e => { e.currentTarget.style.transform = 'scale(1)' }}
                 onPointerLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
                 style={{
@@ -312,12 +383,12 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
                   background: dirty ? `${highlight}26` : 'transparent',
                   color: dirty ? text : `${text}40`,
                   fontSize: '1rem', fontWeight: 700, fontFamily: 'DM Sans, sans-serif',
-                  cursor: dirty ? 'pointer' : 'default',
+                  cursor: dirty && !saving ? 'pointer' : 'default',
                   WebkitTapHighlightColor: 'transparent',
                   transition: 'transform 140ms cubic-bezier(0.23,1,0.32,1)',
                 }}
               >
-                {committed == null ? 'Lock In Guess' : dirty ? 'Update Guess' : 'Guess Locked In'}
+                {saving ? 'Saving…' : committed == null ? 'Lock In Guess' : dirty ? 'Update Guess' : 'Guess Locked In'}
               </button>
             </>
           )}
@@ -325,18 +396,22 @@ export default function WagerBoard({ slide, team, theme, preview = false }) {
           <p style={{ color: `${text}55`, fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
             {guessesLocked
               ? 'Answers locked'
-              : committed == null
-                ? 'Tap your number, then lock it in'
-                : dirty
-                  ? 'Not submitted yet — tap Update Guess'
-                  : `Locked in: ${committed}. You can still change it until Ben locks answers.`}
+              : saving
+                ? 'Saving…'
+                : committed == null
+                  ? 'Tap your number, then lock it in'
+                  : dirty
+                    ? 'Not submitted yet — tap Update Guess'
+                    : `Locked in: ${committed}. You can still change it until Ben locks answers.`}
           </p>
         </>
       )}
 
-      {saveFailed && !guessesLocked && (
+      {/* Phase 1's own failure copy lives inline above (right under the tier
+          cards) — this banner would just duplicate it, so it's phase-2 only. */}
+      {saveFailed && tiersLocked && !guessesLocked && !saving && (
         <p style={{ color: '#ff6b6b', fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
-          Couldn't save — check your connection and tap again
+          Couldn't save — tap {committed == null ? 'Lock In Guess' : 'Update Guess'} again
         </p>
       )}
     </div>

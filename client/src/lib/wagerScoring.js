@@ -40,9 +40,12 @@ export function getWagerTier(id) {
 export function parseWagerNumber(raw) {
   if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null
   if (typeof raw !== 'string') return null
-  const cleaned = raw.replace(/,/g, '').replace(/[^0-9.\-]/g, '')
-  if (!cleaned || cleaned === '-' || cleaned === '.') return null
-  const n = Number(cleaned)
+  // Extract number-LIKE tokens (commas stripped first so "1,200" is one
+  // token, not two) and require exactly one — "12 to 15" and "about 250
+  // (2024)" have to reject as ambiguous instead of mashing digits together.
+  const matches = raw.replace(/,/g, '').match(/-?\d+\.?\d*/g)
+  if (!matches || matches.length !== 1) return null
+  const n = Number(matches[0])
   return Number.isFinite(n) ? n : null
 }
 
@@ -214,10 +217,14 @@ export function scoreWagerRound({ entries, correctAnswer }) {
 // results + live team registrations + the admin scoreboard, produce the
 // scoreboard_teams rows to upsert. team_id <-> team name matching is
 // case-insensitive/trimmed because `teams` (phone) and `scoreboard_teams`
-// (host-typed) have no FK relationship. Writes the round's `phone` half only,
-// preserving `written`, and OVERWRITES rather than adds so re-scoring after a
-// failed attempt is idempotent.
-export function computeWagerScoreUpdates({ results, teams, scoreboardTeams, roundKey }) {
+// (host-typed) have no FK relationship. Writes only THIS slide's entry into
+// the round's phoneBySlide bucket (see normalizeRoundScore), preserving
+// `written` and every other phone-scored slide already in the round — a
+// second phone question in the same round (e.g. a matching question plus a
+// wager question) adds its own points instead of wiping the first one's out.
+// Re-running for the SAME slideId still overwrites just that one entry, so
+// re-scoring after a failed attempt stays idempotent.
+export function computeWagerScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId }) {
   const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name.trim().toLowerCase()]))
   const updates = []
   for (const r of results ?? []) {
@@ -226,8 +233,16 @@ export function computeWagerScoreUpdates({ results, teams, scoreboardTeams, roun
     const sbTeam = (scoreboardTeams ?? []).find(t => t.name.trim().toLowerCase() === teamName)
     if (!sbTeam) continue // host hasn't added this team to the admin scoreboard yet
     const prevSplit = normalizeRoundScore(sbTeam.scores?.[roundKey])
-    const nextScores = { ...sbTeam.scores, [roundKey]: { written: prevSplit.written, phone: r.points } }
+    const nextPhone = { ...prevSplit.phoneBySlide, [slideId]: r.points }
+    const nextScores = { ...sbTeam.scores, [roundKey]: { written: prevSplit.written, phone: nextPhone } }
     updates.push({ id: sbTeam.id, show_id: sbTeam.show_id, name: sbTeam.name, scores: nextScores, sort_order: sbTeam.sort_order })
   }
-  return updates
+  // Two scoreboard_teams rows can normalize to the same name (host data-entry
+  // accident), which makes .find() above resolve multiple real teams onto the
+  // same sbTeam.id — a duplicate id in this array makes the upsert's
+  // ON CONFLICT clause fail outright and scores NOTHING for the round. Dedupe
+  // by id (last write wins) so the crash can't happen; this is a guard against
+  // bad host data, not a policy for how to split points between the colliding
+  // teams.
+  return [...new Map(updates.map(u => [u.id, u])).values()]
 }

@@ -1,17 +1,17 @@
-import { createClient } from '@supabase/supabase-js'
 import { JUKEBOX_LIBRARIES } from './jukeboxLibraries.js'
+import { supabase } from './supabase.js'
 
-// Business Suite project (different project than Trivia OS's own). Read-only:
-// reads the Jukebox's shared library list so the host dropdown self-updates.
-const url = import.meta.env.VITE_JUKEBOX_SUPABASE_URL
-const key = import.meta.env.VITE_JUKEBOX_SUPABASE_ANON_KEY
-const jukeboxSupabase = url && key ? createClient(url, key) : null
+// VITE_JUKEBOX_SUPABASE_URL/ANON_KEY are actually identical to trivia-os's
+// own main Supabase project — this used to spin up a second GoTrueClient on
+// the same project, which shares a browser storage key with the main client
+// and risks auth-state collision for the host_verified RLS claim (this file
+// is imported on /host). Reuse the single client instead. Read-only: reads
+// the Jukebox's shared library list so the host dropdown self-updates.
 
 // Returns [{ id, label }] from the live Jukebox sets.items, or null on any failure.
 export async function fetchJukeboxLibraries() {
-  if (!jukeboxSupabase) return null
   try {
-    const { data, error } = await jukeboxSupabase
+    const { data, error } = await supabase
       .from('jukebox_state')
       .select('sets')
       .limit(1)

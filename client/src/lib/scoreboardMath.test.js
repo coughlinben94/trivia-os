@@ -3,19 +3,23 @@ import { normalizeRoundScore, computeTotal, roundScoreTotal, mergeScoreEdit } fr
 
 describe('normalizeRoundScore', () => {
   it('treats a legacy plain number as written-only', () => {
-    expect(normalizeRoundScore(12)).toEqual({ written: 12, phone: 0 })
+    expect(normalizeRoundScore(12)).toEqual({ written: 12, phone: 0, phoneBySlide: {} })
   })
   it('treats null/undefined as zero/zero', () => {
-    expect(normalizeRoundScore(null)).toEqual({ written: 0, phone: 0 })
-    expect(normalizeRoundScore(undefined)).toEqual({ written: 0, phone: 0 })
+    expect(normalizeRoundScore(null)).toEqual({ written: 0, phone: 0, phoneBySlide: {} })
+    expect(normalizeRoundScore(undefined)).toEqual({ written: 0, phone: 0, phoneBySlide: {} })
   })
   it('passes through an already-split value, defaulting missing halves to 0', () => {
-    expect(normalizeRoundScore({ written: 8, phone: 6 })).toEqual({ written: 8, phone: 6 })
-    expect(normalizeRoundScore({ written: 8 })).toEqual({ written: 8, phone: 0 })
-    expect(normalizeRoundScore({ phone: 6 })).toEqual({ written: 0, phone: 6 })
+    expect(normalizeRoundScore({ written: 8, phone: 6 })).toEqual({ written: 8, phone: 6, phoneBySlide: { __legacy: 6 } })
+    expect(normalizeRoundScore({ written: 8 })).toEqual({ written: 8, phone: 0, phoneBySlide: {} })
+    expect(normalizeRoundScore({ phone: 6 })).toEqual({ written: 0, phone: 6, phoneBySlide: { __legacy: 6 } })
   })
   it('treats a non-numeric legacy value as zero', () => {
-    expect(normalizeRoundScore('')).toEqual({ written: 0, phone: 0 })
+    expect(normalizeRoundScore('')).toEqual({ written: 0, phone: 0, phoneBySlide: {} })
+  })
+  it('sums a per-slide phone bucket rather than treating it as legacy', () => {
+    expect(normalizeRoundScore({ written: 5, phone: { slide_a: 8, slide_b: 20 } }))
+      .toEqual({ written: 5, phone: 28, phoneBySlide: { slide_a: 8, slide_b: 20 } })
   })
 })
 

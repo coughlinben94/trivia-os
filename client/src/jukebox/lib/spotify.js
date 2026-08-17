@@ -36,6 +36,12 @@ export async function login() {
   // opens the Spotify native app and redirects back in a new Safari tab.
   localStorage.setItem('pkce_verifier', verifier)
 
+  // CSRF state param: random value stashed before redirecting, verified
+  // against the value Spotify echoes back on /spotify-callback before the
+  // code exchange runs.
+  const state = base64url(randomBytes(16))
+  localStorage.setItem('oauth_state', state)
+
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     response_type: 'code',
@@ -43,12 +49,19 @@ export async function login() {
     scope: SCOPES,
     code_challenge_method: 'S256',
     code_challenge: challenge,
+    state,
   })
 
   window.location.href = `https://accounts.spotify.com/authorize?${params}`
 }
 
-export async function handleCallback(code) {
+export async function handleCallback(code, state) {
+  const expectedState = localStorage.getItem('oauth_state')
+  localStorage.removeItem('oauth_state')
+  if (!expectedState || state !== expectedState) {
+    throw new Error('Spotify login failed — state mismatch (possible CSRF)')
+  }
+
   const verifier = localStorage.getItem('pkce_verifier')
   localStorage.removeItem('pkce_verifier')
 
@@ -84,7 +97,7 @@ export async function handleCallback(code) {
 // doSeek/doPlay — this call sits underneath both of those (getToken() calls
 // this whenever the cached token is stale), so a stalled response here hangs
 // the whole playback pipeline just as badly, with no error and no recovery.
-export async function refreshToken() {
+async function doRefreshToken() {
   const token = localStorage.getItem('spotify_refresh_token')
   if (!token) return null
 
@@ -109,6 +122,15 @@ export async function refreshToken() {
     clearTimeout(timer)
   }
 
+  // A failed refresh (expired/revoked refresh token, bad request) still
+  // returns JSON, so without checking res.ok the stale token stayed in
+  // localStorage and the UI kept claiming "connected" with dead credentials.
+  if (!res.ok) {
+    console.error('[refreshToken] refresh failed', res.status)
+    logout()
+    return null
+  }
+
   const data = await res.json()
   if (data.access_token) {
     localStorage.setItem('spotify_token', data.access_token)
@@ -116,6 +138,21 @@ export async function refreshToken() {
     if (data.refresh_token) localStorage.setItem('spotify_refresh_token', data.refresh_token)
   }
   return data.access_token ?? null
+}
+
+// Concurrent callers (several call sites, e.g. useSpotifyPlayer.js's
+// getToken() calls plus its own direct forced-refresh-on-401 call) can each
+// trigger a refresh at once; Spotify can invalidate a refresh token when
+// it's used twice in a race, rotating callers out of their session mid-show.
+// Guard lives on refreshToken() itself (not just inside getToken()) so every
+// caller — not only the getToken() path — shares the one in-flight refresh.
+let refreshPromise = null
+
+export function refreshToken() {
+  if (!refreshPromise) {
+    refreshPromise = doRefreshToken().finally(() => { refreshPromise = null })
+  }
+  return refreshPromise
 }
 
 export async function getToken() {

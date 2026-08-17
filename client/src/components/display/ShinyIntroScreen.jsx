@@ -72,7 +72,13 @@ export default function ShinyIntroScreen({ slide, theme }) {
   }, [slide.id])
   // A host-picked photo is a deliberate choice for this specific slide and
   // wins over the random pool — the pool is the default, not an override.
-  const photoUrl = data.hostPhotoUrl || randomPhotoUrl
+  // HostPhotoLibrary's "remove photo" affordance writes `null` explicitly
+  // (never leaves the key unset) — an unset key means "use the random pool",
+  // an explicitly-cleared one means "show nothing", same null-vs-unset
+  // distinction StateOfUnionSlide.jsx's photoUrl already gets right. A plain
+  // `||` here treated both the same, so removing a photo just showed a
+  // different random one instead of none.
+  const photoUrl = data.hostPhotoUrl === null ? null : (data.hostPhotoUrl || randomPhotoUrl)
 
   // Replay key — same idiom as QuestionSlide.jsx's flash reset: a multi-part
   // series keeps the same slide.id across parts, only currentPart changes as

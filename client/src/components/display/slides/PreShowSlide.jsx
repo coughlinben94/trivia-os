@@ -28,7 +28,10 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
   const ytWatchIntervalRef = useRef(null)
 
   useEffect(() => {
-    if (!walkoutSong?.videoId) return
+    // Never in the slide editor's preview pane — this used to create a real
+    // YT player and play it at full volume just from opening the slide to
+    // edit it, stacked on top of YoutubeClipEditor's own preview player.
+    if (!walkoutSong?.videoId || isPreview) return
     let cancelled = false
     const FADE_MS = 2500
     const FADE_STEPS = 20
@@ -52,7 +55,15 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
               const player = ytPlayerRef.current
               if (!player) return
               const t = player.getCurrentTime?.() ?? 0
-              const clipEnd = walkoutSong.end ?? player.getDuration?.() ?? Infinity
+              // getDuration() returns 0 until metadata loads (and stays 0
+              // forever for an embedding-disabled video) — `?? Infinity`
+              // doesn't catch that (0 isn't null/undefined), so an untrimmed
+              // walkout song (end: null, the default until the host drags
+              // the trim handle) was computing clipEnd=0 on the very first
+              // tick and advancing off this slide within ~250ms of going
+              // live, skipping the QR/team-count screen it's meant to hold.
+              const duration = player.getDuration?.() ?? 0
+              const clipEnd = walkoutSong.end ?? (duration > 0 ? duration : Infinity)
               const fadeStart = clipEnd - FADE_MS / 1000
               if (!fading && clipEnd !== Infinity && t >= fadeStart) {
                 fading = true

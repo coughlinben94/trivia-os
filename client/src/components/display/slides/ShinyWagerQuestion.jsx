@@ -31,28 +31,30 @@ export default function ShinyWagerQuestion({ slide, show, theme }) {
   const displayFont = `'${theme.fonts.display}', 'Boogaloo', sans-serif`
   const bodyFont = `'${theme.fonts.body}', 'DM Sans', sans-serif`
 
-  // Same live-count pattern ShinyMatchingQuestion uses — one load, re-run on
-  // any phone_answers change for this slide. Rows are read (not just counted)
-  // because a wager row carries two independent facts: a tier was placed, and
-  // a number was submitted.
+  // Polled, not a postgres_changes subscription — phone_answers' SELECT
+  // policy (tightened 2026-08-17) only allows the owning team or a
+  // host_verified session to read a row, and Supabase Realtime enforces that
+  // same RLS check before delivering a change event, not just on initial
+  // fetch. /display is neither, so a postgres_changes subscription here
+  // would silently never fire. wager_answer_counts() is a SECURITY DEFINER
+  // RPC returning only the two aggregate counts this component ever used —
+  // it never reads individual tiers/guesses, same numbers the old client-side
+  // filter over raw rows produced (its 'answered' count mirrors
+  // parseWagerNumber(guess) != null exactly, because a stored guess is
+  // already guaranteed clean — WagerBoard.jsx's save() runs it through
+  // parseWagerNumber before the upsert, so "guess is non-null in the DB" and
+  // "guess parses" are the same fact by the time it's written).
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const { data: rows } = await supabase
-        .from('phone_answers')
-        .select('answer')
-        .eq('slide_id', slide.id)
+      const { data: counts } = await supabase.rpc('wager_answer_counts', { p_slide_id: slide.id })
       if (cancelled) return
-      const list = rows ?? []
-      setWagered(list.filter(r => r.answer?.tier != null).length)
-      setAnswered(list.filter(r => parseWagerNumber(r.answer?.guess) != null).length)
+      setWagered(counts?.wagered ?? 0)
+      setAnswered(counts?.answered ?? 0)
     }
     load()
-    const channel = supabase
-      .channel(`phone_answers:${slide.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'phone_answers', filter: `slide_id=eq.${slide.id}` }, load)
-      .subscribe()
-    return () => { cancelled = true; supabase.removeChannel(channel) }
+    const interval = setInterval(load, 2000)
+    return () => { cancelled = true; clearInterval(interval) }
   }, [slide.id])
 
   useEffect(() => {

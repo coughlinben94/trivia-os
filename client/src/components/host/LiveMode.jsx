@@ -277,7 +277,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       const roundKey = round ? `r_${round.id}` : 'bonus'
       const pointsPerMatch = slide.data.pointsPerMatch ?? 2
 
-      const updates = computeMatchingScoreUpdates({ answers, teams, scoreboardTeams, roundKey, pointsPerMatch })
+      const updates = computeMatchingScoreUpdates({ answers, teams, scoreboardTeams, roundKey, pointsPerMatch, slideId: slide.id })
 
       // Answers exist but none could be attributed to a scoreboard row — a
       // real problem (team-name mismatch, or nobody's been added to the
@@ -375,7 +375,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       }))
 
       const results = scoreWagerRound({ entries, correctAnswer: slide.data.answer })
-      const updates = computeWagerScoreUpdates({ results, teams, scoreboardTeams, roundKey: roundKeyFor(show, slide) })
+      const updates = computeWagerScoreUpdates({ results, teams, scoreboardTeams, roundKey: roundKeyFor(show, slide), slideId: slide.id })
 
       if (entries.length > 0 && updates.length === 0) {
         setWagerError('No teams could be matched to the scoreboard — check team names match, then retry')

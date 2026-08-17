@@ -64,27 +64,55 @@ describe('computeMatchingScoreUpdates', () => {
 
   it('matches a team by case-insensitive, trimmed name and preserves the written half', () => {
     const answers = [{ team_id: 'team_1', answer: [{ leftId: 'p1', rightId: 'p1' }] }]
-    const updates = computeMatchingScoreUpdates({ answers, teams, scoreboardTeams, roundKey: 'r_1', pointsPerMatch: 2 })
+    const updates = computeMatchingScoreUpdates({ answers, teams, scoreboardTeams, roundKey: 'r_1', pointsPerMatch: 2, slideId: 'slide_matching' })
     expect(updates).toEqual([
-      { id: 'sb_1', show_id: 'show_1', name: '  the quizzlers  ', scores: { r_1: { written: 5, phone: 2 } }, sort_order: 0 },
+      { id: 'sb_1', show_id: 'show_1', name: '  the quizzlers  ', scores: { r_1: { written: 5, phone: { slide_matching: 2 } } }, sort_order: 0 },
     ])
   })
 
   it('skips an answer whose team_id has no live team registration', () => {
     const answers = [{ team_id: 'ghost_team', answer: [{ leftId: 'p1', rightId: 'p1' }] }]
-    expect(computeMatchingScoreUpdates({ answers, teams, scoreboardTeams, roundKey: 'r_1', pointsPerMatch: 2 })).toEqual([])
+    expect(computeMatchingScoreUpdates({ answers, teams, scoreboardTeams, roundKey: 'r_1', pointsPerMatch: 2, slideId: 'slide_matching' })).toEqual([])
   })
 
   it('skips a team with no matching scoreboard_teams row', () => {
     const answers = [{ team_id: 'team_1', answer: [{ leftId: 'p1', rightId: 'p1' }] }]
-    expect(computeMatchingScoreUpdates({ answers, teams, scoreboardTeams: [], roundKey: 'r_1', pointsPerMatch: 2 })).toEqual([])
+    expect(computeMatchingScoreUpdates({ answers, teams, scoreboardTeams: [], roundKey: 'r_1', pointsPerMatch: 2, slideId: 'slide_matching' })).toEqual([])
   })
 
   it('does not disturb other rounds already on the scoreboard row', () => {
     const sbWithOtherRound = [{ ...scoreboardTeams[0], scores: { r_0: 10, r_1: { written: 5, phone: 0 } } }]
     const answers = [{ team_id: 'team_1', answer: [{ leftId: 'p1', rightId: 'p1' }] }]
-    const [update] = computeMatchingScoreUpdates({ answers, teams, scoreboardTeams: sbWithOtherRound, roundKey: 'r_1', pointsPerMatch: 2 })
+    const [update] = computeMatchingScoreUpdates({ answers, teams, scoreboardTeams: sbWithOtherRound, roundKey: 'r_1', pointsPerMatch: 2, slideId: 'slide_matching' })
     expect(update.scores.r_0).toBe(10)
+  })
+
+  it('adds to, rather than overwrites, a different phone-scored slide already in the round', () => {
+    const sbWithWager = [{ ...scoreboardTeams[0], scores: { r_1: { written: 5, phone: { slide_wager: 20 } } } }]
+    const answers = [{ team_id: 'team_1', answer: [{ leftId: 'p1', rightId: 'p1' }] }]
+    const [update] = computeMatchingScoreUpdates({ answers, teams, scoreboardTeams: sbWithWager, roundKey: 'r_1', pointsPerMatch: 2, slideId: 'slide_matching' })
+    expect(update.scores.r_1).toEqual({ written: 5, phone: { slide_wager: 20, slide_matching: 2 } })
+  })
+
+  it('dedupes by id instead of crashing when two scoreboard rows collide on the same normalized name', () => {
+    // Same data-entry accident as computeWagerScoreUpdates: two live teams
+    // normalize to one scoreboard_teams row's name, so .find() resolves both
+    // onto the same sbTeam.id — must not produce a duplicate-id upsert.
+    const collidingTeams = [
+      { id: 'team_1', name: 'The Quizzlers' },
+      { id: 'team_2', name: '  THE QUIZZLERS  ' },
+    ]
+    const collidingScoreboard = [
+      { id: 'sb_1', show_id: 'show_1', name: 'the quizzlers', scores: {}, sort_order: 0 },
+    ]
+    const answers = [
+      { team_id: 'team_1', answer: [{ leftId: 'p1', rightId: 'p1' }] },
+      { team_id: 'team_2', answer: [] },
+    ]
+    const updates = computeMatchingScoreUpdates({ answers, teams: collidingTeams, scoreboardTeams: collidingScoreboard, roundKey: 'r_1', pointsPerMatch: 2, slideId: 'slide_matching' })
+    expect(updates).toHaveLength(1)
+    const ids = updates.map(u => u.id)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 })
 

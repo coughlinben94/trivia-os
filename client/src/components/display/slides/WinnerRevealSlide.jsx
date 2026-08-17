@@ -20,9 +20,15 @@ function playDrumRoll(onReveal, reduced) {
   if (reduced) { setTimeout(onReveal, 1200); return null }
   try {
     const audio = new Audio('/drum-roll.mp3')
-    audio.onended = onReveal
-    audio.onerror = () => setTimeout(onReveal, 2000)
-    audio.play().catch(() => setTimeout(onReveal, 2000))
+    // Hard fallback: a network stall or codec issue can fire neither `ended`
+    // nor `error` (fires `stalled`/`suspend` instead), leaving three TVs on
+    // "And the winner is…" forever with no host override. The MP3 runs ~4.2s
+    // (see the cinematic-sequence comment above); 8000ms gives it room plus
+    // buffer. Cleared by onended/onerror so the normal path never double-fires.
+    const stallTimer = setTimeout(onReveal, 8000)
+    audio.onended = () => { clearTimeout(stallTimer); onReveal() }
+    audio.onerror = () => { clearTimeout(stallTimer); setTimeout(onReveal, 2000) }
+    audio.play().catch(() => { clearTimeout(stallTimer); setTimeout(onReveal, 2000) })
     return audio
   } catch (_) {
     setTimeout(onReveal, 2000)
@@ -266,6 +272,18 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
       }
 
       const max = ranked[0]?.total ?? 0
+
+      // Every team still on 0 (normal state before grading has run, not a
+      // real game-ending tie) used to fall through to the tie path below and
+      // announce "It's a tie!" across every registered team's name, joined
+      // with no cap — treat it the same as no data at all rather than as a
+      // genuine outcome.
+      if (max <= 0) {
+        setWinner({ noData: true })
+        setPhase('reveal')
+        return
+      }
+
       const tied = ranked.filter(t => t.total === max)
       setWinner({ name: tied.map(t => t.name).join(' & '), total: max, isTie: tied.length > 1 })
       audioCtxRef.current = playDrumRoll(goReveal, reduce)

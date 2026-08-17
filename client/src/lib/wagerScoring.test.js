@@ -194,9 +194,18 @@ describe('parseWagerNumber', () => {
     expect(parseWagerNumber('   ')).toBe(null)
     expect(parseWagerNumber('a lot')).toBe(null)
     expect(parseWagerNumber('12-15')).toBe(null) // a range is not an answer
+    expect(parseWagerNumber('12 to 15')).toBe(null) // a range spelled out is still a range
+    expect(parseWagerNumber('about 250 (2024)')).toBe(null) // two numbers, not one
     expect(parseWagerNumber(null)).toBe(null)
     expect(parseWagerNumber(undefined)).toBe(null)
     expect(parseWagerNumber({})).toBe(null)
+  })
+  it('still parses genuine single numbers with commas, currency, decimals, and negatives', () => {
+    expect(parseWagerNumber('12-15')).toBe(null)
+    expect(parseWagerNumber('-15')).toBe(-15)
+    expect(parseWagerNumber('12.5')).toBe(12.5)
+    expect(parseWagerNumber('$1,234')).toBe(1234)
+    expect(parseWagerNumber('1,200')).toBe(1200)
   })
 })
 
@@ -393,34 +402,64 @@ describe('computeWagerScoreUpdates', () => {
       { teamId: 'team_1', points: 20 },
       { teamId: 'team_2', points: 0 },
     ]
-    const updates = computeWagerScoreUpdates({ results, teams, scoreboardTeams, roundKey: 'r_1' })
+    const updates = computeWagerScoreUpdates({ results, teams, scoreboardTeams, roundKey: 'r_1', slideId: 'slide_wager' })
     expect(updates).toEqual([
-      { id: 'sb_1', show_id: 'show_1', name: '  the quizzlers  ', scores: { r_1: { written: 5, phone: 20 } }, sort_order: 0 },
-      { id: 'sb_2', show_id: 'show_1', name: 'Wing Nuts', scores: { r_1: { written: 0, phone: 0 } }, sort_order: 1 },
+      { id: 'sb_1', show_id: 'show_1', name: '  the quizzlers  ', scores: { r_1: { written: 5, phone: { slide_wager: 20 } } }, sort_order: 0 },
+      { id: 'sb_2', show_id: 'show_1', name: 'Wing Nuts', scores: { r_1: { written: 0, phone: { slide_wager: 0 } } }, sort_order: 1 },
     ])
   })
 
   it('skips a result whose team has no live registration', () => {
     const results = [{ teamId: 'ghost_team', points: 30 }]
-    expect(computeWagerScoreUpdates({ results, teams, scoreboardTeams, roundKey: 'r_1' })).toEqual([])
+    expect(computeWagerScoreUpdates({ results, teams, scoreboardTeams, roundKey: 'r_1', slideId: 'slide_wager' })).toEqual([])
   })
 
   it('skips a team with no scoreboard row yet', () => {
     const results = [{ teamId: 'team_1', points: 30 }]
-    expect(computeWagerScoreUpdates({ results, teams, scoreboardTeams: [], roundKey: 'r_1' })).toEqual([])
+    expect(computeWagerScoreUpdates({ results, teams, scoreboardTeams: [], roundKey: 'r_1', slideId: 'slide_wager' })).toEqual([])
   })
 
-  it('overwrites rather than adds, so re-scoring is idempotent', () => {
-    const already = [{ ...scoreboardTeams[0], scores: { r_1: { written: 5, phone: 20 } } }]
+  it('overwrites this slide only, so re-scoring the same slide is idempotent', () => {
+    const already = [{ ...scoreboardTeams[0], scores: { r_1: { written: 5, phone: { slide_wager: 20 } } } }]
     const results = [{ teamId: 'team_1', points: 20 }]
-    const [update] = computeWagerScoreUpdates({ results, teams, scoreboardTeams: already, roundKey: 'r_1' })
-    expect(update.scores.r_1).toEqual({ written: 5, phone: 20 })
+    const [update] = computeWagerScoreUpdates({ results, teams, scoreboardTeams: already, roundKey: 'r_1', slideId: 'slide_wager' })
+    expect(update.scores.r_1).toEqual({ written: 5, phone: { slide_wager: 20 } })
+  })
+
+  it('adds to, rather than overwrites, a different phone-scored slide already in the round', () => {
+    const already = [{ ...scoreboardTeams[0], scores: { r_1: { written: 5, phone: { slide_matching: 8 } } } }]
+    const results = [{ teamId: 'team_1', points: 20 }]
+    const [update] = computeWagerScoreUpdates({ results, teams, scoreboardTeams: already, roundKey: 'r_1', slideId: 'slide_wager' })
+    expect(update.scores.r_1).toEqual({ written: 5, phone: { slide_matching: 8, slide_wager: 20 } })
   })
 
   it('does not disturb other rounds on the row', () => {
     const sb = [{ ...scoreboardTeams[0], scores: { r_0: 10, r_1: { written: 5, phone: 0 } } }]
     const results = [{ teamId: 'team_1', points: 10 }]
-    const [update] = computeWagerScoreUpdates({ results, teams, scoreboardTeams: sb, roundKey: 'r_1' })
+    const [update] = computeWagerScoreUpdates({ results, teams, scoreboardTeams: sb, roundKey: 'r_1', slideId: 'slide_wager' })
     expect(update.scores.r_0).toBe(10)
+  })
+
+  it('dedupes by id instead of crashing when two scoreboard rows collide on the same normalized name', () => {
+    // Host data-entry accident: two scoreboard_teams rows both typed as "the
+    // quizzlers" (different case/spacing). Both live teams below normalize to
+    // that same name, so .find() resolves both onto the SAME sbTeam.id — a
+    // duplicate id in the upsert array used to crash the whole round's
+    // scoring (Postgres ON CONFLICT can't affect one row twice).
+    const collidingTeams = [
+      { id: 'team_1', name: 'The Quizzlers' },
+      { id: 'team_2', name: '  THE QUIZZLERS  ' },
+    ]
+    const collidingScoreboard = [
+      { id: 'sb_1', show_id: 'show_1', name: 'the quizzlers', scores: {}, sort_order: 0 },
+    ]
+    const results = [
+      { teamId: 'team_1', points: 10 },
+      { teamId: 'team_2', points: 30 },
+    ]
+    const updates = computeWagerScoreUpdates({ results, teams: collidingTeams, scoreboardTeams: collidingScoreboard, roundKey: 'r_1', slideId: 'slide_wager' })
+    expect(updates).toHaveLength(1)
+    const ids = updates.map(u => u.id)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 })

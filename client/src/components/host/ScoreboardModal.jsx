@@ -327,11 +327,16 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
     setTeams(prev => prev.map(t => {
       if (t.id !== id) return t
       const prevSplit = normalizeRoundScore(t.scores[key])
+      // Round-trip phoneBySlide (the raw per-slide bucket), not phone (the
+      // summed display number) — writing the summed number back would
+      // collapse a multi-slide bucket into a flat legacy number and silently
+      // drop every phone-scored slide but one the next time this round is
+      // touched by a fold-in.
       const updated = {
         ...t,
         scores: {
           ...t.scores,
-          [key]: val === '' ? { written: 0, phone: prevSplit.phone } : { written: Number(val), phone: prevSplit.phone },
+          [key]: val === '' ? { written: 0, phone: prevSplit.phoneBySlide } : { written: Number(val), phone: prevSplit.phoneBySlide },
         },
       }
       save(updated, key)
@@ -347,6 +352,39 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
       .select().single()
     if (data) setTeams(prev => [...prev, data])
     if (error) { console.error('scoreboard_teams add failed:', error); onWriteError?.('Couldn’t add team — check connection') }
+  }
+
+  // Scoring fold-ins (computeWagerScoreUpdates/computeMatchingScoreUpdates)
+  // match a phone-registered team to its scoreboard_teams row by
+  // case-insensitive/trimmed NAME — there's no id/FK relationship between
+  // the two tables. A hand-retyped name that doesn't match byte-for-byte
+  // (after trim/lowercase) silently drops that team's phone-scored points.
+  // Pulling the exact registered name instead of freehand typing it removes
+  // the actual failure mode (a typo) without touching the scoring match
+  // logic itself, hours before a live show.
+  async function syncRegisteredTeams() {
+    const { data: registered, error } = await supabase
+      .from('teams')
+      .select('name')
+      .eq('show_id', show.id)
+    if (error) { console.error('teams fetch failed:', error); onWriteError?.('Couldn’t read registered teams — check connection'); return }
+
+    const norm = s => s.trim().toLowerCase()
+    const existing = new Set(teams.map(t => norm(t.name)))
+    const toAdd = (registered ?? [])
+      .filter(t => t.name && !existing.has(norm(t.name)))
+      // Two registered teams whose names collide once normalized would hit
+      // the exact same scoring-crash class this whole normalization exists
+      // to avoid — keep only the first of any such pair here rather than
+      // inserting both under names the fold-ins can't tell apart anyway.
+      .filter((t, i, arr) => arr.findIndex(o => norm(o.name) === norm(t.name)) === i)
+
+    if (toAdd.length === 0) return
+
+    const rows = toAdd.map((t, i) => ({ show_id: show.id, name: t.name, scores: {}, sort_order: teams.length + i }))
+    const { data: inserted, error: insertError } = await supabase.from('scoreboard_teams').insert(rows).select()
+    if (insertError) { console.error('scoreboard_teams sync failed:', insertError); onWriteError?.('Sync didn’t save — check connection'); return }
+    if (inserted) setTeams(prev => [...prev, ...inserted])
   }
 
   async function deleteTeam(id) {
@@ -430,6 +468,11 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
             >⚡ Quick Entry</button>
             <button onClick={addTeam} className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200`}>+ Team</button>
             <button
+              onClick={syncRegisteredTeams}
+              title="Add any registered /join team not already on this scoreboard, using their exact registered name"
+              className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200`}
+            >🔄 Sync Teams</button>
+            <button
               onClick={() => openAnim('cards')}
               disabled={teamsWithStats.length < 2}
               className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
@@ -481,9 +524,14 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
             ) : teams.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-40 gap-3">
                 <p className="text-gray-400 text-sm">No teams yet — add your first team to get started.</p>
-                <button onClick={addTeam} className="text-sm font-semibold px-5 py-2.5 rounded-xl bg-[#1a6b4a] text-white hover:bg-green-900 host-button">
-                  + Add Team
-                </button>
+                <div className="flex gap-2">
+                  <button onClick={syncRegisteredTeams} className="text-sm font-semibold px-5 py-2.5 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 host-button">
+                    🔄 Sync Registered Teams
+                  </button>
+                  <button onClick={addTeam} className="text-sm font-semibold px-5 py-2.5 rounded-xl bg-[#1a6b4a] text-white hover:bg-green-900 host-button">
+                    + Add Team
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="flex gap-4 min-h-0">

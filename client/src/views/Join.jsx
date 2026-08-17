@@ -310,39 +310,80 @@ function WaitingScreen({ teamName, theme, onOpenScores }) {
         </motion.div>
       </div>
 
-      {/* Bottom bar */}
+      {/* Scores pill — top-left, same spot it lives in during the live show */}
       <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        padding: '0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px))',
-        background: `${bg}e8`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-        display: 'flex', alignItems: 'center', gap: '0.5rem', minHeight: 64,
+        position: 'fixed', top: 'calc(0.75rem + env(safe-area-inset-top, 0px))', left: '0.75rem', zIndex: 250,
       }}>
-        {/* Scoreboard button */}
-        <button
-          onClick={onOpenScores}
-          onPointerDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
-          onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
-          onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-          style={{
-            flex: 1, height: 44, padding: '0 1rem', borderRadius: 10,
-            background: 'rgba(255,255,255,0.09)',
-            border: '1px solid rgba(255,255,255,0.14)',
-            color: `${text}90`, fontSize: '0.85rem', fontWeight: 600,
-            cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
-            WebkitTapHighlightColor: 'transparent',
-            transition: 'transform 120ms cubic-bezier(0.23,1,0.32,1)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem',
-          }}
-        >
-          📊 Scoreboard
-        </button>
+        <ScoresPillButton onOpen={onOpenScores} />
       </div>
     </div>
   )
 }
 
+// ─── Scores pill ──────────────────────────────────────────────────────────────
+// The scoreboard's entry point, everywhere — a small pill, not a full-width
+// bottom-bar button, so it fits inline in the LiveView top bar (next to the
+// round/question label) or floats standalone during the waiting screen.
+function ScoresPillButton({ onOpen }) {
+  return (
+    <button
+      onClick={onOpen}
+      onPointerDown={e => e.currentTarget.style.transform = 'scale(0.96)'}
+      onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
+      onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0,
+        height: 34, padding: '0 0.75rem', borderRadius: 17,
+        background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.16)',
+        color: 'rgba(255,255,255,0.85)', fontSize: '0.75rem', fontWeight: 600,
+        fontFamily: 'DM Sans, sans-serif', cursor: 'pointer',
+        WebkitTapHighlightColor: 'transparent',
+        transition: 'transform 120ms cubic-bezier(0.23,1,0.32,1)',
+      }}
+    >
+      📊 Scores
+    </button>
+  )
+}
+
+// ─── Follow toggle ──────────────────────────────────────────────────────────
+// Governs browsing on ordinary slides only. A phone-interactive slide (wager,
+// matching) ignores this entirely and always shows up when it's this team's
+// turn to answer — see LiveView's viewedIndex effect. Persisted per-device,
+// not per-show, since it's a browsing preference, not show data.
+const FOLLOW_MODE_KEY = 'trivia-os:followMode'
+function loadFollowMode() {
+  try { return localStorage.getItem(FOLLOW_MODE_KEY) === 'follow' ? 'follow' : 'manual' }
+  catch { return 'manual' }
+}
+function FollowToggle({ mode, onChange, theme }) {
+  const highlight = theme?.colors?.highlight ?? '#4dffc3'
+  return (
+    <div style={{
+      display: 'flex', borderRadius: 14, background: 'rgba(255,255,255,0.08)',
+      border: '1px solid rgba(255,255,255,0.12)', padding: 2, flexShrink: 0,
+    }}>
+      {[['manual', 'Stay'], ['follow', 'Follow']].map(([id, label]) => (
+        <button
+          key={id}
+          onClick={() => onChange(id)}
+          style={{
+            padding: '0.3rem 0.55rem', borderRadius: 11, border: 'none',
+            background: mode === id ? highlight : 'transparent',
+            color: mode === id ? '#08120d' : 'rgba(255,255,255,0.55)',
+            fontSize: '0.68rem', fontWeight: 700, fontFamily: 'DM Sans, sans-serif',
+            cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // ─── Slide content ────────────────────────────────────────────────────────────
-function SlideContent({ slide, show, theme, team }) {
+function SlideContent({ slide, show, theme, team, onInteractiveAnswered }) {
   if (!slide) return null
   const text      = theme?.colors?.text      ?? '#ffffff'
   const round     = show?.rounds?.find(r => r.id === slide.roundId) ?? null
@@ -359,13 +400,13 @@ function SlideContent({ slide, show, theme, team }) {
         )
       }
       if (d.isShiny && isMatchingShiny(d)) {
-        return <MatchingBoard slide={slide} team={team} theme={theme} />
+        return <MatchingBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
       }
       // WagerBoard owns the whole question surface, including the prompt —
       // it must not fall through to the plain text render below, or the
       // question would be readable during the blind-wager phase.
       if (d.isShiny && isWagerShiny(d)) {
-        return <WagerBoard slide={slide} team={team} theme={theme} />
+        return <WagerBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
       }
       const part = resolveShinyPart(d)
       return (
@@ -484,6 +525,11 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
 
   const myNameNorm = (myTeamName ?? '').trim().toLowerCase()
 
+  // Mirrors the panel's own CSS width (`min(86vw, 340px)`) so the left drag
+  // constraint stops the panel exactly at fully-closed instead of leaving it
+  // unboundedly draggable off-screen with no way to reopen it.
+  const panelWidth = typeof window !== 'undefined' ? Math.min(window.innerWidth * 0.86, 340) : 340
+
   // Bar length IS the score — every bar is measured against the current
   // leader's, so the leader's is always full and everyone else reads as a
   // fraction of it at a glance. Phone stays team + total only (no round
@@ -499,38 +545,46 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
       style={{
         position: 'fixed', inset: 0,
         background: 'rgba(0,0,0,0.6)', zIndex: 450,
-        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+        display: 'flex', flexDirection: 'row', justifyContent: 'flex-start',
       }}
       onClick={onClose}
     >
       <motion.div
-        initial={pref ? { opacity: 0 } : { y: '100%' }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={pref ? { opacity: 0 } : { y: '100%' }}
+        initial={pref ? { opacity: 0 } : { x: '-100%' }}
+        animate={{ x: 0, opacity: 1 }}
+        exit={pref ? { opacity: 0 } : { x: '-100%' }}
         transition={pref
           ? { duration: 0.22 }
           : { ease: EASE_PANEL, duration: 0.32 }}
-        drag={pref ? false : 'y'}
-        dragConstraints={{ top: 0 }}
-        dragElastic={{ top: 0.05, bottom: 0.4 }}
+        // drag='x' (not 'y', unlike the old bottom sheet this replaced) —
+        // framer-motion stamps the OPPOSITE axis's touch-action onto this
+        // element (pan-y here), which is what actually lets a finger scroll
+        // the rows list below; a vertical-drag sheet blocked exactly that.
+        drag={pref ? false : 'x'}
+        dragConstraints={{ left: -panelWidth, right: 0 }}
+        dragElastic={{ left: 0.4, right: 0.05 }}
+        // Without this, framer-motion leaves the panel wherever a drag was
+        // released — dragConstraints only bounds the drag, it doesn't spring
+        // back on its own. A partial swipe that clears neither the velocity
+        // nor offset threshold below used to leave the panel resting stuck
+        // partway off-screen (still usable via ✕/backdrop, just visibly
+        // wrong) since `animate={{x:0}}` never re-fires for a value that
+        // never changed on this element's own account.
+        dragSnapToOrigin
         onDragEnd={(_, info) => {
-          if (info.velocity.y > 300 || info.offset.y > 120) onClose()
+          if (info.velocity.x < -300 || info.offset.x < -100) onClose()
         }}
         style={{
           background: `color-mix(in srgb, ${bg} 93%, #000 7%)`,
-          borderRadius: '20px 20px 0 0',
-          height: '72dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          cursor: 'grab',
+          borderRadius: '0 20px 20px 0',
+          width: 'min(86vw, 340px)', height: '100dvh',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          cursor: 'grab', paddingTop: 'env(safe-area-inset-top, 0px)',
         }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Handle */}
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '0.75rem 0 0' }}>
-          <div style={{ width: 32, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.22)' }} />
-        </div>
-
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem 0.75rem' }}>
           <h2 style={{ fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '1.5rem', color: text, margin: 0, letterSpacing: '-0.01em' }}>
             📊 Scores
           </h2>
@@ -545,9 +599,11 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
           >✕</button>
         </div>
 
-        {/* Rows */}
+        {/* Rows — touchAction explicitly set rather than relying solely on
+            the parent drag axis, since some WebKit versions still need it
+            stated on the actual scrolling element to reliably scroll it. */}
         <div style={{
-          flex: 1, overflowY: 'auto',
+          flex: 1, overflowY: 'auto', touchAction: 'pan-y',
           padding: '0.25rem 1rem calc(1.5rem + env(safe-area-inset-bottom, 0px))',
           display: 'flex', flexDirection: 'column', gap: '0.5rem', cursor: 'default',
         }}>
@@ -669,14 +725,19 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
 }
 
 // ─── Landscape prompt ─────────────────────────────────────────────────────────
-function LandscapePrompt() {
-  const [portrait, setPortrait] = useState(() => typeof window !== 'undefined' && window.innerHeight > window.innerWidth)
+function LandscapePrompt({ scoresOpen = false }) {
+  // Phone-width gate (< 600px) alongside the portrait check — a portrait
+  // iPad (e.g. 768x1024) is still "portrait" but is not a phone, and "turn
+  // your phone sideways" is the wrong prompt for a device that's perfectly
+  // readable in portrait.
+  const isPhoneSize = () => typeof window !== 'undefined' && window.innerHeight > window.innerWidth && window.innerWidth < 600
+  const [portrait, setPortrait] = useState(isPhoneSize)
   const [dismissed, setDismissed] = useState(false)
   const pref = useReducedMotion()
 
   useEffect(() => {
     function update() {
-      const isPortrait = window.innerHeight > window.innerWidth
+      const isPortrait = isPhoneSize()
       setPortrait(isPortrait)
       if (!isPortrait) setDismissed(false)
     }
@@ -690,7 +751,7 @@ function LandscapePrompt() {
 
   return (
     <AnimatePresence>
-      {portrait && !dismissed && (
+      {portrait && !dismissed && !scoresOpen && (
         <motion.div
           initial={pref ? { opacity: 0 } : { y: '100%', opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -813,6 +874,7 @@ function ReconnectingBanner({ visible }) {
 // ─── Live view ────────────────────────────────────────────────────────────────
 function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScores }) {
   const [viewedIndex, setViewedIndex]         = useState(0)
+  const [followMode, setFollowModeState]      = useState(loadFollowMode)
   const [powerupConfirming, setPowerupConfirming] = useState(false)
   const [powerupInvoking, setPowerupInvoking]   = useState(false)
   const [powerupError, setPowerupError]         = useState(null)
@@ -823,19 +885,78 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   const highlight = theme?.colors?.highlight ?? '#4dffc3'
   const text      = theme?.colors?.text      ?? '#ffffff'
 
-  // Keep viewedIndex ≤ host's position
-  useEffect(() => {
-    const hostIndex = show?.current_slide_index ?? 0
-    setViewedIndex(prev => Math.min(prev, hostIndex))
-  }, [show?.current_slide_index])
+  function setFollowMode(mode) {
+    setFollowModeState(mode)
+    try { localStorage.setItem(FOLLOW_MODE_KEY, mode) } catch { /* best-effort */ }
+  }
 
   const slides = useMemo(
     () => (show?.slides ?? []).slice().sort((a, b) => a.order - b.order),
     [show?.slides]
   )
+  const hostIndex = show?.current_slide_index ?? 0
+  const liveSlide  = slides[hostIndex] ?? null
+  // Same predicate SlideContent uses to pick WagerBoard/MatchingBoard, PLUS
+  // introDone — SlideContent checks `!d.introDone` first and renders the
+  // teaser text (no board at all) during the intro beat, so treating the
+  // slide as interactive before introDone flips would force-pin every phone
+  // to a screen with no board mounted and no onAnswered wired up.
+  //
+  // PLUS: not locked. Once wagerGuessesLocked/matchingLocked flips, the
+  // board itself stops accepting input (WagerBoard's keypad and Lock In
+  // button are gated on `!guessesLocked`; MatchingBoard's tapItem returns
+  // early on `locked`) — a team that didn't finish in time can never
+  // satisfy onAnswered after that point, so without this check they'd stay
+  // force-pinned to a dead "Answers locked" board with no Back button for
+  // however long the host lingers on the reveal, which is often the loudest
+  // moment of the round. Pinning only makes sense while input is possible.
+  const liveSlideIsInteractive = !!(
+    liveSlide?.type === 'question' && liveSlide.data?.isShiny && liveSlide.data?.introDone &&
+    !liveSlide.data?.wagerGuessesLocked && !liveSlide.data?.matchingLocked &&
+    (isMatchingShiny(liveSlide.data) || isWagerShiny(liveSlide.data))
+  )
+
+  // Whether THIS team has done what the live interactive slide currently
+  // requires — reported by WagerBoard/MatchingBoard's onAnswered, reset
+  // whenever the live slide OR its current phase changes. Starts false on
+  // every new interactive slide/phase, the safe default (force delivery
+  // until proven answered).
+  //
+  // The reset must key on the phase flags too, not just the slide id — a
+  // wager slide's id doesn't change when wagerTiersLocked flips from false
+  // to true. Without this, a team that tiers, gets released, then taps Back
+  // (unmounting WagerBoard, dropping onAnswered) keeps a stale
+  // interactiveSatisfied=true across the lock, and is never force-navigated
+  // to the actual guess phase — the exact silent-miss bug this feature
+  // exists to close, just narrowed to teams who back out after tiering.
+  const interactivePhaseKey = `${liveSlide?.id}:${liveSlide?.data?.introDone}:${liveSlide?.data?.wagerTiersLocked}:${liveSlide?.data?.wagerGuessesLocked}:${liveSlide?.data?.matchingLocked}`
+  const [interactiveSatisfied, setInteractiveSatisfied] = useState(false)
+  useEffect(() => { setInteractiveSatisfied(false) }, [interactivePhaseKey])
+
+  const forceInteractive = liveSlideIsInteractive && !interactiveSatisfied
+
+  // Follow Along always tracks the host. Stay on Slide lets a team browse at
+  // its own pace on ordinary slides — but a phone-interactive slide (wager,
+  // matching) overrides BOTH modes: it's not something a team can silently
+  // opt out of and miss, so it always takes over the moment it goes live and
+  // stays until answered. Re-evaluated on every render (not just once when
+  // the slide first goes live), so a phone that reconnects mid-question
+  // catches up immediately rather than only if it happened to be watching at
+  // the instant the slide changed.
+  useEffect(() => {
+    if (followMode === 'follow' || forceInteractive) {
+      setViewedIndex(hostIndex)
+    } else {
+      setViewedIndex(prev => Math.min(prev, hostIndex))
+    }
+  }, [hostIndex, followMode, forceInteractive])
+
   const currentSlide  = slides[viewedIndex] ?? null
-  const canGoBack     = viewedIndex > 0
-  const isBehindLive  = viewedIndex < (show?.current_slide_index ?? 0)
+  // No manual navigation in Follow mode (there's nothing to navigate — you're
+  // always on the live slide), and none away from a forced interactive slide
+  // until it's answered.
+  const canGoBack     = followMode !== 'follow' && !forceInteractive && viewedIndex > 0
+  const isBehindLive  = viewedIndex < hostIndex
   const powerup       = show?.powerups?.[0] ?? null
 
   // A slide the player has scrolled back to review was already revealed by
@@ -846,7 +967,6 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   // host's first explicit "next" reveals it — without this check, a phone
   // would render that slide's real content (question text, etc.) the moment
   // is_live flips true, before the TV shows anything but the pre-show screen.
-  const hostIndex = show?.current_slide_index ?? 0
   const revealed  = viewedIndex < hostIndex || show?.current_slide_id != null
   const visibleSlide = revealed ? currentSlide : null
 
@@ -882,22 +1002,29 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
         borderBottom: '1px solid rgba(255,255,255,0.06)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         paddingTop: 'env(safe-area-inset-top, 0px)',
-        paddingLeft: '1rem', paddingRight: '1rem',
+        paddingLeft: '0.75rem', paddingRight: '1rem', gap: '0.5rem',
         minHeight: 56,
       }}>
-        <span style={{
-          color: `${highlight}cc`, fontSize: '0.8rem', fontWeight: 600,
-          maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {topLeft}
-        </span>
-        <span style={{ color: highlight, fontSize: '0.8rem', fontWeight: 700, flexShrink: 0 }}>
-          {topRight}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, flex: 1 }}>
+          <ScoresPillButton onOpen={onOpenScores} />
+          <span style={{
+            color: `${highlight}cc`, fontSize: '0.8rem', fontWeight: 600,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+          }}>
+            {topLeft}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+          <FollowToggle mode={followMode} onChange={setFollowMode} theme={theme} />
+          <span style={{ color: highlight, fontSize: '0.8rem', fontWeight: 700, flexShrink: 0 }}>
+            {topRight}
+          </span>
+        </div>
       </div>
 
-      {/* SCROLLABLE CONTENT */}
-      <div style={{ flex: 1, padding: 'calc(4.5rem + env(safe-area-inset-top, 0px)) 1.25rem 5.75rem', overflowY: 'auto' }}>
+      {/* SCROLLABLE CONTENT — bottom padding only needs to clear the fixed
+          bottom bar when it actually renders (i.e. there's a powerup). */}
+      <div style={{ flex: 1, padding: `calc(4.5rem + env(safe-area-inset-top, 0px)) 1.25rem ${powerup ? '5.75rem' : '2rem'}`, overflowY: 'auto', maxWidth: 560, margin: '0 auto' }}>
         <ErrorBoundary
           key={visibleSlide?.id}
           fallback={
@@ -907,7 +1034,16 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
           }
         >
           {revealed ? (
-            <SlideContent slide={visibleSlide} show={show} theme={theme} team={team} />
+            <SlideContent
+              slide={visibleSlide}
+              show={show}
+              theme={theme}
+              team={team}
+              // Only wired up for the actual live slide — a team scrolled
+              // back reviewing an earlier (already-answered, already-locked)
+              // wager slide must not report into the live slide's state.
+              onInteractiveAnswered={visibleSlide?.id === liveSlide?.id ? setInteractiveSatisfied : undefined}
+            />
           ) : (
             <p style={{ color: `${text}50`, fontSize: 'clamp(1rem, 4vw, 1.2rem)', lineHeight: 1.5, margin: 0, fontStyle: 'italic', textAlign: 'center', padding: '2rem 0' }}>
               Get ready…
@@ -959,38 +1095,16 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
         )}
       </div>
 
-      {/* BOTTOM BAR */}
+      {/* BOTTOM BAR — powerup only now; Scores moved to the top-bar pill */}
+      {powerup && (
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0, height: 'auto', zIndex: 200,
         background: `${bg}f0`, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
         borderTop: '1px solid rgba(255,255,255,0.07)',
-        display: 'flex', alignItems: 'center',
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
         padding: `0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px))`,
         gap: '0.5rem', minHeight: 64,
       }}>
-        {/* Scoreboard button */}
-        <button
-          onClick={onOpenScores}
-          onPointerDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
-          onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
-          onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-          style={{
-            flex: 1, height: 44, padding: '0 0.75rem', borderRadius: 10,
-            background: 'rgba(255,255,255,0.07)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            color: `${text}70`, fontSize: '0.8rem', fontWeight: 600,
-            cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
-            WebkitTapHighlightColor: 'transparent',
-            transition: 'transform 120ms cubic-bezier(0.23,1,0.32,1)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          📊 Scores
-        </button>
-
-        {/* Powerup */}
-        {powerup && (
           <div style={{ flex: '0 0 auto', position: 'relative' }}>
             {/* Confirm popover */}
             <AnimatePresence>
@@ -1070,8 +1184,8 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
               {powerupUsed && <span style={{ fontSize: '0.6rem', color: `${text}40`, lineHeight: 1, marginTop: 2 }}>Used ✓</span>}
             </button>
           </div>
-        )}
       </div>
+      )}
     </div>
   )
 }
@@ -1340,7 +1454,7 @@ export default function Join() {
       {phase === 'waiting'  && (
         <>
           <WaitingScreen teamName={team?.name ?? ''} theme={theme} onOpenScores={openScoresDrawer} />
-          <LandscapePrompt />
+          <LandscapePrompt scoresOpen={scoresDrawerOpen} />
         </>
       )}
       {phase === 'live'     && (
@@ -1353,7 +1467,7 @@ export default function Join() {
             theme={theme}
             onOpenScores={openScoresDrawer}
           />
-          <LandscapePrompt />
+          <LandscapePrompt scoresOpen={scoresDrawerOpen} />
         </>
       )}
 
