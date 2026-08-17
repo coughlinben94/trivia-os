@@ -54,7 +54,7 @@ function ErrorScreen({ message }) {
       alignItems: 'center', justifyContent: 'center', padding: '2rem',
     }}>
       <img src="/baynes-logo.svg" alt="" style={{ height: 40, opacity: 0.3, marginBottom: '1.5rem' }} />
-      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.9375rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.6 }}>
+      <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9375rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.6 }}>
         {message}
       </p>
     </div>
@@ -70,10 +70,10 @@ function NoShowScreen() {
       alignItems: 'center', justifyContent: 'center', padding: '2rem',
     }}>
       <img src="/baynes-logo.svg" alt="" style={{ height: 40, opacity: 0.3, marginBottom: '1.5rem' }} />
-      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.9375rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.6 }}>
+      <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9375rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.6 }}>
         No show running right now.
       </p>
-      <p style={{ color: 'rgba(255,255,255,0.18)', fontSize: '0.8rem', marginTop: '0.5rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif' }}>
+      <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem', marginTop: '0.5rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif' }}>
         Ask Ben for the QR code when things kick off.
       </p>
     </div>
@@ -142,7 +142,7 @@ function RegistrationScreen({ onRegister, show, theme }) {
             Enter your team name to join
           </p>
           {show?.title && (
-            <p style={{ color: `${text}45`, fontSize: '0.8rem', marginTop: '0.3rem' }}>{show.title}</p>
+            <p style={{ color: `${text}80`, fontSize: '0.8rem', marginTop: '0.3rem' }}>{show.title}</p>
           )}
         </div>
 
@@ -215,7 +215,7 @@ function RegistrationScreen({ onRegister, show, theme }) {
           </button>
         </form>
 
-        <p style={{ textAlign: 'center', color: `${text}35`, fontSize: '0.7rem', margin: 0 }}>
+        <p style={{ textAlign: 'center', color: `${text}80`, fontSize: '0.7rem', margin: 0 }}>
           Have fun out there — and don't yell at me, I'm not a professional 😂
         </p>
 
@@ -273,7 +273,7 @@ function WaitingScreen({ teamName, theme, onOpenScores }) {
           transition={{ delay: pref ? 0 : 0.18, duration: 0.28, ease: EASE_OUT }}
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}
         >
-          <p style={{ color: `${text}55`, fontSize: '0.7rem', margin: 0, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+          <p style={{ color: `${text}80`, fontSize: '0.7rem', margin: 0, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
             You&rsquo;re in as
           </p>
           <p style={{
@@ -290,7 +290,7 @@ function WaitingScreen({ teamName, theme, onOpenScores }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: pref ? 0 : 0.32, duration: 0.35 }}
-          style={{ color: `${text}65`, fontSize: '1rem', margin: 0, lineHeight: 1.5 }}
+          style={{ color: `${text}b3`, fontSize: '1rem', margin: 0, lineHeight: 1.5 }}
         >
           Show starts soon 🍺
         </motion.p>
@@ -307,7 +307,7 @@ function WaitingScreen({ teamName, theme, onOpenScores }) {
             animation: pref ? 'none' : 'breathePulse 2.2s ease-in-out infinite',
             display: 'inline-block',
           }} />
-          <span style={{ color: `${text}45`, fontSize: '0.8rem' }}>Waiting for Ben…</span>
+          <span style={{ color: `${text}80`, fontSize: '0.8rem' }}>Waiting for Ben…</span>
         </motion.div>
       </div>
 
@@ -329,6 +329,9 @@ function ScoresPillButton({ onOpen }) {
   return (
     <button
       onClick={onOpen}
+      // .tap-target-44 grows the hit area to 44px tall without growing the
+      // pill itself — the top bar it sits in is compact by design.
+      className="tap-target-44"
       onPointerDown={e => e.currentTarget.style.transform = 'scale(0.96)'}
       onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
       onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
@@ -368,8 +371,11 @@ function FollowToggle({ mode, onChange, theme }) {
         <button
           key={id}
           onClick={() => onChange(id)}
+          // Same 44px hit-area treatment as the scores pill — the segments
+          // stay visually small so the bar can shrink in landscape.
+          className="tap-target-44"
           style={{
-            padding: '0.3rem 0.55rem', borderRadius: 11, border: 'none',
+            padding: '0.35rem 0.7rem', borderRadius: 11, border: 'none',
             background: mode === id ? highlight : 'transparent',
             color: mode === id ? '#08120d' : 'rgba(255,255,255,0.55)',
             fontSize: '0.68rem', fontWeight: 700, fontFamily: 'DM Sans, sans-serif',
@@ -381,6 +387,19 @@ function FollowToggle({ mode, onChange, theme }) {
       ))}
     </div>
   )
+}
+
+// Copy for the slide types the phone deliberately doesn't render (see the
+// default branch of SlideContent). Only the few worth their own line get one;
+// everything else takes the generic "look up" message.
+// ponytail: a flat map, not a per-type component — nothing here is more than
+// one sentence, and a phone screen that says less during the TV moments is
+// the whole point.
+const OFF_PHONE_COPY = {
+  'winner-reveal':  'Eyes on the screen — results coming in 🏆',
+  'team-picker':    'Watch the screen — Ben is picking 👀',
+  'team-preview':   'Watch the screen — Ben is picking 👀',
+  'pre-show':       "Hang tight — we're about to start 🍺",
 }
 
 // ─── Slide content ────────────────────────────────────────────────────────────
@@ -395,7 +414,7 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered }) {
       // Shiny intro beat — host is showing the teaser title, not the question yet.
       if (d.isShiny && !d.introDone) {
         return (
-          <p style={{ color: `${text}70`, fontSize: 'clamp(1rem, 4vw, 1.2rem)', lineHeight: 1.5, margin: 0, fontStyle: 'italic' }}>
+          <p style={{ color: `${text}b3`, fontSize: 'clamp(1rem, 4vw, 1.2rem)', lineHeight: 1.5, margin: 0, fontStyle: 'italic' }}>
             {d.isSeries && d.seriesTheme ? d.seriesTheme : 'Next question incoming…'}
           </p>
         )
@@ -425,7 +444,7 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered }) {
           )}
           {part.mediaUrl && part.mediaType?.startsWith('audio/') && (
             <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: '0.75rem 1rem', textAlign: 'center' }}>
-              <p style={{ color: `${text}55`, fontSize: '0.875rem', margin: 0 }}>🎵 Listen on the main screen</p>
+              <p style={{ color: `${text}b3`, fontSize: '0.875rem', margin: 0 }}>🎵 Listen on the main screen</p>
             </div>
           )}
         </div>
@@ -439,7 +458,7 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered }) {
           animate={{ opacity: 1 }}
           style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingTop: '2.5rem', textAlign: 'center' }}
         >
-          <p style={{ color: `${text}45`, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.12em', margin: 0 }}>
+          <p style={{ color: `${text}80`, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.12em', margin: 0 }}>
             Round {slide.data.roundNumber}
           </p>
           <h2 style={{
@@ -450,7 +469,7 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered }) {
             {slide.data.roundTitle}
           </h2>
           {slide.data.subtitle && (
-            <p style={{ color: `${text}55`, fontSize: '1rem', margin: 0, fontStyle: 'italic' }}>{slide.data.subtitle}</p>
+            <p style={{ color: `${text}b3`, fontSize: '1rem', margin: 0, fontStyle: 'italic' }}>{slide.data.subtitle}</p>
           )}
         </motion.div>
       )
@@ -472,7 +491,7 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered }) {
           <h2 style={{ fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '1.75rem', color: text, margin: 0 }}>
             {slide.data.title || 'Leaderboard'}
           </h2>
-          <p style={{ color: `${text}45`, fontSize: '0.875rem', margin: 0 }}>
+          <p style={{ color: `${text}b3`, fontSize: '0.875rem', margin: 0 }}>
             Tap Scores below to see where you stand
           </p>
         </div>
@@ -485,7 +504,7 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered }) {
             {slide.data.title || 'Trivia Night'}
           </h1>
           {slide.data.subtitle && (
-            <p style={{ color: `${text}55`, fontSize: '1.1rem', margin: 0 }}>{slide.data.subtitle}</p>
+            <p style={{ color: `${text}b3`, fontSize: '1.1rem', margin: 0 }}>{slide.data.subtitle}</p>
           )}
         </div>
       )
@@ -494,7 +513,7 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered }) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {round?.title && (
-            <p style={{ color: `${text}45`, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>{round.title}</p>
+            <p style={{ color: `${text}80`, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>{round.title}</p>
           )}
           <h3 style={{ color: text, fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>
             {slide.data.title || 'Questions'}
@@ -507,10 +526,19 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered }) {
         </div>
       )
 
+    // Every slide type the phone doesn't render itself — winner-reveal,
+    // team-picker, pyl-reveal, pre-show, pixelate-series, state-of-union,
+    // grid, custom, team-preview, swing-round-intro. These used to print the
+    // raw type name ("winner reveal") on every phone in the room, which is
+    // both a debug string and a spoiler, during the loudest beats of the
+    // show. The phone's whole job on these slides is to get out of the way
+    // and send eyes to the TV.
     default:
       return (
         <div style={{ paddingTop: '2.5rem', textAlign: 'center' }}>
-          <p style={{ color: `${text}35`, fontSize: '0.875rem' }}>{slide.type.replace(/-/g, ' ')}</p>
+          <p style={{ color: `${text}b3`, fontSize: '1.05rem', lineHeight: 1.5, margin: 0 }}>
+            {OFF_PHONE_COPY[slide.type] ?? 'Look up at the screen 👀'}
+          </p>
         </div>
       )
   }
@@ -593,7 +621,7 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
             onClick={onClose}
             style={{
               background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 8,
-              color: `${text}65`, fontSize: '0.85rem', cursor: 'pointer',
+              color: `${text}cc`, fontSize: '0.85rem', cursor: 'pointer',
               minHeight: 44, minWidth: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontFamily: 'DM Sans, sans-serif', WebkitTapHighlightColor: 'transparent',
             }}
@@ -620,7 +648,7 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
             )
             : teams.length === 0
             ? (
-              <p style={{ color: `${text}30`, textAlign: 'center', fontSize: '0.875rem', paddingTop: '2rem' }}>
+              <p style={{ color: `${text}b3`, textAlign: 'center', fontSize: '0.875rem', paddingTop: '2rem' }}>
                 No scores yet
               </p>
             )
@@ -695,7 +723,7 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
                       <span style={{ fontSize: '1.05rem', width: 24, textAlign: 'center', flexShrink: 0 }}>
                         {/* Bumped from 30 → 70: the rank now sits on top of a
                             bar instead of flat panel and got lost against it. */}
-                        {medal ?? <span style={{ color: `${text}70`, fontSize: '0.8rem', fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{i + 1}</span>}
+                        {medal ?? <span style={{ color: `${text}b3`, fontSize: '0.8rem', fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{i + 1}</span>}
                       </span>
                       <span style={{
                         flex: 1, color: isMe ? '#f5c842' : `${text}f2`,
@@ -705,7 +733,7 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
                         textShadow: '0 1px 3px rgba(0,0,0,0.55)',
                       }}>
                         {t.name.length > 22 ? `${t.name.slice(0, 21)}…` : t.name}
-                        {isMe && <span style={{ color: '#f5c84266', fontSize: '0.72rem', fontWeight: 400, marginLeft: '0.4rem' }}>← you</span>}
+                        {isMe && <span style={{ color: '#f5c842cc', fontSize: '0.72rem', fontWeight: 400, marginLeft: '0.4rem' }}>← you</span>}
                       </span>
                       <span style={{
                         fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '1.05rem', flexShrink: 0,
@@ -782,7 +810,7 @@ function LandscapePrompt({ scoresOpen = false }) {
               <p style={{ fontFamily: 'Boogaloo, sans-serif', fontSize: '1.2rem', color: '#fff', margin: 0, lineHeight: 1.2 }}>
                 Rotate for a better view
               </p>
-              <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.82rem', margin: '0.25rem 0 0', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.4 }}>
+              <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.82rem', margin: '0.25rem 0 0', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.4 }}>
                 Turn your phone sideways to see the full question
               </p>
             </div>
@@ -791,7 +819,7 @@ function LandscapePrompt({ scoresOpen = false }) {
             onClick={() => setDismissed(true)}
             style={{
               background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 10, color: 'rgba(255,255,255,0.45)', fontSize: '0.8rem',
+              borderRadius: 10, color: 'rgba(255,255,255,0.8)', fontSize: '0.8rem',
               padding: '0.5rem 1.25rem', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
               WebkitTapHighlightColor: 'transparent', minHeight: 40,
             }}
@@ -837,7 +865,7 @@ function ScoresLockedPopup({ visible }) {
             <p style={{ fontFamily: 'Boogaloo, sans-serif', fontSize: '1.2rem', color: '#fff', margin: 0, lineHeight: 1.2 }}>
               Ben is currently updating the scores. Hold your pants.
             </p>
-            <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.82rem', margin: '0.25rem 0 0', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.4 }}>
+            <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.82rem', margin: '0.25rem 0 0', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.4 }}>
               Scores will be back up in a moment
             </p>
           </div>
@@ -919,7 +947,7 @@ function WagerResultPopup({ result, theme, onDismiss }) {
           </p>
         )}
         {result.guess != null && (
-          <p style={{ color: `${text}55`, fontSize: '0.8rem', margin: '0.35rem 0 0' }}>
+          <p style={{ color: `${text}b3`, fontSize: '0.8rem', margin: '0.35rem 0 0' }}>
             Your guess: {result.guess}
           </p>
         )}
@@ -927,7 +955,7 @@ function WagerResultPopup({ result, theme, onDismiss }) {
           onClick={onDismiss}
           style={{
             marginTop: '1.25rem', background: 'rgba(255,255,255,0.09)', border: 'none',
-            borderRadius: 10, color: `${text}90`, fontSize: '0.85rem', fontWeight: 600,
+            borderRadius: 10, color: `${text}e6`, fontSize: '0.85rem', fontWeight: 600,
             padding: '0.65rem 1.5rem', cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
             fontFamily: 'DM Sans, sans-serif', minHeight: 44,
           }}
@@ -1089,15 +1117,16 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
     <>
     <div style={{ minHeight: '100dvh', background: `linear-gradient(180deg, ${bg} 0%, ${bgDeep} 100%)`, display: 'flex', flexDirection: 'column', fontFamily: 'DM Sans, sans-serif' }}>
 
-      {/* TOP BAR — paddingTop accounts for Dynamic Island / notch when viewport-fit=cover */}
-      <div style={{
+      {/* TOP BAR — safe-area padding (top for the notch, left/right for the
+          same hardware once the phone is on its side) and the compact
+          landscape sizing both live in .join-top-bar in index.css; an inline
+          minHeight here would outrank the landscape media query. */}
+      <div className="join-top-bar" style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200,
         background: `${bg}e8`, backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        paddingTop: 'env(safe-area-inset-top, 0px)',
-        paddingLeft: '0.75rem', paddingRight: '1rem', gap: '0.5rem',
-        minHeight: 56,
+        gap: '0.5rem',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, flex: 1 }}>
           <ScoresPillButton onOpen={onOpenScores} />
@@ -1118,11 +1147,11 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
 
       {/* SCROLLABLE CONTENT — bottom padding only needs to clear the fixed
           bottom bar when it actually renders (i.e. there's a powerup). */}
-      <div style={{ flex: 1, padding: `calc(4.5rem + env(safe-area-inset-top, 0px)) 1.25rem ${powerup ? '5.75rem' : '2rem'}`, overflowY: 'auto', maxWidth: 560, margin: '0 auto' }}>
+      <div className="join-content" style={{ flex: 1, paddingBottom: powerup ? '5.75rem' : '2rem', overflowY: 'auto', maxWidth: 560, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
         <ErrorBoundary
           key={visibleSlide?.id}
           fallback={
-            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.9rem', textAlign: 'center', padding: '2rem 0' }}>
+            <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9rem', textAlign: 'center', padding: '2rem 0' }}>
               Content unavailable
             </p>
           }
@@ -1139,7 +1168,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
               onInteractiveAnswered={visibleSlide?.id === liveSlide?.id ? setInteractiveSatisfied : undefined}
             />
           ) : (
-            <p style={{ color: `${text}50`, fontSize: 'clamp(1rem, 4vw, 1.2rem)', lineHeight: 1.5, margin: 0, fontStyle: 'italic', textAlign: 'center', padding: '2rem 0' }}>
+            <p style={{ color: `${text}b3`, fontSize: 'clamp(1rem, 4vw, 1.2rem)', lineHeight: 1.5, margin: 0, fontStyle: 'italic', textAlign: 'center', padding: '2rem 0' }}>
               Get ready…
             </p>
           )}
@@ -1174,7 +1203,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
                 onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                 style={{
                   background: 'rgba(255,255,255,0.07)',
-                  border: 'none', borderRadius: 10, color: `${text}65`,
+                  border: 'none', borderRadius: 10, color: `${text}cc`,
                   fontSize: '0.875rem', fontWeight: 500, padding: '0.65rem 1rem',
                   cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
                   minHeight: 44, WebkitTapHighlightColor: 'transparent',
@@ -1220,7 +1249,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
                   <p style={{ color: text, fontSize: '0.875rem', fontWeight: 600, margin: '0 0 0.25rem' }}>
                     Use {powerup.icon} {powerup.name}?
                   </p>
-                  <p style={{ color: `${text}55`, fontSize: '0.775rem', lineHeight: 1.5, margin: '0 0 0.75rem' }}>
+                  <p style={{ color: `${text}b3`, fontSize: '0.775rem', lineHeight: 1.5, margin: '0 0 0.75rem' }}>
                     {powerup.description} This can&apos;t be undone.
                   </p>
                   {powerupError && (
@@ -1232,7 +1261,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
                     <button
                       onClick={() => { setPowerupConfirming(false); setPowerupError(null) }}
                       disabled={powerupInvoking}
-                      style={{ flex: 1, padding: '0.55rem', borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: 'none', color: `${text}65`, fontSize: '0.8rem', fontWeight: 500, cursor: powerupInvoking ? 'default' : 'pointer', opacity: powerupInvoking ? 0.4 : 1, minHeight: 44, fontFamily: 'DM Sans, sans-serif' }}
+                      style={{ flex: 1, padding: '0.55rem', borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: 'none', color: `${text}cc`, fontSize: '0.8rem', fontWeight: 500, cursor: powerupInvoking ? 'default' : 'pointer', opacity: powerupInvoking ? 0.4 : 1, minHeight: 44, fontFamily: 'DM Sans, sans-serif' }}
                     >Cancel</button>
                     <button
                       onClick={async () => {
@@ -1275,7 +1304,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
               title={powerupUsed ? 'Used' : `Use ${powerup.name}`}
             >
               <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>{powerup.icon}</span>
-              {powerupUsed && <span style={{ fontSize: '0.6rem', color: `${text}40`, lineHeight: 1, marginTop: 2 }}>Used ✓</span>}
+              {powerupUsed && <span style={{ fontSize: '0.6rem', color: `${text}80`, lineHeight: 1, marginTop: 2 }}>Used ✓</span>}
             </button>
           </div>
       </div>
@@ -1636,7 +1665,7 @@ export default function Join() {
   if (!showParam) {
     return (
       <div style={{ minHeight: '100dvh', background: '#050505', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-        <p style={{ color: 'rgba(255,255,255,0.28)', fontSize: '0.9rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif' }}>
+        <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif' }}>
           Scan the QR code at Baynes to join tonight's trivia!
         </p>
       </div>

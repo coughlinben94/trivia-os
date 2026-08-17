@@ -212,7 +212,7 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
             }}>
               Place your wager
             </p>
-            <p style={{ margin: '0.35rem 0 0', color: `${text}70`, fontSize: '0.85rem', lineHeight: 1.45 }}>
+            <p style={{ margin: '0.35rem 0 0', color: `${text}b3`, fontSize: '0.85rem', lineHeight: 1.45 }}>
               Pick before you see the question. How sure are you?
             </p>
           </div>
@@ -278,7 +278,7 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
                     {t.points} pts
                   </span>
                   {wagerOddsLine(t.id, teamCount) && (
-                    <span style={{ color: `${text}70`, fontSize: '0.78rem' }}>
+                    <span style={{ color: `${text}b3`, fontSize: '0.78rem' }}>
                       {wagerOddsLine(t.id, teamCount)}
                     </span>
                   )}
@@ -288,7 +288,7 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
             })}
           </div>
 
-          <p style={{ color: `${text}55`, fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
+          <p style={{ color: `${text}b3`, fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
             {committedTier
               ? 'Wager placed — you can still change it until Ben locks it'
               : tier
@@ -311,7 +311,7 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
               <span style={{ fontSize: '1.35rem', lineHeight: 1 }}>{chosen.emoji}</span>
               <span style={{ display: 'flex', flexDirection: 'column' }}>
                 <span style={{ color: text, fontSize: '0.9rem', fontWeight: 700 }}>{chosen.label}</span>
-                <span style={{ color: `${text}70`, fontSize: '0.75rem' }}>
+                <span style={{ color: `${text}b3`, fontSize: '0.75rem' }}>
                   {chosen.points} pts{wagerOddsLine(chosen.id, teamCount) ? ` · ${wagerOddsLine(chosen.id, teamCount)}` : ''}
                 </span>
               </span>
@@ -319,7 +319,7 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
           )}
           {!chosen && (
             <p style={{
-              color: `${text}70`, fontSize: '0.85rem', margin: 0, textAlign: 'center',
+              color: `${text}b3`, fontSize: '0.85rem', margin: 0, textAlign: 'center',
               fontFamily: 'DM Sans, sans-serif',
             }}>
               No wager placed — you're playing it safe ({WAGER_TIERS[0].points} pts).
@@ -344,7 +344,7 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
             transition: 'box-shadow 180ms cubic-bezier(0.23,1,0.32,1)',
           }}>
             <span style={{
-              color: digits ? text : `${text}45`,
+              color: digits ? text : `${text}80`,
               fontSize: '2.6rem', fontWeight: 800, lineHeight: 1,
               fontFamily: 'DM Sans, sans-serif', fontVariantNumeric: 'tabular-nums',
               textShadow: digits ? `0 0 18px ${highlight}66` : 'none',
@@ -393,7 +393,7 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
             </>
           )}
 
-          <p style={{ color: `${text}55`, fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
+          <p style={{ color: `${text}b3`, fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
             {guessesLocked
               ? 'Answers locked'
               : saving

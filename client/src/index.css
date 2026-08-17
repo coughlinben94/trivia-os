@@ -83,6 +83,47 @@ textarea {
 .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
+/* ─── /join LiveView chrome (Join.jsx) ───
+   Landscape is the intended orientation for a team phone, so the left/right
+   safe-area insets matter as much as the top one (notch + home indicator both
+   sit on a long edge when the phone is on its side).
+   Sizing lives here rather than inline because an inline style beats any
+   media query — the short-landscape block below could never win otherwise. */
+.join-top-bar {
+  min-height: 56px;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
+}
+.join-content {
+  padding-top: calc(4.5rem + env(safe-area-inset-top, 0px));
+  padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
+}
+/* Phone on its side: ~375px of height total, so 56px of top bar plus 4.5rem
+   of content padding eats a fifth of the screen. Shrink both — the question
+   is what the screen is for. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .join-top-bar { min-height: 40px; }
+  .join-content { padding-top: 3rem; }
+}
+
+/* 44px minimum tap height without changing the visual size. The /join top bar
+   is deliberately compact (and shrinks further in landscape), so the hit area
+   is grown with a pseudo-element instead of padding — padding would push the
+   bar taller and undo the landscape saving above. */
+.tap-target-44 { position: relative; }
+.tap-target-44::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  height: 44px;
+  width: 100%;
+  min-width: 44px;
+}
+
 
 /* ─── Display: shiny slide flash ─── */
 @keyframes shinyFlash {

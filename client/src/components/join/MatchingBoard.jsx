@@ -2,7 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { seededShuffle, buildMatchAnswer } from '../../lib/matchingScoring.js'
 
-const PALETTE = ['#e02020', '#3aa0e0', '#e0a020', '#8050c0', '#20a060', '#e05090']
+// A matched tile paints the whole button and switches its label to #1a1a1a,
+// so every entry here has to clear AA against that near-black, not against
+// the dark page behind it. The original Baynes red (#e02020, ~3.8:1) and
+// purple (#8050c0, ~2.4:1) both failed that; these lightened versions read
+// ~5.7:1 and ~5.4:1. The other four were already 4.7:1+ and are untouched.
+const PALETTE = ['#ff5c5c', '#3aa0e0', '#e0a020', '#a97ae0', '#20a060', '#e05090']
 
 // preview: true mounts this component read-only-ish for a host building the
 // question (SlideEditor's live phone preview) — taps still animate locally so
@@ -161,7 +166,7 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
           ))}
         </div>
       </div>
-      <p style={{ color: `${text}55`, fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>
+      <p style={{ color: `${text}b3`, fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>
         {locked ? 'Answers locked' : 'Tap one from each side to match them'}
       </p>
       {saveFailed && !locked && (
