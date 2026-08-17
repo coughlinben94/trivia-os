@@ -658,9 +658,34 @@ export default function SlideCanvasEditor({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     clearTimeout(detectTimerRef.current)
+    // Clear stale region boxes IMMEDIATELY on a real slide switch (not on a
+    // panel resize — panelW/H changes shouldn't blank the boxes, they just
+    // need repositioning). Without this, `regions` keeps rendering the
+    // PREVIOUS slide's geometry — the canvas underneath already swapped to
+    // the new slide's real DOM (React re-renders synchronously), but this
+    // effect's own setTimeout hasn't re-measured yet. For up to 350ms a
+    // stale box (wrong size/rotation, e.g. a rotated title's box) sits on
+    // top of the new slide's actual content, and if the new slide happens
+    // to share a region id with the old one (ids like "photo"/"text" aren't
+    // slide-unique) it can even still show as "selected" with live handles.
+    // 2026-08-17, Ben: a photo's box rendered as a big rotated diamond that
+    // matched neither the photo nor anything else on screen, and text boxes
+    // "moved around constantly" while clicking between slides — both are
+    // this same stale-snapshot window, not a per-slide-type bug.
+    setRegions([])
     detectTimerRef.current = setTimeout(detectRegions, 350)
     return () => clearTimeout(detectTimerRef.current)
-  }, [slide.id, slide.type, panelW, panelH])
+  }, [slide.id, slide.type])
+
+  // Panel resize alone (same slide) just needs boxes re-measured at the new
+  // scale — no slide switch happened, so no stale-geometry risk, and
+  // clearing here would flicker the boxes on every resize tick.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    clearTimeout(detectTimerRef.current)
+    detectTimerRef.current = setTimeout(detectRegions, 350)
+    return () => clearTimeout(detectTimerRef.current)
+  }, [panelW, panelH])
 
   // If the slide switches out from under an in-progress edit, drop the edit
   // state without touching the DOM node we no longer own.
