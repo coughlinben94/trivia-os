@@ -163,7 +163,16 @@ export default function ShinyIntroScreen({ slide, theme }) {
         transition={reduce ? { duration: 0.3 } : { duration: LAND_T + 0.26, times: [0, 0.448, 0.599, 1], ease: IMPACT_EASE }}
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: `radial-gradient(ellipse 85% 65% at 50% 62%, ${SHINY_GOLD_GLOW}4d 0%, ${SHINY_GOLD_GLOW}22 38%, transparent 72%)`,
+          // Ellipse sized so the 72% transparent stop actually lands INSIDE
+          // the stage (2026-08-17, Ben: "straight lines" on left/right/
+          // bottom). At the old 85%/65% size, the gradient's own math didn't
+          // reach fully transparent until past the box edge — StageFrame's
+          // overflow:hidden then clipped the still-visible tail into a hard
+          // line instead of a soft fade. 55%/40% finishes fading by ~90% of
+          // the box in every direction, with margin to spare even against
+          // this wash's off-center 62% vertical anchor (only 38% of box
+          // height between center and the bottom edge).
+          background: `radial-gradient(ellipse 55% 40% at 50% 62%, ${SHINY_GOLD_GLOW}4d 0%, ${SHINY_GOLD_GLOW}22 38%, transparent 72%)`,
         }}
       />
 
