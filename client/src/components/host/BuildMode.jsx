@@ -17,6 +17,7 @@ import { EASE_OUT } from '../../lib/easings.js'
 const BTN = 'host-button'
 
 const SLIDE_ICON = {
+  'pre-show': '📱',
   'title': '🇺🇸', 'state-of-union': '🇺🇸', 'round-intro': '🎬', 'swing-round-intro': '🎷',
   'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆',
   'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
@@ -38,6 +39,7 @@ function getSlideLabel(slide) {
   if (type === 'team-preview') return 'Team List'
   if (type === 'team-picker') return 'Team Intro'
   if (type === 'winner-reveal') return '🥇 Winner Reveal'
+  if (type === 'pre-show') return 'Pre-Show'
   return type
 }
 

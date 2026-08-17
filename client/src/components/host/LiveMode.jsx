@@ -10,6 +10,7 @@ import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 
 const SLIDE_META = {
+  'pre-show':          { label: 'Pre-Show',    color: 'bg-sky-100 text-sky-700' },
   'title':             { label: 'Title',       color: 'bg-purple-100 text-purple-700' },
   'round-intro':       { label: 'Round Intro', color: 'bg-blue-100 text-blue-700' },
   'swing-round-intro': { label: 'Swing Intro', color: 'bg-indigo-100 text-indigo-700' },

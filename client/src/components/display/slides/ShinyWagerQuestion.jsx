@@ -3,7 +3,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
-import { WAGER_TIERS, getWagerTier, wagerOddsLine, parseWagerNumber } from '../../../lib/wagerScoring.js'
+import { WAGER_TIERS, getWagerTier, wagerOddsLine, wagerTierReachable, parseWagerNumber } from '../../../lib/wagerScoring.js'
 import { useFitToBox, WAGER_Q_FLOOR, WAGER_Q_CEIL } from '../../../lib/autoFitText.js'
 
 // Fixed tier signal colors, same rule as SHINY_GOLD: the calm → dangerous
@@ -93,11 +93,13 @@ export default function ShinyWagerQuestion({ slide, show, theme }) {
           </p>
 
           <div style={{ display: 'flex', gap: '2rem', width: '100%', maxWidth: 1400, justifyContent: 'center' }}>
-            {WAGER_TIERS.map((t, i) => (
+            {WAGER_TIERS.map((t, i) => {
+              const reachable = wagerTierReachable(t.id, teamCount)
+              return (
               <motion.div
                 key={t.id}
                 initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: 'translateY(16px)' }}
-                animate={{ opacity: 1, transform: 'translateY(0px)' }}
+                animate={{ opacity: reachable ? 1 : 0.35, transform: 'translateY(0px)' }}
                 transition={{ duration: 0.3, delay: 0.08 + i * 0.07, ease: EASE_OUT }}
                 style={{
                   flex: 1, maxWidth: 420,
@@ -117,13 +119,14 @@ export default function ShinyWagerQuestion({ slide, show, theme }) {
                 <span style={{ fontFamily: displayFont, fontSize: '2.1rem', color: TIER_TINT[t.id] }}>
                   {t.points} pts
                 </span>
-                {wagerOddsLine(t.threshold, teamCount) && (
+                {wagerOddsLine(t.id, teamCount) && (
                   <span style={{ fontFamily: bodyFont, fontSize: '1.05rem', color: `${text}80` }}>
-                    {wagerOddsLine(t.threshold, teamCount)}
+                    {wagerOddsLine(t.id, teamCount)}
                   </span>
                 )}
               </motion.div>
-            ))}
+              )
+            })}
           </div>
 
           <CountLine

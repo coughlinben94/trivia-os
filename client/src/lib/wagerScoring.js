@@ -15,6 +15,11 @@ import { normalizeRoundScore } from './scoreboardMath.js'
 // the VS16 selector (U+FE0F) appended, or some phones render them as flat
 // monochrome glyphs instead of emoji. The fire (U+1F525) is emoji by default
 // and takes no selector. Codepoints are asserted in wagerScoring.test.js.
+// Order is load-bearing: wagerTierBar() below walks this array in order and
+// assumes each entry's threshold (and point value) is strictly higher than
+// the one before it. Reordering or inserting a tier out of ascending order
+// silently produces wrong (non-monotonic) bars — nothing will crash, it'll
+// just be quietly incorrect. Keep threshold ascending safe < fire < sun.
 export const WAGER_TIERS = [
   { id: 'safe', emoji: '🕯️', label: 'Play It Safe',         points: 10, threshold: 0.50 },
   { id: 'fire', emoji: '🔥', label: 'Play With Fire',        points: 20, threshold: 0.75 },
@@ -60,23 +65,92 @@ export function teamsToBeat(threshold, teamCount) {
   return Math.ceil(threshold * (teamCount - 1))
 }
 
+// The raw teamsToBeat() ceiling can round two different tier thresholds onto
+// the SAME integer bar in a small room — e.g. at teamCount=4 (3 others),
+// Fire (75%) and Sun (90%) both ceil to 3. That makes Fire strictly
+// dominated: it demands exactly what Sun demands for two-thirds the payout,
+// so a rational team would never pick it. Ben's call (2026-08-16): always
+// resolve a collision by pushing the HARDER tier up, never by loosening the
+// easier one — Sun should always cost strictly more effort than Fire, Fire
+// strictly more than Safe, even if that pushes Sun's bar past what's
+// reachable in a tiny room (better an occasionally-unreachable top tier than
+// a tier nobody should ever pick).
+//
+// Walks WAGER_TIERS in their defined (ascending-threshold) order and bumps
+// each tier's raw bar up to at least one more than the previous tier's
+// already-adjusted bar. Recomputes all three every call — cheap, and the
+// alternative (memoizing per teamCount) isn't worth the cache-invalidation
+// surface for a number computed a handful of times per wager reveal.
+export function wagerTierBar(tierId, teamCount) {
+  // Same "nothing to separate" case teamsToBeat itself short-circuits on —
+  // a lone (or empty) room has no others to beat, so every tier's bar stays
+  // 0 rather than getting bumped apart from tiers that don't reach it either.
+  if (!Number.isFinite(teamCount) || teamCount <= 1) return 0
+  let prevBar = -1
+  let safeBar = 0
+  for (const tier of WAGER_TIERS) {
+    const raw = teamsToBeat(tier.threshold, teamCount)
+    const bar = Math.max(raw, prevBar + 1)
+    if (tier.id === 'safe') safeBar = bar
+    if (tier.id === tierId) return bar
+    prevBar = bar
+  }
+  // Unknown/missing tierId — no live caller can hit this today (WagerBoard,
+  // ShinyWagerQuestion, and scoreWagerRound all source ids from WAGER_TIERS
+  // or getWagerTier), but getWagerTier's own fallback for a bad id is Safe,
+  // not "no bar at all" — matching that here means a hypothetical bad id
+  // scores like Safe instead of silently clearing every tier's bar (0 would
+  // mean "everyone wins", the worst possible default).
+  return safeBar
+}
+
+// Is this tier mathematically reachable at all in a room this size? The
+// collision bump (above) can push a bar past teamCount - 1 others — Ben's
+// accepted tradeoff for keeping tiers strictly separated — but a team should
+// never be shown a tier as pickable/winnable when it cannot pay out no
+// matter how good their guess is.
+export function wagerTierReachable(tierId, teamCount) {
+  if (!Number.isFinite(teamCount) || teamCount < 1) return true // unknown yet — don't block on it
+  if (teamCount === 1) return true
+  return wagerTierBar(tierId, teamCount) <= teamCount - 1
+}
+
 // "Beat 6 of 11 teams" — the win bar as a real head count, never a percentage.
-// The count comes from teamsToBeat(), the same function the scorer uses, so
+// The count comes from wagerTierBar(), the SAME function the scorer uses, so
 // the bar a team is shown before it wagers and the bar applied at lock time
-// are one rule, not two roundings of one idea.
+// are one rule, not two roundings of one idea — including the tier-collision
+// bump (see wagerTierBar's own comment).
 //
 // The denominator is the OTHER teams (teamCount - 1) — who a team is actually
 // measured against. teamCount here is tonight's REGISTERED teams, while the
 // scorer's pool is the teams that actually submitted a guess, so if part of
-// the room never answers the real bar ends up easier than this line promised.
-// That's the right direction to err for a number shown before anyone has
-// answered. Returns null while the count is still unknown, so the caller can
-// render nothing rather than a wrong number.
-export function wagerOddsLine(threshold, teamCount) {
+// the room never answers, the real bar at lock time differs from this line's
+// promise.
+//
+// At teamCount >= 5 that gap only ever errs EASY (fewer real answerers means
+// a lower bar than shown) — the comment this replaces claimed that
+// unconditionally, which was true before the collision bump above existed.
+// It no longer is: below 5 teams the bump can make a bar UNREACHABLE, and
+// losing answerers only pushes an already-small pool smaller, so the gap can
+// err either direction there. wagerTierReachable() is the actual guard
+// against the dangerous case (a tier shown as live that cannot pay) — this
+// function no longer tries to guarantee a direction on its own.
+//
+// Returns null while the count is still unknown, so the caller can render
+// nothing rather than a wrong number.
+export function wagerOddsLine(tierId, teamCount) {
   if (!Number.isFinite(teamCount) || teamCount < 1) return null
   if (teamCount === 1) return 'Only team here — any wager pays'
   const others = teamCount - 1
-  return `Beat ${teamsToBeat(threshold, teamCount)} of ${others} team${others === 1 ? '' : 's'}`
+  const bar = wagerTierBar(tierId, teamCount)
+  // The collision bump (see wagerTierBar) can legitimately push a bar past
+  // what this room can ever reach — a tiny room with a Sun bar of 3 but only
+  // 1 other team to beat. Ben: a team must never be shown a tier as pickable
+  // when it can't pay out — the caller (WagerBoard/ShinyWagerQuestion) uses
+  // wagerTierReachable() to disable/gray this tier entirely, so this string
+  // only needs to be honest, not persuasive.
+  if (bar > others) return 'Not in play tonight — too few teams'
+  return `Beat ${bar} of ${others} team${others === 1 ? '' : 's'} to win`
 }
 
 // Ranks every entry and applies each team's wagered tier. `entries` is
@@ -116,8 +190,9 @@ export function scoreWagerRound({ entries, correctAnswer }) {
     const beaten = pool.filter(o => o.distance > r.distance).length
     const better = pool.filter(o => o.distance < r.distance).length
     const tier = getWagerTier(r.tier)
-    // A lone answering team has nobody to beat, so it clears every bar.
-    const won = beaten >= teamsToBeat(tier.threshold, n)
+    // A lone answering team has nobody to beat, so it clears every bar
+    // (wagerTierBar's own teamCount<=1 short-circuit).
+    const won = beaten >= wagerTierBar(tier.id, n)
     return {
       ...r,
       beaten,

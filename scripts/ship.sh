@@ -20,6 +20,18 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
+# 2026-08-16: this script only ever ran e2e smoke (host-smoke.spec.js) and
+# non-blocking ring-verify — the entire vitest unit suite (pure-logic files:
+# wagerScoring.test.js, skyRegions.test.js, scoreboardMath.test.js, etc.)
+# never ran as part of shipping at all. A gate that skips the fast, cheap
+# checks and only runs the slow e2e one catches "the app loads" but not "the
+# scoring math is right" — exactly the class of bug the wager tier-collision
+# fix and its adversarial critique found tonight. Blocking: it's fast
+# (~200ms) and runs before the expensive build/preview/e2e steps, so a
+# logic regression fails in under a second instead of after a full build.
+echo "ship: running unit tests..."
+npm run test:unit
+
 # ring-verify.mjs (concepts/ART-DIRECTION-SPEC.md gate) — runs on every ship
 # so it can't silently rot unrun (a gate nobody runs does not exist).
 #
