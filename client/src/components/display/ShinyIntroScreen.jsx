@@ -346,7 +346,7 @@ export default function ShinyIntroScreen({ slide, theme }) {
           fontSize: 'clamp(2.75rem, 6.5cqw, 6rem)',
           fontWeight: 700,
           lineHeight: 1.08,
-          textShadow: `0 3px 0 rgba(0,0,0,0.25), 0 2px 21.6px ${SHINY_GOLD_GLOW}80`,
+          textShadow: `0 3px 0 rgba(0,0,0,0.25), 0 2px 10px ${SHINY_GOLD_GLOW}40`,
         }}
       >
         {title}

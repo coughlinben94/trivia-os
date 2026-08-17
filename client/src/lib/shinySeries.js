@@ -63,3 +63,17 @@ export function isMatchingShiny(data) {
 export function isWagerShiny(data) {
   return data.shinyInputSchema?.type === 'wager'
 }
+
+// True when two slides are separate top-level slide objects that together
+// make up one shiny "run" — e.g. an image-type format where the host asked
+// for N slides (one image each) instead of N parts on one slide. Same round,
+// same format, same series title, both flagged isSeries. Used to (a) only
+// play the ShinyIntroScreen announce beat once per run instead of once per
+// slide, and (b) collapse the run into one group in the host's slide list.
+export function isShinySeriesSibling(a, b) {
+  const ad = a?.data, bd = b?.data
+  if (!ad?.isShiny || !bd?.isShiny || !ad.isSeries || !bd.isSeries) return false
+  if (a.roundId !== b.roundId) return false
+  if (!ad.shinyFormatId || ad.shinyFormatId !== bd.shinyFormatId) return false
+  return !!ad.seriesTheme && ad.seriesTheme === bd.seriesTheme
+}

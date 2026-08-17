@@ -1,5 +1,22 @@
 import { useState, useRef } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
+import { isShinySeriesSibling } from '../../lib/shinySeries.js'
+
+// Clusters consecutive slides in a round that form one shiny series run
+// (separate top-level slides, e.g. an image format the host asked for N
+// slides on) into groups. Runs of length 1 are just that slide on its own.
+function groupSeriesRuns(slidesArr) {
+  const groups = []
+  slidesArr.forEach((slide, idx) => {
+    const last = groups[groups.length - 1]
+    if (last && isShinySeriesSibling(last.leadSlide, slide)) {
+      last.items.push({ slide, idx })
+    } else {
+      groups.push({ leadSlide: slide, items: [{ slide, idx }] })
+    }
+  })
+  return groups
+}
 
 const SLIDE_TYPE_META = {
   'pre-show':          { label: 'Pre-Show',         icon: '📱' },
@@ -48,6 +65,14 @@ export default function RoundSidebar({
   onReorderRounds,
 }) {
   const [collapsedRounds, setCollapsedRounds] = useState(() => new Set(show?.rounds?.map(r => r.id) ?? []))
+  const [expandedGroups, setExpandedGroups] = useState(() => new Set())
+  function toggleGroup(id) {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
   const [renamingRound, setRenamingRound] = useState(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [confirmDeleteRound, setConfirmDeleteRound] = useState(null)
@@ -436,27 +461,50 @@ export default function RoundSidebar({
               {/* Slides */}
               {!collapsed && (
                 <div className="pb-1">
-                  {slides.map((slide, slideIdx) => {
-                    const tIdx = blocks.findIndex(bl => bl.slides.some(s => s.id === slide.id))
-                    const over = dragOverId === slide.id && dragOverType === 'slide'
-                    // Within-round: block indices are equal, compare position inside the round instead
+                  {groupSeriesRuns(slides).map(group => {
                     const draggedSlideIdx = dragged ? slides.findIndex(s => s.id === dragged.id) : -1
-                    const withinRound = draggedBIdx === tIdx && draggedSlideIdx !== -1
-                    const before = over && (withinRound ? draggedSlideIdx > slideIdx : draggedBIdx > tIdx)
-                    const after  = over && (withinRound ? draggedSlideIdx < slideIdx : draggedBIdx < tIdx)
+
+                    function rowFor(slide, slideIdx, extraProps) {
+                      const tIdx = blocks.findIndex(bl => bl.slides.some(s => s.id === slide.id))
+                      const over = dragOverId === slide.id && dragOverType === 'slide'
+                      // Within-round: block indices are equal, compare position inside the round instead
+                      const withinRound = draggedBIdx === tIdx && draggedSlideIdx !== -1
+                      const before = over && (withinRound ? draggedSlideIdx > slideIdx : draggedBIdx > tIdx)
+                      const after  = over && (withinRound ? draggedSlideIdx < slideIdx : draggedBIdx < tIdx)
+                      return (
+                        <SlideRow
+                          key={slide.id}
+                          slide={slide}
+                          selected={slide.id === selectedSlideId}
+                          dragging={dragged?.id === slide.id}
+                          dragBefore={before}
+                          dragAfter={after}
+                          onSelect={() => onSelectSlide(slide)}
+                          onDelete={() => onDeleteSlide(slide.id)}
+                          onGripDown={e => handleGripDown(e, slide.id, 'slide')}
+                          indent
+                          {...extraProps}
+                        />
+                      )
+                    }
+
+                    if (group.items.length === 1) {
+                      const { slide, idx } = group.items[0]
+                      return rowFor(slide, idx)
+                    }
+
+                    const groupId = group.leadSlide.id
+                    const expanded = expandedGroups.has(groupId)
+                    const { slide: leadSlide, idx: leadIdx } = group.items[0]
                     return (
-                      <SlideRow
-                        key={slide.id}
-                        slide={slide}
-                        selected={slide.id === selectedSlideId}
-                        dragging={dragged?.id === slide.id}
-                        dragBefore={before}
-                        dragAfter={after}
-                        onSelect={() => onSelectSlide(slide)}
-                        onDelete={() => onDeleteSlide(slide.id)}
-                        onGripDown={e => handleGripDown(e, slide.id, 'slide')}
-                        indent
-                      />
+                      <div key={groupId}>
+                        {rowFor(leadSlide, leadIdx, {
+                          groupCount: group.items.length,
+                          groupExpanded: expanded,
+                          onToggleGroup: () => toggleGroup(groupId),
+                        })}
+                        {expanded && group.items.slice(1).map(({ slide, idx }) => rowFor(slide, idx, { doubleIndent: true }))}
+                      </div>
                     )
                   })}
                 </div>
@@ -487,7 +535,7 @@ export default function RoundSidebar({
   )
 }
 
-function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, onDelete, onGripDown, indent }) {
+function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, onDelete, onGripDown, indent, doubleIndent, groupCount, groupExpanded, onToggleGroup }) {
   const meta  = SLIDE_TYPE_META[slide.type] ?? { icon: '📄', label: slide.type }
   const icon  = slide.data?.isShiny ? '✨' : meta.icon
   const label = slideLabel(slide)
@@ -497,7 +545,7 @@ function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, 
       data-slide-id={slide.id}
       className={`group flex items-center gap-2 px-3 cursor-grab active:cursor-grabbing transition-colors select-none ${
         selected ? '' : 'hover:bg-gray-100'
-      } ${indent ? 'ml-4' : ''} ${dragging ? 'opacity-40' : ''} ${dragBefore ? 'border-t-2 border-t-blue-400' : ''} ${dragAfter ? 'border-b-2 border-b-blue-400' : ''}`}
+      } ${doubleIndent ? 'ml-8' : indent ? 'ml-4' : ''} ${dragging ? 'opacity-40' : ''} ${dragBefore ? 'border-t-2 border-t-blue-400' : ''} ${dragAfter ? 'border-b-2 border-b-blue-400' : ''}`}
       style={{
         height: 36,
         ...(selected && { background: 'linear-gradient(to right, rgba(34,197,94,0.16), transparent)' }),
@@ -514,10 +562,22 @@ function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, 
       >
         ⠿
       </span>
+      {groupCount != null && (
+        <button
+          onClick={e => { e.stopPropagation(); onToggleGroup() }}
+          className="text-gray-400 hover:text-gray-600 w-4 h-4 flex items-center justify-center text-[8px] shrink-0 rounded hover:bg-gray-200 host-button"
+          title={groupExpanded ? 'Collapse slides' : 'Show slides after title card'}
+        >
+          {groupExpanded ? '▼' : '▶'}
+        </button>
+      )}
       <span className="text-sm shrink-0 leading-none">{icon}</span>
       <span className={`text-sm flex-1 truncate ${selected ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
         {label}
       </span>
+      {groupCount != null && (
+        <span className="text-[10px] text-gray-400 shrink-0 tabular-nums">{groupCount}</span>
+      )}
       <button
         onClick={e => { e.stopPropagation(); onDelete() }}
         className="text-[11px] opacity-0 group-hover:opacity-100 shrink-0 transition-opacity w-4 h-4 flex items-center justify-center rounded text-gray-400 hover:text-red-500"

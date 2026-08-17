@@ -6,6 +6,7 @@ import { deriveRoundCols, computeTotal, roundScoreTotal } from '../lib/scoreboar
 import { renumberRoundQuestions } from '../lib/questionNumbering.js'
 import { trackWrite } from '../lib/writeTracking.js'
 import { HOST_PHOTOS_BUCKET, listHostPhotos } from '../lib/hostPhotos.js'
+import { isShinySeriesSibling } from '../lib/shinySeries.js'
 
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 const SHOW_MEDIA_BUCKET = 'trivia-show-media'
@@ -696,7 +697,11 @@ export function useShow() {
     if (target === cur) return
     const targetSlide = sorted[target]
     const bakedSlides = await bakeTeamPickerParts(show.slides, targetSlide)
-    const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === targetSlide?.id) ?? targetSlide, { currentPart: 0, introDone: false })
+    // A run of separate sibling slides sharing one shiny series (e.g. an
+    // image format where the host asked for N slides) already showed its
+    // announce beat on the first slide of the run — skip it on the rest.
+    const skipIntro = isShinySeriesSibling(curSlide, targetSlide)
+    const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === targetSlide?.id) ?? targetSlide, { currentPart: 0, introDone: skipIntro })
     setShow(s => ({
       ...s,
       slides: newSlides,
