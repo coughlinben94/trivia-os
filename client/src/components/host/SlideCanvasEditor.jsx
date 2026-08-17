@@ -545,6 +545,40 @@ export default function SlideCanvasEditor({
     document.addEventListener('pointercancel', onUp)
   }
 
+  // Region resize — media regions only (currently just "photo"). Text
+  // regions size themselves off content/fitToBox and were never resizable;
+  // this mirrors startOverlayResize's radial-scale-around-center approach
+  // (rotation-invariant — a corner drag scales, it doesn't fight the current
+  // rotate handle) but writes into the same _regionTransforms bucket move/
+  // rotate already use, rather than the separate overlays[] model.
+  function startRegionScale(e, region) {
+    e.stopPropagation(); e.preventDefault()
+    const oRect = overlayRef.current.getBoundingClientRect()
+    const rt = data._regionTransforms ?? {}
+    const curDx = rt[region.id]?.dx ?? 0
+    const curDy = rt[region.id]?.dy ?? 0
+    const extraX = (curDx - region.baselineDx) * dynScale
+    const extraY = (curDy - region.baselineDy) * dynScale
+    const cx = oRect.left + region.x + extraX + region.w / 2
+    const cy = oRect.top + region.y + extraY + region.h / 2
+    const startDist = Math.hypot(e.clientX - cx, e.clientY - cy) || 1
+    const startScale = rt[region.id]?.scale ?? 1
+    function onMove(ev) {
+      const ratio = Math.hypot(ev.clientX - cx, ev.clientY - cy) / startDist
+      const ns = Math.min(3, Math.max(0.3, startScale * ratio))
+      setData(d => { const c = d._regionTransforms ?? {}; const n = { ...d, _regionTransforms: { ...c, [region.id]: { ...c[region.id], scale: ns } } }; scheduleSave({ data: n }); return n })
+    }
+    function onUp() {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onUp)
+      setTimeout(detectRegions, 50)
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onUp)
+  }
+
   // Edits the REAL rendered slide element in place — not a copy with
   // guessed-at styles — so gradient-clipped text, custom fonts, drop
   // shadows etc. all just work because it IS that element. Imperative
@@ -760,7 +794,16 @@ export default function SlideCanvasEditor({
                     onPointerLeave={e => { if (!isSelReg) e.currentTarget.style.borderColor = 'transparent' }}
                     onPointerDown={e => {
                       e.stopPropagation()
-                      if (selectedRegionId !== region.id) {
+                      // Media regions (currently just "photo") have no text to
+                      // edit — enterEditMode contentEditable's the wrapper span
+                      // and swallows the click, so a second click on an already-
+                      // selected photo silently ate every re-drag/re-rotate
+                      // attempt instead of starting one (2026-08-17, Ben: "I
+                      // dragged the photo, now I can't re-move it"). Always
+                      // re-select + start a move for these; only text regions
+                      // get the click-again-to-edit-copy behavior.
+                      const isMediaRegion = region.field === 'photo'
+                      if (selectedRegionId !== region.id || isMediaRegion) {
                         setSelectedRegionId(region.id); setSelectedOverlayId(null)
                       } else {
                         // preventDefault matters here: enterEditMode focuses the real
@@ -782,6 +825,19 @@ export default function SlideCanvasEditor({
                     <div title="Reset position & rotation" style={{ position: 'absolute', top: -20, left: -20, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', border: '2px solid white', cursor: 'pointer', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'white', fontWeight: 700, pointerEvents: 'auto' }}
                       onPointerDown={e => { e.stopPropagation(); const c = data._regionTransforms ?? {}; const { [region.id]: _drop, ...rest } = c; change('_regionTransforms', rest); setTimeout(detectRegions, 50) }}>×</div>
                   )}
+                  {/* Resize — media regions only (text sizes off content). Radial
+                      drag from any corner, rotation-invariant like the overlay
+                      system's own resize handles. */}
+                  {isSelReg && region.field === 'photo' && [
+                    { left: -6, top: -6, cursor: 'nwse-resize' },
+                    { right: -6, top: -6, cursor: 'nesw-resize' },
+                    { left: -6, bottom: -6, cursor: 'nesw-resize' },
+                    { right: -6, bottom: -6, cursor: 'nwse-resize' },
+                  ].map((pos, idx) => (
+                    <div key={idx} title="Resize"
+                      style={{ position: 'absolute', ...pos, width: 12, height: 12, borderRadius: 3, background: 'white', border: '2px solid #6366f1', zIndex: 1, pointerEvents: 'auto' }}
+                      onPointerDown={e => startRegionScale(e, region)} />
+                  ))}
                 </div>
               )
             })}

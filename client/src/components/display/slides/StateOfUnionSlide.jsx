@@ -113,7 +113,7 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const rt = slide.data?._regionTransforms ?? {}
-  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
+  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg) scale(${t.scale??1})`, transformOrigin: 'center', display: 'inline-block' } : {} }
 
   // fitToBox measures via canvas — a first paint before the display font
   // loads measures fallback-font metrics. This flips once web fonts are
