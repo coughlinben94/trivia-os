@@ -136,11 +136,14 @@ export default function TeamPickerSlide({ slide, show }) {
   // than surfaced, since there's no UI here to show an error in.
   const audioRef = useRef(null);
   const AUDIO_VOL = 0.55;
+  // 3s hold before the music starts (2026-08-17, Ben) — lets the slide's own
+  // entrance land first instead of music hitting on the same frame as the pop-up.
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
     a.volume = AUDIO_VOL;
-    a.play().catch(() => {});
+    const t = setTimeout(() => { a.play().catch(() => {}); }, 3000);
+    return () => clearTimeout(t);
   }, []);
 
   // live from teams table, baked on mount (everyone who scanned the QR).

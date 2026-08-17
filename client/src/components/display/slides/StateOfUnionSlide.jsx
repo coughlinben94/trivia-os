@@ -4,6 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { fitToBox, TITLE_CARD_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import DEFAULT_PHOTO from '../../../assets/state-of-union-photo.png'
+import { loadYoutubeIframeApi } from '../../host/YoutubeClipEditor.jsx'
 
 // Fixed RWB palette — deliberately NOT theme.colors, anywhere in this
 // component. "State of the Union" is patriotic by identity; it must read
@@ -108,7 +109,7 @@ function WavingGradient({ reduce }) {
   return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
 }
 
-export default function StateOfUnionSlide({ slide }) {
+export default function StateOfUnionSlide({ slide, isPreview }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const message = slide.data?.message ?? "Welcome to Trivia Night at Baynes Apple Valley. Let's get into it."
@@ -122,9 +123,74 @@ export default function StateOfUnionSlide({ slide }) {
   const [fontsReady, setFontsReady] = useState(false)
   useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
 
+  // Walkout song — a {videoId, start, end} clip, same shape/editor as
+  // Pre-Show's. UNLIKE Pre-Show (plays once, fades, auto-advances — that
+  // slide's whole job is to end when the song ends), this one loops: no
+  // fade, no advance, just seeks back to start whenever it hits end and
+  // keeps going for as long as the host stays on this slide (2026-08-17,
+  // Ben: "loop the chorus... over the state of the union slide").
+  const walkoutSong = slide?.data?.walkoutSong
+  const ytContainerRef = useRef(null)
+  const ytPlayerRef = useRef(null)
+  const ytWatchIntervalRef = useRef(null)
+
+  useEffect(() => {
+    // Never in the slide editor's preview pane — see PreShowSlide's identical guard.
+    if (!walkoutSong?.videoId || isPreview) return
+    let cancelled = false
+
+    loadYoutubeIframeApi().then(YT => {
+      if (cancelled || !ytContainerRef.current) return
+      ytPlayerRef.current = new YT.Player(ytContainerRef.current, {
+        videoId: walkoutSong.videoId,
+        width: '1',
+        height: '1',
+        playerVars: { autoplay: 1, controls: 0, playsinline: 1 },
+        events: {
+          onReady: e => {
+            if (cancelled) return
+            e.target.setVolume(100)
+            e.target.seekTo(walkoutSong.start ?? 0, true)
+            e.target.playVideo()
+            clearInterval(ytWatchIntervalRef.current)
+            ytWatchIntervalRef.current = setInterval(() => {
+              const player = ytPlayerRef.current
+              if (!player) return
+              const t = player.getCurrentTime?.() ?? 0
+              // Same duration-not-loaded-yet guard as PreShowSlide — an
+              // untrimmed clip (end: null) must not compute clipEnd=0 on
+              // the first tick and loop-restart every 250ms.
+              const duration = player.getDuration?.() ?? 0
+              const clipEnd = walkoutSong.end ?? (duration > 0 ? duration : Infinity)
+              if (clipEnd !== Infinity && t >= clipEnd) {
+                player.seekTo(walkoutSong.start ?? 0, true)
+              }
+            }, 250)
+          },
+        },
+      })
+    })
+
+    return () => {
+      cancelled = true
+      clearInterval(ytWatchIntervalRef.current)
+      try { ytPlayerRef.current?.destroy() } catch { /* already gone */ }
+      ytPlayerRef.current = null
+    }
+  }, [walkoutSong?.videoId, walkoutSong?.start, walkoutSong?.end]) // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center px-24 overflow-hidden"
       style={{ background: RWB_BLUE_DEEP }}>
+
+      {walkoutSong?.videoId && (
+        <div
+          key={`${walkoutSong.videoId}-${walkoutSong.start}-${walkoutSong.end}`}
+          style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+        >
+          <div ref={ytContainerRef} />
+        </div>
+      )}
 
       <WavingGradient reduce={reduce} />
 

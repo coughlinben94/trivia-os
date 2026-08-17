@@ -1252,6 +1252,14 @@ function StateOfUnionEditor({ data, onChange, getHostPhotos, uploadMedia }) {
         currentPhotoUrl={data.photoUrl}
         onSelectPhoto={url => onChange('photoUrl', url)}
       />
+      <Divider label="Walkout Song" />
+      <p className="text-xs text-gray-400 leading-relaxed -mt-1">
+        Optional — loops the trimmed clip for as long as this slide is on screen.
+      </p>
+      <YoutubeClipEditor
+        value={data.walkoutSong ?? null}
+        onChange={clip => onChange('walkoutSong', clip)}
+      />
     </>
   )
 }
