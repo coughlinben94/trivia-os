@@ -53,7 +53,6 @@ function ErrorScreen({ message }) {
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', padding: '2rem',
     }}>
-      <img src="/baynes-logo.svg" alt="" style={{ height: 40, opacity: 0.3, marginBottom: '1.5rem' }} />
       <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9375rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.6 }}>
         {message}
       </p>
@@ -69,7 +68,6 @@ function NoShowScreen() {
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', padding: '2rem',
     }}>
-      <img src="/baynes-logo.svg" alt="" style={{ height: 40, opacity: 0.3, marginBottom: '1.5rem' }} />
       <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9375rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.6 }}>
         No show running right now.
       </p>
@@ -245,9 +243,6 @@ function WaitingScreen({ teamName, theme, onOpenScores }) {
       padding: '2rem', fontFamily: 'DM Sans, sans-serif',
     }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', textAlign: 'center', maxWidth: 320 }}>
-
-        {/* Logo */}
-        <img src="/baynes-logo.svg" alt="Baynes Apple Valley" style={{ height: 34, opacity: 0.65 }} />
 
         {/* Checkmark */}
         <motion.div

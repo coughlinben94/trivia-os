@@ -32,24 +32,6 @@ export default function RoundIntroSlide({ slide, show }) {
         }}
       />
 
-      {/* Baynes logo — centered above, 35% opacity — Section 21 */}
-      <motion.div
-        initial={{ opacity: 0, y: -16 }}
-        animate={{ opacity: 0.35, y: 0 }}
-        transition={{ duration: 0.5, ease: EASE_OUT }}
-        className="absolute pointer-events-none"
-        style={{ top: 48 }}
-      >
-        <img
-          src="/baynes-logo.svg"
-          alt=""
-          // Same fix as BaynesWatermark.jsx — brightness(0) crushed the
-          // badge's white interior lettering along with its black disc,
-          // collapsing the logo into one flat shape. invert(1) alone reads.
-          style={{ height: 56, maxWidth: '100%', filter: 'invert(1)' }}
-        />
-      </motion.div>
-
       {/* Round number — SLAM in with spring overshoot — Section 5 */}
       <motion.div
         initial={reduce ? { opacity: 0 } : { scale: 3.5, opacity: 0 }}

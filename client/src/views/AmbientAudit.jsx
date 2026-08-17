@@ -2,7 +2,6 @@ import { useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { THEMES, getTheme } from '../themes/index.js'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
-import BaynesWatermark from '../components/display/BaynesWatermark.jsx'
 import RingAmbient from '../components/display/RingAmbient.jsx'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 
@@ -43,7 +42,6 @@ export default function AmbientAudit() {
         data-theme-ready="true"
       >
         <ParticleBackground theme={theme} />
-        <BaynesWatermark />
         <div style={{
           position: 'absolute', top: 24, left: '50%', transform: 'translateX(-50%)',
           fontFamily: "'Boogaloo', sans-serif", fontSize: '3rem', color: theme.colors.text,
