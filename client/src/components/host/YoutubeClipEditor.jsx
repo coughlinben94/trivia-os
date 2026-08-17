@@ -8,7 +8,7 @@ import { extractYoutubeId } from '../../lib/youtube.js'
 // last one would ever resolve. A single shared promise means every caller
 // awaits the same load regardless of how many editors are mounted.
 let ytApiPromise = null
-function loadYoutubeIframeApi() {
+export function loadYoutubeIframeApi() {
   if (typeof window === 'undefined') return Promise.reject(new Error('no window'))
   if (window.YT?.Player) return Promise.resolve(window.YT)
   if (ytApiPromise) return ytApiPromise

@@ -64,6 +64,7 @@ function getSlidePreview(slide) {
 }
 
 const CARD_STYLE = {
+  'pre-show':       'bg-gradient-to-br from-sky-50    to-indigo-100  border-sky-200    hover:border-sky-400',
   'title':          'bg-[linear-gradient(135deg,#fecaca,#f9fafb,#bfdbfe)] border-blue-200 hover:border-blue-400',
   'state-of-union': 'bg-[linear-gradient(135deg,#fecaca,#f9fafb,#bfdbfe)] border-blue-200 hover:border-blue-400',
   'team-preview':   'bg-gradient-to-br from-indigo-50 to-violet-100 border-indigo-200 hover:border-indigo-400',

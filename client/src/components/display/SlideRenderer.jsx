@@ -14,6 +14,7 @@ import WinnerRevealSlide from './slides/WinnerRevealSlide.jsx'
 import TeamPreviewSlide from './slides/TeamPreviewSlide.jsx'
 import TeamPickerSlide, { REVEAL_S } from './slides/TeamPickerSlide.jsx'
 import GridSlide from './slides/GridSlide.jsx'
+import PreShowSlide from './slides/PreShowSlide.jsx'
 import OverlayLayer from './OverlayLayer.jsx'
 import { EASE_OUT, EASE_DROP, EASE_EXIT, EASE_PANEL } from '../../lib/easings.js'
 
@@ -144,6 +145,7 @@ const SLIDE_COMPONENTS = {
   'team-preview':      TeamPreviewSlide,
   'team-picker':       TeamPickerSlide,
   'grid':              GridSlide,
+  'pre-show':          PreShowSlide,
 }
 
 export default function SlideRenderer({ slide, show, direction, isPreview = false }) {
@@ -190,7 +192,7 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
   // lock; what the lock still catches is a dropdown-picked transition or
   // the reduced-motion dissolve, which for this slide become a hard cut to
   // black instead of a fade-up through the world.
-  if (slide?.type === 'team-picker' || slide?.type === 'state-of-union' || slide?.type === 'grid') {
+  if (slide?.type === 'team-picker' || slide?.type === 'state-of-union' || slide?.type === 'grid' || slide?.type === 'pre-show') {
     variants = {
       initial: { ...variants.initial, opacity: 1 },
       animate: { ...variants.animate, opacity: 1 },

@@ -188,6 +188,9 @@ export default function SlideEditor({ slide, show, onUpdateSlide, onDeleteSlide,
               {slide.type === 'winner-reveal' && (
                 <WinnerRevealEditor data={data} onChange={change} />
               )}
+              {slide.type === 'pre-show' && (
+                <PreShowEditor data={data} onChange={change} />
+              )}
             </div>
           </div>
 
@@ -1185,6 +1188,24 @@ function WinnerRevealEditor({ data, onChange }) {
       <p className="text-xs text-gray-400 leading-relaxed">
         The winner is calculated live from team scores at the time the slide appears. No configuration needed — just place it last in your show order.
       </p>
+    </div>
+  )
+}
+
+function PreShowEditor({ data, onChange }) {
+  return (
+    <div className="flex flex-col gap-3 py-2">
+      <p className="text-sm text-gray-500 leading-relaxed">
+        QR code + live team count while people funnel in. Same screen the show shows automatically before it goes live — this just makes it a real, placeable slide.
+      </p>
+      <Divider label="Walkout Song" />
+      <p className="text-xs text-gray-400 leading-relaxed -mt-1">
+        Optional — loops the clip's trimmed range while this slide is up.
+      </p>
+      <YoutubeClipEditor
+        value={data.walkoutSong ?? null}
+        onChange={clip => onChange('walkoutSong', clip)}
+      />
     </div>
   )
 }

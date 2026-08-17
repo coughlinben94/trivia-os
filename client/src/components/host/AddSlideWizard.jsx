@@ -5,6 +5,7 @@ import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import { archiveQuestion } from '../../lib/archiveQuestion.js'
 
 export const TYPE_CARDS = [
+  { type: 'pre-show',       icon: '📱', name: 'Pre-Show',            desc: 'QR code + team count while people join' },
   { type: 'state-of-union', icon: '🇺🇸', name: 'State of the Union', desc: 'Opening address to the crowd' },
   { type: 'team-picker',    icon: '🚀', name: 'Team Intro',            desc: 'Cinematic one-by-one team intro' },
   { type: 'round-intro',    icon: '🎬', name: 'Round Intro',          desc: 'Dramatic round opener' },
