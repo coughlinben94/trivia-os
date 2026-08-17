@@ -597,6 +597,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
   const arcRef = useRef(null)
   const offsetRef = useRef({})
   const stationRef = useRef(0)
+  const debugLabelRef = useRef(null)
   const busyRef = useRef(false)
   const queuedTurnsRef = useRef(0)
   const turnTimerRef = useRef(null)
@@ -996,6 +997,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
       // animates as a visible rewind instead of snapping.
       void stage.offsetWidth
       stationRef.current = (stationRef.current + 1) % ENGINE.PANES
+      if (debugLabelRef.current) debugLabelRef.current.textContent = `S${stationRef.current}`
       layoutScrim(stationRef.current)
       // Still animated on the wrap branch: the wrap snaps the PAN (a rewind
       // across a whole cylinder would read as one), but the sky is decoupled
@@ -1011,6 +1013,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
     ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] += L.surge })
     writeOffsets()
     stationRef.current = (stationRef.current + 1) % ENGINE.PANES
+    if (debugLabelRef.current) debugLabelRef.current.textContent = `S${stationRef.current}`
     layoutScrim(stationRef.current)
     // Fired in the same tick the pan starts, but on a longer duration and a
     // milder curve, so the sky is still settling ~900ms after the pan lands.
@@ -1053,6 +1056,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
       ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] = (offset[L.id] + L.surge) % cylinderOf(ENGINE, L) })
       stationRef.current = (stationRef.current + 1) % ENGINE.PANES
     }
+    if (debugLabelRef.current) debugLabelRef.current.textContent = `S${stationRef.current}`
     // A jump that interrupts a wrap glide before its deferred modulo reset
     // can arrive here with offset === cylinder (legit mid-wrap state). Left
     // un-modded, the NEXT turn() would misread it as another wrap. No-op in
@@ -1087,6 +1091,23 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
         id="design"
         style={{ position: 'absolute', left: 0, top: 0, width: ENGINE.W, height: ENGINE.H, transformOrigin: '0 0', overflow: 'hidden' }}
       />
+      {/* Debug station readout (2026-08-17, Ben: "a faux # somewhere so I
+          know it's a transition from s0-s1") — plain DOM text, updated
+          imperatively at the same 3 sites stationRef.current itself is
+          written (turn()'s reduced/normal branches, jumpTo()), never React
+          state — same "never a prop, never a re-render" rule as everything
+          else on this component. Not gated behind a debug flag: he wants it
+          on to visually confirm transitions during tomorrow's show. */}
+      <div
+        ref={debugLabelRef}
+        style={{
+          position: 'absolute', top: 8, left: 8, zIndex: 999,
+          fontFamily: 'monospace', fontSize: 13, color: 'rgba(255,255,255,0.55)',
+          textShadow: '0 1px 2px rgba(0,0,0,0.9)', pointerEvents: 'none',
+        }}
+      >
+        S0
+      </div>
     </div>
   )
 })
