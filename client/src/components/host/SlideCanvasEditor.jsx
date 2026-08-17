@@ -780,13 +780,27 @@ export default function SlideCanvasEditor({
               const curDx = rt[region.id]?.dx ?? 0
               const curDy = rt[region.id]?.dy ?? 0
               const curRot = rt[region.id]?.rotate ?? 0
+              const curScale = rt[region.id]?.scale ?? 1
               const extraX = (curDx - region.baselineDx) * dynScale
               const extraY = (curDy - region.baselineDy) * dynScale
-              const hasTransform = !!(rt[region.id]?.dx || rt[region.id]?.dy || rt[region.id]?.rotate)
+              // Selection box didn't track a live resize (2026-08-17, Ben:
+              // "the window around the image constantly moves to diff
+              // locations, doesn't stay consistent") — region.w/h come from
+              // the last detectRegions() snapshot, which only re-runs 50ms
+              // after pointerup, so the box stayed the OLD size through the
+              // whole drag and snapped afterward. The real element scales
+              // from its own center (transformOrigin: center in xf()), so
+              // the box now scales the same way here: grow/shrink around
+              // the same center point rather than from a fixed corner.
+              const boxW = region.w * curScale
+              const boxH = region.h * curScale
+              const scaleOffsetX = (region.w - boxW) / 2
+              const scaleOffsetY = (region.h - boxH) / 2
+              const hasTransform = !!(rt[region.id]?.dx || rt[region.id]?.dy || rt[region.id]?.rotate || (rt[region.id]?.scale && rt[region.id].scale !== 1))
               return (
                 <div
                   key={region.id}
-                  style={{ position: 'absolute', left: region.x + extraX, top: region.y + extraY, width: region.w, height: region.h, transform: `rotate(${curRot}deg)`, transformOrigin: 'center', zIndex: 48 }}
+                  style={{ position: 'absolute', left: region.x + extraX + scaleOffsetX, top: region.y + extraY + scaleOffsetY, width: boxW, height: boxH, transform: `rotate(${curRot}deg)`, transformOrigin: 'center', zIndex: 48 }}
                 >
                   <div
                     style={{ position: 'absolute', inset: 0, border: isSelReg ? '2px solid rgba(99,102,241,0.9)' : '1px dashed transparent', borderRadius: 2, cursor: isSelReg ? 'move' : 'default', boxSizing: 'border-box', transition: 'border-color 0.15s', pointerEvents: 'auto' }}
