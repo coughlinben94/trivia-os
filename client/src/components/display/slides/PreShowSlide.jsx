@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
-import BaynesWatermark from '../BaynesWatermark.jsx'
 import { PRESHOW_BEN_PHOTO } from '../../shared/BenPhoto.jsx'
 import { supabase } from '../../../lib/supabase.js'
 import { loadYoutubeIframeApi } from '../../host/YoutubeClipEditor.jsx'
@@ -243,8 +242,6 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
           }}
         />
       </div>
-
-      <BaynesWatermark />
     </div>
   )
 }

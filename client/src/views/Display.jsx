@@ -6,7 +6,6 @@ import { supabase } from '../lib/supabase.js'
 import { ThemeProvider, useTheme } from '../components/shared/ThemeProvider.jsx'
 import SlideRenderer from '../components/display/SlideRenderer.jsx'
 import QuestionCounter from '../components/display/QuestionCounter.jsx'
-import BaynesWatermark from '../components/display/BaynesWatermark.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
 import JukeboxBreakOverlay from '../components/display/JukeboxBreakOverlay.jsx'
@@ -48,7 +47,6 @@ function WaitingScreen() {
           margin: 0,
         }}>Starting soon</p>
       </div>
-      <BaynesWatermark />
     </div>
   )
 }
@@ -232,8 +230,6 @@ function PreShowScreen({ show, onInstall }) {
           + Add to Dock
         </button>
       )}
-
-      <BaynesWatermark />
     </div>
   )
 }
@@ -466,7 +462,6 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
       {/* z-50: persistent overlays — always on top */}
       <QuestionCounter slide={currentSlide} show={show} />
       <AnswerRevealOverlay show={show} currentSlide={currentSlide} />
-      <BaynesWatermark />
 
       {/* Break music — above everything except the nav-denied banner (z-200).
           Teardown on external advance is automatic: the host advancing from

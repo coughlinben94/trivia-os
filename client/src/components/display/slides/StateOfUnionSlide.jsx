@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
-import BaynesWatermark from '../BaynesWatermark.jsx'
 import { fitToBox, TITLE_CARD_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import DEFAULT_PHOTO from '../../../assets/state-of-union-photo.png'
@@ -158,6 +157,27 @@ export default function StateOfUnionSlide({ slide }) {
       )}
 
       <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
+        {/* Fixed title — always reads "State of the Union" regardless of the
+            editable message below (2026-08-17, Ben: the slide wasn't saying
+            it anywhere on screen). Not slide.data-driven, same way a shiny
+            question's format label isn't host-editable. */}
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 0.85, y: 0 }}
+          transition={{ duration: 0.4, ease: EASE_OUT }}
+          style={{
+            fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
+            fontSize: '1.1rem',
+            fontWeight: 700,
+            letterSpacing: '0.28em',
+            textTransform: 'uppercase',
+            color: RWB_WHITE,
+            marginBottom: '1rem',
+          }}
+        >
+          State of the Union
+        </motion.div>
+
         {/* Message — RWB gradient text, springs in tilted like a campaign sign */}
         <span data-slide-region="message" data-slide-field="message" style={xf('message')}>
           <motion.p
@@ -186,8 +206,6 @@ export default function StateOfUnionSlide({ slide }) {
           </motion.p>
         </span>
       </div>
-
-      <BaynesWatermark />
     </div>
   )
 }

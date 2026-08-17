@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { supabase } from '../../../lib/supabase.js';
 import { useTheme } from '../../shared/ThemeProvider.jsx';
 import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js';
-import BaynesWatermark from '../BaynesWatermark.jsx';
 
 const DISP_CAP = 150, SS = 1.6;
 const CAP = DISP_CAP * SS, MAXW = 1520 * SS;
@@ -437,7 +436,6 @@ export default function TeamPickerSlide({ slide, show }) {
           {String(hudIdx).padStart(2, '0')} / {String(teamCount).padStart(2, '0')}
         </div>
       ) : null}
-      <BaynesWatermark />
     </div>
   );
 }
