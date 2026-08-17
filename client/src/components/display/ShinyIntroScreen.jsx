@@ -7,24 +7,30 @@ import { listSharedHostPhotos } from '../../lib/hostPhotos.js'
 // Every shiny question/grid gets a standalone beat before its content — a pure
 // announcement, no question/answer/media yet, giving the host room to set
 // up what's coming. Modeled on the deck's yellow "shiny round title card"
-// slides (tilted handwritten-style title, Ben photo lower-left, format icon
-// lower-right) but reworked to fit the app's per-show theme system instead
-// of a hardcoded color, and to stay ambient rather than full-bleed — the
-// ParticleBackground mounted behind every slide (Display.jsx) should still
-// read through around the edges, not get covered by a flat color block.
+// slides (tilted handwritten-style title, Ben photo lower-left) but reworked
+// to fit the app's per-show theme system instead of a hardcoded color, and
+// to stay ambient rather than full-bleed — the ParticleBackground mounted
+// behind every slide (Display.jsx) should still read through around the
+// edges, not get covered by a flat color block.
 //
 // Entrance choreography ported from the approved WAAPI prototype
 // (shiny-spin-land-drop.html, Ben-approved after two slow-down corrections):
 // title spins in through ~1 tame rotation while scaling up, lands at
 // LAND_T with a two-oscillation spring "boing", a gold burst ring + 8
-// sparks fire at impact, then the format icon stamps in and the host photo
-// rockets up from below the frame — sequenced, not simultaneous. Keyframe
-// values, offsets, and durations are the prototype's numbers (linear-eased
-// tracks map exactly via Framer's times arrays). Two deliberate
-// divergences: the burst/sparks fire AT the landing instant rather than
-// the prototype's early-warped timing (see IMPACT_EASE note below), and
-// the glow settles at full opacity to match this screen's shipped
-// always-on wash instead of the prototype's 0.55.
+// sparks fire at impact, then the host photo rockets up from below the frame
+// — sequenced, not simultaneous. Keyframe values, offsets, and durations are
+// the prototype's numbers (linear-eased tracks map exactly via Framer's
+// times arrays). Two deliberate divergences: the burst/sparks fire AT the
+// landing instant rather than the prototype's early-warped timing (see
+// IMPACT_EASE note below), and the glow settles at full opacity to match
+// this screen's shipped always-on wash instead of the prototype's 0.55.
+//
+// The format-icon badge (prototype "iconBadge" track) was removed from this
+// screen 2026-08-17 (Ben: format icons are a backend/host-only affordance —
+// they identify a format in the editor, not something the audience needs on
+// the TV). `data.shinyFormatIcon` still exists and is still shown in
+// RoundSidebar/AddSlideWizard/FormatLibrary — only this display-facing badge
+// is gone.
 //
 // Shared by QuestionSlide.jsx (question type) and GridSlide.jsx (grid type)
 // — any isShiny slide type can gate its content on `data.introDone` and
@@ -72,7 +78,6 @@ export default function ShinyIntroScreen({ slide, theme }) {
   const { data } = slide
   const reduce = useReducedMotion()
   const title = data.seriesTheme || data.shinyFormatName || 'Shiny Question'
-  const icon = data.shinyFormatIcon || '✨'
 
   // Same drag/rotate/resize region system StateOfUnionSlide's photo already
   // uses (SlideCanvasEditor's [data-slide-region] detection — generic, no
@@ -262,42 +267,6 @@ export default function ShinyIntroScreen({ slide, theme }) {
         style={{ height: '100%', objectFit: 'contain', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.4))' }}
       />
       </div>
-
-      {/* Format icon badge — lower-right, stamps in hard right after landing
-          with its own overshoot wobble (prototype "iconBadge" track) */}
-      <motion.div
-        initial={reduce ? { opacity: 0, scale: 1, rotate: 0 } : { opacity: 0, scale: 0.4, rotate: -24 }}
-        animate={
-          reduce
-            ? { opacity: 1, scale: 1, rotate: 0 }
-            : {
-                opacity: [0, 0, 1, 1, 1, 1],
-                scale: [0.4, 0.4, 1.35, 0.92, 1.06, 1],
-                rotate: [-24, -24, 10, -4, 2, 0],
-              }
-        }
-        transition={
-          reduce
-            ? { delay: 0.3, duration: 0.4, ease: EASE_OUT }
-            : {
-                duration: LAND_T + 0.5,
-                times: [0, 0.72, 0.82, 0.9, 0.96, 1],
-                // Amplitudes here already decay (rotate 10 → 4 → 2), so only the
-                // easing needed fixing: 'linear' made the badge arrive at rest still
-                // moving and stop dead. SETTLE_ARRIVE keeps the stamp punchy (max
-                // velocity off the mark, decelerating into the 1.35 peak).
-                ease: [HOLD, SETTLE_ARRIVE, SETTLE_SWING, SETTLE_SWING, SETTLE_SWING],
-              }
-        }
-        className="absolute bottom-10 right-10 z-10 flex items-center justify-center rounded-2xl"
-        style={{
-          width: 128, height: 128,
-          background: theme.colors.bgDeep,
-          boxShadow: `0 10px 30px rgba(0,0,0,0.4), 0 0 0 2px ${theme.colors.highlight}55`,
-        }}
-      >
-        <span style={{ fontSize: '3.5rem' }}>{icon}</span>
-      </motion.div>
 
       {/* Title — big, tilted, marker-style. Spins in through one tame
           controlled turn while scaling up, lands with a two-oscillation
