@@ -185,10 +185,16 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
   // team-picker no longer has that locked background at all (see the
   // exclusion below), so for it the thing showing through is the ring-world
   // ambient — which its exit wipe reveals deliberately, and which its
-  // entrance wipe exists to cover. A fade would leak the world through a
-  // half-transparent black sheet at both ends, the exact read the exit's
-  // tail-only opacity fade was shaped to avoid. Its own entrance/exit
-  // (assigned above) are translateY-only and so are unaffected by this
+  // entrance wipe exists to cover. pre-show is excluded the same way, but
+  // for a simpler reason: it used to render its own separate
+  // ParticleBackground instance (a real bug, fixed 2026-08-16 — two
+  // concurrent ring worlds at different phases, visible seam at the stage
+  // edge), and Display.jsx already renders one persistent instance behind
+  // everything. Skipping the locked box here just lets that existing world
+  // show through instead of adding a redundant second one. A fade would
+  // leak the world through a half-transparent black sheet at both ends, the
+  // exact read the exit's tail-only opacity fade was shaped to avoid. Its
+  // own entrance/exit (assigned above) are translateY-only and so are unaffected by this
   // lock; what the lock still catches is a dropdown-picked transition or
   // the reduced-motion dissolve, which for this slide become a hard cut to
   // black instead of a fade-up through the world.
@@ -213,7 +219,7 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
           the entrance wipe cover something already covered. So this slide
           type gets no locked background; nothing else about the ambient
           mount changes. */}
-      {slide?.type !== 'team-picker' && (
+      {slide?.type !== 'team-picker' && slide?.type !== 'pre-show' && (
         <div
           className="absolute inset-0"
           style={{ background: theme.colors.bgDeep, zIndex: 0 }}

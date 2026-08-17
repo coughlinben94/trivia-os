@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
-import ParticleBackground from '../ParticleBackground.jsx'
 import BaynesWatermark from '../BaynesWatermark.jsx'
 import BenPhoto from '../../shared/BenPhoto.jsx'
 import { supabase } from '../../../lib/supabase.js'
@@ -129,11 +128,15 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
   }, [joinUrl])
 
   return (
+    // No own ambient background — Display.jsx already renders one persistent,
+    // full-viewport ParticleBackground behind the stage ("must never
+    // re-mount"). SlideRenderer skips its own locked bgDeep box for this
+    // slide type (see the team-picker precedent there) so that world shows
+    // straight through instead of a second instance painting over it.
     <div className="w-full h-full overflow-hidden relative select-none">
-      <ParticleBackground theme={theme} />
-
       {walkoutSong?.videoId && (
         <div
+          key={`${walkoutSong.videoId}-${walkoutSong.start}-${walkoutSong.end}`}
           style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
         >
           <div ref={ytContainerRef} />

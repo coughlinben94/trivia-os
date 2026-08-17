@@ -20,7 +20,13 @@ function ShowPicker({ loadShow, listShows, createShow }) {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    listShows().then(setShows)
+    listShows()
+      .then(setShows)
+      .catch(e => {
+        console.error('[ShowPicker] listShows failed:', e)
+        setShows([])
+        setError('Could not load your shows — try refreshing.')
+      })
   }, [])
 
   async function handleLoad(id) {
