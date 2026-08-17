@@ -1897,6 +1897,111 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     f.appendChild(ringHalf(0, false)) // front half — in front of the body
   }
 
+  else if (kind === 'record') {
+    // Station 12's music object (2026-08-16, Ben: the jukebox break "needs to
+    // have its own ring slot" + "add things to s13 to make it look like an
+    // actual slide that fits into the world").
+    //
+    // Built on `ring`'s already-accepted anatomy rather than a new visual
+    // grammar: same SVG-arc-in-a-viewBox idiom, same tilt (-10deg), same
+    // d-glow outer wash, same A()/E() fill scaling. A record IS a tilted
+    // disc, so that perspective language transfers directly and this object
+    // reads as a member of the same world instead of a UI icon dropped in.
+    //
+    // What makes it a record and not another planet, deliberately, since
+    // "looks like a planet" is the recurring failure this world has already
+    // hit three times (st3's blob rebuild, the far-layer washes, the
+    // occluders — all in FAILURE-LEDGER/the removal notes above):
+    //   - NO drawPlanetDisc. Vinyl is flat and self-lit; a terminator would
+    //     immediately re-read as a sphere. Every other radial-mass station
+    //     (st0/st4/st8) uses the terminator, so skipping it is the single
+    //     clearest silhouette separator available.
+    //   - real LP proportions: label 0.36 of the disc radius, grooves
+    //     stopping short of both the rim and the label.
+    //   - a raked specular sheen. This is vinyl's actual visual signature;
+    //     without it concentric rings read as a bullseye/target, which is
+    //     the exact critique that killed `ring`'s first version (see its
+    //     comment above).
+    const NS = 'http://www.w3.org/2000/svg'
+    const cx = w / 2, cy = h / 2
+    const tilt = -10 // matches `ring` — one perspective convention per world
+    const rx = Math.min(w, h) * 0.46, ry = rx * 0.34
+    const rot = `rotate(${tilt} ${cx.toFixed(1)} ${cy.toFixed(1)})`
+
+    // outer glow first so everything else paints over it — same closest-side
+    // wash and fill scaling as every other kind.
+    const glow = el('d-glow')
+    const gd = w * 0.95
+    glow.style.left = px((w - gd) / 2); glow.style.top = px((h - gd) / 2)
+    glow.style.width = glow.style.height = px(gd)
+    glow.style.background = `radial-gradient(circle closest-side, ${hsla(hue, 62, 68, A(0.28, fill))} 0%, transparent ${E(94, fill).toFixed(0)}%)`
+    f.appendChild(glow)
+
+    const svg = document.createElementNS(NS, 'svg')
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
+    svg.style.position = 'absolute'; svg.style.inset = '0'
+    svg.style.width = '100%'; svg.style.height = '100%'
+
+    const ellipse = (krx, kry, attrs) => {
+      const e = document.createElementNS(NS, 'ellipse')
+      e.setAttribute('cx', cx.toFixed(1)); e.setAttribute('cy', cy.toFixed(1))
+      e.setAttribute('rx', krx.toFixed(1)); e.setAttribute('ry', kry.toFixed(1))
+      e.setAttribute('transform', rot)
+      for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v)
+      svg.appendChild(e)
+      return e
+    }
+
+    // disc face — dark vinyl carrying the station hue at low lightness, so it
+    // belongs to the palette instead of punching a black hole in the sky.
+    ellipse(rx, ry, { fill: hsla(hue, 44, 13, A(0.92, fill)) })
+
+    // grooves: 9 concentric ellipses from the label edge (0.40) to just
+    // inside the rim (0.94), brightening outward so the disc reads as
+    // catching light at its perimeter the way a real LP does.
+    const GROOVES = 9
+    for (let g = 0; g < GROOVES; g++) {
+      const t = g / (GROOVES - 1)
+      const k = lerp(0.40, 0.94, t)
+      ellipse(rx * k, ry * k, {
+        fill: 'none',
+        stroke: hsla(hue + 6, 58, lerp(38, 72, t), A(lerp(0.14, 0.38, t), fill)),
+        'stroke-width': Math.max(1, w * 0.0025).toFixed(2),
+      })
+    }
+
+    // rim — the one crisp edge, so the silhouette closes against the sky
+    // instead of dissolving into the outermost groove.
+    ellipse(rx, ry, {
+      fill: 'none',
+      stroke: hsla(hue + 10, 76, 78, A(0.44, fill)),
+      'stroke-width': Math.max(1.5, w * 0.004).toFixed(2),
+    })
+
+    // centre label — the bright saturated core. This is the element that
+    // carries the object at frame scale and from the back of a taproom.
+    ellipse(rx * 0.36, ry * 0.36, { fill: hsla(hue, 84, 64, A(0.86, fill)) })
+    // spindle hole
+    ellipse(rx * 0.045, ry * 0.045, { fill: hsla(hue, 40, 8, 0.95) })
+
+    f.appendChild(svg)
+
+    // Specular sheen, raked across the grooves. Static — no animation — so
+    // ring-verify's freezeFrame() has nothing to pin and the safe-box p99.5
+    // stays deterministic (instruments eight and nine, FAILURE-LEDGER: every
+    // measurement bug on this project so far has been an unfrozen frame).
+    const sheen = el('rc-sheen')
+    const sw = rx * 2, sh = ry * 2
+    sheen.style.left = px(cx - sw / 2); sheen.style.top = px(cy - sh / 2)
+    sheen.style.width = px(sw); sheen.style.height = px(sh)
+    sheen.style.transform = `rotate(${tilt}deg)`
+    sheen.style.background = `linear-gradient(112deg, transparent 26%, ` +
+      `${hsla(hue + 16, 72, 84, A(0.18, fill))} 44%, ` +
+      `${hsla(hue + 16, 62, 92, A(0.26, fill))} 50%, ` +
+      `${hsla(hue + 16, 72, 84, A(0.14, fill))} 56%, transparent 74%)`
+    f.appendChild(sheen)
+  }
+
   else if (kind === 'binary') {
     // two unequal bodies + a shared halo - distinct from the unparameterized
     // dots cluster (spec §6.2: an atlas entry must be a recipe, not a bare
@@ -2820,9 +2925,26 @@ function clampSafeBoxStarPeaks(prefix, engine, designEl) {
 // never hand-authored per station.
 export const SKY_REGIONS = {
   // Hues match the objects that cause them: aurora sits on the lit
-  // planet (140) / pulsar (120) pair, ember on the supernova (36).
+  // planet (140) / pulsar (120) pair, ember on the supernova (36), disco on
+  // the record (300).
   aurora: { hue: 152, tintSat: 60, tintLight: 27, srcSat: 55, srcLight: 56 },
   ember: { hue: 26, tintSat: 66, tintLight: 28, srcSat: 62, srcLight: 56 },
+  // 2026-08-16, station 12 (Ben: "ensure that the color wiring on s13 is
+  // noticeable and fun"). Deliberately the most saturated of the three
+  // (tintSat 74 vs 60/66, one lightness step up) — this is the party moment,
+  // and the only region whose source is a manufactured object rather than an
+  // astronomical one, so it is allowed to be the loudest.
+  //
+  // Hue 300 is chosen, not arbitrary: it sits between the world's violet home
+  // (sky 268, st0 256, st2 268) and its rose accent (st6, 330), so it reads
+  // as the resident palette turned up rather than a fourth unrelated colour
+  // zone. That also serves Ben's separate standing ask for the colour themes
+  // to flow as one family instead of three disconnected ones.
+  //
+  // Side effect worth knowing before judging it live: station 0 previously
+  // carried zero region weight (the ring's flattest stretch was st0-st2).
+  // It now carries disco at 0.5 on the way out of the music station.
+  disco: { hue: 300, tintSat: 74, tintLight: 30, srcSat: 70, srcLight: 60 },
 }
 
 // "Weather, not a light switch" — a continuous weight curve across station
@@ -3069,6 +3191,12 @@ export function ringCss(prefix) {
 .${p}r-edge{position:absolute;border-radius:999px}
 
 .${p}rg-ring{position:absolute;border-radius:50%}
+
+/* record (station 12). Only the sheen needs a class — the disc/grooves/label
+   are SVG ellipses styled inline. mix-blend-mode:screen so the highlight adds
+   light to the grooves underneath instead of flatly covering them, which is
+   what separates a specular sweep from a grey smear. */
+.${p}rc-sheen{position:absolute;border-radius:50%;mix-blend-mode:screen;pointer-events:none}
 
 .${p}pair-bridge{position:absolute;height:2px;transform-origin:0 50%;pointer-events:none}
 
