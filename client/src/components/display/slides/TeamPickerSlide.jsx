@@ -136,11 +136,15 @@ export default function TeamPickerSlide({ slide, show }) {
   // than surfaced, since there's no UI here to show an error in.
   const audioRef = useRef(null);
   const AUDIO_VOL = 0.55;
-  // 3s hold before the music starts, then a slow fade-in rather than
-  // snapping straight to AUDIO_VOL (2026-08-17, Ben: "way longer", it was
-  // instant) — lets the slide's own entrance land first, then the music
-  // builds instead of hitting all at once.
+  // Synced to the first item's "approach" (the words' zoom/grow-in), not a
+  // flat timer (2026-08-17, Ben: "should start as the words get bigger" /
+  // "the fade in starts just before" — two corrections to what was
+  // originally a plain 3s delay). `covered` flips at REVEAL_S*1000 (see the
+  // entrance-hold effect below) — that's the exact moment the first item
+  // starts growing. START_LEAD_MS gets the fade audibly under way just
+  // before that instant instead of starting flush with it.
   const FADE_IN_MS = 4000;
+  const START_LEAD_MS = 200;
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -155,7 +159,7 @@ export default function TeamPickerSlide({ slide, show }) {
         if (p < 1) raf = requestAnimationFrame(step);
       };
       raf = requestAnimationFrame(step);
-    }, 3000);
+    }, Math.max(0, REVEAL_S * 1000 - START_LEAD_MS));
     return () => { clearTimeout(t); cancelAnimationFrame(raf); };
   }, []);
 
