@@ -581,7 +581,7 @@ export default function RoundSidebar({
 
 function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, onDelete, onGripDown, indent, doubleIndent, groupCount, groupExpanded, onToggleGroup, labelOverride }) {
   const meta  = SLIDE_TYPE_META[slide.type] ?? { icon: '📄', label: slide.type }
-  const icon  = meta.icon
+  const icon  = slide.data?.isShiny ? (slide.data?.shinyFormatIcon || meta.icon) : meta.icon
   const label = labelOverride ?? slideLabel(slide)
 
   return (
