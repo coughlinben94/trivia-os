@@ -52,7 +52,16 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
   // prop, never stale) fixes it — there's no second closure to go stale.
   useEffect(() => {
     flushSave()
-    const next = initialPart != null ? { ...slide.data, currentPart: initialPart } : slide.data
+    // Selecting a specific part means "show me THAT part's content" — but
+    // introDone is one flag for the whole slide (parts live inside ONE
+    // slide, not as separate slide objects), so without also setting it
+    // true here the canvas stays gated on the shiny intro screen no matter
+    // which part sub-row is clicked: currentPart only picks a part once
+    // past the intro, and nothing was ever telling it to get past the
+    // intro. Bug fixed 2026-08-17 (Ben, live: "the animation plays on each
+    // sub slide, I just want the 4 images" — every part sub-row replayed
+    // the same title-card spin-in instead of jumping straight to its image).
+    const next = initialPart != null ? { ...slide.data, currentPart: initialPart, introDone: true } : slide.data
     setData(next)
     setConfirmingDelete(false)
     if (initialPart != null) scheduleSave({ data: next })
