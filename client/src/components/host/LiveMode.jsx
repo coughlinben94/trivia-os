@@ -212,6 +212,15 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // current slide index otherwise (host navigates back manually after).
   const preShowIndex = slides.findIndex(s => s.type === 'pre-show')
 
+  // B6: the scoreboard modal (Host.jsx, fixed inset-0 z-50) renders full-screen
+  // on top of everything, including this wager panel's "Lock Answers & Score"
+  // button. Opening it mid-wager hides the exact button the host needs next —
+  // gate the modal-open trigger instead of fighting z-index against a
+  // deliberately full-screen modal.
+  const wagerActionShowing = currentSlide?.type === 'question'
+    && isWagerShiny(currentSlide?.data)
+    && !currentSlide?.data?.wagerRevealed
+
   const theme = getTheme(show.theme ?? show.theme_id)
 
   const roundsCompleted = show.rounds.filter(r => {
@@ -588,7 +597,13 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           {onOpenScoreboard && (
             <button
               onClick={onOpenScoreboard}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-sm font-semibold hover:bg-gray-200 transition-colors ml-1"
+              disabled={wagerActionShowing}
+              title={wagerActionShowing ? 'Lock/score the wager first — the scoreboard covers that button' : undefined}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ml-1 ${
+                wagerActionShowing
+                  ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
             >
               📊 Scores
             </button>
