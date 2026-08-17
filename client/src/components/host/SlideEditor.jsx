@@ -612,6 +612,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
             uploadMedia={uploadMedia}
             currentPhotoUrl={data.hostPhotoUrl}
             onSelectPhoto={url => onChange('hostPhotoUrl', url)}
+            hasRandomFallback
           />
         </>
       )}
@@ -1453,6 +1454,7 @@ function GridEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uplo
             uploadMedia={uploadMedia}
             currentPhotoUrl={data.hostPhotoUrl}
             onSelectPhoto={url => onChange('hostPhotoUrl', url)}
+            hasRandomFallback
           />
           <Divider label="Grid" />
         </>

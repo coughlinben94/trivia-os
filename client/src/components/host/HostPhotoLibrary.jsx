@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import MediaUpload from './MediaUpload.jsx'
 
-export default function HostPhotoLibrary({ getHostPhotos, uploadMedia, currentPhotoUrl, onSelectPhoto }) {
+export default function HostPhotoLibrary({ getHostPhotos, uploadMedia, currentPhotoUrl, onSelectPhoto, hasRandomFallback = false }) {
   const [photos, setPhotos] = useState([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -32,6 +32,41 @@ export default function HostPhotoLibrary({ getHostPhotos, uploadMedia, currentPh
             className="absolute -top-1.5 -right-1.5 bg-white border border-gray-200 text-gray-500 text-xs rounded-full w-5 h-5 flex items-center justify-center hover:bg-red-50 hover:text-red-500 shadow-sm"
           >
             ✕
+          </button>
+        </div>
+      ) : hasRandomFallback && currentPhotoUrl === null ? (
+        // Explicitly hidden — distinct from "unset" so it doesn't quietly
+        // fall back to a random pool photo again on the next slide mount.
+        <div className="flex items-center gap-3 mb-2">
+          <p className="text-xs text-gray-400">No photo on this slide</p>
+          <button
+            onClick={() => onSelectPhoto(undefined)}
+            className="text-xs text-baynes-forest hover:text-green-800 font-medium"
+          >
+            🎲 Use random photo
+          </button>
+          <button
+            onClick={() => setOpen(true)}
+            className="text-xs text-baynes-forest hover:text-green-800 font-medium"
+          >
+            📷 Choose photo
+          </button>
+        </div>
+      ) : hasRandomFallback ? (
+        // Unset — a random photo from the shared pool is showing live.
+        <div className="flex items-center gap-3 mb-2">
+          <p className="text-xs text-gray-400">🎲 Using a random photo</p>
+          <button
+            onClick={() => setOpen(true)}
+            className="text-xs text-baynes-forest hover:text-green-800 font-medium"
+          >
+            Choose specific…
+          </button>
+          <button
+            onClick={() => onSelectPhoto(null)}
+            className="text-xs text-gray-400 hover:text-red-500 font-medium"
+          >
+            Hide photo
           </button>
         </div>
       ) : (
