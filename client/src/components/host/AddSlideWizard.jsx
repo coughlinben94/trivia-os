@@ -199,6 +199,14 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               shinyFormatName:  selectedShinyFmt.name,
               shinyFormatIcon:  selectedShinyFmt.icon,
               shinyType:        selectedShinyFmt.input_schema?.type ?? null,
+              // Only the first of a batch of separate sibling slides should
+              // ever play the ShinyIntroScreen announce beat (useShow.js's
+              // nextSlide() also skips it live via isShinySeriesSibling, but
+              // baking it in here too means a direct jump/preview of slide 2+
+              // is correct from creation, not just during a forward advance).
+              // 2026-08-17: this exact gap left 3 sibling slides replaying
+              // the full intro animation in the editor before this existed.
+              ...(isConcurrentFmt && i > 0 ? { introDone: true } : {}),
             }
             if (isConcurrentFmt) {
               return {

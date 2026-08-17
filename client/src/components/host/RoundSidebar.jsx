@@ -5,6 +5,15 @@ import { isShinySeriesSibling } from '../../lib/shinySeries.js'
 // Clusters consecutive slides in a round that form one shiny series run
 // (separate top-level slides, e.g. an image format the host asked for N
 // slides on) into groups. Runs of length 1 are just that slide on its own.
+// Short per-type label for a series sibling row (Ben, 2026-08-17: repeating
+// the full series theme text on every sibling row is redundant and just
+// reads as noise — "P1"/"P2" for photos, "A1"/"A2" for audio, etc. is enough
+// to tell them apart once they're grouped under the shared title card).
+const SHINY_TYPE_PREFIX = { image: 'P', audio: 'A', video: 'V', list: 'L', text: 'T' }
+function shinySiblingLabel(slide, position) {
+  return `${SHINY_TYPE_PREFIX[slide.data?.shinyType] ?? 'S'}${position}`
+}
+
 function groupSeriesRuns(slidesArr) {
   const groups = []
   slidesArr.forEach((slide, idx) => {
@@ -503,7 +512,9 @@ export default function RoundSidebar({
                           groupExpanded: expanded,
                           onToggleGroup: () => toggleGroup(groupId),
                         })}
-                        {expanded && group.items.slice(1).map(({ slide, idx }) => rowFor(slide, idx, { doubleIndent: true }))}
+                        {expanded && group.items.slice(1).map(({ slide, idx }, i) =>
+                          rowFor(slide, idx, { doubleIndent: true, labelOverride: shinySiblingLabel(slide, i + 2) })
+                        )}
                       </div>
                     )
                   })}
@@ -535,10 +546,10 @@ export default function RoundSidebar({
   )
 }
 
-function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, onDelete, onGripDown, indent, doubleIndent, groupCount, groupExpanded, onToggleGroup }) {
+function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, onDelete, onGripDown, indent, doubleIndent, groupCount, groupExpanded, onToggleGroup, labelOverride }) {
   const meta  = SLIDE_TYPE_META[slide.type] ?? { icon: '📄', label: slide.type }
   const icon  = slide.data?.isShiny ? '✨' : meta.icon
-  const label = slideLabel(slide)
+  const label = labelOverride ?? slideLabel(slide)
 
   return (
     <div

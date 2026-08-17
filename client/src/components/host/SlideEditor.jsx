@@ -850,30 +850,40 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
           <Field label="Series Theme" hint='Shared across every part, e.g. "Hear Me Roar"'>
             <TextInput value={data.seriesTheme} onChange={v => onChange('seriesTheme', v)} placeholder="Hear Me Roar" />
           </Field>
-          <Field label="Shared Answer (optional)" hint="Leave blank — each part below gets its own answer. Only fill this in if every part shares ONE answer.">
-            <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="Leave blank for per-part answers" />
-          </Field>
 
-          {schema.type === 'image' && (
-            <BulkImageDropzone count={data.parts.length} onFiles={uploadBulkImages} />
+          {/* Shared Answer / bulk dropzone / part-picker chips only mean
+              anything once there's more than one part on THIS slide (Ben,
+              2026-08-17: "too complex" — these were showing even for the
+              common one-image-per-slide case, where they're pure clutter
+              since there's nothing to share/pick/bulk-fill). */}
+          {data.parts.length > 1 && (
+            <>
+              <Field label="Shared Answer (optional)" hint="Leave blank — each part below gets its own answer. Only fill this in if every part shares ONE answer.">
+                <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="Leave blank for per-part answers" />
+              </Field>
+
+              {schema.type === 'image' && (
+                <BulkImageDropzone count={data.parts.length} onFiles={uploadBulkImages} />
+              )}
+
+              <Divider label="Previewing part" />
+              <div className="flex flex-wrap gap-1.5">
+                {data.parts.map((p, i) => (
+                  <button
+                    key={i}
+                    onClick={() => onChange('currentPart', i)}
+                    className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                      (data.currentPart ?? 0) === i
+                        ? 'bg-blue-500 border-blue-500 text-white'
+                        : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    {i + 1}{p.label ? ` · ${p.label}` : ''}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
-
-          <Divider label="Previewing part" />
-          <div className="flex flex-wrap gap-1.5">
-            {data.parts.map((p, i) => (
-              <button
-                key={i}
-                onClick={() => onChange('currentPart', i)}
-                className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
-                  (data.currentPart ?? 0) === i
-                    ? 'bg-blue-500 border-blue-500 text-white'
-                    : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                {i + 1}{p.label ? ` · ${p.label}` : ''}
-              </button>
-            ))}
-          </div>
 
           <div className="space-y-3">
             {data.parts.map((part, i) => (
