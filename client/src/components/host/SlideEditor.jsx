@@ -567,8 +567,11 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
           {/* SIM-REPORT P1 (2026-08-16): fitToBox already detects this exact
               case and warns — but only to a console nobody on this team ever
               opens during a show. Same check, surfaced where Ben can
-              actually see it before it's live on the TV. */}
-          {overflowsBox(data.text, { ...QUESTION_BOX, family: theme.fonts.body }) && (
+              actually see it before it's live on the TV. Measures with the
+              "N. " number prefix included (QuestionSlide.jsx prepends it
+              automatically for non-shiny questions) so this warning matches
+              what's actually rendered, not the raw typed text. */}
+          {overflowsBox(`${data.questionNumber ? `${data.questionNumber}. ` : ''}${data.text}`, { ...QUESTION_BOX, family: theme.fonts.body }) && (
             <p className="text-xs text-amber-600 mt-1.5 leading-relaxed">
               ⚠️ This question is too long to fit the display — it'll run past its box on the TV. Shorten it.
             </p>

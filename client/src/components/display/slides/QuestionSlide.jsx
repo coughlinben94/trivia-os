@@ -20,6 +20,14 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
   const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
   const hasSeries = data.isSeries && data.seriesTheme
   const isAssemble = transitionKey === 'assemble'
+  // Regular (non-shiny) questions get their sequential number prepended
+  // automatically — questionNumber is already kept correct through
+  // reorders/deletes by renumberRoundQuestions (useShow.js), so this stays
+  // right without the host re-typing it. 2026-08-17, Ben: was hand-typing
+  // "1. "/"2. " into the question text itself and wanted it wired in
+  // instead. Shiny questions skip this — they get their own series
+  // banner/title treatment and the QuestionCounter corner badge instead.
+  const displayText = !data.isShiny && data.questionNumber ? `${data.questionNumber}. ${part.text}` : part.text
 
   // fitToBox measures via canvas — a first paint before the body font loads
   // measures fallback-font metrics. This flips once web fonts are ready purely
@@ -101,13 +109,13 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
             style={{
               color: theme.colors.text,
               fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-              fontSize: fitToBox(part.text, { ...QUESTION_BOX, family: theme.fonts.body }),
+              fontSize: fitToBox(displayText, { ...QUESTION_BOX, family: theme.fonts.body }),
               fontWeight: 500,
               maxWidth: '80ch',
               textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
             }}
           >
-            {part.text}
+            {displayText}
           </p>
         </span>
       </motion.div>
@@ -140,13 +148,18 @@ function ShinyVisualQuestion({ slide, theme }) {
   const [flashVisible, setFlashVisible] = useState(true)
 
   useEffect(() => {
-    // Flash clears after the CSS animation completes — Section 20.
-    // Re-fires on currentPart too: a multi-part series keeps the same
-    // slide.id across parts, only currentPart changes as the host advances.
+    // Flash clears after the CSS animation completes — Section 20. Keyed to
+    // slide.id ONLY (2026-08-17, Ben) — used to also re-fire on
+    // data.currentPart, so a 4-photo series played the full flash + gold
+    // glow burst on EVERY photo, not just entering the question once. That's
+    // the "main slide" theatrical treatment; advancing within one series
+    // should read as a calm cut to the next photo, not four separate
+    // entrances. The image itself still crossfades between photos (its own
+    // key={data.currentPart} below), just without the flash/burst.
     setFlashVisible(true)
     const t = setTimeout(() => setFlashVisible(false), 250)
     return () => clearTimeout(t)
-  }, [slide.id, data.currentPart])
+  }, [slide.id])
 
   function handleImageLoad(e) {
     const { naturalWidth: w, naturalHeight: h } = e.target
