@@ -516,12 +516,14 @@ function buildLayerContent(host, L){
        was deliberately deleted earlier this session for causing visible
        pops at turn boundaries; this can't reintroduce that bug class
        because .surge's own transform is never touched here.
-       3600px/480s = 7.5px/s (was 1800px/480s = 3.75px/s - technically
-       above the 2.7px/s floor but too subtle to notice unprompted;
-       doubling the travel at the same duration clears the floor with real
-       margin), crossing time = 3600/7.5 = 480s = 8min, unchanged and still
-       inside the 4-12min band; linear+alternate so it reverses cleanly at
-       each end instead of snapping back to the start. Size bumped 9->14px
+       3600px/120s = 30px/s along a sine path (2026-08-17, Ben watching the
+       pre-show live: "wayyyyy too slow", "needs to be moving at an angle",
+       "even rounded paths" - was 3600px/480s = 7.5px/s, dead-flat
+       horizontal). Crossing time is now 2min, under spec sec 7.7's authored
+       4-12min band; see ringPrimitives.js's .drift block for the full
+       reasoning, the +-55px amplitude's clearance math, and why that band
+       was overridden rather than ignored. linear+alternate so it reverses
+       cleanly at each end instead of snapping back. Size bumped 9->14px
        and given a warmer color + a bigger/stronger glow than any star can
        reach (far-layer stars top out at size 8 with box-shadow blur
        17.6px/spread 2.4px - see ringCss's .drift, blur 32px/spread 10px)

@@ -3277,10 +3277,49 @@ export function ringCss(prefix) {
 .${p}occ-rim{position:absolute;inset:0;border-radius:50%;border:5px solid var(--rim);
   border-right-color:transparent;border-bottom-color:transparent}
 
+/* 2026-08-17, Ben, live art direction watching the pre-show ring: "moving
+   wayyyyy too slow", "it needs to be moving at an angle", "even rounded
+   paths". Was 480s over 3600px of pure translateX — 7.5px/s in a dead-flat
+   horizontal line.
+   Now 120s for the same 3600px span: 30px/s, 4x faster, ~64s to cross the
+   1920px frame — a calm glide, not a manic one. x stays exactly linear
+   (300px per stop, 12 equal stops) so the speed never pulses; y traces
+   55*sin(2*PI*p) sampled every 1/12 cycle. Twelve straight segments whose
+   worst chord error against the true sine is ~1.5px on a 14px object, so it
+   reads as a real curve rather than a polyline — no offset-path needed, and
+   staying on transform keeps spec §8 (transform/opacity only) intact.
+   Amplitude 55px is the most the current placement allows in BOTH
+   directions: bandY seeds this element's top to 102.7px and its glow (blur
+   32 / spread 10) reaches ~42px, so ±55 keeps the glow on-frame at the top
+   (5.7px to spare — Ben's earlier "it was getting clipped at the top") and
+   ~100px clear of the safe box (spec §2, top edge 302.4px) at the bottom.
+   Re-check both clearances before raising it if bandY ever reseeds this
+   element. Down first, up second, so the first half of the pass moves AWAY
+   from the top edge.
+   0% is still translate(0,0), so ring-verify's freezeFrame (currentTime=0)
+   screenshots the identical pixel it always did — this change is deliberately
+   invisible to the gate.
+   Crossing time is now 2min, under spec §7.7's authored 4-12min band. That
+   band exists as a "slower than this reads as frozen" floor, has no gate
+   check behind it, and Ben overrode it directly on screen. Named here rather
+   than quietly ignored. */
 .${p}drift{position:absolute;border-radius:50%;background:#ffd9a0;
-  animation:${driftMove} 480s linear infinite alternate;
+  animation:${driftMove} 120s linear infinite alternate;
   box-shadow:0 0 32px 10px rgba(255,183,110,0.75)}
-@keyframes ${driftMove}{0%{transform:translateX(0)}100%{transform:translateX(3600px)}}
+@keyframes ${driftMove}{
+  0%{transform:translate(0,0)}
+  8.333%{transform:translate(300px,27.5px)}
+  16.667%{transform:translate(600px,47.6px)}
+  25%{transform:translate(900px,55px)}
+  33.333%{transform:translate(1200px,47.6px)}
+  41.667%{transform:translate(1500px,27.5px)}
+  50%{transform:translate(1800px,0)}
+  58.333%{transform:translate(2100px,-27.5px)}
+  66.667%{transform:translate(2400px,-47.6px)}
+  75%{transform:translate(2700px,-55px)}
+  83.333%{transform:translate(3000px,-47.6px)}
+  91.667%{transform:translate(3300px,-27.5px)}
+  100%{transform:translate(3600px,0)}}
 
 .${p}rock-spin{animation:${rockSpin} var(--rd) linear infinite}
 @keyframes ${rockSpin}{from{transform:rotate(var(--r0))}to{transform:rotate(calc(var(--r0) + var(--rspin)))}}
