@@ -148,7 +148,9 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
         events: {
           onReady: e => {
             if (cancelled) return
-            e.target.setVolume(100)
+            // 75%, not full volume (2026-08-17, Ben) — this plays under a
+            // host monologue, not as the only thing happening.
+            e.target.setVolume(75)
             e.target.seekTo(walkoutSong.start ?? 0, true)
             e.target.playVideo()
             clearInterval(ytWatchIntervalRef.current)
@@ -171,8 +173,14 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
     })
 
     return () => {
+      // Hard stop on leaving this slide (2026-08-17, Ben: "once i go to the
+      // next slide the audio should just stop") — pauseVideo before
+      // destroy() rather than relying on destroy alone, so the audio cuts
+      // the instant the host advances rather than trailing for however long
+      // destroy's own teardown takes.
       cancelled = true
       clearInterval(ytWatchIntervalRef.current)
+      try { ytPlayerRef.current?.pauseVideo() } catch { /* already gone */ }
       try { ytPlayerRef.current?.destroy() } catch { /* already gone */ }
       ytPlayerRef.current = null
     }
