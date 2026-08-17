@@ -13,11 +13,19 @@
 const ANSWER_LABEL_RE = /^\s*(answers?|ans\.?)\s*[:\-–—)\.]+\s*/i
 const ANSWER_ARROW_RE = /^\s*(→|»|>{1,2})\s*/
 
+// Word/Docs list-marker glyph, kept as literal text on plain-text paste.
+// Covers the visible bullet characters AND the Private Use Area range Word
+// uses for its Wingdings/Symbol bullet fonts — those render as a tofu/box
+// icon in a normal font (no matching glyph), which is exactly the stray
+// icon that shows up at the start of a pasted question.
+const BULLET_RE = /^\s*[•●▪◦‣∙▸►--]\s*/
+
 export function cleanPastedText(raw, { multiline = false } = {}) {
   let text = raw
     .replace(/\r\n?/g, '\n')
-    .replace(/[   ]/g, ' ')       // non-breaking space variants
+    .replace(/[  ]/g, ' ')            // non-breaking space variants
     .replace(/[​-‍﻿]/g, '')       // zero-width chars, BOM
+    .split('\n').map(line => line.replace(BULLET_RE, '')).join('\n')
   return multiline
     ? text.replace(/[ \t]+(?=\n)/g, '').replace(/\n{3,}/g, '\n\n').trim()
     : text.replace(/\s*\n\s*/g, ' ').replace(/[ \t]{2,}/g, ' ').trim()

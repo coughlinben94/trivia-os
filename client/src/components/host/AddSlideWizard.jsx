@@ -3,6 +3,7 @@ import { sortedSlides } from '../../hooks/useShow.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import { archiveQuestion } from '../../lib/archiveQuestion.js'
+import { makeQuestionPasteHandler, makeCleanPasteHandler } from '../../lib/cleanPaste.js'
 
 export const TYPE_CARDS = [
   { type: 'pre-show',       icon: '📱', name: 'Pre-Show',            desc: 'QR code + team count while people join' },
@@ -650,16 +651,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                 id="add-question-text"
                 value={questionText}
                 onChange={e => setQuestionText(e.target.value)}
-                onPaste={e => {
-                  e.preventDefault()
-                  const plain = e.clipboardData.getData('text/plain')
-                  const el    = e.target
-                  const start = el.selectionStart ?? questionText.length
-                  const end   = el.selectionEnd   ?? questionText.length
-                  const next  = questionText.slice(0, start) + plain + questionText.slice(end)
-                  setQuestionText(next)
-                  requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + plain.length })
-                }}
+                onPaste={makeQuestionPasteHandler(setQuestionText, setQuestionAnswer)}
                 placeholder="Type or paste your question…"
                 rows={4}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
@@ -675,6 +667,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                 type="text"
                 value={questionAnswer}
                 onChange={e => setQuestionAnswer(e.target.value)}
+                onPaste={makeCleanPasteHandler(setQuestionAnswer)}
                 placeholder="The answer…"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
               />
