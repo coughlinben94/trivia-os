@@ -1,6 +1,6 @@
 ---
 name: trivia-questions
-description: Write trivia questions and find question-worthy facts in Ben's Baynes Trivia house style. Use this skill WHENEVER the work involves trivia content — writing or editing questions, brainstorming facts or topics to write questions about, building swing rounds, Press Your Luck boards, bonus questions, or themed shows, analyzing the question bank, or judging whether a fact is "question-worthy." Trigger even on casual asks like "give me some facts about X," "ideas for next week," "is this a good question," or "punch this question up" — fact-finding for trivia IS this skill's core job, not just question formatting.
+description: Write trivia questions and find question-worthy facts in Ben's Baynes Trivia house style. Use this skill WHENEVER the work involves trivia content — writing or editing questions, brainstorming facts or topics to write questions about, building swing rounds, Press Your Luck boards, bonus questions, or themed shows, analyzing the question bank, judging whether a fact is "question-worthy," or auditing/drafting hints. Trigger even on casual asks like "give me some facts about X," "ideas for next week," "is this a good question," or "punch this question up" — fact-finding for trivia IS this skill's core job, not just question formatting.
 ---
 
 # Baynes Trivia — Question Writing & Fact Finding
@@ -50,6 +50,18 @@ Ben doesn't rate difficulty — he engineers it in the prose. The dials:
 - **Easier:** more scaffolding (hook + two clues + wink all pointing the same way), broader category noun, more famous answer, recency ("this past week…").
 - **Harder:** strip to one clue, deepen the cut (championship shows use the same anatomy but reach further — "the only Best Actor surname shared by two winners"), narrow the category noun, require a name instead of a category.
 - **Bonus-tier:** either a single deep-lattice question or a list: "For ten points each, name the five…" (the second bonus is almost always a 5-item list with a scoring frame).
+
+## Hint Audit
+
+The Second Clue and Trailing Wink (anatomy items 4–5) are hints, and the bank proves it: two independent minings of the `questions` table (Aug 2026, 1,883 rows) found "as a hint" once, ever, and zero occurrences of "if that helps," "as a clue," "bonus point." A hint that announces itself has already failed — the bar can't tell it's being helped until after it works. Hints work by quoting the answer's own culture in that culture's own voice, with zero connective tissue explaining the bridge.
+
+**Default to doing nothing.** A question with two independent routes across two knowledge domains already has its hint built in — audit before adding, and "no hint needed" is the expected output, not a cop-out.
+
+**Position matters more than wording.** HEAD (before the question, compressed — 138 rows in the bank, 32 under 25 characters) reads as native color. TAIL (after the `?` — 383 rows, 274 of them over 90 characters) is where hints go long and start sounding like homework. Default to head; reach for tail only when the joke needs the answer's shape already in the ear.
+
+**The em-dash is not this voice.** One occurrence in 1,526 `regular` rows, and it's a test row. Set-off punctuation is the ellipsis and the exclamation point.
+
+Full carrier taxonomy (ranked punchiest first, with bank examples), anti-patterns, and the audit procedure — including the mishearing check, the highest-value single step in the whole thing: **`references/hint-carriers.md`** — read it before auditing an existing question for hints or drafting a hint for a fresh one. Complements `references/question-anatomy.md` §2–3 (hook/wink authoring taxonomy) rather than replacing it — that file is about writing hooks and winks from scratch; this one is about auditing what's already on the page and picking the shortest carrier that survives verification.
 
 ## Voice & Register
 
