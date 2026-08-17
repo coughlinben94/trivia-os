@@ -2929,8 +2929,8 @@ export const SKY_REGIONS = {
   // Hues match the objects that cause them: aurora sits on the lit
   // planet (140) / pulsar (120) pair, ember on the supernova (36), disco on
   // the record (300).
-  aurora: { hue: 152, tintSat: 60, tintLight: 27, srcSat: 55, srcLight: 56 },
-  ember: { hue: 26, tintSat: 66, tintLight: 28, srcSat: 62, srcLight: 56 },
+  aurora: { hue: 152, tintSat: 60, tintLight: 27, srcSat: 55, srcLight: 56, pos: '88% 112%', poolW: 58, poolH: 62 },
+  ember: { hue: 26, tintSat: 66, tintLight: 28, srcSat: 62, srcLight: 56, pos: '16% 116%', poolW: 58, poolH: 62 },
   // 2026-08-16, the record station — st12 at first, st10 since the same-day
   // silhouette swap (Ben: "ensure that the color wiring on s13 is noticeable
   // and fun"). Deliberately the most saturated of the three
@@ -2950,7 +2950,7 @@ export const SKY_REGIONS = {
   // the 2026-08-16 record/supernova swap); disco's own shoulders are st9
   // (0.25 preview) and st11 (0.5 exit), where st11 also carries the ember
   // preview at 0.25 — overlapping shoulders stack, see skyRegionWeights.
-  disco: { hue: 300, tintSat: 74, tintLight: 30, srcSat: 70, srcLight: 60 },
+  disco: { hue: 300, tintSat: 74, tintLight: 30, srcSat: 70, srcLight: 60, pos: '62% 114%', poolW: 44, poolH: 50 },
 }
 
 // "Weather, not a light switch" — a continuous weight curve across station
@@ -3034,17 +3034,24 @@ export const SKY_TINT_IN_MS = 2600
 export const SKY_TINT_OUT_MS = 3800
 export const SKY_TINT_EASE = 'cubic-bezier(.25,.46,.45,.94)'
 
-// Bottom-weighted: deepest at the very bottom edge, gone by 58% of frame
-// height, so the top ~40% of sky stays the world's own midnight purple.
-// Guardrail against the "filter over the screen" failure this replaces - a
-// uniform full-frame tint reads as a filter, a bottom-weighted one with a
-// visible resident cause reads as place.
+// Per-region corner pool (2026-08-17, Ben, live: "orange and green live as
+// just straight lines on the bottom... there needs to be variation, living
+// on diff axis, diff shapes"). Was one shared linear-gradient(to top) bar —
+// full-width, bottom-anchored, only hue/opacity ever varied station to
+// station, so it was structurally always a horizontal line no matter which
+// region painted it. Each region now gets its own off-center elliptical
+// anchor (SKY_REGIONS' pos/poolW/poolH) instead of the shared full-width
+// shape, so no station has a straight-edge boundary and adjacent stations
+// with different regions read as different shapes, not just different hues.
+// Still bottom-weighted (every pos sits AT or BELOW the frame's bottom edge,
+// >100% y) so the top ~40% of sky stays the world's own midnight purple —
+// same guardrail the old bar kept, just no longer full-width to do it.
 function skyTintBackground(cfg) {
-  return `linear-gradient(to top,
+  return `radial-gradient(ellipse ${cfg.poolW}% ${cfg.poolH}% at ${cfg.pos},
     ${hsla(cfg.hue, cfg.tintSat, cfg.tintLight, 0.62)} 0%,
-    ${hsla(cfg.hue, cfg.tintSat - 6, cfg.tintLight - 5, 0.30)} 22%,
-    ${hsla(cfg.hue, cfg.tintSat - 12, cfg.tintLight - 8, 0.10)} 40%,
-    transparent 58%)`
+    ${hsla(cfg.hue, cfg.tintSat - 6, cfg.tintLight - 5, 0.30)} 35%,
+    ${hsla(cfg.hue, cfg.tintSat - 12, cfg.tintLight - 8, 0.10)} 60%,
+    transparent 85%)`
 }
 
 function makeSkyTints(el) {
