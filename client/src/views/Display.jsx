@@ -9,6 +9,8 @@ import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
 import JukeboxBreakOverlay from '../components/display/JukeboxBreakOverlay.jsx'
+import WarpTransition from '../components/display/WarpTransition.jsx'
+import { RING_RETURN } from '../components/display/RingAmbient.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import StageFrame from '../display/StageFrame.jsx'
 import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
@@ -366,6 +368,11 @@ async function advanceAfterBreak(showRow) {
 // prim is 'record' — the routing contract follows the record, not the index.
 const MUSIC_STATION = 10
 
+// How long the grading-break slide holds before the warp takes the TV.
+// 2026-08-17, Ben: was 5s, now 10s ("after the slide is there for 10 seconds,
+// it 'warps' to the jukebox"). Space/ArrowRight still skip the wait.
+const BREAK_DELAY_MS = 10000
+
 function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
   const { theme } = useTheme()
   const sortedSlides = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
@@ -381,25 +388,56 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
   const breakEligible = currentSlide?.type === 'grading-break' && !isPreview
   const breakActive = breakEligible && activeBreakId === currentSlide?.id
 
-  // Auto-open after 5s (Ben's timing — the break screen reads, then music takes
-  // the TV). Space/ArrowRight skip the wait, unchanged from the old slide
-  // behavior: those keys were already claimed by the break slide, and RLS-D-1's
-  // "no keyboard nav on /display" removal explicitly carved this out as the
-  // exception. Once the overlay is up the listener is gone — Jukebox owns Space.
+  // ── The warp (2026-08-17, Ben) ──
+  // 'out'  = leaving the break's own station for the jukebox's record.
+  // 'back' = the mirrored return onto that same station.
+  // null the rest of the time. See WarpTransition.jsx for the effect itself and
+  // RingAmbient.jsx's stationOverride effect for the Sx memory.
+  const [warp, setWarp] = useState(null)
+  const breakWasActiveRef = useRef(false)
+  const lastSlideIdRef = useRef(currentSlide?.id)
+
+  // Auto-open after BREAK_DELAY_MS (Ben's timing — the break screen reads, then
+  // music takes the TV). Space/ArrowRight skip the wait, unchanged from the old
+  // slide behavior: those keys were already claimed by the break slide, and
+  // RLS-D-1's "no keyboard nav on /display" removal explicitly carved this out
+  // as the exception. Once the overlay is up the listener is gone — Jukebox owns
+  // Space.
+  // The timer no longer opens the overlay directly: it starts the warp, and the
+  // warp's own completion mounts the jukebox (see WarpTransition below), so the
+  // ring's snap onto the record happens behind the streaks instead of as a
+  // silent hard cut under an opaque panel.
   useEffect(() => {
-    if (!breakEligible || breakActive) return
-    const id = currentSlide?.id
-    const timer = setTimeout(() => setActiveBreakId(id), 5000)
+    if (!breakEligible || breakActive || warp) return
+    const timer = setTimeout(() => setWarp('out'), BREAK_DELAY_MS)
     const onKey = (e) => {
       if (e.code === 'Space' || e.code === 'ArrowRight') {
         e.preventDefault()
         clearTimeout(timer)
-        setActiveBreakId(id)
+        setWarp('out')
       }
     }
     window.addEventListener('keydown', onKey)
     return () => { clearTimeout(timer); window.removeEventListener('keydown', onKey) }
-  }, [breakEligible, breakActive, currentSlide?.id])
+  }, [breakEligible, breakActive, warp, currentSlide?.id])
+
+  // Return trip. breakActive can only fall by the show moving to another slide
+  // (activeBreakId never clears itself), so the slide id is the honest trigger —
+  // it covers both exits, the in-overlay b-hold and a host-side advance. Guards
+  // on the last slide id actually seen rather than firing on every run of the
+  // effect, the same shape RingAmbient's own turn-per-slide effect uses, so
+  // StrictMode's dev double-invoke can't cancel the warp it just started.
+  useEffect(() => { if (breakActive) breakWasActiveRef.current = true }, [breakActive])
+  useEffect(() => {
+    const id = currentSlide?.id
+    if (lastSlideIdRef.current === id) return
+    lastSlideIdRef.current = id
+    // Also the cleanup path: a slide change mid-'out' (host advanced past the
+    // break early) drops that warp instead of letting it open a jukebox for a
+    // slide that is no longer on screen.
+    setWarp(breakWasActiveRef.current ? 'back' : null)
+    breakWasActiveRef.current = false
+  }, [currentSlide?.id])
 
   const slideFallback = (
     <div style={{
@@ -429,11 +467,14 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
           a specific ring station rather than just advancing by one. It flips
           in the same commit that mounts JukeboxBreakOverlay below, so the
           ring's snap onto the record happens under that overlay's own paint.
-          Inert on non-ring themes, which have no stations at all. */}
+          RING_RETURN is the other half of that trip: when the break ends, the
+          ring goes back to the station it left rather than resuming forward
+          rotation from the record, and the 'back' warp covers that snap the
+          same way. Inert on non-ring themes, which have no stations at all. */}
       <ParticleBackground
         theme={theme}
         slideKey={currentSlide?.id}
-        stationOverride={breakActive ? MUSIC_STATION : null}
+        stationOverride={breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null)}
         showStationDebug={isPreview}
       />
 
@@ -473,6 +514,24 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
           advance; the b-hold path (the normal gesture) keeps the full exit
           animation + fade. Add a pre-unmount fade only if Ben ever advances
           breaks from /host in practice. */}
+      {/* Hyperspace between the ring's own station and the jukebox's record.
+          'out' finishing is what mounts the overlay below AND flips
+          stationOverride to MUSIC_STATION — one commit, so the jump lands on
+          the warp's last (fully black) frame. 'back' mounts in the same commit
+          that asks for RING_RETURN, so that snap is covered too. z-[80]: above
+          the stage and its overlays, below the nav-denied banner (z-200); the
+          jukebox (z-[70]) is only ever up while no warp is. */}
+      {warp && (
+        <WarpTransition
+          key={`${currentSlide?.id}-${warp}`}
+          dir={warp}
+          onDone={() => {
+            if (warp === 'out') setActiveBreakId(currentSlide?.id)
+            setWarp(null)
+          }}
+        />
+      )}
+
       {breakActive && (
         <JukeboxBreakOverlay
           key={currentSlide.id}

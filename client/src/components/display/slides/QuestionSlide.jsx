@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
@@ -28,6 +28,32 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
   // instead. Shiny questions skip this — they get their own series
   // banner/title treatment and the QuestionCounter corner badge instead.
   const displayText = !data.isShiny && data.questionNumber ? `${data.questionNumber}. ${part.text}` : part.text
+
+  // Uniform sizing across the round (Ben, 2026-08-17: "I want the font
+  // sizes to be as close to each other as possible" — Q4 fit its own
+  // longer text at its own optimal size, popping noticeably smaller next
+  // to a short question like Q5 sized at ITS OWN optimal-and-bigger size).
+  // Same philosophy useFitListToBox already uses for MultiQuestion/PylReveal
+  // rows: size everything to the box's HARDEST-to-fit member instead of
+  // letting each item claim its own independent max. Every question-type
+  // slide in this round is measured with fitToBox individually (each still
+  // gets its own real display text/prefix); the smallest of those wins and
+  // every question in the round renders at that one size.
+  const roundQuestionTexts = useMemo(() => {
+    if (!show?.slides) return [displayText]
+    return show.slides
+      .filter(s => s.type === 'question' && s.roundId === slide.roundId)
+      .map(s => {
+        const p = resolveShinyPart(s.data)
+        return !s.data?.isShiny && s.data?.questionNumber ? `${s.data.questionNumber}. ${p.text}` : p.text
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show?.slides, slide.roundId])
+  const uniformFontSize = useMemo(() => {
+    const sizes = roundQuestionTexts.map(t => fitToBox(t, { ...QUESTION_BOX, family: theme.fonts.body }))
+    return sizes.length ? Math.min(...sizes) : fitToBox(displayText, { ...QUESTION_BOX, family: theme.fonts.body })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roundQuestionTexts, theme.fonts.body])
 
   // fitToBox measures via canvas — a first paint before the body font loads
   // measures fallback-font metrics. This flips once web fonts are ready purely
@@ -109,7 +135,7 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
             style={{
               color: theme.colors.text,
               fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-              fontSize: fitToBox(displayText, { ...QUESTION_BOX, family: theme.fonts.body }),
+              fontSize: uniformFontSize,
               fontWeight: 500,
               maxWidth: '80ch',
               textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',

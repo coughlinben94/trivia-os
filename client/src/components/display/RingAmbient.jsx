@@ -585,6 +585,13 @@ const isReduced = () =>
   typeof window !== 'undefined' && window.matchMedia &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+// Sentinel value for the `stationOverride` prop: "go back to the station you
+// were on before the last numeric override sent you away." A sentinel rather
+// than a second prop or a ref threaded through ParticleBackground — the
+// station being returned to is this component's own private state (stationRef),
+// so the caller never has to learn a number it couldn't act on anyway.
+export const RING_RETURN = 'return'
+
 // worldData shape: { id, type, name, phase, sky: [4 hex], qColours: [2 hex],
 // stations: [PANES x {key,prim,hue,accent}] } — see concepts/world-07-ring.html's
 // own WORLD literal. qColours is accepted but unused here (question-colour
@@ -792,8 +799,41 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
   // time that overlay paints, stationRef is MUSIC_STATION (10), the record is
   // the station in frame, and the disco sky tint is at full weight (snapped,
   // not transitioning — jumpTo passes animate:false, see applySkyTints).
+  //
+  // 2026-08-17 (Ben) — the override is now a ROUND TRIP, not a one-way jump:
+  // "like the grading break itself has an Sx station tied to it. then after
+  // the slide is there for 10 seconds, it 'warps' to the jukebox, then when
+  // done, warps back to round 2 slide Sx." A numeric override records the
+  // station it is leaving (Sx — read straight off stationRef, so it is always
+  // whatever the slide's own turn() organically landed on, never a guess or a
+  // slide-index derivation that could drift), then jumps. RING_RETURN jumps
+  // back to it. Display.jsx plays WarpTransition over both, so neither snap is
+  // seen; this component still just snaps, same as before.
+  //
+  // The `station === slideIndex % PANES` invariant that turn()'s comment names:
+  // the JUMP already broke it, and this narrows the damage rather than adding
+  // to it. Before, the ring resumed forward rotation from station 10 and every
+  // later station was permanently offset by an arbitrary amount. Now the only
+  // residual is -1 per grading break — the break slide and the round-2 slide
+  // that follows it both render Sx — which is Ben's explicit call here. Safe to
+  // violate: the invariant is an art-direction property (every slide gets a
+  // fresh station), not a correctness assumption. Nothing reads station except
+  // layoutScrim/writeSkyTints/the debug label, jumpTo() walks whole surges so
+  // offsets stay self-consistent, and ring-verify.mjs drives its own jumpTo()
+  // path and never sees this prop.
+  const returnStationRef = useRef(null)
   useEffect(() => {
     if (stationOverride == null) return
+    if (stationOverride === RING_RETURN) {
+      // Never left (a return with no outbound jump — e.g. a break skipped
+      // before its warp finished): nothing to come back to, so hold still
+      // rather than jumping somewhere stale.
+      if (returnStationRef.current == null) return
+      jumpTo(returnStationRef.current)
+      returnStationRef.current = null
+      return
+    }
+    returnStationRef.current = stationRef.current
     jumpTo(stationOverride)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stationOverride])
