@@ -18,16 +18,21 @@ export default function PreShowSlide({ slide, show }) {
   const [qrDataUrl, setQrDataUrl] = useState(null)
 
   // Walkout song — a {videoId, start, end} clip (same shape/editor as shiny
-  // audio questions), looped for as long as this slide is up. No visible
-  // player, no host play/pause button — it's ambient, not a question.
+  // audio questions). Plays through ONCE from start, fading out over the
+  // last FADE_MS of the trimmed range instead of hard-cutting or looping —
+  // Ben: "it'll be an x long song that'll fade out at the end scrubbed
+  // part," not an ambient loop. No visible player, no host play/pause
+  // button.
   const walkoutSong = slide?.data?.walkoutSong
   const ytContainerRef = useRef(null)
   const ytPlayerRef = useRef(null)
-  const ytLoopIntervalRef = useRef(null)
+  const ytWatchIntervalRef = useRef(null)
 
   useEffect(() => {
     if (!walkoutSong?.videoId) return
     let cancelled = false
+    const FADE_MS = 2500
+    const FADE_STEPS = 20
 
     loadYoutubeIframeApi().then(YT => {
       if (cancelled || !ytContainerRef.current) return
@@ -39,14 +44,31 @@ export default function PreShowSlide({ slide, show }) {
         events: {
           onReady: e => {
             if (cancelled) return
+            e.target.setVolume(100)
             e.target.seekTo(walkoutSong.start ?? 0, true)
             e.target.playVideo()
-            clearInterval(ytLoopIntervalRef.current)
-            ytLoopIntervalRef.current = setInterval(() => {
-              const t = ytPlayerRef.current?.getCurrentTime?.() ?? 0
-              const clipEnd = walkoutSong.end ?? ytPlayerRef.current?.getDuration?.() ?? Infinity
-              if (clipEnd && t >= clipEnd) {
-                ytPlayerRef.current.seekTo(walkoutSong.start ?? 0, true)
+            let fading = false
+            clearInterval(ytWatchIntervalRef.current)
+            ytWatchIntervalRef.current = setInterval(() => {
+              const player = ytPlayerRef.current
+              if (!player) return
+              const t = player.getCurrentTime?.() ?? 0
+              const clipEnd = walkoutSong.end ?? player.getDuration?.() ?? Infinity
+              const fadeStart = clipEnd - FADE_MS / 1000
+              if (!fading && clipEnd !== Infinity && t >= fadeStart) {
+                fading = true
+                clearInterval(ytWatchIntervalRef.current)
+                let step = 0
+                const fadeTimer = setInterval(() => {
+                  step += 1
+                  const v = Math.max(0, 100 * (1 - step / FADE_STEPS))
+                  ytPlayerRef.current?.setVolume(v)
+                  if (step >= FADE_STEPS) {
+                    clearInterval(fadeTimer)
+                    ytPlayerRef.current?.pauseVideo()
+                  }
+                }, FADE_MS / FADE_STEPS)
+                ytWatchIntervalRef.current = fadeTimer
               }
             }, 250)
           },
@@ -56,7 +78,7 @@ export default function PreShowSlide({ slide, show }) {
 
     return () => {
       cancelled = true
-      clearInterval(ytLoopIntervalRef.current)
+      clearInterval(ytWatchIntervalRef.current)
       try { ytPlayerRef.current?.destroy() } catch { /* already gone */ }
       ytPlayerRef.current = null
     }

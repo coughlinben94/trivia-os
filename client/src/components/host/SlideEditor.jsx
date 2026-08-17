@@ -1200,7 +1200,7 @@ function PreShowEditor({ data, onChange }) {
       </p>
       <Divider label="Walkout Song" />
       <p className="text-xs text-gray-400 leading-relaxed -mt-1">
-        Optional — loops the clip's trimmed range while this slide is up.
+        Optional — plays once from the trim in-point, fading out over the last ~2.5s before the trim out-point.
       </p>
       <YoutubeClipEditor
         value={data.walkoutSong ?? null}
