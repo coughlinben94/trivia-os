@@ -208,7 +208,17 @@ function buildLayerContent(engine, world, arc, host, L) {
       const ds = 14
       drift.style.width = drift.style.height = px(ds)
       drift.style.left = px(period * 0.12)
-      drift.style.top = px(dom.bandY(dr, ds))
+      // skipMinBleed: true — the min-bleed clamp is a fraction of the
+      // element's OWN height (14% floor / 16% ceiling), tuned for
+      // 576-880px headlines. On this 14px satellite that collapses to a
+      // ~2px range, so without the flag it's arithmetically pinned to the
+      // top rail regardless of the seed. The reference build
+      // (world-07-ring.html) already carries this fix — Ben: "likes the
+      // drift, but it was getting clipped at the top" — it just never got
+      // ported to this component. Confirmed safe: skipMinBleed only gates
+      // the post-hoc clamp, not bandY's own two rng() draws, so nothing
+      // else in the seeded sequence shifts.
+      drift.style.top = px(dom.bandY(dr, ds, undefined, undefined, true))
       host.appendChild(drift)
     }
   }
