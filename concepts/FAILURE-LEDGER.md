@@ -969,3 +969,52 @@ touched:
 Not decided here: which of these, if any. Per
 `references/ring-world-continuity.md` §4, threshold choice and aesthetic
 acceptance are Ben's.
+
+### RESOLVED 2026-08-17 — Ben: option 1, accept as shipped
+
+Three independent Opus-5 agents ("think tank," different starting lenses —
+one weighted toward the connectedness principle, one toward the gate's own
+contrast check, one deliberately fresh-eyes) each reasoned through the four
+options above without seeing each other's work. All three converged on the
+same read, independently:
+
+- **Options 2 and 4 have the sign backwards.** The tint is brightest exactly
+  where the ring is already loudest (its curve correlates with rendered
+  brightness, not against it) — dimming or normalizing it compresses the
+  realised-span ratio further, it does not restore it. Confirmed by three
+  separate derivations from the real `skyTintBackground`/`skyRegionWeights`
+  numbers, not assumed.
+- **Option 3 only "works" by re-opening the dead-air gaps** tonight's falloff
+  rewrite exists to close — a direct reversal of "panning always feels
+  connected," not a tuning knob.
+- **Option 1 stands.** The realised-span check (11b) is a raw max/min ratio
+  sampling 2 of 13 stations, built for a system where several stations sat at
+  true zero; now that nothing does, the metric may simply not translate. It's
+  spec-tier, not regression-tier, and `scripts/ship.sh` doesn't gate on it —
+  nothing here was blocking Tuesday's show either way.
+
+Decision: ship as-is, no further change to `skyRegionWeights()` or
+`skyTintBackground`. This entry closes the open item above — a future
+session should not re-litigate options 2-4 without new information.
+
+**Not part of this decision, flagged by the same three agents, still open:**
+- A cheap diagnostic (measure the ring with `.sky-tint` forced to `opacity:
+  0`) would show how much of the ring's OWN object contrast — independent of
+  the atmosphere entirely — already sits under its arc target. Two of three
+  agents suspect this is a real, separate, pre-existing gap.
+- A genuinely different direction, from the fresh-eyes agent: instead of
+  touching the atmosphere at all, raise the loud stations' own object
+  brightness outside the safe box ("widen from the top" rather than narrow
+  from the bottom) — modeled as plausible, not measured.
+- Station 10 (the record, relocated there tonight for silhouette spacing)
+  sits on one of the ring's quietest arc targets but now carries `disco`, the
+  single most saturated sky tint of the three regions — two decisions made
+  the same night for unrelated reasons landing in tension. Not touched.
+- Stations 4 and 5 both belong to `aurora` (station 5 is the source — the
+  pulsar; station 4 is lit by it, not causing it) and weight is `max()` over
+  a region's members, not a blend between them — so the pan between 4 and 5
+  never actually moves color, a small residual violation of the
+  connectedness principle none of the four named options touch. A fix exists
+  (weight the non-source member below the source) but trades against
+  station 4's own already-under-target realised-arc number — aesthetic call,
+  Ben's, not applied.
