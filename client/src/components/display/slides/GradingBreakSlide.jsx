@@ -1,19 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { fitToBox, GRADING_BREAK_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 
-export default function GradingBreakSlide({ slide, isPreview = false }) {
+const DEFAULT_MESSAGE = "Now, please sit back, relax, and enjoy each other's company as Ben grades papers 😊"
+
+export default function GradingBreakSlide({ slide, show, isPreview = false }) {
   const { theme } = useTheme()
   const { data } = slide
   const reduce = useReducedMotion()
   const rt = data._regionTransforms ?? {}
   const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
 
-  const message =
-    data.message ||
-    "Now, please sit back, relax, and enjoy each other's company as Ben grades papers 😊"
+  const message = data.message || DEFAULT_MESSAGE
 
   // fitToBox measures via canvas — a first paint before the body font loads
   // measures fallback-font metrics. This flips once web fonts are ready purely
@@ -21,6 +21,20 @@ export default function GradingBreakSlide({ slide, isPreview = false }) {
   // real glyph metrics; the value itself is never read.
   const [fontsReady, setFontsReady] = useState(false)
   useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+
+  // A show has one grading break per round, and a host who customizes one
+  // message rarely customizes them all — so break 2 could render its default
+  // message big next to break 1's longer custom one shrunk to fit. Size every
+  // break in the show to the smallest of their individual fits, same rule
+  // f7ddb51 gave question text across a round.
+  const messageSize = useMemo(() => {
+    const msgs = (show?.slides ?? [])
+      .filter(s => s.type === 'grading-break')
+      .map(s => s.data?.message || DEFAULT_MESSAGE)
+    const pool = msgs.length ? msgs : [message]
+    return Math.min(...pool.map(m => fitToBox(m, { ...GRADING_BREAK_BOX, family: theme.fonts.body })))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show?.slides, message, theme.fonts.body, fontsReady])
 
   // Pure visual as of the 2026-08-16 jukebox integration. The break lifecycle
   // — the 5s countdown, the Space/ArrowRight skip, and handing the screen to
@@ -77,7 +91,7 @@ export default function GradingBreakSlide({ slide, isPreview = false }) {
             style={{
               color: theme.colors.text,
               fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-              fontSize: fitToBox(message, { ...GRADING_BREAK_BOX, family: theme.fonts.body }),
+              fontSize: messageSize,
               fontWeight: 400,
             }}
           >

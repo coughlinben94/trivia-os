@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL } from '../../../lib/autoFitText.js'
@@ -11,8 +11,17 @@ export default function MultiQuestionSlide({ slide, show }) {
   const questions = data.questions ?? []
   const round = (show?.rounds ?? []).find(r => r.id === slide.roundId)
 
+  // Every multi-question slide in this round is measured; the smallest fit
+  // wins for all of them, so advancing between two list slides in one round
+  // doesn't pop the rows bigger/smaller (see useFitListToBox's `groups`).
+  const groups = useMemo(() => {
+    const siblings = (show?.slides ?? []).filter(s => s.type === 'multi-question' && s.roundId === slide.roundId)
+    return siblings.length ? siblings.map(s => (s.data?.questions ?? []).map(q => q.text)) : null
+  }, [show?.slides, slide.roundId])
+
   const listBoxRef = useRef(null)
   const rowSize = useFitListToBox(listBoxRef, questions.map(q => q.text), {
+    groups,
     family: theme.fonts.body,
     floorPx: LIST_ITEM_FLOOR * 16,
     ceilPx: LIST_ITEM_CEIL * 16,

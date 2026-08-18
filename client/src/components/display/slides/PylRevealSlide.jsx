@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import ErrorBoundary from '../../ErrorBoundary.jsx'
@@ -17,8 +17,17 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
   // Hoisted above the showAnimation early return below — hooks can't be called
   // conditionally, and items.map() feeds the useFitListToBox call right here.
   const items = data.stages ?? data.items ?? []
+  // Same round's other PYL boards are measured too — the smallest fit wins
+  // for all of them, so consecutive boards don't pop different row sizes
+  // (see useFitListToBox's `groups`).
+  const groups = useMemo(() => {
+    const siblings = (show?.slides ?? []).filter(s => s.type === 'pyl-reveal' && s.roundId === slide.roundId)
+    return siblings.length ? siblings.map(s => (s.data?.stages ?? s.data?.items ?? []).map(x => x.text)) : null
+  }, [show?.slides, slide.roundId])
+
   const listBoxRef = useRef(null)
   const rowSize = useFitListToBox(listBoxRef, items.map(x => x.text), {
+    groups,
     family: theme.fonts.body,
     floorPx: LIST_ITEM_FLOOR * 16,
     ceilPx: LIST_ITEM_CEIL * 16,

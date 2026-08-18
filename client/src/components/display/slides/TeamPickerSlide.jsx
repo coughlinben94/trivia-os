@@ -84,21 +84,31 @@ function hexToRgb(hex) {
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
-function makeSprite(text, color, glowHi, glowAcc, fontFamily) {
+const F = (px, fontFamily) => `700 ${px}px ${fontFamily}`;
+
+// The size THIS text would claim on its own: full CAP unless it's too wide for
+// MAXW, in which case scale down to fit (canvas advance width is linear in font
+// size, so one measure gives the exact fit — no binary search needed).
+let measureCtx = null;
+export function fitFontSize(text, fontFamily) {
+  if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
+  measureCtx.font = F(CAP, fontFamily);
+  const w0 = measureCtx.measureText((text || '').toUpperCase()).width || 1;
+  return w0 > MAXW ? Math.max(46, CAP * (MAXW / w0)) : CAP;
+}
+
+function makeSprite(text, color, glowHi, glowAcc, fontFamily, fsOverride) {
   const t = (text || '').toUpperCase();
   const off = document.createElement('canvas');
   const g = off.getContext('2d');
-  const F = (px) => `700 ${px}px ${fontFamily}`;
-  g.font = F(CAP);
-  const w0 = g.measureText(t).width || 1;
-  const fs = w0 > MAXW ? Math.max(46, CAP * (MAXW / w0)) : CAP;
-  g.font = F(fs);
+  const fs = fsOverride ?? fitFontSize(t, fontFamily);
+  g.font = F(fs, fontFamily);
   const tw = g.measureText(t).width;
   const pad = Math.ceil(fs * 0.55);
   const W = Math.ceil(tw) + pad * 2, H = Math.ceil(fs * 1.5) + pad;
   off.width = W; off.height = H;
   const cx = W / 2, cy = H / 2;
-  g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = F(fs);
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = F(fs, fontFamily);
   g.shadowColor = glowAcc; g.shadowBlur = fs * 0.34; g.fillStyle = color; g.fillText(t, cx, cy);
   g.shadowColor = glowHi;  g.shadowBlur = fs * 0.16; g.fillText(t, cx, cy);
   g.shadowBlur = 0; g.fillText(t, cx, cy);
@@ -272,19 +282,39 @@ export default function TeamPickerSlide({ slide, show }) {
     ctl.current.restart?.();
   }, [currentPart, seq.length]);
 
+  // One font size for every team name — the size the HARDEST-to-fit (longest)
+  // name claims on its own. Same fix f7ddb51 made for question text across a
+  // round: without it each name independently maximized itself, so a short
+  // name rendered at full CAP right after a long one that had shrunk to fit
+  // MAXW, and consecutive reveals visibly popped bigger/smaller. Smaller than
+  // a name's own optimal size always still fits (fitting is monotonic), so
+  // this only ever adds headroom — the longest name is unchanged, since it IS
+  // the minimum. Computed once per roster (not per frame); the draw loop reads
+  // the baked sprites, which carry the size with them.
+  // ponytail: teams only. The intro/outro lines are one-off framing beats and
+  // keep their own fit — folding them into the min would shrink every team
+  // name to the length of "Now, let's meet our teams".
+  const uniformTeamFs = useMemo(() => {
+    if (!fontsReady || !teamNames.length) return null;
+    return Math.min(...teamNames.map((n) => fitFontSize(n, font)));
+  }, [fontsReady, teamNames, font]);
+
   const getSprite = (it) => {
     const th = ctl.current.theme;
     const c = th.colors, color = c.highlight;
-    const key = `${it.text}|${color}|${c.highlight}|${c.accent}|${font}`;
+    const fs = it.kind === 'team' ? ctl.current.teamFs : null;
+    const key = `${it.text}|${color}|${c.highlight}|${c.accent}|${font}|${fs ?? 'auto'}`;
     let s = spriteCache.current.get(key);
-    if (!s) { s = makeSprite(it.text, color, c.highlight, c.accent, font); spriteCache.current.set(key, s); }
+    if (!s) { s = makeSprite(it.text, color, c.highlight, c.accent, font, fs ?? undefined); spriteCache.current.set(key, s); }
     return s;
   };
 
-  // bake-ahead once fonts + teams ready
+  // bake-ahead once fonts + teams ready. teamFs lives on ctl because the draw
+  // loop captured getSprite's closure on mount (same reason theme does).
   useEffect(() => {
+    ctl.current.teamFs = uniformTeamFs;
     if (fontsReady) { spriteCache.current.clear(); seq.forEach(it => { if (it.kind !== 'landed') getSprite(it); }); }
-  }, [fontsReady, seq]); // eslint-disable-line
+  }, [fontsReady, seq, uniformTeamFs]); // eslint-disable-line
 
   useEffect(() => {
     const canvas = canvasRef.current;

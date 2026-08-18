@@ -250,8 +250,18 @@ export function useFitToBox(boxRef, text, { family, floorPx, ceilPx, maxLines = 
  * to a single px value so the whole list fits: fits the longest item to the
  * per-row height budget (containerH / itemCount) and the container width.
  * listRef → the element bounding all rows. items → array of row strings.
+ *
+ * `groups` (optional) extends that same "size to the hardest-to-fit member"
+ * rule ACROSS sibling slides: pass every sibling list in the group (each as its
+ * own array of row strings, INCLUDING this slide's) and the smallest of their
+ * individual fits wins for all of them. Without it, two Multi-Question/PYL
+ * slides in the same round each maximize independently and visibly pop
+ * different row sizes when the host advances between them — the same problem
+ * f7ddb51 fixed for question text across a round. Each group keeps its own row
+ * COUNT (per-row height budget is n-dependent), so this can only ever pick a
+ * size that already fits this slide.
  */
-export function useFitListToBox(listRef, items, { family, floorPx, ceilPx, gapPx = 0, rowInset = 0, maxLinesPerRow = 2, lineHeight = 1.3, letterSpacing = 0 }) {
+export function useFitListToBox(listRef, items, { family, floorPx, ceilPx, gapPx = 0, rowInset = 0, maxLinesPerRow = 2, lineHeight = 1.3, letterSpacing = 0, groups = null }) {
   const [size, setSize] = useState(ceilPx)
   useLayoutEffect(() => {
     const el = listRef.current
@@ -260,12 +270,16 @@ export function useFitListToBox(listRef, items, { family, floorPx, ceilPx, gapPx
     const recompute = () => {
       const w = el.clientWidth, h = el.clientHeight
       if (!w || !h) return
-      const n = items.length
-      const perRowH = (h - gapPx * (n - 1)) / n
+      const boxW = Math.max(0, w - rowInset)
       // longest item drives the shared size (worst case must fit its row box)
-      let best = floorPx
-      const longest = items.reduce((a, b) => (String(b).length > String(a).length ? b : a), items[0] ?? '')
-      best = fitToBox(longest, { family, boxW: Math.max(0, w - rowInset), boxH: perRowH, floorPx, ceilPx, maxLines: maxLinesPerRow, lineHeight, letterSpacing })
+      const fitGroup = (rows) => {
+        const n = rows.length
+        if (!n) return ceilPx
+        const longest = rows.reduce((a, b) => (String(b).length > String(a).length ? b : a), rows[0] ?? '')
+        return fitToBox(longest, { family, boxW, boxH: (h - gapPx * (n - 1)) / n, floorPx, ceilPx, maxLines: maxLinesPerRow, lineHeight, letterSpacing })
+      }
+      const pool = groups?.length ? groups : [items]
+      const best = Math.min(...pool.map(fitGroup))
       if (!cancelled) setSize(best)
     }
     document.fonts.ready.then(() => { if (!cancelled) recompute() })
@@ -273,6 +287,6 @@ export function useFitListToBox(listRef, items, { family, floorPx, ceilPx, gapPx
     const ro = new ResizeObserver(recompute)
     ro.observe(el)
     return () => { cancelled = true; ro.disconnect() }
-  }, [listRef, items, family, floorPx, ceilPx, gapPx, rowInset, maxLinesPerRow, lineHeight, letterSpacing])
+  }, [listRef, items, groups, family, floorPx, ceilPx, gapPx, rowInset, maxLinesPerRow, lineHeight, letterSpacing])
   return size
 }
