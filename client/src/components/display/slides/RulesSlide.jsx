@@ -9,7 +9,6 @@ import { EASE_OUT } from '../../../lib/easings.js'
 const WARN_BG   = '#050007'
 const WARN_RED  = '#ff4d6d'
 const WARN_TEXT = '#e8d0ff'
-const WARN_DIM  = '#8f6aa8'
 
 export const DEFAULT_RULES = [
   "This ain't just your mommas trivia....",
@@ -29,38 +28,78 @@ const RULES_BEEP_SRC = '/rules-beep.mp3'
 const RULES_BEEP_PLAYBACK_RATE = 2
 export const RULES_BEEP_DURATION_S = 1.65 / RULES_BEEP_PLAYBACK_RATE
 
-// Ben's recorded PSA line (public/rules-psa.mp3, ~4.0s) — replaced the
-// browser speechSynthesis attempt entirely (2026-08-18): TTS can't do a
-// specific "manly and intimidating" voice, a real recording just is one.
+// Ben's recorded PSA line (public/rules-psa.mp3) — replaced the browser
+// speechSynthesis attempt entirely (2026-08-18): TTS can't do a specific
+// "manly and intimidating" voice, a real recording just is one.
 const RULES_PSA_SRC = '/rules-psa.mp3'
-const RULES_PSA_DURATION_S = 4.0
 
-// The whole point is a cinematic beat first (flashes + beeps + PSA line on a
-// bare alert screen), THEN the rules content reveals — not both at once
-// (2026-08-18, Ben). 3 sped-up beeps end at 3×0.825s≈2.5s; the PSA clip runs
-// ~4s after that, so content starts once both are safely done.
-const RULES_CONTENT_DELAY_S = RULES_BEEP_DURATION_S * 3 + 0.15 + RULES_PSA_DURATION_S + 0.3
+// HTMLAudioElement.play() has non-deterministic startup latency (decode/
+// buffer delay) — three separate `new Audio()` + setTimeout calls sounded
+// "staggered weird" (2026-08-18, Ben) even though the delays themselves were
+// exact. Web Audio's AudioBufferSourceNode.start(time) schedules on the
+// audio clock instead of the JS event loop, so all three land exactly
+// RULES_BEEP_DURATION_S apart with no jitter. Buffer is decoded once and
+// cached module-level — safe to reuse across a remount (e.g. a Stream Deck
+// back-then-forward) since the cleanup below cancels any in-flight sequence
+// before a new one can start.
+let cachedBeepBuffer = null
+async function loadBeepBuffer(ctx) {
+  if (cachedBeepBuffer) return cachedBeepBuffer
+  const res = await fetch(RULES_BEEP_SRC)
+  const arrayBuffer = await res.arrayBuffer()
+  cachedBeepBuffer = await ctx.decodeAudioData(arrayBuffer)
+  return cachedBeepBuffer
+}
 
-function playThreeBeeps() {
-  for (let i = 0; i < 3; i++) {
-    setTimeout(() => {
-      const a = new Audio(RULES_BEEP_SRC)
-      a.playbackRate = RULES_BEEP_PLAYBACK_RATE
-      a.play().catch(() => {})
-    }, i * RULES_BEEP_DURATION_S * 1000)
+// Fires `onAllBeepsEnded` off the LAST beep's real `onended` event, not a
+// guessed duration — so whatever plays next is never racing an estimate.
+async function playThreeBeeps(ctx, onAllBeepsEnded) {
+  const buffer = await loadBeepBuffer(ctx)
+  const startAt = ctx.currentTime + 0.05 // small headroom so decode latency can't clip beep 1
+  const sources = [0, 1, 2].map(i => {
+    const src = ctx.createBufferSource()
+    src.buffer = buffer
+    src.playbackRate.value = RULES_BEEP_PLAYBACK_RATE
+    src.connect(ctx.destination)
+    src.start(startAt + i * RULES_BEEP_DURATION_S)
+    return src
+  })
+  sources[sources.length - 1].onended = onAllBeepsEnded
+}
+
+// The strobe/flash must not stop — and the rules must not reveal — until the
+// beeps AND the PSA clip have BOTH actually finished playing, not some
+// estimated duration (2026-08-18, Ben: it was cutting away while the voice
+// was still audible). Driven entirely off real `ended` events.
+//
+// `handles` (owned by the calling effect) is how a mid-sequence unmount gets
+// cancelled: it holds the live AudioContext/PSA element so cleanup can
+// ctx.close()/psa.pause() them, and a `cancelled` flag every callback below
+// checks before touching React state or starting the next stage. Without
+// this, a host advancing off this slide mid-beep leaves the beeps AND the
+// 4s PSA clip playing in full over whatever slide comes next.
+function playAlertSequence(onCinematicDone, handles) {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext
+    const ctx = new AC()
+    handles.ctx = ctx
+    ctx.resume().catch(() => {}) // no-op if already running; recovers a cold-started suspended context
+    playThreeBeeps(ctx, () => {
+      if (handles.cancelled) return
+      ctx.close().catch(() => {})
+      const psa = new Audio(RULES_PSA_SRC)
+      handles.psa = psa
+      const finish = () => { if (!handles.cancelled) onCinematicDone() }
+      psa.addEventListener('ended', finish, { once: true })
+      psa.addEventListener('error', finish, { once: true })
+      psa.play().catch(finish)
+    }).catch(() => { if (!handles.cancelled) onCinematicDone() })
+  } catch {
+    if (!handles.cancelled) onCinematicDone() // AudioContext unavailable — reveal content anyway
   }
 }
 
-function playPSA() {
-  new Audio(RULES_PSA_SRC).play().catch(() => {})
-}
-
-function playAlertSequence() {
-  playThreeBeeps()
-  setTimeout(playPSA, RULES_BEEP_DURATION_S * 3 * 1000 + 150)
-}
-
-export default function RulesSlide({ slide }) {
+export default function RulesSlide({ slide, isPreview }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const { data } = slide
@@ -69,18 +108,37 @@ export default function RulesSlide({ slide }) {
   const firedRef = useRef(false)
   // Screen keeps strobing for the WHOLE cinematic phase — beeps AND the
   // spoken PSA line (2026-08-18, Ben: it was going dark and static during
-  // the voice line, needed to keep flashing the entire time). Turns off the
-  // instant content is about to reveal.
-  const [alerting, setAlerting] = useState(!reduce)
+  // the voice line, needed to keep flashing the entire time). Content only
+  // reveals once playAlertSequence's real audio-ended callback fires — never
+  // a guessed duration, so it can't race ahead of what's still playing.
+  const skipAlert = reduce || isPreview // isPreview: the host's build-mode editor/preview tab shouldn't blast beeps+PSA
+  const [alerting, setAlerting] = useState(!skipAlert)
+  const [contentReady, setContentReady] = useState(skipAlert)
 
   // Fire once per time this slide becomes current, not on every re-render.
   useEffect(() => {
-    if (reduce || firedRef.current) return
+    if (skipAlert || firedRef.current) return
     firedRef.current = true
-    playAlertSequence()
-    const t = setTimeout(() => setAlerting(false), RULES_CONTENT_DELAY_S * 1000)
-    return () => clearTimeout(t)
-  }, [reduce])
+
+    const handles = { cancelled: false, ctx: null, psa: null }
+    const reveal = () => { setAlerting(false); setContentReady(true) }
+    // Watchdog: a suspended AudioContext (no prior user gesture) never
+    // advances its clock, so scheduled sources never fire `onended`; a
+    // stalled PSA download on bar wifi fires neither `ended` nor `error`.
+    // Either leaves the screen strobing red forever with rules never
+    // revealed. Same fix WinnerRevealSlide.jsx already uses for its own
+    // "audio might never end" case.
+    const watchdog = setTimeout(() => { if (!handles.cancelled) reveal() }, 12000)
+
+    playAlertSequence(() => { clearTimeout(watchdog); reveal() }, handles)
+
+    return () => {
+      handles.cancelled = true
+      clearTimeout(watchdog)
+      handles.ctx?.close().catch(() => {})
+      handles.psa?.pause()
+    }
+  }, [skipAlert])
 
   return (
     <div
@@ -126,8 +184,8 @@ export default function RulesSlide({ slide }) {
       }}>
         <motion.span
           initial={{ opacity: 0, y: reduce ? 0 : -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: EASE_OUT, delay: reduce ? 0 : RULES_CONTENT_DELAY_S }}
+          animate={contentReady ? { opacity: 1, y: 0 } : { opacity: 0, y: reduce ? 0 : -10 }}
+          transition={{ duration: 0.3, ease: EASE_OUT }}
           style={{
             background: '#050007', padding: '0.4em 1.4em', borderRadius: 4,
             fontFamily: `'${theme.fonts.display}', sans-serif`,
@@ -144,19 +202,19 @@ export default function RulesSlide({ slide }) {
         {rules.map((rule, i) => (
           <motion.div
             key={i}
-            initial={{ opacity: 0, y: reduce ? 0 : 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, ease: EASE_OUT, delay: reduce ? 0 : RULES_CONTENT_DELAY_S + 0.4 + i * 0.4 }}
+            initial={{ opacity: 0, y: reduce ? 0 : 18 }}
+            animate={contentReady ? { opacity: 1, y: 0 } : { opacity: 0, y: reduce ? 0 : 18 }}
+            transition={{ duration: 0.35, ease: EASE_OUT, delay: reduce ? 0 : 0.4 + i * 0.4 }}
             style={{ display: 'flex', gap: '1.1rem', alignItems: 'baseline' }}
           >
             <span style={{
               fontFamily: `'${theme.fonts.display}', sans-serif`,
-              color: WARN_RED, fontSize: 'clamp(1rem, 2.2vw, 1.5rem)', flexShrink: 0, width: '2ch',
+              color: WARN_RED, fontSize: 'clamp(1.4rem, 3.2vw, 2.1rem)', flexShrink: 0, width: '2ch',
             }}>
               {String(i + 1).padStart(2, '0')}
             </span>
             <span style={{
-              color: WARN_TEXT, fontSize: 'clamp(1rem, 2.3vw, 1.5rem)', lineHeight: 1.35, fontWeight: 500,
+              color: WARN_TEXT, fontSize: 'clamp(1.4rem, 3vw, 2rem)', lineHeight: 1.35, fontWeight: 500,
               fontFamily: "'DM Sans', sans-serif",
             }}>
               {rule}
@@ -164,10 +222,6 @@ export default function RulesSlide({ slide }) {
           </motion.div>
         ))}
       </div>
-
-      <p style={{ position: 'relative', zIndex: 2, textAlign: 'center', color: WARN_DIM, fontSize: '0.8rem', margin: '0 0 2%' }}>
-        Baynes Apple Valley Trivia Night
-      </p>
     </div>
   )
 }
