@@ -482,8 +482,15 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
           ParticleBackground stays OUTSIDE (full-viewport behind the stage). */}
       <StageFrame>
         {/* key resets the boundary on every slide change so a crash on one slide
-            doesn't permanently block the display for subsequent slides */}
-        <ErrorBoundary key={currentSlide?.id} fallback={slideFallback}>
+            doesn't permanently block the display for subsequent slides.
+            A multi-part shiny question keeps the SAME slide.id across every
+            part, the introDone flip, and the closing beat — folding those
+            into the key too means a crash on one part doesn't leave "Slide
+            unavailable" stuck through every part after it. */}
+        <ErrorBoundary
+          key={`${currentSlide?.id}:${currentSlide?.data?.introDone}:${currentSlide?.data?.currentPart}`}
+          fallback={slideFallback}
+        >
           <AnimatePresence mode="wait">
             {currentSlide && (
               <SlideRenderer
@@ -497,13 +504,22 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
             )}
           </AnimatePresence>
         </ErrorBoundary>
-        {/* Scoreboard lives inside the stage — clips at the stage wall */}
-        <ScoreboardOverlay show={show} />
+        {/* Scoreboard lives inside the stage — clips at the stage wall.
+            fallback={null}: this and every boundary below sit on top of an
+            already-rendering TV scene — the default fallback is a full
+            white 100vh reload card, which would be strictly worse than the
+            crash itself (it'd cover the whole show, not just this overlay).
+            A crash here should just make the overlay disappear, not the TV. */}
+        <ErrorBoundary fallback={null}>
+          <ScoreboardOverlay show={show} />
+        </ErrorBoundary>
       </StageFrame>
 
       {/* z-50: persistent overlays — always on top */}
-      <QuestionCounter slide={currentSlide} show={show} />
-      <AnswerRevealOverlay show={show} currentSlide={currentSlide} />
+      <ErrorBoundary fallback={null}>
+        <QuestionCounter slide={currentSlide} show={show} />
+        <AnswerRevealOverlay show={show} currentSlide={currentSlide} />
+      </ErrorBoundary>
 
       {/* Break music — above everything except the nav-denied banner (z-200).
           Teardown on external advance is automatic: the host advancing from
@@ -522,22 +538,26 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
           the stage and its overlays, below the nav-denied banner (z-200); the
           jukebox (z-[70]) is only ever up while no warp is. */}
       {warp && (
-        <WarpTransition
-          key={`${currentSlide?.id}-${warp}`}
-          dir={warp}
-          onDone={() => {
-            if (warp === 'out') setActiveBreakId(currentSlide?.id)
-            setWarp(null)
-          }}
-        />
+        <ErrorBoundary fallback={null}>
+          <WarpTransition
+            key={`${currentSlide?.id}-${warp}`}
+            dir={warp}
+            onDone={() => {
+              if (warp === 'out') setActiveBreakId(currentSlide?.id)
+              setWarp(null)
+            }}
+          />
+        </ErrorBoundary>
       )}
 
       {breakActive && (
-        <JukeboxBreakOverlay
-          key={currentSlide.id}
-          lib={currentSlide?.data?.jukeboxLib ?? 'random'}
-          onExit={onBreakAdvance}
-        />
+        <ErrorBoundary fallback={null}>
+          <JukeboxBreakOverlay
+            key={currentSlide.id}
+            lib={currentSlide?.data?.jukeboxLib ?? 'random'}
+            onExit={onBreakAdvance}
+          />
+        </ErrorBoundary>
       )}
     </div>
   )
@@ -849,14 +869,24 @@ export default function Display() {
     )
   }
 
+  // Root boundary — ThemeProvider and PreShowScreen otherwise have no crash
+  // containment at all (unlike DisplayInner's live-slide path, which has one
+  // around SlideRenderer). fallback={null}, not the default reload card: a
+  // crash here should read as a blank TV, not paint a desktop-styled error
+  // card over the venue screen. Keyed on current_slide_id so a subsequent
+  // host advance — the actual recovery gesture Ben would reach for live —
+  // has a chance to clear a tripped boundary instead of it staying stuck
+  // until someone physically reloads the TV.
   return (
-    <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
-      {show.is_live && show.current_slide_id !== null ? (
-        <DisplayInner show={show} direction={direction} onBreakAdvance={handleBreakAdvance} />
-      ) : (
-        <PreShowScreen show={show} onInstall={canInstall ? handleInstall : null} />
-      )}
-      <NavDeniedBanner visible={navDenied} />
-    </ThemeProvider>
+    <ErrorBoundary key={show.current_slide_id} fallback={null}>
+      <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
+        {show.is_live && show.current_slide_id !== null ? (
+          <DisplayInner show={show} direction={direction} onBreakAdvance={handleBreakAdvance} />
+        ) : (
+          <PreShowScreen show={show} onInstall={canInstall ? handleInstall : null} />
+        )}
+        <NavDeniedBanner visible={navDenied} />
+      </ThemeProvider>
+    </ErrorBoundary>
   )
 }
