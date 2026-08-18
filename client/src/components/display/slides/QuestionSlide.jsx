@@ -441,7 +441,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
             lineHeight: 1,
           }}
         >
-          {data.questionLabel ?? data.questionNumber}
+          {part.questionNumber != null ? `Q${part.questionNumber}` : (data.questionLabel ?? data.questionNumber)}
         </p>
         {part.text && (
           <p className="mt-3" style={{ color: theme.colors.textMuted, fontSize: '1.5rem' }}>
@@ -583,7 +583,7 @@ function ShinyVideoQuestion({ slide, theme }) {
             lineHeight: 1,
           }}
         >
-          {data.questionLabel ?? data.questionNumber}
+          {part.questionNumber != null ? `Q${part.questionNumber}` : (data.questionLabel ?? data.questionNumber)}
         </p>
         {part.text && (
           <p className="mt-3" style={{ color: theme.colors.textMuted, fontSize: '1.5rem' }}>

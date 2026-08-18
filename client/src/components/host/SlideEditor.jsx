@@ -1062,6 +1062,12 @@ function ShinyPartEditor({ part, index, schemaType, theme, onChange, onRemove, o
       <Field label="Subtitle" hint='Shown above the question — a quote, or a short label like "Villain Laughs"'>
         <TextInput value={part.label} onChange={v => onChange({ ...part, label: v })} placeholder="Optional quote or label for this part" />
       </Field>
+      <Field label="Question Number" hint="Optional — each part can read as its own numbered question instead of sharing the slide's number">
+        <NumberInput
+          value={part.questionNumber ?? ''}
+          onChange={v => onChange({ ...part, questionNumber: v === '' ? null : v })}
+        />
+      </Field>
       {schemaType === 'image' && (
         <MediaUpload
           accept="image"
