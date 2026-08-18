@@ -862,7 +862,7 @@ export default function QuestionSlide({ slide, show, transitionKey }) {
         exit="exit"
       >
         {showIntro
-          ? <ShinyIntroScreen slide={slide} theme={theme} />
+          ? <ShinyIntroScreen slide={slide} theme={theme} show={show} />
           : <ShinyContent slide={slide} show={show} theme={theme} transitionKey={transitionKey} />}
       </motion.div>
     </AnimatePresence>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion, useReducedMotion, cubicBezier } from 'framer-motion'
 import { EASE_OUT } from '../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../lib/shinyGold.js'
-import { listSharedHostPhotos, pickUnshownRandomPhoto } from '../../lib/hostPhotos.js'
+import { listSharedHostPhotos, pickUnshownRandomPhoto, getUsedHostPhotoUrls } from '../../lib/hostPhotos.js'
 
 // Every shiny question/grid gets a standalone beat before its content — a pure
 // announcement, no question/answer/media yet, giving the host room to set
@@ -74,7 +74,7 @@ const HOLD = cubicBezier(0.25, 0.25, 0.75, 0.75) // exact identity — preserves
 const SETTLE_ARRIVE = cubicBezier(0.39, 0.575, 0.565, 1) // easeOutSine — moving fast, decelerate to a standstill at the peak
 const SETTLE_SWING = cubicBezier(0.445, 0.05, 0.55, 0.95) // easeInOutSine — extremum to extremum, zero velocity at both ends
 
-export default function ShinyIntroScreen({ slide, theme }) {
+export default function ShinyIntroScreen({ slide, theme, show }) {
   const { data } = slide
   const reduce = useReducedMotion()
   const title = data.seriesTheme || data.shinyFormatName || 'Shiny Question'
@@ -95,15 +95,18 @@ export default function ShinyIntroScreen({ slide, theme }) {
   // Draws from the SHARED cross-show pool (Ben's explicit call, 2026-08-16),
   // not a per-show folder — a per-show pool would go silently empty on any
   // duplicated or brand-new show, since storage objects aren't copied along
-  // with the show row. No `show` prop needed here — the shared pool doesn't
-  // key off which show is live.
+  // with the show row. The `show` prop is only used to steer the random pick
+  // away from photos already explicitly pinned to another slide (Ben,
+  // 2026-08-17: "wire the photo library to see if a photo had already been
+  // used that night or not") — it plays no part in WHICH pool loads.
   const [randomPhotoUrl, setRandomPhotoUrl] = useState(null)
   useEffect(() => {
     let cancelled = false
     setRandomPhotoUrl(null)
+    const excludeUrls = getUsedHostPhotoUrls(show, slide.id)
     listSharedHostPhotos().then(photos => {
       if (cancelled || photos.length === 0) return
-      const pick = pickUnshownRandomPhoto(photos)
+      const pick = pickUnshownRandomPhoto(photos, excludeUrls)
       if (pick) setRandomPhotoUrl(pick.url)
     })
     return () => { cancelled = true }

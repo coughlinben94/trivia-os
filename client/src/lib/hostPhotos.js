@@ -54,17 +54,26 @@ export async function listSharedHostPhotos() {
 // Ben, 2026-08-17: don't repeat a random photo that's already been shown.
 const shownRandomPhotoUrls = new Set()
 
-// Picks a random photo from `photos`, avoiding ones already returned by this
-// function this page load. Once every photo in the pool has been shown, the
-// "already shown" set resets and picking cycles again from the full pool —
-// better than either hard-stopping or repeating immediately once the pool
-// (which can be smaller than the number of shiny slides in a show) runs out.
-export function pickUnshownRandomPhoto(photos) {
+// Picks a random photo from `photos`, avoiding (in priority order):
+//  1. `excludeUrls` — photos explicitly pinned to another slide in THIS show
+//     (from getUsedHostPhotoUrls below). Bug fixed 2026-08-17 (caught by
+//     review, not live): this function only ever tracked what IT had shown
+//     this page load — it had no idea a host had hand-picked one of these
+//     same photos for, say, a Round Intro slide, so the random picker could
+//     hand a shiny question the exact photo already sitting on a different
+//     slide. Wired to getUsedHostPhotoUrls's result at the call site.
+//  2. ones already returned by this function this page load (shownRandomPhotoUrls).
+// Neither exclusion is allowed to return nothing, though — a repeat (or a
+// photo pinned elsewhere) is better than a blank intro screen, so each
+// filter falls back to the wider set if it would leave zero candidates.
+export function pickUnshownRandomPhoto(photos, excludeUrls = new Set()) {
   if (photos.length === 0) return null
-  let pool = photos.filter(p => !shownRandomPhotoUrls.has(p.url))
+  const notPinnedElsewhere = photos.filter(p => !excludeUrls.has(p.url))
+  const candidates = notPinnedElsewhere.length > 0 ? notPinnedElsewhere : photos
+  let pool = candidates.filter(p => !shownRandomPhotoUrls.has(p.url))
   if (pool.length === 0) {
     shownRandomPhotoUrls.clear()
-    pool = photos
+    pool = candidates
   }
   const pick = pool[Math.floor(Math.random() * pool.length)]
   shownRandomPhotoUrls.add(pick.url)
