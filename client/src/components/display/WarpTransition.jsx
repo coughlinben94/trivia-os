@@ -291,7 +291,19 @@ export default function WarpTransition({ dir = 'out', onDone }) {
       // alt-tab, RDP glitch) — force the guaranteed-opaque cover before the
       // caller snaps station state, or the handoff shows a raw flash instead
       // of a covered cut.
-      canvas.style.opacity = '1'
+      //
+      // `out` ONLY (fixed 2026-08-18). finish() also runs at the natural end
+      // of a 'back' warp, where the loop has just eased veil to 0 to reveal
+      // the world again — forcing opacity to 1 there re-covers the screen
+      // with this canvas's opaque GROUND background for one frame. onDone →
+      // setWarp(null) is a React state update scheduled from a rAF callback,
+      // so it lands after the current frame paints: the black frame is
+      // guaranteed to show. That put a hard black blink on the tail of every
+      // jukebox-break RETURN, i.e. once per grading break, all show. The
+      // opaque-cover rationale above is specific to 'out' (cover, then let
+      // the caller snap station state underneath); 'back' wants the opposite
+      // ending in both the natural and watchdog cases.
+      if (out) canvas.style.opacity = '1'
       doneRef.current?.()
     }
 

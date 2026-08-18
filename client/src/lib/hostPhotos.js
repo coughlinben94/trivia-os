@@ -80,6 +80,35 @@ export function pickUnshownRandomPhoto(photos, excludeUrls = new Set()) {
   return pick
 }
 
+// One STABLE pick per slide, for the life of the page load.
+//
+// Bug fixed 2026-08-18 (caught by review, not live): ShinyIntroScreen fully
+// unmounts and remounts every time `data.introDone` flips — and `prevSlide()`
+// regresses introDone to false (useShow.js) specifically so a host can step
+// BACK to the title card. Calling pickUnshownRandomPhoto directly on each
+// mount meant that step-back re-showed the SAME title card wearing a
+// DIFFERENT Ben, which reads as the card mutating under the audience rather
+// than as the host correcting a mis-advance.
+//
+// It also quietly ate the don't-repeat budget: every step-back burned another
+// photo into shownRandomPhotoUrls, so on a small pool the Set exhausted and
+// self-cleared early, losing the no-repeats guarantee Ben asked for
+// (2026-08-17) for the rest of the night. Re-showing one card is not showing
+// a new card, so it should not consume a photo.
+//
+// Keyed on slide id, so a genuinely NEW shiny question still picks fresh —
+// this stabilises per-question, not per-render.
+// ponytail: plain Map, no eviction — bounded by the shiny-slide count in one
+// show (tens), and it resets on reload like the two caches above.
+const pickedPhotoBySlide = new Map()
+
+export function pickPhotoForSlide(slideId, photos, excludeUrls = new Set()) {
+  if (slideId && pickedPhotoBySlide.has(slideId)) return pickedPhotoBySlide.get(slideId)
+  const pick = pickUnshownRandomPhoto(photos, excludeUrls)
+  if (slideId && pick) pickedPhotoBySlide.set(slideId, pick)
+  return pick
+}
+
 // Every slide type that carries a host photo stores it under one of these
 // two field names (RoundIntro/ShinyIntro/GridIntro use hostPhotoUrl,
 // StateOfUnion uses photoUrl — pre-existing split, not something to unify

@@ -16,7 +16,19 @@ export default class ErrorBoundary extends Component {
 
   render() {
     if (this.state.hasError) {
-      if (this.props.fallback) return this.props.fallback
+      // `!== undefined`, NOT truthiness (fixed 2026-08-18). `fallback={null}`
+      // — "render nothing, leave the TV alone" — is the single most common
+      // thing display-side callers want, and a truthiness test silently
+      // routed every one of them to the desktop-styled white reload card
+      // below: the exact outcome those call sites' own comments say they are
+      // avoiding. ParticleBackground.jsx had already hit this and worked
+      // around it locally with `fallback={<></>}`; five boundaries added in
+      // 881db17 (Display.jsx) had not, so a throw in any overlay would have
+      // painted a 100vh "Something went wrong in the editor" panel over a
+      // live venue TV. Fixing the test here rather than at each call site
+      // keeps `null` meaning "render nothing" for every future caller too.
+      // Callers that pass NO fallback still get the default card.
+      if (this.props.fallback !== undefined) return this.props.fallback
       return (
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
