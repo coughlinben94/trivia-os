@@ -15,13 +15,14 @@ export const TYPE_CARDS = [
   { type: 'question',       icon: '❓', name: 'Question',             desc: 'Plain text question' },
   { type: 'shiny-question', icon: '✨', name: 'Shiny Question',       desc: 'Pick a format and fill it in' },
   { type: 'grading-break',  icon: '⏸️', name: 'Grading Break',       desc: 'While Ben grades papers' },
+  { type: 'scoreboard-reveal', icon: '🏆', name: 'Scoreboard Reveal', desc: 'Round standings — also unlocks phone scores for this round' },
   { type: 'winner-reveal',  icon: '🥇', name: 'Winner Reveal',       desc: 'Drum roll → winner + confetti' },
   { type: 'custom',         icon: '✏️', name: 'Custom',              desc: 'Freeform slide' },
   // utility-only — not shown in the picker grid, but provides icon/name metadata for header + sidebar
   { type: 'team-preview',   icon: '👥', name: 'Team List',           desc: 'Show all team names on screen', hidden: true },
 ]
 
-const NEEDS_ROUND = new Set(['swing-round-intro', 'question', 'shiny-question', 'grading-break', 'pixelate-series', 'multi-question', 'pyl-reveal'])
+const NEEDS_ROUND = new Set(['swing-round-intro', 'question', 'shiny-question', 'grading-break', 'scoreboard-reveal', 'pixelate-series', 'multi-question', 'pyl-reveal'])
 
 const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber-400', video: 'bg-purple-400', list: 'bg-orange-400' }
 
