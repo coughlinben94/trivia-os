@@ -20,6 +20,8 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
   const pairs = data.pairs ?? []
   const locked = !!data.matchingLocked
   const text = theme?.colors?.text ?? '#ffffff'
+  const highlight = theme?.colors?.highlight ?? '#f5c842'
+  const [saving, setSaving] = useState(false)
 
   // connections: { [`${side}:${itemId}`]: colorIndex } — side-tagged because
   // left and right items share the same id space (pairs.map(p => p.id) is
@@ -36,14 +38,12 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
   const [pendingSide, setPendingSide] = useState(null) // { side: 'left'|'right', itemId } — first tap of a pair, waiting for the second
   const [saveFailed, setSaveFailed] = useState(false)
   const shouldReduceMotion = useReducedMotion()
-  // Same quick 🔒 pop as WagerBoard's Lock In Guess (2026-08-18, Ben: every
-  // shiny format where a team answers on their phone should get it) — here
-  // there's no explicit lock button, so it fires on the rising edge of
-  // "just became fully matched" instead, tracked via wasCompleteRef so it
-  // doesn't re-fire on every intermediate pair tap.
+  // Same quick 🔒 pop as WagerBoard's Lock In Guess — fires from the explicit
+  // Lock Your Answers button below, not automatically (2026-08-18, Ben:
+  // taps should only build/preview the match; nothing saves until the team
+  // reviews it and locks it in themselves).
   const [showLockPop, setShowLockPop] = useState(false)
   const lockPopTimerRef = useRef(null)
-  const wasCompleteRef = useRef(false)
   useEffect(() => () => clearTimeout(lockPopTimerRef.current), [])
 
   const rightOrder = seededShuffle(pairs, slide.id ?? 'preview')
@@ -92,28 +92,22 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
     return run
   }, [preview, slide.id, slide.showId, team.id, team.showId])
 
+  // Purely local — builds/edits the match on screen. Nothing saves to
+  // phone_answers until the team taps Lock Your Answers below (2026-08-18,
+  // Ben: taps should let them look the matching over first, not auto-submit
+  // on every pair).
   function tapItem(side, itemId) {
     if (locked) return
     const key = `${side}:${itemId}`
     const usedColors = new Set(Object.values(connections))
     const nextColor = PALETTE.findIndex((_, i) => !usedColors.has(i))
 
-    // Already colored — tapping it again normally undoes that pair (both
-    // halves clear). But if this exact pairing was never actually confirmed
-    // saved (submit() failed or timed out — see saveFailed), the tap the error
-    // message asks for ("tap a pair again") must RETRY that save instead of
-    // clearing the pair out from under the team, or the natural recovery
-    // gesture always looks like giving up on the match.
+    // Already colored — tapping it again undoes that pair (both halves clear).
     if (connections[key] != null) {
       const color = connections[key]
-      if (committedConnections[key] !== color) {
-        submit(connections).then(ok => { if (ok) setCommittedConnections(connections) })
-        return
-      }
       const next = { ...connections }
       Object.keys(next).forEach(k => { if (next[k] === color) delete next[k] })
       setConnections(next)
-      submit(next).then(ok => { if (ok) setCommittedConnections(next) })
       return
     }
     if (!pendingSide) {
@@ -129,7 +123,27 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
     const next = { ...connections, [`${pendingSide.side}:${pendingSide.itemId}`]: nextColor, [key]: nextColor }
     setConnections(next)
     setPendingSide(null)
-    submit(next).then(ok => { if (ok) setCommittedConnections(next) })
+  }
+
+  const allMatched = pairs.length > 0 && buildMatchAnswer(connections).length >= pairs.length
+  // Compares the built pairs, not raw color-index equality — an undo/redo
+  // can land the same pairing on a different palette index and shouldn't
+  // read as "changed" when it isn't.
+  const dirty = JSON.stringify(buildMatchAnswer(connections)) !== JSON.stringify(buildMatchAnswer(committedConnections))
+  const hasLockedOnce = Object.keys(committedConnections).length > 0
+
+  function lockAnswers() {
+    if (locked || !allMatched || !dirty || saving) return
+    setSaving(true)
+    submit(connections).then(ok => {
+      setSaving(false)
+      if (ok) {
+        setCommittedConnections(connections)
+        setShowLockPop(true)
+        clearTimeout(lockPopTimerRef.current)
+        lockPopTimerRef.current = setTimeout(() => setShowLockPop(false), 700)
+      }
+    })
   }
 
   useEffect(() => {
@@ -162,14 +176,7 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
   // that finishes on dead wifi must not be released before the save actually
   // lands, or they'd be free to browse away with nothing recorded.
   useEffect(() => {
-    const complete = pairs.length > 0 && buildMatchAnswer(committedConnections).length >= pairs.length
-    onAnswered?.(complete)
-    if (complete && !wasCompleteRef.current) {
-      setShowLockPop(true)
-      clearTimeout(lockPopTimerRef.current)
-      lockPopTimerRef.current = setTimeout(() => setShowLockPop(false), 700)
-    }
-    wasCompleteRef.current = complete
+    onAnswered?.(pairs.length > 0 && buildMatchAnswer(committedConnections).length >= pairs.length)
   }, [onAnswered, committedConnections, pairs.length])
 
   return (
@@ -217,12 +224,39 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
           ))}
         </div>
       </div>
+      {!locked && (
+        <button
+          onClick={lockAnswers}
+          disabled={!allMatched || !dirty || saving}
+          onPointerDown={e => { if (allMatched && dirty && !saving) e.currentTarget.style.transform = 'scale(0.97)' }}
+          onPointerUp={e => { e.currentTarget.style.transform = 'scale(1)' }}
+          onPointerLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+          style={{
+            width: '100%', minHeight: 60, borderRadius: 14,
+            border: allMatched && dirty ? `2px solid ${highlight}` : `1px solid ${text}20`,
+            background: allMatched && dirty ? `${highlight}26` : 'transparent',
+            color: allMatched && dirty ? text : `${text}40`,
+            fontSize: '1rem', fontWeight: 700, fontFamily: 'DM Sans, sans-serif',
+            cursor: allMatched && dirty && !saving ? 'pointer' : 'default',
+            WebkitTapHighlightColor: 'transparent',
+            transition: 'transform 140ms cubic-bezier(0.23,1,0.32,1)',
+          }}
+        >
+          {saving ? 'Saving…' : !hasLockedOnce ? 'Lock Your Answers' : dirty ? 'Update Answers' : 'Answers Locked'}
+        </button>
+      )}
       <p style={{ color: `${text}b3`, fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>
-        {locked ? 'Answers locked' : 'Tap one from each side to match them'}
+        {locked
+          ? 'Answers locked'
+          : !allMatched
+            ? 'Tap one from each side to match them'
+            : dirty
+              ? 'Tap Lock Your Answers to submit'
+              : 'Locked in — you can still change it until Ben locks answers'}
       </p>
       {saveFailed && !locked && (
         <p style={{ color: '#ff6b6b', fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
-          Couldn't save — check your connection and tap a pair again
+          Couldn't save — check your connection and tap Lock Your Answers again
         </p>
       )}
     </div>
@@ -235,7 +269,7 @@ function MatchTile({ label, color, pending, disabled, onTap, textColor }) {
       onClick={onTap}
       disabled={disabled}
       style={{
-        minHeight: 56,
+        minHeight: 64,
         padding: '0.9rem 1rem',
         borderRadius: 14,
         border: pending ? `3px solid ${textColor}` : '1px solid rgba(255,255,255,0.15)',

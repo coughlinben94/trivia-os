@@ -298,11 +298,6 @@ function RegistrationScreen({ onRegister, show, theme }) {
         </p>
 
         <AddToHomeScreenBanner text={text} accent={accent} />
-
-        {/* Watermark */}
-        <p style={{ textAlign: 'center', color: `${text}28`, fontSize: '0.65rem', margin: '-1rem 0 0' }}>
-          Baynes Apple Valley Trivia Night
-        </p>
       </div>
     </div>
   )
