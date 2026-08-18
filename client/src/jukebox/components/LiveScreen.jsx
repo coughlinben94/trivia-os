@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, memo } from 'react'
-import { motion, useAnimation } from 'framer-motion'
+import { motion, useAnimation, useMotionValue, animate } from 'framer-motion'
 // 2026-08-04, owner request: after looking at the pre-mesh circle-blobs
 // engine live (AlbumGradient.jsx, temp-revert earlier this session), the
 // 'screen' composite blob centers read as washed-out/white -- switched to
@@ -7,7 +7,7 @@ import { motion, useAnimation } from 'framer-motion'
 // adapted for the app's current 2-color-max picker-driven model (see that
 // file's header for the full history and what was fixed vs. the original).
 import GradientBackground from './AlbumGradientMesh'
-import StationRingLayer from './StationRingLayer'
+import StationRingLayer, { EH_DUR_MS, EH_PHASES } from './StationRingLayer'
 import { usePalette } from '../hooks/usePalette'
 import { displayName } from '../lib/track'
 
@@ -280,6 +280,19 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
 
   const tonearmCtrl = useAnimation()
   const flyCtrl     = useAnimation()
+  // Event Horizon (ring-world song-to-song transition, 2026-08-17) — a
+  // radial collapse/bloom of the REAL record around its own center, driven
+  // independently of flyCtrl (which owns the non-ring vertical fly-up/
+  // fly-down and stays completely untouched for ring mode: it's never given
+  // a `scale` target during a ring transition, so this motion value is free
+  // to own that CSS property exclusively, bound via style below). Always
+  // created (hooks can't be conditional) but only ever animated when
+  // ringMode is true; harmless at its default 1 otherwise.
+  const recordScaleMV = useMotionValue(1)
+  // { startMs } while an Event Horizon sequence is in flight, else null —
+  // StationRingLayer reads startMs once (a normal prop, not per-frame) and
+  // derives its own progress from wall-clock elapsed against it.
+  const [ringTransition, setRingTransition] = useState(null)
   const busyRef      = useRef(false)
   // Set only by the ending effect below, read only by runTransition's three
   // remaining animation calls (2026-08-07, Opus review) — both `ending` and
@@ -617,6 +630,13 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
       busyRef.current = false
       endingRef.current = false
       setTransitioning(false)
+      // Belt-and-suspenders for ring mode: if the close sequence superseded
+      // an in-flight Event Horizon collapse, don't leave the record's live
+      // scale stranded mid-shrink — the ending effect's own fly-off (flyCtrl,
+      // untouched by ring mode) is about to take over, and it should carry a
+      // normal-sized record up with it, not whatever fraction it collapsed to.
+      recordScaleMV.set(1)
+      setRingTransition(null)
     }
   }, [ending])
 
@@ -646,6 +666,110 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
   // sequence (arm lift, fly-up) starts immediately off that; the real
   // Spotify play call now fires from INSIDE Step 3 below via
   // onTransitionAudioStart, not from an independent timer in Jukebox.jsx.
+  // Event Horizon — the ring-world's own song-to-song transition (2026-08-17,
+  // ported from the approved mockup: claude.ai artifact
+  // a831a530-6ac5-47ed-8486-66a2b3a53352, panel 1 "Event Horizon"). Instead
+  // of the shared fly-up/fly-down, the needle comet's inward ride finishes
+  // the trip, hits the spindle, the groove band draws in behind it, the
+  // record spirals into its own center and collapses in a flash, then the
+  // next record blooms back out of the same point. Called only from
+  // runTransition's `if (ringMode)` branch above — never touches flyCtrl
+  // (that stays the non-ring path's exclusively) or any of the shared
+  // fly-path code below it.
+  //
+  // EH_DUR_MS/EH_PHASES (imported from StationRingLayer.jsx, the single
+  // source of truth for both files) are the mockup's own `dur:2700` and its
+  // render()'s phase boundaries — recordScaleMV's keyframes below and this
+  // function's own art/audio swap timing are kept locked to exactly those
+  // same fractions so the real DOM record and the canvas layer's comet/
+  // groove/flash drawing (which derives its own progress independently, by
+  // reading recordScaleMV and a shared start timestamp — see
+  // StationRingLayer's transitionStartMs/recordScaleMV props) never drift
+  // apart despite being driven by two different mechanisms.
+  const runEventHorizonTransition = useCallback(async (target) => {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const newArtUrl = target?.album?.images?.[0]?.url
+    const preloadPromise = newArtUrl ? preloadImage(newArtUrl) : Promise.resolve()
+
+    const swapIdentity = () => {
+      setShown(target)
+      if (newArtUrl) setArtUrl(newArtUrl)
+      setArtOpacity(1)
+      clearTimeout(audioJustFiredClearTimerRef.current)
+      audioJustFiredRef.current = true
+      audioJustFiredClearTimerRef.current = setTimeout(() => { audioJustFiredRef.current = false }, 1800)
+      onTransitionAudioStart?.(target)
+    }
+
+    if (reducedMotion) {
+      // Critical Rule 3 (this repo): every animated element needs its own
+      // reduced-motion guard, and this is canvas/JS animation, so an
+      // explicit check, not a CSS media query. Instant cut — no spiral/
+      // flash/collapse/bloom. ringTransition is never set, so
+      // StationRingLayer never takes the Event Horizon draw path either;
+      // recordScaleMV never leaves 1, so the record never visibly shrinks.
+      await preloadPromise
+      if (!endingRef.current) swapIdentity()
+    } else {
+      tonearmCtrl.start({ ...ARM_OFF, transition: { type: 'spring', stiffness: 220, damping: 30 } })
+      setRingTransition({ startMs: performance.now() })
+
+      // Scripted collapse/bloom, not a physics spring — matches the
+      // mockup's own eased phase timeline (easeIn fall, easeOut emerge with
+      // a small overshoot bounce) rather than runTransition's other springs.
+      const scaleAnim = animate(recordScaleMV, [1, 1, 0, 0, 1.05, 1, 1], {
+        duration: EH_DUR_MS / 1000,
+        times: [0, EH_PHASES.lockEnd, EH_PHASES.fallEnd, EH_PHASES.emergeStart, 0.69, EH_PHASES.emergeEnd, 1],
+        ease: ['linear', 'easeIn', 'linear', 'easeOut', 'easeOut', 'linear'],
+      })
+
+      // Swap identity once the old record is fully collapsed and the new one
+      // is about to start blooming (mirrors the fly path's Step 3: preload
+      // before swap, fire audio at the same moment the new visual begins).
+      await Promise.all([preloadPromise, sleep(EH_DUR_MS * EH_PHASES.emergeStart)])
+      if (!endingRef.current) swapIdentity()
+
+      await scaleAnim
+      if (!endingRef.current) {
+        tonearmCtrl.start({ ...ARM_ON, transition: { type: 'spring', stiffness: 180, damping: 26 } })
+      }
+      setRingTransition(null)
+    }
+
+    // If a skip arrived mid-transition, hand it back to the caller instead
+    // of recursing into runTransition directly — this function is declared
+    // (and memoized) BEFORE runTransition below it, so it cannot reference
+    // that later const without a forward-reference. runTransition's own
+    // `if (ringMode)` call site does the actual recursive call.
+    if (pendingRef.current && pendingRef.current.uri !== target.uri) {
+      const pending = pendingRef.current
+      pendingRef.current = null
+      setTransitioning(false)
+      busyRef.current = false
+      setTextVisible(false)
+      setTextInstant(true)
+      return pending
+    }
+
+    if (!endingRef.current) {
+      setTransitioning(false)
+      busyRef.current = false
+      setTextInstant(false)
+      setTextVisible(true)
+    }
+
+    const paused = audioJustFiredRef.current ? false : isPausedRef.current
+    if (endingRef.current) {
+      // Close sequence took over — its own effect owns tonearmCtrl from here.
+    } else if (document.hidden) {
+      tonearmCtrl.set(paused ? ARM_OFF : ARM_ON)
+    } else {
+      tonearmCtrl.start({ ...(paused ? ARM_OFF : ARM_ON), transition: { type: 'spring', stiffness: 180, damping: 26 } })
+    }
+    setSpinPaused(paused)
+    return null
+  }, [onTransitionAudioStart])
+
   const runTransition = useCallback(async (target, prevTrack) => {
     try {
       if (busyRef.current) {
@@ -666,6 +790,18 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
       setTextVisible(false)
       setTextInstant(true)
       setTransitioning(true)
+
+      // ── Event Horizon (ring-world only) ──────────────────────────────
+      // Branches out here, before any of the shared/non-ring vertical-fly
+      // code below ever runs, and returns before reaching it — the fly path
+      // beneath this block is completely untouched for ringMode: false, both
+      // in code and in behavior (see the git-diff check this repo's own
+      // CLAUDE.md/handoff docs call for against jukebox-normal-build-baseline).
+      if (ringMode) {
+        const rePending = await runEventHorizonTransition(target)
+        if (rePending) runTransition(rePending, target)
+        return
+      }
 
       // Step 1 — arm lifts alone; record stays put until arm is fully up
       tonearmCtrl.start({ ...ARM_OFF, transition: { type: 'spring', stiffness: 220, damping: 30 } })
@@ -842,7 +978,7 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
         tonearmCtrl.start({ ...ARM_ON, transition: { type: 'spring', stiffness: 180, damping: 26 } })
       }
     }
-  }, [onTransitionAudioStart])
+  }, [onTransitionAudioStart, runEventHorizonTransition])
 
   // Song change → reconciliation backstop, not the primary trigger anymore
   // (2026-08-04) — the real trigger is Jukebox.jsx's advanceToNext calling
@@ -970,8 +1106,21 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
           groove-ring halo, progress-driven needle comet, pulsar rim-spikes.
           Ben confirmed the album wash itself stays exactly as-is ("album wash
           on s13 alone"); only JukeboxBreakOverlay ever turns ringMode on, so
-          the standalone /music tree is untouched. */}
-      {ringMode && <StationRingLayer active={!!shown} colors={palette.colors} progress={progress} />}
+          the standalone /music tree is untouched.
+          transitioning/transitionStartMs/recordScaleMV (2026-08-17, Event
+          Horizon): only set during a ring-mode song-to-song transition — see
+          runEventHorizonTransition above and this file's own comment on
+          recordScaleMV's declaration. */}
+      {ringMode && (
+        <StationRingLayer
+          active={!!shown}
+          colors={palette.colors}
+          progress={progress}
+          transitioning={!!ringTransition}
+          transitionStartMs={ringTransition?.startMs ?? null}
+          recordScaleMV={recordScaleMV}
+        />
+      )}
 
       {/* Entrance black cover (2026-08-04, owner spec), scoped ONLY to
           entranceActive (true exactly once, the very first song of a
@@ -1028,7 +1177,17 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
                    as one unit — only the tonearm is left behind as permanent furniture. */}
               <motion.div
                 className="absolute inset-0"
-                style={{ zIndex: 2, willChange: 'transform, opacity' }}
+                // ringMode: scale bound directly to recordScaleMV (a Framer
+                // Motion value) instead of left to flyCtrl's own `animate`
+                // target — flyCtrl NEVER sets `scale` during a ring-mode
+                // transition (only runEventHorizonTransition's tonearmCtrl
+                // calls run), so there's no dual ownership of the property;
+                // entrance's flyCtrl scale target is always the constant 1,
+                // matching recordScaleMV's own resting value, so binding this
+                // unconditionally whenever ringMode is true changes nothing
+                // visible outside an active Event Horizon sequence. Non-ring
+                // mode: spreads {} — byte-identical to before.
+                style={{ zIndex: 2, willChange: 'transform, opacity', ...(ringMode ? { scale: recordScaleMV } : {}) }}
                 initial={{ opacity: 0, y: -500, scale: 1 }}
                 animate={flyCtrl}
               >
