@@ -349,6 +349,79 @@ function ShinyVisualQuestion({ slide, theme }) {
   )
 }
 
+// ─── Shiny visual question — swing-round pan reveal ────────────────────────────
+// Legacy Swing Round visual questions (data.shinyType === 'visual' — see
+// resolveShinyPart's own comment on the two ways a visual question gets
+// flagged) get a two-beat treatment instead of ShinyVisualQuestion's
+// immediate text+image layout (2026-08-18, Ben): text alone first, then the
+// host presses Reveal Image and the whole slide pans up — a real vertical
+// camera move, not a fade — to bring the image into view. Kept as its own
+// component rather than retrofitting ShinyVisualQuestion, which stays
+// untouched for every format-library image question elsewhere in the show.
+function ShinySwingVisualQuestion({ slide, theme }) {
+  const { data } = slide
+  const part = resolveShinyPart(data)
+  const reduce = useReducedMotion()
+  const revealed = !!data.imagesRevealed
+
+  const captionBoxRef = useRef(null)
+  const captionSize = useFitToBox(captionBoxRef, part.text, {
+    family: theme.fonts.body,
+    floorPx: VISUAL_CAPTION_FLOOR * 16,
+    ceilPx: VISUAL_CAPTION_CEIL * 16,
+    maxLines: 4, lineHeight: 1.25,
+  })
+
+  return (
+    <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
+      <div
+        className="absolute inset-0 pointer-events-none z-10"
+        style={{
+          background: `radial-gradient(ellipse at center, ${SHINY_GOLD_GLOW}38 0%, transparent 55%)`,
+          animation: 'shinyGlow 0.7s ease-out forwards',
+        }}
+      />
+
+      {/* A 200%-tall track holding both beats stacked; panning is just
+          translating this track by exactly one stage-height (-50% of its
+          own 200% height), so it lands pixel-exact on beat 2 regardless of
+          the actual stage size. */}
+      <motion.div
+        className="absolute left-0 right-0 top-0"
+        style={{ height: '200%' }}
+        animate={{ y: revealed ? '-50%' : '0%' }}
+        transition={{ duration: reduce ? 0.15 : 0.85, ease: reduce ? 'linear' : EASE_PANEL }}
+      >
+        {/* Beat 1 — question text alone */}
+        <div className="w-full flex items-center justify-center px-24" style={{ height: '50%' }}>
+          <div ref={captionBoxRef} className="w-full">
+            <p style={{
+              textAlign: 'center', color: theme.colors.text, lineHeight: 1.25,
+              fontFamily: `'${theme.fonts.body}', sans-serif`,
+              fontSize: `${captionSize}px`, fontWeight: 500,
+              textShadow: '0 2px 18px rgba(0,0,0,0.85)',
+            }}>
+              {part.text}
+            </p>
+          </div>
+        </div>
+
+        {/* Beat 2 — the image, revealed by the pan */}
+        <div className="w-full flex items-center justify-center px-20" style={{ height: '50%' }}>
+          {part.mediaUrl && (
+            <img
+              src={part.mediaUrl}
+              alt=""
+              className="max-w-full max-h-full object-contain rounded-2xl"
+              style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}
+            />
+          )}
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
 // ─── Shiny audio question ─────────────────────────────────────────────────────
 
 function ShinyAudioQuestion({ slide, show, theme }) {
@@ -802,7 +875,12 @@ function ShinyContent({ slide, show, theme, transitionKey }) {
   const part = resolveShinyPart(data)
 
   if (isVisualShiny(data) && part.mediaUrl) {
-    return <ShinyVisualQuestion slide={slide} theme={theme} show={show} />
+    // Legacy Swing Round flag (see resolveShinyPart's comment) routes to the
+    // pan-reveal treatment; format-library image questions keep the
+    // existing immediate text+image layout, unchanged.
+    return data.shinyType === 'visual'
+      ? <ShinySwingVisualQuestion slide={slide} theme={theme} />
+      : <ShinyVisualQuestion slide={slide} theme={theme} show={show} />
   }
   if (isAudioShiny(data)) {
     return <ShinyAudioQuestion slide={slide} theme={theme} show={show} />

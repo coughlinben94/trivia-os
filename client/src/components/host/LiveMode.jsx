@@ -787,6 +787,24 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
             </div>
           )}
 
+          {currentSlide?.type === 'question' && currentSlide?.data?.shinyType === 'visual' && (
+            <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
+              <p className="text-xs text-gray-400 mb-3">
+                {currentSlide?.data?.imagesRevealed
+                  ? 'Image revealed — everyone can see it.'
+                  : 'Text only for now — Reveal pans the screen up to the image.'}
+              </p>
+              <button
+                onClick={() => actions.updateSlide(currentSlide.id, {
+                  data: { ...currentSlide.data, imagesRevealed: !currentSlide.data.imagesRevealed },
+                })}
+                className="w-full py-3 rounded-xl border-2 font-semibold text-sm transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50"
+              >
+                {currentSlide?.data?.imagesRevealed ? '⬆️ Hide Image (pan back down)' : '🖼️ Reveal Image (pan up)'}
+              </button>
+            </div>
+          )}
+
           {currentSlide?.type === 'pyl-reveal' && !currentSlide?.data?.animationId && (
             <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
               <p className="text-xs text-gray-400 mb-3">Pick animation</p>
