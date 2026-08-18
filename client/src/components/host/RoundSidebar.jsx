@@ -554,6 +554,12 @@ export default function RoundSidebar({
                           groupCount: group.items.length,
                           groupExpanded: expanded,
                           onToggleGroup: () => toggleGroup(groupId),
+                          // The lead row IS item 1 — its own sub-row is never
+                          // rendered (group.items.slice(1) below skips it), so
+                          // without this the expanded list reads as "only 5"
+                          // when the count badge says 6 (Ben, 2026-08-18, hit
+                          // this twice on a 6-slide image series).
+                          leadPartLabel: shinySiblingLabel(leadSlide, 1),
                         })}
                         {expanded && group.items.slice(1).map(({ slide, idx }, i) =>
                           rowFor(slide, idx, { doubleIndent: true, labelOverride: shinySiblingLabel(slide, i + 2) })
@@ -589,7 +595,7 @@ export default function RoundSidebar({
   )
 }
 
-function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, onDelete, onGripDown, indent, doubleIndent, groupCount, groupExpanded, onToggleGroup, labelOverride }) {
+function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, onDelete, onGripDown, indent, doubleIndent, groupCount, groupExpanded, onToggleGroup, labelOverride, leadPartLabel }) {
   const meta  = SLIDE_TYPE_META[slide.type] ?? { icon: '📄', label: slide.type }
   const icon  = slide.data?.isShiny ? (slide.data?.shinyFormatIcon || meta.icon) : meta.icon
   const label = labelOverride ?? slideLabel(slide)
@@ -630,7 +636,9 @@ function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, 
         {label}
       </span>
       {groupCount != null && (
-        <span className="text-[10px] text-gray-400 shrink-0 tabular-nums">{groupCount}</span>
+        <span className="text-[10px] text-gray-400 shrink-0 tabular-nums">
+          {leadPartLabel ? `${leadPartLabel} · ${groupCount}` : groupCount}
+        </span>
       )}
       <button
         onClick={e => { e.stopPropagation(); onDelete() }}
