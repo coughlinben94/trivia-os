@@ -802,7 +802,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
                 pointsPerMatch={data.pointsPerMatch ?? 2}
                 onChangePairs={pairs => onChange('pairs', pairs)}
                 onChangePoints={pts => onChange('pointsPerMatch', pts)}
-                onMediaUpload={handleMediaUpload}
+                onMediaUpload={async file => { const r = await uploadMedia(file); return r?.url }}
               />
               <div className="flex flex-col gap-2">
                 <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
