@@ -10,6 +10,17 @@ import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
 import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 
+// Named so the UI can recognize this ONE specific refusal and offer a manual
+// override for it — every other wager error is a real, unrecoverable-by-
+// retrying-differently failure (bad connection, unlocked wagers, non-numeric
+// answer), but an empty phone_answers fetch is ALSO exactly what a genuine
+// zero-submission round looks like (small crowd, phones failed, or the
+// question got skipped by everyone). Without an override, Retry just hits
+// this same wall forever with no way to actually score the round (Ben,
+// 2026-08-17: "idk why that keeps popping up ... something different" —
+// found while investigating: this is the one message with no path forward).
+const WAGER_ZERO_ANSWERS_ERROR = 'No wager answers came back — check connection and retry before scoring'
+
 const SLIDE_META = {
   'pre-show':          { label: 'Pre-Show',    color: 'bg-sky-100 text-sky-700' },
   'title':             { label: 'Title',       color: 'bg-purple-100 text-purple-700' },
@@ -369,7 +380,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // lock: the lock flag is written first and stays written even if scoring
   // fails, and the button stays available as "Retry Scoring" until the slide
   // is revealed, so a transient failure never strands the slide.
-  async function handleLockAndScoreWagers(slide) {
+  async function handleLockAndScoreWagers(slide, { force = false } = {}) {
     setWagerBusy(true)
     setWagerError(null)
     try {
@@ -425,8 +436,12 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       // won, no error, no retry path. Refuse instead when teams exist but the
       // fetch came back suspicious-empty; matching has an equivalent guard
       // for its own empty-fetch shape (answers exist but can't be matched).
-      if ((answers?.length ?? 0) === 0 && (teams?.length ?? 0) > 0) {
-        setWagerError('No wager answers came back — check connection and retry before scoring')
+      // `force` (2026-08-17, Ben) skips this ONE check — the UI only offers
+      // it after this exact error has already fired once, as a deliberate
+      // "yes, actually score everyone at 0" override, not a way to bypass
+      // any of the other refusals above.
+      if (!force && (answers?.length ?? 0) === 0 && (teams?.length ?? 0) > 0) {
+        setWagerError(WAGER_ZERO_ANSWERS_ERROR)
         return
       }
 
@@ -693,6 +708,20 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
               </button>
               {wagerError && (
                 <p className="text-xs text-red-600 mt-2 text-center">{wagerError}</p>
+              )}
+              {/* Manual override — ONLY for the empty-answers refusal, and
+                  only after it's actually fired once. Retry alone can't get
+                  past this if it's a genuine zero-submission round (small
+                  crowd, phones failed) rather than a transient fetch blip —
+                  before this existed, Retry just hit the same wall forever. */}
+              {wagerError === WAGER_ZERO_ANSWERS_ERROR && (
+                <button
+                  onClick={() => handleLockAndScoreWagers(currentSlide, { force: true })}
+                  disabled={wagerBusy}
+                  className="w-full mt-2 py-2 rounded-lg border border-amber-300 text-amber-700 text-xs font-semibold hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Score anyway — 0 for every team
+                </button>
               )}
             </div>
           )}
