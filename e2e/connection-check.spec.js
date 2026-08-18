@@ -64,6 +64,8 @@ test('Dashboard: type cards render including Winner Reveal', async ({ page }) =>
   await expect(page.getByText('Winner Reveal')).toBeVisible()
   await expect(page.getByText('Grading Break')).toBeVisible()
   await expect(page.getByText('Question Database')).toBeVisible()
+  await expect(page.getByText('Music Library')).toBeVisible()
+  await expect(page.getByText('Album Transitions')).toBeVisible()
   expect(errors, `JS errors:\n${errors.join('\n')}`).toHaveLength(0)
 })
 

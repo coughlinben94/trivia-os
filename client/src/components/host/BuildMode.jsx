@@ -637,13 +637,43 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                       ticker:   { icon: '👥', name: 'Team List', desc: 'Show all team names on screen', styleKey: 'ticker', onClick: () => openAddModal({ type: 'team-preview', roundId: activeRoundId }) },
                       data:     { icon: '📊', name: 'Data', desc: 'Shows history & analytics', styleKey: 'data', onClick: () => window.open('/dashboard', '_blank') },
                       shows:    { icon: '📋', name: 'My Shows', desc: 'Browse past shows', styleKey: 'shows', onClick: () => window.open('/shows', '_blank') },
-                      music:    { icon: '🎵', name: 'Music Library', desc: 'Jukebox songs, sets & trim points', styleKey: 'music', onClick: () => window.open('/music', '_blank') },
+                      music:    { icon: '🎵', name: 'Music Library', desc: 'Jukebox songs, sets & trim points', styleKey: 'music', subtiles: [
+                        { icon: '🎵', label: 'Music Library', onClick: () => window.open('/music', '_blank') },
+                        { icon: '🌀', label: 'Album Transitions', onClick: () => window.open('https://claude.ai/code/artifact/a831a530-6ac5-47ed-8486-66a2b3a53352', '_blank') },
+                      ] },
                     }
 
                     return restBoxOrder.map(id => {
                       const box = restBoxContent[id]
                       if (!box) return null
                       const dropTarget = restDragOverId === id
+
+                      if (box.subtiles) {
+                        return (
+                          <div
+                            key={id}
+                            data-rest-box-id={id}
+                            className={`relative w-[calc(20%-8px)] flex flex-col rounded-xl border overflow-hidden min-h-[100px] ${
+                              CARD_STYLE[box.styleKey] ?? 'bg-white border-gray-200'
+                            } ${dropTarget ? 'ring-2 ring-[#1a6b4a] ring-offset-1' : ''}`}
+                          >
+                            <RestGripHandle id={id} />
+                            {box.subtiles.map((sub, i) => (
+                              <button
+                                key={sub.label}
+                                onClick={sub.onClick}
+                                className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-2 py-1 text-center ${BTN} ${
+                                  i > 0 ? 'border-t border-black/10' : ''
+                                }`}
+                              >
+                                <span className="text-lg leading-none">{sub.icon}</span>
+                                <span className="text-xs font-semibold text-gray-800 leading-tight">{sub.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )
+                      }
+
                       return (
                         <button
                           key={id}
