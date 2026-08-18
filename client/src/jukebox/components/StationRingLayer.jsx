@@ -338,7 +338,11 @@ export default function StationRingLayer({
     const ctx = canvas.getContext('2d')
     ctx.clearRect(0, 0, w, h) // transparent layer — the album wash below owns the backdrop
 
-    const eh = transitioningRef.current
+    // Self-gated on reducedMotion too, not just relying on the caller never
+    // setting transitioning while reduced motion is on (Critical Rule 3 —
+    // canvas/JS animation needs its own explicit check, a CSS media query
+    // can't reach in here).
+    const eh = transitioningRef.current && !reducedMotion
 
     // Re-measure at most once a second — layout only shifts on resize or
     // when webfont load nudges the text block under the record. Skipped

@@ -293,6 +293,12 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
   // StationRingLayer reads startMs once (a normal prop, not per-frame) and
   // derives its own progress from wall-clock elapsed against it.
   const [ringTransition, setRingTransition] = useState(null)
+  // The in-flight collapse/bloom AnimationPlaybackControls, so the ending
+  // effect and unmount can actually stop it. recordScaleMV.set(1) alone does
+  // NOT do this — a running animate() call overwrites an external .set()
+  // within a couple of frames, so without .stop() here the collapse keeps
+  // running unopposed underneath whatever's supposed to take over next.
+  const animRef = useRef(null)
   const busyRef      = useRef(false)
   // Set only by the ending effect below, read only by runTransition's three
   // remaining animation calls (2026-08-07, Opus review) — both `ending` and
@@ -630,15 +636,23 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
       busyRef.current = false
       endingRef.current = false
       setTransitioning(false)
-      // Belt-and-suspenders for ring mode: if the close sequence superseded
-      // an in-flight Event Horizon collapse, don't leave the record's live
-      // scale stranded mid-shrink — the ending effect's own fly-off (flyCtrl,
-      // untouched by ring mode) is about to take over, and it should carry a
-      // normal-sized record up with it, not whatever fraction it collapsed to.
-      recordScaleMV.set(1)
-      setRingTransition(null)
+      // If the close sequence superseded an in-flight Event Horizon collapse,
+      // don't leave the record's live scale stranded mid-shrink — the ending
+      // effect's own fly-off (flyCtrl, untouched by ring mode) is about to
+      // take over, and it should carry a normal-sized record up with it, not
+      // whatever fraction it collapsed to. .stop() first: a bare .set(1)
+      // against a still-running animate() call gets overwritten within a
+      // couple of frames (verified), so without this the collapse keeps
+      // running unopposed and the fly-off can carry an empty, scaled-to-zero
+      // record off screen. Guarded on ringMode — this whole branch is inert
+      // (and animRef always null) in the non-ring build.
+      if (ringMode) {
+        animRef.current?.stop()
+        recordScaleMV.set(1)
+        setRingTransition(null)
+      }
     }
-  }, [ending])
+  }, [ending, ringMode])
 
   // Hide text immediately when a new track arrives — instant (no fade) before runTransition fires.
   // useLayoutEffect, not useEffect: a plain useEffect runs AFTER the browser
@@ -722,11 +736,32 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
         times: [0, EH_PHASES.lockEnd, EH_PHASES.fallEnd, EH_PHASES.emergeStart, 0.69, EH_PHASES.emergeEnd, 1],
         ease: ['linear', 'easeIn', 'linear', 'easeOut', 'easeOut', 'linear'],
       })
+      animRef.current = scaleAnim
 
       // Swap identity once the old record is fully collapsed and the new one
       // is about to start blooming (mirrors the fly path's Step 3: preload
       // before swap, fire audio at the same moment the new visual begins).
       await Promise.all([preloadPromise, sleep(EH_DUR_MS * EH_PHASES.emergeStart)])
+
+      // A skip that arrived before this point must never let swapIdentity()
+      // fire below — that call also fires onTransitionAudioStart for
+      // `target`, and `target` is about to be abandoned. The fly path's own
+      // runTransition bails before its equivalent audio-firing step for the
+      // same reason (see busyRef check there); this is the EH mirror of it.
+      // A skip arriving AFTER swapIdentity has already fired is still caught
+      // by the pendingRef check further down — that one's audio already
+      // played, it's just a visual handoff at that point.
+      if (pendingRef.current && pendingRef.current.uri !== target.uri) {
+        animRef.current?.stop()
+        const pending = pendingRef.current
+        pendingRef.current = null
+        setRingTransition(null)
+        setTransitioning(false)
+        busyRef.current = false
+        setTextVisible(false)
+        setTextInstant(true)
+        return pending
+      }
       if (!endingRef.current) swapIdentity()
 
       await scaleAnim
