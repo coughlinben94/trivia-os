@@ -364,6 +364,16 @@ function ShinySwingVisualQuestion({ slide, theme }) {
   const reduce = useReducedMotion()
   const revealed = !!data.imagesRevealed
 
+  // Two images (e.g. "the 4 heads" then "the 4 weapons") uses mediaSlots[0]
+  // for beat 1 and [1] for beat 2. The original single-image shape (a
+  // written question, then one revealed photo) still works unchanged —
+  // resolveShinyPart's part.mediaUrl only ever resolves slot 0, so a lone
+  // slot naturally falls through to beat 2, leaving beat 1 as text.
+  const slots = data.mediaSlots ?? []
+  const dualImage = slots.length >= 2
+  const beat1Image = dualImage ? slots[0]?.url : null
+  const beat2Image = dualImage ? slots[1]?.url : part.mediaUrl
+
   const captionBoxRef = useRef(null)
   const captionSize = useFitToBox(captionBoxRef, part.text, {
     family: theme.fonts.body,
@@ -392,25 +402,35 @@ function ShinySwingVisualQuestion({ slide, theme }) {
         animate={{ y: revealed ? '-50%' : '0%' }}
         transition={{ duration: reduce ? 0 : 0.85, ease: EASE_PANEL }}
       >
-        {/* Beat 1 — question text alone */}
+        {/* Beat 1 — question text, or an image when the question is two
+            images back to back (e.g. "the 4 heads") */}
         <div className="w-full flex items-center justify-center px-24" style={{ height: '50%' }}>
-          <div ref={captionBoxRef} className="w-full">
-            <p style={{
-              textAlign: 'center', color: theme.colors.text, lineHeight: 1.25,
-              fontFamily: `'${theme.fonts.body}', sans-serif`,
-              fontSize: `${captionSize}px`, fontWeight: 500,
-              textShadow: '0 2px 18px rgba(0,0,0,0.85)',
-            }}>
-              {part.text}
-            </p>
-          </div>
+          {beat1Image ? (
+            <img
+              src={beat1Image}
+              alt=""
+              className="max-w-full max-h-full object-contain rounded-2xl"
+              style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}
+            />
+          ) : (
+            <div ref={captionBoxRef} className="w-full">
+              <p style={{
+                textAlign: 'center', color: theme.colors.text, lineHeight: 1.25,
+                fontFamily: `'${theme.fonts.body}', sans-serif`,
+                fontSize: `${captionSize}px`, fontWeight: 500,
+                textShadow: '0 2px 18px rgba(0,0,0,0.85)',
+              }}>
+                {part.text}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Beat 2 — the image, revealed by the pan */}
         <div className="w-full flex items-center justify-center px-20" style={{ height: '50%' }}>
-          {part.mediaUrl && (
+          {beat2Image && (
             <img
-              src={part.mediaUrl}
+              src={beat2Image}
               alt=""
               className="max-w-full max-h-full object-contain rounded-2xl"
               style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}

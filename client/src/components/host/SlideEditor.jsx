@@ -802,6 +802,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
                 pointsPerMatch={data.pointsPerMatch ?? 2}
                 onChangePairs={pairs => onChange('pairs', pairs)}
                 onChangePoints={pts => onChange('pointsPerMatch', pts)}
+                onMediaUpload={handleMediaUpload}
               />
               <div className="flex flex-col gap-2">
                 <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
@@ -1191,9 +1192,9 @@ function ShinyListBuilder({ items, hasPoints, onChange }) {
   )
 }
 
-function MatchingBuilder({ pairs, pointsPerMatch, onChangePairs, onChangePoints }) {
-  function updatePair(i, side, value) {
-    onChangePairs(pairs.map((p, idx) => idx === i ? { ...p, [side]: value } : p))
+function MatchingBuilder({ pairs, pointsPerMatch, onChangePairs, onChangePoints, onMediaUpload }) {
+  function updatePair(i, patch) {
+    onChangePairs(pairs.map((p, idx) => idx === i ? { ...p, ...patch } : p))
   }
   function addPair() {
     onChangePairs([...pairs, { id: `p${Date.now()}_${pairs.length}`, left: '', right: '' }])
@@ -1201,32 +1202,61 @@ function MatchingBuilder({ pairs, pointsPerMatch, onChangePairs, onChangePoints 
   function removePair(i) {
     onChangePairs(pairs.filter((_, idx) => idx !== i))
   }
+  // A tile is image OR text on the phone (MatchTile) — the text field stays
+  // editable either way (used as alt text / the pair's identity label), but
+  // adding a photo is what actually switches that side's tile to an image.
+  async function uploadImage(i, side, file) {
+    if (!file) return
+    const url = await onMediaUpload(file)
+    if (url) updatePair(i, { [side === 'left' ? 'leftImage' : 'rightImage']: url })
+  }
 
   return (
     <div className="flex flex-col gap-3">
       <label className="block text-xs font-medium text-gray-700 mb-1.5">Matching Pairs</label>
+      <p className="text-xs text-gray-400 -mt-2">Each side can be text or a photo — add a photo below to make that tile an image.</p>
       {pairs.map((pair, i) => (
-        <div key={pair.id} className="flex gap-2 items-center">
-          <span className="text-xs text-gray-400 w-5 shrink-0 text-right">{i + 1}.</span>
-          <input
-            value={pair.left}
-            onChange={e => updatePair(i, 'left', e.target.value)}
-            placeholder="Left item…"
-            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
-          />
-          <span className="text-xs text-gray-300 shrink-0">↔</span>
-          <input
-            value={pair.right}
-            onChange={e => updatePair(i, 'right', e.target.value)}
-            placeholder="Right item…"
-            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
-          />
-          {pairs.length > 2 && (
-            <button
-              onClick={() => removePair(i)}
-              className="text-xs text-gray-300 hover:text-red-400 shrink-0"
-            >✕</button>
-          )}
+        <div key={pair.id} className="flex flex-col gap-2 pb-4 mb-1 border-b border-gray-100 last:border-0 last:pb-0">
+          <div className="flex gap-2 items-center">
+            <span className="text-xs text-gray-400 w-5 shrink-0 text-right">{i + 1}.</span>
+            <input
+              value={pair.left}
+              onChange={e => updatePair(i, { left: e.target.value })}
+              placeholder="Left item…"
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+            />
+            <span className="text-xs text-gray-300 shrink-0">↔</span>
+            <input
+              value={pair.right}
+              onChange={e => updatePair(i, { right: e.target.value })}
+              placeholder="Right item…"
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+            />
+            {pairs.length > 2 && (
+              <button
+                onClick={() => removePair(i)}
+                className="text-xs text-gray-300 hover:text-red-400 shrink-0"
+              >✕</button>
+            )}
+          </div>
+          <div className="flex gap-2 pl-7">
+            <div className="flex-1">
+              <MediaUpload
+                accept="image" label="Left photo (optional)"
+                currentUrl={pair.leftImage} currentType={pair.leftImage ? 'image/jpeg' : null}
+                onUpload={file => uploadImage(i, 'left', file)}
+                onRemove={() => updatePair(i, { leftImage: null })}
+              />
+            </div>
+            <div className="flex-1">
+              <MediaUpload
+                accept="image" label="Right photo (optional)"
+                currentUrl={pair.rightImage} currentType={pair.rightImage ? 'image/jpeg' : null}
+                onUpload={file => uploadImage(i, 'right', file)}
+                onRemove={() => updatePair(i, { rightImage: null })}
+              />
+            </div>
+          </div>
         </div>
       ))}
       <button

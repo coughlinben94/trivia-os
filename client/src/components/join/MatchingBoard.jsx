@@ -211,14 +211,14 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
       <div style={{ display: 'flex', gap: '0.75rem' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', flex: 1 }}>
           {pairs.map(p => (
-            <MatchTile key={p.id} label={p.left} color={connections[`left:${p.id}`] != null ? PALETTE[connections[`left:${p.id}`]] : null}
+            <MatchTile key={p.id} label={p.left} image={p.leftImage} color={connections[`left:${p.id}`] != null ? PALETTE[connections[`left:${p.id}`]] : null}
               pending={pendingSide?.side === 'left' && pendingSide.itemId === p.id}
               disabled={locked} onTap={() => tapItem('left', p.id)} textColor={text} />
           ))}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', flex: 1 }}>
           {rightOrder.map(p => (
-            <MatchTile key={p.id} label={p.right} color={connections[`right:${p.id}`] != null ? PALETTE[connections[`right:${p.id}`]] : null}
+            <MatchTile key={p.id} label={p.right} image={p.rightImage} color={connections[`right:${p.id}`] != null ? PALETTE[connections[`right:${p.id}`]] : null}
               pending={pendingSide?.side === 'right' && pendingSide.itemId === p.id}
               disabled={locked} onTap={() => tapItem('right', p.id)} textColor={text} />
           ))}
@@ -263,7 +263,30 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
   )
 }
 
-function MatchTile({ label, color, pending, disabled, onTap, textColor }) {
+// A tile is EITHER an image or text, never both (2026-08-18, Ben) — an image
+// tile can't also paint its whole background the matched color the way a
+// text tile does (that would hide the image), so it gets a colored ring
+// border instead. Text tiles are completely unchanged from before.
+function MatchTile({ label, image, color, pending, disabled, onTap, textColor }) {
+  if (image) {
+    return (
+      <button
+        onClick={onTap}
+        disabled={disabled}
+        style={{
+          minHeight: 96,
+          padding: 6,
+          borderRadius: 14,
+          border: pending ? `3px solid ${textColor}` : color ? `4px solid ${color}` : '1px solid rgba(255,255,255,0.15)',
+          background: 'rgba(255,255,255,0.04)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        <img src={image} alt={label || ''} style={{ maxWidth: '100%', maxHeight: 84, objectFit: 'contain' }} />
+      </button>
+    )
+  }
   return (
     <button
       onClick={onTap}
