@@ -873,12 +873,27 @@ export default function Display() {
   // containment at all (unlike DisplayInner's live-slide path, which has one
   // around SlideRenderer). fallback={null}, not the default reload card: a
   // crash here should read as a blank TV, not paint a desktop-styled error
-  // card over the venue screen. Keyed on current_slide_id so a subsequent
-  // host advance — the actual recovery gesture Ben would reach for live —
-  // has a chance to clear a tripped boundary instead of it staying stuck
-  // until someone physically reloads the TV.
+  // card over the venue screen.
+  //
+  // DELIBERATELY UNKEYED (fixed 2026-08-18). This boundary was originally
+  // keyed on current_slide_id so a host advance could clear a tripped
+  // boundary — but this boundary is an ANCESTOR of ThemeProvider →
+  // DisplayInner → ParticleBackground, and a changed `key` remounts the
+  // entire subtree. That broke Critical Rule 1 ("ParticleBackground never
+  // re-mounts"), and the fallout was silent rather than loud: RingAmbient
+  // seeds `lastSlideKeyRef` from the CURRENT slideKey on mount, so a
+  // remount-per-advance meant its one-station-per-question turn() never
+  // fired again for the whole show — the ring world would simply stop
+  // rotating, with nothing on screen to say so. It also re-ran RingAmbient's
+  // ~2,900-line ringPrimitives build on every slide and reset DisplayInner's
+  // break/warp refs, killing the Event Horizon return warp.
+  //
+  // The recovery the key was reaching for still exists one level down: the
+  // StageFrame boundary below IS keyed per slide, and it wraps the slide
+  // content most likely to throw. Do not re-add a key here — put it on an
+  // inner boundary that does not sit above ParticleBackground.
   return (
-    <ErrorBoundary key={show.current_slide_id} fallback={null}>
+    <ErrorBoundary fallback={null}>
       <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
         {show.is_live && show.current_slide_id !== null ? (
           <DisplayInner show={show} direction={direction} onBreakAdvance={handleBreakAdvance} />
