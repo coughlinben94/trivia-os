@@ -18,7 +18,6 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
   const part = resolveShinyPart(data)
   const rt = data._regionTransforms ?? {}
   const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
-  const hasSeries = data.isSeries && data.seriesTheme
   const isAssemble = transitionKey === 'assemble'
   // Regular (non-shiny) questions get their sequential number prepended
   // automatically — questionNumber is already kept correct through
@@ -94,9 +93,6 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [part.subtitle, theme.fonts.body, fontsReady])
 
-  const banner = isAssemble
-    ? { initial: { opacity: 0, y: -40 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.42, delay: 0.04, ease: EASE_OUT } }
-    : { initial: { opacity: 0, y: -12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: EASE_OUT } }
   const question = isAssemble
     ? { initial: { opacity: 0, y: 30, scale: 0.97 }, animate: { opacity: 1, y: 0, scale: 1 }, transition: { duration: 0.46, delay: 0.22, ease: EASE_OUT } }
     : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.22, ease: EASE_OUT, delay: 0.18 } }
@@ -114,30 +110,6 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
         position: 'absolute', inset: 0, zIndex: 18, pointerEvents: 'none',
         background: 'radial-gradient(ellipse 56% 46% at 50% 52%, rgba(0,0,0,0.40) 0%, rgba(0,0,0,0.20) 45%, transparent 72%)',
       }} />
-
-      {/* Series banner — top */}
-      {hasSeries && (
-        <motion.div
-          initial={banner.initial}
-          animate={banner.animate}
-          transition={banner.transition}
-          className="absolute top-0 left-0 right-0 py-3 px-10 text-center z-[30]"
-          style={{ background: theme.colors.accent }}
-        >
-          <span
-            style={{
-              fontFamily: `'${theme.fonts.display}', sans-serif`,
-              color: theme.colors.highlight,
-              fontSize: '0.9rem',
-              fontWeight: 700,
-              letterSpacing: '0.2em',
-              textTransform: 'uppercase',
-            }}
-          >
-            {data.seriesTheme}
-          </span>
-        </motion.div>
-      )}
 
       {/* Question text — large, centered — Section 23. Subtitle (a quote or
           context line, Ben 2026-08-18) sits directly above it, in the same
