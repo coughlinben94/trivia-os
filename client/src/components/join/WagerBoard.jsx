@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
 import { WAGER_TIERS, wagerOddsLine, wagerTierReachable, parseWagerNumber } from '../../lib/wagerScoring.js'
 
@@ -60,6 +60,11 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
   const [teamCount, setTeamCount] = useState(0)
   const [saveFailed, setSaveFailed] = useState(false)
   const [saving, setSaving] = useState(false)
+  // Quick 🔒 pop on a successful lock-in — pure feedback, no state it reads
+  // from (2026-08-18, Ben). Self-clears; nothing else depends on it.
+  const [showLockPop, setShowLockPop] = useState(false)
+  const lockPopTimerRef = useRef(null)
+  useEffect(() => () => clearTimeout(lockPopTimerRef.current), [])
 
   // Chained rather than fired-and-forgotten so two rapid taps (tier switch,
   // or a guess edited faster than the network round-trip) can't land out of
@@ -177,7 +182,12 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
       // Only mark it committed once the write actually landed — an
       // optimistic commit here used to disable the button and claim
       // "Guess Locked In" on a failed save, leaving no way to retry.
-      if (ok) setCommitted(digits)
+      if (ok) {
+        setCommitted(digits)
+        setShowLockPop(true)
+        clearTimeout(lockPopTimerRef.current)
+        lockPopTimerRef.current = setTimeout(() => setShowLockPop(false), 700)
+      }
     })
   }
 
@@ -201,7 +211,33 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
     // thumb-reach width — a no-op on phone widths (already narrower than
     // this), but without it the 3-column keypad grid stretches its keys
     // into wide, awkward rectangles on an iPad's ~560px content column.
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: 420, width: '100%', margin: '0 auto' }}>
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: 420, width: '100%', margin: '0 auto' }}>
+
+      <AnimatePresence>
+        {showLockPop && (
+          <motion.div
+            aria-hidden
+            initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.4 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.9 }}
+            transition={shouldReduceMotion
+              ? { duration: 0.15 }
+              : { type: 'spring', duration: 0.4, bounce: 0.35 }}
+            style={{
+              position: 'absolute', inset: 0, zIndex: 20,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              pointerEvents: 'none',
+            }}
+          >
+            <span style={{
+              fontSize: '5rem', lineHeight: 1,
+              filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.45))',
+            }}>
+              🔒
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {!tiersLocked ? (
         <>

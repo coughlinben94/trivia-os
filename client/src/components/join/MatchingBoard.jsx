@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
 import { seededShuffle, buildMatchAnswer } from '../../lib/matchingScoring.js'
 
@@ -34,6 +35,16 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
   const [committedConnections, setCommittedConnections] = useState({})
   const [pendingSide, setPendingSide] = useState(null) // { side: 'left'|'right', itemId } — first tap of a pair, waiting for the second
   const [saveFailed, setSaveFailed] = useState(false)
+  const shouldReduceMotion = useReducedMotion()
+  // Same quick 🔒 pop as WagerBoard's Lock In Guess (2026-08-18, Ben: every
+  // shiny format where a team answers on their phone should get it) — here
+  // there's no explicit lock button, so it fires on the rising edge of
+  // "just became fully matched" instead, tracked via wasCompleteRef so it
+  // doesn't re-fire on every intermediate pair tap.
+  const [showLockPop, setShowLockPop] = useState(false)
+  const lockPopTimerRef = useRef(null)
+  const wasCompleteRef = useRef(false)
+  useEffect(() => () => clearTimeout(lockPopTimerRef.current), [])
 
   const rightOrder = seededShuffle(pairs, slide.id ?? 'preview')
   const pairIdsKey = pairs.map(p => p.id).join(',')
@@ -87,9 +98,18 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
     const usedColors = new Set(Object.values(connections))
     const nextColor = PALETTE.findIndex((_, i) => !usedColors.has(i))
 
-    // Already colored — tapping it again undoes that pair (both halves clear).
+    // Already colored — tapping it again normally undoes that pair (both
+    // halves clear). But if this exact pairing was never actually confirmed
+    // saved (submit() failed or timed out — see saveFailed), the tap the error
+    // message asks for ("tap a pair again") must RETRY that save instead of
+    // clearing the pair out from under the team, or the natural recovery
+    // gesture always looks like giving up on the match.
     if (connections[key] != null) {
       const color = connections[key]
+      if (committedConnections[key] !== color) {
+        submit(connections).then(ok => { if (ok) setCommittedConnections(connections) })
+        return
+      }
       const next = { ...connections }
       Object.keys(next).forEach(k => { if (next[k] === color) delete next[k] })
       setConnections(next)
@@ -142,14 +162,45 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
   // that finishes on dead wifi must not be released before the save actually
   // lands, or they'd be free to browse away with nothing recorded.
   useEffect(() => {
-    if (!onAnswered) return
-    onAnswered(pairs.length > 0 && buildMatchAnswer(committedConnections).length >= pairs.length)
+    const complete = pairs.length > 0 && buildMatchAnswer(committedConnections).length >= pairs.length
+    onAnswered?.(complete)
+    if (complete && !wasCompleteRef.current) {
+      setShowLockPop(true)
+      clearTimeout(lockPopTimerRef.current)
+      lockPopTimerRef.current = setTimeout(() => setShowLockPop(false), 700)
+    }
+    wasCompleteRef.current = complete
   }, [onAnswered, committedConnections, pairs.length])
 
   return (
     // maxWidth keeps the two tile columns from stretching wide and sparse on
     // an iPad's ~560px content column — a no-op on phone widths.
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 480, width: '100%', margin: '0 auto' }}>
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 480, width: '100%', margin: '0 auto' }}>
+      <AnimatePresence>
+        {showLockPop && (
+          <motion.div
+            aria-hidden
+            initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.4 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.9 }}
+            transition={shouldReduceMotion
+              ? { duration: 0.15 }
+              : { type: 'spring', duration: 0.4, bounce: 0.35 }}
+            style={{
+              position: 'absolute', inset: 0, zIndex: 20,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              pointerEvents: 'none',
+            }}
+          >
+            <span style={{
+              fontSize: '5rem', lineHeight: 1,
+              filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.45))',
+            }}>
+              🔒
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div style={{ display: 'flex', gap: '0.75rem' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', flex: 1 }}>
           {pairs.map(p => (
