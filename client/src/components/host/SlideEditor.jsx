@@ -212,6 +212,9 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
               {slide.type === 'state-of-union' && (
                 <StateOfUnionEditor data={data} onChange={change} getHostPhotos={getHostPhotos} uploadMedia={uploadMedia} usedPhotoUrls={usedPhotoUrls} />
               )}
+              {slide.type === 'rules' && (
+                <RulesEditor data={data} onChange={change} />
+              )}
               {slide.type === 'team-picker' && (
                 <TeamPickerEditor data={data} onChange={change} />
               )}
@@ -1435,6 +1438,35 @@ function CustomEditor({ data, onChange, onMediaUpload }) {
         onUpload={onMediaUpload}
         onRemove={() => { onChange('mediaUrl', null); onChange('mediaType', null) }}
       />
+    </>
+  )
+}
+
+// Defaults mirrored from RulesSlide.jsx's DEFAULT_RULES — kept as a plain
+// literal here rather than a cross-directory import (host vs display slide
+// components don't otherwise share imports) since it's five short lines.
+const DEFAULT_RULES_TEXT = [
+  "This ain't just your mommas trivia....",
+  'Teams up to 6 — extra players cost you points. 20 for the first extra, 10 each after.',
+  'Whatever the quizmaster says, goes.',
+  'Phones down. Cheating gets your phone thrown in the river.',
+  "Have fun, and don't yell at me — I'm not a professional trivia writer!",
+].join('\n')
+
+function RulesEditor({ data, onChange }) {
+  const rulesText = data.rules?.length ? data.rules.join('\n') : DEFAULT_RULES_TEXT
+  return (
+    <>
+      <Field label="Header" hint="Shown in the hazard-stripe banner.">
+        <TextInput value={data.title ?? ''} onChange={v => onChange('title', v)} placeholder="House Rules — Read Carefully" />
+      </Field>
+      <Field label="Rules" hint="One rule per line. Plays a triple flash + beep on entry.">
+        <TextArea
+          value={rulesText}
+          onChange={v => onChange('rules', v.split('\n'))}
+          rows={8}
+        />
+      </Field>
     </>
   )
 }
