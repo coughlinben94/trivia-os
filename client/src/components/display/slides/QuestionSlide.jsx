@@ -390,7 +390,7 @@ function ShinySwingVisualQuestion({ slide, theme }) {
         className="absolute left-0 right-0 top-0"
         style={{ height: '200%' }}
         animate={{ y: revealed ? '-50%' : '0%' }}
-        transition={{ duration: reduce ? 0.15 : 0.85, ease: reduce ? 'linear' : EASE_PANEL }}
+        transition={{ duration: reduce ? 0 : 0.85, ease: EASE_PANEL }}
       >
         {/* Beat 1 — question text alone */}
         <div className="w-full flex items-center justify-center px-24" style={{ height: '50%' }}>
