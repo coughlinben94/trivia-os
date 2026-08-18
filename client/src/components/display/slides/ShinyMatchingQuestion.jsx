@@ -75,12 +75,21 @@ function Column({ items, theme, revealed, shouldReduceMotion }) {
           animate={{ opacity: 1, transform: 'translateY(0px)' }}
           transition={{ duration: 0.28, delay: i * 0.05, ease: EASE_OUT }}
           style={item.image
-            // Image items: just the image, no pill background/border around
-            // it (2026-08-18, Ben) — relative positioning only, so the rank
-            // badge below can sit on its corner once revealed. flex:1/
-            // minHeight:0/width:100% so it claims an equal share of the
-            // column's full stretched height instead of a small fixed size.
-            ? { position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, minHeight: 0, width: '100%' }
+            // Image items: no pill background/border (2026-08-18, Ben), but
+            // a fixed uniform box is what actually makes that look right —
+            // without it, tiles rendered at wildly different visual sizes
+            // (a wide Ohio flag vs. a near-square Massachusetts crest) and
+            // each image's own native background (often white) showed as a
+            // stray rectangle floating on the dark stage. Same fix GridSlide's
+            // Tile already uses: fixed box + object-fit:cover, so every tile
+            // is the same footprint and fully filled — no exposed native
+            // image background peeking out around the edges. flex:1/
+            // minHeight:0 still claims an equal share of the column's height.
+            // overflow stays on the OUTER element unset — it holds the
+            // absolutely-positioned rank badge below, which sits slightly
+            // outside the box (top:-8/left:-8); clipping here would cut the
+            // badge off. Rounding/shadow/crop live on the inner image wrapper instead.
+            ? { position: 'relative', display: 'flex', flex: 1, minHeight: 0, width: '100%', aspectRatio: '3 / 2' }
             : {
                 display: 'flex', alignItems: 'center', gap: '0.9rem',
                 padding: '1.25rem 1.75rem',
@@ -117,7 +126,9 @@ function Column({ items, theme, revealed, shouldReduceMotion }) {
             </span>
           )}
           {item.image ? (
-            <img src={item.image} alt={item.label || ''} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+            <div style={{ width: '100%', height: '100%', borderRadius: 10, overflow: 'hidden', boxShadow: '0 6px 22px rgba(0,0,0,0.45)' }}>
+              <img src={item.image} alt={item.label || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
           ) : (
             item.label
           )}
