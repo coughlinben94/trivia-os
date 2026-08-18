@@ -155,22 +155,47 @@ export default function TeamPickerSlide({ slide, show }) {
   // before that instant instead of starting flush with it.
   const FADE_IN_MS = 4000;
   const START_LEAD_MS = 200;
+  // Single ref for whichever timer/rAF is currently driving a.volume — fed
+  // by both the fade-in below and the fade-out further down, so starting
+  // one always cancels the other first. Before this, the fade-out effect's
+  // `[settled]` dependency fired on MOUNT too (settled starts false) and
+  // unconditionally snapped volume to AUDIO_VOL, racing the fade-in's own
+  // rAF loop (never cancelled except on unmount) for control of a.volume —
+  // two independent loops writing it every frame, occasionally computing a
+  // value just outside [0,1] from the timing skew between them, which
+  // HTMLMediaElement.volume's setter throws on rather than clamps.
+  const volAnimRef = useRef({ timeout: null, raf: null });
+  function stopVolAnim() {
+    clearTimeout(volAnimRef.current.timeout);
+    cancelAnimationFrame(volAnimRef.current.raf);
+    volAnimRef.current = { timeout: null, raf: null };
+  }
+  // HTMLMediaElement.volume THROWS (doesn't clamp) outside [0,1] — confirmed
+  // live even with the single-owner rAF handle above still occasionally
+  // computing a few-ten-thousandths negative right at the fade-out's tail
+  // (startVol * (1-p) with p pinned to exactly 1 by Math.min, but startVol
+  // itself sampled mid-fade-in from the OTHER effect can carry a sliver of
+  // float error through). Clamping here is the actual fix for the crash;
+  // the single-owner handle above is still correct and worth keeping since
+  // it's what stops the two loops fighting over which value wins.
+  function setVol(a, v) { a.volume = Math.max(0, Math.min(1, v)); }
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
+    stopVolAnim();
     a.volume = 0;
-    let raf;
     const t = setTimeout(() => {
       a.play().catch(() => {});
       const t0 = performance.now();
       const step = (now) => {
         const p = Math.min(1, (now - t0) / FADE_IN_MS);
-        a.volume = AUDIO_VOL * p;
-        if (p < 1) raf = requestAnimationFrame(step);
+        setVol(a, AUDIO_VOL * p);
+        if (p < 1) volAnimRef.current.raf = requestAnimationFrame(step);
       };
-      raf = requestAnimationFrame(step);
+      volAnimRef.current.raf = requestAnimationFrame(step);
     }, Math.max(0, REVEAL_S * 1000 - START_LEAD_MS));
-    return () => { clearTimeout(t); cancelAnimationFrame(raf); };
+    volAnimRef.current.timeout = t;
+    return stopVolAnim;
   }, []);
 
   // live from teams table, baked on mount (everyone who scanned the QR).
@@ -235,20 +260,29 @@ export default function TeamPickerSlide({ slide, show }) {
   // than a fixed timer — settled flipping back to false (Stream Deck back
   // out of 'landed') cancels the fade and snaps volume back up instead of
   // leaving the music silent for a resumed sequence.
+  const everSettledRef = useRef(false);
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-    if (!settled) { a.volume = AUDIO_VOL; return; }
+    if (!settled) {
+      // Only a real back-out (was settled, now isn't) snaps volume back to
+      // full — on initial mount settled is ALSO false, but nothing has
+      // happened yet, so leave the fade-in effect above alone to ramp up
+      // from 0 on its own schedule instead of stomping it here.
+      if (everSettledRef.current) { stopVolAnim(); a.volume = AUDIO_VOL; }
+      return;
+    }
+    everSettledRef.current = true;
+    stopVolAnim();
     const startVol = a.volume, t0 = performance.now();
-    let raf;
     const step = (now) => {
       const p = Math.min(1, (now - t0) / (REVEAL_S * 1000));
-      a.volume = startVol * (1 - p);
-      if (p < 1) raf = requestAnimationFrame(step);
+      setVol(a, startVol * (1 - p));
+      if (p < 1) volAnimRef.current.raf = requestAnimationFrame(step);
       else a.pause();
     };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
+    volAnimRef.current.raf = requestAnimationFrame(step);
+    return stopVolAnim;
   }, [settled]);
 
   // Hold the first item's approach until the entrance wipe has landed.
