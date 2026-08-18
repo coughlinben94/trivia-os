@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react'
+import { useEffect, useCallback, useState, useRef } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
 import { resolveShinyPart, isMatchingShiny, isWagerShiny } from '../../lib/shinySeries.js'
@@ -504,14 +504,32 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     }
   }
 
+  // Guards the ArrowRight reveal-then-advance sequence (280ms setTimeout
+  // below) against a second press landing inside that window and firing
+  // nextSlide() twice — see handleKeyDown.
+  const advancingRef = useRef(false)
+
   const handleKeyDown = useCallback((e) => {
+    // A reflexive Cmd/Ctrl/Alt shortcut (Cmd+A select-all, Cmd+R reload,
+    // Cmd+S save) must never fall through to these single-letter hotkeys —
+    // e.code is layout-independent and matches 'KeyA' etc. regardless of
+    // modifiers, so without this guard a plain select-all mid-question
+    // reveals the answer to the whole room.
+    if (e.metaKey || e.ctrlKey || e.altKey) return
     if (e.target.closest?.('input, textarea, select, [contenteditable]')) return
     if (scorePanelOpen || themePickerOpen || scoreboardModalOpen) return
+    // Held-key auto-repeat (a long Stream Deck press, or a finger left on
+    // the arrow key) must not fire the advance/back logic once per repeat —
+    // ArrowRight's own reveal-then-advance sequence below is especially
+    // sensitive to this, see advancingRef.
+    if (e.repeat) return
     if (e.code === 'ArrowRight') {
       e.preventDefault()
+      if (advancingRef.current) return
       if (show.showState.answerReveal) {
+        advancingRef.current = true
         actions.setAnswerReveal(false)
-        setTimeout(() => actions.nextSlide(), 280)
+        setTimeout(() => { actions.nextSlide(); advancingRef.current = false }, 280)
       } else {
         actions.nextSlide()
       }
