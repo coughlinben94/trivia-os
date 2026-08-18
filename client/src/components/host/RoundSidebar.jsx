@@ -31,6 +31,7 @@ const SLIDE_TYPE_META = {
   'pre-show':          { label: 'Pre-Show',         icon: '📱' },
   'title':             { label: 'Title Slide',      icon: '📢' },
   'state-of-union':    { label: 'State of the Union', icon: '🇺🇸' },
+  'rules':             { label: 'Rules',              icon: '🚨' },
   'team-picker':       { label: 'Team Intro',          icon: '🚀' },
   'round-intro':       { label: 'Round Intro',       icon: '🎬' },
   'swing-round-intro': { label: 'Swing Intro',       icon: '🎷' },

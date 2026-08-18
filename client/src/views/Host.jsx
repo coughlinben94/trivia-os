@@ -281,7 +281,7 @@ function HostInner({ showApi }) {
 
 const SLIDE_ICON = {
   'pre-show': '📱',
-  'title': '🇺🇸', 'state-of-union': '🇺🇸', 'round-intro': '🎬', 'swing-round-intro': '🎷',
+  'title': '🇺🇸', 'state-of-union': '🇺🇸', 'rules': '🚨', 'round-intro': '🎬', 'swing-round-intro': '🎷',
   'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆',
   'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
   'winner-reveal': '🥇', 'team-preview': '👥', 'team-picker': '🚀',
@@ -297,6 +297,7 @@ function slidePickerLabel(slide) {
   if (type === 'grading-break') return 'Grading Break'
   if (type === 'scoreboard-reveal') return data.title || 'Scoreboard'
   if (type === 'title') return data.title || 'Title'
+  if (type === 'rules') return 'Rules'
   if (type === 'multi-question') return data.seriesTitle || 'Multi-Q'
   if (type === 'team-picker') return 'Team Intro'
   if (type === 'pre-show') return 'Pre-Show'

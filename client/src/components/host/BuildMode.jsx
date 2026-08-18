@@ -18,7 +18,7 @@ const BTN = 'host-button'
 
 const SLIDE_ICON = {
   'pre-show': '📱',
-  'title': '🇺🇸', 'state-of-union': '🇺🇸', 'round-intro': '🎬', 'swing-round-intro': '🎷',
+  'title': '🇺🇸', 'state-of-union': '🇺🇸', 'rules': '🚨', 'round-intro': '🎬', 'swing-round-intro': '🎷',
   'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆',
   'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
   'winner-reveal': '🥇', 'team-preview': '👥', 'team-picker': '🚀',
@@ -34,6 +34,7 @@ function getSlideLabel(slide) {
   if (type === 'grading-break') return 'Grading Break'
   if (type === 'scoreboard-reveal') return data.title || 'Scoreboard'
   if (type === 'title') return data.title || 'Title'
+  if (type === 'rules') return 'Rules'
   if (type === 'multi-question') return data.seriesTitle || 'Multi-Q'
   if (type === 'pyl-reveal') return 'PYL Reveal'
   if (type === 'team-preview') return 'Team List'
@@ -69,6 +70,7 @@ const CARD_STYLE = {
   'pre-show':       'bg-gradient-to-br from-sky-50    to-indigo-100  border-sky-200    hover:border-sky-400',
   'title':          'bg-[linear-gradient(135deg,#fecaca,#f9fafb,#bfdbfe)] border-blue-200 hover:border-blue-400',
   'state-of-union': 'bg-[linear-gradient(135deg,#fecaca,#f9fafb,#bfdbfe)] border-blue-200 hover:border-blue-400',
+  'rules':          'bg-[repeating-linear-gradient(135deg,#fecaca_0_10px,#fef3c7_10px_20px)] border-red-300 hover:border-red-500',
   'team-preview':   'bg-gradient-to-br from-indigo-50 to-violet-100 border-indigo-200 hover:border-indigo-400',
   'team-picker':    'bg-gradient-to-br from-indigo-50   to-blue-100    border-indigo-200 hover:border-indigo-400',
   'round-intro':    'bg-gradient-to-br from-red-50    to-rose-100    border-red-200    hover:border-red-400',
