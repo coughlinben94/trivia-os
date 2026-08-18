@@ -183,9 +183,13 @@ export const TITLE_CARD_BOX = {
 // Only boxW/boxH/maxLines are new; tune boxH/maxLines live if shrink engages too early/late.
 
 // Grading break: full-screen relaxed multi-sentence message. Wants to breathe, wrap freely.
+// boxW/lineHeight matched to the real render (GradingBreakSlide.jsx: `max-w-4xl px-24
+// leading-relaxed` -> 896px container minus 192px padding = 704px content width, 1.625
+// line-height) — the previous 1728/1.2 assumed a near-full-viewport box that was never
+// actually rendered, so long custom messages sized ~2.45x too big for their real column.
 export const GRADING_BREAK_BOX = {
-  boxW: 1728, boxH: 620, floorPx: PARAGRAPH_FLOOR * 16, ceilPx: PARAGRAPH_CEIL * 16,
-  maxLines: 6, lineHeight: 1.2,
+  boxW: 704, boxH: 620, floorPx: PARAGRAPH_FLOOR * 16, ceilPx: PARAGRAPH_CEIL * 16,
+  maxLines: 6, lineHeight: 1.625,
 }
 
 // Custom slide body: prose under a title (title eats the top band → shorter box).

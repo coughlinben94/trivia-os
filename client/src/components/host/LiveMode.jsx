@@ -505,10 +505,14 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     }
   }
 
-  // Guards the ArrowRight reveal-then-advance sequence (280ms setTimeout
-  // below) against a second press landing inside that window and firing
-  // nextSlide() twice — see handleKeyDown.
-  const advancingRef = useRef(false)
+  // Holds the setTimeout id for the ArrowRight reveal-then-advance sequence
+  // (280ms below) while it's pending, else null. A second ArrowRight in that
+  // window bails instead of double-firing nextSlide(); ArrowLeft in that
+  // window CANCELS it instead of just bailing — without this, pressing Left
+  // to correct a Right press reads as "Left did nothing": prevSlide() fires
+  // immediately, then the stale deferred nextSlide() fires 280ms later on
+  // top of it, net result is right back where the Right press left off.
+  const pendingAdvanceRef = useRef(null)
 
   const handleKeyDown = useCallback((e) => {
     // A reflexive Cmd/Ctrl/Alt shortcut (Cmd+A select-all, Cmd+R reload,
@@ -526,16 +530,25 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     if (e.repeat) return
     if (e.code === 'ArrowRight') {
       e.preventDefault()
-      if (advancingRef.current) return
+      if (pendingAdvanceRef.current) return
       if (show.showState.answerReveal) {
-        advancingRef.current = true
         actions.setAnswerReveal(false)
-        setTimeout(() => { actions.nextSlide(); advancingRef.current = false }, 280)
+        pendingAdvanceRef.current = setTimeout(() => {
+          actions.nextSlide()
+          pendingAdvanceRef.current = null
+        }, 280)
       } else {
         actions.nextSlide()
       }
     }
-    if (e.code === 'ArrowLeft')  { e.preventDefault(); actions.prevSlide() }
+    if (e.code === 'ArrowLeft') {
+      e.preventDefault()
+      if (pendingAdvanceRef.current) {
+        clearTimeout(pendingAdvanceRef.current)
+        pendingAdvanceRef.current = null
+      }
+      actions.prevSlide()
+    }
     if (e.code === 'KeyS')       actions.setScoreboardVisible(!show.showState.scoreboardVisible)
     if (e.code === 'KeyA')       actions.setAnswerReveal(!show.showState.answerReveal)
     if (e.code === 'KeyR')       actions.setScoresRevealed?.(!show.showState.scoresRevealed)
