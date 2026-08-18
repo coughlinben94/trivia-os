@@ -214,6 +214,7 @@ export default function WarpTransition({ dir = 'out', onDone }) {
     scratch.width = W
     scratch.height = H
     const sctx = scratch.getContext('2d')
+    if (!sctx) { doneRef.current?.(); return }
 
     const out = dir !== 'back'
 
@@ -225,6 +226,20 @@ export default function WarpTransition({ dir = 'out', onDone }) {
     const ml = new Uint8Array(MOTES) // parallax layer
     const mx = new Float32Array(MOTES) // previous x — the trail's tail
     const my = new Float32Array(MOTES)
+    // Deferred per-frame segment endpoints. Path2D has no reset/clear API, so
+    // building 12 fresh Path2Ds a frame (~1000+ short-lived objects per break
+    // at 60fps) is a GC-pause risk on the live TV — exactly what this file
+    // says elsewhere it's trying to avoid. These arrays are allocated once
+    // and reused every frame instead: pass 1 (physics) writes each mote's new
+    // endpoint and path-group index here without touching the canvas; pass 2
+    // strokes each of the 12 groups with the context's own resettable path
+    // (beginPath), filtering these arrays instead of allocating Path2Ds.
+    const mnx = new Float32Array(MOTES) // this frame's new x, written before mx/my update
+    const mny = new Float32Array(MOTES)
+    const mMidX = new Float32Array(MOTES)
+    const mMidY = new Float32Array(MOTES)
+    const mHasMid = new Uint8Array(MOTES)
+    const mGroup = new Int16Array(MOTES) // layer*BANDS.length + band, -1 = no segment this frame
 
     // Arms spawn as spirals (the r term) and drift, so the vortex has visible
     // structure without any of it being a hard-edged shape.
@@ -265,7 +280,6 @@ export default function WarpTransition({ dir = 'out', onDone }) {
     // only pre-empts the one-frame gap before the loop sets it itself.
     canvas.style.opacity = out ? '0' : '1'
 
-    const NPATH = LAYERS.length * BANDS.length
     let start = 0
     let last = 0
     let raf = 0
@@ -273,6 +287,11 @@ export default function WarpTransition({ dir = 'out', onDone }) {
     const finish = () => {
       if (finished) return
       finished = true
+      // Watchdog can fire ahead of a throttled/paused rAF loop (OS lock,
+      // alt-tab, RDP glitch) — force the guaranteed-opaque cover before the
+      // caller snaps station state, or the handoff shows a raw flash instead
+      // of a covered cut.
+      canvas.style.opacity = '1'
       doneRef.current?.()
     }
 
@@ -308,7 +327,11 @@ export default function WarpTransition({ dir = 'out', onDone }) {
       // t=0.82 expands to swallow the frame, so 'out' genuinely ends opaque
       // and the cut to JukeboxBreakOverlay's own black is invisible. It opens
       // just after the bloom peaks, so the flash reads before it is eaten.
-      const sw = Math.max(0, (t - 0.82) / 0.18)
+      // Denominator matches veil's own 0.94 saturation point (t=0.82+0.12),
+      // not veil's 0.18-wide predecessor: the drain's opaque radius must
+      // reach the 1101px corner distance by the same t where veil declares
+      // full cover, or the TV corners go briefly uncovered on 'back's open.
+      const sw = Math.max(0, (t - 0.82) / 0.12)
       const elapsed = (now - start) / 1000
 
       // ── 1. Feedback: sweep the whole previous frame inward one notch ──
@@ -331,10 +354,8 @@ export default function WarpTransition({ dir = 'out', onDone }) {
         ctx.globalAlpha = 1
       }
 
-      // ── 2. Advect and stroke the motes ──
+      // ── 2. Advect the motes (pass 1: physics only, no canvas touched) ──
       ctx.globalCompositeOperation = 'lighter'
-      const paths = []
-      for (let i = 0; i < NPATH; i++) paths.push(new Path2D())
       const armPhase = elapsed * 1.7
       for (let i = 0; i < MOTES; i++) {
         const layer = LAYERS[ml[i]]
@@ -360,26 +381,31 @@ export default function WarpTransition({ dir = 'out', onDone }) {
           const nx = CX + Math.cos(a) * r
           const ny = CY + Math.sin(a) * r
           mr[i] = r; ma[i] = a; mx[i] = nx; my[i] = ny
-          continue // no segment across the respawn jump
+          mGroup[i] = -1 // no segment across the respawn jump
+          continue
         }
 
         const x = CX + Math.cos(a) * r
         const y = CY + Math.sin(a) * r
         const band = Math.min(BANDS.length - 1, ((1 - rn) * BANDS.length) | 0)
-        const path = paths[ml[i] * BANDS.length + band]
-        path.moveTo(mx[i], my[i])
+        mGroup[i] = ml[i] * BANDS.length + band
         // Fast inner motes swing far enough in one frame that a straight chord
         // visibly cuts the corner. One mid-point turns the trail into an arc
         // that follows the flow — the smear reads as motion blur along the
         // rotation, which is exactly where it belongs.
         const da = a - a0
         if (da > 0.09 || da < -0.09) {
+          mHasMid[i] = 1
           const am = a0 + da * 0.5
           const rm = (mr[i] + r) * 0.5
-          path.lineTo(CX + Math.cos(am) * rm, CY + Math.sin(am) * rm)
+          mMidX[i] = CX + Math.cos(am) * rm
+          mMidY[i] = CY + Math.sin(am) * rm
+        } else {
+          mHasMid[i] = 0
         }
-        path.lineTo(x, y)
-        mr[i] = r; ma[i] = a; mx[i] = x; my[i] = y
+        mnx[i] = x
+        mny[i] = y
+        mr[i] = r; ma[i] = a
       }
       // Brightness collapses into the drain as it swallows, so the last frames
       // resolve to flat black rather than snapping there. Colour grades from
@@ -389,18 +415,35 @@ export default function WarpTransition({ dir = 'out', onDone }) {
       // Capped at 0.50: the grade should read as the vortex heating up under
       // load, not as a sepia wash over the ring world's cool night sky.
       const warmth = Math.min(0.50, Math.pow(t, 2.2) * 0.5 + pulse * 0.5)
+      // Pass 2: stroke each of the 12 layer x band groups using the context's
+      // own resettable path (beginPath), filtering the flat arrays pass 1
+      // wrote — zero Path2D allocations. mx/my (the trail tail) only update
+      // to this frame's new position here, after they've been read as the
+      // segment start.
       for (let li = 0; li < LAYERS.length; li++) {
         const layer = LAYERS[li]
         for (let bi = 0; bi < BANDS.length; bi++) {
           const band = BANDS[bi]
+          const group = li * BANDS.length + bi
           const rr = Math.round(band.c[0] + (WARM[0] - band.c[0]) * warmth)
           const gg = Math.round(band.c[1] + (WARM[1] - band.c[1]) * warmth)
           const bb = Math.round(band.c[2] + (WARM[2] - band.c[2]) * warmth)
           const al = band.a * layer.alpha * glow * (1 + pulse * 0.5)
           ctx.strokeStyle = `rgba(${rr},${gg},${bb},${Math.min(1, al).toFixed(3)})`
           ctx.lineWidth = band.w * layer.width
-          ctx.stroke(paths[li * BANDS.length + bi])
+          ctx.beginPath()
+          for (let i = 0; i < MOTES; i++) {
+            if (mGroup[i] !== group) continue
+            ctx.moveTo(mx[i], my[i])
+            if (mHasMid[i]) ctx.lineTo(mMidX[i], mMidY[i])
+            ctx.lineTo(mnx[i], mny[i])
+          }
+          ctx.stroke()
         }
+      }
+      for (let i = 0; i < MOTES; i++) {
+        if (mGroup[i] === -1) continue
+        mx[i] = mnx[i]; my[i] = mny[i]
       }
 
       // ── 3. Blobs on the same flow field, for fluid mass ──
