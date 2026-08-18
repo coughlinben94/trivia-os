@@ -237,9 +237,10 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
 
       <div className="relative flex flex-col items-center" style={{ zIndex: 2 }}>
         {/* The only text on screen (2026-08-17, Ben: "state of the union are
-            the only 4 words on the screen, centered, on that angle") — fixed,
-            not the editable message field, same big tilted RWB-gradient
-            treatment the message used to own. */}
+            the only 4 words on the screen, centered, on that angle") — reads
+            "State of the Union" 99.9% of the time, but a host can still
+            override via the Message field for the rare show that needs
+            different words in the same big tilted RWB-gradient treatment. */}
         <span data-slide-region="message" data-slide-field="message" style={xf('message')}>
           <motion.p
             initial={{ opacity: 0, scale: reduce ? 1 : 0.85, rotate: reduce ? -6 : -14 }}
@@ -248,7 +249,7 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
             style={{
               fontFamily: `'${theme.fonts.display}', sans-serif`,
               fontWeight: 700,
-              fontSize: fitToBox('State of the Union', { ...TITLE_CARD_BOX, family: theme.fonts.display }),
+              fontSize: fitToBox(slide.data?.message || 'State of the Union', { ...TITLE_CARD_BOX, family: theme.fonts.display }),
               lineHeight: 1.15,
               textAlign: 'center',
               textWrap: 'balance',
@@ -262,7 +263,7 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
             }}>
-              State of the Union
+              {slide.data?.message || 'State of the Union'}
             </span>
           </motion.p>
         </span>
