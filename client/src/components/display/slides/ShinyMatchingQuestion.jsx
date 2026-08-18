@@ -1,83 +1,78 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { SHINY_GOLD } from '../../../lib/shinyGold.js'
-import { EASE_OUT } from '../../../lib/easings.js'
+import { EASE_PANEL } from '../../../lib/easings.js'
 import { seededShuffle } from '../../../lib/matchingScoring.js'
 
+// Two-beat pan reveal (2026-08-18, Ben: "make it not so different — pans
+// up, so does the swing round questions") — same mechanic as
+// ShinySwingVisualQuestion: a 200%-tall track holding both beats stacked,
+// panning by exactly one stage-height (-50% of the track's own 200%
+// height) lands pixel-exact on beat 2 regardless of actual stage size.
+// Beat 1 (shuffled right column, no badges) sits on screen for however
+// long teams take to submit on their phones; locking + scoring flips
+// data.matchingRevealed, panning up to beat 2 (right column back in
+// pairs' own order, gold badges). Replaces the earlier per-tile `layout`
+// reorder — each beat is now its own static, fully-mounted layout, so
+// there's nothing to reorder or reflow: the fixed-point-shuffle giveaway
+// and the badge-mount jerk that reorder needed real fixes for don't apply
+// to two independently-laid-out beats. seededShuffle's fixed-point
+// avoidance (matchingScoring.js) still matters here for a different
+// reason — without it, beat 1 could by chance show a pair already
+// side-by-side, giving the answer away before the pan.
 export default function ShinyMatchingQuestion({ slide, theme }) {
   const { data } = slide
   const pairs = data.pairs ?? []
   const revealed = !!data.matchingRevealed
-  const shouldReduceMotion = useReducedMotion()
+  const reduce = useReducedMotion()
 
-  // Right column renders shuffled (so the pairing isn't given away by
-  // position) UNTIL revealed — then it switches to `pairs`' own order, same
-  // as the left column, so pairRank-matched tiles land in the same row.
-  // Column's motion.div has `layout` on, so this reorder is what drives the
-  // "tiles physically move to match" reveal (Ben, 2026-08-18 live show note:
-  // the number-badge-only reveal wasn't enough).
-  const rightOrder = revealed ? pairs : seededShuffle(pairs, slide.id ?? 'preview')
+  const leftItems = pairs.map((p, i) => ({ id: p.id, label: p.left, image: p.leftImage, pairRank: i }))
+  const shuffledRight = seededShuffle(pairs, slide.id ?? 'preview')
+    .map(p => ({ id: p.id, label: p.right, image: p.rightImage, pairRank: pairs.findIndex(x => x.id === p.id) }))
+  const matchedRight = pairs.map((p, i) => ({ id: p.id, label: p.right, image: p.rightImage, pairRank: i }))
 
   return (
-    // Explicit opaque backdrop (2026-08-18, Ben: image-bearing shiny content
-    // needs to pan up to its OWN plain slide, isolated from the ring-world
-    // ambient background — unlike audio-only shiny types, which are fine
-    // staying ambient). Previously this div had no background of its own and
-    // relied on SlideRenderer's shared locked layer; this guarantees
-    // isolation regardless of that. theme.colors.shinyBg matches the same
-    // plain-backdrop convention GridSlide/ShinyVisualQuestion already use.
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', height: '100%', padding: '3rem', background: theme.colors.shinyBg }}>
-      {/* flex:1/minHeight:0 so image tiles below can stretch to fill the
-          full available height (2026-08-18, Ben: images needed to take up
-          the whole screen, not sit at a small fixed size) — text pills are
-          unaffected, they keep their natural padding-based size and stay
-          centered as a group via Column's own justifyContent. */}
-      <div style={{ display: 'flex', gap: '6vw', width: '100%', maxWidth: 1400, justifyContent: 'space-between', flex: 1, minHeight: 0 }}>
-        <Column items={pairs.map((p, i) => ({ id: p.id, label: p.left, image: p.leftImage, pairRank: i }))} theme={theme} revealed={revealed} shouldReduceMotion={shouldReduceMotion} />
-        <Column items={rightOrder.map(p => ({ id: p.id, label: p.right, image: p.rightImage, pairRank: pairs.findIndex(x => x.id === p.id) }))} theme={theme} revealed={revealed} shouldReduceMotion={shouldReduceMotion} />
-      </div>
+    <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
+      <motion.div
+        className="absolute left-0 right-0 top-0"
+        style={{ height: '200%' }}
+        animate={{ y: revealed ? '-50%' : '0%' }}
+        transition={{ duration: reduce ? 0 : 0.85, ease: EASE_PANEL }}
+      >
+        {/* Beat 1 — shuffled, unrevealed */}
+        <div className="w-full flex items-center justify-center px-24" style={{ height: '50%' }}>
+          <MatchBoard leftItems={leftItems} rightItems={shuffledRight} theme={theme} revealed={false} />
+        </div>
+
+        {/* Beat 2 — matched order, revealed by the pan */}
+        <div className="w-full flex items-center justify-center px-24" style={{ height: '50%' }}>
+          <MatchBoard leftItems={leftItems} rightItems={matchedRight} theme={theme} revealed />
+        </div>
+      </motion.div>
     </div>
   )
 }
 
-function Column({ items, theme, revealed, shouldReduceMotion }) {
+function MatchBoard({ leftItems, rightItems, theme, revealed }) {
+  return (
+    <div style={{ display: 'flex', gap: '6vw', width: '100%', maxWidth: 1400, height: '100%' }}>
+      <MatchColumn items={leftItems} theme={theme} revealed={revealed} />
+      <MatchColumn items={rightItems} theme={theme} revealed={revealed} />
+    </div>
+  )
+}
+
+function MatchColumn({ items, theme, revealed }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, height: '100%', justifyContent: 'center' }}>
-      {items.map((item, i) => (
-        <motion.div
+      {items.map(item => (
+        <div
           key={item.id}
-          // Off entirely under reduced motion (house convention —
-          // ScoreboardOverlay.jsx does the same) rather than just a faster
-          // transition: `layout` is a spatial slide by nature, exactly what
-          // reduced-motion opts out of. The reorder still happens instantly
-          // (React re-renders the DOM order), it just doesn't animate there.
-          layout={shouldReduceMotion ? false : 'position'}
-          initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: 'translateY(12px)' }}
-          animate={{ opacity: 1, transform: 'translateY(0px)' }}
-          transition={{
-            // `default` governs the entrance fade/rise above; `layout`
-            // governs the reveal reorder (right column snapping into
-            // pairRank order) — kept separate so revealing doesn't re-fire
-            // the staggered entrance. A deliberate, weighted "landing" spring
-            // for the reorder (house style: ScoreboardRevealSlide's crown
-            // drop uses the same bounce:0.3 family).
-            default: { duration: 0.28, delay: i * 0.05, ease: EASE_OUT },
-            layout: { type: 'spring', duration: 0.7, bounce: 0.22 },
-          }}
           style={item.image
             // Image items: no pill background/border (2026-08-18, Ben), but
-            // a fixed uniform box is what actually makes that look right —
-            // without it, tiles rendered at wildly different visual sizes
-            // (a wide Ohio flag vs. a near-square Massachusetts crest) and
-            // each image's own native background (often white) showed as a
-            // stray rectangle floating on the dark stage. Same fix GridSlide's
-            // Tile already uses: fixed box + object-fit:cover, so every tile
-            // is the same footprint and fully filled — no exposed native
-            // image background peeking out around the edges. flex:1/
-            // minHeight:0 still claims an equal share of the column's height.
-            // overflow stays on the OUTER element unset — it holds the
-            // absolutely-positioned rank badge below, which sits slightly
-            // outside the box (top:-8/left:-8); clipping here would cut the
-            // badge off. Rounding/shadow/crop live on the inner image wrapper instead.
+            // a fixed uniform box is what makes it look right — without it,
+            // tiles render at wildly different visual sizes and each
+            // image's own native background shows as a stray rectangle.
+            // Same fix GridSlide's Tile already uses.
             ? { position: 'relative', display: 'flex', flex: 1, minHeight: 0, width: '100%', aspectRatio: '3 / 2' }
             : {
                 display: 'flex', alignItems: 'center', gap: '0.9rem',
@@ -91,36 +86,27 @@ function Column({ items, theme, revealed, shouldReduceMotion }) {
               }
           }
         >
-          {/* The right column is shuffled independently, so nothing else on
-              screen shows which left item actually pairs with which right
-              item once revealed — this rank badge (shared by both halves of
-              the same pair, taken from the unshuffled pairs order) is that
-              correspondence. Image badge is absolutely positioned — mounting
-              it only on reveal is fine, it can't shove anything else. The
-              text-pill badge is an in-flow flex sibling though (found live
-              2026-08-18): conditionally mounting IT at reveal made every
-              label hard-jump sideways by its width+gap in one frame, on top
-              of the layout reorder. Kept always-mounted, reserving its slot,
-              and faded in with opacity instead — no reflow, no jerk. */}
-          {revealed && item.image && (
-            <span style={{
-              position: 'absolute', top: -8, left: -8, zIndex: 2,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: '1.8rem', height: '1.8rem', borderRadius: '50%',
-              background: SHINY_GOLD, color: '#1a1a1a', fontSize: '1rem', fontWeight: 700,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-            }}>
-              {item.pairRank + 1}
-            </span>
-          )}
-          {!item.image && (
-            <span style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: '1.8rem', height: '1.8rem', borderRadius: '50%',
-              background: 'rgba(0,0,0,0.18)', fontSize: '1rem', fontWeight: 700, flexShrink: 0,
-              opacity: revealed ? 1 : 0,
-              transition: 'opacity 0.2s ease-out',
-            }}>
+          {/* The right column is shuffled independently in beat 1, so
+              nothing else shows which left item pairs with which right
+              item until beat 2 — this rank badge (shared by both halves of
+              the same pair) is that correspondence. Only rendered in beat
+              2's own static tree, so there's no mount-time reflow to guard
+              against — it's part of that beat's layout from the start. */}
+          {revealed && (
+            <span style={item.image
+              ? {
+                  position: 'absolute', top: -8, left: -8, zIndex: 2,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: '1.8rem', height: '1.8rem', borderRadius: '50%',
+                  background: SHINY_GOLD, color: '#1a1a1a', fontSize: '1rem', fontWeight: 700,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                }
+              : {
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: '1.8rem', height: '1.8rem', borderRadius: '50%',
+                  background: 'rgba(0,0,0,0.18)', fontSize: '1rem', fontWeight: 700, flexShrink: 0,
+                }
+            }>
               {item.pairRank + 1}
             </span>
           )}
@@ -131,7 +117,7 @@ function Column({ items, theme, revealed, shouldReduceMotion }) {
           ) : (
             item.label
           )}
-        </motion.div>
+        </div>
       ))}
     </div>
   )
