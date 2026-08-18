@@ -570,6 +570,11 @@ export function useShow() {
       (slide.data?.wagerTiersLocked || slide.data?.wagerGuessesLocked || slide.data?.matchingLocked)
     if (introDone !== undefined && slide.data?.isShiny && !!slide.data.introDone !== introDone && !wouldRegressLockedQuestion) {
       patch.introDone = introDone
+      // Fresh entry always restarts the closing-beat cycle too (see
+      // nextSlide's outroShown handling below) — a stale true from a
+      // previous visit would otherwise skip straight past the closing
+      // title card next time this slide's last part is reached.
+      if (slide.data?.outroShown) patch.outroShown = false
     }
     if (Object.keys(patch).length === 0) return slides
     return slides.map(s => s.id === slide.id ? { ...s, data: { ...s.data, ...patch } } : s)
@@ -669,8 +674,12 @@ export function useShow() {
     const curSlide = sorted[cur]
     const data = curSlide?.data
 
-    // Reveal the intro's content before doing anything else.
-    if (data?.isShiny && !data.introDone) {
+    // Reveal the intro's content before doing anything else. Guarded on
+    // !outroShown too (see the closing-beat branch below) — without it,
+    // the Next press that's supposed to land on the closing title card
+    // would immediately re-reveal the last part's content instead, since
+    // this check alone can't tell "never opened yet" from "just closed."
+    if (data?.isShiny && !data.introDone && !data.outroShown) {
       const newSlides = show.slides.map(s =>
         s.id === curSlide.id ? { ...s, data: { ...s.data, introDone: true } } : s
       )
@@ -686,6 +695,22 @@ export function useShow() {
       if (curPart < parts.length - 1) {
         const newSlides = show.slides.map(s =>
           s.id === curSlide.id ? { ...s, data: { ...s.data, currentPart: curPart + 1 } } : s
+        )
+        setShow(s => ({ ...s, slides: newSlides, showState: { ...s.showState, answerReveal: false } }))
+        await updateShowRow(show.id, { slides: newSlides, answer_reveal: false })
+        return
+      }
+      // Closing beat (Ben, 2026-08-17: "then back down to the shiny title
+      // screen, which i then advance to [the next question]"): on the LAST
+      // part, one more Next pans back down to the title card instead of
+      // jumping straight to the next slide — outroShown marks that this
+      // already happened, so the NEXT Next press (introDone false again,
+      // but outroShown true) skips the re-reveal branch above and actually
+      // moves on. Reset to false whenever this slide is entered fresh
+      // (withEntryState), so revisiting always restarts the cycle.
+      if (data.introDone && !data.outroShown) {
+        const newSlides = show.slides.map(s =>
+          s.id === curSlide.id ? { ...s, data: { ...s.data, introDone: false, outroShown: true } } : s
         )
         setShow(s => ({ ...s, slides: newSlides, showState: { ...s.showState, answerReveal: false } }))
         await updateShowRow(show.id, { slides: newSlides, answer_reveal: false })
@@ -723,6 +748,21 @@ export function useShow() {
     const curSlide = sorted[cur]
     const data = curSlide?.data
     const parts = data?.parts
+
+    // Undo the closing beat (see nextSlide's outroShown branch) before
+    // anything else — without this, the generic parts-backward branch right
+    // below would silently decrement currentPart while still on the closing
+    // title card (introDone false there blocks any content from showing
+    // regardless of currentPart), so Prev would look like it did nothing
+    // while actually desyncing which part you'd land back on.
+    if (data?.isShiny && data.outroShown) {
+      const newSlides = show.slides.map(s =>
+        s.id === curSlide.id ? { ...s, data: { ...s.data, introDone: true, outroShown: false } } : s
+      )
+      setShow(s => ({ ...s, slides: newSlides, showState: { ...s.showState, answerReveal: false } }))
+      await updateShowRow(show.id, { slides: newSlides, answer_reveal: false })
+      return
+    }
 
     // Step back through this slide's parts before un-revealing its intro.
     // Generic on purpose (matches the forward branch in nextSlide) — not

@@ -191,8 +191,33 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
 function ShinyVisualQuestion({ slide, theme }) {
   const { data } = slide
   const part = resolveShinyPart(data)
+  const reduce = useReducedMotion()
   const [aspect, setAspect] = useState(null) // 'landscape' | 'portrait' | 'square'
   const [flashVisible, setFlashVisible] = useState(true)
+  // Bug fixed 2026-08-17 (caught while wiring in Pop & Settle, not live):
+  // neither image element below was ever keyed on data.currentPart, so
+  // Framer never remounted them when stepping to the next photo — the
+  // initial->animate entrance only ever played once, on first entering the
+  // series, contradicting this file's own comment a few lines down. Both
+  // image elements now key on `${slide.id}:${currentPart}` (same idiom
+  // already used elsewhere in this file for audio/list parts) so the
+  // entrance actually replays on every photo, not just the first.
+  const partKey = `${slide.id}:${data.currentPart ?? 0}`
+  // Pop & Settle (Ben, 2026-08-17, picked from a side-by-side comparison of
+  // 5 candidates): scales up from 84% with a spring overshoot past 100%
+  // before settling, plus a couple degrees of rotation — reads like a
+  // snapshot being set down, not a generic fade. Spring, not a manual
+  // multi-keyframe curve, for the overshoot — idiomatic for this codebase
+  // (RoundIntroSlide's round-number slam-in uses the same type:'spring'
+  // + bounce approach). transform + opacity only.
+  const imageEntrance = reduce
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0, transition: { duration: 0.14 } }, transition: { duration: 0.2, ease: EASE_OUT } }
+    : {
+        initial: { scale: 0.84, rotate: -2, opacity: 0 },
+        animate: { scale: 1, rotate: 0, opacity: 1 },
+        exit: { scale: 0.97, opacity: 0, transition: { duration: 0.16, ease: EASE_OUT } },
+        transition: { type: 'spring', bounce: 0.32, duration: 0.5 },
+      }
 
   useEffect(() => {
     // Flash clears after the CSS animation completes — Section 20. Keyed to
@@ -249,20 +274,25 @@ function ShinyVisualQuestion({ slide, theme }) {
       {isPortrait ? (
         /* Portrait: image left 50%, text right 50% — Section 14 */
         <div className="w-full h-full flex">
+          {/* popLayout: pops the exiting image out of normal flow while it
+              fades, so the outgoing/incoming pair crossfading briefly
+              doesn't fight the flex layout for the same half-width slot. */}
+          <AnimatePresence mode="popLayout">
+            <motion.div
+              key={partKey}
+              className="w-1/2 h-full overflow-hidden"
+              {...imageEntrance}
+            >
+              <img
+                src={part.mediaUrl}
+                onLoad={handleImageLoad}
+                alt=""
+                className="w-full h-full object-contain"
+              />
+            </motion.div>
+          </AnimatePresence>
           <motion.div
-            className="w-1/2 h-full overflow-hidden"
-            initial={{ scale: 1.08, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.05, duration: 0.28, ease: EASE_OUT }}
-          >
-            <img
-              src={part.mediaUrl}
-              onLoad={handleImageLoad}
-              alt=""
-              className="w-full h-full object-contain"
-            />
-          </motion.div>
-          <motion.div
+            key={`${partKey}:caption`}
             className="w-1/2 h-full flex items-center justify-center px-12"
             initial={{ x: 24, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
@@ -286,16 +316,18 @@ function ShinyVisualQuestion({ slide, theme }) {
       ) : (
         /* Landscape / square: full bleed + gradient scrim — Section 14 */
         <>
-          <motion.img
-            src={part.mediaUrl}
-            onLoad={handleImageLoad}
-            alt=""
-            className="w-full h-full object-contain"
-            initial={{ scale: 1.08, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.05, duration: 0.28, ease: EASE_OUT }}
-          />
+          <AnimatePresence mode="popLayout">
+            <motion.img
+              key={partKey}
+              src={part.mediaUrl}
+              onLoad={handleImageLoad}
+              alt=""
+              className="w-full h-full object-contain"
+              {...imageEntrance}
+            />
+          </AnimatePresence>
           <motion.div
+            key={`${partKey}:caption`}
             className="absolute bottom-0 left-0 right-0"
             style={{
               background: 'linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)',
