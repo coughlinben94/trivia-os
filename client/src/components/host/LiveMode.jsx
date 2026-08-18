@@ -21,6 +21,21 @@ import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TI
 // found while investigating: this is the one message with no path forward).
 const WAGER_ZERO_ANSWERS_ERROR = 'No wager answers came back — check connection and retry before scoring'
 
+// PYL "Pick animation" tiles — same visual language as BuildMode's CARD_STYLE
+// (soft gradient + colored border that brightens on hover) but keyed by
+// animation id, not slide type, and pitched one shade brighter (100/200 vs
+// 50/100) so the row reads as its own family rather than stray slide cards.
+export const ANIM_TILE_STYLE = {
+  boxing:     'bg-gradient-to-br from-rose-100    to-pink-200   border-rose-300    hover:border-rose-500',
+  cards:      'bg-gradient-to-br from-emerald-100 to-green-200  border-emerald-300 hover:border-emerald-500',
+  chestduel:  'bg-gradient-to-br from-amber-100   to-orange-200 border-amber-300   hover:border-amber-500',
+  battleship: 'bg-gradient-to-br from-cyan-100    to-sky-200    border-cyan-300    hover:border-cyan-500',
+  whackamole: 'bg-gradient-to-br from-yellow-100  to-lime-200   border-lime-300    hover:border-lime-500',
+  // Multi-stop on purpose — the one tile that isn't a single animation reads as
+  // a mixed bag at a glance, the same trick winner-reveal pulls in BuildMode.
+  lotto:      'bg-gradient-to-br from-fuchsia-100 via-violet-200 to-indigo-200 border-fuchsia-300 hover:border-fuchsia-500',
+}
+
 const SLIDE_META = {
   'pre-show':          { label: 'Pre-Show',    color: 'bg-sky-100 text-sky-700' },
   'title':             { label: 'Title',       color: 'bg-purple-100 text-purple-700' },
@@ -263,11 +278,16 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         .eq('show_id', show.id)
       if (error || !teams?.length) return
       const cols = deriveRoundCols(show)
+      // Ascending by score, so the pool is everyone OUTSIDE the top 5 (Ben,
+      // 2026-08-18: was "bottom half," which shrinks/grows with team count —
+      // he wants a fixed cutoff instead, always excluding exactly the top 5
+      // regardless of how many teams showed up). Falls back to every team
+      // when there aren't even 6 (nothing would be "outside the top 5").
       const sorted = [...teams].sort(
         (a, b) => computeTotal(a.scores, cols) - computeTotal(b.scores, cols)
       )
-      const poolCount = Math.ceil(sorted.length / 2)
-      const pool = sorted.slice(0, poolCount).map(t => ({ id: t.id, name: t.name }))
+      const pool = (sorted.length > 5 ? sorted.slice(0, sorted.length - 5) : sorted)
+        .map(t => ({ id: t.id, name: t.name }))
       const winnerId = pool[Math.floor(Math.random() * pool.length)].id
       actions.updateSlide(currentSlide.id, {
         data: { ...currentSlide.data, animationId: animId, winnerId, pool },
@@ -808,16 +828,18 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           {currentSlide?.type === 'pyl-reveal' && !currentSlide?.data?.animationId && (
             <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
               <p className="text-xs text-gray-400 mb-3">Pick animation</p>
-              <div className="flex gap-3">
+              {/* Two rows of three rather than one row of six — six across in
+                  this panel squeezes the labels to two lines each. */}
+              <div className="grid grid-cols-3 gap-3">
                 {SELECTION_ANIMATIONS.map(anim => (
                   <button
                     key={anim.id}
                     onClick={() => handlePickAnimation(anim.id)}
                     disabled={pylPickerBusy}
-                    className={`flex-1 flex flex-col items-center gap-2 py-4 rounded-xl border-2 transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
+                    className={`flex flex-col items-center gap-2 px-3 py-5 rounded-2xl border-2 transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
                       pylPickerBusy
-                        ? 'border-gray-100 text-gray-300 cursor-not-allowed'
-                        : 'border-gray-200 hover:border-gray-400 text-gray-700'
+                        ? 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed'
+                        : `${ANIM_TILE_STYLE[anim.id] ?? 'bg-gray-50 border-gray-200 hover:border-gray-400'} text-gray-700`
                     }`}
                   >
                     <span className="text-3xl">{anim.emoji}</span>
