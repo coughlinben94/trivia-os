@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { blendDurationMs } from '../lib/gradientTuning.js'
+import { lerpOklabPolar, rgbToOklab, oklabToRgb } from './AlbumGradientMesh.jsx'
 
 // StationRingLayer — "Station Thirteen" ambient layer for the grading-break
 // jukebox (ring-world fusion, 2026-08-16). Transparent ADDITIVE canvas that
@@ -103,7 +105,36 @@ export default function StationRingLayer({ active = true, colors = [], progress 
   )
 
   useEffect(() => { progressRef.current = clamp(progress, 0, 1) }, [progress])
-  useEffect(() => { rgbRef.current = parseColors(colors) }, [colors])
+
+  // Ring color used to snap instantly on every colors-prop change while
+  // AlbumGradientMesh's album wash crossfades the same track change over
+  // blendDurationMs() (~7.5s) in OKLab — the ring would pop to the new hue
+  // well before the backdrop caught up. Blend it the same way, over the same
+  // duration, reusing the exact OKLab machinery AlbumGradientMesh already
+  // proved out (see lerpOklabPolar's header comment for why per-pixel hue
+  // stability doesn't matter here: our two endpoints are fixed for the life
+  // of one blend, so the no-per-frame-drift branch applies directly).
+  // First mount and reduced-motion both still snap: reduced motion has no
+  // rAF loop to drive the blend (its own effect below redraws a single
+  // static frame), and snapping on mount avoids a pointless fade in from the
+  // fallback purple/pink before any real palette has ever been shown.
+  const blendRef = useRef(null)
+  const colorsMountedRef = useRef(false)
+  useEffect(() => {
+    const target = parseColors(colors)
+    if (reducedMotion || !colorsMountedRef.current) {
+      colorsMountedRef.current = true
+      rgbRef.current = target
+      blendRef.current = null
+      return
+    }
+    blendRef.current = {
+      fromOklab: rgbRef.current.map(rgbToOklab),
+      toOklab: target.map(rgbToOklab),
+      startMs: performance.now(),
+      durMs: blendDurationMs(),
+    }
+  }, [colors, reducedMotion])
 
   // Locate the record scene so the ring band hugs the REAL disc.
   // ponytail: selector coupled to LiveScreen's record-box Tailwind classes
@@ -147,6 +178,17 @@ export default function StationRingLayer({ active = true, colors = [], progress 
       lastMeasureRef.current = t
     }
     const { cx, cy, recordR } = geomRef.current
+
+    if (blendRef.current) {
+      const b = blendRef.current
+      const p = Math.max(0, Math.min(1, (t * 1000 - b.startMs) / b.durMs))
+      const eased = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p
+      rgbRef.current = [
+        oklabToRgb(lerpOklabPolar(b.fromOklab[0], b.toOklab[0], eased)),
+        oklabToRgb(lerpOklabPolar(b.fromOklab[1], b.toOklab[1], eased)),
+      ]
+      if (p >= 1) blendRef.current = null
+    }
     const [c0, c1] = rgbRef.current
     // Mockup math was tuned in a 960px-wide space — scale the dot/line
     // weights up with the real canvas so a TV doesn't get 2px specks.

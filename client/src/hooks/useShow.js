@@ -568,12 +568,19 @@ export function useShow() {
     // blank every phone back to the teaser screen with no way to submit.
     const wouldRegressLockedQuestion = introDone === false &&
       (slide.data?.wagerTiersLocked || slide.data?.wagerGuessesLocked || slide.data?.matchingLocked)
-    if (introDone !== undefined && slide.data?.isShiny && !!slide.data.introDone !== introDone && !wouldRegressLockedQuestion) {
-      patch.introDone = introDone
+    if (introDone !== undefined && slide.data?.isShiny && !wouldRegressLockedQuestion) {
+      if (!!slide.data.introDone !== introDone) {
+        patch.introDone = introDone
+      }
       // Fresh entry always restarts the closing-beat cycle too (see
       // nextSlide's outroShown handling below) — a stale true from a
       // previous visit would otherwise skip straight past the closing
-      // title card next time this slide's last part is reached.
+      // title card next time this slide's last part is reached. This must
+      // NOT be nested inside the introDone-changed check above: a second
+      // fresh entry (e.g. rehearsal, then go-live for real) can arrive with
+      // introDone already false, which used to skip this reset entirely and
+      // leave outroShown stuck true — question never displayed, only the
+      // title card, no matter how many times Next was pressed.
       if (slide.data?.outroShown) patch.outroShown = false
     }
     if (Object.keys(patch).length === 0) return slides
@@ -708,7 +715,21 @@ export function useShow() {
       // but outroShown true) skips the re-reveal branch above and actually
       // moves on. Reset to false whenever this slide is entered fresh
       // (withEntryState), so revisiting always restarts the cycle.
-      if (data.introDone && !data.outroShown) {
+      //
+      // Two cases must skip this pause entirely and fall through to the
+      // normal advance below:
+      //   - the next slide continues the same shiny series (siblings only
+      //     get one announce beat at the start, skipIntro below — each one
+      //     pausing on its own closing title card too would break what's
+      //     supposed to read as one continuous run)
+      //   - this slide is a locked wager/matching question (same guard
+      //     withEntryState uses above) — setting introDone:false here would
+      //     blank every phone back to the teaser screen mid-scoring, with no
+      //     way to submit, exactly what that guard exists to prevent.
+      const peekTarget = sorted[Math.min(cur + 1, sorted.length - 1)]
+      const nextIsSeriesSibling = !!peekTarget && peekTarget.id !== curSlide.id && isShinySeriesSibling(curSlide, peekTarget)
+      const curIsLockedQuestion = !!(data?.wagerTiersLocked || data?.wagerGuessesLocked || data?.matchingLocked)
+      if (data.introDone && !data.outroShown && !nextIsSeriesSibling && !curIsLockedQuestion) {
         const newSlides = show.slides.map(s =>
           s.id === curSlide.id ? { ...s, data: { ...s.data, introDone: false, outroShown: true } } : s
         )

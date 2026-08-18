@@ -218,6 +218,18 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const nextSlides = slides.slice(currentIndex + 1, currentIndex + 3)
   const atStart = currentIndex === 0
   const atEnd = currentIndex >= slides.length - 1
+
+  // wagerError/matchingScoreError used to persist across a slide change —
+  // advancing off a wager slide that hit WAGER_ZERO_ANSWERS_ERROR left the
+  // "Score anyway — 0 for every team" override armed and rendered on
+  // whatever wager slide came next, even one that was never locked or
+  // scored, wired to force-zero-score THAT slide via currentSlide in its
+  // onClick closure. Clear both on every slide change so a stale error (and
+  // the destructive override it unlocks) can never follow the host forward.
+  useEffect(() => {
+    setWagerError(null)
+    setMatchingScoreError(null)
+  }, [currentSlide?.id])
   // Jump-to-QR — a late team scans in mid-show. Only shown if the show
   // actually has a Pre-Show slide; jumps the TV there without touching the
   // current slide index otherwise (host navigates back manually after).
