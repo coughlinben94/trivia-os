@@ -45,7 +45,12 @@ function Column({ items, theme, revealed, shouldReduceMotion }) {
       {items.map((item, i) => (
         <motion.div
           key={item.id}
-          layout="position"
+          // Off entirely under reduced motion (house convention —
+          // ScoreboardOverlay.jsx does the same) rather than just a faster
+          // transition: `layout` is a spatial slide by nature, exactly what
+          // reduced-motion opts out of. The reorder still happens instantly
+          // (React re-renders the DOM order), it just doesn't animate there.
+          layout={shouldReduceMotion ? false : 'position'}
           initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: 'translateY(12px)' }}
           animate={{ opacity: 1, transform: 'translateY(0px)' }}
           transition={{
@@ -54,13 +59,9 @@ function Column({ items, theme, revealed, shouldReduceMotion }) {
             // pairRank order) — kept separate so revealing doesn't re-fire
             // the staggered entrance. A deliberate, weighted "landing" spring
             // for the reorder (house style: ScoreboardRevealSlide's crown
-            // drop uses the same bounce:0.3 family) — reduced motion swaps it
-            // for a fast, non-spatial reflow so the correct pairing still
-            // reads instantly without a big slide.
+            // drop uses the same bounce:0.3 family).
             default: { duration: 0.28, delay: i * 0.05, ease: EASE_OUT },
-            layout: shouldReduceMotion
-              ? { duration: 0.2, ease: EASE_OUT }
-              : { type: 'spring', duration: 0.7, bounce: 0.22 },
+            layout: { type: 'spring', duration: 0.7, bounce: 0.22 },
           }}
           style={item.image
             // Image items: no pill background/border (2026-08-18, Ben), but
@@ -94,22 +95,32 @@ function Column({ items, theme, revealed, shouldReduceMotion }) {
               screen shows which left item actually pairs with which right
               item once revealed — this rank badge (shared by both halves of
               the same pair, taken from the unshuffled pairs order) is that
-              correspondence. */}
-          {revealed && (
-            <span style={item.image
-              ? {
-                  position: 'absolute', top: -8, left: -8, zIndex: 2,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  width: '1.8rem', height: '1.8rem', borderRadius: '50%',
-                  background: SHINY_GOLD, color: '#1a1a1a', fontSize: '1rem', fontWeight: 700,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-                }
-              : {
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  width: '1.8rem', height: '1.8rem', borderRadius: '50%',
-                  background: 'rgba(0,0,0,0.18)', fontSize: '1rem', fontWeight: 700, flexShrink: 0,
-                }
-            }>
+              correspondence. Image badge is absolutely positioned — mounting
+              it only on reveal is fine, it can't shove anything else. The
+              text-pill badge is an in-flow flex sibling though (found live
+              2026-08-18): conditionally mounting IT at reveal made every
+              label hard-jump sideways by its width+gap in one frame, on top
+              of the layout reorder. Kept always-mounted, reserving its slot,
+              and faded in with opacity instead — no reflow, no jerk. */}
+          {revealed && item.image && (
+            <span style={{
+              position: 'absolute', top: -8, left: -8, zIndex: 2,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '1.8rem', height: '1.8rem', borderRadius: '50%',
+              background: SHINY_GOLD, color: '#1a1a1a', fontSize: '1rem', fontWeight: 700,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+            }}>
+              {item.pairRank + 1}
+            </span>
+          )}
+          {!item.image && (
+            <span style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '1.8rem', height: '1.8rem', borderRadius: '50%',
+              background: 'rgba(0,0,0,0.18)', fontSize: '1rem', fontWeight: 700, flexShrink: 0,
+              opacity: revealed ? 1 : 0,
+              transition: 'opacity 0.2s ease-out',
+            }}>
               {item.pairRank + 1}
             </span>
           )}

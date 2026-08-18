@@ -58,12 +58,31 @@ export function buildMatchAnswer(connections) {
 // stable per question but not a predictable mirror of the left column — the
 // naive `sort().reverse()` this replaced produced an exact mirror for any
 // 2-pair question, making it solvable without reading it.
+//
+// Re-rolls if any item lands back in its own (matched) slot, for n >= 3 —
+// found live 2026-08-18: a fixed point pre-reveals that pair by position
+// (it's already sitting in its matched row) and, on the display TV, never
+// animates at reveal since it doesn't move. n=2 is exempt: its only
+// fixed-point-free permutation is the full mirror, which is exactly the
+// "solvable without reading it" pattern the shuffle exists to avoid — see
+// the mirror test below. Capped at 50 tries so a pathological seed can't
+// loop forever; the tiny leftover fixed-point risk beyond that is far
+// better than never terminating.
 export function seededShuffle(items, seed) {
   const rand = mulberry32(hashSeed(String(seed)))
-  const arr = [...items]
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1))
-    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  function shuffleOnce() {
+    const arr = [...items]
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1))
+      ;[arr[i], arr[j]] = [arr[j], arr[i]]
+    }
+    return arr
+  }
+  let arr = shuffleOnce()
+  if (items.length >= 3) {
+    for (let tries = 0; tries < 50 && arr.some((item, i) => item === items[i]); tries++) {
+      arr = shuffleOnce()
+    }
   }
   return arr
 }
