@@ -1837,8 +1837,30 @@ function PylRevealEditor({ data, onChange, setData, scheduleSave, show, slide })
   // do the same detection:
   //  - pool/winnerId/animationId  -> the Lotto Animation spin
   //  - items                      -> the Theme Picker board (plain names)
-  //  - stages (default/fallback)  -> a points-scoring reveal list
+  //  - stages                     -> a points-scoring reveal list
+  //  - none of the above          -> bare Lotto Animation slide — its only
+  //    real config is LiveMode's live "Pick animation" row, not this panel
   if (data.pool) return <PylLottoEditor data={data} setData={setData} scheduleSave={scheduleSave} />
+
+  if (!data.items && !data.stages) {
+    return (
+      <>
+        <p className="text-xs text-gray-500">
+          This slide runs the live animation pick — no content to fill in here. Pool, winner, and animation style come from LiveMode's "Pick animation" row when this slide is up.
+        </p>
+        <button
+          onClick={() => {
+            const next = { ...data, stages: [{ text: '', points: 20, revealed: false }] }
+            setData(next)
+            scheduleSave({ data: next })
+          }}
+          className="text-xs text-baynes-forest hover:text-green-800 font-medium transition-colors self-start"
+        >
+          + Use this slide for a scored reveal instead
+        </button>
+      </>
+    )
+  }
 
   const listKey = data.items ? 'items' : 'stages'
   const isBoard = listKey === 'items'
