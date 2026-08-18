@@ -632,8 +632,18 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
     const design = designElRef.current
     if (!stage || !design) return
 
+    // 2026-08-17, Ben, live: a real gap opened at the bottom of the frame on
+    // any viewport narrower-than-16:9 (taller relative to width) — a 2000x1300
+    // window (1.54:1) left ~175px uncovered. Root cause: this only ever
+    // scaled off WIDTH, so a stage taller than 16:9-of-its-width never got
+    // covered on the extra height. Cover-fit instead of width-fit: take
+    // whichever axis needs the BIGGER scale so the design canvas always
+    // covers the full stage regardless of its aspect ratio, same as CSS
+    // `object-fit: cover` — the design can now overflow slightly on the
+    // other axis, which ring-stage's own overflow:hidden already clips.
     function fit() {
-      design.style.transform = `scale(${stage.clientWidth / ENGINE.W})`
+      const s = Math.max(stage.clientWidth / ENGINE.W, stage.clientHeight / ENGINE.H)
+      design.style.transform = `scale(${s})`
     }
     const ro = new ResizeObserver(fit)
     ro.observe(stage)
@@ -1152,7 +1162,18 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
       ref={stageElRef}
       className="ring-stage"
       aria-hidden
-      style={{ position: 'absolute', inset: 0, aspectRatio: '16/9', overflow: 'hidden', background: '#01010a', pointerEvents: 'none' }}
+      // aspectRatio: '16/9' removed (2026-08-17, Ben, live) — with inset:0 in
+      // a definite-size parent this doesn't act as a MINIMUM, it caps the
+      // stage's own height to width*9/16, independent of the parent's real
+      // height. On the real show TV (a true 1920x1080 16:9 panel) that cap
+      // never bound anything since width*9/16 already equals the true
+      // height. In any other window shape (any dev/preview browser window,
+      // which is what actually surfaced this) it silently capped the stage
+      // short and left the difference as bare, uncovered space below it —
+      // the fit() cover-scale above can't reach space the stage itself never
+      // claimed. inset:0 alone already does the right thing: fill the true
+      // parent size on every aspect ratio, identical result on a real 16:9 TV.
+      style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#01010a', pointerEvents: 'none' }}
     >
       <style>{RING_CSS}</style>
       <div

@@ -432,7 +432,13 @@ const fill = i => fillOf(ENGINE, ARC, i);
 
 const stage = document.getElementById('stage');
 const design = document.getElementById('design');
-function fit(){ design.style.transform = 'scale(' + (stage.clientWidth/ENGINE.W) + ')'; }
+// Cover-fit, not width-only (2026-08-17, Ben, live, synced from
+// RingAmbient.jsx) — this .stage's own height comes from aspect-ratio, not
+// a definite parent height, so it can't leave a gap the way the live
+// component's absolute+inset:0 stage could; kept here purely so this file's
+// fit() stays in step with the live one, not because this specific bug
+// reproduces in this layout.
+function fit(){ const s = Math.max(stage.clientWidth/ENGINE.W, stage.clientHeight/ENGINE.H); design.style.transform = 'scale(' + s + ')'; }
 new ResizeObserver(fit).observe(stage); fit();
 
 // dom.el/dom.makePrim/dom.bandY/dom.buildStars (and the plain px export)
