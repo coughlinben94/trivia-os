@@ -352,7 +352,7 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#e8ecf5", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: dead ? "line-through" : "none" }}>{f.name}</span>
                 </div>
                 <div style={{ height: 9, background: "#00000066", borderRadius: 5, overflow: "hidden", border: "1px solid #ffffff18" }}>
-                  <div style={{ width: `${Math.max(0, f.hp)}%`, height: "100%", background: dead ? "#555" : hpColor(f.hp), transition: "width 140ms cubic-bezier(0.23,1,0.32,1)" }} />
+                  <div style={{ width: "100%", height: "100%", transformOrigin: "left", transform: `scaleX(${Math.max(0, f.hp) / 100})`, background: dead ? "#555" : hpColor(f.hp), transition: "transform 140ms cubic-bezier(0.23,1,0.32,1)" }} />
                 </div>
               </div>
             );
@@ -383,7 +383,7 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
               const wt = f.win && celeb ? clamp((now - celeb) / 420, 0, 1) : 0;
               const bmp = f.win ? 1 + 0.4 * easeOutBack(wt) : armed ? 1.12 : 1;
               return (
-                <div key={f.id} style={{ position: "absolute", left: f.x, top: f.y, transform: `translate(-50%,-50%) rotate(${f.rot}deg) scale(${bmp * pScale})`, filter: `grayscale(${f.gray}) brightness(${f.hitFlash > 0 ? 1.85 : 1})`, opacity: entering ? 0 : f.alive ? 1 : 1 - f.gray * 0.7, transition: "opacity 300ms, filter 160ms ease-out", willChange: armed || f.win ? "transform, opacity" : undefined, zIndex: f.win || armed ? 40 : 10 }}>
+                <div key={f.id} style={{ position: "absolute", left: f.x, top: f.y, transform: `translate(-50%,-50%) rotate(${f.rot}deg) scale(${bmp * pScale})`, filter: `grayscale(${f.gray}) brightness(${f.hitFlash > 0 ? 1.85 : 1})`, opacity: entering ? 0 : f.alive ? 1 : 1 - f.gray * 0.7, transition: "opacity 300ms", willChange: armed || f.win ? "transform, opacity" : undefined, zIndex: f.win || armed ? 40 : 10 }}>
                   <div style={{ position: "relative", width: PLATE_W, padding: "9px 6px", borderRadius: 12, textAlign: "center", fontWeight: 900, fontSize: 18, lineHeight: 1.05, color: "#0b0d16", background: f.color, boxShadow: f.win || armed ? `0 0 60px ${C.highlight}, 0 0 0 4px ${C.highlight}` : "0 6px 14px #0009", border: "2px solid #00000033" }}>
                     {f.name}
                     {armed && <div style={{ position: "absolute", top: -30, right: -18, fontSize: 40, transform: "rotate(20deg)", filter: `drop-shadow(0 0 10px ${C.highlight})`, animation: "swordIn 260ms cubic-bezier(.34,1.56,.64,1) both" }}>⚔️</div>}
