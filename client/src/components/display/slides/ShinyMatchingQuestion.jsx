@@ -1,6 +1,4 @@
-import { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { supabase } from '../../../lib/supabase.js'
 import { SHINY_GOLD } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { seededShuffle } from '../../../lib/matchingScoring.js'
@@ -8,35 +6,26 @@ import { seededShuffle } from '../../../lib/matchingScoring.js'
 export default function ShinyMatchingQuestion({ slide, theme }) {
   const { data } = slide
   const pairs = data.pairs ?? []
-  const locked = !!data.matchingLocked
   const revealed = !!data.matchingRevealed
-  const [submittedCount, setSubmittedCount] = useState(0)
   const shouldReduceMotion = useReducedMotion()
 
-  // Polled, not a postgres_changes subscription — phone_answers' SELECT
-  // policy (tightened 2026-08-17) only allows the owning team or a
-  // host_verified session to read a row, and Supabase Realtime enforces that
-  // same RLS check before delivering a change event, not just on initial
-  // fetch. /display is neither (it never goes through the host PIN gate,
-  // same reason advance_show() exists as its own RPC) — a postgres_changes
-  // subscription here would silently never fire. The count itself comes
-  // from phone_answers_count(), a SECURITY DEFINER RPC that returns only the
-  // aggregate this component actually needs, not raw rows.
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      const { data: count } = await supabase.rpc('phone_answers_count', { p_slide_id: slide.id })
-      if (!cancelled) setSubmittedCount(count ?? 0)
-    }
-    load()
-    const interval = setInterval(load, 2000)
-    return () => { cancelled = true; clearInterval(interval) }
-  }, [slide.id])
-
-  const text = theme.colors.text
+  // Right column renders shuffled (so the pairing isn't given away by
+  // position) UNTIL revealed — then it switches to `pairs`' own order, same
+  // as the left column, so pairRank-matched tiles land in the same row.
+  // Column's motion.div has `layout` on, so this reorder is what drives the
+  // "tiles physically move to match" reveal (Ben, 2026-08-18 live show note:
+  // the number-badge-only reveal wasn't enough).
+  const rightOrder = revealed ? pairs : seededShuffle(pairs, slide.id ?? 'preview')
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', height: '100%', padding: '3rem' }}>
+    // Explicit opaque backdrop (2026-08-18, Ben: image-bearing shiny content
+    // needs to pan up to its OWN plain slide, isolated from the ring-world
+    // ambient background — unlike audio-only shiny types, which are fine
+    // staying ambient). Previously this div had no background of its own and
+    // relied on SlideRenderer's shared locked layer; this guarantees
+    // isolation regardless of that. theme.colors.shinyBg matches the same
+    // plain-backdrop convention GridSlide/ShinyVisualQuestion already use.
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', height: '100%', padding: '3rem', background: theme.colors.shinyBg }}>
       {/* flex:1/minHeight:0 so image tiles below can stretch to fill the
           full available height (2026-08-18, Ben: images needed to take up
           the whole screen, not sit at a small fixed size) — text pills are
@@ -44,23 +33,8 @@ export default function ShinyMatchingQuestion({ slide, theme }) {
           centered as a group via Column's own justifyContent. */}
       <div style={{ display: 'flex', gap: '6vw', width: '100%', maxWidth: 1400, justifyContent: 'space-between', flex: 1, minHeight: 0 }}>
         <Column items={pairs.map((p, i) => ({ id: p.id, label: p.left, image: p.leftImage, pairRank: i }))} theme={theme} revealed={revealed} shouldReduceMotion={shouldReduceMotion} />
-        <Column items={seededShuffle(pairs, slide.id ?? 'preview').map(p => ({ id: p.id, label: p.right, image: p.rightImage, pairRank: pairs.findIndex(x => x.id === p.id) }))} theme={theme} revealed={revealed} shouldReduceMotion={shouldReduceMotion} />
+        <Column items={rightOrder.map(p => ({ id: p.id, label: p.right, image: p.rightImage, pairRank: pairs.findIndex(x => x.id === p.id) }))} theme={theme} revealed={revealed} shouldReduceMotion={shouldReduceMotion} />
       </div>
-      {!locked && (
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3, ease: EASE_OUT }}
-          style={{ marginTop: '2.5rem', color: `${text}70`, fontSize: '1.1rem', fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif` }}
-        >
-          {submittedCount} team{submittedCount === 1 ? '' : 's'} submitted
-        </motion.p>
-      )}
-      {locked && !revealed && (
-        <p style={{ marginTop: '2.5rem', color: `${text}45`, fontSize: '1rem', fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif` }}>
-          Locked — scoring…
-        </p>
-      )}
     </div>
   )
 }
@@ -71,9 +45,23 @@ function Column({ items, theme, revealed, shouldReduceMotion }) {
       {items.map((item, i) => (
         <motion.div
           key={item.id}
+          layout="position"
           initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: 'translateY(12px)' }}
           animate={{ opacity: 1, transform: 'translateY(0px)' }}
-          transition={{ duration: 0.28, delay: i * 0.05, ease: EASE_OUT }}
+          transition={{
+            // `default` governs the entrance fade/rise above; `layout`
+            // governs the reveal reorder (right column snapping into
+            // pairRank order) — kept separate so revealing doesn't re-fire
+            // the staggered entrance. A deliberate, weighted "landing" spring
+            // for the reorder (house style: ScoreboardRevealSlide's crown
+            // drop uses the same bounce:0.3 family) — reduced motion swaps it
+            // for a fast, non-spatial reflow so the correct pairing still
+            // reads instantly without a big slide.
+            default: { duration: 0.28, delay: i * 0.05, ease: EASE_OUT },
+            layout: shouldReduceMotion
+              ? { duration: 0.2, ease: EASE_OUT }
+              : { type: 'spring', duration: 0.7, bounce: 0.22 },
+          }}
           style={item.image
             // Image items: no pill background/border (2026-08-18, Ben), but
             // a fixed uniform box is what actually makes that look right —
