@@ -554,7 +554,6 @@ export default function RoundSidebar({
                           groupCount: group.items.length,
                           groupExpanded: expanded,
                           onToggleGroup: () => toggleGroup(groupId),
-                          labelOverride: shinySiblingLabel(leadSlide, 1),
                         })}
                         {expanded && group.items.slice(1).map(({ slide, idx }, i) =>
                           rowFor(slide, idx, { doubleIndent: true, labelOverride: shinySiblingLabel(slide, i + 2) })
