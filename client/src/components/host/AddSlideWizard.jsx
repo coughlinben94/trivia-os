@@ -5,7 +5,6 @@ import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import { archiveQuestion } from '../../lib/archiveQuestion.js'
 import { makeQuestionPasteHandler, makeCleanPasteHandler } from '../../lib/cleanPaste.js'
-import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
 
 export const TYPE_CARDS = [
   { type: 'pre-show',       icon: '📱', name: 'Pre-Show',            desc: 'QR code + team count while people join' },
@@ -18,7 +17,7 @@ export const TYPE_CARDS = [
   { type: 'grading-break',  icon: '⏸️', name: 'Grading Break',       desc: 'While Ben grades papers' },
   { type: 'scoreboard-reveal', icon: '🏆', name: 'Scoreboard Reveal', desc: 'Round standings — also unlocks phone scores for this round' },
   { type: 'winner-reveal',  icon: '🥇', name: 'Winner Reveal',       desc: 'Drum roll → winner + confetti' },
-  { type: 'pyl-lotto',      icon: '🎰', name: 'Lotto Animation',     desc: 'Press Your Luck — spin to reveal which theme plays' },
+  { type: 'pyl-lotto',      icon: '🎰', name: 'Lotto Animation',     desc: 'Press Your Luck — pick animation live, same as any PYL spin' },
   { type: 'pyl-board',      icon: '🎯', name: 'Theme Picker',        desc: 'Press Your Luck — on-screen board naming the 2-3 embedded themes' },
   { type: 'custom',         icon: '✏️', name: 'Custom',              desc: 'Freeform slide' },
   // utility-only — not shown in the picker grid, but provides icon/name metadata for header + sidebar
@@ -77,18 +76,8 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const [jukeboxLib, setJukeboxLib]   = useState('random')
   const [jukeboxLibs, setJukeboxLibs] = useState(JUKEBOX_LIBRARIES)
 
-  // PYL — Lotto Animation (persists as slide.type 'pyl-reveal' with
-  // animationId/pool/winnerId set — PylRevealSlide's animation branch).
-  // winnerId is decided here, by the host, before the show — the spin is
-  // theater for the audience, same as LottoPicker.jsx's own contract.
-  const [pylNames,      setPylNames]      = useState(['', '', ''])
-  const [pylWinnerIdx,  setPylWinnerIdx]  = useState(0)
-  const [pylAnimationId, setPylAnimationId] = useState('lotto')
-
-  // PYL — Theme Picker board (persists as the same slide.type 'pyl-reveal',
-  // but with items/title set instead — PylRevealSlide's static branch).
-  // Independent field, not derived from pylNames above: the two tiles are
-  // added separately and don't need to describe the same theme set.
+  // PYL — Theme Picker board (persists as slide.type 'pyl-reveal' with
+  // items/title set — PylRevealSlide's static branch).
   const [pylBoardNames, setPylBoardNames] = useState(['', '', ''])
 
   useEffect(() => {
@@ -392,20 +381,24 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
       data = { title: '', body: '', mediaUrl: null, mediaType: null }
 
     } else if (type === 'pyl-lotto') {
-      const names = pylNames.map(n => n.trim()).filter(Boolean)
-      const pool = names.map((name, i) => ({ id: `pyl_opt_${i}`, name }))
-      data = {
-        animationId: pylAnimationId,
-        pool,
-        winnerId: pool[pylWinnerIdx]?.id ?? pool[0]?.id ?? null,
-      }
+      // Bare pyl-reveal slide, no animationId/pool/winnerId — the host
+      // picks live from LiveMode's "Pick animation" row (real team pool,
+      // real winner), same as every other PYL slide. Pre-seeding
+      // theme-name candidates here was wrong (2026-08-18, Ben: "the tile
+      // only is supposed to invoke the lotto then the picker animation.
+      // not the three themes thing") — that's the Theme Picker board's job.
+      data = {}
 
     } else if (type === 'pyl-board') {
       const names = pylBoardNames.map(n => n.trim()).filter(Boolean)
+      const items = names.map(name => ({ text: name, targetSlideId: null }))
       data = {
         title: 'Which will it be?',
-        items: names.map(name => ({ text: name })),
-        currentReveal: 0,
+        items,
+        // Board names are the click targets, not a build-suspense reveal
+        // list — they need to be visible immediately so the host can click
+        // whichever the winning team calls (2026-08-18, Ben).
+        currentReveal: items.length,
       }
     }
 
@@ -447,7 +440,6 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const needsRound     = NEEDS_ROUND.has(type)
   const canCreate      = !(needsRound && !roundId)
     && (type !== 'round-intro' || (roundNumValid && !!roundId))
-    && (type !== 'pyl-lotto' || pylNames.filter(n => n.trim()).length >= 2)
     && (type !== 'pyl-board' || pylBoardNames.filter(n => n.trim()).length >= 2)
   const canAddQuestion = !!roundId && questionText.trim().length > 0 && questionAnswer.trim().length > 0
   const isConcurrentFmt = selectedShinyFmt?.input_schema?.concurrent === true
@@ -1004,57 +996,13 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               </div>
             )}
 
-            {/* ── PYL LOTTO ANIMATION: candidate names + which one wins + which
-                 animation plays (winner is decided now, by the host — the
-                 spin is theater, same contract LottoPicker.jsx documents) ── */}
+            {/* ── PYL LOTTO ANIMATION: no fields — bare pyl-reveal slide,
+                 the host picks the real animation/winner live from
+                 LiveMode's "Pick animation" row (2026-08-18, Ben) ── */}
             {type === 'pyl-lotto' && (
-              <>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                    Theme options <span className="font-normal text-gray-400">(2 or 3 — leave the third blank for 2)</span>
-                  </label>
-                  <div className="flex flex-col gap-2">
-                    {pylNames.map((name, i) => (
-                      <input
-                        key={i}
-                        type="text"
-                        value={name}
-                        onChange={e => setPylNames(prev => prev.map((n, j) => j === i ? e.target.value : n))}
-                        placeholder={`Theme ${i + 1}${i === 2 ? ' (optional)' : ''}`}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Which one wins the spin</label>
-                  <select
-                    value={pylWinnerIdx}
-                    onChange={e => setPylWinnerIdx(Number(e.target.value))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                  >
-                    {pylNames.map((name, i) => (
-                      <option key={i} value={i} disabled={!name.trim()}>
-                        {name.trim() || `Theme ${i + 1} (name it above)`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Animation style</label>
-                  <select
-                    value={pylAnimationId}
-                    onChange={e => setPylAnimationId(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                  >
-                    {SELECTION_ANIMATIONS.map(a => (
-                      <option key={a.id} value={a.id}>{a.emoji} {a.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </>
+              <p className="text-xs text-gray-400">
+                Creates an empty slide — pick the animation and winning team live from the "Pick animation" row when this slide is up.
+              </p>
             )}
 
             {/* ── PYL THEME PICKER BOARD: on-screen list of the 2-3 embedded

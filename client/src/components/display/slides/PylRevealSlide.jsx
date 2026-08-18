@@ -46,6 +46,21 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
     }).eq('id', show.id)
   }
 
+  // Theme Picker board only (2026-08-18, Ben: click the theme the winning
+  // team calls, jump straight into it, skip the other embedded theme(s)).
+  // Disabled in preview so editing the slide can't accidentally move the
+  // live show.
+  async function jumpToSlide(targetSlideId) {
+    if (isPreview || !targetSlideId) return
+    const sorted = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
+    const idx = sorted.findIndex(s => s.id === targetSlideId)
+    if (idx < 0) return
+    await supabase.from('shows').update({
+      current_slide_index: idx,
+      current_slide_id: sorted[idx]?.id ?? null,
+    }).eq('id', show.id)
+  }
+
   if (showAnimation) {
     const Anim = getSelectionAnimation(data.animationId)
     return (
@@ -124,9 +139,15 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
                 key={i}
                 initial={{ opacity: 0, y: reduce ? 0 : 18, scale: reduce ? 1 : 0.97 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
+                whileHover={item.targetSlideId && !isPreview ? { scale: 1.015 } : undefined}
+                whileTap={item.targetSlideId && !isPreview ? { scale: 0.99 } : undefined}
                 transition={{ duration: 0.28, ease: EASE_OUT }}
+                onClick={item.targetSlideId ? () => jumpToSlide(item.targetSlideId) : undefined}
                 className="flex items-center gap-5 px-6 py-4 rounded-2xl"
-                style={{ background: `${theme.colors.accent}35` }}
+                style={{
+                  background: `${theme.colors.accent}35`,
+                  cursor: item.targetSlideId && !isPreview ? 'pointer' : 'default',
+                }}
               >
                 <span
                   className="shrink-0"

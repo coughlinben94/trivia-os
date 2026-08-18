@@ -207,7 +207,7 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
                 <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} theme={theme} />
               )}
               {slide.type === 'pyl-reveal' && (
-                <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} theme={theme} />
+                <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} theme={theme} show={show} slide={slide} />
               )}
               {slide.type === 'state-of-union' && (
                 <StateOfUnionEditor data={data} onChange={change} getHostPhotos={getHostPhotos} uploadMedia={uploadMedia} usedPhotoUrls={usedPhotoUrls} />
@@ -1831,60 +1831,141 @@ function GridEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uplo
   )
 }
 
-function PylRevealEditor({ data, onChange, setData, scheduleSave }) {
-  const stages = data.stages || [{ text: '', points: 40, revealed: false }]
+function PylRevealEditor({ data, onChange, setData, scheduleSave, show, slide }) {
+  // Three data shapes share this one slide type (PylRevealSlide branches on
+  // which fields are present, not on a separate type) — the editor has to
+  // do the same detection:
+  //  - pool/winnerId/animationId  -> the Lotto Animation spin
+  //  - items                      -> the Theme Picker board (plain names)
+  //  - stages (default/fallback)  -> a points-scoring reveal list
+  if (data.pool) return <PylLottoEditor data={data} setData={setData} scheduleSave={scheduleSave} />
 
-  function addStage() {
-    const next = { ...data, stages: [...stages, { text: '', points: 20, revealed: false }] }
+  const listKey = data.items ? 'items' : 'stages'
+  const isBoard = listKey === 'items'
+  const list = data[listKey] || [{ text: '', points: 40, revealed: false }]
+
+  // Same-round slides only (2026-08-18, Ben: click a theme, jump straight to
+  // that theme's own content) — every other round's slides are irrelevant
+  // jump targets and would just clutter the picker.
+  const roundSlides = (show?.slides ?? [])
+    .filter(s => s.roundId === slide?.roundId && s.id !== slide?.id)
+    .sort((a, b) => a.order - b.order)
+
+  function addRow() {
+    const next = { ...data, [listKey]: [...list, isBoard ? { text: '' } : { text: '', points: 20, revealed: false }] }
     setData(next)
     scheduleSave({ data: next })
   }
 
-  function removeStage(i) {
-    const next = { ...data, stages: stages.filter((_, idx) => idx !== i) }
+  function removeRow(i) {
+    const next = { ...data, [listKey]: list.filter((_, idx) => idx !== i) }
     setData(next)
     scheduleSave({ data: next })
   }
 
-  function updateStage(i, key, value) {
-    const next = { ...data, stages: stages.map((s, idx) => idx === i ? { ...s, [key]: value } : s) }
+  function updateRow(i, key, value) {
+    const next = { ...data, [listKey]: list.map((s, idx) => idx === i ? { ...s, [key]: value } : s) }
     setData(next)
     scheduleSave({ data: next })
   }
 
   return (
     <>
-      <p className="text-xs text-gray-500">Each stage reveals one answer item. Host advances to reveal the next.</p>
-      <Divider label="Reveal Stages" />
+      <p className="text-xs text-gray-500">
+        {isBoard
+          ? 'Each row is one embedded theme option. "Jump to" is where clicking it on the board sends the live show.'
+          : 'Each stage reveals one answer item. Host advances to reveal the next.'}
+      </p>
+      <Divider label={isBoard ? 'Theme Options' : 'Reveal Stages'} />
       <div className="space-y-3">
-        {stages.map((stage, i) => (
+        {list.map((row, i) => (
           <div key={i} className="flex gap-2 items-start">
             <span className="text-xs text-gray-400 mt-2.5 w-5 text-right shrink-0">{i + 1}.</span>
-            <input
-              value={stage.text}
-              onChange={e => updateStage(i, 'text', e.target.value)}
-              placeholder={`Answer item ${i + 1}…`}
-              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
-            />
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-gray-500">+</span>
+            <div className="flex-1 flex flex-col gap-1.5">
               <input
-                type="number"
-                value={stage.points}
-                onChange={e => updateStage(i, 'points', Number(e.target.value))}
-                min={0}
-                className="w-14 border border-gray-200 rounded px-2 py-2 text-sm text-center text-gray-900 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+                value={row.text}
+                onChange={e => updateRow(i, 'text', e.target.value)}
+                placeholder={isBoard ? `Theme ${i + 1}…` : `Answer item ${i + 1}…`}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
               />
+              {isBoard && (
+                <select
+                  value={row.targetSlideId ?? ''}
+                  onChange={e => updateRow(i, 'targetSlideId', e.target.value || null)}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+                >
+                  <option value="">Jump to…</option>
+                  {roundSlides.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.data?.questionLabel ? `${s.data.questionLabel} — ` : ''}{s.data?.shinyFormatName ?? s.data?.text?.slice(0, 40) ?? s.type}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
-            {stages.length > 1 && (
-              <button onClick={() => removeStage(i)} className="text-gray-300 hover:text-red-500 mt-2 text-xs transition-colors">✕</button>
+            {!isBoard && (
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-500">+</span>
+                <input
+                  type="number"
+                  value={row.points}
+                  onChange={e => updateRow(i, 'points', Number(e.target.value))}
+                  min={0}
+                  className="w-14 border border-gray-200 rounded px-2 py-2 text-sm text-center text-gray-900 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+                />
+              </div>
+            )}
+            {list.length > 1 && (
+              <button onClick={() => removeRow(i)} className="text-gray-300 hover:text-red-500 mt-2 text-xs transition-colors">✕</button>
             )}
           </div>
         ))}
       </div>
-      <button onClick={addStage} className="text-xs text-baynes-forest hover:text-green-800 font-medium transition-colors">
-        + Add reveal stage
+      <button onClick={addRow} className="text-xs text-baynes-forest hover:text-green-800 font-medium transition-colors">
+        + Add {isBoard ? 'theme option' : 'reveal stage'}
       </button>
+    </>
+  )
+}
+
+function PylLottoEditor({ data, setData, scheduleSave }) {
+  const pool = data.pool || []
+
+  function updateCandidate(i, name) {
+    const next = { ...data, pool: pool.map((c, idx) => idx === i ? { ...c, name } : c) }
+    setData(next)
+    scheduleSave({ data: next })
+  }
+
+  function setWinner(id) {
+    const next = { ...data, winnerId: id }
+    setData(next)
+    scheduleSave({ data: next })
+  }
+
+  return (
+    <>
+      <p className="text-xs text-gray-500">The winner is decided now — the spin animation is theater, the outcome isn't actually random.</p>
+      <Divider label="Theme Options" />
+      <div className="space-y-2">
+        {pool.map((c, i) => (
+          <div key={c.id} className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="pyl-lotto-winner"
+              checked={data.winnerId === c.id}
+              onChange={() => setWinner(c.id)}
+              className="shrink-0"
+            />
+            <input
+              value={c.name}
+              onChange={e => updateCandidate(i, e.target.value)}
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+            />
+          </div>
+        ))}
+      </div>
+      <p className="text-[11px] text-gray-400">Radio button marks which option wins the spin.</p>
     </>
   )
 }
