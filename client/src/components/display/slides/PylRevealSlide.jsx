@@ -53,14 +53,32 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
   // team calls, jump straight into it, skip the other embedded theme(s)).
   // Disabled in preview so editing the slide can't accidentally move the
   // live show.
+  //
+  // Jumping in from the board is never a "continuing series sibling" the
+  // way normal Next-advance can be (useShow.js's nextSlide() skips the
+  // intro card via isShinySeriesSibling when consecutive slides share a
+  // series) — the board is always a hard context switch into whichever
+  // theme won. So this must force introDone/outroShown/currentPart back to
+  // a fresh-entry state on the target, the same reset nextSlide() and
+  // goLive() apply on ordinary entry (withEntryState) — otherwise a stale
+  // introDone:true left over from a prior test pass makes the theme's
+  // announce card silently skip (Ben, 2026-08-18: "the image plays before
+  // the shiny title animation").
   async function jumpToSlide(targetSlideId) {
     if (isPreview || !targetSlideId) return
     const sorted = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
     const idx = sorted.findIndex(s => s.id === targetSlideId)
     if (idx < 0) return
+    const target = sorted[idx]
+    const newSlides = (show.slides ?? []).map(s =>
+      s.id === target.id
+        ? { ...s, data: { ...s.data, introDone: false, outroShown: false, currentPart: 0 } }
+        : s
+    )
     await supabase.from('shows').update({
+      slides: newSlides,
       current_slide_index: idx,
-      current_slide_id: sorted[idx]?.id ?? null,
+      current_slide_id: target.id,
     }).eq('id', show.id)
   }
 
