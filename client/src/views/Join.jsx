@@ -4,6 +4,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
+import { sortedSlides } from '../hooks/useShow.js'
 import { getTheme } from '../themes/index.js'
 import { resolveShinyPart, isMatchingShiny, isWagerShiny } from '../lib/shinySeries.js'
 import { getWagerTier } from '../lib/wagerScoring.js'
@@ -1453,11 +1454,34 @@ export default function Join() {
     const t = setInterval(() => setLockCheckTick(Date.now()), 30000)
     return () => clearInterval(t)
   }, [])
-  const scoresLocked = useMemo(() => {
+  const editLockActive = useMemo(() => {
     const lockedAt = show?.scores_locked_at
     if (!lockedAt) return false
     return lockCheckTick - new Date(lockedAt).getTime() < 10 * 60 * 1000
   }, [show?.scores_locked_at, lockCheckTick])
+
+  // Wager/Matching write straight to scoreboard_teams the instant a phone
+  // question is auto-scored (LiveMode.jsx) — that update reached the DB with
+  // no gate of its own, so without this a team tapping Scores mid-round saw
+  // standings the moment ANY phone question got graded, not at round end
+  // (2026-08-18, Ben). Walking the slide order up to the host's current
+  // position: a round-intro re-locks (new round, nothing revealed yet), a
+  // scoreboard-reveal unlocks (this round is done) — so each round scores
+  // independently instead of one reveal unlocking every round after it.
+  const roundScoresRevealed = useMemo(() => {
+    if (!show) return false
+    const slides = sortedSlides(show)
+    const hostIdx = show.current_slide_index ?? 0
+    let revealed = false
+    for (let i = 0; i <= hostIdx && i < slides.length; i++) {
+      const t = slides[i]?.type
+      if (t === 'round-intro' || t === 'swing-round-intro') revealed = false
+      else if (t === 'scoreboard-reveal') revealed = true
+    }
+    return revealed
+  }, [show])
+
+  const scoresLocked = editLockActive || !roundScoresRevealed
 
   // ── Mount: fetch show + restore session ───────────────────────────────
   useEffect(() => {
