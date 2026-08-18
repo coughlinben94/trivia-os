@@ -179,11 +179,20 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
           // bottom). At the old 85%/65% size, the gradient's own math didn't
           // reach fully transparent until past the box edge — StageFrame's
           // overflow:hidden then clipped the still-visible tail into a hard
-          // line instead of a soft fade. 55%/40% finishes fading by ~90% of
-          // the box in every direction, with margin to spare even against
-          // this wash's off-center 62% vertical anchor (only 38% of box
-          // height between center and the bottom edge).
-          background: `radial-gradient(ellipse 55% 40% at 50% 62%, ${SHINY_GOLD_GLOW}4d 0%, ${SHINY_GOLD_GLOW}22 38%, transparent 72%)`,
+          // line instead of a soft fade.
+          //
+          // Anchor moved 62% → 50% (2026-08-17, Ben: "the shiny aura looks
+          // centered towards under the text ... i want it equal on the
+          // text"). The title sits at 50% of the stage (this screen is
+          // flex-centered), so a 50% anchor makes the glow vertically
+          // symmetric around it — the old 62% weighted it toward the host
+          // photo's landing zone below. Clip-safety at the new anchor:
+          // fade completes at 0.72 × the semi-axis, so horizontally
+          // 0.72 × 55% = 39.6% from center vs 50% to either edge (10.4%
+          // margin, unchanged), and vertically 0.72 × 40% = 28.8% vs 50%
+          // to BOTH edges now (21.2% margin each — better than the old
+          // bottom-edge worst case of 38% − 28.8% = 9.2%).
+          background: `radial-gradient(ellipse 55% 40% at 50% 50%, ${SHINY_GOLD_GLOW}4d 0%, ${SHINY_GOLD_GLOW}22 38%, transparent 72%)`,
         }}
       />
 
