@@ -375,6 +375,7 @@ const BREAK_DELAY_MS = 10000
 
 function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
   const { theme } = useTheme()
+  const reduce = useReducedMotion()
   const sortedSlides = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
   const currentSlide = sortedSlides[show.current_slide_index ?? 0] ?? null
 
@@ -477,6 +478,36 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
         stationOverride={breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null)}
         showStationDebug={isPreview}
       />
+
+      {/* Shiny content's opaque backdrop, full-viewport (2026-08-18, Ben:
+          "the pan up away from the ring stations are supposed to be 100%
+          covered by opaque background"). Every Shiny*Question component
+          already paints its own theme.colors.shinyBg on a w-full h-full div,
+          but that div renders inside StageFrame below, which clips ALL slide
+          content to a centered 85%-viewport box — confirmed via measurement,
+          a 1512x745 stage rendered that backdrop at 1285x633. The ring, which
+          IS meant to show through StageFrame's own 15% margin for every other
+          slide type, was bleeding through it for shiny content too, which is
+          supposed to read as a full takeover once panned up. Rendered here,
+          between ParticleBackground and StageFrame (z-index 1, between the
+          ring's implicit 0 and StageFrame's own 2), so it fills exactly the
+          margin StageFrame leaves uncovered — StageFrame's own content still
+          paints on top of it. Gated on introDone specifically: false during
+          the intro title card (ring is meant to show through that) and false
+          again during the closing beat's pan back down. */}
+      <AnimatePresence>
+        {currentSlide?.data?.isShiny && currentSlide?.data?.introDone && (
+          <motion.div
+            key="shiny-fullbleed-backdrop"
+            className="absolute inset-0"
+            style={{ background: theme.colors.shinyBg, zIndex: 1 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduce ? 0 : 0.3 }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* StageFrame: 85% viewport, centered, overflow:hidden — all slide content clips here.
           ParticleBackground stays OUTSIDE (full-viewport behind the stage). */}
