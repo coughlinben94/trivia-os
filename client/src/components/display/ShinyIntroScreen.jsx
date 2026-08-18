@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, useReducedMotion, cubicBezier } from 'framer-motion'
 import { EASE_OUT } from '../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../lib/shinyGold.js'
@@ -79,6 +79,22 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
   const reduce = useReducedMotion()
   const title = data.seriesTheme || data.shinyFormatName || 'Shiny Question'
 
+  // The title is flex-centered (its own midpoint always sits at 50%/50% of
+  // the stage, matching the glow's anchor above — see that comment), but the
+  // host photo is separately pinned to the frame's bottom edge (see the photo
+  // wrapper below) and never moves. A title that wraps to 2 lines grows
+  // symmetrically around that fixed center, so its second line can reach
+  // down into the photo's face — confirmed live on "We're not so different,
+  // you and I...": the word "not" lands across the eyes. Rather than move the
+  // photo (its trajectory/height are deliberately static, see that comment)
+  // or the glow (Ben: "i want it equal on the text" — it has to track the
+  // title's own center), shrink the title once if it actually rendered to
+  // more than one line. Measuring real rendered lines rather than guessing
+  // off character count matches this codebase's house rule against
+  // char-count text sizing (see autoFitText.js).
+  const titleRef = useRef(null)
+  const [titleWrapped, setTitleWrapped] = useState(false)
+
   // Same drag/rotate/resize region system StateOfUnionSlide's photo already
   // uses (SlideCanvasEditor's [data-slide-region] detection — generic, no
   // per-slide registration needed). Composed onto the wrapper's existing
@@ -133,6 +149,29 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
   // the host advances (Phase 2 will re-show this screen per part). Remounting
   // on the key replays every keyframe track below.
   const replayKey = `${slide.id}:${data.currentPart ?? 0}`
+
+  // Measures actual rendered line count, not character count (per the
+  // comment on titleWrapped above). CSS transforms (the scale/rotate this
+  // element animates on) never affect layout, so this reads the true rest
+  // line-wrap immediately, even mid-entrance — no need to wait for the
+  // animation to settle. Guarded on document.fonts.ready, same gotcha every
+  // other measure-to-fit spot in this codebase guards against: measuring
+  // against fallback-font metrics before the theme font loads would read the
+  // wrong line count. Resets on every replay so a shorter title (or a
+  // different part of a series) doesn't inherit a stale shrink.
+  useEffect(() => {
+    setTitleWrapped(false)
+    let cancelled = false
+    document.fonts.ready.then(() => {
+      if (cancelled) return
+      const textNode = titleRef.current?.firstChild
+      if (!textNode) return
+      const range = document.createRange()
+      range.selectNodeContents(textNode)
+      if (range.getClientRects().length > 1) setTitleWrapped(true)
+    })
+    return () => { cancelled = true }
+  }, [replayKey, title])
 
   // Spark geometry — 8 particles radiating from center, random angle jitter
   // and distance per replay (prototype: 90–145px on a ~900px stage; doubled
@@ -337,11 +376,18 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
                 ease: [HOLD, HOLD, HOLD, SETTLE_ARRIVE, SETTLE_SWING, SETTLE_SWING, SETTLE_SWING],
               }
         }
+        ref={titleRef}
         className="relative z-10 text-center px-20"
         style={{
           fontFamily: `'${theme.fonts.display}', sans-serif`,
           color: SHINY_GOLD,
-          fontSize: 'clamp(2.75rem, 6.5cqw, 6rem)',
+          // ponytail: single-shot shrink (not an iterative fit loop) — good
+          // enough for the one long title this actually hits tonight ("We're
+          // not so different, you and I..."). If a future title is long
+          // enough to still wrap at 80%, port this to the real
+          // measure-and-binary-search loop in autoFitText.js instead of
+          // adding more shrink steps here.
+          fontSize: titleWrapped ? 'clamp(2.2rem, 5.2cqw, 4.8rem)' : 'clamp(2.75rem, 6.5cqw, 6rem)',
           fontWeight: 700,
           lineHeight: 1.08,
           textShadow: `0 3px 0 rgba(0,0,0,0.25), 0 2px 10px ${SHINY_GOLD_GLOW}40`,
