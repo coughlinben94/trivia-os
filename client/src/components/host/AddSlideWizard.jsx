@@ -8,6 +8,7 @@ import { makeQuestionPasteHandler, makeCleanPasteHandler } from '../../lib/clean
 export const TYPE_CARDS = [
   { type: 'pre-show',       icon: '📱', name: 'Pre-Show',            desc: 'QR code + team count while people join' },
   { type: 'state-of-union', icon: '🇺🇸', name: 'State of the Union', desc: 'Opening address to the crowd' },
+  { type: 'rules',          icon: '🚨', name: 'Rules',              desc: 'Cinematic house-rules warning broadcast' },
   { type: 'team-picker',    icon: '🚀', name: 'Team Intro',            desc: 'Cinematic one-by-one team intro' },
   { type: 'round-intro',    icon: '🎬', name: 'Round Intro',          desc: 'Dramatic round opener' },
   { type: 'question',       icon: '❓', name: 'Question',             desc: 'Plain text question' },

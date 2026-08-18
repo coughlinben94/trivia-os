@@ -10,6 +10,7 @@ import PixelateSeriesSlide from './slides/PixelateSeriesSlide.jsx'
 import MultiQuestionSlide from './slides/MultiQuestionSlide.jsx'
 import PylRevealSlide from './slides/PylRevealSlide.jsx'
 import StateOfUnionSlide from './slides/StateOfUnionSlide.jsx'
+import RulesSlide from './slides/RulesSlide.jsx'
 import WinnerRevealSlide from './slides/WinnerRevealSlide.jsx'
 import TeamPreviewSlide from './slides/TeamPreviewSlide.jsx'
 import TeamPickerSlide, { REVEAL_S } from './slides/TeamPickerSlide.jsx'
@@ -86,6 +87,10 @@ const TRANSITIONS = {
 // neutralized to a constant 1 further down, regardless of this or any other
 // transition assigned to it — see the comment there for why.)
 SLIDE_ANIMATIONS['state-of-union'] = TRANSITIONS.zoom
+// rules chooses its own entrance (the header fade + flash/beep sequence
+// inside RulesSlide itself), so the outer wrapper just cuts in instantly
+// rather than layering a second fade on top of it.
+SLIDE_ANIMATIONS['rules'] = TRANSITIONS.assemble
 // team-picker's entrance is its own exit reveal, run backwards. At the end of
 // that slide the black canvas lifts off the TOP of the stage (translateY
 // 0% -> -100%, REVEAL_S, EASE_PANEL — see REVEAL_VARIANTS in
@@ -141,6 +146,7 @@ const SLIDE_COMPONENTS = {
   'multi-question':    MultiQuestionSlide,
   'pyl-reveal':        PylRevealSlide,
   'state-of-union':    StateOfUnionSlide,
+  'rules':             RulesSlide,
   'winner-reveal':     WinnerRevealSlide,
   'team-preview':      TeamPreviewSlide,
   'team-picker':       TeamPickerSlide,
