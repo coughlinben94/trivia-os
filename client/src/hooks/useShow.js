@@ -6,7 +6,7 @@ import { deriveRoundCols, computeTotal, roundScoreTotal } from '../lib/scoreboar
 import { renumberRoundQuestions } from '../lib/questionNumbering.js'
 import { trackWrite } from '../lib/writeTracking.js'
 import { HOST_PHOTOS_BUCKET, listHostPhotos } from '../lib/hostPhotos.js'
-import { isShinySeriesSibling } from '../lib/shinySeries.js'
+import { isShinySeriesSibling, isMatchingShiny, isWagerShiny } from '../lib/shinySeries.js'
 
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 const SHOW_MEDIA_BUCKET = 'trivia-show-media'
@@ -715,7 +715,8 @@ export function useShow() {
 
     // Step through this slide's parts before moving to the next slide.
     const parts = data?.parts
-    if (Array.isArray(parts) && parts.length > 1) {
+    const isMultiPart = Array.isArray(parts) && parts.length > 1
+    if (isMultiPart) {
       const curPart = data.currentPart ?? 0
       if (curPart < parts.length - 1) {
         const newSlides = show.slides.map(s =>
@@ -725,29 +726,46 @@ export function useShow() {
         await updateShowRow(show.id, { slides: newSlides, answer_reveal: false })
         return
       }
-      // Closing beat (Ben, 2026-08-17: "then back down to the shiny title
-      // screen, which i then advance to [the next question]"): on the LAST
-      // part, one more Next pans back down to the title card instead of
-      // jumping straight to the next slide — outroShown marks that this
-      // already happened, so the NEXT Next press (introDone false again,
-      // but outroShown true) skips the re-reveal branch above and actually
-      // moves on. Reset to false whenever this slide is entered fresh
-      // (withEntryState), so revisiting always restarts the cycle.
-      //
-      // Two cases must skip this pause entirely and fall through to the
-      // normal advance below:
-      //   - the next slide continues the same shiny series (siblings only
-      //     get one announce beat at the start, skipIntro below — each one
-      //     pausing on its own closing title card too would break what's
-      //     supposed to read as one continuous run)
-      //   - this slide is a locked wager/matching question (same guard
-      //     withEntryState uses above) — setting introDone:false here would
-      //     blank every phone back to the teaser screen mid-scoring, with no
-      //     way to submit, exactly what that guard exists to prevent.
+    }
+    // Closing beat (Ben, 2026-08-17: "then back down to the shiny title
+    // screen, which i then advance to [the next question]"): one more Next
+    // pans back down to the title card instead of jumping straight to the
+    // next slide — outroShown marks that this already happened, so the NEXT
+    // Next press (introDone false again, but outroShown true) skips the
+    // re-reveal branch above and actually moves on. Reset to false whenever
+    // this slide is entered fresh (withEntryState), so revisiting always
+    // restarts the cycle.
+    //
+    // 2026-08-18, Ben: "pan down is always associated with pan up — if up
+    // happens, down must happen eventually." Every isShiny slide pans UP on
+    // its own (QuestionSlide's intro→content swap, keyed off introDone) —
+    // so by that rule every one of them owes a pan DOWN too, once its
+    // content is actually done, not just multi-part series (which is all
+    // this used to cover). "Done" varies by type:
+    //   - multi-part series: the LAST part (isMultiPart, handled above —
+    //     any earlier part returns before reaching here)
+    //   - matching / wager: once fully scored (matchingRevealed /
+    //     wagerGuessesLocked) — NOT merely locked. Both have a locked-but-
+    //     still-scoring window (matching's "Retry Scoring" state, wager's
+    //     collecting-guesses-after-tiers-locked state) that must never
+    //     regress — same guard withEntryState uses for its own jump-back
+    //     case, and the reason isPending exists below.
+    //   - everything else (a single-shot list/audio/video/image question,
+    //     no parts, not lockable): done the moment its content has been
+    //     shown at all, i.e. as soon as introDone is true.
+    const isPending = (isMatchingShiny(data) && data.matchingLocked && !data.matchingRevealed) ||
+                       (isWagerShiny(data) && data.wagerTiersLocked && !data.wagerGuessesLocked)
+    if (data?.isShiny && data.introDone && !data.outroShown && !isPending) {
+      // Skip the pause when the next slide continues the same shiny series
+      // — siblings only get one announce beat at the start (skipIntro
+      // below); each one pausing on its own closing title card too would
+      // break what's supposed to read as one continuous run. 2026-08-18:
+      // this is exactly how 6 separate matching slides chained as one
+      // series (isShinySeriesSibling) skip the pan-down between Q1-Q5 and
+      // only actually pause after Q6, whose next slide isn't a sibling.
       const peekTarget = sorted[Math.min(cur + 1, sorted.length - 1)]
       const nextIsSeriesSibling = !!peekTarget && peekTarget.id !== curSlide.id && isShinySeriesSibling(curSlide, peekTarget)
-      const curIsLockedQuestion = !!(data?.wagerTiersLocked || data?.wagerGuessesLocked || data?.matchingLocked)
-      if (data.introDone && !data.outroShown && !nextIsSeriesSibling && !curIsLockedQuestion) {
+      if (!nextIsSeriesSibling) {
         const newSlides = show.slides.map(s =>
           s.id === curSlide.id ? { ...s, data: { ...s.data, introDone: false, outroShown: true } } : s
         )
