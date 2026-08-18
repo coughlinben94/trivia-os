@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion, useReducedMotion, cubicBezier } from 'framer-motion'
 import { EASE_OUT } from '../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../lib/shinyGold.js'
-import { listSharedHostPhotos, pickUnshownRandomPhoto, getUsedHostPhotoUrls } from '../../lib/hostPhotos.js'
+import { listSharedHostPhotos, pickPhotoForSlide, getUsedHostPhotoUrls } from '../../lib/hostPhotos.js'
 
 // Every shiny question/grid gets a standalone beat before its content — a pure
 // announcement, no question/answer/media yet, giving the host room to set
@@ -88,9 +88,16 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
   const photoRegionTransform = `translateX(-80%) translate(${photoRt?.dx ?? 0}px,${photoRt?.dy ?? 0}px) rotate(${photoRt?.rotate ?? 0}deg) scale(${photoRt?.scale ?? 1})`
 
   // Host photo — a random pick from the show's uploaded host-photo library,
-  // chosen once per slide mount (not per re-render), so each intro card can
-  // surprise with a different Ben. Falls back to the slide's fixed
+  // chosen once per SLIDE (not per mount, and not per re-render), so each
+  // intro card can surprise with a different Ben while any one card keeps the
+  // same Ben for its whole life. Falls back to the slide's fixed
   // data.hostPhotoUrl while the list loads or when the pool is empty.
+  //
+  // Stability lives in pickPhotoForSlide's module-scoped map, not in this
+  // component's state, on purpose: this component fully unmounts whenever
+  // `data.introDone` flips, and prevSlide() regresses that flag to false to
+  // step back to the title card — so component state cannot survive the one
+  // navigation that matters here. See pickPhotoForSlide's header comment.
   //
   // Draws from the SHARED cross-show pool (Ben's explicit call, 2026-08-16),
   // not a per-show folder — a per-show pool would go silently empty on any
@@ -106,7 +113,7 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
     const excludeUrls = getUsedHostPhotoUrls(show, slide.id)
     listSharedHostPhotos().then(photos => {
       if (cancelled || photos.length === 0) return
-      const pick = pickUnshownRandomPhoto(photos, excludeUrls)
+      const pick = pickPhotoForSlide(slide.id, photos, excludeUrls)
       if (pick) setRandomPhotoUrl(pick.url)
     })
     return () => { cancelled = true }
