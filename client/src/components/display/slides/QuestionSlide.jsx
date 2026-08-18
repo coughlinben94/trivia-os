@@ -228,7 +228,14 @@ function ShinyVisualQuestion({ slide, theme }) {
     else setAspect('square')
   }
 
-  const isPortrait = aspect === 'portrait'
+  // Portrait's 50/50 image+caption split only earns its keep when there's
+  // real caption text to put in the other half — without it (2026-08-18,
+  // "Time for a Close Up": image-only questions, no part.text) a portrait
+  // photo left half the screen blank, reading as off-center/broken rather
+  // than a deliberate layout. No text falls through to the landscape/square
+  // branch's full-bleed object-contain treatment instead, which centers any
+  // aspect ratio the same way.
+  const isPortrait = aspect === 'portrait' && !!part.text?.trim()
 
   const captionBoxRef1 = useRef(null)
   const captionSize1 = useFitToBox(captionBoxRef1, part.text, {
