@@ -559,6 +559,23 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
+  // The ArrowRight path above is carefully protected against double-firing
+  // (e.repeat, pendingAdvanceRef); the Next ▶ button had nothing, so an
+  // accidental double-click or a fat-fingered trackpad double-tap advanced
+  // TWO slides in front of the room. Timestamp guard rather than a disabled
+  // state: the first click always goes through instantly (a host must never
+  // feel lag on this button), only a second one inside 350ms is dropped —
+  // invisible in normal clicking, including deliberately fast clicking.
+  // Wrapped here rather than inside actions.nextSlide so the keyboard path,
+  // which has its own protection, is untouched.
+  const lastNextClickRef = useRef(0)
+  function handleNextClick() {
+    const now = Date.now()
+    if (now - lastNextClickRef.current < 350) return
+    lastNextClickRef.current = now
+    actions.nextSlide()
+  }
+
   return (
     <div className="flex flex-col h-screen bg-gray-50 select-none">
 
@@ -623,7 +640,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
 
         {/* Right: Next + Theme + Score */}
         <div className="absolute right-0 flex items-center gap-1 px-4 h-full">
-          <NavButton onClick={actions.nextSlide} disabled={atEnd} label="Next ▶" title="Next (→)" primary />
+          <NavButton onClick={handleNextClick} disabled={atEnd} label="Next ▶" title="Next (→)" primary />
           {onThemeChange && (
             <div className="relative ml-1">
               <button

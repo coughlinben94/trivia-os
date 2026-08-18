@@ -649,6 +649,25 @@ export default function Display() {
     }
     function onFirstInteraction() {
       enter()
+      // Prime Web Audio on whatever the first click/keydown of the show
+      // happens to be. On Chrome this is belt-and-suspenders — sticky user
+      // activation already unlocks any AudioContext created later in the
+      // same tab (including RulesSlide.jsx's own, built at slide-mount) the
+      // instant ANY gesture occurs, so this specific call doesn't unlock
+      // anything Chrome wouldn't already allow on its own. Kept anyway
+      // because it's zero-cost and WebKit/Safari autoplay gating is less
+      // consistently "sticky" per-context, where actually resuming inside
+      // the gesture handler can matter. This does NOT solve the genuinely
+      // cold case — zero interaction anywhere on the TV before Rules plays —
+      // there is no code-only fix for that; a tab that's never been touched
+      // still can't unlock audio no matter where the priming call lives. The
+      // real mitigation for that case stays physical: tap/click the TV once
+      // during setup, before the show goes live.
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext
+        const ctx = new AC()
+        ctx.resume().then(() => ctx.close()).catch(() => {})
+      } catch {}
       window.removeEventListener('click', onFirstInteraction)
       window.removeEventListener('keydown', onFirstInteraction)
     }

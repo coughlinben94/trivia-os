@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
-import { isShinySeriesSibling } from '../../lib/shinySeries.js'
+import { isShinySeriesSibling, reorderWithinRound } from '../../lib/shinySeries.js'
+import { roundLabel } from '../../lib/scoreboardMath.js'
 
 // Clusters consecutive slides in a round that form one shiny series run
 // (separate top-level slides, e.g. an image format the host asked for N
@@ -197,11 +198,15 @@ export default function RoundSidebar({
         const slides = [...draggedBlock.slides]
         const fromIdx = slides.findIndex(s => s.id === draggedSpec.id)
         const toIdx   = slides.findIndex(s => s.id === targetKey)
-        if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return null
-        const [moved] = slides.splice(fromIdx, 1)
-        slides.splice(toIdx, 0, moved)
+        // Moves the dragged slide's whole shiny-series group together (not
+        // just the single slide) while preserving the existing "dragging
+        // down lands after target, dragging up lands before" direction rule
+        // — see reorderWithinRound in shinySeries.js for both.
+        const reordered = reorderWithinRound(slides, fromIdx, toIdx)
+        if (!reordered) return null
+
         const ids = b.flatMap(bl =>
-          bl === draggedBlock ? slides.map(s => s.id) : bl.slides.map(s => s.id)
+          bl === draggedBlock ? reordered : bl.slides.map(s => s.id)
         )
         return { kind: 'slides', ids }
       }
@@ -440,7 +445,7 @@ export default function RoundSidebar({
                     }`}
                     title="Click to view round — double-click to rename"
                   >
-                    R{round.number} · {round.title}
+                    {roundLabel(round, show?.slides)} · {round.title}
                   </button>
                 )}
 

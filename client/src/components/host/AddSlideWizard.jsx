@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
+import { insertAfterSlideId } from '../../lib/questionNumbering.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import { archiveQuestion } from '../../lib/archiveQuestion.js'
@@ -136,9 +137,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             text:         shinyQuestion.trim(),
             answer:       shinyAnswer.trim(),
           }
-          const afterId = roundSlides.length > 0
-            ? roundSlides[roundSlides.length - 1].id
-            : (sorted.length > 0 ? sorted[sorted.length - 1].id : null)
+          const afterId = insertAfterSlideId(roundSlides, sorted)
           await onAddSlide({ type: 'grid', roundId: roundId ?? null, afterSlideId: afterId, data: gridData })
           archiveQuestion({
             type:               'shiny',
@@ -185,9 +184,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           // editor, same pattern already used for concurrent parts/grid tiles.
           const collectShared = numSlides === 1 && (!isConcurrentFmt || !isQuestionSeriesFmt)
 
-          const afterId = roundSlides.length > 0
-            ? roundSlides[roundSlides.length - 1].id
-            : (sorted.length > 0 ? sorted[sorted.length - 1].id : null)
+          const afterId = insertAfterSlideId(roundSlides, sorted)
 
           const slidesData = Array.from({ length: numSlides }, (_, i) => {
             const n = qNum + i
@@ -336,10 +333,10 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
 
     // Insert right after this round's last existing slide (not the absolute end of
     // the show) — otherwise a slide added to an earlier round lands after Winner
-    // Reveal/later rounds, splitting the round into two non-contiguous sidebar groups.
-    const afterSlideId = roundSlides.length > 0
-      ? roundSlides[roundSlides.length - 1].id
-      : (sorted.length > 0 ? sorted[sorted.length - 1].id : null)
+    // Reveal/later rounds, splitting the round into two non-contiguous sidebar
+    // groups. See insertAfterSlideId (questionNumbering.js) for why winner-reveal
+    // is excluded from "this round's last slide."
+    const afterSlideId = insertAfterSlideId(roundSlides, sorted)
     // Both dashboard tiles ("Question" and "Shiny Question") persist as the
     // same slide type — data.isShiny is what actually distinguishes them.
     const slideType = (type === 'question' || type === 'shiny-question') ? 'question' : type

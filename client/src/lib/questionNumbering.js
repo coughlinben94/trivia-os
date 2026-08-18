@@ -16,6 +16,23 @@
 // series grouping matches sibling slides by exact questionLabel equality, so
 // silently rewriting it would break that.
 
+// Where a newly-added slide should land: right after the round's own last
+// slide (roundSlides), falling back to the show's own last slide if the
+// round is currently empty (allSortedSlides). A `winner-reveal` slide is
+// excluded from both candidate lists even when it's nominally tagged with a
+// round's roundId — a winner-reveal always belongs at the literal end of the
+// whole show, and Display.jsx's Final Break auto-jump depends on it staying
+// there. Without this exclusion, adding a slide to the round a winner-reveal
+// happens to be tagged with (typically the last round) silently lands the
+// new slide AFTER winner-reveal.
+export function insertAfterSlideId(roundSlides, allSortedSlides) {
+  const insertable = arr => arr.filter(s => s.type !== 'winner-reveal')
+  const inRound = insertable(roundSlides)
+  if (inRound.length > 0) return inRound[inRound.length - 1].id
+  const inShow = insertable(allSortedSlides)
+  return inShow.length > 0 ? inShow[inShow.length - 1].id : null
+}
+
 export function renumberRoundQuestions(slides) {
   const groups = new Map() // `${roundId}::${isBonus}` -> slides, insertion order arbitrary
   for (const s of slides) {

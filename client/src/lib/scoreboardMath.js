@@ -5,22 +5,34 @@
 
 export const MEDALS = ['🥇', '🥈', '🥉']
 
+// The one place a round's on-screen label ("SW"/"PYL"/"R{n}") gets computed —
+// shared by deriveRoundCols (scoreboard columns + Quick Entry's numeric
+// resolution) and any display surface that shows a round badge next to a
+// question (QuestionCounter, RoundSidebar). Before this was extracted, those
+// display surfaces each derived a round's number from its live ARRAY
+// POSITION instead of calling this — so a Swing/PYL round always showed a
+// bogus "R{position}" badge (never "SW"/"PYL"), and dragging any round to a
+// new position silently relabeled it to match its new slot, disagreeing with
+// what Quick Entry (which reads this same function) already called it. Using
+// one shared function for every surface means there's nothing left to drift.
+export function roundLabel(round, slides) {
+  // roundType is stamped by AddRoundWizard and the Swing/PYL auto-create
+  // paths and is the authoritative signal — the Swing auto-create makes a
+  // round with only question slides (no swing-round-intro), which the
+  // slide-type sniffing below mislabeled as R{n}, breaking Quick Entry's
+  // "SW" input. Slide-type detection stays as a fallback for legacy rounds
+  // created before roundType existed.
+  if (round.roundType === 'swing') return 'SW'
+  if (round.roundType === 'pyl') return 'PYL'
+  const roundSlides = (slides ?? []).filter(s => s.roundId === round.id)
+  if (roundSlides.some(s => s.type === 'swing-round-intro')) return 'SW'
+  if (roundSlides.some(s => s.type === 'pyl-reveal')) return 'PYL'
+  return `R${round.number ?? '?'}`
+}
+
 export function deriveRoundCols(show) {
   const sorted = (show.rounds ?? []).slice().sort((a, b) => (a.number ?? 0) - (b.number ?? 0))
-  const cols = sorted.map(round => {
-    // roundType is stamped by AddRoundWizard and the Swing/PYL auto-create
-    // paths and is the authoritative signal — the Swing auto-create makes a
-    // round with only question slides (no swing-round-intro), which the
-    // slide-type sniffing below mislabeled as R{n}, breaking Quick Entry's
-    // "SW" input. Slide-type detection stays as a fallback for legacy rounds
-    // created before roundType existed.
-    if (round.roundType === 'swing') return { key: `r_${round.id}`, label: 'SW' }
-    if (round.roundType === 'pyl') return { key: `r_${round.id}`, label: 'PYL' }
-    const slides = (show.slides ?? []).filter(s => s.roundId === round.id)
-    if (slides.some(s => s.type === 'swing-round-intro')) return { key: `r_${round.id}`, label: 'SW' }
-    if (slides.some(s => s.type === 'pyl-reveal')) return { key: `r_${round.id}`, label: 'PYL' }
-    return { key: `r_${round.id}`, label: `R${round.number ?? '?'}` }
-  })
+  const cols = sorted.map(round => ({ key: `r_${round.id}`, label: roundLabel(round, show.slides) }))
   cols.push({ key: 'bonus', label: '?' })
   return cols
 }

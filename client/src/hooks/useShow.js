@@ -368,7 +368,16 @@ export function useShow() {
     }))
     const allSlides = renumberRoundQuestions([...shifted, ...newSlides])
     setShow(prev => ({ ...prev, slides: allSlides }))
-    await updateShowRow(show.id, { slides: allSlides })
+    // Chained through slidesSaveChainRef rather than written directly, for the
+    // same reason the debounced updateSlide path is (see the comment at
+    // flushSlides): two writes to the `slides` jsonb column that leave the
+    // browser concurrently can resolve out of order, and the one that lands
+    // last wins even if it started first — silently losing whichever
+    // structural edit lost the race. Awaiting `run` keeps this function's
+    // existing "resolves once the write actually landed" contract.
+    const run = slidesSaveChainRef.current.then(() => updateShowRow(show.id, { slides: allSlides }))
+    slidesSaveChainRef.current = run.catch(() => {})
+    await run
     // Return the freshly-renumbered versions, not the pre-renumber snapshot —
     // callers (e.g. AddSlideWizard) open the editor on this returned slide.
     const newIds = new Set(newSlides.map(s => s.id))
@@ -438,7 +447,10 @@ export function useShow() {
     if (!show) return
     const newSlides = renumberRoundQuestions(show.slides.filter(s => s.id !== id))
     setShow(prev => ({ ...prev, slides: newSlides }))
-    await updateShowRow(show.id, { slides: newSlides })
+    // Same write-ordering chain as addSiblingSlides — see the comment there.
+    const run = slidesSaveChainRef.current.then(() => updateShowRow(show.id, { slides: newSlides }))
+    slidesSaveChainRef.current = run.catch(() => {})
+    await run
   }
 
   async function reorderSlides(orderedIds) {
@@ -452,7 +464,10 @@ export function useShow() {
         .filter(Boolean)
     )
     setShow(prev => ({ ...prev, slides: newSlides }))
-    await updateShowRow(show.id, { slides: newSlides })
+    // Same write-ordering chain as addSiblingSlides — see the comment there.
+    const run = slidesSaveChainRef.current.then(() => updateShowRow(show.id, { slides: newSlides }))
+    slidesSaveChainRef.current = run.catch(() => {})
+    await run
   }
 
   // orderedSlideIds is RoundSidebar's own recomputed flat block order (the same
@@ -479,7 +494,10 @@ export function useShow() {
         .filter(Boolean)
     )
     setShow(prev => ({ ...prev, rounds: newRounds, slides: newSlides }))
-    await updateShowRow(show.id, { rounds: newRounds, slides: newSlides })
+    // Same write-ordering chain as addSiblingSlides — see the comment there.
+    const run = slidesSaveChainRef.current.then(() => updateShowRow(show.id, { rounds: newRounds, slides: newSlides }))
+    slidesSaveChainRef.current = run.catch(() => {})
+    await run
   }
 
   // --- Powerups ---

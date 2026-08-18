@@ -77,3 +77,49 @@ export function isShinySeriesSibling(a, b) {
   if (!ad.shinyFormatId || ad.shinyFormatId !== bd.shinyFormatId) return false
   return !!ad.seriesTheme && ad.seriesTheme === bd.seriesTheme
 }
+
+// A shiny series is meant to drag-reorder as one atomic unit in
+// RoundSidebar — the lead slide's grip is the only handle shown once a
+// group is collapsed, but treating a drag as moving only the single slide
+// under the cursor silently splits a multi-slide series apart. This walks
+// outward from a slide's own index to find every contiguous series sibling
+// on either side (via isShinySeriesSibling), so callers can move the whole
+// run together regardless of whether the drag started on the lead or a
+// sibling. For a non-series slide this always returns [idx, idx] — a
+// "group" of one — so it's safe to call unconditionally on any slide.
+export function seriesGroupIndices(slides, idx) {
+  let start = idx, end = idx
+  while (start > 0 && isShinySeriesSibling(slides[start - 1], slides[start])) start--
+  while (end < slides.length - 1 && isShinySeriesSibling(slides[end], slides[end + 1])) end++
+  return [start, end]
+}
+
+// Pure reorder step for RoundSidebar's within-round drag-and-drop: moves the
+// slide at fromIdx (plus its whole series group, per seriesGroupIndices) to
+// land next to the slide at toIdx, preserving the existing direction rule —
+// dragging down lands the moved item AFTER the target, dragging up lands it
+// BEFORE the target. Returns the reordered array of slide ids, or null for a
+// no-op drop (invalid indices, or dropped inside the dragged slide's own
+// group). Extracted as a pure function specifically so this direction logic
+// has a test seam — the group-move fix that introduced this once shipped a
+// regression where every downward drag landed one slot short (or no-op'd on
+// an adjacent-down drag) because nothing exercised the direction case.
+export function reorderWithinRound(slides, fromIdx, toIdx) {
+  if (fromIdx < 0 || toIdx < 0 || fromIdx >= slides.length || toIdx >= slides.length || fromIdx === toIdx) return null
+  const [groupStart, groupEnd] = seriesGroupIndices(slides, fromIdx)
+  if (toIdx >= groupStart && toIdx <= groupEnd) return null // dropped inside its own group — no-op
+  const targetId = slides[toIdx].id
+  const movedGroup = slides.slice(groupStart, groupEnd + 1)
+  const remaining = [...slides.slice(0, groupStart), ...slides.slice(groupEnd + 1)]
+  const targetIdxInRemaining = remaining.findIndex(s => s.id === targetId)
+  if (targetIdxInRemaining === -1) return null
+  // toIdx was computed against the ORIGINAL `slides` array, before the group
+  // was removed. When the group started above the target (a downward drag),
+  // removing it shifts the target's own index down by the group's length —
+  // insert one slot past targetIdxInRemaining to land after it, matching the
+  // direction rule. Dragging up needs no adjustment: a group removed from
+  // below the target never shifts the target's position.
+  const insertAt = groupStart < toIdx ? targetIdxInRemaining + 1 : targetIdxInRemaining
+  remaining.splice(insertAt, 0, ...movedGroup)
+  return remaining.map(s => s.id)
+}

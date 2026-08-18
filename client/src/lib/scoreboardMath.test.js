@@ -1,5 +1,47 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeRoundScore, computeTotal, roundScoreTotal, mergeScoreEdit } from './scoreboardMath.js'
+import { normalizeRoundScore, computeTotal, roundScoreTotal, mergeScoreEdit, roundLabel, deriveRoundCols } from './scoreboardMath.js'
+
+describe('roundLabel', () => {
+  // Bug this guards against: display surfaces (QuestionCounter, RoundSidebar)
+  // used to derive a round's badge from its live array POSITION instead of
+  // calling this shared function — so a Swing/PYL round always showed a
+  // bogus "R{position}" badge, and dragging a round to a new spot silently
+  // relabeled it, disagreeing with what the scoreboard/Quick Entry already
+  // called it via deriveRoundCols.
+
+  it('labels a swing round "SW" regardless of its array position', () => {
+    const swing = { id: 'r2', roundType: 'swing', number: null }
+    expect(roundLabel(swing, [])).toBe('SW')
+  })
+
+  it('labels a PYL round "PYL" regardless of its array position', () => {
+    const pyl = { id: 'r3', roundType: 'pyl', number: null }
+    expect(roundLabel(pyl, [])).toBe('PYL')
+  })
+
+  it('labels a normal round "R{number}" using the stored number, not position', () => {
+    const round = { id: 'r1', roundType: 'normal', number: 1 }
+    expect(roundLabel(round, [])).toBe('R1')
+  })
+
+  it('falls back to slide-type sniffing for legacy rounds with no roundType', () => {
+    const legacySwing = { id: 'r2', number: null }
+    const slides = [{ roundId: 'r2', type: 'swing-round-intro' }]
+    expect(roundLabel(legacySwing, slides)).toBe('SW')
+  })
+
+  it('a round keeps its own label after being dragged to a new array position (identity is round.number, not array index)', () => {
+    const r1 = { id: 'r1', roundType: 'normal', number: 1 }
+    const swing = { id: 'r2', roundType: 'swing', number: null }
+    const beforeDrag = { rounds: [r1, swing], slides: [] } // r1 at index 0
+    const afterDrag = { rounds: [swing, r1], slides: [] }  // r1 dragged to index 1
+    const labelFor = (show, id) => deriveRoundCols(show).find(c => c.key === `r_${id}`).label
+    expect(labelFor(beforeDrag, 'r1')).toBe('R1')
+    expect(labelFor(afterDrag, 'r1')).toBe('R1') // still R1 even though its array index changed
+    expect(labelFor(beforeDrag, 'r2')).toBe('SW')
+    expect(labelFor(afterDrag, 'r2')).toBe('SW') // still SW, never "R1" from sitting at index 0
+  })
+})
 
 describe('normalizeRoundScore', () => {
   it('treats a legacy plain number as written-only', () => {
