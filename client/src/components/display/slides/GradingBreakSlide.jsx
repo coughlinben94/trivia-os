@@ -30,11 +30,14 @@ export default function GradingBreakSlide({ slide, show, isPreview = false }) {
   const messageSize = useMemo(() => {
     const msgs = (show?.slides ?? [])
       .filter(s => s.type === 'grading-break')
-      .map(s => s.data?.message || DEFAULT_MESSAGE)
+      // This slide's own entry in show.slides is saved (debounced) state —
+      // swap in the live `message` so a message being typed right now sizes
+      // against itself immediately, not the stale saved text underneath it.
+      .map(s => s.id === slide.id ? message : (s.data?.message || DEFAULT_MESSAGE))
     const pool = msgs.length ? msgs : [message]
     return Math.min(...pool.map(m => fitToBox(m, { ...GRADING_BREAK_BOX, family: theme.fonts.body })))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show?.slides, message, theme.fonts.body, fontsReady])
+  }, [show?.slides, message, slide.id, theme.fonts.body, fontsReady])
 
   // Pure visual as of the 2026-08-16 jukebox integration. The break lifecycle
   // — the 5s countdown, the Space/ArrowRight skip, and handing the screen to

@@ -294,7 +294,7 @@ function ShinyVisualQuestion({ slide, theme }) {
           <motion.div
             key={`${partKey}:caption`}
             className="w-1/2 h-full flex items-center justify-center px-12"
-            initial={{ x: 24, opacity: 0 }}
+            initial={{ x: reduce ? 0 : 24, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ delay: 0.18, duration: 0.28, ease: EASE_OUT }}
           >
@@ -336,7 +336,7 @@ function ShinyVisualQuestion({ slide, theme }) {
               paddingLeft: 64,
               paddingRight: 64,
             }}
-            initial={{ y: 32, opacity: 0 }}
+            initial={{ y: reduce ? 0 : 32, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.15, duration: 0.22, ease: EASE_OUT }}
           >
