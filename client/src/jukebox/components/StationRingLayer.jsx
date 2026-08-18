@@ -44,6 +44,29 @@ const GROOVE_SEED = 99
 const GROOVE_PITCH = 6      // px between rings at 1x scale, same as mockup
 const GROOVE_INSET = 14     // px gap between the record rim and the first ring
 
+// Event Horizon song-to-song transition (2026-08-17) — ported from the
+// approved mockup (claude.ai artifact a831a530-6ac5-47ed-8486-66a2b3a53352,
+// panel 1 "Event Horizon"): the needle comet's inward ride triggers the
+// change — it strikes the spindle, the groove band draws in behind it, the
+// record spirals into its own center and collapses in a flash, then the
+// next record blooms back out of the same point. dur/phase fractions are
+// the mockup's own `dur:2700` and its render()'s seg() boundaries — kept
+// here as the single source of truth; LiveScreen.jsx imports both so its
+// record-scale keyframes and its art/audio swap timing stay locked to
+// exactly these canvas phases instead of drifting into their own numbers.
+export const EH_DUR_MS = 2700
+export const EH_PHASES = Object.freeze({
+  lockEnd: 0.16,      // comet finishes its inward approach, strikes the spindle
+  fallEnd: 0.46,      // old record fully collapsed into its own center
+  flashStart: 0.46,
+  flashEnd: 0.56,     // collapse flash / shockwave resolves
+  emergeStart: 0.52,  // new record starts blooming open (overlaps flash's tail)
+  emergeEnd: 0.86,    // new record at full size, band settled
+})
+const easeIn  = p => p * p * p
+const easeOut = p => 1 - Math.pow(1 - p, 3)
+const seg = (p, a, b) => clamp((p - a) / (b - a), 0, 1)
+
 function mulberry(seed) {
   return function () {
     seed |= 0; seed = seed + 0x6D2B79F5 | 0
@@ -71,7 +94,145 @@ function parseColors(colors) {
   return [hexRgb(safe(0)), hexRgb(safe(1))]
 }
 
-export default function StationRingLayer({ active = true, colors = [], progress = 0 }) {
+// Static/authored record radius by breakpoint (Tailwind w-[352px] /
+// sm:w-[391px]) — measure()'s existing no-DOM fallback below, and ALSO the
+// fixed scale reference the Event Horizon transition computes its live
+// recordR from (baseRecordR * current scale). bandInner/bandOuter must track
+// the record's live collapse/bloom every frame during that sequence, not the
+// once-a-second DOM read measure() normally does — a collapse that takes
+// well under a second would otherwise be read through a stale rect.
+const baseRecordR = w => (w >= 640 ? 391 : 352) / 2
+
+// Comet dot + fading trail, shared by the idle ride-the-groove-band loop and
+// Event Horizon's lock/settle beats below — same draw, parameterized by
+// radius and an overall alpha (Event Horizon fades the comet in/out; idle
+// playback is always alpha 1).
+function drawCometAt(ctx, t, cx, cy, nr, c0, k, alpha) {
+  const th = t * 1.15
+  for (let i = TRAIL_LEN; i >= 1; i--) {
+    const ta = th - i * 0.055
+    ctx.globalAlpha = (1 - i / (TRAIL_LEN + 1)) * 0.5 * alpha
+    ctx.fillStyle = rgba(c0, 1)
+    ctx.beginPath()
+    ctx.arc(cx + Math.cos(ta) * nr, cy + Math.sin(ta) * nr, 2.6 * k, 0, 7)
+    ctx.fill()
+  }
+  ctx.globalAlpha = 1
+  ctx.save()
+  ctx.shadowColor = rgba(c0, 0.9)
+  ctx.shadowBlur = 16 * k
+  ctx.globalAlpha = alpha
+  ctx.fillStyle = rgba(c0, 1)
+  ctx.beginPath()
+  ctx.arc(cx + Math.cos(th) * nr, cy + Math.sin(th) * nr, 4.5 * k, 0, 7)
+  ctx.fill()
+  ctx.restore()
+  ctx.globalAlpha = 1
+}
+
+// Event Horizon's own comet/groove/flash/pulsar drawing for the transition
+// window — kept out of the idle draw() path below so neither can leak into
+// the other (idle playback never calls this; this never runs outside an
+// active transition). Reuses the same GROOVE_COUNT/grooveAlphas idle
+// drawing uses, so the ring band reads as the same object, just live.
+function drawEventHorizon(ctx, t, p, geom, rgbPair, grooveAlphas) {
+  const { cx, cy, recordR, bandInner, bandOuter, k, R0 } = geom
+  const [c0, c1] = rgbPair
+
+  const lock   = seg(p, 0, EH_PHASES.lockEnd)
+  const fall   = seg(p, EH_PHASES.lockEnd, EH_PHASES.fallEnd)
+  const flash  = seg(p, EH_PHASES.flashStart, EH_PHASES.flashEnd)
+  const settle = seg(p, EH_PHASES.emergeEnd, 1)
+
+  // Grooves — bandInner/bandOuter already track the record's live collapse
+  // (recordR, computed by the caller from the live scale prop), so no
+  // separate "pull" easing is needed the way the mockup's own free-floating
+  // canvas record needed one — the ring band shrinks in lockstep with the
+  // real disc for free. Flash briefly brightens the whole band.
+  ctx.lineWidth = 1.2 * k
+  const grooveAlphaMul = 1 + flash * 1.4
+  for (let i = 0; i < GROOVE_COUNT; i++) {
+    ctx.strokeStyle = rgba(c1, grooveAlphas[i] * grooveAlphaMul)
+    ctx.beginPath()
+    ctx.arc(cx, cy, bandInner + i * GROOVE_PITCH * k, 0, 7)
+    ctx.stroke()
+  }
+
+  // Comet — rides in to the record's own visible rim during lock (not the
+  // true center, R0 * 0.16, which sat well under the opaque record and was
+  // never actually seen — Ben's call, decision B over shipping the invisible
+  // strike as-is). recordR holds steady through the whole lock phase
+  // (recordScaleMV doesn't start shrinking until lockEnd), so this is a
+  // fixed target for the entire ride, same shape as before, just aimed at
+  // something that's actually on screen. Gone through the collapse (no comet
+  // drawn p 0.22-0.86, matching the mockup), reappears riding back out to
+  // the groove band during settle.
+  if (p < 0.22) {
+    drawCometAt(ctx, t, cx, cy, lerp(bandInner, recordR, easeIn(lock)), c0, k, 1)
+  }
+  if (settle > 0) {
+    drawCometAt(ctx, t, cx, cy, lerp(R0 * 0.4, bandOuter, easeOut(settle)), c0, k, easeOut(settle))
+  }
+
+  // Collapse flash — expanding shockwave ring + a core glow, both additive.
+  // Both anchor on R0 (the record's RESTING radius), not the live recordR:
+  // the glow is meant to intensify into a bright POINT as the disc shrinks
+  // away, not shrink away along with it.
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  if (flash > 0 && flash < 1) {
+    const fr = bandOuter * (0.15 + 1.35 * easeOut(flash))
+    ctx.strokeStyle = rgba(mixRgb(c0, [255, 255, 255], 0.5), (1 - flash) * 0.85)
+    ctx.lineWidth = (10 - 8 * flash) * k
+    ctx.beginPath()
+    ctx.arc(cx, cy, fr, 0, 7)
+    ctx.stroke()
+  }
+  const glow = Math.max(easeIn(fall) * 0.7, flash > 0 ? (1 - flash) : 0)
+  if (glow > 0.02 && p < 0.62) {
+    const gr = R0 * (0.25 + glow * 0.9)
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, gr)
+    grad.addColorStop(0, rgba(mixRgb(c0, [255, 255, 255], 0.65), glow))
+    grad.addColorStop(1, rgba(c0, 0))
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.arc(cx, cy, gr, 0, 7)
+    ctx.fill()
+  }
+  ctx.restore()
+
+  // Pulsar spikes — same rim-spike shape the idle loop draws, boosted for a
+  // beat right through the flash.
+  const bu = (t % BEAT_INTERVAL) / BEAT_INTERVAL
+  const pulse = Math.exp(-4.5 * bu) * (1 + flash * (1 - flash) * 6)
+  if (pulse > 0.03) {
+    const rot = t * 0.35
+    ctx.strokeStyle = rgba(c0, Math.min(0.9, 0.55 * pulse))
+    ctx.lineWidth = 2 * k
+    for (let s = 0; s < 8; s++) {
+      const a = rot * 0.4 + s * Math.PI / 4
+      const r1 = recordR + 6 * k
+      const r2 = recordR + (10 + 30 * pulse) * k
+      ctx.beginPath()
+      ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1)
+      ctx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2)
+      ctx.stroke()
+    }
+  }
+}
+
+export default function StationRingLayer({
+  active = true, colors = [], progress = 0,
+  // Event Horizon transition props (all optional — a plain idle mount, e.g.
+  // the standalone jukebox never sets ringMode, never passes these):
+  // `transitioning` gates the whole alternate draw path; `transitionStartMs`
+  // is a performance.now() timestamp LiveScreen stamps once when the
+  // sequence starts (this file derives p from wall-clock elapsed against it,
+  // no per-frame prop traffic needed); `recordScaleMV` is the live Framer
+  // Motion value driving the real record's CSS scale — read every frame
+  // instead of polling the DOM for it (see baseRecordR's comment above).
+  transitioning = false, transitionStartMs = null, recordScaleMV = null,
+}) {
   const canvasRef = useRef(null)
   const rafRef = useRef(null)
   const mountedRef = useRef(false)
@@ -81,6 +242,14 @@ export default function StationRingLayer({ active = true, colors = [], progress 
   const sizeRef = useRef({ w: 0, h: 0 })
   const geomRef = useRef(null)      // { cx, cy, recordR } — measured from the real record box
   const lastMeasureRef = useRef(0)
+  // Event Horizon transition state — refs, not direct closure reads, for the
+  // same reason progressRef/rgbRef already are: draw()/tick() are redefined
+  // every render but the rAF loop keeps calling whichever tick() closure was
+  // captured when startLoop() last ran, so anything that changes over time
+  // has to be read through a ref to stay current inside that stale closure.
+  const transitioningRef = useRef(transitioning)
+  const transitionStartRef = useRef(transitionStartMs)
+  const recordScaleRef = useRef(recordScaleMV)
 
   // Seeded once — same star field for the whole session, never regenerated
   // per frame. Normalized coords (x in a 2.2x-wide wrap band, y in canvas
@@ -105,6 +274,11 @@ export default function StationRingLayer({ active = true, colors = [], progress 
   )
 
   useEffect(() => { progressRef.current = clamp(progress, 0, 1) }, [progress])
+  useEffect(() => {
+    transitioningRef.current = transitioning
+    transitionStartRef.current = transitionStartMs
+    recordScaleRef.current = recordScaleMV
+  }, [transitioning, transitionStartMs, recordScaleMV])
 
   // Ring color used to snap instantly on every colors-prop change while
   // AlbumGradientMesh's album wash crossfades the same track change over
@@ -154,11 +328,10 @@ export default function StationRingLayer({ active = true, colors = [], progress 
         recordR: r.width / 2,
       }
     } else {
-      const w = sizeRef.current.w
       geomRef.current = {
         cx: sizeRef.current.w / 2,
         cy: sizeRef.current.h / 2,
-        recordR: (w >= 640 ? 391 : 352) / 2,
+        recordR: baseRecordR(sizeRef.current.w),
       }
     }
   }
@@ -171,13 +344,28 @@ export default function StationRingLayer({ active = true, colors = [], progress 
     const ctx = canvas.getContext('2d')
     ctx.clearRect(0, 0, w, h) // transparent layer — the album wash below owns the backdrop
 
+    // Self-gated on reducedMotion too, not just relying on the caller never
+    // setting transitioning while reduced motion is on (Critical Rule 3 —
+    // canvas/JS animation needs its own explicit check, a CSS media query
+    // can't reach in here).
+    const eh = transitioningRef.current && !reducedMotion
+
     // Re-measure at most once a second — layout only shifts on resize or
-    // when webfont load nudges the text block under the record.
-    if (!geomRef.current || t - lastMeasureRef.current > 1) {
+    // when webfont load nudges the text block under the record. Skipped
+    // entirely mid-transition: the record never translates during Event
+    // Horizon (only scales around its own center), so the last idle
+    // measurement is still good for cx/cy, and recordR is computed live
+    // below instead of from this throttled read (see baseRecordR's comment).
+    if (!geomRef.current) measure() // first frame ever needs SOME geometry
+    else if (!eh && t - lastMeasureRef.current > 1) {
       measure()
       lastMeasureRef.current = t
     }
-    const { cx, cy, recordR } = geomRef.current
+    const { cx, cy } = geomRef.current
+    const R0 = baseRecordR(w)
+    const recordR = eh && recordScaleRef.current
+      ? R0 * clamp(recordScaleRef.current.get(), 0, 2)
+      : geomRef.current.recordR
 
     if (blendRef.current) {
       const b = blendRef.current
@@ -215,6 +403,18 @@ export default function StationRingLayer({ active = true, colors = [], progress 
     //    (platter is recordR + 9px in LiveScreen) ──
     const bandInner = recordR + GROOVE_INSET * k
     const bandOuter = bandInner + (GROOVE_COUNT - 1) * GROOVE_PITCH * k
+
+    // Event Horizon owns grooves/comet/flash/pulsar entirely for the
+    // duration of the transition window — idle drawing below never runs
+    // while this is active. p comes from wall-clock elapsed against the
+    // timestamp LiveScreen stamped once at sequence start, not a per-frame
+    // prop (see the transitionStartMs prop comment above).
+    if (eh && transitionStartRef.current != null) {
+      const p = clamp((t * 1000 - transitionStartRef.current) / EH_DUR_MS, 0, 1)
+      drawEventHorizon(ctx, t, p, { cx, cy, recordR, bandInner, bandOuter, k, R0 }, [c0, c1], grooveAlphas)
+      return
+    }
+
     ctx.lineWidth = 1.2 * k
     for (let i = 0; i < GROOVE_COUNT; i++) {
       ctx.strokeStyle = rgba(c1, grooveAlphas[i])
