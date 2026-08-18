@@ -10,7 +10,7 @@ import { getWagerTier } from '../lib/wagerScoring.js'
 import MatchingBoard from '../components/join/MatchingBoard.jsx'
 import WagerBoard from '../components/join/WagerBoard.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
-import BenPhoto from '../components/shared/BenPhoto.jsx'
+import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
 import { EASE_OUT, EASE_PANEL, EASE_BAR } from '../lib/easings.js'
 
 // ─── localStorage ─────────────────────────────────────────────────────────────
@@ -71,9 +71,88 @@ function NoShowScreen() {
       <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9375rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.6 }}>
         No show running right now.
       </p>
-      <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem', marginTop: '0.5rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif' }}>
+      <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.8rem', marginTop: '0.5rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif' }}>
         Ask Ben for the QR code when things kick off.
       </p>
+    </div>
+  )
+}
+
+// ─── Add to Home Screen ─────────────────────────────────────────────────────
+// One-time nag on the join screen only — installing gets rid of Safari/Chrome's
+// URL bar (via join-manifest.json's display:standalone), but nobody should be
+// asked mid-show. iOS has no install-prompt API, so it's instructions instead
+// of a button.
+const A2HS_DISMISSED_KEY = 'trivia-os:a2hs-dismissed'
+
+function useAddToHomeScreen() {
+  const [installEvent, setInstallEvent] = useState(null)
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem(A2HS_DISMISSED_KEY) === '1' } catch { return false }
+  })
+
+  useEffect(() => {
+    function onPrompt(e) { e.preventDefault(); setInstallEvent(e) }
+    window.addEventListener('beforeinstallprompt', onPrompt)
+    return () => window.removeEventListener('beforeinstallprompt', onPrompt)
+  }, [])
+
+  const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent)
+
+  function dismiss() {
+    setDismissed(true)
+    try { localStorage.setItem(A2HS_DISMISSED_KEY, '1') } catch { /* private browsing */ }
+  }
+  function install() {
+    if (!installEvent) return
+    installEvent.prompt()
+    installEvent.userChoice.finally(() => setInstallEvent(null))
+  }
+
+  return {
+    show: isMobile && !isStandalone && !dismissed && (isIOS || !!installEvent),
+    isIOS, install, dismiss,
+  }
+}
+
+function AddToHomeScreenBanner({ text, accent }) {
+  const { show, isIOS, install, dismiss } = useAddToHomeScreen()
+  if (!show) return null
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '0.6rem',
+      background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
+      borderRadius: 10, padding: '0.6rem 0.75rem',
+    }}>
+      <p style={{ flex: 1, margin: 0, color: `${text}cc`, fontSize: '0.75rem', lineHeight: 1.4 }}>
+        {isIOS
+          ? 'Full-screen, no browser bar: tap Share, then "Add to Home Screen".'
+          : 'Full-screen, no browser bar — add this to your Home Screen.'}
+      </p>
+      {!isIOS && (
+        <button
+          type="button" onClick={install}
+          style={{
+            flexShrink: 0, background: accent, color: '#fff', border: 'none',
+            borderRadius: 8, padding: '0.4rem 0.7rem', fontSize: '0.75rem', fontWeight: 700,
+            fontFamily: 'DM Sans, sans-serif', cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          Add
+        </button>
+      )}
+      <button
+        type="button" onClick={dismiss} aria-label="Dismiss"
+        style={{
+          flexShrink: 0, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'transparent', border: 'none', color: `${text}80`, fontSize: '1rem',
+          cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        ×
+      </button>
     </div>
   )
 }
@@ -123,7 +202,7 @@ function RegistrationScreen({ onRegister, show, theme }) {
             background: 'rgba(255,255,255,0.06)',
             overflow: 'hidden', flexShrink: 0,
           }}>
-            <BenPhoto size={100} />
+            <img src={PRESHOW_BEN_PHOTO} alt="Ben" style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
           </div>
         </div>
 
@@ -140,7 +219,7 @@ function RegistrationScreen({ onRegister, show, theme }) {
             Enter your team name to join
           </p>
           {show?.title && (
-            <p style={{ color: `${text}80`, fontSize: '0.8rem', marginTop: '0.3rem' }}>{show.title}</p>
+            <p style={{ color: `${text}b3`, fontSize: '0.8rem', marginTop: '0.3rem' }}>{show.title}</p>
           )}
         </div>
 
@@ -213,9 +292,11 @@ function RegistrationScreen({ onRegister, show, theme }) {
           </button>
         </form>
 
-        <p style={{ textAlign: 'center', color: `${text}80`, fontSize: '0.7rem', margin: 0 }}>
-          Have fun out there — and don't yell at me, I'm not a professional 😂
+        <p style={{ textAlign: 'center', color: `${text}b3`, fontSize: '0.7rem', margin: 0 }}>
+          Have fun out there — and don't yell at me, I'm not a professional
         </p>
+
+        <AddToHomeScreenBanner text={text} accent={accent} />
 
         {/* Watermark */}
         <p style={{ textAlign: 'center', color: `${text}28`, fontSize: '0.65rem', margin: '-1rem 0 0' }}>
@@ -250,7 +331,7 @@ function WaitingScreen({ teamName, theme, onOpenScores }) {
           animate={{ scale: 1, opacity: 1 }}
           transition={pref
             ? { duration: 0.25 }
-            : { type: 'spring', duration: 0.55, bounce: 0.35 }}
+            : { type: 'spring', duration: 0.45, bounce: 0.25 }}
           style={{
             width: 72, height: 72, borderRadius: '50%',
             background: `${accent}2e`, border: `2px solid ${accent}55`,
@@ -268,7 +349,7 @@ function WaitingScreen({ teamName, theme, onOpenScores }) {
           transition={{ delay: pref ? 0 : 0.18, duration: 0.28, ease: EASE_OUT }}
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}
         >
-          <p style={{ color: `${text}80`, fontSize: '0.7rem', margin: 0, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+          <p style={{ color: `${text}b3`, fontSize: '0.7rem', margin: 0, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
             You&rsquo;re in as
           </p>
           <p style={{
@@ -302,7 +383,7 @@ function WaitingScreen({ teamName, theme, onOpenScores }) {
             animation: pref ? 'none' : 'breathePulse 2.2s ease-in-out infinite',
             display: 'inline-block',
           }} />
-          <span style={{ color: `${text}80`, fontSize: '0.8rem' }}>Waiting for Ben…</span>
+          <span style={{ color: `${text}b3`, fontSize: '0.8rem' }}>Waiting for Ben…</span>
         </motion.div>
       </div>
 
@@ -372,9 +453,10 @@ function FollowToggle({ mode, onChange, theme }) {
           style={{
             padding: '0.35rem 0.7rem', borderRadius: 11, border: 'none',
             background: mode === id ? highlight : 'transparent',
-            color: mode === id ? '#08120d' : 'rgba(255,255,255,0.55)',
+            color: mode === id ? '#08120d' : 'rgba(255,255,255,0.75)',
             fontSize: '0.68rem', fontWeight: 700, fontFamily: 'DM Sans, sans-serif',
             cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+            transition: 'background-color 150ms ease, color 150ms ease',
           }}
         >
           {label}
@@ -453,7 +535,7 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered }) {
           animate={{ opacity: 1 }}
           style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingTop: '2.5rem', textAlign: 'center' }}
         >
-          <p style={{ color: `${text}80`, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.12em', margin: 0 }}>
+          <p style={{ color: `${text}b3`, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.12em', margin: 0 }}>
             Round {slide.data.roundNumber}
           </p>
           <h2 style={{
@@ -508,7 +590,7 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered }) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {round?.title && (
-            <p style={{ color: `${text}80`, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>{round.title}</p>
+            <p style={{ color: `${text}b3`, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>{round.title}</p>
           )}
           <h3 style={{ color: text, fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>
             {slide.data.title || 'Questions'}
@@ -937,7 +1019,7 @@ function WagerResultPopup({ result, theme, onDismiss }) {
           {won ? 'You won your wager!' : "Didn't hit this one"}
         </p>
         {tier && (
-          <p style={{ color: `${text}80`, fontSize: '0.9rem', margin: '0.5rem 0 0' }}>
+          <p style={{ color: `${text}b3`, fontSize: '0.9rem', margin: '0.5rem 0 0' }}>
             {tier.label}{won && result.points ? ` · +${result.points} pts` : ''}
           </p>
         )}
@@ -1335,6 +1417,28 @@ export default function Join() {
   const [scoresDrawerLoading, setScoresDrawerLoading] = useState(false)
 
   const theme = useMemo(() => show?.theme_id ? getTheme(show.theme_id) : null, [show?.theme_id])
+
+  // Scoped PWA tags so "Add to Home Screen" launches /join full-screen,
+  // no browser chrome. Mirrors Display.jsx's manifest injection — added on
+  // mount, removed on unmount, since the SPA shares one document head
+  // across routes.
+  useEffect(() => {
+    const tags = [
+      { tag: 'link', rel: 'manifest', href: '/join-manifest.json' },
+      { tag: 'link', rel: 'apple-touch-icon', href: '/join-icon-180.png' },
+      { tag: 'meta', name: 'apple-mobile-web-app-capable', content: 'yes' },
+      { tag: 'meta', name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
+      { tag: 'meta', name: 'apple-mobile-web-app-title', content: 'Trivia' },
+      { tag: 'meta', name: 'theme-color', content: '#050505' },
+    ]
+    const added = tags.map(({ tag, ...attrs }) => {
+      const el = document.createElement(tag)
+      Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v))
+      document.head.appendChild(el)
+      return el
+    })
+    return () => added.forEach(el => document.head.contains(el) && document.head.removeChild(el))
+  }, [])
 
   // scores_locked_at is a timestamp, not a boolean — ScoreboardModal.jsx
   // refreshes it every 2 minutes while open, so a lock older than 10

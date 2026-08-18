@@ -344,7 +344,7 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
             transition: 'box-shadow 180ms cubic-bezier(0.23,1,0.32,1)',
           }}>
             <span style={{
-              color: digits ? text : `${text}80`,
+              color: digits ? text : `${text}b3`,
               fontSize: '2.6rem', fontWeight: 800, lineHeight: 1,
               fontFamily: 'DM Sans, sans-serif', fontVariantNumeric: 'tabular-nums',
               textShadow: digits ? `0 0 18px ${highlight}66` : 'none',
