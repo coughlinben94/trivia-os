@@ -16,6 +16,9 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
 
   // Hoisted above the showAnimation early return below — hooks can't be called
   // conditionally, and items.map() feeds the useFitListToBox call right here.
+  // Same detection SlideEditor.jsx's PylRevealEditor uses to tell the Theme
+  // Picker board (plain named options, no points) from a scored reveal list.
+  const isBoard = !data.stages && !!data.items
   const items = data.stages ?? data.items ?? []
   // Same round's other PYL boards are measured too — the smallest fit wins
   // for all of them, so consecutive boards don't pop different row sizes
@@ -215,8 +218,10 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
         </div>
       </div>
 
-      {/* Running total — bottom */}
-      {revealed > 0 && (
+      {/* Running total — bottom. Board mode (Theme Picker) has no points at
+          all, just named options to click — showing "+0" there is a
+          leftover from the points-scoring stages branch, not a real total. */}
+      {revealed > 0 && !isBoard && (
         <motion.div
           initial={{ opacity: 0, y: reduce ? 0 : 10 }}
           animate={{ opacity: 1, y: 0 }}
