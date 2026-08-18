@@ -111,8 +111,15 @@ function MatchColumn({ items, theme, revealed }) {
             </span>
           )}
           {item.image ? (
-            <div style={{ width: '100%', height: '100%', borderRadius: 10, overflow: 'hidden', boxShadow: '0 6px 22px rgba(0,0,0,0.45)' }}>
-              <img src={item.image} alt={item.label || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            // object-fit:contain, not cover — matching tile art (turtle
+            // heads ~1:1, weapon closeups ~3:4 portrait) doesn't reliably
+            // come in this box's 3:2 landscape ratio the way flags do; cover
+            // crops a portrait source down to a thin center sliver (found
+            // live 2026-08-18: weapon tiles showed almost nothing but a
+            // diagonal handle line). contain always shows the whole image,
+            // letterboxed on the tinted panel background instead of cropped.
+            <div style={{ width: '100%', height: '100%', borderRadius: 10, overflow: 'hidden', boxShadow: '0 6px 22px rgba(0,0,0,0.45)', background: 'rgba(255,255,255,0.06)', padding: '0.6rem' }}>
+              <img src={item.image} alt={item.label || ''} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             </div>
           ) : (
             item.label
