@@ -204,6 +204,16 @@ export const QUESTION_BOX = {
   maxLines: 4, lineHeight: 1.18,
 }
 
+// Shiny question quote/subtitle: sits above the question text as context (e.g.
+// "here's a quote, now answer the question below it") — secondary to the
+// question, so its ceiling stays well under QUESTION_BOX's so it never
+// out-sizes the thing it's introducing, but it gets its own line budget since
+// a quote can run longer than the old "Villain Laughs"-style short label.
+export const QUOTE_BOX = {
+  boxW: 1728, boxH: 220, floorPx: LINE_FLOOR * 16, ceilPx: PARAGRAPH_CEIL * 0.6 * 16,
+  maxLines: 3, lineHeight: 1.25,
+}
+
 // Visual caption: short label under an image. Narrow region, 1–2 lines.
 export const VISUAL_CAPTION_BOX = {
   boxW: 1280, boxH: 140, floorPx: VISUAL_CAPTION_FLOOR * 16, ceilPx: VISUAL_CAPTION_CEIL * 16,

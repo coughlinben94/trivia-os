@@ -1055,8 +1055,8 @@ function ShinyPartEditor({ part, index, schemaType, theme, onChange, onRemove, o
           <button onClick={onRemove} className="text-xs text-gray-300 hover:text-red-500 transition-colors">✕</button>
         )}
       </div>
-      <Field label="Subtitle" hint='e.g. "Villain Laughs"'>
-        <TextInput value={part.label} onChange={v => onChange({ ...part, label: v })} placeholder="Optional label for this part" />
+      <Field label="Subtitle" hint='Shown above the question — a quote, or a short label like "Villain Laughs"'>
+        <TextInput value={part.label} onChange={v => onChange({ ...part, label: v })} placeholder="Optional quote or label for this part" />
       </Field>
       {schemaType === 'image' && (
         <MediaUpload

@@ -6,7 +6,7 @@ import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
 import ShinyMatchingQuestion from './ShinyMatchingQuestion.jsx'
 import ShinyWagerQuestion from './ShinyWagerQuestion.jsx'
 import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny } from '../../../lib/shinySeries.js'
-import { fitToBox, QUESTION_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
+import { fitToBox, QUESTION_BOX, QUOTE_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT, EASE_EXIT, EASE_PANEL } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { youtubeEmbedUrl } from '../../../lib/youtube.js'
@@ -83,6 +83,17 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roundQuestionTexts, theme.fonts.body, fontsReady])
 
+  // Subtitle as a quote sitting above the question text (Ben, 2026-08-18:
+  // "sometimes i give a quote and they have to answer the question") — sized
+  // on its own, not folded into uniformFontSize's per-round match, since it's
+  // a per-part quote, not the thing being kept visually consistent slide to
+  // slide the way the question itself is.
+  const subtitleFontSize = useMemo(() => {
+    if (!part.subtitle) return 0
+    return fitToBox(part.subtitle, { ...QUOTE_BOX, family: theme.fonts.body })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [part.subtitle, theme.fonts.body, fontsReady])
+
   const banner = isAssemble
     ? { initial: { opacity: 0, y: -40 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.42, delay: 0.04, ease: EASE_OUT } }
     : { initial: { opacity: 0, y: -12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: EASE_OUT } }
@@ -125,31 +136,36 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
           >
             {data.seriesTheme}
           </span>
-          {part.subtitle && (
-            <span
-              style={{
-                display: 'block',
-                fontFamily: `'${theme.fonts.ui}', 'Inter', sans-serif`,
-                color: theme.colors.text,
-                fontSize: '0.7rem',
-                fontWeight: 500,
-                letterSpacing: '0.08em',
-                marginTop: 2,
-              }}
-            >
-              {part.subtitle}
-            </span>
-          )}
         </motion.div>
       )}
 
-      {/* Question text — large, centered — Section 23 */}
+      {/* Question text — large, centered — Section 23. Subtitle (a quote or
+          context line, Ben 2026-08-18) sits directly above it, in the same
+          reading well, rather than tucked into the series banner's tiny
+          label style — it needs to read as "here's the setup", not a badge. */}
       <motion.div
         initial={question.initial}
         animate={question.animate}
         transition={question.transition}
-        className="absolute inset-0 flex items-center justify-center px-24 py-20 z-[30]"
+        className="absolute inset-0 flex flex-col items-center justify-center px-24 py-20 z-[30] gap-4"
       >
+        {part.subtitle && (
+          <span data-slide-region="subtitle" data-slide-field="subtitle">
+            <p
+              className="text-center leading-relaxed italic"
+              style={{
+                color: theme.colors.textMuted ?? theme.colors.text,
+                fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+                fontSize: subtitleFontSize,
+                fontWeight: 500,
+                maxWidth: '80ch',
+                textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
+              }}
+            >
+              {part.subtitle}
+            </p>
+          </span>
+        )}
         <span data-slide-region="text" data-slide-field="text" style={xf('text')}>
           <p
             className="text-center leading-relaxed"
