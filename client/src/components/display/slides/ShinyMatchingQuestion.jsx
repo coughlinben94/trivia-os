@@ -68,12 +68,21 @@ function MatchColumn({ items, theme, revealed }) {
         <div
           key={item.id}
           style={item.image
-            // Image items: no pill background/border (2026-08-18, Ben), but
-            // a fixed uniform box is what makes it look right — without it,
-            // tiles render at wildly different visual sizes and each
-            // image's own native background shows as a stray rectangle.
-            // Same fix GridSlide's Tile already uses.
-            ? { position: 'relative', display: 'flex', flex: 1, minHeight: 0, width: '100%', aspectRatio: '3 / 2' }
+            // Image items: this is now just the flex ROW SLOT — sizing
+            // authority moved to the inner aspect-ratio box below. A
+            // width-driven `aspect-ratio` box (the old approach here) wants
+            // a fixed height regardless of how many rows are sharing the
+            // column, and flex's own shrink algorithm doesn't reliably
+            // compress an aspect-ratio-derived hypothetical size — with 4
+            // rows of images (confirmed live 2026-08-18: TMNT, state flags,
+            // Pokémon) that fixed height added up to MORE than the column's
+            // actual height, clipping the last row off the bottom of the
+            // canvas. flex:1/minHeight:0 here lets this slot genuinely
+            // shrink to whatever 4-way split the column has room for; the
+            // inner box then fits itself inside that, so tiles stay a
+            // uniform 3:2 (Ben's fix, still true) when there's room, and
+            // shrink together (never crop) when there isn't.
+            ? { position: 'relative', display: 'flex', flex: '1 1 0', minHeight: 0, width: '100%', alignItems: 'center', justifyContent: 'center' }
             : {
                 display: 'flex', alignItems: 'center', gap: '0.9rem',
                 padding: '1.25rem 1.75rem',
@@ -92,34 +101,40 @@ function MatchColumn({ items, theme, revealed }) {
               the same pair) is that correspondence. Only rendered in beat
               2's own static tree, so there's no mount-time reflow to guard
               against — it's part of that beat's layout from the start. */}
-          {revealed && (
-            <span style={item.image
-              ? {
+          {revealed && !item.image && (
+            <span style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '1.8rem', height: '1.8rem', borderRadius: '50%',
+              background: 'rgba(0,0,0,0.18)', fontSize: '1rem', fontWeight: 700, flexShrink: 0,
+            }}>
+              {item.pairRank + 1}
+            </span>
+          )}
+          {item.image ? (
+            // Inner box now owns the 3:2 shape — maxWidth/maxHeight:100%
+            // means it fits inside whatever the outer flex slot actually
+            // has room for (see the slot's own comment above), instead of
+            // dictating a height the slot has to accommodate. object-fit:
+            // contain, not cover — matching tile art (turtle heads ~1:1,
+            // weapon closeups ~3:4 portrait) doesn't reliably come in a 3:2
+            // landscape ratio the way flags do; cover crops a portrait
+            // source down to a thin center sliver (found live 2026-08-18:
+            // weapon tiles showed almost nothing but a diagonal handle
+            // line). contain always shows the whole image, letterboxed on
+            // the tinted panel background instead of cropped.
+            <div style={{ position: 'relative', width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', aspectRatio: '3 / 2', borderRadius: 10, overflow: 'hidden', boxShadow: '0 6px 22px rgba(0,0,0,0.45)', background: 'rgba(255,255,255,0.06)', padding: '0.6rem' }}>
+              <img src={item.image} alt={item.label || ''} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              {revealed && (
+                <span style={{
                   position: 'absolute', top: -8, left: -8, zIndex: 2,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   width: '1.8rem', height: '1.8rem', borderRadius: '50%',
                   background: SHINY_GOLD, color: '#1a1a1a', fontSize: '1rem', fontWeight: 700,
                   boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-                }
-              : {
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  width: '1.8rem', height: '1.8rem', borderRadius: '50%',
-                  background: 'rgba(0,0,0,0.18)', fontSize: '1rem', fontWeight: 700, flexShrink: 0,
-                }
-            }>
-              {item.pairRank + 1}
-            </span>
-          )}
-          {item.image ? (
-            // object-fit:contain, not cover — matching tile art (turtle
-            // heads ~1:1, weapon closeups ~3:4 portrait) doesn't reliably
-            // come in this box's 3:2 landscape ratio the way flags do; cover
-            // crops a portrait source down to a thin center sliver (found
-            // live 2026-08-18: weapon tiles showed almost nothing but a
-            // diagonal handle line). contain always shows the whole image,
-            // letterboxed on the tinted panel background instead of cropped.
-            <div style={{ width: '100%', height: '100%', borderRadius: 10, overflow: 'hidden', boxShadow: '0 6px 22px rgba(0,0,0,0.45)', background: 'rgba(255,255,255,0.06)', padding: '0.6rem' }}>
-              <img src={item.image} alt={item.label || ''} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                }}>
+                  {item.pairRank + 1}
+                </span>
+              )}
             </div>
           ) : (
             item.label
