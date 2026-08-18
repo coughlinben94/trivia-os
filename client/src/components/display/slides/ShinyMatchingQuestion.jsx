@@ -36,8 +36,13 @@ export default function ShinyMatchingQuestion({ slide, theme }) {
   const text = theme.colors.text
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '4rem' }}>
-      <div style={{ display: 'flex', gap: '6vw', width: '100%', maxWidth: 1400, justifyContent: 'space-between' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', height: '100%', padding: '3rem' }}>
+      {/* flex:1/minHeight:0 so image tiles below can stretch to fill the
+          full available height (2026-08-18, Ben: images needed to take up
+          the whole screen, not sit at a small fixed size) — text pills are
+          unaffected, they keep their natural padding-based size and stay
+          centered as a group via Column's own justifyContent. */}
+      <div style={{ display: 'flex', gap: '6vw', width: '100%', maxWidth: 1400, justifyContent: 'space-between', flex: 1, minHeight: 0 }}>
         <Column items={pairs.map((p, i) => ({ id: p.id, label: p.left, image: p.leftImage, pairRank: i }))} theme={theme} revealed={revealed} shouldReduceMotion={shouldReduceMotion} />
         <Column items={seededShuffle(pairs, slide.id ?? 'preview').map(p => ({ id: p.id, label: p.right, image: p.rightImage, pairRank: pairs.findIndex(x => x.id === p.id) }))} theme={theme} revealed={revealed} shouldReduceMotion={shouldReduceMotion} />
       </div>
@@ -62,7 +67,7 @@ export default function ShinyMatchingQuestion({ slide, theme }) {
 
 function Column({ items, theme, revealed, shouldReduceMotion }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, height: '100%', justifyContent: 'center' }}>
       {items.map((item, i) => (
         <motion.div
           key={item.id}
@@ -72,8 +77,10 @@ function Column({ items, theme, revealed, shouldReduceMotion }) {
           style={item.image
             // Image items: just the image, no pill background/border around
             // it (2026-08-18, Ben) — relative positioning only, so the rank
-            // badge below can sit on its corner once revealed.
-            ? { position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+            // badge below can sit on its corner once revealed. flex:1/
+            // minHeight:0/width:100% so it claims an equal share of the
+            // column's full stretched height instead of a small fixed size.
+            ? { position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, minHeight: 0, width: '100%' }
             : {
                 display: 'flex', alignItems: 'center', gap: '0.9rem',
                 padding: '1.25rem 1.75rem',
@@ -110,7 +117,7 @@ function Column({ items, theme, revealed, shouldReduceMotion }) {
             </span>
           )}
           {item.image ? (
-            <img src={item.image} alt={item.label || ''} style={{ maxHeight: '4.5rem', maxWidth: '100%', objectFit: 'contain' }} />
+            <img src={item.image} alt={item.label || ''} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
           ) : (
             item.label
           )}
