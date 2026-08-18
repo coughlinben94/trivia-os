@@ -222,6 +222,10 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
                 <GridEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload}
                   uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} usedPhotoUrls={usedPhotoUrls} />
               )}
+              {slide.type === 'venn' && (
+                <VennEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload}
+                  uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} usedPhotoUrls={usedPhotoUrls} />
+              )}
               {slide.type === 'winner-reveal' && (
                 <WinnerRevealEditor data={data} onChange={change} />
               )}
@@ -1557,6 +1561,103 @@ function MultiQuestionEditor({ data, onChange, setData, scheduleSave }) {
         + Add question
       </button>
     </>
+  )
+}
+
+function VennEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uploadMedia, getHostPhotos, usedPhotoUrls }) {
+  const leftCast = data.leftCast ?? []
+  const rightCast = data.rightCast ?? []
+
+  function writeCast(side, i, patch) {
+    const key = side === 'left' ? 'leftCast' : 'rightCast'
+    const arr = (data[key] ?? Array.from({ length: 3 }, () => ({ name: '', mediaUrl: null }))).slice()
+    arr[i] = { ...(arr[i] ?? { name: '', mediaUrl: null }), ...patch }
+    const next = { ...data, [key]: arr }
+    setData(next)
+    scheduleSave({ data: next })
+  }
+
+  async function uploadCastPhoto(side, i, file) {
+    if (!file) return
+    const url = await onMediaUpload(file)
+    if (url) writeCast(side, i, { mediaUrl: url })
+  }
+
+  function castColumn(side, cast, label) {
+    return (
+      <>
+        <Divider label={label} />
+        {[0, 1, 2].map(i => (
+          <div key={i} className="flex flex-col gap-2 mb-3">
+            <Field label={`${label.replace(' Cast', '')} ${i + 1}`}>
+              <TextInput value={cast[i]?.name ?? ''} onChange={v => writeCast(side, i, { name: v })} placeholder="Actor name" />
+            </Field>
+            <MediaUpload
+              accept="image"
+              label="Photo"
+              currentUrl={cast[i]?.mediaUrl}
+              currentType={cast[i]?.mediaUrl ? 'image/jpeg' : null}
+              onUpload={file => uploadCastPhoto(side, i, file)}
+              onRemove={() => writeCast(side, i, { mediaUrl: null })}
+            />
+          </div>
+        ))}
+      </>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Previewing — matches GridEditor: every shiny slide gets a standalone
+          intro beat before its content. */}
+      {data.isShiny && (
+        <>
+          <Divider label="Previewing" />
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              onClick={() => onChange('introDone', false)}
+              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                !data.introDone ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              🎬 Intro
+            </button>
+            <button
+              onClick={() => onChange('introDone', true)}
+              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                !!data.introDone ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              Content
+            </button>
+          </div>
+
+          <Divider label="Intro Screen" />
+          <Field label="Subtitle" hint='Optional — e.g. "Movie Edition"'>
+            <TextInput value={data.introSubtitle ?? ''} onChange={v => onChange('introSubtitle', v)} placeholder="Optional subtitle…" />
+          </Field>
+          <HostPhotoLibrary
+            usedPhotoUrls={usedPhotoUrls}
+            getHostPhotos={getHostPhotos}
+            uploadMedia={uploadMedia}
+            currentPhotoUrl={data.hostPhotoUrl}
+            onSelectPhoto={url => onChange('hostPhotoUrl', url)}
+            hasRandomFallback
+          />
+        </>
+      )}
+
+      <Divider label="Venn Diagram" />
+      <Field label="Question / Prompt">
+        <TextArea value={data.text ?? ''} onChange={v => onChange('text', v)} placeholder="Which actor connects these two movies?" rows={2} />
+      </Field>
+      <Field label="Answer" hint="The shared actor/actress — for scoring, not shown on screen.">
+        <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="Actor name" />
+      </Field>
+
+      {castColumn('left', leftCast, 'Left Movie Cast')}
+      {castColumn('right', rightCast, 'Right Movie Cast')}
+    </div>
   )
 }
 

@@ -64,6 +64,10 @@ export function isWagerShiny(data) {
   return data.shinyInputSchema?.type === 'wager'
 }
 
+export function isVennShiny(data) {
+  return data.shinyInputSchema?.type === 'venn'
+}
+
 // True when two slides are separate top-level slide objects that together
 // make up one shiny "run" — e.g. an image-type format where the host asked
 // for N slides (one image each) instead of N parts on one slide. Same round,

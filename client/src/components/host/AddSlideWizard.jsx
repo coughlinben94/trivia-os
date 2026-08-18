@@ -154,6 +154,38 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           return
         }
 
+        const isVenn = selectedShinyFmt.input_schema?.type === 'venn'
+        if (isVenn) {
+          const vennData = {
+            questionNumber:  qNum,
+            questionLabel:   `Q${qNum}`,
+            questionMode:    'shiny',
+            isShiny:         true,
+            shinyFormatId:   selectedShinyFmt.id,
+            shinyFormatName: selectedShinyFmt.name,
+            shinyFormatIcon: selectedShinyFmt.icon,
+            leftCast:  Array.from({ length: 3 }, () => ({ name: '', mediaUrl: null })),
+            rightCast: Array.from({ length: 3 }, () => ({ name: '', mediaUrl: null })),
+            text:      shinyQuestion.trim(),
+            answer:    shinyAnswer.trim(),
+          }
+          const afterId = insertAfterSlideId(roundSlides, sorted)
+          await onAddSlide({ type: 'venn', roundId: roundId ?? null, afterSlideId: afterId, data: vennData })
+          archiveQuestion({
+            type:               'shiny',
+            text:                vennData.text,
+            answer:              vennData.answer,
+            is_bonus:            false,
+            is_shiny:            true,
+            shiny_type:          selectedShinyFmt.input_schema?.type ?? null,
+            shiny_format_name:   selectedShinyFmt.name,
+            show_id:             show?.id ?? null,
+            show_title:          show?.title ?? null,
+            show_date:           show?.date ?? null,
+          })
+          return
+        }
+
         const isConcurrentFmt = selectedShinyFmt.input_schema?.concurrent === true
         const isImageFmt = selectedShinyFmt.input_schema?.type === 'image'
         // Undefined/legacy concurrent formats default to true — the behavior
