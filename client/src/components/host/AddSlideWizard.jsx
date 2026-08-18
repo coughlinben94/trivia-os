@@ -96,6 +96,14 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
 
   async function handleCreate() {
     const roundSlides = sorted.filter(s => s.roundId === roundId)
+    // A round built entirely from one shiny format (2026-08-18, Ben: 6 Drag
+    // and Drop questions in a row for Swing Round) shouldn't replay that
+    // format's announce card on every single question — only the first one
+    // in the round needs it. Existing runs (isSeries siblings) already skip
+    // repeats via a different mechanism; this covers separate standalone
+    // slides of the same format in the same round.
+    const formatAlreadyIntroducedThisRound = fmtId =>
+      roundSlides.some(s => s.data?.isShiny && s.data?.shinyFormatId === fmtId)
     const nonBonusQ   = roundSlides.filter(s => (s.type === 'question' || s.type === 'pixelate-series' || s.type === 'grid') && !s.data?.isBonus)
     const bonusQ      = roundSlides.filter(s => s.type === 'question' && s.data?.isBonus)
     const qNum = nonBonusQ.length + 1
@@ -128,6 +136,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             questionLabel:   `Q${qNum}`,
             questionMode:    'shiny',
             isShiny:         true,
+            introDone:       formatAlreadyIntroducedThisRound(selectedShinyFmt.id),
             shinyFormatId:   selectedShinyFmt.id,
             shinyFormatName: selectedShinyFmt.name,
             shinyFormatIcon: selectedShinyFmt.icon,
@@ -162,6 +171,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             questionLabel:   `Q${qNum}`,
             questionMode:    'shiny',
             isShiny:         true,
+            introDone:       formatAlreadyIntroducedThisRound(selectedShinyFmt.id),
             shinyFormatId:   selectedShinyFmt.id,
             shinyFormatName: selectedShinyFmt.name,
             shinyFormatIcon: selectedShinyFmt.icon,
@@ -237,7 +247,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               // is correct from creation, not just during a forward advance).
               // 2026-08-17: this exact gap left 3 sibling slides replaying
               // the full intro animation in the editor before this existed.
-              ...(isConcurrentFmt && i > 0 ? { introDone: true } : {}),
+              ...(isConcurrentFmt && (i > 0 || formatAlreadyIntroducedThisRound(selectedShinyFmt.id)) ? { introDone: true } : {}),
             }
             if (isConcurrentFmt) {
               return {
@@ -321,6 +331,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           questionLabel:    `Q${qNum}`,
           questionMode:     'shiny',
           isShiny:          true,
+          introDone:        formatAlreadyIntroducedThisRound(selectedShinyFmt.id),
           shinyFormatId:    selectedShinyFmt.id,
           shinyFormatName:  selectedShinyFmt.name,
           shinyFormatIcon:  selectedShinyFmt.icon,
