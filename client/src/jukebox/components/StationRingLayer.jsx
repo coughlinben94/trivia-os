@@ -158,11 +158,17 @@ function drawEventHorizon(ctx, t, p, geom, rgbPair, grooveAlphas) {
     ctx.stroke()
   }
 
-  // Comet — rides in to the spindle during lock, gone through the collapse
-  // (no comet drawn p 0.22-0.86, matching the mockup exactly), reappears
-  // riding back out to the groove band during settle.
+  // Comet — rides in to the record's own visible rim during lock (not the
+  // true center, R0 * 0.16, which sat well under the opaque record and was
+  // never actually seen — Ben's call, decision B over shipping the invisible
+  // strike as-is). recordR holds steady through the whole lock phase
+  // (recordScaleMV doesn't start shrinking until lockEnd), so this is a
+  // fixed target for the entire ride, same shape as before, just aimed at
+  // something that's actually on screen. Gone through the collapse (no comet
+  // drawn p 0.22-0.86, matching the mockup), reappears riding back out to
+  // the groove band during settle.
   if (p < 0.22) {
-    drawCometAt(ctx, t, cx, cy, lerp(bandInner, R0 * 0.16, easeIn(lock)), c0, k, 1)
+    drawCometAt(ctx, t, cx, cy, lerp(bandInner, recordR, easeIn(lock)), c0, k, 1)
   }
   if (settle > 0) {
     drawCometAt(ctx, t, cx, cy, lerp(R0 * 0.4, bandOuter, easeOut(settle)), c0, k, easeOut(settle))
