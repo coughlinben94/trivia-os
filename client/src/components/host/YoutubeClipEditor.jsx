@@ -56,6 +56,16 @@ export default function YoutubeClipEditor({ value, onChange }) {
   const [previewing, setPreviewing] = useState(false)
   const [abLooping, setAbLooping] = useState(false)
 
+  // Mirrors `volume` for the A/B loop's setTimeout chain (caught by Opus
+  // review): playClip/playReference are scheduled callbacks that close over
+  // whatever `volume` was at the moment toggleAbLoop ran. Nudging the
+  // slider mid-loop updates playback live via handleVolumeChange, but the
+  // NEXT scheduled playClip() (≤6s later) would read the stale closed-over
+  // value and silently undo the change — exactly the workflow this feature
+  // exists for. A ref always reads current.
+  const volumeRef = useRef(volume)
+  useEffect(() => { volumeRef.current = volume }, [volume])
+
   const containerRef = useRef(null)
   const playerRef = useRef(null)
   const trackRef = useRef(null)
@@ -214,7 +224,7 @@ export default function YoutubeClipEditor({ value, onChange }) {
     abReferenceRef.current = ref
     const AB_SEGMENT_MS = 3000
     const playClip = () => {
-      playerRef.current?.setVolume(volume)
+      playerRef.current?.setVolume(volumeRef.current)
       playerRef.current?.seekTo(start, true)
       playerRef.current?.playVideo()
       abTimerRef.current = setTimeout(playReference, AB_SEGMENT_MS)

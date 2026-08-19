@@ -253,6 +253,55 @@ function RoundView({ show, round, slides, onSelectSlide, onOpenAddModal, onReord
   )
 }
 
+// Popup off the Press Your Luck tile (2026-08-19) — folds the Lotto
+// Animation and Theme Picker tiles into it instead of them cluttering the
+// dashboard as their own boxes. Same click-outside/Escape pattern as
+// LateTeamPopover.jsx, scoped down since this menu has no state of its own
+// beyond which of the 3 actions got clicked.
+function PylMenuBox({ button, open, onClose, onSetup, onLotto, onThemePicker }) {
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onClickOutside(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('mousedown', onClickOutside)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open, onClose])
+
+  return (
+    <div ref={ref} className="relative w-[calc(20%-8px)]">
+      {button}
+      {open && (
+        <div className="absolute z-20 top-full mt-1.5 left-0 right-0 rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+          <button
+            onClick={onSetup}
+            className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-gray-800 hover:bg-gray-50 ${BTN}`}
+          >
+            🎰 Set up PYL themes and slides
+          </button>
+          <button
+            onClick={onLotto}
+            className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-gray-800 hover:bg-gray-50 border-t border-gray-100 ${BTN}`}
+          >
+            🎲 Lotto Animation
+          </button>
+          <button
+            onClick={onThemePicker}
+            className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-gray-800 hover:bg-gray-50 border-t border-gray-100 ${BTN}`}
+          >
+            🎯 Theme Picker
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOpenScoreboard }) {
   // Preloaded on dashboard mount (not on modal open) so FormatLibrary and
   // AddSlideWizard never show a blank-then-pop-in flash, and both share one
@@ -276,6 +325,10 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
   const [activeRoundId, setActiveRoundId] = useState(null)
   const [showSwingWizard, setShowSwingWizard] = useState(false)
   const [showPylWizard,   setShowPylWizard]   = useState(false)
+  // 2026-08-19, Ben: board was "messy" with Lotto Animation + Theme Picker
+  // as their own standalone tiles — folded into a popup off the Press Your
+  // Luck tile instead (same 📱 Late Team popover pattern LiveMode.jsx uses).
+  const [showPylMenu,     setShowPylMenu]     = useState(false)
 
   // Rest-state grid reorder — same pointer-events drag pattern as
   // RoundSidebar/RoundView's slide reorder (grip mousedown -> pointermove
@@ -633,7 +686,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                       }])),
                       theme:    { icon: '🌌', name: 'World', desc: 'Change the display world', styleKey: 'theme', onClick: () => setShowThemePicker(true) },
                       swing:    { icon: '🎷', name: 'Swing Round', desc: 'Bulk-add all swing questions at once', styleKey: 'swing', onClick: () => setShowSwingWizard(true) },
-                      pyl:      { icon: '🎰', name: 'Press Your Luck!', desc: 'Set up PYL themes and slides', styleKey: 'pyl', onClick: () => setShowPylWizard(true) },
+                      pyl:      { icon: '🎰', name: 'Press Your Luck!', desc: 'Set up PYL themes and slides', styleKey: 'pyl', onClick: () => setShowPylMenu(v => !v), menu: true },
                       shiny:    { icon: '✨', name: 'Shiny Formats', desc: 'Add or edit shiny question styles', styleKey: 'shiny', onClick: () => setShowFormatLibrary(true) },
                       database: { icon: '🗃️', name: 'Question Database', desc: 'Browse and search your archive', styleKey: 'database', onClick: () => window.open('/questions', '_blank') },
                       ticker:   { icon: '👥', name: 'Team List', desc: 'Show all team names on screen', styleKey: 'ticker', onClick: () => openAddModal({ type: 'team-preview', roundId: activeRoundId }) },
@@ -676,12 +729,12 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                         )
                       }
 
-                      return (
+                      const button = (
                         <button
-                          key={id}
+                          key={box.menu ? undefined : id}
                           data-rest-box-id={id}
                           onClick={box.onClick}
-                          className={`relative w-[calc(20%-8px)] flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border text-center min-h-[100px] ${BTN} ${
+                          className={`relative ${box.menu ? 'w-full' : 'w-[calc(20%-8px)]'} flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border text-center min-h-[100px] ${BTN} ${
                             CARD_STYLE[box.styleKey] ?? 'bg-white border-gray-200 hover:border-gray-400'
                           } ${dropTarget ? 'ring-2 ring-[#1a6b4a] ring-offset-1' : ''}`}
                         >
@@ -691,6 +744,26 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                           <span className="text-xs text-gray-500 leading-snug">{box.desc}</span>
                         </button>
                       )
+
+                      // Popup off the tile instead of a direct action — see
+                      // showPylMenu's comment above. Only Press Your Luck
+                      // uses this today; box.menu keeps it generic rather
+                      // than hardcoding id === 'pyl' twice.
+                      if (box.menu) {
+                        return (
+                          <PylMenuBox
+                            key={id}
+                            button={button}
+                            open={showPylMenu}
+                            onClose={() => setShowPylMenu(false)}
+                            onSetup={() => { setShowPylMenu(false); setShowPylWizard(true) }}
+                            onLotto={() => { setShowPylMenu(false); openAddModal({ type: 'pyl-lotto', roundId: activeRoundId }) }}
+                            onThemePicker={() => { setShowPylMenu(false); openAddModal({ type: 'pyl-board', roundId: activeRoundId }) }}
+                          />
+                        )
+                      }
+
+                      return button
                     })
                   })()}
                 </div>

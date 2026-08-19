@@ -17,8 +17,11 @@ export const TYPE_CARDS = [
   { type: 'grading-break',  icon: '⏸️', name: 'Grading Break',       desc: 'While Ben grades papers' },
   { type: 'scoreboard-reveal', icon: '🏆', name: 'Scoreboard Reveal', desc: 'Round standings — also unlocks phone scores for this round' },
   { type: 'winner-reveal',  icon: '🥇', name: 'Winner Reveal',       desc: 'Drum roll → winner + confetti' },
-  { type: 'pyl-lotto',      icon: '🎰', name: 'Lotto Animation',     desc: 'Press Your Luck — pick animation live, same as any PYL spin' },
-  { type: 'pyl-board',      icon: '🎯', name: 'Theme Picker',        desc: 'Press Your Luck — on-screen board naming the 2-3 embedded themes' },
+  // hidden 2026-08-19 — folded into a popup off the Press Your Luck tile in
+  // BuildMode.jsx (Ben: board was "messy") instead of standing alone here.
+  // Metadata kept for icon/name lookups elsewhere (header, sidebar).
+  { type: 'pyl-lotto',      icon: '🎰', name: 'Lotto Animation',     desc: 'Press Your Luck — pick animation live, same as any PYL spin', hidden: true },
+  { type: 'pyl-board',      icon: '🎯', name: 'Theme Picker',        desc: 'Press Your Luck — on-screen board naming the 2-3 embedded themes', hidden: true },
   { type: 'custom',         icon: '✏️', name: 'Custom',              desc: 'Freeform slide' },
   // utility-only — not shown in the picker grid, but provides icon/name metadata for header + sidebar
   { type: 'team-preview',   icon: '👥', name: 'Team List',           desc: 'Show all team names on screen', hidden: true },

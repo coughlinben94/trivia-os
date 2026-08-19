@@ -455,7 +455,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
   function setYoutubeSlot(i, clip) {
     const next = [...mediaSlots]
     while (next.length <= i) next.push({})
-    next[i] = clip ? { type: 'youtube', videoId: clip.videoId, start: clip.start, end: clip.end } : { url: null, type: null }
+    next[i] = clip ? { type: 'youtube', videoId: clip.videoId, start: clip.start, end: clip.end, volume: clip.volume } : { url: null, type: null }
     onChange('mediaSlots', next)
   }
 
@@ -1049,7 +1049,7 @@ function ShinyPartEditor({ part, index, schemaType, theme, onChange, onRemove, o
   const [audioMode, setAudioMode] = useState(media?.type === 'youtube' ? 'youtube' : 'upload')
 
   function setPartYoutube(clip) {
-    onChange({ ...part, mediaSlots: clip ? [{ type: 'youtube', videoId: clip.videoId, start: clip.start, end: clip.end }] : [] })
+    onChange({ ...part, mediaSlots: clip ? [{ type: 'youtube', videoId: clip.videoId, start: clip.start, end: clip.end, volume: clip.volume }] : [] })
   }
 
   return (

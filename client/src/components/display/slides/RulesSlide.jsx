@@ -128,6 +128,15 @@ function playAlertSequence(onCinematicDone, handles) {
           try {
             const psaCtx = new AC()
             handles.psaCtx = psaCtx
+            // Missing resume() (caught by Opus review) meant a context that
+            // starts suspended — the normal state with no prior user
+            // gesture on this document, exactly the /display-loaded-cold
+            // case — left createMediaElementSource's rerouted output
+            // silent: the element's `ended` event still fires on schedule,
+            // the slide still reveals on time, nothing errors, the PSA just
+            // never plays. The beep sequence above already resumes its own
+            // context (line ~110) — this one needs the same.
+            psaCtx.resume().catch(() => {})
             const src = psaCtx.createMediaElementSource(psa)
             const gainNode = psaCtx.createGain()
             gainNode.gain.value = Math.pow(10, gainDb / 20)

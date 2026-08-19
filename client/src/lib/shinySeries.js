@@ -30,6 +30,11 @@ export function resolveShinyPart(data, overridePart) {
       youtubeId: isYoutube ? media.videoId : null,
       youtubeStart: isYoutube ? (media.start ?? 0) : null,
       youtubeEnd: isYoutube ? (media.end ?? null) : null,
+      // Caught by Opus review 2026-08-19: without this, QuestionSlide.jsx's
+      // YT.Player conversion always reads part.volume as undefined and the
+      // whole point of that conversion (applying a manual gain) silently
+      // never happens.
+      volume: isYoutube ? (media.volume ?? 100) : null,
     }
   }
   const media = data.mediaSlots?.[0]
@@ -44,6 +49,7 @@ export function resolveShinyPart(data, overridePart) {
     youtubeId: isYoutube ? media.videoId : null,
     youtubeStart: isYoutube ? (media.start ?? 0) : null,
     youtubeEnd: isYoutube ? (media.end ?? null) : null,
+    volume: isYoutube ? (media.volume ?? 100) : null,
   }
 }
 

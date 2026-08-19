@@ -149,8 +149,11 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
           onReady: e => {
             if (cancelled) return
             // 75%, not full volume (2026-08-17, Ben) — this plays under a
-            // host monologue, not as the only thing happening.
-            e.target.setVolume(75)
+            // host monologue, not as the only thing happening. walkoutSong.volume
+            // (2026-08-19) is a loudness-matching correction on TOP of that
+            // baseline, not a replacement for it — it composes multiplicatively
+            // so an unset/100 value leaves the deliberate 75% duck untouched.
+            e.target.setVolume(Math.round(75 * ((walkoutSong.volume ?? 100) / 100)))
             e.target.seekTo(walkoutSong.start ?? 0, true)
             e.target.playVideo()
             clearInterval(ytWatchIntervalRef.current)
