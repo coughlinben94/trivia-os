@@ -325,6 +325,12 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
   const [activeRoundId, setActiveRoundId] = useState(null)
   const [showSwingWizard, setShowSwingWizard] = useState(false)
   const [showPylWizard,   setShowPylWizard]   = useState(false)
+  // 2026-08-19: PYL themes marked "shiny" still need a format picked —
+  // handlePYLAdd opens AddSlideWizard for the first one; this queue (theme
+  // names still pending + the shared roundId) drives opening the NEXT one
+  // when the shared onAddSlide handler below finishes the current batch,
+  // instead of always jumping into enterEditing after one add.
+  const [pylShinyQueue, setPylShinyQueue] = useState(null) // { roundId, names: string[] } | null
   // 2026-08-19, Ben: board was "messy" with Lotto Animation + Theme Picker
   // as their own standalone tiles — folded into a popup off the Press Your
   // Luck tile instead (same 📱 Late Team popover pattern LiveMode.jsx uses).
@@ -407,17 +413,21 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
     }
   }, [show?.rounds, activeRoundId, viewingRoundId])
 
+  // Swing/PYL should always live in a real, collapsible round. Without this,
+  // slides created with no round active land as flat, unassigned items in
+  // the sidebar instead of a proper round group. Shared by both wizards'
+  // text-entry paths AND the shiny hand-off path below (onGoShiny) — a round
+  // must exist before opening AddSlideWizard pre-scoped to it either way.
+  async function ensureRound(roundId, { roundType, title }) {
+    if (roundId) return roundId
+    const round = await actions.addRound({ roundType, title, subtitle: '' })
+    setActiveRoundId(round.id)
+    return round.id
+  }
+
   async function handleSwingAdd(questions, roundId) {
     setShowSwingWizard(false)
-    // Swing should always live in a real, collapsible round — same as PYL.
-    // Without this, slides created with no round active land as flat,
-    // unassigned items in the sidebar instead of a proper round group.
-    let targetRoundId = roundId
-    if (!targetRoundId) {
-      const round = await actions.addRound({ roundType: 'swing', title: 'Swing Round', subtitle: '' })
-      targetRoundId = round.id
-      setActiveRoundId(round.id)
-    }
+    const targetRoundId = await ensureRound(roundId, { roundType: 'swing', title: 'Swing Round' })
     const sortedAll = [...(show?.slides ?? [])].sort((a, b) => a.order - b.order)
     const roundSlides = sortedAll.filter(s => s.roundId === targetRoundId)
     const existingQCount = roundSlides.filter(s => s.type === 'question' && !s.data?.isBonus).length
@@ -451,22 +461,30 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
     }
   }
 
+  // 2026-08-19, Ben: Swing Round's "shiny" choice hands off to the standard
+  // shiny-question wizard instead of duplicating its batch-generation logic
+  // (format pick → N slides, one shinyFormatId/seriesTheme, intro shown once
+  // — see AddSlideWizard.jsx's handleCreate). Round is created up front (if
+  // needed) so the wizard opens already scoped to it, same as clicking the
+  // Shiny Question tile with a round pre-selected.
+  async function handleSwingGoShiny(roundId) {
+    setShowSwingWizard(false)
+    const targetRoundId = await ensureRound(roundId, { roundType: 'swing', title: 'Swing Round' })
+    openAddModal({ type: 'shiny-question', roundId: targetRoundId })
+  }
+
   async function handlePYLAdd(themes, roundId) {
     setShowPylWizard(false)
-    // PYL should always live in a real, collapsible round — same as Swing.
-    // Without this, slides created with no round active land as flat,
-    // unassigned items in the sidebar instead of a proper round group.
-    let targetRoundId = roundId
-    if (!targetRoundId) {
-      const round = await actions.addRound({ roundType: 'pyl', title: 'Press Your Luck!', subtitle: '' })
-      targetRoundId = round.id
-      setActiveRoundId(round.id)
-    }
+    const targetRoundId = await ensureRound(roundId, { roundType: 'pyl', title: 'Press Your Luck!' })
     const sortedAll = [...(show?.slides ?? [])].sort((a, b) => a.order - b.order)
     const roundSlides = sortedAll.filter(s => s.roundId === targetRoundId)
     const afterId = roundSlides.length > 0
       ? roundSlides[roundSlides.length - 1].id
       : sortedAll[sortedAll.length - 1]?.id ?? null
+
+    // One pyl-reveal board per theme regardless of style — this is the
+    // Theme Picker/Lotto Animation board metadata, separate from the actual
+    // question content handled below.
     const slidesData = themes.map((theme, i) => ({
       type: 'pyl-reveal',
       roundId: targetRoundId,
@@ -483,6 +501,48 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
         show_date:  show.date ?? null,
       })))
     }
+
+    // Text-style themes: real question slides now, same shape Swing uses.
+    // pylTheme tags which theme each question belongs to within the round.
+    const textThemes = themes.filter(t => t.style === 'text' && t.questions?.length)
+    if (textThemes.length) {
+      const sortedAfter = [...(show?.slides ?? []), ...slidesData].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      const existingQCount = sortedAfter.filter(s => s.roundId === targetRoundId && s.type === 'question' && !s.data?.isBonus).length
+      let n = existingQCount
+      const questionSlides = textThemes.flatMap(theme =>
+        theme.questions.map(q => {
+          n += 1
+          return {
+            type: 'question',
+            roundId: targetRoundId,
+            data: {
+              questionNumber: n,
+              questionLabel:  `Q${n}`,
+              questionMode:   'regular',
+              isShiny:        false,
+              pylTheme:       theme.name,
+              text:           q.text.trim(),
+              answer:         q.answer.trim(),
+              mediaSlots:     [],
+            },
+          }
+        })
+      )
+      if (questionSlides.length) await actions.addSiblingSlides(afterId, questionSlides)
+    }
+
+    // Shiny-style themes: no format picked yet (see STYLE_OPTIONS' comment
+    // in PYLWizard.jsx) — queue them and open AddSlideWizard for the first;
+    // the shared onAddSlide handler below advances the queue as each one's
+    // batch finishes instead of jumping into enterEditing every time.
+    const shinyThemeNames = themes.filter(t => t.style === 'shiny').map(t => t.name)
+    if (shinyThemeNames.length) {
+      setPylShinyQueue({ roundId: targetRoundId, names: shinyThemeNames })
+      // pylQueueKey is the remaining-count, not the theme name — strictly
+      // decreasing each step, so it can't collide even if two themes share
+      // a name (guarantees the remount described at the key's definition).
+      openAddModal({ type: 'shiny-question', roundId: targetRoundId, pylQueueKey: shinyThemeNames.length })
+    }
   }
 
   const syncedSelectedSlide = selectedSlide
@@ -496,6 +556,9 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
   function closeAddModal() {
     setAddModalData(null)
     setWizardPickedType(null)
+    // Cancelling (✕/backdrop) mid-queue — don't leave a stale queue that'd
+    // reopen the wizard unexpectedly off some unrelated later add.
+    setPylShinyQueue(null)
   }
 
   function enterEditing(slide, partIndex = null) {
@@ -793,7 +856,13 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
               onClick={e => e.stopPropagation()}
             >
               <AddSlideWizard
-                key={(addModalData.type ?? 'picker') + (addModalData.roundId ?? '')}
+                // pylQueueKey (2026-08-19): without it, advancing the PYL
+                // shiny queue below reopens with the SAME type+roundId as
+                // the theme just finished, so this key wouldn't change and
+                // React would reuse the same AddSlideWizard instance —
+                // keeping the previous theme's chosen format/step instead
+                // of resetting to a blank picker for the next theme.
+                key={(addModalData.type ?? 'picker') + (addModalData.roundId ?? '') + (addModalData.pylQueueKey ?? '')}
                 show={show}
                 initialData={addModalData}
                 onTypeChange={setWizardPickedType}
@@ -804,10 +873,21 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                   const slidesData = slides ?? [rest]
                   const newSlides = await actions.addSiblingSlides(afterSlideId, slidesData)
                   const slide = newSlides?.[0]
-                  if (slide) {
-                    closeAddModal()
-                    enterEditing(slide)
+                  if (!slide) return
+                  // PYL shiny-theme queue (2026-08-19): more themes still
+                  // need a format picked — reopen for the next one instead
+                  // of jumping into enterEditing, which would otherwise
+                  // interrupt the "choose thrice" flow after the first.
+                  if (pylShinyQueue && pylShinyQueue.names.length > 1) {
+                    const [, ...rest] = pylShinyQueue.names
+                    setPylShinyQueue({ roundId: pylShinyQueue.roundId, names: rest })
+                    setAddModalData({ type: 'shiny-question', roundId: pylShinyQueue.roundId, pylQueueKey: rest.length })
+                    setWizardPickedType(null)
+                    return
                   }
+                  setPylShinyQueue(null)
+                  closeAddModal()
+                  enterEditing(slide)
                 }}
                 onClose={closeAddModal}
                 shinyFormats={shinyFormats}
@@ -887,6 +967,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
               <SwingRoundWizard
                 activeRoundId={activeRoundId}
                 onAdd={handleSwingAdd}
+                onGoShiny={handleSwingGoShiny}
                 onClose={() => setShowSwingWizard(false)}
               />
             </motion.div>

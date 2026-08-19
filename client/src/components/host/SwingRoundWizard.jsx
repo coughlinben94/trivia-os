@@ -2,8 +2,15 @@ import { useState } from 'react'
 
 const BTN = 'host-button'
 
-export default function SwingRoundWizard({ activeRoundId, onAdd, onClose }) {
-  const [step, setStep] = useState('count')
+// 2026-08-19, Ben: "if i select shiny itll insert 6 slides of the same
+// shiny, only introducing it once" — that exact mechanic (N slides, one
+// shinyFormatId/seriesTheme, intro skipped on siblings) already exists in
+// AddSlideWizard's shiny-question batch-add path. Rather than duplicate that
+// branching logic here, the Shiny choice below hands off to it directly
+// (onGoShiny, wired in BuildMode.jsx) instead of continuing this wizard's
+// own text-entry flow.
+export default function SwingRoundWizard({ activeRoundId, onAdd, onGoShiny, onClose }) {
+  const [step, setStep] = useState('style')
   const [count, setCount] = useState(6)
   const [questions, setQuestions] = useState([])
 
@@ -24,9 +31,9 @@ export default function SwingRoundWizard({ activeRoundId, onAdd, onClose }) {
 
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
         <div className="flex items-center gap-2">
-          {step === 'questions' && (
+          {(step === 'count' || step === 'questions') && (
             <button
-              onClick={() => setStep('count')}
+              onClick={() => setStep(step === 'questions' ? 'count' : 'style')}
               className={`text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100 ${BTN}`}
             >
               ←
@@ -43,7 +50,31 @@ export default function SwingRoundWizard({ activeRoundId, onAdd, onClose }) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
-        {step === 'count' ? (
+        {step === 'style' ? (
+          <div className="flex flex-col gap-3 items-center">
+            <p className="text-xs font-medium text-gray-500 text-center">How should these questions look?</p>
+            <button
+              onClick={() => setStep('count')}
+              className={`w-full flex items-center gap-3 p-4 rounded-xl border border-gray-200 hover:border-[#1a6b4a] text-left transition-colors ${BTN}`}
+            >
+              <span className="text-2xl">📝</span>
+              <span>
+                <span className="block text-sm font-semibold text-gray-900">Text-based</span>
+                <span className="block text-xs text-gray-500">Plain question + answer, typed right here</span>
+              </span>
+            </button>
+            <button
+              onClick={() => onGoShiny(activeRoundId)}
+              className={`w-full flex items-center gap-3 p-4 rounded-xl border border-gray-200 hover:border-[#1a6b4a] text-left transition-colors ${BTN}`}
+            >
+              <span className="text-2xl">✨</span>
+              <span>
+                <span className="block text-sm font-semibold text-gray-900">Shiny format</span>
+                <span className="block text-xs text-gray-500">Pick a shiny style — one intro, then fill in each slide after</span>
+              </span>
+            </button>
+          </div>
+        ) : step === 'count' ? (
           <div className="flex flex-col gap-5 items-center">
             <div className="w-full flex flex-col items-center gap-1.5">
               <label className="text-xs font-medium text-gray-500">How many questions?</label>
