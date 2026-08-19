@@ -19,7 +19,15 @@ import { EASE_OUT } from '../lib/easings.js'
 import { resolvePreviewShow } from '../lib/previewSlide.js'
 
 // See the FULL_BLEED_SLIDE_TYPES comment at StageFrame's usage below.
-const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules'])
+// team-picker added 2026-08-19 (Ben, live: "sits on top of the ring world,
+// not full screen") — same root cause as the other three: its own black
+// warp canvas is `absolute inset-0 w-full h-full`, meant to cover the FULL
+// viewport during the ceremony and then wipe away to reveal the ring-world
+// "running full-viewport behind this slide the whole time" (its own file's
+// comment) — but confined to StageFrame's 85% box, that cover/reveal only
+// ever happened in the center, with the real ring-world visible in the
+// margins around it the whole time instead of hidden until the wipe.
+const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker'])
 
 // ─── No-show holding screen (before any show goes live) ────────────────────
 

@@ -797,7 +797,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                           key={box.menu ? undefined : id}
                           data-rest-box-id={id}
                           onClick={box.onClick}
-                          className={`relative ${box.menu ? 'w-full' : 'w-[calc(20%-8px)]'} flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border text-center min-h-[100px] ${BTN} ${
+                          className={`relative ${box.menu ? 'w-full h-full' : 'w-[calc(20%-8px)]'} flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border text-center min-h-[100px] ${BTN} ${
                             CARD_STYLE[box.styleKey] ?? 'bg-white border-gray-200 hover:border-gray-400'
                           } ${dropTarget ? 'ring-2 ring-[#1a6b4a] ring-offset-1' : ''}`}
                         >

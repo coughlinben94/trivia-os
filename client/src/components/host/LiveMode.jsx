@@ -580,13 +580,23 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // back and forth" and the ring desynced into chaos off it — a chattering
   // Stream Deck button, or just a fast double-tap, fired two real nextSlide/
   // prevSlide calls before React re-rendered, both reading the same stale
-  // index). The Next ▶ button already had its own 350ms guard (below); this
+  // index). The Next ▶ button already had its own guard (below); this
   // extends the same protection to Prev, and to ArrowLeft/ArrowRight, which
   // had none.
+  //
+  // 120ms, not the original 350ms (2026-08-19, Ben, live: Team Intro's
+  // one-by-one team names "never scrolled through") — a host rapidly
+  // clicking Next through a long team roster (or a multi-part shiny series)
+  // easily taps faster than 350ms apart on purpose, and every one of those
+  // legitimate presses inside that window was getting silently dropped,
+  // not just the electrical bounce it was meant to catch. Real hardware
+  // contact bounce resolves in single-digit-to-tens of milliseconds — 120ms
+  // still catches that with real margin while no longer eating a human's
+  // fast deliberate taps.
   const lastNavRef = useRef(0)
   const guardNav = useCallback((fn) => {
     const now = Date.now()
-    if (now - lastNavRef.current < 350) return
+    if (now - lastNavRef.current < 120) return
     lastNavRef.current = now
     fn()
   }, [])
@@ -641,8 +651,10 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // accidental double-click or a fat-fingered trackpad double-tap advanced
   // TWO slides in front of the room. Timestamp guard rather than a disabled
   // state: the first click always goes through instantly (a host must never
-  // feel lag on this button), only a second one inside 350ms is dropped —
-  // invisible in normal clicking, including deliberately fast clicking.
+  // feel lag on this button), only a second one inside the window is
+  // dropped — see guardNav's own comment above for why that window is
+  // 120ms, not the 350ms originally here (350ms turned out NOT invisible to
+  // deliberately fast clicking, just to accidental double-clicking).
   // Wrapped here rather than inside actions.nextSlide so the keyboard path,
   // which has its own protection, is untouched.
   function handleNextClick() {
