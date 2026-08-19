@@ -540,7 +540,18 @@ export function useShow() {
 
   async function uploadMedia(file, isHostPhoto = false) {
     if (!show) throw new Error('No active show')
-    const ext = file.name.split('.').pop().toLowerCase()
+    // Caught by Opus review 2026-08-19, ahead of adding clipboard-paste
+    // upload support: a pasted image's File can arrive nameless or without
+    // an extension (varies by browser/OS), and file.name.split('.').pop()
+    // on that gave '' — a storage path ending in a bare '.', which uploaded
+    // fine but then MediaUpload.jsx's URL-extension regex couldn't classify
+    // it as an image. Fall back to the file's real MIME type.
+    const nameExt = file.name?.includes('.') ? file.name.split('.').pop().toLowerCase() : ''
+    const MIME_EXT = {
+      'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp',
+      'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-m4a': 'm4a', 'audio/ogg': 'ogg',
+    }
+    const ext = nameExt || MIME_EXT[file.type] || 'bin'
     const bucket = isHostPhoto ? HOST_PHOTOS_BUCKET : SHOW_MEDIA_BUCKET
     const path = isHostPhoto
       ? `${show.id}/host-photos/${nanoid(12)}.${ext}`

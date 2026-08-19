@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const ACCEPT_IMAGE = '.jpg,.jpeg,.png,.gif,.webp'
 const ACCEPT_AUDIO = '.mp3,.wav,.m4a,.ogg'
@@ -7,10 +7,19 @@ const ACCEPT_ALL   = `${ACCEPT_IMAGE},${ACCEPT_AUDIO}`
 function isImage(file) { return file.type.startsWith('image/') }
 function isAudio(file) { return file.type.startsWith('audio/') }
 
-export default function MediaUpload({ accept = 'all', currentUrl, currentType, onUpload, onRemove, label }) {
+// popup (2026-08-19, Ben: "the pop up wizard is way easier than the right
+// hand rail wizard in reality") — same upload/drag-drop/paste logic, just
+// rendered as a compact trigger + centered modal instead of always-inline,
+// for the two shiny-visual-question call sites in SlideEditor.jsx that were
+// cluttering the rail. Every other call site (Custom, Grid, Venn, Matching,
+// audio uploads, etc.) is untouched — still inline, `popup` defaults false —
+// deliberately not migrated wholesale; see MediaUpload's git history if this
+// gets extended to more call sites later.
+export default function MediaUpload({ accept = 'all', currentUrl, currentType, onUpload, onRemove, label, popup = false }) {
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState(null)
+  const [open, setOpen] = useState(false)
   const inputRef = useRef(null)
 
   const acceptAttr = accept === 'image' ? ACCEPT_IMAGE : accept === 'audio' ? ACCEPT_AUDIO : ACCEPT_ALL
@@ -22,7 +31,7 @@ export default function MediaUpload({ accept = 'all', currentUrl, currentType, o
     setUploading(true)
     try {
       const result = await onUpload(file)
-      if (result?.url) { /* parent handles state update */ }
+      if (result?.url) { if (popup) setOpen(false) }
     } catch (err) {
       setError(err.message || 'Upload failed')
     } finally {
@@ -43,13 +52,46 @@ export default function MediaUpload({ accept = 'all', currentUrl, currentType, o
     e.target.value = ''
   }
 
+  // Paste support (Opus 5 review, 2026-08-19) — a `paste` event needs no
+  // permission prompt (unlike navigator.clipboard.read()), so this is safe
+  // to attach directly. Guarded to never interfere with a normal text paste
+  // elsewhere on the page: only acts when the clipboard actually carries an
+  // image, and only calls preventDefault() in that case — a text paste into
+  // some other field on the page falls through completely untouched.
+  // e.defaultPrevented check means if two of these happen to be mounted at
+  // once, only the first to see the event handles it, not both.
+  useEffect(() => {
+    if (popup && !open) return
+    function onPaste(e) {
+      if (e.defaultPrevented) return
+      const item = Array.from(e.clipboardData?.items ?? []).find(i => i.type.startsWith('image/'))
+      if (!item) return
+      e.preventDefault()
+      const file = item.getAsFile()
+      if (file) handleFile(file)
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  }, [popup, open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Escape-to-close, matching FormatLibrary.jsx's modal pattern.
+  useEffect(() => {
+    if (!popup || !open) return
+    function onKey(e) { if (e.key === 'Escape') setOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [popup, open])
+
   const hasMedia = Boolean(currentUrl)
   const mediaIsImage = currentType?.startsWith('image/') || (currentUrl && /\.(jpg|jpeg|png|gif|webp)$/i.test(currentUrl))
   const mediaIsAudio = currentType?.startsWith('audio/') || (currentUrl && /\.(mp3|wav|m4a|ogg)$/i.test(currentUrl))
 
-  return (
+  const body = (
     <div className="space-y-2">
-      {label && <p className="text-xs font-medium text-gray-700">{label}</p>}
+      {/* In popup mode the modal header already shows label as its title —
+          this line would be a third redundant repeat alongside the trigger's
+          own label line below. */}
+      {label && !popup && <p className="text-xs font-medium text-gray-700">{label}</p>}
 
       {/* Current media preview */}
       {hasMedia && (
@@ -107,12 +149,58 @@ export default function MediaUpload({ accept = 'all', currentUrl, currentType, o
             </p>
             <p className="text-xs text-gray-400 mt-0.5">
               {accept === 'image' ? 'JPG, PNG, GIF, WebP' : accept === 'audio' ? 'MP3, WAV, M4A, OGG' : 'Images or audio · Max 50MB'}
+              {accept !== 'audio' && ' · or paste (⌘V)'}
             </p>
           </>
         )}
       </div>
 
       {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  )
+
+  if (!popup) return body
+
+  return (
+    <div>
+      {label && <p className="text-xs font-medium text-gray-700 mb-1.5">{label}</p>}
+      {hasMedia ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="relative block rounded-lg overflow-hidden border border-gray-200 hover:border-baynes-forest transition-colors"
+        >
+          <img src={currentUrl} alt="Uploaded media" className="w-20 h-20 object-cover bg-gray-100" />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="text-xs text-baynes-forest hover:text-green-800 font-medium flex items-center gap-1.5"
+        >
+          <span>🖼️</span> Add Image
+        </button>
+      )}
+
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl w-full max-w-sm"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-900">{label || 'Image'}</h3>
+              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <div className="p-4">
+              {body}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

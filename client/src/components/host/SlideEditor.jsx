@@ -1071,6 +1071,7 @@ function ShinyPartEditor({ part, index, schemaType, theme, onChange, onRemove, o
       </Field>
       {schemaType === 'image' && (
         <MediaUpload
+          popup
           accept="image"
           label="Image"
           currentUrl={media?.url}
