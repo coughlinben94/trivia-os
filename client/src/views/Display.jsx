@@ -18,6 +18,9 @@ import { resolveShinyPart, isWagerShiny } from '../lib/shinySeries.js'
 import { EASE_OUT } from '../lib/easings.js'
 import { resolvePreviewShow } from '../lib/previewSlide.js'
 
+// See the FULL_BLEED_SLIDE_TYPES comment at StageFrame's usage below.
+const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules'])
+
 // ─── No-show holding screen (before any show goes live) ────────────────────
 
 function WaitingScreen() {
@@ -510,8 +513,13 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
       </AnimatePresence>
 
       {/* StageFrame: 85% viewport, centered, overflow:hidden — all slide content clips here.
-          ParticleBackground stays OUTSIDE (full-viewport behind the stage). */}
-      <StageFrame>
+          ParticleBackground stays OUTSIDE (full-viewport behind the stage).
+          FULL_BLEED_SLIDE_TYPES (2026-08-19, Ben: state-of-union/winner-reveal/
+          rules all read as broken/tiny boxed inside the 85% margin with the
+          ring bleeding through around them) get the full viewport instead —
+          these are one-off graphic/interstitial moments, not ring-framed
+          question content, so there's no margin worth preserving for them. */}
+      <StageFrame scale={FULL_BLEED_SLIDE_TYPES.has(currentSlide?.type) ? 1 : undefined}>
         {/* key resets the boundary on every slide change so a crash on one slide
             doesn't permanently block the display for subsequent slides.
             A multi-part shiny question keeps the SAME slide.id across every
@@ -605,6 +613,7 @@ export default function Display() {
   const [show, setShow] = useState(null)
   const [loading, setLoading] = useState(true)
   const prevIndexRef = useRef(0)
+  const lastUpdatedAtRef = useRef(null)
   const [direction, setDirection] = useState(1)
   const installPromptRef = useRef(null)
   const [canInstall, setCanInstall] = useState(false)
@@ -787,6 +796,14 @@ export default function Display() {
 
     function handlePayload(payload) {
       const next = payload.new
+      // Drop a payload older than (or equal to) the last one applied — the
+      // host UI has its own echo guard (markLocalNav) but /display's
+      // subscription had nothing comparable, so two writes landing out of
+      // delivery order could apply the stale one last (2026-08-18 show,
+      // Ben: slides "jumped back and forth"). `updated_at` is stamped on
+      // every write in updateShowRow now.
+      if (next.updated_at && lastUpdatedAtRef.current && next.updated_at <= lastUpdatedAtRef.current) return
+      if (next.updated_at) lastUpdatedAtRef.current = next.updated_at
       const nextIndex = next.current_slide_index ?? 0
       setDirection(nextIndex >= prevIndexRef.current ? 1 : -1)
       prevIndexRef.current = nextIndex
@@ -808,6 +825,13 @@ export default function Display() {
       supabase.from('shows').select('*').eq('id', showId).single().then(({ data }) => {
         if (!data) return
         prevIndexRef.current = data.current_slide_index ?? 0
+        // Never move backward — a realtime payload can land in the window
+        // between the reconnect firing and this fetch resolving, advancing
+        // lastUpdatedAtRef past what this now-stale snapshot holds. Rolling
+        // it back would let a genuinely-stale redelivery through afterward.
+        if (data.updated_at && (!lastUpdatedAtRef.current || data.updated_at > lastUpdatedAtRef.current)) {
+          lastUpdatedAtRef.current = data.updated_at
+        }
         setShow(prev => (prev && prev.id === data.id
           ? { ...prev, ...data, theme: data.theme_id ?? data.theme, themeOverrides: data.theme_overrides ?? data.themeOverrides }
           : prev))

@@ -701,17 +701,33 @@ const [newSetName, setNewSetName] = useState('')
     setIsPlaying(true)
     pendingLiveOpenRef.current = true
     pendingUriRef.current = song.uri
-    playTrackFn.current?.(song)?.then(started => {
-      // started === undefined means a newer play superseded this one — that
-      // newer play owns the UI now, so only a genuine failure (false) resets it.
-      if (started === false) {
-        pendingLiveOpenRef.current = false
-        pendingUriRef.current = null
-        setIsPlaying(false)
-        setShowLive(false)
-        setPlayingId(null)
-      }
-    })
+    // Retry-once + toast on failure (2026-08-18 show, Ben: grading break
+    // "took us to the main page of the jukebox instead of the player" —
+    // this handoff fires the instant the overlay mounts, racing the fresh
+    // Spotify SDK player's device-ready handshake; playTrack() polls up to
+    // 5s and can genuinely lose that race on a fresh mount. This was the
+    // only playTrackFn caller with no retry/no toast — advanceToNext's
+    // tryPlay above has both, mirrored here.
+    const attemptPlay = (isRetry) => {
+      playTrackFn.current?.(song)?.then(started => {
+        // started === undefined means a newer play superseded this one —
+        // that newer play owns the UI now, so only a genuine failure (false)
+        // resets/retries it.
+        if (started === false) {
+          if (!isRetry) {
+            attemptPlay(true)
+            return
+          }
+          pendingLiveOpenRef.current = false
+          pendingUriRef.current = null
+          setIsPlaying(false)
+          setShowLive(false)
+          setPlayingId(null)
+          addToast('Playback stalled and auto-retry failed — hit Shuffle to restart')
+        }
+      })
+    }
+    attemptPlay(false)
 
     strip()
   }, [syncDone])  // eslint-disable-line react-hooks/exhaustive-deps

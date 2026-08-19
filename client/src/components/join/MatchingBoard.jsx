@@ -68,7 +68,13 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
     const answer = buildMatchAnswer(nextConnections)
     const run = saveChainRef.current.then(async () => {
       const upsert = supabase.from('phone_answers').upsert(
-        { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer },
+        // submitted_at stamped explicitly (2026-08-19): Postgres upsert only
+        // touches columns it's given, so without this the column's
+        // default-on-insert value froze at the FIRST save and never moved on
+        // a re-save — silently defeating the host's lock-cutoff check below,
+        // which compares this timestamp against the lock time to discard a
+        // late write instead of trusting a fixed 700ms sleep.
+        { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer, submitted_at: new Date().toISOString() },
         { onConflict: 'slide_id,team_id' }
       )
       // Raced against a timeout, not just awaited — a request that never

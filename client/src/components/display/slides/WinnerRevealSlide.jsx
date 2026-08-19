@@ -192,7 +192,7 @@ function Fireworks({ active, themeColors = [] }) {
 
   // zIndex 5 — below the kicker/name (zIndex 10) so the winner stays legible
   // on top of the show (the old confetti sat at 30 and painted over the name)
-  return <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 5 }} />
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 5 }} />
 }
 
 // ─── WinnerRevealSlide ─────────────────────────────────────────────────────

@@ -25,6 +25,15 @@ function gridMetrics(teamCount) {
   }
 }
 
+// Past a team count where one column shrinks names below readable on a bar
+// TV (2026-08-19, Ben: "couldn't even read [the names]... probably needs to
+// be split into two"), split the roster into two side-by-side columns —
+// each column's row height is computed off half the count, roughly doubling
+// name size. Per-round columns are dropped in split mode (rank/name/total
+// only): fitting the same round-by-round table twice side by side is what
+// the single-column layout was built to avoid in the first place.
+const SPLIT_TEAM_THRESHOLD = 9
+
 // ─── Count-up total ────────────────────────────────────────────────────────
 // A live score edit while the board is up should read as the number climbing,
 // not a silent swap. Snaps when the user prefers reduced motion.
@@ -215,12 +224,20 @@ function ScoreboardContent({ show }) {
     return () => { cancelled = true; supabase.removeChannel(channel) }
   }, [show.id])
 
-  const m = gridMetrics(ranked.length)
+  const isSplit = ranked.length > SPLIT_TEAM_THRESHOLD
+  const splitCols = isSplit ? [] : cols
+  // Split mode ranks each half independently by its own row index within that
+  // half's metrics — the left column gets the top half of ranked.length, the
+  // right gets the rest, so it reads left-to-right / top-to-bottom by rank.
+  const half = Math.ceil(ranked.length / 2)
+  const columns = isSplit ? [ranked.slice(0, half), ranked.slice(half)] : [ranked]
+  const m = gridMetrics(isSplit ? half : ranked.length)
   // rank | team name | one per round | total. The round columns share whatever
   // the name column doesn't need (1fr each) so the numbers stay spread evenly
   // across the board instead of huddling at the right with dead space beside
   // the names — the width is the same however many rounds a show has.
-  const template = `3.4cqw minmax(0, 33cqw) repeat(${cols.length}, minmax(0, 1fr)) 9cqw`
+  // Split mode drops the round columns (see SPLIT_TEAM_THRESHOLD above).
+  const template = `3.4cqw minmax(0, 33cqw) repeat(${splitCols.length}, minmax(0, 1fr)) 9cqw`
 
   const displayFont = `'${theme.fonts.display}', 'Boogaloo', sans-serif`
   const bodyFont = `'${theme.fonts.body}', 'DM Sans', sans-serif`
@@ -272,8 +289,10 @@ function ScoreboardContent({ show }) {
 
       {/* The grid — centered when the rows don't need the whole stage */}
       <div style={{ flex: 1, minHeight: 0, margin: '0 4cqw 4cqh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-      <div style={{
-        flex: '0 1 auto', minHeight: 0, maxHeight: '100%',
+      <div style={{ display: 'flex', gap: isSplit ? '1.4cqw' : 0, minHeight: 0, maxHeight: '100%', width: '100%' }}>
+      {columns.map((half, colIdx) => (
+      <div key={colIdx} style={{
+        flex: isSplit ? '1 1 0' : '0 1 auto', minWidth: 0, minHeight: 0, maxHeight: '100%',
         display: 'flex', flexDirection: 'column',
         border: `1px solid ${c.text}1c`,
         borderRadius: '1.4cqh',
@@ -304,7 +323,7 @@ function ScoreboardContent({ show }) {
         >
           <span />
           <span style={{ paddingLeft: '0.8cqw' }}>Team</span>
-          {cols.map(col => (
+          {splitCols.map(col => (
             <span key={col.key} style={{ textAlign: 'center', borderLeft: `1px solid ${c.text}0d` }}>
               {col.label}
             </span>
@@ -314,28 +333,33 @@ function ScoreboardContent({ show }) {
           </span>
         </motion.div>
 
-        {/* Rows — one column, always. The stage is full-width now, and row
-            height auto-fits the team count, so the old >8-team split into two
-            half-width columns (which can't fit N round columns twice) is gone. */}
+        {/* Rows. Past SPLIT_TEAM_THRESHOLD teams, columns.length is 2 and each
+            half's rows use metrics sized off the half-count, not the full
+            roster, so names stay readable on a bar TV (2026-08-19, Ben). */}
         <div style={{
           flex: '0 1 auto', minHeight: 0, overflow: 'hidden',
           display: 'flex', flexDirection: 'column',
         }}>
-          {ranked.map((team, i) => (
-            <TeamRow
-              key={team.id}
-              team={team}
-              rank={i + 1}
-              cols={cols}
-              template={template}
-              metrics={m}
-              delay={0.14 + i * 0.035}
-              isTop={i === 0}
-              zebra={i % 2 === 1}
-              reduce={reduce}
-            />
-          ))}
+          {half.map((team, i) => {
+            const rank = colIdx === 0 ? i + 1 : columns[0].length + i + 1
+            return (
+              <TeamRow
+                key={team.id}
+                team={team}
+                rank={rank}
+                cols={splitCols}
+                template={template}
+                metrics={m}
+                delay={0.14 + i * 0.035}
+                isTop={rank === 1}
+                zebra={i % 2 === 1}
+                reduce={reduce}
+              />
+            )
+          })}
         </div>
+      </div>
+      ))}
       </div>
       </div>
     </motion.div>

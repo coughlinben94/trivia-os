@@ -45,7 +45,10 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
         events: {
           onReady: e => {
             if (cancelled) return
-            e.target.setVolume(100)
+            // walkoutSong.volume: manual gain set in YoutubeClipEditor's trim
+            // UI (2026-08-19) — a cross-origin YouTube iframe can't be
+            // measured/normalized automatically the way an uploaded file can.
+            e.target.setVolume(walkoutSong.volume ?? 100)
             e.target.seekTo(walkoutSong.start ?? 0, true)
             e.target.playVideo()
             let fading = false
@@ -70,7 +73,7 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
                 let step = 0
                 const fadeTimer = setInterval(() => {
                   step += 1
-                  const v = Math.max(0, 100 * (1 - step / FADE_STEPS))
+                  const v = Math.max(0, (walkoutSong.volume ?? 100) * (1 - step / FADE_STEPS))
                   ytPlayerRef.current?.setVolume(v)
                   if (step >= FADE_STEPS) {
                     clearInterval(fadeTimer)

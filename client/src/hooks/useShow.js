@@ -8,6 +8,9 @@ import { trackWrite } from '../lib/writeTracking.js'
 import { HOST_PHOTOS_BUCKET, listHostPhotos } from '../lib/hostPhotos.js'
 import { isShinySeriesSibling, isMatchingShiny, isWagerShiny } from '../lib/shinySeries.js'
 
+// See the disabled call site in nextSlide() below.
+const CLOSING_BEAT_ENABLED = false
+
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 const SHOW_MEDIA_BUCKET = 'trivia-show-media'
 const FONT_BUCKET = 'trivia-fonts'
@@ -59,6 +62,15 @@ export function useShow() {
   // or roll back the optimistic update (that's a bigger behavior change), but
   // it at least surfaces the failure instead of swallowing it completely.
   async function updateShowRow(id, patch) {
+    // `shows.updated_at` is kept fresh by a DB trigger (shows_updated_at_trigger
+    // migration, 2026-08-19) — NOT stamped here. It used to be, but two other
+    // direct `supabase.from('shows').update(...)` call sites (PylRevealSlide.jsx,
+    // ScoreboardModal.jsx) don't go through this function, so a client-side
+    // stamp here alone left `updated_at` frozen on writes from those paths —
+    // which silently broke Display.jsx's staleness guard (a same-value
+    // `updated_at` reads as "not newer", so PYL auto-advance got dropped by
+    // its own subscription). A DB trigger covers every write path, including
+    // ones added later, instead of every call site needing to remember this.
     const result = await supabase.from('shows').update(patch).eq('id', id)
     if (result.error) console.error(`[useShow] shows update failed (${Object.keys(patch).join(', ')}):`, result.error)
     return trackWrite(Promise.resolve(result), setWriteError)
@@ -755,7 +767,16 @@ export function useShow() {
     //     shown at all, i.e. as soon as introDone is true.
     const isPending = (isMatchingShiny(data) && data.matchingLocked && !data.matchingRevealed) ||
                        (isWagerShiny(data) && data.wagerTiersLocked && !data.wagerGuessesLocked)
-    if (data?.isShiny && data.introDone && !data.outroShown && !isPending) {
+    // Disabled 2026-08-19 (Ben, day after this shipped: "shiny intros were
+    // shown after the question as well") — SlideRenderer can't distinguish
+    // "never shown" from "closing beat" (both read as introDone:false), so
+    // flipping it back here replayed the FULL ~2.4s entrance choreography
+    // (spin/land/gold-burst/photo-rocket) a second time instead of a quiet
+    // pan-down, and one Next press doing that instead of just advancing
+    // read as the intro firing unprompted. Block kept intact rather than
+    // deleted — CLOSING_BEAT_ENABLED flips this back on if a quiet-variant
+    // closing animation (ShinyIntroScreen isClosing prop) gets built later.
+    if (CLOSING_BEAT_ENABLED && data?.isShiny && data.introDone && !data.outroShown && !isPending) {
       // Skip the pause when the next slide continues the same shiny series
       // — siblings only get one announce beat at the start (skipIntro
       // below); each one pausing on its own closing title card too would

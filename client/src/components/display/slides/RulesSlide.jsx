@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { EASE_OUT } from '../../../lib/easings.js'
+import { analyzeAudioGain } from '../../../lib/audioNormalize.js'
 
 // Fixed hazard-broadcast palette — like StateOfUnionSlide's locked RWB, this
 // slide is an identity ("emergency bulletin"), not a themed moment, so it
@@ -51,16 +52,39 @@ async function loadBeepBuffer(ctx) {
   return cachedBeepBuffer
 }
 
+// Loudness normalization for this slide's two fixed audio assets (2026-08-19,
+// Ben: uploaded clips play at wildly different perceived volume against each
+// other). Reuses the same RMS analysis `SlideEditor.jsx` already runs on every
+// user-uploaded audio file (`analyzeAudioGain`, live since 2026-06-25) — these
+// two are static `public/` files rather than something uploaded through the
+// app, so there's no upload-time hook to compute this at; done once here
+// instead and cached module-level like the beep buffer above it. Returns a dB
+// value that can be POSITIVE (a boost) as well as negative — `analyzeAudioGain`
+// allows up to +12dB with a peak-ceiling guard against clipping, which a plain
+// HTMLMediaElement.volume (hard-capped at 1.0/unity) can't apply; the PSA
+// playback below routes through a real GainNode when gainDb is positive.
+const gainDbCache = new Map()
+async function loadGainDb(src) {
+  if (gainDbCache.has(src)) return gainDbCache.get(src)
+  const blob = await fetch(src).then(r => r.blob())
+  const gainDb = await analyzeAudioGain(blob)
+  gainDbCache.set(src, gainDb)
+  return gainDb
+}
+
 // Fires `onAllBeepsEnded` off the LAST beep's real `onended` event, not a
 // guessed duration — so whatever plays next is never racing an estimate.
 async function playThreeBeeps(ctx, onAllBeepsEnded) {
-  const buffer = await loadBeepBuffer(ctx)
+  const [buffer, gainDb] = await Promise.all([loadBeepBuffer(ctx), loadGainDb(RULES_BEEP_SRC).catch(() => 0)])
+  const gainNode = ctx.createGain()
+  gainNode.gain.value = Math.pow(10, gainDb / 20)
+  gainNode.connect(ctx.destination)
   const startAt = ctx.currentTime + 0.05 // small headroom so decode latency can't clip beep 1
   const sources = [0, 1, 2].map(i => {
     const src = ctx.createBufferSource()
     src.buffer = buffer
     src.playbackRate.value = RULES_BEEP_PLAYBACK_RATE
-    src.connect(ctx.destination)
+    src.connect(gainNode)
     src.start(startAt + i * RULES_BEEP_DURATION_S)
     return src
   })
@@ -87,12 +111,34 @@ function playAlertSequence(onCinematicDone, handles) {
     playThreeBeeps(ctx, () => {
       if (handles.cancelled) return
       ctx.close().catch(() => {})
-      const psa = new Audio(RULES_PSA_SRC)
-      handles.psa = psa
-      const finish = () => { if (!handles.cancelled) onCinematicDone() }
-      psa.addEventListener('ended', finish, { once: true })
-      psa.addEventListener('error', finish, { once: true })
-      psa.play().catch(finish)
+      // gainDb resolved BEFORE the Audio element is created/played, not
+      // applied after — createMediaElementSource reroutes an element's
+      // entire output through the Web Audio graph, so building that graph
+      // mid-playback risks an audible glitch. The gain is cached after the
+      // first show, so this await is only real latency once.
+      loadGainDb(RULES_PSA_SRC).catch(() => 0).then(gainDb => {
+        if (handles.cancelled) return
+        const psa = new Audio(RULES_PSA_SRC)
+        handles.psa = psa
+        const finish = () => { if (!handles.cancelled) onCinematicDone() }
+        psa.addEventListener('ended', finish, { once: true })
+        psa.addEventListener('error', finish, { once: true })
+        if (gainDb > 0) {
+          // A boost needs a real gain node — .volume can't exceed 1.0/unity.
+          try {
+            const psaCtx = new AC()
+            handles.psaCtx = psaCtx
+            const src = psaCtx.createMediaElementSource(psa)
+            const gainNode = psaCtx.createGain()
+            gainNode.gain.value = Math.pow(10, gainDb / 20)
+            src.connect(gainNode)
+            gainNode.connect(psaCtx.destination)
+          } catch { /* graph failed to build — falls through, plays at raw level */ }
+        } else {
+          psa.volume = Math.max(0, Math.min(1, Math.pow(10, gainDb / 20)))
+        }
+        psa.play().catch(finish)
+      })
     }).catch(() => { if (!handles.cancelled) onCinematicDone() })
   } catch {
     if (!handles.cancelled) onCinematicDone() // AudioContext unavailable — reveal content anyway
@@ -136,6 +182,7 @@ export default function RulesSlide({ slide, isPreview }) {
       handles.cancelled = true
       clearTimeout(watchdog)
       handles.ctx?.close().catch(() => {})
+      handles.psaCtx?.close().catch(() => {})
       handles.psa?.pause()
     }
   }, [skipAlert])

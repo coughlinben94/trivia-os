@@ -306,23 +306,42 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     setMatchingBusy(true)
     setMatchingScoreError(null)
     try {
+      // Lock cutoff (2026-08-19, Ben: the lock system "needs to be reviewed"
+      // — it was pure client-trust, a fixed 700ms sleep guessing Realtime
+      // delivery time with no DB-side backstop). Any phone_answers row
+      // written after this timestamp is a late write that slipped in after
+      // the lock and gets discarded below instead of silently scored (or
+      // silently NOT scored while the phone still shows a false "locked"
+      // success).
+      //
+      // Persisted in slide.data, NOT recomputed each call — this function is
+      // also the "🔁 Retry Scoring" handler for an already-locked slide
+      // (matchingRevealed false), and a fresh `new Date()` on that second
+      // call would silently reopen the exact window this guards: any answer
+      // submitted between the real lock and the retry tap would pass a
+      // recomputed cutoff. First lock wins; every retry reuses it.
+      let lockedAt = slide.data.matchingLockedAt
       if (!slide.data.matchingLocked) {
+        lockedAt = new Date().toISOString()
         // updateSlide is a debounced 600ms write, not a real await — without
         // flushSlides + a buffer here, the phone_answers read below used to
         // run BEFORE the lock had even reached the database, let alone the
         // phones over Realtime. A pair tapped in that gap saved successfully
         // and stayed colored on the phone, but was invisible to this fetch —
         // silently unscored while the phone showed it as submitted.
-        actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true } })
+        actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true, matchingLockedAt: lockedAt } })
         await actions.flushSlides()
         await new Promise(r => setTimeout(r, 700))
       }
 
-      const { data: answers, error: fetchError } = await supabase
+      const { data: rawAnswers, error: fetchError } = await supabase
         .from('phone_answers')
-        .select('team_id, answer')
+        .select('team_id, answer, submitted_at')
         .eq('slide_id', slide.id)
       if (fetchError) { console.error('phone_answers fetch failed:', fetchError); setMatchingScoreError('Scoring failed — check connection and retry'); return }
+      const answers = rawAnswers?.filter(a => !a.submitted_at || a.submitted_at <= lockedAt) ?? []
+      const lateCount = (rawAnswers?.length ?? 0) - answers.length
+      if (lateCount > 0) console.warn(`[LiveMode] discarded ${lateCount} phone_answers row(s) submitted after matching lock`)
 
       const { data: teams, error: teamsError } = await supabase
         .from('teams')
@@ -356,7 +375,11 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setMatchingScoreError('Scoring failed — check connection and retry'); return }
       }
 
-      await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true, matchingRevealed: true } })
+      // matchingLockedAt explicit here too, not just relying on the ...slide.data
+      // spread — `slide` is this call's original param and never updates
+      // mid-function, so on a first-lock-then-score-in-one-call it would
+      // otherwise spread the PRE-lock data and wipe the stamp just written above.
+      await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true, matchingLockedAt: lockedAt, matchingRevealed: true } })
     } finally {
       setMatchingBusy(false)
     }
@@ -386,23 +409,32 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       // first, flushing the real write, and giving Realtime a moment to
       // deliver it shrinks that window to roughly just propagation lag
       // instead of debounce+lag combined.
+      // See handleLockAndScoreMatching's identical lockedAt cutoff comment —
+      // persisted in slide.data, not recomputed, so it survives a re-call.
+      let lockedAt = slide.data.wagerTiersLockedAt
       if (!slide.data.wagerTiersLocked) {
-        actions.updateSlide(slide.id, { data: { ...slide.data, wagerTiersLocked: true } })
+        lockedAt = new Date().toISOString()
+        actions.updateSlide(slide.id, { data: { ...slide.data, wagerTiersLocked: true, wagerTiersLockedAt: lockedAt } })
         await actions.flushSlides()
         await new Promise(r => setTimeout(r, 700))
       }
 
-      const { data: answers, error } = await supabase
+      const { data: rawAnswers, error } = await supabase
         .from('phone_answers')
-        .select('team_id, answer')
+        .select('team_id, answer, submitted_at')
         .eq('slide_id', slide.id)
       if (error) { console.error('phone_answers fetch failed:', error); setWagerError('Couldn’t read wagers — check connection and retry'); return }
+      const answers = rawAnswers?.filter(a => !a.submitted_at || a.submitted_at <= lockedAt) ?? []
+      const lateCount = (rawAnswers?.length ?? 0) - answers.length
+      if (lateCount > 0) console.warn(`[LiveMode] discarded ${lateCount} phone_answers row(s) submitted after wager-tier lock`)
 
       const wagerTiers = {}
       for (const row of answers ?? []) {
         if (row.answer?.tier) wagerTiers[row.team_id] = row.answer.tier
       }
-      await actions.updateSlide(slide.id, { data: { ...slide.data, wagerTiersLocked: true, wagerTiers } })
+      // wagerTiersLockedAt explicit here too — same stale-spread reasoning as
+      // handleLockAndScoreMatching's final write.
+      await actions.updateSlide(slide.id, { data: { ...slide.data, wagerTiersLocked: true, wagerTiersLockedAt: lockedAt, wagerTiers } })
       await actions.flushSlides()
     } finally {
       setWagerBusy(false)
@@ -431,21 +463,30 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         setWagerError('Wagers were never locked — tap Lock Wagers first')
         return
       }
+      // See handleLockAndScoreMatching's identical lockedAt cutoff comment —
+      // persisted, not recomputed, because `force: true` above is a real
+      // retry path (the "yes, actually score everyone at 0" override), and a
+      // fresh timestamp on that retry would reopen the cutoff window.
+      let lockedAt = slide.data.wagerGuessesLockedAt
       if (!slide.data.wagerGuessesLocked) {
+        lockedAt = new Date().toISOString()
         // Same fake-await problem as the tier lock above — flush the real
         // write and give phones a moment to actually receive the lock
         // before reading what they submitted, instead of racing the read
         // against a write that hadn't left the browser yet.
-        actions.updateSlide(slide.id, { data: { ...slide.data, wagerGuessesLocked: true } })
+        actions.updateSlide(slide.id, { data: { ...slide.data, wagerGuessesLocked: true, wagerGuessesLockedAt: lockedAt } })
         await actions.flushSlides()
         await new Promise(r => setTimeout(r, 700))
       }
 
-      const { data: answers, error: fetchError } = await supabase
+      const { data: rawAnswers, error: fetchError } = await supabase
         .from('phone_answers')
-        .select('team_id, answer')
+        .select('team_id, answer, submitted_at')
         .eq('slide_id', slide.id)
       if (fetchError) { console.error('phone_answers fetch failed:', fetchError); setWagerError('Scoring failed — check connection and retry'); return }
+      const answers = rawAnswers?.filter(a => !a.submitted_at || a.submitted_at <= lockedAt) ?? []
+      const lateCount = (rawAnswers?.length ?? 0) - answers.length
+      if (lateCount > 0) console.warn(`[LiveMode] discarded ${lateCount} phone_answers row(s) submitted after wager-guess lock`)
 
       const { data: teams, error: teamsError } = await supabase
         .from('teams')
@@ -507,6 +548,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         data: {
           ...slide.data,
           wagerGuessesLocked: true,
+          wagerGuessesLockedAt: lockedAt,
           wagerRevealed: true,
           // What the TV reveal renders, plus the phone-side result popup's
           // own lookup (Join.jsx). teamId IS included — unlike the original
@@ -534,6 +576,21 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // top of it, net result is right back where the Right press left off.
   const pendingAdvanceRef = useRef(null)
 
+  // Shared debounce for every nav path (2026-08-18 show, Ben: slides "jumped
+  // back and forth" and the ring desynced into chaos off it — a chattering
+  // Stream Deck button, or just a fast double-tap, fired two real nextSlide/
+  // prevSlide calls before React re-rendered, both reading the same stale
+  // index). The Next ▶ button already had its own 350ms guard (below); this
+  // extends the same protection to Prev, and to ArrowLeft/ArrowRight, which
+  // had none.
+  const lastNavRef = useRef(0)
+  const guardNav = useCallback((fn) => {
+    const now = Date.now()
+    if (now - lastNavRef.current < 350) return
+    lastNavRef.current = now
+    fn()
+  }, [])
+
   const handleKeyDown = useCallback((e) => {
     // A reflexive Cmd/Ctrl/Alt shortcut (Cmd+A select-all, Cmd+R reload,
     // Cmd+S save) must never fall through to these single-letter hotkeys —
@@ -554,11 +611,11 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       if (show.showState.answerReveal) {
         actions.setAnswerReveal(false)
         pendingAdvanceRef.current = setTimeout(() => {
-          actions.nextSlide()
+          guardNav(actions.nextSlide)
           pendingAdvanceRef.current = null
         }, 280)
       } else {
-        actions.nextSlide()
+        guardNav(actions.nextSlide)
       }
     }
     if (e.code === 'ArrowLeft') {
@@ -567,12 +624,12 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         clearTimeout(pendingAdvanceRef.current)
         pendingAdvanceRef.current = null
       }
-      actions.prevSlide()
+      guardNav(actions.prevSlide)
     }
     if (e.code === 'KeyS')       actions.setScoreboardVisible(!show.showState.scoreboardVisible)
     if (e.code === 'KeyA')       actions.setAnswerReveal(!show.showState.answerReveal)
     if (e.code === 'KeyR')       actions.setScoresRevealed?.(!show.showState.scoresRevealed)
-  }, [scorePanelOpen, themePickerOpen, scoreboardModalOpen, actions, show.showState.answerReveal, show.showState.scoresRevealed])
+  }, [scorePanelOpen, themePickerOpen, scoreboardModalOpen, actions, show.showState.answerReveal, show.showState.scoresRevealed, guardNav])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -588,12 +645,11 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // invisible in normal clicking, including deliberately fast clicking.
   // Wrapped here rather than inside actions.nextSlide so the keyboard path,
   // which has its own protection, is untouched.
-  const lastNextClickRef = useRef(0)
   function handleNextClick() {
-    const now = Date.now()
-    if (now - lastNextClickRef.current < 350) return
-    lastNextClickRef.current = now
-    actions.nextSlide()
+    guardNav(actions.nextSlide)
+  }
+  function handlePrevClick() {
+    guardNav(actions.prevSlide)
   }
 
   return (
@@ -612,7 +668,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
             </svg>
             Edit
           </button>
-          <NavButton onClick={actions.prevSlide} disabled={atStart} label="◀ Prev" title="Previous (←)" />
+          <NavButton onClick={handlePrevClick} disabled={atStart} label="◀ Prev" title="Previous (←)" />
           {preShowIndex !== -1 && (
             <div className="relative">
               <button

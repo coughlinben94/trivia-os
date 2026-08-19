@@ -154,9 +154,14 @@ function HostInner({ showApi }) {
           const team = payload.new
           const action = team.last_action
           if (!action) return
-          if (action === 'went_back') {
-            addToast({ id: `${team.id}-${Date.now()}`, type: 'warning', message: `↩ ${team.name} went back`, autoDismiss: 6000 })
-          } else if (action === 'left_app') {
+          // 'went_back' toast removed 2026-08-19 (Ben: "only notifications I
+          // care about are when people leave the app") — teams scrolling
+          // back through slides is normal /join use (see the "No auto-
+          // advance" standing decision), not something the host needs
+          // interrupted for mid-show. last_action/last_action_at on the
+          // `teams` row is untouched — Join.jsx still writes 'went_back',
+          // this just stops surfacing it as a host toast.
+          if (action === 'left_app') {
             if (leftAppDebounceRef.current[team.id]) return
             leftAppDebounceRef.current[team.id] = setTimeout(() => { delete leftAppDebounceRef.current[team.id] }, 8000)
             addToast({ id: `${team.id}-left`, type: 'info', message: `📵 ${team.name} left the app`, autoDismiss: 6000 })

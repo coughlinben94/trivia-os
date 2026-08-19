@@ -9,9 +9,14 @@
 // - visual-type shiny questions are flagged two different ways:
 //   data.shinyType === 'visual' (legacy/Swing Round) or
 //   data.shinyInputSchema.type === 'image' (current format library)
-export function resolveShinyPart(data) {
+// overridePart (2026-08-19): /join's own local per-part position, when a
+// team has stepped back to an earlier part of the CURRENT live series —
+// data.currentPart alone is the host's live position, which is all every
+// viewer used to render (see Join.jsx's LiveView localPart state for why a
+// phone needs its own).
+export function resolveShinyPart(data, overridePart) {
   if (Array.isArray(data.parts) && data.parts.length > 0) {
-    const idx = Math.min(Math.max(data.currentPart ?? 0, 0), data.parts.length - 1)
+    const idx = Math.min(Math.max(overridePart ?? data.currentPart ?? 0, 0), data.parts.length - 1)
     const part = data.parts[idx] ?? {}
     const media = part.mediaSlots?.[0]
     const isYoutube = media?.type === 'youtube'
