@@ -279,9 +279,16 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
   }, [show.id])
 
   function save(team, fieldKey) {
-    clearTimeout(saveTimers.current[team.id])
+    // Keyed per CELL, not per team — a team-keyed timer meant editing two
+    // different fields (e.g. two round scores) on the same team within the
+    // debounce window cancelled the first edit's pending save outright
+    // (clearTimeout on the same slot) before it ever reached the DB, silently
+    // dropping it. Confirmed live 2026-08-18: rapid multi-round paper entry
+    // for one team lost the earlier round's number with no error, no amber
+    // border — the save was never scheduled to fail, it was cancelled.
     const cellKey = `${team.id}:${fieldKey}`
-    saveTimers.current[team.id] = setTimeout(async () => {
+    clearTimeout(saveTimers.current[cellKey])
+    saveTimers.current[cellKey] = setTimeout(async () => {
       // One place that decides what "this save failed" looks like to the
       // host, reached from every failure path below — including the initial
       // read, which used to throw on a real network outage BEFORE reaching
@@ -404,8 +411,15 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
   async function deleteTeam(id) {
     // A pending debounced save() for this team (from an edit moments ago)
     // would otherwise fire ~500ms later and re-insert the row we just deleted.
-    clearTimeout(saveTimers.current[id])
-    delete saveTimers.current[id]
+    // Timers are keyed per cell (`${teamId}:${fieldKey}`), so a plain
+    // saveTimers.current[id] lookup here would always miss — sweep every key
+    // that belongs to this team instead.
+    for (const key of Object.keys(saveTimers.current)) {
+      if (key.startsWith(`${id}:`)) {
+        clearTimeout(saveTimers.current[key])
+        delete saveTimers.current[key]
+      }
+    }
     setTeams(prev => prev.filter(t => t.id !== id))
     const { error } = await supabase.from('scoreboard_teams').delete().eq('id', id)
     if (error) { console.error('scoreboard_teams delete failed:', error); onWriteError?.('Delete didn’t save — check connection') }
