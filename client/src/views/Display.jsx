@@ -391,6 +391,36 @@ async function advanceAfterBreak(showRow) {
   return { advanced: true, next, nextSlide, denied: false }
 }
 
+// ─── Dev Mode backward step ─────────────────────────────────────────────────
+// advance_show (above) is anon-callable but deliberately can't go backward —
+// RLS-D-2 (supabase/migrations/20260716000000) closed that off on purpose, so
+// there's no RPC to reuse here. This is a plain authenticated UPDATE instead:
+// it only succeeds if this browser already holds a host_verified session
+// (same shared `supabase` client Host itself uses — if this tab/device has
+// ever verified the host PIN, it's already carrying that session). No PIN
+// prompt lives on /display; if the write is denied, Dev Mode's click/key
+// handler surfaces the same NavDeniedBanner every other denied write does.
+// Whole-slide-only, same granularity as advanceAfterBreak (not the full
+// multi-part nextSlide()/prevSlide() step machinery Host uses).
+async function retreatShow(showRow) {
+  const sorted = [...(showRow.slides ?? [])].sort((a, b) => a.order - b.order)
+  const cur = showRow.current_slide_index ?? 0
+  const prev = Math.max(cur - 1, 0)
+  if (prev >= cur) return { advanced: false, denied: false }
+  const prevSlide = sorted[prev]
+  const { data, error } = await supabase
+    .from('shows')
+    .update({ current_slide_index: prev, current_slide_id: prevSlide?.id ?? null })
+    .eq('id', showRow.id)
+    .eq('is_live', true)
+    .select('id')
+  if (error || !data?.length) {
+    console.error('[Display] dev-mode retreat denied:', error ?? '0 rows — not host-authenticated on this browser')
+    return { advanced: false, denied: true }
+  }
+  return { advanced: true, prev, prevSlide, denied: false }
+}
+
 // ─── Live display ──────────────────────────────────────────────────────────
 
 // The ring's dedicated music slot — index 10, the `record` station added
@@ -690,6 +720,12 @@ export default function Display() {
     const res = await advanceAfterBreak(showRef.current)
     if (res.denied) setNavDenied(true)
   }, [])
+  // Dev Mode only — see retreatShow's own comment for why this needs a
+  // host-authenticated write instead of the anon RPC advance uses.
+  const handleDevRetreat = useCallback(async () => {
+    const res = await retreatShow(showRef.current)
+    if (res.denied) setNavDenied(true)
+  }, [])
 
   // Capture Chrome's install prompt — only fires when not already installed
   useEffect(() => {
@@ -774,11 +810,13 @@ export default function Display() {
     }
   }, [])
 
-  // Dev Mode (Host toggle, `dev_mode` on the shows row) — click or press to
-  // step forward, for previewing transitions without a second Host window.
-  // Forward-only: reuses handleBreakAdvance's same advance_show RPC path
-  // anon already has for the break-return jump (RLS-D-1) — backward/
-  // arbitrary jumps stay blocked there regardless of this toggle.
+  // Dev Mode (Host toggle, `dev_mode` on the shows row) — click/Right/Space
+  // steps forward (anon-safe advance_show RPC, same as the break-return
+  // jump), Left steps backward (retreatShow — needs this browser's own
+  // Supabase session to already be host-authenticated; silently denied
+  // otherwise, surfaced via the same NavDeniedBanner other denials use).
+  // Both whole-slide-only, not the full multi-part step machinery Host's
+  // own Next/Prev has.
   useEffect(() => {
     if (!show?.dev_mode) return
     function onDevAdvance(e) {
@@ -786,13 +824,20 @@ export default function Display() {
       if (e.target?.closest?.('input, textarea, [contenteditable]')) return
       handleBreakAdvance()
     }
+    function onDevRetreat(e) {
+      if (e.code !== 'ArrowLeft') return
+      if (e.target?.closest?.('input, textarea, [contenteditable]')) return
+      handleDevRetreat()
+    }
     window.addEventListener('click', onDevAdvance)
     window.addEventListener('keydown', onDevAdvance)
+    window.addEventListener('keydown', onDevRetreat)
     return () => {
       window.removeEventListener('click', onDevAdvance)
       window.removeEventListener('keydown', onDevAdvance)
+      window.removeEventListener('keydown', onDevRetreat)
     }
-  }, [show?.dev_mode, handleBreakAdvance])
+  }, [show?.dev_mode, handleBreakAdvance, handleDevRetreat])
 
   useEffect(() => {
     if (isDemo) return
