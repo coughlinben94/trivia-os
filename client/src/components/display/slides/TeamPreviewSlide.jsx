@@ -22,9 +22,16 @@ export default function TeamPreviewSlide({ slide, show }) {
   return (
     <div
       className="w-full h-full relative flex flex-col items-center justify-center overflow-hidden"
-      style={{ background: theme.colors.bg }}
+      style={{ background: 'transparent' }}
     >
-      {/* Ambient glow */}
+      {/* Reading well — sits on the ring world instead of an opaque fill,
+          same pattern as QuestionSlide's transparent + radial darken. */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse 70% 60% at 50% 50%, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.22) 45%, transparent 72%)',
+        }}
+      />
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
