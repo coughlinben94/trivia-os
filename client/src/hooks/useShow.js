@@ -626,6 +626,12 @@ export function useShow() {
       // title card, no matter how many times Next was pressed.
       if (slide.data?.outroShown) patch.outroShown = false
     }
+    // Fresh entry always re-arms invoke-gated audio too — a stale `invoked:
+    // true` from an earlier rehearsal/visit would otherwise skip straight
+    // past the silent hold and autoplay again on this new entry.
+    if (slide.data?.walkoutSong?.trigger === 'invoke' && slide.data.walkoutSong.invoked) {
+      patch.walkoutSong = { ...slide.data.walkoutSong, invoked: false }
+    }
     if (Object.keys(patch).length === 0) return slides
     return slides.map(s => s.id === slide.id ? { ...s, data: { ...s.data, ...patch } } : s)
   }
@@ -681,23 +687,17 @@ export function useShow() {
     const now = new Date().toISOString()
     const bakedSlides = await bakeTeamPickerParts(show.slides, slide)
     const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === slide?.id) ?? slide, { currentPart: 0, introDone: false })
-    // currentSlideId stays null here (queued, not revealed) — same as
-    // plain goLive(). Setting it to the real slide id immediately used to
-    // reveal the target slide (and, for a pre-show slide, start its
-    // walkout song) the instant Go Live fired, with no chance for the
-    // host to time it — nextSlide()'s "first advance" branch is what's
-    // supposed to reveal it, on the host's first explicit Next press.
     setShow(s => ({
       ...s,
       slides: newSlides,
       updatedAt: now,
-      showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: null },
+      showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: slide?.id ?? null },
     }))
     await updateShowRow(show.id, {
       slides: newSlides,
       is_live: true,
       current_slide_index: target,
-      current_slide_id: null,
+      current_slide_id: slide?.id ?? null,
       updated_at: now,
     })
   }
@@ -729,6 +729,22 @@ export function useShow() {
 
     const curSlide = sorted[cur]
     const data = curSlide?.data
+
+    // Invoke-gated audio (e.g. pre-show's walkout song, "Hold until triggered"
+    // checked): held silent on mount, started by the host's next explicit
+    // Next/Stream-Deck press instead — same slide, same index, just flips
+    // `invoked`. Ben: the QR screen sits up from doors-open until a
+    // Stream-Deck press fires the walkout song later, not the instant Go
+    // Live lands on it. A second Next while already playing just advances
+    // normally (host's own call to cut it short).
+    if (data?.walkoutSong?.trigger === 'invoke' && data.walkoutSong.videoId && !data.walkoutSong.invoked) {
+      const newSlides = show.slides.map(s =>
+        s.id === curSlide.id ? { ...s, data: { ...s.data, walkoutSong: { ...s.data.walkoutSong, invoked: true } } } : s
+      )
+      setShow(s => ({ ...s, slides: newSlides }))
+      await updateShowRow(show.id, { slides: newSlides })
+      return
+    }
 
     // Reveal the intro's content before doing anything else. Guarded on
     // !outroShown too (see the closing-beat branch below) — without it,

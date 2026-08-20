@@ -1396,6 +1396,17 @@ function PreShowEditor({ data, onChange }) {
       <p className="text-xs text-gray-400 leading-relaxed -mt-1">
         Optional — plays once from the trim in-point, fading out over the last ~2.5s before the trim out-point.
       </p>
+      <label className="flex items-center gap-2 text-sm text-gray-600">
+        <input
+          type="checkbox"
+          checked={data.walkoutSong?.trigger === 'invoke'}
+          onChange={e => onChange('walkoutSong', {
+            ...(data.walkoutSong ?? {}),
+            trigger: e.target.checked ? 'invoke' : 'advance',
+          })}
+        />
+        Hold silent until a separate Next press — instead of playing the instant Go Live lands on this slide
+      </label>
       <YoutubeClipEditor
         value={data.walkoutSong ?? null}
         onChange={clip => onChange('walkoutSong', clip)}

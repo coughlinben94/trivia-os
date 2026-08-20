@@ -31,6 +31,10 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
     // YT player and play it at full volume just from opening the slide to
     // edit it, stacked on top of YoutubeClipEditor's own preview player.
     if (!walkoutSong?.videoId || isPreview) return
+    // trigger: 'invoke' (SlideEditor's "Hold until triggered" checkbox) —
+    // stay silent on mount; useShow.js's nextSlide() flips `invoked` on the
+    // host's next explicit Next/Stream-Deck press, which re-runs this effect.
+    if (walkoutSong.trigger === 'invoke' && !walkoutSong.invoked) return
     let cancelled = false
     const FADE_MS = 2500
     const FADE_STEPS = 20
@@ -102,7 +106,7 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
     // isPreview/onAdvance intentionally excluded — both are stable for the
     // life of one mount (onAdvance is a useCallback from Display.jsx),
     // re-running this effect on their identity would remount the player.
-  }, [walkoutSong?.videoId, walkoutSong?.start, walkoutSong?.end]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [walkoutSong?.videoId, walkoutSong?.start, walkoutSong?.end, walkoutSong?.trigger, walkoutSong?.invoked]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const joinUrl = `${window.location.origin}/join?show=${show.id}`
 
