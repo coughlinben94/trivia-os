@@ -123,7 +123,16 @@ function makeSprite(text, color, glowHi, glowAcc, fontFamily, fsOverride) {
 // reacts, same as PylRevealSlide/PixelateSeriesSlide. It does NOT listen for
 // its own keydown — Stream Deck lives on /host (LiveMode.jsx), not /display,
 // so a local listener here would never see the real hardware.
-export default function TeamPickerSlide({ slide, show }) {
+// How long a fully-revealed intro/team name holds before auto-advancing to
+// the next one (2026-08-20, Ben: "one advance button to start the whole
+// animation ... all team names ... flow together" — a Next press per name
+// was the actual complaint, not the pacing). Outro is deliberately excluded
+// (see the auto-advance effect below) — the closing line still waits for an
+// explicit Next, same as today, since that's the one beat Ben still wants to
+// control the timing of ("then i have to advance to get to next slide").
+const AUTO_HOLD_MS = 1400;
+
+export default function TeamPickerSlide({ slide, show, isPreview = false }) {
   const { theme } = useTheme();
   const reduce = useMemo(() =>
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches, []);
@@ -315,6 +324,29 @@ export default function TeamPickerSlide({ slide, show }) {
     ctl.current.targetIdx = Math.min(currentPart, seq.length - 1);
     ctl.current.restart?.();
   }, [currentPart, seq.length]);
+
+  // Auto-advance intro/team parts — same write nextSlide()'s multi-part
+  // branch makes (useShow.js), fired from here instead of a host click.
+  // Guarded to hudIdx === currentPart so a fresh page load mid-sequence or a
+  // Stream Deck press racing the timer never double-advances: hudIdx only
+  // updates once the draw loop has actually settled on the Supabase-driven
+  // target (see the `[currentPart, seq.length]` effect above), so if they
+  // disagree a nav is already in flight and this effect's cleanup — which
+  // fires on every hudIdx change — clears the pending timer before it can
+  // fire against a part that's no longer current.
+  useEffect(() => {
+    if (isPreview) return;
+    const item = seq[hudIdx];
+    if (!item || (item.kind !== 'intro' && item.kind !== 'team')) return;
+    if (hudIdx !== currentPart || hudIdx >= seq.length - 1) return;
+    const t = setTimeout(() => {
+      const newSlides = (show.slides ?? []).map((s) =>
+        s.id === slide.id ? { ...s, data: { ...s.data, currentPart: hudIdx + 1 } } : s
+      );
+      supabase.from('shows').update({ slides: newSlides, answer_reveal: false }).eq('id', show.id);
+    }, AUTO_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [hudIdx, currentPart, seq, isPreview, show, slide.id]);
 
   // One font size for every team name — the size the HARDEST-to-fit (longest)
   // name claims on its own. Same fix f7ddb51 made for question text across a
