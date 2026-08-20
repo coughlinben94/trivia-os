@@ -729,6 +729,26 @@ export default function Display() {
     }
   }, [])
 
+  // Dev Mode (Host toggle, `dev_mode` on the shows row) — click or press to
+  // step forward, for previewing transitions without a second Host window.
+  // Forward-only: reuses handleBreakAdvance's same advance_show RPC path
+  // anon already has for the break-return jump (RLS-D-1) — backward/
+  // arbitrary jumps stay blocked there regardless of this toggle.
+  useEffect(() => {
+    if (!show?.dev_mode) return
+    function onDevAdvance(e) {
+      if (e.type === 'keydown' && !['ArrowRight', 'Space', 'Enter'].includes(e.code)) return
+      if (e.target?.closest?.('input, textarea, [contenteditable]')) return
+      handleBreakAdvance()
+    }
+    window.addEventListener('click', onDevAdvance)
+    window.addEventListener('keydown', onDevAdvance)
+    return () => {
+      window.removeEventListener('click', onDevAdvance)
+      window.removeEventListener('keydown', onDevAdvance)
+    }
+  }, [show?.dev_mode, handleBreakAdvance])
+
   useEffect(() => {
     if (isDemo) return
     async function load() {

@@ -35,6 +35,7 @@ function normalizeShow(row) {
       scoreboardVisible: row.scoreboard_visible ?? false,
       scoresRevealed: row.scores_revealed ?? false,
       answerReveal: row.answer_reveal ?? false,
+      devMode: row.dev_mode ?? false,
     },
   }
 }
@@ -149,6 +150,7 @@ export function useShow() {
                 scoreboardVisible: row.scoreboard_visible ?? prev.showState.scoreboardVisible,
                 scoresRevealed: row.scores_revealed ?? prev.showState.scoresRevealed,
                 answerReveal: row.answer_reveal ?? prev.showState.answerReveal,
+                devMode: row.dev_mode ?? prev.showState.devMode,
               },
             }
           })
@@ -933,6 +935,12 @@ export function useShow() {
     await updateShowRow(show.id, { scores_revealed: revealed })
   }
 
+  async function setDevMode(enabled) {
+    if (!show) return
+    setShow(s => ({ ...s, showState: { ...s.showState, devMode: enabled } }))
+    await updateShowRow(show.id, { dev_mode: enabled })
+  }
+
   async function updateRoundScore(teamId, roundIndex, score) {
     if (!show) return
     // Atomic upsert on the (team_id, round_index) unique constraint — the
@@ -1022,6 +1030,7 @@ export function useShow() {
     setScoreboardVisible,
     setAnswerReveal,
     setScoresRevealed,
+    setDevMode,
     updateRoundScore,
     saveResults,
   }
