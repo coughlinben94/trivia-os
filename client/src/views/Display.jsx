@@ -94,6 +94,30 @@ function NavDeniedBanner({ visible }) {
 
 // ─── Pre-show waiting screen ───────────────────────────────────────────────
 
+// One ParticleBackground instance, rendered as a sibling of the
+// PreShowScreen<->DisplayInner ternary so it survives that swap (Critical
+// Rule 1). DisplayInner reports slideId/stationOverride up via
+// onRingStateChange; PreShowScreen has no override, so the defaults
+// (slideId: null, stationOverride: null) apply while it's showing.
+function PersistentRing({ slideId, stationOverride, showStationDebug }) {
+  const { theme } = useTheme()
+  // ParticleBackground's own root is `absolute inset-0` — it needs a sized,
+  // positioned ancestor of its own now that it's not nested inside
+  // PreShowScreen's/DisplayInner's `w-screen h-screen relative` div anymore.
+  // Also owns the base fill: those two divs' own background is transparent
+  // now (see their own comments) so this paints through underneath them.
+  return (
+    <div className="fixed inset-0 overflow-hidden" style={{ background: theme.colors.bg }}>
+      <ParticleBackground
+        theme={theme}
+        slideKey={slideId}
+        stationOverride={stationOverride}
+        showStationDebug={showStationDebug}
+      />
+    </div>
+  )
+}
+
 function PreShowScreen({ show, onInstall }) {
   const { theme } = useTheme()
   const [teams, setTeams] = useState([])
@@ -138,10 +162,11 @@ function PreShowScreen({ show, onInstall }) {
   }, [joinUrl])
 
   return (
-    <div className="w-screen h-screen overflow-hidden relative select-none"
-      style={{ background: theme.colors.bg }}>
+    <div className="w-screen h-screen overflow-hidden relative select-none">
 
-      <ParticleBackground theme={theme} />
+      {/* No own background fill — PersistentRing (rendered as our sibling at
+          Display's root) paints theme.colors.bg underneath. This div used to
+          set it directly, back when ParticleBackground was nested inside it. */}
 
       {/* UI bar — sits at 23% from top, above the treeline */}
       <div style={{
@@ -384,7 +409,7 @@ const MUSIC_STATION = 10
 // it 'warps' to the jukebox"). Space/ArrowRight still skip the wait.
 const BREAK_DELAY_MS = 10000
 
-function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
+function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRingStateChange }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const sortedSlides = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
@@ -408,6 +433,19 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
   const [warp, setWarp] = useState(null)
   const breakWasActiveRef = useRef(false)
   const lastSlideIdRef = useRef(currentSlide?.id)
+
+  // Report ring state up to Display's persistent, root-level
+  // ParticleBackground instead of rendering our own (see PersistentRing) —
+  // this component mounts/unmounts around Go Live (PreShowScreen<->
+  // DisplayInner), and Critical Rule 1 is ParticleBackground must never
+  // remount.
+  useEffect(() => {
+    onRingStateChange?.({
+      slideId: currentSlide?.id ?? null,
+      stationOverride: breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null),
+      showStationDebug: isPreview,
+    })
+  }, [onRingStateChange, currentSlide?.id, breakActive, warp, isPreview])
 
   // Auto-open after BREAK_DELAY_MS (Ben's timing — the break screen reads, then
   // music takes the TV). Space/ArrowRight skip the wait, unchanged from the old
@@ -472,23 +510,25 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance }) {
   return (
     <div
       className="w-screen h-screen overflow-hidden relative select-none"
-      style={{ background: theme.colors.bg }}
+      // Transparent when PersistentRing owns the base fill (the normal
+      // live-show case, onRingStateChange set) — opaque in the standalone
+      // isDemo/isPreview paths, which still render their own ParticleBackground
+      // as a child below and need this div to paint the base color itself.
+      style={{ background: onRingStateChange ? 'transparent' : theme.colors.bg }}
     >
-      {/* ParticleBackground lives OUTSIDE the ErrorBoundary — it must never re-mount */}
-      {/* stationOverride: the grading break is the one slide that must land on
-          a specific ring station rather than just advancing by one. It flips
-          in the same commit that mounts JukeboxBreakOverlay below, so the
-          ring's snap onto the record happens under that overlay's own paint.
-          RING_RETURN is the other half of that trip: when the break ends, the
-          ring goes back to the station it left rather than resuming forward
-          rotation from the record, and the 'back' warp covers that snap the
-          same way. Inert on non-ring themes, which have no stations at all. */}
-      <ParticleBackground
-        theme={theme}
-        slideKey={currentSlide?.id}
-        stationOverride={breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null)}
-        showStationDebug={isPreview}
-      />
+      {/* ParticleBackground lives OUTSIDE the ErrorBoundary — it must never re-mount.
+          onRingStateChange is only unset for the standalone isDemo/isPreview
+          root paths (Display() renders DisplayInner alone there, no swap with
+          PreShowScreen ever happens) — everywhere else Display's root owns
+          one persistent instance and DisplayInner just reports state to it. */}
+      {!onRingStateChange && (
+        <ParticleBackground
+          theme={theme}
+          slideKey={currentSlide?.id}
+          stationOverride={breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null)}
+          showStationDebug={isPreview}
+        />
+      )}
 
       {/* Shiny content's opaque backdrop, full-viewport (2026-08-18, Ben:
           "the pan up away from the ring stations are supposed to be 100%
@@ -630,6 +670,11 @@ export default function Display() {
   // successfully) or a later nav write succeeds. Guard the RESULT, not the
   // cause: any 0-row/error outcome must surface, including unknown future ones.
   const [navDenied, setNavDenied] = useState(false)
+  // Ring/particle state, reported up by DisplayInner (see its
+  // onRingStateChange effect) — lives here so ONE ParticleBackground instance
+  // can render across the PreShowScreen<->DisplayInner swap at Go Live
+  // without remounting (Critical Rule 1).
+  const [ringState, setRingState] = useState({ slideId: null, stationOverride: null, showStationDebug: false })
 
   // Jukebox has already run its exit animation + fade + flushed pending
   // Supabase writes before calling this (its 'b'-hold path awaits EXIT_TOTAL_MS
@@ -997,8 +1042,9 @@ export default function Display() {
   return (
     <ErrorBoundary fallback={null}>
       <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
+        <PersistentRing {...ringState} />
         {show.is_live && show.current_slide_id !== null ? (
-          <DisplayInner show={show} direction={direction} onBreakAdvance={handleBreakAdvance} />
+          <DisplayInner show={show} direction={direction} onBreakAdvance={handleBreakAdvance} onRingStateChange={setRingState} />
         ) : (
           <PreShowScreen show={show} onInstall={canInstall ? handleInstall : null} />
         )}
