@@ -681,17 +681,23 @@ export function useShow() {
     const now = new Date().toISOString()
     const bakedSlides = await bakeTeamPickerParts(show.slides, slide)
     const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === slide?.id) ?? slide, { currentPart: 0, introDone: false })
+    // currentSlideId stays null here (queued, not revealed) — same as
+    // plain goLive(). Setting it to the real slide id immediately used to
+    // reveal the target slide (and, for a pre-show slide, start its
+    // walkout song) the instant Go Live fired, with no chance for the
+    // host to time it — nextSlide()'s "first advance" branch is what's
+    // supposed to reveal it, on the host's first explicit Next press.
     setShow(s => ({
       ...s,
       slides: newSlides,
       updatedAt: now,
-      showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: slide?.id ?? null },
+      showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: null },
     }))
     await updateShowRow(show.id, {
       slides: newSlides,
       is_live: true,
       current_slide_index: target,
-      current_slide_id: slide?.id ?? null,
+      current_slide_id: null,
       updated_at: now,
     })
   }
