@@ -172,6 +172,14 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
   // content DOES want the opaque backdrop (theme.colors.shinyBg etc, for
   // legibility over detailed ambient art), so this must not outlive introDone.
   const isShinyIntroBeat = isShiny && !slide?.data?.introDone && (slide?.type === 'question' || slide?.type === 'grid' || slide?.type === 'venn')
+  // Same "i cant see the background" bug as isShinyIntroBeat above, hitting
+  // plain (non-shiny) question and team-preview once they went full-bleed
+  // (2026-08-20) — this component's locked bgDeep div (below) is opaque and
+  // sat behind them at 100% viewport instead of the old 85% box, hiding the
+  // ring world completely instead of just narrowing its margin. Shiny
+  // questions are untouched: their own content paints an opaque shinyBg
+  // already, so the lock behind them is redundant, not harmful.
+  const isRingWorldSlide = slide?.type === 'team-preview' || (slide?.type === 'question' && !isShiny)
 
   let transitionKey = null
   let variants
@@ -239,7 +247,7 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
           the entrance wipe cover something already covered. So this slide
           type gets no locked background; nothing else about the ambient
           mount changes. */}
-      {slide?.type !== 'team-picker' && slide?.type !== 'pre-show' && slide?.type !== 'round-intro' && slide?.type !== 'swing-round-intro' && !isShinyIntroBeat && (
+      {slide?.type !== 'team-picker' && slide?.type !== 'pre-show' && slide?.type !== 'round-intro' && slide?.type !== 'swing-round-intro' && !isShinyIntroBeat && !isRingWorldSlide && (
         <div
           className="absolute inset-0"
           style={{ background: theme.colors.bgDeep, zIndex: 0 }}

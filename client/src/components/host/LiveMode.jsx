@@ -21,6 +21,10 @@ import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TI
 // found while investigating: this is the one message with no path forward).
 const WAGER_ZERO_ANSWERS_ERROR = 'No wager answers came back — check connection and retry before scoring'
 
+// How long each team-picker intro/team part holds before auto-advancing —
+// see the effect near guardNav below for why this lives host-side.
+const TEAM_PICKER_HOLD_MS = 2400
+
 // PYL "Pick animation" tiles — same visual language as BuildMode's CARD_STYLE
 // (soft gradient + colored border that brightens on hover) but keyed by
 // animation id, not slide type, and pitched one shade brighter (100/200 vs
@@ -600,6 +604,44 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     lastNavRef.current = now
     fn()
   }, [])
+
+  // `actions` is a fresh object literal every render (Host.jsx builds it as
+  // `{ ...showApi }` with no memoization) — putting it directly in the
+  // auto-advance effect's deps below would clear and reschedule that
+  // effect's timer on every single re-render of Host.jsx, not just the ones
+  // that actually change the team-picker part. In a live show with realtime
+  // subscriptions firing constantly, that's easily faster than the hold
+  // duration, so the timer could starve and never fire. A ref sidesteps the
+  // instability without needing Host.jsx's actions object to be stable.
+  const actionsRef = useRef(actions)
+  actionsRef.current = actions
+
+  // Team-picker auto-advance — intro and each team name step forward on
+  // their own; only the closing statement (outro) still waits for an
+  // explicit Next (2026-08-20, Ben: "one advance button to start the whole
+  // animation ... all team names ... flow together, then i have to advance
+  // to get to next slide"). Lives here rather than on /display: useShow's
+  // nextSlide() (which reads/writes `show.slides` from THIS component's own
+  // state) must stay the only writer of currentPart. A /display-side timer
+  // was tried first and reverted — it wrote directly to Supabase, so the
+  // host's local `show.slides` (never updated by the realtime subscription,
+  // which only merges showState fields, see useShow.js) went stale the
+  // instant the display auto-advanced once, and the next manual Next
+  // recomputed currentPart off that stale value — silently rewinding the
+  // whole sequence back toward team #1 every time the host tried to leave.
+  // Routing through guardNav means a manual press landing right on the
+  // timer can't double-advance, same protection Next/Prev/arrows already get.
+  useEffect(() => {
+    if (currentSlide?.type !== 'team-picker') return
+    const partsLen = currentSlide.data?.parts?.length ?? 0
+    const curPart = currentSlide.data?.currentPart ?? 0
+    // parts = [intro, ...teams, outro, landed] (bakeTeamPickerParts,
+    // useShow.js) — auto-advance covers intro through the last team name;
+    // outro (partsLen-2) and landed (partsLen-1) still need an explicit Next.
+    if (partsLen < 3 || curPart >= partsLen - 2) return
+    const t = setTimeout(() => guardNav(actionsRef.current.nextSlide), TEAM_PICKER_HOLD_MS)
+    return () => clearTimeout(t)
+  }, [currentSlide?.type, currentSlide?.data?.currentPart, currentSlide?.data?.parts?.length, guardNav])
 
   const handleKeyDown = useCallback((e) => {
     // A reflexive Cmd/Ctrl/Alt shortcut (Cmd+A select-all, Cmd+R reload,
