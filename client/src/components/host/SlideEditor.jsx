@@ -1396,17 +1396,35 @@ function PreShowEditor({ data, onChange }) {
       <p className="text-xs text-gray-400 leading-relaxed -mt-1">
         Optional — plays once from the trim in-point, fading out over the last ~2.5s before the trim out-point.
       </p>
-      <label className="flex items-center gap-2 text-sm text-gray-600">
-        <input
-          type="checkbox"
-          checked={data.walkoutSong?.trigger === 'invoke'}
-          onChange={e => onChange('walkoutSong', {
-            ...(data.walkoutSong ?? {}),
-            trigger: e.target.checked ? 'invoke' : 'advance',
-          })}
-        />
-        Hold silent until a separate Next press — instead of playing the instant Go Live lands on this slide
-      </label>
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          onClick={() => onChange('walkoutSong', { ...(data.walkoutSong ?? {}), trigger: 'advance' })}
+          className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+            data.walkoutSong?.trigger !== 'invoke'
+              ? 'bg-blue-500 border-blue-500 text-white'
+              : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          ▶️ On Advance
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange('walkoutSong', { ...(data.walkoutSong ?? {}), trigger: 'invoke' })}
+          className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+            data.walkoutSong?.trigger === 'invoke'
+              ? 'bg-blue-500 border-blue-500 text-white'
+              : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          👆 On Click
+        </button>
+      </div>
+      <p className="text-xs text-gray-400 leading-relaxed -mt-1">
+        {data.walkoutSong?.trigger === 'invoke'
+          ? 'Held silent — starts on your next Next press after this slide is already up, not the instant Go Live lands here.'
+          : 'Plays automatically the instant this slide advances into view.'}
+      </p>
       <YoutubeClipEditor
         value={data.walkoutSong ?? null}
         onChange={clip => onChange('walkoutSong', clip)}
