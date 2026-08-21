@@ -464,18 +464,25 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
   const breakWasActiveRef = useRef(false)
   const lastSlideIdRef = useRef(currentSlide?.id)
 
-  // Report ring state up to Display's persistent, root-level
+  // Report break/warp ring state up to Display's persistent, root-level
   // ParticleBackground instead of rendering our own (see PersistentRing) —
   // this component mounts/unmounts around Go Live (PreShowScreen<->
   // DisplayInner), and Critical Rule 1 is ParticleBackground must never
-  // remount.
+  // remount. slideId is NOT reported this way — root derives it straight
+  // from show.current_slide_id every render (see Display()). This effect
+  // fires a render AFTER the one that swaps PreShowScreen for DisplayInner
+  // (effects run post-paint), so bridging slideId through it left a one-
+  // frame gap where the new slide's content was already on screen but the
+  // ring was still keyed to the old (null) slideId — read as a stale-
+  // background flash right at Go Live. breakActive/warp don't have that
+  // problem: both start false/null and only change deep into a live show,
+  // long after any Go Live transition.
   useEffect(() => {
     onRingStateChange?.({
-      slideId: currentSlide?.id ?? null,
       stationOverride: breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null),
       showStationDebug: isPreview,
     })
-  }, [onRingStateChange, currentSlide?.id, breakActive, warp, isPreview])
+  }, [onRingStateChange, breakActive, warp, isPreview])
 
   // Auto-open after BREAK_DELAY_MS (Ben's timing — the break screen reads, then
   // music takes the TV). Space/ArrowRight skip the wait, unchanged from the old
@@ -700,11 +707,12 @@ export default function Display() {
   // successfully) or a later nav write succeeds. Guard the RESULT, not the
   // cause: any 0-row/error outcome must surface, including unknown future ones.
   const [navDenied, setNavDenied] = useState(false)
-  // Ring/particle state, reported up by DisplayInner (see its
+  // Break/warp ring state, reported up by DisplayInner (see its
   // onRingStateChange effect) — lives here so ONE ParticleBackground instance
   // can render across the PreShowScreen<->DisplayInner swap at Go Live
-  // without remounting (Critical Rule 1).
-  const [ringState, setRingState] = useState({ slideId: null, stationOverride: null, showStationDebug: false })
+  // without remounting (Critical Rule 1). slideId is NOT part of this — it's
+  // derived straight from `show` on every render instead, see the JSX below.
+  const [ringState, setRingState] = useState({ stationOverride: null, showStationDebug: false })
 
   // Jukebox has already run its exit animation + fade + flushed pending
   // Supabase writes before calling this (its 'b'-hold path awaits EXIT_TOTAL_MS
@@ -1087,7 +1095,7 @@ export default function Display() {
   return (
     <ErrorBoundary fallback={null}>
       <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
-        <PersistentRing {...ringState} />
+        <PersistentRing slideId={show.is_live ? show.current_slide_id : null} {...ringState} />
         {show.is_live && show.current_slide_id !== null ? (
           <DisplayInner show={show} direction={direction} onBreakAdvance={handleBreakAdvance} onRingStateChange={setRingState} />
         ) : (
