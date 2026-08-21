@@ -35,7 +35,7 @@
 // with nothing dimming it), and its geometry/alpha don't depend on knowing
 // anything about the app's actual question text or its show/hide timing —
 // only on the current station. See layoutScrim() below.
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useEffect, useLayoutEffect, useImperativeHandle, useRef } from 'react'
 import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, fillOf, rng, lerp, assertLayerPeriods } from '../../lib/ringEngine.js'
 import { EASE_SURGE } from '../../lib/easings.js'
 import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, applySkyTints } from '../../lib/ringPrimitives.js'
@@ -787,8 +787,21 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   // Guards on the last index actually seen rather than a first-run boolean,
   // so StrictMode's dev double-invoke can't fire a spurious extra turn (the
   // second invocation sees prev already === slideIndex and no-ops).
+  //
+  // useLayoutEffect, not useEffect (2026-08-21, Ben: "a stale ambient
+  // background pops up first for a quick second" on Go Live): a plain
+  // useEffect fires AFTER the browser paints, so on the very first render
+  // where DisplayInner shows a real slide, that first paint happened with
+  // the ring still sitting at whatever station it was idling on through
+  // PreShowScreen — the correcting jumpTo() only landed a frame later,
+  // which read as a stale-background flash. This is the same class of bug
+  // slideId's own lag fix (in Display.jsx) already fixed one layer up —
+  // that one made the PROP arrive on time; this makes what RingAmbient DOES
+  // with it happen before paint too. useLayoutEffect runs synchronously
+  // after DOM mutations but before the browser paints, so the jump/turn is
+  // already applied by the time anything is shown.
   const lastSlideIndexRef = useRef(slideIndex)
-  useEffect(() => {
+  useLayoutEffect(() => {
     // == null: also catches an explicit null from a future call site, not just undefined
     if (slideIndex == null) return
     const prev = lastSlideIndexRef.current
