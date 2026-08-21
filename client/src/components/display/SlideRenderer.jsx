@@ -179,7 +179,11 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
   // ring world completely instead of just narrowing its margin. Shiny
   // questions are untouched: their own content paints an opaque shinyBg
   // already, so the lock behind them is redundant, not harmful.
-  const isRingWorldSlide = slide?.type === 'team-preview' || (slide?.type === 'question' && !isShiny)
+  // grading-break joined FULL_BLEED_SLIDE_TYPES 2026-08-21 (Ben: "grading
+  // slide still sits on the 85% square") — same fix, and GradingBreakSlide
+  // itself already paints `background: transparent`, so it was relying on
+  // this very lock for its base color before going full-bleed.
+  const isRingWorldSlide = slide?.type === 'team-preview' || slide?.type === 'grading-break' || (slide?.type === 'question' && !isShiny)
 
   let transitionKey = null
   let variants

@@ -27,7 +27,7 @@ import { resolvePreviewShow } from '../lib/previewSlide.js'
 // comment) — but confined to StageFrame's 85% box, that cover/reveal only
 // ever happened in the center, with the real ring-world visible in the
 // margins around it the whole time instead of hidden until the wipe.
-const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker', 'question', 'team-preview'])
+const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker', 'question', 'team-preview', 'grading-break'])
 
 // ─── No-show holding screen (before any show goes live) ────────────────────
 
