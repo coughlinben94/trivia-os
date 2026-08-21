@@ -96,10 +96,12 @@ function NavDeniedBanner({ visible }) {
 
 // One ParticleBackground instance, rendered as a sibling of the
 // PreShowScreen<->DisplayInner ternary so it survives that swap (Critical
-// Rule 1). DisplayInner reports slideId/stationOverride up via
-// onRingStateChange; PreShowScreen has no override, so the defaults
-// (slideId: null, stationOverride: null) apply while it's showing.
-function PersistentRing({ slideId, stationOverride, showStationDebug }) {
+// Rule 1). DisplayInner reports stationOverride up via onRingStateChange;
+// PreShowScreen has no override, so the default (stationOverride: null)
+// applies while it's showing. slideIndex drives RingAmbient's own
+// forward-glide-vs-snap decision (see RingAmbient's slideIndex effect) —
+// it's the numeric show.current_slide_index, not a slide id.
+function PersistentRing({ slideIndex, stationOverride, showStationDebug }) {
   const { theme } = useTheme()
   // ParticleBackground's own root is `absolute inset-0` — it needs a sized,
   // positioned ancestor of its own now that it's not nested inside
@@ -110,7 +112,7 @@ function PersistentRing({ slideId, stationOverride, showStationDebug }) {
     <div className="fixed inset-0 overflow-hidden" style={{ background: theme.colors.bg }}>
       <ParticleBackground
         theme={theme}
-        slideKey={slideId}
+        slideIndex={slideIndex}
         stationOverride={stationOverride}
         showStationDebug={showStationDebug}
       />
@@ -561,7 +563,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
       {!onRingStateChange && (
         <ParticleBackground
           theme={theme}
-          slideKey={currentSlide?.id}
+          slideIndex={show.current_slide_index ?? 0}
           stationOverride={breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null)}
           showStationDebug={isPreview}
         />
@@ -1095,7 +1097,7 @@ export default function Display() {
   return (
     <ErrorBoundary fallback={null}>
       <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
-        <PersistentRing slideId={show.is_live ? show.current_slide_id : null} {...ringState} />
+        <PersistentRing slideIndex={show.is_live ? show.current_slide_index : null} {...ringState} />
         {show.is_live && show.current_slide_id !== null ? (
           <DisplayInner show={show} direction={direction} onBreakAdvance={handleBreakAdvance} onRingStateChange={setRingState} />
         ) : (

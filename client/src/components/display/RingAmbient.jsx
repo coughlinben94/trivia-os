@@ -596,7 +596,7 @@ export const RING_RETURN = 'return'
 // stations: [PANES x {key,prim,hue,accent}] } — see concepts/world-07-ring.html's
 // own WORLD literal. qColours is accepted but unused here (question-colour
 // styling belongs to the out-of-scope question-rendering system).
-const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stationOverride, showStationDebug = false }, ref) {
+const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, stationOverride, showStationDebug = false }, ref) {
   const stageElRef = useRef(null)
   const designElRef = useRef(null)
   const surgeElsRef = useRef({})
@@ -770,24 +770,35 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideKey, stati
     }
   }, [])
 
-  // Advances one station per question change. Separate from the mount-only
-  // build effect above — this only ever calls turn() (imperative mutation of
-  // existing DOM/refs), never rebuilds anything, so it's safe to depend on a
-  // prop that changes every question. Guards on the last slideKey actually
-  // seen rather than a first-run boolean, so StrictMode's dev double-invoke
-  // of this effect can't fire a spurious turn. The null branch returns
-  // *before* writing the ref, so a null `prev` means only "no real question
-  // has ever been on screen", and no turn fires before the first one.
-  const lastSlideKeyRef = useRef(slideKey)
+  // Advances one station per question change — or snaps straight to the
+  // correct one when the change isn't a plain forward step (Prev, a
+  // multi-slide skip, or a Go Live that resumes mid-show). turn()'s glide
+  // only has authored content for a single FORWARD pan (see turn()'s own
+  // comment on the spare-frame cylinder width); anything else uses jumpTo()
+  // instead, which snaps rather than glides. Ben, 2026-08-21: clicking back
+  // and forth in Dev Mode was cycling the ring forward every single time
+  // regardless of direction — this used to fire turn() on ANY slideKey
+  // change, with no idea which way the show had actually moved. Keyed on
+  // slideIndex (not slideKey) so "which way" and "how far" are answerable
+  // at all — station === slideIndex % PANES is the system's own stated
+  // invariant (see jumpTo's comment), this just actually enforces it for
+  // every transition, not only forward-by-one ones.
+  //
+  // Guards on the last index actually seen rather than a first-run boolean,
+  // so StrictMode's dev double-invoke can't fire a spurious extra turn (the
+  // second invocation sees prev already === slideIndex and no-ops).
+  const lastSlideIndexRef = useRef(slideIndex)
   useEffect(() => {
     // == null: also catches an explicit null from a future call site, not just undefined
-    if (slideKey == null) return
-    const prev = lastSlideKeyRef.current
-    lastSlideKeyRef.current = slideKey
-    if (prev == null || prev === slideKey) return
-    turn()
+    if (slideIndex == null) return
+    const prev = lastSlideIndexRef.current
+    lastSlideIndexRef.current = slideIndex
+    if (prev == null) { jumpTo(slideIndex); return } // first real slide — align even if Go Live resumed mid-show
+    if (prev === slideIndex) return
+    if (slideIndex === prev + 1) turn()
+    else jumpTo(slideIndex)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slideKey])
+  }, [slideIndex])
 
   // ── Station override: the jukebox grading-break's dedicated slot ──
   // Every other caller advances the ring by exactly one station per slide.
