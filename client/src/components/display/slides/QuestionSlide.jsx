@@ -663,6 +663,7 @@ function ShinyAudioQuestion({ slide, show, theme }) {
             className="relative z-10"
           >
             <div
+              data-no-step
               className="w-24 h-24 rounded-full flex items-center justify-center cursor-pointer"
               onClick={() => {
                 if (isYoutubeSource) {
@@ -804,6 +805,7 @@ function ShinyVideoQuestion({ slide, theme }) {
           className="relative z-10"
         >
           <div
+            data-no-step
             className="w-24 h-24 rounded-full flex items-center justify-center cursor-pointer"
             onClick={() => setPlaying(p => !p)}
             style={{

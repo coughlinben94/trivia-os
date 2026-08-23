@@ -18,6 +18,7 @@ import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
 import { resolveShinyPart, isWagerShiny } from '../lib/shinySeries.js'
 import { EASE_OUT } from '../lib/easings.js'
 import { resolvePreviewShow } from '../lib/previewSlide.js'
+import { computeNextStep, computePrevStep } from '../lib/slideStepping.js'
 
 // See the FULL_BLEED_SLIDE_TYPES comment at StageFrame's usage below.
 // team-picker added 2026-08-19 (Ben, live: "sits on top of the ring world,
@@ -90,6 +91,104 @@ function NavDeniedBanner({ visible }) {
     >
       ⚠ Display can’t advance the show — use the host controls
     </div>
+  )
+}
+
+// ─── Inline host-PIN prompt ────────────────────────────────────────────────
+// /display must keep rendering the live show to the room no matter what, so
+// it is NOT wrapped in <HostPinGate> — a full-screen PIN modal over the venue
+// TV is unacceptable. This is the small corner-card version instead: it only
+// appears the first time someone tries to step the show from the TV itself,
+// makes the exact same verify-host-pin call HostPinGate makes, and never
+// comes back once the session carries host_verified (Supabase Auth persists
+// that session in localStorage, so it survives reloads — same free
+// persistence /questions already gets).
+function isHostVerified(session) {
+  return session?.user?.app_metadata?.host_verified === true
+}
+
+function DisplayPinPrompt({ onVerified, onDismiss }) {
+  const { theme } = useTheme()
+  const [pin, setPin] = useState('')
+  const [error, setError] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (pin.length !== 4) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      let { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        const { data, error: signInError } = await supabase.auth.signInAnonymously()
+        if (signInError) throw new Error('Could not start a session — try again')
+        session = data.session
+      }
+      const { data, error: fnError } = await supabase.functions.invoke('verify-host-pin', { body: { pin } })
+      if (fnError) throw new Error('Could not reach the server — try again')
+      if (!data?.ok) throw new Error(data?.error || 'Incorrect PIN')
+      const { data: { session: refreshed } } = await supabase.auth.refreshSession()
+      if (!isHostVerified(refreshed)) throw new Error('Verification did not take — try again')
+      onVerified()
+    } catch (err) {
+      setError(err.message)
+      setPin('')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <form
+      data-pin-prompt
+      onSubmit={handleSubmit}
+      // Escape closes it without touching the show. stopPropagation so the
+      // key never reaches the global step handlers.
+      onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onDismiss() } }}
+      style={{
+        position: 'fixed', bottom: 28, right: 28, zIndex: 200,
+        display: 'flex', alignItems: 'center', gap: 12,
+        background: `${theme.colors.bgDeep}f2`,
+        border: `1px solid ${theme.colors.highlight}66`,
+        color: theme.colors.text,
+        fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
+        padding: '14px 16px', borderRadius: 18,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+      }}
+    >
+      <span style={{ fontSize: '0.95rem', fontWeight: 600, opacity: 0.85, whiteSpace: 'nowrap' }}>
+        {error ? error : 'Host PIN'}
+      </span>
+      <input
+        type="password"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        maxLength={4}
+        autoFocus
+        value={pin}
+        onChange={e => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setError(null) }}
+        placeholder="••••"
+        style={{
+          width: 130, height: 56, textAlign: 'center',
+          fontSize: '1.6rem', letterSpacing: '0.5em', textIndent: '0.5em',
+          background: 'rgba(0,0,0,0.45)', color: theme.colors.text,
+          border: `1px solid ${theme.colors.highlight}55`, borderRadius: 12, outline: 'none',
+        }}
+      />
+      <button
+        type="submit"
+        disabled={pin.length !== 4 || submitting}
+        style={{
+          height: 56, minWidth: 110, padding: '0 20px', borderRadius: 12, border: 'none',
+          fontSize: '1rem', fontWeight: 700, cursor: 'pointer',
+          background: theme.colors.accent, color: theme.colors.bgDeep,
+          opacity: pin.length !== 4 || submitting ? 0.4 : 1,
+        }}
+      >
+        {submitting ? '…' : 'Unlock'}
+      </button>
+    </form>
   )
 }
 
@@ -403,34 +502,50 @@ async function advanceAfterBreak(showRow) {
   return { advanced: true, next, nextSlide, denied: false }
 }
 
-// ─── Dev Mode backward step ─────────────────────────────────────────────────
-// advance_show (above) is anon-callable but deliberately can't go backward —
-// RLS-D-2 (supabase/migrations/20260716000000) closed that off on purpose, so
-// there's no RPC to reuse here. This is a plain authenticated UPDATE instead:
-// it only succeeds if this browser already holds a host_verified session
-// (same shared `supabase` client Host itself uses — if this tab/device has
-// ever verified the host PIN, it's already carrying that session). No PIN
-// prompt lives on /display; if the write is denied, Dev Mode's click/key
-// handler surfaces the same NavDeniedBanner every other denied write does.
-// Whole-slide-only, same granularity as advanceAfterBreak (not the full
-// multi-part nextSlide()/prevSlide() step machinery Host uses).
-async function retreatShow(showRow) {
-  const sorted = [...(showRow.slides ?? [])].sort((a, b) => a.order - b.order)
-  const cur = showRow.current_slide_index ?? 0
-  const prev = Math.max(cur - 1, 0)
-  if (prev >= cur) return { advanced: false, denied: false }
-  const prevSlide = sorted[prev]
+// ─── Step-through from the TV itself ────────────────────────────────────────
+// Ben rehearses a whole show by clicking through it on the TV, and wants that
+// to behave IDENTICALLY to pressing Next on /host — invoke-gated walkout
+// audio, shiny intro beats, multi-part stepping and all. So this runs the
+// SAME decision functions the host's nextSlide()/prevSlide() run
+// (client/src/lib/slideStepping.js) against /display's own raw show row, and
+// writes the resulting patch directly.
+//
+// advance_show (the anon RPC above) can't serve this: it only does index+1,
+// and teaching an anonymous-callable endpoint the full parts/invoke state
+// machine is exactly the unrestricted-anon-write surface RLS-D-1/RLS-D-2
+// (supabase/migrations/20260716000000) closed off on purpose — any phone in
+// the venue holds the same anon key. Instead /display PIN-verifies once
+// (DisplayPinPrompt below, same verify-host-pin call HostPinGate makes), and
+// this becomes a plain authenticated UPDATE that RLS accepts.
+//
+// The jukebox break return still uses advanceAfterBreak() — that path wants
+// the whole-slide Final Break jump, not a step.
+async function stepShow(showRow, direction) {
+  const fetchTeamCount = async () => {
+    const { data, error } = await supabase.from('teams').select('id').eq('show_id', showRow.id)
+    if (error) console.error('[Display] team count fetch failed:', error)
+    return data?.length ?? 0
+  }
+  const args = {
+    slides: showRow.slides,
+    currentSlideIndex: showRow.current_slide_index,
+    currentSlideId: showRow.current_slide_id,
+  }
+  const patch = direction > 0
+    ? await computeNextStep(args, fetchTeamCount)
+    : await computePrevStep(args, fetchTeamCount)
+  if (!patch) return { advanced: false, denied: false }
   const { data, error } = await supabase
     .from('shows')
-    .update({ current_slide_index: prev, current_slide_id: prevSlide?.id ?? null })
+    .update(patch)
     .eq('id', showRow.id)
     .eq('is_live', true)
     .select('id')
   if (error || !data?.length) {
-    console.error('[Display] dev-mode retreat denied:', error ?? '0 rows — not host-authenticated on this browser')
+    console.error('[Display] display step denied:', error ?? '0 rows — not host-authenticated on this browser')
     return { advanced: false, denied: true }
   }
-  return { advanced: true, prev, prevSlide, denied: false }
+  return { advanced: true, denied: false }
 }
 
 // ─── Live display ──────────────────────────────────────────────────────────
@@ -759,6 +874,20 @@ export default function Display() {
   // without remounting (Critical Rule 1). slideId is NOT part of this — it's
   // derived straight from `show` on every render instead, see the JSX below.
   const [ringState, setRingState] = useState({ stationOverride: null, showStationDebug: false })
+  // Host-verified state for step-through. `null` while the initial session
+  // check is in flight — a step attempted in that window opens the prompt
+  // rather than silently doing nothing. Mirrored into a ref because the
+  // click/key handlers are registered once with a stable identity.
+  const [hostVerified, setHostVerified] = useState(null)
+  const hostVerifiedRef = useRef(null)
+  hostVerifiedRef.current = hostVerified
+  const [pinOpen, setPinOpen] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setHostVerified(isHostVerified(session)))
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => setHostVerified(isHostVerified(session)))
+    return () => sub.subscription.unsubscribe()
+  }, [])
 
   // Jukebox has already run its exit animation + fade + flushed pending
   // Supabase writes before calling this (its 'b'-hold path awaits EXIT_TOTAL_MS
@@ -774,12 +903,23 @@ export default function Display() {
     const res = await advanceAfterBreak(showRef.current)
     if (res.denied) setNavDenied(true)
   }, [])
-  // Dev Mode only — see retreatShow's own comment for why this needs a
-  // host-authenticated write instead of the anon RPC advance uses.
-  const handleDevRetreat = useCallback(async () => {
-    const res = await retreatShow(showRef.current)
+  // Step-through from the TV — see stepShow's own comment. Runs the identical
+  // decision logic /host's Next/Prev run; needs a host_verified session, which
+  // the inline PIN prompt below establishes once per browser.
+  const stepRef = useRef(null)
+  const handleStep = useCallback(async (direction) => {
+    // Preview/demo windows render a real show row but must never drive it —
+    // the host opens Preview alongside Live Mode, and a stray click there
+    // used to be harmless because dev_mode gated this off.
+    if (isPreview || isDemo || !showRef.current?.is_live) return
+    if (hostVerifiedRef.current !== true) {
+      stepRef.current = direction
+      setPinOpen(true)
+      return
+    }
+    const res = await stepShow(showRef.current, direction)
     if (res.denied) setNavDenied(true)
-  }, [])
+  }, [isPreview, isDemo])
 
   // Capture Chrome's install prompt — only fires when not already installed
   useEffect(() => {
@@ -864,34 +1004,50 @@ export default function Display() {
     }
   }, [])
 
-  // Dev Mode (Host toggle, `dev_mode` on the shows row) — click/Right/Space
-  // steps forward (anon-safe advance_show RPC, same as the break-return
-  // jump), Left steps backward (retreatShow — needs this browser's own
-  // Supabase session to already be host-authenticated; silently denied
-  // otherwise, surfaced via the same NavDeniedBanner other denials use).
-  // Both whole-slide-only, not the full multi-part step machinery Host's
-  // own Next/Prev has.
+  // Step the show from the TV itself — click / ArrowRight / Space / Enter go
+  // forward, ArrowLeft goes back, running the SAME logic /host's Next/Prev
+  // run (see stepShow). Always armed, no per-show flag: the gate is the
+  // host_verified session, and an unverified press opens the inline PIN
+  // prompt instead of advancing. This replaced the old `dev_mode` toggle,
+  // which was a dumb index±1 with no awareness of invoke-gated audio,
+  // multi-part stepping, or shiny intro beats.
   useEffect(() => {
-    if (!show?.dev_mode) return
-    function onDevAdvance(e) {
+    function blocked(e) {
+      // Typing in the jukebox search / PIN box must never step the show, and
+      // while the break overlay owns the screen its own b-hold is the advance
+      // path — a click on a song row must not double as a Next press.
+      // [data-no-step] covers /display's own interactive controls whose
+      // clicks bubble to window with nothing to stop them — the audio
+      // PLAY/pause button (QuestionSlide, StateOfUnionSlide) and PYL's jump
+      // tiles are the two that matter: under the old dev_mode toggle this
+      // listener was off during a real show, so nobody hit it; always-armed,
+      // a PLAY press — the single most common /display click during a real
+      // show — would otherwise also fire a step (2026-08-23, Fable 5 review).
+      // The scoreboard overlay gets the same treatment as the break overlay:
+      // it's a full-screen z-60 layer over the live show, and a click meant
+      // to dismiss/interact with it must not step what's hidden underneath.
+      return !!e.target?.closest?.('input, textarea, [contenteditable], [data-pin-prompt], [data-no-step]') ||
+        !!document.querySelector('[data-break-overlay], [data-scoreboard-overlay]')
+    }
+    function onAdvance(e) {
       if (e.type === 'keydown' && !['ArrowRight', 'Space', 'Enter'].includes(e.code)) return
-      if (e.target?.closest?.('input, textarea, [contenteditable]')) return
-      handleBreakAdvance()
+      if (blocked(e)) return
+      handleStep(1)
     }
-    function onDevRetreat(e) {
+    function onRetreat(e) {
       if (e.code !== 'ArrowLeft') return
-      if (e.target?.closest?.('input, textarea, [contenteditable]')) return
-      handleDevRetreat()
+      if (blocked(e)) return
+      handleStep(-1)
     }
-    window.addEventListener('click', onDevAdvance)
-    window.addEventListener('keydown', onDevAdvance)
-    window.addEventListener('keydown', onDevRetreat)
+    window.addEventListener('click', onAdvance)
+    window.addEventListener('keydown', onAdvance)
+    window.addEventListener('keydown', onRetreat)
     return () => {
-      window.removeEventListener('click', onDevAdvance)
-      window.removeEventListener('keydown', onDevAdvance)
-      window.removeEventListener('keydown', onDevRetreat)
+      window.removeEventListener('click', onAdvance)
+      window.removeEventListener('keydown', onAdvance)
+      window.removeEventListener('keydown', onRetreat)
     }
-  }, [show?.dev_mode, handleBreakAdvance, handleDevRetreat])
+  }, [handleStep])
 
   useEffect(() => {
     if (isDemo) return
@@ -1162,6 +1318,21 @@ export default function Display() {
           <PreShowScreen show={show} onInstall={canInstall ? handleInstall : null} />
         )}
         <NavDeniedBanner visible={navDenied} />
+        {pinOpen && (
+          <DisplayPinPrompt
+            onDismiss={() => { stepRef.current = null; setPinOpen(false) }}
+            onVerified={() => {
+              setHostVerified(true)
+              hostVerifiedRef.current = true
+              setPinOpen(false)
+              const pending = stepRef.current
+              stepRef.current = null
+              // Carry out the press that opened the prompt, so unlocking
+              // doesn't cost an extra click.
+              if (pending) handleStep(pending)
+            }}
+          />
+        )}
       </ThemeProvider>
     </ErrorBoundary>
   )

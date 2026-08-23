@@ -164,6 +164,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
                 whileTap={item.targetSlideId && !isPreview ? { scale: 0.99 } : undefined}
                 transition={{ duration: 0.28, ease: EASE_OUT }}
                 onClick={item.targetSlideId ? () => jumpToSlide(item.targetSlideId) : undefined}
+                data-no-step={item.targetSlideId ? true : undefined}
                 className="flex items-center gap-5 px-6 py-4 rounded-2xl"
                 style={{
                   background: `${theme.colors.accent}35`,

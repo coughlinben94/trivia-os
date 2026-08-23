@@ -40,7 +40,10 @@ const disconnectedBanner = (
 
 export default function JukeboxBreakOverlay({ lib, onExit }) {
   return (
-    <div className="fixed inset-0 z-[70]">
+    // data-break-overlay: Display.jsx's click/key step-through handlers bail
+    // while this is mounted — the break's own b-hold is the advance path here,
+    // and a click on a song row must not also step the show.
+    <div className="fixed inset-0 z-[70]" data-break-overlay>
       <SpotifyConnectGate renderDisconnected={disconnectedBanner}>
         <div className="absolute inset-0 bg-black">
           <Jukebox initialLib={lib} onExitToShow={onExit} onLogout={() => {}} ringMode />

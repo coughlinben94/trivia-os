@@ -376,6 +376,7 @@ export default function ScoreboardOverlay({ show }) {
       {visible && (
         <motion.div
           key="scoreboard-overlay"
+          data-scoreboard-overlay
           initial={reduce ? { opacity: 0 } : { x: '100%' }}
           animate={reduce ? { opacity: 1 } : { x: 0 }}
           exit={reduce ? { opacity: 0 } : { x: '100%' }}

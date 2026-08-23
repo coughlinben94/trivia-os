@@ -773,18 +773,6 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
             <span style={{ fontSize: '0.85em' }}>📊</span>
             Score
           </button>
-          <button
-            onClick={() => actions.setDevMode(!show.showState.devMode)}
-            title="Dev Mode: let clicks/keys on /display itself step forward — for previewing transitions solo. Off = live show, /display only follows Host."
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ml-1 ${
-              show.showState.devMode
-                ? 'bg-amber-500 text-white hover:bg-amber-600'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            <span style={{ fontSize: '0.85em' }}>🛠️</span>
-            Dev Mode
-          </button>
           {onOpenScoreboard && (
             <button
               onClick={onOpenScoreboard}
