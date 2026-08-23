@@ -1,9 +1,17 @@
 import { useState } from 'react'
 
-export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onOpenLibrary, onOpenScoreboard, onDashboard, previewSlideId }) {
+export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onSyncArchive, onOpenLibrary, onOpenScoreboard, onDashboard, previewSlideId }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [copied, setCopied] = useState(false)
+  const [syncState, setSyncState] = useState('idle') // idle | syncing | synced
+
+  async function handleSyncArchive() {
+    setSyncState('syncing')
+    await onSyncArchive?.()
+    setSyncState('synced')
+    setTimeout(() => setSyncState('idle'), 1600)
+  }
   const joinUrl = `${window.location.origin}/join?show=${show.id}`
 
   function copyJoinUrl() {
@@ -113,6 +121,14 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onO
             className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
           >
             Export
+          </button>
+          <button
+            onClick={handleSyncArchive}
+            disabled={syncState === 'syncing'}
+            title="Save this show's questions to the question bank now, without waiting for Go Live"
+            className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button disabled:opacity-50"
+          >
+            {syncState === 'syncing' ? 'Syncing…' : syncState === 'synced' ? 'Synced ✓' : 'Sync archive'}
           </button>
           <button
             onClick={onGoLive}

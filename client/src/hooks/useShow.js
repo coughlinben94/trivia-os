@@ -7,6 +7,7 @@ import { renumberRoundQuestions } from '../lib/questionNumbering.js'
 import { trackWrite } from '../lib/writeTracking.js'
 import { HOST_PHOTOS_BUCKET, listHostPhotos } from '../lib/hostPhotos.js'
 import { isShinySeriesSibling, isMatchingShiny, isWagerShiny } from '../lib/shinySeries.js'
+import { archiveShow } from '../lib/questionRows.js'
 
 // See the disabled call site in nextSlide() below.
 const CLOSING_BEAT_ENABLED = false
@@ -655,6 +656,16 @@ export function useShow() {
     return slides.map(s => s.id === slide.id ? { ...s, data: { ...s.data, parts } } : s)
   }
 
+  // Manual "Sync archive" button in BuildMode — lets a host force an archive
+  // pass mid-build without waiting for goLive. Same non-blocking failure
+  // surfacing as the goLive/goLiveFrom call sites.
+  async function syncArchive() {
+    if (!show) return
+    const ok = await archiveShow(show)
+    trackWrite(Promise.resolve({ error: ok ? null : { message: 'archive failed' } }), setWriteError, 'Archive failed — some questions may not be saved to history')
+    return ok
+  }
+
   async function goLive() {
     if (!show) return
     markLocalNav()
@@ -669,13 +680,22 @@ export function useShow() {
       updatedAt: now,
       showState: { ...s.showState, isLive: true, currentSlideIndex: 0, currentSlideId: null },
     }))
-    await updateShowRow(show.id, {
+    const wroteShow = await updateShowRow(show.id, {
       slides: newSlides,
       is_live: true,
       current_slide_index: 0,
       current_slide_id: null,
       updated_at: now,
     })
+    // Best-effort, non-blocking — don't hold up the live transition on it, and
+    // don't let a successful archive clear a real shows-write failure toast.
+    if (wroteShow) {
+      trackWrite(
+        archiveShow({ id: show.id, title: show.title, date: show.date, rounds: show.rounds, slides: newSlides }),
+        setWriteError,
+        'Archive failed — some questions may not be saved to history'
+      )
+    }
   }
 
   async function goLiveFrom(index) {
@@ -693,13 +713,22 @@ export function useShow() {
       updatedAt: now,
       showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: slide?.id ?? null },
     }))
-    await updateShowRow(show.id, {
+    const wroteShow = await updateShowRow(show.id, {
       slides: newSlides,
       is_live: true,
       current_slide_index: target,
       current_slide_id: slide?.id ?? null,
       updated_at: now,
     })
+    // Best-effort, non-blocking — don't hold up the live transition on it, and
+    // don't let a successful archive clear a real shows-write failure toast.
+    if (wroteShow) {
+      trackWrite(
+        archiveShow({ id: show.id, title: show.title, date: show.date, rounds: show.rounds, slides: newSlides }),
+        setWriteError,
+        'Archive failed — some questions may not be saved to history'
+      )
+    }
   }
 
   async function nextSlide() {
@@ -1060,6 +1089,7 @@ export function useShow() {
     getHostPhotos,
     goLive,
     goLiveFrom,
+    syncArchive,
     nextSlide,
     prevSlide,
     setScoreboardVisible,

@@ -9,7 +9,6 @@ import FormatLibrary from './FormatLibrary.jsx'
 import ThemePickerModal from './ThemePickerModal.jsx'
 import SwingRoundWizard from './SwingRoundWizard.jsx'
 import PYLWizard from './PYLWizard.jsx'
-import { archiveQuestions } from '../../lib/archiveQuestion.js'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 import { EASE_OUT } from '../../lib/easings.js'
@@ -451,13 +450,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
     }))
     if (slidesData.length) {
       await actions.addSiblingSlides(afterId, slidesData)
-      archiveQuestions([{
-        type:            'swing',
-        questions_data:  nonEmpty.map(q => ({ text: q.text.trim(), answer: q.answer.trim() })),
-        show_id:         show.id,
-        show_title:      show.title,
-        show_date:       show.date ?? null,
-      }])
     }
   }
 
@@ -492,14 +484,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
     }))
     if (slidesData.length) {
       await actions.addSiblingSlides(afterId, slidesData)
-      archiveQuestions(themes.map(theme => ({
-        type:       'pyl',
-        text:       theme.name,
-        answer:     theme.type,
-        show_id:    show.id,
-        show_title: show.title,
-        show_date:  show.date ?? null,
-      })))
     }
 
     // Text-style themes: real question slides now, same shape Swing uses.
@@ -653,6 +637,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
         onUpdateMeta={actions.updateShowMeta}
         onGoLive={onGoLive}
         onExport={actions.exportShow}
+        onSyncArchive={actions.syncArchive}
         onOpenLibrary={onOpenLibrary}
         onOpenScoreboard={onOpenScoreboard}
         onDashboard={mode !== 'wizard' ? returnToDashboard : undefined}

@@ -3,7 +3,6 @@ import { sortedSlides } from '../../hooks/useShow.js'
 import { insertAfterSlideId } from '../../lib/questionNumbering.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
-import { archiveQuestion } from '../../lib/archiveQuestion.js'
 import { makeQuestionPasteHandler, makeCleanPasteHandler } from '../../lib/cleanPaste.js'
 
 export const TYPE_CARDS = [
@@ -158,18 +157,6 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           }
           const afterId = insertAfterSlideId(roundSlides, sorted)
           await onAddSlide({ type: 'grid', roundId: roundId ?? null, afterSlideId: afterId, data: gridData })
-          archiveQuestion({
-            type:               'shiny',
-            text:                gridData.text,
-            answer:              gridData.answer,
-            is_bonus:            false,
-            is_shiny:            true,
-            shiny_type:          selectedShinyFmt.input_schema?.type ?? null,
-            shiny_format_name:   selectedShinyFmt.name,
-            show_id:             show?.id ?? null,
-            show_title:          show?.title ?? null,
-            show_date:           show?.date ?? null,
-          })
           return
         }
 
@@ -191,18 +178,6 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           }
           const afterId = insertAfterSlideId(roundSlides, sorted)
           await onAddSlide({ type: 'venn', roundId: roundId ?? null, afterSlideId: afterId, data: vennData })
-          archiveQuestion({
-            type:               'shiny',
-            text:                vennData.text,
-            answer:              vennData.answer,
-            is_bonus:            false,
-            is_shiny:            true,
-            shiny_type:          selectedShinyFmt.input_schema?.type ?? null,
-            shiny_format_name:   selectedShinyFmt.name,
-            show_id:             show?.id ?? null,
-            show_title:          show?.title ?? null,
-            show_date:           show?.date ?? null,
-          })
           return
         }
 
@@ -305,23 +280,6 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           })
 
           await onAddSlide({ afterSlideId: afterId, slides: slidesData })
-
-          if (collectShared) {
-            const d = slidesData[0].data
-            const text   = d.parts?.[0]?.text ?? d.text ?? ''
-            const answer = d.parts?.[0]?.answer ?? d.answer ?? ''
-            archiveQuestion({
-              type:              'shiny',
-              text, answer,
-              is_bonus:          false,
-              is_shiny:          true,
-              shiny_type:        selectedShinyFmt.input_schema?.type ?? null,
-              shiny_format_name: selectedShinyFmt.name,
-              show_id:           show?.id ?? null,
-              show_title:        show?.title ?? null,
-              show_date:         show?.date ?? null,
-            })
-          }
           return
         }
 
@@ -420,24 +378,6 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
       : (type === 'pyl-lotto' || type === 'pyl-board') ? 'pyl-reveal'
       : type
     await onAddSlide({ type: slideType, roundId: roundId ?? null, afterSlideId, data })
-
-    if (slideType === 'question') {
-      const isShiny = !!data.isShiny
-      const shinyText = data.parts?.[0]?.text ?? data.text
-      const shinyAnswerVal = data.parts?.[0]?.answer ?? data.answer
-      archiveQuestion({
-        type:              isShiny ? 'shiny' : (isBonus ? 'regular' : 'regular'),
-        text:              isShiny ? shinyText : questionText.trim(),
-        answer:            isShiny ? shinyAnswerVal : questionAnswer.trim(),
-        is_bonus:          isBonus,
-        is_shiny:          isShiny,
-        shiny_type:        isShiny ? (selectedShinyFmt?.input_schema?.type ?? null) : null,
-        shiny_format_name: isShiny ? (selectedShinyFmt?.name ?? null) : null,
-        show_id:           show?.id ?? null,
-        show_title:        show?.title ?? null,
-        show_date:         show?.date ?? null,
-      })
-    }
   }
 
   const needsRound     = NEEDS_ROUND.has(type)
