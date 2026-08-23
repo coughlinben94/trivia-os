@@ -246,7 +246,7 @@ export default function RulesSlide({ slide, isPreview }) {
             background: '#050007', padding: '0.4em 1.4em', borderRadius: 4,
             fontFamily: `'${theme.fonts.display}', sans-serif`,
             letterSpacing: '0.02em', color: '#fff',
-            fontSize: 'clamp(1.4rem, 3.6vw, 2.5rem)',
+            fontSize: 'clamp(1.8rem, 4.5vw, 3.2rem)',
           }}
         >
           {title}
@@ -265,12 +265,12 @@ export default function RulesSlide({ slide, isPreview }) {
           >
             <span style={{
               fontFamily: `'${theme.fonts.display}', sans-serif`,
-              color: WARN_RED, fontSize: 'clamp(1.4rem, 3.2vw, 2.1rem)', flexShrink: 0, width: '2ch',
+              color: WARN_RED, fontSize: 'clamp(1.8rem, 4vw, 2.7rem)', flexShrink: 0, width: '2ch',
             }}>
               {String(i + 1).padStart(2, '0')}
             </span>
             <span style={{
-              color: WARN_TEXT, fontSize: 'clamp(1.4rem, 3vw, 2rem)', lineHeight: 1.35, fontWeight: 500,
+              color: WARN_TEXT, fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', lineHeight: 1.35, fontWeight: 500,
               fontFamily: "'DM Sans', sans-serif",
             }}>
               {rule}

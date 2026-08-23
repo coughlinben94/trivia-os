@@ -4,7 +4,8 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import QRCode from 'qrcode'
 import { supabase } from '../lib/supabase.js'
 import { ThemeProvider, useTheme } from '../components/shared/ThemeProvider.jsx'
-import SlideRenderer from '../components/display/SlideRenderer.jsx'
+import SlideRenderer, { skipsLockedBackground } from '../components/display/SlideRenderer.jsx'
+import { ringVisibleStationIndex } from '../lib/ringStationIndex.js'
 import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
@@ -101,6 +102,15 @@ function NavDeniedBanner({ visible }) {
 // applies while it's showing. slideIndex drives RingAmbient's own
 // forward-glide-vs-snap decision (see RingAmbient's slideIndex effect) —
 // it's the numeric show.current_slide_index, not a slide id.
+// team-picker is explicitly excluded even though skipsLockedBackground()
+// returns true for it — that's SlideRenderer skipping ITS lock because
+// team-picker paints its own opaque black canvas instead, not because the
+// ring is actually on screen (2026-08-23, Ben: team-picker/rules/state-of-
+// union etc. "dont need a ring rotation" — each was burning a turn() while
+// completely hidden, so the ring was mid-rotation the instant the next
+// visible slide's own reveal wipe uncovered it).
+const isRingVisible = s => skipsLockedBackground(s) && s.type !== 'team-picker'
+
 function PersistentRing({ slideIndex, stationOverride, showStationDebug }) {
   const { theme } = useTheme()
   // ParticleBackground's own root is `absolute inset-0` — it needs a sized,
@@ -563,7 +573,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
       {!onRingStateChange && (
         <ParticleBackground
           theme={theme}
-          slideIndex={show.current_slide_index ?? 0}
+          slideIndex={ringVisibleStationIndex(sortedSlides, show.current_slide_index ?? 0, isRingVisible)}
           stationOverride={breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null)}
           showStationDebug={isPreview}
         />
@@ -1097,7 +1107,12 @@ export default function Display() {
   return (
     <ErrorBoundary fallback={null}>
       <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
-        <PersistentRing slideIndex={show.is_live ? show.current_slide_index : null} {...ringState} />
+        <PersistentRing
+          slideIndex={show.is_live && show.current_slide_index != null
+            ? ringVisibleStationIndex([...(show.slides ?? [])].sort((a, b) => a.order - b.order), show.current_slide_index, isRingVisible)
+            : null}
+          {...ringState}
+        />
         {show.is_live && show.current_slide_id !== null ? (
           <DisplayInner show={show} direction={direction} onBreakAdvance={handleBreakAdvance} onRingStateChange={setRingState} />
         ) : (

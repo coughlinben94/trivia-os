@@ -60,6 +60,14 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
             ytWatchIntervalRef.current = setInterval(() => {
               const player = ytPlayerRef.current
               if (!player) return
+              // A cold /display tab (no click/keydown yet this session) blocks
+              // unmuted autoplay — playVideo() above fails silently, no error,
+              // no onError, player just sits UNSTARTED forever. Retry every
+              // tick: the instant ANY interaction lands on the tab (tap the
+              // TV, press F), browser autoplay unlocks and this catches it,
+              // instead of requiring the host to remember to tap before Go Live.
+              const state = player.getPlayerState?.()
+              if (state === -1 || state === 5) player.playVideo()
               const t = player.getCurrentTime?.() ?? 0
               // getDuration() returns 0 until metadata loads (and stays 0
               // forever for an embedding-disabled video) — `?? Infinity`

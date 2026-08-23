@@ -20,6 +20,23 @@ import PreShowSlide from './slides/PreShowSlide.jsx'
 import OverlayLayer from './OverlayLayer.jsx'
 import { EASE_OUT, EASE_DROP, EASE_EXIT, EASE_PANEL } from '../../lib/easings.js'
 
+// Exported so Display.jsx can drive the ring's station index off the same
+// "does this slide skip the locked opaque background" rule this component
+// uses internally — one source of truth, so the two can't drift apart.
+// NOTE: this says "SlideRenderer paints no lock behind it," not "the ring is
+// visually on screen" — team-picker is in this set too (its own black canvas
+// covers the ring, not this component's lock), so a caller that means
+// "ring visually visible" must additionally exclude 'team-picker' itself,
+// same as the isRingWorldSlide computation below does implicitly.
+export function skipsLockedBackground(slide) {
+  const isShiny = slide?.data?.isShiny
+  const isShinyIntroBeat = isShiny && !slide?.data?.introDone && (slide?.type === 'question' || slide?.type === 'grid' || slide?.type === 'venn')
+  const isRingWorldSlide = slide?.type === 'team-preview' || slide?.type === 'grading-break' || (slide?.type === 'question' && !isShiny)
+  return isShinyIntroBeat || isRingWorldSlide ||
+    slide?.type === 'team-picker' || slide?.type === 'pre-show' ||
+    slide?.type === 'round-intro' || slide?.type === 'swing-round-intro'
+}
+
 // Per-slide content animation config — tune these without touching component logic
 const SLIDE_ANIMATIONS = {
   'question': {
@@ -171,19 +188,10 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
   // — once introDone flips and real question/grid content mounts, that
   // content DOES want the opaque backdrop (theme.colors.shinyBg etc, for
   // legibility over detailed ambient art), so this must not outlive introDone.
-  const isShinyIntroBeat = isShiny && !slide?.data?.introDone && (slide?.type === 'question' || slide?.type === 'grid' || slide?.type === 'venn')
-  // Same "i cant see the background" bug as isShinyIntroBeat above, hitting
-  // plain (non-shiny) question and team-preview once they went full-bleed
-  // (2026-08-20) — this component's locked bgDeep div (below) is opaque and
-  // sat behind them at 100% viewport instead of the old 85% box, hiding the
-  // ring world completely instead of just narrowing its margin. Shiny
-  // questions are untouched: their own content paints an opaque shinyBg
-  // already, so the lock behind them is redundant, not harmful.
-  // grading-break joined FULL_BLEED_SLIDE_TYPES 2026-08-21 (Ben: "grading
-  // slide still sits on the 85% square") — same fix, and GradingBreakSlide
-  // itself already paints `background: transparent`, so it was relying on
-  // this very lock for its base color before going full-bleed.
-  const isRingWorldSlide = slide?.type === 'team-preview' || slide?.type === 'grading-break' || (slide?.type === 'question' && !isShiny)
+  // isShinyIntroBeat/isRingWorldSlide folded into the exported
+  // skipsLockedBackground() above — same rule, single source of truth so
+  // Display.jsx's ring station counter can't drift from this component.
+  const hidesLockedBackground = skipsLockedBackground(slide)
 
   let transitionKey = null
   let variants
@@ -251,7 +259,7 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
           the entrance wipe cover something already covered. So this slide
           type gets no locked background; nothing else about the ambient
           mount changes. */}
-      {slide?.type !== 'team-picker' && slide?.type !== 'pre-show' && slide?.type !== 'round-intro' && slide?.type !== 'swing-round-intro' && !isShinyIntroBeat && !isRingWorldSlide && (
+      {!hidesLockedBackground && (
         <div
           className="absolute inset-0"
           style={{ background: theme.colors.bgDeep, zIndex: 0 }}

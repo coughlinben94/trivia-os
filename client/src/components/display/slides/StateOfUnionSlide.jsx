@@ -160,6 +160,12 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
             ytWatchIntervalRef.current = setInterval(() => {
               const player = ytPlayerRef.current
               if (!player) return
+              // Same cold-tab autoplay block as PreShowSlide's walkout song —
+              // playVideo() above can fail silently with no error. Retry every
+              // tick so the loop self-heals the instant the tab gets any
+              // interaction, instead of relying on the host tapping the TV first.
+              const state = player.getPlayerState?.()
+              if (state === -1 || state === 5) player.playVideo()
               const t = player.getCurrentTime?.() ?? 0
               // Same duration-not-loaded-yet guard as PreShowSlide — an
               // untrimmed clip (end: null) must not compute clipEnd=0 on
