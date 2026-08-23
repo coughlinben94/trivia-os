@@ -713,7 +713,20 @@ export function useShow() {
       const targetSlide = sorted[cur]
       if (!targetSlide) return
       const bakedSlides = await bakeTeamPickerParts(show.slides, targetSlide)
-      const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === targetSlide.id) ?? targetSlide, { currentPart: 0, introDone: false })
+      let newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === targetSlide.id) ?? targetSlide, { currentPart: 0, introDone: false })
+      // Invoke-gated audio (pre-show's walkout song) on the revealed slide:
+      // this reveal press IS the first real Next press of the show, and per
+      // design ("fires the walkout song later, not the instant Go Live lands
+      // on it") that's the press meant to fire it. Without this, the check
+      // below never runs on this branch (it returns first) — the host would
+      // need a second, visually-identical Next press with no on-screen sign
+      // the first one did anything.
+      const revealed = newSlides.find(s => s.id === targetSlide.id)
+      if (revealed?.data?.walkoutSong?.trigger === 'invoke' && revealed.data.walkoutSong.videoId && !revealed.data.walkoutSong.invoked) {
+        newSlides = newSlides.map(s =>
+          s.id === targetSlide.id ? { ...s, data: { ...s.data, walkoutSong: { ...s.data.walkoutSong, invoked: true } } } : s
+        )
+      }
       setShow(s => ({
         ...s,
         slides: newSlides,
