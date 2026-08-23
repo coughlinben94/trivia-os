@@ -627,7 +627,24 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           key={`${currentSlide?.id}:${currentSlide?.data?.introDone}:${currentSlide?.data?.currentPart}`}
           fallback={slideFallback}
         >
-          <AnimatePresence mode="wait">
+          {/* mode="wait" (the default everywhere else) fully unmounts the
+              outgoing slide — including its own opaque lock/background —
+              before the incoming one mounts. That's fine for a plain fade,
+              but team-picker's entrance IS a black panel sliding down to
+              cover the previous slide (SLIDE_ANIMATIONS['team-picker'],
+              REVEAL_S run backwards) — under "wait" the previous slide is
+              already gone by the time it starts sliding, so the panel
+              descends over the bare ring instead of over what was actually
+              on screen (2026-08-23, Ben: "team intro slide should slide
+              over the rules slide, instead of jumping to a new ring world
+              slide, then the intro slide sliding down on that"). "sync"
+              (Framer Motion's default) keeps the outgoing slide mounted and
+              animating its own exit while the incoming one animates in on
+              top — DOM order puts the new team-picker panel after the old
+              slide, so it paints over it while descending. Scoped to just
+              this direction (entering team-picker) so every other
+              transition keeps its existing sequential "wait" behavior. */}
+          <AnimatePresence mode={currentSlide?.type === 'team-picker' ? 'sync' : 'wait'}>
             {currentSlide && (
               <SlideRenderer
                 key={currentSlide.id}
