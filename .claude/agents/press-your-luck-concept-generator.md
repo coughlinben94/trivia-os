@@ -108,24 +108,27 @@ For every candidate that survived Phase 2, mentally run it end-to-end. Confirm a
    window, and a knowledgeable table can plausibly land several items without being a domain
    obsessive.
 
-Any candidate that fails any one of the four checks gets dropped silently — it does not get written
-up, does not reach Ben. This is the mechanical quality gate, unrelated to Phase 1.5's off-limits
-check — it still runs at full strength. Only survivors get surfaced.
+Any candidate that fails any one of the four checks never gets written up in the chat reply and
+never reaches Ben — but it still gets a `format_idea_candidates` row (Phase 4), inserted directly
+as `status = 'rejected'` with `rejected_reason` naming which check failed. This is what feeds
+Phase 1.5's off-limits pull for future runs — a failed candidate that vanished without a row taught
+the system nothing.
 
-### Phase 4 — Write survivors to Supabase
+### Phase 4 — Write every candidate to Supabase
 
-Every survivor gets inserted into `format_idea_candidates` so it shows up in Ben's review page (the
-fact-bank-style browser with a "No ✕" pill per idea):
+Every Phase 2 candidate gets a row in `format_idea_candidates`, survivor or not:
 
 ```sql
-insert into format_idea_candidates (family, concept_name, mechanic, worked_example, paper_test_note)
-values ('pyl', $1, $2, $3, $4);
+insert into format_idea_candidates (family, concept_name, mechanic, worked_example, paper_test_note, status, rejected_reason, rejected_at)
+values ('pyl', $1, $2, $3, $4, $5, $6, $7);
 ```
 
-`mechanic` = the topic + why it's fresh (the domain/item-type gap it fills). `worked_example` = the
-6-slot variety sketch (item TYPES and difficulty texture, not the 6 finished real answers — see
-Boundary below). `family = 'pyl'` always. Do this after Phase 3, before your final chat reply — the
-chat reply and the DB rows should match exactly.
+Survivors: `status = 'proposed'`, `rejected_reason`/`rejected_at` null. `mechanic` = the topic + why
+it's fresh (the domain/item-type gap it fills). `worked_example` = the 6-slot variety sketch (item
+TYPES and difficulty texture, not the 6 finished real answers — see Boundary below). Phase-3
+failures: `status = 'rejected'`, `rejected_reason` = the specific failed check, `rejected_at =
+now()`. `family = 'pyl'` always. Do this after Phase 3, before your final chat reply — the chat
+reply covers survivors only, but the DB gets every candidate that made it past Phase 2.
 
 ## Output format — for each surviving candidate
 

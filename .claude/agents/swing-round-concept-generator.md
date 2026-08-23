@@ -155,7 +155,7 @@ For a uniform-mechanic candidate that survived Phase 2, mentally run it end-to-e
 round — write out (at minimum) the EX item plus 2–3 more real-sounding items with real, plausible
 placeholder content, not "Item A" / "Subject B." For a topic-specialist candidate, run the
 equivalent check against the 6-slot item-type sketch instead — do NOT write real finished items,
-per the boundary above. Confirm all three:
+per the boundary above. Confirm all four:
 
 1. **Passes the hard paper-test constraint above** — every one of the 6–9 items is exactly one
    thing written on paper per item, no app, no device, no grid, no turn-based mechanic, and no item
@@ -182,26 +182,36 @@ per the boundary above. Confirm all three:
    past rejections and not Ben's actual run history, also sanity-check the topic isn't an obvious
    repeat of a domain Ben clearly runs often (Disney, sports, music) without a fresh enough angle —
    flag it for Ben to confirm rather than silently guessing at his full history.
+4. **Actually fun, not just legal.** Ben, 2026-08-23: "the shiny questions are supposed to take off
+   the blinders. think outside the box. be different, unique. the fun questions are what people
+   come back for." That standard applies at swing length too — a candidate that's paper-answerable,
+   playable, and technically fresh but STILL flat across all 6–9 items (one mechanic, no comic or
+   performative texture, no "click") fails this check even though it cleared 1–3. Does the uniform
+   shape itself have real personality (the way "Fauxbituaries" or "Haikus" does), or is it a
+   colorless template that happens to repeat 6–9 times? For a topic-specialist candidate: does the
+   domain genuinely reward a fan's excitement, not just fill 6 slots?
 
-Any candidate that fails any one of the three checks gets dropped silently — it does not get
-written up, does not get an apology paragraph, does not reach Ben. This is the mechanical
-quality gate, unrelated to Phase 1.5's rejection list — it still runs at full strength. Only
-survivors get surfaced.
+Any candidate that fails any one of the four checks never gets written up in the chat reply and
+never reaches Ben — but it still gets a `format_idea_candidates` row (Phase 4), inserted directly
+as `status = 'rejected'` with `rejected_reason` naming which check failed. This is what feeds
+Phase 1.5's dedupe pull for future runs — a failed candidate that vanished without a row taught
+the system nothing.
 
-### Phase 4 — Write survivors to Supabase
+### Phase 4 — Write every candidate to Supabase
 
-Every survivor gets inserted into `format_idea_candidates` so it shows up in Ben's review page
-(the fact-bank-style browser with a "No ✕" pill per idea):
+Every Phase 2 candidate gets a row in `format_idea_candidates`, survivor or not:
 
 ```sql
-insert into format_idea_candidates (family, concept_name, mechanic, worked_example, paper_test_note)
-values ('swing', $1, $2, $3, $4);
+insert into format_idea_candidates (family, concept_name, mechanic, worked_example, paper_test_note, status, rejected_reason, rejected_at)
+values ('swing', $1, $2, $3, $4, $5, $6, $7);
 ```
 
-One row per surviving candidate, `family = 'swing'` always. For a topic-specialist survivor,
-`mechanic` = the topic + why it's fresh, `worked_example` = the item-type sketch (never the 6
-finished questions — see the archetype note above). Do this after Phase 3, before your final chat
-reply — the chat reply and the DB rows should match exactly, same candidates, same content.
+Survivors: `status = 'proposed'`, `rejected_reason`/`rejected_at` null. Phase-3 failures:
+`status = 'rejected'`, `rejected_reason` = the specific failed check, `rejected_at = now()`.
+`family = 'swing'` always. For a topic-specialist survivor, `mechanic` = the topic + why it's
+fresh, `worked_example` = the item-type sketch (never the 6 finished questions — see the archetype
+note above). Do this after Phase 3, before your final chat reply — the chat reply covers survivors
+only, but the DB gets every candidate that made it past Phase 2.
 
 ## Output format — for each surviving candidate
 
