@@ -1081,7 +1081,16 @@ export default function Display() {
     )
   }
 
-  if (loading || !show) {
+  if (loading) {
+    // Fetch in flight — render nothing themed. Painting WaitingScreen's
+    // default-theme ambient here is what caused the pure-michigan flash
+    // before the real show's theme (e.g. midnight-galaxy) landed: `show`
+    // and `loading` are set in the same tick once the fetch resolves, so
+    // there's nothing to gain by guessing a theme during this window.
+    return <div className="w-screen h-screen" style={{ background: '#000' }} />
+  }
+
+  if (!show) {
     return (
       <ThemeProvider showThemeId={null}>
         <WaitingScreen />
