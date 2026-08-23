@@ -2,7 +2,7 @@
 
 The named recurring formats. When writing for one, match its rules exactly; when inventing a new one, match the *spirit* (a repeatable mechanic + a name that gets announced with relish, often With! Exclamation! Points!).
 
-**Family tree — these three sections aren't independent.** A shiny format is a single-question mechanic; a swing round is that same mechanic stretched to 6–9 uniform items; a PYL board is a swing round narrowed to a *complete, verifiable list* under one theme. Concretely: "We're not so different, you and I…" (shiny, find the hidden connection) is the same move as a swing round built around one connection worked across 8 items; "Did you tape the instructions?" (shiny, name-from-parts-list) is one step from a PYL board like "the six [X] with no [Y] in the name" (name-from-bounded-list). When a shiny format feels tapped out at 1 question, that's often a sign it has a swing-round or PYL life left in it — check here before inventing from scratch.
+**Family tree — these three sections aren't independent (corrected 2026-08-23).** A shiny format is a single-question mechanic; a swing round stretches a mechanic to 6–9 uniform items, OR (the topic-specialist archetype) bundles 6 independent shiny-style items under one broad topic; a PYL board is the SAME topic-specialist move as swing — 6 independent items, one topic — with PYL's own scoring gamble layered on (20pts/correct on a perfect 6/6, else 10pts/correct). PYL is not a "closed/complete list" game — that framing was invented and never matched a real board; retired, see the Press! Your! Luck! section below. Concretely: "We're not so different, you and I…" (shiny, find the hidden connection) is the same move as a uniform-mechanic swing round built around one connection worked across 8 items; a topic-specialist swing round on "Disney" is one step from a PYL board on the same topic — same shape, different scoring, AND one other real difference: a topic-specialist swing slot may use the phone matching carve-out, a PYL board never may (see the PYL section below). When a shiny format feels tapped out at 1 question, that's often a sign it has a uniform-mechanic swing-round life left in it — check here before inventing from scratch.
 
 ## Shiny / In-Round Named Formats
 
@@ -66,23 +66,82 @@ These slot INSIDE question rounds (1–2 per round). Frequency notes from the 56
 
 **AI-generated shiny content** (established, growing): AI band images (band's songs as literal AI images), AI movie titles ("movies using AI, in other words"), ChatGPT-goes-ERB, AI song covers in cartoon voices. When asked to generate these, the joke is literal-mindedness — the AI takes the title at face value.
 
+### Phone matching-board (2026-08-23 — the one deliberate exception to "no app")
+
+A real, shipped mechanic: teams use their phones to connect left/right pairs together in real time
+(`client/src/components/join/MatchingBoard.jsx`). Ben loves this specifically because it's
+collaborative — the table works the puzzle together, out loud. Live examples: **Strike a Match**,
+**Drag and Drop** (e.g. "match each Pokémon to its type"). This is the ONLY shiny mechanic allowed
+to break the paper-only rule, capped at 1–2 uses per trivia night — see the shiny-format-idea-
+generator agent's hard-constraint carve-out. Every other app/grid/device idea is still dead on
+arrival; this is not a general reopening.
+
 ## Swing Round Concepts (Round 3)
 
-One concept, 6–9 items, uniform answer shape, concept announced in the round title. The concept IS the entertainment — novelty is prized. The corpus catalog, for spirit-matching and repeat-avoidance:
+One concept, usually 6–9 items sharing a uniform answer shape (see the topic-specialist archetype
+below for the other real shape), concept announced in the round title. The concept IS the entertainment — novelty is prized. The corpus catalog, for spirit-matching and repeat-avoidance:
 
 Children's book opening lines · Poorly-and-shortly described movie plots · Stupid questions get stupid answers (answer is IN the question: the horse named Upset, the band called The Band) · Fauxbituaries (fictional-character obituaries/graves) · Band Name Inspirations (origin story → name band) · Celebrity Mean Tweets · One-star travel reviews (review → name landmark) · Haikus (celebrity/film as haiku) · Movie Quote Odd One Out · Character cast mix-up (plot retold with actors' OTHER roles) · Crazy movie deaths · Epic Rap Battles of History (lyric → name opponent) · Famous landmarks by city (images) · Scattergories full-round · Music Bingo Precursor (lyric-detail questions: "what job does Tiny Dancer have?" → seamstress) · Origin stories (hero origins, no names) · ESPN 30-for-30 titles · MiLB team nicknames (city + definition riddle → nickname) · College-nickname definitions by city (Spartans, Sooners, Cavaliers…) · AFI movie quotes · Iconic sports calls (audio → answer a detail) · The Disney Theory Timeline · Map maker: make me a film (travel-route maps → film) · High school superiority (MI school nicknames by riddle) · Silenced RPG (map/level → country) · Live Action?? (Disney live-action deep cuts) · Irish rock covers · Song covers by genre · TV show change-a-letter (plot of the pun title → pun title) · Checklists (narrative walk-through with embedded questions) · X marks the spot (treasure/maps) · Gotta catch 'em all (Pokémon lore → real-world origin) · A Nostalgic Christmas / Shawn's Big Day / Ben's Historic Road Trip (personal-lore: family anecdote + verifiable fact per item) · Alphabetically first and last · Big EGOS (award lists → name person) · Pokémon entomology odd-one-out · Off to a rough start (this year's deaths, legacy-routed) · Masters ("master" wordplay across domains) · Cards Against Humanity descriptions.
 
 **When proposing a new swing concept:** name it like Ben would (pun or catchphrase), define the uniform answer shape, write the EX: item first (rounds often open with a worked example), and keep every item independently verifiable.
 
+### Topic-specialist swing round — a second, non-uniform archetype
+
+Not every swing round shares one mechanic. The other real archetype: **6 independent, varied-format
+shiny-style questions, unified only by one broad topic/domain** — no shared answer shape, no shared
+clue structure. The point isn't a novel mechanic, it's giving the table's resident expert in that
+one narrow lane (the Disney freak, the guy who knows every Office cameo) a round they can sweep
+while everyone else free-rides on 1–2. March Madness (a real, live `round_type='swing'` row) is a
+confirmed example of this shape — its six items are a documentary fact, an audio clip, a nickname
+riddle, and a video-game reference, loosely bracket-themed, not one repeated mechanic. Treat this
+as a legitimate second archetype, not a mistagged uniform-mechanic round.
+
+A topic-specialist round proposal is a **topic pick, not a mechanic invention** — the deliverable is
+the topic/domain, why it's fresh (not run recently, deep enough for 6 real items, has a genuine
+"someone here will ace this" fanbase at Baynes), and a rough sketch of the angle-variety across the
+6 slots (e.g. "one visual, one audio, one deep-cut trivia, one connect-the-dots, one date/timeline,
+one obscure-detail") — not the 6 actual finished questions. Writing those stays Ben's job via the
+trivia-questions skill, same boundary as every other format in this library.
+
+**On the phone-matching carve-out here:** since a topic-specialist round is built from independent
+shiny-style items, one of its 6 slots may use the phone collaborative-matching mechanic (see the
+Shiny section above) under the same terms as a standalone shiny question — capped at the same
+shared 1–2-uses-per-night total, not a separate allowance. This does NOT extend to Press Your Luck
+— see that section below, PYL stays paper/verbal only.
+
 ## Press! Your! Luck! Boards (Round 4, 2026-era)
 
-3–4 categories per board, each a **6-item complete or bounded list**. Teams press to name items; the list must be airtight:
+**Corrected 2026-08-23 — the model below is from Ben directly and supersedes an old
+"completeness strategy" framing that used to live in the 2026 Season section further down this
+doc (deleted — it was never actually run; see the deletion note where the "actually run" board
+list appears below).**
 
-- Complete-by-definition: "the six WW2-set Best Picture winners," "Operation ailments with no bones in the name."
-- Bounded-by-window: "the last 6 Super Bowl halftime BANDS," "since the list's 2011 inception."
-- Source-bounded: "most photographed buildings per a NYT × NatGeo cross-reference."
+A PYL board is **6 quick-fire items under one punchy topic** — structurally the same as a
+topic-specialist swing round (see above), just with PYL's specific scoring gamble instead of a
+straight tally, AND one real difference: **PYL does NOT get the phone collaborative-matching
+carve-out that shiny and topic-specialist swing get.** Ben was asked directly and said no — every
+PYL item stays paper/verbal, always. "Matching pair" below and everywhere else in this section
+means plain paper matching (grade as one answer, like "match the tagline to the poster"), never
+the phone mechanic. Each item can be its own mechanic (an image ID, a riddle, a paper matching
+pair, a fact-lookup) — there's no requirement that the 6 items be an exhaustively "closed list";
+"Deadliest Warrior," "Sitcom Workplaces," "Books Without Words," "Movie Boosts," "Match the movie
+tagline to the film poster," "Name this animal" ×6, "6 state mottos" are all real/plausible shapes.
 
-Category titles are punchy nouns ("Deadliest Warrior," "Sitcom Workplaces," "Books Without Words," "Movie Boosts" = product placements). Boards deliberately REPEAT across consecutive weeks (2–4 shows) before rotating — returning teams get a memory reward. When building a board, verify list completeness independently for every item; a missing valid item is a table dispute waiting to happen.
+**The scoring IS the "press your luck":** teams answer all 6 in one go and submit together, not
+one at a time.
+- All 6 correct → **20 points per correct answer** (120 total).
+- Even one wrong → every correct answer drops to **10 points instead of 20**.
+
+So a team sitting on 5 confident answers and 1 shaky guess has to decide whether to press their
+luck on the 6th (risk halving all 5 sure points) or play it safer — that tension is the whole
+name of the round. When judging whether a new board is good, judge on: is each of the 6 items
+independently gettable by a knowledgeable team, is the topic fresh (see the real-board list
+below for what's already run, and don't rely on the old 15-board table — it was never actually
+run), and is there real texture in the difficulty spread (a board where all 6 are trivial or all 6
+are brutal removes the tension entirely).
+
+Boards deliberately REPEAT across consecutive weeks (2–4 shows) before rotating — returning teams
+get a memory reward.
 
 ## Bonus Round (2 questions)
 
@@ -161,27 +220,32 @@ Every item: one clue or clue-set (read-aloud, projected image, or short audio/vi
 
 **Corpus data-quality flags found while reading (not fixed, per standing rule — Ben's call):** swing round id 1418 looks corrupted/duplicated (Stone Temple Pilots appears as both a clue and an answer in the same 8-item set). Swing round id 1688 has two factually-wrong items — a "World Series winners since 2010" list including the Yankees (haven't won since 2009), and a "US Mint locations" list including San Diego (not a current Mint site). Worth a spot-check before either round runs again.
 
-### Press Your Luck boards — full-corpus specialist
+### Press Your Luck boards — actually run (reconstructed from the live `questions` table, 2026-08-23)
 
-15 boards, each with a named completeness strategy (the format-library's existing three — complete-by-definition, bounded-by-window, source-bounded — plus a 4th spotted live in the corpus but never named: **taxonomy-complete**, the entire fixed classification itself, not a filtered subset of something bigger).
+`round_title` is populated on only 3 of 42 real PYL rows, so this list was rebuilt by reading the
+raw question/answer text of all 42 rows. 37 of 42 are exactly 6 items (1 is 4, 1 is 5, 3 are null/
+unparseable) — **6 is the dominant, correct-as-doctrine board size** (it's Ben's own stated
+number), just not a universal one the data proves; don't overclaim it as absolute. The old "5-8"
+range from earlier drafts was never actually observed and should stay dropped.
+**Do not re-propose any of these soon** — cross-check new ideas against this list.
 
-| Board | Strategy | The 5-8 items | Why fresh |
-|---|---|---|---|
-| **The Original Six** | bounded-by-window | Bruins, Black Hawks, **Red Wings**, Canadiens, Rangers, Maple Leafs (NHL, 1942-67) | Hockey absent from sample; Michigan anchor free |
-| **The Fab Five** | complete-by-definition | Webber, Rose, Howard, King, Jackson (Michigan '91 recruits) | Hyper-local |
-| **Cooperstown's Class of '36** | complete-by-definition | Cobb, Ruth, Wagner, Mathewson, W. Johnson | HOF induction classes untouched |
-| **Day One!** | complete-by-definition | 100m, long jump, shot put, high jump, 400m (Olympic decathlon day 1) | Track & field absent from sample |
-| **Seven for Seven** | complete-by-definition | 100mH, high jump, shot put, 200m, long jump, javelin, 800m (heptathlon) | Pairs with Day One! |
-| **The Five Mother Sauces** | taxonomy-complete | Béchamel, Velouté, Espagnole, Tomate, Hollandaise | No cooking-classification boards exist |
-| **Grain Rules!** | source-bounded (27 CFR §5.143) | Bourbon, Rye, Wheat, Malt, Rye Malt, Corn Whiskey | Liquor-LAW trivia, not flavor |
-| **Bordeaux's First Growths** | source-bounded (1855 Classification, amended once) | Lafite-Rothschild, Latour, Margaux, Haut-Brion, Mouton Rothschild | Wine trivia untouched |
-| **The Five Basic Tastes** | taxonomy-complete | Sweet, sour, salty, bitter, umami | Science×food cross-domain bridge |
-| **Cluedo's Original Six — Suspects** | complete-by-definition | Scarlett, Mustard, White, Green, Peacock, Plum | No board-game-character boards exist |
-| **Cluedo's Original Six — Weapons** | complete-by-definition | Candlestick, knife, lead pipe, revolver, rope, wrench | Pairs with Suspects as one Cluedo board |
-| **Trivial Pursuit's Wedge Six** | taxonomy-complete | Geography, Entertainment, History, Arts & Lit, Science & Nature, Sports & Leisure | Board-game-inception angle |
-| **Crayola's Original Eight** | bounded-by-window | Red, orange, yellow, green, blue, violet, brown, black (1903 box) | Toy/school-supply angle absent |
-| **The Early Bird Four** | source-bounded (Kenner 1977 mail-away) | Luke, Leia, Chewbacca, R2-D2 | Toy-marketing-history angle |
-| **Super Mario Kart's Original Eight** | bounded-by-window | Mario, Luigi, Peach, Yoshi, Koopa Troopa, Toad, Bowser, DK Jr. (1992 SNES) | Video games absent from sample |
+Villains (sub-boards: Weapon of Choice · Man Behind the Mask · Say It and Tremble) · State
+Nicknames · Sitcom Workplaces · Did You Tape the Instructions (board-game parts-list) · Movie
+Boosts (product placements) · Birds · Deadliest Warrior · BNAS · Operation Ailments (no bones in
+the name) · Most Photographed Buildings · Best Picture WW2-set winners · Last 6 Super Bowl
+halftime bands · MLB #1 draft picks since 2011 · Books Without Words · Those Sneaky Bricks (LEGO
+Easter eggs) · Disney Opening Lines · Comics · Fish/Birds/Flowers-Trees · Mascot Examples ·
+Country/Pop/Yacht Rock · RNRHOF Nominees · MiLB Alts.
+
+**Note on strictness:** a couple of these ("Weapon of Choice," "Mascot Examples") are curated
+editorial picks, not externally-verifiable closed lists — Ben has run boards like this
+successfully. Don't over-apply a "must be provably closed" bar the real show doesn't actually
+enforce.
+
+*(A 15-board "completeness strategy" table used to live here — Original Six, Fab Five, Five Mother
+Sauces, etc. Deleted 2026-08-23: it was AI brainstorm material mislabeled as historical catalog,
+confirmed zero overlap with any board Ben has actually run, and encoded a "closed list" framework
+that isn't how Ben judges a board — see the corrected model above. Nothing downstream needs it.)*
 
 ### Shiny — video/audio/image, single-answer (survivors of the grid/video batch — the rest required an interactive grid or app and got cut in the 2026-07-17 rework, see note above)
 
