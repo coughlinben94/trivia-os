@@ -30,17 +30,27 @@ never reaches Ben, no "but it's a fun idea anyway" — **except the one narrow c
 below.** "Matching" means the phone mechanic ONLY when it explicitly says phone/MatchingBoard — a
 plain paper matching set was never restricted and needs no carve-out.
 
-**One narrow, deliberate carve-out (added 2026-08-23):** the phone-based **collaborative matching
-board** (`client/src/components/join/MatchingBoard.jsx` — teams tap their phones together to
-connect left/right pairs, live-synced through Supabase) is a real, shipped, Ben-loved exception.
-He explicitly wants more of it: "people love working together as a team putting together that
-puzzle." A shiny candidate MAY use this exact mechanic — pairs of items a team connects together
-on their phones, drag/matching only, nothing more exotic — capped at **1–2 uses per trivia
-night** (note the cap explicitly in Phase 3's confirmation line for any such candidate). This
-carve-out is scoped to the matching-board mechanic specifically, not a general reopening of
-"app is fine now" — crossword fill-ins, Wordle tiles, NYT-Connections groupings, and
-Battleship-style turn-based reveals are still dead on arrival. Recent live examples of this shape:
-"Strike a Match," "Drag and Drop."
+**Two narrow, deliberate carve-outs (added 2026-08-23, expanded same day):** these are real,
+shipped, Ben-loved phone mechanics — not a general reopening of "app is fine now." Crossword
+fill-ins, Wordle tiles, NYT-Connections groupings, and Battleship-style turn-based reveals are
+still dead on arrival. Both carve-outs together share one cap: **1–2 phone-based shiny uses per
+trivia night**, total, not 1–2 of each (note this explicitly in Phase 3's confirmation line for any
+such candidate).
+
+1. **Collaborative matching board** (`client/src/components/join/MatchingBoard.jsx` — teams tap
+   their phones together to connect left/right pairs, live-synced through Supabase). Ben: "people
+   love working together as a team putting together that puzzle." A shiny candidate MAY use this
+   exact mechanic — pairs of items a team connects together, drag/matching only, nothing more
+   exotic. Recent live example: "Drag and Drop."
+2. **Wager/closeness board** (`client/src/components/join/WagerBoard.jsx` — teams blind-wager one
+   of three risk tiers (Safe/Fire/Sun, escalating point value) BEFORE the question shows, then
+   submit a numeric guess; scoring ranks every team by distance from the true number and a team
+   only wins its chosen tier's payout if it beat enough of the room — miss the bar and it's zero,
+   no fallback to a safer tier). Ben: "i love the strike a match concept where they bet on how
+   close to the right answer they'll be." A shiny candidate MAY use this exact mechanic — ONE
+   numeric-answer question, teams bet risk level before seeing it, nothing more exotic (no
+   multi-round wagering, no wagering on non-numeric answers). Recent live example: "Strike a
+   Match."
 
 ## Mandatory process — every invocation, in this order
 
@@ -53,9 +63,12 @@ each existing format works mechanically — the actual retrieval trick, not the 
 cover. Output this taxonomy as a short list before moving to Phase 2. Ground it in real named
 formats, e.g.:
 
-- **Phone collaborative-matching mechanic (the carve-out)** — teams connect left/right pairs
-  together on their phones in real time ("Strike a Match," "Drag and Drop") — the ONE mechanic
-  allowed to break the paper-only rule, capped at 1–2/night, see the carve-out above.
+- **Phone collaborative-matching mechanic (carve-out 1)** — teams connect left/right pairs
+  together on their phones in real time ("Drag and Drop") — one of two mechanics allowed to break
+  the paper-only rule, capped at 1–2/night shared with carve-out 2, see above.
+- **Phone wager/closeness mechanic (carve-out 2)** — teams blind-bet a risk tier, then submit a
+  numeric guess, scored by closeness to the truth relative to the room ("Strike a Match") — the
+  other mechanic allowed to break the paper-only rule, same shared cap, see above.
 - **Hidden-connection mechanic** — 4 items shown/read, find the shared trait ("We're not so
   different, you and I…"; "Song Connections"; "Odd One Out" is this mechanic inverted — find the
   one that DOESN'T fit).
@@ -126,14 +139,14 @@ candidate.
 ### Phase 3 — Gate every candidate through a literal simulated-run paper test
 
 For every candidate that survived Phase 2, mentally run it end-to-end with real-sounding
-placeholder content — an actual plausible fact, not "Item A" / "Subject B." Confirm all three:
+placeholder content — an actual plausible fact, not "Item A" / "Subject B." Confirm all four:
 
 1. **Passes the hard paper-test constraint above** — exactly one thing written on paper, no app,
-   no device, no grid, no turn-based mechanic — OR is a legitimate use of the 2026-08-23
-   phone-matching-board carve-out (connect-the-pairs only, nothing more exotic), and if so, say so
-   plainly in the confirmation line and note it relies on the 1–2-per-night cap (this agent proposes
-   concepts, not a night's actual lineup — it can't enforce the cap itself, only flag that a
-   candidate needs it).
+   no device, no grid, no turn-based mechanic — OR is a legitimate use of one of the two
+   2026-08-23 phone carve-outs (matching-board or wager/closeness, nothing more exotic), and if so,
+   say so plainly in the confirmation line and note it relies on the shared 1–2-per-night cap (this
+   agent proposes concepts, not a night's actual lineup — it can't enforce the cap itself, only
+   flag that a candidate needs it).
 2. **Genuinely playable live, in real time, by a bar crowd** — the host can read/show it in under
    30 seconds, and a table can commit to a written answer within the round's normal pace. No
    candidate requiring per-table individualized content, live scoring math heavier than a normal
@@ -141,8 +154,18 @@ placeholder content — an actual plausible fact, not "Item A" / "Subject B." Co
 3. **Not a reskin of an existing catalog entry** — check it against the FULL Phase 1 taxonomy and
    the format-library.md table, not just the format it was force-paired from. If it's "Cover Story"
    with the serial numbers filed off, drop it.
+4. **Actually fun, not just legal.** Ben, 2026-08-23: "the shiny questions are supposed to take off
+   the blinders. think outside the box. be different, unique. the fun questions are what people
+   come back for." A candidate that's paper-answerable, playable, and fresh but STILL flat —
+   one clue, one straight redaction, no "click" — fails this check even though it cleared 1–3. The
+   test, per the standing design principle (`feedback_trivia_night_shiny_format_design.md`): does
+   it converge 2+ independent routes onto one answer the way Tri Bond or "We're not so different"
+   does, OR is it a single item with real comic/performative texture (a Kiss This Guy-style bit,
+   a deadpan delivery, a genuine reveal)? A flat "redact one fact, guess the source" template is
+   the exact shape that got a whole 28-concept batch rejected on 2026-07-17 for having "no
+   pizzazz" — don't let one slip through just because it's mechanically clean.
 
-Any candidate that fails any one of the three checks gets dropped silently — it does not get
+Any candidate that fails any one of the four checks gets dropped silently — it does not get
 written up, does not get an apology paragraph, does not reach Ben. This is the mechanical
 quality gate, unrelated to Phase 1.5's rejection list — it still runs at full strength. Only
 survivors get surfaced.

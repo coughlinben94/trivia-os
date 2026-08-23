@@ -66,15 +66,20 @@ These slot INSIDE question rounds (1–2 per round). Frequency notes from the 56
 
 **AI-generated shiny content** (established, growing): AI band images (band's songs as literal AI images), AI movie titles ("movies using AI, in other words"), ChatGPT-goes-ERB, AI song covers in cartoon voices. When asked to generate these, the joke is literal-mindedness — the AI takes the title at face value.
 
-### Phone matching-board (2026-08-23 — the one deliberate exception to "no app")
+### Phone carve-outs (2026-08-23, expanded same day — the two deliberate exceptions to "no app")
 
-A real, shipped mechanic: teams use their phones to connect left/right pairs together in real time
-(`client/src/components/join/MatchingBoard.jsx`). Ben loves this specifically because it's
-collaborative — the table works the puzzle together, out loud. Live examples: **Strike a Match**,
-**Drag and Drop** (e.g. "match each Pokémon to its type"). This is the ONLY shiny mechanic allowed
-to break the paper-only rule, capped at 1–2 uses per trivia night — see the shiny-format-idea-
-generator agent's hard-constraint carve-out. Every other app/grid/device idea is still dead on
-arrival; this is not a general reopening.
+Two real, shipped mechanics, sharing one cap of 1–2 uses per trivia night total (not each) — see
+the shiny-format-idea-generator agent's hard-constraint carve-out for the full doctrine. Every
+other app/grid/device idea is still dead on arrival; this is not a general reopening.
+
+- **Collaborative matching board** (`client/src/components/join/MatchingBoard.jsx`) — teams use
+  their phones to connect left/right pairs together in real time. Ben loves this specifically
+  because it's collaborative — the table works the puzzle together, out loud. Live example:
+  **Drag and Drop** (e.g. "match each Pokémon to its type").
+- **Wager/closeness board** (`client/src/components/join/WagerBoard.jsx`) — teams blind-bet a risk
+  tier (Safe/Fire/Sun, escalating points) before the question shows, then submit a numeric guess;
+  scored by closeness to the truth relative to the room, not a fixed tolerance — miss your tier's
+  bar and it's zero. Live example: **Strike a Match**.
 
 ## Swing Round Concepts (Round 3)
 
