@@ -617,46 +617,63 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           these are one-off graphic/interstitial moments, not ring-framed
           question content, so there's no margin worth preserving for them. */}
       <StageFrame scale={FULL_BLEED_SLIDE_TYPES.has(currentSlide?.type) ? 1 : undefined}>
-        {/* key resets the boundary on every slide change so a crash on one slide
-            doesn't permanently block the display for subsequent slides.
-            A multi-part shiny question keeps the SAME slide.id across every
-            part, the introDone flip, and the closing beat — folding those
-            into the key too means a crash on one part doesn't leave "Slide
-            unavailable" stuck through every part after it. */}
-        <ErrorBoundary
-          key={`${currentSlide?.id}:${currentSlide?.data?.introDone}:${currentSlide?.data?.currentPart}`}
-          fallback={slideFallback}
-        >
-          {/* mode="wait" (the default everywhere else) fully unmounts the
-              outgoing slide — including its own opaque lock/background —
-              before the incoming one mounts. That's fine for a plain fade,
-              but team-picker's entrance IS a black panel sliding down to
-              cover the previous slide (SLIDE_ANIMATIONS['team-picker'],
-              REVEAL_S run backwards) — under "wait" the previous slide is
-              already gone by the time it starts sliding, so the panel
-              descends over the bare ring instead of over what was actually
-              on screen (2026-08-23, Ben: "team intro slide should slide
-              over the rules slide, instead of jumping to a new ring world
-              slide, then the intro slide sliding down on that"). "sync"
-              (Framer Motion's default) keeps the outgoing slide mounted and
-              animating its own exit while the incoming one animates in on
-              top — DOM order puts the new team-picker panel after the old
-              slide, so it paints over it while descending. Scoped to just
-              this direction (entering team-picker) so every other
-              transition keeps its existing sequential "wait" behavior. */}
-          <AnimatePresence mode={currentSlide?.type === 'team-picker' ? 'sync' : 'wait'}>
-            {currentSlide && (
+        {/* AnimatePresence must be the STABLE element here — it never remounts,
+            so its enter/exit animations (below) actually get to run. Its
+            tracked child is keyed on slide.id ONLY, changing exclusively on
+            a real slide swap, never on a part-step within one slide.
+            (2026-08-23, Opus review: this used to be the other way around —
+            an ErrorBoundary wrapping AnimatePresence, keyed on
+            `${slide.id}:${introDone}:${currentPart}` — which meant every
+            part-step, not just every slide change, destroyed and recreated
+            AnimatePresence from scratch, so no exit animation it was ever
+            asked to run — mode="sync" below, holdExitForReveal on
+            SlideRenderer — actually executed.) */}
+        <AnimatePresence mode={currentSlide?.type === 'team-picker' ? 'sync' : 'wait'}>
+          {currentSlide && (
+            // resetKey (not key) clears a tripped boundary on a part-step —
+            // e.g. a crash on one team name during Team Intro doesn't leave
+            // "Slide unavailable" stuck through every name after it — without
+            // remounting this boundary (which would remount AnimatePresence
+            // too, see above). key IS slide.id, so AnimatePresence sees a new
+            // child exactly when the real slide changes.
+            <ErrorBoundary
+              key={currentSlide.id}
+              resetKey={`${currentSlide.data?.introDone}:${currentSlide.data?.currentPart}`}
+              fallback={slideFallback}
+            >
+              {/* mode="wait" (the default everywhere else) fully unmounts the
+                  outgoing slide — including its own opaque lock/background —
+                  before the incoming one mounts. That's fine for a plain fade,
+                  but team-picker's entrance IS a black panel sliding down to
+                  cover the previous slide (SLIDE_ANIMATIONS['team-picker'],
+                  REVEAL_S run backwards) — under "wait" the previous slide is
+                  already gone by the time it starts sliding, so the panel
+                  descends over the bare ring instead of over what was actually
+                  on screen (2026-08-23, Ben: "team intro slide should slide
+                  over the rules slide, instead of jumping to a new ring world
+                  slide, then the intro slide sliding down on that"). "sync"
+                  (Framer Motion's default) keeps the outgoing slide mounted and
+                  animating its own exit while the incoming one animates in on
+                  top — DOM order puts the new team-picker panel after the old
+                  slide, so it paints over it while descending. Scoped to just
+                  this direction (entering team-picker) so every other
+                  transition keeps its existing sequential "wait" behavior. */}
               <SlideRenderer
-                key={currentSlide.id}
                 slide={currentSlide}
                 show={show}
                 direction={direction}
                 isPreview={isPreview}
                 onAdvance={onBreakAdvance}
+                // Carried on every render so the LAST props this slide held
+                // before exiting (AnimatePresence clones them, doesn't
+                // re-render an exiting child) already say whether ITS OWN
+                // next slide is team-picker — see SlideRenderer's own
+                // comment on holdExitForReveal.
+                holdExitForReveal={sortedSlides[(show.current_slide_index ?? 0) + 1]?.type === 'team-picker'}
               />
-            )}
-          </AnimatePresence>
-        </ErrorBoundary>
+            </ErrorBoundary>
+          )}
+        </AnimatePresence>
         {/* Scoreboard lives inside the stage — clips at the stage wall.
             fallback={null}: this and every boundary below sit on top of an
             already-rendering TV scene — the default fallback is a full

@@ -173,7 +173,7 @@ const SLIDE_COMPONENTS = {
   'pre-show':          PreShowSlide,
 }
 
-export default function SlideRenderer({ slide, show, direction, isPreview = false, onAdvance }) {
+export default function SlideRenderer({ slide, show, direction, isPreview = false, onAdvance, holdExitForReveal = false }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const isShiny = slide?.data?.isShiny
@@ -244,6 +244,20 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
       animate: { ...variants.animate, opacity: 1 },
       exit:    { ...variants.exit,    opacity: 1 },
     }
+  }
+
+  // team-picker's incoming cover sheet takes REVEAL_S to fully descend
+  // (SLIDE_ANIMATIONS['team-picker'] above), but this slide's own exit
+  // (e.g. rules' 0.16s 'assemble' cut) unmounts THIS component — locked
+  // background included — the instant its own exit finishes. AnimatePresence
+  // only keeps an exiting child mounted for its own transition's duration,
+  // so without this, the sheet is still ~80% short of covering the screen
+  // when the opaque lock behind it disappears, exposing the bare ring for
+  // the gap (2026-08-23, Ben: "I see a ring world screen for a second" on
+  // rules -> team-picker). Stretching this exit to REVEAL_S keeps the lock
+  // up until the sheet has actually finished covering.
+  if (holdExitForReveal) {
+    variants = { ...variants, exit: { ...variants.exit, transition: { ...variants.exit.transition, duration: REVEAL_S } } }
   }
 
   const SlideComponent = SLIDE_COMPONENTS[slide.type] ?? CustomSlide

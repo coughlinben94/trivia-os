@@ -14,6 +14,20 @@ export default class ErrorBoundary extends Component {
     console.error('[ErrorBoundary] crash:', error, info.componentStack)
   }
 
+  // Reset without remounting. A caller that needs "clear a tripped boundary
+  // when X changes" used to do it by putting X in this component's `key`
+  // (forcing React to destroy and recreate it) — but when this boundary sits
+  // inside an AnimatePresence, that same remount also destroys the
+  // AnimatePresence instance itself, silently killing any exit animation it
+  // was supposed to run (2026-08-23, found via Opus review: a slide's own
+  // crash-reset key, wrapping AnimatePresence, made every enter/exit
+  // transition a no-op). `resetKey` clears `hasError` in place instead.
+  componentDidUpdate(prevProps) {
+    if (this.state.hasError && this.props.resetKey !== prevProps.resetKey) {
+      this.setState({ hasError: false })
+    }
+  }
+
   render() {
     if (this.state.hasError) {
       // `!== undefined`, NOT truthiness (fixed 2026-08-18). `fallback={null}`
