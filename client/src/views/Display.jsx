@@ -617,7 +617,7 @@ const BREAK_DELAY_MS = 10000
 // One-line tunable if it still needs to move.
 const HEAD_START_DELAY_MS = 1200
 
-export function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRingStateChange }) {
+function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRingStateChange }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const sortedSlides = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
