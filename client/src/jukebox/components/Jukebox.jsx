@@ -1279,6 +1279,18 @@ const [newSetName, setNewSetName] = useState('')
         handoffHoldRef.current = setTimeout(async () => {
           handoffHoldRef.current = null
           if (isPlaying || showLive) {
+            // Re-cover the library (same black layer the grading-break
+            // handoff itself renders behind, see libHandoffPending's
+            // declaration) — Ben, live: "the 'back to trivia' reshows the
+            // library for a split second." handleStop()'s exit animation
+            // ends by setting showLive false (LiveScreen's onClose ->
+            // closeLive), which un-hides the plain library grid underneath
+            // for however long the flush + slide-advance round trip below
+            // takes before Display.jsx actually unmounts this component.
+            // Never explicitly cleared: the component unmounts once
+            // onExitToShow's advance lands, same as the grading-break
+            // handoff's own cover never needing an exit-side clear either.
+            setLibHandoffPending(true)
             // Play the same stop-and-animate exit spacebar uses (fade audio,
             // LiveScreen tonearm lift + record fly-up) instead of cutting to
             // trivia-os mid-song. Wait matches LiveScreen's exit sequence
