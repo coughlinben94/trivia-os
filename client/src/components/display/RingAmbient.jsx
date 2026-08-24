@@ -37,6 +37,7 @@
 // only on the current station. See layoutScrim() below.
 import { forwardRef, useEffect, useLayoutEffect, useImperativeHandle, useRef } from 'react'
 import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, fillOf, rng, lerp, assertLayerPeriods } from '../../lib/ringEngine.js'
+import { ringNavAction } from '../../lib/ringStationIndex.js'
 import { EASE_SURGE } from '../../lib/easings.js'
 import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, applySkyTints } from '../../lib/ringPrimitives.js'
 
@@ -606,7 +607,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   const stationRef = useRef(0)
   const debugLabelRef = useRef(null)
   const busyRef = useRef(false)
-  const queuedTurnsRef = useRef(0)
+  const queuedTurnsRef = useRef([]) // queued turn() directions (+1/-1), drained one per unlock()
   const turnTimerRef = useRef(null)
   const shootLaneRef = useRef(null)
   const shootTimerRef = useRef(null)
@@ -771,18 +772,23 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   }, [])
 
   // Advances one station per question change — or snaps straight to the
-  // correct one when the change isn't a plain forward step (Prev, a
-  // multi-slide skip, or a Go Live that resumes mid-show). turn()'s glide
-  // only has authored content for a single FORWARD pan (see turn()'s own
-  // comment on the spare-frame cylinder width); anything else uses jumpTo()
-  // instead, which snaps rather than glides. Ben, 2026-08-21: clicking back
+  // correct one when the change isn't a single adjacent step (a multi-slide
+  // skip, or a Go Live that resumes mid-show). Single steps glide in BOTH
+  // directions (2026-08-24, Ben: "why i cant go back and forth between ring
+  // slides and have it be smooth" — Prev used to always snap): turn() takes
+  // a direction now, and its backward branch pre-snaps across the wrap where
+  // it has to (see turn()'s own willUnwrap comment) so a one-station glide
+  // always travels over authored content. Multi-station moves still use
+  // jumpTo(), which snaps rather than glides — the pan cylinders only carry
+  // content for single-surge travel (see the stationOverride comment below).
+  // Ben, 2026-08-21: clicking back
   // and forth in Dev Mode was cycling the ring forward every single time
   // regardless of direction — this used to fire turn() on ANY slideKey
   // change, with no idea which way the show had actually moved. Keyed on
   // slideIndex (not slideKey) so "which way" and "how far" are answerable
   // at all — station === slideIndex % PANES is the system's own stated
   // invariant (see jumpTo's comment), this just actually enforces it for
-  // every transition, not only forward-by-one ones.
+  // every transition, not only single-step ones.
   //
   // Guards on the last index actually seen rather than a first-run boolean,
   // so StrictMode's dev double-invoke can't fire a spurious extra turn (the
@@ -806,10 +812,13 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     if (slideIndex == null) return
     const prev = lastSlideIndexRef.current
     lastSlideIndexRef.current = slideIndex
-    if (prev == null) { jumpTo(slideIndex); return } // first real slide — align even if Go Live resumed mid-show
-    if (prev === slideIndex) return
-    if (slideIndex === prev + 1) turn()
-    else jumpTo(slideIndex)
+    // Decision table lives in ringNavAction (pure, unit-tested): single
+    // steps glide either way, everything else jumps. 'jump' also covers
+    // prev == null — first real slide, align even if Go Live resumed mid-show.
+    const action = ringNavAction(prev, slideIndex)
+    if (action === 'turn') turn()
+    else if (action === 'turn-back') turn(-1)
+    else if (action === 'jump') jumpTo(slideIndex)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideIndex])
 
@@ -1076,22 +1085,38 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   function unlock() {
     busyRef.current = false
     dom.clampSafeBoxStarPeaks(designElRef.current) // item 3: re-clamp at rest, new station
-    if (queuedTurnsRef.current > 0) {
-      queuedTurnsRef.current--
-      turn()
+    if (queuedTurnsRef.current.length > 0) {
+      turn(queuedTurnsRef.current.shift())
     }
   }
 
-  function turn() {
-    if (busyRef.current) { queuedTurnsRef.current++; return }
+  // dir: +1 (default — every pre-2026-08-24 caller, including ring-verify's
+  // window.__world.turn()) glides one station forward; -1 glides one station
+  // back (Prev between adjacent ring-visible slides — see the slideIndex
+  // effect above). Still strictly single-station: multi-station moves stay
+  // jumpTo()'s job.
+  function turn(dir = 1) {
+    if (busyRef.current) { queuedTurnsRef.current.push(dir); return }
     busyRef.current = true
     const stage = stageElRef.current
     const offset = offsetRef.current
-    const willWrap = ENGINE.LAYERS.some(L => L.id !== 'sky' &&
+    const willWrap = dir > 0 && ENGINE.LAYERS.some(L => L.id !== 'sky' &&
       offset[L.id] + L.surge >= cylinderOf(ENGINE, L))
+    // Backward mirror of willWrap: a glide target below offset 0 would pan
+    // the viewport over the unauthored space LEFT of each cylinder's x=0
+    // (content only exists on [0, cylinder + spare frame]). Handled by the
+    // pre-snap below, so — unlike willWrap — nothing is deferred to the
+    // transition-end timer: the subtraction itself lands the offsets back
+    // in [0, cylinder).
+    const willUnwrap = dir < 0 && ENGINE.LAYERS.some(L => L.id !== 'sky' &&
+      offset[L.id] - L.surge < 0)
 
     if (isReduced()) {
-      ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] = (offset[L.id] + L.surge) % cylinderOf(ENGINE, L) })
+      ENGINE.LAYERS.forEach(L => {
+        if (L.id === 'sky') return
+        const cyl = cylinderOf(ENGINE, L)
+        offset[L.id] = ((offset[L.id] + dir * L.surge) % cyl + cyl) % cyl
+      })
       stage.classList.remove('go')
       writeOffsets()
       // unlock() may drain a queued turn and re-add 'go' in this same
@@ -1099,7 +1124,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       // the browser coalesces both writes into one paint and the wrap
       // animates as a visible rewind instead of snapping.
       void stage.offsetWidth
-      stationRef.current = (stationRef.current + 1) % ENGINE.PANES
+      stationRef.current = (stationRef.current + dir + ENGINE.PANES) % ENGINE.PANES
       if (debugLabelRef.current) debugLabelRef.current.textContent = `S${stationRef.current}`
       layoutScrim(stationRef.current)
       // Still animated on the wrap branch: the wrap snaps the PAN (a rewind
@@ -1112,10 +1137,27 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       return
     }
 
+    if (willUnwrap) {
+      // Invisible pre-snap — the backward wrap (station 0 -> 12), the mirror
+      // of the forward wrap's deferred modulo reset, just run BEFORE the
+      // glide instead of after it. At station 0 every offset is 0, and
+      // offset === cylinder shows the exact same pixels: the viewport
+      // [cylinder, cylinder + W] is the spare-frame content copy of [0, W] —
+      // the same window every forward wrap glide already ends on, so this is
+      // proven-authored territory, not an assumption. Snap there without a
+      // transition ('go' off + forced reflow, same coalescing discipline as
+      // the branches above), then the ordinary subtraction below glides
+      // cylinder -> cylinder - surge over real content.
+      stage.classList.remove('go')
+      ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] += cylinderOf(ENGINE, L) })
+      writeOffsets()
+      void stage.offsetWidth
+    }
+
     stage.classList.add('go')
-    ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] += L.surge })
+    ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] += dir * L.surge })
     writeOffsets()
-    stationRef.current = (stationRef.current + 1) % ENGINE.PANES
+    stationRef.current = (stationRef.current + dir + ENGINE.PANES) % ENGINE.PANES
     if (debugLabelRef.current) debugLabelRef.current.textContent = `S${stationRef.current}`
     layoutScrim(stationRef.current)
     // Fired in the same tick the pan starts, but on a longer duration and a
@@ -1148,7 +1190,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     // can't be overshot by that turn still landing afterward.
     clearTimeout(turnTimerRef.current)
     busyRef.current = false
-    queuedTurnsRef.current = 0
+    queuedTurnsRef.current = []
     // stationRef only ever holds 0..PANES-1 — normalize first, or an
     // out-of-range/non-integer target (a raw slide index from a future
     // caller, an off-by-one, a stray float) never equals stationRef.current

@@ -204,3 +204,79 @@ describe('13-pane wrap glide (Ben: "the glide from s12-s13-s0")', () => {
     expect(legs[10].after.mid).not.toBe(0) // old wrap leg 11->0
   })
 })
+
+// turn(-1)'s offset arithmetic, reproduced the same way simulateTurns above
+// reproduces turn(+1)'s (RingAmbient.jsx, 2026-08-24 — Prev between adjacent
+// ring slides glides instead of snapping). The backward wrap is the forward
+// wrap's mirror with the snap on the OTHER side of the glide: at station 0
+// (all offsets 0) the offsets pre-snap to their cylinders — pixel-identical,
+// offset===cylinder shows the spare-frame copy of [0, W], the same window
+// every forward wrap glide already ends on — and THEN the subtraction glides
+// over authored content. Nothing is deferred: cylinder - surge is already in
+// [0, cylinder), so no post-transition modulo reset exists on this path.
+function simulateBackTurn(engine, station) {
+  const pans = engine.LAYERS.filter(L => L.surge !== 0)
+  // offset === station * surge is the system's own invariant (turn/jumpTo
+  // both move offsets by whole surges in lockstep with stationRef).
+  const offset = Object.fromEntries(pans.map(L => [L.id, station * L.surge]))
+  const before = { ...offset }
+  const willUnwrap = pans.some(L => offset[L.id] - L.surge < 0)
+  if (willUnwrap) for (const L of pans) offset[L.id] += cylinderOf(engine, L)
+  const preSnap = { ...offset }
+  for (const L of pans) offset[L.id] -= L.surge
+  return { before, willUnwrap, preSnap, glideTarget: { ...offset } }
+}
+
+describe('backward glide (2026-08-24: Prev between adjacent ring slides)', () => {
+  const pans = ENGINE13.LAYERS.filter(L => L.surge !== 0)
+
+  it('every non-wrap leg travels exactly one surge backward, never below 0', () => {
+    for (let s = 1; s < ENGINE13.PANES; s++) {
+      const leg = simulateBackTurn(ENGINE13, s)
+      expect(leg.willUnwrap, `station ${s}`).toBe(false)
+      for (const L of pans) {
+        expect(leg.glideTarget[L.id] - leg.before[L.id], `station ${s}, layer ${L.id}`).toBe(-L.surge)
+        expect(leg.glideTarget[L.id], `station ${s}, layer ${L.id}`).toBeGreaterThanOrEqual(0)
+      }
+    }
+  })
+
+  it('station 0 is the one backward wrap, on every layer at once', () => {
+    expect(simulateBackTurn(ENGINE13, 0).willUnwrap).toBe(true)
+    for (let s = 1; s < ENGINE13.PANES; s++) {
+      expect(simulateBackTurn(ENGINE13, s).willUnwrap).toBe(false)
+    }
+  })
+
+  it('the backward wrap pre-snaps to offset === cylinder — the pixel-identical spare-frame window', () => {
+    const leg = simulateBackTurn(ENGINE13, 0)
+    for (const L of pans) {
+      // Same resting point every FORWARD wrap glide ends on before its own
+      // deferred reset — proven-authored content, not an assumption.
+      expect(leg.preSnap[L.id]).toBe(cylinderOf(ENGINE13, L))
+    }
+  })
+
+  it('the backward wrap glide lands exactly on station 12 resting offsets, already normalized', () => {
+    const leg = simulateBackTurn(ENGINE13, 0)
+    for (const L of pans) {
+      expect(leg.glideTarget[L.id]).toBe((ENGINE13.PANES - 1) * L.surge)
+      expect(leg.glideTarget[L.id]).toBeLessThan(cylinderOf(ENGINE13, L)) // no deferred modulo needed
+    }
+  })
+
+  it('a full backward circuit retraces the forward circuit station by station', () => {
+    // Walk 0 -> 12 -> 11 -> ... -> 0 and check each glide target equals the
+    // resting offsets simulateTurns produces for that same station.
+    const forward = simulateTurns(ENGINE13, 13).map(l => l.after)
+    let station = 0
+    for (let step = 0; step < ENGINE13.PANES; step++) {
+      const leg = simulateBackTurn(ENGINE13, station)
+      station = (station - 1 + ENGINE13.PANES) % ENGINE13.PANES
+      const expected = station === 0
+        ? { far: 0, mid: 0, near: 0 }
+        : forward[station - 1] // legs[s-1].after is station s's resting offsets
+      expect(leg.glideTarget, `arrived at station ${station}`).toEqual(expected)
+    }
+  })
+})
