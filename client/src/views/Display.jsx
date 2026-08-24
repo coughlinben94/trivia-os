@@ -743,7 +743,14 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
             style={{ background: theme.colors.shinyBg, zIndex: 1 }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            // Held up through the outgoing shiny slide's own 0.2s exit
+            // (SLIDE_ANIMATIONS['shiny'].exit, SlideRenderer.jsx) before this
+            // starts fading — both AnimatePresences here fire off the same
+            // currentSlide change, so without the delay this backdrop was
+            // uncovering the ring margin while StageFrame's shiny content was
+            // still fading out in the center: "coming out of it ... has a
+            // ring world transition behind it when it shouldn't" (2026-08-24).
+            exit={{ opacity: 0, transition: { delay: reduce ? 0 : 0.2 } }}
             transition={{ duration: reduce ? 0 : 0.3 }}
           />
         )}
