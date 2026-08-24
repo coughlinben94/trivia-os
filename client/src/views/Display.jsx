@@ -604,6 +604,19 @@ const MUSIC_STATION = 10
 // it 'warps' to the jukebox"). Space/ArrowRight still skip the wait.
 const BREAK_DELAY_MS = 10000
 
+// How far into the swirl to wait before starting the jukebox handoff
+// (2026-08-24, Ben, live: "the music started too early during the
+// transition. needs to be pushed back a bit"). Mounting at warp START
+// (0ms) meant a fast handoff could go audible while the vortex is still in
+// its deliberately-readable wind-up — WarpTransition's veil stays under
+// ~30% opaque through roughly this point (veil = (t/0.94)^2, t = elapsed/
+// 2500ms). Not pushed all the way back to onDone — that's the pre-
+// 2026-08-24 behavior this feature exists to improve on — just far enough
+// that a fast handoff's audio lands once the swirl is visually taking over,
+// not while the grading-break slide is still mostly readable underneath.
+// One-line tunable if it still needs to move.
+const HEAD_START_DELAY_MS = 1200
+
 export function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRingStateChange }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
@@ -628,6 +641,16 @@ export function DisplayInner({ show, direction, isPreview = false, onBreakAdvanc
   const [warp, setWarp] = useState(null)
   const breakWasActiveRef = useRef(false)
   const lastSlideIdRef = useRef(currentSlide?.id)
+
+  // Gates the jukebox head-start mount (below) to HEAD_START_DELAY_MS after
+  // the warp actually starts, instead of the instant it does. See
+  // HEAD_START_DELAY_MS's own comment for why.
+  const [headStartArmed, setHeadStartArmed] = useState(false)
+  useEffect(() => {
+    if (warp !== 'out') { setHeadStartArmed(false); return }
+    const t = setTimeout(() => setHeadStartArmed(true), HEAD_START_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [warp])
 
   // Report break/warp ring state up to Display's persistent, root-level
   // ParticleBackground instead of rendering our own (see PersistentRing) —
@@ -890,9 +913,12 @@ export function DisplayInner({ show, direction, isPreview = false, onBreakAdvanc
           shuffle pick -> SDK player connect -> play confirm) started AFTER the
           2.5s vortex had fully finished — that chain's real latency is what
           the black handoff cover (Jukebox's libHandoffPending) then sat on.
-          Now the overlay mounts the instant 'out' STARTS, so the handoff runs
-          concurrently with the warp and the residual black hold after it
-          shrinks by up to the warp's full runtime.
+          Now the overlay mounts HEAD_START_DELAY_MS after 'out' STARTS (not
+          instantly — see that constant's own comment, 2026-08-24 follow-up:
+          Ben, "the music started too early ... needs to be pushed back a
+          bit"), so the handoff runs concurrently with most of the warp and
+          the residual black hold after it shrinks, without a fast handoff's
+          audio landing while the swirl is still mostly transparent.
           visibility:hidden until breakActive, NOT a bare early mount: the warp
           canvas's veil is (t/0.94)^2 — near-transparent for its first ~1.5s
           (deliberately, "the scene stays readable while the vortex spins up")
@@ -912,7 +938,7 @@ export function DisplayInner({ show, direction, isPreview = false, onBreakAdvanc
           ponytail: audio can start under the warp's tail if the handoff beats
           2.5s (a J-cut — Ben asked for exactly this); if it ever reads wrong,
           the upgrade is deferring only playTrack (not sync/connect) to onDone. */}
-      {(breakActive || (breakEligible && warp === 'out')) && (
+      {(breakActive || (breakEligible && warp === 'out' && headStartArmed)) && (
         <ErrorBoundary fallback={null}>
           <div style={{ visibility: breakActive ? 'visible' : 'hidden' }}>
             <JukeboxBreakOverlay
