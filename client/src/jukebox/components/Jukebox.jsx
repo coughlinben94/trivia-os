@@ -85,6 +85,22 @@ export default function Jukebox({ onLogout, initialLib, onExitToShow, ringMode =
   const [isPlaying, setIsPlaying] = useState(false)
   const [showLive, setShowLive] = useState(false)
   const [liveEnding, setLiveEnding] = useState(false)
+  // Grading-break handoff cover (2026-08-24, Ben live: "i still saw the library
+  // for a split second, then it was shuffled … go straight from the animation
+  // to the songs playing, not seeing the library at all"). showLive can only
+  // flip true after a real round trip (Supabase sync -> shuffle pick -> Spotify
+  // play -> SDK confirms the track), so between mount and that confirmation the
+  // library grid is what's actually painted on the TV. This is a render-default
+  // problem, not a latency one — no playback speedup can close the window.
+  // While it's true (and Live hasn't opened yet) a plain black layer covers the
+  // library, matching LiveScreen's own `fixed inset-0 bg-black z-50` backdrop so
+  // the swap is continuous with no flash. Starts true ONLY when initialLib is
+  // present, i.e. the break-overlay auto-shuffle path — /music browsing passes
+  // no initialLib, starts false, and never renders the cover at all.
+  // Cleared on every give-up path of the ?lib= effect below (so a real failure
+  // falls back to the visible library, which the host needs), when the handoff
+  // resolves, and by a backstop timer.
+  const [libHandoffPending, setLibHandoffPending] = useState(!!initialLib)
   // setEntranceSong(null) added (2026-08-07, Opus review) — this used to be
   // the one close path that didn't clear it (handleStop and the play-failure
   // branch both already did). Escape/toggle-close left the session's FIRST
@@ -164,6 +180,9 @@ const [newSetName, setNewSetName] = useState('')
         setEntranceSong(null)
         setIsPlaying(false)
         setShowLive(false)
+        // Any path that resets back to the library must also drop the handoff
+        // cover, or the library it's falling back to stays hidden behind black.
+        setLibHandoffPending(false)
         setShowTest(false)
         setPlayingId(null)
         addToast('Couldn’t start playback — another session may be controlling Spotify')
@@ -281,6 +300,9 @@ const [newSetName, setNewSetName] = useState('')
   // race where the 500ms debounce fires before we know what the remote row contains.
   const syncCompletedRef          = useRef(false)
   const libParamHandledRef        = useRef(false)
+  // Timer that force-drops the handoff cover if the handoff somehow neither
+  // succeeds nor reports failure — see where it's armed, below the ?lib= effect.
+  const handoffCoverBackstopRef   = useRef(null)
   // updated_at of the remote row as of the last sets we know we're caught up
   // with (initial sync, an applied realtime update, a visibility resync, or
   // our own successful write). writeToSupabase compares against this before
@@ -632,8 +654,13 @@ const [newSetName, setNewSetName] = useState('')
     // a no-op so every downstream call site stays byte-identical.
     let lib = initialLib ?? null
     const strip = () => {}
+    // Every branch that gives up on the handoff calls this: the cover exists to
+    // hide the library during a handoff that's still working, NOT to hide a
+    // failure. On a real failure the host needs to see the library (and the
+    // toast) to fix it, so the cover comes off and the grid renders as normal.
+    const abandonHandoff = () => setLibHandoffPending(false)
 
-    if (!lib) { strip(); return }
+    if (!lib) { abandonHandoff(); strip(); return }
 
     // Random branch — resolve before the existence check so it flows the same path.
     // Only pick among sets that actually have songs, so a random landing
@@ -643,6 +670,7 @@ const [newSetName, setNewSetName] = useState('')
       const keys = Object.keys(items).filter(k => items[k].songs?.length)
       if (!keys.length) {
         addToast('No sets have songs — nothing to shuffle')
+        abandonHandoff()
         strip()
         return
       }
@@ -655,6 +683,7 @@ const [newSetName, setNewSetName] = useState('')
     // truthy function, sailed past this guard, and then threw on `.songs.length`.
     if (!Object.hasOwn(setsRef.current?.items ?? {}, lib)) {
       console.warn('[Jukebox] ?lib= key not found:', lib)
+      abandonHandoff()
       strip()
       return
     }
@@ -663,6 +692,7 @@ const [newSetName, setNewSetName] = useState('')
     if (!allTargetSongs.length) {
       const setName = setsRef.current.items[lib].name ?? lib
       addToast(`“${setName}” has no songs — pick another theme`)
+      abandonHandoff()
       strip()
       return
     }
@@ -673,6 +703,7 @@ const [newSetName, setNewSetName] = useState('')
     if (!targetSongs.length) {
       const setName = setsRef.current.items[lib].name ?? lib
       addToast(`“${setName}” has no trimmed songs — scrub a few songs first`)
+      abandonHandoff()
       strip()
       return
     }
@@ -709,7 +740,12 @@ const [newSetName, setNewSetName] = useState('')
     // only playTrackFn caller with no retry/no toast — advanceToNext's
     // tryPlay above has both, mirrored here.
     const attemptPlay = (isRetry) => {
-      playTrackFn.current?.(song)?.then(started => {
+      const attempt = playTrackFn.current?.(song)
+      // playTrackFn isn't wired yet (its effect hasn't run) — nothing is going
+      // to resolve, so don't sit behind the cover waiting for a promise that
+      // doesn't exist.
+      if (!attempt) { abandonHandoff(); return }
+      attempt.then(started => {
         // started === undefined means a newer play superseded this one —
         // that newer play owns the UI now, so only a genuine failure (false)
         // resets/retries it.
@@ -724,13 +760,24 @@ const [newSetName, setNewSetName] = useState('')
           setShowLive(false)
           setPlayingId(null)
           addToast('Playback stalled and auto-retry failed — hit Shuffle to restart')
+          abandonHandoff()
         }
       })
     }
     attemptPlay(false)
+    // Backstop. Every branch above is bounded (playTrack's own waits and the
+    // SDK confirm all time out, so the retry-exhausted toast lands by ~15s
+    // worst case), but a black TV for a whole grading break is a far worse
+    // failure than a visible library, so nothing gets to hold the cover
+    // indefinitely. Only ever fires on a hang the enumerated paths missed —
+    // and it's harmless after a success, since the cover doesn't render once
+    // showLive is true.
+    handoffCoverBackstopRef.current = setTimeout(abandonHandoff, 20000)
 
     strip()
   }, [syncDone])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => () => clearTimeout(handoffCoverBackstopRef.current), [])
 
   const advanceToNext = useCallback(() => {
     // isRetry closes over this call only — advanceToNext itself stays
@@ -880,6 +927,12 @@ const [newSetName, setNewSetName] = useState('')
           // screen and leaves showLive alone (see tuningRef above).
           if (tuningRef.current) setShowTest(true)
           else setShowLive(true)
+          // The handoff resolved — the real screen is up, so the cover has
+          // done its job and must not linger as latent state. Without this it
+          // would still be true behind LiveScreen, and an Escape back to the
+          // library mid-break would re-blank the TV instead of showing it.
+          clearTimeout(handoffCoverBackstopRef.current)
+          setLibHandoffPending(false)
         }
       }
       // Warm the upcoming song's palette now, not at fade start — a cold
@@ -1580,6 +1633,16 @@ const [newSetName, setNewSetName] = useState('')
           </div>
         </div>
       </div>
+
+      {/* Handoff cover — see libHandoffPending's declaration. Deliberately the
+          same `fixed inset-0 bg-black z-50` layer LiveScreen itself renders, so
+          when Live opens the black is continuous and nothing flashes between
+          them. Nothing inside it: this is a should-be-invisible cover over a
+          break that's about to start, not a loading screen worth designing.
+          Only ever rendered on the initialLib (grading-break) path. */}
+      {libHandoffPending && !showLive && (
+        <div className="fixed inset-0 bg-black z-50" />
+      )}
 
       {showLive && (
         <LiveScreen
