@@ -223,8 +223,28 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
 
   // ─── Play a track with custom start/stop ─────────────────────────
   const playTrack = useCallback(async (uri, startMs = 0, stopMs = 0, preview = false) => {
-    const player = playerRef.current
-    if (!player) return false
+    let player = playerRef.current
+    if (!player) {
+      // player.connect() (the init effect) hasn't resolved yet — this is the
+      // gap the deviceId poll below doesn't cover, it only starts once
+      // playerRef.current already exists. Real failure mode (2026-08-18 show,
+      // grading-break auto-shuffle fired the instant the overlay mounted,
+      // milliseconds after the SDK player was constructed): both call sites
+      // that retry on `started === false` retried within the same tick,
+      // long before connect() could possibly finish, so every attempt hit
+      // this bail. Poll it the same way the deviceId wait already does.
+      player = await new Promise(resolve => {
+        const poll = setInterval(() => {
+          if (playerRef.current) {
+            clearInterval(poll)
+            clearTimeout(deadline)
+            resolve(playerRef.current)
+          }
+        }, 100)
+        const deadline = setTimeout(() => { clearInterval(poll); resolve(null) }, 5000)
+      })
+      if (!player) return false
+    }
 
     let deviceId = deviceIdRef.current
     if (!deviceId) {
