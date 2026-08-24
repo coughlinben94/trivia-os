@@ -23,10 +23,32 @@ describe('computeNextStep', () => {
     const slides = [slide('a', 0, 'pre-show', { walkoutSong: { trigger: 'invoke', videoId: 'x' } }), slide('b', 1)]
     const patch = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
     expect(dataOf(patch, 'a').walkoutSong.invoked).toBe(true)
+    expect(dataOf(patch, 'a').walkoutSong.invokedAt).toEqual(expect.any(Number))
     expect(patch.current_slide_index).toBeUndefined()
-    // second press advances normally
-    const next = await computeNextStep({ slides: patch.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-    expect(next.current_slide_index).toBe(1)
+  })
+
+  // 2026-08-24 (Fable 5 diagnosis): the real-world gap between "invoke press
+  // lands" and "song is actually audible" is 2-4s (Supabase write + /display's
+  // realtime round-trip + YouTube iframe load/buffer/seek), with nothing on
+  // screen showing the first press worked. An impatient retry or a trailing
+  // click inside that window used to read as "cut the song short" and
+  // advanced almost immediately — Ben: "plays for like a second, then jumps
+  // to the next slide." A press this soon after invoking must be absorbed,
+  // not treated as a deliberate cut-it-short.
+  it('absorbs a second press that lands inside the invoke grace window', async () => {
+    const slides = [slide('a', 0, 'pre-show', {
+      walkoutSong: { trigger: 'invoke', videoId: 'x', invoked: true, invokedAt: Date.now() },
+    }), slide('b', 1)]
+    const patch = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(patch).toBe(null)
+  })
+
+  it('still lets a press well after the grace window cut the song short', async () => {
+    const slides = [slide('a', 0, 'pre-show', {
+      walkoutSong: { trigger: 'invoke', videoId: 'x', invoked: true, invokedAt: Date.now() - 10_000 },
+    }), slide('b', 1)]
+    const patch = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(patch.current_slide_index).toBe(1)
   })
 
   it('reveals a shiny intro before its content, then steps its parts', async () => {

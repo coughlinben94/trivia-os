@@ -26,6 +26,22 @@ import { isShinySeriesSibling, isMatchingShiny, isWagerShiny } from './shinySeri
 // See the disabled call site in computeNextStep() below.
 export const CLOSING_BEAT_ENABLED = false
 
+// Grace window after invoking a walkout song before a second press is
+// allowed to "cut it short" and advance. Between the invoke press landing
+// and the song being AUDIBLE sits real, silent dead time — the Supabase
+// write, /display's realtime round-trip (no optimistic update there), the
+// YouTube iframe loading, the player buffering and seeking — easily 2-4s
+// with zero on-screen sign the first press did anything. Any second press
+// inside that window (an impatient retry, a trailing click, Stream Deck
+// chatter) used to read as "the host wants to cut the song short" and
+// advanced immediately, ~1s after the song actually started — exactly
+// Ben's "plays for like a second, then jumps to the next slide" (2026-08-24,
+// diagnosed by an independent Fable 5 read after the fullscreen-click
+// collision fix, 4dde9d4, didn't fully resolve it). 4000ms rather than
+// something tighter: it needs to comfortably outlast the round-trip, not
+// just the write.
+const WALKOUT_INVOKE_GRACE_MS = 4000
+
 export function sortSlides(slides) {
   return [...(slides ?? [])].sort((a, b) => a.order - b.order)
 }
@@ -73,7 +89,7 @@ export function withEntryState(slides, slide, { currentPart, introDone } = {}) {
   // true` from an earlier rehearsal/visit would otherwise skip straight
   // past the silent hold and autoplay again on this new entry.
   if (slide.data?.walkoutSong?.trigger === 'invoke' && slide.data.walkoutSong.invoked) {
-    patch.walkoutSong = { ...slide.data.walkoutSong, invoked: false }
+    patch.walkoutSong = { ...slide.data.walkoutSong, invoked: false, invokedAt: null }
   }
   if (Object.keys(patch).length === 0) return slides
   return patchSlideData(slides, slide.id, patch)
@@ -148,7 +164,7 @@ export async function computeNextStep(show, fetchTeamCount) {
     // the first one did anything.
     const revealed = newSlides.find(s => s.id === targetSlide.id)
     if (revealed?.data?.walkoutSong?.trigger === 'invoke' && revealed.data.walkoutSong.videoId && !revealed.data.walkoutSong.invoked) {
-      newSlides = patchSlideData(newSlides, targetSlide.id, { walkoutSong: { ...revealed.data.walkoutSong, invoked: true } })
+      newSlides = patchSlideData(newSlides, targetSlide.id, { walkoutSong: { ...revealed.data.walkoutSong, invoked: true, invokedAt: Date.now() } })
     }
     return { slides: newSlides, current_slide_id: targetSlide.id, answer_reveal: false }
   }
@@ -161,11 +177,17 @@ export async function computeNextStep(show, fetchTeamCount) {
   // Next/Stream-Deck press instead — same slide, same index, just flips
   // `invoked`. Ben: the QR screen sits up from doors-open until a
   // Stream-Deck press fires the walkout song later, not the instant Go
-  // Live lands on it. A second Next while already playing just advances
-  // normally (host's own call to cut it short).
-  if (data?.walkoutSong?.trigger === 'invoke' && data.walkoutSong.videoId && !data.walkoutSong.invoked) {
-    const newSlides = patchSlideData(slides, curSlide.id, { walkoutSong: { ...data.walkoutSong, invoked: true } })
-    return { slides: newSlides }
+  // Live lands on it. A press well after it's actually playing can still
+  // cut it short (host's own call) — see WALKOUT_INVOKE_GRACE_MS above for
+  // why "well after" isn't just "any second press".
+  if (data?.walkoutSong?.trigger === 'invoke' && data.walkoutSong.videoId) {
+    if (!data.walkoutSong.invoked) {
+      const newSlides = patchSlideData(slides, curSlide.id, { walkoutSong: { ...data.walkoutSong, invoked: true, invokedAt: Date.now() } })
+      return { slides: newSlides }
+    }
+    if (data.walkoutSong.invokedAt && Date.now() - data.walkoutSong.invokedAt < WALKOUT_INVOKE_GRACE_MS) {
+      return null
+    }
   }
 
   // Reveal the intro's content before doing anything else. Guarded on
