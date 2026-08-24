@@ -970,14 +970,13 @@ export default function Display() {
 
 
   // First interaction → fullscreen. F key toggles.
-  // The Arrow/Space slide-advance that used to live here is REMOVED
-  // (RLS-D-1 / DK-1): it was fully redundant with the host's controls
-  // (Stream Deck keys go to the /host window), it double-fired with
-  // GradingBreakSlide's own Space/ArrowRight jukebox-skip handler (racing a
-  // nav write against the page navigating away), and a stray keyboard near
-  // the TV silently advancing the show is a liability with no owner.
-  // Navigation authority on /display is now exactly one path: the
-  // jukebox-return jump below, via the advance_show RPC.
+  // STALE as of 2026-08-24 (2ab9720 added a second nav path, the always-armed
+  // click/keydown stepper below — see its own comment) — this used to be
+  // true, isn't anymore, and the mismatch is exactly what caused the
+  // fullscreen-click/step collision documented on that stepper's `blocked()`.
+  // Kept as history of why keyboard nav was ever removed from here in the
+  // first place (still true: Stream Deck goes to /host, not this page), not
+  // as a current description of what /display's total nav surface is.
   useEffect(() => {
     function enter() {
       if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {})
@@ -1040,6 +1039,20 @@ export default function Display() {
       // fall through to Space/Enter/Arrow. e.repeat is undefined on clicks,
       // so this one expression covers both event types.
       if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return true
+      // A click, specifically, is ambiguous until the TV is actually in
+      // performance mode: the SAME window 'click' listener that requests
+      // fullscreen (the effect above, onFirstInteraction) fires on every one
+      // of the 1-3 clicks it typically takes a browser to actually enter
+      // fullscreen (a real quirk Ben hit live: "click it, click it again, it
+      // refocuses/gets bigger, then click... then it goes"). Every one of
+      // those clicks was ALSO reaching this stepper — the first reveals AND
+      // invokes the walkout song in one press (see computeNextStep's reveal
+      // branch), and the very next click, still just trying to get
+      // fullscreen, immediately fell through to a real advance — "plays for
+      // like a second, then jumps to the next slide." Keyboard (Stream Deck)
+      // isn't part of the fullscreen ritual, so it stays always-armed
+      // regardless — only `click` needs this gate.
+      if (e.type === 'click' && !document.fullscreenElement) return true
       // The ENTIRE grading-break window belongs to the break, not the stepper.
       // Space/ArrowRight during the BREAK_DELAY_MS wait are the break's own
       // skip-the-wait keys (DisplayInner's warp effect) — but the same press
