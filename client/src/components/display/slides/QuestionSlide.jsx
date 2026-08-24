@@ -452,7 +452,7 @@ function ShinySwingVisualQuestion({ slide, theme }) {
 
 // ─── Shiny audio question ─────────────────────────────────────────────────────
 
-function ShinyAudioQuestion({ slide, show, theme }) {
+function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
   const { data } = slide
   const part = resolveShinyPart(data)
   const isYoutubeSource = !!part.youtubeId
@@ -568,13 +568,18 @@ function ShinyAudioQuestion({ slide, show, theme }) {
   // React to show.audio_playing from Supabase (wired in step 5 Live Mode)
   // — only meaningful for the real <audio> element; a YouTube-sourced clip
   // has no gain graph to hook into and is driven purely by the on-screen button.
+  // isPreview: the host's build-mode preview pane must not play the clip out
+  // loud on the laptop while the show is being built — same gate RulesSlide,
+  // WinnerRevealSlide, PreShowSlide and StateOfUnionSlide put on their audio.
+  // Only this remote-driven path is gated; the on-screen PLAY button below is
+  // an explicit press and still works in preview.
   useEffect(() => {
-    if (isYoutubeSource) return
+    if (isYoutubeSource || isPreview) return
     const ap = show?.audio_playing
     if (ap?.slideId === slide.id && ap?.playing && audioRef.current) {
       playWithGain().catch(() => {})
     }
-  }, [show?.audio_playing, slide.id, isYoutubeSource])
+  }, [show?.audio_playing, slide.id, isYoutubeSource, isPreview])
 
   return (
     <div
@@ -969,7 +974,7 @@ const SHINY_PAN_REDUCED = {
 
 // ─── Main dispatcher ──────────────────────────────────────────────────────────
 
-function ShinyContent({ slide, show, theme, transitionKey }) {
+function ShinyContent({ slide, show, theme, transitionKey, isPreview }) {
   const { data } = slide
   const part = resolveShinyPart(data)
 
@@ -982,7 +987,7 @@ function ShinyContent({ slide, show, theme, transitionKey }) {
       : <ShinyVisualQuestion slide={slide} theme={theme} show={show} />
   }
   if (isAudioShiny(data)) {
-    return <ShinyAudioQuestion slide={slide} theme={theme} show={show} />
+    return <ShinyAudioQuestion slide={slide} theme={theme} show={show} isPreview={isPreview} />
   }
   if (isVideoShiny(data)) {
     return <ShinyVideoQuestion slide={slide} theme={theme} />
@@ -999,7 +1004,7 @@ function ShinyContent({ slide, show, theme, transitionKey }) {
   return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} />
 }
 
-export default function QuestionSlide({ slide, show, transitionKey }) {
+export default function QuestionSlide({ slide, show, transitionKey, isPreview }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const { data } = slide
@@ -1028,7 +1033,7 @@ export default function QuestionSlide({ slide, show, transitionKey }) {
       >
         {showIntro
           ? <ShinyIntroScreen slide={slide} theme={theme} show={show} />
-          : <ShinyContent slide={slide} show={show} theme={theme} transitionKey={transitionKey} />}
+          : <ShinyContent slide={slide} show={show} theme={theme} transitionKey={transitionKey} isPreview={isPreview} />}
       </motion.div>
     </AnimatePresence>
   )

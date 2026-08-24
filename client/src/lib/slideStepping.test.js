@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeNextStep, computePrevStep, withEntryState, bakeTeamPickerParts } from './slideStepping.js'
+import { computeNextStep, computePrevStep, withEntryState, bakeTeamPickerParts, isAutoRollPart } from './slideStepping.js'
 
 const noTeams = async () => 0
 const slide = (id, order, type = 'question', data = {}) => ({ id, order, type, roundId: 'r1', data })
@@ -118,5 +118,44 @@ describe('bakeTeamPickerParts', () => {
   it('leaves non-team-picker slides untouched', async () => {
     const s = slide('a', 0, 'question', {})
     expect(await bakeTeamPickerParts([s], s, async () => 9)).toEqual([s])
+  })
+})
+
+// The Team Intro auto-roll's index law (LiveMode.jsx schedules the timer off
+// this). Off-by-one here is invisible in code review and only shows up in
+// front of a live room as a skipped team, a skipped closing statement, or a
+// roll that never starts — so it gets its own asserts.
+describe('isAutoRollPart', () => {
+  // 4 teams -> bakeTeamPickerParts length 7: [intro, t1, t2, t3, t4, outro, landed]
+  const LEN = 4 + 3
+
+  it('never fires on the opening text — that press is the host\'s roll trigger', () => {
+    expect(isAutoRollPart(LEN, 0)).toBe(false)
+  })
+
+  it('fires on every team name, first through last', () => {
+    expect([1, 2, 3, 4].map(p => isAutoRollPart(LEN, p))).toEqual([true, true, true, true])
+  })
+
+  it('stops on the closing statement and the landed reveal', () => {
+    expect(isAutoRollPart(LEN, LEN - 2)).toBe(false) // outro
+    expect(isAutoRollPart(LEN, LEN - 1)).toBe(false) // landed
+  })
+
+  it('rolls the last team name so the roll lands ON the closing statement', () => {
+    // The final auto-fire must come from the last team (LEN-3), moving to the
+    // outro — otherwise the roll stalls one name short and Ben has to press.
+    expect(isAutoRollPart(LEN, LEN - 3)).toBe(true)
+  })
+
+  it('never fires for a zero-team roster (baked length 3) or an unbaked slide', () => {
+    expect([0, 1, 2].map(p => isAutoRollPart(3, p))).toEqual([false, false, false])
+    expect(isAutoRollPart(0, 0)).toBe(false)
+  })
+
+  it('scales to any roster size without hardcoded indices', () => {
+    const big = 21 + 3
+    expect(isAutoRollPart(big, 21)).toBe(true)   // last team
+    expect(isAutoRollPart(big, 22)).toBe(false)  // outro
   })
 })

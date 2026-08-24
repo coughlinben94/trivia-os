@@ -18,7 +18,7 @@ import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
 import { resolveShinyPart, isWagerShiny } from '../lib/shinySeries.js'
 import { EASE_OUT } from '../lib/easings.js'
 import { resolvePreviewShow } from '../lib/previewSlide.js'
-import { computeNextStep, computePrevStep } from '../lib/slideStepping.js'
+import { computeNextStep, computePrevStep, sortSlides } from '../lib/slideStepping.js'
 
 // See the FULL_BLEED_SLIDE_TYPES comment at StageFrame's usage below.
 // team-picker added 2026-08-19 (Ben, live: "sits on top of the ring world,
@@ -29,7 +29,19 @@ import { computeNextStep, computePrevStep } from '../lib/slideStepping.js'
 // comment) — but confined to StageFrame's 85% box, that cover/reveal only
 // ever happened in the center, with the real ring-world visible in the
 // margins around it the whole time instead of hidden until the wipe.
-const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker', 'question', 'team-preview', 'grading-break'])
+// pre-show added 2026-08-24 (Ben: "jumping from the first slide to slide two
+// then to slide three is jumpy — the assets get bigger then smaller"). A real
+// show opens pre-show -> state-of-union -> rules -> team-picker -> ...; every
+// one of those but pre-show was already full-bleed, so slide 1 rendered in the
+// 85% box and slide 2 snapped out to the full viewport. pre-show is not a
+// boxed design that happened to be omitted — it is the SAME screen as the
+// automatic pre-show gate (PreShowScreen below), which renders full-viewport
+// outside this stage entirely, and PreShowScreen's own comment says to "keep
+// the two in step or the screen visibly changes when the host re-shows it
+// mid-show". Boxing one copy and not the other was the drift. The paired
+// change is PreShowSlide's Ben photo, 45cqh -> 38cqh, since the container it
+// measures against just grew from 85% of the viewport to all of it.
+const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker', 'question', 'team-preview', 'grading-break', 'pre-show'])
 
 // ─── No-show holding screen (before any show goes live) ────────────────────
 
@@ -339,8 +351,10 @@ function PreShowScreen({ show, onInstall }) {
             Rationale for the pin, the `contain` fit, the negative margin and
             the bottom fade is documented there and on PRESHOW_BEN_PHOTO.
             vh here vs cqh there is deliberate, not drift: this gate renders
-            full-viewport, that slide renders inside StageFrame's 85% stage.
-            Both land on ~410px at 1080p. */}
+            full-viewport with no query container, that slide renders inside
+            StageFrame — which since 2026-08-24 hands 'pre-show' a scale-1
+            stage, so its container IS the viewport and 38cqh there resolves
+            to the same 38vh here. Both land on ~410px at 1080p. */}
         <img
           src={PRESHOW_BEN_PHOTO}
           alt=""
@@ -907,6 +921,13 @@ export default function Display() {
   // decision logic /host's Next/Prev run; needs a host_verified session, which
   // the inline PIN prompt below establishes once per browser.
   const stepRef = useRef(null)
+  // One shared timestamp across BOTH directions — the same shape (and the same
+  // 120ms) as LiveMode.jsx's guardNav, for the same reason: stepShow() reads
+  // showRef.current, which only refreshes after a realtime round-trip, so two
+  // presses closer together than that both compute off the same stale row and
+  // fire two real advances. See guardNav's comment in LiveMode.jsx for why the
+  // window is 120ms and not the 350ms it started at.
+  const lastStepRef = useRef(0)
   const handleStep = useCallback(async (direction) => {
     // Preview/demo windows render a real show row but must never drive it —
     // the host opens Preview alongside Live Mode, and a stray click there
@@ -1013,6 +1034,30 @@ export default function Display() {
   // multi-part stepping, or shiny intro beats.
   useEffect(() => {
     function blocked(e) {
+      // Same three guards the host's own Next path has (LiveMode.jsx's
+      // handleKeyDown): a held key on the TV must not fire the stepper once
+      // per auto-repeat, and a reflexive Cmd/Ctrl/Alt shortcut must never
+      // fall through to Space/Enter/Arrow. e.repeat is undefined on clicks,
+      // so this one expression covers both event types.
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return true
+      // The ENTIRE grading-break window belongs to the break, not the stepper.
+      // Space/ArrowRight during the BREAK_DELAY_MS wait are the break's own
+      // skip-the-wait keys (DisplayInner's warp effect) — but the same press
+      // also reached this always-armed stepper, which advanced the show, and
+      // the slide-change effect then tore down the in-progress 'out' warp. Net
+      // result: the jukebox never opened and the break was skipped outright.
+      // The [data-break-overlay] check below only covers the window AFTER the
+      // overlay mounts; this covers the 10s before it, where nothing visible
+      // has happened yet. Every legitimate exit from a grading break moves the
+      // show off the slide (the jukebox b-hold -> advanceAfterBreak), so this
+      // releases on its own the moment the break is really over.
+      // (current_slide_id null = queued but not yet revealed, the state
+      // PreShowScreen is up in — DisplayInner isn't mounted, no break timer is
+      // running, and that first press is the reveal press. Nothing to collide
+      // with there, so don't block it.)
+      const row = showRef.current
+      if (row && (row.current_slide_id ?? null) !== null &&
+          sortSlides(row.slides)[row.current_slide_index ?? 0]?.type === 'grading-break') return true
       // Typing in the jukebox search / PIN box must never step the show, and
       // while the break overlay owns the screen its own b-hold is the advance
       // path — a click on a song row must not double as a Next press.
@@ -1029,15 +1074,21 @@ export default function Display() {
       return !!e.target?.closest?.('input, textarea, [contenteditable], [data-pin-prompt], [data-no-step]') ||
         !!document.querySelector('[data-break-overlay], [data-scoreboard-overlay]')
     }
+    function guardedStep(direction) {
+      const now = Date.now()
+      if (now - lastStepRef.current < 120) return
+      lastStepRef.current = now
+      handleStep(direction)
+    }
     function onAdvance(e) {
       if (e.type === 'keydown' && !['ArrowRight', 'Space', 'Enter'].includes(e.code)) return
       if (blocked(e)) return
-      handleStep(1)
+      guardedStep(1)
     }
     function onRetreat(e) {
       if (e.code !== 'ArrowLeft') return
       if (blocked(e)) return
-      handleStep(-1)
+      guardedStep(-1)
     }
     window.addEventListener('click', onAdvance)
     window.addEventListener('keydown', onAdvance)

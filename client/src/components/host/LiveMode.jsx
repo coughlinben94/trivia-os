@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
 import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
+import { isAutoRollPart } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
 // override for it — every other wager error is a real, unrecoverable-by-
@@ -20,6 +21,20 @@ import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TI
 // 2026-08-17: "idk why that keeps popping up ... something different" —
 // found while investigating: this is the one message with no path forward).
 const WAGER_ZERO_ANSWERS_ERROR = 'No wager answers came back — check connection and retry before scoring'
+
+// How long each team-picker TEAM NAME holds before auto-rolling to the next —
+// see the effect near guardNav below for why this lives host-side.
+//
+// 2400ms, not the 1400ms the first (reverted, /display-side) version used:
+// this timer measures currentPart-change to currentPart-change, and the
+// display burns most of that window on choreography before the name is even
+// readable. TeamPickerSlide's draw loop exits the outgoing name over E=620ms,
+// then approaches the incoming one over A=1050ms, and only then enters its
+// indefinite `hold` phase. That's ~1670ms of motion per step, so 1400ms never
+// let a name finish arriving, let alone be read; 2400ms leaves ~730ms of
+// actual still hold. Retune here if Ben wants the roll faster or slower —
+// anything at or below ~1700ms starts eating the arrival animation itself.
+const TEAM_PICKER_HOLD_MS = 2400
 
 // PYL "Pick animation" tiles — same visual language as BuildMode's CARD_STYLE
 // (soft gradient + colored border that brightens on hover) but keyed by
@@ -601,6 +616,71 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     fn()
   }, [])
 
+  // `actions` is a fresh object literal every render (Host.jsx builds it as
+  // `{ ...showApi }` with no memoization) — putting it directly in the
+  // auto-roll effect's deps below would clear and reschedule that effect's
+  // timer on every single re-render of Host.jsx, not just the ones that
+  // actually change the team-picker part. In a live show with realtime
+  // subscriptions firing constantly, that's easily faster than the hold
+  // duration, so the timer could starve and never fire. A ref sidesteps the
+  // instability without needing Host.jsx's actions object to be stable.
+  const actionsRef = useRef(actions)
+  actionsRef.current = actions
+
+  // Team Intro (team-picker) auto-roll — once the host starts it, every team
+  // name advances on its own, no press per name (2026-08-20, Ben: "one
+  // advance button to start the whole animation ... all team names ... flow
+  // together, then i have to advance to get to next slide"). The exact flow
+  // Ben confirmed:
+  //   part 0 (opening text)  — silent, waits for ONE explicit Next
+  //   parts 1..N (teams)     — this effect rolls them automatically
+  //   part N+1 (closing text)— the roll lands here and STOPS, waits for Next
+  //   part N+2 (landed)      — ring-world reveal, then one more Next leaves
+  // So the auto range is deliberately [1, len-3]: firing on part 0 would rob
+  // the host of the "start the roll" press, and firing on len-2/len-1 would
+  // blow through the closing statement and the reveal.
+  //
+  // Lives HERE, not on /display. A /display-side timer was tried first
+  // (53065d0) and reverted (9401c75): it wrote currentPart straight to
+  // Supabase, but the host's realtime subscription only merges showState
+  // fields and never `slides` (see useShow.js) — so the host's local
+  // `show.slides` went stale the instant the display auto-advanced once, and
+  // the next manual Next recomputed currentPart off that stale value,
+  // silently rewinding the ceremony back toward team #1. Verified still true
+  // today. Routing through guardNav + actions.nextSlide() keeps
+  // computeNextStep (slideStepping.js) the single writer, same as every other
+  // nav path, and means a manual press landing on the timer can't
+  // double-advance.
+  //
+  // The effect is keyed on currentPart, so ANY change to it — this timer
+  // firing, or a manual Next/Prev/Stream Deck press cutting the hold short —
+  // runs the cleanup, cancels the pending timeout, and reschedules against
+  // the new part. That is what prevents a timer and a manual press both
+  // advancing the same transition.
+  useEffect(() => {
+    if (currentSlide?.type !== 'team-picker') return
+    // Nothing is revealed yet right after Go Live (computeNextStep's
+    // reveal-without-stepping branch keys off a null currentSlideId). A
+    // leftover currentPart from an earlier run would otherwise let this
+    // timer fire that reveal press itself, so landing on Team Intro would
+    // start the ceremony with no host input at all.
+    if ((show.showState.currentSlideId ?? null) === null) return
+    // parts = [intro, ...teams, outro, landed] — bakeTeamPickerParts() bakes
+    // length = teamCount + 3. isAutoRollPart owns that index law (same file,
+    // slideStepping.js) so this component can't drift from it.
+    const partsLen = currentSlide.data?.parts?.length ?? 0
+    const curPart = currentSlide.data?.currentPart ?? 0
+    if (!isAutoRollPart(partsLen, curPart)) return
+    const t = setTimeout(() => guardNav(actionsRef.current.nextSlide), TEAM_PICKER_HOLD_MS)
+    return () => clearTimeout(t)
+  }, [
+    currentSlide?.type,
+    currentSlide?.data?.currentPart,
+    currentSlide?.data?.parts?.length,
+    show.showState.currentSlideId,
+    guardNav,
+  ])
+
   const handleKeyDown = useCallback((e) => {
     // A reflexive Cmd/Ctrl/Alt shortcut (Cmd+A select-all, Cmd+R reload,
     // Cmd+S save) must never fall through to these single-letter hotkeys —
@@ -657,7 +737,12 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // deliberately fast clicking, just to accidental double-clicking).
   // Wrapped here rather than inside actions.nextSlide so the keyboard path,
   // which has its own protection, is untouched.
+  // Same pendingAdvanceRef bail ArrowRight has: an ArrowRight that cleared an
+  // active answer reveal defers its nextSlide() by 280ms, and the timestamp
+  // guard alone can't see that — click Next inside that window and both fire,
+  // advancing two slides.
   function handleNextClick() {
+    if (pendingAdvanceRef.current) return
     guardNav(actions.nextSlide)
   }
   function handlePrevClick() {

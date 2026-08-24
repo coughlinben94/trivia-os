@@ -235,14 +235,20 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
           alt=""
           style={{
             // cqh, not vh: this renderer draws inside StageFrame's
-            // `container-type: size` box (85% of viewport, so 918px on a 1080p
-            // TV) AND inside the host editor's `transform: scale()` preview
-            // canvas, where vh would resolve against the whole browser window
-            // and blow the photo up. 45cqh of an 918px stage ≈ 410px, matching
-            // the size validated on a 1920x1080 render. Display.jsx's copy of
-            // this block uses 38vh for the identical 410px because the
-            // automatic pre-show gate renders full-viewport, outside the stage.
-            height: '45cqh',
+            // `container-type: size` box AND inside the host editor's
+            // `transform: scale()` preview canvas, where vh would resolve
+            // against the whole browser window and blow the photo up.
+            // 38cqh, not the 45cqh this used to be: 'pre-show' joined
+            // FULL_BLEED_SLIDE_TYPES on 2026-08-24 (see Display.jsx), so
+            // StageFrame now hands this slide a scale-1 stage — the query
+            // container is the full 1080p viewport, not the old 918px 85%
+            // box. 45cqh of 1080 would be 486px; 38cqh is the ~410px
+            // validated on a 1920x1080 render. That is also exactly what
+            // Display.jsx's PreShowScreen copy of this block uses (38vh),
+            // and at scale 1 cqh and vh finally agree — the two renders of
+            // this one screen are now identical instead of merely tuned to
+            // land on the same photo size from different box sizes.
+            height: '38cqh',
             maxWidth: '100%',
             objectFit: 'contain',
             marginTop: '-3rem',

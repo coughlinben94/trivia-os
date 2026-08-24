@@ -106,6 +106,24 @@ export async function bakeTeamPickerParts(slides, slide, fetchTeamCount) {
   return patchSlideData(slides, slide.id, { parts })
 }
 
+// Is this team-picker part one the host-side auto-roll should step off on its
+// own? Lives here, next to bakeTeamPickerParts, because it is the same
+// [intro, ...teams, outro, landed] shape law — LiveMode.jsx used to restate
+// those indices itself, which is exactly how the roll silently drifts a beat
+// if the baked length ever changes.
+//
+// Ben's confirmed Team Intro flow (2026-08-20, re-confirmed 2026-08-24):
+//   0            opening text   — waits for ONE explicit Next to start the roll
+//   1..len-3     team names     — auto-roll, no press per name
+//   len-2        closing text   — the roll lands here and STOPS, waits for Next
+//   len-1        landed         — ring-world reveal, then one more Next leaves
+// So part 0 is excluded (it would rob the host of the start press) and both
+// closing parts are excluded (they would blow past the closing statement and
+// the reveal). A zero-team roster bakes len 3, which yields an empty range.
+export function isAutoRollPart(partsLen, curPart) {
+  return curPart >= 1 && curPart <= partsLen - 3
+}
+
 /**
  * One Next press. `show` is { slides, currentSlideIndex, currentSlideId }.
  * Returns a shows-row patch, or null when the press is a no-op.
