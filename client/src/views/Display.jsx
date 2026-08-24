@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import QRCode from 'qrcode'
 import { supabase } from '../lib/supabase.js'
 import { ThemeProvider, useTheme } from '../components/shared/ThemeProvider.jsx'
-import SlideRenderer, { skipsLockedBackground, SHINY_EXIT_DURATION_S } from '../components/display/SlideRenderer.jsx'
+import SlideRenderer, { SHINY_EXIT_DURATION_S } from '../components/display/SlideRenderer.jsx'
 import { ringVisibleStationIndex } from '../lib/ringStationIndex.js'
 import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
@@ -222,14 +222,27 @@ function DisplayPinPrompt({ onVerified, onDismiss }) {
 // applies while it's showing. slideIndex drives RingAmbient's own
 // forward-glide-vs-snap decision (see RingAmbient's slideIndex effect) —
 // it's the numeric show.current_slide_index, not a slide id.
-// team-picker is explicitly excluded even though skipsLockedBackground()
-// returns true for it — that's SlideRenderer skipping ITS lock because
-// team-picker paints its own opaque black canvas instead, not because the
-// ring is actually on screen (2026-08-23, Ben: team-picker/rules/state-of-
-// union etc. "dont need a ring rotation" — each was burning a turn() while
-// completely hidden, so the ring was mid-rotation the instant the next
-// visible slide's own reveal wipe uncovered it).
-const isRingVisible = s => skipsLockedBackground(s) && s.type !== 'team-picker'
+// Deliberately NOT skipsLockedBackground(s) — that function also answers
+// "is THIS render of the slide painting its own opaque lock", which for a
+// shiny question/grid/venn is DATA-dependent (data.introDone): true during
+// the intro/closing beat (ambient, ring shows through — see SlideRenderer's
+// isShinyIntroBeat), false during content (opaque backdrop, ring hidden).
+// ringVisibleStationIndex sums isVisible(slide) INCLUSIVE of the current
+// index every render, so reusing that same data-dependent check here meant
+// the running total could change TWICE for one physical slide — once on
+// entry (content's introDone flips true, uncounting it) and, since
+// 2026-08-24's closing beat, AGAIN on exit (outroShown flips introDone back
+// to false, re-counting it) — a second, spurious turn() on a slide the show
+// never actually left. Ben: "coming out of not so different... there was a
+// ring move. shouldnt be diff from the original intro." Station-visibility
+// has to be a stable, TYPE-only fact for the whole lifetime of a slide, so a
+// shiny question/grid/venn — like team-picker — never moves the ring no
+// matter how many times its own introDone toggles internally; the ring only
+// advances once you actually leave to a real ring-visible slide.
+const isRingVisible = s =>
+  s?.type === 'team-preview' || s?.type === 'grading-break' ||
+  (s?.type === 'question' && !s?.data?.isShiny) ||
+  s?.type === 'pre-show' || s?.type === 'round-intro' || s?.type === 'swing-round-intro'
 
 function PersistentRing({ slideIndex, stationOverride, showStationDebug }) {
   const { theme } = useTheme()
@@ -591,7 +604,7 @@ const MUSIC_STATION = 10
 // it 'warps' to the jukebox"). Space/ArrowRight still skip the wait.
 const BREAK_DELAY_MS = 10000
 
-function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRingStateChange }) {
+export function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRingStateChange }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const sortedSlides = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
