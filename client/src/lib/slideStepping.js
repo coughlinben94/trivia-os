@@ -23,8 +23,11 @@
 
 import { isShinySeriesSibling, isMatchingShiny, isWagerShiny } from './shinySeries.js'
 
-// See the disabled call site in computeNextStep() below.
-export const CLOSING_BEAT_ENABLED = false
+// Kill switch for the closing-beat branch in computeNextStep() below. Kept
+// (rather than inlined away) purely as a same-night escape hatch: flipping
+// this to false restores the straight "last part → next slide" step with no
+// other edit. See that branch for the full history.
+export const CLOSING_BEAT_ENABLED = true
 
 // Grace window after invoking a walkout song before a second press is
 // allowed to "cut it short" and advance. Between the invoke press landing
@@ -317,14 +320,22 @@ export async function computeNextStep(show, fetchTeamCount) {
   const isPending = (isMatchingShiny(data) && data.matchingLocked && !data.matchingRevealed) ||
                      (isWagerShiny(data) && data.wagerTiersLocked && !data.wagerGuessesLocked)
   // Disabled 2026-08-19 (Ben, day after this shipped: "shiny intros were
-  // shown after the question as well") — SlideRenderer can't distinguish
+  // shown after the question as well") — SlideRenderer couldn't distinguish
   // "never shown" from "closing beat" (both read as introDone:false), so
   // flipping it back here replayed the FULL ~2.4s entrance choreography
   // (spin/land/gold-burst/photo-rocket) a second time instead of a quiet
   // pan-down, and one Next press doing that instead of just advancing
-  // read as the intro firing unprompted. Block kept intact rather than
-  // deleted — CLOSING_BEAT_ENABLED flips this back on if a quiet-variant
-  // closing animation (ShinyIntroScreen isClosing prop) gets built later.
+  // read as the intro firing unprompted.
+  //
+  // Re-enabled 2026-08-24, once that missing quiet variant existed: every
+  // renderer that mounts ShinyIntroScreen on !introDone (QuestionSlide,
+  // GridSlide, VennDiagramSlide) now passes `isClosing={!!data.outroShown}`,
+  // which is exactly the distinction that was missing — the closing card
+  // arrives already landed, no spin/burst/sparks/photo-rocket, and
+  // QuestionSlide pans it back down (SHINY_PAN run with dir -1) instead of
+  // up. Ben's ask, verbatim: "it should then pan back down to the shiny
+  // title ... so i can then move to the next question ring world style and
+  // have it look smooth."
   if (CLOSING_BEAT_ENABLED && data?.isShiny && data.introDone && !data.outroShown && !isPending) {
     // Skip the pause when the next slide continues the same shiny series
     // — siblings only get one announce beat at the start (skipIntro

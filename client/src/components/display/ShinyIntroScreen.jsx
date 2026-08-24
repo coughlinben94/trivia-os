@@ -74,9 +74,26 @@ const HOLD = cubicBezier(0.25, 0.25, 0.75, 0.75) // exact identity — preserves
 const SETTLE_ARRIVE = cubicBezier(0.39, 0.575, 0.565, 1) // easeOutSine — moving fast, decelerate to a standstill at the peak
 const SETTLE_SWING = cubicBezier(0.445, 0.05, 0.55, 0.95) // easeInOutSine — extremum to extremum, zero velocity at both ends
 
-export default function ShinyIntroScreen({ slide, theme, show }) {
+// `isClosing` — this card is the CLOSING beat (Ben, 2026-08-24: "after the
+// third slide of a shiny that pans, it should then pan back down to the shiny
+// title"), not the opening announce. Same card, same destination: the title
+// and photo sit at exactly the rest values the entrance settles to (title
+// scale 1 / rotate -6, photo y 0% / rotate 0), the same layout, the same
+// theme colors, the same glow. Only the JOURNEY differs — the card is already
+// landed, so nothing spins, scales up from nothing, bursts, or rockets in.
+// The travel for this beat belongs to the container that pans it back down
+// (QuestionSlide's SHINY_PAN, run in reverse); anything moving in here on top
+// of that would be a second, competing motion.
+//
+// Mechanically this is the reduced-motion presentation — which already IS the
+// "arrive at rest, no travel" version of this screen — so the two share one
+// `quiet` flag rather than growing a third set of keyframes to keep in sync.
+// That also means the closing beat can never drift out of step with the rest
+// values the entrance lands on: they're read from the same expressions.
+export default function ShinyIntroScreen({ slide, theme, show, isClosing = false }) {
   const { data } = slide
   const reduce = useReducedMotion()
+  const quiet = isClosing || reduce
   const title = data.seriesTheme || data.shinyFormatName || 'Shiny Question'
 
   // The title is flex-centered (its own midpoint always sits at 50%/50% of
@@ -209,8 +226,8 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
       <motion.div
         aria-hidden
         initial={{ opacity: 0 }}
-        animate={reduce ? { opacity: 1 } : { opacity: [0, 0, 1, 1] }}
-        transition={reduce ? { duration: 0.3 } : { duration: LAND_T + 0.26, times: [0, 0.448, 0.599, 1], ease: IMPACT_EASE }}
+        animate={quiet ? { opacity: 1 } : { opacity: [0, 0, 1, 1] }}
+        transition={quiet ? { duration: 0.3 } : { duration: LAND_T + 0.26, times: [0, 0.448, 0.599, 1], ease: IMPACT_EASE }}
         className="absolute inset-0 pointer-events-none"
         style={{
           // Ellipse sized so the 72% transparent stop actually lands INSIDE
@@ -235,8 +252,11 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
         }}
       />
 
-      {/* Impact burst + sparks — pure decoration, skipped under reduced motion */}
-      {!reduce && (
+      {/* Impact burst + sparks — pure decoration, skipped under reduced motion
+          and on the closing beat (nothing is impacting: the card is already
+          landed, so a burst would be announcing an arrival that never
+          happens). */}
+      {!quiet && (
         <>
           <motion.div
             aria-hidden
@@ -308,9 +328,9 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
       <motion.img
         src={photoUrl || undefined}
         alt=""
-        initial={reduce ? { opacity: 0, y: '0%', rotate: 0 } : { opacity: 0, y: '85%', rotate: -6 }}
+        initial={quiet ? { opacity: 0, y: '0%', rotate: 0 } : { opacity: 0, y: '85%', rotate: -6 }}
         animate={
-          reduce
+          quiet
             ? { opacity: 1, y: '0%', rotate: 0 }
             : {
                 opacity: [0, 0, 1, 1, 1],
@@ -319,7 +339,7 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
               }
         }
         transition={
-          reduce
+          quiet
             ? { delay: 0.15, duration: 0.4, ease: EASE_OUT }
             : {
                 duration: LAND_T + 0.65,
@@ -341,9 +361,9 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
           spring "boing". Final rest angle is 354deg ≡ exactly -6deg (360-6),
           matching this file's tilt convention — not a leftover spin remainder. */}
       <motion.p
-        initial={reduce ? { opacity: 0, scale: 1, rotate: -6 } : { opacity: 0, scale: 0.05, rotate: 0 }}
+        initial={quiet ? { opacity: 0, scale: 1, rotate: -6 } : { opacity: 0, scale: 0.05, rotate: 0 }}
         animate={
-          reduce
+          quiet
             ? { opacity: 1, scale: 1, rotate: -6 }
             : {
                 opacity: [0, 1, 1, 1, 1, 1, 1, 1],
@@ -359,7 +379,7 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
               }
         }
         transition={
-          reduce
+          quiet
             ? { duration: 0.3, ease: EASE_OUT }
             : {
                 duration: LAND_T,
@@ -400,9 +420,9 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
           Delayed past the landing instant so it doesn't precede the title. */}
       {data.introSubtitle && (
         <motion.p
-          initial={{ opacity: 0, y: reduce ? 0 : 10 }}
+          initial={{ opacity: 0, y: quiet ? 0 : 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: reduce ? 0.35 : 1.45, duration: 0.35, ease: EASE_OUT }}
+          transition={{ delay: quiet ? 0.35 : 1.45, duration: 0.35, ease: EASE_OUT }}
           className="absolute z-10 text-center px-20"
           style={{
             top: 'calc(50% + 5.5rem)',

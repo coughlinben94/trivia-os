@@ -961,10 +961,21 @@ function ShinyListQuestion({ slide, theme }) {
 // scale 1.08 — a third bounce on the container made the whole beat read busy
 // on a TV. The pan owns the container; the existing inner entrances still run
 // underneath it and compose fine (nested transforms multiply).
+//
+// Direction (2026-08-24, Ben: "after the third slide of a shiny that pans, it
+// should then pan back down to the shiny title"): the closing beat has to
+// travel the OPPOSITE way from the opening one, or the camera appears to keep
+// moving forward while the content goes backwards. `dir` is +1 for the
+// title→content pan and -1 for the content→title pan back, and simply flips
+// the sign of both throws — same distances, same durations, same curves,
+// mirrored. Written as dynamic variants (functions of `custom`) specifically
+// because the EXITING half can't be reached any other way: AnimatePresence
+// freezes the outgoing element's props at removal, so its exit direction has
+// to arrive through AnimatePresence's own `custom` prop.
 const SHINY_PAN = {
-  initial: { opacity: 0, transform: 'translateY(16%)' },
-  animate: { opacity: 1, transform: 'translateY(0%)',   transition: { duration: 0.36, ease: EASE_PANEL } },
-  exit:    { opacity: 0, transform: 'translateY(-20%)', transition: { duration: 0.24, ease: EASE_EXIT } },
+  initial: dir => ({ opacity: 0, transform: `translateY(${16 * dir}%)` }),
+  animate: { opacity: 1, transform: 'translateY(0%)', transition: { duration: 0.36, ease: EASE_PANEL } },
+  exit:    dir => ({ opacity: 0, transform: `translateY(${-20 * dir}%)`, transition: { duration: 0.24, ease: EASE_EXIT } }),
 }
 // Reduced motion keeps the content and the beat, drops the travel — a short
 // crossfade, no position change.
@@ -1031,22 +1042,31 @@ export default function QuestionSlide({ slide, show, transitionKey, isPreview })
   }
 
   const showIntro = !data.introDone
+  // The title card is showing again AFTER its content already ran — the
+  // closing beat (slideStepping.js's outroShown). Same card, panned back the
+  // way it came, and rendered quiet instead of replaying the entrance.
+  const isClosing = showIntro && !!data.outroShown
+  const dir = isClosing ? -1 : 1
 
   return (
     // initial={false} — the first mount must not animate. Arriving on a shiny
     // slide is SlideRenderer's transition to own; this one exists only for the
     // intro→content swap that happens later, while the slide is already up.
-    <AnimatePresence mode="wait" initial={false}>
+    // custom={dir} feeds the dynamic variants above — on AnimatePresence so
+    // the outgoing (frozen-props) half reads the CURRENT direction, and on the
+    // motion.div so the incoming half reads the same one.
+    <AnimatePresence mode="wait" initial={false} custom={dir}>
       <motion.div
         key={showIntro ? 'shiny-intro' : 'shiny-content'}
         className="absolute inset-0"
         variants={reduce ? SHINY_PAN_REDUCED : SHINY_PAN}
+        custom={dir}
         initial="initial"
         animate="animate"
         exit="exit"
       >
         {showIntro
-          ? <ShinyIntroScreen slide={slide} theme={theme} show={show} />
+          ? <ShinyIntroScreen slide={slide} theme={theme} show={show} isClosing={isClosing} />
           : <ShinyContent slide={slide} show={show} theme={theme} transitionKey={transitionKey} isPreview={isPreview} />}
       </motion.div>
     </AnimatePresence>

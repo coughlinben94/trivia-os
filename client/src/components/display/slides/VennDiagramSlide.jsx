@@ -35,8 +35,10 @@ export default function VennDiagramSlide({ slide, show }) {
   const { theme } = useTheme()
   const { data } = slide
 
+  // outroShown ⇒ this is the closing beat, not the opening announce — same
+  // card, quiet arrival instead of the full entrance (see ShinyIntroScreen).
   if (data.isShiny && !data.introDone) {
-    return <ShinyIntroScreen slide={slide} theme={theme} show={show} />
+    return <ShinyIntroScreen slide={slide} theme={theme} show={show} isClosing={!!data.outroShown} />
   }
 
   return <VennContent slide={slide} theme={theme} />
