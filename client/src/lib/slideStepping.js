@@ -73,19 +73,24 @@ export function withEntryState(slides, slide, { currentPart, introDone } = {}) {
   // blank every phone back to the teaser screen with no way to submit.
   const wouldRegressLockedQuestion = introDone === false &&
     (slide.data?.wagerTiersLocked || slide.data?.wagerGuessesLocked || slide.data?.matchingLocked)
-  if (introDone !== undefined && slide.data?.isShiny && !wouldRegressLockedQuestion) {
-    if (!!slide.data.introDone !== introDone) {
+  if (introDone !== undefined && slide.data?.isShiny) {
+    if (!wouldRegressLockedQuestion && !!slide.data.introDone !== introDone) {
       patch.introDone = introDone
     }
     // Fresh entry always restarts the closing-beat cycle too (see
     // computeNextStep's outroShown handling below) — a stale true from a
     // previous visit would otherwise skip straight past the closing
     // title card next time this slide's last part is reached. This must
-    // NOT be nested inside the introDone-changed check above: a second
-    // fresh entry (e.g. rehearsal, then go-live for real) can arrive with
-    // introDone already false, which used to skip this reset entirely and
-    // leave outroShown stuck true — question never displayed, only the
-    // title card, no matter how many times Next was pressed.
+    // NOT be nested inside wouldRegressLockedQuestion, on top of not being
+    // nested inside the introDone-changed check: a locked-and-scored
+    // matching/wager slide re-entered after a rehearsal (introDone:false,
+    // outroShown:true, matchingRevealed/wagerGuessesLocked true — exactly
+    // what a real Go Live after a rehearsal leaves behind) kept
+    // outroShown stuck true when this lived inside that guard, so the
+    // very next Next press skipped the closing card straight past the
+    // question into the next slide — the question was never shown at all
+    // (2026-08-24, Opus review after CLOSING_BEAT_ENABLED went live made
+    // outroShown:true reachable for the first time).
     if (slide.data?.outroShown) patch.outroShown = false
   }
   // Fresh entry always re-arms invoke-gated audio too — a stale `invoked:
@@ -309,16 +314,21 @@ export async function computeNextStep(show, fetchTeamCount) {
   //   - multi-part series: the LAST part (isMultiPart, handled above —
   //     any earlier part returns before reaching here)
   //   - matching / wager: once fully scored (matchingRevealed /
-  //     wagerGuessesLocked) — NOT merely locked. Both have a locked-but-
-  //     still-scoring window (matching's "Retry Scoring" state, wager's
-  //     collecting-guesses-after-tiers-locked state) that must never
-  //     regress — same guard withEntryState uses for its own jump-back
-  //     case, and the reason isPending exists below.
+  //     wagerRevealed) — NOT merely locked, and NOT merely guesses-locked.
+  //     Both have a locked-but-still-scoring window (matching's "Retry
+  //     Scoring" state, wager's guesses-locked-but-not-yet-revealed state,
+  //     LiveMode.jsx's own Reveal control gates on this exact flag) that
+  //     must never regress — same guard withEntryState uses for its own
+  //     jump-back case, and the reason isPending exists below. Wager fixed
+  //     2026-08-24 (Opus review): this used to check wagerGuessesLocked,
+  //     one stage too early — the closing beat fired the instant guesses
+  //     locked but before the host ever pressed Reveal, panning every
+  //     phone back to the teaser with no way to recover except Prev.
   //   - everything else (a single-shot list/audio/video/image question,
   //     no parts, not lockable): done the moment its content has been
   //     shown at all, i.e. as soon as introDone is true.
   const isPending = (isMatchingShiny(data) && data.matchingLocked && !data.matchingRevealed) ||
-                     (isWagerShiny(data) && data.wagerTiersLocked && !data.wagerGuessesLocked)
+                     (isWagerShiny(data) && data.wagerTiersLocked && !data.wagerRevealed)
   // Disabled 2026-08-19 (Ben, day after this shipped: "shiny intros were
   // shown after the question as well") — SlideRenderer couldn't distinguish
   // "never shown" from "closing beat" (both read as introDone:false), so

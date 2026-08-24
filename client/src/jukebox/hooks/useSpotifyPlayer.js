@@ -114,6 +114,14 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
         getOAuthToken: cb => getToken().then(cb),
         volume: 0,
       })
+      // Assigned here, before connect() resolves, not after (2026-08-24,
+      // Opus review) — the cleanup below only ever disconnects
+      // playerRef.current, so an unmount landing mid-connect() (now a real
+      // window: the grading-break overlay can mount-then-unmount inside
+      // 2.5s if the host advances mid-warp) used to disconnect null while
+      // this local `player` kept connecting anyway, leaking a live
+      // "Trivia Jukebox" Spotify Connect device nothing could ever stop.
+      playerRef.current = player
 
       player.addListener('ready', ({ device_id }) => {
         deviceIdRef.current = device_id
@@ -143,7 +151,6 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
       )
 
       await player.connect()
-      playerRef.current = player
     }
 
     if (window.Spotify) init()

@@ -125,13 +125,24 @@ describe('computeNextStep', () => {
       expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
     })
 
-    it('waits for a wager slide to have its guesses locked', async () => {
+    it('waits for a wager slide to be revealed, not merely guesses-locked', async () => {
+      // 2026-08-24 (Opus review): this used to gate on wagerGuessesLocked,
+      // one stage too early — that's the "guesses in, host hasn't pressed
+      // Reveal yet" window (LiveMode.jsx's own Reveal control gates on
+      // wagerRevealed, not wagerGuessesLocked). Closing the beat there
+      // panned every phone back to the teaser with no way to recover except
+      // Prev, before the host ever got to reveal the answer.
       const tiersOnly = { shinyInputSchema: { type: 'wager' }, wagerTiersLocked: true }
       const slides = [shiny('a', 0, tiersOnly), slide('b', 1)]
       expect((await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)).current_slide_index).toBe(1)
 
-      const done = [shiny('a', 0, { ...tiersOnly, wagerGuessesLocked: true }), slide('b', 1)]
-      const close = await computeNextStep({ slides: done, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+      // Guesses locked, not yet revealed — still pending, still advances.
+      const guessesLocked = [shiny('a', 0, { ...tiersOnly, wagerGuessesLocked: true }), slide('b', 1)]
+      const mid = await computeNextStep({ slides: guessesLocked, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+      expect(mid.current_slide_index).toBe(1)
+
+      const revealed = [shiny('a', 0, { ...tiersOnly, wagerGuessesLocked: true, wagerRevealed: true }), slide('b', 1)]
+      const close = await computeNextStep({ slides: revealed, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
       expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
     })
 
