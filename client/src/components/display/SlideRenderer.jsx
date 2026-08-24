@@ -209,36 +209,46 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
     }
   }
 
-  // These three are fixed, theme-independent designs that must never be
-  // caught half-transparent. ANY transition that fades this content's own
-  // opacity from/to 0 — the default assigned above, a transition manually
-  // picked from the editor's dropdown, even the reduced-motion dissolve
-  // fallback — would show whatever sits behind the slide straight through
-  // it. Neutralize opacity here regardless of which branch produced
-  // `variants`, keeping whatever transform/scale/timing it chose.
+  // These are fixed, theme-independent designs that must never be caught
+  // half-transparent. ANY transition that fades this content's own opacity
+  // from/to 0 — the default assigned above, a transition manually picked
+  // from the editor's dropdown, even the reduced-motion dissolve fallback —
+  // would show whatever sits behind the slide straight through it.
+  // Neutralize opacity here regardless of which branch produced `variants`,
+  // keeping whatever transform/scale/timing it chose.
   //
-  // state-of-union and grid sit on this component's permanently-opaque
-  // locked background (theme.colors.bgDeep, rendered below), so a fade
-  // exposes the real theme color and reads as "shows the theme, then snaps
-  // to the fixed design."
+  // grid sits on this component's permanently-opaque locked background
+  // (theme.colors.bgDeep, rendered below), so a fade exposes the real theme
+  // color and reads as "shows the theme, then snaps to the fixed design."
   //
   // team-picker no longer has that locked background at all (see the
   // exclusion below), so for it the thing showing through is the ring-world
   // ambient — which its exit wipe reveals deliberately, and which its
-  // entrance wipe exists to cover. pre-show is excluded the same way, but
-  // for a simpler reason: it used to render its own separate
-  // ParticleBackground instance (a real bug, fixed 2026-08-16 — two
-  // concurrent ring worlds at different phases, visible seam at the stage
-  // edge), and Display.jsx already renders one persistent instance behind
-  // everything. Skipping the locked box here just lets that existing world
-  // show through instead of adding a redundant second one. A fade would
-  // leak the world through a half-transparent black sheet at both ends, the
-  // exact read the exit's tail-only opacity fade was shaped to avoid. Its
-  // own entrance/exit (assigned above) are translateY-only and so are unaffected by this
-  // lock; what the lock still catches is a dropdown-picked transition or
-  // the reduced-motion dissolve, which for this slide become a hard cut to
-  // black instead of a fade-up through the world.
-  if (slide?.type === 'team-picker' || slide?.type === 'state-of-union' || slide?.type === 'grid' || slide?.type === 'venn' || slide?.type === 'pre-show' || slide?.type === 'round-intro' || slide?.type === 'swing-round-intro') {
+  // entrance wipe exists to cover. A fade would leak the world through a
+  // half-transparent BLACK SHEET at both ends — team-picker's own canvas is
+  // meant to read as solid black covering the stage, not a translucent
+  // scrim — the exact read the exit's tail-only opacity fade was shaped to
+  // avoid. Its own entrance/exit (assigned above) are translateY-only and so
+  // are unaffected by this lock; what the lock still catches is a
+  // dropdown-picked transition or the reduced-motion dissolve, which for
+  // this slide become a hard cut to black instead of a fade-up through the
+  // world.
+  //
+  // pre-show and state-of-union used to be on this list too — REMOVED
+  // 2026-08-24 (Ben: "i dont want there to be instant jumps" / "i want the
+  // motion" / "can there just be a nice slide transition instead"). Locking
+  // their opacity kept the zoom entrance's scale-in and the exit's shrink
+  // fully visible instead of veiled by the fade they were authored with —
+  // that's the whole mechanism a GPU-only transition relies on to read as
+  // smooth rather than jarring (every other slide type here already gets
+  // this for free). Neither slide has team-picker's black-sheet concern:
+  // pre-show has no locked backdrop at all (the persistent ring is meant to
+  // show through it regardless of fade state, so a fade just varies HOW MUCH
+  // shows through, never exposing anything unintended), and state-of-union's
+  // own locked bgDeep box is a themed flat color, not a broken/unfinished
+  // state — briefly seeing it during a 0.14-0.3s fade reads as a normal
+  // crossfade, not as "the wrong background leaking through."
+  if (slide?.type === 'team-picker' || slide?.type === 'grid' || slide?.type === 'venn' || slide?.type === 'round-intro' || slide?.type === 'swing-round-intro') {
     variants = {
       initial: { ...variants.initial, opacity: 1 },
       animate: { ...variants.animate, opacity: 1 },
