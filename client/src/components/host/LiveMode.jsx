@@ -9,7 +9,7 @@ import { supabase } from '../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
 import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
-import { isAutoRollPart } from '../../lib/slideStepping.js'
+import { isAutoRollPart, TEAM_PICKER_HOLD_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
 // override for it — every other wager error is a real, unrecoverable-by-
@@ -21,20 +21,6 @@ import { isAutoRollPart } from '../../lib/slideStepping.js'
 // 2026-08-17: "idk why that keeps popping up ... something different" —
 // found while investigating: this is the one message with no path forward).
 const WAGER_ZERO_ANSWERS_ERROR = 'No wager answers came back — check connection and retry before scoring'
-
-// How long each team-picker TEAM NAME holds before auto-rolling to the next —
-// see the effect near guardNav below for why this lives host-side.
-//
-// 2400ms, not the 1400ms the first (reverted, /display-side) version used:
-// this timer measures currentPart-change to currentPart-change, and the
-// display burns most of that window on choreography before the name is even
-// readable. TeamPickerSlide's draw loop exits the outgoing name over E=620ms,
-// then approaches the incoming one over A=1050ms, and only then enters its
-// indefinite `hold` phase. That's ~1670ms of motion per step, so 1400ms never
-// let a name finish arriving, let alone be read; 2400ms leaves ~730ms of
-// actual still hold. Retune here if Ben wants the roll faster or slower —
-// anything at or below ~1700ms starts eating the arrival animation itself.
-const TEAM_PICKER_HOLD_MS = 2400
 
 // PYL "Pick animation" tiles — same visual language as BuildMode's CARD_STYLE
 // (soft gradient + colored border that brightens on hover) but keyed by
@@ -640,23 +626,38 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // the host of the "start the roll" press, and firing on len-2/len-1 would
   // blow through the closing statement and the reveal.
   //
-  // Lives HERE, not on /display. A /display-side timer was tried first
-  // (53065d0) and reverted (9401c75): it wrote currentPart straight to
-  // Supabase, but the host's realtime subscription only merges showState
-  // fields and never `slides` (see useShow.js) — so the host's local
-  // `show.slides` went stale the instant the display auto-advanced once, and
-  // the next manual Next recomputed currentPart off that stale value,
-  // silently rewinding the ceremony back toward team #1. Verified still true
-  // today. Routing through guardNav + actions.nextSlide() keeps
-  // computeNextStep (slideStepping.js) the single writer, same as every other
-  // nav path, and means a manual press landing on the timer can't
-  // double-advance.
+  // /display runs a MIRROR of this effect (see Display.jsx, same constants,
+  // same index law). It has to: /host and /display are both open all show,
+  // only one has OS keyboard focus, and the Stream Deck's Right-Arrow goes
+  // wherever that focus is. With the timer only here, a show driven from the
+  // /display window rolled nothing at all — every team name needed its own
+  // press (confirmed live, 2026-08-24, twice).
+  //
+  // The two timers can't double-fire, because each window only paces the roll
+  // IT is driving. This one is scoped by construction: `currentSlide` comes
+  // from useShow's local state, whose `slides` are only ever changed by this
+  // window's own actions — the realtime subscription there deliberately
+  // merges showState and never `slides` (useShow.js), so a /display-driven
+  // currentPart change simply never reaches this effect and never arms it.
+  // /display, whose subscription DOES take `slides`, can't rely on that and
+  // checks ownership explicitly instead (ownsAutoRoll, slideStepping.js).
+  //
+  // That same non-merge is why the FIRST attempt at a /display-side timer
+  // (53065d0) was reverted (9401c75): it wrote currentPart to Supabase while
+  // the host's local `show.slides` stayed frozen, so the next manual Next
+  // here recomputed off that stale value and silently rewound the ceremony.
+  // Still true — a mid-roll switch of focus from one window to the other is
+  // the one case that can still desync (see below), which is why every step,
+  // manual or timed, goes through guardNav + actions.nextSlide() so
+  // computeNextStep stays the single writer.
   //
   // The effect is keyed on currentPart, so ANY change to it — this timer
   // firing, or a manual Next/Prev/Stream Deck press cutting the hold short —
   // runs the cleanup, cancels the pending timeout, and reschedules against
   // the new part. That is what prevents a timer and a manual press both
-  // advancing the same transition.
+  // advancing the same transition. It does NOT see a /display press (no
+  // merge), so a host-armed timer mid-hold plus a sudden /display press can
+  // still land two advances on one beat; don't switch windows mid-roll.
   useEffect(() => {
     if (currentSlide?.type !== 'team-picker') return
     // Nothing is revealed yet right after Go Live (computeNextStep's

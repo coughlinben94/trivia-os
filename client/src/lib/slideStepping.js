@@ -140,6 +140,86 @@ export function isAutoRollPart(partsLen, curPart) {
   return curPart >= 1 && curPart <= partsLen - 3
 }
 
+// How long each team-picker TEAM NAME holds before auto-rolling to the next.
+// Lived in LiveMode.jsx until /display grew its own copy of the timer (see
+// ownsAutoRoll below) — two windows pacing the same ceremony must not be able
+// to drift to two different tempos, so the number lives here with the index
+// law it belongs to.
+//
+// 2400ms, not the 1400ms the first (reverted, /display-side) version used:
+// this timer measures currentPart-change to currentPart-change, and the
+// display burns most of that window on choreography before the name is even
+// readable. TeamPickerSlide's draw loop exits the outgoing name over E=620ms,
+// then approaches the incoming one over A=1050ms, and only then enters its
+// indefinite `hold` phase. That's ~1670ms of motion per step, so 1400ms never
+// let a name finish arriving, let alone be read; 2400ms leaves ~730ms of
+// actual still hold. Retune here if Ben wants the roll faster or slower —
+// anything at or below ~1700ms starts eating the arrival animation itself.
+export const TEAM_PICKER_HOLD_MS = 2400
+
+// How stale a window's own-write record may be and still count as "I am the
+// one driving this roll" (see ownsAutoRoll). Normally the gap between a
+// window's write and seeing that write come back is a realtime round trip —
+// a few hundred ms — so this is generous by an order of magnitude. Its only
+// job is to make ownership EXPIRE, so a cursor a window wrote minutes ago
+// can't be re-matched by the OTHER window navigating back onto that exact
+// part later and have both windows arm a timer off it.
+export const AUTO_ROLL_OWNERSHIP_MAX_AGE_MS = TEAM_PICKER_HOLD_MS + 3000
+
+// Where a live show is sitting, IF it's sitting on a team-picker slide:
+// { slideId, part, partsLen }, or null for anything else (no slide revealed
+// yet, some other slide type). This is the whole state the auto-roll cares
+// about, in one comparable value — see ownsAutoRoll.
+export function teamPickerCursor(show) {
+  if ((show?.currentSlideId ?? null) === null) return null
+  const slide = sortSlides(show?.slides ?? [])[show?.currentSlideIndex ?? 0]
+  if (!slide || slide.type !== 'team-picker') return null
+  return {
+    slideId: slide.id,
+    part: slide.data?.currentPart ?? 0,
+    partsLen: slide.data?.parts?.length ?? 0,
+  }
+}
+
+// The cursor a step patch will leave the show on, computed BEFORE the write
+// echoes back. A window records this as "the state my own press caused" —
+// see ownsAutoRoll. `show` is the pre-write state, `patch` what
+// computeNextStep/computePrevStep returned (shows COLUMN names); the merge
+// lives here because both callers hold the pre-write row in a different shape.
+export function cursorAfterStep(show, patch, now = Date.now()) {
+  if (!patch) return null
+  const cursor = teamPickerCursor({
+    slides: patch.slides ?? show?.slides,
+    currentSlideIndex: patch.current_slide_index ?? show?.currentSlideIndex,
+    currentSlideId: patch.current_slide_id !== undefined ? patch.current_slide_id : show?.currentSlideId,
+  })
+  return cursor && { ...cursor, at: now }
+}
+
+// Should THIS window arm the auto-roll timer for the state it's now observing?
+//
+// The team-picker roll has to keep rolling no matter which window the human's
+// Next press actually lands in — /host and /display are both open all show
+// (laptop + extended monitor), only one has OS keyboard focus, and the Stream
+// Deck sends its Right-Arrow to whichever that happens to be. Both windows
+// therefore run the same timer. What must NEVER happen is both of them
+// arming a timer off the same transition and double-advancing (skipping a
+// team name).
+//
+// The rule that keeps exactly one of them armed: a window only paces the roll
+// it is itself driving. `owned` is the cursor that window's OWN last
+// successful write produced (cursorAfterStep); `cursor` is what it is
+// observing now. They match only for the window whose press caused this
+// state — the other window is merely watching it arrive over realtime, and
+// stays silent. Whichever window is being driven drives the pacing too, with
+// no coordination between them beyond the Supabase writes they already do.
+export function ownsAutoRoll(cursor, owned, now = Date.now()) {
+  if (!cursor || !owned) return false
+  if (!isAutoRollPart(cursor.partsLen, cursor.part)) return false
+  if (cursor.slideId !== owned.slideId || cursor.part !== owned.part) return false
+  return now - (owned.at ?? 0) <= AUTO_ROLL_OWNERSHIP_MAX_AGE_MS
+}
+
 /**
  * One Next press. `show` is { slides, currentSlideIndex, currentSlideId }.
  * Returns a shows-row patch, or null when the press is a no-op.

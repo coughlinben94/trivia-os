@@ -18,7 +18,15 @@ import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
 import { resolveShinyPart, isWagerShiny } from '../lib/shinySeries.js'
 import { EASE_OUT } from '../lib/easings.js'
 import { resolvePreviewShow } from '../lib/previewSlide.js'
-import { computeNextStep, computePrevStep, sortSlides } from '../lib/slideStepping.js'
+import {
+  computeNextStep,
+  computePrevStep,
+  sortSlides,
+  cursorAfterStep,
+  teamPickerCursor,
+  ownsAutoRoll,
+  TEAM_PICKER_HOLD_MS,
+} from '../lib/slideStepping.js'
 import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
 
 // See the FULL_BLEED_SLIDE_TYPES comment at StageFrame's usage below.
@@ -549,7 +557,7 @@ async function stepShow(showRow, direction) {
   const patch = direction > 0
     ? await computeNextStep(args, fetchTeamCount)
     : await computePrevStep(args, fetchTeamCount)
-  if (!patch) return { advanced: false, denied: false }
+  if (!patch) return { advanced: false, denied: false, cursor: null }
   const { data, error } = await supabase
     .from('shows')
     .update(patch)
@@ -558,9 +566,11 @@ async function stepShow(showRow, direction) {
     .select('id')
   if (error || !data?.length) {
     console.error('[Display] display step denied:', error ?? '0 rows — not host-authenticated on this browser')
-    return { advanced: false, denied: true }
+    return { advanced: false, denied: true, cursor: null }
   }
-  return { advanced: true, denied: false }
+  // Where this window's OWN press just left the show — the team-picker
+  // auto-roll's ownership token (see ownsAutoRoll in slideStepping.js).
+  return { advanced: true, denied: false, cursor: cursorAfterStep(args, patch) }
 }
 
 // ─── Live display ──────────────────────────────────────────────────────────
@@ -929,6 +939,12 @@ export default function Display() {
   // fire two real advances. See guardNav's comment in LiveMode.jsx for why the
   // window is 120ms and not the 350ms it started at.
   const lastStepRef = useRef(0)
+  // The cursor THIS window's own last successful step wrote — the team-picker
+  // auto-roll's ownership token (see the effect below, and ownsAutoRoll in
+  // slideStepping.js). State, not a ref, on purpose: it and the realtime echo
+  // of the same write land in either order, and whichever lands second has to
+  // be what re-runs the effect that arms the timer.
+  const [ownedCursor, setOwnedCursor] = useState(null)
   const handleStep = useCallback(async (direction) => {
     // Preview/demo windows render a real show row but must never drive it —
     // the host opens Preview alongside Live Mode, and a stray click there
@@ -941,12 +957,72 @@ export default function Display() {
     }
     const res = await stepShow(showRef.current, direction)
     if (res.denied) setNavDenied(true)
+    setOwnedCursor(res.cursor)
     // Deliberately no optimistic local apply here (2026-08-24 council
     // review): it would only buy back the write+realtime-echo leg — a few
     // hundred ms — while the walkout song's real 2-4s gap is the warm-pool's
     // job below. Low value for tonight's risk budget on a live-show deploy;
     // revisit if the host UI still feels laggy on its own merits.
   }, [isPreview, isDemo])
+
+  // One shared debounce for EVERY nav path on this window — the click/key
+  // listeners below and the team-picker auto-roll timer. Hoisted out of the
+  // listener effect (where it used to live) so the timer can't slip a step
+  // past the guard a hair after a manual press already fired one.
+  const guardedStep = useCallback((direction) => {
+    const now = Date.now()
+    if (now - lastStepRef.current < 120) return
+    lastStepRef.current = now
+    handleStep(direction)
+  }, [handleStep])
+
+  // Team Intro (team-picker) auto-roll, /display's half. LiveMode.jsx runs the
+  // identical timer for the host window — read the long comment there for the
+  // ceremony's shape and why the auto range is [1, len-3].
+  //
+  // Why BOTH windows need one: /host and /display are both open and alive all
+  // show (laptop + the extended monitor driving the TV), but only one of them
+  // has OS keyboard focus, and the Stream Deck's simulated Right-Arrow goes
+  // wherever that focus is. When it landed on /display, every team-picker
+  // advance was fully manual (confirmed live, 2026-08-24, twice) — /display
+  // wrote the new currentPart straight to Supabase, and the host's
+  // subscription deliberately merges only showState, never `slides`
+  // (useShow.js), so the host's local currentPart never moved and its timer
+  // never armed.
+  //
+  // Why this can't double-fire with the host's copy: ownership. This arms
+  // only when the state it's observing is the state THIS window's own last
+  // write produced (ownsAutoRoll + cursorAfterStep, slideStepping.js). A
+  // transition merely watched arriving over realtime — i.e. one the host
+  // caused — never arms it. The mirror image protects the host: its local
+  // `slides` only ever change through its own actions, so a /display-driven
+  // transition can't arm the host's timer either. Whichever window is being
+  // driven is the one that paces the roll.
+  //
+  // Keyed on the observed cursor, so any change to it — this timer firing, a
+  // manual press cutting the hold short, or the host taking over mid-roll —
+  // runs the cleanup and cancels the pending advance before anything is
+  // rescheduled.
+  useEffect(() => {
+    if (isPreview || isDemo || !show?.is_live) return
+    const cursor = teamPickerCursor({
+      slides: show.slides,
+      currentSlideIndex: show.current_slide_index,
+      currentSlideId: show.current_slide_id,
+    })
+    if (!ownsAutoRoll(cursor, ownedCursor)) return
+    const t = setTimeout(() => guardedStep(1), TEAM_PICKER_HOLD_MS)
+    return () => clearTimeout(t)
+  }, [
+    isPreview,
+    isDemo,
+    show?.is_live,
+    show?.slides,
+    show?.current_slide_index,
+    show?.current_slide_id,
+    ownedCursor,
+    guardedStep,
+  ])
 
   // Pre-warm walkout-song players ahead of need (see youtubeWarmAudio.js):
   // a muted player buffered at the trim point is built for the queued
@@ -1117,12 +1193,6 @@ export default function Display() {
       return !!e.target?.closest?.('input, textarea, [contenteditable], [data-pin-prompt], [data-no-step]') ||
         !!document.querySelector('[data-break-overlay], [data-scoreboard-overlay]')
     }
-    function guardedStep(direction) {
-      const now = Date.now()
-      if (now - lastStepRef.current < 120) return
-      lastStepRef.current = now
-      handleStep(direction)
-    }
     function onAdvance(e) {
       if (e.type === 'keydown' && !['ArrowRight', 'Space', 'Enter'].includes(e.code)) return
       if (blocked(e)) return
@@ -1141,7 +1211,7 @@ export default function Display() {
       window.removeEventListener('keydown', onAdvance)
       window.removeEventListener('keydown', onRetreat)
     }
-  }, [handleStep])
+  }, [guardedStep])
 
   useEffect(() => {
     if (isDemo) return

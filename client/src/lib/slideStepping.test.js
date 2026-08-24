@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { computeNextStep, computePrevStep, withEntryState, bakeTeamPickerParts, isAutoRollPart } from './slideStepping.js'
+import {
+  computeNextStep,
+  computePrevStep,
+  withEntryState,
+  bakeTeamPickerParts,
+  isAutoRollPart,
+  teamPickerCursor,
+  cursorAfterStep,
+  ownsAutoRoll,
+  AUTO_ROLL_OWNERSHIP_MAX_AGE_MS,
+} from './slideStepping.js'
 
 const noTeams = async () => 0
 const slide = (id, order, type = 'question', data = {}) => ({ id, order, type, roundId: 'r1', data })
@@ -179,5 +189,125 @@ describe('isAutoRollPart', () => {
     const big = 21 + 3
     expect(isAutoRollPart(big, 21)).toBe(true)   // last team
     expect(isAutoRollPart(big, 22)).toBe(false)  // outro
+  })
+})
+
+// Which of the two live windows (/host and /display, both open all show, only
+// one holding OS keyboard focus) owns the auto-roll pacing. Both run the same
+// timer; exactly one of them may arm it per transition, or the roll skips a
+// team name. See ownsAutoRoll's comment in slideStepping.js.
+describe('team-picker auto-roll ownership', () => {
+  const parts = n => new Array(n).fill(null)
+  const picker = (part, len = 7) => slide('tp', 0, 'team-picker', { parts: parts(len), currentPart: part })
+  const at = (slides, id = 'tp') => ({ slides, currentSlideIndex: 0, currentSlideId: id })
+
+  describe('teamPickerCursor', () => {
+    it('reads slide id, part and baked length off the live slide', () => {
+      expect(teamPickerCursor(at([picker(3)]))).toEqual({ slideId: 'tp', part: 3, partsLen: 7 })
+    })
+
+    it('is null before the queued slide is revealed (currentSlideId null)', () => {
+      // Go Live leaves currentSlideId null with a stale currentPart possible —
+      // arming there would start the whole ceremony with no host press at all.
+      expect(teamPickerCursor({ slides: [picker(2)], currentSlideIndex: 0, currentSlideId: null })).toBe(null)
+    })
+
+    it('is null on any other slide type', () => {
+      expect(teamPickerCursor(at([slide('a', 0, 'question')], 'a'))).toBe(null)
+    })
+
+    it('defaults an unbaked/unstarted slide to part 0', () => {
+      expect(teamPickerCursor(at([slide('tp', 0, 'team-picker', {})]))).toEqual({ slideId: 'tp', part: 0, partsLen: 0 })
+    })
+  })
+
+  describe('cursorAfterStep', () => {
+    it('describes where a window\'s own press just left the show', async () => {
+      const slides = [picker(1)]
+      const patch = await computeNextStep(at(slides), noTeams)
+      expect(cursorAfterStep(at(slides), patch, 1000)).toEqual({ slideId: 'tp', part: 2, partsLen: 7, at: 1000 })
+    })
+
+    it('follows a step that crosses ONTO a team-picker slide', async () => {
+      // Landing on Team Intro from the previous slide bakes parts and resets to
+      // part 0 — not an auto-roll part, but the cursor must still track it so
+      // the next (host-pressed) step is correctly owned.
+      const slides = [slide('a', 0), slide('tp', 1, 'team-picker', {})]
+      const patch = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, async () => 4)
+      const c = cursorAfterStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, patch, 5)
+      expect(c).toEqual({ slideId: 'tp', part: 0, partsLen: 7, at: 5 })
+    })
+
+    it('is null when the press stepped off the team-picker entirely', async () => {
+      const slides = [picker(6), slide('b', 1)]
+      const patch = await computeNextStep(at(slides), noTeams)
+      expect(cursorAfterStep(at(slides), patch, 1)).toBe(null)
+    })
+
+    it('is null for a no-op press', () => {
+      expect(cursorAfterStep(at([picker(1)]), null)).toBe(null)
+    })
+  })
+
+  describe('ownsAutoRoll', () => {
+    const cursor = { slideId: 'tp', part: 2, partsLen: 7 }
+
+    it('arms the window whose own write produced the state it is observing', () => {
+      expect(ownsAutoRoll(cursor, { ...cursor, at: 1000 }, 1200)).toBe(true)
+    })
+
+    it('stays silent in the window that only WATCHED the change arrive', () => {
+      // The whole point: /host press -> /display sees it over realtime with no
+      // own-write record. Two armed timers here = a skipped team name.
+      expect(ownsAutoRoll(cursor, null, 1200)).toBe(false)
+    })
+
+    it('stays silent while its own write is still in flight (cursor behind owned)', () => {
+      // setOwnedCursor lands before the realtime echo: owned is already part 2
+      // while the observed row still reads part 1. Arming then would advance
+      // off a beat that hasn\'t been shown yet.
+      expect(ownsAutoRoll({ ...cursor, part: 1 }, { ...cursor, at: 1000 }, 1100)).toBe(false)
+    })
+
+    it('stays silent when the observed slide is not the one it wrote', () => {
+      expect(ownsAutoRoll(cursor, { ...cursor, slideId: 'other', at: 1000 }, 1100)).toBe(false)
+    })
+
+    it('never arms outside the auto-roll range, however clear the ownership', () => {
+      const opening = { slideId: 'tp', part: 0, partsLen: 7 }
+      const closing = { slideId: 'tp', part: 5, partsLen: 7 }
+      const landed  = { slideId: 'tp', part: 6, partsLen: 7 }
+      expect(ownsAutoRoll(opening, { ...opening, at: 1000 }, 1100)).toBe(false)
+      expect(ownsAutoRoll(closing, { ...closing, at: 1000 }, 1100)).toBe(false)
+      expect(ownsAutoRoll(landed,  { ...landed,  at: 1000 }, 1100)).toBe(false)
+    })
+
+    it('expires stale ownership so the other window can never re-match it', () => {
+      // Guards the one remaining double-arm shape: this window wrote part 2
+      // long ago, the OTHER window later navigates back onto part 2 and arms
+      // its own timer. Without the age bound both would fire on that beat.
+      const owned = { ...cursor, at: 1000 }
+      expect(ownsAutoRoll(cursor, owned, 1000 + AUTO_ROLL_OWNERSHIP_MAX_AGE_MS)).toBe(true)
+      expect(ownsAutoRoll(cursor, owned, 1001 + AUTO_ROLL_OWNERSHIP_MAX_AGE_MS)).toBe(false)
+    })
+
+    it('survives a full roll: each own step re-arms, the last one lands and stops', async () => {
+      // The chain the live show actually runs, one window driving: press ->
+      // write -> echo -> arm -> write -> echo ... and it must stop ON the
+      // closing statement, not blow through it.
+      let slides = [picker(0)]
+      let owned = null
+      const armed = []
+      for (let i = 0; i < 8; i++) {
+        const patch = await computeNextStep(at(slides), noTeams)
+        if (!patch?.slides) break
+        owned = cursorAfterStep(at(slides), patch, 1000)
+        slides = patch.slides
+        armed.push(ownsAutoRoll(teamPickerCursor(at(slides)), owned, 1100))
+      }
+      // parts 1..4 are the four team names (auto), 5 = closing, 6 = landed;
+      // the 7th press is a no-op (nothing after this slide) and breaks out.
+      expect(armed).toEqual([true, true, true, true, false, false])
+    })
   })
 })
