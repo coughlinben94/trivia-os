@@ -850,12 +850,13 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           animation + fade. Add a pre-unmount fade only if Ben ever advances
           breaks from /host in practice. */}
       {/* Hyperspace between the ring's own station and the jukebox's record.
-          'out' finishing is what mounts the overlay below AND flips
+          'out' finishing is what makes the overlay below VISIBLE and flips
           stationOverride to MUSIC_STATION — one commit, so the jump lands on
           the warp's last (fully black) frame. 'back' mounts in the same commit
           that asks for RING_RETURN, so that snap is covered too. z-[80]: above
           the stage and its overlays, below the nav-denied banner (z-200); the
-          jukebox (z-[70]) is only ever up while no warp is. */}
+          jukebox (z-[70]) is only ever VISIBLE while no warp is — but since
+          2026-08-24 it MOUNTS (hidden) the moment 'out' starts, see below. */}
       {warp && (
         <ErrorBoundary fallback={null}>
           <WarpTransition
@@ -869,13 +870,44 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
         </ErrorBoundary>
       )}
 
-      {breakActive && (
+      {/* Head start (2026-08-24, Ben: "cant [the swirl] have the black screen
+          behind it? … invoke the jukebox playing earlier in theory"): the
+          overlay used to mount only in the warp's onDone commit, so its whole
+          handoff chain (Spotify token check -> Supabase jukebox_state sync ->
+          shuffle pick -> SDK player connect -> play confirm) started AFTER the
+          2.5s vortex had fully finished — that chain's real latency is what
+          the black handoff cover (Jukebox's libHandoffPending) then sat on.
+          Now the overlay mounts the instant 'out' STARTS, so the handoff runs
+          concurrently with the warp and the residual black hold after it
+          shrinks by up to the warp's full runtime.
+          visibility:hidden until breakActive, NOT a bare early mount: the warp
+          canvas's veil is (t/0.94)^2 — near-transparent for its first ~1.5s
+          (deliberately, "the scene stays readable while the vortex spins up")
+          — so an unhidden overlay would slam its opaque bg-black over the
+          still-visible grading-break slide mid-wind-up. Hidden, nothing paints
+          and the visual timeline is byte-identical to before; only the DATA/
+          PLAYBACK work starts early. The reveal is the same commit as before:
+          onDone sets activeBreakId -> breakActive flips true (visibility on)
+          AND warp goes null (canvas unmounts) in one batched commit, so the
+          mount condition below never goes false across it — Jukebox does NOT
+          remount at the handover. The ring's station jump (stationOverride ->
+          MUSIC_STATION, effect above) stays keyed to breakActive, i.e. still
+          lands on onDone's fully-black frame — deliberately NOT moved earlier.
+          If the host advances mid-'out', breakEligible drops and this unmounts
+          exactly like a host-side advance mid-break always has (player
+          disconnect cuts any early audio).
+          ponytail: audio can start under the warp's tail if the handoff beats
+          2.5s (a J-cut — Ben asked for exactly this); if it ever reads wrong,
+          the upgrade is deferring only playTrack (not sync/connect) to onDone. */}
+      {(breakActive || (breakEligible && warp === 'out')) && (
         <ErrorBoundary fallback={null}>
-          <JukeboxBreakOverlay
-            key={currentSlide.id}
-            lib={currentSlide?.data?.jukeboxLib ?? 'random'}
-            onExit={onBreakAdvance}
-          />
+          <div style={{ visibility: breakActive ? 'visible' : 'hidden' }}>
+            <JukeboxBreakOverlay
+              key={currentSlide.id}
+              lib={currentSlide?.data?.jukeboxLib ?? 'random'}
+              onExit={onBreakAdvance}
+            />
+          </div>
         </ErrorBoundary>
       )}
     </div>

@@ -1245,6 +1245,17 @@ const [newSetName, setNewSetName] = useState('')
       if (e.code !== 'Space') return
       if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return
       if (modalTrack) return
+      // While the grading-break handoff is in flight (the black cover is up —
+      // or, since the 2026-08-24 early mount, the whole overlay is still
+      // hidden under the warp), Space must not reach this toggle: before the
+      // ?lib= effect runs (it waits on syncDone) isPlaying is still false, so
+      // a stray second press — e.g. a double-tap of the skip-the-wait Space
+      // that started the warp — would fire startShuffle() against the
+      // persisted active set, racing the handoff's own shuffle. After the
+      // effect runs it would handleStop() a handoff mid-confirm. Both wrong;
+      // the handoff owns playback until it resolves or gives up (every
+      // give-up path clears libHandoffPending, re-arming this key).
+      if (libHandoffPending) return
       e.preventDefault()
       if (isPlaying) handleStop()
       // While LiveScreen is animating out (liveEnding), ignore play — starting
@@ -1253,7 +1264,7 @@ const [newSetName, setNewSetName] = useState('')
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [isPlaying, handleStop, startShuffle, modalTrack, liveEnding])
+  }, [isPlaying, handleStop, startShuffle, modalTrack, liveEnding, libHandoffPending])
 
   useEffect(() => {
     const onDown = (e) => {
