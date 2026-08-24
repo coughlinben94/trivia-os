@@ -11,6 +11,7 @@ import { EASE_OUT, EASE_EXIT, EASE_PANEL } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { youtubeEmbedUrl } from '../../../lib/youtube.js'
 import { warmYoutubeAudio, claimYoutubeAudio } from '../../../lib/youtubeWarmAudio.js'
+import { warmImages, slideImageUrls } from '../../../lib/warmImages.js'
 
 // ─── Standard question ────────────────────────────────────────────────────────
 
@@ -322,7 +323,16 @@ function ShinyVisualQuestion({ slide, theme }) {
               {...imageEntrance}
             />
           </AnimatePresence>
-          <motion.div
+          {/* Same rule the portrait branch above already applies: the
+              caption furniture only earns its keep when there is real
+              caption text to put in it. A shared-answer image series
+              ("We're not so different, you and I..." — one answer collected
+              up front, so every part.text is empty) was rendering an empty
+              <p> inside a ~200px-tall black gradient scrim that re-keyed on
+              every part step, so each photo swap also slid a bare dark band
+              up from the bottom over the new image. 2026-08-24, Ben:
+              "arent transitioning smooth". */}
+          {!!part.text?.trim() && <motion.div
             key={`${partKey}:caption`}
             className="absolute bottom-0 left-0 right-0"
             style={{
@@ -349,7 +359,7 @@ function ShinyVisualQuestion({ slide, theme }) {
                 {part.text}
               </p>
             </div>
-          </motion.div>
+          </motion.div>}
         </>
       )}
 
@@ -1000,6 +1010,18 @@ export default function QuestionSlide({ slide, show, transitionKey, isPreview })
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const { data } = slide
+
+  // Warm every image this slide can show, the moment the slide mounts — see
+  // warmImages.js for why (a part step remounts the <img> with a cold src,
+  // so the entrance animation plays over an empty box and the photo pops in
+  // after it). Deliberately here, above the early return: this runs for the
+  // shiny intro card too, which is ~2s of free lead time before the first
+  // photo is even asked for, and hooks order has to stay stable regardless.
+  // No-op for a slide with no image media.
+  useEffect(() => {
+    warmImages(slideImageUrls(data))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slide.id])
 
   // Non-shiny questions never see the intro↔content swap, so they never enter
   // the AnimatePresence below — identical output and identical DOM depth to
