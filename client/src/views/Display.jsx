@@ -5,7 +5,7 @@ import QRCode from 'qrcode'
 import { supabase } from '../lib/supabase.js'
 import { ThemeProvider, useTheme } from '../components/shared/ThemeProvider.jsx'
 import SlideRenderer, { SHINY_EXIT_DURATION_S } from '../components/display/SlideRenderer.jsx'
-import { ringVisibleStationIndex } from '../lib/ringStationIndex.js'
+import { ringVisibleStationIndex, ringPeekIndex } from '../lib/ringStationIndex.js'
 import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
@@ -749,7 +749,7 @@ export function DisplayInner({ show, direction, isPreview = false, onBreakAdvanc
       {!onRingStateChange && (
         <ParticleBackground
           theme={theme}
-          slideIndex={ringVisibleStationIndex(sortedSlides, show.current_slide_index ?? 0, isRingVisible)}
+          slideIndex={ringVisibleStationIndex(sortedSlides, ringPeekIndex(sortedSlides, show.current_slide_index ?? 0), isRingVisible)}
           stationOverride={breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null)}
           showStationDebug={isPreview}
         />
@@ -1552,7 +1552,10 @@ export default function Display() {
       <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
         <PersistentRing
           slideIndex={show.is_live && show.current_slide_index != null
-            ? ringVisibleStationIndex([...(show.slides ?? [])].sort((a, b) => a.order - b.order), show.current_slide_index, isRingVisible)
+            ? (() => {
+                const sorted = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
+                return ringVisibleStationIndex(sorted, ringPeekIndex(sorted, show.current_slide_index), isRingVisible)
+              })()
             : null}
           {...ringState}
         />

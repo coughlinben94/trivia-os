@@ -32,3 +32,22 @@ export function ringNavAction(prev, next) {
   if (next === prev - 1) return 'turn-back'
   return 'jump'
 }
+
+// Team-picker's own landed part (its black sheet already wiped away) is
+// deliberately the moment that reveal is supposed to read as "this puts us
+// in the ring world" (2026-08-24, Ben: "the end animation of the team intro
+// slide thing is supposed to look like it put us in that ring world, so ...
+// i want it stationary when the intro slide is done" — leaving team-picker
+// for the next real slide must not turn the ring a SECOND time). team-picker
+// itself never counts toward ringVisibleStationIndex's running total (it's
+// excluded from isVisible), so peeking currentIndex+1 the instant it lands
+// makes the count equal whatever the NEXT slide will show — the ring turns
+// once, synced with team-picker's own reveal, and the real Next press onto
+// that next slide recomputes the exact same value: zero further movement.
+export function ringPeekIndex(sortedSlides, currentIndex) {
+  const slide = sortedSlides[currentIndex]
+  if (slide?.type !== 'team-picker') return currentIndex
+  const partsLen = slide.data?.parts?.length ?? 0
+  const isLanded = partsLen > 0 && (slide.data?.currentPart ?? 0) === partsLen - 1
+  return isLanded ? currentIndex + 1 : currentIndex
+}
