@@ -19,6 +19,7 @@ import { resolveShinyPart, isWagerShiny } from '../lib/shinySeries.js'
 import { EASE_OUT } from '../lib/easings.js'
 import { resolvePreviewShow } from '../lib/previewSlide.js'
 import { computeNextStep, computePrevStep, sortSlides } from '../lib/slideStepping.js'
+import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
 
 // See the FULL_BLEED_SLIDE_TYPES comment at StageFrame's usage below.
 // team-picker added 2026-08-19 (Ben, live: "sits on top of the ring world,
@@ -940,7 +941,36 @@ export default function Display() {
     }
     const res = await stepShow(showRef.current, direction)
     if (res.denied) setNavDenied(true)
+    // Deliberately no optimistic local apply here (2026-08-24 council
+    // review): it would only buy back the write+realtime-echo leg — a few
+    // hundred ms — while the walkout song's real 2-4s gap is the warm-pool's
+    // job below. Low value for tonight's risk budget on a live-show deploy;
+    // revisit if the host UI still feels laggy on its own merits.
   }, [isPreview, isDemo])
+
+  // Pre-warm walkout-song players ahead of need (see youtubeWarmAudio.js):
+  // a muted player buffered at the trim point is built for the queued
+  // reveal target while the pre-live gate is up, and for the current + next
+  // slide once live. This is what makes the walkout song audible ~instantly
+  // on the invoke press even in the dominant flow, where the reveal press
+  // invokes in the same write (514f8ba) and PreShowSlide therefore mounts
+  // with `invoked` already true — too late to warm from inside the slide.
+  // It also covers state-of-union's loop, which autoplays at mount and so
+  // can only be warmed from the slide BEFORE it. Shiny audio questions warm
+  // themselves at content mount instead (their PLAY press comes well after).
+  // Idempotent per clip; the pool caps at 2 hidden muted iframes.
+  useEffect(() => {
+    if (isPreview || isDemo || !show?.is_live) return
+    const sorted = sortSlides(show.slides)
+    const cur = show.current_slide_index ?? 0
+    const targets = (show.current_slide_id ?? null) === null
+      ? [sorted[cur]] // gate is up — the next press reveals (and may invoke) this slide
+      : [sorted[cur], sorted[cur + 1]]
+    for (const s of targets) {
+      const clip = s?.data?.walkoutSong
+      if (clip?.videoId) warmYoutubeAudio(clip.videoId, clip.start ?? 0)
+    }
+  }, [isPreview, isDemo, show?.is_live, show?.slides, show?.current_slide_index, show?.current_slide_id])
 
   // Capture Chrome's install prompt — only fires when not already installed
   useEffect(() => {

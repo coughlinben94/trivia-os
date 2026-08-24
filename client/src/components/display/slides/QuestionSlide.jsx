@@ -10,7 +10,7 @@ import { fitToBox, QUESTION_BOX, QUOTE_BOX, useFitToBox, useFitListToBox, LIST_I
 import { EASE_OUT, EASE_EXIT, EASE_PANEL } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { youtubeEmbedUrl } from '../../../lib/youtube.js'
-import { loadYoutubeIframeApi } from '../../host/YoutubeClipEditor.jsx'
+import { warmYoutubeAudio, claimYoutubeAudio } from '../../../lib/youtubeWarmAudio.js'
 
 // ─── Standard question ────────────────────────────────────────────────────────
 
@@ -459,72 +459,77 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
   const [playing, setPlaying] = useState(false)
   const audioRef = useRef(null)
   const audioCtxRef = useRef(null)
-  const ytContainerRef = useRef(null)
-  const ytPlayerRef = useRef(null)
+  const ytHandleRef = useRef(null)
 
   useEffect(() => {
     return () => { audioCtxRef.current?.close() }
   }, [])
 
-  // Warms the YT IFrame API script (a real network fetch, shared/cached via
-  // loadYoutubeIframeApi's singleton promise — free if PreShowSlide.jsx
-  // already ran it this session) so the first shiny-audio play of the
-  // night doesn't stall waiting on it.
+  // Pre-build the whole player at slide mount, not just the API script
+  // (2026-08-24, Ben: close the build/load/buffer latency "on any slide
+  // with audio... unless the audio is downloaded"). warmYoutubeAudio builds
+  // a muted player buffered at the clip start and parks it paused in a
+  // hidden body-level container (see youtubeWarmAudio.js), so the PLAY
+  // press below is unmute+play instead of API-load/build/buffer/seek —
+  // the "first shiny-audio play of the night stalls" gap, closed. Not in
+  // the host's preview pane: a warm iframe there would stack on top of
+  // YoutubeClipEditor's own preview player for no benefit.
   useEffect(() => {
-    if (isYoutubeSource) loadYoutubeIframeApi().catch(() => {})
-  }, [isYoutubeSource])
+    if (!isYoutubeSource || isPreview) return
+    warmYoutubeAudio(part.youtubeId, part.youtubeStart ?? 0, part.youtubeEnd ?? null)
+  }, [isYoutubeSource, isPreview, part.youtubeId, part.youtubeStart, part.youtubeEnd])
+
+  // One claimed player per clip, destroyed when the clip changes (a
+  // multi-part series keeps the same slide.id across parts) or on unmount.
+  // Declared BEFORE the play/pause effect below so that on a part change
+  // this cleanup runs first and the play effect sees a clean slate.
+  useEffect(() => {
+    if (!isYoutubeSource) return
+    return () => {
+      ytHandleRef.current?.destroy()
+      ytHandleRef.current = null
+    }
+  }, [isYoutubeSource, part.youtubeId, part.youtubeStart, part.youtubeEnd, slide.id, data.currentPart])
 
   // Real YT.Player instead of a bare iframe (2026-08-19) — needed for
   // .setVolume(part.volume), which a plain embed URL has no equivalent for.
-  // Mount-on-play / destroy-on-pause, NOT PreShowSlide.jsx's create-once
-  // pattern — this component's existing semantics are that pausing fully
-  // stops playback and replaying restarts from the clip start (the old
-  // `playing && <iframe key=.../>` unmounted the iframe entirely on pause).
-  // A persistent player with playVideo()/pauseVideo() would silently change
-  // pause into resume-mid-clip instead. Runs only while playing is true;
-  // destroy() in cleanup covers both an explicit pause AND the auto-stop
-  // effect below flipping playing back to false.
+  // Since the warm-player rework the player persists across pause/replay
+  // within one clip — but the SEMANTICS are unchanged from the old
+  // mount-on-play/destroy-on-pause pattern: pause fully stops playback, and
+  // replay restarts from the clip start (the explicit seekTo on both the
+  // pause and play paths below), never resume-mid-clip.
+  // `end` in the warm player's playerVars (2026-08-19, Opus review) makes
+  // YouTube's own player the real stop; the wall-clock timeout below stays
+  // as a backstop for the rare case `end` doesn't fire.
   useEffect(() => {
-    if (!isYoutubeSource || !playing || !ytContainerRef.current) return
-    let cancelled = false
-    loadYoutubeIframeApi().then(YT => {
-      if (cancelled || !ytContainerRef.current) return
-      ytPlayerRef.current = new YT.Player(ytContainerRef.current, {
-        videoId: part.youtubeId,
-        width: '1',
-        height: '1',
-        // start/end here (2026-08-19, Opus review): the old bare-iframe embed
-        // URL passed `end` and YouTube stopped playback at that exact media
-        // timestamp. The wall-clock setTimeout below is the only stop
-        // mechanism otherwise — it starts counting the instant `playing`
-        // flips true, before API load/player construction/onReady/seek/
-        // buffering, so it cuts the clip short by however long that takes
-        // (worse on the first play of the night, cold). `end` here makes
-        // YouTube's own player the real stop; the timeout is now just a
-        // backstop for the rare case `end` doesn't fire.
-        playerVars: {
-          autoplay: 0, controls: 0, playsinline: 1,
-          start: Math.floor(part.youtubeStart ?? 0),
-          ...(part.youtubeEnd ? { end: Math.ceil(part.youtubeEnd) } : {}),
-        },
-        events: {
-          onReady: e => {
-            if (cancelled) return
-            e.target.setVolume(part.volume ?? 100)
-            e.target.seekTo(part.youtubeStart ?? 0, true)
-            e.target.playVideo()
-          },
-          onStateChange: e => {
-            if (!cancelled && e.data === window.YT.PlayerState.ENDED) setPlaying(false)
-          },
-        },
+    if (!isYoutubeSource) return
+    if (playing) {
+      let cancelled = false
+      if (!ytHandleRef.current) {
+        ytHandleRef.current = claimYoutubeAudio(part.youtubeId, part.youtubeStart ?? 0, part.youtubeEnd ?? null)
+        ytHandleRef.current.onStateChange(state => {
+          if (state === 0 /* ENDED */) setPlaying(false)
+        })
+      }
+      const handle = ytHandleRef.current
+      handle.whenReady(player => {
+        if (cancelled || handle !== ytHandleRef.current) return
+        player.setVolume(part.volume ?? 100)
+        player.unMute()
+        player.seekTo(part.youtubeStart ?? 0, true)
+        player.playVideo()
       })
-    })
-    return () => {
-      cancelled = true
-      try { ytPlayerRef.current?.destroy() } catch { /* already gone */ }
-      ytPlayerRef.current = null
+      return () => { cancelled = true }
     }
+    // playing false — an explicit pause press, the auto-stop timeout, or
+    // YouTube's own `end`/ENDED. Park the player back at the clip start,
+    // still claimed and buffered, so a replay is instant too.
+    const handle = ytHandleRef.current
+    handle?.whenReady(player => {
+      if (handle !== ytHandleRef.current) return
+      player.pauseVideo()
+      player.seekTo(part.youtubeStart ?? 0, true)
+    })
   }, [isYoutubeSource, playing, part.youtubeId, part.youtubeStart, part.youtubeEnd, part.volume, slide.id, data.currentPart])
 
   // A multi-part series keeps the same slide.id across parts — reset
@@ -635,25 +640,12 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
           is identical either way. */}
       {(isYoutubeSource ? part.youtubeId : part.mediaUrl) && (
         <>
-          {isYoutubeSource ? (
-            playing && (
-              // Visually hidden but NOT display:none — some browsers pause
-              // iframes hidden that way, which would silently kill playback
-              // (same lesson PreShowSlide.jsx's walkout-song player already
-              // encodes). Keyed wrapper, not the YT.Player's own container —
-              // YT.Player replaces the inner node directly; keying the
-              // wrapper instead of fighting that keeps React from clobbering
-              // a real reflow. Keyed on slide.id:currentPart so a multi-part
-              // series (same slide.id throughout) still gets a clean
-              // create/destroy per part.
-              <div
-                key={`${slide.id}:${data.currentPart ?? 0}`}
-                style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
-              >
-                <div ref={ytContainerRef} />
-              </div>
-            )
-          ) : (
+          {/* YouTube source renders no element here anymore — the hidden
+              player lives in a body-level container owned by
+              youtubeWarmAudio.js so it can be pre-built/buffered before the
+              PLAY press (and an iframe can't be reparented into this tree
+              without reloading and dropping its buffer). */}
+          {!isYoutubeSource && (
             <audio
               ref={audioRef}
               src={part.mediaUrl}

@@ -4,7 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { fitToBox, TITLE_CARD_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import DEFAULT_PHOTO from '../../../assets/state-of-union-photo.png'
-import { loadYoutubeIframeApi } from '../../host/YoutubeClipEditor.jsx'
+import { claimYoutubeAudio } from '../../../lib/youtubeWarmAudio.js'
 
 // Fixed RWB palette — deliberately NOT theme.colors, anywhere in this
 // component. "State of the Union" is patriotic by identity; it must read
@@ -129,7 +129,6 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
   // keeps going for as long as the host stays on this slide (2026-08-17,
   // Ben: "loop the chorus... over the state of the union slide").
   const walkoutSong = slide?.data?.walkoutSong
-  const ytContainerRef = useRef(null)
   const ytPlayerRef = useRef(null)
   const ytWatchIntervalRef = useRef(null)
 
@@ -138,59 +137,58 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
     if (!walkoutSong?.videoId || isPreview) return
     let cancelled = false
 
-    loadYoutubeIframeApi().then(YT => {
-      if (cancelled || !ytContainerRef.current) return
-      ytPlayerRef.current = new YT.Player(ytContainerRef.current, {
-        videoId: walkoutSong.videoId,
-        width: '1',
-        height: '1',
-        playerVars: { autoplay: 1, controls: 0, playsinline: 1 },
-        events: {
-          onReady: e => {
-            if (cancelled) return
-            // 75%, not full volume (2026-08-17, Ben) — this plays under a
-            // host monologue, not as the only thing happening. walkoutSong.volume
-            // (2026-08-19) is a loudness-matching correction on TOP of that
-            // baseline, not a replacement for it — it composes multiplicatively
-            // so an unset/100 value leaves the deliberate 75% duck untouched.
-            e.target.setVolume(Math.round(75 * ((walkoutSong.volume ?? 100) / 100)))
-            e.target.seekTo(walkoutSong.start ?? 0, true)
-            e.target.playVideo()
-            clearInterval(ytWatchIntervalRef.current)
-            ytWatchIntervalRef.current = setInterval(() => {
-              const player = ytPlayerRef.current
-              if (!player) return
-              // Same cold-tab autoplay block as PreShowSlide's walkout song —
-              // playVideo() above can fail silently with no error. Retry every
-              // tick so the loop self-heals the instant the tab gets any
-              // interaction, instead of relying on the host tapping the TV first.
-              const state = player.getPlayerState?.()
-              if (state === -1 || state === 5) player.playVideo()
-              const t = player.getCurrentTime?.() ?? 0
-              // Same duration-not-loaded-yet guard as PreShowSlide — an
-              // untrimmed clip (end: null) must not compute clipEnd=0 on
-              // the first tick and loop-restart every 250ms.
-              const duration = player.getDuration?.() ?? 0
-              const clipEnd = walkoutSong.end ?? (duration > 0 ? duration : Infinity)
-              if (clipEnd !== Infinity && t >= clipEnd) {
-                player.seekTo(walkoutSong.start ?? 0, true)
-              }
-            }, 250)
-          },
-        },
-      })
+    // Claims the player Display.jsx pre-warmed while the PREVIOUS slide was
+    // up (muted, buffered at the trim in-point, parked paused — see
+    // youtubeWarmAudio.js), so entering this slide is unmute+play instead of
+    // API-load/build/buffer/seek. Falls back to building fresh (the old
+    // latency, never worse) if nothing was warmed — e.g. the host jumped
+    // here from further away than one slide.
+    const handle = claimYoutubeAudio(walkoutSong.videoId, walkoutSong.start ?? 0)
+    handle.whenReady(player => {
+      if (cancelled) return
+      ytPlayerRef.current = player
+      // 75%, not full volume (2026-08-17, Ben) — this plays under a
+      // host monologue, not as the only thing happening. walkoutSong.volume
+      // (2026-08-19) is a loudness-matching correction on TOP of that
+      // baseline, not a replacement for it — it composes multiplicatively
+      // so an unset/100 value leaves the deliberate 75% duck untouched.
+      player.setVolume(Math.round(75 * ((walkoutSong.volume ?? 100) / 100)))
+      player.unMute()
+      player.seekTo(walkoutSong.start ?? 0, true)
+      player.playVideo()
+      clearInterval(ytWatchIntervalRef.current)
+      ytWatchIntervalRef.current = setInterval(() => {
+        const player = ytPlayerRef.current
+        if (!player) return
+        // Same cold-tab autoplay block as PreShowSlide's walkout song —
+        // playVideo() above can fail silently with no error. Retry every
+        // tick so the loop self-heals the instant the tab gets any
+        // interaction, instead of relying on the host tapping the TV first.
+        // 2 (PAUSED) added with the warm-player rework: a warmed player is
+        // parked paused, and a blocked unmuted play lands it back there —
+        // safe to retry from, nothing on this slide ever pauses on purpose.
+        const state = player.getPlayerState?.()
+        if (state === -1 || state === 5 || state === 2) player.playVideo()
+        const t = player.getCurrentTime?.() ?? 0
+        // Same duration-not-loaded-yet guard as PreShowSlide — an
+        // untrimmed clip (end: null) must not compute clipEnd=0 on
+        // the first tick and loop-restart every 250ms.
+        const duration = player.getDuration?.() ?? 0
+        const clipEnd = walkoutSong.end ?? (duration > 0 ? duration : Infinity)
+        if (clipEnd !== Infinity && t >= clipEnd) {
+          player.seekTo(walkoutSong.start ?? 0, true)
+        }
+      }, 250)
     })
 
     return () => {
       // Hard stop on leaving this slide (2026-08-17, Ben: "once i go to the
-      // next slide the audio should just stop") — pauseVideo before
-      // destroy() rather than relying on destroy alone, so the audio cuts
-      // the instant the host advances rather than trailing for however long
-      // destroy's own teardown takes.
+      // next slide the audio should just stop") — handle.destroy() pauses
+      // before destroying, so the audio cuts the instant the host advances
+      // rather than trailing for however long teardown takes.
       cancelled = true
       clearInterval(ytWatchIntervalRef.current)
-      try { ytPlayerRef.current?.pauseVideo() } catch { /* already gone */ }
-      try { ytPlayerRef.current?.destroy() } catch { /* already gone */ }
+      handle.destroy()
       ytPlayerRef.current = null
     }
   }, [walkoutSong?.videoId, walkoutSong?.start, walkoutSong?.end]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -199,15 +197,8 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
     <div className="absolute inset-0 flex flex-col items-center justify-center px-24 overflow-hidden"
       style={{ background: RWB_BLUE_DEEP }}>
 
-      {walkoutSong?.videoId && (
-        <div
-          key={`${walkoutSong.videoId}-${walkoutSong.start}-${walkoutSong.end}`}
-          style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
-        >
-          <div ref={ytContainerRef} />
-        </div>
-      )}
-
+      {/* Walkout song iframe lives in a body-level container owned by
+          youtubeWarmAudio.js now — see PreShowSlide's matching note. */}
       <WavingGradient reduce={reduce} />
 
       {/* Dark center vignette — keeps the tilted text readable */}
