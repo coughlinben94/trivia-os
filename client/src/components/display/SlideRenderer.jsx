@@ -38,6 +38,13 @@ export function skipsLockedBackground(slide) {
 }
 
 // Per-slide content animation config — tune these without touching component logic
+// Exported so anything outside this file that has to sequence against a
+// shiny slide's own exit (e.g. Display.jsx's full-viewport shiny backdrop,
+// which must stay opaque until the outgoing shiny slide is actually gone)
+// reads the real value instead of hand-copying the number — see SLIDE_ANIMATIONS
+// below, and skipsLockedBackground() above for the same pattern.
+export const SHINY_EXIT_DURATION_S = 0.2
+
 const SLIDE_ANIMATIONS = {
   'question': {
     initial: { opacity: 0, y: 18 },
@@ -72,7 +79,7 @@ const SLIDE_ANIMATIONS = {
   'shiny': {
     initial: { opacity: 0, scale: 1.06 },
     animate: { opacity: 1, scale: 1, transition: { delay: 0.05, duration: 0.28, ease: EASE_OUT } },
-    exit:    { opacity: 0, scale: 0.96, transition: { duration: 0.2, ease: EASE_EXIT } },
+    exit:    { opacity: 0, scale: 0.96, transition: { duration: SHINY_EXIT_DURATION_S, ease: EASE_EXIT } },
   },
   // Same timing as 'shiny', scale delta dropped — shiny slides always used
   // this variant regardless of reduce (checked before reduce was ever
@@ -80,7 +87,7 @@ const SLIDE_ANIMATIONS = {
   'shiny-reduced': {
     initial: { opacity: 0 },
     animate: { opacity: 1, transition: { delay: 0.05, duration: 0.28, ease: EASE_OUT } },
-    exit:    { opacity: 0, transition: { duration: 0.2, ease: EASE_EXIT } },
+    exit:    { opacity: 0, transition: { duration: SHINY_EXIT_DURATION_S, ease: EASE_EXIT } },
   },
 }
 

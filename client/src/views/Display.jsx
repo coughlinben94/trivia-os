@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import QRCode from 'qrcode'
 import { supabase } from '../lib/supabase.js'
 import { ThemeProvider, useTheme } from '../components/shared/ThemeProvider.jsx'
-import SlideRenderer, { skipsLockedBackground } from '../components/display/SlideRenderer.jsx'
+import SlideRenderer, { skipsLockedBackground, SHINY_EXIT_DURATION_S } from '../components/display/SlideRenderer.jsx'
 import { ringVisibleStationIndex } from '../lib/ringStationIndex.js'
 import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
@@ -743,14 +743,16 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
             style={{ background: theme.colors.shinyBg, zIndex: 1 }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            // Held up through the outgoing shiny slide's own 0.2s exit
-            // (SLIDE_ANIMATIONS['shiny'].exit, SlideRenderer.jsx) before this
-            // starts fading — both AnimatePresences here fire off the same
+            // Held up through the outgoing shiny slide's own exit
+            // (SHINY_EXIT_DURATION_S, SlideRenderer.jsx — same value
+            // SLIDE_ANIMATIONS['shiny'].exit uses, imported rather than
+            // copied so the two can't drift out of sync) before this starts
+            // fading — both AnimatePresences here fire off the same
             // currentSlide change, so without the delay this backdrop was
             // uncovering the ring margin while StageFrame's shiny content was
             // still fading out in the center: "coming out of it ... has a
             // ring world transition behind it when it shouldn't" (2026-08-24).
-            exit={{ opacity: 0, transition: { delay: reduce ? 0 : 0.2 } }}
+            exit={{ opacity: 0, transition: { delay: reduce ? 0 : SHINY_EXIT_DURATION_S } }}
             transition={{ duration: reduce ? 0 : 0.3 }}
           />
         )}

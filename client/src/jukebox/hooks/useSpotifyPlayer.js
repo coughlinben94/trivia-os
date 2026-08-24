@@ -53,6 +53,27 @@ const withTimeout = (promise, ms) => Promise.race([
 // audible click/pop, nowhere near long enough to read as a musical fade-out.
 const STOP_FADE_MS = 400
 
+// Poll a ref until it holds a truthy value, or give up after `timeoutMs` and
+// resolve null. Shared by playTrack's two "hasn't finished initializing yet"
+// races below (the player itself connecting, then its device ID arriving) —
+// same shape, different ref. clearInterval runs on BOTH the resolve path and
+// the deadline path (2026-08-07, Opus review: losing it on the deadline path
+// left the interval running for the life of the page whenever the ref never
+// became truthy — exactly when something's already gone wrong).
+function waitForRef(ref, timeoutMs = 5000, intervalMs = 100) {
+  if (ref.current) return Promise.resolve(ref.current)
+  return new Promise(resolve => {
+    const poll = setInterval(() => {
+      if (ref.current) {
+        clearInterval(poll)
+        clearTimeout(deadline)
+        resolve(ref.current)
+      }
+    }, intervalMs)
+    const deadline = setTimeout(() => { clearInterval(poll); resolve(null) }, timeoutMs)
+  })
+}
+
 export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
   const [isReady, setIsReady] = useState(false)
   const [isPaused, setIsPaused] = useState(true)
@@ -226,43 +247,21 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
     let player = playerRef.current
     if (!player) {
       // player.connect() (the init effect) hasn't resolved yet — this is the
-      // gap the deviceId poll below doesn't cover, it only starts once
+      // gap the deviceId wait below doesn't cover, it only starts once
       // playerRef.current already exists. Real failure mode (2026-08-18 show,
       // grading-break auto-shuffle fired the instant the overlay mounted,
       // milliseconds after the SDK player was constructed): both call sites
       // that retry on `started === false` retried within the same tick,
       // long before connect() could possibly finish, so every attempt hit
-      // this bail. Poll it the same way the deviceId wait already does.
-      player = await new Promise(resolve => {
-        const poll = setInterval(() => {
-          if (playerRef.current) {
-            clearInterval(poll)
-            clearTimeout(deadline)
-            resolve(playerRef.current)
-          }
-        }, 100)
-        const deadline = setTimeout(() => { clearInterval(poll); resolve(null) }, 5000)
-      })
+      // this bail.
+      player = await waitForRef(playerRef)
       if (!player) return false
     }
 
     let deviceId = deviceIdRef.current
     if (!deviceId) {
-      // SDK ready event hasn't fired yet — poll for up to 5s
-      deviceId = await new Promise(resolve => {
-        const poll = setInterval(() => {
-          if (deviceIdRef.current) {
-            clearInterval(poll)
-            clearTimeout(deadline)
-            resolve(deviceIdRef.current)
-          }
-        }, 100)
-        // clearInterval(poll) added (2026-08-07, Opus review) — the deadline
-        // losing the race left this 100ms interval running for the life of
-        // the page, exactly when the device never becomes ready (i.e.
-        // exactly when something's already gone wrong).
-        const deadline = setTimeout(() => { clearInterval(poll); resolve(null) }, 5000)
-      })
+      // SDK ready event hasn't fired yet — wait for up to 5s
+      deviceId = await waitForRef(deviceIdRef)
       if (!deviceId) {
         setError('Spotify player still connecting — try again in a moment.')
         transitioningRef.current = false
