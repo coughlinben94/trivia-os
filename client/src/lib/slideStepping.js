@@ -84,13 +84,23 @@ export function withEntryState(slides, slide, { currentPart, introDone } = {}) {
 // and the parts-stepping branches in computeNextStep/computePrevStep already
 // handle any slide with an array in data.parts — no changes needed there). The
 // only team-picker-specific piece is baking data.parts to the right LENGTH
-// once, the first time the slide is entered fresh, from a live count of the
-// teams table — after that it's just a plain step counter (TeamPickerSlide
-// fetches the actual names itself). Baking only once (not on every entry)
-// means a team registering mid-reveal can't resize the sequence out from
-// under an in-progress Stream Deck advance.
+// from a live count of the teams table — after that it's just a plain step
+// counter (TeamPickerSlide fetches the actual names itself).
+//
+// Re-bakes on EVERY call, not just the first. All 5 call sites (goLive,
+// goLiveFrom, and the reveal/advance/retreat branches below) fire only at
+// slide-ENTRY — never mid-reveal, since currentPart-stepping doesn't touch
+// this function — so there is no in-progress sequence this can resize out
+// from under. The original "bake once, ever" guard (`Array.isArray(...)
+// return slides`) protected against that non-existent risk while creating a
+// real one: `data.parts`, once baked, never expired — a rehearsal with 1
+// team registered permanently froze the roster at 1 team for that slide,
+// even after 20 more teams joined and the show went live for real
+// (2026-08-24, Ben: "only saw one team name" / "said 1/1 on the bottom" —
+// confirmed live, `registered_teams: 21` against a stale 4-length `parts`
+// array baked back when only 1 was registered).
 export async function bakeTeamPickerParts(slides, slide, fetchTeamCount) {
-  if (!slide || slide.type !== 'team-picker' || Array.isArray(slide.data?.parts)) return slides
+  if (!slide || slide.type !== 'team-picker') return slides
   const count = await fetchTeamCount()
   const parts = new Array(count + 3).fill(null) // intro + teams + outro + landed
   return patchSlideData(slides, slide.id, { parts })

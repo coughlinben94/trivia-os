@@ -102,8 +102,21 @@ describe('withEntryState', () => {
 })
 
 describe('bakeTeamPickerParts', () => {
-  it('bakes only once — an existing parts array is left alone', async () => {
+  // 2026-08-24: this used to skip re-baking whenever data.parts already
+  // existed, on the theory that only an in-progress reveal could have put it
+  // there. All 5 real call sites fire only at slide-entry, never mid-reveal,
+  // so that theory was wrong — it just left a stale team count frozen from
+  // whenever the slide was first ever entered (confirmed live: a rehearsal
+  // with 1 team registered froze the roster at 1 team even after 20 more
+  // teams joined for the real show). Every entry must re-bake fresh.
+  it('re-bakes from the live count even when a parts array already exists', async () => {
     const s = slide('a', 0, 'team-picker', { parts: [null, null] })
+    const out = await bakeTeamPickerParts([s], s, async () => 9)
+    expect(out[0].data.parts).toHaveLength(9 + 3)
+  })
+
+  it('leaves non-team-picker slides untouched', async () => {
+    const s = slide('a', 0, 'question', {})
     expect(await bakeTeamPickerParts([s], s, async () => 9)).toEqual([s])
   })
 })
