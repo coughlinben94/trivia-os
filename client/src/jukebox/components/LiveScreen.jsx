@@ -1297,7 +1297,22 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
                       clipPath: 'circle(50%)',
                     }}
                   >
-                    <img src={artUrl} alt="" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+                    {/* brightness/saturate down a touch (2026-08-24, Ben: "cant
+                        see the vinyl here with these colors ... pull the
+                        neonness or brightness down a bit so we can see the
+                        rings the comet is flying on") — the groove-ring overlay
+                        right below is a flat 12% black band; bright/saturated
+                        cover art (neon illustrations especially) can wash it out
+                        to invisible. Dims the art itself rather than darkening
+                        the rings, so ordinary/darker covers look the same as
+                        before and only the washed-out case actually changes. */}
+                    <img
+                      src={artUrl}
+                      alt=""
+                      decoding="async"
+                      className="absolute inset-0 w-full h-full object-cover"
+                      style={{ filter: 'brightness(0.8) saturate(0.85)' }}
+                    />
                     <div
                       className="absolute inset-0 rounded-full pointer-events-none"
                       style={{
