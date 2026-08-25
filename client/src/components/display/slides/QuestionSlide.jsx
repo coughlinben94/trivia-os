@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { Fragment, useState, useRef, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
@@ -933,6 +933,148 @@ function ShinyListQuestion({ slide, theme }) {
   )
 }
 
+// ─── Shiny concurrent question ────────────────────────────────────────────────
+// A text series played all-at-once: every part stays on screen as a
+// label | question | answer row, and each Next fills in one more answer cell
+// (data.currentPart is the highest revealed row — the existing per-part
+// stepping, untouched, just read additively here instead of as a swap).
+
+function ShinyConcurrentQuestion({ slide, theme }) {
+  const { data } = slide
+  const reduce = useReducedMotion()
+  const parts = data.parts ?? []
+  // This component only mounts after the intro card dismisses (introDone
+  // gates it upstream in QuestionSlide), so row 0's answer is showing from
+  // the first content frame — currentPart starts at 0, and 0 hidden rows
+  // would leave the host one press behind the audience's expectation.
+  const revealedCount = data.introDone ? Math.min((data.currentPart ?? 0) + 1, parts.length) : 0
+
+  // Fixed-px side columns on purpose: the stage is a fixed 1920 canvas
+  // (same assumption QUESTION_BOX bakes in), and a constant label/answer
+  // width makes the question column's width "container minus a constant" —
+  // exactly the rowInset shape useFitListToBox already handles, so this
+  // reuses the measured-uniform-rows convention from ShinyListQuestion
+  // instead of a guessed clamp(). Question text drives the shared size;
+  // labels/answers are short (song names / titles) and render slightly
+  // smaller in their own fixed cells.
+  const LABEL_W = 340, ANSWER_W = 440, COL_GAP = 28, ROW_GAP = 14
+  const gridRef = useRef(null)
+  const rowSize = useFitListToBox(gridRef, parts.map(p => p.text ?? ''), {
+    family: theme.fonts.body,
+    floorPx: LIST_ITEM_FLOOR * 16,
+    ceilPx: LIST_ITEM_CEIL * 16,
+    gapPx: ROW_GAP,
+    rowInset: LABEL_W + ANSWER_W + COL_GAP * 2,
+    maxLinesPerRow: 2,
+    lineHeight: 1.3,
+  })
+
+  const rowEntrance = i => ({
+    initial: { opacity: 0, x: reduce ? 0 : -16 },
+    animate: { opacity: 1, x: 0 },
+    transition: { delay: 0.08 + i * 0.06, duration: 0.22, ease: EASE_OUT },
+  })
+
+  return (
+    <div className="w-full h-full relative overflow-hidden flex flex-col items-center justify-center px-20 py-14" style={{ background: theme.colors.shinyBg }}>
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: `radial-gradient(ellipse 70% 55% at 50% 50%, ${SHINY_GOLD_GLOW}18 0%, transparent 65%)` }}
+      />
+
+      {data.text && (
+        <motion.p
+          initial={{ opacity: 0, y: reduce ? 0 : -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, ease: EASE_OUT }}
+          className="relative z-10 text-center mb-8"
+          style={{
+            color: theme.colors.text,
+            fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+            fontSize: 'clamp(1.3rem, 2.8vw, 2.1rem)',
+            fontWeight: 500,
+            maxWidth: '70ch',
+          }}
+        >
+          {data.text}
+        </motion.p>
+      )}
+
+      {/* flex-1 min-h-0 gives the fit hook a real bounded height to divide
+          among the rows, instead of a content-driven one that grows with
+          whatever size it just picked. */}
+      <div ref={gridRef} className="relative z-10 w-full flex-1 min-h-0" style={{ maxWidth: 1680 }}>
+        <div
+          className="w-full h-full"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `${LABEL_W}px minmax(0, 1fr) ${ANSWER_W}px`,
+            columnGap: COL_GAP,
+            rowGap: ROW_GAP,
+            alignContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          {parts.map((part, i) => (
+            <Fragment key={i}>
+              <motion.p
+                {...rowEntrance(i)}
+                style={{
+                  color: theme.colors.highlight,
+                  fontFamily: `'${theme.fonts.display}', sans-serif`,
+                  fontSize: `${rowSize * 0.9}px`,
+                  fontWeight: 700,
+                  lineHeight: 1.2,
+                }}
+              >
+                {part.label}
+              </motion.p>
+              <motion.p
+                {...rowEntrance(i)}
+                style={{
+                  color: theme.colors.text,
+                  fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+                  fontSize: `${rowSize}px`,
+                  fontWeight: 500,
+                  lineHeight: 1.3,
+                }}
+              >
+                {part.text}
+              </motion.p>
+              {/* Cell div always present so the grid never reflows on a
+                  reveal; only the answer inside mounts. Key is stable per
+                  row, so the entrance fires exactly once — when that row's
+                  answer newly appears — not on later renders. */}
+              <div>
+                {i < revealedCount && (
+                  <motion.p
+                    key={`${slide.id}:ans:${i}`}
+                    initial={{ opacity: 0, x: reduce ? 0 : 14 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.28, ease: EASE_OUT }}
+                    style={{
+                      color: SHINY_GOLD,
+                      fontFamily: `'${theme.fonts.display}', sans-serif`,
+                      fontSize: `${rowSize * 0.95}px`,
+                      fontWeight: 700,
+                      lineHeight: 1.25,
+                    }}
+                  >
+                    {part.answer}
+                  </motion.p>
+                )}
+              </div>
+            </Fragment>
+          ))}
+        </div>
+      </div>
+
+      <div className="absolute top-5 left-5 z-20 text-2xl" style={{ filter: `drop-shadow(0 0 8px ${SHINY_GOLD_GLOW})` }}>✨</div>
+    </div>
+  )
+}
+
 // ─── Shiny intro → content pan ────────────────────────────────────────────────
 // Ben, 2026-08-17: "literally just the pan transition up to an image." When
 // introDone flips, the title card lifts UP and out of frame while the real
@@ -1013,6 +1155,12 @@ function ShinyContent({ slide, show, theme, transitionKey, isPreview }) {
   }
   if (isWagerShiny(data)) {
     return <ShinyWagerQuestion slide={slide} show={show} theme={theme} />
+  }
+  // Gated on type AND concurrent together — image series ("Time for a
+  // Close Up") also sets concurrent: true in its schema, and must keep its
+  // existing one-part-at-a-time visual treatment above.
+  if (data.shinyInputSchema?.type === 'text' && data.shinyInputSchema?.concurrent === true && Array.isArray(data.parts) && data.parts.length > 1) {
+    return <ShinyConcurrentQuestion slide={slide} theme={theme} />
   }
   return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} />
 }

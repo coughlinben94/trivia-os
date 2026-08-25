@@ -18,6 +18,10 @@ export default function CustomSlide({ slide }) {
   const rt = data._regionTransforms ?? {}
   const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
 
+  // data.images is the current shape (host can attach any number); data.mediaUrl
+  // is the legacy single-image shape, still read for slides built before this.
+  const images = data.images?.length ? data.images.filter(i => i.url) : (data.mediaUrl ? [{ url: data.mediaUrl }] : [])
+
   return (
     <div
       className="w-full h-full relative flex flex-col items-center justify-center overflow-hidden px-24 py-20"
@@ -31,19 +35,22 @@ export default function CustomSlide({ slide }) {
         }}
       />
 
-      {data.mediaUrl && (
+      {images.length > 0 && (
         <motion.div
           initial={{ opacity: 0, scale: reduce ? 1 : 1.05 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.35, ease: EASE_OUT }}
-          className="relative z-10 mb-10 max-w-2xl"
+          className="relative z-10 mb-10 flex flex-wrap justify-center gap-6 max-w-5xl"
         >
-          <img
-            src={data.mediaUrl}
-            alt=""
-            className="w-full rounded-2xl object-contain"
-            style={{ maxHeight: '45vh' }}
-          />
+          {images.map((img, i) => (
+            <img
+              key={img.url ?? i}
+              src={img.url}
+              alt=""
+              className="rounded-2xl object-contain"
+              style={{ maxHeight: '45vh', maxWidth: images.length > 1 ? `${Math.floor(88 / images.length)}vw` : '100%' }}
+            />
+          ))}
         </motion.div>
       )}
 

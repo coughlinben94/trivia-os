@@ -145,6 +145,17 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
     return result
   }
 
+  async function handleCustomImageUpload(index, file) {
+    const result = await uploadMedia(file)
+    if (result?.url) {
+      const legacy = data.images?.length ? [] : (data.mediaUrl ? [{ url: data.mediaUrl, type: data.mediaType }] : [])
+      const next = [...(data.images?.length ? data.images : legacy)]
+      next[index] = { url: result.url, type: result.type }
+      batchChange({ images: next, mediaUrl: undefined, mediaType: undefined })
+    }
+    return result
+  }
+
   // Questions in same round (for grading-break back link)
   const roundSlides = show.slides.filter(s => s.roundId === slide.roundId && s.type === 'question')
 
@@ -198,7 +209,7 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
                 <ScoreboardRevealEditor data={data} onChange={change} show={show} />
               )}
               {slide.type === 'custom' && (
-                <CustomEditor data={data} onChange={change} onMediaUpload={handleMediaUpload} theme={theme} />
+                <CustomEditor data={data} onChange={change} onImageUpload={handleCustomImageUpload} theme={theme} />
               )}
               {slide.type === 'pixelate-series' && (
                 <PixelateSeriesEditor data={data} onChange={change} onStageUpload={handleStageUpload} theme={theme} />
@@ -539,6 +550,20 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
       return results[i]?.url ? { ...existing, mediaSlots: [{ url: results[i].url, type: results[i].type }] } : existing
     })
     onBatchChange({ parts, currentPart: 0 })
+  }
+
+  // Bulk fill for text-type series — paste a grid (name / question / answer,
+  // tab-separated, one row per line — exactly what copying cells out of a
+  // spreadsheet produces) and replace the whole parts list in one shot.
+  // Mirrors uploadBulkImages' "grows to fit, replaces wholesale" behavior for
+  // the text case (2026-08-25, Ben: wanted the same paste-a-grid flow he has
+  // in the /questions/add archive panels available right here in the live
+  // builder, not just the archive).
+  function handleBulkTextRows(rows) {
+    onBatchChange({
+      parts: rows.map(r => ({ label: r.label, text: r.text, answer: r.answer, mediaSlots: [] })),
+      currentPart: 0,
+    })
   }
 
   // ── Mode selector ──────────────────────────────────────────────────────
@@ -904,6 +929,9 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
           {schema.type === 'image' && (
             <BulkImageDropzone count={data.parts.length} onFiles={uploadBulkImages} />
           )}
+          {schema.type === 'text' && (
+            <BulkTextDropzone count={data.parts.length} onRows={handleBulkTextRows} />
+          )}
 
           {/* Shared Answer / part-picker chips only mean anything once
               there's more than one part on THIS slide (Ben, 2026-08-17:
@@ -1036,6 +1064,44 @@ function BulkImageDropzone({ count, onFiles }) {
           <p className="text-xs text-gray-400 mt-0.5">Fills part 1, 2, 3… in order — adds more parts if you drop more than {count} already here</p>
         </>
       )}
+    </div>
+  )
+}
+
+// Paste target for a text-type series: paste tab-separated rows (name /
+// question / answer — what copying cells out of a spreadsheet produces) and
+// replace the whole parts list at once, same "grows to fit, wholesale
+// replace" contract as BulkImageDropzone above. Always-empty controlled
+// textarea rather than a real input — the paste is intercepted and parsed,
+// nothing is meant to visibly land in the box itself.
+function BulkTextDropzone({ count, onRows }) {
+  function handlePaste(e) {
+    const raw = e.clipboardData.getData('text/plain')
+    e.preventDefault()
+    if (!raw.trim()) return
+    const rows = raw
+      .split('\n')
+      .map(l => l.replace(/\r$/, ''))
+      .filter(l => l.trim())
+      .map(line => {
+        const cols = line.split('\t')
+        return { label: (cols[0] ?? '').trim(), text: (cols[1] ?? '').trim(), answer: (cols[2] ?? '').trim() }
+      })
+      .filter(r => r.label || r.text || r.answer)
+    if (rows.length) onRows(rows)
+  }
+
+  return (
+    <div className="relative border-2 border-dashed rounded-lg p-4 text-center border-gray-200 hover:border-baynes-forest hover:bg-gray-50 transition-colors">
+      <textarea
+        value=""
+        onChange={() => {}}
+        onPaste={handlePaste}
+        placeholder="📋 Click here and paste a grid — name, question, answer"
+        rows={1}
+        className="w-full bg-transparent text-xs font-medium text-gray-600 placeholder:text-gray-400 text-center resize-none focus:outline-none cursor-text"
+      />
+      <p className="text-xs text-gray-400 mt-0.5">Fills part 1, 2, 3… in order — adds more parts if you paste more than {count} rows</p>
     </div>
   )
 }
@@ -1495,19 +1561,36 @@ function ScoreboardRevealEditor({ data, onChange, show }) {
   )
 }
 
-function CustomEditor({ data, onChange, onMediaUpload }) {
+function CustomEditor({ data, onChange, onImageUpload }) {
+  // data.images is the current shape; data.mediaUrl is the legacy single-image
+  // shape (still read, never written, by any slide that predates this).
+  const images = data.images?.length ? data.images : (data.mediaUrl ? [{ url: data.mediaUrl, type: data.mediaType }] : [])
+
+  function addImage() { onChange('images', [...images, { url: null, type: null }]) }
+  function removeImage(i) { onChange('images', images.filter((_, idx) => idx !== i)) }
+
   return (
     <>
       <Field label="Title"><TextInput value={data.title} onChange={v => onChange('title', v)} placeholder="Slide title" /></Field>
       <Field label="Body"><TextArea value={data.body} onChange={v => onChange('body', v)} placeholder="Slide content…" rows={6} /></Field>
-      <MediaUpload
-        accept="image"
-        label="Optional Image"
-        currentUrl={data.mediaUrl}
-        currentType={data.mediaType}
-        onUpload={onMediaUpload}
-        onRemove={() => { onChange('mediaUrl', null); onChange('mediaType', null) }}
-      />
+      <Divider label="Images" />
+      {images.map((img, i) => (
+        <MediaUpload
+          key={i}
+          accept="image"
+          label={`Image ${i + 1}`}
+          currentUrl={img.url}
+          currentType={img.type}
+          onUpload={file => onImageUpload(i, file)}
+          onRemove={() => removeImage(i)}
+        />
+      ))}
+      <button
+        onClick={addImage}
+        className="text-xs text-baynes-forest hover:text-green-800 font-medium transition-colors"
+      >
+        + Add image
+      </button>
     </>
   )
 }
