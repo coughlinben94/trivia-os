@@ -10,6 +10,8 @@ import FormatLibrary from './FormatLibrary.jsx'
 import SlideCanvasEditor from './SlideCanvasEditor.jsx'
 import MatchingBoard from '../join/MatchingBoard.jsx'
 import WagerBoard from '../join/WagerBoard.jsx'
+import OrderBoard from '../join/OrderBoard.jsx'
+import { DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { overflowsBox, QUESTION_BOX } from '../../lib/autoFitText.js'
@@ -432,6 +434,29 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
   const slots = typeof schema.slots === 'number' ? schema.slots : 0
   const mediaSlots = data.mediaSlots ?? []
   const isSeriesMode = !!data.isSeries && Array.isArray(data.parts)
+  // Order defaults — 2 blank items to start, same "minimum viable pair"
+  // shape MatchingBuilder's own default pairs use. correctOrder always
+  // falls back to items' own id order so a freshly-added item has a valid
+  // (if provisional) position instead of no position at all.
+  const orderItems = data.items ?? [{ id: 'o0', url: '' }, { id: 'o1', url: '' }]
+  const orderCorrectOrder = data.correctOrder ?? orderItems.map(i => i.id)
+
+  // Persists correctOrder into `data` the moment real items exist, instead of
+  // only ever computing it as the local `orderCorrectOrder` fallback above —
+  // that fallback never reaches `data` on its own. Without this, a host who
+  // uploads images and never touches the position dropdowns (the default
+  // as-uploaded order IS already a valid answer key) ships a slide with no
+  // correctOrder at all; LiveMode then reads slide.data.correctOrder ?? [],
+  // and scoreOrderSubmission's empty-key guard scores every team 0 (2026-08-25
+  // review finding). Runs only while correctOrder is still absent — once set,
+  // OrderBuilder's own writes (addItem/removeItem/setPosition) own it.
+  useEffect(() => {
+    if (schema.type !== 'order') return
+    if (data.correctOrder != null) return
+    if (!data.items || data.items.length === 0) return
+    onBatchChange({ correctOrder: data.items.map(i => i.id) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schema.type, data.correctOrder, data.items])
 
   // Per-slot "Upload file" vs "YouTube URL" toggle for audio slots — not
   // persisted to `data`, just derived once from whatever's already there
@@ -859,6 +884,39 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
                     theme={theme}
                     team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
                     slide={{ id: slide.id, showId: show?.id, data: { ...data, wagerTiersLocked: false, wagerGuessesLocked: false } }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Order builder — upload each image, then set its correct
+              position. A numbered dropdown per item, not tap-to-sequence
+              on the host side: this file has no existing tap-to-sequence
+              authoring pattern anywhere, while a per-item numeric control
+              right next to a photo upload is exactly MatchingBuilder's
+              existing shape (a small field beside each item) — smaller
+              diff, same house style. */}
+          {schema.type === 'order' && (
+            <>
+              <OrderBuilder
+                items={orderItems}
+                correctOrder={orderCorrectOrder}
+                pointsForOrder={data.pointsForOrder ?? DEFAULT_ORDER_POINTS}
+                onChangeItems={items => onChange('items', items)}
+                onChangeCorrectOrder={order => onChange('correctOrder', order)}
+                onChangePoints={pts => onChange('pointsForOrder', pts)}
+                onBatchChange={onBatchChange}
+                onMediaUpload={async file => { const r = await uploadMedia(file); return r?.url }}
+              />
+              <div className="flex flex-col gap-2">
+                <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
+                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
+                  <OrderBoard
+                    preview
+                    theme={theme}
+                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
+                    slide={{ id: slide.id, showId: show?.id, data: { ...data, items: orderItems, orderLocked: false } }}
                   />
                 </div>
               </div>
@@ -1336,6 +1394,98 @@ function MatchingBuilder({ pairs, pointsPerMatch, onChangePairs, onChangePoints,
         <input
           type="number"
           value={pointsPerMatch}
+          onChange={e => onChangePoints(Number(e.target.value))}
+          min={0}
+          className="w-16 border border-gray-200 rounded px-2 py-1.5 text-sm text-center text-gray-900 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+        />
+      </div>
+    </div>
+  )
+}
+
+// Mirrors MatchingBuilder's shape (upload-per-item + a small numeric field),
+// substituting a "correct position" dropdown for Matching's plain text
+// inputs — Order has no left/right text sides, just images and a sequence.
+function OrderBuilder({ items, correctOrder, pointsForOrder, onChangeItems, onChangeCorrectOrder, onChangePoints, onBatchChange, onMediaUpload }) {
+  // addItem/removeItem touch BOTH items and correctOrder together — must be
+  // ONE onBatchChange call, not two separate onChangeItems/onChangeCorrectOrder
+  // calls. SlideEditor's change(key, value) closes over the render's `data`
+  // and does `{ ...data, [key]: value }`; two synchronous calls in the same
+  // tick both read the SAME stale `data`, so the second call's spread silently
+  // discards the first call's write. Found live 2026-08-25: "+ Add item"
+  // added nothing visible (while corrupting correctOrder with a phantom id),
+  // and removing an item desynced items/correctOrder so every team scored 0.
+  function addItem() {
+    const id = `o${Date.now()}_${items.length}`
+    onBatchChange({ items: [...items, { id, url: '' }], correctOrder: [...correctOrder, id] })
+  }
+  function removeItem(i) {
+    const removed = items[i]
+    onBatchChange({
+      items: items.filter((_, idx) => idx !== i),
+      correctOrder: correctOrder.filter(id => id !== removed.id),
+    })
+  }
+  async function uploadImage(i, file) {
+    if (!file) return
+    const url = await onMediaUpload(file)
+    if (url) onChangeItems(items.map((it, idx) => idx === i ? { ...it, url } : it))
+  }
+  // Pulls the item out of its current slot and re-inserts it at the chosen
+  // 1-based position — correctOrder stays a valid permutation of every
+  // item's id at each step (no duplicate/missing slot is ever reachable
+  // through this control), the same "can't get out of sync" guarantee
+  // MatchingBuilder gets for free by only ever editing plain text fields.
+  function setPosition(itemId, pos) {
+    const without = correctOrder.filter(id => id !== itemId)
+    const at = Math.max(0, Math.min(pos - 1, without.length))
+    without.splice(at, 0, itemId)
+    onChangeCorrectOrder(without)
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="block text-xs font-medium text-gray-700 mb-1.5">Order Items</label>
+      <p className="text-xs text-gray-400 -mt-2">Upload each image, then set its correct position — teams see them shuffled and tap to guess the sequence.</p>
+      {items.map((item, i) => (
+        <div key={item.id} className="flex gap-2 items-center pb-4 mb-1 border-b border-gray-100 last:border-0 last:pb-0">
+          <div className="flex-1">
+            <MediaUpload
+              accept="image" label={`Item ${i + 1}`}
+              currentUrl={item.url || null} currentType={item.url ? 'image/jpeg' : null}
+              onUpload={file => uploadImage(i, file)}
+              onRemove={() => onChangeItems(items.map((it, idx) => idx === i ? { ...it, url: '' } : it))}
+            />
+          </div>
+          <div className="flex flex-col items-center gap-1 shrink-0">
+            <label className="text-xs text-gray-400">Position</label>
+            <select
+              value={correctOrder.indexOf(item.id) + 1}
+              onChange={e => setPosition(item.id, Number(e.target.value))}
+              className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+            >
+              {items.map((_, idx) => <option key={idx} value={idx + 1}>{idx + 1}</option>)}
+            </select>
+          </div>
+          {items.length > 2 && (
+            <button
+              onClick={() => removeItem(i)}
+              className="text-xs text-gray-300 hover:text-red-400 shrink-0"
+            >✕</button>
+          )}
+        </div>
+      ))}
+      <button
+        onClick={addItem}
+        className="text-xs text-baynes-forest hover:text-green-800 font-medium text-left"
+      >
+        + Add item
+      </button>
+      <div className="flex items-center gap-2 mt-1 pt-3 border-t border-gray-100">
+        <label className="text-xs font-medium text-gray-700">Points for correct order</label>
+        <input
+          type="number"
+          value={pointsForOrder}
           onChange={e => onChangePoints(Number(e.target.value))}
           min={0}
           className="w-16 border border-gray-200 rounded px-2 py-1.5 text-sm text-center text-gray-900 focus:outline-none focus:ring-1 focus:ring-baynes-forest"

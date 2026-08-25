@@ -2,6 +2,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { SHINY_GOLD } from '../../../lib/shinyGold.js'
 import { EASE_PANEL } from '../../../lib/easings.js'
 import { seededShuffle } from '../../../lib/matchingScoring.js'
+import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 
 // Two-beat pan reveal (2026-08-18, Ben: "make it not so different — pans
 // up, so does the swing round questions") — same mechanic as
@@ -9,7 +10,7 @@ import { seededShuffle } from '../../../lib/matchingScoring.js'
 // panning by exactly one stage-height (-50% of the track's own 200%
 // height) lands pixel-exact on beat 2 regardless of actual stage size.
 // Beat 1 (shuffled right column, no badges) sits on screen for however
-// long teams take to submit on their phones; locking + scoring flips
+// long teams take to submit on their phones; the host's A key flips
 // data.matchingRevealed, panning up to beat 2 (right column back in
 // pairs' own order, gold badges). Replaces the earlier per-tile `layout`
 // reorder — each beat is now its own static, fully-mounted layout, so
@@ -22,6 +23,7 @@ import { seededShuffle } from '../../../lib/matchingScoring.js'
 export default function ShinyMatchingQuestion({ slide, theme }) {
   const { data } = slide
   const pairs = data.pairs ?? []
+  const locked = !!data.matchingLocked
   const revealed = !!data.matchingRevealed
   const reduce = useReducedMotion()
 
@@ -39,15 +41,46 @@ export default function ShinyMatchingQuestion({ slide, theme }) {
         transition={{ duration: reduce ? 0 : 0.85, ease: EASE_PANEL }}
       >
         {/* Beat 1 — shuffled, unrevealed */}
-        <div className="w-full flex items-center justify-center px-24" style={{ height: '50%' }}>
-          <MatchBoard leftItems={leftItems} rightItems={shuffledRight} theme={theme} revealed={false} />
+        <div className="w-full flex flex-col items-center justify-center px-24 py-10" style={{ height: '50%' }}>
+          <div style={{ flex: '1 1 0', minHeight: 0, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <MatchBoard leftItems={leftItems} rightItems={shuffledRight} theme={theme} revealed={false} />
+          </div>
+          {/* Matching had NO locked-vs-open visual at all before 2026-08-25 —
+              it branched only on revealed, so locking the board changed
+              nothing on the TV. That was survivable while locked lasted about
+              a second; now the host holds it (reveal is the A key) and the
+              room would be staring at a board that still looks open for
+              submissions. This band is the missing state. */}
+          <StatusSlot>{locked && !revealed ? <AnswersLockedBadge theme={theme} /> : null}</StatusSlot>
         </div>
 
         {/* Beat 2 — matched order, revealed by the pan */}
-        <div className="w-full flex items-center justify-center px-24" style={{ height: '50%' }}>
-          <MatchBoard leftItems={leftItems} rightItems={matchedRight} theme={theme} revealed />
+        <div className="w-full flex flex-col items-center justify-center px-24 py-10" style={{ height: '50%' }}>
+          <div style={{ flex: '1 1 0', minHeight: 0, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <MatchBoard leftItems={leftItems} rightItems={matchedRight} theme={theme} revealed />
+          </div>
+          {/* Empty, but PRESENT — both beats must stay structurally identical
+              or the shared pan lands on a board that sits at a different
+              height than the one it left, reading as a jump rather than a
+              pan (the same trap ShinyOrderQuestion's beat-2 StatusSlot
+              documents finding the hard way). */}
+          <StatusSlot />
         </div>
       </motion.div>
+    </div>
+  )
+}
+
+// Fixed-height band under the board holding whichever status line the beat
+// has, or nothing. Both beats render one so the board above never changes
+// height between them — see beat 2's comment.
+function StatusSlot({ children }) {
+  return (
+    <div style={{
+      minHeight: '3.4rem', flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      {children}
     </div>
   )
 }

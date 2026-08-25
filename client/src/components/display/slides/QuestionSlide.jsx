@@ -5,7 +5,8 @@ import WaveformBars from '../WaveformBars.jsx'
 import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
 import ShinyMatchingQuestion from './ShinyMatchingQuestion.jsx'
 import ShinyWagerQuestion from './ShinyWagerQuestion.jsx'
-import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny } from '../../../lib/shinySeries.js'
+import ShinyOrderQuestion from './ShinyOrderQuestion.jsx'
+import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny } from '../../../lib/shinySeries.js'
 import { fitToBox, QUESTION_BOX, QUOTE_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT, EASE_EXIT, EASE_PANEL } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
@@ -1178,6 +1179,9 @@ function ShinyContent({ slide, show, theme, transitionKey, isPreview }) {
   // existing one-part-at-a-time visual treatment above.
   if (data.shinyInputSchema?.type === 'text' && data.shinyInputSchema?.concurrent === true && Array.isArray(data.parts) && data.parts.length > 1) {
     return <ShinyConcurrentQuestion slide={slide} theme={theme} isPreview={isPreview} />
+  }
+  if (isOrderShiny(data)) {
+    return <ShinyOrderQuestion slide={slide} show={show} theme={theme} />
   }
   return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} />
 }

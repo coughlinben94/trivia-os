@@ -9,6 +9,9 @@ import {
   cursorAfterStep,
   ownsAutoRoll,
   AUTO_ROLL_OWNERSHIP_MAX_AGE_MS,
+  pendingLockPhase,
+  pendingReveal,
+  REVEAL_FIELD,
 } from './slideStepping.js'
 
 const noTeams = async () => 0
@@ -112,34 +115,49 @@ describe('computeNextStep', () => {
       expect(dataOf(patch, 'a').outroShown).toBeUndefined()
     })
 
-    it('waits for a matching slide to be scored, not merely locked', async () => {
+    it('blocks entirely for a matching slide that is locked but not yet scored/revealed', async () => {
+      // Ben's decision, 2026-08-25 whole-branch review: Next used to fall
+      // through to a plain advance here once the closing-beat pan-down was
+      // skipped, letting a host who locked and forgot to press A move on
+      // without the room ever seeing the answer. Next must now do nothing
+      // (return null) instead.
       const locked = { shinyInputSchema: { type: 'matching' }, matchingLocked: true }
       const slides = [shiny('a', 0, locked), slide('b', 1)]
       const mid = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-      // Still scoring (Retry Scoring state) — regressing introDone here would
-      // blank every phone mid-question.
-      expect(mid.current_slide_index).toBe(1)
+      expect(mid).toBe(null)
 
       const scored = [shiny('a', 0, { ...locked, matchingRevealed: true }), slide('b', 1)]
       const close = await computeNextStep({ slides: scored, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
       expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
     })
 
-    it('waits for a wager slide to be revealed, not merely guesses-locked', async () => {
-      // 2026-08-24 (Opus review): this used to gate on wagerGuessesLocked,
-      // one stage too early — that's the "guesses in, host hasn't pressed
-      // Reveal yet" window (LiveMode.jsx's own Reveal control gates on
-      // wagerRevealed, not wagerGuessesLocked). Closing the beat there
-      // panned every phone back to the teaser with no way to recover except
-      // Prev, before the host ever got to reveal the answer.
+    it('blocks entirely for an order slide that is locked but not yet revealed', async () => {
+      const locked = { shinyInputSchema: { type: 'order' }, orderLocked: true }
+      const slides = [shiny('a', 0, locked), slide('b', 1)]
+      const mid = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+      expect(mid).toBe(null)
+
+      const revealed = [shiny('a', 0, { ...locked, orderRevealed: true }), slide('b', 1)]
+      const close = await computeNextStep({ slides: revealed, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+      expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
+    })
+
+    it('blocks a wager slide once guesses are locked but not revealed — but NOT the earlier tiers-locked-only window', async () => {
+      // 2026-08-24 (Opus review): the OLD isPending gate used to key off
+      // wagerTiersLocked, one stage too early — that's the "guesses in,
+      // host hasn't pressed A yet" window is actually later; tiers-locked-
+      // only is still mid-question and must keep falling through to a plain
+      // advance exactly like before, not get swept into the new block
+      // (2026-08-25 review: only pendingReveal's narrower wagerGuessesLocked
+      // window blocks, per Ben's decision above).
       const tiersOnly = { shinyInputSchema: { type: 'wager' }, wagerTiersLocked: true }
       const slides = [shiny('a', 0, tiersOnly), slide('b', 1)]
       expect((await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)).current_slide_index).toBe(1)
 
-      // Guesses locked, not yet revealed — still pending, still advances.
+      // Guesses locked, not yet revealed — this is the one that now blocks.
       const guessesLocked = [shiny('a', 0, { ...tiersOnly, wagerGuessesLocked: true }), slide('b', 1)]
       const mid = await computeNextStep({ slides: guessesLocked, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-      expect(mid.current_slide_index).toBe(1)
+      expect(mid).toBe(null)
 
       const revealed = [shiny('a', 0, { ...tiersOnly, wagerGuessesLocked: true, wagerRevealed: true }), slide('b', 1)]
       const close = await computeNextStep({ slides: revealed, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
@@ -207,6 +225,22 @@ describe('withEntryState', () => {
     const s = slide('a', 0, 'question', { isShiny: true, introDone: false, outroShown: true })
     const out = withEntryState([s], s, { currentPart: 0, introDone: false })
     expect(out[0].data.outroShown).toBe(false)
+  })
+
+  // 2026-08-25 review: a countdown interrupted before completing (Live Mode
+  // exited mid-countdown, a reload) used to leave lockCountdownPhase/
+  // StartedAt sitting on the slide. Landing back on it later, the
+  // completion effect computed remaining off the stale startedAt, got 0,
+  // and fired the real lock+score immediately — before any team had
+  // answered, with no countdown shown to explain why.
+  it('clears a stale lock countdown on a fresh entry', () => {
+    const s = slide('a', 0, 'question', {
+      isShiny: true, introDone: true, matchingLocked: false,
+      lockCountdownPhase: 'matching', lockCountdownStartedAt: Date.now() - 60_000,
+    })
+    const out = withEntryState([s], s, { currentPart: 0, introDone: false })
+    expect(out[0].data.lockCountdownPhase).toBe(null)
+    expect(out[0].data.lockCountdownStartedAt).toBe(null)
   })
 })
 
@@ -386,5 +420,119 @@ describe('team-picker auto-roll ownership', () => {
       // the 7th press is a no-op (nothing after this slide) and breaks out.
       expect(armed).toEqual([true, true, true, true, false, false])
     })
+  })
+})
+
+// The "Next locks answers" phase law. Both /host (which starts the countdown
+// AND performs the lock at zero) and /display (which starts it and draws it)
+// branch off this one function, so a wrong answer here either strands a
+// question's answers open forever or eats a Next press on a question that had
+// nothing left to lock — both of them in front of a live room.
+describe('pendingLockPhase', () => {
+  const shiny = (type, data = {}) => slide('q', 0, 'question', { isShiny: true, shinyInputSchema: { type }, ...data })
+
+  it('returns matching while a matching question is still taking answers', () => {
+    expect(pendingLockPhase(shiny('matching', { introDone: true }))).toBe('matching')
+  })
+
+  it('returns null once matching is locked', () => {
+    expect(pendingLockPhase(shiny('matching', { matchingLocked: true }))).toBe(null)
+  })
+
+  it('returns order while an Order Up question is still taking answers', () => {
+    expect(pendingLockPhase(shiny('order', { introDone: true }))).toBe('order')
+  })
+
+  it('returns null once Order Up is locked', () => {
+    expect(pendingLockPhase(shiny('order', { orderLocked: true }))).toBe(null)
+  })
+
+  // Wager is the only mechanic with two lock phases on ONE slide: the blind
+  // tier lock, then the numeric-guess lock after the question reveals. They
+  // must come back in that order from three consecutive Next presses.
+  it('walks wager through tiers, then guesses, then null', () => {
+    expect(pendingLockPhase(shiny('wager', { introDone: true }))).toBe('wager-tiers')
+    expect(pendingLockPhase(shiny('wager', { introDone: true, wagerTiersLocked: true }))).toBe('wager-guesses')
+    expect(pendingLockPhase(shiny('wager', { introDone: true, wagerTiersLocked: true, wagerGuessesLocked: true }))).toBe(null)
+  })
+
+  it('never skips the tier lock just because guesses are somehow already flagged', () => {
+    // Out-of-order flags shouldn't let a press jump straight to scoring a
+    // wager whose tiers were never locked.
+    expect(pendingLockPhase(shiny('wager', { introDone: true, wagerGuessesLocked: true }))).toBe('wager-tiers')
+  })
+
+  it('returns null for all mechanics when introDone is false, blocking locks during the intro beat', () => {
+    // The intro beat (introDone: false) is the first Next press after entering
+    // a shiny question — the FIRST Next press must reveal the question's
+    // content before anything else (like starting a countdown). Without this
+    // guard, pendingLockPhase would return a lock phase on that first press
+    // and start a 3-2-1 countdown on a question the room hasn't even seen yet.
+    expect(pendingLockPhase(shiny('matching', { introDone: false }))).toBe(null)
+    expect(pendingLockPhase(shiny('order', { introDone: false }))).toBe(null)
+    expect(pendingLockPhase(shiny('wager', { introDone: false }))).toBe(null)
+  })
+
+  it('returns null for a question that is not phone-scored at all', () => {
+    expect(pendingLockPhase(shiny('list'))).toBe(null)
+    expect(pendingLockPhase(shiny('image'))).toBe(null)
+    expect(pendingLockPhase(slide('q', 0))).toBe(null)
+    expect(pendingLockPhase(slide('tp', 0, 'team-picker', { parts: [null, null] }))).toBe(null)
+  })
+
+  it('returns null for no slide / no data rather than throwing mid-press', () => {
+    expect(pendingLockPhase(null)).toBe(null)
+    expect(pendingLockPhase(undefined)).toBe(null)
+    expect(pendingLockPhase({ id: 'q' })).toBe(null)
+  })
+})
+
+// The other half of the same law: what the host's A press does. A wrong
+// answer here either swallows A on a plain question (no answer overlay for
+// the room) or fires a phone-scored reveal on a question that hasn't been
+// locked or scored yet.
+describe('pendingReveal', () => {
+  const shiny = (type, data = {}) => slide('q', 0, 'question', { isShiny: true, shinyInputSchema: { type }, ...data })
+
+  it('returns null while a mechanic is still taking answers', () => {
+    expect(pendingReveal(shiny('matching'))).toBe(null)
+    expect(pendingReveal(shiny('order'))).toBe(null)
+    expect(pendingReveal(shiny('wager'))).toBe(null)
+  })
+
+  it('names the mechanic once it is locked but not yet revealed', () => {
+    expect(pendingReveal(shiny('matching', { matchingLocked: true }))).toBe('matching')
+    expect(pendingReveal(shiny('order', { orderLocked: true }))).toBe('order')
+    expect(pendingReveal(shiny('wager', { wagerTiersLocked: true, wagerGuessesLocked: true }))).toBe('wager')
+  })
+
+  // Locking a wager's TIERS only puts the question on screen — there is no
+  // answer to reveal until the guesses are in and scored. A here must still
+  // fall through to the ordinary answer_reveal toggle.
+  it('does not offer a wager reveal on the tier lock alone', () => {
+    expect(pendingReveal(shiny('wager', { wagerTiersLocked: true }))).toBe(null)
+  })
+
+  it('returns null once revealed, so A cannot un-reveal a scored result', () => {
+    expect(pendingReveal(shiny('matching', { matchingLocked: true, matchingRevealed: true }))).toBe(null)
+    expect(pendingReveal(shiny('order', { orderLocked: true, orderRevealed: true }))).toBe(null)
+    expect(pendingReveal(shiny('wager', { wagerTiersLocked: true, wagerGuessesLocked: true, wagerRevealed: true }))).toBe(null)
+  })
+
+  it('returns null for plain questions and non-questions, leaving A untouched', () => {
+    expect(pendingReveal(shiny('list'))).toBe(null)
+    expect(pendingReveal(slide('q', 0))).toBe(null)
+    expect(pendingReveal(slide('tp', 0, 'team-picker', { parts: [null, null] }))).toBe(null)
+    expect(pendingReveal(null)).toBe(null)
+    expect(pendingReveal(undefined)).toBe(null)
+    expect(pendingReveal({ id: 'q' })).toBe(null)
+  })
+
+  it('maps every mechanic it can return to a real slide.data flag', () => {
+    // REVEAL_FIELD is what LiveMode.jsx writes off this return value — a
+    // mechanic missing from it would silently write `undefined: true`.
+    for (const mechanic of ['matching', 'wager', 'order']) {
+      expect(REVEAL_FIELD[mechanic]).toBeTruthy()
+    }
   })
 })

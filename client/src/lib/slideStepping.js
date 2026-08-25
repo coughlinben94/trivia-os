@@ -21,7 +21,7 @@
 // Callers own the write + their own local-state update; nothing here
 // touches the network or React.
 
-import { isShinySeriesSibling, isMatchingShiny, isWagerShiny } from './shinySeries.js'
+import { isShinySeriesSibling, isMatchingShiny, isWagerShiny, isOrderShiny } from './shinySeries.js'
 
 // Kill switch for the closing-beat branch in computeNextStep() below. Kept
 // (rather than inlined away) purely as a same-night escape hatch: flipping
@@ -49,7 +49,11 @@ export function sortSlides(slides) {
   return [...(slides ?? [])].sort((a, b) => a.order - b.order)
 }
 
-function patchSlideData(slides, id, dataPatch) {
+// Exported so Display.jsx's own raw shows-row writes (it has no `actions`
+// object, just a host-verified UPDATE) can patch one slide's data the same
+// way every internal caller here does, instead of growing a second copy of
+// this map — e.g. writing the "Next locks answers" countdown fields.
+export function patchSlideData(slides, id, dataPatch) {
   return slides.map(s => s.id === id ? { ...s, data: { ...s.data, ...dataPatch } } : s)
 }
 
@@ -67,12 +71,12 @@ export function withEntryState(slides, slide, { currentPart, introDone } = {}) {
     patch.currentPart = currentPart
   }
   // Same guard as the Prev-key handler below: never regress introDone to
-  // false on a wager/matching slide that's already locked — jumping away
+  // false on a wager/matching/order slide that's already locked — jumping away
   // from an in-progress locked question and back to it (Go Live's "jump
   // to a slide" picker, reachable after exiting Live Mode) would otherwise
   // blank every phone back to the teaser screen with no way to submit.
   const wouldRegressLockedQuestion = introDone === false &&
-    (slide.data?.wagerTiersLocked || slide.data?.wagerGuessesLocked || slide.data?.matchingLocked)
+    (slide.data?.wagerTiersLocked || slide.data?.wagerGuessesLocked || slide.data?.matchingLocked || slide.data?.orderLocked)
   if (introDone !== undefined && slide.data?.isShiny) {
     if (!wouldRegressLockedQuestion && !!slide.data.introDone !== introDone) {
       patch.introDone = introDone
@@ -98,6 +102,18 @@ export function withEntryState(slides, slide, { currentPart, introDone } = {}) {
   // past the silent hold and autoplay again on this new entry.
   if (slide.data?.walkoutSong?.trigger === 'invoke' && slide.data.walkoutSong.invoked) {
     patch.walkoutSong = { ...slide.data.walkoutSong, invoked: false, invokedAt: null }
+  }
+  // Fresh entry always clears a stale "Next locks answers" countdown too
+  // (2026-08-25 review) — a countdown interrupted before completing (Live
+  // Mode exited mid-countdown, a reload) otherwise leaves lockCountdownPhase/
+  // StartedAt sitting on the slide. The next time the host lands on it, the
+  // completion effect computes remaining = max(startedAt + LOCK_COUNTDOWN_MS
+  // - now, 0) off that stale startedAt, gets 0, and fires the real lock+score
+  // IMMEDIATELY — before any team has answered, with no countdown shown to
+  // explain why. Same unconditional-truthy shape as outroShown's reset above.
+  if (slide.data?.lockCountdownPhase || slide.data?.lockCountdownStartedAt) {
+    patch.lockCountdownPhase = null
+    patch.lockCountdownStartedAt = null
   }
   if (Object.keys(patch).length === 0) return slides
   return patchSlideData(slides, slide.id, patch)
@@ -228,6 +244,82 @@ export function ownsAutoRoll(cursor, owned, now = Date.now()) {
   return now - (owned.at ?? 0) <= AUTO_ROLL_OWNERSHIP_MAX_AGE_MS
 }
 
+// How long the "Next locks answers" countdown runs before the real lock+score
+// fires — 3-2-1, ~1s a number. Lives here, next to the phase law it paces, for
+// the same reason TEAM_PICKER_HOLD_MS does: /host arms the completion timer off
+// it while /display draws the numbers off it, and two windows pacing one
+// ceremony must never be able to drift to two tempos.
+export const LOCK_COUNTDOWN_MS = 3000
+
+// Which lock phase, if any, is still OPEN on this slide — i.e. what a Next
+// press here should start a countdown for instead of advancing. null when the
+// slide isn't a phone-scored question at all, or every lock phase it has is
+// already past.
+//
+// The ONE definition of "is a lock phase pending". Both LiveMode.jsx (which
+// starts the countdown and later performs the actual lock) and Display.jsx
+// (which starts it and only draws it) call this, so they cannot drift on the
+// question the way LiveMode.jsx used to drift from bakeTeamPickerParts by
+// restating its index law inline — same reasoning isAutoRollPart documents.
+//
+// Deliberately NOT paired with an ownsAutoRoll-style ownership handshake. That
+// one exists because EITHER window can perform the auto-roll's shared action
+// (actions.nextSlide() is identical on both sides), so both arming a timer off
+// the same observed state double-advances. Here the actual lock+score reads
+// phone_answers/teams and writes scoreboard_teams through host-side `actions`
+// that Display.jsx simply does not have — exactly one window in the app is
+// capable of completing this ceremony, so there is no double-completion race
+// to arbitrate. Starting it is safe from either window too: one physical
+// keypress reaches only the one OS-focused listener.
+//
+// Wager is the only mechanic with TWO lock phases on one slide (blind tiers
+// first, then the numeric guesses once the question is out), so it gets
+// checked in that order and returns null only when both are shut.
+export function pendingLockPhase(slide) {
+  const data = slide?.data
+  if (!data) return null
+  if (isMatchingShiny(data)) return data.introDone && !data.matchingLocked ? 'matching' : null
+  if (isWagerShiny(data)) {
+    if (data.introDone && !data.wagerTiersLocked) return 'wager-tiers'
+    if (data.introDone && !data.wagerGuessesLocked) return 'wager-guesses'
+    return null
+  }
+  if (isOrderShiny(data)) return data.introDone && !data.orderLocked ? 'order' : null
+  return null
+}
+
+// The slide.data flag each phone-scored mechanic flips when its answer is
+// finally shown to the room. One map, so nothing has to restate the field
+// names it is about to write (LiveMode.jsx's A-key reveal is the only writer).
+export const REVEAL_FIELD = {
+  matching: 'matchingRevealed',
+  wager: 'wagerRevealed',
+  order: 'orderRevealed',
+}
+
+// Which mechanic on this slide is locked but NOT yet revealed — i.e. what the
+// host's A press should reveal, or null when A should do its ordinary
+// show-level answer_reveal toggle instead. The sibling of pendingLockPhase
+// above, and the ONE definition of "does this slide owe the room a reveal"
+// (2026-08-25: reveal was split out of lock+score, so this state is now
+// whatever the host lets it be — he talks, then presses A).
+//
+// Wager keys off wagerGuessesLocked, NOT wagerTiersLocked: locking tiers only
+// puts the QUESTION up, there is nothing to reveal until the guesses are in
+// and scored. Note that computeNextStep's own closing-beat `isPending` check
+// deliberately uses the WIDER wagerTiersLocked window for the same slide —
+// it is asking a different question ("may this slide pan away yet", which
+// must stay false from the very first lock), so the two are not duplicates of
+// each other and must not be collapsed.
+export function pendingReveal(slide) {
+  const data = slide?.data
+  if (!data) return null
+  if (isMatchingShiny(data)) return data.matchingLocked && !data.matchingRevealed ? 'matching' : null
+  if (isWagerShiny(data)) return data.wagerGuessesLocked && !data.wagerRevealed ? 'wager' : null
+  if (isOrderShiny(data)) return data.orderLocked && !data.orderRevealed ? 'order' : null
+  return null
+}
+
 /**
  * One Next press. `show` is { slides, currentSlideIndex, currentSlideId }.
  * Returns a shows-row patch, or null when the press is a no-op.
@@ -313,22 +405,24 @@ export async function computeNextStep(show, fetchTeamCount) {
   // this used to cover). "Done" varies by type:
   //   - multi-part series: the LAST part (isMultiPart, handled above —
   //     any earlier part returns before reaching here)
-  //   - matching / wager: once fully scored (matchingRevealed /
-  //     wagerRevealed) — NOT merely locked, and NOT merely guesses-locked.
+  //   - matching / wager / order: once fully scored (matchingRevealed /
+  //     wagerRevealed / orderRevealed) — NOT merely locked, and NOT merely guesses-locked.
   //     Both have a locked-but-still-scoring window (matching's "Retry
-  //     Scoring" state, wager's guesses-locked-but-not-yet-revealed state,
-  //     LiveMode.jsx's own Reveal control gates on this exact flag) that
-  //     must never regress — same guard withEntryState uses for its own
-  //     jump-back case, and the reason isPending exists below. Wager fixed
-  //     2026-08-24 (Opus review): this used to check wagerGuessesLocked,
-  //     one stage too early — the closing beat fired the instant guesses
-  //     locked but before the host ever pressed Reveal, panning every
-  //     phone back to the teaser with no way to recover except Prev.
+  //     Scoring" state, wager's guesses-locked-but-not-yet-revealed state —
+  //     there is no separate Reveal control, it's the host's A key, see
+  //     pendingReveal above) that must never regress — same guard
+  //     withEntryState uses for its own jump-back case, and the reason
+  //     isPending exists below. Wager fixed 2026-08-24 (Opus review): this
+  //     used to check wagerGuessesLocked, one stage too early — the closing
+  //     beat fired the instant guesses locked but before the host ever
+  //     pressed Reveal, panning every phone back to the teaser with no way
+  //     to recover except Prev.
   //   - everything else (a single-shot list/audio/video/image question,
   //     no parts, not lockable): done the moment its content has been
   //     shown at all, i.e. as soon as introDone is true.
   const isPending = (isMatchingShiny(data) && data.matchingLocked && !data.matchingRevealed) ||
-                     (isWagerShiny(data) && data.wagerTiersLocked && !data.wagerRevealed)
+                     (isWagerShiny(data) && data.wagerTiersLocked && !data.wagerRevealed) ||
+                     (isOrderShiny(data) && data.orderLocked && !data.orderRevealed)
   // Disabled 2026-08-19 (Ben, day after this shipped: "shiny intros were
   // shown after the question as well") — SlideRenderer couldn't distinguish
   // "never shown" from "closing beat" (both read as introDone:false), so
@@ -363,6 +457,20 @@ export async function computeNextStep(show, fetchTeamCount) {
       }
     }
   }
+
+  // Ben's decision (2026-08-25 whole-branch review): Next must not fall
+  // through to a plain advance while a phone-scored question is locked but
+  // not yet revealed — force the host to press A first, or the room never
+  // sees the answer. Deliberately pendingReveal, NOT isPending above:
+  // isPending's wager check widens to wagerTiersLocked on purpose (see
+  // pendingReveal's own comment) to also gate the closing-beat pan-down,
+  // but that means it's still true during wager's transient
+  // tiers-locked-but-guesses-not-yet-locked window — a state that is NOT
+  // "locked but not revealed" and must keep falling through to a plain
+  // advance like it always has. pendingReveal is the narrower, correct
+  // check for every mechanic (matching/order match isPending exactly here;
+  // wager keys off wagerGuessesLocked instead of wagerTiersLocked).
+  if (pendingReveal(curSlide)) return null
 
   const target = Math.min(cur + 1, sorted.length - 1)
   if (target === cur) return null
@@ -418,9 +526,9 @@ export async function computePrevStep(show, fetchTeamCount) {
   }
 
   // Back to the intro beat before moving to the previous slide — but NOT
-  // for a wager/matching slide that's already locked. Regressing introDone
+  // for a wager/matching/order slide that's already locked. Regressing introDone
   // there blanks every phone back to "Next question incoming…" (Join.jsx
-  // gates the WagerBoard/MatchingBoard mount on introDone, so the board
+  // gates the WagerBoard/MatchingBoard/OrderBoard mount on introDone, so the board
   // unmounts entirely) with no data loss but no way to submit until the
   // host presses Next again — and Prev is one keystroke/Stream Deck press
   // away, the single most likely accidental trigger of this regression.
@@ -432,7 +540,7 @@ export async function computePrevStep(show, fetchTeamCount) {
   // and it took a SECOND Prev to actually move back a slide.
   const prevInOrder = sorted[cur - 1]
   const isAutoSkippedSibling = prevInOrder && isShinySeriesSibling(prevInOrder, curSlide)
-  if (data?.isShiny && data.introDone && !isAutoSkippedSibling && !(data.wagerTiersLocked || data.wagerGuessesLocked || data.matchingLocked)) {
+  if (data?.isShiny && data.introDone && !isAutoSkippedSibling && !(data.wagerTiersLocked || data.wagerGuessesLocked || data.matchingLocked || data.orderLocked)) {
     return { slides: patchSlideData(slides, curSlide.id, { introDone: false }), answer_reveal: false }
   }
 

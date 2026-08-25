@@ -77,6 +77,10 @@ export function isWagerShiny(data) {
   return data.shinyInputSchema?.type === 'wager'
 }
 
+export function isOrderShiny(data) {
+  return data.shinyInputSchema?.type === 'order'
+}
+
 export function isVennShiny(data) {
   return data.shinyInputSchema?.type === 'venn'
 }

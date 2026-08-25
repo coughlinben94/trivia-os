@@ -291,8 +291,11 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
         // A wager question is always one prompt and one true number, so it
         // stays on the flat shape no matter what asset count the format
         // carries. The multi-slot `parts` shape would leave WagerBoard and
-        // ShinyWagerQuestion reading an empty data.text.
-        const isMultiSlot = totalSlots > 1 && selectedShinyFmt.input_schema?.type !== 'wager'
+        // ShinyWagerQuestion reading an empty data.text. Order shares this
+        // exact incompatibility — its images live in flat data.items, and
+        // OrderBoard/ShinyOrderQuestion have no `parts` reading path — so it
+        // gets the same carve-out, not a new one invented for it.
+        const isMultiSlot = totalSlots > 1 && !['wager', 'order'].includes(selectedShinyFmt.input_schema?.type)
         data = {
           questionNumber:   qNum,
           questionLabel:    `Q${qNum}`,

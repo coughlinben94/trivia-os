@@ -1,15 +1,16 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
-import { resolveShinyPart, isMatchingShiny, isWagerShiny } from '../../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny } from '../../lib/shinySeries.js'
 import ScorePanel from './ScorePanel.jsx'
 import LateTeamPopover from './LateTeamPopover.jsx'
 import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
 import { supabase } from '../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
 import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
+import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
-import { isAutoRollPart, TEAM_PICKER_HOLD_MS } from '../../lib/slideStepping.js'
+import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
 // override for it — every other wager error is a real, unrecoverable-by-
@@ -228,6 +229,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [matchingScoreError, setMatchingScoreError] = useState(null)
   const [wagerBusy, setWagerBusy] = useState(false)
   const [wagerError, setWagerError] = useState(null)
+  const [orderBusy, setOrderBusy] = useState(false)
+  const [orderScoreError, setOrderScoreError] = useState(null)
 
   const slides = sortedSlides(show)
   const currentIndex = show.showState.currentSlideIndex ?? 0
@@ -246,6 +249,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   useEffect(() => {
     setWagerError(null)
     setMatchingScoreError(null)
+    setOrderScoreError(null)
   }, [currentSlide?.id])
   // Jump-to-QR — a late team scans in mid-show. Only shown if the show
   // actually has a Pre-Show slide; jumps the TV there without touching the
@@ -380,9 +384,90 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       // spread — `slide` is this call's original param and never updates
       // mid-function, so on a first-lock-then-score-in-one-call it would
       // otherwise spread the PRE-lock data and wipe the stamp just written above.
-      await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true, matchingLockedAt: lockedAt, matchingRevealed: true } })
+      // No matchingRevealed here (2026-08-25, Ben: "the answer reveal
+      // animation for phone questions should only invoke when i hit A"). This
+      // write locks and scores; the room sees a held "Answers locked" state
+      // until the host presses A (see revealCurrentSlide below). Same split in
+      // handleLockAndScoreOrder/handleLockAndScoreWagers.
+      await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true, matchingLockedAt: lockedAt } })
     } finally {
       setMatchingBusy(false)
+    }
+  }
+
+  // Order question: same lock-then-score shape as handleLockAndScoreMatching
+  // above (Order has no Wager-style blind-tier phase to split into a
+  // separate first lock). Reveal is a separate later host action (the A
+  // key, see revealCurrentSlide below), not part of this write. Kept as its
+  // own function rather than parameterizing the Matching handler, same
+  // reasoning MatchingBoard/Wager already establish: each mechanic's
+  // scoring call, data-shape keys
+  // (orderLocked/orderRevealed vs matchingLocked/matchingRevealed) and error
+  // copy differ enough that sharing one function would need its own branch
+  // per mechanic anyway.
+  async function handleLockAndScoreOrder(slide) {
+    setOrderBusy(true)
+    setOrderScoreError(null)
+    try {
+      // Same lock-cutoff reasoning as handleLockAndScoreMatching: persisted,
+      // not recomputed, so this is also the safe "🔁 Retry Scoring" handler
+      // for a slide that's already locked (orderRevealed still false).
+      let lockedAt = slide.data.orderLockedAt
+      if (!slide.data.orderLocked) {
+        lockedAt = new Date().toISOString()
+        actions.updateSlide(slide.id, { data: { ...slide.data, orderLocked: true, orderLockedAt: lockedAt } })
+        await actions.flushSlides()
+        await new Promise(r => setTimeout(r, 700))
+      }
+
+      const { data: rawAnswers, error: fetchError } = await supabase
+        .from('phone_answers')
+        .select('team_id, answer, submitted_at')
+        .eq('slide_id', slide.id)
+      if (fetchError) { console.error('phone_answers fetch failed:', fetchError); setOrderScoreError('Scoring failed — check connection and retry'); return }
+      const answers = rawAnswers?.filter(a => !a.submitted_at || a.submitted_at <= lockedAt) ?? []
+      const lateCount = (rawAnswers?.length ?? 0) - answers.length
+      if (lateCount > 0) console.warn(`[LiveMode] discarded ${lateCount} phone_answers row(s) submitted after order lock`)
+
+      const { data: teams, error: teamsError } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('show_id', show.id)
+      if (teamsError) { console.error('teams fetch failed:', teamsError); setOrderScoreError('Scoring failed — check connection and retry'); return }
+
+      const { data: scoreboardTeams, error: sbError } = await supabase
+        .from('scoreboard_teams')
+        .select('id, show_id, name, scores, sort_order')
+        .eq('show_id', show.id)
+      if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); setOrderScoreError('Scoring failed — check connection and retry'); return }
+
+      const updates = computeOrderScoreUpdates({
+        answers, teams, scoreboardTeams,
+        roundKey: roundKeyFor(show, slide),
+        points: slide.data.pointsForOrder ?? DEFAULT_ORDER_POINTS,
+        correctOrder: slide.data.correctOrder ?? [],
+        slideId: slide.id,
+      })
+
+      // Same real-problem-vs-nothing-to-score distinction as Matching's own
+      // guard — answers exist but none could be attributed to the
+      // scoreboard means a name mismatch or an empty admin scoreboard, not
+      // "no one played."
+      if ((answers?.length ?? 0) > 0 && updates.length === 0) {
+        setOrderScoreError('No answers could be matched to the scoreboard — check team names match, then retry')
+        return
+      }
+
+      if (updates.length > 0) {
+        const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
+        if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setOrderScoreError('Scoring failed — check connection and retry'); return }
+      }
+
+      // Reveal is the host's A press, not part of this write — see
+      // handleLockAndScoreMatching's final write.
+      await actions.updateSlide(slide.id, { data: { ...slide.data, orderLocked: true, orderLockedAt: lockedAt } })
+    } finally {
+      setOrderBusy(false)
     }
   }
 
@@ -550,7 +635,10 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           ...slide.data,
           wagerGuessesLocked: true,
           wagerGuessesLockedAt: lockedAt,
-          wagerRevealed: true,
+          // No wagerRevealed here — the host's A press flips it (see
+          // handleLockAndScoreMatching's final write). wagerResults is still
+          // computed and stored NOW, at lock time; A only decides when the
+          // room gets to see it.
           // What the TV reveal renders, plus the phone-side result popup's
           // own lookup (Join.jsx). teamId IS included — unlike the original
           // "no team ids, no beatFraction, so the jsonb doesn't bloat" call,
@@ -682,6 +770,154 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     guardNav,
   ])
 
+  // "Next locks answers" — starts the 3-2-1 countdown ceremony instead of
+  // advancing, when the current slide is a phone-scored question with a lock
+  // phase still open. pendingLockPhase (slideStepping.js) is the ONE place
+  // either window checks that — see its own comment for why this ceremony
+  // doesn't need ownsAutoRoll-style ownership arbitration to START safely
+  // from either window (only completing it is host-only, see the effect
+  // below).
+  //
+  // Returns true if it handled the press (started the countdown, or no-op'd
+  // because one is already running) — callers must return/bail on true
+  // instead of falling through to their normal advance. Already-running is
+  // checked off currentSlide.data.lockCountdownStartedAt, not local state,
+  // so it reads correctly no matter which window's press started it.
+  function maybeStartLockCountdown() {
+    const phase = pendingLockPhase(currentSlide)
+    if (!phase) return false
+    if (!currentSlide.data?.lockCountdownStartedAt) {
+      guardNav(async () => {
+        actions.updateSlide(currentSlide.id, {
+          data: { ...currentSlide.data, lockCountdownPhase: phase, lockCountdownStartedAt: Date.now() },
+        })
+        // updateSlide is a debounced ~600ms write — without flushing here,
+        // the ~600ms debounce plus realtime lag meant /display didn't
+        // actually show "3" until ~800-1000ms had already elapsed, making
+        // the first beat of the countdown nearly invisible (2026-08-25
+        // review). Same pattern the lock handlers themselves already use
+        // for the same reason (handleLockAndScoreMatching etc., above).
+        await actions.flushSlides()
+      })
+    }
+    return true
+  }
+
+  // The A press, for a phone-scored question that's locked but still holding
+  // its answer back (2026-08-25, Ben: reveal "should only invoke when i hit
+  // A"). pendingReveal (slideStepping.js) is the ONE place that decides
+  // whether this slide owes the room a reveal, and REVEAL_FIELD the one place
+  // that knows which flag each mechanic uses — no field names restated here.
+  //
+  // One-way, not a toggle, unlike the show-level answer_reveal it stands in
+  // for: un-revealing a scored result would put the room back in a suspense
+  // it has already left, and every renderer treats revealed as terminal.
+  //
+  // Returns true when it handled the press, so the caller falls through to
+  // the ordinary answer_reveal toggle on every other kind of slide.
+  function revealCurrentSlide() {
+    const mechanic = pendingReveal(currentSlide)
+    if (!mechanic) return false
+    actions.updateSlide(currentSlide.id, {
+      data: { ...currentSlide.data, [REVEAL_FIELD[mechanic]]: true },
+    })
+    return true
+  }
+
+  // Same actionsRef reasoning above, plus: handleLockAndScoreMatching/
+  // handleLockWagers/handleLockAndScoreWagers/handleLockAndScoreOrder are
+  // ordinary function declarations recreated on every render (they close
+  // over this render's setMatchingBusy/etc. state setters), so calling one
+  // of them directly from the completion effect's deps would clear and
+  // reschedule its countdown timer far more often than a real slide/phase
+  // change — same failure mode actionsRef exists to dodge. This ref always
+  // points at the latest versions without pulling them into that effect's
+  // deps array.
+  const lockHandlersRef = useRef(null)
+  lockHandlersRef.current = {
+    matching: handleLockAndScoreMatching,
+    'wager-tiers': handleLockWagers,
+    'wager-guesses': handleLockAndScoreWagers,
+    order: handleLockAndScoreOrder,
+  }
+
+  // Mirrors currentSlide into a ref for the same reason actionsRef exists —
+  // the completion effect below reads the LATEST slide at fire time (up to
+  // LOCK_COUNTDOWN_MS later), not whatever currentSlide the effect closed
+  // over when it was scheduled.
+  const currentSlideRef = useRef(currentSlide)
+  currentSlideRef.current = currentSlide
+
+  // "Next locks answers" completion — mirrors the Team Intro auto-roll
+  // effect above in shape: keyed on the CURRENT slide's countdown fields,
+  // schedules ONE setTimeout for whatever time REMAINS until startedAt +
+  // LOCK_COUNTDOWN_MS (not always the full duration — this can mount or
+  // re-run partway through an already-running countdown, e.g. a re-render),
+  // and on fire calls the real lock+score handler for whichever phase is
+  // active. Any change to the deps below — the timer firing (which clears
+  // these fields, see the scrub below), a manual Next/Prev, or the host
+  // locking manually via the button — cancels and reschedules, same
+  // "effect keyed on state" shape team-picker's timer uses.
+  //
+  // Deliberately LiveMode.jsx-only, no Display.jsx mirror — see
+  // pendingLockPhase's comment in slideStepping.js: only /host can perform
+  // the actual lock+score (phone_answers/teams reads, scoreboard_teams
+  // writes, via `actions` Display.jsx doesn't have), so there is exactly
+  // one actor capable of completing this ceremony — no double-completion
+  // race to arbitrate, unlike team-picker's auto-roll.
+  //
+  // The slide handed to the handler has lockCountdownPhase/StartedAt
+  // stripped out first — the SAME shape the plan's "cleared as part of the
+  // SAME updateSlide call that performs the actual lock" calls for, without
+  // touching the handler functions themselves: each one's own first write
+  // spreads `...slide.data` verbatim, so scrubbing the param here is enough
+  // to keep those fields out of what actually lands in the database — in
+  // the normal case, where the handler's first write actually fires.
+  //
+  // 2026-08-25 review: that's NOT true for handleLockAndScoreWagers's
+  // 'wager-guesses' phase specifically — it bails on a bad `parseWagerNumber`
+  // BEFORE its first write (unlike Matching/Order/wager-tiers, whose first
+  // write is unconditional). A bailed handler never writes anything, so the
+  // scrub above never lands in the database either: lockCountdownStartedAt
+  // stays stuck true forever, and maybeStartLockCountdown/handleStep's
+  // "already running" check reads exactly that field — every subsequent
+  // Next on that slide would silently no-op via Stream Deck, no visible
+  // countdown to explain why (the overlay self-hides on its own timer
+  // regardless of whether these fields ever cleared). The unconditional
+  // cleanup write below closes that without touching the handler: whatever
+  // the handler did or didn't write, this always clears the countdown
+  // fields off the slide afterward, off the FRESHEST slide data (not the
+  // pre-handler `slide` snapshot, so it can't stomp a field the handler's
+  // own write just set) — and only when they're actually still set, so the
+  // normal already-scrubbed case doesn't pay for a redundant write.
+  useEffect(() => {
+    const phase = currentSlide?.data?.lockCountdownPhase
+    const startedAt = currentSlide?.data?.lockCountdownStartedAt
+    if (!phase || !startedAt) return
+    const remaining = Math.max(startedAt + LOCK_COUNTDOWN_MS - Date.now(), 0)
+    const t = setTimeout(async () => {
+      const slide = currentSlideRef.current
+      // Bail if the slide/phase/timestamp drifted since this fired was
+      // scheduled (e.g. the host locked manually via the button in the
+      // meantime) — don't fire a stale-phase lock against a slide that's
+      // moved on.
+      if (!slide || slide.data?.lockCountdownPhase !== phase || slide.data?.lockCountdownStartedAt !== startedAt) return
+      const slideId = slide.id
+      const scrubbedSlide = { ...slide, data: { ...slide.data, lockCountdownPhase: null, lockCountdownStartedAt: null } }
+      try {
+        await lockHandlersRef.current?.[phase]?.(scrubbedSlide)
+      } finally {
+        const latest = currentSlideRef.current
+        if (latest?.id === slideId && (latest.data?.lockCountdownPhase || latest.data?.lockCountdownStartedAt)) {
+          actionsRef.current.updateSlide(slideId, {
+            data: { ...latest.data, lockCountdownPhase: null, lockCountdownStartedAt: null },
+          })
+        }
+      }
+    }, remaining)
+    return () => clearTimeout(t)
+  }, [currentSlide?.id, currentSlide?.data?.lockCountdownPhase, currentSlide?.data?.lockCountdownStartedAt])
+
   const handleKeyDown = useCallback((e) => {
     // A reflexive Cmd/Ctrl/Alt shortcut (Cmd+A select-all, Cmd+R reload,
     // Cmd+S save) must never fall through to these single-letter hotkeys —
@@ -699,6 +935,11 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     if (e.code === 'ArrowRight') {
       e.preventDefault()
       if (pendingAdvanceRef.current) return
+      // "Next locks answers": a phone-scored question with an open lock
+      // phase starts the countdown instead of advancing — see
+      // maybeStartLockCountdown above. Checked before the answerReveal
+      // dance below since starting a countdown isn't an advance at all.
+      if (maybeStartLockCountdown()) return
       if (show.showState.answerReveal) {
         actions.setAnswerReveal(false)
         pendingAdvanceRef.current = setTimeout(() => {
@@ -718,9 +959,13 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       guardNav(actions.prevSlide)
     }
     if (e.code === 'KeyS')       actions.setScoreboardVisible(!show.showState.scoreboardVisible)
-    if (e.code === 'KeyA')       actions.setAnswerReveal(!show.showState.answerReveal)
+    // A on a locked-but-unrevealed phone-scored question reveals THAT slide's
+    // own result instead of toggling the show-level plain-question answer
+    // overlay (unrelated flag, unrelated mechanism — see revealCurrentSlide).
+    // Every other slide keeps the original toggle, untouched.
+    if (e.code === 'KeyA' && !revealCurrentSlide()) actions.setAnswerReveal(!show.showState.answerReveal)
     if (e.code === 'KeyR')       actions.setScoresRevealed?.(!show.showState.scoresRevealed)
-  }, [scorePanelOpen, themePickerOpen, scoreboardModalOpen, actions, show.showState.answerReveal, show.showState.scoresRevealed, guardNav])
+  }, [scorePanelOpen, themePickerOpen, scoreboardModalOpen, actions, show.showState.answerReveal, show.showState.scoresRevealed, guardNav, currentSlide])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -744,6 +989,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // advancing two slides.
   function handleNextClick() {
     if (pendingAdvanceRef.current) return
+    // "Next locks answers" — same check as the ArrowRight branch above.
+    if (maybeStartLockCountdown()) return
     guardNav(actions.nextSlide)
   }
   function handlePrevClick() {
@@ -895,9 +1142,19 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         <div className="flex flex-col gap-3" style={{ flex: '0 0 60%' }}>
           <CurrentSlideCard slide={currentSlide} show={show} />
 
-          {currentSlide?.type === 'question' && isMatchingShiny(currentSlide?.data) && !currentSlide?.data?.matchingRevealed && (
+          {/* `|| matchingScoreError` (2026-08-25): reveal is no longer bundled
+              into scoring, so the host can press A on a slide whose scoring
+              actually failed — without this the panel (and its only Retry
+              Scoring button) would vanish the moment he did, stranding the
+              slide exactly the way this button's own comment exists to
+              prevent. Same clause on the Order and Wager panels below. */}
+          {currentSlide?.type === 'question' && isMatchingShiny(currentSlide?.data) && (!currentSlide?.data?.matchingRevealed || matchingScoreError) && (
             <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
-              <p className="text-xs text-gray-400 mb-3">Matching question — teams are submitting on their phones</p>
+              <p className="text-xs text-gray-400 mb-3">
+                {currentSlide?.data?.matchingLocked
+                  ? 'Answers locked and scored — press A to reveal them on the TV.'
+                  : 'Matching question — teams are submitting on their phones'}
+              </p>
               <button
                 onClick={() => handleLockAndScoreMatching(currentSlide)}
                 disabled={matchingBusy}
@@ -915,12 +1172,38 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
             </div>
           )}
 
-          {currentSlide?.type === 'question' && isWagerShiny(currentSlide?.data) && !currentSlide?.data?.wagerRevealed && (
+          {currentSlide?.type === 'question' && isOrderShiny(currentSlide?.data) && (!currentSlide?.data?.orderRevealed || orderScoreError) && (
+            <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
+              <p className="text-xs text-gray-400 mb-3">
+                {currentSlide?.data?.orderLocked
+                  ? 'Answers locked and scored — press A to reveal them on the TV.'
+                  : 'Order Up question — teams are submitting on their phones'}
+              </p>
+              <button
+                onClick={() => handleLockAndScoreOrder(currentSlide)}
+                disabled={orderBusy}
+                className={`w-full py-3 rounded-xl border-2 font-semibold text-sm transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
+                  orderBusy
+                    ? 'border-gray-100 text-gray-300 cursor-not-allowed'
+                    : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'
+                }`}
+              >
+                {orderBusy ? 'Scoring…' : currentSlide?.data?.orderLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score'}
+              </button>
+              {orderScoreError && (
+                <p className="text-xs text-red-600 mt-2 text-center">{orderScoreError}</p>
+              )}
+            </div>
+          )}
+
+          {currentSlide?.type === 'question' && isWagerShiny(currentSlide?.data) && (!currentSlide?.data?.wagerRevealed || wagerError) && (
             <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
               <p className="text-xs text-gray-400 mb-3">
                 {currentSlide?.data?.wagerTiers == null
                   ? 'Wager question — teams are picking a risk tier. The question is hidden everywhere until you lock.'
-                  : 'Wagers locked — the question is up and teams are entering numbers.'}
+                  : currentSlide?.data?.wagerGuessesLocked
+                    ? 'Guesses locked and scored — press A to reveal the answer on the TV.'
+                    : 'Wagers locked — the question is up and teams are entering numbers.'}
               </p>
               <button
                 onClick={() => (currentSlide?.data?.wagerTiers != null

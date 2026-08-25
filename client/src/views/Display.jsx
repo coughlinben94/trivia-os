@@ -9,6 +9,7 @@ import { ringVisibleStationIndex, ringPeekIndex } from '../lib/ringStationIndex.
 import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
+import LockCountdownOverlay from '../components/display/LockCountdownOverlay.jsx'
 import JukeboxBreakOverlay from '../components/display/JukeboxBreakOverlay.jsx'
 import WarpTransition from '../components/display/WarpTransition.jsx'
 import { RING_RETURN } from '../components/display/RingAmbient.jsx'
@@ -896,6 +897,12 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
         <ErrorBoundary fallback={null}>
           <ScoreboardOverlay show={show} />
         </ErrorBoundary>
+        {/* "Next locks answers" — the 3-2-1-🔒 ceremony. Mounted unconditionally
+            (startedAt falsy renders nothing) so it's always ready the instant
+            either window writes lockCountdownStartedAt to the current slide. */}
+        <ErrorBoundary fallback={null}>
+          <LockCountdownOverlay startedAt={currentSlide?.data?.lockCountdownStartedAt} />
+        </ErrorBoundary>
       </StageFrame>
 
       {/* z-50: persistent overlays — always on top */}
@@ -1063,6 +1070,19 @@ export default function Display() {
       setPinOpen(true)
       return
     }
+    // "Next locks answers" — deliberately NOT triggered from here. This
+    // window has no way to OBSERVE a countdown it starts (LiveMode.jsx's
+    // completion effect reads useShow's local React state, which only ever
+    // merges realtime showState, never slides — see useShow.js's merge
+    // comment), so a countdown started from /display could never complete:
+    // the overlay would self-hide, submissions would stay open, nothing
+    // would score, and lockCountdownStartedAt would stay stuck set forever
+    // (silently no-op'ing every later Next on that slide via the guard
+    // above). Fixed 2026-08-25 (whole-branch review) by removing the trigger
+    // entirely — a Next arriving here just falls through to the plain step
+    // below, same as before this feature existed. LockCountdownOverlay stays
+    // mounted below (DisplayInner) so /display can still SHOW a countdown
+    // /host starts; only the WRITE that starts one moved to host-only.
     const res = await stepShow(showRef.current, direction)
     if (res.denied) setNavDenied(true)
     setOwnedCursor(res.cursor)

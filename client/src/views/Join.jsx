@@ -6,10 +6,11 @@ import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
 import { sortedSlides } from '../hooks/useShow.js'
 import { getTheme } from '../themes/index.js'
-import { resolveShinyPart, isMatchingShiny, isWagerShiny } from '../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny } from '../lib/shinySeries.js'
 import { getWagerTier } from '../lib/wagerScoring.js'
 import MatchingBoard from '../components/join/MatchingBoard.jsx'
 import WagerBoard from '../components/join/WagerBoard.jsx'
+import OrderBoard from '../components/join/OrderBoard.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
 import { EASE_OUT, EASE_PANEL, EASE_BAR } from '../lib/easings.js'
@@ -542,6 +543,9 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered, overrid
       // question would be readable during the blind-wager phase.
       if (d.isShiny && isWagerShiny(d)) {
         return <WagerBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
+      }
+      if (d.isShiny && isOrderShiny(d)) {
+        return <OrderBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
       }
       const part = resolveShinyPart(d, overridePart)
       return (
@@ -1115,8 +1119,8 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   // moment of the round. Pinning only makes sense while input is possible.
   const liveSlideIsInteractive = !!(
     liveSlide?.type === 'question' && liveSlide.data?.isShiny && liveSlide.data?.introDone &&
-    !liveSlide.data?.wagerGuessesLocked && !liveSlide.data?.matchingLocked &&
-    (isMatchingShiny(liveSlide.data) || isWagerShiny(liveSlide.data))
+    !liveSlide.data?.wagerGuessesLocked && !liveSlide.data?.matchingLocked && !liveSlide.data?.orderLocked &&
+    (isMatchingShiny(liveSlide.data) || isWagerShiny(liveSlide.data) || isOrderShiny(liveSlide.data))
   )
 
   // Whether THIS team has done what the live interactive slide currently
@@ -1132,7 +1136,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   // interactiveSatisfied=true across the lock, and is never force-navigated
   // to the actual guess phase — the exact silent-miss bug this feature
   // exists to close, just narrowed to teams who back out after tiering.
-  const interactivePhaseKey = `${liveSlide?.id}:${liveSlide?.data?.introDone}:${liveSlide?.data?.wagerTiersLocked}:${liveSlide?.data?.wagerGuessesLocked}:${liveSlide?.data?.matchingLocked}`
+  const interactivePhaseKey = `${liveSlide?.id}:${liveSlide?.data?.introDone}:${liveSlide?.data?.wagerTiersLocked}:${liveSlide?.data?.wagerGuessesLocked}:${liveSlide?.data?.matchingLocked}:${liveSlide?.data?.orderLocked}`
   const [interactiveSatisfied, setInteractiveSatisfied] = useState(false)
   useEffect(() => { setInteractiveSatisfied(false) }, [interactivePhaseKey])
 
