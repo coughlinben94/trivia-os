@@ -131,7 +131,7 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
               style={{
                 color: theme.colors.textMuted ?? theme.colors.text,
                 fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-                fontSize: subtitleFontSize,
+                fontSize: rt.subtitle?.fontSizePx ?? subtitleFontSize,
                 fontWeight: 500,
                 maxWidth: '80ch',
                 textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
@@ -147,7 +147,7 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
             style={{
               color: theme.colors.text,
               fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-              fontSize: uniformFontSize,
+              fontSize: rt.text?.fontSizePx ?? uniformFontSize,
               fontWeight: 500,
               maxWidth: '80ch',
               textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
@@ -1037,12 +1037,27 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
           // length proper nouns (character/team names), so a tuned cqw clamp
           // stands in for the measure-to-fit hook here rather than teaching
           // that hook a second, per-column box shape for one slide type.
+          //
+          // columnHeaders (optional, per-slide data): array of [labelHeader,
+          // answerHeader] pairs, one per group — 2026-08-25, Ben: "theres
+          // nothing referencing what i need for answers" — audience needs to
+          // know THIS side is the character, THAT side is the team. Row
+          // numbers count straight through 1..N across groups, not restart
+          // per column (same ask, same message).
           <div
             className="w-full h-full grid"
             style={{ gridTemplateColumns: `repeat(${rowGroups.length}, minmax(0, 1fr))`, columnGap: 64, alignContent: 'center' }}
           >
-            {rowGroups.map((group, gi) => (
+            {rowGroups.map((group, gi) => {
+              const headers = data.columnHeaders?.[gi]
+              return (
               <div key={gi} className="flex flex-col justify-center" style={{ gap: 28 }}>
+                {headers && (
+                  <div className="flex items-center justify-between gap-6 pb-1" style={{ borderBottom: `1px solid ${SHINY_GOLD_GLOW}55` }}>
+                    <span style={{ color: theme.colors.textMuted, fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`, fontSize: '1rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{headers[0]}</span>
+                    <span style={{ minWidth: '35%', textAlign: 'right', color: theme.colors.textMuted, fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`, fontSize: '1rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{headers[1]}</span>
+                  </div>
+                )}
                 {group.map((row, ri) => (
                   <div key={ri} className="flex items-center justify-between gap-6">
                     <motion.p
@@ -1055,6 +1070,7 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
                         lineHeight: 1.2,
                       }}
                     >
+                      <span style={{ color: theme.colors.textMuted, fontSize: '0.55em', fontWeight: 600, marginRight: '0.4em' }}>{gi * groupSize + ri + 1}.</span>
                       {row.label}
                     </motion.p>
                     <div style={{ minWidth: '35%', textAlign: 'right' }}>
@@ -1079,7 +1095,8 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
                   </div>
                 ))}
               </div>
-            ))}
+              )
+            })}
           </div>
         ) : (
           <div
@@ -1093,6 +1110,29 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
               alignItems: 'center',
             }}
           >
+            {/* columnHeaders (optional): [labelHeader, textHeader, answerHeader]
+                — 2026-08-25, Ben: "song, lyrics, answer as column titles". Plain
+                grid cells in the same 3-col template, not a separate row
+                element, so they line up with the data cells for free. */}
+            {data.columnHeaders?.length === 3 && (
+              <Fragment>
+                {data.columnHeaders.map((h, ci) => (
+                  <span key={ci} style={{
+                    color: theme.colors.textMuted,
+                    fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+                    fontSize: '1rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    borderBottom: `1px solid ${SHINY_GOLD_GLOW}55`,
+                    paddingBottom: 6,
+                    textAlign: ci === 0 ? 'left' : ci === 2 ? 'right' : 'left',
+                  }}>
+                    {h}
+                  </span>
+                ))}
+              </Fragment>
+            )}
             {rows.map((row, i) => (
               <Fragment key={i}>
                 <motion.p
