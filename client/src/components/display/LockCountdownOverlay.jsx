@@ -73,6 +73,51 @@ function LockMark() {
   )
 }
 
+// What every phone-scored mechanic shows once its answers are locked and
+// scored but the room hasn't been told yet. Since 2026-08-25 that is a state
+// the host holds for as long as he wants to talk (reveal moved to the A key),
+// not the ~1s transitional flicker it used to be — so it needs to be alive,
+// legible from across a bar, and still recede while he's the one talking.
+//
+// Continuity, not decoration: it is the SAME LockMark the 3-2-1 ceremony
+// slams down on at zero, in the same theme color, so the overlay fading out
+// reads as that lock settling onto the slide rather than one mark being
+// swapped for a different one.
+//
+// The breathe is opacity only (compositor-only, no layout/paint), ~3.6s per
+// cycle — slow enough to read as "still here, waiting" rather than as
+// something asking to be looked at, which is the whole job while the host
+// talks over it. prefers-reduced-motion gets the same mark held steady at the
+// cycle's midpoint, not a dimmer or brighter version of it.
+export function AnswersLockedBadge({ theme, label = 'Answers locked' }) {
+  const reduce = useReducedMotion()
+  return (
+    <motion.div
+      animate={reduce ? { opacity: 0.88 } : { opacity: [0.72, 1, 0.72] }}
+      transition={reduce
+        ? { duration: 0.3, ease: EASE_OUT }
+        : { duration: 3.6, repeat: Infinity, ease: 'easeInOut' }}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '0.55em',
+        // Matches the typography ShinyOrderQuestion's StatusSlot was retuned
+        // to in the 2026-08-25 design pass (its own comment measures why the
+        // old 21.6px/27%-alpha status text was unreadable on a TV) — this
+        // replaces that line on all three mechanics, so it inherits the fix
+        // rather than reopening it.
+        color: `${theme.colors.text}d9`,
+        fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
+        fontSize: 'clamp(1.6rem, 2vw, 2.3rem)',
+        letterSpacing: '0.16em',
+        textTransform: 'uppercase',
+        willChange: 'opacity',
+      }}
+    >
+      <LockMark />
+      <span>{label}</span>
+    </motion.div>
+  )
+}
+
 export default function LockCountdownOverlay({ startedAt, onComplete }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()

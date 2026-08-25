@@ -10,7 +10,7 @@ import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
 import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
-import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
+import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
 // override for it — every other wager error is a real, unrecoverable-by-
@@ -384,7 +384,12 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       // spread — `slide` is this call's original param and never updates
       // mid-function, so on a first-lock-then-score-in-one-call it would
       // otherwise spread the PRE-lock data and wipe the stamp just written above.
-      await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true, matchingLockedAt: lockedAt, matchingRevealed: true } })
+      // No matchingRevealed here (2026-08-25, Ben: "the answer reveal
+      // animation for phone questions should only invoke when i hit A"). This
+      // write locks and scores; the room sees a held "Answers locked" state
+      // until the host presses A (see revealCurrentSlide below). Same split in
+      // handleLockAndScoreOrder/handleLockAndScoreWagers.
+      await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true, matchingLockedAt: lockedAt } })
     } finally {
       setMatchingBusy(false)
     }
@@ -457,7 +462,9 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setOrderScoreError('Scoring failed — check connection and retry'); return }
       }
 
-      await actions.updateSlide(slide.id, { data: { ...slide.data, orderLocked: true, orderLockedAt: lockedAt, orderRevealed: true } })
+      // Reveal is the host's A press, not part of this write — see
+      // handleLockAndScoreMatching's final write.
+      await actions.updateSlide(slide.id, { data: { ...slide.data, orderLocked: true, orderLockedAt: lockedAt } })
     } finally {
       setOrderBusy(false)
     }
@@ -627,7 +634,10 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           ...slide.data,
           wagerGuessesLocked: true,
           wagerGuessesLockedAt: lockedAt,
-          wagerRevealed: true,
+          // No wagerRevealed here — the host's A press flips it (see
+          // handleLockAndScoreMatching's final write). wagerResults is still
+          // computed and stored NOW, at lock time; A only decides when the
+          // room gets to see it.
           // What the TV reveal renders, plus the phone-side result popup's
           // own lookup (Join.jsx). teamId IS included — unlike the original
           // "no team ids, no beatFraction, so the jsonb doesn't bloat" call,
@@ -783,6 +793,27 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     return true
   }
 
+  // The A press, for a phone-scored question that's locked but still holding
+  // its answer back (2026-08-25, Ben: reveal "should only invoke when i hit
+  // A"). pendingReveal (slideStepping.js) is the ONE place that decides
+  // whether this slide owes the room a reveal, and REVEAL_FIELD the one place
+  // that knows which flag each mechanic uses — no field names restated here.
+  //
+  // One-way, not a toggle, unlike the show-level answer_reveal it stands in
+  // for: un-revealing a scored result would put the room back in a suspense
+  // it has already left, and every renderer treats revealed as terminal.
+  //
+  // Returns true when it handled the press, so the caller falls through to
+  // the ordinary answer_reveal toggle on every other kind of slide.
+  function revealCurrentSlide() {
+    const mechanic = pendingReveal(currentSlide)
+    if (!mechanic) return false
+    actions.updateSlide(currentSlide.id, {
+      data: { ...currentSlide.data, [REVEAL_FIELD[mechanic]]: true },
+    })
+    return true
+  }
+
   // Same actionsRef reasoning above, plus: handleLockAndScoreMatching/
   // handleLockWagers/handleLockAndScoreWagers/handleLockAndScoreOrder are
   // ordinary function declarations recreated on every render (they close
@@ -918,7 +949,11 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       guardNav(actions.prevSlide)
     }
     if (e.code === 'KeyS')       actions.setScoreboardVisible(!show.showState.scoreboardVisible)
-    if (e.code === 'KeyA')       actions.setAnswerReveal(!show.showState.answerReveal)
+    // A on a locked-but-unrevealed phone-scored question reveals THAT slide's
+    // own result instead of toggling the show-level plain-question answer
+    // overlay (unrelated flag, unrelated mechanism — see revealCurrentSlide).
+    // Every other slide keeps the original toggle, untouched.
+    if (e.code === 'KeyA' && !revealCurrentSlide()) actions.setAnswerReveal(!show.showState.answerReveal)
     if (e.code === 'KeyR')       actions.setScoresRevealed?.(!show.showState.scoresRevealed)
   }, [scorePanelOpen, themePickerOpen, scoreboardModalOpen, actions, show.showState.answerReveal, show.showState.scoresRevealed, guardNav, currentSlide])
 
@@ -1097,9 +1132,19 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         <div className="flex flex-col gap-3" style={{ flex: '0 0 60%' }}>
           <CurrentSlideCard slide={currentSlide} show={show} />
 
-          {currentSlide?.type === 'question' && isMatchingShiny(currentSlide?.data) && !currentSlide?.data?.matchingRevealed && (
+          {/* `|| matchingScoreError` (2026-08-25): reveal is no longer bundled
+              into scoring, so the host can press A on a slide whose scoring
+              actually failed — without this the panel (and its only Retry
+              Scoring button) would vanish the moment he did, stranding the
+              slide exactly the way this button's own comment exists to
+              prevent. Same clause on the Order and Wager panels below. */}
+          {currentSlide?.type === 'question' && isMatchingShiny(currentSlide?.data) && (!currentSlide?.data?.matchingRevealed || matchingScoreError) && (
             <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
-              <p className="text-xs text-gray-400 mb-3">Matching question — teams are submitting on their phones</p>
+              <p className="text-xs text-gray-400 mb-3">
+                {currentSlide?.data?.matchingLocked
+                  ? 'Answers locked and scored — press A to reveal them on the TV.'
+                  : 'Matching question — teams are submitting on their phones'}
+              </p>
               <button
                 onClick={() => handleLockAndScoreMatching(currentSlide)}
                 disabled={matchingBusy}
@@ -1117,9 +1162,13 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
             </div>
           )}
 
-          {currentSlide?.type === 'question' && isOrderShiny(currentSlide?.data) && !currentSlide?.data?.orderRevealed && (
+          {currentSlide?.type === 'question' && isOrderShiny(currentSlide?.data) && (!currentSlide?.data?.orderRevealed || orderScoreError) && (
             <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
-              <p className="text-xs text-gray-400 mb-3">Order Up question — teams are submitting on their phones</p>
+              <p className="text-xs text-gray-400 mb-3">
+                {currentSlide?.data?.orderLocked
+                  ? 'Answers locked and scored — press A to reveal them on the TV.'
+                  : 'Order Up question — teams are submitting on their phones'}
+              </p>
               <button
                 onClick={() => handleLockAndScoreOrder(currentSlide)}
                 disabled={orderBusy}
@@ -1137,12 +1186,14 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
             </div>
           )}
 
-          {currentSlide?.type === 'question' && isWagerShiny(currentSlide?.data) && !currentSlide?.data?.wagerRevealed && (
+          {currentSlide?.type === 'question' && isWagerShiny(currentSlide?.data) && (!currentSlide?.data?.wagerRevealed || wagerError) && (
             <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
               <p className="text-xs text-gray-400 mb-3">
                 {currentSlide?.data?.wagerTiers == null
                   ? 'Wager question — teams are picking a risk tier. The question is hidden everywhere until you lock.'
-                  : 'Wagers locked — the question is up and teams are entering numbers.'}
+                  : currentSlide?.data?.wagerGuessesLocked
+                    ? 'Guesses locked and scored — press A to reveal the answer on the TV.'
+                    : 'Wagers locked — the question is up and teams are entering numbers.'}
               </p>
               <button
                 onClick={() => (currentSlide?.data?.wagerTiers != null

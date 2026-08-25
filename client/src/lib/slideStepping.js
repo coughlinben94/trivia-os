@@ -276,6 +276,38 @@ export function pendingLockPhase(slide) {
   return null
 }
 
+// The slide.data flag each phone-scored mechanic flips when its answer is
+// finally shown to the room. One map, so nothing has to restate the field
+// names it is about to write (LiveMode.jsx's A-key reveal is the only writer).
+export const REVEAL_FIELD = {
+  matching: 'matchingRevealed',
+  wager: 'wagerRevealed',
+  order: 'orderRevealed',
+}
+
+// Which mechanic on this slide is locked but NOT yet revealed — i.e. what the
+// host's A press should reveal, or null when A should do its ordinary
+// show-level answer_reveal toggle instead. The sibling of pendingLockPhase
+// above, and the ONE definition of "does this slide owe the room a reveal"
+// (2026-08-25: reveal was split out of lock+score, so this state is now
+// whatever the host lets it be — he talks, then presses A).
+//
+// Wager keys off wagerGuessesLocked, NOT wagerTiersLocked: locking tiers only
+// puts the QUESTION up, there is nothing to reveal until the guesses are in
+// and scored. Note that computeNextStep's own closing-beat `isPending` check
+// deliberately uses the WIDER wagerTiersLocked window for the same slide —
+// it is asking a different question ("may this slide pan away yet", which
+// must stay false from the very first lock), so the two are not duplicates of
+// each other and must not be collapsed.
+export function pendingReveal(slide) {
+  const data = slide?.data
+  if (!data) return null
+  if (isMatchingShiny(data)) return data.matchingLocked && !data.matchingRevealed ? 'matching' : null
+  if (isWagerShiny(data)) return data.wagerGuessesLocked && !data.wagerRevealed ? 'wager' : null
+  if (isOrderShiny(data)) return data.orderLocked && !data.orderRevealed ? 'order' : null
+  return null
+}
+
 /**
  * One Next press. `show` is { slides, currentSlideIndex, currentSlideId }.
  * Returns a shows-row patch, or null when the press is a no-op.

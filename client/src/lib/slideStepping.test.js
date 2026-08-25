@@ -10,6 +10,8 @@ import {
   ownsAutoRoll,
   AUTO_ROLL_OWNERSHIP_MAX_AGE_MS,
   pendingLockPhase,
+  pendingReveal,
+  REVEAL_FIELD,
 } from './slideStepping.js'
 
 const noTeams = async () => 0
@@ -440,5 +442,55 @@ describe('pendingLockPhase', () => {
     expect(pendingLockPhase(null)).toBe(null)
     expect(pendingLockPhase(undefined)).toBe(null)
     expect(pendingLockPhase({ id: 'q' })).toBe(null)
+  })
+})
+
+// The other half of the same law: what the host's A press does. A wrong
+// answer here either swallows A on a plain question (no answer overlay for
+// the room) or fires a phone-scored reveal on a question that hasn't been
+// locked or scored yet.
+describe('pendingReveal', () => {
+  const shiny = (type, data = {}) => slide('q', 0, 'question', { isShiny: true, shinyInputSchema: { type }, ...data })
+
+  it('returns null while a mechanic is still taking answers', () => {
+    expect(pendingReveal(shiny('matching'))).toBe(null)
+    expect(pendingReveal(shiny('order'))).toBe(null)
+    expect(pendingReveal(shiny('wager'))).toBe(null)
+  })
+
+  it('names the mechanic once it is locked but not yet revealed', () => {
+    expect(pendingReveal(shiny('matching', { matchingLocked: true }))).toBe('matching')
+    expect(pendingReveal(shiny('order', { orderLocked: true }))).toBe('order')
+    expect(pendingReveal(shiny('wager', { wagerTiersLocked: true, wagerGuessesLocked: true }))).toBe('wager')
+  })
+
+  // Locking a wager's TIERS only puts the question on screen — there is no
+  // answer to reveal until the guesses are in and scored. A here must still
+  // fall through to the ordinary answer_reveal toggle.
+  it('does not offer a wager reveal on the tier lock alone', () => {
+    expect(pendingReveal(shiny('wager', { wagerTiersLocked: true }))).toBe(null)
+  })
+
+  it('returns null once revealed, so A cannot un-reveal a scored result', () => {
+    expect(pendingReveal(shiny('matching', { matchingLocked: true, matchingRevealed: true }))).toBe(null)
+    expect(pendingReveal(shiny('order', { orderLocked: true, orderRevealed: true }))).toBe(null)
+    expect(pendingReveal(shiny('wager', { wagerTiersLocked: true, wagerGuessesLocked: true, wagerRevealed: true }))).toBe(null)
+  })
+
+  it('returns null for plain questions and non-questions, leaving A untouched', () => {
+    expect(pendingReveal(shiny('list'))).toBe(null)
+    expect(pendingReveal(slide('q', 0))).toBe(null)
+    expect(pendingReveal(slide('tp', 0, 'team-picker', { parts: [null, null] }))).toBe(null)
+    expect(pendingReveal(null)).toBe(null)
+    expect(pendingReveal(undefined)).toBe(null)
+    expect(pendingReveal({ id: 'q' })).toBe(null)
+  })
+
+  it('maps every mechanic it can return to a real slide.data flag', () => {
+    // REVEAL_FIELD is what LiveMode.jsx writes off this return value — a
+    // mechanic missing from it would silently write `undefined: true`.
+    for (const mechanic of ['matching', 'wager', 'order']) {
+      expect(REVEAL_FIELD[mechanic]).toBeTruthy()
+    }
   })
 })

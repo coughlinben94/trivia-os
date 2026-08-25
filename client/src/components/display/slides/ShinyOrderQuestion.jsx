@@ -4,6 +4,7 @@ import { supabase } from '../../../lib/supabase.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_PANEL, EASE_OUT } from '../../../lib/easings.js'
 import { seededShuffle } from '../../../lib/orderScoring.js'
+import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 
 // The TV side of an Order Up question. Same two-beat pan mechanic as
 // ShinyMatchingQuestion.jsx (see that file's own comment for the
@@ -79,15 +80,16 @@ export default function ShinyOrderQuestion({ slide, show, theme }) {
         <div className="w-full flex flex-col items-center gap-8 px-12 py-12" style={{ height: '50%' }}>
           <QuestionText text={data.text} theme={theme} />
           <OrderRow items={shuffled} theme={theme} revealed={false} />
-          {/* Barely-visible transitional state (2026-08-25): Order has no
-              extra locked-only visual, same as Matching — locking just
-              stops the count from climbing further. Swap the live count
-              for a "scoring" line once locked, same text-swap
-              ShinyWagerQuestion's guessesLocked branch already uses. */}
+          {/* Locked-and-waiting is a real held state now (2026-08-25, reveal
+              moved to the host's A key), not the ~1s gap before scoring
+              landed that the old "Locked — scoring…" line described. The
+              shared badge says so and keeps breathing while the host talks —
+              and it says the same thing the countdown ceremony's own last
+              frame said, in the same mark. */}
           <StatusSlot theme={theme}>
             {!locked
               ? <CountLine n={submittedCount} total={teamCount} />
-              : 'Locked — scoring…'}
+              : <AnswersLockedBadge theme={theme} />}
           </StatusSlot>
         </div>
 
