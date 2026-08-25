@@ -67,6 +67,14 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // Blank-able string state so the field can be empty; blank = 1 (the
   // normal single-question case).
   const [slideCount, setSlideCount] = useState('')
+  // "How many assets?" and "How many slides?" used to sit side by side as two
+  // plain number inputs — easy to fill both with the same number thinking
+  // they meant the same thing (Ben, 2026-08-25: typed 3 into both meaning "3
+  // parts on one question," got 3 separate slides x 3 parts each = 9 empty
+  // parts instead). Mutually exclusive now: 'one' uses assetCount and forces
+  // slides to 1, 'many' uses slideCount and forces assets to 1 (unless the
+  // format presets its own slot count, which stays independent of this).
+  const [batchMode, setBatchMode] = useState('one')
 
   // Round-intro — pre-filled from AddRoundWizard or from round filter; also derived from selected round
   const _preRound = initialData.roundId ? show.rounds.find(r => r.id === initialData.roundId) : null
@@ -203,8 +211,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           // Asset count comes from the format's preset when it has one
           // (slots is a number), otherwise from the host's per-use input.
           const fmtPreset = selectedShinyFmt.input_schema?.slots
-          const assets = (typeof fmtPreset === 'number' && fmtPreset > 0) ? fmtPreset : Math.max(1, assetCount)
-          const numSlides = Math.max(1, parseInt(slideCount, 10) || 1)
+          // batchMode makes the two counts mutually exclusive — see its
+          // declaration above for why (2026-08-25 mixed-them-up incident).
+          const assets = (typeof fmtPreset === 'number' && fmtPreset > 0)
+            ? fmtPreset
+            : (batchMode === 'many' ? 1 : Math.max(1, assetCount))
+          const numSlides = batchMode === 'many' ? Math.max(1, parseInt(slideCount, 10) || 1) : 1
           // A batch of >1 slides can't share one typed-in question/answer —
           // each slide needs its own distinct content — so batch-created
           // slides start blank and get filled in afterward via the slide
@@ -398,8 +410,8 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // when blank, the host enters it here.
   const fmtAssetPreset  = selectedShinyFmt?.input_schema?.slots
   const hasAssetPreset  = typeof fmtAssetPreset === 'number' && fmtAssetPreset > 0
-  const effectiveAssets = hasAssetPreset ? fmtAssetPreset : Math.max(1, assetCount)
-  const slideNum        = Math.max(1, parseInt(slideCount, 10) || 1)
+  const effectiveAssets = hasAssetPreset ? fmtAssetPreset : (batchMode === 'many' ? 1 : Math.max(1, assetCount))
+  const slideNum        = batchMode === 'many' ? Math.max(1, parseInt(slideCount, 10) || 1) : 1
   // Shared question/answer fields only make sense for a single slide (a
   // batch of >1 can't share one typed-in answer across distinct slides) and,
   // for concurrent formats specifically, only when it's NOT a question
@@ -521,17 +533,42 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
 
             {(isImageFmt || isConcurrentFmt) ? (
               /* Image formats (any concurrent state), and any concurrent
-                 format regardless of type, always prompt for slide count +
-                 asset count. Asset count's meaning branches on concurrent
-                 (back-to-back parts vs. all-at-once on one slide via the
-                 grid renderer), but the two inputs themselves are shared. */
+                 format regardless of type, choose between "one question, N
+                 parts" and "N separate questions" — mutually exclusive (see
+                 batchMode's declaration up top for why: these used to be two
+                 side-by-side number inputs, easy to fill both with the same
+                 number and get slides x parts instead of just parts). */
               <>
-                <div className="flex gap-4">
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                      How many slides to add? <span className="font-normal text-gray-400">(optional)</span>
-                    </label>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setBatchMode('one')}
+                    className={`flex-1 text-xs font-medium px-3 py-2 rounded-lg border transition-colors ${
+                      batchMode === 'one'
+                        ? 'bg-yellow-50 border-yellow-400 text-yellow-700'
+                        : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    One question
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchMode('many')}
+                    className={`flex-1 text-xs font-medium px-3 py-2 rounded-lg border transition-colors ${
+                      batchMode === 'many'
+                        ? 'bg-yellow-50 border-yellow-400 text-yellow-700'
+                        : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    Separate questions
+                  </button>
+                </div>
+
+                {batchMode === 'many' ? (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">How many slides to add?</label>
                     <input
+                      autoFocus
                       type="number"
                       min={1}
                       max={20}
@@ -540,27 +577,24 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                       placeholder="1"
                       className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
-                    <p className="text-[11px] text-gray-400 mt-1">Each one is a separate question (its own Q-number, its own sidebar row).</p>
+                    <p className="text-[11px] text-gray-400 mt-1">Each one is a separate question (its own Q-number, its own sidebar row){hasAssetPreset ? '' : `, 1 part each — add more per slide afterward from the slide editor if you need them`}.</p>
                   </div>
-                  {/* The format presets its asset count — only prompt here when
-                      it's left blank on the format. */}
-                  {!hasAssetPreset && (
-                    <div className="flex-1">
-                      <label className="block text-xs font-medium text-gray-500 mb-1.5">How many assets?</label>
-                      <input
-                        autoFocus
-                        type="number"
-                        min={1}
-                        max={20}
-                        value={assetCount}
-                        onChange={e => setAssetCount(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      />
-                      <p className="text-[11px] text-gray-400 mt-1">All stay on ONE question — step through them with Next during the show.</p>
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-gray-400 -mt-2">
+                ) : !hasAssetPreset && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">How many parts on this question?</label>
+                    <input
+                      autoFocus
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={assetCount}
+                      onChange={e => setAssetCount(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <p className="text-[11px] text-gray-400 mt-1">All stay on ONE question — step through them with Next during the show.</p>
+                  </div>
+                )}
+                <p className="text-xs text-gray-400">
                   {isConcurrentFmt
                     ? isQuestionSeriesFmt
                       ? `${effectiveAssets} back-to-back part${effectiveAssets === 1 ? '' : 's'} per slide, each with its own answer — fill them in from the slide editor.`
@@ -825,7 +859,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             {selectedShinyFmt && (
               <div className="mt-auto pt-2">
                 <button
-                  onClick={() => { setSlideCount(''); setShinyStep('details') }}
+                  onClick={() => { setSlideCount(''); setBatchMode('one'); setShinyStep('details') }}
                   className={`w-full bg-yellow-500 text-white text-sm font-semibold py-3 rounded-xl hover:bg-yellow-600 ${BTN}`}
                 >
                   Add {selectedShinyFmt.name} →
