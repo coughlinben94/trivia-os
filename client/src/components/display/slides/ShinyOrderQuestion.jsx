@@ -11,7 +11,7 @@ import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 // pixel-exact -50% pan rationale): a 200%-tall track holding both beats
 // stacked, panning by exactly one stage-height lands pixel-exact on beat 2
 // regardless of actual stage size. Beat 1 is the shuffled row teams see
-// while submitting; scoring flips data.orderRevealed, panning up to beat 2
+// while submitting; the host's A key flips data.orderRevealed, panning up to beat 2
 // (correct sequence, gold rank badges). Order has one row of images, not
 // Matching's two paired columns, so the row/tile layout below is new, but
 // the pan/reveal skeleton is copied straight from Matching.
@@ -46,9 +46,10 @@ export default function ShinyOrderQuestion({ slide, show, theme }) {
   // wired up until now.
   useEffect(() => {
     // Stops on `locked`, not just `revealed` — the live count is only ever
-    // rendered pre-lock (the locked branch below swaps it for "Locked —
-    // scoring…"), so polling past that point just burns a request every 2s
-    // for a number nothing displays (2026-08-25 review finding).
+    // rendered pre-lock (the locked branch below swaps it for the held
+    // "Answers locked" badge), so polling past that point just burns a
+    // request every 2s for a number nothing displays (2026-08-25 review
+    // finding).
     if (locked || revealed) return
     let cancelled = false
     async function load() {
@@ -85,11 +86,15 @@ export default function ShinyOrderQuestion({ slide, show, theme }) {
               landed that the old "Locked — scoring…" line described. The
               shared badge says so and keeps breathing while the host talks —
               and it says the same thing the countdown ceremony's own last
-              frame said, in the same mark. */}
+              frame said, in the same mark. Gated on !revealed too, matching
+              ShinyMatchingQuestion's guard — beat 1 stays mounted after the
+              pan to beat 2, so without it the badge kept running its
+              breathing animation panned off-screen for the rest of the
+              slide (2026-08-25 review). */}
           <StatusSlot theme={theme}>
             {!locked
               ? <CountLine n={submittedCount} total={teamCount} />
-              : <AnswersLockedBadge theme={theme} />}
+              : !revealed ? <AnswersLockedBadge theme={theme} /> : null}
           </StatusSlot>
         </div>
 
@@ -130,7 +135,7 @@ function QuestionText({ text, theme }) {
 // comment above for why an omitted status line jumped the headline mid-pan.
 //
 // Typography lives here, not on the children, so the live count and the
-// "Locked — scoring…" swap can't drift apart. Both were badly under-scaled for
+// locked-badge swap can't drift apart. Both were badly under-scaled for
 // a TV before (2026-08-25 design critique measured 21.6px at ~3.1:1 and 19.2px
 // at 27% alpha — unreadable from across a bar); `d9` alpha over a near-black
 // shinyBg clears 10:1, comfortably past the 3:1 large-text floor

@@ -103,6 +103,18 @@ export function withEntryState(slides, slide, { currentPart, introDone } = {}) {
   if (slide.data?.walkoutSong?.trigger === 'invoke' && slide.data.walkoutSong.invoked) {
     patch.walkoutSong = { ...slide.data.walkoutSong, invoked: false, invokedAt: null }
   }
+  // Fresh entry always clears a stale "Next locks answers" countdown too
+  // (2026-08-25 review) — a countdown interrupted before completing (Live
+  // Mode exited mid-countdown, a reload) otherwise leaves lockCountdownPhase/
+  // StartedAt sitting on the slide. The next time the host lands on it, the
+  // completion effect computes remaining = max(startedAt + LOCK_COUNTDOWN_MS
+  // - now, 0) off that stale startedAt, gets 0, and fires the real lock+score
+  // IMMEDIATELY — before any team has answered, with no countdown shown to
+  // explain why. Same unconditional-truthy shape as outroShown's reset above.
+  if (slide.data?.lockCountdownPhase || slide.data?.lockCountdownStartedAt) {
+    patch.lockCountdownPhase = null
+    patch.lockCountdownStartedAt = null
+  }
   if (Object.keys(patch).length === 0) return slides
   return patchSlideData(slides, slide.id, patch)
 }
@@ -396,14 +408,15 @@ export async function computeNextStep(show, fetchTeamCount) {
   //   - matching / wager / order: once fully scored (matchingRevealed /
   //     wagerRevealed / orderRevealed) — NOT merely locked, and NOT merely guesses-locked.
   //     Both have a locked-but-still-scoring window (matching's "Retry
-  //     Scoring" state, wager's guesses-locked-but-not-yet-revealed state,
-  //     LiveMode.jsx's own Reveal control gates on this exact flag) that
-  //     must never regress — same guard withEntryState uses for its own
-  //     jump-back case, and the reason isPending exists below. Wager fixed
-  //     2026-08-24 (Opus review): this used to check wagerGuessesLocked,
-  //     one stage too early — the closing beat fired the instant guesses
-  //     locked but before the host ever pressed Reveal, panning every
-  //     phone back to the teaser with no way to recover except Prev.
+  //     Scoring" state, wager's guesses-locked-but-not-yet-revealed state —
+  //     there is no separate Reveal control, it's the host's A key, see
+  //     pendingReveal above) that must never regress — same guard
+  //     withEntryState uses for its own jump-back case, and the reason
+  //     isPending exists below. Wager fixed 2026-08-24 (Opus review): this
+  //     used to check wagerGuessesLocked, one stage too early — the closing
+  //     beat fired the instant guesses locked but before the host ever
+  //     pressed Reveal, panning every phone back to the teaser with no way
+  //     to recover except Prev.
   //   - everything else (a single-shot list/audio/video/image question,
   //     no parts, not lockable): done the moment its content has been
   //     shown at all, i.e. as soon as introDone is true.
@@ -444,6 +457,20 @@ export async function computeNextStep(show, fetchTeamCount) {
       }
     }
   }
+
+  // Ben's decision (2026-08-25 whole-branch review): Next must not fall
+  // through to a plain advance while a phone-scored question is locked but
+  // not yet revealed — force the host to press A first, or the room never
+  // sees the answer. Deliberately pendingReveal, NOT isPending above:
+  // isPending's wager check widens to wagerTiersLocked on purpose (see
+  // pendingReveal's own comment) to also gate the closing-beat pan-down,
+  // but that means it's still true during wager's transient
+  // tiers-locked-but-guesses-not-yet-locked window — a state that is NOT
+  // "locked but not revealed" and must keep falling through to a plain
+  // advance like it always has. pendingReveal is the narrower, correct
+  // check for every mechanic (matching/order match isPending exactly here;
+  // wager keys off wagerGuessesLocked instead of wagerTiersLocked).
+  if (pendingReveal(curSlide)) return null
 
   const target = Math.min(cur + 1, sorted.length - 1)
   if (target === cur) return null

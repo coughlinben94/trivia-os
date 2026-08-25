@@ -115,34 +115,49 @@ describe('computeNextStep', () => {
       expect(dataOf(patch, 'a').outroShown).toBeUndefined()
     })
 
-    it('waits for a matching slide to be scored, not merely locked', async () => {
+    it('blocks entirely for a matching slide that is locked but not yet scored/revealed', async () => {
+      // Ben's decision, 2026-08-25 whole-branch review: Next used to fall
+      // through to a plain advance here once the closing-beat pan-down was
+      // skipped, letting a host who locked and forgot to press A move on
+      // without the room ever seeing the answer. Next must now do nothing
+      // (return null) instead.
       const locked = { shinyInputSchema: { type: 'matching' }, matchingLocked: true }
       const slides = [shiny('a', 0, locked), slide('b', 1)]
       const mid = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-      // Still scoring (Retry Scoring state) — regressing introDone here would
-      // blank every phone mid-question.
-      expect(mid.current_slide_index).toBe(1)
+      expect(mid).toBe(null)
 
       const scored = [shiny('a', 0, { ...locked, matchingRevealed: true }), slide('b', 1)]
       const close = await computeNextStep({ slides: scored, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
       expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
     })
 
-    it('waits for a wager slide to be revealed, not merely guesses-locked', async () => {
-      // 2026-08-24 (Opus review): this used to gate on wagerGuessesLocked,
-      // one stage too early — that's the "guesses in, host hasn't pressed
-      // Reveal yet" window (LiveMode.jsx's own Reveal control gates on
-      // wagerRevealed, not wagerGuessesLocked). Closing the beat there
-      // panned every phone back to the teaser with no way to recover except
-      // Prev, before the host ever got to reveal the answer.
+    it('blocks entirely for an order slide that is locked but not yet revealed', async () => {
+      const locked = { shinyInputSchema: { type: 'order' }, orderLocked: true }
+      const slides = [shiny('a', 0, locked), slide('b', 1)]
+      const mid = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+      expect(mid).toBe(null)
+
+      const revealed = [shiny('a', 0, { ...locked, orderRevealed: true }), slide('b', 1)]
+      const close = await computeNextStep({ slides: revealed, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+      expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
+    })
+
+    it('blocks a wager slide once guesses are locked but not revealed — but NOT the earlier tiers-locked-only window', async () => {
+      // 2026-08-24 (Opus review): the OLD isPending gate used to key off
+      // wagerTiersLocked, one stage too early — that's the "guesses in,
+      // host hasn't pressed A yet" window is actually later; tiers-locked-
+      // only is still mid-question and must keep falling through to a plain
+      // advance exactly like before, not get swept into the new block
+      // (2026-08-25 review: only pendingReveal's narrower wagerGuessesLocked
+      // window blocks, per Ben's decision above).
       const tiersOnly = { shinyInputSchema: { type: 'wager' }, wagerTiersLocked: true }
       const slides = [shiny('a', 0, tiersOnly), slide('b', 1)]
       expect((await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)).current_slide_index).toBe(1)
 
-      // Guesses locked, not yet revealed — still pending, still advances.
+      // Guesses locked, not yet revealed — this is the one that now blocks.
       const guessesLocked = [shiny('a', 0, { ...tiersOnly, wagerGuessesLocked: true }), slide('b', 1)]
       const mid = await computeNextStep({ slides: guessesLocked, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-      expect(mid.current_slide_index).toBe(1)
+      expect(mid).toBe(null)
 
       const revealed = [shiny('a', 0, { ...tiersOnly, wagerGuessesLocked: true, wagerRevealed: true }), slide('b', 1)]
       const close = await computeNextStep({ slides: revealed, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
@@ -210,6 +225,22 @@ describe('withEntryState', () => {
     const s = slide('a', 0, 'question', { isShiny: true, introDone: false, outroShown: true })
     const out = withEntryState([s], s, { currentPart: 0, introDone: false })
     expect(out[0].data.outroShown).toBe(false)
+  })
+
+  // 2026-08-25 review: a countdown interrupted before completing (Live Mode
+  // exited mid-countdown, a reload) used to leave lockCountdownPhase/
+  // StartedAt sitting on the slide. Landing back on it later, the
+  // completion effect computed remaining off the stale startedAt, got 0,
+  // and fired the real lock+score immediately — before any team had
+  // answered, with no countdown shown to explain why.
+  it('clears a stale lock countdown on a fresh entry', () => {
+    const s = slide('a', 0, 'question', {
+      isShiny: true, introDone: true, matchingLocked: false,
+      lockCountdownPhase: 'matching', lockCountdownStartedAt: Date.now() - 60_000,
+    })
+    const out = withEntryState([s], s, { currentPart: 0, introDone: false })
+    expect(out[0].data.lockCountdownPhase).toBe(null)
+    expect(out[0].data.lockCountdownStartedAt).toBe(null)
   })
 })
 

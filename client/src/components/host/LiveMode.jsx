@@ -395,12 +395,13 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     }
   }
 
-  // Order question: same one-lock-does-everything shape as
-  // handleLockAndScoreMatching above (lock, score, and reveal in one host
-  // action — Order has no Wager-style blind-tier phase to split into a
-  // separate first lock). Kept as its own function rather than
-  // parameterizing the Matching handler, same reasoning MatchingBoard/Wager
-  // already establish: each mechanic's scoring call, data-shape keys
+  // Order question: same lock-then-score shape as handleLockAndScoreMatching
+  // above (Order has no Wager-style blind-tier phase to split into a
+  // separate first lock). Reveal is a separate later host action (the A
+  // key, see revealCurrentSlide below), not part of this write. Kept as its
+  // own function rather than parameterizing the Matching handler, same
+  // reasoning MatchingBoard/Wager already establish: each mechanic's
+  // scoring call, data-shape keys
   // (orderLocked/orderRevealed vs matchingLocked/matchingRevealed) and error
   // copy differ enough that sharing one function would need its own branch
   // per mechanic anyway.
@@ -786,9 +787,18 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     const phase = pendingLockPhase(currentSlide)
     if (!phase) return false
     if (!currentSlide.data?.lockCountdownStartedAt) {
-      guardNav(() => actions.updateSlide(currentSlide.id, {
-        data: { ...currentSlide.data, lockCountdownPhase: phase, lockCountdownStartedAt: Date.now() },
-      }))
+      guardNav(async () => {
+        actions.updateSlide(currentSlide.id, {
+          data: { ...currentSlide.data, lockCountdownPhase: phase, lockCountdownStartedAt: Date.now() },
+        })
+        // updateSlide is a debounced ~600ms write — without flushing here,
+        // the ~600ms debounce plus realtime lag meant /display didn't
+        // actually show "3" until ~800-1000ms had already elapsed, making
+        // the first beat of the countdown nearly invisible (2026-08-25
+        // review). Same pattern the lock handlers themselves already use
+        // for the same reason (handleLockAndScoreMatching etc., above).
+        await actions.flushSlides()
+      })
     }
     return true
   }

@@ -27,8 +27,6 @@ import {
   teamPickerCursor,
   ownsAutoRoll,
   TEAM_PICKER_HOLD_MS,
-  pendingLockPhase,
-  patchSlideData,
 } from '../lib/slideStepping.js'
 import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
 
@@ -617,31 +615,6 @@ async function stepShow(showRow, direction) {
   return { advanced: true, denied: false, cursor: cursorAfterStep(args, patch) }
 }
 
-// Starts the "Next locks answers" countdown ceremony from THIS window — a
-// plain host-verified UPDATE, the same write path stepShow above uses, since
-// /display has no `actions` object. Only patches the current slide's
-// countdown fields via the shared patchSlideData helper (slideStepping.js);
-// it is not a real step, so it never touches current_slide_index/id.
-//
-// Completing the countdown is LiveMode.jsx-only (see pendingLockPhase's own
-// comment in slideStepping.js for why) — this function only ever WRITES the
-// start timestamp, never arms a completion timer of its own.
-async function startLockCountdown(showRow, slideId, phase) {
-  const newSlides = patchSlideData(showRow.slides, slideId, {
-    lockCountdownPhase: phase,
-    lockCountdownStartedAt: Date.now(),
-  })
-  const { data, error } = await supabase
-    .from('shows')
-    .update({ slides: newSlides })
-    .eq('id', showRow.id)
-    .eq('is_live', true)
-    .select('id')
-  if (error || !data?.length) {
-    console.error('[Display] lock countdown start denied:', error ?? '0 rows — not host-authenticated on this browser')
-  }
-}
-
 // ─── Live display ──────────────────────────────────────────────────────────
 
 // The ring's dedicated music slot — index 10, the `record` station added
@@ -1097,21 +1070,19 @@ export default function Display() {
       setPinOpen(true)
       return
     }
-    // "Next locks answers" — same pendingLockPhase check LiveMode.jsx's own
-    // trigger sites run (the ONE place either window checks "is a lock phase
-    // open", per slideStepping.js). Forward-only: stepping backward off a
-    // phone-scored question should behave as it always has. Already-running
-    // (lockCountdownStartedAt set) is a no-op — the countdown runs its full
-    // course once started, no restart, no advance.
-    if (direction > 0) {
-      const row = showRef.current
-      const curSlide = sortSlides(row.slides)[row.current_slide_index ?? 0]
-      const phase = pendingLockPhase(curSlide)
-      if (phase) {
-        if (!curSlide.data?.lockCountdownStartedAt) await startLockCountdown(row, curSlide.id, phase)
-        return
-      }
-    }
+    // "Next locks answers" — deliberately NOT triggered from here. This
+    // window has no way to OBSERVE a countdown it starts (LiveMode.jsx's
+    // completion effect reads useShow's local React state, which only ever
+    // merges realtime showState, never slides — see useShow.js's merge
+    // comment), so a countdown started from /display could never complete:
+    // the overlay would self-hide, submissions would stay open, nothing
+    // would score, and lockCountdownStartedAt would stay stuck set forever
+    // (silently no-op'ing every later Next on that slide via the guard
+    // above). Fixed 2026-08-25 (whole-branch review) by removing the trigger
+    // entirely — a Next arriving here just falls through to the plain step
+    // below, same as before this feature existed. LockCountdownOverlay stays
+    // mounted below (DisplayInner) so /display can still SHOW a countdown
+    // /host starts; only the WRITE that starts one moved to host-only.
     const res = await stepShow(showRef.current, direction)
     if (res.denied) setNavDenied(true)
     setOwnedCursor(res.cursor)

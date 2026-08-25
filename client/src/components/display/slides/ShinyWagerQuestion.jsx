@@ -15,7 +15,8 @@ const TIER_TINT = { safe: '#5fa8d3', fire: '#e8703a', sun: '#f5c842' }
 // The TV side of a wager question. Four beats, one component:
 //   1. Wagering  — the three tiers at stake, no question text anywhere.
 //   2. Question  — the prompt, once the host has locked wagers.
-//   3. Scoring   — the gap between "lock guesses" and the scores landing.
+//   3. Locked    — held after "lock guesses" until the host presses A to
+//                  reveal (2026-08-25: reveal split out of lock+score).
 //   4. Reveal    — the true number, then who beat the room and who didn't.
 export default function ShinyWagerQuestion({ slide, show, theme }) {
   const { data } = slide

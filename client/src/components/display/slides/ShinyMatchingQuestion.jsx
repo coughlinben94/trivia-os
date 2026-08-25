@@ -10,7 +10,7 @@ import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 // panning by exactly one stage-height (-50% of the track's own 200%
 // height) lands pixel-exact on beat 2 regardless of actual stage size.
 // Beat 1 (shuffled right column, no badges) sits on screen for however
-// long teams take to submit on their phones; locking + scoring flips
+// long teams take to submit on their phones; the host's A key flips
 // data.matchingRevealed, panning up to beat 2 (right column back in
 // pairs' own order, gold badges). Replaces the earlier per-tile `layout`
 // reorder — each beat is now its own static, fully-mounted layout, so
