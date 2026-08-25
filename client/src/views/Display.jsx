@@ -56,7 +56,22 @@ import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
 // first built 2026-08-19. Its own root already paints a full w-full/h-full
 // theme.colors.bg backdrop (ScoreboardRevealSlide.jsx), so it just needed the
 // same scale=1 StageFrame treatment to reach the true screen edges.
-const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker', 'question', 'team-preview', 'grading-break', 'pre-show', 'scoreboard-reveal'])
+// round-intro/swing-round-intro added 2026-08-25 (Ben: "the round 1 intro
+// title thing gets smaller once i transition from that to q1... transition
+// isnt really smooth") — the exact boxed<->full-bleed crossing StageFrame.jsx
+// itself already documents (the reverted FLIP-morph attempt was for this
+// same crossing). question is already full-bleed; round-intro/swing-round-
+// intro were the one gap still snapping into it. Confirmed safe: both use
+// RoundIntroSlide.jsx, whose text is sized in plain vw/rem, not cq units, so
+// nothing inside needs retuning for the bigger box (unlike pre-show's photo).
+// pyl-reveal/grid added 2026-08-25 (Fable-5 second-opinion pass, requested by
+// Ben) — same crossing as round-intro above. pyl-reveal is confirmed in a
+// real show sitting directly next to full-bleed slides (round-intro ->
+// pyl-reveal -> pyl-reveal -> question); grid sits among round questions
+// whenever that shiny format is used. Both checked cq-unit-free (grid's own
+// caption uses useFitToBox, but that only makes long captions render
+// BIGGER at full bleed, never smaller/broken).
+const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker', 'question', 'team-preview', 'grading-break', 'pre-show', 'scoreboard-reveal', 'round-intro', 'swing-round-intro', 'pyl-reveal', 'grid'])
 
 // ─── No-show holding screen (before any show goes live) ────────────────────
 

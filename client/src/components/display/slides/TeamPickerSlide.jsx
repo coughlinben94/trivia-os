@@ -148,11 +148,15 @@ export default function TeamPickerSlide({ slide, show }) {
   const AUDIO_VOL = 0.55;
   // 2026-08-25 (Ben: swap the ceremony theme, start at 3:01, fade in, run
   // until he advances past it — same fade-in/fade-out this slide already
-  // had, just a different clip and a mid-track start). Native `loop` would
-  // restart at 0:00, undoing the mid-track start, so looping (below, on the
-  // audio element's `onEnded`) re-seeks to AUDIO_START_S instead of 0. The
-  // file is ~17min, far longer than any real team-intro roll, so that loop
-  // is a safety net, not something a real show should ever actually reach.
+  // had, just a different clip and a mid-track start). Playback starts at
+  // 3:01, not 3:04 — the source track has its OWN built-in fade-in from
+  // 3:01 to 3:04 (the "real" start), so starting at 3:01 lets that fade
+  // play out naturally; this app's own FADE_IN_MS volume ramp below just
+  // rides on top of it. Native `loop` would restart at 0:00, undoing the
+  // mid-track start, so looping (below, on the audio element's `onEnded`)
+  // re-seeks to AUDIO_START_S instead of 0. The file is ~17min, far longer
+  // than any real team-intro roll, so that loop is a safety net, not
+  // something a real show should ever actually reach.
   const AUDIO_START_S = 3 * 60 + 1
   // Synced to the first item's "approach" (the words' zoom/grow-in), not a
   // flat timer (2026-08-17, Ben: "should start as the words get bigger" /
