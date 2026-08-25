@@ -155,14 +155,9 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
     return result
   }
 
-  async function handleCustomImageUpload(index, file) {
+  async function handleCustomImageUpload(file) {
     const result = await uploadMedia(file)
-    if (result?.url) {
-      const legacy = data.images?.length ? [] : (data.mediaUrl ? [{ url: data.mediaUrl, type: data.mediaType }] : [])
-      const next = [...(data.images?.length ? data.images : legacy)]
-      next[index] = { url: result.url, type: result.type }
-      batchChange({ images: next, mediaUrl: undefined, mediaType: undefined })
-    }
+    if (result?.url) batchChange({ mediaUrl: result.url, mediaType: result.type })
     return result
   }
 
@@ -1571,36 +1566,26 @@ function ScoreboardRevealEditor({ data, onChange, show }) {
   )
 }
 
+// Multiple/movable images on a slide go through the freeform overlay system
+// (the "✏️ Design" toolbar's Insert Image, supports multi-select) instead of
+// a field here — 2026-08-25, Ben: needed drag/resize/multi-image, which
+// overlays already do generically for every slide type. This editor only
+// ever writes the single legacy data.mediaUrl now; CustomSlide.jsx still
+// reads data.images[] if a slide already has it saved, but nothing here
+// creates that shape anymore — one image-adding workflow, not two.
 function CustomEditor({ data, onChange, onImageUpload }) {
-  // data.images is the current shape; data.mediaUrl is the legacy single-image
-  // shape (still read, never written, by any slide that predates this).
-  const images = data.images?.length ? data.images : (data.mediaUrl ? [{ url: data.mediaUrl, type: data.mediaType }] : [])
-
-  function addImage() { onChange('images', [...images, { url: null, type: null }]) }
-  function removeImage(i) { onChange('images', images.filter((_, idx) => idx !== i)) }
-
   return (
     <>
       <Field label="Title"><TextInput value={data.title} onChange={v => onChange('title', v)} placeholder="Slide title" /></Field>
       <Field label="Body"><TextArea value={data.body} onChange={v => onChange('body', v)} placeholder="Slide content…" rows={6} /></Field>
-      <Divider label="Images" />
-      {images.map((img, i) => (
-        <MediaUpload
-          key={i}
-          accept="image"
-          label={`Image ${i + 1}`}
-          currentUrl={img.url}
-          currentType={img.type}
-          onUpload={file => onImageUpload(i, file)}
-          onRemove={() => removeImage(i)}
-        />
-      ))}
-      <button
-        onClick={addImage}
-        className="text-xs text-baynes-forest hover:text-green-800 font-medium transition-colors"
-      >
-        + Add image
-      </button>
+      <MediaUpload
+        accept="image"
+        label="Optional Image"
+        currentUrl={data.mediaUrl}
+        currentType={data.mediaType}
+        onUpload={onImageUpload}
+        onRemove={() => { onChange('mediaUrl', null); onChange('mediaType', null) }}
+      />
     </>
   )
 }

@@ -233,7 +233,14 @@ export default function SlideCanvasEditor({
       if (res?.url) {
         recordHistory()
         const id = nanoid()
-        commitOverlays(cur => [...cur, { id, kind: 'image', x: 35, y: 30, w: 30, rotation: 0, z: nextZ(cur), mediaUrl: res.url }])
+        // Spread across a row of 3 instead of one fixed spot — dropping
+        // several images in a row (2026-08-25, Ben: a Swing Round with 3
+        // images per question) used to stack every one at the same x/y,
+        // leaving the host to drag each apart by hand.
+        commitOverlays(cur => {
+          const n = cur.filter(o => o.kind === 'image').length % 3
+          return [...cur, { id, kind: 'image', x: 6 + n * 31, y: 32, w: 28, rotation: 0, z: nextZ(cur), mediaUrl: res.url }]
+        })
         setSelectedOverlayId(id)
       } else {
         setUploadError('Upload failed — no URL returned')
@@ -242,6 +249,15 @@ export default function SlideCanvasEditor({
       setUploadError(err?.message || 'Upload failed')
     } finally {
       setUploading(false)
+    }
+  }
+
+  // Sequential, not Promise.all — each upload's placement reads the
+  // in-progress overlay count (see addImageFromFile), so they need to land
+  // one at a time to spread across the row correctly.
+  async function addImagesFromFiles(fileList) {
+    for (const file of Array.from(fileList)) {
+      await addImageFromFile(file)
     }
   }
 
@@ -821,8 +837,9 @@ export default function SlideCanvasEditor({
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
-        onChange={e => { addImageFromFile(e.target.files?.[0]); e.target.value = '' }}
+        onChange={e => { addImagesFromFiles(e.target.files); e.target.value = '' }}
       />
 
       {/* ── canvas viewport ── */}
