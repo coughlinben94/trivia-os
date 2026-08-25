@@ -401,7 +401,7 @@ describe('pendingLockPhase', () => {
   const shiny = (type, data = {}) => slide('q', 0, 'question', { isShiny: true, shinyInputSchema: { type }, ...data })
 
   it('returns matching while a matching question is still taking answers', () => {
-    expect(pendingLockPhase(shiny('matching'))).toBe('matching')
+    expect(pendingLockPhase(shiny('matching', { introDone: true }))).toBe('matching')
   })
 
   it('returns null once matching is locked', () => {
@@ -409,7 +409,7 @@ describe('pendingLockPhase', () => {
   })
 
   it('returns order while an Order Up question is still taking answers', () => {
-    expect(pendingLockPhase(shiny('order'))).toBe('order')
+    expect(pendingLockPhase(shiny('order', { introDone: true }))).toBe('order')
   })
 
   it('returns null once Order Up is locked', () => {
@@ -420,15 +420,26 @@ describe('pendingLockPhase', () => {
   // tier lock, then the numeric-guess lock after the question reveals. They
   // must come back in that order from three consecutive Next presses.
   it('walks wager through tiers, then guesses, then null', () => {
-    expect(pendingLockPhase(shiny('wager'))).toBe('wager-tiers')
-    expect(pendingLockPhase(shiny('wager', { wagerTiersLocked: true }))).toBe('wager-guesses')
-    expect(pendingLockPhase(shiny('wager', { wagerTiersLocked: true, wagerGuessesLocked: true }))).toBe(null)
+    expect(pendingLockPhase(shiny('wager', { introDone: true }))).toBe('wager-tiers')
+    expect(pendingLockPhase(shiny('wager', { introDone: true, wagerTiersLocked: true }))).toBe('wager-guesses')
+    expect(pendingLockPhase(shiny('wager', { introDone: true, wagerTiersLocked: true, wagerGuessesLocked: true }))).toBe(null)
   })
 
   it('never skips the tier lock just because guesses are somehow already flagged', () => {
     // Out-of-order flags shouldn't let a press jump straight to scoring a
     // wager whose tiers were never locked.
-    expect(pendingLockPhase(shiny('wager', { wagerGuessesLocked: true }))).toBe('wager-tiers')
+    expect(pendingLockPhase(shiny('wager', { introDone: true, wagerGuessesLocked: true }))).toBe('wager-tiers')
+  })
+
+  it('returns null for all mechanics when introDone is false, blocking locks during the intro beat', () => {
+    // The intro beat (introDone: false) is the first Next press after entering
+    // a shiny question — the FIRST Next press must reveal the question's
+    // content before anything else (like starting a countdown). Without this
+    // guard, pendingLockPhase would return a lock phase on that first press
+    // and start a 3-2-1 countdown on a question the room hasn't even seen yet.
+    expect(pendingLockPhase(shiny('matching', { introDone: false }))).toBe(null)
+    expect(pendingLockPhase(shiny('order', { introDone: false }))).toBe(null)
+    expect(pendingLockPhase(shiny('wager', { introDone: false }))).toBe(null)
   })
 
   it('returns null for a question that is not phone-scored at all', () => {

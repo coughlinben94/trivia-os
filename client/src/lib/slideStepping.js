@@ -266,13 +266,13 @@ export const LOCK_COUNTDOWN_MS = 3000
 export function pendingLockPhase(slide) {
   const data = slide?.data
   if (!data) return null
-  if (isMatchingShiny(data)) return data.matchingLocked ? null : 'matching'
+  if (isMatchingShiny(data)) return data.introDone && !data.matchingLocked ? 'matching' : null
   if (isWagerShiny(data)) {
-    if (!data.wagerTiersLocked) return 'wager-tiers'
-    if (!data.wagerGuessesLocked) return 'wager-guesses'
+    if (data.introDone && !data.wagerTiersLocked) return 'wager-tiers'
+    if (data.introDone && !data.wagerGuessesLocked) return 'wager-guesses'
     return null
   }
-  if (isOrderShiny(data)) return data.orderLocked ? null : 'order'
+  if (isOrderShiny(data)) return data.introDone && !data.orderLocked ? 'order' : null
   return null
 }
 
