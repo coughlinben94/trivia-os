@@ -88,12 +88,22 @@ describe('<LockCountdownOverlay>', () => {
     // The real /display case this protects: the window that did NOT press Next
     // picks the countdown up over realtime, part-way through. Each of these is
     // a fresh mount at a different offset off the same shared stamp.
-    for (const [elapsed, glyph] of [[0, '3'], [1200, '2'], [2400, '1'], [3100, '🔒']]) {
+    for (const [elapsed, glyph] of [[0, '3'], [1200, '2'], [2400, '1']]) {
       act(() => root.unmount())
       root = createRoot(container)
       render({ startedAt: Date.now() - elapsed })
       expect(container.textContent).toContain(glyph)
     }
+
+    // Past zero the glyph is the themed <LockMark> SVG, not a number and not
+    // the 🔒 emoji it replaced — an emoji ignored `color`/`fontFamily`, so it
+    // looked identical on all 21 themes. Asserted by node, not textContent,
+    // since an SVG contributes none.
+    act(() => root.unmount())
+    root = createRoot(container)
+    render({ startedAt: Date.now() - 3100 })
+    expect(container.querySelector('[data-lock-mark]')).not.toBe(null)
+    expect(container.textContent).not.toMatch(/[123]/)
   })
 
   it('walks itself to zero on its own timer and fires onComplete exactly once', () => {

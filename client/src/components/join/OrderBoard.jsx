@@ -128,6 +128,19 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 480, width: '100%', margin: '0 auto' }}>
+      {/* The ordering criterion — "by when the state joined the Union" — is the
+          whole question, and until 2026-08-25 it only existed on the TV: a
+          player looking down at their phone for 20+ seconds had no way to see
+          what they were ordering BY without looking back up. Same block
+          WagerBoard renders for its own prompt, same type scale. */}
+      {data.text && (
+        <p style={{
+          color: text, fontSize: 'clamp(1.15rem, 4.5vw, 1.35rem)',
+          lineHeight: 1.55, margin: 0, fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
+        }}>
+          {data.text}
+        </p>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'center' }}>
         {shuffled.map((item, i) => {
           const position = answer.indexOf(item.id)
@@ -204,7 +217,16 @@ function OrderTile({ image, label, number, disabled, onTap, textColor, highlight
         minHeight: 96,
         padding: 6,
         borderRadius: 14,
-        border: number != null ? `4px solid ${highlight}` : '1px solid rgba(255,255,255,0.15)',
+        // Selection ring is an OUTLINE, not a thicker border (2026-08-25 design
+        // critique). Growing the border 1px -> 4px grew the tile's footprint,
+        // which reflowed the row below it and shoved the Undo button ~6px down
+        // on EVERY tap — the single most-repeated interaction on this screen.
+        // outline doesn't participate in layout, so the board now sits
+        // perfectly still; offset -4 pulls the ring inside the tile's own edge
+        // so it reads as the border thickening the way it looks like it should.
+        border: '1px solid rgba(255,255,255,0.15)',
+        outline: number != null ? `4px solid ${highlight}` : 'none',
+        outlineOffset: -4,
         background: 'rgba(255,255,255,0.04)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         WebkitTapHighlightColor: 'transparent',

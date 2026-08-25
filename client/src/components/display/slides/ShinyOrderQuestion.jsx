@@ -76,7 +76,7 @@ export default function ShinyOrderQuestion({ slide, show, theme }) {
         transition={{ duration: reduce ? 0 : 0.85, ease: EASE_PANEL }}
       >
         {/* Beat 1 — shuffled, unrevealed */}
-        <div className="w-full flex flex-col items-center justify-center gap-10 px-24" style={{ height: '50%' }}>
+        <div className="w-full flex flex-col items-center gap-8 px-12 py-12" style={{ height: '50%' }}>
           <QuestionText text={data.text} theme={theme} />
           <OrderRow items={shuffled} theme={theme} revealed={false} />
           {/* Barely-visible transitional state (2026-08-25): Order has no
@@ -84,19 +84,26 @@ export default function ShinyOrderQuestion({ slide, show, theme }) {
               stops the count from climbing further. Swap the live count
               for a "scoring" line once locked, same text-swap
               ShinyWagerQuestion's guessesLocked branch already uses. */}
-          {!locked ? (
-            <CountLine n={submittedCount} total={teamCount} theme={theme} />
-          ) : (
-            <p style={{ margin: 0, color: `${theme.colors.text}45`, fontSize: '1.2rem', fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif` }}>
-              Locked — scoring…
-            </p>
-          )}
+          <StatusSlot theme={theme}>
+            {!locked
+              ? <CountLine n={submittedCount} total={teamCount} />
+              : 'Locked — scoring…'}
+          </StatusSlot>
         </div>
 
         {/* Beat 2 — correct sequence, revealed by the pan */}
-        <div className="w-full flex flex-col items-center justify-center gap-10 px-24" style={{ height: '50%' }}>
+        <div className="w-full flex flex-col items-center gap-8 px-12 py-12" style={{ height: '50%' }}>
           <QuestionText text={data.text} theme={theme} />
           <OrderRow items={revealedItems} theme={theme} revealed />
+          {/* Empty, but PRESENT (2026-08-25 design critique). Beat 1 has a
+              status line and beat 2 doesn't; simply omitting it here left the
+              two beats with a different number of children, so the shared
+              justify-content re-centered the stack and the headline — which is
+              identical in both beats and should sit perfectly still — jumped
+              36px mid-pan. A reserved empty slot of the same height keeps both
+              beats structurally identical, which is exactly why
+              ShinyMatchingQuestion (two beats, same children) never had this. */}
+          <StatusSlot theme={theme} />
         </div>
       </motion.div>
     </div>
@@ -107,7 +114,7 @@ function QuestionText({ text, theme }) {
   if (!text) return null
   return (
     <p style={{
-      margin: 0, textAlign: 'center', maxWidth: 1300,
+      margin: 0, textAlign: 'center', maxWidth: 1300, flexShrink: 0,
       fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
       fontSize: 'clamp(1.8rem, 3.2vw, 3.2rem)', lineHeight: 1.15, color: theme.colors.text,
     }}>
@@ -116,16 +123,40 @@ function QuestionText({ text, theme }) {
   )
 }
 
-function CountLine({ n, total, theme }) {
+// The fixed-height band under the row that holds whichever status line this
+// beat has — or nothing, in beat 2. Fixed height is the point: see the beat-2
+// comment above for why an omitted status line jumped the headline mid-pan.
+//
+// Typography lives here, not on the children, so the live count and the
+// "Locked — scoring…" swap can't drift apart. Both were badly under-scaled for
+// a TV before (2026-08-25 design critique measured 21.6px at ~3.1:1 and 19.2px
+// at 27% alpha — unreadable from across a bar); `d9` alpha over a near-black
+// shinyBg clears 10:1, comfortably past the 3:1 large-text floor
+// contrast.js/ThemeProvider.jsx enforce on textMuted.
+function StatusSlot({ theme, children }) {
   return (
-    <motion.p
+    <div style={{
+      minHeight: '3.4rem', flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: `${theme.colors.text}d9`,
+      fontSize: 'clamp(1.6rem, 2vw, 2.3rem)',
+      fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
+    }}>
+      {children}
+    </div>
+  )
+}
+
+function CountLine({ n, total }) {
+  return (
+    <motion.span
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3, ease: EASE_OUT }}
-      style={{ margin: 0, color: `${theme.colors.text}70`, fontSize: '1.35rem', fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif` }}
+      style={{ fontVariantNumeric: 'tabular-nums' }}
     >
       {total > 0 ? `${n} of ${total} teams submitted` : `${n} team${n === 1 ? '' : 's'} submitted`}
-    </motion.p>
+    </motion.span>
   )
 }
 
@@ -136,34 +167,61 @@ function CountLine({ n, total, theme }) {
 // for the same gold rank badge Matching's own revealed image tiles use.
 function OrderRow({ items, theme, revealed }) {
   return (
-    <div style={{ display: 'flex', gap: '1.5vw', width: '100%', maxWidth: 1500, justifyContent: 'center' }}>
+    // flex:1/minHeight:0 inside the beat's full-height column, and no fixed
+    // caps (2026-08-25 design critique): tiles were pinned at maxWidth 320 in a
+    // row capped at 1500px, so the whole question filled ~78% of the TV's width
+    // and ~37% of its height, with big dead bands above and below. Mirrors
+    // ShinyMatchingQuestion's columns, which genuinely fill the stage for the
+    // same reason. Tiles are still bounded by their 3:2 shape — maxHeight:100%
+    // on the tile keeps a short row (2-3 items) from growing taller than the
+    // band it has — so growing the row never crops or stretches art.
+    <div style={{
+      display: 'flex', gap: '1.5vw', width: '100%',
+      flex: '1 1 0', minHeight: 0, alignItems: 'center', justifyContent: 'center',
+    }}>
       {items.map((item, i) => (
-        <div key={item.id} style={{ position: 'relative', flex: '1 1 0', minWidth: 0, maxWidth: 320 }}>
-          <div style={{
-            position: 'relative', width: '100%', aspectRatio: '3 / 2', borderRadius: 10, overflow: 'hidden',
-            boxShadow: '0 6px 22px rgba(0,0,0,0.45)', background: 'rgba(255,255,255,0.06)', padding: '0.6rem',
-            border: revealed ? `2px solid ${SHINY_GOLD}88` : '1px solid rgba(255,255,255,0.12)',
-          }}>
-            <img src={item.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        <div key={item.id} style={{
+          display: 'flex', flex: '1 1 0', minWidth: 0, height: '100%',
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          {/* Unclipped shape wrapper: owns the tile's 3:2 box and carries the
+              badge, so the badge can hang off the corner (see below) while the
+              image frame inside it still clips its own rounded corners. */}
+          <div style={{ position: 'relative', width: '100%', aspectRatio: '3 / 2', maxHeight: '100%' }}>
+            <div style={{
+              position: 'absolute', inset: 0, borderRadius: 10, overflow: 'hidden',
+              boxShadow: '0 6px 22px rgba(0,0,0,0.45)', background: 'rgba(255,255,255,0.06)', padding: '0.6rem',
+              border: revealed ? `2px solid ${SHINY_GOLD}88` : '1px solid rgba(255,255,255,0.12)',
+            }}>
+              <img src={item.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            </div>
+            {/* Badge lives on the UNCLIPPED wrapper, not the rounded/clipped
+                frame above — sitting it inside that frame at top:-8/left:-8
+                clipped the badge under its own rounded corner (2026-08-25
+                review finding; more visible here than on Matching's equivalent
+                since Order shows this badge on every tile in both beats, not
+                only on reveal).
+
+                Sized for a TV, not a monitor (2026-08-25 design critique): the
+                glyph measured 16px in a 28.8px badge, which is illegible from
+                across a bar — and this badge's whole job is letting the room
+                say "B" out loud without pointing. Display font too, so it
+                matches the headline instead of falling back to the UI stack. */}
+            <span style={{
+              position: 'absolute', top: '-1rem', left: '-1rem', zIndex: 2,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '4rem', height: '4rem', borderRadius: '50%',
+              background: revealed ? SHINY_GOLD : 'rgba(0,0,0,0.72)',
+              color: revealed ? '#1a1a1a' : theme.colors.text,
+              fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
+              fontSize: '2.2rem', fontWeight: 700, lineHeight: 1,
+              border: revealed ? 'none' : `2px solid ${SHINY_GOLD}55`,
+              boxShadow: revealed ? `0 2px 8px rgba(0,0,0,0.4)` : 'none',
+              textShadow: revealed ? 'none' : `0 0 10px ${SHINY_GOLD_GLOW}55`,
+            }}>
+              {revealed ? i + 1 : String.fromCharCode(65 + i)}
+            </span>
           </div>
-          {/* Badge lives on the OUTER wrapper (no overflow:hidden), not the
-              rounded/clipped inner frame above — sitting it inside that inner
-              div at top:-8/left:-8 clipped the badge under its own rounded
-              corner (2026-08-25 review finding; more visible here than on
-              Matching's equivalent since Order shows this badge on every tile
-              in both beats, not only on reveal). */}
-          <span style={{
-            position: 'absolute', top: -8, left: -8, zIndex: 2,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: '1.8rem', height: '1.8rem', borderRadius: '50%',
-            background: revealed ? SHINY_GOLD : 'rgba(0,0,0,0.6)',
-            color: revealed ? '#1a1a1a' : theme.colors.text,
-            fontSize: '1rem', fontWeight: 700,
-            boxShadow: revealed ? `0 2px 8px rgba(0,0,0,0.4)` : 'none',
-            textShadow: revealed ? 'none' : `0 0 10px ${SHINY_GOLD_GLOW}55`,
-          }}>
-            {revealed ? i + 1 : String.fromCharCode(65 + i)}
-          </span>
         </div>
       ))}
     </div>

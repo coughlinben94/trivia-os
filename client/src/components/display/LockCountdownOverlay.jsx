@@ -4,10 +4,10 @@ import { useTheme } from '../shared/ThemeProvider.jsx'
 import { LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 import { EASE_OUT } from '../../lib/easings.js'
 
-// How long the 🔒 holds on screen after the count reaches zero. The real lock
-// write normally lands inside this window and clears the countdown fields off
-// the slide, which unmounts this overlay early — this is the fallback ceiling
-// so a dropped/slow write can't leave a 🔒 parked over the TV forever.
+// How long the lock mark holds on screen after the count reaches zero. The real
+// lock write normally lands inside this window and clears the countdown fields
+// off the slide, which unmounts this overlay early — this is the fallback
+// ceiling so a dropped/slow write can't leave a lock parked over the TV forever.
 const LOCK_FLASH_MS = 1200
 
 // What the overlay should be showing at `now`: 3 | 2 | 1 | 'lock' | null.
@@ -42,6 +42,37 @@ export function countdownFrame(startedAt, now) {
  *                (only /host can perform it, and /display must not need to be
  *                open for a show to lock).
  */
+// The padlock that closes the ceremony. Deliberately NOT the 🔒 emoji it
+// replaced (2026-08-25 design critique): an emoji glyph ignores `color` and
+// `fontFamily` entirely, so it rendered as the OS's own glossy brass padlock —
+// pixel-identical across all 21 themes in a product where the theme drives
+// everything else. Drawn instead of imported: this repo has no icon set, and a
+// padlock is a rounded rect plus an arc. `currentColor` + em sizing mean it
+// inherits the countdown glyph's own theme color and scale, so it lands at the
+// same size the numbers do and re-tints per theme like every other mark.
+function LockMark() {
+  return (
+    <svg
+      data-lock-mark
+      viewBox="0 0 24 24"
+      role="img"
+      aria-label="Answers locked"
+      style={{ height: '0.86em', width: '0.86em', display: 'block' }}
+    >
+      <path
+        d="M7.5 10.5V7.5a4.5 4.5 0 0 1 9 0v3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+      />
+      <rect x="4.2" y="10.2" width="15.6" height="11.4" rx="2.6" fill="currentColor" />
+      <circle cx="12" cy="15.1" r="1.7" fill="rgba(0,0,0,0.55)" />
+      <rect x="11.15" y="15.1" width="1.7" height="3.6" rx="0.85" fill="rgba(0,0,0,0.55)" />
+    </svg>
+  )
+}
+
 export default function LockCountdownOverlay({ startedAt, onComplete }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
@@ -87,16 +118,32 @@ export default function LockCountdownOverlay({ startedAt, onComplete }) {
           transition={{ duration: reduce ? 0.15 : 0.3, ease: EASE_OUT }}
           className="absolute inset-0 z-[70] flex flex-col items-center justify-center pointer-events-none"
           style={{
-            background: `radial-gradient(ellipse 70% 70% at 50% 50%, ${c.bgDeep}f2 0%, ${c.bgDeep}d9 55%, ${c.bgDeep}b3 100%)`,
+            // Flat near-opaque scrim + blur, NOT a radial gradient (2026-08-25
+            // design critique): the gradient left the middle of the stage only
+            // ~5% darkened, so the question headline underneath stayed fully
+            // readable and collided with the ceremony — two live visual states
+            // fighting. Blur is the right tool for masking one state under
+            // another (emil-design-eng); the flat fill makes the darkening even
+            // across the whole stage instead of brightening toward the corners.
+            background: `${c.bgDeep}f5`,
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
           }}
         >
-          {/* Label — sits still for the whole ceremony so the swapping number
-              below is the only thing moving. */}
+          {/* Label — pinned near the top rather than stacked against the number,
+              so it never lands on the question headline's own center band
+              (2026-08-25 design critique). Sits still for the whole ceremony so
+              the swapping number below is the only thing moving. */}
           <motion.p
             initial={{ opacity: 0, y: reduce ? 0 : -12 }}
             animate={{ opacity: 0.8, y: 0 }}
             transition={{ duration: 0.3, ease: EASE_OUT }}
             style={{
+              position: 'absolute',
+              top: '18%',
+              left: 0,
+              right: 0,
+              textAlign: 'center',
               fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
               color: c.textMuted,
               fontSize: 'clamp(1rem, 3vmin, 2.2rem)',
@@ -126,11 +173,12 @@ export default function LockCountdownOverlay({ startedAt, onComplete }) {
                 fontSize: 'clamp(7rem, 34vmin, 24rem)',
                 lineHeight: 1,
                 fontVariantNumeric: 'tabular-nums',
-                textShadow: `0 0 6vmin ${c.highlight}66`,
+                textShadow: isLock ? 'none' : `0 0 6vmin ${c.highlight}66`,
+                filter: isLock ? `drop-shadow(0 0 3vmin ${c.highlight}66)` : 'none',
                 willChange: 'transform, opacity',
               }}
             >
-              {isLock ? '🔒' : frame}
+              {isLock ? <LockMark /> : frame}
             </motion.div>
           </AnimatePresence>
         </motion.div>
