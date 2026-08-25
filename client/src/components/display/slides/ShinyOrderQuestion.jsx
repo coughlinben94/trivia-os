@@ -22,7 +22,7 @@ export default function ShinyOrderQuestion({ slide, show, theme }) {
   const revealed = !!data.orderRevealed
   const reduce = useReducedMotion()
 
-  const shuffled = seededShuffle(items, slide.id ?? 'preview')
+  const shuffled = seededShuffle(items, slide.id ?? 'preview', correctOrder)
   // correctOrder is the answer key (item ids in the right sequence); fall
   // back to items as-authored if it's missing/malformed so a bad slide
   // still renders something instead of an empty reveal row.
@@ -44,7 +44,11 @@ export default function ShinyOrderQuestion({ slide, show, theme }) {
   // ("a submitted-count (ShinyMatchingQuestion.jsx)") but never actually
   // wired up until now.
   useEffect(() => {
-    if (revealed) return
+    // Stops on `locked`, not just `revealed` — the live count is only ever
+    // rendered pre-lock (the locked branch below swaps it for "Locked —
+    // scoring…"), so polling past that point just burns a request every 2s
+    // for a number nothing displays (2026-08-25 review finding).
+    if (locked || revealed) return
     let cancelled = false
     async function load() {
       const { data: count } = await supabase.rpc('phone_answers_count', { p_slide_id: slide.id })
@@ -53,7 +57,7 @@ export default function ShinyOrderQuestion({ slide, show, theme }) {
     load()
     const interval = setInterval(load, 2000)
     return () => { cancelled = true; clearInterval(interval) }
-  }, [slide.id, revealed])
+  }, [slide.id, locked, revealed])
 
   useEffect(() => {
     if (!show?.id || revealed) return
@@ -141,19 +145,25 @@ function OrderRow({ items, theme, revealed }) {
             border: revealed ? `2px solid ${SHINY_GOLD}88` : '1px solid rgba(255,255,255,0.12)',
           }}>
             <img src={item.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-            <span style={{
-              position: 'absolute', top: -8, left: -8, zIndex: 2,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: '1.8rem', height: '1.8rem', borderRadius: '50%',
-              background: revealed ? SHINY_GOLD : 'rgba(0,0,0,0.6)',
-              color: revealed ? '#1a1a1a' : theme.colors.text,
-              fontSize: '1rem', fontWeight: 700,
-              boxShadow: revealed ? `0 2px 8px rgba(0,0,0,0.4)` : 'none',
-              textShadow: revealed ? 'none' : `0 0 10px ${SHINY_GOLD_GLOW}55`,
-            }}>
-              {revealed ? i + 1 : String.fromCharCode(65 + i)}
-            </span>
           </div>
+          {/* Badge lives on the OUTER wrapper (no overflow:hidden), not the
+              rounded/clipped inner frame above — sitting it inside that inner
+              div at top:-8/left:-8 clipped the badge under its own rounded
+              corner (2026-08-25 review finding; more visible here than on
+              Matching's equivalent since Order shows this badge on every tile
+              in both beats, not only on reveal). */}
+          <span style={{
+            position: 'absolute', top: -8, left: -8, zIndex: 2,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: '1.8rem', height: '1.8rem', borderRadius: '50%',
+            background: revealed ? SHINY_GOLD : 'rgba(0,0,0,0.6)',
+            color: revealed ? '#1a1a1a' : theme.colors.text,
+            fontSize: '1rem', fontWeight: 700,
+            boxShadow: revealed ? `0 2px 8px rgba(0,0,0,0.4)` : 'none',
+            textShadow: revealed ? 'none' : `0 0 10px ${SHINY_GOLD_GLOW}55`,
+          }}>
+            {revealed ? i + 1 : String.fromCharCode(65 + i)}
+          </span>
         </div>
       ))}
     </div>

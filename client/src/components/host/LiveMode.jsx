@@ -8,7 +8,7 @@ import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
 import { supabase } from '../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
 import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
-import { computeOrderScoreUpdates } from '../../lib/orderScoring.js'
+import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 import { isAutoRollPart, TEAM_PICKER_HOLD_MS } from '../../lib/slideStepping.js'
 
@@ -438,7 +438,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       const updates = computeOrderScoreUpdates({
         answers, teams, scoreboardTeams,
         roundKey: roundKeyFor(show, slide),
-        points: slide.data.pointsForOrder ?? 10,
+        points: slide.data.pointsForOrder ?? DEFAULT_ORDER_POINTS,
         correctOrder: slide.data.correctOrder ?? [],
         slideId: slide.id,
       })

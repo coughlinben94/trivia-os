@@ -32,6 +32,15 @@ describe('scoreOrderSubmission', () => {
     expect(scoreOrderSubmission(answer, correctOrder, 10)).toBe(0)
   })
 
+  it('scores zero when correctOrder is empty, even against an empty answer', () => {
+    // An empty answer key can never be "correct" — without an explicit
+    // guard, [].every(...) on two empty arrays is vacuously true and would
+    // score full points for a question that never got an answer key set
+    // (2026-08-25 review finding).
+    expect(scoreOrderSubmission([], [], 10)).toBe(0)
+    expect(scoreOrderSubmission(['p1'], [], 10)).toBe(0)
+  })
+
   it('scores zero for a null answer', () => {
     expect(scoreOrderSubmission(null, ['p1', 'p2'], 10)).toBe(0)
   })
@@ -75,15 +84,25 @@ describe('seededShuffle', () => {
     expect(a).not.toEqual(b)
   })
 
-  it('does not return the identity order for n >= 3', () => {
-    // A fixed point (item in its matched slot) pre-reveals that pair
-    // and breaks animation on the TV, so for n >= 3 it re-rolls.
-    const twoOrMore = [{ id: 'p0' }, { id: 'p1' }, { id: 'p2' }]
+  it('never returns the exact correctOrder for n >= 3', () => {
+    // Order's giveaway isn't a single fixed point (that's Matching's
+    // concern) — it's the WHOLE shuffled row already matching the answer
+    // key, which would show teams the answer before they tap anything.
+    const threeItems = [{ id: 'p0' }, { id: 'p1' }, { id: 'p2' }]
+    const correctOrder = ['p0', 'p1', 'p2']
     for (let i = 0; i < 50; i++) {
-      const shuffled = seededShuffle(twoOrMore, `seed_${i}`)
-      const isIdentity = shuffled.every((item, idx) => item === twoOrMore[idx])
-      expect(isIdentity).toBe(false)
+      const shuffled = seededShuffle(threeItems, `seed_${i}`, correctOrder)
+      const matchesAnswer = shuffled.every((item, idx) => item.id === correctOrder[idx])
+      expect(matchesAnswer).toBe(false)
     }
+  })
+
+  it('skips the re-roll check when no correctOrder is given (e.g. a preview row before an answer key exists)', () => {
+    const threeItems = [{ id: 'p0' }, { id: 'p1' }, { id: 'p2' }]
+    // No assertion beyond "doesn't throw and still returns a full permutation"
+    // — without an answer key there's nothing to avoid giving away.
+    const shuffled = seededShuffle(threeItems, 'seed_x')
+    expect(shuffled.map(i => i.id).sort()).toEqual(['p0', 'p1', 'p2'])
   })
 
   it('does not mutate the input array', () => {

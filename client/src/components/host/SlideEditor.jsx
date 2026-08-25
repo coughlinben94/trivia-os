@@ -11,6 +11,7 @@ import SlideCanvasEditor from './SlideCanvasEditor.jsx'
 import MatchingBoard from '../join/MatchingBoard.jsx'
 import WagerBoard from '../join/WagerBoard.jsx'
 import OrderBoard from '../join/OrderBoard.jsx'
+import { DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { overflowsBox, QUESTION_BOX } from '../../lib/autoFitText.js'
@@ -429,6 +430,23 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
   // (if provisional) position instead of no position at all.
   const orderItems = data.items ?? [{ id: 'o0', url: '' }, { id: 'o1', url: '' }]
   const orderCorrectOrder = data.correctOrder ?? orderItems.map(i => i.id)
+
+  // Persists correctOrder into `data` the moment real items exist, instead of
+  // only ever computing it as the local `orderCorrectOrder` fallback above —
+  // that fallback never reaches `data` on its own. Without this, a host who
+  // uploads images and never touches the position dropdowns (the default
+  // as-uploaded order IS already a valid answer key) ships a slide with no
+  // correctOrder at all; LiveMode then reads slide.data.correctOrder ?? [],
+  // and scoreOrderSubmission's empty-key guard scores every team 0 (2026-08-25
+  // review finding). Runs only while correctOrder is still absent — once set,
+  // OrderBuilder's own writes (addItem/removeItem/setPosition) own it.
+  useEffect(() => {
+    if (schema.type !== 'order') return
+    if (data.correctOrder != null) return
+    if (!data.items || data.items.length === 0) return
+    onBatchChange({ correctOrder: data.items.map(i => i.id) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schema.type, data.correctOrder, data.items])
 
   // Per-slot "Upload file" vs "YouTube URL" toggle for audio slots — not
   // persisted to `data`, just derived once from whatever's already there
@@ -860,10 +878,11 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
               <OrderBuilder
                 items={orderItems}
                 correctOrder={orderCorrectOrder}
-                pointsForOrder={data.pointsForOrder ?? 10}
+                pointsForOrder={data.pointsForOrder ?? DEFAULT_ORDER_POINTS}
                 onChangeItems={items => onChange('items', items)}
                 onChangeCorrectOrder={order => onChange('correctOrder', order)}
                 onChangePoints={pts => onChange('pointsForOrder', pts)}
+                onBatchChange={onBatchChange}
                 onMediaUpload={async file => { const r = await uploadMedia(file); return r?.url }}
               />
               <div className="flex flex-col gap-2">
@@ -1322,16 +1341,25 @@ function MatchingBuilder({ pairs, pointsPerMatch, onChangePairs, onChangePoints,
 // Mirrors MatchingBuilder's shape (upload-per-item + a small numeric field),
 // substituting a "correct position" dropdown for Matching's plain text
 // inputs — Order has no left/right text sides, just images and a sequence.
-function OrderBuilder({ items, correctOrder, pointsForOrder, onChangeItems, onChangeCorrectOrder, onChangePoints, onMediaUpload }) {
+function OrderBuilder({ items, correctOrder, pointsForOrder, onChangeItems, onChangeCorrectOrder, onChangePoints, onBatchChange, onMediaUpload }) {
+  // addItem/removeItem touch BOTH items and correctOrder together — must be
+  // ONE onBatchChange call, not two separate onChangeItems/onChangeCorrectOrder
+  // calls. SlideEditor's change(key, value) closes over the render's `data`
+  // and does `{ ...data, [key]: value }`; two synchronous calls in the same
+  // tick both read the SAME stale `data`, so the second call's spread silently
+  // discards the first call's write. Found live 2026-08-25: "+ Add item"
+  // added nothing visible (while corrupting correctOrder with a phantom id),
+  // and removing an item desynced items/correctOrder so every team scored 0.
   function addItem() {
     const id = `o${Date.now()}_${items.length}`
-    onChangeItems([...items, { id, url: '' }])
-    onChangeCorrectOrder([...correctOrder, id])
+    onBatchChange({ items: [...items, { id, url: '' }], correctOrder: [...correctOrder, id] })
   }
   function removeItem(i) {
     const removed = items[i]
-    onChangeItems(items.filter((_, idx) => idx !== i))
-    onChangeCorrectOrder(correctOrder.filter(id => id !== removed.id))
+    onBatchChange({
+      items: items.filter((_, idx) => idx !== i),
+      correctOrder: correctOrder.filter(id => id !== removed.id),
+    })
   }
   async function uploadImage(i, file) {
     if (!file) return

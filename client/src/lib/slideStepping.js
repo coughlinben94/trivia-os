@@ -21,7 +21,7 @@
 // Callers own the write + their own local-state update; nothing here
 // touches the network or React.
 
-import { isShinySeriesSibling, isMatchingShiny, isWagerShiny } from './shinySeries.js'
+import { isShinySeriesSibling, isMatchingShiny, isWagerShiny, isOrderShiny } from './shinySeries.js'
 
 // Kill switch for the closing-beat branch in computeNextStep() below. Kept
 // (rather than inlined away) purely as a same-night escape hatch: flipping
@@ -67,12 +67,12 @@ export function withEntryState(slides, slide, { currentPart, introDone } = {}) {
     patch.currentPart = currentPart
   }
   // Same guard as the Prev-key handler below: never regress introDone to
-  // false on a wager/matching slide that's already locked — jumping away
+  // false on a wager/matching/order slide that's already locked — jumping away
   // from an in-progress locked question and back to it (Go Live's "jump
   // to a slide" picker, reachable after exiting Live Mode) would otherwise
   // blank every phone back to the teaser screen with no way to submit.
   const wouldRegressLockedQuestion = introDone === false &&
-    (slide.data?.wagerTiersLocked || slide.data?.wagerGuessesLocked || slide.data?.matchingLocked)
+    (slide.data?.wagerTiersLocked || slide.data?.wagerGuessesLocked || slide.data?.matchingLocked || slide.data?.orderLocked)
   if (introDone !== undefined && slide.data?.isShiny) {
     if (!wouldRegressLockedQuestion && !!slide.data.introDone !== introDone) {
       patch.introDone = introDone
@@ -313,8 +313,8 @@ export async function computeNextStep(show, fetchTeamCount) {
   // this used to cover). "Done" varies by type:
   //   - multi-part series: the LAST part (isMultiPart, handled above —
   //     any earlier part returns before reaching here)
-  //   - matching / wager: once fully scored (matchingRevealed /
-  //     wagerRevealed) — NOT merely locked, and NOT merely guesses-locked.
+  //   - matching / wager / order: once fully scored (matchingRevealed /
+  //     wagerRevealed / orderRevealed) — NOT merely locked, and NOT merely guesses-locked.
   //     Both have a locked-but-still-scoring window (matching's "Retry
   //     Scoring" state, wager's guesses-locked-but-not-yet-revealed state,
   //     LiveMode.jsx's own Reveal control gates on this exact flag) that
@@ -328,7 +328,8 @@ export async function computeNextStep(show, fetchTeamCount) {
   //     no parts, not lockable): done the moment its content has been
   //     shown at all, i.e. as soon as introDone is true.
   const isPending = (isMatchingShiny(data) && data.matchingLocked && !data.matchingRevealed) ||
-                     (isWagerShiny(data) && data.wagerTiersLocked && !data.wagerRevealed)
+                     (isWagerShiny(data) && data.wagerTiersLocked && !data.wagerRevealed) ||
+                     (isOrderShiny(data) && data.orderLocked && !data.orderRevealed)
   // Disabled 2026-08-19 (Ben, day after this shipped: "shiny intros were
   // shown after the question as well") — SlideRenderer couldn't distinguish
   // "never shown" from "closing beat" (both read as introDone:false), so
@@ -418,9 +419,9 @@ export async function computePrevStep(show, fetchTeamCount) {
   }
 
   // Back to the intro beat before moving to the previous slide — but NOT
-  // for a wager/matching slide that's already locked. Regressing introDone
+  // for a wager/matching/order slide that's already locked. Regressing introDone
   // there blanks every phone back to "Next question incoming…" (Join.jsx
-  // gates the WagerBoard/MatchingBoard mount on introDone, so the board
+  // gates the WagerBoard/MatchingBoard/OrderBoard mount on introDone, so the board
   // unmounts entirely) with no data loss but no way to submit until the
   // host presses Next again — and Prev is one keystroke/Stream Deck press
   // away, the single most likely accidental trigger of this regression.
@@ -432,7 +433,7 @@ export async function computePrevStep(show, fetchTeamCount) {
   // and it took a SECOND Prev to actually move back a slide.
   const prevInOrder = sorted[cur - 1]
   const isAutoSkippedSibling = prevInOrder && isShinySeriesSibling(prevInOrder, curSlide)
-  if (data?.isShiny && data.introDone && !isAutoSkippedSibling && !(data.wagerTiersLocked || data.wagerGuessesLocked || data.matchingLocked)) {
+  if (data?.isShiny && data.introDone && !isAutoSkippedSibling && !(data.wagerTiersLocked || data.wagerGuessesLocked || data.matchingLocked || data.orderLocked)) {
     return { slides: patchSlideData(slides, curSlide.id, { introDone: false }), answer_reveal: false }
   }
 

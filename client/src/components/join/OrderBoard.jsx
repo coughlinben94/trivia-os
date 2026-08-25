@@ -26,7 +26,12 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
   const [answer, setAnswer] = useState([])
   const [committedAnswer, setCommittedAnswer] = useState([])
 
-  const shuffled = seededShuffle(items, slide.id ?? 'preview')
+  // Passing correctOrder so the phone's shuffle re-roll decision matches
+  // the display's exactly — same items + same seed + same correctOrder is
+  // required for both to land on the identical visual order (see
+  // orderScoring.js's seededShuffle comment for why the re-roll depends on
+  // correctOrder).
+  const shuffled = seededShuffle(items, slide.id ?? 'preview', data.correctOrder)
   const itemsKey = items.map(i => i.id).join(',')
 
   // Preview-only: if the host edits items (adds/removes one) while the live
@@ -124,12 +129,13 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 480, width: '100%', margin: '0 auto' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'center' }}>
-        {shuffled.map(item => {
+        {shuffled.map((item, i) => {
           const position = answer.indexOf(item.id)
           return (
             <OrderTile
               key={item.id}
               image={item.url}
+              label={String.fromCharCode(65 + i)}
               number={position >= 0 ? position + 1 : null}
               disabled={locked || position >= 0}
               onTap={() => tapItem(item.id)}
@@ -180,7 +186,14 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
 
 // Order's items are always images (see the plan's data shape) — one tile
 // shape only, unlike MatchTile's image/text branch.
-function OrderTile({ image, number, disabled, onTap, textColor, highlight }) {
+//
+// Always carries the A/B/C… letter badge (same spot ShinyOrderQuestion.jsx
+// stamps on the TV — String.fromCharCode(65 + i)) so the room can talk about
+// "B" out loud; once tapped, the badge swaps to the position number, mirroring
+// ShinyOrderQuestion's own letter-then-number swap between its unrevealed and
+// revealed beats (2026-08-25 review finding — this board used to show no
+// letter at all, only a number after tapping).
+function OrderTile({ image, label, number, disabled, onTap, textColor, highlight }) {
   return (
     <button
       onClick={onTap}
@@ -197,18 +210,18 @@ function OrderTile({ image, number, disabled, onTap, textColor, highlight }) {
         WebkitTapHighlightColor: 'transparent',
       }}
     >
-      <img src={image} alt="" style={{ maxWidth: '100%', maxHeight: 84, objectFit: 'contain' }} />
-      {number != null && (
-        <span style={{
-          position: 'absolute', top: -8, left: -8,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: '1.8rem', height: '1.8rem', borderRadius: '50%',
-          background: highlight, color: '#1a1a1a', fontSize: '1rem', fontWeight: 700,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-        }}>
-          {number}
-        </span>
-      )}
+      <img src={image} alt={label} style={{ maxWidth: '100%', maxHeight: 84, objectFit: 'contain' }} />
+      <span style={{
+        position: 'absolute', top: -8, left: -8,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: '1.8rem', height: '1.8rem', borderRadius: '50%',
+        background: number != null ? highlight : 'rgba(0,0,0,0.6)',
+        color: number != null ? '#1a1a1a' : textColor,
+        fontSize: '1rem', fontWeight: 700,
+        boxShadow: number != null ? '0 2px 8px rgba(0,0,0,0.4)' : 'none',
+      }}>
+        {number != null ? number : label}
+      </span>
     </button>
   )
 }
