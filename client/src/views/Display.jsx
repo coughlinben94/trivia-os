@@ -256,13 +256,20 @@ function DisplayPinPrompt({ onVerified, onDismiss }) {
 // to false, re-counting it) — a second, spurious turn() on a slide the show
 // never actually left. Ben: "coming out of not so different... there was a
 // ring move. shouldnt be diff from the original intro." Station-visibility
-// has to be a stable, TYPE-only fact for the whole lifetime of a slide, so a
-// shiny question/grid/venn — like team-picker — never moves the ring no
-// matter how many times its own introDone toggles internally; the ring only
-// advances once you actually leave to a real ring-visible slide.
+// has to be a stable, TYPE-only fact for the whole lifetime of a slide — but
+// that means COUNTING it once (like any other question), not excluding it
+// entirely. 2026-08-24's fix over-corrected into the latter: shiny questions
+// stopped moving the ring AT ALL (not even the one entry turn every other
+// slide gets), which is a live-show regression flagged 2026-08-25 (Ben, live,
+// on this exact Q2 -> "We're not so different, you and I" transition: "ring
+// world change... is non existent"). Fixed by counting shiny questions the
+// same as plain ones — the type-only-ness (no introDone in the formula) is
+// what actually prevents the jitter; excluding shiny outright was never
+// required for that, it just also happened to remove the ring move Ben
+// wanted to keep.
 const isRingVisible = s =>
   s?.type === 'team-preview' || s?.type === 'grading-break' ||
-  (s?.type === 'question' && !s?.data?.isShiny) ||
+  s?.type === 'question' ||
   s?.type === 'pre-show' || s?.type === 'round-intro' || s?.type === 'swing-round-intro'
 
 function PersistentRing({ slideIndex, stationOverride, showStationDebug }) {
