@@ -174,6 +174,23 @@ describe('computeOrderScoreUpdates', () => {
     ).toEqual([])
   })
 
+  it('skips a team that never submitted (no phone_answers row)', () => {
+    // A team exists in both teams and scoreboardTeams but has no entry in
+    // answers — they never submitted. Should produce no update entry.
+    const answers = [] // team_1 never answered
+    expect(
+      computeOrderScoreUpdates({
+        answers,
+        teams,
+        scoreboardTeams,
+        roundKey: 'r_1',
+        points: 20,
+        correctOrder,
+        slideId: 'slide_order',
+      })
+    ).toEqual([])
+  })
+
   it('preserves other rounds already on the scoreboard row', () => {
     const sbWithOtherRound = [{ ...scoreboardTeams[0], scores: { r_0: 10, r_1: { written: 5, phone: 0 } } }]
     const answers = [{ team_id: 'team_1', answer: ['img1', 'img2', 'img3'] }]

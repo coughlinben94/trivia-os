@@ -7,6 +7,7 @@ import { normalizeRoundScore } from './scoreboardMath.js'
 
 export function scoreOrderSubmission(answer, correctOrder, points) {
   if (!Array.isArray(answer)) return 0
+  if (!Array.isArray(correctOrder)) return 0
   if (answer.length !== correctOrder.length) return 0
   if (answer.every((id, i) => id === correctOrder[i])) return Number(points) || 0
   return 0
