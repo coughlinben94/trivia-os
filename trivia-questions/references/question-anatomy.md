@@ -36,6 +36,19 @@ The signature. Two (or more) independent routes to one answer, usually crossing 
 > Louisiana is the only state in the country that uses what term instead of county for judicial districts? You can ask the home run leader and everyday battery mate from the 1984 Tigers; he may be from there… → **Parish** (Lance Parrish)
 *(The witness IS the pun. This is a beloved move — the bridge clue works only when said aloud.)*
 
+**Combinatorial wordplay bridge** — the route is a literal instruction to alter or combine words, not a "shares a name with" fact:
+> "If you were to take the last name of the sidekick in Dragnet, and add the name of a straight-to-DVD movie character…" → **Ganondorf**
+> "If you were to flip some letters around in the name of the oldest Michigan beer brand…" → **Shorts**
+
+**Etymology-meaning bridge** — the route is what the answer's own name literally translates to, not a shared name:
+> "…the last name of the most-thanked person means 'watchmaker' in German." → **Spielberg**
+
+**Lyric-scenario direct address** — a recurring standalone construction, not just a swing-round device ("Music Bingo Precursor" is this same trick scaled to a round): *"If you're [artist], and you're [inside a specific lyric detail], [question]?"* — e.g. "If you're Chad Kroeger staring at a photograph, where did you spend all the money you made at your job?" → **Arcade**. Found independently in every partition of the bank (~20+ instances total) — common enough to be a named device, not an occasional flourish. Fuses setup and pivot into one sentence.
+
+**The hook-as-bridge pattern, named explicitly:** the Operation Paper Clip example above (hook = Clippy, which IS the second route) isn't a one-off — it recurs constantly (e.g. a Sublime lyric hook that is itself the bridge to "Bazooka," no separate bridge sentence anywhere else in the question). When drafting, a strong hook can BE the second clue instead of needing its own — don't force a redundant bridge sentence if the hook already does the job.
+
+*(Corpus check, 2026-08-25, full bank n=1,553 standalone rows: at least 132 rows carry an explicit, formulaic bridge phrase like the ones above — a floor, not a ceiling, since most bridges aren't formulaic-phrased at all and weren't systematically countable at manual-read scale. Treat "extremely common" above as still true, just mostly delivered without a stock connector phrase.)*
+
 ## 2. Hook Taxonomy (cold opens)
 
 Hooks precede the question, unattributed, unexplained. Four species:
@@ -55,17 +68,20 @@ Hooks precede the question, unattributed, unexplained. Four species:
 
 **D. The venue/topical open** — "There is a great disturbance here at Baynes trivia… last week the acting world lost…" / "With JV being back, we must start with a baseball question…" — grounds the show in the room and the week.
 
-Ratio guidance: roughly 40% of standalone questions carry a hook; within a round, vary the species. Never two type-A hooks back to back.
+**E. The stacked-name-fragment guessing bit** — a cold-open run of bare proper nouns ending in "?"/"???" with no verb, daring the room to guess the connection before the question even starts: "Daltrey? Goodell? Bannister???" / "Steve? Andy? Mick?" / "Stanley, Phyllis, Jim, Ted…"
+
+**Corpus check, 2026-08-25, full bank n=1,553 standalone rows:** hooks appear on **≈10% of questions (154/1,553)**, not ~40% — the earlier estimate was drawn from an unrepresentative sample. Rate is also NOT flat over time: the earliest third of the bank runs ~18.5% hooks, the most recent third ~3%. Hooks have faded as the show matured, likely alongside a shift toward denser topical/recency openers (type D) — flag for Ben's call on whether that's a drift worth reversing or a natural evolution. Within a round, vary the species; never two type-A hooks back to back.
 
 ## 3. Trailing Wink Taxonomy
 
 The ellipsis-tailed aside AFTER the question mark. Three species:
 
-**A. The extra sideways clue:** "Don't go too fast, though, we wouldn't want you to turn to plaid…" (Spaceballs → **Ludicrous** speed). "No wonder they're so happy…" (→ **Finnish**/finish, happiest country).
+**A. The extra sideways clue:** "Don't go too fast, though, we wouldn't want you to turn to plaid…" (Spaceballs → **Ludicrous** speed). "No wonder they're so happy…" (→ **Finnish**/finish, happiest country). Includes an implicit-bridge variant that opens "No word on if…" before delivering the sideways clue.
 **B. The local/personal tag:** "…he has two locations in Saginaw, two in Bay City, and one in Midland… PTTTTNNNNNNGGGGG!" (Wild Bill Hickok → Wild Bill's stores + the door chime onomatopoeia).
 **C. The editorial mutter:** "…for the record, I think the nickname Spike would be more appropriate." / "…that honestly, put me to sleep." Pure personality, no clue.
+**D. The quoted wink** — the trailing aside is a verbatim quote from the answer's own property, not a paraphrase: "'That's how I roll'!" placed after the question mark rather than as a lead hook.
 
-Winks appear on maybe a third of questions. A question with hook + lattice + wink is fully loaded — usually reserve full loading for openers and crowd-pleasers.
+**Corpus check, 2026-08-25, full bank n=1,553 standalone rows:** winks appear on **≈7% of questions (108/1,553)** by the strict ellipsis-terminated-aside definition above, not "a third" — the earlier estimate was too high. A question with hook + lattice + wink is fully loaded — usually reserve full loading for openers and crowd-pleasers.
 
 ## 4. Pivot Phrasing Patterns
 
