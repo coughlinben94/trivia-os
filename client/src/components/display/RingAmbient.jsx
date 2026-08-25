@@ -355,14 +355,23 @@ function buildLayerContent(engine, world, arc, host, L) {
         const glowEl2 = head.querySelector('[class*="d-glow"]')
         if (glowEl2) {
           const FEATHER = 24
+          // 2026-08-24: drawPlanetDisc now sets its own mask on this same
+          // element (the dark-side glow falloff — see its glowMask comment).
+          // Assigning here used to OVERWRITE it, silently restoring the
+          // full-wrap corona this station was flagged for. Stack instead:
+          // multi-layer mask + intersect composite multiplies the two.
+          const stackMask = (m) => {
+            const prev = glowEl2.style.maskImage
+            const combined = prev ? `${prev}, ${m}` : m
+            glowEl2.style.maskImage = combined; glowEl2.style.webkitMaskImage = combined
+            if (prev) { glowEl2.style.maskComposite = 'intersect'; glowEl2.style.webkitMaskComposite = 'source-in' }
+          }
           if (headlineCornerLeft && glowLeft < x0) {
             const b = x0 - glowLeft
-            const m = `linear-gradient(to right, transparent ${b.toFixed(0)}px, black ${(b + FEATHER).toFixed(0)}px)`
-            glowEl2.style.maskImage = m; glowEl2.style.webkitMaskImage = m
+            stackMask(`linear-gradient(to right, transparent ${b.toFixed(0)}px, black ${(b + FEATHER).toFixed(0)}px)`)
           } else if (!headlineCornerLeft && glowLeft + glowW > x0 + ENGINE.W) {
             const b = (x0 + ENGINE.W) - glowLeft
-            const m = `linear-gradient(to right, black ${(b - FEATHER).toFixed(0)}px, transparent ${b.toFixed(0)}px)`
-            glowEl2.style.maskImage = m; glowEl2.style.webkitMaskImage = m
+            stackMask(`linear-gradient(to right, black ${(b - FEATHER).toFixed(0)}px, transparent ${b.toFixed(0)}px)`)
           }
         }
       }

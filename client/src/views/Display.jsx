@@ -50,7 +50,13 @@ import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
 // mid-show". Boxing one copy and not the other was the drift. The paired
 // change is PreShowSlide's Ben photo, 45cqh -> 38cqh, since the container it
 // measures against just grew from 85% of the viewport to all of it.
-const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker', 'question', 'team-preview', 'grading-break', 'pre-show'])
+// scoreboard-reveal added 2026-08-24 (Ben: "leaderboard slide seems to be not
+// on the ring world either, the 85% problem again") — same boxed-with-ring-
+// bleeding-through gap as the others above, just missed when this set was
+// first built 2026-08-19. Its own root already paints a full w-full/h-full
+// theme.colors.bg backdrop (ScoreboardRevealSlide.jsx), so it just needed the
+// same scale=1 StageFrame treatment to reach the true screen edges.
+const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker', 'question', 'team-preview', 'grading-break', 'pre-show', 'scoreboard-reveal'])
 
 // ─── No-show holding screen (before any show goes live) ────────────────────
 

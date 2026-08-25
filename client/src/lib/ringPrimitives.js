@@ -2604,6 +2604,19 @@ function drawPlanetDisc(el, container, size, hue, fill, lightDeg) {
   glow.style.background = `radial-gradient(circle closest-side, transparent 0%, transparent ${glowInnerPct}%, ${glowHalf} ${(Number(glowInnerPct) + 3).toFixed(1)}%, ${glowPeak} ${peakPct.toFixed(1)}%,
     ${hsla(hue + 10, 52, 60, A(0.22, fill))} ${q1Pct.toFixed(1)}%,
     ${hsla(hue + 10, 48, 50, A(0.08, fill))} ${q2Pct.toFixed(1)}%, transparent ${outerPct.toFixed(0)}%)`
+  // 2026-08-24 (same Opus-5 critique as the terminator change below): the
+  // glow ring encircled the ENTIRE silhouette — a corona wrapping a
+  // near-black ball is the single strongest eclipse cue there is. A real
+  // lit body's atmosphere reads on the lit limb and dies off around the
+  // dark one. Linear-gradient alpha mask along the light axis: full
+  // strength across the lit limb through center (the peak ring's lit-side
+  // position/value — the number the ablation gate's fill->E() relationship
+  // depends on — is untouched), decaying to a whisper (0.18) on the dark
+  // limb so the silhouette doesn't vanish against the sky entirely.
+  // Same inline-mask idiom as `pulsar`'s beam and RingAmbient's glow masks.
+  const maskDeg = (Math.atan2(-Lx, Ly) * 180 / Math.PI).toFixed(1)
+  const glowMask = `linear-gradient(${maskDeg}deg, black 0%, black 44%, rgba(0,0,0,0.45) 60%, rgba(0,0,0,0.10) 78%, rgba(0,0,0,0.10) 100%)`
+  glow.style.maskImage = glowMask; glow.style.webkitMaskImage = glowMask
   container.appendChild(glow)
 
   const NS = 'http://www.w3.org/2000/svg'
@@ -2670,11 +2683,47 @@ function drawPlanetDisc(el, container, size, hue, fill, lightDeg) {
   // offset-circle technique) — computed from LIGHT_DEG, not a hand-picked
   // coordinate. Same near-black tone the old flat disc used, so total light
   // output stays low enough to still occlude.
-  const shadowOff = R * 0.55, shadowR = R * 1.13
+  // 2026-08-24 (Ben: lit crescent reads as "clipped" on st4 — confirmed on a
+  // live question slide, not just a transition frame): the shadow circle was
+  // a flat hard-edged fill with no feather, so wherever its boundary crosses
+  // the visible disc it overwrites `lit`'s own smooth radial falloff with an
+  // abrupt straight-looking cut instead of a gradual terminator — worse at
+  // light angles where that boundary runs closer to vertical (st4's case).
+  // A small SVG blur on just this circle (not the whole svg, which would
+  // also soften the crisp rim/silhouette) feathers the seam into `lit`'s
+  // gradient without touching occlusion: g's clip-path still hard-crops the
+  // outer disc edge to R, and the blurred shadow's near-black core still
+  // covers the same interior alpha=~1 area, just with a soft edge instead of
+  // a hard one.
+  const termBlurId = `occTermBlur${occCounter}`
+  const termFilter = document.createElementNS(NS, 'filter')
+  termFilter.setAttribute('id', termBlurId)
+  termFilter.setAttribute('x', '-20%'); termFilter.setAttribute('y', '-20%')
+  termFilter.setAttribute('width', '140%'); termFilter.setAttribute('height', '140%')
+  const termBlur = document.createElementNS(NS, 'feGaussianBlur')
+  termBlur.setAttribute('stdDeviation', (R * 0.05).toFixed(2))
+  termFilter.appendChild(termBlur)
+  defs.appendChild(termFilter)
+  // 2026-08-24, second pass on the same st4 complaint (Opus-5 critique after
+  // the blur: "still dominantly reads as an eclipse... the next lever is
+  // shadowOff/shadowR, not more blur"). Old values (off 0.55R, r 1.13R) put
+  // the terminator crossing at +0.58R toward the light — ~2/3 of the disc
+  // near-black with a thin bright sliver, which at headline size is the
+  // anatomy of an eclipse, not a phase. New values move the crossing to
+  // +0.33R (a fat crescent / near-quarter phase) and are not independent:
+  // shadowR = sqrt(1 + shadowOff^2) * R keeps the terminator's endpoints
+  // exactly on the disc's perpendicular diameter (the poles), which is where
+  // a real phase terminator always lands — the old pair happened to satisfy
+  // this too (1.13 ~ sqrt(1+0.55^2)), so the constraint is preserved, not
+  // invented. The larger circle also flattens the terminator's curvature:
+  // an occluding body carves a same-curvature bite (eclipse), a phase
+  // terminator is much flatter — flatness itself is a planet cue.
+  const shadowOff = R * 1.35, shadowR = R * 1.68
   const shC = { x: cx - Lx * shadowOff, y: cy - Ly * shadowOff }
   const shadow = document.createElementNS(NS, 'circle')
   shadow.setAttribute('cx', shC.x.toFixed(2)); shadow.setAttribute('cy', shC.y.toFixed(2)); shadow.setAttribute('r', shadowR.toFixed(2))
   shadow.setAttribute('fill', hsla(hue - 12, 22, 3, 0.99))
+  shadow.setAttribute('filter', `url(#${termBlurId})`)
   g.appendChild(shadow)
   // 2 surface bands (detail budget), arcs at decreasing radius centered on
   // the light angle so they always sit inside the lit crescent regardless
