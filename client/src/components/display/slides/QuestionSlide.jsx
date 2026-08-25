@@ -245,14 +245,14 @@ function ShinyVisualQuestion({ slide, theme }) {
     family: theme.fonts.body,
     floorPx: VISUAL_CAPTION_FLOOR * 16,
     ceilPx: VISUAL_CAPTION_CEIL * 16,
-    maxLines: 3, lineHeight: 1.15,
+    maxLines: 5, lineHeight: 1.15,
   })
   const captionBoxRef2 = useRef(null)
   const captionSize2 = useFitToBox(captionBoxRef2, part.text, {
     family: theme.fonts.body,
     floorPx: VISUAL_CAPTION_FLOOR * 16,
     ceilPx: VISUAL_CAPTION_CEIL * 16,
-    maxLines: 3, lineHeight: 1.15,
+    maxLines: 5, lineHeight: 1.15,
   })
 
   return (
