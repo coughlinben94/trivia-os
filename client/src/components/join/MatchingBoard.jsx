@@ -274,7 +274,44 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
 // text tile does (that would hide the image), so it gets a colored ring
 // border instead. Text tiles are completely unchanged from before.
 function MatchTile({ label, image, color, pending, disabled, onTap, textColor }) {
+  // A failed load used to leave silent blank space inside the tile — same
+  // fix as Join.jsx's QuestionImage, applied here since this is a separate
+  // <img> (2026-08-25, Ben: "couldn't see pictures at all").
+  const [imgFailed, setImgFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  // A host swapping this pair's image while the slide stays live must not
+  // leave a phone that already failed on the OLD image stuck failed —
+  // same reasoning as QuestionImage's src-keyed reset.
+  useEffect(() => { setImgFailed(false); setAttempt(0) }, [image])
   if (image) {
+    // Failed state swaps the WHOLE tile to a retry action instead of
+    // nesting a retry control inside the match-tap button — a nested
+    // clickable inside `onClick={onTap}` used to fire a match tap on any
+    // tap of the failure text, retry included, and had no retry at all.
+    if (imgFailed) {
+      return (
+        <button
+          onClick={() => { setImgFailed(false); setAttempt(a => a + 1) }}
+          style={{
+            minHeight: 96,
+            padding: 6,
+            borderRadius: 14,
+            border: pending ? `3px solid ${textColor}` : color ? `4px solid ${color}` : '1px solid rgba(255,255,255,0.15)',
+            background: 'rgba(255,255,255,0.04)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          {/* Matched tiles switch their label to dark text for contrast
+              against the bright match color, same as the text-tile branch
+              below (PALETTE comment above) — a pale label here would sit
+              on that bright color with bad contrast. */}
+          <span style={{ fontSize: '0.75rem', color: color ? '#1a1a1a' : `${textColor}99`, textAlign: 'center' }}>
+            🖼️ Picture didn&apos;t load — tap to retry
+          </span>
+        </button>
+      )
+    }
     return (
       <button
         onClick={onTap}
@@ -289,7 +326,13 @@ function MatchTile({ label, image, color, pending, disabled, onTap, textColor })
           WebkitTapHighlightColor: 'transparent',
         }}
       >
-        <img src={image} alt={label || ''} style={{ maxWidth: '100%', maxHeight: 84, objectFit: 'contain' }} />
+        <img
+          key={attempt}
+          src={attempt ? `${image}${image.includes('?') ? '&' : '?'}retry=${attempt}` : image}
+          alt={label || ''}
+          onError={() => setImgFailed(true)}
+          style={{ maxWidth: '100%', maxHeight: 84, objectFit: 'contain' }}
+        />
       </button>
     )
   }

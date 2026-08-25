@@ -179,12 +179,6 @@ textarea {
   to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
-@keyframes rotatePulse {
-  0%   { transform: rotate(0deg);  }
-  35%  { transform: rotate(90deg); }
-  65%  { transform: rotate(90deg); }
-  100% { transform: rotate(0deg);  }
-}
 @keyframes arrowSlide {
   0%, 100% { transform: translateX(0); opacity: 0.4; }
   50%       { transform: translateX(6px); opacity: 1; }

@@ -476,6 +476,48 @@ const OFF_PHONE_COPY = {
 }
 
 // ─── Slide content ────────────────────────────────────────────────────────────
+// A failed image load previously left silent blank space — indistinguishable
+// from "there's no picture on this question" — which is exactly what "we
+// couldn't see the pictures at all" looks like from a team's seat regardless
+// of whether the actual cause is a network hiccup or something else (2026-
+// 08-25, Ben). Now it fails visibly and offers a one-tap retry (cache-busted,
+// since a phone that cached an earlier failed/slow load might otherwise
+// retry the exact same broken request).
+function QuestionImage({ src, alt }) {
+  const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  // A host swapping this part's image while the slide stays live must not
+  // leave a phone that already failed on the OLD url stuck showing "didn't
+  // load" for a new url that would work fine — reset whenever src changes.
+  useEffect(() => { setFailed(false); setAttempt(0) }, [src])
+  if (failed) {
+    return (
+      <button
+        onClick={() => { setFailed(false); setAttempt(a => a + 1) }}
+        style={{
+          width: '100%', minHeight: 96, borderRadius: 10, border: '1px dashed rgba(255,255,255,0.25)',
+          background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.6)',
+          fontSize: '0.85rem', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.35rem',
+          padding: '1.25rem', WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        <span style={{ fontSize: '1.4rem' }} aria-hidden>🖼️</span>
+        Picture didn&apos;t load — tap to retry
+      </button>
+    )
+  }
+  return (
+    <img
+      key={attempt}
+      src={attempt ? `${src}${src.includes('?') ? '&' : '?'}retry=${attempt}` : src}
+      alt={alt}
+      onError={() => setFailed(true)}
+      style={{ width: '100%', borderRadius: 10, objectFit: 'cover', maxHeight: 220 }}
+    />
+  )
+}
+
 function SlideContent({ slide, show, theme, team, onInteractiveAnswered, overridePart }) {
   if (!slide) return null
   const text      = theme?.colors?.text      ?? '#ffffff'
@@ -511,14 +553,20 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered, overrid
             {part.text || <span style={{ opacity: 0.3, fontStyle: 'italic' }}>No question text</span>}
           </p>
 
-          {part.mediaUrl && part.mediaType?.startsWith('image/') && (
-            <img src={part.mediaUrl} alt="Question media"
-              style={{ width: '100%', borderRadius: 10, objectFit: 'cover', maxHeight: 220 }} />
-          )}
-          {part.mediaUrl && part.mediaType?.startsWith('audio/') && (
+          {part.mediaUrl && part.mediaType?.startsWith('audio/') ? (
             <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: '0.75rem 1rem', textAlign: 'center' }}>
               <p style={{ color: `${text}b3`, fontSize: '0.875rem', margin: 0 }}>🎵 Listen on the main screen</p>
             </div>
+          ) : part.mediaUrl && (
+            // No mediaType gate here — matches QuestionSlide.jsx (the TV
+            // renderer), which renders on url alone. A missing/legacy/
+            // malformed mediaType (e.g. the flat data.mediaUrl/mediaType
+            // shape shinySeries.js falls back to) used to render fine on
+            // the TV but mount NO <img> at all here, silently, which is a
+            // large chunk of Ben's original "can't see pictures" report —
+            // let QuestionImage's onError/retry handle a genuinely broken
+            // URL instead of pre-filtering on mime type.
+            <QuestionImage src={part.mediaUrl} alt="Question media" />
           )}
         </div>
       )
@@ -826,85 +874,6 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
   )
 }
 
-// ─── Landscape prompt ─────────────────────────────────────────────────────────
-function LandscapePrompt({ scoresOpen = false }) {
-  // Phone-width gate (< 600px) alongside the portrait check — a portrait
-  // iPad (e.g. 768x1024) is still "portrait" but is not a phone, and "turn
-  // your phone sideways" is the wrong prompt for a device that's perfectly
-  // readable in portrait.
-  const isPhoneSize = () => typeof window !== 'undefined' && window.innerHeight > window.innerWidth && window.innerWidth < 600
-  const [portrait, setPortrait] = useState(isPhoneSize)
-  const [dismissed, setDismissed] = useState(false)
-  const pref = useReducedMotion()
-
-  useEffect(() => {
-    function update() {
-      const isPortrait = isPhoneSize()
-      setPortrait(isPortrait)
-      if (!isPortrait) setDismissed(false)
-    }
-    window.addEventListener('resize', update)
-    window.addEventListener('orientationchange', update)
-    return () => {
-      window.removeEventListener('resize', update)
-      window.removeEventListener('orientationchange', update)
-    }
-  }, [])
-
-  return (
-    <AnimatePresence>
-      {portrait && !dismissed && !scoresOpen && (
-        <motion.div
-          initial={pref ? { opacity: 0 } : { y: '100%', opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={pref ? { opacity: 0 } : { y: '100%', opacity: 0 }}
-          transition={pref ? { duration: 0.2 } : { ease: EASE_PANEL, duration: 0.35 }}
-          style={{
-            // Sits above the bottom nav bar (its ~88px fixed height + safe
-            // area, see the BOTTOM BAR block below) instead of at bottom:0 —
-            // both are fixed to the same edge, so bottom:0 here fully
-            // covered the nav's Scores/powerup buttons while this was shown.
-            position: 'fixed', bottom: 'calc(5.75rem + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, zIndex: 600,
-            background: 'rgba(5,5,5,0.96)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
-            borderTop: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 20,
-            padding: 'clamp(1.25rem,4vw,1.75rem) 1.5rem',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-            <span style={{
-              fontSize: '2.5rem', display: 'block', lineHeight: 1,
-              animation: pref ? 'none' : 'rotatePulse 2s ease-in-out infinite',
-            }}>
-              📱
-            </span>
-            <div>
-              <p style={{ fontFamily: 'Boogaloo, sans-serif', fontSize: '1.2rem', color: '#fff', margin: 0, lineHeight: 1.2 }}>
-                Rotate for a better view
-              </p>
-              <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.82rem', margin: '0.25rem 0 0', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.4 }}>
-                Turn your phone sideways to see the full question
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setDismissed(true)}
-            style={{
-              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 10, color: 'rgba(255,255,255,0.8)', fontSize: '0.8rem',
-              padding: '0.5rem 1.25rem', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
-              WebkitTapHighlightColor: 'transparent', minHeight: 40,
-            }}
-          >
-            Stay in portrait
-          </button>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
-}
-
 // ─── Scores-locked popup ───────────────────────────────────────────────────
 // Shown instead of the scores drawer while ScoreboardModal.jsx is open on
 // /host — that component owns show.scores_locked_at (a timestamp refreshed
@@ -1040,17 +1009,43 @@ function WagerResultPopup({ result, theme, onDismiss }) {
   )
 }
 
+// Carousel enter/exit for LiveView's swipeable slide/part content — `custom`
+// carries the nav direction (1 = moving forward/left, -1 = moving back/
+// right), same convention as a horizontal photo gallery. Small, subtle
+// offset (not a full-width slide) — this is a frequent, everyday gesture on
+// this screen, not a rare celebratory moment, so it stays restrained.
+const SWIPE_VARIANTS = {
+  enter: direction => ({ x: direction >= 0 ? 56 : -56, opacity: 0 }),
+  center: { x: 0, opacity: 1 },
+  exit: direction => ({ x: direction >= 0 ? -56 : 56, opacity: 0 }),
+}
+const REDUCED_SWIPE_VARIANTS = {
+  enter: { opacity: 0 },
+  center: { opacity: 1 },
+  exit: { opacity: 0 },
+}
+
 // ─── Live view ────────────────────────────────────────────────────────────────
 function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScores }) {
+  const pref = useReducedMotion()
   const [viewedIndex, setViewedIndex]         = useState(0)
   const [followMode, setFollowModeState]      = useState(loadFollowMode)
-  // Local per-part position within the CURRENT live multi-part shiny series
-  // (2026-08-19, Ben: teams "couldn't go back and see images" on formats
-  // like "We're not so different" — every viewer used to render whichever
-  // part data.currentPart pointed to, the host's live position, with no way
-  // for a phone to hold an earlier part while the host keeps going).
-  // null = following the host's live part (the old, only behavior).
+  // Local per-part position within whichever slide is CURRENTLY IN VIEW —
+  // live or an earlier slide the team stepped back to (2026-08-19, Ben:
+  // teams "couldn't go back and see images" on formats like "We're not so
+  // different" — every viewer used to render whichever part
+  // data.currentPart pointed to, the host's live position, with no way for
+  // a phone to hold an earlier part while the host keeps going; generalized
+  // 2026-08-25 from "the live slide only" to "whichever slide is viewed" —
+  // see viewedParts/effectivePart below).
+  // null = the viewed slide's own default part (host's live part if it IS
+  // the live slide; otherwise wherever the host left it).
   const [localPart, setLocalPart] = useState(null)
+  // Direction of the last swipe/tap nav — 1 forward, -1 back — feeds the
+  // carousel enter/exit variants below so the new slide/part visibly
+  // continues the same direction the team just moved, matching how a
+  // horizontal photo gallery reads (see SWIPE_VARIANTS).
+  const [swipeDirection, setSwipeDirection] = useState(0)
   const [powerupConfirming, setPowerupConfirming] = useState(false)
   const [powerupInvoking, setPowerupInvoking]   = useState(false)
   const [powerupError, setPowerupError]         = useState(null)
@@ -1072,16 +1067,38 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   )
   const hostIndex = show?.current_slide_index ?? 0
   const liveSlide  = slides[hostIndex] ?? null
-  const liveParts = liveSlide?.data?.parts
-  const isLiveMultiPart = Array.isArray(liveParts) && liveParts.length > 1
-  const hostPart = liveSlide?.data?.currentPart ?? 0
-  // Reset to "following the host" on every new live slide, and re-clamp
-  // (never auto-jump forward) if a team had deliberately stepped back and
-  // the host then advances further — same spirit as followMode's own
-  // Math.min clamp below, just for the part index instead of the slide index.
-  useEffect(() => { setLocalPart(null) }, [liveSlide?.id])
-  useEffect(() => { setLocalPart(p => (p === null ? null : Math.min(p, hostPart))) }, [hostPart])
-  const effectiveLivePart = localPart ?? hostPart
+  const currentSlide = slides[viewedIndex] ?? null
+
+  // Whichever slide is CURRENTLY IN VIEW may itself be a multi-part shiny
+  // series — parts are resolved off `currentSlide`, not off `liveSlide`, so
+  // part-by-part nav works on any slide being reviewed, not just the live
+  // one (2026-08-25, Ben: PYL's new multi-part image questions surfaced
+  // this — the old canGoBackPart only ever matched viewedIndex ===
+  // hostIndex, i.e. the live slide, so a team that had stepped back PAST a
+  // multi-part slide jumped straight over the whole series on the next
+  // Back instead of stepping through its parts).
+  const viewedParts = currentSlide?.data?.parts
+  const isViewedMultiPart = Array.isArray(viewedParts) && viewedParts.length > 1
+  // The slide's own data.currentPart is the right "default part" whether or
+  // not it's the live slide: for the live slide it's the host's live
+  // position (kept current by Realtime); for an earlier slide the host has
+  // moved past, it's frozen wherever the host left it — both are the
+  // correct resting point for a team arriving fresh at this slide.
+  const viewedBasePart = currentSlide?.data?.currentPart ?? 0
+  // Reset to the viewed slide's own default part whenever the VIEWED slide
+  // itself changes — not on every render. A team mid-review of a slide the
+  // host has since moved past must not get yanked around by the host
+  // continuing to advance elsewhere (that slide isn't live anymore, so
+  // nothing about it should move under the team's feet).
+  useEffect(() => { setLocalPart(null) }, [viewedIndex])
+  // Never let a team who stepped back on the LIVE slide's parts hold a
+  // position ahead of wherever the host actually is — re-scoped from the
+  // old hostPart-only clamp to only apply while the viewed slide IS live.
+  useEffect(() => {
+    if (viewedIndex !== hostIndex) return
+    setLocalPart(p => (p === null ? null : Math.min(p, viewedBasePart)))
+  }, [viewedIndex, hostIndex, viewedBasePart])
+  const effectivePart = localPart ?? viewedBasePart
   // Same predicate SlideContent uses to pick WagerBoard/MatchingBoard, PLUS
   // introDone — SlideContent checks `!d.introDone` first and renders the
   // teaser text (no board at all) during the intro beat, so treating the
@@ -1162,18 +1179,24 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
     }
   }, [hostIndex, followMode, forceInteractive])
 
-  const currentSlide  = slides[viewedIndex] ?? null
-  // Stepping back to an earlier PART of the live multi-part series is its
-  // own thing, independent of slide-level Follow Mode/forceInteractive —
-  // it's not leaving the live slide, just showing an earlier part of it, so
-  // it stays available even in Follow mode (see localPart above).
-  const canGoBackPart = isLiveMultiPart && viewedIndex === hostIndex && effectiveLivePart > 0
-  const isBehindLivePart = isLiveMultiPart && viewedIndex === hostIndex && effectiveLivePart < hostPart
+  // Stepping through the parts of whichever slide is CURRENTLY IN VIEW is
+  // its own thing, independent of slide-level Follow Mode/forceInteractive —
+  // it's not leaving that slide, just showing a different part of it, so it
+  // stays available even in Follow mode (see localPart above). Generalized
+  // 2026-08-25 from "only the live slide" — see viewedParts/effectivePart.
+  const canGoBackPart = isViewedMultiPart && effectivePart > 0
+  // viewedBasePart (= currentSlide?.data?.currentPart ?? 0, see above) is
+  // already the right cap on ANY viewed slide, live or not: on the live
+  // slide it's the host's live position; on a slide the host has since
+  // moved past, it's frozen wherever the host actually left it — never
+  // viewedParts.length - 1, which would let a team step into parts the
+  // host abandoned that slide before ever revealing.
+  const canGoForwardPart = isViewedMultiPart && effectivePart < viewedBasePart
   // No manual navigation in Follow mode (there's nothing to navigate — you're
   // always on the live slide), and none away from a forced interactive slide
   // until it's answered.
   const canGoBack     = canGoBackPart || (followMode !== 'follow' && !forceInteractive && viewedIndex > 0)
-  const isBehindLive  = viewedIndex < hostIndex || isBehindLivePart
+  const isBehindLive  = viewedIndex < hostIndex || canGoForwardPart
   const powerup       = show?.powerups?.[0] ?? null
 
   // A slide the player has scrolled back to review was already revealed by
@@ -1195,12 +1218,20 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
 
   async function handleBack() {
     if (!canGoBack) return
+    // Set explicitly, not just left to whatever onDragEnd last set — this
+    // also fires on a tap (Back button) and must animate the same
+    // direction a swipe-back would, not replay a stale forward direction.
+    setSwipeDirection(-1)
     // Within-series part step takes priority over leaving the slide
     // entirely — a team on part 3 of 4 wants part 2, not the prior question.
     if (canGoBackPart) {
-      setLocalPart(effectiveLivePart - 1)
+      setLocalPart(effectivePart - 1)
     } else {
       setViewedIndex(v => v - 1)
+      // The slide being left has its own parts (or none) — null always
+      // resolves to whichever slide we're LANDING on's own default part
+      // (see viewedBasePart above), never the part we were just on.
+      setLocalPart(null)
     }
     if (team?.id) {
       await supabase.from('teams').update({ last_action: 'went_back', last_action_at: new Date().toISOString() }).eq('id', team.id)
@@ -1208,54 +1239,42 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   }
 
   // One-part-forward step, mirroring handleBack's one-part-back — swiping
-  // forward through a series a team backed into should step part by part,
-  // not jump straight to wherever the host currently is.
+  // forward through a series a team stepped back into (live OR an earlier
+  // slide) should step part by part, not jump straight to wherever the host
+  // currently is.
   async function handleForward() {
-    if (isBehindLivePart) {
-      const next = effectiveLivePart + 1
-      // Landing exactly on the host's part must reset to null (the
-      // "following" sentinel — see localPart above), not a concrete number.
-      // A concrete match reads as caught-up right now, but the clamp effect
-      // above only ever narrows toward hostPart (Math.min), never widens
-      // back to null — so without this, the NEXT time the host advances,
-      // isBehindLivePart flips true again and the team is stuck a step
-      // behind on every future part until they hit "Current Slide →"
-      // (which does reset to null) instead of just swiping forward again.
-      setLocalPart(next >= hostPart ? null : next)
+    if (!isBehindLive) return
+    // Same reasoning as handleBack — a tap (or a host-driven advance that
+    // routes through here) must animate forward, not replay whatever
+    // direction the last manual drag happened to leave behind.
+    setSwipeDirection(1)
+    if (canGoForwardPart) {
+      const next = effectivePart + 1
+      // On the LIVE slide, landing exactly on the host's part must reset to
+      // null (the "following" sentinel — see localPart above), not a
+      // concrete number. A concrete match reads as caught-up right now, but
+      // the clamp effect above only ever narrows toward viewedBasePart
+      // (Math.min), never widens back to null — so without this, the NEXT
+      // time the host advances, canGoForwardPart flips true again and the
+      // team is stuck a step behind on every future part until they hit
+      // "Current Slide →" (which does reset to null) instead of just
+      // swiping forward again. An earlier (non-live) slide has no such
+      // "host keeps moving" concern, so a concrete part number is fine there.
+      setLocalPart(viewedIndex === hostIndex && next >= viewedBasePart ? null : next)
+      return
+    }
+    if (viewedIndex < hostIndex) {
+      setViewedIndex(v => v + 1)
+      setLocalPart(null)
       return
     }
     await handleJumpToCurrent()
   }
 
-  // Swipe nav (2026-08-19, Ben: "need to implement swiping through slides" —
-  // teams were having trouble with the tap-target Back/Current-Slide
-  // buttons). Left = forward (catch up / next part), right = back — same
-  // direction convention as a horizontal photo gallery. Threshold-based, not
-  // a full gesture library: this is a single unambiguous swipe, not
-  // multi-touch/pinch/drag content, so a plain touchstart/touchend delta is
-  // the whole feature.
-  const swipeStartRef = useRef(null)
-  function handleTouchStart(e) {
-    const t = e.touches[0]
-    swipeStartRef.current = { x: t.clientX, y: t.clientY }
-  }
-  function handleTouchEnd(e) {
-    const start = swipeStartRef.current
-    swipeStartRef.current = null
-    if (!start) return
-    const t = e.changedTouches[0]
-    const dx = t.clientX - start.x
-    const dy = t.clientY - start.y
-    const SWIPE_THRESHOLD = 60
-    // Mostly-horizontal only — a vertical scroll through question text must
-    // never get misread as a swipe.
-    if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) < Math.abs(dy) * 1.5) return
-    if (dx > 0) handleBack()
-    else handleForward()
-  }
-
   async function handleJumpToCurrent() {
     if (!isBehindLive) return
+    // "Current Slide →" always moves forward to catch up to the host.
+    setSwipeDirection(1)
     setViewedIndex(show?.current_slide_index ?? 0)
     setLocalPart(null)
     if (team?.id) {
@@ -1300,78 +1319,137 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
       <div
         className="join-content"
         style={{ flex: 1, paddingBottom: powerup ? '5.75rem' : '2rem', overflowY: 'auto', maxWidth: 560, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
       >
-        <ErrorBoundary
-          key={visibleSlide?.id}
-          fallback={
-            <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9rem', textAlign: 'center', padding: '2rem 0' }}>
-              Content unavailable
-            </p>
-          }
+        {/* Swipeable slide/part carousel (2026-08-25, Ben: swipe should be
+            the primary, trusted way to move — not the tap buttons — and
+            should feel like a real slide, not a blind threshold jump). The
+            drag itself follows the finger 1:1 (framer's own `drag`, not a
+            derived value) and always springs back to center on release —
+            actual navigation happens by swapping the AnimatePresence key
+            (slide+part), which drives the enter/exit slide+fade below.
+            mode="popLayout" (not "wait") so the entering slide mounts
+            immediately instead of waiting for the outgoing slide's slower x
+            spring to settle — "wait" left a visible blank gap on every
+            advance since opacity fades out fast but the spring doesn't.
+            dragConstraints stay pinned at {left:0,right:0}: while at least
+            one direction is still live, that gives visible rubber-band
+            resistance toward the dead side; once BOTH directions are dead,
+            `drag` itself is set to false below and there's no gesture at
+            all (nothing to give resistance to). The draggable surface spans
+            the whole scrollable .join-content area (slide + the Back/
+            Current-Slide buttons), not just the slide, so short slides and
+            the button row stay swipeable too — a drag scoped to only the
+            slide-sized inner div left them dead to swipe. Stays enabled
+            under prefers-reduced-motion (only the visual variants swap to a
+            plain fade below — see REDUCED_SWIPE_VARIANTS — losing the
+            animation isn't a reason to lose the gesture). Disabled only
+            while a forced-interactive slide (wager/matching) needs the
+            team's input. Vertical scroll through long question text keeps
+            working natively — framer's own x-axis drag lock leaves the
+            y-axis alone (sets touch-action: pan-y on the dragged element),
+            same idiom ScoresDrawer already uses. */}
+        <motion.div
+          drag={!forceInteractive && (canGoBack || isBehindLive) ? 'x' : false}
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={1}
+          onDragEnd={(_, info) => {
+            if (Math.abs(info.offset.x) < 60 && Math.abs(info.velocity.x) < 500) return
+            if (info.offset.x < 0) { setSwipeDirection(1); handleForward() }
+            else { setSwipeDirection(-1); handleBack() }
+          }}
+          style={{ minHeight: '100%' }}
         >
-          {revealed ? (
-            <SlideContent
-              slide={visibleSlide}
-              show={show}
-              theme={theme}
-              team={team}
-              // Only wired up for the actual live slide — a team scrolled
-              // back reviewing an earlier (already-answered, already-locked)
-              // wager slide must not report into the live slide's state.
-              onInteractiveAnswered={visibleSlide?.id === liveSlide?.id ? setInteractiveSatisfied : undefined}
-              overridePart={visibleSlide?.id === liveSlide?.id ? effectiveLivePart : undefined}
-            />
-          ) : (
-            <p style={{ color: `${text}b3`, fontSize: 'clamp(1rem, 4vw, 1.2rem)', lineHeight: 1.5, margin: 0, fontStyle: 'italic', textAlign: 'center', padding: '2rem 0' }}>
-              Get ready…
-            </p>
-          )}
-        </ErrorBoundary>
-
-        {/* Back / catch-up navigation */}
-        {(isBehindLive || canGoBack) && (
-          <div style={{ marginTop: '2rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-            {isBehindLive && (
-              <button
-                onClick={handleJumpToCurrent}
-                onPointerDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
-                onPointerUp={e   => e.currentTarget.style.transform = 'scale(1)'}
-                onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                style={{
-                  background: `${accent}30`, border: `1px solid ${accent}50`, borderRadius: 10, color: highlight,
-                  fontSize: '0.875rem', fontWeight: 600, padding: '0.65rem 1rem',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
-                  minHeight: 44, WebkitTapHighlightColor: 'transparent',
-                  fontFamily: 'DM Sans, sans-serif',
-                  transition: 'transform 120ms cubic-bezier(0.23,1,0.32,1)',
-                }}
+          <div style={{ position: 'relative', overflow: 'hidden' }}>
+            <AnimatePresence initial={false} mode="popLayout" custom={swipeDirection}>
+              <motion.div
+                key={`${viewedIndex}:${effectivePart}`}
+                custom={swipeDirection}
+                variants={pref ? REDUCED_SWIPE_VARIANTS : SWIPE_VARIANTS}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={pref
+                  ? { opacity: { duration: 0.15 } }
+                  : { x: { type: 'spring', stiffness: 380, damping: 32 }, opacity: { duration: 0.18 } }}
               >
-                Current Slide →
-              </button>
-            )}
-            {canGoBack && (
-              <button
-                onClick={handleBack}
-                onPointerDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
-                onPointerUp={e   => e.currentTarget.style.transform = 'scale(1)'}
-                onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                style={{
-                  background: 'rgba(255,255,255,0.07)',
-                  border: 'none', borderRadius: 10, color: `${text}cc`,
-                  fontSize: '0.875rem', fontWeight: 500, padding: '0.65rem 1rem',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
-                  minHeight: 44, WebkitTapHighlightColor: 'transparent',
-                  fontFamily: 'DM Sans, sans-serif',
-                  transition: 'transform 120ms cubic-bezier(0.23,1,0.32,1)',
-                }}
-              >
-                ← Back
-              </button>
-            )}
+                {/* Keyed on the actual slide id (not the carousel's
+                    index:part key above) — a tripped boundary must only stay
+                    tripped for the slide that actually errored, not for
+                    whatever slide next lands on this index if the host
+                    inserts/deletes/reorders slides mid-show. */}
+                <ErrorBoundary
+                  key={visibleSlide?.id}
+                  fallback={
+                    <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9rem', textAlign: 'center', padding: '2rem 0' }}>
+                      Content unavailable
+                    </p>
+                  }
+                >
+                  {revealed ? (
+                    <SlideContent
+                      slide={visibleSlide}
+                      show={show}
+                      theme={theme}
+                      team={team}
+                      // Only wired up for the actual live slide — a team scrolled
+                      // back reviewing an earlier (already-answered, already-locked)
+                      // wager slide must not report into the live slide's state.
+                      onInteractiveAnswered={visibleSlide?.id === liveSlide?.id ? setInteractiveSatisfied : undefined}
+                      overridePart={isViewedMultiPart ? effectivePart : undefined}
+                    />
+                  ) : (
+                    <p style={{ color: `${text}b3`, fontSize: 'clamp(1rem, 4vw, 1.2rem)', lineHeight: 1.5, margin: 0, fontStyle: 'italic', textAlign: 'center', padding: '2rem 0' }}>
+                      Get ready…
+                    </p>
+                  )}
+                </ErrorBoundary>
+              </motion.div>
+            </AnimatePresence>
           </div>
-        )}
+
+          {/* Back / catch-up navigation */}
+          {(isBehindLive || canGoBack) && (
+            <div style={{ marginTop: '2rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {isBehindLive && (
+                <button
+                  onClick={handleJumpToCurrent}
+                  onPointerDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
+                  onPointerUp={e   => e.currentTarget.style.transform = 'scale(1)'}
+                  onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                  style={{
+                    background: `${accent}30`, border: `1px solid ${accent}50`, borderRadius: 10, color: highlight,
+                    fontSize: '0.875rem', fontWeight: 600, padding: '0.65rem 1rem',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
+                    minHeight: 44, WebkitTapHighlightColor: 'transparent',
+                    fontFamily: 'DM Sans, sans-serif',
+                    transition: 'transform 120ms cubic-bezier(0.23,1,0.32,1)',
+                  }}
+                >
+                  Current Slide →
+                </button>
+              )}
+              {canGoBack && (
+                <button
+                  onClick={handleBack}
+                  onPointerDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
+                  onPointerUp={e   => e.currentTarget.style.transform = 'scale(1)'}
+                  onPointerLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                  style={{
+                    background: 'rgba(255,255,255,0.07)',
+                    border: 'none', borderRadius: 10, color: `${text}cc`,
+                    fontSize: '0.875rem', fontWeight: 500, padding: '0.65rem 1rem',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
+                    minHeight: 44, WebkitTapHighlightColor: 'transparent',
+                    fontFamily: 'DM Sans, sans-serif',
+                    transition: 'transform 120ms cubic-bezier(0.23,1,0.32,1)',
+                  }}
+                >
+                  ← Back
+                </button>
+              )}
+            </div>
+          )}
+        </motion.div>
       </div>
 
       {/* BOTTOM BAR — powerup only now; Scores moved to the top-bar pill */}
@@ -1883,23 +1961,17 @@ export default function Join() {
       <ScoresLockedPopup visible={scoresLocked} />
       {phase === 'register' && <RegistrationScreen onRegister={handleRegister} show={show} theme={theme} />}
       {phase === 'waiting'  && (
-        <>
-          <WaitingScreen teamName={team?.name ?? ''} theme={theme} onOpenScores={openScoresDrawer} />
-          <LandscapePrompt scoresOpen={scoresDrawerOpen} />
-        </>
+        <WaitingScreen teamName={team?.name ?? ''} theme={theme} onOpenScores={openScoresDrawer} />
       )}
       {phase === 'live'     && (
-        <>
-          <LiveView
-            show={show}
-            team={team}
-            powerupUsed={powerupUsed}
-            onInvokePowerup={handleInvokePowerup}
-            theme={theme}
-            onOpenScores={openScoresDrawer}
-          />
-          <LandscapePrompt scoresOpen={scoresDrawerOpen} />
-        </>
+        <LiveView
+          show={show}
+          team={team}
+          powerupUsed={powerupUsed}
+          onInvokePowerup={handleInvokePowerup}
+          theme={theme}
+          onOpenScores={openScoresDrawer}
+        />
       )}
 
       {/* Global scores drawer — available in waiting + live phases */}
