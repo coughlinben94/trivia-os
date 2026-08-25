@@ -181,6 +181,7 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
 
 function ShinyVisualQuestion({ slide, theme }) {
   const { data } = slide
+  const rt = data._regionTransforms ?? {}
   const part = resolveShinyPart(data)
   const reduce = useReducedMotion()
   const [aspect, setAspect] = useState(null) // 'landscape' | 'portrait' | 'square'
@@ -240,13 +241,9 @@ function ShinyVisualQuestion({ slide, theme }) {
   // aspect ratio the same way.
   const isPortrait = aspect === 'portrait' && !!part.text?.trim()
 
-  // Host override escape hatch (2026-08-25): auto-fit sizes for the
-  // hardest-to-fit case (longest caption at its floor), which isn't always
-  // what looks best for a specific slide — data.captionFontSizePx, when
-  // set, wins outright over the computed fit. No canvas/drag UI yet (that's
-  // a separate, bigger design — see the manual text-region override
-  // shipped for Design-canvas slide types); this is just the value read
-  // straight off the slide.
+  // Wireable via the same Design-canvas region-transform mechanism
+  // StandardQuestion already uses (2026-08-25) — both branches share one
+  // "caption" region id since only one is ever mounted at a time.
   const captionBoxRef1 = useRef(null)
   const autoCaptionSize1 = useFitToBox(captionBoxRef1, part.text, {
     family: theme.fonts.body,
@@ -254,7 +251,7 @@ function ShinyVisualQuestion({ slide, theme }) {
     ceilPx: VISUAL_CAPTION_CEIL * 16,
     maxLines: 5, lineHeight: 1.15,
   })
-  const captionSize1 = data.captionFontSizePx ?? autoCaptionSize1
+  const captionSize1 = rt.caption?.fontSizePx ?? autoCaptionSize1
   const captionBoxRef2 = useRef(null)
   const autoCaptionSize2 = useFitToBox(captionBoxRef2, part.text, {
     family: theme.fonts.body,
@@ -262,7 +259,7 @@ function ShinyVisualQuestion({ slide, theme }) {
     ceilPx: VISUAL_CAPTION_CEIL * 16,
     maxLines: 5, lineHeight: 1.15,
   })
-  const captionSize2 = data.captionFontSizePx ?? autoCaptionSize2
+  const captionSize2 = rt.caption?.fontSizePx ?? autoCaptionSize2
 
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
@@ -306,17 +303,19 @@ function ShinyVisualQuestion({ slide, theme }) {
             transition={{ delay: 0.18, duration: 0.28, ease: EASE_OUT }}
           >
             <div ref={captionBoxRef1} className="w-full">
-              <p
-                className="text-center leading-relaxed"
-                style={{
-                  color: theme.colors.text,
-                  fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-                  fontSize: `${captionSize1}px`,
-                  fontWeight: 500,
-                }}
-              >
-                {part.text}
-              </p>
+              <span data-slide-region="caption" data-slide-field="text">
+                <p
+                  className="text-center leading-relaxed"
+                  style={{
+                    color: theme.colors.text,
+                    fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+                    fontSize: `${captionSize1}px`,
+                    fontWeight: 500,
+                  }}
+                >
+                  {part.text}
+                </p>
+              </span>
             </div>
           </motion.div>
         </div>
@@ -357,17 +356,19 @@ function ShinyVisualQuestion({ slide, theme }) {
             transition={{ delay: 0.15, duration: 0.22, ease: EASE_OUT }}
           >
             <div ref={captionBoxRef2} className="w-full">
-              <p
-                className="text-center leading-snug"
-                style={{
-                  color: '#f5f0e8',
-                  fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-                  fontSize: `${captionSize2}px`,
-                  fontWeight: 500,
-                }}
-              >
-                {part.text}
-              </p>
+              <span data-slide-region="caption" data-slide-field="text">
+                <p
+                  className="text-center leading-snug"
+                  style={{
+                    color: '#f5f0e8',
+                    fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+                    fontSize: `${captionSize2}px`,
+                    fontWeight: 500,
+                  }}
+                >
+                  {part.text}
+                </p>
+              </span>
             </div>
           </motion.div>}
         </>
