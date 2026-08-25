@@ -943,15 +943,24 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
   const { data } = slide
   const reduce = useReducedMotion()
   const parts = data.parts ?? []
+  // A part normally IS one display row (Song Lyrics: 6 parts, 6 rows, one
+  // reveal per Next). A part can also carry `rows: [...]` — several rows
+  // that reveal TOGETHER on one Next press (2026-08-25, Ben: Disney wants
+  // "three and three" — 6 rows, but only 2 reveal presses, not 6). Stepping
+  // itself is untouched (computeNextStep still just increments currentPart
+  // 0..parts.length-1); grouping the rows under fewer parts is what changes
+  // press count, for free.
+  const rowGroups = parts.map(p => Array.isArray(p.rows) ? p.rows : [p])
+  const rows = rowGroups.flatMap((g, gi) => g.map(r => ({ ...r, _group: gi })))
   // This component only mounts after the intro card dismisses (introDone
-  // gates it upstream in QuestionSlide), so row 0's answer is showing from
-  // the first content frame — currentPart starts at 0, and 0 hidden rows
-  // would leave the host one press behind the audience's expectation.
+  // gates it upstream in QuestionSlide), so group 0's answers are showing
+  // from the first content frame — currentPart starts at 0, and 0 hidden
+  // rows would leave the host one press behind the audience's expectation.
   // isPreview (the host's build-mode canvas, SlideCanvasEditor) forces this
   // to 0 regardless of currentPart — 2026-08-25, Ben: browsing/editing this
   // slide in Build Mode must never leak an answer onto the host's own
   // screen before the round is actually live.
-  const revealedCount = isPreview ? 0 : (data.introDone ? Math.min((data.currentPart ?? 0) + 1, parts.length) : 0)
+  const revealedGroups = isPreview ? 0 : (data.introDone ? Math.min((data.currentPart ?? 0) + 1, rowGroups.length) : 0)
 
   // Fixed-px side columns on purpose: the stage is a fixed 1920 canvas
   // (same assumption QUESTION_BOX bakes in), and a constant label/answer
@@ -967,7 +976,7 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
   // it toward its floor on anything but the shortest line.
   const LABEL_W = 230, ANSWER_W = 300, COL_GAP = 24, ROW_GAP = 14
   const gridRef = useRef(null)
-  const rowSize = useFitListToBox(gridRef, parts.map(p => p.text ?? ''), {
+  const rowSize = useFitListToBox(gridRef, rows.map(r => r.text ?? ''), {
     family: theme.fonts.body,
     floorPx: LIST_ITEM_FLOOR * 16,
     ceilPx: 3.4 * 16,
@@ -1024,7 +1033,7 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
             alignItems: 'center',
           }}
         >
-          {parts.map((part, i) => (
+          {rows.map((row, i) => (
             <Fragment key={i}>
               <motion.p
                 {...rowEntrance(i)}
@@ -1036,7 +1045,7 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
                   lineHeight: 1.2,
                 }}
               >
-                {part.label}
+                {row.label}
               </motion.p>
               <motion.p
                 {...rowEntrance(i)}
@@ -1048,14 +1057,14 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
                   lineHeight: 1.3,
                 }}
               >
-                {part.text}
+                {row.text}
               </motion.p>
               {/* Cell div always present so the grid never reflows on a
                   reveal; only the answer inside mounts. Key is stable per
                   row, so the entrance fires exactly once — when that row's
-                  answer newly appears — not on later renders. */}
+                  group newly reveals — not on later renders. */}
               <div>
-                {i < revealedCount && (
+                {row._group < revealedGroups && (
                   <motion.p
                     key={`${slide.id}:ans:${i}`}
                     initial={{ opacity: 0, x: reduce ? 0 : 14 }}
@@ -1069,7 +1078,7 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
                       lineHeight: 1.25,
                     }}
                   >
-                    {part.answer}
+                    {row.answer}
                   </motion.p>
                 )}
               </div>
