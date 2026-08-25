@@ -249,7 +249,7 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
             style={{
               fontFamily: `'${theme.fonts.display}', sans-serif`,
               fontWeight: 700,
-              fontSize: fitToBox(slide.data?.message || 'State of the Union', { ...TITLE_CARD_BOX, family: theme.fonts.display }),
+              fontSize: rt.message?.fontSizePx ?? fitToBox(slide.data?.message || 'State of the Union', { ...TITLE_CARD_BOX, family: theme.fonts.display }),
               lineHeight: 1.15,
               textAlign: 'center',
               textWrap: 'balance',

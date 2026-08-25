@@ -39,7 +39,7 @@ export default function TitleSlide({ slide, show }) {
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
             color: theme.colors.text,
-            fontSize: 'clamp(3rem, 7vw, 6rem)',
+            fontSize: rt.title?.fontSizePx ? `${rt.title.fontSizePx}px` : 'clamp(3rem, 7vw, 6rem)',
             lineHeight: 1,
             letterSpacing: '-0.02em',
           }}
@@ -58,7 +58,7 @@ export default function TitleSlide({ slide, show }) {
             className="relative z-10 mt-5 text-center"
             style={{
               color: theme.colors.text,
-              fontSize: 'clamp(1.25rem, 2.5vw, 2.5rem)',
+              fontSize: rt.subtitle?.fontSizePx ? `${rt.subtitle.fontSizePx}px` : 'clamp(1.25rem, 2.5vw, 2.5rem)',
               fontWeight: 300,
             }}
           >

@@ -42,6 +42,14 @@ const INNER_H = 720
 const SNAP_PCT = 1.2
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
+// Drill from a region's wrapping <span data-slide-region> down to the actual
+// text-bearing leaf element (the <p>/motion.div fontSize is set on, not the
+// span) — used to read a region's REAL current font size off the DOM.
+function findTextLeaf(el) {
+  if (!el) return null
+  const kids = Array.from(el.children || []).filter(c => (c.textContent || '').trim())
+  return kids.length ? findTextLeaf(kids[0]) : el
+}
 // Overlay color tokens — resolution MUST match OverlayLayer.jsx exactly
 // (WYSIWYG). Theme tokens read the active palette; fixed tokens are
 // theme-independent. `gold` is the shiny signal made host-reachable; the
@@ -118,6 +126,12 @@ export default function SlideCanvasEditor({
 
   const overlays = data.overlays ?? []
   const selectedOverlay = overlays.find(o => o.id === selectedOverlayId) ?? null
+  // A selected TEXT region (any non-photo region) routes the top toolbar's
+  // font-size stepper to its fontSizePx override instead of an overlay —
+  // see applyRegionFontSize/getRegionFontSizePx below. Photo regions keep
+  // their existing scale-only resize (no font to size).
+  const selectedRegionObj = selectedRegionId ? regions.find(r => r.id === selectedRegionId) : null
+  const isTextRegionSelected = !!selectedRegionObj && selectedRegionObj.field !== 'photo'
 
   // Reset per-slide selection when the slide switches (keep editLayout sticky
   // so a host laying out several slides doesn't have to re-arm it each time).
@@ -607,6 +621,14 @@ export default function SlideCanvasEditor({
   // (rotation-invariant — a corner drag scales, it doesn't fight the current
   // rotate handle) but writes into the same _regionTransforms bucket move/
   // rotate already use, rather than the separate overlays[] model.
+  //
+  // NOTE: this `scale` path is PHOTO-only. Text regions get their own
+  // fontSizePx override below (startRegionFontResize) instead of `scale` —
+  // a text region's box is a fixed constant per slide file (QUESTION_BOX
+  // etc., see autoFitText.js), so scaling the *box* wouldn't move the
+  // auto-fit result at all; the override has to replace the computed font
+  // size directly, the same way a photo's `scale` replaces its rendered
+  // height.
   function startRegionScale(e, region) {
     e.stopPropagation(); e.preventDefault()
     const oRect = overlayRef.current.getBoundingClientRect()
@@ -635,6 +657,64 @@ export default function SlideCanvasEditor({
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
     document.addEventListener('pointercancel', onUp)
+  }
+
+  // Text-region resize — a corner drag sets an explicit fontSizePx override
+  // (radial ratio off the box center, same feel as startRegionScale/
+  // startOverlayResize) that REPLACES whatever fitToBox/clamp() picked, in
+  // every slide file that reads `_regionTransforms[id].fontSizePx` (see the
+  // `rt.<id>?.fontSizePx ??` guards in QuestionSlide/CustomSlide/
+  // GradingBreakSlide/StateOfUnionSlide/TitleSlide/RoundIntroSlide). Baseline
+  // is read off the REAL rendered element (findTextLeaf), so the first drag
+  // starts from whatever's on screen right now — auto-fit size or an
+  // existing override — instead of jumping from an arbitrary default.
+  function startRegionFontResize(e, region) {
+    e.stopPropagation(); e.preventDefault()
+    const oRect = overlayRef.current.getBoundingClientRect()
+    const rt = data._regionTransforms ?? {}
+    const curDx = rt[region.id]?.dx ?? 0
+    const curDy = rt[region.id]?.dy ?? 0
+    const extraX = curDx * dynScale
+    const extraY = curDy * dynScale
+    const cx = oRect.left + region.x + extraX + region.w / 2
+    const cy = oRect.top + region.y + extraY + region.h / 2
+    const startDist = Math.hypot(e.clientX - cx, e.clientY - cy) || 1
+    const startFS = getRegionFontSizePx(region)
+    function onMove(ev) {
+      const ratio = Math.hypot(ev.clientX - cx, ev.clientY - cy) / startDist
+      const nfs = clamp(startFS * ratio, 8, 400)
+      setData(d => { const c = d._regionTransforms ?? {}; const n = { ...d, _regionTransforms: { ...c, [region.id]: { ...c[region.id], fontSizePx: nfs } } }; scheduleSave({ data: n }); return n })
+    }
+    function onUp() {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onUp)
+      setTimeout(() => detectRegionsRef.current(), 50)
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onUp)
+  }
+
+  // Baseline for the font-size stepper/drag: the stored override if one
+  // exists, else the REAL rendered size (findTextLeaf drills past the
+  // wrapping <span data-slide-region>/motion.* to the actual text-bearing
+  // leaf, since fontSize is set on that element, not the span).
+  function getRegionFontSizePx(region) {
+    if (!region) return 40
+    const override = (data._regionTransforms ?? {})[region.id]?.fontSizePx
+    if (override != null) return override
+    const el = canvasRef.current?.querySelector(`[data-slide-region="${region.id}"]`)
+    const leaf = findTextLeaf(el)
+    const v = leaf ? parseFloat(getComputedStyle(leaf).fontSize) : NaN
+    return Number.isFinite(v) ? v : 40
+  }
+
+  // Toolbar stepper → the selected text region's fontSizePx override.
+  function applyRegionFontSize(patch) {
+    if (!selectedRegionObj || patch.fontSize == null) return
+    const id = selectedRegionObj.id
+    setData(d => { const c = d._regionTransforms ?? {}; const n = { ...d, _regionTransforms: { ...c, [id]: { ...c[id], fontSizePx: patch.fontSize } } }; scheduleSave({ data: n }); return n })
   }
 
   // Edits the REAL rendered slide element in place — not a copy with
@@ -822,9 +902,14 @@ export default function SlideCanvasEditor({
         uploadError={uploadError}
         theme={theme}
         fonts={fontOptions(show)}
-        textStyle={selectedOverlay?.kind === 'text' ? selectedOverlay : (selectedOverlay ? null : textDefaults)}
-        isDefaults={!selectedOverlay}
-        onTextStyle={applyTextStyle}
+        textStyle={
+          selectedOverlay?.kind === 'text' ? selectedOverlay
+          : isTextRegionSelected ? { fontSize: getRegionFontSizePx(selectedRegionObj) }
+          : (selectedOverlay ? null : textDefaults)
+        }
+        textStyleMode={selectedOverlay?.kind === 'text' ? 'overlay' : isTextRegionSelected ? 'region' : 'overlay'}
+        isDefaults={!selectedOverlay && !isTextRegionSelected}
+        onTextStyle={isTextRegionSelected && selectedOverlay?.kind !== 'text' ? applyRegionFontSize : applyTextStyle}
         selectedOverlay={selectedOverlay}
         onCenterH={() => selectedOverlay && centerOverlayH(selectedOverlay.id)}
         onCenterV={() => selectedOverlay && centerOverlayV(selectedOverlay.id)}
@@ -889,7 +974,7 @@ export default function SlideCanvasEditor({
               const boxH = region.h * curScale
               const scaleOffsetX = (region.w - boxW) / 2
               const scaleOffsetY = (region.h - boxH) / 2
-              const hasTransform = !!(rt[region.id]?.dx || rt[region.id]?.dy || rt[region.id]?.rotate || (rt[region.id]?.scale && rt[region.id].scale !== 1))
+              const hasTransform = !!(rt[region.id]?.dx || rt[region.id]?.dy || rt[region.id]?.rotate || (rt[region.id]?.scale && rt[region.id].scale !== 1) || rt[region.id]?.fontSizePx)
               return (
                 <div
                   key={region.id}
@@ -932,18 +1017,20 @@ export default function SlideCanvasEditor({
                     <div title="Reset position & rotation" style={{ position: 'absolute', top: -20, left: -20, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', border: '2px solid white', cursor: 'pointer', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'white', fontWeight: 700, pointerEvents: 'auto' }}
                       onPointerDown={e => { e.stopPropagation(); const c = data._regionTransforms ?? {}; const { [region.id]: _drop, ...rest } = c; change('_regionTransforms', rest); setTimeout(() => detectRegionsRef.current(), 50) }}>×</div>
                   )}
-                  {/* Resize — media regions only (text sizes off content). Radial
-                      drag from any corner, rotation-invariant like the overlay
-                      system's own resize handles. */}
-                  {isSelReg && region.field === 'photo' && [
+                  {/* Resize — any region. Radial drag from any corner,
+                      rotation-invariant like the overlay system's own resize
+                      handles. Photo regions scale their rendered size (no
+                      text to fit); text regions set a fontSizePx override
+                      that replaces auto-fit (startRegionFontResize). */}
+                  {isSelReg && [
                     { left: -6, top: -6, cursor: 'nwse-resize' },
                     { right: -6, top: -6, cursor: 'nesw-resize' },
                     { left: -6, bottom: -6, cursor: 'nesw-resize' },
                     { right: -6, bottom: -6, cursor: 'nwse-resize' },
                   ].map((pos, idx) => (
-                    <div key={idx} title="Resize"
+                    <div key={idx} title={region.field === 'photo' ? 'Resize' : 'Resize — sets a manual font size, overriding auto-fit'}
                       style={{ position: 'absolute', ...pos, width: 12, height: 12, borderRadius: 3, background: 'white', border: '2px solid #6366f1', zIndex: 1, pointerEvents: 'auto' }}
-                      onPointerDown={e => startRegionScale(e, region)} />
+                      onPointerDown={e => (region.field === 'photo' ? startRegionScale(e, region) : startRegionFontResize(e, region))} />
                   ))}
                 </div>
               )
@@ -1316,7 +1403,7 @@ function DesignToolbar({
   editLayout, onToggleLayout,
   onUndo, onRedo, canUndo, canRedo,
   onInsertText, onInsertImage, getHostPhotos, uploadMedia, onInsertPhoto, uploading, uploadError,
-  theme, fonts, textStyle, isDefaults, onTextStyle,
+  theme, fonts, textStyle, textStyleMode = 'overlay', isDefaults, onTextStyle,
   selectedOverlay, onCenterH, onCenterV, onFront, onBack, onDuplicate, onDelete,
 }) {
   const barRef = useRef(null)
@@ -1393,7 +1480,7 @@ function DesignToolbar({
             {textStyle && (
               <>
                 <TbSep />
-                <TextStyleGroup theme={theme} fonts={fonts} style={textStyle} isDefaults={isDefaults} onStyle={onTextStyle} />
+                <TextStyleGroup theme={theme} fonts={fonts} style={textStyle} isDefaults={isDefaults} onStyle={onTextStyle} mode={textStyleMode} />
               </>
             )}
 
@@ -1562,7 +1649,34 @@ function BenPhotoInsert({ getHostPhotos, uploadMedia, onInsert }) {
 // toolbar must never touch), so the defaults chip's tooltip points the host at
 // Theme for that. Routing is unchanged (SlideCanvasEditor.applyTextStyle) —
 // only the signalling is made explicit.
-function TextStyleGroup({ theme, fonts, style, isDefaults, onStyle }) {
+function TextStyleGroup({ theme, fonts, style, isDefaults, onStyle, mode = 'overlay' }) {
+  // Region mode: a slide's own built-in text region. Only a font-size
+  // override is supported — no color/font/align/bold overrides exist for
+  // regions (regions render through each slide file's own fixed styling;
+  // see SlideCanvasEditor's header comment on the two editing systems).
+  // Values are literal px (matching fitToBox's own return unit — see
+  // autoFitText.js), not the overlay group's %-of-canvas-height, so this
+  // is a separate small control rather than a reuse of the overlay stepper.
+  if (mode === 'region') {
+    const size = Math.round(style?.fontSize ?? 40)
+    const step = (delta) => onStyle({ fontSize: clamp(size + delta, 8, 400) })
+    return (
+      <>
+        <span
+          title="Styling the selected text region's font size — overrides auto-fit. Use the × on the region to go back to auto-fit."
+          className="inline-flex items-center gap-1 h-7 px-2 rounded-md border text-[11px] font-semibold shrink-0 select-none bg-indigo-50 border-indigo-200 text-indigo-700"
+        >
+          <Icon name="box" size={13} />
+          <span className="max-w-[92px] truncate">Selected text</span>
+        </span>
+        <div className="inline-flex items-center h-7 rounded-md border border-gray-200 bg-white shrink-0 overflow-hidden">
+          <button type="button" onPointerDown={tbPD} onClick={() => step(-2)} title="Smaller" className="host-button h-full w-7 inline-flex items-center justify-center text-gray-600 hover:bg-gray-100"><Icon name="minus" size={14} /></button>
+          <span className="w-11 text-center text-[11px] tabular-nums text-gray-700 select-none border-x border-gray-200 leading-[26px]" title="Font size (px)">{size}px</span>
+          <button type="button" onPointerDown={tbPD} onClick={() => step(2)} title="Bigger" className="host-button h-full w-7 inline-flex items-center justify-center text-gray-600 hover:bg-gray-100"><Icon name="plus" size={14} /></button>
+        </div>
+      </>
+    )
+  }
   const size = style.fontSize ?? 5
   const weight = style.weight ?? 700
   const align = style.align ?? 'center'

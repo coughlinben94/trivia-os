@@ -61,7 +61,7 @@ export default function RoundIntroSlide({ slide, show }) {
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
             color: theme.colors.text,
-            fontSize: 'clamp(2.5rem, 5vw, 5rem)',
+            fontSize: rt.roundTitle?.fontSizePx ? `${rt.roundTitle.fontSizePx}px` : 'clamp(2.5rem, 5vw, 5rem)',
             fontWeight: 700,
             letterSpacing: '-0.01em',
           }}
@@ -80,7 +80,7 @@ export default function RoundIntroSlide({ slide, show }) {
             className="relative z-10 mt-4 text-center italic"
             style={{
               color: theme.colors.text,
-              fontSize: fitToBox(data.subtitle, { ...LINE_BOX, family: 'system-ui' }),
+              fontSize: rt.subtitle?.fontSizePx ?? fitToBox(data.subtitle, { ...LINE_BOX, family: 'system-ui' }),
               fontWeight: 300,
             }}
           >

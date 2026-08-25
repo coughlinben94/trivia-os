@@ -64,7 +64,7 @@ export default function CustomSlide({ slide }) {
             style={{
               fontFamily: `'${theme.fonts.display}', sans-serif`,
               color: theme.colors.highlight,
-              fontSize: 'clamp(2.5rem, 6vw, 6rem)',
+              fontSize: rt.title?.fontSizePx ? `${rt.title.fontSizePx}px` : 'clamp(2.5rem, 6vw, 6rem)',
               fontWeight: 700,
               letterSpacing: '-0.01em',
             }}
@@ -83,7 +83,7 @@ export default function CustomSlide({ slide }) {
             className="relative z-10 text-center leading-relaxed max-w-4xl"
             style={{
               color: theme.colors.text,
-              fontSize: fitToBox(data.body, { ...CUSTOM_BODY_BOX, family: 'system-ui' }),
+              fontSize: rt.body?.fontSizePx ?? fitToBox(data.body, { ...CUSTOM_BODY_BOX, family: 'system-ui' }),
               fontWeight: 400,
             }}
           >

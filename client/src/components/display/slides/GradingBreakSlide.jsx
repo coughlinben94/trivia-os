@@ -94,7 +94,7 @@ export default function GradingBreakSlide({ slide, show, isPreview = false }) {
             style={{
               color: theme.colors.text,
               fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-              fontSize: messageSize,
+              fontSize: rt.message?.fontSizePx ?? messageSize,
               fontWeight: 400,
             }}
           >
