@@ -10,7 +10,7 @@ import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
 import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
-import { isAutoRollPart, TEAM_PICKER_HOLD_MS } from '../../lib/slideStepping.js'
+import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
 // override for it — every other wager error is a real, unrecoverable-by-
@@ -759,6 +759,96 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     guardNav,
   ])
 
+  // "Next locks answers" — starts the 3-2-1 countdown ceremony instead of
+  // advancing, when the current slide is a phone-scored question with a lock
+  // phase still open. pendingLockPhase (slideStepping.js) is the ONE place
+  // either window checks that — see its own comment for why this ceremony
+  // doesn't need ownsAutoRoll-style ownership arbitration to START safely
+  // from either window (only completing it is host-only, see the effect
+  // below).
+  //
+  // Returns true if it handled the press (started the countdown, or no-op'd
+  // because one is already running) — callers must return/bail on true
+  // instead of falling through to their normal advance. Already-running is
+  // checked off currentSlide.data.lockCountdownStartedAt, not local state,
+  // so it reads correctly no matter which window's press started it.
+  function maybeStartLockCountdown() {
+    const phase = pendingLockPhase(currentSlide)
+    if (!phase) return false
+    if (!currentSlide.data?.lockCountdownStartedAt) {
+      guardNav(() => actions.updateSlide(currentSlide.id, {
+        data: { ...currentSlide.data, lockCountdownPhase: phase, lockCountdownStartedAt: Date.now() },
+      }))
+    }
+    return true
+  }
+
+  // Same actionsRef reasoning above, plus: handleLockAndScoreMatching/
+  // handleLockWagers/handleLockAndScoreWagers/handleLockAndScoreOrder are
+  // ordinary function declarations recreated on every render (they close
+  // over this render's setMatchingBusy/etc. state setters), so calling one
+  // of them directly from the completion effect's deps would clear and
+  // reschedule its countdown timer far more often than a real slide/phase
+  // change — same failure mode actionsRef exists to dodge. This ref always
+  // points at the latest versions without pulling them into that effect's
+  // deps array.
+  const lockHandlersRef = useRef(null)
+  lockHandlersRef.current = {
+    matching: handleLockAndScoreMatching,
+    'wager-tiers': handleLockWagers,
+    'wager-guesses': handleLockAndScoreWagers,
+    order: handleLockAndScoreOrder,
+  }
+
+  // Mirrors currentSlide into a ref for the same reason actionsRef exists —
+  // the completion effect below reads the LATEST slide at fire time (up to
+  // LOCK_COUNTDOWN_MS later), not whatever currentSlide the effect closed
+  // over when it was scheduled.
+  const currentSlideRef = useRef(currentSlide)
+  currentSlideRef.current = currentSlide
+
+  // "Next locks answers" completion — mirrors the Team Intro auto-roll
+  // effect above in shape: keyed on the CURRENT slide's countdown fields,
+  // schedules ONE setTimeout for whatever time REMAINS until startedAt +
+  // LOCK_COUNTDOWN_MS (not always the full duration — this can mount or
+  // re-run partway through an already-running countdown, e.g. a re-render),
+  // and on fire calls the real lock+score handler for whichever phase is
+  // active. Any change to the deps below — the timer firing (which clears
+  // these fields, see the scrub below), a manual Next/Prev, or the host
+  // locking manually via the button — cancels and reschedules, same
+  // "effect keyed on state" shape team-picker's timer uses.
+  //
+  // Deliberately LiveMode.jsx-only, no Display.jsx mirror — see
+  // pendingLockPhase's comment in slideStepping.js: only /host can perform
+  // the actual lock+score (phone_answers/teams reads, scoreboard_teams
+  // writes, via `actions` Display.jsx doesn't have), so there is exactly
+  // one actor capable of completing this ceremony — no double-completion
+  // race to arbitrate, unlike team-picker's auto-roll.
+  //
+  // The slide handed to the handler has lockCountdownPhase/StartedAt
+  // stripped out first — the SAME shape the plan's "cleared as part of the
+  // SAME updateSlide call that performs the actual lock" calls for, without
+  // touching the handler functions themselves: each one's own first write
+  // spreads `...slide.data` verbatim, so scrubbing the param here is enough
+  // to keep those fields out of what actually lands in the database.
+  useEffect(() => {
+    const phase = currentSlide?.data?.lockCountdownPhase
+    const startedAt = currentSlide?.data?.lockCountdownStartedAt
+    if (!phase || !startedAt) return
+    const remaining = Math.max(startedAt + LOCK_COUNTDOWN_MS - Date.now(), 0)
+    const t = setTimeout(() => {
+      const slide = currentSlideRef.current
+      // Bail if the slide/phase/timestamp drifted since this fired was
+      // scheduled (e.g. the host locked manually via the button in the
+      // meantime) — don't fire a stale-phase lock against a slide that's
+      // moved on.
+      if (!slide || slide.data?.lockCountdownPhase !== phase || slide.data?.lockCountdownStartedAt !== startedAt) return
+      const scrubbedSlide = { ...slide, data: { ...slide.data, lockCountdownPhase: null, lockCountdownStartedAt: null } }
+      lockHandlersRef.current?.[phase]?.(scrubbedSlide)
+    }, remaining)
+    return () => clearTimeout(t)
+  }, [currentSlide?.id, currentSlide?.data?.lockCountdownPhase, currentSlide?.data?.lockCountdownStartedAt])
+
   const handleKeyDown = useCallback((e) => {
     // A reflexive Cmd/Ctrl/Alt shortcut (Cmd+A select-all, Cmd+R reload,
     // Cmd+S save) must never fall through to these single-letter hotkeys —
@@ -776,6 +866,11 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     if (e.code === 'ArrowRight') {
       e.preventDefault()
       if (pendingAdvanceRef.current) return
+      // "Next locks answers": a phone-scored question with an open lock
+      // phase starts the countdown instead of advancing — see
+      // maybeStartLockCountdown above. Checked before the answerReveal
+      // dance below since starting a countdown isn't an advance at all.
+      if (maybeStartLockCountdown()) return
       if (show.showState.answerReveal) {
         actions.setAnswerReveal(false)
         pendingAdvanceRef.current = setTimeout(() => {
@@ -797,7 +892,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     if (e.code === 'KeyS')       actions.setScoreboardVisible(!show.showState.scoreboardVisible)
     if (e.code === 'KeyA')       actions.setAnswerReveal(!show.showState.answerReveal)
     if (e.code === 'KeyR')       actions.setScoresRevealed?.(!show.showState.scoresRevealed)
-  }, [scorePanelOpen, themePickerOpen, scoreboardModalOpen, actions, show.showState.answerReveal, show.showState.scoresRevealed, guardNav])
+  }, [scorePanelOpen, themePickerOpen, scoreboardModalOpen, actions, show.showState.answerReveal, show.showState.scoresRevealed, guardNav, currentSlide])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -821,6 +916,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // advancing two slides.
   function handleNextClick() {
     if (pendingAdvanceRef.current) return
+    // "Next locks answers" — same check as the ArrowRight branch above.
+    if (maybeStartLockCountdown()) return
     guardNav(actions.nextSlide)
   }
   function handlePrevClick() {

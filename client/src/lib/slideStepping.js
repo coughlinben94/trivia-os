@@ -49,7 +49,11 @@ export function sortSlides(slides) {
   return [...(slides ?? [])].sort((a, b) => a.order - b.order)
 }
 
-function patchSlideData(slides, id, dataPatch) {
+// Exported so Display.jsx's own raw shows-row writes (it has no `actions`
+// object, just a host-verified UPDATE) can patch one slide's data the same
+// way every internal caller here does, instead of growing a second copy of
+// this map — e.g. writing the "Next locks answers" countdown fields.
+export function patchSlideData(slides, id, dataPatch) {
   return slides.map(s => s.id === id ? { ...s, data: { ...s.data, ...dataPatch } } : s)
 }
 

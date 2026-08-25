@@ -9,6 +9,7 @@ import { ringVisibleStationIndex, ringPeekIndex } from '../lib/ringStationIndex.
 import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
+import LockCountdownOverlay from '../components/display/LockCountdownOverlay.jsx'
 import JukeboxBreakOverlay from '../components/display/JukeboxBreakOverlay.jsx'
 import WarpTransition from '../components/display/WarpTransition.jsx'
 import { RING_RETURN } from '../components/display/RingAmbient.jsx'
@@ -26,6 +27,8 @@ import {
   teamPickerCursor,
   ownsAutoRoll,
   TEAM_PICKER_HOLD_MS,
+  pendingLockPhase,
+  patchSlideData,
 } from '../lib/slideStepping.js'
 import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
 
@@ -614,6 +617,31 @@ async function stepShow(showRow, direction) {
   return { advanced: true, denied: false, cursor: cursorAfterStep(args, patch) }
 }
 
+// Starts the "Next locks answers" countdown ceremony from THIS window — a
+// plain host-verified UPDATE, the same write path stepShow above uses, since
+// /display has no `actions` object. Only patches the current slide's
+// countdown fields via the shared patchSlideData helper (slideStepping.js);
+// it is not a real step, so it never touches current_slide_index/id.
+//
+// Completing the countdown is LiveMode.jsx-only (see pendingLockPhase's own
+// comment in slideStepping.js for why) — this function only ever WRITES the
+// start timestamp, never arms a completion timer of its own.
+async function startLockCountdown(showRow, slideId, phase) {
+  const newSlides = patchSlideData(showRow.slides, slideId, {
+    lockCountdownPhase: phase,
+    lockCountdownStartedAt: Date.now(),
+  })
+  const { data, error } = await supabase
+    .from('shows')
+    .update({ slides: newSlides })
+    .eq('id', showRow.id)
+    .eq('is_live', true)
+    .select('id')
+  if (error || !data?.length) {
+    console.error('[Display] lock countdown start denied:', error ?? '0 rows — not host-authenticated on this browser')
+  }
+}
+
 // ─── Live display ──────────────────────────────────────────────────────────
 
 // The ring's dedicated music slot — index 10, the `record` station added
@@ -896,6 +924,12 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
         <ErrorBoundary fallback={null}>
           <ScoreboardOverlay show={show} />
         </ErrorBoundary>
+        {/* "Next locks answers" — the 3-2-1-🔒 ceremony. Mounted unconditionally
+            (startedAt falsy renders nothing) so it's always ready the instant
+            either window writes lockCountdownStartedAt to the current slide. */}
+        <ErrorBoundary fallback={null}>
+          <LockCountdownOverlay startedAt={currentSlide?.data?.lockCountdownStartedAt} />
+        </ErrorBoundary>
       </StageFrame>
 
       {/* z-50: persistent overlays — always on top */}
@@ -1062,6 +1096,21 @@ export default function Display() {
       stepRef.current = direction
       setPinOpen(true)
       return
+    }
+    // "Next locks answers" — same pendingLockPhase check LiveMode.jsx's own
+    // trigger sites run (the ONE place either window checks "is a lock phase
+    // open", per slideStepping.js). Forward-only: stepping backward off a
+    // phone-scored question should behave as it always has. Already-running
+    // (lockCountdownStartedAt set) is a no-op — the countdown runs its full
+    // course once started, no restart, no advance.
+    if (direction > 0) {
+      const row = showRef.current
+      const curSlide = sortSlides(row.slides)[row.current_slide_index ?? 0]
+      const phase = pendingLockPhase(curSlide)
+      if (phase) {
+        if (!curSlide.data?.lockCountdownStartedAt) await startLockCountdown(row, curSlide.id, phase)
+        return
+      }
     }
     const res = await stepShow(showRef.current, direction)
     if (res.denied) setNavDenied(true)
