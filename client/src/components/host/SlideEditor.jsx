@@ -155,12 +155,6 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
     return result
   }
 
-  async function handleCustomImageUpload(file) {
-    const result = await uploadMedia(file)
-    if (result?.url) batchChange({ mediaUrl: result.url, mediaType: result.type })
-    return result
-  }
-
   // Questions in same round (for grading-break back link)
   const roundSlides = show.slides.filter(s => s.roundId === slide.roundId && s.type === 'question')
 
@@ -214,7 +208,7 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
                 <ScoreboardRevealEditor data={data} onChange={change} show={show} />
               )}
               {slide.type === 'custom' && (
-                <CustomEditor data={data} onChange={change} onImageUpload={handleCustomImageUpload} theme={theme} />
+                <CustomEditor data={data} onChange={change} theme={theme} />
               )}
               {slide.type === 'pixelate-series' && (
                 <PixelateSeriesEditor data={data} onChange={change} onStageUpload={handleStageUpload} theme={theme} />
@@ -1566,26 +1560,17 @@ function ScoreboardRevealEditor({ data, onChange, show }) {
   )
 }
 
-// Multiple/movable images on a slide go through the freeform overlay system
-// (the "✏️ Design" toolbar's Insert Image, supports multi-select) instead of
-// a field here — 2026-08-25, Ben: needed drag/resize/multi-image, which
-// overlays already do generically for every slide type. This editor only
-// ever writes the single legacy data.mediaUrl now; CustomSlide.jsx still
-// reads data.images[] if a slide already has it saved, but nothing here
-// creates that shape anymore — one image-adding workflow, not two.
-function CustomEditor({ data, onChange, onImageUpload }) {
+// All images on a slide go through the freeform overlay system now (the
+// "✏️ Design" toolbar's Insert Image — multi-select, drag, resize) — one
+// image-adding workflow instead of two. 2026-08-25, Ben: "why not make them
+// one in the same" after this editor's own single-image field and the
+// overlay tool sat side by side. CustomSlide.jsx still renders data.mediaUrl
+// for any slide that already has one saved from before this change.
+function CustomEditor({ data, onChange }) {
   return (
     <>
       <Field label="Title"><TextInput value={data.title} onChange={v => onChange('title', v)} placeholder="Slide title" /></Field>
       <Field label="Body"><TextArea value={data.body} onChange={v => onChange('body', v)} placeholder="Slide content…" rows={6} /></Field>
-      <MediaUpload
-        accept="image"
-        label="Optional Image"
-        currentUrl={data.mediaUrl}
-        currentType={data.mediaType}
-        onUpload={onImageUpload}
-        onRemove={() => { onChange('mediaUrl', null); onChange('mediaType', null) }}
-      />
     </>
   )
 }
