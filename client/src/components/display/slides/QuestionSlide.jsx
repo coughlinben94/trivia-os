@@ -964,6 +964,10 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
   // slide in Build Mode must never leak an answer onto the host's own
   // screen before the round is actually live.
   const revealedGroups = isPreview ? 0 : (data.introDone ? Math.min((data.currentPart ?? 0) + 1, rowGroups.length) : 0)
+  // groupSize > 1 with more than one group (Disney: 2 groups of 3) means a
+  // real "columns" layout, not just fewer reveal presses — see isPaired's
+  // render branch below.
+  const isPaired = groupSize > 1 && rowGroups.length > 1
 
   // Fixed-px side columns on purpose: the stage is a fixed 1920 canvas
   // (same assumption QUESTION_BOX bakes in), and a constant label/answer
@@ -1025,69 +1029,123 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
           among the rows, instead of a content-driven one that grows with
           whatever size it just picked. */}
       <div ref={gridRef} className="relative z-10 w-full flex-1 min-h-0" style={{ maxWidth: 1820 }}>
-        <div
-          className="w-full h-full"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `${LABEL_W}px minmax(0, 1fr) ${ANSWER_W}px`,
-            columnGap: COL_GAP,
-            rowGap: ROW_GAP,
-            alignContent: 'center',
-            alignItems: 'center',
-          }}
-        >
-          {rows.map((row, i) => (
-            <Fragment key={i}>
-              <motion.p
-                {...rowEntrance(i)}
-                style={{
-                  color: theme.colors.highlight,
-                  fontFamily: `'${theme.fonts.display}', sans-serif`,
-                  fontSize: `${rowSize * 0.9}px`,
-                  fontWeight: 700,
-                  lineHeight: 1.2,
-                }}
-              >
-                {row.label}
-              </motion.p>
-              <motion.p
-                {...rowEntrance(i)}
-                style={{
-                  color: theme.colors.text,
-                  fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-                  fontSize: `${rowSize}px`,
-                  fontWeight: 500,
-                  lineHeight: 1.3,
-                }}
-              >
-                {row.text}
-              </motion.p>
-              {/* Cell div always present so the grid never reflows on a
-                  reveal; only the answer inside mounts. Key is stable per
-                  row, so the entrance fires exactly once — when that row's
-                  group newly reveals — not on later renders. */}
-              <div>
-                {row._group < revealedGroups && (
-                  <motion.p
-                    key={`${slide.id}:ans:${i}`}
-                    initial={{ opacity: 0, x: reduce ? 0 : 14 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.28, ease: EASE_OUT }}
-                    style={{
-                      color: SHINY_GOLD,
-                      fontFamily: `'${theme.fonts.display}', sans-serif`,
-                      fontSize: `${rowSize * 0.95}px`,
-                      fontWeight: 700,
-                      lineHeight: 1.25,
-                    }}
-                  >
-                    {row.answer}
-                  </motion.p>
-                )}
+        {isPaired ? (
+          // Paired mode (groupSize > 1, more than one group): one COLUMN per
+          // reveal group instead of one row per part — 2026-08-25, Ben:
+          // Disney's 3-and-3 has to read as "left column / right column", not
+          // a single 6-row list. Each group is short, fixed-count, bounded-
+          // length proper nouns (character/team names), so a tuned cqw clamp
+          // stands in for the measure-to-fit hook here rather than teaching
+          // that hook a second, per-column box shape for one slide type.
+          <div
+            className="w-full h-full grid"
+            style={{ gridTemplateColumns: `repeat(${rowGroups.length}, minmax(0, 1fr))`, columnGap: 64, alignContent: 'center' }}
+          >
+            {rowGroups.map((group, gi) => (
+              <div key={gi} className="flex flex-col justify-center" style={{ gap: 28 }}>
+                {group.map((row, ri) => (
+                  <div key={ri} className="flex items-center justify-between gap-6">
+                    <motion.p
+                      {...rowEntrance(gi * groupSize + ri)}
+                      style={{
+                        color: theme.colors.highlight,
+                        fontFamily: `'${theme.fonts.display}', sans-serif`,
+                        fontSize: 'clamp(1.6rem, 3.4cqw, 2.6rem)',
+                        fontWeight: 700,
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {row.label}
+                    </motion.p>
+                    <div style={{ minWidth: '35%', textAlign: 'right' }}>
+                      {gi < revealedGroups && (
+                        <motion.p
+                          key={`${slide.id}:ans:${gi}:${ri}`}
+                          initial={{ opacity: 0, x: reduce ? 0 : 14 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ duration: 0.28, ease: EASE_OUT }}
+                          style={{
+                            color: SHINY_GOLD,
+                            fontFamily: `'${theme.fonts.display}', sans-serif`,
+                            fontSize: 'clamp(1.6rem, 3.4cqw, 2.6rem)',
+                            fontWeight: 700,
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {row.answer}
+                        </motion.p>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-            </Fragment>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            className="w-full h-full"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `${LABEL_W}px minmax(0, 1fr) ${ANSWER_W}px`,
+              columnGap: COL_GAP,
+              rowGap: ROW_GAP,
+              alignContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            {rows.map((row, i) => (
+              <Fragment key={i}>
+                <motion.p
+                  {...rowEntrance(i)}
+                  style={{
+                    color: theme.colors.highlight,
+                    fontFamily: `'${theme.fonts.display}', sans-serif`,
+                    fontSize: `${rowSize * 0.9}px`,
+                    fontWeight: 700,
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {row.label}
+                </motion.p>
+                <motion.p
+                  {...rowEntrance(i)}
+                  style={{
+                    color: theme.colors.text,
+                    fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
+                    fontSize: `${rowSize}px`,
+                    fontWeight: 500,
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {row.text}
+                </motion.p>
+                {/* Cell div always present so the grid never reflows on a
+                    reveal; only the answer inside mounts. Key is stable per
+                    row, so the entrance fires exactly once — when that row's
+                    group newly reveals — not on later renders. */}
+                <div>
+                  {row._group < revealedGroups && (
+                    <motion.p
+                      key={`${slide.id}:ans:${i}`}
+                      initial={{ opacity: 0, x: reduce ? 0 : 14 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.28, ease: EASE_OUT }}
+                      style={{
+                        color: SHINY_GOLD,
+                        fontFamily: `'${theme.fonts.display}', sans-serif`,
+                        fontSize: `${rowSize * 0.95}px`,
+                        fontWeight: 700,
+                        lineHeight: 1.25,
+                      }}
+                    >
+                      {row.answer}
+                    </motion.p>
+                  )}
+                </div>
+              </Fragment>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="absolute top-5 left-5 z-20 text-2xl" style={{ filter: `drop-shadow(0 0 8px ${SHINY_GOLD_GLOW})` }}>✨</div>
