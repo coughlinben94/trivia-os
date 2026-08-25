@@ -25,18 +25,70 @@ a lock phase still open (not yet locked):
   snappy UI blip — this is a rare, once-per-question moment, closer to
   "occasional/rare" on the animation decision framework than a repeated
   keyboard action).
-- When the countdown reaches zero, the exact same lock-and-score action that
-  already exists behind the manual button fires automatically (no scoring
-  logic changes — this only changes what TRIGGERS it), followed by a brief
-  🔒 flash on `/display`.
-- A second Next then behaves as it does today once a question is locked.
+- When the countdown reaches zero, the LOCK-AND-SCORE half of the existing
+  manual-button action fires automatically — submissions close, scoring
+  computes and writes to `scoreboard_teams` — but **NOT the reveal half**
+  (see "Reveal is decoupled" below, added 2026-08-25 after Ben's follow-up).
+  `/display` shows a persistent "🔒 Locked" state, not the correct answer.
+- A second Next then behaves as it does today once a question is locked —
+  EXCEPT today "locked" and "revealed" happen together, and after this
+  change they don't (see below), so what "a locked slide's Next behavior"
+  even means may need re-deriving from `slideStepping.js`'s existing
+  locked-question guards once decoupled — check those still make sense.
 
 **Wager has two lock phases on one slide, not one** — the blind wager-tier
 lock, then (after the question reveals and teams guess) the numeric-guess
 lock. Ben confirmed: apply the countdown-then-lock at BOTH points
 independently, giving Wager three Nexts in sequence (lock tiers → lock
 guesses+score → advance), vs two for Matching/Order Up (lock+score →
-advance).
+advance) — the reveal decoupling below applies only to the SECOND Wager
+lock (guesses), since only that one currently bundles a reveal; the tier
+lock never revealed anything.
+
+## Reveal is decoupled from lock — triggered by the existing 'A' hotkey
+
+Added 2026-08-25, Ben: "the answer reveal animation for phone questions
+should only invoke when i hit A, the hotkey for answer on my streamdeck."
+
+Today, `handleLockAndScoreMatching`/`handleLockAndScoreWagers`/
+`handleLockAndScoreOrder` (all in `LiveMode.jsx`) set locked+scored+revealed
+in ONE write each (search for `matchingRevealed: true` /
+`wagerGuessesLocked: true` alongside its neighbor / `orderRevealed: true` in
+each function to see the current combined write). **Split this**: the
+lock-and-score half still fires automatically via the Next+countdown
+ceremony above; the reveal half (setting `matchingRevealed` /
+`orderRevealed` true — Wager's `wagerGuessesLocked` write itself doesn't
+need to change, since scoring depends on the guesses being locked, not on
+revealing them, but check the actual code for what `wagerRevealed` or
+equivalent is really called before assuming a name) fires only when the
+host presses **A** (`KeyA`) while the current slide is a locked-but-not-yet-
+revealed phone-scored question.
+
+`LiveMode.jsx`'s existing `A` handler (search `e.code === 'KeyA'`) currently
+does one thing: `actions.setAnswerReveal(!show.showState.answerReveal)` — a
+SHOW-LEVEL toggle used by plain (non-shiny) questions for the text-answer
+overlay. That flag and mechanism are unrelated to the phone-scored
+mechanics' own per-SLIDE `*Revealed` fields — don't conflate them. Extend
+the `A` handler with a branch: if the current slide is locked-but-not-
+revealed per whichever phone-scored mechanic it is, set that slide's own
+`*Revealed` field to true (a one-way reveal, not a toggle — unlike the
+plain-question answer overlay, un-revealing a scored result doesn't make
+sense) instead of touching the unrelated show-level `answer_reveal` flag.
+If the current slide ISN'T a phone-scored mechanic, `A` should behave
+exactly as it does today (untouched).
+
+**Consequence for each mechanic's `/display` component:** "locked, not yet
+revealed" becomes a real, potentially long-lived state a room might sit in
+for a while (host talking, building suspense) — not a brief transitional
+flicker like it is today. Verify each of `ShinyMatchingQuestion.jsx`,
+`ShinyWagerQuestion.jsx`, `ShinyOrderQuestion.jsx` actually has a real,
+finished visual for this state, not just a placeholder. The final
+whole-branch review of the Order Up work already found
+`ShinyMatchingQuestion.jsx` has NO distinct locked-vs-revealed visual today
+(it only branches on revealed, not on locked) — that gap must be closed as
+part of this task, not left as a blank/broken-looking screen once locked
+stops being momentary. Order Up's own three-state design (open / locked-not-
+scored / revealed) is the closest existing model to extend from.
 
 ## Architecture — read this before writing any code
 
@@ -228,16 +280,70 @@ completion. `Display.jsx` only needs to RENDER the countdown reactively
 (via `LockCountdownOverlay` reading `lockCountdownStartedAt` off the slide
 it's already subscribed to) — it takes no action of its own.
 
+## Task 3 — Decouple reveal from lock, wire it to the 'A' hotkey
+
+Do this task AFTER Task 2 (it edits the same handler functions Task 2's
+completion effect calls, so the call sites must exist first).
+
+1. In `LiveMode.jsx`, edit `handleLockAndScoreMatching`,
+   `handleLockAndScoreWagers` (the guesses-lock function — NOT
+   `handleLockWagers`, the tiers-lock function, which never set a reveal
+   field to begin with), and `handleLockAndScoreOrder`: remove the
+   `*Revealed: true` write from each (find the exact field name each one
+   sets today — `matchingRevealed`, `orderRevealed`, and whatever Wager's
+   equivalent is actually called, don't assume — and stop setting it in
+   these functions). Locking and scoring themselves are unchanged — only
+   stop flipping the reveal flag as part of the same write.
+2. Add a new small function (or extend an existing one, your call, but keep
+   it in one place) that JUST sets the appropriate `*Revealed` field true
+   for whichever mechanic the current slide is — this is what both the
+   manual UI (see #4) and the new `A`-key branch (see #3) call.
+3. In `LiveMode.jsx`'s `handleKeyDown`, find the `e.code === 'KeyA'` branch
+   (currently just `actions.setAnswerReveal(!show.showState.answerReveal)`).
+   Add a check: if the current slide is a phone-scored mechanic that's
+   locked but not yet revealed (matching `pendingLockPhase`'s underlying
+   locked-flags, but for the REVEALED half — you may want a small sibling
+   helper next to `pendingLockPhase` in `slideStepping.js`, e.g.
+   `pendingReveal(slide)`, returning which mechanic needs revealing or null
+   — use your judgment, keep the "one source of truth" rule from the
+   Global Constraints), call the new reveal-setter from #2 instead of
+   touching `answer_reveal`. If the slide isn't a locked-but-unrevealed
+   phone-scored question, `A` must behave exactly as it does today
+   (untouched fallback).
+4. Find wherever the existing manual "🔒 Lock Answers & Score" buttons live
+   in `LiveMode.jsx`'s JSX (search `handleLockAndScoreMatching`/
+   `handleLockAndScoreWagers`/`handleLockAndScoreOrder` for their `onClick`
+   sites). Per Ben's ask, reveal should ONLY ever happen via `A` — including
+   when the host locks manually from the laptop, not just via the Next
+   ceremony — so these buttons should stay as "lock+score only" after your
+   step 1 edit, no additional change needed here beyond confirming they now
+   correctly do NOT reveal (verify, don't just assume step 1 covered it).
+5. Update each of `ShinyMatchingQuestion.jsx`, `ShinyWagerQuestion.jsx`,
+   `ShinyOrderQuestion.jsx` to have a real, finished "locked, awaiting
+   reveal" visual — not a placeholder — since this state can now last as
+   long as the host wants before pressing `A`. Order Up's existing
+   open/locked-not-scored/revealed three-state design
+   (`ShinyOrderQuestion.jsx`) is the closest existing model; the review that
+   flagged this gap noted Matching currently has none at all, so that one
+   needs real design work, not just a copy-paste. Read `emil-design-eng`'s
+   guidance again for this — a "waiting for the host" state that might hold
+   for 10+ seconds needs different treatment than a 3-frame transitional
+   flicker (a subtle idle/breathing animation on the 🔒, GPU-only, is
+   reasonable; don't leave it a static frozen frame, but don't over-animate
+   something meant to recede into the background while the host talks).
+
 ## Global constraints
 
-- No changes to the actual scoring/locking logic inside
+- Task 1/2 must not change the actual scoring MATH inside
   `handleLockAndScoreMatching`/`handleLockWagers`/`handleLockAndScoreWagers`/
-  `handleLockAndScoreOrder` — this plan only changes what CALLS them, never
-  their internals.
+  `handleLockAndScoreOrder` — only what calls them. Task 3 DOES intentionally
+  change these same functions, but only to remove the bundled reveal write,
+  never the scoring logic itself.
 - The existing manual "🔒 Lock Answers & Score" buttons in `LiveMode.jsx`
-  should stay working exactly as they do today (don't remove them — a host
-  who's back at the laptop should still be able to click them directly,
-  bypassing the countdown entirely, same as today).
+  should stay working (don't remove them — a host back at the laptop should
+  still be able to click them directly, bypassing the countdown), but after
+  Task 3 they lock+score only, same as the Next ceremony — reveal is `A`-only
+  everywhere, no exceptions carved out for the manual button.
 - `pendingLockPhase` must be the ONLY place either file checks "is a lock
   phase open" — no duplicate inline conditions re-deriving the same thing
   in `LiveMode.jsx` or `Display.jsx`.

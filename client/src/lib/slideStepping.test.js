@@ -9,6 +9,7 @@ import {
   cursorAfterStep,
   ownsAutoRoll,
   AUTO_ROLL_OWNERSHIP_MAX_AGE_MS,
+  pendingLockPhase,
 } from './slideStepping.js'
 
 const noTeams = async () => 0
@@ -386,5 +387,58 @@ describe('team-picker auto-roll ownership', () => {
       // the 7th press is a no-op (nothing after this slide) and breaks out.
       expect(armed).toEqual([true, true, true, true, false, false])
     })
+  })
+})
+
+// The "Next locks answers" phase law. Both /host (which starts the countdown
+// AND performs the lock at zero) and /display (which starts it and draws it)
+// branch off this one function, so a wrong answer here either strands a
+// question's answers open forever or eats a Next press on a question that had
+// nothing left to lock — both of them in front of a live room.
+describe('pendingLockPhase', () => {
+  const shiny = (type, data = {}) => slide('q', 0, 'question', { isShiny: true, shinyInputSchema: { type }, ...data })
+
+  it('returns matching while a matching question is still taking answers', () => {
+    expect(pendingLockPhase(shiny('matching'))).toBe('matching')
+  })
+
+  it('returns null once matching is locked', () => {
+    expect(pendingLockPhase(shiny('matching', { matchingLocked: true }))).toBe(null)
+  })
+
+  it('returns order while an Order Up question is still taking answers', () => {
+    expect(pendingLockPhase(shiny('order'))).toBe('order')
+  })
+
+  it('returns null once Order Up is locked', () => {
+    expect(pendingLockPhase(shiny('order', { orderLocked: true }))).toBe(null)
+  })
+
+  // Wager is the only mechanic with two lock phases on ONE slide: the blind
+  // tier lock, then the numeric-guess lock after the question reveals. They
+  // must come back in that order from three consecutive Next presses.
+  it('walks wager through tiers, then guesses, then null', () => {
+    expect(pendingLockPhase(shiny('wager'))).toBe('wager-tiers')
+    expect(pendingLockPhase(shiny('wager', { wagerTiersLocked: true }))).toBe('wager-guesses')
+    expect(pendingLockPhase(shiny('wager', { wagerTiersLocked: true, wagerGuessesLocked: true }))).toBe(null)
+  })
+
+  it('never skips the tier lock just because guesses are somehow already flagged', () => {
+    // Out-of-order flags shouldn't let a press jump straight to scoring a
+    // wager whose tiers were never locked.
+    expect(pendingLockPhase(shiny('wager', { wagerGuessesLocked: true }))).toBe('wager-tiers')
+  })
+
+  it('returns null for a question that is not phone-scored at all', () => {
+    expect(pendingLockPhase(shiny('list'))).toBe(null)
+    expect(pendingLockPhase(shiny('image'))).toBe(null)
+    expect(pendingLockPhase(slide('q', 0))).toBe(null)
+    expect(pendingLockPhase(slide('tp', 0, 'team-picker', { parts: [null, null] }))).toBe(null)
+  })
+
+  it('returns null for no slide / no data rather than throwing mid-press', () => {
+    expect(pendingLockPhase(null)).toBe(null)
+    expect(pendingLockPhase(undefined)).toBe(null)
+    expect(pendingLockPhase({ id: 'q' })).toBe(null)
   })
 })

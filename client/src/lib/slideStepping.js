@@ -228,6 +228,50 @@ export function ownsAutoRoll(cursor, owned, now = Date.now()) {
   return now - (owned.at ?? 0) <= AUTO_ROLL_OWNERSHIP_MAX_AGE_MS
 }
 
+// How long the "Next locks answers" countdown runs before the real lock+score
+// fires — 3-2-1, ~1s a number. Lives here, next to the phase law it paces, for
+// the same reason TEAM_PICKER_HOLD_MS does: /host arms the completion timer off
+// it while /display draws the numbers off it, and two windows pacing one
+// ceremony must never be able to drift to two tempos.
+export const LOCK_COUNTDOWN_MS = 3000
+
+// Which lock phase, if any, is still OPEN on this slide — i.e. what a Next
+// press here should start a countdown for instead of advancing. null when the
+// slide isn't a phone-scored question at all, or every lock phase it has is
+// already past.
+//
+// The ONE definition of "is a lock phase pending". Both LiveMode.jsx (which
+// starts the countdown and later performs the actual lock) and Display.jsx
+// (which starts it and only draws it) call this, so they cannot drift on the
+// question the way LiveMode.jsx used to drift from bakeTeamPickerParts by
+// restating its index law inline — same reasoning isAutoRollPart documents.
+//
+// Deliberately NOT paired with an ownsAutoRoll-style ownership handshake. That
+// one exists because EITHER window can perform the auto-roll's shared action
+// (actions.nextSlide() is identical on both sides), so both arming a timer off
+// the same observed state double-advances. Here the actual lock+score reads
+// phone_answers/teams and writes scoreboard_teams through host-side `actions`
+// that Display.jsx simply does not have — exactly one window in the app is
+// capable of completing this ceremony, so there is no double-completion race
+// to arbitrate. Starting it is safe from either window too: one physical
+// keypress reaches only the one OS-focused listener.
+//
+// Wager is the only mechanic with TWO lock phases on one slide (blind tiers
+// first, then the numeric guesses once the question is out), so it gets
+// checked in that order and returns null only when both are shut.
+export function pendingLockPhase(slide) {
+  const data = slide?.data
+  if (!data) return null
+  if (isMatchingShiny(data)) return data.matchingLocked ? null : 'matching'
+  if (isWagerShiny(data)) {
+    if (!data.wagerTiersLocked) return 'wager-tiers'
+    if (!data.wagerGuessesLocked) return 'wager-guesses'
+    return null
+  }
+  if (isOrderShiny(data)) return data.orderLocked ? null : 'order'
+  return null
+}
+
 /**
  * One Next press. `show` is { slides, currentSlideIndex, currentSlideId }.
  * Returns a shows-row patch, or null when the press is a no-op.
