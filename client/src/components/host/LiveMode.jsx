@@ -1,13 +1,14 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
-import { resolveShinyPart, isMatchingShiny, isWagerShiny } from '../../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny } from '../../lib/shinySeries.js'
 import ScorePanel from './ScorePanel.jsx'
 import LateTeamPopover from './LateTeamPopover.jsx'
 import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
 import { supabase } from '../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
 import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
+import { computeOrderScoreUpdates } from '../../lib/orderScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 import { isAutoRollPart, TEAM_PICKER_HOLD_MS } from '../../lib/slideStepping.js'
 
@@ -228,6 +229,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [matchingScoreError, setMatchingScoreError] = useState(null)
   const [wagerBusy, setWagerBusy] = useState(false)
   const [wagerError, setWagerError] = useState(null)
+  const [orderBusy, setOrderBusy] = useState(false)
+  const [orderScoreError, setOrderScoreError] = useState(null)
 
   const slides = sortedSlides(show)
   const currentIndex = show.showState.currentSlideIndex ?? 0
@@ -246,6 +249,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   useEffect(() => {
     setWagerError(null)
     setMatchingScoreError(null)
+    setOrderScoreError(null)
   }, [currentSlide?.id])
   // Jump-to-QR — a late team scans in mid-show. Only shown if the show
   // actually has a Pre-Show slide; jumps the TV there without touching the
@@ -383,6 +387,79 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true, matchingLockedAt: lockedAt, matchingRevealed: true } })
     } finally {
       setMatchingBusy(false)
+    }
+  }
+
+  // Order question: same one-lock-does-everything shape as
+  // handleLockAndScoreMatching above (lock, score, and reveal in one host
+  // action — Order has no Wager-style blind-tier phase to split into a
+  // separate first lock). Kept as its own function rather than
+  // parameterizing the Matching handler, same reasoning MatchingBoard/Wager
+  // already establish: each mechanic's scoring call, data-shape keys
+  // (orderLocked/orderRevealed vs matchingLocked/matchingRevealed) and error
+  // copy differ enough that sharing one function would need its own branch
+  // per mechanic anyway.
+  async function handleLockAndScoreOrder(slide) {
+    setOrderBusy(true)
+    setOrderScoreError(null)
+    try {
+      // Same lock-cutoff reasoning as handleLockAndScoreMatching: persisted,
+      // not recomputed, so this is also the safe "🔁 Retry Scoring" handler
+      // for a slide that's already locked (orderRevealed still false).
+      let lockedAt = slide.data.orderLockedAt
+      if (!slide.data.orderLocked) {
+        lockedAt = new Date().toISOString()
+        actions.updateSlide(slide.id, { data: { ...slide.data, orderLocked: true, orderLockedAt: lockedAt } })
+        await actions.flushSlides()
+        await new Promise(r => setTimeout(r, 700))
+      }
+
+      const { data: rawAnswers, error: fetchError } = await supabase
+        .from('phone_answers')
+        .select('team_id, answer, submitted_at')
+        .eq('slide_id', slide.id)
+      if (fetchError) { console.error('phone_answers fetch failed:', fetchError); setOrderScoreError('Scoring failed — check connection and retry'); return }
+      const answers = rawAnswers?.filter(a => !a.submitted_at || a.submitted_at <= lockedAt) ?? []
+      const lateCount = (rawAnswers?.length ?? 0) - answers.length
+      if (lateCount > 0) console.warn(`[LiveMode] discarded ${lateCount} phone_answers row(s) submitted after order lock`)
+
+      const { data: teams, error: teamsError } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('show_id', show.id)
+      if (teamsError) { console.error('teams fetch failed:', teamsError); setOrderScoreError('Scoring failed — check connection and retry'); return }
+
+      const { data: scoreboardTeams, error: sbError } = await supabase
+        .from('scoreboard_teams')
+        .select('id, show_id, name, scores, sort_order')
+        .eq('show_id', show.id)
+      if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); setOrderScoreError('Scoring failed — check connection and retry'); return }
+
+      const updates = computeOrderScoreUpdates({
+        answers, teams, scoreboardTeams,
+        roundKey: roundKeyFor(show, slide),
+        points: slide.data.pointsForOrder ?? 10,
+        correctOrder: slide.data.correctOrder ?? [],
+        slideId: slide.id,
+      })
+
+      // Same real-problem-vs-nothing-to-score distinction as Matching's own
+      // guard — answers exist but none could be attributed to the
+      // scoreboard means a name mismatch or an empty admin scoreboard, not
+      // "no one played."
+      if ((answers?.length ?? 0) > 0 && updates.length === 0) {
+        setOrderScoreError('No answers could be matched to the scoreboard — check team names match, then retry')
+        return
+      }
+
+      if (updates.length > 0) {
+        const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
+        if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setOrderScoreError('Scoring failed — check connection and retry'); return }
+      }
+
+      await actions.updateSlide(slide.id, { data: { ...slide.data, orderLocked: true, orderLockedAt: lockedAt, orderRevealed: true } })
+    } finally {
+      setOrderBusy(false)
     }
   }
 
@@ -911,6 +988,26 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
               </button>
               {matchingScoreError && (
                 <p className="text-xs text-red-600 mt-2 text-center">{matchingScoreError}</p>
+              )}
+            </div>
+          )}
+
+          {currentSlide?.type === 'question' && isOrderShiny(currentSlide?.data) && !currentSlide?.data?.orderRevealed && (
+            <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
+              <p className="text-xs text-gray-400 mb-3">Order Up question — teams are submitting on their phones</p>
+              <button
+                onClick={() => handleLockAndScoreOrder(currentSlide)}
+                disabled={orderBusy}
+                className={`w-full py-3 rounded-xl border-2 font-semibold text-sm transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
+                  orderBusy
+                    ? 'border-gray-100 text-gray-300 cursor-not-allowed'
+                    : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'
+                }`}
+              >
+                {orderBusy ? 'Scoring…' : currentSlide?.data?.orderLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score'}
+              </button>
+              {orderScoreError && (
+                <p className="text-xs text-red-600 mt-2 text-center">{orderScoreError}</p>
               )}
             </div>
           )}
