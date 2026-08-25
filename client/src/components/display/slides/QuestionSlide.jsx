@@ -240,20 +240,29 @@ function ShinyVisualQuestion({ slide, theme }) {
   // aspect ratio the same way.
   const isPortrait = aspect === 'portrait' && !!part.text?.trim()
 
+  // Host override escape hatch (2026-08-25): auto-fit sizes for the
+  // hardest-to-fit case (longest caption at its floor), which isn't always
+  // what looks best for a specific slide — data.captionFontSizePx, when
+  // set, wins outright over the computed fit. No canvas/drag UI yet (that's
+  // a separate, bigger design — see the manual text-region override
+  // shipped for Design-canvas slide types); this is just the value read
+  // straight off the slide.
   const captionBoxRef1 = useRef(null)
-  const captionSize1 = useFitToBox(captionBoxRef1, part.text, {
+  const autoCaptionSize1 = useFitToBox(captionBoxRef1, part.text, {
     family: theme.fonts.body,
     floorPx: VISUAL_CAPTION_FLOOR * 16,
     ceilPx: VISUAL_CAPTION_CEIL * 16,
     maxLines: 5, lineHeight: 1.15,
   })
+  const captionSize1 = data.captionFontSizePx ?? autoCaptionSize1
   const captionBoxRef2 = useRef(null)
-  const captionSize2 = useFitToBox(captionBoxRef2, part.text, {
+  const autoCaptionSize2 = useFitToBox(captionBoxRef2, part.text, {
     family: theme.fonts.body,
     floorPx: VISUAL_CAPTION_FLOOR * 16,
     ceilPx: VISUAL_CAPTION_CEIL * 16,
     maxLines: 5, lineHeight: 1.15,
   })
+  const captionSize2 = data.captionFontSizePx ?? autoCaptionSize2
 
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
