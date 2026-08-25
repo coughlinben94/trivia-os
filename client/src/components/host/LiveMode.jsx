@@ -830,21 +830,49 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // SAME updateSlide call that performs the actual lock" calls for, without
   // touching the handler functions themselves: each one's own first write
   // spreads `...slide.data` verbatim, so scrubbing the param here is enough
-  // to keep those fields out of what actually lands in the database.
+  // to keep those fields out of what actually lands in the database — in
+  // the normal case, where the handler's first write actually fires.
+  //
+  // 2026-08-25 review: that's NOT true for handleLockAndScoreWagers's
+  // 'wager-guesses' phase specifically — it bails on a bad `parseWagerNumber`
+  // BEFORE its first write (unlike Matching/Order/wager-tiers, whose first
+  // write is unconditional). A bailed handler never writes anything, so the
+  // scrub above never lands in the database either: lockCountdownStartedAt
+  // stays stuck true forever, and maybeStartLockCountdown/handleStep's
+  // "already running" check reads exactly that field — every subsequent
+  // Next on that slide would silently no-op via Stream Deck, no visible
+  // countdown to explain why (the overlay self-hides on its own timer
+  // regardless of whether these fields ever cleared). The unconditional
+  // cleanup write below closes that without touching the handler: whatever
+  // the handler did or didn't write, this always clears the countdown
+  // fields off the slide afterward, off the FRESHEST slide data (not the
+  // pre-handler `slide` snapshot, so it can't stomp a field the handler's
+  // own write just set) — and only when they're actually still set, so the
+  // normal already-scrubbed case doesn't pay for a redundant write.
   useEffect(() => {
     const phase = currentSlide?.data?.lockCountdownPhase
     const startedAt = currentSlide?.data?.lockCountdownStartedAt
     if (!phase || !startedAt) return
     const remaining = Math.max(startedAt + LOCK_COUNTDOWN_MS - Date.now(), 0)
-    const t = setTimeout(() => {
+    const t = setTimeout(async () => {
       const slide = currentSlideRef.current
       // Bail if the slide/phase/timestamp drifted since this fired was
       // scheduled (e.g. the host locked manually via the button in the
       // meantime) — don't fire a stale-phase lock against a slide that's
       // moved on.
       if (!slide || slide.data?.lockCountdownPhase !== phase || slide.data?.lockCountdownStartedAt !== startedAt) return
+      const slideId = slide.id
       const scrubbedSlide = { ...slide, data: { ...slide.data, lockCountdownPhase: null, lockCountdownStartedAt: null } }
-      lockHandlersRef.current?.[phase]?.(scrubbedSlide)
+      try {
+        await lockHandlersRef.current?.[phase]?.(scrubbedSlide)
+      } finally {
+        const latest = currentSlideRef.current
+        if (latest?.id === slideId && (latest.data?.lockCountdownPhase || latest.data?.lockCountdownStartedAt)) {
+          actionsRef.current.updateSlide(slideId, {
+            data: { ...latest.data, lockCountdownPhase: null, lockCountdownStartedAt: null },
+          })
+        }
+      }
     }, remaining)
     return () => clearTimeout(t)
   }, [currentSlide?.id, currentSlide?.data?.lockCountdownPhase, currentSlide?.data?.lockCountdownStartedAt])
