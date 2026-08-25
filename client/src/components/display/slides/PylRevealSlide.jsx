@@ -28,12 +28,17 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
     return siblings.length ? siblings.map(s => (s.data?.stages ?? s.data?.items ?? []).map(x => x.text)) : null
   }, [show?.slides, slide.roundId])
 
+  // Theme Picker board rows (isBoard) are a handful of short named options
+  // ("Sports", "Song Lyrics") with tons of headroom left under the shared
+  // 2.5rem list ceiling, which exists to keep long scored-stage lists from
+  // overrunning — 2026-08-25, Ben: "can def be made bigger" on a 3-item
+  // board. A scored/points list keeps the conservative ceiling unchanged.
   const listBoxRef = useRef(null)
   const rowSize = useFitListToBox(listBoxRef, items.map(x => x.text), {
     groups,
     family: theme.fonts.body,
     floorPx: LIST_ITEM_FLOOR * 16,
-    ceilPx: LIST_ITEM_CEIL * 16,
+    ceilPx: (isBoard ? 5.5 : LIST_ITEM_CEIL) * 16,
     gapPx: 12,
     rowInset: 176,
     maxLinesPerRow: 2,
