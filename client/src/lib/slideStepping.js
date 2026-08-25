@@ -380,11 +380,15 @@ export async function computeNextStep(show, fetchTeamCount) {
   }
 
   // Step through this slide's parts before moving to the next slide.
+  // groupSize (default 1) lets a slide reveal N parts per Next press
+  // instead of one — currentPart then counts GROUPS, not raw parts (Ben,
+  // 2026-08-25: Disney reveals 3 character/team pairs per press, not 1).
   const parts = data?.parts
-  const isMultiPart = Array.isArray(parts) && parts.length > 1
+  const stepCount = Math.ceil((parts?.length ?? 0) / (data?.groupSize || 1))
+  const isMultiPart = Array.isArray(parts) && stepCount > 1
   if (isMultiPart) {
     const curPart = data.currentPart ?? 0
-    if (curPart < parts.length - 1) {
+    if (curPart < stepCount - 1) {
       return { slides: patchSlideData(slides, curSlide.id, { currentPart: curPart + 1 }), answer_reveal: false }
     }
   }
@@ -518,7 +522,8 @@ export async function computePrevStep(show, fetchTeamCount) {
   // Generic on purpose (matches the forward branch in computeNextStep) — not
   // gated to isShiny/introDone, since team-picker uses this same
   // data.parts/currentPart mechanism without either of those fields.
-  if (Array.isArray(parts) && parts.length > 1) {
+  const stepCountBack = Math.ceil((parts?.length ?? 0) / (data?.groupSize || 1))
+  if (Array.isArray(parts) && stepCountBack > 1) {
     const curPart = data.currentPart ?? 0
     if (curPart > 0) {
       return { slides: patchSlideData(slides, curSlide.id, { currentPart: curPart - 1 }), answer_reveal: false }
@@ -551,7 +556,7 @@ export async function computePrevStep(show, fetchTeamCount) {
   const resolvedTarget = bakedSlides.find(s => s.id === targetSlide?.id) ?? targetSlide
   // Backing into a shiny or team-picker slide lands on its last revealed
   // state — the natural "undo" of advancing forward through it.
-  const lastPartIdx = Math.max((resolvedTarget?.data?.parts?.length ?? 1) - 1, 0)
+  const lastPartIdx = Math.max(Math.ceil((resolvedTarget?.data?.parts?.length ?? 1) / (resolvedTarget?.data?.groupSize || 1)) - 1, 0)
   const newSlides = withEntryState(bakedSlides, resolvedTarget, { currentPart: lastPartIdx, introDone: true })
   return {
     slides: newSlides,

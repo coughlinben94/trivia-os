@@ -945,13 +945,15 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
   const reduce = useReducedMotion()
   const parts = data.parts ?? []
   // A part normally IS one display row (Song Lyrics: 6 parts, 6 rows, one
-  // reveal per Next). A part can also carry `rows: [...]` — several rows
-  // that reveal TOGETHER on one Next press (2026-08-25, Ben: Disney wants
-  // "three and three" — 6 rows, but only 2 reveal presses, not 6). Stepping
-  // itself is untouched (computeNextStep still just increments currentPart
-  // 0..parts.length-1); grouping the rows under fewer parts is what changes
-  // press count, for free.
-  const rowGroups = parts.map(p => Array.isArray(p.rows) ? p.rows : [p])
+  // reveal per Next). data.groupSize chunks flat parts into fixed-size
+  // reveal groups instead — several rows reveal TOGETHER on one Next press
+  // (2026-08-25, Ben: Disney wants "three and three" — 6 rows, only 2
+  // reveal presses). Parts stay flat so the existing part-editor UI keeps
+  // working; slideStepping.js's stepCount mirrors this chunking so Next/Prev
+  // cap at group count, not raw part count.
+  const groupSize = data.groupSize || 1
+  const rowGroups = []
+  for (let i = 0; i < parts.length; i += groupSize) rowGroups.push(parts.slice(i, i + groupSize))
   const rows = rowGroups.flatMap((g, gi) => g.map(r => ({ ...r, _group: gi })))
   // This component only mounts after the intro card dismisses (introDone
   // gates it upstream in QuestionSlide), so group 0's answers are showing
