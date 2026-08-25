@@ -939,7 +939,7 @@ function ShinyListQuestion({ slide, theme }) {
 // (data.currentPart is the highest revealed row — the existing per-part
 // stepping, untouched, just read additively here instead of as a swap).
 
-function ShinyConcurrentQuestion({ slide, theme }) {
+function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
   const { data } = slide
   const reduce = useReducedMotion()
   const parts = data.parts ?? []
@@ -947,7 +947,11 @@ function ShinyConcurrentQuestion({ slide, theme }) {
   // gates it upstream in QuestionSlide), so row 0's answer is showing from
   // the first content frame — currentPart starts at 0, and 0 hidden rows
   // would leave the host one press behind the audience's expectation.
-  const revealedCount = data.introDone ? Math.min((data.currentPart ?? 0) + 1, parts.length) : 0
+  // isPreview (the host's build-mode canvas, SlideCanvasEditor) forces this
+  // to 0 regardless of currentPart — 2026-08-25, Ben: browsing/editing this
+  // slide in Build Mode must never leak an answer onto the host's own
+  // screen before the round is actually live.
+  const revealedCount = isPreview ? 0 : (data.introDone ? Math.min((data.currentPart ?? 0) + 1, parts.length) : 0)
 
   // Fixed-px side columns on purpose: the stage is a fixed 1920 canvas
   // (same assumption QUESTION_BOX bakes in), and a constant label/answer
@@ -957,12 +961,16 @@ function ShinyConcurrentQuestion({ slide, theme }) {
   // instead of a guessed clamp(). Question text drives the shared size;
   // labels/answers are short (song names / titles) and render slightly
   // smaller in their own fixed cells.
-  const LABEL_W = 340, ANSWER_W = 440, COL_GAP = 28, ROW_GAP = 14
+  // Narrowed from an earlier 340/440 pass (2026-08-25, Ben: "wayyyyyyyy too
+  // small") — those widths reserved over 800px of a 1680px stage, starving
+  // the fit hook's available width for the actual question text and driving
+  // it toward its floor on anything but the shortest line.
+  const LABEL_W = 230, ANSWER_W = 300, COL_GAP = 24, ROW_GAP = 14
   const gridRef = useRef(null)
   const rowSize = useFitListToBox(gridRef, parts.map(p => p.text ?? ''), {
     family: theme.fonts.body,
     floorPx: LIST_ITEM_FLOOR * 16,
-    ceilPx: LIST_ITEM_CEIL * 16,
+    ceilPx: 3.4 * 16,
     gapPx: ROW_GAP,
     rowInset: LABEL_W + ANSWER_W + COL_GAP * 2,
     maxLinesPerRow: 2,
@@ -1004,7 +1012,7 @@ function ShinyConcurrentQuestion({ slide, theme }) {
       {/* flex-1 min-h-0 gives the fit hook a real bounded height to divide
           among the rows, instead of a content-driven one that grows with
           whatever size it just picked. */}
-      <div ref={gridRef} className="relative z-10 w-full flex-1 min-h-0" style={{ maxWidth: 1680 }}>
+      <div ref={gridRef} className="relative z-10 w-full flex-1 min-h-0" style={{ maxWidth: 1820 }}>
         <div
           className="w-full h-full"
           style={{
@@ -1160,7 +1168,7 @@ function ShinyContent({ slide, show, theme, transitionKey, isPreview }) {
   // Close Up") also sets concurrent: true in its schema, and must keep its
   // existing one-part-at-a-time visual treatment above.
   if (data.shinyInputSchema?.type === 'text' && data.shinyInputSchema?.concurrent === true && Array.isArray(data.parts) && data.parts.length > 1) {
-    return <ShinyConcurrentQuestion slide={slide} theme={theme} />
+    return <ShinyConcurrentQuestion slide={slide} theme={theme} isPreview={isPreview} />
   }
   return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} />
 }

@@ -61,10 +61,20 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
     // intro. Bug fixed 2026-08-17 (Ben, live: "the animation plays on each
     // sub slide, I just want the 4 images" — every part sub-row replayed
     // the same title-card spin-in instead of jumping straight to its image).
-    const next = initialPart != null ? { ...slide.data, currentPart: initialPart, introDone: true } : slide.data
+    // Clicking the slide's own row (not a numbered part sub-row) means "show
+    // me this question fresh" — for a multi-part series that's the shiny
+    // intro card, not whatever part testing/editing last left currentPart/
+    // introDone on. 2026-08-25, Ben: "when i hit song lyrics, ie the round
+    // title, it should pop up as a shiny question intro."
+    const isMultiPartShiny = !!slide.data?.isShiny && Array.isArray(slide.data?.parts) && slide.data.parts.length > 0
+    const next = initialPart != null
+      ? { ...slide.data, currentPart: initialPart, introDone: true }
+      : isMultiPartShiny
+        ? { ...slide.data, introDone: false }
+        : slide.data
     setData(next)
     setConfirmingDelete(false)
-    if (initialPart != null) scheduleSave({ data: next })
+    if (initialPart != null || isMultiPartShiny) scheduleSave({ data: next })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slide.id, initialPart])
 
