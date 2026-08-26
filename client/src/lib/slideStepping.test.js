@@ -12,11 +12,37 @@ import {
   pendingLockPhase,
   pendingReveal,
   REVEAL_FIELD,
+  nextSlideAfter,
 } from './slideStepping.js'
 
 const noTeams = async () => 0
 const slide = (id, order, type = 'question', data = {}) => ({ id, order, type, roundId: 'r1', data })
 const dataOf = (patch, id) => patch.slides.find(s => s.id === id).data
+
+// 2026-08-25: team-picker's own "Round 1" teaser used to fire unconditionally
+// on landing, assuming it always precedes round-intro directly. A real show's
+// default opening (team-picker -> team-preview -> round-intro) violates that,
+// producing a "Round 1 / Team List / Round 1" flicker that read as a nav bug.
+// nextSlideAfter is the fix's load-bearing lookup — TeamPickerSlide gates its
+// teaser on this returning a round-intro slide.
+describe('nextSlideAfter', () => {
+  it('returns the slide immediately after, in authored order', () => {
+    const slides = [slide('a', 0), slide('b', 1), slide('c', 2)]
+    expect(nextSlideAfter(slides, 'a').id).toBe('b')
+  })
+  it('returns null for the last slide', () => {
+    const slides = [slide('a', 0), slide('b', 1)]
+    expect(nextSlideAfter(slides, 'b')).toBe(null)
+  })
+  it('returns null when the slide id is not found', () => {
+    const slides = [slide('a', 0)]
+    expect(nextSlideAfter(slides, 'missing')).toBe(null)
+  })
+  it('respects order, not array position', () => {
+    const slides = [slide('b', 1), slide('a', 0)]
+    expect(nextSlideAfter(slides, 'a').id).toBe('b')
+  })
+})
 
 describe('computeNextStep', () => {
   it('reveals the queued slide without stepping past it on the first advance', async () => {

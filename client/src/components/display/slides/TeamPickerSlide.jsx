@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { supabase } from '../../../lib/supabase.js';
 import { useTheme } from '../../shared/ThemeProvider.jsx';
 import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js';
+import { nextSlideAfter } from '../../../lib/slideStepping.js';
 
 const DISP_CAP = 150, SS = 1.6;
 const CAP = DISP_CAP * SS, MAXW = 1520 * SS;
@@ -256,6 +257,19 @@ export default function TeamPickerSlide({ slide, show }) {
     { kind: 'outro', text: closingText },
     { kind: 'landed' },
   ], [teamNames, openingText, closingText]);
+
+  // RoundOneBeat only reads true if the very next AUTHORED slide is actually
+  // a round-intro — it used to assume that unconditionally ("the team intro
+  // only ever precedes round 1"), but a team-preview ("Team List") slide
+  // commonly sits between them (this app's own default opening order:
+  // team-picker -> team-preview -> round-intro). Landing on 'landed' then
+  // played this slide's own "Round 1" tease, followed moments later by the
+  // real team-preview slide, followed by the real round-intro slide — same
+  // "Round 1" text twice with Team List sandwiched between, reading as a
+  // backward nav flicker even though every write was correctly forward and
+  // in order (2026-08-25, Ben, live: "went to round 1 slide, then team list
+  // slide, then back to round 1 slide").
+  const nextIsRoundOne = nextSlideAfter(show?.slides, slide?.id)?.type === 'round-intro';
 
   const canvasRef = useRef(null);
   const spriteCache = useRef(new Map());
@@ -532,7 +546,7 @@ export default function TeamPickerSlide({ slide, show }) {
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
       </motion.div>
       {revealed ? (
-        <RoundOneBeat theme={theme} font={font} reduce={reduce} />
+        nextIsRoundOne ? <RoundOneBeat theme={theme} font={font} reduce={reduce} /> : null
       ) : cur?.kind === 'team' ? (
         <div className="absolute bottom-10 inset-x-0 text-center" style={{ fontFamily: font, letterSpacing: 4, color: theme.colors.highlight, opacity: 0.5, fontSize: 26 }}>
           {String(hudIdx).padStart(2, '0')} / {String(teamCount).padStart(2, '0')}
@@ -551,8 +565,10 @@ export default function TeamPickerSlide({ slide, show }) {
 // the ring world we just revealed, so it stays transparent and leans on a
 // dark radial scrim for legibility over whatever the world is doing.
 // ponytail: "Round 1" is hardcoded, exactly as the label it replaces was —
-// this slide has no round data of its own, and the team intro only ever
-// precedes round 1.
+// this slide has no round data of its own. Only actually mounted when the
+// caller's nextIsRoundOne check (above) confirmed the next authored slide
+// really is a round-intro — see that comment for why the assumption "team
+// intro always precedes round 1" doesn't hold on its own.
 function RoundOneBeat({ theme, font, reduce }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">

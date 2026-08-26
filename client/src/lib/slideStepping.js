@@ -49,6 +49,17 @@ export function sortSlides(slides) {
   return [...(slides ?? [])].sort((a, b) => a.order - b.order)
 }
 
+// The slide immediately after `slideId` in authored order, or null if it's
+// the last slide (or not found). Pulled out so a slide component that needs
+// to know what's coming next (e.g. team-picker deciding whether its own
+// "Round 1" teaser is actually true) doesn't hand-roll its own sort+find —
+// see TeamPickerSlide.jsx.
+export function nextSlideAfter(slides, slideId) {
+  const sorted = sortSlides(slides)
+  const idx = sorted.findIndex(s => s.id === slideId)
+  return idx === -1 ? null : sorted[idx + 1] ?? null
+}
+
 // Exported so Display.jsx's own raw shows-row writes (it has no `actions`
 // object, just a host-verified UPDATE) can patch one slide's data the same
 // way every internal caller here does, instead of growing a second copy of
