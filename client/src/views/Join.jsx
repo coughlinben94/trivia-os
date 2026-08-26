@@ -576,6 +576,7 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered, overrid
     }
 
     case 'round-intro':
+    case 'swing-round-intro':
       return (
         <motion.div
           initial={false}
@@ -650,21 +651,63 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered, overrid
         </div>
       )
 
-    // Every slide type the phone doesn't render itself — winner-reveal,
-    // team-picker, pyl-reveal, pre-show, pixelate-series, state-of-union,
-    // grid, custom, team-preview, swing-round-intro. These used to print the
-    // raw type name ("winner reveal") on every phone in the room, which is
-    // both a debug string and a spoiler, during the loudest beats of the
-    // show. The phone's whole job on these slides is to get out of the way
-    // and send eyes to the TV.
-    default:
+    // Every remaining slide type — winner-reveal, team-picker, pyl-reveal,
+    // pre-show, pixelate-series, state-of-union, grid, custom, team-preview.
+    // Used to be an unconditional "look up at the screen" (2026-08-25, Ben,
+    // live: a whole swing round built as blank `custom` slides with the
+    // question images placed as freeform canvas overlays showed NOTHING on
+    // phones — the round simply never showed up there). Now: show whatever
+    // real content the slide actually carries (title/body/prompt text, a
+    // direct image, or overlay images/text) and only fall back to the
+    // "look up" copy when there's truly nothing to show — the ceremony
+    // slides (team-picker's roll, team-preview's live list, winner-reveal,
+    // pre-show's QR/team-count) never carry that kind of content, so they
+    // fall through here unchanged. Deliberately excludes pixelate-series'
+    // `stages` images and pyl-reveal's `answers` — both are progressive
+    // reveals on the TV and showing them here would hand out the answer
+    // early.
+    default: {
+      const d = slide.data ?? {}
+      const heading = d.title || null
+      const bodyText = d.body || d.text || d.message || null
+      const overlayTexts = (d.overlays ?? []).filter(o => o.kind === 'text' && o.text).map(o => o.text)
+      const images = [
+        ...(d.mediaUrl ? [d.mediaUrl] : []),
+        ...(d.overlays ?? [])
+          .filter(o => o.kind === 'image' && o.mediaUrl)
+          .sort((a, b) => (a.z ?? 0) - (b.z ?? 0))
+          .map(o => o.mediaUrl),
+        ...(d.columns ?? []).flat().filter(c => c?.mediaUrl).map(c => c.mediaUrl),
+      ]
+      const hasContent = heading || bodyText || overlayTexts.length > 0 || images.length > 0
+      if (!hasContent) {
+        return (
+          <div style={{ paddingTop: '2.5rem', textAlign: 'center' }}>
+            <p style={{ color: `${text}b3`, fontSize: '1.05rem', lineHeight: 1.5, margin: 0 }}>
+              {OFF_PHONE_COPY[slide.type] ?? 'Look up at the screen 👀'}
+            </p>
+          </div>
+        )
+      }
       return (
-        <div style={{ paddingTop: '2.5rem', textAlign: 'center' }}>
-          <p style={{ color: `${text}b3`, fontSize: '1.05rem', lineHeight: 1.5, margin: 0 }}>
-            {OFF_PHONE_COPY[slide.type] ?? 'Look up at the screen 👀'}
-          </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', paddingTop: '1.5rem' }}>
+          {heading && (
+            <h3 style={{ fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '1.5rem', color: text, margin: 0, textAlign: 'center' }}>
+              {heading}
+            </h3>
+          )}
+          {bodyText && (
+            <p style={{ color: text, fontSize: 'clamp(1.05rem, 4.5vw, 1.25rem)', lineHeight: 1.55, margin: 0, fontFamily: 'DM Sans, sans-serif' }}>
+              {bodyText}
+            </p>
+          )}
+          {overlayTexts.map((t, i) => (
+            <p key={i} style={{ color: text, fontSize: '1rem', lineHeight: 1.5, margin: 0, fontFamily: 'DM Sans, sans-serif' }}>{t}</p>
+          ))}
+          {images.map((src, i) => <QuestionImage key={i} src={src} alt="Slide media" />)}
         </div>
       )
+    }
   }
 }
 

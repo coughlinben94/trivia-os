@@ -115,49 +115,46 @@ describe('computeNextStep', () => {
       expect(dataOf(patch, 'a').outroShown).toBeUndefined()
     })
 
-    it('blocks entirely for a matching slide that is locked but not yet scored/revealed', async () => {
-      // Ben's decision, 2026-08-25 whole-branch review: Next used to fall
-      // through to a plain advance here once the closing-beat pan-down was
-      // skipped, letting a host who locked and forgot to press A move on
-      // without the room ever seeing the answer. Next must now do nothing
-      // (return null) instead.
+    it('skips the closing beat but still advances for a matching slide locked but not yet scored/revealed', async () => {
+      // Ben shipped a hard block here 2026-08-25 (Next did nothing until A
+      // was pressed), then reverted it live the same night — the TV gave no
+      // hint why Next looked broken, and it stranded a real show mid-round.
+      // isPending still skips the closing-beat pan-down (the room hasn't
+      // seen the answer yet, no reason to pan back to the title card), but
+      // Next now falls straight through to a plain advance either way.
       const locked = { shinyInputSchema: { type: 'matching' }, matchingLocked: true }
       const slides = [shiny('a', 0, locked), slide('b', 1)]
       const mid = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-      expect(mid).toBe(null)
+      expect(mid.current_slide_index).toBe(1)
 
       const scored = [shiny('a', 0, { ...locked, matchingRevealed: true }), slide('b', 1)]
       const close = await computeNextStep({ slides: scored, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
       expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
     })
 
-    it('blocks entirely for an order slide that is locked but not yet revealed', async () => {
+    it('skips the closing beat but still advances for an order slide locked but not yet revealed', async () => {
       const locked = { shinyInputSchema: { type: 'order' }, orderLocked: true }
       const slides = [shiny('a', 0, locked), slide('b', 1)]
       const mid = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-      expect(mid).toBe(null)
+      expect(mid.current_slide_index).toBe(1)
 
       const revealed = [shiny('a', 0, { ...locked, orderRevealed: true }), slide('b', 1)]
       const close = await computeNextStep({ slides: revealed, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
       expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
     })
 
-    it('blocks a wager slide once guesses are locked but not revealed — but NOT the earlier tiers-locked-only window', async () => {
+    it('advances normally through every wager lock stage, tiers-only and guesses-locked alike', async () => {
       // 2026-08-24 (Opus review): the OLD isPending gate used to key off
-      // wagerTiersLocked, one stage too early — that's the "guesses in,
-      // host hasn't pressed A yet" window is actually later; tiers-locked-
-      // only is still mid-question and must keep falling through to a plain
-      // advance exactly like before, not get swept into the new block
-      // (2026-08-25 review: only pendingReveal's narrower wagerGuessesLocked
-      // window blocks, per Ben's decision above).
+      // wagerTiersLocked, one stage too early — tiers-locked-only is still
+      // mid-question and must fall through to a plain advance, same as
+      // guesses-locked-but-unrevealed now does too (2026-08-25 revert).
       const tiersOnly = { shinyInputSchema: { type: 'wager' }, wagerTiersLocked: true }
       const slides = [shiny('a', 0, tiersOnly), slide('b', 1)]
       expect((await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)).current_slide_index).toBe(1)
 
-      // Guesses locked, not yet revealed — this is the one that now blocks.
       const guessesLocked = [shiny('a', 0, { ...tiersOnly, wagerGuessesLocked: true }), slide('b', 1)]
       const mid = await computeNextStep({ slides: guessesLocked, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-      expect(mid).toBe(null)
+      expect(mid.current_slide_index).toBe(1)
 
       const revealed = [shiny('a', 0, { ...tiersOnly, wagerGuessesLocked: true, wagerRevealed: true }), slide('b', 1)]
       const close = await computeNextStep({ slides: revealed, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
