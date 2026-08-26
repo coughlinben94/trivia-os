@@ -548,6 +548,36 @@ export default function RoundSidebar({
                     const groupId = group.leadSlide.id
                     const expanded = expandedGroups.has(groupId)
                     const { slide: leadSlide, idx: leadIdx } = group.items[0]
+                    // A sibling-group member can ALSO independently carry its
+                    // own data.parts — seriesEnabled's "Part of a Series"
+                    // toggle is a per-slide flag, orthogonal to the sibling
+                    // grouping here (isShinySeriesSibling). Confirmed live
+                    // 2026-08-25: a "Hear! Me! Roar!" lead slide held 3 real
+                    // sub-answers (Johnny Bravo / Pinky and the Brain /
+                    // Dragontales) in its own parts array while its 2 sibling
+                    // slides sat blank — but this branch only ever rendered
+                    // one row per sibling, so those 3 real sub-answers were
+                    // completely invisible/unreachable from the nav tree
+                    // (only reachable by opening the slide in the editor).
+                    // Nested under the group's own expand toggle rather than
+                    // a second one — "show me what's inside" already covers
+                    // both meanings.
+                    function ownPartRows(slide, idx) {
+                      const parts = slide.data?.isShiny && Array.isArray(slide.data.parts) && slide.data.parts.length > 0 ? slide.data.parts : null
+                      if (!parts) return null
+                      const activePart = selectedSlideId === slide.id ? (slide.data.currentPart ?? 0) : -1
+                      return (
+                        <div className="pl-4">
+                          {parts.map((_, i) => rowFor(slide, idx, {
+                            key: `${slide.id}:${i}`,
+                            doubleIndent: true,
+                            labelOverride: shinySiblingLabel(slide, i + 1),
+                            selected: activePart === i,
+                            onSelect: () => onSelectPart(slide, i),
+                          }))}
+                        </div>
+                      )
+                    }
                     return (
                       <div key={groupId}>
                         {rowFor(leadSlide, leadIdx, {
@@ -561,9 +591,13 @@ export default function RoundSidebar({
                           // this twice on a 6-slide image series).
                           leadPartLabel: shinySiblingLabel(leadSlide, 1),
                         })}
-                        {expanded && group.items.slice(1).map(({ slide, idx }, i) =>
-                          rowFor(slide, idx, { doubleIndent: true, labelOverride: shinySiblingLabel(slide, i + 2) })
-                        )}
+                        {expanded && ownPartRows(leadSlide, leadIdx)}
+                        {expanded && group.items.slice(1).map(({ slide, idx }, i) => (
+                          <div key={slide.id}>
+                            {rowFor(slide, idx, { doubleIndent: true, labelOverride: shinySiblingLabel(slide, i + 2) })}
+                            {ownPartRows(slide, idx)}
+                          </div>
+                        ))}
                       </div>
                     )
                   })}
