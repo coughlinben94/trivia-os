@@ -15,6 +15,7 @@ import { DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { overflowsBox, QUESTION_BOX } from '../../lib/autoFitText.js'
+import { isConcurrentShiny } from '../../lib/shinySeries.js'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 
 export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos }) {
@@ -971,9 +972,47 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
       {/* Parts editor — the merged series content: one question, N variations */}
       {isSeriesMode && (
         <>
-          <Field label="Series Theme" hint='Shared across every part, e.g. "Hear Me Roar"'>
+          <Field label="Series Theme" hint='Shared across every asset, e.g. "Hear Me Roar"'>
             <TextInput value={data.seriesTheme} onChange={v => onChange('seriesTheme', v)} placeholder="Hear Me Roar" />
           </Field>
+
+          {/* Display mode — the post-creation escape hatch. One field
+              (data.shinyDisplay), read at render time, so a question can be
+              flipped between one-at-a-time and all-at-once without being
+              recreated. The old creation path froze this choice into the
+              slide's TYPE (a media series became a `grid` slide), which meant
+              changing your mind cost you the whole question.
+              Only offered where "all at once" has a renderer: text
+              (cumulative reveal) and image (every tile via GridContent). */}
+          {data.parts.length > 1 && ['text', 'image'].includes(schema.type) && (
+            <Field label="Display" hint="How the assets appear on the TV. Changeable any time.">
+              <div className="flex gap-1.5">
+                {[
+                  { id: 'sequential', label: 'One at a time' },
+                  { id: 'concurrent', label: 'All at once' },
+                ].map(opt => {
+                  // Derived through the shared gate so a legacy concurrent-text
+                  // slide (no shinyDisplay field, never rewritten) shows the
+                  // mode it actually plays in.
+                  const active = (isConcurrentShiny(data) ? 'concurrent' : 'sequential') === opt.id
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => onChange('shinyDisplay', opt.id)}
+                      className={`flex-1 text-xs font-medium px-3 py-2 rounded-lg border transition-colors ${
+                        active
+                          ? 'bg-yellow-50 border-yellow-400 text-yellow-700'
+                          : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </Field>
+          )}
 
           {/* Bulk dropzone stays reachable at 1 part — it's the GROW
               mechanism itself (drop N files, get N parts), not just a bulk
@@ -997,11 +1036,11 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
               there's nothing to share/pick). */}
           {data.parts.length > 1 && (
             <>
-              <Field label="Shared Answer (optional)" hint="Leave blank — each part below gets its own answer. Only fill this in if every part shares ONE answer.">
-                <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="Leave blank for per-part answers" />
+              <Field label="Shared Answer (optional)" hint="Leave blank — each asset below gets its own answer. Only fill this in if every asset shares ONE answer.">
+                <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="Leave blank for per-asset answers" />
               </Field>
 
-              <Divider label="Previewing part" />
+              <Divider label="Previewing asset" />
               <div className="flex flex-wrap gap-1.5">
                 {data.parts.map((p, i) => (
                   <button
@@ -1039,7 +1078,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
             onClick={addPart}
             className="text-xs text-baynes-forest hover:text-green-800 font-medium transition-colors"
           >
-            + Add part
+            + Add asset
           </button>
         </>
       )}
@@ -1118,7 +1157,7 @@ function BulkImageDropzone({ count, onFiles }) {
       ) : (
         <>
           <p className="text-xs font-medium text-gray-600">📎 Drop screenshots here, or click to browse</p>
-          <p className="text-xs text-gray-400 mt-0.5">Fills part 1, 2, 3… in order — adds more parts if you drop more than {count} already here</p>
+          <p className="text-xs text-gray-400 mt-0.5">Fills asset 1, 2, 3… in order — adds more assets if you drop more than {count} already here</p>
         </>
       )}
     </div>
@@ -1158,7 +1197,7 @@ function BulkTextDropzone({ count, onRows }) {
         rows={1}
         className="w-full bg-transparent text-xs font-medium text-gray-600 placeholder:text-gray-400 text-center resize-none focus:outline-none cursor-text"
       />
-      <p className="text-xs text-gray-400 mt-0.5">Fills part 1, 2, 3… in order — adds more parts if you paste more than {count} rows</p>
+      <p className="text-xs text-gray-400 mt-0.5">Fills asset 1, 2, 3… in order — adds more assets if you paste more than {count} rows</p>
     </div>
   )
 }
@@ -1178,15 +1217,15 @@ function ShinyPartEditor({ part, index, schemaType, theme, onChange, onRemove, o
   return (
     <div className="border border-gray-200 rounded-lg p-3 space-y-2.5">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Part {index + 1}</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Asset {index + 1}</span>
         {canRemove && (
           <button onClick={onRemove} className="text-xs text-gray-300 hover:text-red-500 transition-colors">✕</button>
         )}
       </div>
       <Field label="Subtitle" hint='Shown above the question — a quote, or a short label like "Villain Laughs"'>
-        <TextInput value={part.label} onChange={v => onChange({ ...part, label: v })} placeholder="Optional quote or label for this part" />
+        <TextInput value={part.label} onChange={v => onChange({ ...part, label: v })} placeholder="Optional quote or label for this asset" />
       </Field>
-      <Field label="Question Number" hint="Optional — each part can read as its own numbered question instead of sharing the slide's number">
+      <Field label="Question Number" hint="Optional — each asset can read as its own numbered question instead of sharing the slide's number">
         <NumberInput
           value={part.questionNumber ?? ''}
           onChange={v => onChange({ ...part, questionNumber: v === '' ? null : v })}
@@ -1257,7 +1296,7 @@ function ShinyPartEditor({ part, index, schemaType, theme, onChange, onRemove, o
           <TextArea value={part.text} onChange={v => onChange({ ...part, text: v })} placeholder="Write the question here…" rows={2} />
           {overflowsBox(part.text, { ...QUESTION_BOX, family: theme?.fonts?.body ?? 'DM Sans' }) && (
             <p className="text-xs text-amber-600 mt-1.5 leading-relaxed">
-              ⚠️ This part's text is too long to fit the display — it'll run past its box on the TV. Shorten it.
+              ⚠️ This asset's text is too long to fit the display — it'll run past its box on the TV. Shorten it.
             </p>
           )}
         </Field>
