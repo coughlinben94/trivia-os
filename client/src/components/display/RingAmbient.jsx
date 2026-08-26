@@ -331,9 +331,14 @@ function buildLayerContent(engine, world, arc, host, L) {
       // count is identical whether or not it's overridden.
       const cornerDraw = rHeadline() < 0.5
       const headlineCornerLeft = st.cornerLeft !== undefined ? st.cornerLeft : cornerDraw
-      let headLeft = isSpanningField
-        ? (x0 + engine.W) - hw / 2 // centered ON the st9/st10 boundary
-        : dom.cornerX(rHeadline, hw, x0, headlineCornerLeft)
+      // 2026-08-26 (ring-verify Bug C): boundary-centered placement put
+      // exactly 50% of this headline's box outside st9's own frame — the
+      // bleed check's own "ACCIDENTAL CLIP (>35%)" call, confirmed real by
+      // design-council review, not the deliberate 10-35% corner-bleed the
+      // rest of the ring uses. Reverted to the same cornerX() every other
+      // headline uses (isSpanningField still governs this station's size
+      // tier/aspect below — only its POSITION was the bug).
+      let headLeft = dom.cornerX(rHeadline, hw, x0, headlineCornerLeft)
       // 2026-08-13: synced from world-07-ring.html — `planet` centers its
       // min(w,h) disc in a wider box, leaving ~(hw-hh)/2 of dead horizontal
       // inset between the box edge (which cornerX corner-hugs) and the
@@ -393,7 +398,11 @@ function buildLayerContent(engine, world, arc, host, L) {
         const discInset = hw / 2 - hw * 0.28
         headLeft += headlineCornerLeft ? -discInset : discInset
       }
-      const headTop = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh), isSpanningField)
+      // skipMinBleed dropped with the headLeft fix above — it existed only
+      // to keep the old boundary-centered placement's ~50% horizontal crop
+      // from stacking with the normal forced vertical bleed and going even
+      // further past the 35% cap. Normal cornerX placement doesn't need it.
+      const headTop = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh))
       head.style.left = px(headLeft)
       head.style.top = px(headTop)
       host.appendChild(head)
@@ -545,7 +554,15 @@ function buildLayerContent(engine, world, arc, host, L) {
       // Forcing one detail element per station into [58,70] guarantees
       // 576/70 = 8.2x even in the worst-case headline draw; the ladder no
       // longer depends on two independent random draws going its way.
-      const dn = Math.round(lerp(1, 4, lou))
+      // maxDetail (2026-08-26, ring-verify Bug A: elements-per-station 2-5,
+      // spec §1): loud stations' own headline+companion+dn(up to 4) already
+      // sits at 6 before counting any neighbor-corner bleed — st0-4/9-12
+      // measured 6-8. Detail dots are the one Feature-and-below tier not
+      // protected by the §7.5 declared-pair rule (headline/companion stay
+      // untouched), so they're the surplus to trim. Per-station cap, not a
+      // formula-wide cut, so untouched stations (already 2-5) keep their
+      // loudness-scaled dot count exactly as before.
+      const dn = Math.min(Math.round(lerp(1, 4, lou)), st.maxDetail ?? 4)
       for (let k = 0; k < dn; k++) {
         const dw = k === 0 ? lerp(58, 70, rDetail()) : lerp(58, 154, rDetail())
         const d = dom.makePrim('dots', dw, dw * 0.9, st.hue, lerp(0.34, 0.60, lou) * 0.7, rDetail, false, fill)

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { THEMES, getTheme } from '../themes/index.js'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
@@ -16,20 +16,43 @@ export default function AmbientAudit() {
   // passing a station-shaped prop into RingAmbient (which must never
   // re-render/remount; see that component's own header comment).
   const [displayStation, setDisplayStation] = useState(0)
+  const stationCount = midnightGalaxyRing.stations.length
+  // Auto-play: walk the ring on a timer, exactly like a show would move
+  // slide-to-slide, so a person can just watch it turn instead of clicking
+  // 13 times — off by default, same manual Turn button still works.
+  const [autoPlay, setAutoPlay] = useState(false)
+
+  useEffect(() => {
+    if (!ringMode || !autoPlay) return
+    const id = setInterval(() => {
+      ringRef.current?.turn()
+      setDisplayStation(ringRef.current?.station ?? 0)
+    }, 4000)
+    return () => clearInterval(id)
+  }, [ringMode, autoPlay])
 
   if (ringMode) {
     return (
       <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
         <RingAmbient ref={ringRef} worldData={midnightGalaxyRing} />
-        <button
-          onClick={() => {
-            ringRef.current?.turn()
-            setDisplayStation(ringRef.current?.station ?? 0)
-          }}
-          style={{ position: 'absolute', top: 24, left: 24, zIndex: 30, padding: '10px 20px' }}
-        >
-          Turn ▶ (station {displayStation})
-        </button>
+        <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 30, display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button
+            onClick={() => {
+              setAutoPlay(false)
+              ringRef.current?.turn()
+              setDisplayStation(ringRef.current?.station ?? 0)
+            }}
+            style={{ padding: '10px 20px' }}
+          >
+            Turn ▶ (station {displayStation} / {stationCount})
+          </button>
+          <button
+            onClick={() => setAutoPlay(p => !p)}
+            style={{ padding: '10px 20px', background: autoPlay ? '#2a6' : undefined }}
+          >
+            {autoPlay ? '⏸ Pause auto-play' : '▶ Auto-play (4s/station)'}
+          </button>
+        </div>
       </div>
     )
   }

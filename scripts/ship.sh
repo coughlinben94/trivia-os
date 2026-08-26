@@ -35,31 +35,28 @@ npm run test:unit
 # ring-verify.mjs (concepts/ART-DIRECTION-SPEC.md gate) — runs on every ship
 # so it can't silently rot unrun (a gate nobody runs does not exist).
 #
-# 2026-08-16: RingAmbient IS now mounted in production (client/src/views/
+# 2026-08-16: RingAmbient IS mounted in production (client/src/views/
 # Display.jsx -> ParticleBackground.jsx's RING_WORLDS registry, midnight-
-# galaxy theme) — the "dev-only /ambient preview route" reason this step
-# used to be non-blocking no longer applies. A ring-verify regression is now
-# a real production-visible bug on any live show using that theme, not
-# dev-only noise.
+# galaxy theme) — a ring-verify regression is a real production-visible bug
+# on any live show using that theme, not dev-only noise.
 #
-# STILL NOT BLOCKING, for a different reason: the REGRESSION tier itself
-# (the "must always be green" structural-correctness tier, not the separate
-# spec-conformance/art-direction tier covered by HANDOFF-ring-thinktank.md's
-# tracked order-of-work) is failing. Measured 2026-08-16, whole run =
-# 35 checks / 23 PASS / 1 WARN / 11 FAIL, regression tier 3/19 red:
-#   - safe-box luminance cap over on 2 of 12 stations (st0, st11)
-#   - safe-box peak-forcing self-check (no effect on st2, st4, st8)
-#   - [react-live] window.__world contract (see boot flake below)
-# The stray-Math.random() red that used to be in this list was a stale
-# allowlist in ring-verify.mjs (spawnMeteorShower was never added as a
-# sanctioned caller), fixed 2026-08-16 — it now PASSes. The two safe-box
-# reds are pre-existing (not introduced by the mount — matched within
-# 1-3pts against the pre-mount build) but genuinely broken, not flaky.
-# Flipping this to blocking today would fail EVERY future `npm run ship` —
-# for any change, ring-related or not — until those are fixed. Leave
-# non-blocking until Ben has made a call on those 2 stations; flip to
-# blocking once the regression tier is actually green, so it becomes a real
-# gate instead of a gate that's already red on day one.
+# 2026-08-26: REGRESSION TIER NOW BLOCKS. Re-measured 3x today after the
+# 2026-08-16 note below named 2 real (non-flaky) safe-box luminance reds at
+# st0/st11 as the reason to stay non-blocking: both are now PASSing (st0
+# mean6.1/p99.5-61, st11 mean11.3/p99.5-43, cap is mean<=34/p99.5<=68) —
+# fixed sometime between 2026-08-16 and today, not re-diagnosed here, just
+# confirmed gone. 3 runs: 34/34 green, 34/34 green, 1/31 FAIL (the known
+# [react-live] boot flake below, on the 3rd run only) — read as flaky per
+# the existing KNOWN GATE FLAKE note, not a new regression. This satisfies
+# the 2026-08-16 note's own stated bar ("flip once regression tier is
+# actually green"), so this step now fails the ship on any REGRESSION-tier
+# red. It intentionally does NOT fail on the separate SPEC-CONFORMANCE tier
+# (still 16-17/31 below spec as of today — tracked separately per
+# HANDOFF-ring-thinktank.md's order-of-work, not a shipping blocker; that
+# tier is about art-direction quality, not structural correctness). This
+# only reads ring-verify.mjs's own printed "regression tier:" summary line
+# to decide — ring-verify.mjs's pass/fail logic and thresholds are not
+# touched here (STAYS-HUMAN, references/ring-world-continuity.md §4).
 #
 # KNOWN GATE FLAKE — "the gate goes quiet": ring-verify runs the same check
 # suite twice, once against the static concepts/ HTML and once against the
@@ -67,12 +64,19 @@ npm run test:unit
 # the live pass fails to boot it reports a single red — "target does not
 # expose window.__world within 8s — cannot verify" — and every other
 # react-live check simply never runs, roughly halving total coverage while
-# the summary line still reads like a normal result. That is exactly what
-# both 2026-08-16 runs above did, so the 35-check total is the REDUCED
-# number, not the full suite. If a run's totals look suspiciously small,
-# check for that line before trusting a green. Not investigated here.
-echo "ship: running ring-verify (non-blocking — see this step's own comment for why)..."
-npm run verify:ring || echo "ship: ring-verify reported FAIL — not blocking ship, see output above"
+# the summary line still reads like a normal result. If a run's totals look
+# suspiciously small, check for that line before trusting a green. If this
+# step starts blocking ship on a flake rather than a real regression, that's
+# the first thing to check — re-run `npm run verify:ring` once by hand.
+echo "ship: running ring-verify..."
+set +e
+RING_OUTPUT="$(npm run verify:ring 2>&1)"
+set -e
+echo "$RING_OUTPUT"
+if echo "$RING_OUTPUT" | grep -q "^regression tier: [0-9]*/[0-9]* FAIL"; then
+  echo "SHIP_BLOCKED: ring-verify regression tier has structural-correctness failures — see REGRESSION TIER section above. (Spec-conformance-tier failures alone do not block — see this step's own comment.) If this looks like the documented [react-live] boot flake, re-run 'npm run verify:ring' by hand to confirm before spending time on a fix."
+  exit 1
+fi
 
 PREVIEW_PORT=4173
 PREVIEW_URL="http://localhost:${PREVIEW_PORT}"
