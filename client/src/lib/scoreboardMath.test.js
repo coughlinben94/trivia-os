@@ -1,5 +1,29 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeRoundScore, computeTotal, roundScoreTotal, mergeScoreEdit, roundLabel, deriveRoundCols } from './scoreboardMath.js'
+import { normalizeRoundScore, computeTotal, roundScoreTotal, mergeScoreEdit, roundLabel, deriveRoundCols, pickableTeams } from './scoreboardMath.js'
+
+describe('pickableTeams', () => {
+  // Bug this guards against: `+ Team` inserts a row with name: '' as a
+  // placeholder until the host types a name in. The PYL Picker animations
+  // (BoxingRing/ChestDuel/CardPick/BattleshipDuel) pick a random
+  // winner from whatever list they're handed and render its name with no
+  // fallback — so an un-named row present when the host opens a picker could
+  // get picked and "win" with a blank name on the TV.
+
+  it('excludes a team with an empty name', () => {
+    const teams = [{ id: 't1', name: 'The Sharks' }, { id: 't2', name: '' }]
+    expect(pickableTeams(teams).map(t => t.id)).toEqual(['t1'])
+  })
+
+  it('excludes a whitespace-only name', () => {
+    const teams = [{ id: 't1', name: 'The Sharks' }, { id: 't2', name: '   ' }]
+    expect(pickableTeams(teams).map(t => t.id)).toEqual(['t1'])
+  })
+
+  it('keeps every team when all are named', () => {
+    const teams = [{ id: 't1', name: 'The Sharks' }, { id: 't2', name: 'Quiz Pistols' }]
+    expect(pickableTeams(teams).map(t => t.id)).toEqual(['t1', 't2'])
+  })
+})
 
 describe('roundLabel', () => {
   // Bug this guards against: display surfaces (QuestionCounter, RoundSidebar)

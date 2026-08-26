@@ -6,7 +6,7 @@ import ScorePanel from './ScorePanel.jsx'
 import LateTeamPopover from './LateTeamPopover.jsx'
 import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
 import { supabase } from '../../lib/supabase.js'
-import { deriveRoundCols, computeTotal } from '../../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, pickableTeams } from '../../lib/scoreboardMath.js'
 import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
@@ -32,7 +32,7 @@ export const ANIM_TILE_STYLE = {
   cards:      'bg-gradient-to-br from-emerald-100 to-green-200  border-emerald-300 hover:border-emerald-500',
   chestduel:  'bg-gradient-to-br from-amber-100   to-orange-200 border-amber-300   hover:border-amber-500',
   battleship: 'bg-gradient-to-br from-cyan-100    to-sky-200    border-cyan-300    hover:border-cyan-500',
-  whackamole: 'bg-gradient-to-br from-yellow-100  to-lime-200   border-lime-300    hover:border-lime-500',
+  abduction:  'bg-gradient-to-br from-lime-100    to-lime-200   border-lime-300    hover:border-lime-500',
   // Multi-stop on purpose — the one tile that isn't a single animation reads as
   // a mixed bag at a glance, the same trick winner-reveal pulls in BuildMode.
   lotto:      'bg-gradient-to-br from-fuchsia-100 via-violet-200 to-indigo-200 border-fuchsia-300 hover:border-fuchsia-500',
@@ -298,11 +298,15 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     if (pylPickerBusy || !currentSlide) return
     setPylPickerBusy(true)
     try {
-      const { data: teams, error } = await supabase
+      const { data: rawTeams, error } = await supabase
         .from('scoreboard_teams')
         .select('*')
         .eq('show_id', show.id)
-      if (error || !teams?.length) return
+      if (error || !rawTeams?.length) return
+      // Excludes not-yet-named teams (`+ Team` starts blank) — same fix as
+      // ScoreboardModal's picker buttons, see pickableTeams in scoreboardMath.js.
+      const teams = pickableTeams(rawTeams)
+      if (!teams.length) return
       const cols = deriveRoundCols(show)
       // Ascending by score, so the pool is everyone OUTSIDE the top 5 (Ben,
       // 2026-08-18: was "bottom half," which shrinks/grows with team count —

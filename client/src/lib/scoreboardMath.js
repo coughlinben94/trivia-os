@@ -5,6 +5,16 @@
 
 export const MEDALS = ['🥇', '🥈', '🥉']
 
+// `+ Team` inserts a row with name: '' until the host types one in. The PYL
+// Picker animations (BoxingRing/ChestDuel/CardPick/BattleshipDuel)
+// pick a random winner from whatever list they're handed and render its name
+// with no fallback, so a not-yet-named team could get picked and "win" with
+// a blank name on the TV. Every picker call site must filter through this
+// before building its candidates list.
+export function pickableTeams(teams) {
+  return teams.filter(t => t.name && t.name.trim())
+}
+
 // The one place a round's on-screen label ("SW"/"PYL"/"R{n}") gets computed —
 // shared by deriveRoundCols (scoreboard columns + Quick Entry's numeric
 // resolution) and any display surface that shows a round badge next to a

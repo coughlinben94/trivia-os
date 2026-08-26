@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
-import { deriveRoundCols, computeTotal, normalizeRoundScore, mergeScoreEdit } from '../../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, normalizeRoundScore, mergeScoreEdit, pickableTeams } from '../../lib/scoreboardMath.js'
 import BoxingRing from '../display/slides/BoxingRing.jsx'
 import ChestDuel from '../display/slides/ChestDuel.jsx'
 import CardPick from '../display/slides/CardPick.jsx'
 import BattleshipDuel from '../display/slides/BattleshipDuel.jsx'
-import WhackAMole from '../display/slides/WhackAMole.jsx'
+import Abduction from '../display/slides/Abduction.jsx'
 
 // ─── Quick Entry ──────────────────────────────────────────────────────────────
 function QuickEntry({ teams, cols, onSave, onClose }) {
@@ -246,6 +246,9 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
   const half           = Math.ceil(teamsWithStats.length / 2)
   const leftTeams      = teamsWithStats.slice(0, half)
   const rightTeams     = teamsWithStats.slice(half)
+  // PYL Picker candidates must exclude not-yet-named teams (`+ Team` starts
+  // blank) — see pickableTeams in scoreboardMath.js for why.
+  const pickTeams      = pickableTeams(teamsWithStats)
 
 
   useEffect(() => {
@@ -475,8 +478,8 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
   function quickSave(teamId, colKey, score) { updateScore(teamId, colKey, score) }
 
   function openAnim(type) {
-    if (teamsWithStats.length < 2) return
-    const winner = teamsWithStats[Math.floor(Math.random() * teamsWithStats.length)]
+    if (pickTeams.length < 2) return
+    const winner = pickTeams[Math.floor(Math.random() * pickTeams.length)]
     setAnimWinnerId(winner.id)
     setActiveAnim(type)
   }
@@ -520,29 +523,29 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
             >🔄 Sync Teams</button>
             <button
               onClick={() => openAnim('cards')}
-              disabled={teamsWithStats.length < 2}
+              disabled={pickTeams.length < 2}
               className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
             >🎴 Cards</button>
             <button
               onClick={() => openAnim('boxing')}
-              disabled={teamsWithStats.length < 2}
+              disabled={pickTeams.length < 2}
               className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
             >🥊 Boxing</button>
             <button
               onClick={() => openAnim('chest')}
-              disabled={teamsWithStats.length < 2}
+              disabled={pickTeams.length < 2}
               className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
             >📦 Chest</button>
             <button
               onClick={() => openAnim('battleship')}
-              disabled={teamsWithStats.length < 2}
+              disabled={pickTeams.length < 2}
               className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
             >🚢 Battleship</button>
             <button
-              onClick={() => openAnim('whackamole')}
-              disabled={teamsWithStats.length < 2}
+              onClick={() => openAnim('abduction')}
+              disabled={pickTeams.length < 2}
               className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
-            >🔨 Whack-a-Mole</button>
+            >👽 Abduction</button>
             {confirmClear ? (
               <div className="flex items-center gap-1.5 ml-1">
                 <span className="text-xs text-red-600 font-semibold">Remove all teams?</span>
@@ -622,7 +625,7 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
           >
             {activeAnim === 'boxing' && (
               <BoxingRing
-                candidates={teamsWithStats}
+                candidates={pickTeams}
                 winnerId={animWinnerId}
                 theme={theme}
                 onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}
@@ -630,7 +633,7 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
             )}
             {activeAnim === 'chest' && (
               <ChestDuel
-                candidates={teamsWithStats}
+                candidates={pickTeams}
                 winnerId={animWinnerId}
                 theme={theme}
                 onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}
@@ -638,7 +641,7 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
             )}
             {activeAnim === 'cards' && (
               <CardPick
-                candidates={teamsWithStats}
+                candidates={pickTeams}
                 winnerId={animWinnerId}
                 theme={theme}
                 onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}
@@ -646,15 +649,15 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
             )}
             {activeAnim === 'battleship' && (
               <BattleshipDuel
-                candidates={teamsWithStats}
+                candidates={pickTeams}
                 winnerId={animWinnerId}
                 theme={theme}
                 onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}
               />
             )}
-            {activeAnim === 'whackamole' && (
-              <WhackAMole
-                candidates={teamsWithStats}
+            {activeAnim === 'abduction' && (
+              <Abduction
+                candidates={pickTeams}
                 winnerId={animWinnerId}
                 theme={theme}
                 onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}

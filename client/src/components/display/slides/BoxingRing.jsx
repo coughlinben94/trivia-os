@@ -107,7 +107,12 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
       else if (m.ids.length <= 2) dying = [];
       else { dying = nonW.slice(0, -1); }
       m.bearerId = dying.length ? dying[dying.length - 1] : null;
-      const swIdx = (m.sword && dying.length >= 2) ? 1 : (m.sword && dying.length === 1 ? 0 : -1);
+      // The bearer is excluded from every beat up to and including the sword
+      // beat (swordPending), then dies normally in a LATER beat — so the sword
+      // beat can never be the last one, or the bearer has no beat left to die
+      // in and the match hangs forever (confirmed: N=4 -> dying.length===2 with
+      // the old `? 1 :` here left zero beats after the sword beat).
+      const swIdx = !m.sword ? -1 : dying.length >= 3 ? 1 : dying.length >= 1 ? 0 : -1;
       const beats = []; let t = FIRST_KO_DOOM;
       for (let k = 0; k < dying.length; k++) { const isS = k === swIdx; beats.push({ t, sword: isS }); t += isS ? SWORD_MS + 700 : KO_SPACING; }
       marks.current.beats = beats; marks.current.beatIdx = 0; marks.current.dying = new Set(dying); marks.current.meleeStart = performance.now(); marks.current.swordPending = swIdx >= 0;
@@ -400,8 +405,8 @@ export default function BoxingRing({ candidates, winnerId, theme, onDone }) {
             if (f.flash) return <div key={f.id} style={{ position: "absolute", left: f.x, top: f.y, width: 520, height: 520, marginLeft: -260, marginTop: -260, borderRadius: "50%", background: `radial-gradient(circle, ${f.color}dd, transparent 65%)`, animation: "flashFade 280ms ease-out forwards", zIndex: 46 }} />;
             if (f.shock) return <div key={f.id} style={{ position: "absolute", left: f.x, top: f.y, width: 80, height: 80, marginLeft: -40, marginTop: -40, borderRadius: "50%", border: `7px solid ${f.color}`, animation: "shockRing 580ms cubic-bezier(0.23,1,0.32,1) forwards", zIndex: 46 }} />;
             if (f.slash) return <div key={f.id} style={{ position: "absolute", left: f.x, top: f.y, width: 500, height: 28, transform: "translate(-50%,-50%) rotate(-32deg)", background: `linear-gradient(90deg, transparent, ${f.color}, #fff, ${f.color}, transparent)`, borderRadius: 14, boxShadow: `0 0 70px ${f.color}`, animation: "slash 460ms ease-out", zIndex: 47 }} />;
-            if (f.ko || f.big) return <div key={f.id} style={{ position: "absolute", left: f.x, top: f.y, transform: "translate(-50%,-50%) rotate(-10deg)", fontWeight: 900, fontSize: f.big ? 94 : 52, color: f.big ? f.color : "#fff", textShadow: `0 0 22px ${f.color}, 3px 3px 0 #000`, animation: "koPop 500ms ease-out", zIndex: 48 }}>{f.txt || "K.O."}</div>;
-            return <div key={f.id} style={{ position: "absolute", left: f.x, top: f.y, transform: "translate(-50%,-50%)", fontWeight: 900, fontSize: 34, color: f.color, textShadow: "2px 2px 0 #000", animation: "powPop 450ms ease-out", zIndex: 25 }}>{f.txt}</div>;
+            if (f.ko || f.big) return <div key={f.id} style={{ position: "absolute", left: f.x, top: f.y, transform: "translate(-50%,-50%) rotate(-10deg)", fontWeight: 900, fontSize: f.big ? 94 : 52, color: f.big ? f.color : "#fff", whiteSpace: "nowrap", textShadow: `0 0 22px ${f.color}, 3px 3px 0 #000`, animation: "koPop 500ms ease-out", zIndex: 48 }}>{f.txt || "K.O."}</div>;
+            return <div key={f.id} style={{ position: "absolute", left: f.x, top: f.y, transform: "translate(-50%,-50%)", fontWeight: 900, fontSize: 34, color: f.color, whiteSpace: "nowrap", textShadow: "2px 2px 0 #000", animation: "powPop 450ms ease-out", zIndex: 25 }}>{f.txt}</div>;
           })}
         </div>
       </div>
