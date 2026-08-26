@@ -25,6 +25,7 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
   // actually in phone_answers.
   const [answer, setAnswer] = useState([])
   const [committedAnswer, setCommittedAnswer] = useState([])
+  const [saving, setSaving] = useState(false)
 
   // Passing correctOrder so the phone's shuffle re-roll decision matches
   // the display's exactly — same items + same seed + same correctOrder is
@@ -79,14 +80,14 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
     return run
   }, [preview, slide.id, slide.showId, team.id, team.showId])
 
-  // Every tap autosaves — no explicit submit button (Global Constraints:
-  // host's Lock Answers closes the question, not a team-side submit tap).
+  // Builds the order LOCALLY — nothing saves until Lock In (below) is
+  // tapped. Was autosave-per-tap with no explicit submit button (2026-08-25,
+  // Ben, live: "there is nothing on people's phones for them to lock in") —
+  // switched to MatchingBoard's build-then-lock pattern for consistency.
   function tapItem(itemId) {
     if (locked) return
     if (answer.includes(itemId)) return // already numbered — only unnumbered images are tappable
-    const next = [...answer, itemId]
-    setAnswer(next)
-    submit(next).then(ok => { if (ok) setCommittedAnswer(next) })
+    setAnswer([...answer, itemId])
   }
 
   // "⌫ Undo last" — stack-pop only, removes the highest-numbered item
@@ -94,9 +95,23 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
   // removal).
   function undoLast() {
     if (locked || answer.length === 0) return
-    const next = answer.slice(0, -1)
-    setAnswer(next)
-    submit(next).then(ok => { if (ok) setCommittedAnswer(next) })
+    setAnswer(answer.slice(0, -1))
+  }
+
+  const allPlaced = items.length > 0 && answer.length >= items.length
+  // Compares built order, not reference equality — restoring the exact same
+  // order from the DB on mount must read as "not dirty", same reasoning as
+  // MatchingBoard's own dirty check.
+  const dirty = JSON.stringify(answer) !== JSON.stringify(committedAnswer)
+  const hasLockedOnce = committedAnswer.length > 0
+
+  function lockIn() {
+    if (locked || !allPlaced || !dirty || saving) return
+    setSaving(true)
+    submit(answer).then(ok => {
+      setSaving(false)
+      if (ok) setCommittedAnswer(answer)
+    })
   }
 
   useEffect(() => {
@@ -179,18 +194,41 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
           ⌫ Undo last
         </button>
       )}
+      {!locked && (
+        <button
+          onClick={lockIn}
+          disabled={!allPlaced || !dirty || saving}
+          onPointerDown={e => { if (allPlaced && dirty && !saving) e.currentTarget.style.transform = 'scale(0.97)' }}
+          onPointerUp={e => { e.currentTarget.style.transform = 'scale(1)' }}
+          onPointerLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+          style={{
+            width: '100%', minHeight: 60, borderRadius: 14,
+            border: allPlaced && dirty ? `2px solid ${highlight}` : `1px solid ${text}20`,
+            background: allPlaced && dirty ? `${highlight}26` : 'transparent',
+            color: allPlaced && dirty ? text : `${text}40`,
+            fontSize: '1rem', fontWeight: 700, fontFamily: 'DM Sans, sans-serif',
+            cursor: allPlaced && dirty && !saving ? 'pointer' : 'default',
+            WebkitTapHighlightColor: 'transparent',
+            transition: 'transform 140ms cubic-bezier(0.23,1,0.32,1)',
+          }}
+        >
+          {saving ? 'Saving…' : !hasLockedOnce ? '🔒 Lock In My Order' : dirty ? 'Update My Order' : 'Order Locked'}
+        </button>
+      )}
       <p style={{ color: `${text}b3`, fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>
         {locked
           ? 'Answers locked'
           : answer.length === 0
             ? 'Tap the images in order'
-            : answer.length < items.length
+            : !allPlaced
               ? `${answer.length} of ${items.length} placed`
-              : 'All placed — tap Undo to change'}
+              : dirty
+                ? 'Tap Lock In to submit'
+                : 'Locked in — you can still change it until Ben locks answers'}
       </p>
       {saveFailed && !locked && (
         <p style={{ color: '#ff6b6b', fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
-          Couldn't save — check your connection and try tapping again
+          Couldn't save — check your connection and tap Lock In again
         </p>
       )}
     </div>
