@@ -212,7 +212,16 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
             transition: 'transform 140ms cubic-bezier(0.23,1,0.32,1)',
           }}
         >
-          {saving ? 'Saving…' : !hasLockedOnce ? '🔒 Lock In My Order' : dirty ? 'Update My Order' : 'Order Locked'}
+          {/* !allPlaced checked before hasLockedOnce/dirty (2026-08-26,
+              Sonnet re-review): a team restored from an old partial
+              phone_answers row (pre-Lock-In autosave-per-tap data) can have
+              committedAnswer non-empty but short of items.length with
+              nothing locally changed — hasLockedOnce true, dirty false —
+              which read "Order Locked" here while the status line below
+              correctly said "N of M placed", a self-contradicting screen.
+              The button is already disabled via !allPlaced above; the label
+              just needs to agree. */}
+          {saving ? 'Saving…' : (!allPlaced || !hasLockedOnce) ? '🔒 Lock In My Order' : dirty ? 'Update My Order' : 'Order Locked'}
         </button>
       )}
       <p style={{ color: `${text}b3`, fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>

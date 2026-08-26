@@ -107,7 +107,17 @@ export function isVennShiny(data) {
 // been revealed so far, so 0 must mean "nothing revealed yet." See
 // slideStepping.js's step-count handling for the off-by-one this drives.
 export function isConcurrentTextShiny(data) {
-  return data.shinyInputSchema?.type === 'text' && data.shinyInputSchema?.concurrent === true
+  // Must match QuestionSlide.jsx's dispatcher guard exactly (parts.length > 1)
+  // — without it, a 1-part concurrent-text question diverges from the
+  // renderer: slideStepping.js's revealStepCount adds its +1 "nothing
+  // revealed yet" state (stepCount 2), so computeNextStep treats it as
+  // multi-part and bumps currentPart on the first Next press, but the
+  // dispatcher (needing >1 part) falls through to plain StandardQuestion,
+  // which never reads currentPart — that Next press produces no visible
+  // change, and Prev/closing-beat stepping are off by one from there on
+  // (2026-08-26, Sonnet re-review of the 2026-08-25 fix).
+  return Array.isArray(data.parts) && data.parts.length > 1 &&
+    data.shinyInputSchema?.type === 'text' && data.shinyInputSchema?.concurrent === true
 }
 
 // True when two slides are separate top-level slide objects that together

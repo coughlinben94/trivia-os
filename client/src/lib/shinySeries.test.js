@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isShinySeriesSibling, seriesGroupIndices, reorderWithinRound, resolveShinyPart } from './shinySeries.js'
+import { isShinySeriesSibling, seriesGroupIndices, reorderWithinRound, resolveShinyPart, isConcurrentTextShiny } from './shinySeries.js'
 
 function seriesSlide(id, overrides = {}) {
   return {
@@ -149,5 +149,38 @@ describe('resolveShinyPart — legacy dual-image swing visual', () => {
   it('a non-visual shiny type ignores imagesRevealed (never picks slot 1)', () => {
     const data = { shinyType: 'audio', isShiny: true, imagesRevealed: true, mediaSlots: [{ url: 'a.mp3' }, { url: 'b.mp3' }] }
     expect(resolveShinyPart(data).mediaUrl).toBe('a.mp3')
+  })
+})
+
+describe('isConcurrentTextShiny', () => {
+  // Bug fixed 2026-08-26 (Sonnet re-review of the same-night 2026-08-25 fix):
+  // this must match QuestionSlide.jsx's dispatcher guard exactly
+  // (Array.isArray(parts) && parts.length > 1). Without the length check, a
+  // 1-part concurrent-text question diverged from the renderer —
+  // slideStepping.js's revealStepCount added its +1 "nothing revealed yet"
+  // state, so computeNextStep treated it as multi-part and bumped
+  // currentPart on the first Next press, but the dispatcher (needing >1
+  // part) fell through to plain StandardQuestion, which never reads
+  // currentPart — that Next press produced no visible change.
+  const textConcurrent = (parts) => ({ shinyInputSchema: { type: 'text', concurrent: true }, parts })
+
+  it('is true for a concurrent text question with more than one part', () => {
+    expect(isConcurrentTextShiny(textConcurrent([{}, {}]))).toBe(true)
+  })
+
+  it('is false for a concurrent text question with exactly one part', () => {
+    expect(isConcurrentTextShiny(textConcurrent([{}]))).toBe(false)
+  })
+
+  it('is false with no parts at all', () => {
+    expect(isConcurrentTextShiny(textConcurrent(undefined))).toBe(false)
+  })
+
+  it('is false for a non-text concurrent format regardless of part count', () => {
+    expect(isConcurrentTextShiny({ shinyInputSchema: { type: 'image', concurrent: true }, parts: [{}, {}] })).toBe(false)
+  })
+
+  it('is false for a multi-part text question that is not concurrent', () => {
+    expect(isConcurrentTextShiny({ shinyInputSchema: { type: 'text', concurrent: false }, parts: [{}, {}] })).toBe(false)
   })
 })

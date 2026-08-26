@@ -202,7 +202,18 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
       // state setters can't fire after teardown; the next mount rebinds
       // fresh ones via bindListeners.
       const p = playerRef.current
-      p?.removeListener('ready')
+      // 'ready' fires exactly ONCE per player instance for its whole page
+      // lifetime (see sharedSpotifyPlayer's comment above). Spotify's
+      // removeListener(name) with no callback wipes EVERY listener for that
+      // event on the player, not just this mount's own. If this mount
+      // unmounts before 'ready' has ever fired on the shared singleton (a
+      // real window: the overlay can mount-then-unmount inside 2.5s if the
+      // host advances mid-warp), removing it here permanently loses that
+      // one-shot event — sharedDeviceId never populates, reproducing the
+      // exact "every break after the first breaks" bug this file exists to
+      // fix (2026-08-26, Sonnet re-review). Only safe to remove once it's
+      // already done its one job.
+      if (sharedDeviceId) p?.removeListener('ready')
       p?.removeListener('not_ready')
       p?.removeListener('player_state_changed')
       p?.removeListener('account_error')
