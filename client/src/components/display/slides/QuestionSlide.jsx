@@ -994,13 +994,16 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
   // Narrowed again (2026-08-25, Ben: "this slides text needs to be
   // bigger") — labels/answers here are short single words/titles, not
   // worth 530px of fixed width when it's the question column's fit that
-  // sets everyone's size. Ceiling raised to match.
+  // sets everyone's size. Ceiling raised to match (was a literal 4.4rem;
+  // now reads LIST_ITEM_CEIL directly since the shared const was bumped
+  // to this exact value in the same tuning pass — one less magic number
+  // to keep in sync by hand).
   const LABEL_W = 190, ANSWER_W = 220, COL_GAP = 24, ROW_GAP = 14
   const gridRef = useRef(null)
   const rowSize = useFitListToBox(gridRef, rows.map(r => r.text ?? ''), {
     family: theme.fonts.body,
     floorPx: LIST_ITEM_FLOOR * 16,
-    ceilPx: 4.4 * 16,
+    ceilPx: LIST_ITEM_CEIL * 16,
     gapPx: ROW_GAP,
     rowInset: LABEL_W + ANSWER_W + COL_GAP * 2,
     maxLinesPerRow: 2,

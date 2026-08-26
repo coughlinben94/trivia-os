@@ -28,46 +28,58 @@ import { useState, useLayoutEffect } from 'react'
 // ─── Per-surface size bounds ────────────────────────────────────────────────
 
 // Single block of prose filling most of the slide: questions, Grading Break,
-// Custom body, Pixelate Series hint. Ceiling anchored to the existing
-// QuestionSlide max (4.5rem ≈ 54pt).
-export const PARAGRAPH_FLOOR = 1.8
-export const PARAGRAPH_CEIL  = 4.5
+// Custom body, Pixelate Series hint. Ceiling was 4.5rem (54pt), anchored to
+// the old QuestionSlide max — bumped 2026-08-25 (Ben, live show: "text on
+// the tvs are still soooooo small") to 5.5rem (66pt). All these surfaces
+// have far more box height than the old ceiling ever used (see *_BOX below),
+// so this was pure headroom left on the table, not a fit constraint.
+export const PARAGRAPH_FLOOR = 2.0
+export const PARAGRAPH_CEIL  = 5.5
 
 // Short, dramatic title-card line — State of the Union's patriotic tagline.
 // NOT paragraph prose: a one-line announcement meant to dominate the screen
 // like a title slide, so it keeps its own bigger range rather than
-// PARAGRAPH's. Matches this slide's original hardcoded clamp(2.4rem, …, 5.2rem).
-export const TITLE_CARD_FLOOR = 2.4
-export const TITLE_CARD_CEIL  = 5.2
+// PARAGRAPH's. Bumped 2026-08-25 alongside PARAGRAPH so it still reads
+// clearly larger than a paragraph ceiling.
+export const TITLE_CARD_FLOOR = 2.6
+export const TITLE_CARD_CEIL  = 6.0
 
 // Multiple items sharing one screen (Multi-Question, PYL Reveal answer
 // list) — inherently smaller than a single dominant question since several
-// rows compete for the same space.
-export const LIST_ITEM_FLOOR = 1.1
-export const LIST_ITEM_CEIL  = 2.5
+// rows compete for the same space. Ceiling bumped 2026-08-25 to 4.4rem to
+// match the value Ben hand-tuned live on the "First, Second, or Third"
+// list surface that same night (QuestionSlide.jsx's rows list, see its
+// ceilPx) — real-show-tested number, applied here for every other list
+// surface too since a higher ceiling only helps short lists (tall lists
+// still get sized down by their own row-height budget regardless).
+export const LIST_ITEM_FLOOR = 1.3
+export const LIST_ITEM_CEIL  = 4.4
 
 // Short single lines that are still host-typed and length-variable, but
 // never a full paragraph — round-intro subtitles/catchphrases.
-export const LINE_FLOOR = 1.3
-export const LINE_CEIL  = 3.0
+export const LINE_FLOOR = 1.5
+export const LINE_CEIL  = 3.6
 
 // The dramatic winner-name reveal — normally one short team name, but ties
 // join multiple names together ("Team A & Team B & Team C") and can run
-// long enough to blow past a fixed ceiling.
+// long enough to blow past a fixed ceiling. Already generous — not touched
+// in the 2026-08-25 pass.
 export const REVEAL_FLOOR = 2.5
 export const REVEAL_CEIL  = 10
 
 // Prose sharing the frame with a full-height image — shiny visual question's
 // half-width portrait column, or the bottom-third scrim band in landscape.
-// Genuinely less room than a full-bleed question.
-export const VISUAL_CAPTION_FLOOR = 1.5
-export const VISUAL_CAPTION_CEIL  = 3.5
+// Genuinely less room than a full-bleed question. Bumped 2026-08-25.
+export const VISUAL_CAPTION_FLOOR = 1.7
+export const VISUAL_CAPTION_CEIL  = 4.0
 
 // A wager question's prompt — the only content on the screen during the guess
 // phase (the tier strip and submitted-count are chrome), so it can run larger
-// than an ordinary question, but it's a full sentence, not a title.
-export const WAGER_Q_FLOOR = 1.8
-export const WAGER_Q_CEIL  = 4.6
+// than an ordinary question, but it's a full sentence, not a title. Bumped
+// 2026-08-25 to actually deliver on that "larger than ordinary question"
+// intent — it was previously only 0.1rem above PARAGRAPH_CEIL.
+export const WAGER_Q_FLOOR = 2.0
+export const WAGER_Q_CEIL  = 6.0
 
 /* ── font-agnostic measure-to-fit ──────────────────────────────────────────
    Measures real glyph width instead of counting chars, so it snaps correctly
@@ -172,8 +184,8 @@ export function overflowsBox(text, {
 export const TITLE_CARD_BOX = {
   boxW: 1728,       // 1920 stage − px-24 (96px) each side
   boxH: 560,        // vertically-centered band
-  floorPx: 2.4 * 16,
-  ceilPx:  5.2 * 16,
+  floorPx: TITLE_CARD_FLOOR * 16,
+  ceilPx:  TITLE_CARD_CEIL * 16,
   maxLines: 4,
   lineHeight: 1.12,
 }
