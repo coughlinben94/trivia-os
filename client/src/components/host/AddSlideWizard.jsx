@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { nanoid } from 'nanoid'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { insertAfterSlideId } from '../../lib/questionNumbering.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
@@ -32,6 +33,49 @@ const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber
 
 const BTN = 'host-button'
 
+// ── Shiny creation shape (2026-08-26 rebuild) ────────────────────────────────
+// One popup for every asset-capable format: how many ASSETS come after the
+// title card, and how those assets relate to each other. Nothing branches on
+// invisible format flags any more — the format can pre-fill both answers, and
+// can never lock either one (the preset lock caused a real live incident on
+// 2026-08-25: a host stared at a count he could not change).
+//
+// Formats whose mechanic has no variable asset count skip both controls
+// VISIBLY, keeping whatever bespoke inputs they already have. There is no
+// state where the host wonders why an input is missing, because the missing
+// inputs are the whole point of a fixed-shape format.
+const FIXED_SHAPE_TYPES = new Set(['matching', 'wager', 'order', 'venn', 'grid'])
+
+// "All at once" only exists where something can actually draw it: text
+// (ShinyConcurrentQuestion's cumulative reveal) and image (every tile at once
+// via GridContent). Audio/video/list formats get the two choices that are
+// real for them rather than a third that would render nothing.
+const CONCURRENT_CAPABLE_TYPES = new Set(['text', 'image'])
+
+const RELATIONSHIPS = [
+  { id: 'sequential', label: 'One at a time',  hint: 'One question. Next steps through the assets.' },
+  { id: 'concurrent', label: 'All at once',    hint: 'One question. Every asset on screen together, one shared answer.' },
+  { id: 'separate',   label: 'Separate questions', hint: 'Each asset becomes its own question — its own number, its own answer.' },
+]
+
+// What the relationship control starts on. A format may pre-select it; it can
+// never decide it (Ben: "ask each time, as a 3rd choice"). Legacy
+// `concurrent: true` maps to 'concurrent' for TEXT formats only — on image
+// formats that flag has always produced one-at-a-time playback, and reading it
+// as all-at-once here would quietly change what those formats do.
+function defaultRelationship(fmt) {
+  const schema = fmt?.input_schema ?? {}
+  if (schema.defaultDisplay) return schema.defaultDisplay
+  if (schema.concurrent === true && schema.type === 'text') return 'concurrent'
+  return 'sequential'
+}
+
+// The format's preset asset count is a DEFAULT the host can always edit.
+function defaultAssetCount(fmt) {
+  const slots = fmt?.input_schema?.slots
+  return (typeof slots === 'number' && slots > 0) ? slots : 1
+}
+
 // Editable: add a fundraiser type by adding one object here
 export const ROUND_TYPES = [
   { id: 'normal', label: 'Normal Round',    needsNumber: true,  titleTemplate: 'Round {n}' },
@@ -59,22 +103,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const [shinyAnswer,       setShinyAnswer]      = useState('')
   const [gridCols, setGridCols] = useState(4)
   const [gridRows, setGridRows] = useState(3)
-  // Shared "how many assets" count — used by any concurrent format
-  // (image/audio/video) and, for image formats specifically, also by the
-  // non-concurrent "N images together on one slide" path.
-  const [assetCount, setAssetCount] = useState(3)
-  // Image formats only: how many separate slides to batch-insert at once.
-  // Blank-able string state so the field can be empty; blank = 1 (the
-  // normal single-question case).
-  const [slideCount, setSlideCount] = useState('')
-  // "How many assets?" and "How many slides?" used to sit side by side as two
-  // plain number inputs — easy to fill both with the same number thinking
-  // they meant the same thing (Ben, 2026-08-25: typed 3 into both meaning "3
-  // parts on one question," got 3 separate slides x 3 parts each = 9 empty
-  // parts instead). Mutually exclusive now: 'one' uses assetCount and forces
-  // slides to 1, 'many' uses slideCount and forces assets to 1 (unless the
-  // format presets its own slot count, which stays independent of this).
-  const [batchMode, setBatchMode] = useState('one')
+  // The two — and only two — shape questions the shiny popup asks: how many
+  // assets come after the title card, and how they relate to each other.
+  // Both are pre-filled from the format and both are always editable.
+  // Blank-able string state so the field can be cleared while typing.
+  const [assetCount, setAssetCount] = useState('1')
+  const [relationship, setRelationship] = useState('sequential')
 
   // Round-intro — pre-filled from AddRoundWizard or from round filter; also derived from selected round
   const _preRound = initialData.roundId ? show.rounds.find(r => r.id === initialData.roundId) : null
@@ -189,149 +223,98 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           return
         }
 
-        const isConcurrentFmt = selectedShinyFmt.input_schema?.concurrent === true
-        const isImageFmt = selectedShinyFmt.input_schema?.type === 'image'
-        // Undefined/legacy concurrent formats default to true — the behavior
-        // concurrent formats have always had (each asset its own answer).
-        const isQuestionSeriesFmt = selectedShinyFmt.input_schema?.questionSeries !== false
+        // ── One unified shape path (2026-08-26 rebuild) ──────────────────
+        // Count + relationship, nothing else. The format's `slots` preset only
+        // pre-filled the count input; it never overrides what the host typed.
+        // Fixed-shape formats (matching/wager/order — venn/grid already
+        // returned above) never show either control, so they land here as
+        // assetNum 1 / 'sequential' and keep their flat shape exactly as
+        // before.
+        const schema = selectedShinyFmt.input_schema ?? null
+        const shinyBase = n => ({
+          questionNumber:  n,
+          questionLabel:   `Q${n}`,
+          questionMode:    'shiny',
+          isShiny:         true,
+          shinyFormatId:   selectedShinyFmt.id,
+          shinyFormatName: selectedShinyFmt.name,
+          shinyFormatIcon: selectedShinyFmt.icon,
+          shinyType:       schema?.type ?? null,
+        })
+        const afterId = insertAfterSlideId(roundSlides, sorted)
 
-        if (isImageFmt || isConcurrentFmt) {
-          // Image formats (any concurrent state) and any concurrent format
-          // (any type) get "How many slides? / How many assets?" at add
-          // time. Assets meaning branches:
-          //   concurrent, question series    -> N back-to-back parts per
-          //     slide, each with its own independent answer (Zookeeper)
-          //   concurrent, NOT question series -> N back-to-back parts per
-          //     slide sharing ONE answer, collected up front (We're not so
-          //     different)
-          //   non-concurrent image, N>1 -> N images together on ONE slide —
-          //     reuses the grid slide type/editor/renderer under the hood
-          //     (N columns x 1 row) instead of new rendering code
-          //   non-concurrent image, N===1 -> today's flat single-slot shape
-          // Asset count comes from the format's preset when it has one
-          // (slots is a number), otherwise from the host's per-use input.
-          const fmtPreset = selectedShinyFmt.input_schema?.slots
-          // batchMode makes the two counts mutually exclusive — see its
-          // declaration above for why (2026-08-25 mixed-them-up incident).
-          const assets = (typeof fmtPreset === 'number' && fmtPreset > 0)
-            ? fmtPreset
-            : (batchMode === 'many' ? 1 : Math.max(1, assetCount))
-          const numSlides = batchMode === 'many' ? Math.max(1, parseInt(slideCount, 10) || 1) : 1
-          // A batch of >1 slides can't share one typed-in question/answer —
-          // each slide needs its own distinct content — so batch-created
-          // slides start blank and get filled in afterward via the slide
-          // editor, same pattern already used for concurrent parts/grid tiles.
-          const collectShared = numSlides === 1 && (!isConcurrentFmt || !isQuestionSeriesFmt)
-
-          const afterId = insertAfterSlideId(roundSlides, sorted)
-
-          const slidesData = Array.from({ length: numSlides }, (_, i) => {
-            const n = qNum + i
-            const base = {
-              questionNumber:   n,
-              questionLabel:    `Q${n}`,
-              questionMode:     'shiny',
-              isShiny:          true,
-              shinyFormatId:    selectedShinyFmt.id,
-              shinyFormatName:  selectedShinyFmt.name,
-              shinyFormatIcon:  selectedShinyFmt.icon,
-              shinyType:        selectedShinyFmt.input_schema?.type ?? null,
-              // Only the first of a batch of separate sibling slides should
-              // ever play the ShinyIntroScreen announce beat (useShow.js's
-              // nextSlide() also skips it live via isShinySeriesSibling, but
-              // baking it in here too means a direct jump/preview of slide 2+
-              // is correct from creation, not just during a forward advance).
-              // 2026-08-17: this exact gap left 3 sibling slides replaying
-              // the full intro animation in the editor before this existed.
-              ...(isConcurrentFmt && (i > 0 || formatAlreadyIntroducedThisRound(selectedShinyFmt.id)) ? { introDone: true } : {}),
-            }
-            if (isConcurrentFmt) {
-              return {
-                type: 'question',
-                roundId: roundId ?? null,
-                data: {
-                  ...base,
-                  shinyInputSchema: { ...selectedShinyFmt.input_schema, slots: 1 },
-                  isSeries:    true,
-                  seriesTheme: selectedShinyFmt.name,
-                  currentPart: 0,
-                  ...(collectShared ? { answer: shinyAnswer.trim() } : {}),
-                  parts: Array.from({ length: assets }, () => ({
-                    label: '', text: collectShared ? shinyQuestion.trim() : '', answer: '', mediaSlots: [],
-                  })),
-                },
-              }
-            }
-            if (assets > 1) {
-              const columns = Array.from({ length: assets }, () => [{ color: null, mediaUrl: null }])
-              return {
-                type: 'grid',
-                roundId: roundId ?? null,
-                data: {
-                  ...base,
-                  columns,
-                  intraGap:     0,
-                  interGap:     84,
-                  columnLabels: false,
-                  text:   collectShared ? shinyQuestion.trim() : '',
-                  answer: collectShared ? shinyAnswer.trim() : '',
-                },
-              }
-            }
-            return {
-              type: 'question',
-              roundId: roundId ?? null,
-              data: {
-                ...base,
-                shinyInputSchema: selectedShinyFmt.input_schema ?? null,
-                text:       collectShared ? shinyQuestion.trim() : '',
-                answer:     collectShared ? shinyAnswer.trim() : '',
-                mediaSlots: [],
-              },
-            }
-          })
-
+        if (effectiveRel === 'separate') {
+          // N literal sibling slides — each its own Q-number, sidebar row,
+          // Next press, phone submission and score. One shinyGroupId stamped
+          // across the run makes the grouping exact: two runs of the same
+          // format in the same round no longer merge into one (the latent bug
+          // isShinySeriesSibling documents).
+          const groupId = `sgrp_${nanoid(8)}`
+          const slidesData = Array.from({ length: assetNum }, (_, i) => ({
+            type: 'question',
+            roundId: roundId ?? null,
+            data: {
+              ...shinyBase(qNum + i),
+              shinyInputSchema: schema,
+              isSeries:      true,
+              seriesTheme:   selectedShinyFmt.name,
+              shinyGroupId:  groupId,
+              // Only the first slide of a run plays the announce beat — baked
+              // in here so a direct jump to / preview of slide 2+ is correct
+              // from creation, not just during a live forward advance.
+              introDone:     i > 0 || formatAlreadyIntroducedThisRound(selectedShinyFmt.id),
+              text:          '',
+              answer:        '',
+              mediaSlots:    [],
+            },
+          }))
           await onAddSlide({ afterSlideId: afterId, slides: slidesData })
           return
         }
 
-        // Reaches here only for non-concurrent, non-image formats (audio,
-        // video, text, list) — plain flat shape, or the legacy fixed-slots
-        // multi-slot shape for audio/video formats that never got migrated
-        // to concurrent.
-        const totalSlots = selectedShinyFmt.input_schema?.slots ?? 1
-        // A wager question is always one prompt and one true number, so it
-        // stays on the flat shape no matter what asset count the format
-        // carries. The multi-slot `parts` shape would leave WagerBoard and
-        // ShinyWagerQuestion reading an empty data.text. Order shares this
-        // exact incompatibility — its images live in flat data.items, and
-        // OrderBoard/ShinyOrderQuestion have no `parts` reading path — so it
-        // gets the same carve-out, not a new one invented for it.
-        const isMultiSlot = totalSlots > 1 && !['wager', 'order'].includes(selectedShinyFmt.input_schema?.type)
+        if (assetNum > 1) {
+          // Tied together — ONE slide, N parts. shinyDisplay is the single
+          // field that decides one-at-a-time vs all-at-once, read at RENDER
+          // time, so the host can flip it later in the editor without
+          // recreating the question. (The old path froze that choice into the
+          // slide's TYPE: a non-concurrent image series became a `grid`
+          // slide, unchangeable afterward.)
+          const q = shinyQuestion.trim()
+          await onAddSlide({
+            type: 'question',
+            roundId: roundId ?? null,
+            afterSlideId: afterId,
+            data: {
+              ...shinyBase(qNum),
+              introDone:        formatAlreadyIntroducedThisRound(selectedShinyFmt.id),
+              shinyInputSchema: schema ? { ...schema, slots: 1 } : null,
+              shinyDisplay:     effectiveRel,
+              isSeries:         true,
+              seriesTheme:      selectedShinyFmt.name,
+              currentPart:      0,
+              // Slide-level text is what the all-at-once renderers draw
+              // (ShinyConcurrentQuestion's header, GridContent's caption);
+              // one-at-a-time renders each PART's own text, so a shared
+              // question is copied onto every part too. Written both ways so
+              // flipping the display mode later never loses it.
+              text:   q,
+              answer: shinyAnswer.trim(),
+              parts:  Array.from({ length: assetNum }, () => ({
+                label: '', text: effectiveRel === 'sequential' ? q : '', answer: '', mediaSlots: [],
+              })),
+            },
+          })
+          return
+        }
+
+        // One asset — the flat single-asset shape, unchanged.
         data = {
-          questionNumber:   qNum,
-          questionLabel:    `Q${qNum}`,
-          questionMode:     'shiny',
-          isShiny:          true,
+          ...shinyBase(qNum),
           introDone:        formatAlreadyIntroducedThisRound(selectedShinyFmt.id),
-          shinyFormatId:    selectedShinyFmt.id,
-          shinyFormatName:  selectedShinyFmt.name,
-          shinyFormatIcon:  selectedShinyFmt.icon,
-          // Multi-slot formats (e.g. 4 images, same secret answer) collapse to
-          // a single slide with N parts — one part pre-filled here, the host
-          // adds the rest in the editor. Single-slot formats keep the flat shape.
-          shinyInputSchema: isMultiSlot ? { ...selectedShinyFmt.input_schema, slots: 1 } : (selectedShinyFmt.input_schema ?? null),
-          shinyType:        selectedShinyFmt.input_schema?.type ?? null,
-          ...(isMultiSlot ? {
-            isSeries:    true,
-            seriesTheme: selectedShinyFmt.name,
-            currentPart: 0,
-            parts:       [{ label: '', text: shinyQuestion.trim(), answer: shinyAnswer.trim(), mediaSlots: [] }],
-          } : {
-            text:       shinyQuestion.trim(),
-            answer:     shinyAnswer.trim(),
-            mediaSlots: [],
-          }),
+          shinyInputSchema: schema,
+          text:             shinyQuestion.trim(),
+          answer:           shinyAnswer.trim(),
+          mediaSlots:       [],
         }
       } else {
         data = {
@@ -400,26 +383,28 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
     && (type !== 'round-intro' || (roundNumValid && !!roundId))
     && (type !== 'pyl-board' || pylBoardNames.filter(n => n.trim()).length >= 2)
   const canAddQuestion = !!roundId && questionText.trim().length > 0 && questionAnswer.trim().length > 0
-  const isConcurrentFmt = selectedShinyFmt?.input_schema?.concurrent === true
-  const isImageFmt      = selectedShinyFmt?.input_schema?.type === 'image'
-  // Undefined/legacy concurrent formats default to true (each asset its own
-  // independent answer) — the behavior concurrent formats have always had.
-  const isQuestionSeriesFmt = selectedShinyFmt?.input_schema?.questionSeries !== false
-  // A format can preset its asset count (slots). When it does, the add
-  // wizard uses that number and hides its own "How many assets?" input;
-  // when blank, the host enters it here.
+  const shinyFmtType    = selectedShinyFmt?.input_schema?.type ?? null
+  const isFixedShapeFmt = FIXED_SHAPE_TYPES.has(shinyFmtType)
   const fmtAssetPreset  = selectedShinyFmt?.input_schema?.slots
   const hasAssetPreset  = typeof fmtAssetPreset === 'number' && fmtAssetPreset > 0
-  const effectiveAssets = hasAssetPreset ? fmtAssetPreset : (batchMode === 'many' ? 1 : Math.max(1, assetCount))
-  const slideNum        = batchMode === 'many' ? Math.max(1, parseInt(slideCount, 10) || 1) : 1
-  // Shared question/answer fields only make sense for a single slide (a
-  // batch of >1 can't share one typed-in answer across distinct slides) and,
-  // for concurrent formats specifically, only when it's NOT a question
-  // series — a question-series format's whole point is each asset gets its
-  // own independent answer, filled in afterward via the slide editor.
-  const showSharedFields = slideNum === 1 && (!isConcurrentFmt || !isQuestionSeriesFmt)
-  const skipSharedAnswer = !showSharedFields
-  const canAddShiny    = !!roundId && (skipSharedAnswer || shinyAnswer.trim().length > 0)
+  // The typed count wins, always. A preset only pre-fills it (see the
+  // FIXED_SHAPE_TYPES comment for the incident that made this non-negotiable).
+  const assetNum        = Math.min(20, Math.max(1, parseInt(assetCount, 10) || 1))
+  // With one asset the three relationships are identical, so the control
+  // hides and 'sequential' is what gets stamped.
+  const showRelationship = !isFixedShapeFmt && assetNum > 1
+  const relationshipOptions = RELATIONSHIPS.filter(r => r.id !== 'concurrent' || CONCURRENT_CAPABLE_TYPES.has(shinyFmtType))
+  const effectiveRel    = !showRelationship ? 'sequential'
+    : relationshipOptions.some(r => r.id === relationship) ? relationship
+    : 'sequential'
+  // Separate questions can't share one typed answer — those slides start
+  // blank and get filled in the editor, exactly as the old batch path did.
+  const showSharedFields = effectiveRel !== 'separate'
+  // A plain single-asset question — and every fixed-shape format — still
+  // needs its answer up front, unchanged. Multi-asset tied questions usually
+  // answer per-asset in the editor, so the shared answer is optional there.
+  const sharedAnswerRequired = showSharedFields && (isFixedShapeFmt || assetNum === 1)
+  const canAddShiny    = !!roundId && (!sharedAnswerRequired || shinyAnswer.trim().length > 0)
   const isPlainOnly    = type === 'question'
   const isShinyOnly    = type === 'shiny-question'
   const isQuestionType = isPlainOnly || isShinyOnly
@@ -531,109 +516,88 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               )}
             </div>
 
-            {(isImageFmt || isConcurrentFmt) ? (
-              /* Image formats (any concurrent state), and any concurrent
-                 format regardless of type, choose between "one question, N
-                 parts" and "N separate questions" — mutually exclusive (see
-                 batchMode's declaration up top for why: these used to be two
-                 side-by-side number inputs, easy to fill both with the same
-                 number and get slides x parts instead of just parts). */
-              <>
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setBatchMode('one')}
-                    className={`flex-1 text-xs font-medium px-3 py-2 rounded-lg border transition-colors ${
-                      batchMode === 'one'
-                        ? 'bg-yellow-50 border-yellow-400 text-yellow-700'
-                        : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'
-                    }`}
-                  >
-                    One question
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBatchMode('many')}
-                    className={`flex-1 text-xs font-medium px-3 py-2 rounded-lg border transition-colors ${
-                      batchMode === 'many'
-                        ? 'bg-yellow-50 border-yellow-400 text-yellow-700'
-                        : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'
-                    }`}
-                  >
-                    Separate questions
-                  </button>
-                </div>
-
-                {batchMode === 'many' ? (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">How many slides to add?</label>
-                    <input
-                      autoFocus
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={slideCount}
-                      onChange={e => setSlideCount(e.target.value)}
-                      placeholder="1"
-                      className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <p className="text-[11px] text-gray-400 mt-1">Each one is a separate question (its own Q-number, its own sidebar row){hasAssetPreset ? '' : `, 1 part each — add more per slide afterward from the slide editor if you need them`}.</p>
-                  </div>
-                ) : !hasAssetPreset && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">How many parts on this question?</label>
-                    <input
-                      autoFocus
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={assetCount}
-                      onChange={e => setAssetCount(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <p className="text-[11px] text-gray-400 mt-1">All stay on ONE question — step through them with Next during the show.</p>
-                  </div>
-                )}
-                <p className="text-xs text-gray-400">
-                  {isConcurrentFmt
-                    ? isQuestionSeriesFmt
-                      ? `${effectiveAssets} back-to-back part${effectiveAssets === 1 ? '' : 's'} per slide, each with its own answer — fill them in from the slide editor.`
-                      : `${effectiveAssets} back-to-back part${effectiveAssets === 1 ? '' : 's'} per slide, sharing one answer.`
-                    : effectiveAssets > 1
-                      ? `${effectiveAssets} images together on one slide, one shared answer.`
-                      : 'A single image, one shared answer.'}
-                  {slideNum > 1 ? ` Creates ${slideNum} separate slides — fill each in from the slide editor.` : ''}
+            {/* How many assets — one input, always visible, always editable.
+                A format's `slots` preset only pre-fills it. It used to HIDE
+                this input and hard-override the value, which on 2026-08-25
+                left a host staring at a number he could not change mid-build. */}
+            {!isFixedShapeFmt && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">How many assets?</label>
+                <input
+                  autoFocus
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={assetCount}
+                  onChange={e => setAssetCount(e.target.value)}
+                  placeholder="1"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  The title card is automatic — this is how many assets come after it.
+                  {hasAssetPreset && assetNum !== fmtAssetPreset ? ` Format default: ${fmtAssetPreset}.` : ''}
                 </p>
+              </div>
+            )}
 
-                {!skipSharedAnswer && (
-                  <>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                        Question text <span className="font-normal text-gray-400">(optional)</span>
-                      </label>
-                      <textarea
-                        value={shinyQuestion}
-                        onChange={e => setShinyQuestion(e.target.value)}
-                        placeholder="e.g. What connects these four images?"
-                        rows={3}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Answer</label>
-                      <input
-                        type="text"
-                        value={shinyAnswer}
-                        onChange={e => setShinyAnswer(e.target.value)}
-                        placeholder="The answer…"
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                      />
-                    </div>
-                  </>
+            {/* How the assets relate — asked every time, never decided by the
+                format (Ben: "ask each time, as a 3rd choice"). Hidden at one
+                asset, where all three answers are the same thing. */}
+            {showRelationship && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">How do these {assetNum} assets go together?</label>
+                <div className="flex flex-col gap-1.5">
+                  {relationshipOptions.map(opt => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setRelationship(opt.id)}
+                      className={`text-left px-3 py-2 rounded-lg border transition-colors ${
+                        effectiveRel === opt.id
+                          ? 'bg-yellow-50 border-yellow-400'
+                          : 'bg-gray-50 border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <p className={`text-xs font-semibold ${effectiveRel === opt.id ? 'text-yellow-700' : 'text-gray-600'}`}>{opt.label}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{opt.hint}</p>
+                    </button>
+                  ))}
+                </div>
+                {effectiveRel === 'separate' && (
+                  <p className="text-[11px] text-gray-400 mt-1.5">
+                    Creates {assetNum} slides — fill each one in from the slide editor.
+                  </p>
                 )}
-              </>
-            ) : (
-              /* Reaches here only for non-concurrent, non-image formats. */
+              </div>
+            )}
+
+            {/* Grid formats set their own shape instead of a count. */}
+            {shinyFmtType === 'grid' && (
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Columns</label>
+                  <div className="flex gap-2">
+                    {[1,2,3,4,5,6].map(n => (
+                      <button key={n} onClick={() => setGridCols(n)}
+                        className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${gridCols === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Rows</label>
+                  <div className="flex gap-2">
+                    {[1,2,3,4,5].map(n => (
+                      <button key={n} onClick={() => setGridRows(n)}
+                        className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${gridRows === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Question + answer — the two tied modes share one of each.
+                Separate questions can't, so those slides start blank. */}
+            {showSharedFields && (
               <>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1.5">
@@ -647,38 +611,16 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
                   />
                 </div>
-
-                {selectedShinyFmt.input_schema?.type === 'grid' && (
-                  <div className="flex gap-4">
-                    <div className="flex-1">
-                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Columns</label>
-                      <div className="flex gap-2">
-                        {[1,2,3,4,5,6].map(n => (
-                          <button key={n} onClick={() => setGridCols(n)}
-                            className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${gridCols === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Rows</label>
-                      <div className="flex gap-2">
-                        {[1,2,3,4,5].map(n => (
-                          <button key={n} onClick={() => setGridRows(n)}
-                            className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${gridRows === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Answer</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                    Answer
+                    {!sharedAnswerRequired && <span className="font-normal text-gray-400"> (optional — each asset can have its own)</span>}
+                  </label>
                   <input
                     type="text"
                     value={shinyAnswer}
                     onChange={e => setShinyAnswer(e.target.value)}
-                    placeholder="The answer…"
-                    autoFocus
+                    placeholder={sharedAnswerRequired ? 'The answer…' : 'Leave blank for per-asset answers'}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
                   />
                 </div>
@@ -859,7 +801,13 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             {selectedShinyFmt && (
               <div className="mt-auto pt-2">
                 <button
-                  onClick={() => { setSlideCount(''); setBatchMode('one'); setShinyStep('details') }}
+                  onClick={() => {
+                    // Seed both shape controls from the format — a pre-fill,
+                    // not a lock. Both stay editable on the next screen.
+                    setAssetCount(String(defaultAssetCount(selectedShinyFmt)))
+                    setRelationship(defaultRelationship(selectedShinyFmt))
+                    setShinyStep('details')
+                  }}
                   className={`w-full bg-yellow-500 text-white text-sm font-semibold py-3 rounded-xl hover:bg-yellow-600 ${BTN}`}
                 >
                   Add {selectedShinyFmt.name} →
