@@ -615,3 +615,94 @@ describe('pendingReveal', () => {
     }
   })
 })
+
+// ── Shiny suite rebuild (2026-08-26) ────────────────────────────────────────
+// Stepping now reads data.shinyDisplay instead of inferring the display mode
+// from the format's schema flags. Three step-count laws:
+//   sequential      -> N states (one part on screen per press)
+//   concurrent text -> N + 1 states (currentPart counts groups REVEALED)
+//   concurrent media-> 1 state (every tile on screen at once, one answer)
+describe('shinyDisplay stepping', () => {
+  const shinyParts = (extra) => ({
+    isShiny: true, introDone: true, currentPart: 0,
+    parts: [null, null, null], ...extra,
+  })
+
+  it('steps a sequential multi-asset slide one asset per press', async () => {
+    const data = shinyParts({ shinyDisplay: 'sequential', shinyInputSchema: { type: 'image' } })
+    const slides = [slide('a', 0, 'question', data), slide('b', 1)]
+    const p1 = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(p1, 'a').currentPart).toBe(1)
+    const p2 = await computeNextStep({ slides: p1.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(p2, 'a').currentPart).toBe(2)
+    // 3 assets = 3 states — the next press is the closing beat, not a 4th asset.
+    const close = await computeNextStep({ slides: p2.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
+  })
+
+  it('gives a concurrent TEXT slide the extra nothing-revealed-yet state', async () => {
+    const data = shinyParts({ shinyDisplay: 'concurrent', shinyInputSchema: { type: 'text' } })
+    const slides = [slide('a', 0, 'question', data), slide('b', 1)]
+    let patch = { slides }
+    for (const expected of [1, 2, 3]) {
+      patch = await computeNextStep({ slides: patch.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+      expect(dataOf(patch, 'a').currentPart).toBe(expected)
+    }
+    const close = await computeNextStep({ slides: patch.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
+  })
+
+  it('never steps inside a concurrent MEDIA slide — all assets show at once', async () => {
+    // Ben, 2026-08-26: concurrent media shows every asset together with one
+    // shared answer. "One at a time" is what sequential is for, so a Next
+    // press here must go straight to the closing beat, not reveal a tile.
+    const data = shinyParts({ shinyDisplay: 'concurrent', shinyInputSchema: { type: 'image' } })
+    const slides = [slide('a', 0, 'question', data), slide('b', 1)]
+    const close = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
+    expect(dataOf(close, 'a').currentPart ?? 0).toBe(0)
+  })
+
+  it('backs into a concurrent MEDIA slide on its single state, not its last part', async () => {
+    const data = shinyParts({ shinyDisplay: 'concurrent', shinyInputSchema: { type: 'image' }, currentPart: 0 })
+    const slides = [slide('a', 0, 'question', data), slide('b', 1)]
+    const back = await computePrevStep({ slides, currentSlideIndex: 1 }, noTeams)
+    expect(back.current_slide_index).toBe(0)
+    expect(dataOf(back, 'a').currentPart ?? 0).toBe(0)
+  })
+
+  it('backs into a sequential multi-asset slide on its LAST asset', async () => {
+    const data = shinyParts({ shinyDisplay: 'sequential', shinyInputSchema: { type: 'image' } })
+    const slides = [slide('a', 0, 'question', data), slide('b', 1)]
+    const back = await computePrevStep({ slides, currentSlideIndex: 1 }, noTeams)
+    expect(dataOf(back, 'a').currentPart).toBe(2)
+  })
+
+  it('a separate run stamped with shinyGroupId still shares one intro beat', async () => {
+    // Separate-question runs skip the announce beat on every slide after the
+    // first — that routes through isShinySeriesSibling, which now prefers
+    // shinyGroupId over the old format+theme heuristic.
+    const run = { isShiny: true, introDone: true, isSeries: true, shinyGroupId: 'grp_1', shinyFormatId: 'f1', seriesTheme: 'Run' }
+    const slides = [slide('a', 0, 'question', run), slide('b', 1, 'question', { ...run })]
+    const patch = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(patch.current_slide_index).toBe(1)
+    expect(dataOf(patch, 'b').introDone).toBe(true) // no repeat announce card
+    expect(dataOf(patch, 'a').outroShown).toBeUndefined() // no pan-down mid-run
+  })
+
+  it('a SECOND run of the same format in the same round gets its own intro beat', async () => {
+    // The regression the groupId fix exists for: without it, run 2's first
+    // slide was treated as run 1's sibling and had its announce card skipped.
+    const base = { isShiny: true, introDone: true, isSeries: true, shinyFormatId: 'f1', seriesTheme: 'Same Format' }
+    const slides = [
+      slide('a', 0, 'question', { ...base, shinyGroupId: 'grp_1' }),
+      slide('b', 1, 'question', { ...base, shinyGroupId: 'grp_2' }),
+    ]
+    // Slide a is the end of run 1, so Next pans down to its closing card first.
+    const close = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
+    const adv = await computeNextStep({ slides: close.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(adv.current_slide_index).toBe(1)
+    expect(dataOf(adv, 'b').introDone).toBe(false) // run 2 announces itself
+  })
+})

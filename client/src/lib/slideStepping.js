@@ -21,7 +21,7 @@
 // Callers own the write + their own local-state update; nothing here
 // touches the network or React.
 
-import { isShinySeriesSibling, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentTextShiny } from './shinySeries.js'
+import { isShinySeriesSibling, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
 
 // Number of Next-reachable states for a slide's data.parts/groupSize
 // stepping. For every format except ShinyConcurrentQuestion, currentPart
@@ -34,12 +34,20 @@ import { isShinySeriesSibling, isMatchingShiny, isWagerShiny, isOrderShiny, isCo
 // (2026-08-25, Ben: "pyl song lyrics... already had the first answer
 // revealed" — found live, the format shipped hours earlier the same night)
 // and the LAST group's answer was unreachable by any number of Next
-// presses. See isConcurrentTextShiny's own comment for why the semantics
+// presses. See isConcurrentShiny's own comment for why the semantics
 // differ from every other multi-part format.
+//
+// Concurrent MEDIA is the third case (2026-08-26 rebuild): every asset is on
+// screen together with one shared answer, so the slide has exactly ONE
+// Next-reachable state no matter how many assets it holds — a press moves to
+// the closing beat, it never reveals a tile. "One at a time" is what
+// sequential is for.
 function revealStepCount(data) {
   const parts = data?.parts
   const groups = Math.ceil((parts?.length ?? 0) / (data?.groupSize || 1))
-  return isConcurrentTextShiny(data ?? {}) ? groups + 1 : groups
+  const d = data ?? {}
+  if (!isConcurrentShiny(d)) return groups
+  return isConcurrentMediaShiny(d) ? 1 : groups + 1
 }
 
 // Kill switch for the closing-beat branch in computeNextStep() below. Kept
