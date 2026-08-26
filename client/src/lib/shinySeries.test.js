@@ -266,6 +266,41 @@ describe('isShinySeriesSibling — shinyGroupId', () => {
   })
 })
 
+// The compatibility contract in one place. Every one of these shapes exists
+// in the live database today and is NEVER rewritten — the rebuild's whole
+// legacy surface is the read path, so these four assertions are what a
+// reviewer checks to know old shows still play the way they always have.
+describe('legacy shapes read exactly as before', () => {
+  it('flat single-asset shiny — not concurrent, media from mediaSlots[0]', () => {
+    const data = { isShiny: true, shinyInputSchema: { type: 'image' }, text: 'Q', answer: 'A', mediaSlots: [{ url: 'x.jpg', type: 'image/jpeg' }] }
+    expect(isConcurrentShiny(data)).toBe(false)
+    expect(isConcurrentMediaShiny(data)).toBe(false)
+    expect(resolveShinyPart(data)).toMatchObject({ text: 'Q', answer: 'A', mediaUrl: 'x.jpg' })
+  })
+
+  it('multi-asset one-slide series — not concurrent, resolves the current part', () => {
+    const data = {
+      isShiny: true, isSeries: true, seriesTheme: 'Hear Me Roar', currentPart: 1,
+      shinyInputSchema: { type: 'audio' },
+      parts: [{ text: 'one', mediaSlots: [] }, { text: 'two', answer: 'B', mediaSlots: [] }],
+    }
+    expect(isConcurrentShiny(data)).toBe(false)
+    expect(resolveShinyPart(data)).toMatchObject({ text: 'two', answer: 'B' })
+  })
+
+  it('concurrent text series — still concurrent, still NOT media', () => {
+    const data = { isShiny: true, isSeries: true, shinyInputSchema: { type: 'text', concurrent: true }, parts: [{ text: 'a' }, { text: 'b' }] }
+    expect(isConcurrentShiny(data)).toBe(true)
+    expect(isConcurrentMediaShiny(data)).toBe(false)
+  })
+
+  it('legacy sibling run with no shinyGroupId — still grouped by the old heuristic', () => {
+    const s = id => ({ id, roundId: 'r1', data: { isShiny: true, isSeries: true, shinyFormatId: 'f1', seriesTheme: 'Close Up' } })
+    expect(isShinySeriesSibling(s('a'), s('b'))).toBe(true)
+    expect(seriesGroupIndices([s('a'), s('b'), s('c')], 1)).toEqual([0, 2])
+  })
+})
+
 describe('partsToGridView', () => {
   const media = url => ({ mediaSlots: [{ url, type: 'image/jpeg' }] })
 

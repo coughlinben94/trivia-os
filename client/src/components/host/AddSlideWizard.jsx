@@ -389,7 +389,10 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const hasAssetPreset  = typeof fmtAssetPreset === 'number' && fmtAssetPreset > 0
   // The typed count wins, always. A preset only pre-fills it (see the
   // FIXED_SHAPE_TYPES comment for the incident that made this non-negotiable).
-  const assetNum        = Math.min(20, Math.max(1, parseInt(assetCount, 10) || 1))
+  // Fixed-shape formats are pinned to 1: their count input never renders, so
+  // a stray `slots` preset on a matching/wager/order format must not silently
+  // turn it into a parts[] series — those mechanics read flat data only.
+  const assetNum        = isFixedShapeFmt ? 1 : Math.min(20, Math.max(1, parseInt(assetCount, 10) || 1))
   // With one asset the three relationships are identical, so the control
   // hides and 'sequential' is what gets stamped.
   const showRelationship = !isFixedShapeFmt && assetNum > 1
@@ -620,6 +623,9 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                     type="text"
                     value={shinyAnswer}
                     onChange={e => setShinyAnswer(e.target.value)}
+                    // Fixed-shape formats render no count input, so the answer
+                    // takes the focus the count would otherwise have had.
+                    autoFocus={isFixedShapeFmt}
                     placeholder={sharedAnswerRequired ? 'The answer…' : 'Leave blank for per-asset answers'}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
                   />
