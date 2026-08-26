@@ -2086,21 +2086,43 @@ function PylRevealEditor({ data, onChange, setData, scheduleSave, show, slide })
   if (data.pool) return <PylLottoEditor data={data} setData={setData} scheduleSave={scheduleSave} />
 
   if (!data.items && !data.stages) {
+    // This branch also catches the per-theme skeleton slides "🎰 Set up PYL
+    // themes and slides" (BuildMode.jsx's handlePYLAdd) stamps for each theme
+    // (themeName/themeType/title/themeIndex, no items/stages) — until this
+    // button existed there was no way to turn one into a working board short
+    // of deleting it and recreating it via the separate "🎯 Theme Picker"
+    // menu item, which is the only OTHER thing that produces this same
+    // items-based shape (2026-08-25, Ben: PYL round had a themed board slide
+    // with nothing clickable on it live — "no pop ups on the slide to choose
+    // pyl themes"). Seeding items here doesn't touch themeName/title, so a
+    // slide that already came from that wizard keeps its label.
     return (
       <>
         <p className="text-xs text-gray-500">
           This slide runs the live animation pick — no content to fill in here. Pool, winner, and animation style come from LiveMode's "Pick animation" row when this slide is up.
         </p>
-        <button
-          onClick={() => {
-            const next = { ...data, stages: [{ text: '', points: 20, revealed: false }] }
-            setData(next)
-            scheduleSave({ data: next })
-          }}
-          className="text-xs text-baynes-forest hover:text-green-800 font-medium transition-colors self-start"
-        >
-          + Use this slide for a scored reveal instead
-        </button>
+        <div className="flex flex-col gap-1.5 self-start">
+          <button
+            onClick={() => {
+              const next = { ...data, stages: [{ text: '', points: 20, revealed: false }] }
+              setData(next)
+              scheduleSave({ data: next })
+            }}
+            className="text-xs text-baynes-forest hover:text-green-800 font-medium transition-colors text-left"
+          >
+            + Use this slide for a scored reveal instead
+          </button>
+          <button
+            onClick={() => {
+              const next = { ...data, items: [{ text: '', targetSlideId: null }] }
+              setData(next)
+              scheduleSave({ data: next })
+            }}
+            className="text-xs text-baynes-forest hover:text-green-800 font-medium transition-colors text-left"
+          >
+            + Use this slide as a Theme Picker board instead
+          </button>
+        </div>
       </>
     )
   }
