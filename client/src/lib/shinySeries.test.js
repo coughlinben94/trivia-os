@@ -167,49 +167,80 @@ describe('resolveShinyPart — legacy dual-image swing visual', () => {
 // legacy gate below is the whole compatibility surface.
 
 describe('isConcurrentShiny', () => {
+  const twoParts = [{ text: 'a' }, { text: 'b' }]
+
   it('reads the new shinyDisplay field when present', () => {
-    expect(isConcurrentShiny({ shinyDisplay: 'concurrent' })).toBe(true)
-    expect(isConcurrentShiny({ shinyDisplay: 'sequential' })).toBe(false)
+    expect(isConcurrentShiny({ shinyDisplay: 'concurrent', parts: twoParts })).toBe(true)
+    expect(isConcurrentShiny({ shinyDisplay: 'sequential', parts: twoParts })).toBe(false)
   })
 
   it('shinyDisplay wins over the legacy schema flags', () => {
     // A legacy-shaped text format the host later flipped to one-at-a-time in
     // the editor: the new field must not be overridden by the old flags.
-    const data = { shinyDisplay: 'sequential', shinyInputSchema: { type: 'text', concurrent: true } }
+    const data = { shinyDisplay: 'sequential', shinyInputSchema: { type: 'text', concurrent: true }, parts: twoParts }
     expect(isConcurrentShiny(data)).toBe(false)
   })
 
   it('treats a legacy concurrent TEXT slide as concurrent (unchanged behavior)', () => {
-    expect(isConcurrentShiny({ shinyInputSchema: { type: 'text', concurrent: true } })).toBe(true)
+    expect(isConcurrentShiny({ shinyInputSchema: { type: 'text', concurrent: true }, parts: twoParts })).toBe(true)
   })
 
   it('leaves legacy concurrent IMAGE series one-at-a-time (they set concurrent: true too)', () => {
     // "Time for a Close Up" and friends set concurrent: true in their schema
     // but have always rendered one part per Next press. Never regress this.
-    expect(isConcurrentShiny({ shinyInputSchema: { type: 'image', concurrent: true } })).toBe(false)
-    expect(isConcurrentShiny({ shinyInputSchema: { type: 'audio', concurrent: true } })).toBe(false)
+    expect(isConcurrentShiny({ shinyInputSchema: { type: 'image', concurrent: true }, parts: twoParts })).toBe(false)
+    expect(isConcurrentShiny({ shinyInputSchema: { type: 'audio', concurrent: true }, parts: twoParts })).toBe(false)
   })
 
   it('is false for a flat legacy shiny question with no relevant fields', () => {
     expect(isConcurrentShiny({ isShiny: true, text: 'q', answer: 'a' })).toBe(false)
     expect(isConcurrentShiny({})).toBe(false)
   })
+
+  // 2026-08-26, overseer review: must agree with QuestionSlide.jsx's
+  // dispatcher guard (parts.length > 1) on EVERY path, new and legacy alike.
+  // Without this, a 1-part concurrent question diverges from the renderer —
+  // revealStepCount adds its +1 "nothing revealed yet" state so
+  // computeNextStep bumps currentPart on the first Next press, but the
+  // dispatcher (needing >1 part) falls through to plain StandardQuestion,
+  // which never reads currentPart. Dead Next press, live. Independently
+  // found and fixed the same night on the pre-rebuild isConcurrentTextShiny
+  // (main, commit-adjacent to this branch) — carried forward here so the
+  // new shinyDisplay path can't reintroduce the identical bug.
+  it('is false with exactly one part, on the new shinyDisplay path', () => {
+    expect(isConcurrentShiny({ shinyDisplay: 'concurrent', parts: [{ text: 'only' }] })).toBe(false)
+  })
+
+  it('is false with exactly one part, on the legacy text path', () => {
+    expect(isConcurrentShiny({ shinyInputSchema: { type: 'text', concurrent: true }, parts: [{ text: 'only' }] })).toBe(false)
+  })
+
+  it('is false with no parts array at all, on either path', () => {
+    expect(isConcurrentShiny({ shinyDisplay: 'concurrent' })).toBe(false)
+    expect(isConcurrentShiny({ shinyInputSchema: { type: 'text', concurrent: true } })).toBe(false)
+  })
 })
 
 describe('isConcurrentMediaShiny', () => {
+  const twoParts = [{ mediaSlots: [{ url: 'a.jpg' }] }, { mediaSlots: [{ url: 'b.jpg' }] }]
+
   it('is true only for a concurrent slide whose assets are not text', () => {
-    expect(isConcurrentMediaShiny({ shinyDisplay: 'concurrent', shinyInputSchema: { type: 'image' } })).toBe(true)
-    expect(isConcurrentMediaShiny({ shinyDisplay: 'concurrent', shinyInputSchema: { type: 'video' } })).toBe(true)
-    expect(isConcurrentMediaShiny({ shinyDisplay: 'concurrent', shinyInputSchema: { type: 'text' } })).toBe(false)
+    expect(isConcurrentMediaShiny({ shinyDisplay: 'concurrent', shinyInputSchema: { type: 'image' }, parts: twoParts })).toBe(true)
+    expect(isConcurrentMediaShiny({ shinyDisplay: 'concurrent', shinyInputSchema: { type: 'video' }, parts: twoParts })).toBe(true)
+    expect(isConcurrentMediaShiny({ shinyDisplay: 'concurrent', shinyInputSchema: { type: 'text' }, parts: twoParts })).toBe(false)
   })
 
   it('is false for a sequential media slide', () => {
-    expect(isConcurrentMediaShiny({ shinyDisplay: 'sequential', shinyInputSchema: { type: 'image' } })).toBe(false)
+    expect(isConcurrentMediaShiny({ shinyDisplay: 'sequential', shinyInputSchema: { type: 'image' }, parts: twoParts })).toBe(false)
   })
 
   it('is false for every legacy shape (no slide created before this existed is concurrent media)', () => {
-    expect(isConcurrentMediaShiny({ shinyInputSchema: { type: 'image', concurrent: true } })).toBe(false)
-    expect(isConcurrentMediaShiny({ shinyInputSchema: { type: 'text', concurrent: true } })).toBe(false)
+    expect(isConcurrentMediaShiny({ shinyInputSchema: { type: 'image', concurrent: true }, parts: twoParts })).toBe(false)
+    expect(isConcurrentMediaShiny({ shinyInputSchema: { type: 'text', concurrent: true }, parts: twoParts })).toBe(false)
+  })
+
+  it('is false for a single-part media slide even with shinyDisplay: concurrent', () => {
+    expect(isConcurrentMediaShiny({ shinyDisplay: 'concurrent', shinyInputSchema: { type: 'image' }, parts: [{ mediaSlots: [{ url: 'only.jpg' }] }] })).toBe(false)
   })
 })
 

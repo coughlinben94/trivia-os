@@ -112,6 +112,17 @@ export function isVennShiny(data) {
 // always rendered one asset per Next press. Widening this would silently
 // change how every one of those existing slides plays.
 export function isConcurrentShiny(data) {
+  // Must agree with the dispatcher's own guard (QuestionSlide.jsx requires
+  // parts.length > 1) on BOTH paths — without it, a 1-part concurrent
+  // question diverges from the renderer: revealStepCount adds its +1
+  // "nothing revealed yet" state, so computeNextStep bumps currentPart on
+  // the first Next press, but the dispatcher falls through to plain
+  // StandardQuestion, which never reads currentPart — a dead Next press
+  // live. (This is the exact bug main independently found and fixed on
+  // the old isConcurrentTextShiny 2026-08-26 — carried forward here so the
+  // new shinyDisplay path can't reintroduce it.)
+  const hasMultipleParts = Array.isArray(data.parts) && data.parts.length > 1
+  if (!hasMultipleParts) return false
   if (data.shinyDisplay) return data.shinyDisplay === 'concurrent'
   return data.shinyInputSchema?.type === 'text' && data.shinyInputSchema?.concurrent === true
 }

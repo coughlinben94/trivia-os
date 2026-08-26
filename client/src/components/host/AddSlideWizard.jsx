@@ -255,7 +255,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             roundId: roundId ?? null,
             data: {
               ...shinyBase(qNum + i),
-              shinyInputSchema: schema,
+              // slots: 1 (2026-08-26, overseer review) — each sibling is ONE
+              // asset; without this a format with a slots preset (e.g. 4)
+              // renders 4 media-slot inputs in the editor for a slide that
+              // only ever shows slot 0, same fix the tied branch below
+              // already applies to its own shinyInputSchema.
+              shinyInputSchema: schema ? { ...schema, slots: 1 } : null,
               isSeries:      true,
               seriesTheme:   selectedShinyFmt.name,
               shinyGroupId:  groupId,
@@ -295,12 +300,16 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               // Slide-level text is what the all-at-once renderers draw
               // (ShinyConcurrentQuestion's header, GridContent's caption);
               // one-at-a-time renders each PART's own text, so a shared
-              // question is copied onto every part too. Written both ways so
-              // flipping the display mode later never loses it.
+              // question is copied onto every part too — unconditionally
+              // (2026-08-26, overseer review: this used to only copy it for
+              // 'sequential', so a concurrent creation left every part's
+              // text blank, and flipping concurrent -> sequential in the
+              // editor later showed empty captions instead of "never loses
+              // it" as originally intended).
               text:   q,
               answer: shinyAnswer.trim(),
               parts:  Array.from({ length: assetNum }, () => ({
-                label: '', text: effectiveRel === 'sequential' ? q : '', answer: '', mediaSlots: [],
+                label: '', text: q, answer: '', mediaSlots: [],
               })),
             },
           })
