@@ -103,8 +103,21 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
     )
   }
 
-  // currentReveal: how many items are revealed (0 = none, items.length = all)
-  const revealed = data.currentReveal ?? 0
+  // currentReveal: how many items are revealed (0 = none, items.length = all).
+  // Boards (Theme Picker) have no progressive-reveal control anywhere in the
+  // host UI — nothing ever increments currentReveal for one; the only writer
+  // in the whole codebase is AddSlideWizard's initial `currentReveal:
+  // items.length` at creation time, and SlideEditor's board row editor
+  // (addRow/removeRow) never keeps it in sync when options are added/removed
+  // afterward. A board whose items were built/edited that way — or created
+  // by any path other than that one wizard call — is left with
+  // currentReveal stuck below items.length FOREVER, rendering every option
+  // as a blank hidden-placeholder bar with no way to reveal it (2026-08-25).
+  // Boards were always meant to show all options immediately (a live
+  // click-to-jump list, not a scored suspense reveal) — only the scored
+  // "stages" mode actually uses progressive reveal — so gate on that
+  // instead of a field nothing keeps current for boards.
+  const revealed = isBoard ? items.length : (data.currentReveal ?? 0)
 
   const visibleItems = items.slice(0, revealed)
   const hiddenCount  = items.length - revealed

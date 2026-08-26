@@ -482,6 +482,27 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
   const audioCtxRef = useRef(null)
   const ytHandleRef = useRef(null)
 
+  // A multi-part series keeps the same slide.id across parts, so this
+  // component never remounts when the host steps to a new part — only
+  // data.currentPart changes. `playing` is local state, so on the very
+  // render where the part changes it still reads whatever it was for the
+  // OLD part (true, if that clip was still playing when Next was pressed).
+  // The play/pause effect below runs in the SAME commit against THIS
+  // render's `playing` value — resetting it in a separate, later-declared
+  // effect is too late; that effect's state update only takes effect next
+  // render, after the play effect already fired once using the stale
+  // `true` and claimed+started the NEW part's clip with sound (a phantom
+  // blip immediately paused behind it, and a claimed-but-never-really-
+  // pressed-play handle left behind). Resetting during render — React's
+  // own documented pattern for "state derived from a changed prop" —
+  // reruns synchronously before any effect sees the stale value.
+  const partKey = `${slide.id}:${data.currentPart ?? 0}`
+  const [lastPartKey, setLastPartKey] = useState(partKey)
+  if (partKey !== lastPartKey) {
+    setLastPartKey(partKey)
+    if (playing) setPlaying(false)
+  }
+
   useEffect(() => {
     return () => { audioCtxRef.current?.close() }
   }, [])
@@ -553,12 +574,12 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
     })
   }, [isYoutubeSource, playing, part.youtubeId, part.youtubeStart, part.youtubeEnd, part.volume, slide.id, data.currentPart])
 
-  // A multi-part series keeps the same slide.id across parts — reset
-  // playback state when the host advances to a different clip.
+  // `playing` itself is already reset synchronously during render above —
+  // this only pauses the real <audio> element (non-YouTube path), which is
+  // an imperative DOM call and has to stay in an effect.
   useEffect(() => {
-    setPlaying(false)
     audioRef.current?.pause()
-  }, [slide.id, data.currentPart])
+  }, [partKey])
 
   // A YouTube-sourced clip has no <audio onEnded> equivalent — a plain
   // embed gives us no ended event — so we time the auto-stop ourselves
