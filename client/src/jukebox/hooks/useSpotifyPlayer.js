@@ -6,6 +6,26 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 const FADE_STEPS = 24
 const FADE_MS = 2500
 
+// Root cause of the 2026-08-25 live-show bug ("worked once, only once" —
+// every grading break after the first landed on the plain library instead
+// of auto-playing): JukeboxBreakOverlay's Jukebox fully unmounts between
+// breaks (Display.jsx removes it from the tree once breakActive/breakEligible
+// both go false), so this hook's init effect used to run `new
+// window.Spotify.Player(...)` + `.connect()` fresh on EVERY break. The
+// Spotify Web Playback SDK reliably fires 'ready' (handing back a device_id)
+// for the FIRST player instance built in a tab; a second instance built
+// later in the same page session — even well after the first was
+// disconnected — does not reliably re-fire 'ready', so deviceIdRef never
+// populates on the second+ break and playTrack's waitForRef(deviceIdRef)
+// times out every time. That's a deterministic SDK limitation, not the
+// transient race the existing retry-once logic in Jukebox.jsx's attemptPlay
+// was built for (2026-08-18 note there) — retrying doesn't help a device_id
+// that will never arrive. Fix: build the Player object exactly once per page
+// load and reuse it across every mount; only this mount's listeners (which
+// close over its own React state setters) get rebound each time.
+let sharedSpotifyPlayer = null
+let sharedDeviceId = null
+
 // Root cause of the 2026-07-28 "shuffle plays nothing, forever" bug: every
 // other awaited network step in this file (deviceId poll, play-confirmation
 // listener, seek landed-poll) has an explicit deadline with a fallback. The
@@ -103,27 +123,13 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
   useEffect(() => {
     window.onSpotifyWebPlaybackSDKReady = () => {}
 
-    let player
-
-    const init = async () => {
-      const token = await getToken()
-      if (!token) return
-
-      player = new window.Spotify.Player({
-        name: 'Trivia Jukebox',
-        getOAuthToken: cb => getToken().then(cb),
-        volume: 0,
-      })
-      // Assigned here, before connect() resolves, not after (2026-08-24,
-      // Opus review) — the cleanup below only ever disconnects
-      // playerRef.current, so an unmount landing mid-connect() (now a real
-      // window: the grading-break overlay can mount-then-unmount inside
-      // 2.5s if the host advances mid-warp) used to disconnect null while
-      // this local `player` kept connecting anyway, leaking a live
-      // "Trivia Jukebox" Spotify Connect device nothing could ever stop.
-      playerRef.current = player
-
+    // Bind THIS mount's listeners (closing over this mount's own state
+    // setters) onto whatever player instance is in play — a fresh one or the
+    // shared singleton. See sharedSpotifyPlayer's comment above for why the
+    // player object itself is never rebuilt after the first mount.
+    const bindListeners = (player) => {
       player.addListener('ready', ({ device_id }) => {
+        sharedDeviceId = device_id
         deviceIdRef.current = device_id
         setIsReady(true)
       })
@@ -149,6 +155,38 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
       player.addListener('initialization_error', ({ message }) =>
         setError(`Player init failed: ${message}`)
       )
+    }
+
+    const init = async () => {
+      if (sharedSpotifyPlayer) {
+        // Reuse the already-connected singleton instead of constructing a
+        // second Spotify.Player — see the sharedSpotifyPlayer comment above.
+        playerRef.current = sharedSpotifyPlayer
+        if (sharedDeviceId) deviceIdRef.current = sharedDeviceId
+        bindListeners(sharedSpotifyPlayer)
+        setIsReady(!!sharedDeviceId)
+        return
+      }
+
+      const token = await getToken()
+      if (!token) return
+
+      const player = new window.Spotify.Player({
+        name: 'Trivia Jukebox',
+        getOAuthToken: cb => getToken().then(cb),
+        volume: 0,
+      })
+      // Assigned here, before connect() resolves, not after (2026-08-24,
+      // Opus review) — the cleanup below only ever touched
+      // playerRef.current, so an unmount landing mid-connect() (now a real
+      // window: the grading-break overlay can mount-then-unmount inside
+      // 2.5s if the host advances mid-warp) used to miss null while this
+      // local `player` kept connecting anyway, leaking a live "Trivia
+      // Jukebox" Spotify Connect device nothing could ever stop.
+      sharedSpotifyPlayer = player
+      playerRef.current = player
+
+      bindListeners(player)
 
       await player.connect()
     }
@@ -158,7 +196,18 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
 
     return () => {
       clearInterval(monitorRef.current)
-      playerRef.current?.disconnect()
+      // Don't disconnect — sharedSpotifyPlayer stays connected for the whole
+      // page session (see its comment above) so the NEXT grading break can
+      // reuse it. Just drop this mount's listeners so an unmounted overlay's
+      // state setters can't fire after teardown; the next mount rebinds
+      // fresh ones via bindListeners.
+      const p = playerRef.current
+      p?.removeListener('ready')
+      p?.removeListener('not_ready')
+      p?.removeListener('player_state_changed')
+      p?.removeListener('account_error')
+      p?.removeListener('authentication_error')
+      p?.removeListener('initialization_error')
     }
   }, [])
 
