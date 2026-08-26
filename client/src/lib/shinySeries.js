@@ -37,7 +37,20 @@ export function resolveShinyPart(data, overridePart) {
       volume: isYoutube ? (media.volume ?? 100) : null,
     }
   }
-  const media = data.mediaSlots?.[0]
+  // Legacy Swing Round dual-image visual questions (shinyType: 'visual',
+  // e.g. "the 4 heads" then "the 4 weapons") stash a SECOND image in
+  // mediaSlots[1] and reveal it via data.imagesRevealed — QuestionSlide.jsx's
+  // ShinySwingVisualQuestion reads mediaSlots directly for its two-beat pan
+  // and never calls this function for its own mediaUrl, so this always fell
+  // through to slot 0. Join.jsx (phones) has no pan beat — it only ever
+  // calls this — so it was stuck showing beat 1's image forever, even after
+  // the host revealed beat 2 on the TV: a guaranteed phone/TV mismatch, and
+  // "only seeing half the images" for any dual-image swing question. Bug
+  // fixed 2026-08-25, found auditing tonight's shiny-question reports.
+  const slots = data.mediaSlots ?? []
+  const media = (data.shinyType === 'visual' && data.imagesRevealed && slots.length >= 2)
+    ? slots[1]
+    : slots[0]
   const isYoutube = media?.type === 'youtube'
   return {
     text: data.text ?? '',

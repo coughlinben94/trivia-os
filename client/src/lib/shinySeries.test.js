@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isShinySeriesSibling, seriesGroupIndices, reorderWithinRound } from './shinySeries.js'
+import { isShinySeriesSibling, seriesGroupIndices, reorderWithinRound, resolveShinyPart } from './shinySeries.js'
 
 function seriesSlide(id, overrides = {}) {
   return {
@@ -109,5 +109,45 @@ describe('reorderWithinRound', () => {
     expect(reorderWithinRound(slides, 0, 0)).toBe(null)
     expect(reorderWithinRound(slides, -1, 2)).toBe(null)
     expect(reorderWithinRound(slides, 0, 99)).toBe(null)
+  })
+})
+
+describe('resolveShinyPart — legacy dual-image swing visual', () => {
+  // Bug fixed 2026-08-25: ShinySwingVisualQuestion (TV) reads
+  // data.mediaSlots/imagesRevealed directly for its two-beat pan and never
+  // calls resolveShinyPart for its own image, so this always fell through to
+  // slot 0. Join.jsx (phones) has no pan beat and ONLY calls resolveShinyPart
+  // — so a phone was stuck showing beat 1's image forever, even after the
+  // host revealed beat 2 on the TV. Reported live as "teams were only seeing
+  // half the images" / phone not matching TV.
+  function dualImageSlide(imagesRevealed) {
+    return {
+      shinyType: 'visual',
+      isShiny: true,
+      text: 'Guess the answer',
+      imagesRevealed,
+      mediaSlots: [
+        { url: 'heads.jpg', type: 'image/jpeg' },
+        { url: 'weapons.jpg', type: 'image/jpeg' },
+      ],
+    }
+  }
+
+  it('shows slot 0 (beat 1) before the host reveals the second image', () => {
+    expect(resolveShinyPart(dualImageSlide(false)).mediaUrl).toBe('heads.jpg')
+  })
+
+  it('shows slot 1 (beat 2) once the host reveals the second image', () => {
+    expect(resolveShinyPart(dualImageSlide(true)).mediaUrl).toBe('weapons.jpg')
+  })
+
+  it('a single-image visual question is unaffected by imagesRevealed', () => {
+    const data = { shinyType: 'visual', isShiny: true, text: 'Q', imagesRevealed: true, mediaSlots: [{ url: 'only.jpg', type: 'image/jpeg' }] }
+    expect(resolveShinyPart(data).mediaUrl).toBe('only.jpg')
+  })
+
+  it('a non-visual shiny type ignores imagesRevealed (never picks slot 1)', () => {
+    const data = { shinyType: 'audio', isShiny: true, imagesRevealed: true, mediaSlots: [{ url: 'a.mp3' }, { url: 'b.mp3' }] }
+    expect(resolveShinyPart(data).mediaUrl).toBe('a.mp3')
   })
 })
