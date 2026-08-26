@@ -462,20 +462,6 @@ export async function computeNextStep(show, fetchTeamCount) {
     }
   }
 
-  // Ben's decision (2026-08-25 whole-branch review): Next must not fall
-  // through to a plain advance while a phone-scored question is locked but
-  // not yet revealed — force the host to press A first, or the room never
-  // sees the answer. Deliberately pendingReveal, NOT isPending above:
-  // isPending's wager check widens to wagerTiersLocked on purpose (see
-  // pendingReveal's own comment) to also gate the closing-beat pan-down,
-  // but that means it's still true during wager's transient
-  // tiers-locked-but-guesses-not-yet-locked window — a state that is NOT
-  // "locked but not revealed" and must keep falling through to a plain
-  // advance like it always has. pendingReveal is the narrower, correct
-  // check for every mechanic (matching/order match isPending exactly here;
-  // wager keys off wagerGuessesLocked instead of wagerTiersLocked).
-  if (pendingReveal(curSlide)) return null
-
   const target = Math.min(cur + 1, sorted.length - 1)
   if (target === cur) return null
   const targetSlide = sorted[target]
