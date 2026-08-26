@@ -1097,7 +1097,18 @@ const REDUCED_SWIPE_VARIANTS = {
 // ─── Live view ────────────────────────────────────────────────────────────────
 function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScores }) {
   const pref = useReducedMotion()
-  const [viewedIndex, setViewedIndex]         = useState(0)
+  // Seeded from the host's actual position, not a hardcoded 0 (2026-08-26,
+  // phone-suite audit — MEDIUM): LiveView mounts fresh whenever `phase`
+  // flips to 'live', which for a team registering after the show is already
+  // several slides in is exactly the moment `show.current_slide_index`
+  // already reflects that. The hostIndex-tracking effect below only ever
+  // narrows viewedIndex toward hostIndex (Math.min) in manual follow mode
+  // (the default) — it never widens it — so a late-arriving team on the
+  // hardcoded 0 landed on stale slide-1 content and had to notice
+  // `isBehindLive` and tap "Current Slide →" themselves. Reads exactly like
+  // "the app is broken" to a guest who has no reason to know that button
+  // exists.
+  const [viewedIndex, setViewedIndex]         = useState(() => show?.current_slide_index ?? 0)
   const [followMode, setFollowModeState]      = useState(loadFollowMode)
   // Local per-part position within whichever slide is CURRENTLY IN VIEW —
   // live or an earlier slide the team stepped back to (2026-08-19, Ben:
@@ -1638,6 +1649,7 @@ export default function Join() {
   const [powerupUsed, setPowerupUsed] = useState(false)
   const [initError, setInitError]             = useState(null)
   const [connStatus, setConnStatus]           = useState('SUBSCRIBED')
+  const lastUpdatedAtRef = useRef(null)
   const [scoresDrawerOpen, setScoresDrawerOpen]   = useState(false)
   const [scoresDrawerTeams, setScoresDrawerTeams] = useState([])
   const [scoresDrawerLoading, setScoresDrawerLoading] = useState(false)
@@ -1835,23 +1847,95 @@ export default function Join() {
   }, [showParam])
 
   // ── Subscribe to show updates ─────────────────────────────────────────
+  // Same TEAM-2 fix as Display.jsx: postgres_changes over a live socket is
+  // at-most-once with no replay on rejoin. A channel that drops to
+  // CHANNEL_ERROR/TIMED_OUT/CLOSED (a phone's wifi blipping mid-transition
+  // is the common case here) used to just sit dead — connStatus flipped the
+  // ReconnectingBanner on, but nothing ever refetched the row once the
+  // socket came back, so a phone could be stuck on a stale scores_locked_at
+  // (wrong lock state) until an unrelated later write happened to land.
+  // Display.jsx already had to fix this exact class of bug; Join.jsx never
+  // got the parallel patch. Tear down and rejoin on any terminal status, and
+  // on a RE-subscribe (i.e. we previously dropped) refetch the row once to
+  // catch up on whatever was missed during the dead window.
   useEffect(() => {
     if (!show?.id) return
-    const channel = supabase
-      .channel(`join-show:${show.id}`)
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'shows', filter: `id=eq.${show.id}` },
-        (payload) => {
-          // MERGE over the previous row — Realtime omits unchanged TOASTed
-          // columns (a real show's `slides` jsonb) from UPDATE payloads, so a
-          // flag-only write arrives without `slides` and a full replace wiped
-          // the phone's slide content (same bug as Display.jsx, same fix).
-          setShow(prev => prev && prev.id === payload.new.id ? { ...prev, ...payload.new } : payload.new)
-          if (payload.new.is_live) setPhase(prev => prev === 'waiting' ? 'live' : prev)
-        }
-      )
-      .subscribe(status => setConnStatus(status))
-    return () => supabase.removeChannel(channel)
+    let channel
+    let retryTimer
+    let everSubscribed = false
+
+    function applyRow(row) {
+      // MERGE over the previous row — Realtime omits unchanged TOASTed
+      // columns (a real show's `slides` jsonb) from UPDATE payloads, so a
+      // flag-only write arrives without `slides` and a full replace wiped
+      // the phone's slide content (same bug as Display.jsx, same fix).
+      setShow(prev => prev && prev.id === row.id ? { ...prev, ...row } : row)
+      if (row.is_live) setPhase(prev => prev === 'waiting' ? 'live' : prev)
+    }
+
+    // Drop a payload older than (or equal to) the last one applied — same
+    // guard as Display.jsx's handlePayload (see its own comment: two writes,
+    // e.g. an unrelated flag flip landing right after a scores_locked_at
+    // write, can arrive out of delivery order over the realtime socket).
+    // Ported here 2026-08-26 (fable review) — the reconnect/refetch shape
+    // was copied from Display.jsx but this ordering guard on the regular
+    // payload path was dropped, leaving Join with no protection at all
+    // against a stale payload landing after a fresher one, reconnect or not.
+    function handlePayload(row) {
+      if (row.updated_at && lastUpdatedAtRef.current && row.updated_at <= lastUpdatedAtRef.current) return
+      if (row.updated_at) lastUpdatedAtRef.current = row.updated_at
+      applyRow(row)
+    }
+
+    function refetchRow(showId) {
+      supabase.from('shows').select('*').eq('id', showId).single().then(({ data }) => {
+        if (!data) return
+        // Same drop-if-stale check handlePayload uses, not just a ref guard
+        // (2026-08-26, phone-suite audit — this was missing here and in the
+        // Display.jsx original both copied from: a real UPDATE can land on
+        // the now-live channel and get applied via handlePayload WHILE this
+        // SELECT is still in flight; the SELECT's older snapshot resolving
+        // after it would silently overwrite the fresher applied state —
+        // e.g. current_slide_index or scores_locked_at reverting for a beat
+        // right after a reconnect). Checked before advancing the ref, so a
+        // stale snapshot neither applies NOR rolls lastUpdatedAtRef backward.
+        if (data.updated_at && lastUpdatedAtRef.current && data.updated_at <= lastUpdatedAtRef.current) return
+        if (data.updated_at) lastUpdatedAtRef.current = data.updated_at
+        applyRow(data)
+      })
+    }
+
+    function subscribe(showId) {
+      channel = supabase
+        .channel(`join-show:${showId}`)
+        .on('postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'shows', filter: `id=eq.${showId}` },
+          (payload) => handlePayload(payload.new)
+        )
+        .subscribe((status) => {
+          setConnStatus(status)
+          if (status === 'SUBSCRIBED') {
+            clearTimeout(retryTimer)
+            if (everSubscribed) {
+              console.warn('[Join] realtime channel rejoined — refetching to catch up on any missed updates')
+              refetchRow(showId)
+            }
+            everSubscribed = true
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            clearTimeout(retryTimer)
+            retryTimer = setTimeout(() => {
+              supabase.removeChannel(channel)
+              subscribe(showId)
+            }, 1500)
+          }
+        })
+    }
+
+    subscribe(show.id)
+    return () => {
+      clearTimeout(retryTimer)
+      if (channel) supabase.removeChannel(channel)
+    }
   }, [show?.id])
 
   // ── Keep viewedIndex ≤ host (handled inside LiveView) ─────────────────
@@ -1859,16 +1943,43 @@ export default function Join() {
   // ── Scoreboard drawer live updates ───────────────────────────────────
   // `scoreboard_teams` was added to the `supabase_realtime` publication
   // 2026-08-16, so this subscription actually fires now.
+  // Reconnect-recovery added 2026-08-26 (phone-suite audit): unlike the
+  // join-show: channel above, this one had no status callback at all — a
+  // socket blip while a team had the drawer open (plausible during a
+  // grading break, exactly when teams are most likely to be sitting on the
+  // scores view) silently froze it on stale numbers with no banner (this
+  // channel isn't wired to connStatus/ReconnectingBanner) and no recovery
+  // short of closing and reopening the drawer. Same retry shape as above;
+  // "catch up" here just means refetching, there's no ordering-sensitive
+  // payload merge for this table.
   useEffect(() => {
     if (!scoresDrawerOpen || !show?.id) return
-    const channel = supabase
-      .channel(`scores-drawer:${show.id}`)
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'scoreboard_teams', filter: `show_id=eq.${show.id}` },
-        () => { refreshScores() }
-      )
-      .subscribe()
-    return () => supabase.removeChannel(channel)
+    let channel
+    let retryTimer
+    function subscribeScores(showId) {
+      channel = supabase
+        .channel(`scores-drawer:${showId}`)
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'scoreboard_teams', filter: `show_id=eq.${showId}` },
+          () => { refreshScores() }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            clearTimeout(retryTimer)
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            clearTimeout(retryTimer)
+            retryTimer = setTimeout(() => {
+              supabase.removeChannel(channel)
+              subscribeScores(showId)
+            }, 1500)
+          }
+        })
+    }
+    subscribeScores(show.id)
+    return () => {
+      clearTimeout(retryTimer)
+      if (channel) supabase.removeChannel(channel)
+    }
   }, [scoresDrawerOpen, show?.id])
 
   // ── visibilitychange ──────────────────────────────────────────────────
@@ -1884,6 +1995,31 @@ export default function Join() {
     }
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [team?.id])
+
+  // ── Presence heartbeat (2026-08-26, phone-suite audit) ─────────────────
+  // visibilitychange only catches an actual background/foreground
+  // transition — a force-quit or crashed tab never fires it, so is_connected
+  // can be stuck `true` forever with nothing to tell the host's Late Team
+  // popover otherwise. While foregrounded, periodically refresh
+  // last_action_at so that popover can check freshness, not just the raw
+  // boolean — see PRESENCE_STALE_MS in LateTeamPopover.jsx. Doesn't touch
+  // is_connected/last_action, only the timestamp — those fields keep meaning
+  // exactly what they already meant.
+  useEffect(() => {
+    if (!team?.id) return
+    const HEARTBEAT_MS = 30000
+    function beat() {
+      if (document.hidden) return
+      supabase.from('teams').update({ last_action_at: new Date().toISOString() }).eq('id', team.id).then()
+    }
+    // Fire once immediately, not just on the first 30s tick — otherwise a
+    // team that just registered/reauthed (the exact team a host is most
+    // likely to be looking at in the Late Team popover) reads `last_action_at`
+    // as null/old and shows "may be gone" for its first half-minute.
+    beat()
+    const interval = setInterval(beat, HEARTBEAT_MS)
+    return () => clearInterval(interval)
   }, [team?.id])
 
   // ── Register ──────────────────────────────────────────────────────────
@@ -1932,6 +2068,32 @@ export default function Join() {
     const teamId = `team_${nanoid(8)}`
     const { error } = await supabase.from('teams').insert({ id: teamId, show_id: actualShowId, name, color, is_connected: true, powerup_used: false, owner_uid: ownerUid })
     if (error) {
+      // Recovery for a lost response (2026-08-26, phone-suite audit): the
+      // insert above can commit server-side while its response is lost to a
+      // connectivity blip — same class of failure this file already designs
+      // around elsewhere (see session-restore's comment on this). Without
+      // this, the guest saw a thrown error with no local session saved, and
+      // retrying with the same name then collided with their OWN
+      // just-created row via the taken-name checks — a confusing dead end
+      // with no self-service way out short of the host's Late Team reauth.
+      // owner_uid alone (no name match, no ILIKE) is enough: it's minted
+      // fresh per browser session just above and only ever attached to a
+      // team WE created, so a hit here can only mean our own insert
+      // actually succeeded.
+      const { data: recovered } = await supabase
+        .from('teams')
+        .select('id, name, color')
+        .eq('show_id', actualShowId)
+        .eq('owner_uid', ownerUid)
+        .maybeSingle()
+      if (recovered) {
+        const recoveredTeam = { id: recovered.id, name: recovered.name, color: recovered.color, showId: actualShowId }
+        setTeam(recoveredTeam)
+        saveStoredTeam(actualShowId, recoveredTeam)
+        setPowerupUsed(false)
+        setPhase(show.is_live ? 'live' : 'waiting')
+        return
+      }
       if (error.code === '23505') throw new Error("That name's taken — try another")
       throw new Error(error.message)
     }
@@ -1946,12 +2108,20 @@ export default function Join() {
   // ── Powerup ───────────────────────────────────────────────────────────
   async function handleInvokePowerup() {
     if (!team?.id) return
+    // .eq('powerup_used', false) makes this idempotent (2026-08-26,
+    // phone-suite audit): the write was already a blind UPDATE with no
+    // guard, so if a first invoke committed server-side but its response
+    // got lost to a connectivity blip, the guest saw an error and could
+    // retry — the retry would then overwrite powerup_used_on with whatever
+    // slide was live BY THEN, misattributing which slide the powerup was
+    // actually used on. With the guard, a retry after an already-successful
+    // use matches zero rows and silently no-ops instead.
     const { error } = await supabase.from('teams').update({
       powerup_used: true,
       powerup_used_on: show?.current_slide_id ?? null,
       last_action: 'used_powerup',
       last_action_at: new Date().toISOString(),
-    }).eq('id', team.id)
+    }).eq('id', team.id).eq('powerup_used', false)
     if (error) throw new Error("Couldn't use powerup — try again")
     setPowerupUsed(true)
   }
@@ -1972,7 +2142,11 @@ export default function Join() {
         .sort((a, b) => b.total - a.total)
       setScoresDrawerTeams(withTotals)
     } catch {
-      setScoresDrawerTeams([])
+      // Leave whatever was already on screen — a transient fetch failure
+      // (the exact case a reconnect-triggered refresh can hit) used to wipe
+      // the board to [], which renders "No scores yet" and reads as "there
+      // are no scores" instead of "connection problem." Stale-but-correct
+      // beats confidently wrong (2026-08-26, phone-suite audit).
     }
   }
 

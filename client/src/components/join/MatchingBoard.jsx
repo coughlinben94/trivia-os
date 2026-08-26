@@ -68,13 +68,15 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
     const answer = buildMatchAnswer(nextConnections)
     const run = saveChainRef.current.then(async () => {
       const upsert = supabase.from('phone_answers').upsert(
-        // submitted_at stamped explicitly (2026-08-19): Postgres upsert only
-        // touches columns it's given, so without this the column's
-        // default-on-insert value froze at the FIRST save and never moved on
-        // a re-save — silently defeating the host's lock-cutoff check below,
-        // which compares this timestamp against the lock time to discard a
-        // late write instead of trusting a fixed 700ms sleep.
-        { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer, submitted_at: new Date().toISOString() },
+        // submitted_at is NOT sent — a `phone_answers_set_submitted_at`
+        // trigger (2026-08-26) stamps it server-side with `now()` on every
+        // insert or update instead. A client-side stamp used to be required
+        // here (Postgres upsert only refreshes columns it's given, so the
+        // column would freeze at the FIRST save otherwise) but trusted the
+        // phone's own clock for the host's lock-cutoff check below — a real
+        // scoring-integrity gap on clock-drifted phones. The trigger keeps
+        // the same always-moves-on-resave behavior without that trust.
+        { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer },
         { onConflict: 'slide_id,team_id' }
       )
       // Raced against a timeout, not just awaited — a request that never

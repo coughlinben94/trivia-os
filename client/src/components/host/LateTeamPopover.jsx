@@ -18,6 +18,15 @@ import { supabase } from '../../lib/supabase.js'
 //   that team's row, bypassing the ownership chicken-and-egg. The token
 //   never appears anywhere except this QR — it's not stored in the show
 //   payload or shown to the audience.
+// A force-quit/crashed tab never fires visibilitychange, so is_connected can
+// be stuck `true` forever with nothing to correct it — Join.jsx's presence
+// heartbeat (2026-08-26) refreshes last_action_at every 30s while
+// foregrounded specifically so this can be checked. 3x the heartbeat
+// interval, not 1x: normal jitter (a slow network tick, a throttled
+// background timer right at the backgrounding edge) shouldn't false-positive
+// a perfectly fine phone as gone.
+const PRESENCE_STALE_MS = 90 * 1000
+
 export default function LateTeamPopover({ show, onShowJoinQr, onClose }) {
   const [mode, setMode] = useState('choose') // 'choose' | 'pick-team' | 'qr'
   const [teams, setTeams] = useState([])
@@ -108,19 +117,27 @@ export default function LateTeamPopover({ show, onShowJoinQr, onClose }) {
             // kicks whatever phone currently owns that team's row off both
             // writes AND reads of its own answers, so picking the wrong
             // (actually-fine) team by mistake locks out a working phone.
-            const connected = !!t.is_connected
+            // `is_connected` alone can't tell "genuinely still here" apart
+            // from "claimed connected once, then the tab was force-quit" —
+            // see PRESENCE_STALE_MS above. Three states now, not two: fresh
+            // (definitely there), stale (claims connected but hasn't proven
+            // it in a while — probably gone, not certain), and disconnected
+            // (definitely not there, e.g. backgrounded).
+            const fresh = t.last_action_at && (Date.now() - new Date(t.last_action_at).getTime()) < PRESENCE_STALE_MS
+            const connected = !!t.is_connected && fresh
+            const stale = !!t.is_connected && !fresh
+            const dotClass = connected ? 'bg-green-500' : stale ? 'bg-amber-400' : 'bg-gray-300'
+            const dotTitle = connected ? 'Currently connected' : stale ? 'May have disconnected — hasn’t checked in recently' : 'Not connected'
             return (
               <button
                 key={t.id}
                 onClick={() => pickTeam(t)}
                 className="text-left text-sm text-gray-700 hover:bg-gray-100 rounded-lg px-3 py-2 flex items-center gap-2"
               >
-                <span
-                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${connected ? 'bg-green-500' : 'bg-gray-300'}`}
-                  title={connected ? 'Currently connected' : 'Not connected'}
-                />
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} title={dotTitle} />
                 <span className="flex-1">{t.name}</span>
                 {connected && <span className="text-[10px] text-green-600 font-medium">connected</span>}
+                {stale && <span className="text-[10px] text-amber-600 font-medium">may be gone</span>}
               </button>
             )
           })}

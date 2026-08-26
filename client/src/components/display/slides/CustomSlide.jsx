@@ -82,8 +82,9 @@ export default function CustomSlide({ slide }) {
             transition={{ delay: 0.15, duration: 0.25, ease: EASE_OUT }}
             className="relative z-10 text-center leading-relaxed max-w-4xl"
             style={{
+              fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
               color: theme.colors.text,
-              fontSize: rt.body?.fontSizePx ?? fitToBox(data.body, { ...CUSTOM_BODY_BOX, family: 'system-ui' }),
+              fontSize: rt.body?.fontSizePx ?? fitToBox(data.body, { ...CUSTOM_BODY_BOX, family: theme.fonts.body }),
               fontWeight: 400,
             }}
           >

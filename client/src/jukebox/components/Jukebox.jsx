@@ -900,6 +900,24 @@ const [newSetName, setNewSetName] = useState('')
 
   const player = useSpotifyPlayer({ onAdvance: advanceToNext, onFadeStart })
 
+  // Every other exit path (Space, `b`-hold, closeTuning, switching sets)
+  // routes through handleStop, which calls player.fadeAndPause(). But the
+  // host can also advance straight past the grading-break slide from
+  // /host (Next / Stream Deck arrow) without ever touching this overlay —
+  // Display.jsx just unmounts JukeboxBreakOverlay/Jukebox outright. React
+  // unmount runs no cleanup here on its own, so the still-playing track
+  // kept going indefinitely over the venue's Spotify Connect device, with
+  // no fade and no position monitor to auto-stop it at its trim point
+  // either (useSpotifyPlayer's own cleanup only drops listeners, it
+  // deliberately never calls pause() — see its comment). Track isPlaying
+  // in a ref so this fires only on the real unmount, not on every
+  // isPlaying toggle.
+  const isPlayingRef = useRef(isPlaying)
+  useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
+  useEffect(() => () => {
+    if (isPlayingRef.current) player.fadeAndPause()
+  }, [player.fadeAndPause])
+
   const registerUpcomingTrackHandler = useCallback(({ token, fn }) => {
     if (fn) {
       upcomingTrackTokenRef.current = token

@@ -139,6 +139,17 @@ function HostInner({ showApi }) {
   const [showScoreboard, setShowScoreboard] = useState(false)
   const savedResultsRef = useRef(false)
   const leftAppDebounceRef = useRef({})
+  // Toasts below fire off the row's CURRENT last_action, not a delta — that
+  // was safe as long as every writer to `teams` also changed last_action.
+  // Join.jsx's presence heartbeat (2026-08-26) broke that assumption: it
+  // updates last_action_at only, every 30s, while a team just sits
+  // foregrounded — which still fires this UPDATE subscription, redelivering
+  // whatever last_action was last set to. A team who used a powerup and then
+  // did nothing else got a fresh, non-auto-dismissing "used their powerup!"
+  // toast every 30s for the rest of the show. Dedupe against the last action
+  // actually SEEN per team so a repeated identical value (the heartbeat
+  // echo) is silently ignored, while a genuine transition still toasts.
+  const prevActionRef = useRef({})
   const [connStatus, setConnStatus] = useState('SUBSCRIBED')
   const disconnected = connStatus === 'CHANNEL_ERROR' || connStatus === 'TIMED_OUT' || connStatus === 'CLOSED'
 
@@ -153,7 +164,9 @@ function HostInner({ showApi }) {
         (payload) => {
           const team = payload.new
           const action = team.last_action
-          if (!action) return
+          const prevAction = prevActionRef.current[team.id]
+          prevActionRef.current[team.id] = action
+          if (!action || action === prevAction) return
           // 'went_back' toast removed 2026-08-19 (Ben: "only notifications I
           // care about are when people leave the app") — teams scrolling
           // back through slides is normal /join use (see the "No auto-

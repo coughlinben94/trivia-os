@@ -52,11 +52,10 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
     if (preview) return Promise.resolve(true)
     const run = saveChainRef.current.then(async () => {
       const upsert = supabase.from('phone_answers').upsert(
-        // submitted_at stamped explicitly on every save, same reasoning as
-        // MatchingBoard's: Postgres upsert only touches columns it's given,
-        // so without this the column's default-on-insert value would freeze
-        // at the FIRST tap and never move on later taps/undos.
-        { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer: nextAnswer, submitted_at: new Date().toISOString() },
+        // submitted_at NOT sent — see MatchingBoard.jsx's identical upsert:
+        // a server-side trigger (2026-08-26) owns this column now instead
+        // of trusting the phone's own clock.
+        { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer: nextAnswer },
         { onConflict: 'slide_id,team_id' }
       )
       // Raced against a timeout, not just awaited — a request that never

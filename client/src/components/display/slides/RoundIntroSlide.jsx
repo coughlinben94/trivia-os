@@ -79,8 +79,9 @@ export default function RoundIntroSlide({ slide, show }) {
             transition={{ delay: 0.55, duration: 0.2 }}
             className="relative z-10 mt-4 text-center italic"
             style={{
+              fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
               color: theme.colors.text,
-              fontSize: rt.subtitle?.fontSizePx ?? fitToBox(data.subtitle, { ...LINE_BOX, family: 'system-ui' }),
+              fontSize: rt.subtitle?.fontSizePx ?? fitToBox(data.subtitle, { ...LINE_BOX, family: theme.fonts.body }),
               fontWeight: 300,
             }}
           >

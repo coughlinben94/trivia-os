@@ -222,6 +222,18 @@ function UpNextCard({ slide, offset }) {
 
 export default function LiveMode({ show, actions, onExitLive, onThemeChange, onOpenScoreboard, scoreboardModalOpen }) {
   const [lateTeamPopoverOpen, setLateTeamPopoverOpen] = useState(false)
+  // 📱 Late Team's "show join QR" jumps the WHOLE show's current_slide_index
+  // to the pre-show slide — goLiveFrom is a real navigation, broadcast to
+  // every connected phone (Join.jsx's hostIndex effect pulls every phone's
+  // viewedIndex toward it via Math.min, follow-mode or not) and to the TV.
+  // There was previously no way back to the exact position it interrupted —
+  // if the pre-show slide has a walkout song it auto-advances forward once
+  // the song ends, past wherever the round actually was, and otherwise the
+  // host had to manually re-navigate with nothing marking where they'd been
+  // (2026-08-26, phone-suite audit — flagged HIGH, this is likely a real
+  // contributor to "the app desynced/broke" reports). This ref-then-button
+  // just remembers the exact index to snap everyone straight back to.
+  const [preShowReturnIndex, setPreShowReturnIndex] = useState(null)
   const [scorePanelOpen, setScorePanelOpen] = useState(false)
   const [themePickerOpen, setThemePickerOpen] = useState(false)
   const [pylPickerBusy, setPylPickerBusy] = useState(false)
@@ -255,6 +267,15 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // actually has a Pre-Show slide; jumps the TV there without touching the
   // current slide index otherwise (host navigates back manually after).
   const preShowIndex = slides.findIndex(s => s.type === 'pre-show')
+
+  // If the host leaves the pre-show slide by any OTHER means while
+  // preShowReturnIndex is armed (Prev/Next, Go Live picker, Stream Deck)
+  // rather than the Resume button, drop the stale target — clicking Resume
+  // afterward must not snap the show backward over navigation the host
+  // already did on purpose.
+  useEffect(() => {
+    if (preShowReturnIndex != null && currentIndex !== preShowIndex) setPreShowReturnIndex(null)
+  }, [currentIndex, preShowIndex, preShowReturnIndex])
 
   // B6: the scoreboard modal (Host.jsx, fixed inset-0 z-50) renders full-screen
   // on top of everything, including this wager panel's "Lock Answers & Score"
@@ -1026,11 +1047,23 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
               {lateTeamPopoverOpen && (
                 <LateTeamPopover
                   show={show}
-                  onShowJoinQr={() => actions.goLiveFrom(preShowIndex)}
+                  onShowJoinQr={() => {
+                    setPreShowReturnIndex(currentIndex)
+                    actions.goLiveFrom(preShowIndex)
+                  }}
                   onClose={() => setLateTeamPopoverOpen(false)}
                 />
               )}
             </div>
+          )}
+          {preShowReturnIndex != null && (
+            <button
+              onClick={() => { actions.goLiveFrom(preShowReturnIndex); setPreShowReturnIndex(null) }}
+              title="Jump the show (and every phone) back to where it was before showing the join QR"
+              className="flex items-center gap-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded-lg transition-colors"
+            >
+              ▶ Resume Round
+            </button>
           )}
         </div>
 
@@ -1050,11 +1083,6 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           {!show.showState.answerReveal && currentSlide?.type === 'grading-break' && (
             <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 animate-pulse">
               Jukebox Live
-            </span>
-          )}
-          {show.showState.scoresRevealed && (
-            <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 animate-pulse">
-              Scores Live
             </span>
           )}
         </div>
@@ -1338,7 +1366,6 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                 ['← →', 'Navigate slides'],
                 ['A', 'Toggle answer'],
                 ['S', 'TV scoreboard'],
-                ['R', 'Scores live (Join)'],
               ].map(([key, label]) => (
                 <div key={key} className="flex items-center justify-between">
                   <code className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">{key}</code>

@@ -726,8 +726,9 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
   }, [breakEligible, breakActive, warp, currentSlide?.id])
 
   // Return trip. breakActive can only fall by the show moving to another slide
-  // (activeBreakId never clears itself), so the slide id is the honest trigger —
-  // it covers both exits, the in-overlay b-hold and a host-side advance. Guards
+  // (activeBreakId is cleared below, on that same slide change), so the slide
+  // id is the honest trigger — it covers both exits, the in-overlay b-hold
+  // and a host-side advance. Guards
   // on the last slide id actually seen rather than firing on every run of the
   // effect, the same shape RingAmbient's own turn-per-slide effect uses, so
   // StrictMode's dev double-invoke can't cancel the warp it just started.
@@ -739,9 +740,35 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
     // Also the cleanup path: a slide change mid-'out' (host advanced past the
     // break early) drops that warp instead of letting it open a jukebox for a
     // slide that is no longer on screen.
-    setWarp(breakWasActiveRef.current ? 'back' : null)
+    //
+    // Back-to-back grading-break slides (2026-08-26): if the slide we just
+    // left was active AND the slide we landed on is ALSO break-eligible,
+    // skip the 'back' warp specifically — the full round-trip (vortex back
+    // to normal, sit for BREAK_DELAY_MS, vortex right back into the same
+    // music station) read as a pointless flicker for what's really one
+    // continuous jukebox stretch across two slides. This only drops the
+    // RETURN vortex; the ring still settles onto this new slide's own
+    // natural station via its normal per-slide turn (no dedicated
+    // animation, just the ordinary advance), the new slide's own break
+    // message still gets its full BREAK_DELAY_MS read-time exactly like any
+    // other break (breakActive stays false until that elapses — nothing
+    // here touches pacing or hides content), and the auto-open effect above
+    // still fires its own fresh 'out' warp into the music station once that
+    // wait is up, same ceremony every break gets. A break slide reached any
+    // other way (leaving a break for a non-break slide, or a non-break slide
+    // for a break slide) is unaffected — only the specific break→break case
+    // drops the redundant leg.
+    setWarp(breakWasActiveRef.current && !breakEligible ? 'back' : null)
     breakWasActiveRef.current = false
-  }, [currentSlide?.id])
+    // activeBreakId used to persist forever (only ever overwritten by the
+    // NEXT break's id, never cleared) — so revisiting the same break slide
+    // later (Prev, Go Live picker) found `activeBreakId === currentSlide.id`
+    // still true on the very first render and hard-cut straight into
+    // breakActive with no warp/countdown, unlike every other visit. Clearing
+    // it on every slide change means a revisited break re-arms the same
+    // BREAK_DELAY_MS-then-warp ceremony as a first-time visit (2026-08-26).
+    setActiveBreakId(null)
+  }, [currentSlide?.id, breakEligible])
 
   const slideFallback = (
     <div style={{
@@ -914,12 +941,12 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
       {/* Break music — above everything except the nav-denied banner (z-200).
           Teardown on external advance is automatic: the host advancing from
           /host changes currentSlide, breakActive goes false, the overlay
-          unmounts, and useSpotifyPlayer's cleanup (player.disconnect()) stops
-          audio.
-          ponytail: unmount-disconnect cuts audio without a fade on host-side
-          advance; the b-hold path (the normal gesture) keeps the full exit
-          animation + fade. Add a pre-unmount fade only if Ben ever advances
-          breaks from /host in practice. */}
+          unmounts — Jukebox.jsx's own unmount cleanup now calls
+          player.fadeAndPause() (2026-08-26) if a track was playing.
+          useSpotifyPlayer's cleanup itself only drops this mount's listeners,
+          it never disconnects (the shared-player singleton stays connected
+          for the whole page session), so the fade has to happen at the
+          Jukebox level, not here. */}
       {/* Hyperspace between the ring's own station and the jukebox's record.
           'out' finishing is what makes the overlay below VISIBLE and flips
           stationOverride to MUSIC_STATION — one commit, so the jump lands on
@@ -930,8 +957,19 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           2026-08-24 it MOUNTS (hidden) the moment 'out' starts, see below. */}
       {warp && (
         <ErrorBoundary fallback={null}>
+          {/* key is `warp` alone, not `${currentSlide?.id}-${warp}` (2026-08-26
+              fix). currentSlide is derived fresh every render from the `show`
+              prop, but `warp` only updates in the effect above, which commits
+              a render AFTER the one where a realtime slide change already
+              flipped currentSlide. Keying on the slide id forced a remount of
+              this in-flight vortex canvas on that intermediate render — a
+              visible stutter, restarting the 2500ms animation from t=0 for
+              one commit whenever the host advanced during the 'out' warp.
+              warp alone already carries a fresh key on every real mount: it's
+              null the instant this block is unmounted, so a new 'out'/'back'
+              always starts from a genuinely fresh instance. */}
           <WarpTransition
-            key={`${currentSlide?.id}-${warp}`}
+            key={warp}
             dir={warp}
             onDone={() => {
               if (warp === 'out') setActiveBreakId(currentSlide?.id)
@@ -1444,14 +1482,19 @@ export default function Display() {
     function refetchRow(showId) {
       supabase.from('shows').select('*').eq('id', showId).single().then(({ data }) => {
         if (!data) return
+        // Same drop-if-stale check handlePayload uses above, not just a ref
+        // guard (2026-08-26, phone-suite audit — found here first, since
+        // Join.jsx's port copied this shape faithfully including the gap: a
+        // real UPDATE can land on the now-live channel and get applied via
+        // handlePayload WHILE this SELECT is still in flight; the SELECT's
+        // older snapshot resolving after it would silently overwrite the
+        // fresher applied state, prevIndexRef included — e.g.
+        // current_slide_index reverting for a beat right after a reconnect).
+        // Checked before touching prevIndexRef or lastUpdatedAtRef, so a
+        // stale snapshot doesn't corrupt either.
+        if (data.updated_at && lastUpdatedAtRef.current && data.updated_at <= lastUpdatedAtRef.current) return
         prevIndexRef.current = data.current_slide_index ?? 0
-        // Never move backward — a realtime payload can land in the window
-        // between the reconnect firing and this fetch resolving, advancing
-        // lastUpdatedAtRef past what this now-stale snapshot holds. Rolling
-        // it back would let a genuinely-stale redelivery through afterward.
-        if (data.updated_at && (!lastUpdatedAtRef.current || data.updated_at > lastUpdatedAtRef.current)) {
-          lastUpdatedAtRef.current = data.updated_at
-        }
+        if (data.updated_at) lastUpdatedAtRef.current = data.updated_at
         setShow(prev => (prev && prev.id === data.id
           ? { ...prev, ...data, theme: data.theme_id ?? data.theme, themeOverrides: data.theme_overrides ?? data.themeOverrides }
           : prev))

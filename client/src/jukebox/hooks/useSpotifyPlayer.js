@@ -106,6 +106,19 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
   const playerRef = useRef(null)
   const deviceIdRef = useRef(null)
   const genRef = useRef(0)
+  // Set true in the init effect's own cleanup below. `genRef` alone can't
+  // express "this mount is gone" — playTrack unconditionally bumps it on
+  // every call, so a call that was ALREADY mid-flight (awaiting
+  // waitForRef(playerRef)/waitForRef(deviceIdRef), each up to 5s) when
+  // Jukebox.jsx's new unmount-fadeAndPause fires resumes as if nothing
+  // happened and plays the track through the full pipeline anyway —
+  // resurrecting the exact "audio never stops" bug that fade was added to
+  // fix, this time via a zombie playTrack instead of a stuck one (2026-08-26,
+  // fable review of that fix). Checked at the two long-wait resume points and
+  // right before startMonitor, not on every internal await — those two waits
+  // are the only ones long enough to still be pending several seconds after
+  // an unmount most calls have already cleared by.
+  const deadRef = useRef(false)
   const monitorRef = useRef(null)
   const seekingRef = useRef(false)
   const seekTimerRef = useRef(null)
@@ -195,6 +208,7 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
     else window.onSpotifyWebPlaybackSDKReady = init
 
     return () => {
+      deadRef.current = true
       clearInterval(monitorRef.current)
       // Don't disconnect — sharedSpotifyPlayer stays connected for the whole
       // page session (see its comment above) so the NEXT grading break can
@@ -311,6 +325,7 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
 
   // ─── Play a track with custom start/stop ─────────────────────────
   const playTrack = useCallback(async (uri, startMs = 0, stopMs = 0, preview = false) => {
+    if (deadRef.current) return false
     let player = playerRef.current
     if (!player) {
       // player.connect() (the init effect) hasn't resolved yet — this is the
@@ -322,13 +337,17 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
       // long before connect() could possibly finish, so every attempt hit
       // this bail.
       player = await waitForRef(playerRef)
-      if (!player) return false
+      // deadRef re-checked here (2026-08-26): this wait can run up to 5s —
+      // long enough for a host-side unmount to land while it's pending. See
+      // deadRef's own comment above.
+      if (!player || deadRef.current) return false
     }
 
     let deviceId = deviceIdRef.current
     if (!deviceId) {
       // SDK ready event hasn't fired yet — wait for up to 5s
       deviceId = await waitForRef(deviceIdRef)
+      if (deadRef.current) return false
       if (!deviceId) {
         setError('Spotify player still connecting — try again in a moment.')
         transitioningRef.current = false
@@ -520,6 +539,10 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
     await fadeVolume(0, maxVol, gen, fadeInMs)
 
     if (genRef.current !== gen) return undefined
+    // Last gate before this call would start driving live playback (a real
+    // position monitor that keeps the shuffle chain going via onAdvance) —
+    // see deadRef's comment above.
+    if (deadRef.current) return undefined
 
     startMonitor(stopMs > startMs ? stopMs : 0, gen, preview, fadeBudget)
     return true

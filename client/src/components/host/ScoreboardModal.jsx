@@ -269,12 +269,30 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
   // actually fires unless something consumes it (.then/await); the exact
   // bug this file's own `save()` already found and fixed once, 17 lines below.
   useEffect(() => {
-    const lock = () => supabase.from('shows').update({ scores_locked_at: new Date().toISOString() }).eq('id', show.id).then()
+    // Tracks the exact timestamp WE last wrote, so the unmount clear below
+    // can compare-and-clear instead of blind-clearing (2026-08-26,
+    // phone-suite audit — this repo documents that Ben sometimes runs more
+    // than one session at once; a second ScoreboardModal open at the same
+    // time had its active heartbeat silently nulled by whichever modal
+    // closed first, exposing possibly-incomplete scores to guests while the
+    // other host was still mid-edit).
+    let myLastLock = null
+    const lock = () => {
+      const stamp = new Date().toISOString()
+      supabase.from('shows').update({ scores_locked_at: stamp }).eq('id', show.id).then(() => { myLastLock = stamp })
+    }
     lock()
     const heartbeat = setInterval(lock, 2 * 60 * 1000)
     return () => {
       clearInterval(heartbeat)
-      supabase.from('shows').update({ scores_locked_at: null }).eq('id', show.id).then()
+      // Only clear if the row's lock still matches what WE last wrote — no
+      // schema change needed, this is a compare-and-clear on the existing
+      // column. If another session's heartbeat landed a newer timestamp
+      // since, this UPDATE matches zero rows and correctly no-ops instead of
+      // stealing that session's still-active lock.
+      if (myLastLock) {
+        supabase.from('shows').update({ scores_locked_at: null }).eq('id', show.id).eq('scores_locked_at', myLastLock).then()
+      }
     }
   }, [show.id])
 

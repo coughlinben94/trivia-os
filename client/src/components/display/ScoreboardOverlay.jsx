@@ -92,6 +92,18 @@ function TeamRow({ team, rank, cols, template, metrics, delay, isTop, zebra, red
         gridTemplateColumns: template,
         alignItems: 'center',
         height: `${metrics.row}cqh`,
+        // The isTop row scales its name/total text up (1.14x/1.12x, below) to
+        // make the leader pop — but every row shares this same fixed height,
+        // and without a clip that larger text can render taller than its own
+        // row box. Nothing here grows to absorb it (CSS Grid track height
+        // doesn't expand for overflowing content), so the extra height just
+        // painted straight through into the row underneath — read live as
+        // "the top team's row is taller and misplaced, and everything below
+        // it looks off too," since the overlap corrupts the whole board's
+        // apparent alignment even though every row's actual DOM position
+        // never moved (2026-08-26, Ben — reported after a live open-and-look,
+        // not mid-edit, matching a static rendering bug, not a race).
+        overflow: 'hidden',
         position: 'relative',
         background: isTop ? `${c.accent}38` : zebra ? `${c.text}09` : 'transparent',
         borderLeft: isTop ? `0.35cqw solid ${c.highlight}` : `0.35cqw solid transparent`,

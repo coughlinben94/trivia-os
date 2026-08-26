@@ -81,9 +81,9 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
           slide_id: slide.id,
           team_id: team.id,
           answer: { tier: nextTier, guess: parseWagerNumber(nextGuess) },
-          // See MatchingBoard.jsx's identical stamp — required for the
-          // host's lock-cutoff check, not just a default-on-insert value.
-          submitted_at: new Date().toISOString(),
+          // submitted_at NOT sent — see MatchingBoard.jsx's identical upsert:
+          // a server-side trigger (2026-08-26) owns this column now instead
+          // of trusting the phone's own clock.
         },
         { onConflict: 'slide_id,team_id' }
       )

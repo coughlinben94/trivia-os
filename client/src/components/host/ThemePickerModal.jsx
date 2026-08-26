@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { THEMES, getTheme } from '../../themes/index.js'
 import ParticleBackground from '../display/ParticleBackground.jsx'
 import ThemeCustomizeControls from './ThemeCustomizeControls.jsx'
+import { applyOverrides } from '../shared/ThemeProvider.jsx'
 
 // Matches the real /display TV output (see Display.jsx's ticker comment:
 // "always fills the full 1920px width") — fixed-px ambient details (stars,
@@ -82,11 +83,11 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
   }, [])
 
   const baseTheme = getTheme(previewId)
-  const previewTheme = {
-    ...baseTheme,
-    fonts: { ...baseTheme.fonts, ...(overrides.fonts ?? {}) },
-    colors: { ...baseTheme.colors, ...(overrides.colors ?? {}) },
-  }
+  // Same merge+contrast-floor the real TV runs (ThemeProvider's
+  // applyOverrides) — a hand-duplicated merge here previously skipped the
+  // floor, so a host could pick an unreadable `text` color and see it look
+  // fine in preview, then floored to something different on the actual TV.
+  const previewTheme = applyOverrides(baseTheme, overrides)
 
   function handlePick(id) {
     if (id === previewId) return
