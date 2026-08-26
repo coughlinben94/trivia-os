@@ -6,7 +6,8 @@ import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
 import ShinyMatchingQuestion from './ShinyMatchingQuestion.jsx'
 import ShinyWagerQuestion from './ShinyWagerQuestion.jsx'
 import ShinyOrderQuestion from './ShinyOrderQuestion.jsx'
-import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny } from '../../../lib/shinySeries.js'
+import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView } from '../../../lib/shinySeries.js'
+import { GridContent } from './GridSlide.jsx'
 import { fitToBox, QUESTION_BOX, QUOTE_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT, EASE_EXIT, EASE_PANEL } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
@@ -1292,6 +1293,17 @@ function ShinyContent({ slide, show, theme, transitionKey, isPreview }) {
   const { data } = slide
   const part = resolveShinyPart(data)
 
+  // "All at once" with image assets — every asset on screen together, one
+  // shared answer, no per-press reveal (Ben, 2026-08-26: one-at-a-time is
+  // what sequential is for). Reuses GridSlide's drawing code via the
+  // partsToGridView adapter rather than a second renderer, and sits ABOVE
+  // the visual branch so concurrent beats the one-at-a-time treatment.
+  // isVisualShiny guards the tiles: GridContent draws <img>, so only image
+  // assets belong here (the wizard only offers "all at once" for text and
+  // image formats for the same reason).
+  if (isConcurrentMediaShiny(data) && isVisualShiny(data) && Array.isArray(data.parts) && data.parts.length > 1) {
+    return <GridContent slide={{ ...slide, data: { ...data, ...partsToGridView(data) } }} theme={theme} />
+  }
   if (isVisualShiny(data) && part.mediaUrl) {
     // Legacy Swing Round flag (see resolveShinyPart's comment) routes to the
     // pan-reveal treatment; format-library image questions keep the
@@ -1315,10 +1327,13 @@ function ShinyContent({ slide, show, theme, transitionKey, isPreview }) {
   if (isWagerShiny(data)) {
     return <ShinyWagerQuestion slide={slide} show={show} theme={theme} />
   }
-  // Gated on type AND concurrent together — image series ("Time for a
-  // Close Up") also sets concurrent: true in its schema, and must keep its
-  // existing one-part-at-a-time visual treatment above.
-  if (data.shinyInputSchema?.type === 'text' && data.shinyInputSchema?.concurrent === true && Array.isArray(data.parts) && data.parts.length > 1) {
+  // Concurrent TEXT — the cumulative-reveal treatment. isConcurrentShiny is
+  // the single gate (it keeps legacy concurrent IMAGE series, e.g. "Time for
+  // a Close Up", on their one-at-a-time visual treatment above); the media
+  // check excludes the tiles branch at the top of this dispatcher. This
+  // condition used to be restated inline here instead of calling the gate —
+  // that duplication is exactly what the 2026-08-26 rebuild consolidated.
+  if (isConcurrentShiny(data) && !isConcurrentMediaShiny(data) && Array.isArray(data.parts) && data.parts.length > 1) {
     return <ShinyConcurrentQuestion slide={slide} theme={theme} isPreview={isPreview} />
   }
   if (isOrderShiny(data)) {

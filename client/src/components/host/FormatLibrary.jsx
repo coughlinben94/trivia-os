@@ -143,14 +143,14 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                   </div>
                 </div>
 
-                {/* Number of assets — on EVERY format. Preset the count for a
-                    format whose item count never changes (We're not so
-                    different is always 4 images). Leave blank and the host
-                    enters the count each time the format is added, in the add
-                    wizard. */}
+                {/* Default number of assets — on EVERY format. This is a
+                    DEFAULT, not a lock: the add popup pre-fills its count
+                    input with it and the host can always type something else
+                    (2026-08-26 rebuild — the old lock hid the input entirely
+                    and hard-overrode the host, which stranded a live show). */}
                 <div className="flex flex-col gap-1">
-                  <label className="text-sm font-medium text-gray-700">Number of assets</label>
-                  <p className="text-xs text-gray-400 -mt-0.5 mb-1">Preset the count (e.g. 4). Leave blank to choose the number each time you add this format.</p>
+                  <label className="text-sm font-medium text-gray-700">Default number of assets</label>
+                  <p className="text-xs text-gray-400 -mt-0.5 mb-1">Pre-fills the count in the add popup (e.g. 4). Leave blank to start at 1. Either way you can change it every time you add this format.</p>
                   <input
                     type="number"
                     min={1}
@@ -165,26 +165,22 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                   />
                 </div>
 
-                {/* Concurrent slides — image/audio/video/text. When on, each
-                    item gets revealed back-to-back. */}
+                {/* Default to all at once — image/audio/video/text. The add
+                    popup always asks how the assets go together; this only
+                    pre-selects "all at once" there, for the text formats that
+                    have an all-at-once renderer (see defaultRelationship in
+                    AddSlideWizard). It no longer nulls the asset count: the
+                    count is just a default now, so the two can coexist. */}
                 {['image', 'audio', 'video', 'text'].includes(schema.type) && (
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-700">Concurrent slides?</p>
-                      <p className="text-xs text-gray-400">Back-to-back items, revealed one at a time — host picks how many each time it's used</p>
+                      <p className="text-sm font-medium text-gray-700">Default to all at once?</p>
+                      <p className="text-xs text-gray-400">Pre-selects "all at once" in the add popup for text formats — you still choose per question, every time</p>
                     </div>
                     <button
                       onClick={() => setDraft(d => ({
                         ...d,
-                        input_schema: {
-                          ...d.input_schema,
-                          concurrent: !d.input_schema.concurrent,
-                          // Turning concurrent on retires the fixed slot count —
-                          // the host picks it per-use instead. Turning it back
-                          // off restores a sane default so the format isn't left
-                          // with no slot count at all.
-                          slots: d.input_schema.concurrent ? 1 : null,
-                        },
+                        input_schema: { ...d.input_schema, concurrent: !d.input_schema.concurrent },
                       }))}
                       className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.concurrent ? 'bg-gray-900' : 'bg-gray-200'}`}
                     >

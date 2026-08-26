@@ -98,26 +98,67 @@ export function isVennShiny(data) {
   return data.shinyInputSchema?.type === 'venn'
 }
 
-// ShinyConcurrentQuestion (QuestionSlide.jsx) — a text series played
-// all-at-once, each Next cumulatively revealing one more group's answer
-// (every prior group stays visible). Unlike every other multi-part format,
-// where data.currentPart indexes the single part currently on screen (part 0
-// showing immediately on entry is correct there — something must always be
-// displayed), this format's data.currentPart counts how many groups have
-// been revealed so far, so 0 must mean "nothing revealed yet." See
-// slideStepping.js's step-count handling for the off-by-one this drives.
-export function isConcurrentTextShiny(data) {
-  // Must match QuestionSlide.jsx's dispatcher guard exactly (parts.length > 1)
-  // — without it, a 1-part concurrent-text question diverges from the
-  // renderer: slideStepping.js's revealStepCount adds its +1 "nothing
-  // revealed yet" state (stepCount 2), so computeNextStep treats it as
-  // multi-part and bumps currentPart on the first Next press, but the
-  // dispatcher (needing >1 part) falls through to plain StandardQuestion,
-  // which never reads currentPart — that Next press produces no visible
-  // change, and Prev/closing-beat stepping are off by one from there on
-  // (2026-08-26, Sonnet re-review of the 2026-08-25 fix).
-  return Array.isArray(data.parts) && data.parts.length > 1 &&
-    data.shinyInputSchema?.type === 'text' && data.shinyInputSchema?.concurrent === true
+// THE one place "is this slide shown all at once" is decided — the TV
+// dispatcher, the step-count math, and the host editor all read it here
+// rather than restating the condition (they used to disagree by luck).
+//
+// data.shinyDisplay ('sequential' | 'concurrent') is stamped at creation by
+// AddSlideWizard and flipped by SlideEditor's display-mode toggle. It is the
+// ONLY field new slides need; everything below it is the read-only legacy
+// path for rows created before it existed. Nothing is ever backfilled.
+//
+// The legacy gate is text-only ON PURPOSE: legacy image-series formats
+// ("Time for a Close Up") also set input_schema.concurrent: true and have
+// always rendered one asset per Next press. Widening this would silently
+// change how every one of those existing slides plays.
+export function isConcurrentShiny(data) {
+  // Must agree with the dispatcher's own guard (QuestionSlide.jsx requires
+  // parts.length > 1) on BOTH paths — without it, a 1-part concurrent
+  // question diverges from the renderer: revealStepCount adds its +1
+  // "nothing revealed yet" state, so computeNextStep bumps currentPart on
+  // the first Next press, but the dispatcher falls through to plain
+  // StandardQuestion, which never reads currentPart — a dead Next press
+  // live. (This is the exact bug main independently found and fixed on
+  // the old isConcurrentTextShiny 2026-08-26 — carried forward here so the
+  // new shinyDisplay path can't reintroduce it.)
+  const hasMultipleParts = Array.isArray(data.parts) && data.parts.length > 1
+  if (!hasMultipleParts) return false
+  if (data.shinyDisplay) return data.shinyDisplay === 'concurrent'
+  return data.shinyInputSchema?.type === 'text' && data.shinyInputSchema?.concurrent === true
+}
+
+// Concurrent with MEDIA assets (images/video/audio) rather than text.
+//
+// The two concurrent flavors step differently and render differently:
+//   - text  -> ShinyConcurrentQuestion, where data.currentPart counts how many
+//              groups have been REVEALED so far (0 = nothing revealed yet),
+//              which is why it needs one extra Next-reachable state.
+//   - media -> every asset on screen together (GridContent, fed by
+//              partsToGridView), one shared answer, no per-press reveal:
+//              exactly one state. "One at a time" is what sequential is for
+//              (Ben, 2026-08-26).
+// Only reachable via the new shinyDisplay field, so no legacy slide is media
+// concurrent.
+export function isConcurrentMediaShiny(data) {
+  return isConcurrentShiny(data) && data.shinyInputSchema?.type !== 'text'
+}
+
+// parts[] -> the columns[][] view GridContent (GridSlide.jsx) already knows
+// how to draw: N assets become N columns of one tile, matching the shape the
+// old creation path used to bake into a real `grid` slide. Reusing that
+// drawing code is why concurrent media needs no new renderer — and keeping
+// the slide on `type: 'question'` with parts[] is what lets the host flip
+// between one-at-a-time and all-at-once after creation, which the old
+// frozen-at-creation grid shape never allowed.
+export function partsToGridView(data) {
+  return {
+    columns: (data.parts ?? []).map(p => [{ color: null, mediaUrl: p?.mediaSlots?.[0]?.url ?? null }]),
+    columnLabels: false,
+    intraGap: 0,
+    interGap: 84,
+    text: data.text,
+    answer: data.answer,
+  }
 }
 
 // True when two slides are separate top-level slide objects that together
@@ -128,7 +169,17 @@ export function isConcurrentTextShiny(data) {
 // slide, and (b) collapse the run into one group in the host's slide list.
 export function isShinySeriesSibling(a, b) {
   const ad = a?.data, bd = b?.data
-  if (!ad?.isShiny || !bd?.isShiny || !ad.isSeries || !bd.isSeries) return false
+  if (!ad?.isShiny || !bd?.isShiny) return false
+  // New creations carry a shinyGroupId stamped once per run — exact, and
+  // collision-proof. A slide that has one is never a sibling of a slide that
+  // doesn't (a legacy row can't have belonged to a run stamped after it).
+  if (ad.shinyGroupId || bd.shinyGroupId) return ad.shinyGroupId === bd.shinyGroupId
+  // Legacy rows keep the original heuristic, unchanged and never backfilled.
+  // Known ceiling: seriesTheme is stamped as the FORMAT'S NAME, so two runs
+  // of the same format in the same round are indistinguishable and merge —
+  // the second run loses its announce beat and the sidebar collapses both
+  // into one row. Accepted for old shows, impossible for new ones.
+  if (!ad.isSeries || !bd.isSeries) return false
   if (a.roundId !== b.roundId) return false
   if (!ad.shinyFormatId || ad.shinyFormatId !== bd.shinyFormatId) return false
   return !!ad.seriesTheme && ad.seriesTheme === bd.seriesTheme

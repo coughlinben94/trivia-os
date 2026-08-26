@@ -27,7 +27,12 @@ export default function GridSlide({ slide, show }) {
   return <GridContent slide={slide} theme={theme} />
 }
 
-function GridContent({ slide, theme }) {
+// Exported for QuestionSlide.jsx's concurrent-media branch: an "all at once"
+// shiny question feeds this the same columns[][] view a real `grid` slide
+// carries (via partsToGridView), so N images on screen together reuses this
+// drawing code instead of a second renderer. Real `grid` slides are
+// unaffected — this is the same component they have always rendered.
+export function GridContent({ slide, theme }) {
   const reduce = useReducedMotion()
   const { data } = slide
   const columns = Array.isArray(data.columns) ? data.columns : []

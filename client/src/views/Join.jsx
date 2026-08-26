@@ -5,7 +5,7 @@ import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
-import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny } from '../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny } from '../lib/shinySeries.js'
 import { getWagerTier } from '../lib/wagerScoring.js'
 import MatchingBoard from '../components/join/MatchingBoard.jsx'
 import WagerBoard from '../components/join/WagerBoard.jsx'
@@ -545,6 +545,29 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered, overrid
       }
       if (d.isShiny && isOrderShiny(d)) {
         return <OrderBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
+      }
+      // All-at-once media (2026-08-26 rebuild): the TV shows every asset
+      // together, so a phone stepping one asset at a time through
+      // resolveShinyPart would contradict what the room is looking at. Ben's
+      // call: show all N in a stack the team can scroll (the sheet this
+      // renders into already scrolls), not a "look at the TV" placeholder.
+      if (d.isShiny && isConcurrentMediaShiny(d) && Array.isArray(d.parts) && d.parts.length > 1) {
+        const urls = d.parts.map(p => p?.mediaSlots?.[0]?.url).filter(Boolean)
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+            {d.text && (
+              <p style={{
+                color: text, fontSize: 'clamp(1.15rem, 4.5vw, 1.35rem)',
+                lineHeight: 1.55, margin: 0, fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
+              }}>
+                {d.text}
+              </p>
+            )}
+            {urls.map((url, i) => (
+              <QuestionImage key={`${i}-${url}`} src={url} alt={`Question image ${i + 1}`} />
+            ))}
+          </div>
+        )
       }
       const part = resolveShinyPart(d, overridePart)
       return (
