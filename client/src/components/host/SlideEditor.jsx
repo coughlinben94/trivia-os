@@ -2233,7 +2233,7 @@ function PylLottoEditor({ data, setData, scheduleSave }) {
   return (
     <>
       <p className="text-xs text-gray-500">The winner is decided now — the spin animation is theater, the outcome isn't actually random.</p>
-      <Divider label="Theme Options" />
+      <Divider label="Teams" />
       <div className="space-y-2">
         {pool.map((c, i) => (
           <div key={c.id} className="flex items-center gap-2">
