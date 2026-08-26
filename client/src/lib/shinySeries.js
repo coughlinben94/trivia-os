@@ -98,6 +98,18 @@ export function isVennShiny(data) {
   return data.shinyInputSchema?.type === 'venn'
 }
 
+// ShinyConcurrentQuestion (QuestionSlide.jsx) — a text series played
+// all-at-once, each Next cumulatively revealing one more group's answer
+// (every prior group stays visible). Unlike every other multi-part format,
+// where data.currentPart indexes the single part currently on screen (part 0
+// showing immediately on entry is correct there — something must always be
+// displayed), this format's data.currentPart counts how many groups have
+// been revealed so far, so 0 must mean "nothing revealed yet." See
+// slideStepping.js's step-count handling for the off-by-one this drives.
+export function isConcurrentTextShiny(data) {
+  return data.shinyInputSchema?.type === 'text' && data.shinyInputSchema?.concurrent === true
+}
+
 // True when two slides are separate top-level slide objects that together
 // make up one shiny "run" — e.g. an image-type format where the host asked
 // for N slides (one image each) instead of N parts on one slide. Same round,

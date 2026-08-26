@@ -110,6 +110,35 @@ describe('computeNextStep', () => {
     expect(adv.current_slide_index).toBe(1)
   })
 
+  // 2026-08-25, found live the same night this format shipped: Ben clicked
+  // into a PYL "Song Lyrics" (ShinyConcurrentQuestion) slide and the first
+  // row's answer was already showing before any Next press. Root cause was
+  // an off-by-one in the OLD revealedGroups formula (currentPart + 1), which
+  // meant currentPart's fresh-entry value of 0 already counted as "one
+  // revealed" instead of "nothing revealed" — and symmetrically made the
+  // LAST group unreachable by any number of Next presses. revealStepCount()
+  // gives this format (data.shinyInputSchema.type/concurrent) one extra
+  // Next-reachable state so currentPart can mean "count of groups revealed,"
+  // 0 included.
+  it('reveals a concurrent text series cumulatively, starting with nothing revealed', async () => {
+    const concurrent = { isShiny: true, shinyInputSchema: { type: 'text', concurrent: true }, parts: [null, null, null] }
+    const slides = [slide('a', 0, 'question', concurrent), slide('b', 1)]
+    const reveal = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(reveal, 'a').introDone).toBe(true)
+    expect(dataOf(reveal, 'a').currentPart ?? 0).toBe(0) // nothing revealed on first content frame
+
+    const p1 = await computeNextStep({ slides: reveal.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(p1, 'a').currentPart).toBe(1) // group 0 revealed
+    const p2 = await computeNextStep({ slides: p1.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(p2, 'a').currentPart).toBe(2) // group 1 revealed
+    const p3 = await computeNextStep({ slides: p2.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(p3, 'a').currentPart).toBe(3) // group 2 (the last one) revealed — unreachable before this fix
+
+    // fully revealed — one closing beat back down to the title card next, same as any other shiny
+    const close = await computeNextStep({ slides: p3.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
+  })
+
   // Ben, 2026-08-24: "after the third slide of a shiny that pans, it should
   // then pan back down to the shiny title. ex: not so different. so i can then
   // move to the next question ring world style." The index law that makes that
@@ -231,6 +260,19 @@ describe('computePrevStep', () => {
     expect(dataOf(back, 'a').currentPart).toBe(2)
   })
 
+  // Same off-by-one as the computeNextStep test above, seen from the other
+  // direction: the OLD lastPartIdx formula (groups - 1) landed a concurrent
+  // series backed-into from the next slide with its LAST group still
+  // unrevealed, contradicting "last revealed state" for every other format.
+  it('lands a concurrent text series fully revealed, not one group short', async () => {
+    const concurrent = { isShiny: true, shinyInputSchema: { type: 'text', concurrent: true }, parts: [null, null, null] }
+    const slides = [slide('a', 0, 'question', concurrent), slide('b', 1)]
+    const back = await computePrevStep({ slides, currentSlideIndex: 1 }, noTeams)
+    expect(back.current_slide_index).toBe(0)
+    expect(dataOf(back, 'a').introDone).toBe(true)
+    expect(dataOf(back, 'a').currentPart).toBe(3) // all 3 groups, not 2
+  })
+
   it('returns null at the start of the show', async () => {
     const slides = [slide('a', 0)]
     expect(await computePrevStep({ slides, currentSlideIndex: 0 }, noTeams)).toBe(null)
@@ -264,6 +306,20 @@ describe('withEntryState', () => {
     const out = withEntryState([s], s, { currentPart: 0, introDone: false })
     expect(out[0].data.lockCountdownPhase).toBe(null)
     expect(out[0].data.lockCountdownStartedAt).toBe(null)
+  })
+
+  // For every other multi-part format, currentPart:0 means "part 0 is
+  // showing" — correct on fresh entry, nothing to reset. ShinyConcurrentQuestion
+  // is the one format where currentPart COUNTS groups revealed, so a stale
+  // nonzero value left over from a previous visit (or a rehearsal) must not
+  // survive re-entry, or the room sees answers from a prior pass before any
+  // Next press this time.
+  it('clears a stale currentPart on a fresh entry into a concurrent-reveal slide, so no group starts pre-revealed', () => {
+    const s = slide('a', 0, 'question', {
+      isShiny: true, shinyInputSchema: { type: 'text', concurrent: true }, parts: [null, null, null], currentPart: 2,
+    })
+    const out = withEntryState([s], s, { currentPart: 0, introDone: false })
+    expect(out[0].data.currentPart).toBe(0)
   })
 })
 

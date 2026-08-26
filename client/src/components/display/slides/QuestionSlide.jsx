@@ -965,15 +965,18 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
   const rowGroups = []
   for (let i = 0; i < parts.length; i += groupSize) rowGroups.push(parts.slice(i, i + groupSize))
   const rows = rowGroups.flatMap((g, gi) => g.map(r => ({ ...r, _group: gi })))
-  // This component only mounts after the intro card dismisses (introDone
-  // gates it upstream in QuestionSlide), so group 0's answers are showing
-  // from the first content frame — currentPart starts at 0, and 0 hidden
-  // rows would leave the host one press behind the audience's expectation.
-  // isPreview (the host's build-mode canvas, SlideCanvasEditor) forces this
-  // to 0 regardless of currentPart — 2026-08-25, Ben: browsing/editing this
-  // slide in Build Mode must never leak an answer onto the host's own
-  // screen before the round is actually live.
-  const revealedGroups = isPreview ? 0 : (data.introDone ? Math.min((data.currentPart ?? 0) + 1, rowGroups.length) : 0)
+  // currentPart counts groups ALREADY revealed here, not "the part currently
+  // on screen" — 0 means nothing revealed yet. (Fixed 2026-08-25, live show
+  // bug: this used to add +1, so group 0's answer showed on the very first
+  // content frame before any Next press — Ben: "pyl song lyrics... already
+  // had the first answer revealed." slideStepping.js's revealStepCount gives
+  // this format one extra Next-reachable state up front so the last group is
+  // still reachable now that 0 no longer means "one revealed.") isPreview
+  // (the host's build-mode canvas, SlideCanvasEditor) forces this to 0
+  // regardless of currentPart — 2026-08-25, Ben: browsing/editing this slide
+  // in Build Mode must never leak an answer onto the host's own screen
+  // before the round is actually live.
+  const revealedGroups = isPreview ? 0 : (data.introDone ? Math.min(data.currentPart ?? 0, rowGroups.length) : 0)
   // groupSize > 1 with more than one group (Disney: 2 groups of 3) means a
   // real "columns" layout, not just fewer reveal presses — see isPaired's
   // render branch below.

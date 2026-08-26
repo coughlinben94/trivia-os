@@ -21,7 +21,26 @@
 // Callers own the write + their own local-state update; nothing here
 // touches the network or React.
 
-import { isShinySeriesSibling, isMatchingShiny, isWagerShiny, isOrderShiny } from './shinySeries.js'
+import { isShinySeriesSibling, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentTextShiny } from './shinySeries.js'
+
+// Number of Next-reachable states for a slide's data.parts/groupSize
+// stepping. For every format except ShinyConcurrentQuestion, currentPart
+// indexes the part currently on screen, so there are exactly `groups`
+// states (0..groups-1 — part 0 already shows on entry, nothing to add).
+// ShinyConcurrentQuestion's currentPart instead counts how many groups have
+// been cumulatively revealed, so it needs one EXTRA state at the front
+// (0 = nothing revealed yet) to reach fully-revealed (`groups`) at all —
+// without it, group 0's answer showed on the very first content frame
+// (2026-08-25, Ben: "pyl song lyrics... already had the first answer
+// revealed" — found live, the format shipped hours earlier the same night)
+// and the LAST group's answer was unreachable by any number of Next
+// presses. See isConcurrentTextShiny's own comment for why the semantics
+// differ from every other multi-part format.
+function revealStepCount(data) {
+  const parts = data?.parts
+  const groups = Math.ceil((parts?.length ?? 0) / (data?.groupSize || 1))
+  return isConcurrentTextShiny(data ?? {}) ? groups + 1 : groups
+}
 
 // Kill switch for the closing-beat branch in computeNextStep() below. Kept
 // (rather than inlined away) purely as a same-night escape hatch: flipping
@@ -395,7 +414,7 @@ export async function computeNextStep(show, fetchTeamCount) {
   // instead of one — currentPart then counts GROUPS, not raw parts (Ben,
   // 2026-08-25: Disney reveals 3 character/team pairs per press, not 1).
   const parts = data?.parts
-  const stepCount = Math.ceil((parts?.length ?? 0) / (data?.groupSize || 1))
+  const stepCount = revealStepCount(data)
   const isMultiPart = Array.isArray(parts) && stepCount > 1
   if (isMultiPart) {
     const curPart = data.currentPart ?? 0
@@ -519,7 +538,7 @@ export async function computePrevStep(show, fetchTeamCount) {
   // Generic on purpose (matches the forward branch in computeNextStep) — not
   // gated to isShiny/introDone, since team-picker uses this same
   // data.parts/currentPart mechanism without either of those fields.
-  const stepCountBack = Math.ceil((parts?.length ?? 0) / (data?.groupSize || 1))
+  const stepCountBack = revealStepCount(data)
   if (Array.isArray(parts) && stepCountBack > 1) {
     const curPart = data.currentPart ?? 0
     if (curPart > 0) {
@@ -553,7 +572,7 @@ export async function computePrevStep(show, fetchTeamCount) {
   const resolvedTarget = bakedSlides.find(s => s.id === targetSlide?.id) ?? targetSlide
   // Backing into a shiny or team-picker slide lands on its last revealed
   // state — the natural "undo" of advancing forward through it.
-  const lastPartIdx = Math.max(Math.ceil((resolvedTarget?.data?.parts?.length ?? 1) / (resolvedTarget?.data?.groupSize || 1)) - 1, 0)
+  const lastPartIdx = Math.max(revealStepCount(resolvedTarget?.data ?? {}) - 1, 0)
   const newSlides = withEntryState(bakedSlides, resolvedTarget, { currentPart: lastPartIdx, introDone: true })
   return {
     slides: newSlides,
