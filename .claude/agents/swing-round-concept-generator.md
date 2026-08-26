@@ -124,10 +124,22 @@ select concept_name, mechanic from format_idea_candidates
 where family = 'swing' and status = 'rejected';
 ```
 
-Treat every row as permanently off-limits — not just that exact name, but the same mechanic +
-theme pairing under a new name. A renamed reskin of a killed idea is still a killed idea. If a
-Phase 2 candidate turns out to be a close variant of a rejected one, drop it in Phase 2 rather than
-letting it waste a Phase 3 pass.
+Also pull `select concept_name, mechanic from format_idea_candidates where family = 'swing' and
+status = 'proposed';` — candidates that cleared this agent's own Phase 3 in past runs. **Ben has
+not necessarily seen or endorsed these** — `proposed` is agent-signal, never Ben's taste. Use the
+pull for two things only: don't re-propose an exact concept already on it, and note that a
+`[LIMIT-TESTER: ` prefix means that convention-break cleared the gate before, so it stays fair
+game rather than used up. This pull is never an off-limits list. Separately, pull
+`status = 'adopted'` rows — those ARE Ben's taste (approved by him directly) and the only positive
+signal in this table; push further along adopted directions. Zero adopted rows = no positive
+signal yet, proceed on the catalog alone.
+
+Treat every rejected row as permanently off-limits — not just that exact name, but the same
+mechanic + theme pairing under a new name. (Rows whose `rejected_reason` starts `LIMIT-TESTER: ` are the
+exception — same-name/same-concept still off-limits, but the underlying convention-break is fair
+game again.) A renamed reskin of a killed idea is still a killed idea. If a Phase 2 candidate
+turns out to be a close variant of a rejected one, drop it in Phase 2 rather than letting it waste
+a Phase 3 pass.
 
 ### Phase 2 — Generate wide via forced-pairing lenses
 
@@ -149,6 +161,27 @@ briefly, for your own reasoning, which taxonomy entries and which theme you forc
 candidate, and whether the uniform answer shape holds across all 6–9 items or only the first couple
 you thought of (a concept that only has 3 good real items isn't a swing round yet).
 
+**Limit-testers (mandatory, added 2026-08-26 on Ben's direct ask — "think outside the box, test
+the limits of trivia"):** at least 2 of the raw candidates must be deliberate convention-breakers.
+Forced pairing recombines the existing taxonomy; a limit-tester breaks an assumption EVERY catalog
+swing round shares. First name the unstated convention it violates, then build the round that
+violates it. Example conventions genuinely unbroken across the catalog: "no item recontextualizes
+an earlier one — a narrative frame is already common (Checklists, Shawn's Big Day), but no round
+has ever made item 6 change what item 2 meant" (such a round must still grade every item
+independently — no cascade, a wrong item 3 cannot cost the team item 4); "items are revealed one at a time in host order"; "the round's title
+tells you the mechanic up front instead of the mechanic being a mid-round reveal" (a mid-reveal
+round still needs a title card — the title has to promise something without spoiling); "every item
+is a fresh subject rather than the round returning to one subject from six angles." The list above
+is priming, not a menu — a run that only ever breaks listed conventions has stopped limit-testing.
+At least one of your limit-testers must break a convention that is NOT on this list, derived from
+the taxonomy you just built in Phase 1: state the assumption every entry you mapped happens to
+share, then break that one. The HARD constraints are not conventions and stay hard: every one of the 6–9 items is exactly one gradeable
+answer written on paper, no app, no device, no fill-in grid, no turn-based mechanic, no per-table
+individualized content, no open-ended brainstorms or Scattergories shapes. Limit-testers go
+through Phase 3 like everyone else — most will die there, that's fine; the survivors are rounds
+forced pairing could never reach. Survivors carry the **(e) LIMIT-TESTER** line in the output
+format below.
+
 ### Phase 3 — Gate every candidate through a literal simulated-run paper test
 
 For a uniform-mechanic candidate that survived Phase 2, mentally run it end-to-end across a full
@@ -165,6 +198,9 @@ per the boundary above. Confirm all four:
    cap defined in the shiny agent. Every other slot still follows the paper-only rule.
 2. **Genuinely playable live, in real time, by a bar crowd** — the host can read/show each item in
    under 30–45 seconds and the round runs in the same 6–9-minute window as any other swing round.
+   For a limit-tester, that bar applies to the ITEMS, not to the one-time rule explanation — a
+   novel round is allowed a sentence of setup when announced; it still fails this check if the
+   rule can't be explained in one sentence.
    For a uniform-mechanic candidate, the uniform shape must actually hold for a real 6–9-item set
    (verify you can genuinely source 6–9 independently verifiable items on this theme, not just the
    2–3 you already thought of — a concept that runs dry at item 4 is not a swing round, it's a
@@ -195,7 +231,9 @@ Any candidate that fails any one of the four checks never gets written up in the
 never reaches Ben — but it still gets a `format_idea_candidates` row (Phase 4), inserted directly
 as `status = 'rejected'` with `rejected_reason` naming which check failed. This is what feeds
 Phase 1.5's dedupe pull for future runs — a failed candidate that vanished without a row taught
-the system nothing.
+the system nothing. A limit-tester that dies here gets `rejected_reason` prefixed `LIMIT-TESTER: `
+— Phase 1.5 treats those rows as "this exact concept is spent," NOT as retiring the convention it
+broke. The convention stays available; Ben never saw the candidate, so it was never his kill.
 
 ### Phase 4 — Write every candidate to Supabase
 
@@ -225,6 +263,8 @@ only, but the DB gets every candidate that made it past Phase 2.
 - **(d) Explicit paper-test confirmation** — one line stating it passed and specifically why (what
   the single written answer is per item, and why no app/grid/device/turn-based element is needed),
   plus a one-line note on whether 6–9 genuine items are actually sourceable for this theme.
+- **(e) LIMIT-TESTER** — present only if this candidate broke a convention; name the convention it
+  broke. In Phase 4, prefix these candidates' `mechanic` with `[LIMIT-TESTER: <convention broken>] `.
 
 **Topic-specialist candidates (do NOT use the uniform-mechanic format above — no finished items,
 ever, per the boundary section):**
@@ -237,6 +277,8 @@ ever, per the boundary section):**
 - **(d) Explicit constraint confirmation** — one line stating the topic has real depth for 6 items,
   and whether any slot relies on the phone-matching carve-out (and if so, that it counts against
   the shared 1–2-per-night cap).
+- **(e) LIMIT-TESTER** — present only if this candidate broke a convention; name the convention it
+  broke. In Phase 4, prefix these candidates' `mechanic` with `[LIMIT-TESTER: <convention broken>] `.
 
 Reply in chat with this same content — the Supabase write in Phase 4 is in addition to the chat
 reply, not instead of it.

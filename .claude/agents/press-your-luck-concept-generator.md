@@ -78,7 +78,19 @@ own runs going forward, not Ben's historical board rotation. So it is NOT suffic
 Cross-check every candidate against `format-library.md`'s "actually run" real-board list too — that
 list is the actual already-used inventory. A candidate that's a close variant of anything on either
 list (renamed, or same topic from a different angle) is off-limits — drop it in Phase 2 rather than
-letting it waste a Phase 3 pass.
+letting it waste a Phase 3 pass. (Rows whose `rejected_reason` starts `LIMIT-TESTER: ` are the
+exception — same-name/same-concept still off-limits, but the underlying convention-break is fair
+game again.)
+
+Also pull `select concept_name, mechanic from format_idea_candidates where family = 'pyl' and
+status = 'proposed';` — candidates that cleared this agent's own Phase 3 in past runs. **Ben has
+not necessarily seen or endorsed these** — `proposed` is agent-signal, never Ben's taste. Use the
+pull for two things only: don't re-propose an exact concept already on it, and note that a
+`[LIMIT-TESTER: ` prefix means that convention-break cleared the gate before, so it stays fair
+game rather than used up. This pull is never an off-limits list. Separately, pull
+`status = 'adopted'` rows — those ARE Ben's taste (approved by him directly) and the only positive
+signal in this table; push further along adopted directions. Zero adopted rows = no positive
+signal yet, proceed on the coverage map alone.
 
 ### Phase 2 — Generate wide via forced-pairing lenses
 
@@ -93,6 +105,27 @@ and the 6-slot shape — either "6× [the one ask]" or, when mixed genuinely fit
 breakdown (e.g. "2 image ID, 2 riddle-description, 1 matching pair, 1 audio") — and flag which
 domain-gap or item-type-gap it's filling.
 
+**Limit-testers (mandatory, added 2026-08-26 on Ben's direct ask — "think outside the box, test
+the limits of trivia"):** at least 2 of the raw candidates must be deliberate convention-breakers.
+The coverage map fills gaps in known territory; a limit-tester breaks an assumption EVERY real
+board shares. First name the unstated convention it violates, then build the board that violates
+it. Example conventions genuinely unbroken across the real board list: "the topic is a subject
+domain rather than a structural gimmick"; "the 6 items share difficulty texture by accident rather
+than the ramp itself being the announced hook"; "the board is about the world, never about the bar
+/ the room / tonight's earlier rounds" (a room-referential candidate must still be preppable
+before doors and adjudicable from a written key); "all 6 items ask the same *kind* of knowledge —
+none of them asks the team to *order* what they know: every item is a lookup, never a ranking, a
+sequencing, or a 'which of these came first' (one written ordering grades as one answer)." The
+list above is priming, not a menu — a run that only ever breaks listed conventions has stopped
+limit-testing. At least one of your limit-testers must break a convention that is NOT on this
+list, derived from the coverage map you just built in Phase 1: state the assumption every real
+board you mapped happens to share, then break that one. The HARD constraints are not conventions
+and stay hard: 6 independently, cleanly adjudicable answers on
+paper, real difficulty texture, no phone mechanics ever (Ben ruled directly), no app, no device,
+no fill-in grid, no turn-based element. Limit-testers go through Phase 3 like everyone else — most
+will die there, that's fine; the survivors are boards the coverage map could never reach.
+Survivors carry the **(e) LIMIT-TESTER** line in the output format below.
+
 ### Phase 3 — Gate every candidate through a literal simulated-run paper test
 
 For every candidate that survived Phase 2, mentally run it end-to-end. Confirm all four:
@@ -106,13 +139,17 @@ For every candidate that survived Phase 2, mentally run it end-to-end. Confirm a
    just the domain-gap it was force-paired from.
 4. **Genuinely playable live** — the host can present the topic and all 6 prompts in a reasonable
    window, and a knowledgeable table can plausibly land several items without being a domain
-   obsessive.
+   obsessive. For a limit-tester, that window applies to the PROMPTS, not to the one-time rule
+   explanation — a novel board is allowed a sentence of setup; it still fails this check if the
+   rule can't be explained in one sentence.
 
 Any candidate that fails any one of the four checks never gets written up in the chat reply and
 never reaches Ben — but it still gets a `format_idea_candidates` row (Phase 4), inserted directly
 as `status = 'rejected'` with `rejected_reason` naming which check failed. This is what feeds
 Phase 1.5's off-limits pull for future runs — a failed candidate that vanished without a row taught
-the system nothing.
+the system nothing. A limit-tester that dies here gets `rejected_reason` prefixed `LIMIT-TESTER: `
+— Phase 1.5 treats those rows as "this exact concept is spent," NOT as retiring the convention it
+broke. The convention stays available; Ben never saw the candidate, so it was never his kill.
 
 ### Phase 4 — Write every candidate to Supabase
 
@@ -141,6 +178,8 @@ reply covers survivors only, but the DB gets every candidate that made it past P
   board.
 - **(d) Explicit constraint confirmation** — one line stating it passed and why (all 6 cleanly
   adjudicable, real difficulty spread, no app/device/grid/turn-based element).
+- **(e) LIMIT-TESTER** — present only if this candidate broke a convention; name the convention it
+  broke. In Phase 4, prefix these candidates' `mechanic` with `[LIMIT-TESTER: <convention broken>] `.
 
 Reply in chat with this same content — the Supabase write in Phase 4 is in addition to the chat
 reply, not instead of it.
