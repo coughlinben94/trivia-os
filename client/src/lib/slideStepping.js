@@ -150,6 +150,28 @@ export function withEntryState(slides, slide, { currentPart, introDone, protectI
     // (2026-08-24, Opus review after CLOSING_BEAT_ENABLED went live made
     // outroShown:true reachable for the first time).
     if (slide.data?.outroShown) patch.outroShown = false
+    // Fresh entry also clears stale wager/matching/order lock+reveal flags
+    // (2026-08-31, Ben — found by sequencing audit ahead of live show).
+    // These gate whether WagerBoard/MatchingBoard/OrderBoard mount as
+    // interactive on /join (liveSlideIsInteractive) — left true from a
+    // rehearsal, a plain Next into the slide during the real show shows the
+    // intro card fine (2026-08-31 fix above) but the phones never unlock:
+    // the boards see already-locked/revealed and stay on the teaser screen,
+    // silently skipping the whole audience-interaction round. Guarded by
+    // the SAME wouldRegressLockedQuestion check as introDone above (not
+    // unconditional like outroShown) — that guard is specifically "this is
+    // a Go Live jump back into a question actually in progress", where
+    // clearing these WOULD be wrong: it would reopen submission on a
+    // question the room already answered and that's mid-grading.
+    if (!wouldRegressLockedQuestion) {
+      if (slide.data?.wagerTiersLocked) patch.wagerTiersLocked = false
+      if (slide.data?.wagerGuessesLocked) patch.wagerGuessesLocked = false
+      if (slide.data?.wagerRevealed) patch.wagerRevealed = false
+      if (slide.data?.matchingLocked) patch.matchingLocked = false
+      if (slide.data?.matchingRevealed) patch.matchingRevealed = false
+      if (slide.data?.orderLocked) patch.orderLocked = false
+      if (slide.data?.orderRevealed) patch.orderRevealed = false
+    }
   }
   // Fresh entry always re-arms invoke-gated audio too — a stale `invoked:
   // true` from an earlier rehearsal/visit would otherwise skip straight
