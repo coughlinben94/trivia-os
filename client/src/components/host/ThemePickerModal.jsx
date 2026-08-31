@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { THEMES, getTheme } from '../../themes/index.js'
 import ParticleBackground from '../display/ParticleBackground.jsx'
 import ThemeCustomizeControls from './ThemeCustomizeControls.jsx'
+import WorldPaletteEditor from './WorldPaletteEditor.jsx'
 import { applyOverrides } from '../shared/ThemeProvider.jsx'
 
 // Matches the real /display TV output (see Display.jsx's ticker comment:
@@ -75,6 +76,7 @@ function PreviewFrame({ background, children }) {
 export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdateOverrides, onUploadFont }) {
   const [previewId, setPreviewId] = useState(show.theme)
   const [overrides, setOverrides] = useState(show.themeOverrides ?? {})
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const activeRef = useRef(null)
   const overrideDebounceRef = useRef(null)
 
@@ -118,6 +120,17 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
   async function handleUploadFont(file) {
     const { familyName, url } = await onUploadFont(file)
     const next = { ...overrides, fonts: { ...overrides.fonts, display: familyName, displayUrl: url } }
+    setOverrides(next)
+    onUpdateOverrides(next)
+  }
+
+  // Weighted-palette apply: merges the derived color set into the existing
+  // overrides rather than replacing them, so a text/textMuted/shinyBg/
+  // shinyAccent override the host set by hand in Customize survives a
+  // palette apply. Same single write path as every other override
+  // (useShow.js's updateShowMeta via onUpdateOverrides) — no second one.
+  function applyPaletteColors(nextColors) {
+    const next = { ...overrides, colors: { ...overrides.colors, ...nextColors } }
     setOverrides(next)
     onUpdateOverrides(next)
   }
@@ -264,6 +277,28 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
             </div>
           </div>
         </div>
+
+        {/* World palette — Midnight Galaxy only: the one real ring world.
+            Opens the weighted 2-3-color picker; its Apply writes only
+            theme_overrides.colors (the ungated theme half). The ring's
+            station hues are untouched by anything in that editor. */}
+        {previewId === 'midnight-galaxy' && (
+          <div className="px-5 py-2 border-t border-gray-100 shrink-0">
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="text-sm font-medium text-gray-600 hover:text-gray-900 underline"
+            >
+              World palette
+            </button>
+          </div>
+        )}
+        {paletteOpen && (
+          <WorldPaletteEditor
+            baseTheme={baseTheme}
+            onApplyThemeColors={applyPaletteColors}
+            onClose={() => setPaletteOpen(false)}
+          />
+        )}
 
         {/* Customize + Done */}
         <ThemeCustomizeControls
