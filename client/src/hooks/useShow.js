@@ -670,7 +670,7 @@ export function useShow() {
     const slide = sorted[target] ?? null
     const now = new Date().toISOString()
     const bakedSlides = await bakeTeamPickerParts(show.slides, slide)
-    const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === slide?.id) ?? slide, { currentPart: 0, introDone: false })
+    const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === slide?.id) ?? slide, { currentPart: 0, introDone: false, protectInProgress: true })
     setShow(s => ({
       ...s,
       slides: newSlides,

@@ -87,6 +87,16 @@ export function nextSlideAfter(slides, slideId) {
   return idx === -1 ? null : sorted[idx + 1] ?? null
 }
 
+// Symmetric to nextSlideAfter — used by RoundIntroSlide to tell whether it's
+// landing right after a team-picker's own "Round 1" tease (RoundOneBeat),
+// which already played the identical spring-slam entrance on the same
+// number moments earlier.
+export function prevSlideBefore(slides, slideId) {
+  const sorted = sortSlides(slides)
+  const idx = sorted.findIndex(s => s.id === slideId)
+  return idx <= 0 ? null : sorted[idx - 1] ?? null
+}
+
 // Exported so Display.jsx's own raw shows-row writes (it has no `actions`
 // object, just a host-verified UPDATE) can patch one slide's data the same
 // way every internal caller here does, instead of growing a second copy of
@@ -102,18 +112,24 @@ export function patchSlideData(slides, id, dataPatch) {
 // into it from an adjacent slide) always resets to a specific state
 // rather than resuming wherever a previous visit left off, so jumping to
 // a slide is predictable.
-export function withEntryState(slides, slide, { currentPart, introDone } = {}) {
+export function withEntryState(slides, slide, { currentPart, introDone, protectInProgress = false } = {}) {
   if (!slide) return slides
   const patch = {}
   if (currentPart !== undefined && (slide.data?.parts?.length ?? 0) > 1 && (slide.data.currentPart ?? 0) !== currentPart) {
     patch.currentPart = currentPart
   }
-  // Same guard as the Prev-key handler below: never regress introDone to
-  // false on a wager/matching/order slide that's already locked — jumping away
-  // from an in-progress locked question and back to it (Go Live's "jump
-  // to a slide" picker, reachable after exiting Live Mode) would otherwise
-  // blank every phone back to the teaser screen with no way to submit.
-  const wouldRegressLockedQuestion = introDone === false &&
+  // Only relevant for goLiveFrom's "jump to a slide" picker (the one caller
+  // that passes protectInProgress: true) — jumping away from an in-progress
+  // locked question and back to it would otherwise blank every phone back to
+  // the teaser screen with no way to submit. computeNextStep/goLive never set
+  // this: a plain Next always lands on a slide that wasn't already live, so a
+  // locked flag it finds there is stale (left over from an earlier test/
+  // rehearsal), not a question actually in progress — regressing it is the
+  // correct, expected fresh-entry reset. Bug fixed 2026-08-31 (Ben, live
+  // rehearsal): this guard used to apply unconditionally, so a shiny "order"
+  // slide left orderLocked:true from testing skipped straight to its content
+  // on the first real Next into it, with no intro card.
+  const wouldRegressLockedQuestion = protectInProgress && introDone === false &&
     (slide.data?.wagerTiersLocked || slide.data?.wagerGuessesLocked || slide.data?.matchingLocked || slide.data?.orderLocked)
   if (introDone !== undefined && slide.data?.isShiny) {
     if (!wouldRegressLockedQuestion && !!slide.data.introDone !== introDone) {

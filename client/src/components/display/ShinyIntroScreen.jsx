@@ -3,6 +3,7 @@ import { motion, useReducedMotion, cubicBezier } from 'framer-motion'
 import { EASE_OUT } from '../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../lib/shinyGold.js'
 import { listSharedHostPhotos, pickPhotoForSlide, getUsedHostPhotoUrls } from '../../lib/hostPhotos.js'
+import { warmImages } from '../../lib/warmImages.js'
 
 // Every shiny question/grid gets a standalone beat before its content — a pure
 // announcement, no question/answer/media yet, giving the host room to set
@@ -146,6 +147,15 @@ export default function ShinyIntroScreen({ slide, theme, show, isClosing = false
     const excludeUrls = getUsedHostPhotoUrls(show, slide.id)
     listSharedHostPhotos().then(photos => {
       if (cancelled || photos.length === 0) return
+      // Warm the WHOLE shared pool, not just this card's pick — this card's
+      // own opacity ramp reaches full well before a cold Storage fetch can
+      // land (same "pop-in over an empty box" shape warmImages.js was built
+      // to fix for question media, 2026-08-24 — Ben photos were never wired
+      // into it). Warming the full pool means every card AFTER the first one
+      // tonight hits an already-decoded image; only the very first shiny of
+      // the show still pays the cold-fetch cost, same as any first slide's
+      // media does today.
+      warmImages(photos.map(p => p.url))
       const pick = pickPhotoForSlide(slide.id, photos, excludeUrls)
       if (pick) setRandomPhotoUrl(pick.url)
     })

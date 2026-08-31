@@ -3,12 +3,23 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { fitToBox, LINE_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
+import { prevSlideBefore } from '../../../lib/slideStepping.js'
 
 export default function RoundIntroSlide({ slide, show }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const { data } = slide
   const isSwing = slide.type === 'swing-round-intro'
+  // Team-picker's own closing beat (RoundOneBeat) already teases "Round 1"
+  // with this exact spring-slam entrance the instant it reveals the ring
+  // world — it's hardcoded to "1" (see that file's comment), so it can only
+  // ever match a REAL round-intro whose roundNumber is also 1. Landing here
+  // right after it would otherwise replay the identical big-to-small slam a
+  // second time on the same number (Ben, 2026-08-31 rehearsal: "the round 1
+  // thing is still getting smaller when I try to advance"). Land at rest
+  // instead — same "already landed, nothing spins" treatment
+  // ShinyIntroScreen's isClosing uses for its own repeated-beat case.
+  const alreadyTeased = data.roundNumber === 1 && prevSlideBefore(show?.slides, slide.id)?.type === 'team-picker'
   const rt = data._regionTransforms ?? {}
   const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg) scale(${t.scale??1})`, transformOrigin: 'center', display: 'inline-block' } : {} }
 
@@ -33,9 +44,9 @@ export default function RoundIntroSlide({ slide, show }) {
 
       {/* Round number — SLAM in with spring overshoot — Section 5 */}
       <motion.div
-        initial={reduce ? { opacity: 0 } : { scale: 3.5, opacity: 0 }}
-        animate={reduce ? { opacity: 1 } : { scale: 1, opacity: 1 }}
-        transition={reduce
+        initial={reduce || alreadyTeased ? { opacity: 0 } : { scale: 3.5, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={reduce || alreadyTeased
           ? { duration: 0.3, ease: EASE_OUT }
           : { type: 'spring', duration: 0.4, bounce: 0.25 }}
         className="relative z-10"
