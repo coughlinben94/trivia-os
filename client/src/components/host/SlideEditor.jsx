@@ -1355,6 +1355,12 @@ function ShinyListBuilder({ items, hasPoints, onChange }) {
   )
 }
 
+// MatchingBoard.jsx's PALETTE (the phone-side tile colors) has exactly 6
+// entries, hand-tuned for contrast against the board's dark background — a
+// 7th pair has no color to allocate and the board silently can't be
+// completed. Cap here so a bigger question can never ship.
+const MAX_MATCHING_PAIRS = 6
+
 function MatchingBuilder({ pairs, pointsPerMatch, onChangePairs, onChangePoints, onMediaUpload }) {
   function updatePair(i, patch) {
     onChangePairs(pairs.map((p, idx) => idx === i ? { ...p, ...patch } : p))
@@ -1422,12 +1428,21 @@ function MatchingBuilder({ pairs, pointsPerMatch, onChangePairs, onChangePoints,
           </div>
         </div>
       ))}
-      <button
-        onClick={addPair}
-        className="text-xs text-baynes-forest hover:text-green-800 font-medium text-left"
-      >
-        + Add pair
-      </button>
+      {pairs.length < MAX_MATCHING_PAIRS ? (
+        <button
+          onClick={addPair}
+          className="text-xs text-baynes-forest hover:text-green-800 font-medium text-left"
+        >
+          + Add pair
+        </button>
+      ) : (
+        // MatchTile only has 6 hand-tuned colors (MatchingBoard.jsx's PALETTE)
+        // — a 7th pair silently can't get a color, and the phone board's
+        // tap handler just no-ops once it runs out, permanently disabling
+        // "Lock Your Answers" for every team. Cap the builder instead of
+        // hitting that live.
+        <p className="text-xs text-gray-400">6-pair max (matching runs out of tile colors past this).</p>
+      )}
       <div className="flex items-center gap-2 mt-1 pt-3 border-t border-gray-100">
         <label className="text-xs font-medium text-gray-700">Points per correct pair</label>
         <input

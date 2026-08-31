@@ -30,6 +30,16 @@ import {
 } from '../lib/slideStepping.js'
 import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
 
+// Realtime's payload and PostgREST's .select() are two independently
+// maintained serializers for the same Postgres timestamptz — lexicographic
+// string comparison isn't guaranteed monotonic if they ever format the same
+// instant differently (fractional-second padding, offset suffix). Compare
+// as real time values instead (2026-08-31 adversarial pass, same fix ported
+// to Join.jsx).
+function isStaleTimestamp(candidate, lastApplied) {
+  return !!candidate && !!lastApplied && new Date(candidate).getTime() <= new Date(lastApplied).getTime()
+}
+
 // See the FULL_BLEED_SLIDE_TYPES comment at StageFrame's usage below.
 // team-picker added 2026-08-19 (Ben, live: "sits on top of the ring world,
 // not full screen") — same root cause as the other three: its own black
@@ -1460,7 +1470,7 @@ export default function Display() {
       // delivery order could apply the stale one last (2026-08-18 show,
       // Ben: slides "jumped back and forth"). `updated_at` is stamped on
       // every write in updateShowRow now.
-      if (next.updated_at && lastUpdatedAtRef.current && next.updated_at <= lastUpdatedAtRef.current) return
+      if (isStaleTimestamp(next.updated_at, lastUpdatedAtRef.current)) return
       if (next.updated_at) lastUpdatedAtRef.current = next.updated_at
       const nextIndex = next.current_slide_index ?? 0
       setDirection(nextIndex >= prevIndexRef.current ? 1 : -1)
@@ -1492,7 +1502,7 @@ export default function Display() {
         // current_slide_index reverting for a beat right after a reconnect).
         // Checked before touching prevIndexRef or lastUpdatedAtRef, so a
         // stale snapshot doesn't corrupt either.
-        if (data.updated_at && lastUpdatedAtRef.current && data.updated_at <= lastUpdatedAtRef.current) return
+        if (isStaleTimestamp(data.updated_at, lastUpdatedAtRef.current)) return
         prevIndexRef.current = data.current_slide_index ?? 0
         if (data.updated_at) lastUpdatedAtRef.current = data.updated_at
         setShow(prev => (prev && prev.id === data.id
@@ -1502,7 +1512,17 @@ export default function Display() {
     }
 
     function subscribe(showId) {
-      channel = supabase
+      // myChannel + the `channel !== myChannel` guard below (2026-08-31,
+      // adversarial pass): removeChannel() always fires its own status
+      // callback with a synthetic CLOSED, including for a channel we're
+      // deliberately tearing down to replace. Without this guard, that
+      // generation's callback still closes over the SHARED `channel`
+      // variable — which by then points at the new, healthy channel — and
+      // tears IT down too, forever: one real blip put the connection into
+      // permanent churn even after the network recovered. Each generation
+      // now only acts on its own close event.
+      let myChannel
+      myChannel = supabase
         .channel(`display:${showId}`)
         .on(
           'postgres_changes',
@@ -1510,6 +1530,7 @@ export default function Display() {
           handlePayload
         )
         .subscribe((status) => {
+          if (channel !== myChannel) return
           if (status === 'SUBSCRIBED') {
             clearTimeout(retryTimer)
             if (everSubscribed) {
@@ -1526,6 +1547,7 @@ export default function Display() {
             }, 1500)
           }
         })
+      channel = myChannel
     }
 
     subscribe(show.id)

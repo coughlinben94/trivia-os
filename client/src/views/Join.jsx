@@ -24,6 +24,15 @@ function saveStoredTeam(showId, team) {
   localStorage.setItem(getTeamKey(showId), JSON.stringify(team))
 }
 
+// Realtime's payload and PostgREST's .select() are two independently
+// maintained serializers for the same Postgres timestamptz — lexicographic
+// string comparison isn't guaranteed monotonic if they ever format the same
+// instant differently (fractional-second padding, offset suffix). Compare
+// as real time values instead (2026-08-31 adversarial pass).
+function isStaleTimestamp(candidate, lastApplied) {
+  return !!candidate && !!lastApplied && new Date(candidate).getTime() <= new Date(lastApplied).getTime()
+}
+
 const TEAM_COLORS = [
   '#f5c842','#e02020','#60c000','#4a90d9','#c96fff',
   '#ff8c00','#00bcd4','#e91e8c','#8bc34a','#ff5722',
@@ -1925,7 +1934,7 @@ export default function Join() {
     // payload path was dropped, leaving Join with no protection at all
     // against a stale payload landing after a fresher one, reconnect or not.
     function handlePayload(row) {
-      if (row.updated_at && lastUpdatedAtRef.current && row.updated_at <= lastUpdatedAtRef.current) return
+      if (isStaleTimestamp(row.updated_at, lastUpdatedAtRef.current)) return
       if (row.updated_at) lastUpdatedAtRef.current = row.updated_at
       applyRow(row)
     }
@@ -1942,20 +1951,32 @@ export default function Join() {
         // e.g. current_slide_index or scores_locked_at reverting for a beat
         // right after a reconnect). Checked before advancing the ref, so a
         // stale snapshot neither applies NOR rolls lastUpdatedAtRef backward.
-        if (data.updated_at && lastUpdatedAtRef.current && data.updated_at <= lastUpdatedAtRef.current) return
+        if (isStaleTimestamp(data.updated_at, lastUpdatedAtRef.current)) return
         if (data.updated_at) lastUpdatedAtRef.current = data.updated_at
         applyRow(data)
       })
     }
 
     function subscribe(showId) {
-      channel = supabase
+      // myChannel + the `channel !== myChannel` guard below (2026-08-31,
+      // adversarial pass): `removeChannel()` always fires its own status
+      // callback with a synthetic CLOSED, including for a channel we're
+      // deliberately tearing down to replace. Without this guard, that
+      // generation's callback still closes over the SHARED `channel`
+      // variable — which by then points at the new, healthy channel — and
+      // tears IT down too, forever: one real blip put the connection into
+      // permanent churn (flapping banner, repeated rejoin/refetch) even
+      // after the network recovered, since nothing ever stops re-triggering
+      // it. Each generation now only acts on its own close event.
+      let myChannel
+      myChannel = supabase
         .channel(`join-show:${showId}`)
         .on('postgres_changes',
           { event: 'UPDATE', schema: 'public', table: 'shows', filter: `id=eq.${showId}` },
           (payload) => handlePayload(payload.new)
         )
         .subscribe((status) => {
+          if (channel !== myChannel) return
           setConnStatus(status)
           if (status === 'SUBSCRIBED') {
             clearTimeout(retryTimer)
@@ -1972,6 +1993,7 @@ export default function Join() {
             }, 1500)
           }
         })
+      channel = myChannel
     }
 
     subscribe(show.id)
@@ -2000,13 +2022,18 @@ export default function Join() {
     let channel
     let retryTimer
     function subscribeScores(showId) {
-      channel = supabase
+      // Same stale-generation guard as the join-show: channel above (2026-08-31) —
+      // removeChannel()'s own synthetic CLOSED echo would otherwise tear
+      // down whatever channel replaced it, forever.
+      let myChannel
+      myChannel = supabase
         .channel(`scores-drawer:${showId}`)
         .on('postgres_changes',
           { event: '*', schema: 'public', table: 'scoreboard_teams', filter: `show_id=eq.${showId}` },
           () => { refreshScores() }
         )
         .subscribe((status) => {
+          if (channel !== myChannel) return
           if (status === 'SUBSCRIBED') {
             clearTimeout(retryTimer)
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
@@ -2017,6 +2044,7 @@ export default function Join() {
             }, 1500)
           }
         })
+      channel = myChannel
     }
     subscribeScores(show.id)
     return () => {
@@ -2105,6 +2133,32 @@ export default function Join() {
           ? "Too many phones joining right now — wait a minute and try again"
           : "Couldn't start your session — try again")
       }
+    }
+
+    // A phone can already own a team here without a local team saved — e.g.
+    // iOS purging a backgrounded tab before `saveStoredTeam` ran (2026-08-31
+    // adversarial pass). Without this check, that phone lands back on the
+    // register screen, doesn't recognize it's already in, and creates a
+    // SECOND team under the same owner_uid: two live teams for one phone
+    // (fairness), and it breaks the lost-response recovery above for the
+    // rest of the night — `.maybeSingle()` errors once more than one row
+    // matches instead of resolving. Same fast-path-plus-real-enforcement
+    // shape as the name check above: no unique constraint exists on
+    // owner_uid yet (that's a migration — flagged separately, not a
+    // TOCTOU-safe fix), so this closes the common case, not the race.
+    const { data: existingTeam } = await supabase
+      .from('teams')
+      .select('id, name, color')
+      .eq('show_id', actualShowId)
+      .eq('owner_uid', ownerUid)
+      .maybeSingle()
+    if (existingTeam) {
+      const recoveredTeam = { id: existingTeam.id, name: existingTeam.name, color: existingTeam.color, showId: actualShowId }
+      setTeam(recoveredTeam)
+      saveStoredTeam(actualShowId, recoveredTeam)
+      setPowerupUsed(false)
+      setPhase(show.is_live ? 'live' : 'waiting')
+      return
     }
 
     const color  = TEAM_COLORS[Math.floor(Math.random() * TEAM_COLORS.length)]
