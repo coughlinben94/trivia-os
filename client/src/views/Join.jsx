@@ -37,25 +37,37 @@ const TEAM_COLORS = [
 // an earlier version of this prompt shared `bottom: 0` with the nav and only
 // out-z-indexed it, hiding the buttons while leaving them tappable. Hence
 // fixed + inset 0 + zIndex 9999 (highest elsewhere in this file is 700).
-// `display` deliberately lives in the CSS class — inline would beat the query.
+// Visibility lives in the CSS class as an opacity transition (not display —
+// inline would beat the query, and display can't animate anyway): a plain
+// display:none/flex snap made the gate slam onto screen, and near the 45°
+// orientation boundary the media query itself can flip back and forth fast
+// enough to flicker. A 200ms opacity fade (emil-design-eng review,
+// 2026-08-31) smooths both. Symmetric duration is deliberate — the user's
+// own phone rotation IS the exit animation, a slower decorative exit on top
+// of that would just feel laggy.
+// zIndex 800: comfortably above the file's highest other value (700), but
+// deliberately not the flagged 999/9999 magic numbers — see file-wide
+// z-index note above for why this still isn't a real scale.
 function RotateGate() {
   return (
     <div className="join-rotate-gate" style={{
-      position: 'fixed', inset: 0, zIndex: 9999, background: '#050505',
-      flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      gap: '1rem', padding: '2rem', textAlign: 'center',
+      position: 'fixed', inset: 0, zIndex: 800, background: '#050505',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      gap: '1.5rem', padding: '2rem', textAlign: 'center',
     }}>
-      <svg width="52" height="52" viewBox="0 0 52 52" fill="none" aria-hidden="true"
+      <svg width="80" height="80" viewBox="0 0 52 52" fill="none" aria-hidden="true"
         style={{ animation: 'joinRotateHint 2.4s ease-in-out infinite' }}>
         <rect x="16" y="6" width="20" height="40" rx="4.5" stroke="rgba(255,255,255,0.85)" strokeWidth="2.5" />
         <circle cx="26" cy="40" r="1.75" fill="rgba(255,255,255,0.85)" />
       </svg>
-      <h1 style={{ fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '2rem', color: '#fff', margin: 0, letterSpacing: '-0.01em' }}>
-        Turn your phone sideways
-      </h1>
-      <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: '0.9375rem', color: 'rgba(255,255,255,0.72)', margin: 0, lineHeight: 1.6 }}>
-        Trivia plays in landscape.
-      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <h1 style={{ fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '2rem', color: '#fff', margin: 0, letterSpacing: '-0.01em', textWrap: 'balance' }}>
+          Turn your phone sideways
+        </h1>
+        <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: '0.9375rem', color: 'rgba(255,255,255,0.72)', margin: 0, lineHeight: 1.6 }}>
+          Trivia plays in landscape.
+        </p>
+      </div>
     </div>
   )
 }
