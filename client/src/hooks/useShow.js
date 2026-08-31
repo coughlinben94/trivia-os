@@ -360,11 +360,38 @@ export function useShow() {
     if (!show) return
     const newRounds = show.rounds.filter(r => r.id !== roundId)
     const newSlides = show.slides.filter(s => s.roundId !== roundId)
-    setShow(prev => ({ ...prev, rounds: newRounds, slides: newSlides }))
-    await updateShowRow(show.id, { rounds: newRounds, slides: newSlides })
+    const livePatch = liveIndexPatch(newSlides)
+    setShow(prev => ({
+      ...prev,
+      rounds: newRounds,
+      slides: newSlides,
+      showState: livePatch.current_slide_index !== undefined
+        ? { ...prev.showState, currentSlideIndex: livePatch.current_slide_index }
+        : prev.showState,
+    }))
+    await updateShowRow(show.id, { rounds: newRounds, slides: newSlides, ...livePatch })
   }
 
   // --- Slides ---
+
+  // A slide-structure mutation (add/delete/reorder) below can shift what sits
+  // at the numeric position current_slide_index points to. Display.jsx and
+  // Join.jsx both trust that index literally — sorted[index] — with no
+  // re-lookup by id, so a live reorder/delete/insert would otherwise change
+  // what's on the TV/every phone instantly, with no Next press and no
+  // warning. Recompute the index by finding the still-live slide's id in the
+  // NEW order (sorted by .order, matching sortedSlides) and fold it into the
+  // same write. If the live slide's own id no longer exists (it was the one
+  // deleted), leave the index alone — that's a host decision, not something
+  // to guess at here.
+  function liveIndexPatch(newSlides) {
+    if (!show?.showState?.isLive) return {}
+    const id = show.showState.currentSlideId
+    if (id == null) return {}
+    const idx = [...newSlides].sort((a, b) => a.order - b.order).findIndex(s => s.id === id)
+    if (idx === -1 || idx === show.showState.currentSlideIndex) return {}
+    return { current_slide_index: idx }
+  }
 
   async function addSiblingSlides(afterSlideId, slidesData) {
     if (!show || !slidesData.length) return []
@@ -382,7 +409,14 @@ export function useShow() {
       data: d.data ?? {},
     }))
     const allSlides = renumberRoundQuestions([...shifted, ...newSlides])
-    setShow(prev => ({ ...prev, slides: allSlides }))
+    const livePatch = liveIndexPatch(allSlides)
+    setShow(prev => ({
+      ...prev,
+      slides: allSlides,
+      showState: livePatch.current_slide_index !== undefined
+        ? { ...prev.showState, currentSlideIndex: livePatch.current_slide_index }
+        : prev.showState,
+    }))
     // Chained through slidesSaveChainRef rather than written directly, for the
     // same reason the debounced updateSlide path is (see the comment at
     // flushSlides): two writes to the `slides` jsonb column that leave the
@@ -390,7 +424,7 @@ export function useShow() {
     // last wins even if it started first — silently losing whichever
     // structural edit lost the race. Awaiting `run` keeps this function's
     // existing "resolves once the write actually landed" contract.
-    const run = slidesSaveChainRef.current.then(() => updateShowRow(show.id, { slides: allSlides }))
+    const run = slidesSaveChainRef.current.then(() => updateShowRow(show.id, { slides: allSlides, ...livePatch }))
     slidesSaveChainRef.current = run.catch(() => {})
     await run
     // Return the freshly-renumbered versions, not the pre-renumber snapshot —
@@ -461,9 +495,16 @@ export function useShow() {
   async function deleteSlide(id) {
     if (!show) return
     const newSlides = renumberRoundQuestions(show.slides.filter(s => s.id !== id))
-    setShow(prev => ({ ...prev, slides: newSlides }))
+    const livePatch = liveIndexPatch(newSlides)
+    setShow(prev => ({
+      ...prev,
+      slides: newSlides,
+      showState: livePatch.current_slide_index !== undefined
+        ? { ...prev.showState, currentSlideIndex: livePatch.current_slide_index }
+        : prev.showState,
+    }))
     // Same write-ordering chain as addSiblingSlides — see the comment there.
-    const run = slidesSaveChainRef.current.then(() => updateShowRow(show.id, { slides: newSlides }))
+    const run = slidesSaveChainRef.current.then(() => updateShowRow(show.id, { slides: newSlides, ...livePatch }))
     slidesSaveChainRef.current = run.catch(() => {})
     await run
   }
@@ -478,9 +519,16 @@ export function useShow() {
         })
         .filter(Boolean)
     )
-    setShow(prev => ({ ...prev, slides: newSlides }))
+    const livePatch = liveIndexPatch(newSlides)
+    setShow(prev => ({
+      ...prev,
+      slides: newSlides,
+      showState: livePatch.current_slide_index !== undefined
+        ? { ...prev.showState, currentSlideIndex: livePatch.current_slide_index }
+        : prev.showState,
+    }))
     // Same write-ordering chain as addSiblingSlides — see the comment there.
-    const run = slidesSaveChainRef.current.then(() => updateShowRow(show.id, { slides: newSlides }))
+    const run = slidesSaveChainRef.current.then(() => updateShowRow(show.id, { slides: newSlides, ...livePatch }))
     slidesSaveChainRef.current = run.catch(() => {})
     await run
   }
@@ -508,9 +556,17 @@ export function useShow() {
         })
         .filter(Boolean)
     )
-    setShow(prev => ({ ...prev, rounds: newRounds, slides: newSlides }))
+    const livePatch = liveIndexPatch(newSlides)
+    setShow(prev => ({
+      ...prev,
+      rounds: newRounds,
+      slides: newSlides,
+      showState: livePatch.current_slide_index !== undefined
+        ? { ...prev.showState, currentSlideIndex: livePatch.current_slide_index }
+        : prev.showState,
+    }))
     // Same write-ordering chain as addSiblingSlides — see the comment there.
-    const run = slidesSaveChainRef.current.then(() => updateShowRow(show.id, { rounds: newRounds, slides: newSlides }))
+    const run = slidesSaveChainRef.current.then(() => updateShowRow(show.id, { rounds: newRounds, slides: newSlides, ...livePatch }))
     slidesSaveChainRef.current = run.catch(() => {})
     await run
   }
