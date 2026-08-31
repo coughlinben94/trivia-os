@@ -1378,8 +1378,12 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
                 </motion.div>
               </motion.div>
 
-              {/* Layer 4 – tonearm */}
-              <Tonearm controls={tonearmCtrl} />
+              {/* Layer 4 – tonearm — skipped in ringMode: Midnight Galaxy's
+                  ring elements (record station, comet) already read as the
+                  scene's own moving parts; a second physical tonearm on top
+                  read as visual clutter fighting the comet (Ben, 2026-08-31).
+                  Standalone /music (ringMode:false) keeps it untouched. */}
+              {!ringMode && <Tonearm controls={tonearmCtrl} />}
             </div>
 
             {/* Track info — hidden during transitions and before entrance completes.
@@ -1446,8 +1450,8 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
             >
               <div className="w-4 h-4 rounded-full bg-black ring-1 ring-white/10" />
             </div>
-            {/* Tonearm in lifted/OFF position */}
-            <Tonearm controls={tonearmCtrl} />
+            {/* Tonearm in lifted/OFF position — same ringMode skip as above */}
+            {!ringMode && <Tonearm controls={tonearmCtrl} />}
           </div>
         )}
       </div>
