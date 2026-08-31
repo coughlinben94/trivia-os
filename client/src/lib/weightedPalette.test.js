@@ -3,7 +3,7 @@ import {
   hexToHslHue, hueDelta, allocate, spread, hueLadder, lumaProxy,
   atLightness, derivePalette,
 } from './weightedPalette.js'
-import { rgbToOklab, hexToRgb } from '../jukebox/components/AlbumGradientMesh.jsx'
+import { rgbToOklab, oklabToRgb, hexToRgb } from '../jukebox/components/AlbumGradientMesh.jsx'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 
 const BASE = {
@@ -65,6 +65,42 @@ describe('spread', () => {
   })
 })
 
+describe('the weight bar swept across every reachable divider position', () => {
+  // WorldPaletteEditor's WeightBar clamps a dragged cut to
+  // [MIN_WEIGHT, 1 - MIN_WEIGHT] and snaps it to SNAP, so a two-colour bar
+  // has exactly 19 positions a host can actually land on. At EVERY one of
+  // them the ring must sit ON the arithmetic adjacency floor, not near it.
+  //
+  // This is the invariant an assignment that chases hue distance quietly
+  // trades away: it buys a better hue match by accepting one extra
+  // same-colour block, then has no way to tell the host that the block was
+  // a choice rather than arithmetic. A floor-respecting assignment can
+  // always say "unavoidable" honestly, because it only ever reports the
+  // adjacencies that are.
+  const SNAP = 0.05
+  const MIN_WEIGHT = 0.05
+  const DEFAULT_COLORS = ['#a855f7', '#3b82f6'] // the editor's opening palette
+  const positions = Array.from(
+    { length: Math.round((1 - 2 * MIN_WEIGHT) / SNAP) + 1 },
+    (_, i) => +(MIN_WEIGHT + i * SNAP).toFixed(2),
+  )
+
+  it('has 19 reachable positions, end to end', () => {
+    expect(positions).toHaveLength(19)
+    expect(positions[0]).toBe(MIN_WEIGHT)
+    expect(positions.at(-1)).toBe(+(1 - MIN_WEIGHT).toFixed(2))
+  })
+
+  it.each(positions)('hits the adjacency floor at a %s split', cut => {
+    const weights = [cut, +(1 - cut).toFixed(2)]
+    const out = derivePalette({
+      colors: DEFAULT_COLORS, weights, stationCount: 13,
+      baseTheme: BASE, currentHues: CURRENT_HUES,
+    })
+    expect(cyclicAdjacent(out.assignment)).toBe(floorFor(out.counts))
+  })
+})
+
 describe('hueLadder', () => {
   it('spans the window symmetrically', () => {
     expect(hueLadder(7, 18)).toEqual([-18, -12, -6, 0, 6, 12, 18])
@@ -86,6 +122,27 @@ describe('lumaProxy', () => {
 })
 
 describe('atLightness', () => {
+  // The properties atLightness actually promises, measured in the space it
+  // works in. HSL hue is NOT preserved by a constant-OKLab-hue lightness
+  // change and never was — the two spaces disagree about what "the same
+  // blue, lighter" means, so an HSL-degree bound is the wrong instrument
+  // (it passes a clipped color that drifted 18 HSL degrees for the right
+  // reason and would pass a mud-clipped one for the wrong reason).
+  const oklabHue    = hex => { const [, a, b] = rgbToOklab(hexToRgb(hex)); return Math.atan2(b, a) }
+  const oklabChroma = hex => { const [, a, b] = rgbToOklab(hexToRgb(hex)); return Math.hypot(a, b) }
+  const angleGap    = (p, q) => Math.abs(Math.atan2(Math.sin(p - q), Math.cos(p - q)))
+  // The control: what a naive implementation does — teleport L, hold chroma
+  // fixed, let oklabToRgb's own clamp deal with the overflow. Clipping one
+  // channel of three IS a hue shift. Asserting only "the mapped color held
+  // its hue" proves nothing unless the naive baseline demonstrably doesn't.
+  const naiveClip = (hex, targetHex) => {
+    const [, a, b] = rgbToOklab(hexToRgb(hex))
+    const [L] = rgbToOklab(hexToRgb(targetHex))
+    return '#' + oklabToRgb([L, a, b])
+      .map(v => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0'))
+      .join('')
+  }
+
   it('moves a color to the target OKLab lightness', () => {
     const out = atLightness('#a855f7', BASE.colors.highlight)
     const [L] = rgbToOklab(hexToRgb(out))
@@ -103,9 +160,19 @@ describe('atLightness', () => {
     const [L] = rgbToOklab(hexToRgb(out))
     const [targetL] = rgbToOklab(hexToRgb(BASE.colors.highlight))
     expect(Math.abs(L - targetL)).toBeLessThan(0.02)          // lightness held
-    expect(hueDelta(hexToHslHue(out), 240)).toBeLessThan(30)  // still blue
-    const [r, g, b] = hexToRgb(out)
-    expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeGreaterThan(50) // not gray
+    // Hue held in OKLab — and the naive clip demonstrably does NOT hold it,
+    // so this pair of assertions is a real discriminator rather than a bound
+    // both implementations would satisfy.
+    expect(angleGap(oklabHue(out), oklabHue('#0000d0'))).toBeLessThan(0.02)
+    expect(angleGap(oklabHue(naiveClip('#0000d0', BASE.colors.highlight)), oklabHue('#0000d0')))
+      .toBeGreaterThan(0.03)
+    // Still saturated: gamut-mapping gives up chroma, not all of it.
+    expect(oklabChroma(out)).toBeGreaterThan(0.5 * oklabChroma('#0000d0'))
+  })
+
+  it('leaves an already-in-gamut color alone instead of quietly desaturating it', () => {
+    const out = atLightness('#a855f7', BASE.colors.highlight)
+    expect(oklabChroma(out)).toBeGreaterThan(0.9 * oklabChroma('#a855f7'))
   })
 })
 

@@ -241,6 +241,11 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
             the values pinned in weightedPalette.test.js, the proxy is broken, not the palette.
             Run <code>npm run verify:ring</code> for the real answer.
           </p>
+          <p className="text-[11px] text-gray-400 mt-2 font-sans">
+            The hue column is a preview only. Applying these hues to the real ring is a
+            separate, gated step that is not built yet — nothing on this screen writes a
+            station hue.
+          </p>
         </div>
 
         <div className="flex items-center gap-3 px-5 py-3 border-t border-gray-100 shrink-0">
