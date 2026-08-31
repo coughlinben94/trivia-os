@@ -18,6 +18,7 @@
     "verify:ring": "node concepts/tools/ring-verify.mjs concepts/world-07-ring.html"
   },
   "dependencies": {
+    "@sentry/react": "^10.73.0",
     "@supabase/supabase-js": "^2.39.0",
     "framer-motion": "^10.18.0",
     "fuse.js": "^7.0.0",
