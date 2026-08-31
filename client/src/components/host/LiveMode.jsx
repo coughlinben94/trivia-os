@@ -810,22 +810,42 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // so it reads correctly no matter which window's press started it.
   function maybeStartLockCountdown() {
     const phase = pendingLockPhase(currentSlide)
-    if (!phase) return false
-    if (!currentSlide.data?.lockCountdownStartedAt) {
-      guardNav(async () => {
-        actions.updateSlide(currentSlide.id, {
-          data: { ...currentSlide.data, lockCountdownPhase: phase, lockCountdownStartedAt: Date.now() },
+    if (phase) {
+      if (!currentSlide.data?.lockCountdownStartedAt) {
+        guardNav(async () => {
+          actions.updateSlide(currentSlide.id, {
+            data: { ...currentSlide.data, lockCountdownPhase: phase, lockCountdownStartedAt: Date.now() },
+          })
+          // updateSlide is a debounced ~600ms write — without flushing here,
+          // the ~600ms debounce plus realtime lag meant /display didn't
+          // actually show "3" until ~800-1000ms had already elapsed, making
+          // the first beat of the countdown nearly invisible (2026-08-25
+          // review). Same pattern the lock handlers themselves already use
+          // for the same reason (handleLockAndScoreMatching etc., above).
+          await actions.flushSlides()
         })
-        // updateSlide is a debounced ~600ms write — without flushing here,
-        // the ~600ms debounce plus realtime lag meant /display didn't
-        // actually show "3" until ~800-1000ms had already elapsed, making
-        // the first beat of the countdown nearly invisible (2026-08-25
-        // review). Same pattern the lock handlers themselves already use
-        // for the same reason (handleLockAndScoreMatching etc., above).
-        await actions.flushSlides()
-      })
+      }
+      return true
     }
-    return true
+    // pendingLockPhase goes false the INSTANT the lock+score handler's first
+    // write flips e.g. orderLocked to true (React state, synchronous) — long
+    // before that same handler's phone_answers/teams/scoreboard_teams fetch
+    // and score upsert (the actually-slow, network-bound part) has finished.
+    // Without this check, the ~3s countdown finishing read as "done, move
+    // on" and Next was already unblocked by the time it visually completed:
+    // pressing it advanced the host to the next slide while scoring for
+    // THIS one was still in flight in the background. If that in-flight
+    // write then hit a genuine network hiccup (this file's actionsRef
+    // block above documents the same venue-wifi class of failure elsewhere)
+    // and set matchingScoreError/orderScoreError/wagerError, that error
+    // rendered on a component now showing a DIFFERENT currentSlide — so the
+    // host never saw it, and the question was permanently left unscored
+    // with zero indication anything went wrong (root-caused 2026-08-31
+    // against the unresolved 2026-08-25 "Q6 scored 0/23, no error surfaced"
+    // incident). *Busy flags always correspond to the CURRENT slide once
+    // this guard exists, since it's what stops the host leaving a slide
+    // while its own scoring is still running.
+    return matchingBusy || orderBusy || wagerBusy
   }
 
   // The A press, for a phone-scored question that's locked but still holding
