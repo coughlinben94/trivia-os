@@ -5,6 +5,7 @@
   "start_url": "/join",
   "scope": "/join",
   "display": "standalone",
+  "orientation": "landscape",
   "background_color": "#050505",
   "theme_color": "#050505",
   "icons": [

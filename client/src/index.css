@@ -108,6 +108,24 @@ textarea {
   .join-content { padding-top: 3rem; }
 }
 
+/* Portrait gate: /join is landscape-only. The gate element always renders
+   (RotateGate in Join.jsx) and this toggle is the whole mechanism — no JS
+   orientation listeners. `display` must live here, not inline: an inline
+   style would beat the media query. In portrait it fully replaces the
+   screen (fixed, inset 0, z-index above everything else in Join.jsx). */
+.join-rotate-gate { display: none; }
+@media (orientation: portrait) {
+  .join-rotate-gate { display: flex; }
+}
+@keyframes joinRotateHint {
+  0%, 20%  { transform: rotate(0deg); }
+  55%, 90% { transform: rotate(90deg); }
+  100%     { transform: rotate(0deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .join-rotate-gate svg { animation: none; }
+}
+
 /* 44px minimum tap height without changing the visual size. The /join top bar
    is deliberately compact (and shrinks further in landscape), so the hit area
    is grown with a pseudo-element instead of padding — padding would push the

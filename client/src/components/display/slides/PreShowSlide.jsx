@@ -222,6 +222,13 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
               textAlign: 'center',
               maxWidth: '120px',
             }}>Scan to join</span>
+            <span style={{
+              fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
+              fontSize: '0.85rem',
+              color: `${theme.colors.textMuted}aa`,
+              textAlign: 'center',
+              maxWidth: '120px',
+            }}>then turn your phone sideways</span>
           </div>
         </div>
 

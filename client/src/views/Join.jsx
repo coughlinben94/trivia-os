@@ -29,6 +29,37 @@ const TEAM_COLORS = [
   '#ff8c00','#00bcd4','#e91e8c','#8bc34a','#ff5722',
 ]
 
+// ─── Rotate gate ──────────────────────────────────────────────────────────────
+// /join is landscape-only (see the join-* rules in index.css — landscape was
+// already the intended orientation; this makes it mandatory). Always rendered,
+// shown/hidden purely by the .join-rotate-gate media query — no orientation
+// listeners, no state. It must be a full-screen REPLACEMENT, not an overlay:
+// an earlier version of this prompt shared `bottom: 0` with the nav and only
+// out-z-indexed it, hiding the buttons while leaving them tappable. Hence
+// fixed + inset 0 + zIndex 9999 (highest elsewhere in this file is 700).
+// `display` deliberately lives in the CSS class — inline would beat the query.
+function RotateGate() {
+  return (
+    <div className="join-rotate-gate" style={{
+      position: 'fixed', inset: 0, zIndex: 9999, background: '#050505',
+      flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      gap: '1rem', padding: '2rem', textAlign: 'center',
+    }}>
+      <svg width="52" height="52" viewBox="0 0 52 52" fill="none" aria-hidden="true"
+        style={{ animation: 'joinRotateHint 2.4s ease-in-out infinite' }}>
+        <rect x="16" y="6" width="20" height="40" rx="4.5" stroke="rgba(255,255,255,0.85)" strokeWidth="2.5" />
+        <circle cx="26" cy="40" r="1.75" fill="rgba(255,255,255,0.85)" />
+      </svg>
+      <h1 style={{ fontFamily: 'Boogaloo, Anton, sans-serif', fontSize: '2rem', color: '#fff', margin: 0, letterSpacing: '-0.01em' }}>
+        Turn your phone sideways
+      </h1>
+      <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: '0.9375rem', color: 'rgba(255,255,255,0.72)', margin: 0, lineHeight: 1.6 }}>
+        Trivia plays in landscape.
+      </p>
+    </div>
+  )
+}
+
 // ─── Loading ──────────────────────────────────────────────────────────────────
 function LoadingScreen() {
   return (
@@ -2168,51 +2199,64 @@ export default function Join() {
   // ── Render ────────────────────────────────────────────────────────────
   const disconnected = connStatus === 'CHANNEL_ERROR' || connStatus === 'TIMED_OUT' || connStatus === 'CLOSED'
 
+  // Every path renders inside the same fragment as <RotateGate /> (bottom of
+  // this function) so portrait is gated in ALL phases — registration and the
+  // no-show/error screens included, not just the live view.
+  let body
   if (!showParam) {
-    return (
+    body = (
       <div style={{ minHeight: '100dvh', background: '#050505', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
         <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif' }}>
           Scan the QR code at Baynes to join tonight's trivia!
         </p>
       </div>
     )
-  }
+  } else if (phase === 'loading') {
+    body = <LoadingScreen />
+  } else if (phase === 'no-show') {
+    body = <NoShowScreen />
+  } else if (phase === 'error') {
+    body = <ErrorScreen message={initError} />
+  } else {
+    body = (
+      <>
+        <ReconnectingBanner visible={disconnected} />
+        <ScoresLockedPopup visible={scoresLocked} />
+        {phase === 'register' && <RegistrationScreen onRegister={handleRegister} show={show} theme={theme} />}
+        {phase === 'waiting'  && (
+          <WaitingScreen teamName={team?.name ?? ''} theme={theme} onOpenScores={openScoresDrawer} />
+        )}
+        {phase === 'live'     && (
+          <LiveView
+            show={show}
+            team={team}
+            powerupUsed={powerupUsed}
+            onInvokePowerup={handleInvokePowerup}
+            theme={theme}
+            onOpenScores={openScoresDrawer}
+          />
+        )}
 
-  if (phase === 'loading') return <LoadingScreen />
-  if (phase === 'no-show') return <NoShowScreen />
-  if (phase === 'error')   return <ErrorScreen message={initError} />
+        {/* Global scores drawer — available in waiting + live phases */}
+        <AnimatePresence>
+          {scoresDrawerOpen && (
+            <ScoresDrawer
+              teams={scoresDrawerTeams}
+              loading={scoresDrawerLoading}
+              myTeamName={team?.name ?? ''}
+              onClose={() => setScoresDrawerOpen(false)}
+              theme={theme}
+            />
+          )}
+        </AnimatePresence>
+      </>
+    )
+  }
 
   return (
     <>
-      <ReconnectingBanner visible={disconnected} />
-      <ScoresLockedPopup visible={scoresLocked} />
-      {phase === 'register' && <RegistrationScreen onRegister={handleRegister} show={show} theme={theme} />}
-      {phase === 'waiting'  && (
-        <WaitingScreen teamName={team?.name ?? ''} theme={theme} onOpenScores={openScoresDrawer} />
-      )}
-      {phase === 'live'     && (
-        <LiveView
-          show={show}
-          team={team}
-          powerupUsed={powerupUsed}
-          onInvokePowerup={handleInvokePowerup}
-          theme={theme}
-          onOpenScores={openScoresDrawer}
-        />
-      )}
-
-      {/* Global scores drawer — available in waiting + live phases */}
-      <AnimatePresence>
-        {scoresDrawerOpen && (
-          <ScoresDrawer
-            teams={scoresDrawerTeams}
-            loading={scoresDrawerLoading}
-            myTeamName={team?.name ?? ''}
-            onClose={() => setScoresDrawerOpen(false)}
-            theme={theme}
-          />
-        )}
-      </AnimatePresence>
+      <RotateGate />
+      {body}
     </>
   )
 }
