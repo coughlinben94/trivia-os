@@ -244,6 +244,19 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [orderBusy, setOrderBusy] = useState(false)
   const [orderScoreError, setOrderScoreError] = useState(null)
 
+  // scoringBusy + the 12s cap below (2026-08-31, Opus second-opinion review
+  // of the maybeStartLockCountdown fix): the fix that blocks Next during
+  // scoring has no timeout of its own — supabase-js calls here have no
+  // AbortController/timeout — so on the exact stalled-wifi case it exists
+  // for, a *Busy flag can stay true for tens of seconds, and Next was dead
+  // on every slide with no escape but a page reload. 12s comfortably covers
+  // a real scoring round (three SELECTs + one upsert, normally 1-2s); past
+  // that the host gets Next back and any real failure is already showing
+  // its error on-screen via the Retry Scoring button.
+  const scoringBusy = matchingBusy || orderBusy || wagerBusy
+  const scoringSinceRef = useRef(0)
+  useEffect(() => { scoringSinceRef.current = scoringBusy ? Date.now() : 0 }, [scoringBusy])
+
   const slides = sortedSlides(show)
   const currentIndex = show.showState.currentSlideIndex ?? 0
   const currentSlide = slides[currentIndex] ?? null
@@ -842,10 +855,16 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     // host never saw it, and the question was permanently left unscored
     // with zero indication anything went wrong (root-caused 2026-08-31
     // against the unresolved 2026-08-25 "Q6 scored 0/23, no error surfaced"
-    // incident). *Busy flags always correspond to the CURRENT slide once
-    // this guard exists, since it's what stops the host leaving a slide
-    // while its own scoring is still running.
-    return matchingBusy || orderBusy || wagerBusy
+    // incident).
+    //
+    // NOT a complete guarantee the busy flag always matches currentSlide —
+    // this only covers forward nav in THIS window. ArrowLeft/handlePrevClick
+    // are ungated (ok, doesn't advance PAST the scoring slide), and
+    // /display's own step path has no lock logic at all, so a Stream Deck
+    // press landing there can still advance mid-scoring (both pre-existing,
+    // not a regression from this fix). Capped at 12s (scoringSinceRef,
+    // above) so a genuinely stalled write can't leave Next dead all night.
+    return scoringBusy && Date.now() - scoringSinceRef.current < 12000
   }
 
   // The A press, for a phone-scored question that's locked but still holding
@@ -1113,7 +1132,13 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
 
         {/* Right: Next + Theme + Score */}
         <div className="absolute right-0 flex items-center gap-1 px-4 h-full">
-          <NavButton onClick={handleNextClick} disabled={atEnd} label="Next ▶" title="Next (→)" primary />
+          {/* scoringBusy shown here too (2026-08-31, Opus review) — a host
+              driving the auto-countdown flow never looks at the per-mechanic
+              "Scoring…" button in the score panel, so without this the only
+              feedback for why Next isn't responding was that small label on
+              a control they're not touching. Still enabled, not disabled —
+              maybeStartLockCountdown is what actually blocks the press. */}
+          <NavButton onClick={handleNextClick} disabled={atEnd} label={scoringBusy ? 'Scoring…' : 'Next ▶'} title="Next (→)" primary />
           {onThemeChange && (
             <div className="relative ml-1">
               <button
