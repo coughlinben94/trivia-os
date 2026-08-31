@@ -10,6 +10,7 @@ import GradientBackground from './AlbumGradientMesh'
 import StationRingLayer, { EH_DUR_MS, EH_PHASES } from './StationRingLayer'
 import { usePalette } from '../hooks/usePalette'
 import { displayName } from '../lib/track'
+import { RECORD_HUE } from '../../worlds/midnightGalaxy.ring.js'
 
 // One palette-driven two-pool Canvas renderer owns the live background.
 
@@ -1136,6 +1137,43 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
           removing it from api/palette.js would change server output and need
           another PALETTE_VERSION bump. */}
       <GradientBackground colors={palette.colors} nextColors={upcomingPalette.colors} active={true} shuffleKey={shuffleKey} entranceActive={entranceActive} />
+      {/* Ring-fusion void scrim (2026-08-31 council design session, Ben live
+          rehearsal: "can barely see stars, comets, nouns" — StationRingLayer
+          draws on a transparent canvas and explicitly relies on whatever's
+          under it for darkness; the full-bleed album mesh was burying it).
+          Sits BETWEEN the mesh and StationRingLayer in DOM order — all three
+          share z-index 0 (StationRingLayer.jsx: "same slot GradientBackground
+          occupies"), so paint order is DOM order, not z-index. Placing this
+          above StationRingLayer would dim the very stars it's meant to
+          reveal; that's the mistake this comment exists to prevent someone
+          from reintroducing.
+          Fully OPAQUE past ~62% radius on purpose — a semi-transparent black
+          layered over live OKLab noise reads as dim mud, not void (the
+          texture is still there, just darker). Only the center window stays
+          album-reactive, which is the point: the glow behind the disc is the
+          playing record's own color, not a fixed tint.
+          --record-hue drives the tint's hue so this always matches the ring
+          world's own record station (RECORD_HUE, imported above) — one
+          source of truth for "what color is the record." Not itself
+          animated/tunable at runtime; a code-edit constant, not a host UI
+          (see RECORD_HUE's own comment for why the value doesn't move yet).
+          Named ceiling: GradientBackground keeps rendering its full mesh at
+          full rate underneath this opaque cover — acceptable on tonight's
+          hardware; if frames drop on a real TV, gate the mesh's own rAF
+          loop while ringMode is on rather than rewriting this scrim. */}
+      {ringMode && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            zIndex: 0,
+            '--record-hue': RECORD_HUE,
+            background:
+              'radial-gradient(circle at 50% 46%, transparent 0%, ' +
+              'oklch(0.32 0.11 var(--record-hue) / 0.5) 26%, ' +
+              'rgba(4,2,10,0.9) 46%, #030106 62%, #020104 100%)',
+          }}
+        />
+      )}
       {/* ringMode (2026-08-16, grading-break "Station Thirteen" fusion):
           additive ring-world decoration over the album wash — star field,
           groove-ring halo, progress-driven needle comet, pulsar rim-spikes.
