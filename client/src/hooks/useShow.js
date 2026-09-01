@@ -788,6 +788,15 @@ export function useShow() {
     await updateShowRow(show.id, { answer_reveal: visible })
   }
 
+  // { slideId, playing } — remote play trigger for a question's audio clip
+  // (QuestionAudio/ShinyAudioQuestion both react to it). No caller existed
+  // for this column until LiveMode's "Next plays audio" gate (2026-09-01).
+  async function setAudioPlaying(payload) {
+    if (!show) return
+    setShow(s => ({ ...s, audio_playing: payload }))
+    await updateShowRow(show.id, { audio_playing: payload })
+  }
+
   async function setScoresRevealed(revealed) {
     if (!show) return
     setShow(s => ({ ...s, showState: { ...s.showState, scoresRevealed: revealed } }))
@@ -883,6 +892,7 @@ export function useShow() {
     prevSlide,
     setScoreboardVisible,
     setAnswerReveal,
+    setAudioPlaying,
     setScoresRevealed,
     updateRoundScore,
     saveResults,

@@ -867,6 +867,33 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     return scoringBusy && Date.now() - scoringSinceRef.current < 12000
   }
 
+  // "Next plays audio" — a plain (non-shiny) question's Click-mode clip
+  // (2026-09-01, Ben live: "is there not a way to have the audio play on the
+  // next button but only after i invoke it" — read the question to the room
+  // first, THEN have his own Next/Stream Deck press start the clip, not a
+  // literal tap on the TV). First Next after landing on the slide fires
+  // show.audio_playing (QuestionAudio reacts to it — see QuestionSlide.jsx)
+  // instead of advancing; the second Next, once fired, falls through to the
+  // ordinary advance. Advance-mode audio already started itself at slide
+  // mount — nothing to gate there, hence the audioTrigger check below.
+  //
+  // Checked off show.audio_playing itself, not local state, so it reads
+  // correctly no matter which window's press fired it — same rationale
+  // maybeStartLockCountdown's own comment gives for pendingLockPhase.
+  //
+  // Returns true if it handled the press — callers must return/bail on true,
+  // same contract as maybeStartLockCountdown above.
+  function maybeStartAudioPlay() {
+    if (!currentSlide || currentSlide.type !== 'question' || currentSlide.data?.isShiny) return false
+    if ((currentSlide.data?.audioTrigger ?? 'click') !== 'click') return false
+    const part = resolveShinyPart(currentSlide.data)
+    const hasAudio = !!part.youtubeId || (!!part.mediaUrl && String(part.mediaType ?? '').startsWith('audio'))
+    if (!hasAudio) return false
+    if (show.audio_playing?.slideId === currentSlide.id) return false
+    guardNav(() => actions.setAudioPlaying({ slideId: currentSlide.id, playing: true }))
+    return true
+  }
+
   // The A press, for a phone-scored question that's locked but still holding
   // its answer back (2026-08-25, Ben: reveal "should only invoke when i hit
   // A"). pendingReveal (slideStepping.js) is the ONE place that decides
@@ -1004,6 +1031,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       // maybeStartLockCountdown above. Checked before the answerReveal
       // dance below since starting a countdown isn't an advance at all.
       if (maybeStartLockCountdown()) return
+      if (maybeStartAudioPlay()) return
       if (show.showState.answerReveal) {
         actions.setAnswerReveal(false)
         pendingAdvanceRef.current = setTimeout(() => {
@@ -1055,6 +1083,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     if (pendingAdvanceRef.current) return
     // "Next locks answers" — same check as the ArrowRight branch above.
     if (maybeStartLockCountdown()) return
+    if (maybeStartAudioPlay()) return
     guardNav(actions.nextSlide)
   }
   function handlePrevClick() {

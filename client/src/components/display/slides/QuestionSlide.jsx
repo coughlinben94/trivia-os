@@ -46,7 +46,7 @@ import { warmImages, slideImageUrls } from '../../../lib/warmImages.js'
 // Replay on re-entry is deliberate: SlideRenderer keys on slide.id, so Prev
 // back into the question remounts this and the clip plays again. Hearing it
 // again is what "go back to that question" means on a live show.
-function QuestionAudio({ part, gainDb, theme, isPreview, autoPlay }) {
+function QuestionAudio({ part, gainDb, theme, isPreview, autoPlay, show, slideId }) {
   const { youtubeId, youtubeStart, youtubeEnd, volume, mediaUrl } = part
   const isYoutube = !!youtubeId
   const [playing, setPlaying] = useState(autoPlay && !isPreview)
@@ -133,6 +133,25 @@ function QuestionAudio({ part, gainDb, theme, isPreview, autoPlay }) {
     play().catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Click mode's remote trigger — LiveMode's "Next plays audio" (Ben,
+  // 2026-09-01, live: read the question to the room first, THEN have his own
+  // next press start the clip, not a literal tap on the TV). Same
+  // show.audio_playing field ShinyAudioQuestion already reacts to, but
+  // covering YouTube too — unlike that upload-only path, a plain question's
+  // clip is just as likely to be YouTube-sourced (it's what's actually
+  // attached to tonight's slide) and sticky user-activation from the show's
+  // own setup ritual covers unmuted play here the same as it does there.
+  // autoPlay mode never sets this field in the first place (LiveMode gates
+  // its writer on 'click'), so the guard is redundant defense, not load-bearing.
+  useEffect(() => {
+    if (autoPlay || isPreview) return
+    const ap = show?.audio_playing
+    if (ap?.slideId !== slideId || !ap?.playing) return
+    if (isYoutube) setPlaying(true)
+    else play().catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show?.audio_playing, slideId, isYoutube, autoPlay, isPreview])
 
   return (
     <>
@@ -314,7 +333,7 @@ function StandardQuestion({ slide, show, theme, transitionKey, isPreview }) {
           </p>
         </span>
         {hasAudio && (
-          <QuestionAudio part={part} gainDb={data.audioGainDb} theme={theme} isPreview={isPreview} autoPlay={data.audioTrigger === 'advance'} />
+          <QuestionAudio part={part} gainDb={data.audioGainDb} theme={theme} isPreview={isPreview} autoPlay={data.audioTrigger === 'advance'} show={show} slideId={slide.id} />
         )}
       </motion.div>
 

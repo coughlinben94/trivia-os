@@ -216,4 +216,61 @@ describe('<QuestionSlide> — audio on a plain question', () => {
       expect(mediaPlay).not.toHaveBeenCalled()
     })
   })
+
+  // Click-mode audio, fired remotely: LiveMode's "Next plays audio" (Ben,
+  // 2026-09-01, live: wants to read the question to the room first, THEN have
+  // his own next press — not a literal tap on the TV — start the clip).
+  // show.audio_playing is the same field ShinyAudioQuestion already reacts to
+  // (wired 2026-08-?? for shiny, upload-only there); this is the plain-question
+  // side of it, and unlike the shiny path it must also cover a YouTube source
+  // since that's what's actually attached to tonight's slide.
+  describe("audioTrigger: 'click' — remote play via show.audio_playing", () => {
+    const player = () => ({
+      setVolume: vi.fn(), unMute: vi.fn(), seekTo: vi.fn(),
+      playVideo: vi.fn(), pauseVideo: vi.fn(),
+    })
+
+    beforeEach(() => {
+      yt.warm.mockClear()
+      yt.claim.mockClear()
+    })
+
+    it('plays an uploaded clip when show.audio_playing matches this slide', () => {
+      const slide = slideWith({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg', audioGainDb: 6 })
+      render(slide, { show: { slides: [slide], audio_playing: { slideId: 'slide-1', playing: true } } })
+
+      expect(mediaPlay).toHaveBeenCalled()
+    })
+
+    it('claims and starts a YouTube clip when show.audio_playing matches this slide', () => {
+      const p = player()
+      yt.claim.mockReturnValue({ whenReady: cb => cb(p), onStateChange: () => {}, destroy: () => {} })
+      const slide = slideWith({ mediaSlots: [{ type: 'youtube', videoId: 'dQw4w9WgXcQ', start: 10, end: 25, volume: 80 }] })
+      render(slide, { show: { slides: [slide], audio_playing: { slideId: 'slide-1', playing: true } } })
+
+      expect(yt.claim).toHaveBeenCalledWith('dQw4w9WgXcQ', 10, 25)
+      expect(p.playVideo).toHaveBeenCalled()
+    })
+
+    it('does not play on mount without a matching audio_playing signal', () => {
+      const slide = slideWith({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' })
+      render(slide, { show: { slides: [slide], audio_playing: null } })
+
+      expect(mediaPlay).not.toHaveBeenCalled()
+    })
+
+    it('ignores an audio_playing signal for a different slide', () => {
+      const slide = slideWith({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' })
+      render(slide, { show: { slides: [slide], audio_playing: { slideId: 'some-other-slide', playing: true } } })
+
+      expect(mediaPlay).not.toHaveBeenCalled()
+    })
+
+    it('ignores audio_playing in the host preview pane', () => {
+      const slide = slideWith({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' })
+      render(slide, { show: { slides: [slide], audio_playing: { slideId: 'slide-1', playing: true } }, isPreview: true })
+
+      expect(mediaPlay).not.toHaveBeenCalled()
+    })
+  })
 })
