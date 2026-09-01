@@ -93,6 +93,23 @@ function VennContent({ slide, theme }) {
           }}>
             {rightCast.map((p, i) => <CastPhoto key={i} person={p} i={i} reduce={reduce} />)}
           </div>
+
+          {/* The overlap IS the mystery — a big "?" marks the empty middle so
+              it reads as "guess what belongs here," not as unfinished art
+              (Ben, 2026-09-01). */}
+          <motion.div
+            initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4, delay: 0.3, ease: EASE_OUT }}
+            style={{
+              position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+              fontSize: 120, fontWeight: 800, color: SHINY_GOLD, lineHeight: 1,
+              textShadow: `0 0 40px ${SHINY_GOLD_GLOW}, 0 4px 12px rgba(0,0,0,0.5)`,
+              pointerEvents: 'none', zIndex: 20,
+            }}
+          >
+            ?
+          </motion.div>
         </div>
       </div>
 

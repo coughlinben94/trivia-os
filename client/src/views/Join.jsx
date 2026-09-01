@@ -726,6 +726,35 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered, overrid
         </div>
       )
 
+    case 'venn': {
+      const leftCast = (slide.data.leftCast ?? []).filter(p => p?.name)
+      const rightCast = (slide.data.rightCast ?? []).filter(p => p?.name)
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {slide.data.text && (
+            <p style={{
+              color: text, fontSize: 'clamp(1.35rem, 5.5vw, 1.6rem)',
+              lineHeight: 1.55, margin: 0, fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
+            }}>
+              {slide.data.text}
+            </p>
+          )}
+          {/* No cast photos on the TV for a text-only venn (Ben, 2026-09-01) —
+              the two name lists ARE the puzzle, so they're the one thing a
+              phone must show even though the circles/overlap art is TV-only. */}
+          <div style={{ display: 'flex', gap: '1.5rem' }}>
+            {[leftCast, rightCast].map((cast, side) => cast.length > 0 && (
+              <div key={side} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {cast.map((p, i) => (
+                  <p key={i} style={{ color: text, fontSize: '1rem', lineHeight: 1.4, margin: 0, fontWeight: 500 }}>{p.name}</p>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
     // Every remaining slide type — winner-reveal, team-picker, pyl-reveal,
     // pre-show, pixelate-series, state-of-union, grid, custom, team-preview.
     // Used to be an unconditional "look up at the screen" (2026-08-25, Ben,

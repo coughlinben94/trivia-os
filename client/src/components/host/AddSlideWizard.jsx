@@ -103,6 +103,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const [shinyAnswer,       setShinyAnswer]      = useState('')
   const [gridCols, setGridCols] = useState(4)
   const [gridRows, setGridRows] = useState(3)
+  const [vennPerSide, setVennPerSide] = useState(3)
+  // "How many assets" for venn means how many SEPARATE venn questions to
+  // create in one go (Ben, 2026-09-01: "I'll be asking three separate venn
+  // diagrams" — a round of 3 standalone puzzles, not 3 people on one side).
+  // Blank-able string state, same idiom as assetCount.
+  const [vennSlideCount, setVennSlideCount] = useState('1')
   // The two — and only two — shape questions the shiny popup asks: how many
   // assets come after the title card, and how they relate to each other.
   // Both are pre-filled from the format and both are always editable.
@@ -204,6 +210,41 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
 
         const isVenn = selectedShinyFmt.input_schema?.type === 'venn'
         if (isVenn) {
+          const vennNum = Math.min(20, Math.max(1, parseInt(vennSlideCount, 10) || 1))
+          const afterId = insertAfterSlideId(roundSlides, sorted)
+          const castArr = () => Array.from({ length: vennPerSide }, () => ({ name: '', mediaUrl: null }))
+
+          if (vennNum > 1) {
+            // N separate standalone venn slides — same shinyGroupId/isSeries
+            // shape as the generic 'separate' relationship path above, just
+            // for a fixed-shape format that never reaches that code (venn
+            // returns early, before assetNum/relationship exist).
+            const groupId = `sgrp_${nanoid(8)}`
+            const slidesData = Array.from({ length: vennNum }, (_, i) => ({
+              type: 'venn',
+              roundId: roundId ?? null,
+              data: {
+                questionNumber:  qNum + i,
+                questionLabel:   `Q${qNum + i}`,
+                questionMode:    'shiny',
+                isShiny:         true,
+                introDone:       i > 0 || formatAlreadyIntroducedThisRound(selectedShinyFmt.id),
+                shinyFormatId:   selectedShinyFmt.id,
+                shinyFormatName: selectedShinyFmt.name,
+                shinyFormatIcon: selectedShinyFmt.icon,
+                isSeries:        true,
+                seriesTheme:     selectedShinyFmt.name,
+                shinyGroupId:    groupId,
+                leftCast:  castArr(),
+                rightCast: castArr(),
+                text:      '',
+                answer:    '',
+              },
+            }))
+            await onAddSlide({ afterSlideId: afterId, slides: slidesData })
+            return
+          }
+
           const vennData = {
             questionNumber:  qNum,
             questionLabel:   `Q${qNum}`,
@@ -213,12 +254,11 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             shinyFormatId:   selectedShinyFmt.id,
             shinyFormatName: selectedShinyFmt.name,
             shinyFormatIcon: selectedShinyFmt.icon,
-            leftCast:  Array.from({ length: 3 }, () => ({ name: '', mediaUrl: null })),
-            rightCast: Array.from({ length: 3 }, () => ({ name: '', mediaUrl: null })),
+            leftCast:  castArr(),
+            rightCast: castArr(),
             text:      shinyQuestion.trim(),
             answer:    shinyAnswer.trim(),
           }
-          const afterId = insertAfterSlideId(roundSlides, sorted)
           await onAddSlide({ type: 'venn', roundId: roundId ?? null, afterSlideId: afterId, data: vennData })
           return
         }
@@ -409,9 +449,14 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const effectiveRel    = !showRelationship ? 'sequential'
     : relationshipOptions.some(r => r.id === relationship) ? relationship
     : 'sequential'
+  // Venn's own "how many assets" means how many SEPARATE questions — there's
+  // no sequential/concurrent concept for a Venn puzzle, only "one" or "a
+  // batch of standalone ones," so it skips the relationship picker entirely.
+  const isVenn          = shinyFmtType === 'venn'
+  const vennNum         = Math.min(20, Math.max(1, parseInt(vennSlideCount, 10) || 1))
   // Separate questions can't share one typed answer — those slides start
   // blank and get filled in the editor, exactly as the old batch path did.
-  const showSharedFields = effectiveRel !== 'separate'
+  const showSharedFields = effectiveRel !== 'separate' && !(isVenn && vennNum > 1)
   // A plain single-asset question — and every fixed-shape format — still
   // needs its answer up front, unchanged. Multi-asset tied questions usually
   // answer per-asset in the editor, so the shared answer is optional there.
@@ -607,6 +652,52 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               </div>
             )}
 
+            {/* Venn's "how many assets" is how many SEPARATE venn questions to
+                create at once (Ben, 2026-09-01: "I'll be asking three separate
+                venn diagrams" — a round of standalone puzzles, not 3 people on
+                one side). Same idiom as the generic "How many assets?" input,
+                just scoped to venn since it always creates separate slides
+                (no sequential/concurrent option makes sense for a Venn). */}
+            {isVenn && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">How many separate questions?</label>
+                <input
+                  autoFocus
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={vennSlideCount}
+                  onChange={e => setVennSlideCount(e.target.value)}
+                  placeholder="1"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                {vennNum > 1 && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Creates {vennNum} separate Venn questions — fill each one in from the slide editor.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Venn sets its own per-side count instead of the generic asset
+                count (Ben, 2026-09-01: venn was bucketed into FIXED_SHAPE_TYPES
+                alongside matching/wager/order — which really do have a fixed
+                or elsewhere-configured count — but venn's "3 per side" was
+                just a hardcoded default with no dedicated control anywhere,
+                so hosts had no way to change it. Same idiom as Grid's own
+                Columns/Rows picker just above.) */}
+            {isVenn && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">How many per side?</label>
+                <div className="flex gap-2">
+                  {[2,3,4,5,6].map(n => (
+                    <button key={n} onClick={() => setVennPerSide(n)}
+                      className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${vennPerSide === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Question + answer — the two tied modes share one of each.
                 Separate questions can't, so those slides start blank. */}
             {showSharedFields && (
@@ -633,8 +724,9 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                     value={shinyAnswer}
                     onChange={e => setShinyAnswer(e.target.value)}
                     // Fixed-shape formats render no count input, so the answer
-                    // takes the focus the count would otherwise have had.
-                    autoFocus={isFixedShapeFmt}
+                    // takes the focus the count would otherwise have had —
+                    // except venn, which has its own count input to focus.
+                    autoFocus={isFixedShapeFmt && !isVenn}
                     placeholder={sharedAnswerRequired ? 'The answer…' : 'Leave blank for per-asset answers'}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
                   />
