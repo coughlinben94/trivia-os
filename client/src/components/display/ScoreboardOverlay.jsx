@@ -34,6 +34,27 @@ function gridMetrics(teamCount) {
 // the single-column layout was built to avoid in the first place.
 const SPLIT_TEAM_THRESHOLD = 9
 
+// rank | team name | one per round | total. The round columns share whatever
+// the name column doesn't need (1fr each) so the numbers stay spread evenly
+// across the board instead of huddling at the right with dead space beside
+// the names — the width is the same however many rounds a show has.
+//
+// Built by hand instead of `repeat(${n}, …)`: `repeat(0, …)` is INVALID CSS
+// (the count must be a positive integer), and an invalid value makes the
+// browser drop the whole grid-template-columns declaration — every cell
+// then stacks into one implicit column: rank on line 1, name on line 2,
+// total pushed below the row's fixed height and clipped by overflow:hidden.
+// Split mode (>SPLIT_TEAM_THRESHOLD teams) has zero round columns, so that's
+// exactly what a 21-team show put on the TV live (2026-09-01, Ben: "no
+// scores are showing", "team names aren't showing", "sooo messy"). The
+// 2026-08-26 "top team's row is taller and misplaced" report (see TeamRow)
+// was this same collapse seen at 10+ teams — the overflow:hidden added then
+// only hid the totals it pushed out of view.
+export function gridTemplate(roundCount) {
+  const rounds = Array.from({ length: roundCount }, () => 'minmax(0, 1fr)').join(' ')
+  return `3.4cqw minmax(0, 33cqw) ${rounds ? `${rounds} ` : ''}9cqw`
+}
+
 // ─── Count-up total ────────────────────────────────────────────────────────
 // A live score edit while the board is up should read as the number climbing,
 // not a silent swap. Snaps when the user prefers reduced motion.
@@ -244,12 +265,8 @@ function ScoreboardContent({ show }) {
   const half = Math.ceil(ranked.length / 2)
   const columns = isSplit ? [ranked.slice(0, half), ranked.slice(half)] : [ranked]
   const m = gridMetrics(isSplit ? half : ranked.length)
-  // rank | team name | one per round | total. The round columns share whatever
-  // the name column doesn't need (1fr each) so the numbers stay spread evenly
-  // across the board instead of huddling at the right with dead space beside
-  // the names — the width is the same however many rounds a show has.
-  // Split mode drops the round columns (see SPLIT_TEAM_THRESHOLD above).
-  const template = `3.4cqw minmax(0, 33cqw) repeat(${splitCols.length}, minmax(0, 1fr)) 9cqw`
+  // Split mode drops the round columns (see gridTemplate above).
+  const template = gridTemplate(splitCols.length)
 
   const displayFont = `'${theme.fonts.display}', 'Boogaloo', sans-serif`
   const bodyFont = `'${theme.fonts.body}', 'DM Sans', sans-serif`
