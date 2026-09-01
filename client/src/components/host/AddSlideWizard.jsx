@@ -5,6 +5,7 @@ import { insertAfterSlideId } from '../../lib/questionNumbering.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import { makeQuestionPasteHandler, makeCleanPasteHandler } from '../../lib/cleanPaste.js'
+import { FIXED_SHAPE_KINDS } from '../../lib/shinyWizardKinds.jsx'
 
 export const TYPE_CARDS = [
   { type: 'pre-show',       icon: '📱', name: 'Pre-Show',            desc: 'QR code + team count while people join' },
@@ -40,11 +41,10 @@ const BTN = 'host-button'
 // can never lock either one (the preset lock caused a real live incident on
 // 2026-08-25: a host stared at a count he could not change).
 //
-// Formats whose mechanic has no variable asset count skip both controls
-// VISIBLY, keeping whatever bespoke inputs they already have. There is no
-// state where the host wonders why an input is missing, because the missing
-// inputs are the whole point of a fixed-shape format.
-const FIXED_SHAPE_TYPES = new Set(['matching', 'wager', 'order', 'venn', 'grid'])
+// Which formats skip the generic count/relationship UI, and what each
+// bespoke one does instead, now lives in shinyWizardKinds.jsx — see that
+// file's header comment for why (2026-09-01, replacing the hand-maintained
+// FIXED_SHAPE_TYPES Set this used to be).
 
 // "All at once" only exists where something can actually draw it: text
 // (ShinyConcurrentQuestion's cumulative reveal) and image (every tile at once
@@ -182,84 +182,16 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
     } else if (type === 'question' || type === 'shiny-question') {
       const num = isBonus ? bNum : qNum
       if (selectedShinyFmt && shinyStep === 'details') {
-        const isGrid = selectedShinyFmt.input_schema?.type === 'grid'
-        if (isGrid) {
-          const columns = Array.from({ length: gridCols }, () =>
-            Array.from({ length: gridRows }, () => ({ color: null, mediaUrl: null }))
-          )
-          const gridData = {
-            questionNumber:  qNum,
-            questionLabel:   `Q${qNum}`,
-            questionMode:    'shiny',
-            isShiny:         true,
-            introDone:       formatAlreadyIntroducedThisRound(selectedShinyFmt.id),
-            shinyFormatId:   selectedShinyFmt.id,
-            shinyFormatName: selectedShinyFmt.name,
-            shinyFormatIcon: selectedShinyFmt.icon,
-            columns,
-            intraGap:     0,
-            interGap:     84,
-            columnLabels: selectedShinyFmt.input_schema?.columnLabels !== false,
-            text:         shinyQuestion.trim(),
-            answer:       shinyAnswer.trim(),
-          }
+        // Bespoke-shape formats (grid, venn, …) build their own slide payload —
+        // the registry entry decides which builder runs, so handleCreate no
+        // longer needs to know those formats exist by name.
+        if (fixedShapeKind?.buildSlideData) {
           const afterId = insertAfterSlideId(roundSlides, sorted)
-          await onAddSlide({ type: 'grid', roundId: roundId ?? null, afterSlideId: afterId, data: gridData })
-          return
-        }
-
-        const isVenn = selectedShinyFmt.input_schema?.type === 'venn'
-        if (isVenn) {
-          const vennNum = Math.min(20, Math.max(1, parseInt(vennSlideCount, 10) || 1))
-          const afterId = insertAfterSlideId(roundSlides, sorted)
-          const castArr = () => Array.from({ length: vennPerSide }, () => ({ name: '', mediaUrl: null }))
-
-          if (vennNum > 1) {
-            // N separate standalone venn slides — same shinyGroupId/isSeries
-            // shape as the generic 'separate' relationship path above, just
-            // for a fixed-shape format that never reaches that code (venn
-            // returns early, before assetNum/relationship exist).
-            const groupId = `sgrp_${nanoid(8)}`
-            const slidesData = Array.from({ length: vennNum }, (_, i) => ({
-              type: 'venn',
-              roundId: roundId ?? null,
-              data: {
-                questionNumber:  qNum + i,
-                questionLabel:   `Q${qNum + i}`,
-                questionMode:    'shiny',
-                isShiny:         true,
-                introDone:       i > 0 || formatAlreadyIntroducedThisRound(selectedShinyFmt.id),
-                shinyFormatId:   selectedShinyFmt.id,
-                shinyFormatName: selectedShinyFmt.name,
-                shinyFormatIcon: selectedShinyFmt.icon,
-                isSeries:        true,
-                seriesTheme:     selectedShinyFmt.name,
-                shinyGroupId:    groupId,
-                leftCast:  castArr(),
-                rightCast: castArr(),
-                text:      '',
-                answer:    '',
-              },
-            }))
-            await onAddSlide({ afterSlideId: afterId, slides: slidesData })
-            return
-          }
-
-          const vennData = {
-            questionNumber:  qNum,
-            questionLabel:   `Q${qNum}`,
-            questionMode:    'shiny',
-            isShiny:         true,
-            introDone:       formatAlreadyIntroducedThisRound(selectedShinyFmt.id),
-            shinyFormatId:   selectedShinyFmt.id,
-            shinyFormatName: selectedShinyFmt.name,
-            shinyFormatIcon: selectedShinyFmt.icon,
-            leftCast:  castArr(),
-            rightCast: castArr(),
-            text:      shinyQuestion.trim(),
-            answer:    shinyAnswer.trim(),
-          }
-          await onAddSlide({ type: 'venn', roundId: roundId ?? null, afterSlideId: afterId, data: vennData })
+          await onAddSlide(fixedShapeKind.buildSlideData({
+            qNum, roundId, afterId, selectedShinyFmt,
+            shinyQuestion, shinyAnswer, formatAlreadyIntroducedThisRound,
+            gridCols, gridRows, vennPerSide, vennSlideCount,
+          }))
           return
         }
 
@@ -433,11 +365,13 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
     && (type !== 'pyl-board' || pylBoardNames.filter(n => n.trim()).length >= 2)
   const canAddQuestion = !!roundId && questionText.trim().length > 0 && questionAnswer.trim().length > 0
   const shinyFmtType    = selectedShinyFmt?.input_schema?.type ?? null
-  const isFixedShapeFmt = FIXED_SHAPE_TYPES.has(shinyFmtType)
+  const fixedShapeKind  = shinyFmtType ? FIXED_SHAPE_KINDS[shinyFmtType] : null
+  const isFixedShapeFmt = !!fixedShapeKind
   const fmtAssetPreset  = selectedShinyFmt?.input_schema?.slots
   const hasAssetPreset  = typeof fmtAssetPreset === 'number' && fmtAssetPreset > 0
   // The typed count wins, always. A preset only pre-fills it (see the
-  // FIXED_SHAPE_TYPES comment for the incident that made this non-negotiable).
+  // creation-shape comment at the top of this file for the incident that made
+  // this non-negotiable).
   // Fixed-shape formats are pinned to 1: their count input never renders, so
   // a stray `slots` preset on a matching/wager/order format must not silently
   // turn it into a parts[] series — those mechanics read flat data only.
@@ -628,75 +562,14 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               </div>
             )}
 
-            {/* Grid formats set their own shape instead of a count. */}
-            {shinyFmtType === 'grid' && (
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Columns</label>
-                  <div className="flex gap-2">
-                    {[1,2,3,4,5,6].map(n => (
-                      <button key={n} onClick={() => setGridCols(n)}
-                        className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${gridCols === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Rows</label>
-                  <div className="flex gap-2">
-                    {[1,2,3,4,5].map(n => (
-                      <button key={n} onClick={() => setGridRows(n)}
-                        className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${gridRows === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Venn's "how many assets" is how many SEPARATE venn questions to
-                create at once (Ben, 2026-09-01: "I'll be asking three separate
-                venn diagrams" — a round of standalone puzzles, not 3 people on
-                one side). Same idiom as the generic "How many assets?" input,
-                just scoped to venn since it always creates separate slides
-                (no sequential/concurrent option makes sense for a Venn). */}
-            {isVenn && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">How many separate questions?</label>
-                <input
-                  autoFocus
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={vennSlideCount}
-                  onChange={e => setVennSlideCount(e.target.value)}
-                  placeholder="1"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-                {vennNum > 1 && (
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Creates {vennNum} separate Venn questions — fill each one in from the slide editor.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Venn sets its own per-side count instead of the generic asset
-                count (Ben, 2026-09-01: venn was bucketed into FIXED_SHAPE_TYPES
-                alongside matching/wager/order — which really do have a fixed
-                or elsewhere-configured count — but venn's "3 per side" was
-                just a hardcoded default with no dedicated control anywhere,
-                so hosts had no way to change it. Same idiom as Grid's own
-                Columns/Rows picker just above.) */}
-            {isVenn && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">How many per side?</label>
-                <div className="flex gap-2">
-                  {[2,3,4,5,6].map(n => (
-                    <button key={n} onClick={() => setVennPerSide(n)}
-                      className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${vennPerSide === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Bespoke-shape formats set their own shape instead of the
+                generic count/relationship controls — grid's Columns/Rows,
+                venn's separate-question and per-side counts. Each kind's
+                controls live with its slide builder in shinyWizardKinds.jsx. */}
+            {fixedShapeKind?.extraControls?.({
+              gridCols, setGridCols, gridRows, setGridRows,
+              vennSlideCount, setVennSlideCount, vennNum, vennPerSide, setVennPerSide,
+            })}
 
             {/* Question + answer — the two tied modes share one of each.
                 Separate questions can't, so those slides start blank. */}
