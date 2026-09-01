@@ -17,12 +17,71 @@ import { warmImages, slideImageUrls } from '../../../lib/warmImages.js'
 
 // ─── Standard question ────────────────────────────────────────────────────────
 
+// Audio on a plain question (Ben, 2026-09-01: a clip was only attachable by
+// making the question shiny, which drags in the intro card and waveform
+// treatment he doesn't want on an ordinary question). Same gain-corrected
+// graph ShinyAudioQuestion uses — audioGainDb is what makes a quietly-recorded
+// upload audible in a loud room, so a bare <audio> tag isn't a substitute —
+// but nothing else shiny: no intro beat, no waveform bars.
+function QuestionAudioButton({ mediaUrl, gainDb, theme }) {
+  const [playing, setPlaying] = useState(false)
+  const audioRef = useRef(null)
+  const audioCtxRef = useRef(null)
+
+  useEffect(() => {
+    return () => { audioCtxRef.current?.close() }
+  }, [])
+
+  async function play() {
+    if (!audioCtxRef.current && audioRef.current) {
+      const ctx = new AudioContext()
+      const gainNode = ctx.createGain()
+      gainNode.gain.value = Math.pow(10, (gainDb ?? 0) / 20)
+      ctx.createMediaElementSource(audioRef.current).connect(gainNode)
+      gainNode.connect(ctx.destination)
+      audioCtxRef.current = ctx
+    }
+    const ctx = audioCtxRef.current
+    if (ctx?.state === 'suspended') await ctx.resume()
+    await audioRef.current.play()
+    setPlaying(true)
+  }
+
+  return (
+    <>
+      <audio ref={audioRef} src={mediaUrl} onEnded={() => setPlaying(false)} preload="auto" />
+      <div
+        data-no-step
+        role="button"
+        aria-label={playing ? 'Pause audio' : 'Play audio'}
+        className="w-20 h-20 rounded-full flex items-center justify-center cursor-pointer shrink-0"
+        onClick={() => {
+          if (playing) { audioRef.current?.pause(); setPlaying(false) }
+          else play().catch(() => {})
+        }}
+        style={{
+          background: theme.colors.accent,
+          boxShadow: playing ? 'none' : `0 0 40px ${theme.colors.highlight}50`,
+          animation: playing ? 'none' : 'playPulse 2.4s ease-in-out infinite',
+        }}
+      >
+        <span style={{ color: theme.colors.text, fontSize: '2rem', marginLeft: playing ? 0 : 4 }}>
+          {playing ? '⏸' : '▶'}
+        </span>
+      </div>
+    </>
+  )
+}
+
 function StandardQuestion({ slide, show, theme, transitionKey }) {
   const { data } = slide
   const part = resolveShinyPart(data)
   const rt = data._regionTransforms ?? {}
   const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
   const isAssemble = transitionKey === 'assemble'
+  // mediaType is the upload's real MIME ('audio/mpeg'), not the bare word —
+  // startsWith covers both that and anything already stored as plain 'audio'.
+  const hasAudio = !!data.mediaUrl && String(data.mediaType ?? '').startsWith('audio')
   // Regular (non-shiny) questions get their sequential number prepended
   // automatically — questionNumber is already kept correct through
   // reorders/deletes by renumberRoundQuestions (useShow.js), so this stays
@@ -157,6 +216,9 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
             {displayText}
           </p>
         </span>
+        {hasAudio && (
+          <QuestionAudioButton mediaUrl={data.mediaUrl} gainDb={data.audioGainDb} theme={theme} />
+        )}
       </motion.div>
 
       {/* Host photo — bottom-right, subtle */}

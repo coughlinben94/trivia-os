@@ -74,16 +74,26 @@ function setColor(index, value) {
 }
 
 describe('WorldPaletteEditor', () => {
-  it('opens on two swatches and the full 13-station world', () => {
+  it('opens on preset swatches and the full 13-station world', () => {
     render()
-    expect(swatches()).toHaveLength(2)
+    expect(swatches()).toHaveLength(0)
+    expect(byText('Custom colors')).toBeTruthy()
     expect(mounts[0].worldData.stations).toHaveLength(13)
+  })
+
+  it('applying a preset commits colors+weights and remounts the preview', () => {
+    render()
+    const first = mounts[0].worldData.stations.map(s => s.hue)
+    act(() => byText('Amber & Rose').click())
+    expect(mounts).toHaveLength(2)
+    expect(mounts[1].worldData.stations.map(s => s.hue)).not.toEqual(first)
   })
 
   it('remounts the preview with the new hues when the palette changes', () => {
     // If this regresses to a stable key, the weight bar and the swatches look
     // dead: everything else on screen updates and the preview does not.
     render()
+    act(() => byText('Custom colors').click())
     const first = mounts[0].worldData.stations.map(s => s.hue)
     setColor(0, '#f97316')
     act(() => { vi.advanceTimersByTime(500) })
@@ -95,6 +105,7 @@ describe('WorldPaletteEditor', () => {
     // A remount rebuilds several thousand DOM nodes. Native color inputs fire
     // continuously while the OS picker is open, so the commit is debounced.
     render()
+    act(() => byText('Custom colors').click())
     setColor(0, '#f97316')
     setColor(0, '#f97318')
     setColor(0, '#f97320')
@@ -105,6 +116,7 @@ describe('WorldPaletteEditor', () => {
 
   it('adds and removes a third color, keeping the bar at 100%', () => {
     render()
+    act(() => byText('Custom colors').click())
     act(() => byText('add a third color').click())
     expect(swatches()).toHaveLength(3)
     const pct = [...host.querySelectorAll('[style*="width"]')]
@@ -125,19 +137,21 @@ describe('WorldPaletteEditor', () => {
     for (const v of Object.values(applied[0])) expect(v).toMatch(/^#[0-9a-f]{6}$/)
   })
 
-  it('lists every station with its advisory row', () => {
+  it('lists every station with its advisory row once details are expanded', () => {
+    // The table is advisory/dev-facing (hue/luma math), collapsed by default
+    // so the host's first view is just colors + weight bar + preview + Apply.
     render()
-    expect(host.textContent).toContain('amber planet')
-    expect(host.textContent).toContain('supernova')
+    act(() => byText('Technical details').click())
     expect(host.querySelectorAll('tbody tr')).toHaveLength(13)
   })
 
-  it('says out loud that the hue column is a preview and writes nothing', () => {
+  it('says out loud that the hue column is a preview and writes nothing, once expanded', () => {
     // The screen shows a full before/after hue table next to an Apply button.
     // Without this sentence a host reasonably reads Apply as "apply all of
     // this", including the ring — which it does not do and must not appear
     // to. The ring half is a separate gated step (Task 4).
     render()
+    act(() => byText('Technical details').click())
     expect(host.textContent).toContain('nothing on this screen writes a station hue')
   })
 })

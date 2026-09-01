@@ -31,6 +31,18 @@ const SNAP = 0.05
 const MIN_WEIGHT = 0.05
 const COLOR_DEBOUNCE_MS = 400
 
+// One-click starting points so picking a palette never requires understanding
+// hue/weight math. Each is just a (colors, weights) pair fed through the same
+// setColor/setWeights path a manual edit uses — no separate code path to drift.
+const PRESETS = [
+  { name: 'Purple & Blue',  colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] },
+  { name: 'Violet & Pink',  colors: ['#8b5cf6', '#ec4899'], weights: [0.6, 0.4] },
+  { name: 'Blue & Teal',    colors: ['#3b82f6', '#14b8a6'], weights: [0.6, 0.4] },
+  { name: 'Amber & Rose',   colors: ['#f59e0b', '#f43f5e'], weights: [0.55, 0.45] },
+  { name: 'Emerald & Indigo', colors: ['#10b981', '#6366f1'], weights: [0.55, 0.45] },
+  { name: 'Crimson & Gold', colors: ['#dc2626', '#eab308'], weights: [0.6, 0.4] },
+]
+
 const CURRENT_HUES = midnightGalaxyRing.stations.map(s => s.hue)
 
 // Cumulative divider positions, so dragging one divider moves weight
@@ -93,12 +105,24 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   // Trails the live state: synced on drag-end / debounced colour change.
   const [committed, setCommitted] = useState({ colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] })
   const [previewStation, setPreviewStation] = useState(0)
+  const [showDetails, setShowDetails] = useState(false)
+  const [showCustom, setShowCustom] = useState(false)
   const colorDebounceRef = useRef(null)
 
   useEffect(() => () => clearTimeout(colorDebounceRef.current), [])
 
   function commit(nextColors = colors, nextWeights = weights) {
     setCommitted({ colors: nextColors, weights: nextWeights })
+  }
+
+  // Every immediate (non-debounced) palette change goes through this, so a
+  // stale debounced drag-commit (below) can never fire afterward and clobber
+  // it back to the abandoned in-progress drag colour.
+  function applyPalette(nextColors, nextWeights) {
+    clearTimeout(colorDebounceRef.current)
+    setColors(nextColors)
+    setWeights(nextWeights)
+    commit(nextColors, nextWeights)
   }
 
   function commitColorsDebounced(nextColors, nextWeights) {
@@ -121,19 +145,16 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
     const big = weights.indexOf(Math.max(...weights))
     const nw = [...weights]
     nw[big] = +(nw[big] - 0.15).toFixed(2)
-    const nextWeights = [...nw, 0.15]
-    setColors(nextColors)
-    setWeights(nextWeights)
-    commit(nextColors, nextWeights)
+    applyPalette(nextColors, [...nw, 0.15])
   }
 
   function removeThird() {
     // Fold the third colour's weight into its left neighbour.
-    const nextColors = colors.slice(0, 2)
-    const nextWeights = [weights[0], +(weights[1] + weights[2]).toFixed(2)]
-    setColors(nextColors)
-    setWeights(nextWeights)
-    commit(nextColors, nextWeights)
+    applyPalette(colors.slice(0, 2), [weights[0], +(weights[1] + weights[2]).toFixed(2)])
+  }
+
+  function applyPreset(preset) {
+    applyPalette(preset.colors, preset.weights)
   }
 
   // Live derivation — cheap pure math, fine to run per drag tick for the
@@ -175,22 +196,47 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
         </div>
 
         <div className="px-5 py-4 border-b border-gray-100 shrink-0 space-y-3">
-          <div className="flex items-center gap-3">
-            {colors.map((c, i) => (
-              <input
-                key={i}
-                type="color"
-                value={c}
-                aria-label={`Palette color ${i + 1}`}
-                onChange={e => setColor(i, e.target.value)}
-                className="w-10 h-10 border border-gray-200 rounded-lg cursor-pointer"
-              />
+          <div className="flex flex-wrap gap-2">
+            {PRESETS.map(preset => (
+              <button
+                key={preset.name}
+                onClick={() => applyPreset(preset)}
+                title={preset.name}
+                className="flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full border border-gray-200 hover:border-gray-400 transition-colors"
+              >
+                <span className="flex rounded-full overflow-hidden w-6 h-6 shrink-0">
+                  {preset.colors.map((c, i) => <span key={i} className="flex-1 h-full" style={{ background: c }} />)}
+                </span>
+                <span className="text-xs font-medium text-gray-700">{preset.name}</span>
+              </button>
             ))}
-            {colors.length === 2
-              ? <button onClick={addThird} className="text-xs font-medium text-gray-500 hover:text-gray-900 underline">+ add a third color</button>
-              : <button onClick={removeThird} className="text-xs font-medium text-gray-500 hover:text-gray-900 underline">remove third color</button>}
           </div>
-          <WeightBar colors={colors} weights={weights} onChange={setWeights} onCommit={() => commit()} />
+          <button
+            onClick={() => setShowCustom(v => !v)}
+            className="text-xs font-medium text-gray-500 hover:text-gray-900 underline"
+          >
+            {showCustom ? 'Hide custom colors' : 'Custom colors'}
+          </button>
+          {showCustom && (
+            <div className="space-y-3 pt-1">
+              <div className="flex items-center gap-3">
+                {colors.map((c, i) => (
+                  <input
+                    key={i}
+                    type="color"
+                    value={c}
+                    aria-label={`Palette color ${i + 1}`}
+                    onChange={e => setColor(i, e.target.value)}
+                    className="w-10 h-10 border border-gray-200 rounded-lg cursor-pointer"
+                  />
+                ))}
+                {colors.length === 2
+                  ? <button onClick={addThird} className="text-xs font-medium text-gray-500 hover:text-gray-900 underline">+ add a third color</button>
+                  : <button onClick={removeThird} className="text-xs font-medium text-gray-500 hover:text-gray-900 underline">remove third color</button>}
+              </div>
+              <WeightBar colors={colors} weights={weights} onChange={setWeights} onCommit={() => commit()} />
+            </div>
+          )}
         </div>
 
         <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -215,38 +261,48 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
           </div>
         </div>
 
-        <div className="px-5 py-3 border-t border-gray-100 shrink-0 max-h-56 overflow-y-auto">
-          {derived.warnings.map((w, i) => (
-            <div key={i} className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mb-2">{w}</div>
-          ))}
-          <table className="w-full text-[11px] font-mono">
-            <thead className="text-gray-400">
-              <tr><th className="text-left font-normal">station</th><th className="text-right font-normal">hue</th><th className="text-right font-normal">luma now</th><th className="text-right font-normal">luma after</th><th className="text-right font-normal">Δ</th></tr>
-            </thead>
-            <tbody>
-              {derived.advisory.map(a => (
-                <tr key={a.index} className={a.delta > 25 ? 'text-amber-700' : 'text-gray-600'}>
-                  <td className="text-left capitalize">{midnightGalaxyRing.stations[a.index].key}</td>
-                  <td className="text-right">{a.fromHue}° → {a.toHue}°</td>
-                  <td className="text-right">{a.fromLuma}</td>
-                  <td className="text-right">{a.toLuma}</td>
-                  <td className="text-right">{a.delta > 0 ? '+' : ''}{a.delta}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="text-[11px] text-gray-400 mt-2 font-sans">
-            Luma is an advisory proxy for one flat swatch, not a prediction of the gate.
-            The “luma now” column is the shipped world — if those numbers ever stop matching
-            the values pinned in weightedPalette.test.js, the proxy is broken, not the palette.
-            Run <code>npm run verify:ring</code> for the real answer.
-          </p>
-          <p className="text-[11px] text-gray-400 mt-2 font-sans">
-            The hue column is a preview only. Applying these hues to the real ring is a
-            separate, gated step that is not built yet — nothing on this screen writes a
-            station hue.
-          </p>
+        <div className="px-5 py-2 border-t border-gray-100 shrink-0">
+          <button
+            onClick={() => setShowDetails(v => !v)}
+            className="text-xs font-medium text-gray-500 hover:text-gray-900 underline"
+          >
+            {showDetails ? 'Hide technical details' : `Technical details${derived.warnings.length ? ` (${derived.warnings.length})` : ''}`}
+          </button>
         </div>
+        {showDetails && (
+          <div className="px-5 py-3 border-t border-gray-100 shrink-0 max-h-56 overflow-y-auto">
+            {derived.warnings.map((w, i) => (
+              <div key={i} className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mb-2">{w}</div>
+            ))}
+            <table className="w-full text-[11px] font-mono">
+              <thead className="text-gray-400">
+                <tr><th className="text-left font-normal">station</th><th className="text-right font-normal">hue</th><th className="text-right font-normal">luma now</th><th className="text-right font-normal">luma after</th><th className="text-right font-normal">Δ</th></tr>
+              </thead>
+              <tbody>
+                {derived.advisory.map(a => (
+                  <tr key={a.index} className={a.delta > 25 ? 'text-amber-700' : 'text-gray-600'}>
+                    <td className="text-left capitalize">{midnightGalaxyRing.stations[a.index].key}</td>
+                    <td className="text-right">{a.fromHue}° → {a.toHue}°</td>
+                    <td className="text-right">{a.fromLuma}</td>
+                    <td className="text-right">{a.toLuma}</td>
+                    <td className="text-right">{a.delta > 0 ? '+' : ''}{a.delta}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[11px] text-gray-400 mt-2 font-sans">
+              Luma is an advisory proxy for one flat swatch, not a prediction of the gate.
+              The “luma now” column is the shipped world — if those numbers ever stop matching
+              the values pinned in weightedPalette.test.js, the proxy is broken, not the palette.
+              Run <code>npm run verify:ring</code> for the real answer.
+            </p>
+            <p className="text-[11px] text-gray-400 mt-2 font-sans">
+              The hue column is a preview only. Applying these hues to the real ring is a
+              separate, gated step that is not built yet — nothing on this screen writes a
+              station hue.
+            </p>
+          </div>
+        )}
 
         <div className="flex items-center gap-3 px-5 py-3 border-t border-gray-100 shrink-0">
           <div className="flex items-center gap-2 text-xs text-gray-500">

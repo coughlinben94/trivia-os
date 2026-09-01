@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 export const DISPLAY_FONTS = ['Boogaloo', 'Handters', 'Roquen', 'DM Sans']
 
 // Every field theme.colors actually has (themes/index.js) — grouped by what
@@ -38,7 +40,12 @@ function ColorSwatch({ field, overrides, baseTheme, onSetTextColor }) {
 }
 
 export default function ThemeCustomizeControls({ overrides, baseTheme, onSetDisplayFont, onUploadFont, onSetTextColor, onReset, onDone }) {
-  const hasOverrides = !!(overrides.colors && Object.keys(overrides.colors).length > 0) ||
+  const hasColorOverrides = !!(overrides.colors && Object.keys(overrides.colors).length > 0)
+  // Starts open when the show already has customized colors, so reopening
+  // the modal doesn't hide the fact that colors were touched — collapsed
+  // only for the common case of a show that's never customized colors.
+  const [showColors, setShowColors] = useState(hasColorOverrides)
+  const hasOverrides = hasColorOverrides ||
     !!(overrides.fonts && Object.keys(overrides.fonts).length > 0)
   return (
     <div className="border-t border-gray-100 shrink-0">
@@ -71,19 +78,13 @@ export default function ThemeCustomizeControls({ overrides, baseTheme, onSetDisp
           />
         </label>
       </div>
-      <div className="flex items-end gap-5 px-5 py-3 border-t border-gray-50 flex-wrap">
-        {COLOR_GROUPS.map((group, i) => (
-          <div key={group.label} className={`flex items-end gap-3 ${i > 0 ? 'pl-5 border-l border-gray-100' : ''}`}>
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{group.label}</span>
-              <div className="flex items-start gap-3">
-                {group.fields.map(field => (
-                  <ColorSwatch key={field.key} field={field} overrides={overrides} baseTheme={baseTheme} onSetTextColor={onSetTextColor} />
-                ))}
-              </div>
-            </div>
-          </div>
-        ))}
+      <div className="flex items-center gap-3 px-5 py-3 border-t border-gray-50 flex-wrap">
+        <button
+          onClick={() => setShowColors(v => !v)}
+          className="text-xs font-medium text-gray-500 hover:text-gray-900 underline"
+        >
+          {showColors ? 'Hide individual colors' : 'Advanced: edit individual colors'}
+        </button>
         <div className="ml-auto flex items-center gap-2 shrink-0 self-center">
           <button
             onClick={onReset}
@@ -101,6 +102,22 @@ export default function ThemeCustomizeControls({ overrides, baseTheme, onSetDisp
           </button>
         </div>
       </div>
+      {showColors && (
+        <div className="flex items-end gap-5 px-5 py-3 border-t border-gray-50 flex-wrap">
+          {COLOR_GROUPS.map((group, i) => (
+            <div key={group.label} className={`flex items-end gap-3 ${i > 0 ? 'pl-5 border-l border-gray-100' : ''}`}>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{group.label}</span>
+                <div className="flex items-start gap-3">
+                  {group.fields.map(field => (
+                    <ColorSwatch key={field.key} field={field} overrides={overrides} baseTheme={baseTheme} onSetTextColor={onSetTextColor} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

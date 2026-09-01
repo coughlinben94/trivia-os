@@ -201,7 +201,7 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
                 // slots are in "YouTube" mode, the format-library modal, etc.)
                 // resets when switching to a different question slide instead
                 // of leaking across slides that share this same component type.
-                <QuestionEditor key={slide.id} data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} theme={theme} show={show} slide={slide} usedPhotoUrls={usedPhotoUrls} />
+                <QuestionEditor key={slide.id} data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} onMediaUpload={handleMediaUpload} getHostPhotos={getHostPhotos} theme={theme} show={show} slide={slide} usedPhotoUrls={usedPhotoUrls} />
               )}
               {slide.type === 'grading-break' && (
                 <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
@@ -426,7 +426,7 @@ function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos,
   )
 }
 
-function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPhotos, theme, show, slide, usedPhotoUrls }) {
+function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, onMediaUpload, getHostPhotos, theme, show, slide, usedPhotoUrls }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
   const { formats: shinyFormats, loading: shinyFormatsLoading } = useShinyFormats()
 
@@ -656,6 +656,21 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
         <Field label="Answer">
           <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="The answer…" />
         </Field>
+        {/* Optional audio on an ordinary question (Ben, 2026-09-01) — this
+            used to require flipping the question to Shiny just to get an
+            upload control. Writes the generic mediaUrl/mediaType/audioGainDb
+            fields, not mediaSlots: those are the shiny formats' slot shape,
+            and a plain question has no schema/slot count to index into. */}
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1.5">Audio (optional)</label>
+          <MediaUpload
+            accept="audio"
+            currentUrl={data.mediaUrl}
+            currentType={data.mediaType}
+            onUpload={onMediaUpload}
+            onRemove={() => onBatchChange({ mediaUrl: null, mediaType: null, audioGainDb: null })}
+          />
+        </div>
       </>
     )
   }

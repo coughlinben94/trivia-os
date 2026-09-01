@@ -26,6 +26,12 @@ export default function MediaUpload({ accept = 'all', currentUrl, currentType, o
 
   async function handleFile(file) {
     if (!file) return
+    // Drop and paste both bypass the file input's `accept` attribute (which
+    // only gates the OS picker), so this is the one chokepoint that actually
+    // enforces it — without it, pasting/dropping an image onto an audio-only
+    // control silently attaches it with no audio data.
+    if (accept === 'audio' && !isAudio(file)) { setError('That file isn\'t audio.'); return }
+    if (accept === 'image' && !isImage(file)) { setError('That file isn\'t an image.'); return }
     if (file.size > 50 * 1024 * 1024) { setError('File is too large — max 50MB.'); return }
     setError(null)
     setUploading(true)
@@ -62,6 +68,7 @@ export default function MediaUpload({ accept = 'all', currentUrl, currentType, o
   // once, only the first to see the event handles it, not both.
   useEffect(() => {
     if (popup && !open) return
+    if (accept === 'audio') return // clipboard paste only ever carries images; don't eat one meant elsewhere
     function onPaste(e) {
       if (e.defaultPrevented) return
       const item = Array.from(e.clipboardData?.items ?? []).find(i => i.type.startsWith('image/'))
