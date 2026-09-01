@@ -8,12 +8,12 @@ import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 // side (some photos, some text-only) shows a circle just for the ones who
 // have one, and a fully text-only side (Ben's actual shows) never draws the
 // empty placeholder ring the old per-side-agnostic version always did.
-function CastPhoto({ person, i, reduce, size, font }) {
+function CastPhoto({ person, i, reduce, size, font, maxW }) {
   const tIn = reduce
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2 } }
     : { initial: { opacity: 0, scale: 0.8 }, animate: { opacity: 1, scale: 1 }, transition: { duration: 0.4, delay: 0.08 * i, ease: EASE_OUT } }
   return (
-    <motion.div {...tIn} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, maxWidth: 260 }}>
+    <motion.div {...tIn} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, maxWidth: maxW }}>
       {person?.mediaUrl && (
         <div style={{
           width: size, height: size, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
@@ -80,8 +80,17 @@ function VennContent({ slide, theme }) {
   // then. Text-only (Ben's actual shows) has no such ceiling — six name rows
   // fit fine, which is why the font scale below has no clamp against CIRCLE.
   const castSize = Math.min(148, (CIRCLE * 0.78 - 28 * (n - 1)) / n)
-  const castFont = anyPhoto ? '1.15rem' : `${Math.max(1.6, 2.9 - 0.2 * n).toFixed(2)}rem`
+  // 2.5 (not 2.9) rem base — tuned so ordinary two-word names ("Chadwick
+  // Boseman", "Joaquin Phoenix") land on one line at n=3 instead of
+  // wrapping while shorter neighbors ("Mark Ruffalo") don't, which read as
+  // a ragged, unformatted list (Ben, 2026-09-01 live screenshot).
+  const castFont = anyPhoto ? '1.15rem' : `${Math.max(1.5, 2.5 - 0.18 * n).toFixed(2)}rem`
   const castGap  = anyPhoto ? 28 : 18
+  // Narrows with N: a row near the top/bottom of a tall stack sits on a
+  // shorter chord of the 620px circle, so the safe text width shrinks as
+  // more rows are stacked — kept above the ~230px floor the devil's-
+  // advocate review measured for a 6-row stack's outermost rows.
+  const castMaxW = Math.max(230, 300 - 12 * (n - 3))
 
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
@@ -108,14 +117,14 @@ function VennContent({ slide, theme }) {
             position: 'absolute', left: CIRCLE * 0.08, top: 0, width: CIRCLE * 0.5, height: CIRCLE,
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: castGap,
           }}>
-            {leftCast.map((p, i) => <CastPhoto key={p.name || i} person={p} i={i} reduce={reduce} size={castSize} font={castFont} />)}
+            {leftCast.map((p, i) => <CastPhoto key={p.name || i} person={p} i={i} reduce={reduce} size={castSize} font={castFont} maxW={castMaxW} />)}
           </div>
 
           <div style={{
             position: 'absolute', right: CIRCLE * 0.08, top: 0, width: CIRCLE * 0.5, height: CIRCLE,
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: castGap,
           }}>
-            {rightCast.map((p, i) => <CastPhoto key={p.name || i} person={p} i={i} reduce={reduce} size={castSize} font={castFont} />)}
+            {rightCast.map((p, i) => <CastPhoto key={p.name || i} person={p} i={i} reduce={reduce} size={castSize} font={castFont} maxW={castMaxW} />)}
           </div>
 
           {/* The overlap IS the mystery — a big "?" marks the empty middle so
