@@ -34,7 +34,6 @@ describe('buildGridSlide', () => {
       selectedShinyFmt: { ...baseFmt, input_schema: { type: 'grid', columnLabels: true } },
       shinyQuestion: '  What connects these?  ',
       shinyAnswer: '  Golf terms  ',
-      formatAlreadyIntroducedThisRound: () => false,
     })
     expect(result).toEqual({
       type: 'grid',
@@ -45,7 +44,6 @@ describe('buildGridSlide', () => {
         questionLabel: 'Q3',
         questionMode: 'shiny',
         isShiny: true,
-        introDone: false,
         shinyFormatId: 'fmt_1',
         shinyFormatName: 'Test Format',
         shinyFormatIcon: '✨',
@@ -67,10 +65,17 @@ describe('buildGridSlide', () => {
       qNum: 1, roundId: null, afterId: null, gridCols: 1, gridRows: 1,
       selectedShinyFmt: { ...baseFmt, input_schema: { type: 'grid' } },
       shinyQuestion: '', shinyAnswer: '',
-      formatAlreadyIntroducedThisRound: () => true,
     })
     expect(result.data.columnLabels).toBe(true)
-    expect(result.data.introDone).toBe(true)
+  })
+
+  it('never seeds introDone — the announce beat is a separate shiny-title slide now', () => {
+    const result = buildGridSlide({
+      qNum: 1, roundId: null, afterId: null, gridCols: 1, gridRows: 1,
+      selectedShinyFmt: { ...baseFmt, input_schema: { type: 'grid' } },
+      shinyQuestion: '', shinyAnswer: '',
+    })
+    expect(result.data).not.toHaveProperty('introDone')
   })
 })
 
@@ -85,7 +90,6 @@ describe('buildVennSlide', () => {
       selectedShinyFmt: { ...baseFmt, input_schema: { type: 'venn' } },
       shinyQuestion: 'Name the movie',
       shinyAnswer: 'The Joker - Steve Miller Band',
-      formatAlreadyIntroducedThisRound: () => false,
     })
     expect(result).toEqual({
       type: 'venn',
@@ -96,7 +100,6 @@ describe('buildVennSlide', () => {
         questionLabel: 'Q5',
         questionMode: 'shiny',
         isShiny: true,
-        introDone: false,
         shinyFormatId: 'fmt_1',
         shinyFormatName: 'Test Format',
         shinyFormatIcon: '✨',
@@ -118,7 +121,6 @@ describe('buildVennSlide', () => {
       selectedShinyFmt: { ...baseFmt, input_schema: { type: 'venn' } },
       shinyQuestion: 'ignored for batch',
       shinyAnswer: 'ignored for batch',
-      formatAlreadyIntroducedThisRound: () => false,
     })
     expect(result.afterSlideId).toBe('slide_before')
     expect(result.slides).toHaveLength(3)
@@ -135,8 +137,9 @@ describe('buildVennSlide', () => {
       expect(slide.data.rightCast).toHaveLength(2)
       expect(slide.data.text).toBe('')
       expect(slide.data.answer).toBe('')
-      // Only the first slide of a run plays the announce beat.
-      expect(slide.data.introDone).toBe(i > 0)
+      // The announce beat is a separate shiny-title slide now, prepended by
+      // AddSlideWizard — no sibling carries introDone.
+      expect(slide.data).not.toHaveProperty('introDone')
     })
   })
 
@@ -145,7 +148,6 @@ describe('buildVennSlide', () => {
       qNum: 1, roundId: null, afterId: null, vennPerSide: 3, vennSlideCount: 'not a number',
       selectedShinyFmt: { ...baseFmt, input_schema: { type: 'venn' } },
       shinyQuestion: '', shinyAnswer: '',
-      formatAlreadyIntroducedThisRound: () => false,
     })
     // Garbage input falls back to 1 (single slide), not a batch.
     expect(result.slides).toBeUndefined()

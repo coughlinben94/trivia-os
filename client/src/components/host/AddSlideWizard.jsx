@@ -6,6 +6,7 @@ import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import { makeQuestionPasteHandler, makeCleanPasteHandler } from '../../lib/cleanPaste.js'
 import { FIXED_SHAPE_KINDS } from '../../lib/shinyWizardKinds.jsx'
+import { withShinyTitleSlide } from '../../lib/shinySeries.js'
 
 export const TYPE_CARDS = [
   { type: 'pre-show',       icon: '📱', name: 'Pre-Show',            desc: 'QR code + team count while people join' },
@@ -26,6 +27,9 @@ export const TYPE_CARDS = [
   { type: 'custom',         icon: '✏️', name: 'Custom',              desc: 'Freeform slide' },
   // utility-only — not shown in the picker grid, but provides icon/name metadata for header + sidebar
   { type: 'team-preview',   icon: '👥', name: 'Team List',           desc: 'Show all team names on screen', hidden: true },
+  // Never created from the picker — every shiny creation prepends one
+  // automatically (see handleCreate's addShiny). Metadata only.
+  { type: 'shiny-title',    icon: '✨', name: 'Shiny Title',         desc: 'Announce card that opens a shiny series', hidden: true },
 ]
 
 const NEEDS_ROUND = new Set(['swing-round-intro', 'question', 'shiny-question', 'grading-break', 'scoreboard-reveal', 'pixelate-series', 'multi-question', 'pyl-lotto', 'pyl-board'])
@@ -153,13 +157,20 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   async function handleCreate() {
     const roundSlides = sorted.filter(s => s.roundId === roundId)
     // A round built entirely from one shiny format (2026-08-18, Ben: 6 Drag
-    // and Drop questions in a row for Swing Round) shouldn't replay that
-    // format's announce card on every single question — only the first one
-    // in the round needs it. Existing runs (isSeries siblings) already skip
-    // repeats via a different mechanism; this covers separate standalone
-    // slides of the same format in the same round.
+    // and Drop questions in a row for Swing Round) shouldn't get that
+    // format's title card again on every single question — only the first
+    // one in the round needs it. (A `shiny-title` slide itself carries
+    // isShiny + shinyFormatId, so it counts here too.)
     const formatAlreadyIntroducedThisRound = fmtId =>
       roundSlides.some(s => s.data?.isShiny && s.data?.shinyFormatId === fmtId)
+    // Every shiny creation goes through here (2026-09-01, SPEC.md): the
+    // standalone `shiny-title` slide is prepended to whatever the path built
+    // — single slide, tied parts[] series, N separate siblings, grid, venn —
+    // sharing one shinyGroupId with its content. Content slides no longer
+    // carry introDone; the title card is a real slide, not a swap state.
+    const addShiny = payload => onAddSlide(
+      formatAlreadyIntroducedThisRound(selectedShinyFmt.id) ? payload : withShinyTitleSlide(payload, selectedShinyFmt)
+    )
     const nonBonusQ   = roundSlides.filter(s => (s.type === 'question' || s.type === 'pixelate-series' || s.type === 'grid') && !s.data?.isBonus)
     const bonusQ      = roundSlides.filter(s => s.type === 'question' && s.data?.isBonus)
     const qNum = nonBonusQ.length + 1
@@ -187,9 +198,9 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
         // longer needs to know those formats exist by name.
         if (fixedShapeKind?.buildSlideData) {
           const afterId = insertAfterSlideId(roundSlides, sorted)
-          await onAddSlide(fixedShapeKind.buildSlideData({
+          await addShiny(fixedShapeKind.buildSlideData({
             qNum, roundId, afterId, selectedShinyFmt,
-            shinyQuestion, shinyAnswer, formatAlreadyIntroducedThisRound,
+            shinyQuestion, shinyAnswer,
             gridCols, gridRows, vennPerSide, vennSlideCount,
           }))
           return
@@ -236,16 +247,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               isSeries:      true,
               seriesTheme:   selectedShinyFmt.name,
               shinyGroupId:  groupId,
-              // Only the first slide of a run plays the announce beat — baked
-              // in here so a direct jump to / preview of slide 2+ is correct
-              // from creation, not just during a live forward advance.
-              introDone:     i > 0 || formatAlreadyIntroducedThisRound(selectedShinyFmt.id),
               text:          '',
               answer:        '',
               mediaSlots:    [],
             },
           }))
-          await onAddSlide({ afterSlideId: afterId, slides: slidesData })
+          await addShiny({ afterSlideId: afterId, slides: slidesData })
           return
         }
 
@@ -257,13 +264,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
           // slide's TYPE: a non-concurrent image series became a `grid`
           // slide, unchangeable afterward.)
           const q = shinyQuestion.trim()
-          await onAddSlide({
+          await addShiny({
             type: 'question',
             roundId: roundId ?? null,
             afterSlideId: afterId,
             data: {
               ...shinyBase(qNum),
-              introDone:        formatAlreadyIntroducedThisRound(selectedShinyFmt.id),
               shinyInputSchema: schema ? { ...schema, slots: 1 } : null,
               shinyDisplay:     effectiveRel,
               isSeries:         true,
@@ -289,14 +295,19 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
         }
 
         // One asset — the flat single-asset shape, unchanged.
-        data = {
-          ...shinyBase(qNum),
-          introDone:        formatAlreadyIntroducedThisRound(selectedShinyFmt.id),
-          shinyInputSchema: schema,
-          text:             shinyQuestion.trim(),
-          answer:           shinyAnswer.trim(),
-          mediaSlots:       [],
-        }
+        await addShiny({
+          type: 'question',
+          roundId: roundId ?? null,
+          afterSlideId: afterId,
+          data: {
+            ...shinyBase(qNum),
+            shinyInputSchema: schema,
+            text:             shinyQuestion.trim(),
+            answer:           shinyAnswer.trim(),
+            mediaSlots:       [],
+          },
+        })
+        return
       } else {
         data = {
           questionNumber: num,

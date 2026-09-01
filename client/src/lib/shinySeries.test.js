@@ -7,6 +7,8 @@ import {
   isConcurrentShiny,
   isConcurrentMediaShiny,
   partsToGridView,
+  buildShinyTitleSlide,
+  withShinyTitleSlide,
 } from './shinySeries.js'
 
 function seriesSlide(id, overrides = {}) {
@@ -360,5 +362,65 @@ describe('partsToGridView', () => {
 
   it('survives a missing parts array', () => {
     expect(partsToGridView({}).columns).toEqual([])
+  })
+})
+
+describe('buildShinyTitleSlide / withShinyTitleSlide', () => {
+  // SPEC.md (2026-09-01): every shiny series opens with a real `shiny-title`
+  // slide sharing its content's shinyGroupId. These pin the exact data shape
+  // ShinyTitleSlide.jsx / ShinyIntroScreen read and the grouping seam
+  // (isShinySeriesSibling) later tasks rely on.
+  const fmt = { id: 'fmt_venn', name: "We're not so different, you and I...", icon: '🎭' }
+  const fixedId = () => 'sgrp_test1234'
+
+  it('stamps the shiny-title shape ShinyIntroScreen reads', () => {
+    expect(buildShinyTitleSlide(fmt, 'sgrp_abc', 'round_1')).toEqual({
+      type: 'shiny-title',
+      roundId: 'round_1',
+      data: {
+        isShiny: true,
+        shinyGroupId: 'sgrp_abc',
+        seriesTheme: fmt.name,
+        shinyFormatId: 'fmt_venn',
+        shinyFormatName: fmt.name,
+        shinyFormatIcon: '🎭',
+      },
+    })
+  })
+
+  it('leaves hostPhotoUrl unset (random pool) and never seeds introDone', () => {
+    const { data } = buildShinyTitleSlide(fmt, 'sgrp_abc')
+    expect(data).not.toHaveProperty('hostPhotoUrl')
+    expect(data).not.toHaveProperty('introDone')
+  })
+
+  it('wraps a single-slide payload into a batch led by the title, stamping a fresh shinyGroupId on both', () => {
+    const out = withShinyTitleSlide(
+      { type: 'question', roundId: 'round_1', afterSlideId: 'slide_prev', data: { isShiny: true, text: 'Q' } },
+      fmt, fixedId,
+    )
+    expect(out.afterSlideId).toBe('slide_prev')
+    expect(out.slides.map(s => s.type)).toEqual(['shiny-title', 'question'])
+    expect(out.slides[0].roundId).toBe('round_1')
+    expect(out.slides.every(s => s.data.shinyGroupId === 'sgrp_test1234')).toBe(true)
+    expect(out.slides[1].data.text).toBe('Q')
+    expect(out.slides[1]).not.toHaveProperty('afterSlideId')
+  })
+
+  it("reuses the batch payload's existing shinyGroupId so the title joins the run", () => {
+    const slides = [1, 2, 3].map(i => ({ type: 'venn', roundId: 'round_1', data: { isShiny: true, isSeries: true, shinyGroupId: 'sgrp_run', questionNumber: i } }))
+    const out = withShinyTitleSlide({ afterSlideId: 'slide_prev', slides }, fmt, fixedId)
+    expect(out.slides).toHaveLength(4)
+    expect(out.slides[0].type).toBe('shiny-title')
+    expect(out.slides.every(s => s.data.shinyGroupId === 'sgrp_run')).toBe(true)
+  })
+
+  it('makes the title a series sibling of its content, so it becomes the group lead', () => {
+    const out = withShinyTitleSlide(
+      { type: 'grid', roundId: 'round_1', afterSlideId: null, data: { isShiny: true } },
+      fmt, fixedId,
+    )
+    expect(isShinySeriesSibling(out.slides[0], out.slides[1])).toBe(true)
+    expect(seriesGroupIndices(out.slides, 1)).toEqual([0, 1])
   })
 })
