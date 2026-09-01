@@ -129,20 +129,34 @@ function VennContent({ slide, theme }) {
 
           {/* The overlap IS the mystery — a big "?" marks the empty middle so
               it reads as "guess what belongs here," not as unfinished art
-              (Ben, 2026-09-01). */}
-          <motion.div
-            initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4, delay: 0.3, ease: EASE_OUT }}
-            style={{
-              position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-              fontSize: 120, fontWeight: 800, color: SHINY_GOLD, lineHeight: 1,
-              textShadow: `0 0 40px ${SHINY_GOLD_GLOW}, 0 4px 12px rgba(0,0,0,0.5)`,
-              pointerEvents: 'none', zIndex: 20,
-            }}
-          >
-            ?
-          </motion.div>
+              (Ben, 2026-09-01).
+              Centering lives on this plain (non-motion) wrapper, not on the
+              motion.div below — Framer Motion's `animate={{ scale }}` owns
+              the `transform` CSS property entirely once it resolves, which
+              silently discards any hand-written `transform: translate(...)`
+              in that element's own style object (computed style comes back
+              literally `none`). A static wrapper is the only reliable way
+              to combine CSS-percentage centering with a Motion scale/opacity
+              animation on the same spot (Ben, 2026-09-01 live show — this
+              is why the mark always rendered low-and-right of true center,
+              not a font-metrics issue as first assumed). */}
+          <div style={{
+            position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none', zIndex: 20,
+          }}>
+            <motion.div
+              initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.4, delay: 0.3, ease: EASE_OUT }}
+              style={{
+                fontFamily: `'${theme.fonts.display}', sans-serif`,
+                fontSize: 120, fontWeight: 800, color: SHINY_GOLD, lineHeight: 1,
+                textShadow: `0 0 40px ${SHINY_GOLD_GLOW}, 0 4px 12px rgba(0,0,0,0.5)`,
+              }}
+            >
+              ?
+            </motion.div>
+          </div>
         </div>
       </div>
 

@@ -107,9 +107,14 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   const [previewStation, setPreviewStation] = useState(0)
   const [showDetails, setShowDetails] = useState(false)
   const [showCustom, setShowCustom] = useState(false)
+  const [applied, setApplied] = useState(false)
   const colorDebounceRef = useRef(null)
+  const appliedTimeoutRef = useRef(null)
 
-  useEffect(() => () => clearTimeout(colorDebounceRef.current), [])
+  useEffect(() => () => {
+    clearTimeout(appliedTimeoutRef.current)
+    clearTimeout(colorDebounceRef.current)
+  }, [])
 
   function commit(nextColors = colors, nextWeights = weights) {
     setCommitted({ colors: nextColors, weights: nextWeights })
@@ -319,10 +324,19 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
               ring half is Task 4 — deferred post-show, separate gated
               mechanism, see the TODO at the top of this file. */}
           <button
-            onClick={() => onApplyThemeColors(derived.themeColors)}
-            className="ml-auto text-sm font-semibold px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-700"
+            onClick={() => {
+              onApplyThemeColors(derived.themeColors)
+              setApplied(true)
+              // Visible confirmation before closing — the write itself is
+              // silent (same fire-and-forget theme_overrides path every
+              // other control here uses), so with no feedback at all the
+              // click read as dead on a live show tonight (Ben, 2026-09-01).
+              appliedTimeoutRef.current = setTimeout(onClose, 700)
+            }}
+            disabled={applied}
+            className="ml-auto text-sm font-semibold px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-70"
           >
-            Apply to this show's theme
+            {applied ? 'Applied ✓' : "Apply to this show's theme"}
           </button>
         </div>
       </div>
