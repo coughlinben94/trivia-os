@@ -2324,6 +2324,9 @@ function PylRevealEditor({ data, onChange, setData, scheduleSave, show, slide })
 
   return (
     <>
+      <Field label="Title">
+        <TextInput value={data.title ?? ''} onChange={v => onChange('title', v)} placeholder="Name the…" />
+      </Field>
       <p className="text-xs text-gray-500">
         {isBoard
           ? 'Each row is one embedded theme option. "Jump to" is where clicking it on the board sends the live show.'
