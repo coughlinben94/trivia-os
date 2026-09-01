@@ -11,8 +11,13 @@ import { roundLabel } from '../../lib/scoreboardMath.js'
 // reads as noise — "P1"/"P2" for photos, "A1"/"A2" for audio, etc. is enough
 // to tell them apart once they're grouped under the shared title card).
 const SHINY_TYPE_PREFIX = { image: 'P', audio: 'A', video: 'V', list: 'L', text: 'T' }
-function shinySiblingLabel(slide, position) {
-  return `${SHINY_TYPE_PREFIX[slide.data?.shinyType] ?? 'S'}${position}`
+// `total` makes every row's label self-explanatory ("S1 of 3", not just
+// "S1") — the lead row folds item 1 into itself with no sub-row of its own
+// (Ben, 2026-09-01: counted only the indented sub-rows, read a real 3-item
+// series as 2 because the old "S1 · 3" corner badge didn't say "of 3").
+function shinySiblingLabel(slide, position, total) {
+  const label = `${SHINY_TYPE_PREFIX[slide.data?.shinyType] ?? 'S'}${position}`
+  return total ? `${label} of ${total}` : label
 }
 
 function groupSeriesRuns(slidesArr) {
@@ -536,7 +541,7 @@ export default function RoundSidebar({
                             rowFor(slide, idx, {
                               key: `${slide.id}:${i}`,
                               doubleIndent: true,
-                              labelOverride: shinySiblingLabel(slide, i + 1),
+                              labelOverride: shinySiblingLabel(slide, i + 1, parts.length),
                               selected: activePart === i,
                               onSelect: () => onSelectPart(slide, i),
                             })
@@ -571,7 +576,7 @@ export default function RoundSidebar({
                           {parts.map((_, i) => rowFor(slide, idx, {
                             key: `${slide.id}:${i}`,
                             doubleIndent: true,
-                            labelOverride: shinySiblingLabel(slide, i + 1),
+                            labelOverride: shinySiblingLabel(slide, i + 1, parts.length),
                             selected: activePart === i,
                             onSelect: () => onSelectPart(slide, i),
                           }))}
@@ -589,12 +594,12 @@ export default function RoundSidebar({
                           // without this the expanded list reads as "only 5"
                           // when the count badge says 6 (Ben, 2026-08-18, hit
                           // this twice on a 6-slide image series).
-                          leadPartLabel: shinySiblingLabel(leadSlide, 1),
+                          leadPartLabel: shinySiblingLabel(leadSlide, 1, group.items.length),
                         })}
                         {expanded && ownPartRows(leadSlide, leadIdx)}
                         {expanded && group.items.slice(1).map(({ slide, idx }, i) => (
                           <div key={slide.id}>
-                            {rowFor(slide, idx, { doubleIndent: true, labelOverride: shinySiblingLabel(slide, i + 2) })}
+                            {rowFor(slide, idx, { doubleIndent: true, labelOverride: shinySiblingLabel(slide, i + 2, group.items.length) })}
                             {ownPartRows(slide, idx)}
                           </div>
                         ))}
@@ -671,7 +676,7 @@ function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, 
       </span>
       {groupCount != null && (
         <span className="text-[10px] text-gray-400 shrink-0 tabular-nums">
-          {leadPartLabel ? `${leadPartLabel} · ${groupCount}` : groupCount}
+          {leadPartLabel ?? groupCount}
         </span>
       )}
       <button
