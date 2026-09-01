@@ -53,6 +53,7 @@ const SLIDE_META = {
   'winner-reveal':     { label: 'Winner',      color: 'bg-yellow-100 text-yellow-800' },
   'state-of-union':    { label: 'State of Union', color: 'bg-slate-100 text-slate-700' },
   'rules':             { label: 'Rules',          color: 'bg-red-100 text-red-700' },
+  'shiny-title':       { label: 'Shiny Title',    color: 'bg-yellow-100 text-yellow-800' },
 }
 
 function typeMeta(type) {
@@ -202,6 +203,7 @@ function UpNextCard({ slide, offset }) {
   const label = (() => {
     if (slide.type === 'question') return d.questionLabel || `Q${d.questionNumber || '?'}`
     if (slide.type === 'round-intro' || slide.type === 'swing-round-intro') return d.roundTitle || 'Round Intro'
+    if (slide.type === 'shiny-title') return d.seriesTheme || d.shinyFormatName || meta.label
     if (slide.type === 'grading-break') return 'Grading Break'
     if (slide.type === 'scoreboard-reveal') return d.title || 'Leaderboard'
     return d.title || meta.label

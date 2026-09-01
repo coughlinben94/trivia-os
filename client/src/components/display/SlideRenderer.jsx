@@ -17,6 +17,7 @@ import TeamPickerSlide, { REVEAL_S } from './slides/TeamPickerSlide.jsx'
 import GridSlide from './slides/GridSlide.jsx'
 import VennDiagramSlide from './slides/VennDiagramSlide.jsx'
 import PreShowSlide from './slides/PreShowSlide.jsx'
+import ShinyTitleSlide from './slides/ShinyTitleSlide.jsx'
 import OverlayLayer from './OverlayLayer.jsx'
 import { EASE_OUT, EASE_DROP, EASE_EXIT, EASE_PANEL } from '../../lib/easings.js'
 
@@ -32,9 +33,13 @@ export function skipsLockedBackground(slide) {
   const isShiny = slide?.data?.isShiny
   const isShinyIntroBeat = isShiny && !slide?.data?.introDone && (slide?.type === 'question' || slide?.type === 'grid' || slide?.type === 'venn')
   const isRingWorldSlide = slide?.type === 'team-preview' || slide?.type === 'grading-break' || (slide?.type === 'question' && !isShiny)
+  // shiny-title is the standalone announce card (ShinyTitleSlide.jsx) —
+  // ambient by design, same as the intro beat it replaces and the
+  // round-intro family it sits alongside.
   return isShinyIntroBeat || isRingWorldSlide ||
     slide?.type === 'team-picker' || slide?.type === 'pre-show' ||
-    slide?.type === 'round-intro' || slide?.type === 'swing-round-intro'
+    slide?.type === 'round-intro' || slide?.type === 'swing-round-intro' ||
+    slide?.type === 'shiny-title'
 }
 
 // Per-slide content animation config — tune these without touching component logic
@@ -185,6 +190,7 @@ const SLIDE_COMPONENTS = {
   'grid':              GridSlide,
   'venn':              VennDiagramSlide,
   'pre-show':          PreShowSlide,
+  'shiny-title':       ShinyTitleSlide,
 }
 
 export default function SlideRenderer({ slide, show, direction, isPreview = false, onAdvance, holdExitForReveal = false }) {

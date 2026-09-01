@@ -89,7 +89,14 @@ function isStaleTimestamp(candidate, lastApplied) {
 // re-add a FLIP morph — see StageFrame.jsx). Same rem/vw sizing as its
 // grid/round-intro siblings (no cq units), already grouped with them in
 // SlideRenderer's opacity-lock list just above — safe for full-bleed.
-const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker', 'question', 'team-preview', 'grading-break', 'pre-show', 'scoreboard-reveal', 'round-intro', 'swing-round-intro', 'pyl-reveal', 'grid', 'venn'])
+// 'shiny-title' added 2026-09-01 (SPEC.md standalone title slide) — the
+// announce card used to render INSIDE a full-bleed question/grid/venn slide
+// (as its introDone=false swap state), so it has always been full-bleed;
+// keeping it so as its own slide type is what stops the boxed<->full-bleed
+// snap between it and the content slide that follows. ShinyIntroScreen sizes
+// its title in cqw, which only makes it larger at full bleed, same as grid's
+// caption above.
+const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker', 'question', 'team-preview', 'grading-break', 'pre-show', 'scoreboard-reveal', 'round-intro', 'swing-round-intro', 'pyl-reveal', 'grid', 'venn', 'shiny-title'])
 
 // ─── No-show holding screen (before any show goes live) ────────────────────
 
@@ -285,10 +292,16 @@ function DisplayPinPrompt({ onVerified, onDismiss }) {
 // what actually prevents the jitter; excluding shiny outright was never
 // required for that, it just also happened to remove the ring move Ben
 // wanted to keep.
+// 'shiny-title' (2026-09-01): the standalone announce card paints no lock
+// (skipsLockedBackground), so the ring is visibly on screen behind it for
+// the slide's whole life — a stable type-only fact, exactly what this
+// formula wants. Counting it means the ring takes one entry turn on the
+// title card, same as it does on round-intro.
 const isRingVisible = s =>
   s?.type === 'team-preview' || s?.type === 'grading-break' ||
   s?.type === 'question' ||
-  s?.type === 'pre-show' || s?.type === 'round-intro' || s?.type === 'swing-round-intro'
+  s?.type === 'pre-show' || s?.type === 'round-intro' || s?.type === 'swing-round-intro' ||
+  s?.type === 'shiny-title'
 
 function PersistentRing({ slideIndex, stationOverride, showStationDebug }) {
   const { theme } = useTheme()

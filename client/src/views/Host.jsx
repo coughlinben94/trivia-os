@@ -302,7 +302,7 @@ const SLIDE_ICON = {
   'title': '🇺🇸', 'state-of-union': '🇺🇸', 'rules': '🚨', 'round-intro': '🎬', 'swing-round-intro': '🎷',
   'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆',
   'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
-  'winner-reveal': '🥇', 'team-preview': '👥', 'team-picker': '🚀',
+  'winner-reveal': '🥇', 'team-preview': '👥', 'team-picker': '🚀', 'shiny-title': '✨',
 }
 
 function slidePickerLabel(slide) {
@@ -311,6 +311,7 @@ function slidePickerLabel(slide) {
     if (data.isShiny) return data.seriesTheme || data.shinyFormatName || '✨ Shiny'
     return data.questionLabel || `Q${data.questionNumber || '?'}`
   }
+  if (type === 'shiny-title') return data.seriesTheme || data.shinyFormatName || '✨ Shiny'
   if (type === 'round-intro' || type === 'swing-round-intro') return data.roundTitle || 'Round Intro'
   if (type === 'grading-break') return 'Grading Break'
   if (type === 'scoreboard-reveal') return data.title || 'Scoreboard'
