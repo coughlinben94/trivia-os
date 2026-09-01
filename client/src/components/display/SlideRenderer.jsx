@@ -54,7 +54,14 @@ const SLIDE_ANIMATIONS = {
   'round-intro': {
     initial: { opacity: 0, scale: 0.92 },
     animate: { opacity: 1, scale: 1, transition: { duration: 0.04 } },
-    exit:    { opacity: 0, scale: 0.94, transition: { duration: 0.3, ease: EASE_EXIT } },
+    // No scale on exit (2026-09-01, Ben live, round-intro -> question: "the
+    // round 1 thing still shrinks a bit"). The old 0.94 scale ran for 300ms —
+    // longer than the incoming question's own 220ms entrance (SLIDE_ANIMATIONS
+    // above) — so the outgoing round number was still visibly shrinking on
+    // screen well after Q1 had already faded in on top of it. Plain fade,
+    // same duration as every other full-bleed exit that isn't itself a scale-
+    // driven slide type (grading-break/winner-reveal/title, above).
+    exit:    { opacity: 0, transition: { duration: 0.2, ease: EASE_EXIT } },
   },
   'grading-break': {
     initial: { opacity: 0 },

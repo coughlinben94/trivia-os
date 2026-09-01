@@ -82,7 +82,14 @@ function isStaleTimestamp(candidate, lastApplied) {
 // whenever that shiny format is used. Both checked cq-unit-free (grid's own
 // caption uses useFitToBox, but that only makes long captions render
 // BIGGER at full bleed, never smaller/broken).
-const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker', 'question', 'team-preview', 'grading-break', 'pre-show', 'scoreboard-reveal', 'round-intro', 'swing-round-intro', 'pyl-reveal', 'grid'])
+// 'venn' added 2026-09-01 (Ben, live, R1 Q5 -> Q6: "changes formatting
+// quickly") — missing from this set since venn shipped today, so a plain
+// question (full-bleed, 1920x1080) into a venn slide (still boxed at
+// StageFrame's 85%, ~1632x918) snapped size instantly with no morph (DO NOT
+// re-add a FLIP morph — see StageFrame.jsx). Same rem/vw sizing as its
+// grid/round-intro siblings (no cq units), already grouped with them in
+// SlideRenderer's opacity-lock list just above — safe for full-bleed.
+const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker', 'question', 'team-preview', 'grading-break', 'pre-show', 'scoreboard-reveal', 'round-intro', 'swing-round-intro', 'pyl-reveal', 'grid', 'venn'])
 
 // ─── No-show holding screen (before any show goes live) ────────────────────
 
