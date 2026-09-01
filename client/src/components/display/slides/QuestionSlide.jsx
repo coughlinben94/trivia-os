@@ -791,20 +791,25 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
     setPlaying(true)
   }
 
-  // React to show.audio_playing from Supabase (wired in step 5 Live Mode)
-  // — only meaningful for the real <audio> element; a YouTube-sourced clip
-  // has no gain graph to hook into and is driven purely by the on-screen button.
+  // React to show.audio_playing from Supabase — LiveMode's "Next plays
+  // audio" gate (maybeStartAudioPlay) now fires this for a shiny audio
+  // question once its intro is dismissed (Ben, 2026-09-01, P1 live: "One Hit
+  // Unwonder" in Round 2 — "hitting next skips to next question, doesn't
+  // play audio"). Originally upload-only (a YouTube clip "has no gain graph
+  // to hook into and is driven purely by the on-screen button") — but
+  // tonight's actual clip is YouTube-sourced, same gap QuestionAudio's
+  // plain-question remote trigger had before it covered both source types.
   // isPreview: the host's build-mode preview pane must not play the clip out
   // loud on the laptop while the show is being built — same gate RulesSlide,
   // WinnerRevealSlide, PreShowSlide and StateOfUnionSlide put on their audio.
   // Only this remote-driven path is gated; the on-screen PLAY button below is
   // an explicit press and still works in preview.
   useEffect(() => {
-    if (isYoutubeSource || isPreview) return
+    if (isPreview) return
     const ap = show?.audio_playing
-    if (ap?.slideId === slide.id && ap?.playing && audioRef.current) {
-      playWithGain().catch(() => {})
-    }
+    if (ap?.slideId !== slide.id || !ap?.playing) return
+    if (isYoutubeSource) setPlaying(true)
+    else if (audioRef.current) playWithGain().catch(() => {})
   }, [show?.audio_playing, slide.id, isYoutubeSource, isPreview])
 
   return (

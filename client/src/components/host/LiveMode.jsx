@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
-import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny } from '../../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isAudioShiny } from '../../lib/shinySeries.js'
 import ScorePanel from './ScorePanel.jsx'
 import LateTeamPopover from './LateTeamPopover.jsx'
 import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
@@ -884,8 +884,17 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // Returns true if it handled the press — callers must return/bail on true,
   // same contract as maybeStartLockCountdown above.
   function maybeStartAudioPlay() {
-    if (!currentSlide || currentSlide.type !== 'question' || currentSlide.data?.isShiny) return false
-    if ((currentSlide.data?.audioTrigger ?? 'click') !== 'click') return false
+    if (!currentSlide || currentSlide.type !== 'question') return false
+    if (currentSlide.data?.isShiny) {
+      // A shiny audio question (2026-09-01, P1 live, Round 2's "One Hit
+      // Unwonder": "hitting next skips to next question, doesnt play
+      // audio"). Gated on introDone: the FIRST Next on a fresh shiny slide
+      // only dismisses its intro card (computeNextStep, slideStepping.js) —
+      // this must not steal THAT press, or the intro would never dismiss.
+      if (!isAudioShiny(currentSlide.data) || !currentSlide.data?.introDone) return false
+    } else if ((currentSlide.data?.audioTrigger ?? 'click') !== 'click') {
+      return false
+    }
     const part = resolveShinyPart(currentSlide.data)
     const hasAudio = !!part.youtubeId || (!!part.mediaUrl && String(part.mediaType ?? '').startsWith('audio'))
     if (!hasAudio) return false

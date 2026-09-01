@@ -220,10 +220,10 @@ describe('<QuestionSlide> — audio on a plain question', () => {
   // Click-mode audio, fired remotely: LiveMode's "Next plays audio" (Ben,
   // 2026-09-01, live: wants to read the question to the room first, THEN have
   // his own next press — not a literal tap on the TV — start the clip).
-  // show.audio_playing is the same field ShinyAudioQuestion already reacts to
-  // (wired 2026-08-?? for shiny, upload-only there); this is the plain-question
-  // side of it, and unlike the shiny path it must also cover a YouTube source
-  // since that's what's actually attached to tonight's slide.
+  // show.audio_playing is the same field ShinyAudioQuestion reacts to (see
+  // that component's own tests further below) — this is the plain-question
+  // side of it, and must cover a YouTube source too since that's what's
+  // actually attached to tonight's slide.
   describe("audioTrigger: 'click' — remote play via show.audio_playing", () => {
     const player = () => ({
       setVolume: vi.fn(), unMute: vi.fn(), seekTo: vi.fn(),
@@ -272,5 +272,84 @@ describe('<QuestionSlide> — audio on a plain question', () => {
 
       expect(mediaPlay).not.toHaveBeenCalled()
     })
+  })
+})
+
+// P1, live, Round 2: "One Hit Unwonder" — a shiny audio question. "hitting
+// next skips to next question, doesnt play audio." LiveMode's Next-plays-
+// audio gate (maybeStartAudioPlay) now covers shiny audio questions too
+// once their intro is dismissed, same show.audio_playing field the plain-
+// question path above uses — but ShinyAudioQuestion's own listener for it
+// used to be gated `if (isYoutubeSource) return`, so it never actually fired
+// for a YouTube-sourced clip, which is what tonight's slide actually has.
+describe('<QuestionSlide> — shiny audio question, remote play via show.audio_playing', () => {
+  let container, root
+
+  beforeEach(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    globalThis.FontFace = class { load() { return Promise.resolve(this) } }
+    if (!document.fonts) document.fonts = { add() {}, delete() {}, ready: Promise.resolve() }
+    HTMLCanvasElement.prototype.getContext = () => ({
+      font: '16px sans-serif',
+      measureText(s) { return { width: s.length * 8 } },
+    })
+    HTMLMediaElement.prototype.play = mediaPlay
+    globalThis.AudioContext = class {
+      state = 'running'
+      createGain() { return { gain: {}, connect() {} } }
+      createMediaElementSource() { return { connect() {} } }
+      resume() { return Promise.resolve() }
+      close() {}
+    }
+    mediaPlay.mockClear()
+    yt.warm.mockClear()
+    yt.claim.mockClear()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  const shinySlide = data => ({
+    id: 'shiny-1',
+    type: 'question',
+    roundId: 'round-2',
+    data: { isShiny: true, shinyType: 'audio', introDone: true, questionNumber: 6, ...data },
+  })
+
+  const render = (slide, show) => act(() => {
+    root.render(
+      <ThemeProvider>
+        <QuestionSlide slide={slide} show={show ?? { slides: [slide] }} />
+      </ThemeProvider>
+    )
+  })
+
+  it('plays an uploaded clip when show.audio_playing matches this slide', () => {
+    const slide = shinySlide({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' })
+    render(slide, { slides: [slide], audio_playing: { slideId: 'shiny-1', playing: true } })
+
+    expect(mediaPlay).toHaveBeenCalled()
+  })
+
+  it('claims and starts a YouTube clip when show.audio_playing matches this slide', () => {
+    const p = { setVolume: vi.fn(), unMute: vi.fn(), seekTo: vi.fn(), playVideo: vi.fn(), pauseVideo: vi.fn() }
+    yt.claim.mockReturnValue({ whenReady: cb => cb(p), onStateChange: () => {}, destroy: () => {} })
+    const slide = shinySlide({ mediaSlots: [{ type: 'youtube', videoId: 'kryV3E4QKGk', start: 29.5, end: 57.4, volume: 100 }] })
+    render(slide, { slides: [slide], audio_playing: { slideId: 'shiny-1', playing: true } })
+
+    expect(yt.claim).toHaveBeenCalledWith('kryV3E4QKGk', 29.5, 57.4)
+    expect(p.playVideo).toHaveBeenCalled()
+  })
+
+  it('does not play on mount without a matching audio_playing signal', () => {
+    const slide = shinySlide({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' })
+    render(slide, { slides: [slide], audio_playing: null })
+
+    expect(mediaPlay).not.toHaveBeenCalled()
   })
 })

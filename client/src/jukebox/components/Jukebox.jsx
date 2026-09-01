@@ -597,7 +597,9 @@ const [newSetName, setNewSetName] = useState('')
   const debounceRef = useRef(null)
   const searchTokenRef = useRef(0)
   const shuffleDebounceRef = useRef(null)
-  const handoffHoldRef = useRef(null)
+  // Re-entry guard for the 'b' exit handler below — a real keydown (not
+  // auto-repeat) can still double-fire off a flaky Stream Deck bounce.
+  const handoffFiredRef = useRef(false)
   const playTrackFn = useRef(null)
   const onUpcomingTrackRef = useRef(null)
   // Tokens for identity-checked unregister (2026-08-04) — LiveScreen can
@@ -1291,11 +1293,16 @@ const [newSetName, setNewSetName] = useState('')
       if (e.target.isContentEditable) return
       if (modalTrack) return
       if (e.key === 'b' && onExitToShow) {
-        // Hold-to-confirm: a quick tap does nothing (too easy to hit mid-show).
-        // Only a ~500ms hold triggers the handoff; keyup below cancels the timer.
-        // e.repeat guard above keeps auto-repeat from refiring this during the hold.
-        handoffHoldRef.current = setTimeout(async () => {
-          handoffHoldRef.current = null
+        // Straight press, not hold-to-confirm (2026-09-01, Ben live: "its a
+        // hold b, not a press b" — a Stream Deck button sends a plain
+        // keydown/keyup pair, not a sustained physical hold, so the old
+        // 500ms hold NEVER actually fired from it). e.repeat above already
+        // drops keyboard auto-repeat; handoffFiredRef below is the guard
+        // against a real second keydown (a flaky Stream Deck bounce) firing
+        // this twice concurrently, same job the setTimeout ref used to do.
+        if (handoffFiredRef.current) return
+        handoffFiredRef.current = true
+        ;(async () => {
           if (isPlaying || showLive) {
             // Re-cover the library (same black layer the grading-break
             // handoff itself renders behind, see libHandoffPending's
@@ -1326,22 +1333,12 @@ const [newSetName, setNewSetName] = useState('')
           // the overlay's callback (which advances the slide) instead of a
           // full-page navigation. No-op on the /music manager page.
           onExitToShow?.()
-        }, 500)
+        })()
       }
     }
-    const onUp = (e) => {
-      if (e.key !== 'b') return
-      // Released before the hold threshold — cancel cleanly, no side effects.
-      clearTimeout(handoffHoldRef.current)
-      handoffHoldRef.current = null
-    }
     window.addEventListener('keydown', onDown)
-    window.addEventListener('keyup', onUp)
     return () => {
       window.removeEventListener('keydown', onDown)
-      window.removeEventListener('keyup', onUp)
-      clearTimeout(handoffHoldRef.current)
-      handoffHoldRef.current = null
     }
   }, [modalTrack, flushPendingWrite, isPlaying, showLive, handleStop, onExitToShow])
 
