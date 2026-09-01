@@ -854,11 +854,11 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           between ParticleBackground and StageFrame (z-index 1, between the
           ring's implicit 0 and StageFrame's own 2), so it fills exactly the
           margin StageFrame leaves uncovered — StageFrame's own content still
-          paints on top of it. Gated on introDone specifically: false during
-          the intro title card (ring is meant to show through that) and false
-          again during the closing beat's pan back down. */}
+          paints on top of it. Not for the 'shiny-title' announce card (its
+          data carries isShiny too) — the ring is meant to show through that
+          one, same as round-intro. */}
       <AnimatePresence>
-        {currentSlide?.data?.isShiny && currentSlide?.data?.introDone && (
+        {currentSlide?.data?.isShiny && currentSlide?.type !== 'shiny-title' && (
           <motion.div
             key="shiny-fullbleed-backdrop"
             className="absolute inset-0"

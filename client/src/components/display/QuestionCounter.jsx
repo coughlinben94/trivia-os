@@ -5,9 +5,6 @@ export default function QuestionCounter({ slide, show }) {
   const { theme } = useTheme()
 
   if (!slide || slide.type !== 'question') return null
-  // Shiny questions get a standalone intro beat first — pure dramatic
-  // reveal, no question content, so no counter badge yet either.
-  if (slide.data?.isShiny && !slide.data?.introDone) return null
 
   // roundLabel (SW/PYL/R{round.number}) — the SAME function the scoreboard
   // and Quick Entry use — not the round's array position. Position-based

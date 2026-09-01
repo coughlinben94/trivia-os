@@ -1,7 +1,6 @@
 import { useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
-import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
 import { useFitToBox, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
@@ -14,16 +13,10 @@ function Tile({ tile, size, reduce }) {
   return <div style={{ ...common, background: tile?.color ?? '#222' }} />
 }
 
-export default function GridSlide({ slide, show }) {
+// The announce card is its own permanent 'shiny-title' slide now
+// (ShinyTitleSlide.jsx, 2026-09-01) — no introDone swap here.
+export default function GridSlide({ slide }) {
   const { theme } = useTheme()
-  const { data } = slide
-
-  // outroShown ⇒ this is the closing beat, not the opening announce — same
-  // card, quiet arrival instead of the full entrance (see ShinyIntroScreen).
-  if (data.isShiny && !data.introDone) {
-    return <ShinyIntroScreen slide={slide} theme={theme} show={show} isClosing={!!data.outroShown} />
-  }
-
   return <GridContent slide={slide} theme={theme} />
 }
 

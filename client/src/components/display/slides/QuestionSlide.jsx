@@ -2,14 +2,13 @@ import { Fragment, useState, useRef, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import WaveformBars from '../WaveformBars.jsx'
-import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
 import ShinyMatchingQuestion from './ShinyMatchingQuestion.jsx'
 import ShinyWagerQuestion from './ShinyWagerQuestion.jsx'
 import ShinyOrderQuestion from './ShinyOrderQuestion.jsx'
 import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView } from '../../../lib/shinySeries.js'
 import { GridContent } from './GridSlide.jsx'
 import { fitToBox, QUESTION_BOX, QUOTE_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
-import { EASE_OUT, EASE_EXIT, EASE_PANEL } from '../../../lib/easings.js'
+import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { youtubeEmbedUrl } from '../../../lib/youtube.js'
 import { warmYoutubeAudio, claimYoutubeAudio } from '../../../lib/youtubeWarmAudio.js'
@@ -1181,7 +1180,7 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
   // regardless of currentPart — 2026-08-25, Ben: browsing/editing this slide
   // in Build Mode must never leak an answer onto the host's own screen
   // before the round is actually live.
-  const revealedGroups = isPreview ? 0 : (data.introDone ? Math.min(data.currentPart ?? 0, rowGroups.length) : 0)
+  const revealedGroups = isPreview ? 0 : Math.min(data.currentPart ?? 0, rowGroups.length)
   // groupSize > 1 with more than one group (Disney: 2 groups of 3) means a
   // real "columns" layout, not just fewer reveal presses — see isPaired's
   // render branch below.
@@ -1418,58 +1417,6 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
   )
 }
 
-// ─── Shiny intro → content pan ────────────────────────────────────────────────
-// Ben, 2026-08-17: "literally just the pan transition up to an image." When
-// introDone flips, the title card lifts UP and out of frame while the real
-// content rises into the space it left, so the swap reads as the camera
-// tilting up past the card to the thing sitting behind it. Before this it was
-// a plain conditional render — an instant cut with no exit/enter at all (and
-// SlideRenderer's cross-slide transition never covered it: same component
-// instance, same key={slide.id}, so nothing there re-runs on this swap).
-//
-// mode="wait" — the card must be gone before the content arrives. Overlapping
-// them would stack two full-bleed layers over the ambient world mid-pan.
-//
-// GPU-only: transform + opacity, nothing else. Full `transform` strings rather
-// than Framer's `y` shorthand so this stays on the hardware-accelerated path
-// (the shorthand runs on the main thread via rAF), and so the distances can be
-// percentages of the element's own height — the wrapper is inset-0, so they
-// scale with the stage instead of being pinned to 1080p pixel values.
-//
-// Distances are deliberately partial (20% out / 16% in), not a full 100%
-// travel: with mode="wait" the two halves don't move together, so a full-frame
-// slide would show the empty gap between them. A shorter throw paired with an
-// opacity fade reads as one continuous camera move.
-//
-// No overshoot/spring on purpose. The intro card already lands with its own
-// two-oscillation boing, and ShinyVisualQuestion's image settles from
-// scale 1.08 — a third bounce on the container made the whole beat read busy
-// on a TV. The pan owns the container; the existing inner entrances still run
-// underneath it and compose fine (nested transforms multiply).
-//
-// Direction (2026-08-24, Ben: "after the third slide of a shiny that pans, it
-// should then pan back down to the shiny title"): the closing beat has to
-// travel the OPPOSITE way from the opening one, or the camera appears to keep
-// moving forward while the content goes backwards. `dir` is +1 for the
-// title→content pan and -1 for the content→title pan back, and simply flips
-// the sign of both throws — same distances, same durations, same curves,
-// mirrored. Written as dynamic variants (functions of `custom`) specifically
-// because the EXITING half can't be reached any other way: AnimatePresence
-// freezes the outgoing element's props at removal, so its exit direction has
-// to arrive through AnimatePresence's own `custom` prop.
-const SHINY_PAN = {
-  initial: dir => ({ opacity: 0, transform: `translateY(${16 * dir}%)` }),
-  animate: { opacity: 1, transform: 'translateY(0%)', transition: { duration: 0.36, ease: EASE_PANEL } },
-  exit:    dir => ({ opacity: 0, transform: `translateY(${-20 * dir}%)`, transition: { duration: 0.24, ease: EASE_EXIT } }),
-}
-// Reduced motion keeps the content and the beat, drops the travel — a short
-// crossfade, no position change.
-const SHINY_PAN_REDUCED = {
-  initial: { opacity: 0 },
-  animate: { opacity: 1, transition: { duration: 0.2, ease: EASE_OUT } },
-  exit:    { opacity: 0, transition: { duration: 0.14, ease: EASE_EXIT } },
-}
-
 // ─── Main dispatcher ──────────────────────────────────────────────────────────
 
 function ShinyContent({ slide, show, theme, transitionKey, isPreview }) {
@@ -1527,56 +1474,22 @@ function ShinyContent({ slide, show, theme, transitionKey, isPreview }) {
 
 export default function QuestionSlide({ slide, show, transitionKey, isPreview }) {
   const { theme } = useTheme()
-  const reduce = useReducedMotion()
   const { data } = slide
 
   // Warm every image this slide can show, the moment the slide mounts — see
   // warmImages.js for why (a part step remounts the <img> with a cold src,
   // so the entrance animation plays over an empty box and the photo pops in
-  // after it). Deliberately here, above the early return: this runs for the
-  // shiny intro card too, which is ~2s of free lead time before the first
-  // photo is even asked for, and hooks order has to stay stable regardless.
-  // No-op for a slide with no image media.
+  // after it). No-op for a slide with no image media.
   useEffect(() => {
     warmImages(slideImageUrls(data))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slide.id])
 
-  // Non-shiny questions never see the intro↔content swap, so they never enter
-  // the AnimatePresence below — identical output and identical DOM depth to
-  // before this transition existed.
+  // The announce card is its own permanent 'shiny-title' slide now
+  // (ShinyTitleSlide.jsx, 2026-09-01) — a shiny question renders its content
+  // from the first frame, no introDone swap.
   if (!data.isShiny) {
     return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} isPreview={isPreview} />
   }
-
-  const showIntro = !data.introDone
-  // The title card is showing again AFTER its content already ran — the
-  // closing beat (slideStepping.js's outroShown). Same card, panned back the
-  // way it came, and rendered quiet instead of replaying the entrance.
-  const isClosing = showIntro && !!data.outroShown
-  const dir = isClosing ? -1 : 1
-
-  return (
-    // initial={false} — the first mount must not animate. Arriving on a shiny
-    // slide is SlideRenderer's transition to own; this one exists only for the
-    // intro→content swap that happens later, while the slide is already up.
-    // custom={dir} feeds the dynamic variants above — on AnimatePresence so
-    // the outgoing (frozen-props) half reads the CURRENT direction, and on the
-    // motion.div so the incoming half reads the same one.
-    <AnimatePresence mode="wait" initial={false} custom={dir}>
-      <motion.div
-        key={showIntro ? 'shiny-intro' : 'shiny-content'}
-        className="absolute inset-0"
-        variants={reduce ? SHINY_PAN_REDUCED : SHINY_PAN}
-        custom={dir}
-        initial="initial"
-        animate="animate"
-        exit="exit"
-      >
-        {showIntro
-          ? <ShinyIntroScreen slide={slide} theme={theme} show={show} isClosing={isClosing} />
-          : <ShinyContent slide={slide} show={show} theme={theme} transitionKey={transitionKey} isPreview={isPreview} />}
-      </motion.div>
-    </AnimatePresence>
-  )
+  return <ShinyContent slide={slide} show={show} theme={theme} transitionKey={transitionKey} isPreview={isPreview} />
 }
