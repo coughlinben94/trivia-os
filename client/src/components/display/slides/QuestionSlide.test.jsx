@@ -24,6 +24,8 @@ vi.mock('../../../lib/youtubeWarmAudio.js', () => ({
 // directions: a wrong gate either hides a clip the host attached (dead air on
 // the TV mid-question) or mounts an <audio> element on every ordinary text
 // question in the show.
+const mediaPlay = vi.fn(() => Promise.resolve())
+
 describe('<QuestionSlide> — audio on a plain question', () => {
   let container, root
 
@@ -40,6 +42,17 @@ describe('<QuestionSlide> — audio on a plain question', () => {
         return { width: s.length * px * 0.55 }
       },
     })
+    // jsdom implements neither of these; the 'advance' (autoplay) path calls
+    // both the moment the slide mounts.
+    HTMLMediaElement.prototype.play = mediaPlay
+    globalThis.AudioContext = class {
+      state = 'running'
+      createGain() { return { gain: {}, connect() {} } }
+      createMediaElementSource() { return { connect() {} } }
+      resume() { return Promise.resolve() }
+      close() {}
+    }
+    mediaPlay.mockClear()
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -57,10 +70,10 @@ describe('<QuestionSlide> — audio on a plain question', () => {
     data: { questionNumber: 1, text: 'Which lake is biggest?', answer: 'Superior', ...data },
   })
 
-  const render = slide => act(() => {
+  const render = (slide, props = {}) => act(() => {
     root.render(
       <ThemeProvider>
-        <QuestionSlide slide={slide} show={{ slides: [slide] }} />
+        <QuestionSlide slide={slide} show={{ slides: [slide] }} {...props} />
       </ThemeProvider>
     )
   })
@@ -137,17 +150,70 @@ describe('<QuestionSlide> — audio on a plain question', () => {
     })
 
     it('does not warm a clip in the host preview pane', () => {
-      const slide = ytSlide()
-      act(() => {
-        root.render(
-          <ThemeProvider>
-            <QuestionSlide slide={slide} show={{ slides: [slide] }} isPreview />
-          </ThemeProvider>
-        )
-      })
+      render(ytSlide(), { isPreview: true })
 
       expect(yt.warm).not.toHaveBeenCalled()
       expect(container.querySelector('[role="button"][aria-label="Play audio"]')).not.toBe(null)
+    })
+  })
+
+  // audioTrigger: 'advance' — the walkout song's "▶️ On Advance" mode ported to
+  // question audio (Ben, 2026-09-01: "i just dont want the play icon" / "i
+  // click next"). 'click' (default, covered above) keeps the button.
+  describe("audioTrigger: 'advance'", () => {
+    const player = () => ({
+      setVolume: vi.fn(), unMute: vi.fn(), seekTo: vi.fn(),
+      playVideo: vi.fn(), pauseVideo: vi.fn(),
+    })
+
+    beforeEach(() => {
+      yt.warm.mockClear()
+      yt.claim.mockClear()
+    })
+
+    it('auto-plays an uploaded clip on mount, with no play button', () => {
+      render(slideWith({
+        mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg',
+        audioGainDb: 6, audioTrigger: 'advance',
+      }))
+
+      expect(container.querySelector('audio')).not.toBe(null)
+      expect(container.querySelector('[role="button"]')).toBe(null)
+      expect(mediaPlay).toHaveBeenCalled()
+    })
+
+    it('claims and starts a YouTube clip on mount, with no play button', () => {
+      const p = player()
+      yt.claim.mockReturnValue({
+        whenReady: cb => cb(p), onStateChange: () => {}, destroy: () => {},
+      })
+      render(slideWith({
+        mediaSlots: [{ type: 'youtube', videoId: 'dQw4w9WgXcQ', start: 10, end: 25, volume: 80 }],
+        audioTrigger: 'advance',
+      }))
+
+      expect(container.querySelector('[role="button"]')).toBe(null)
+      expect(yt.claim).toHaveBeenCalledWith('dQw4w9WgXcQ', 10, 25)
+      expect(p.setVolume).toHaveBeenCalledWith(80)
+      expect(p.seekTo).toHaveBeenCalledWith(10, true)
+      expect(p.playVideo).toHaveBeenCalled()
+    })
+
+    it('never auto-plays in the host preview pane', () => {
+      yt.claim.mockReturnValue({
+        whenReady: cb => cb(player()), onStateChange: () => {}, destroy: () => {},
+      })
+      render(slideWith({
+        mediaSlots: [{ type: 'youtube', videoId: 'dQw4w9WgXcQ', start: 10, end: 25 }],
+        audioTrigger: 'advance',
+      }), { isPreview: true })
+      expect(yt.claim).not.toHaveBeenCalled()
+
+      render(slideWith({
+        mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg',
+        audioTrigger: 'advance',
+      }), { isPreview: true })
+      expect(mediaPlay).not.toHaveBeenCalled()
     })
   })
 })

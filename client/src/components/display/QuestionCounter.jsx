@@ -25,15 +25,16 @@ export default function QuestionCounter({ slide, show }) {
 
   return (
     <div
-      className="absolute top-5 right-5 z-50 pointer-events-none"
+      className="absolute top-6 right-6 z-50 pointer-events-none"
       style={{
         color: theme.colors.accent,
-        opacity: 0.7,
+        opacity: 0.9,
         fontFamily: `'${theme.fonts.ui}', 'Inter', system-ui, sans-serif`,
-        fontSize: '0.75rem',
+        fontSize: '1.15rem',
         fontWeight: 700,
-        letterSpacing: '0.12em',
+        letterSpacing: '0.1em',
         textTransform: 'uppercase',
+        textShadow: '0 2px 8px rgba(0,0,0,0.6)',
       }}
     >
       {counter}

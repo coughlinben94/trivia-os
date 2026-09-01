@@ -498,6 +498,10 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
   // Plain (non-shiny) question audio — slot 0 of the same audioModes map, so
   // a question saved with a YouTube clip reopens in YouTube mode.
   const regularAudioMode = audioModes[0] ?? 'upload'
+  // Mirrors StandardQuestion's own hasAudio check on /display — a clip exists
+  // if it's a YouTube slot or an upload whose MIME actually says audio.
+  const hasRegularAudio = mediaSlots[0]?.type === 'youtube' ||
+    (!!data.mediaUrl && String(data.mediaType ?? '').startsWith('audio'))
 
   function setRegularYoutube(clip) {
     onBatchChange({
@@ -734,6 +738,45 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
               onUpload={uploadRegularAudio}
               onRemove={() => onBatchChange({ mediaUrl: null, mediaType: null, audioGainDb: null })}
             />
+          )}
+          {/* Same trigger choice the walkout song already offers (PreShowEditor
+              below) — pills copied to match, since these pill pairs are inline
+              per-block throughout this editor rather than a shared component.
+              Default is 'click': audio attached before this toggle existed was
+              play-button-only, and a silent switch to autoplay would surprise
+              the host mid-show. Only shown once a clip actually exists. */}
+          {hasRegularAudio && (
+            <>
+              <div className="flex gap-1.5 mt-2">
+                <button
+                  type="button"
+                  onClick={() => onChange('audioTrigger', 'advance')}
+                  className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                    data.audioTrigger === 'advance'
+                      ? 'bg-blue-500 border-blue-500 text-white'
+                      : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  ▶️ On Advance
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChange('audioTrigger', 'click')}
+                  className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                    data.audioTrigger !== 'advance'
+                      ? 'bg-blue-500 border-blue-500 text-white'
+                      : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  👆 On Click
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 leading-relaxed mt-1.5">
+                {data.audioTrigger === 'advance'
+                  ? 'No play button on the TV — starts the instant this slide advances into view.'
+                  : 'Shows a play button on the TV — the clip waits until it is pressed.'}
+              </p>
+            </>
           )}
         </div>
       </>

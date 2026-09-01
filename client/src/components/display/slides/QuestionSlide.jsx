@@ -33,10 +33,23 @@ import { warmImages, slideImageUrls } from '../../../lib/warmImages.js'
 // parallel implementation on purpose: this one has no parts/currentPart
 // churn, and folding both into one hook would mean editing the shiny path
 // that already works live.
-function QuestionAudioButton({ part, gainDb, theme, isPreview }) {
+//
+// Two trigger modes, same pair the walkout song already offers (SlideEditor's
+// "▶️ On Advance" / "👆 On Click" pills), stored in data.audioTrigger:
+//   'click'   — default; the visible play/pause button below.
+//   'advance' — no button at all, the clip starts the instant the slide goes
+//               live (Ben, 2026-09-01: "i just dont want the play icon" /
+//               "i click next"). Audible autoplay needs the tab's sticky user
+//               activation, exactly like the walkout song and state-of-union's
+//               loop — the show's setup ritual (tap the TV once) is what
+//               supplies it; no extra gating is added here.
+// Replay on re-entry is deliberate: SlideRenderer keys on slide.id, so Prev
+// back into the question remounts this and the clip plays again. Hearing it
+// again is what "go back to that question" means on a live show.
+function QuestionAudio({ part, gainDb, theme, isPreview, autoPlay }) {
   const { youtubeId, youtubeStart, youtubeEnd, volume, mediaUrl } = part
   const isYoutube = !!youtubeId
-  const [playing, setPlaying] = useState(false)
+  const [playing, setPlaying] = useState(autoPlay && !isPreview)
   const audioRef = useRef(null)
   const audioCtxRef = useRef(null)
   const ytHandleRef = useRef(null)
@@ -111,6 +124,16 @@ function QuestionAudioButton({ part, gainDb, theme, isPreview }) {
     setPlaying(true)
   }
 
+  // Upload path, 'advance' mode: the YouTube half already starts itself off
+  // the `playing` state seeded above, but an <audio> element needs the
+  // explicit play() call (and the gain graph built inside it). Mount-only on
+  // purpose — see the replay note on the component.
+  useEffect(() => {
+    if (!autoPlay || isPreview || isYoutube || !mediaUrl) return
+    play().catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <>
       {/* YouTube renders no element here — its player lives in a body-level
@@ -119,6 +142,7 @@ function QuestionAudioButton({ part, gainDb, theme, isPreview }) {
       {!isYoutube && (
         <audio ref={audioRef} src={mediaUrl} onEnded={() => setPlaying(false)} preload="auto" />
       )}
+      {!autoPlay && (
       <div
         data-no-step
         role="button"
@@ -139,6 +163,7 @@ function QuestionAudioButton({ part, gainDb, theme, isPreview }) {
           {playing ? '⏸' : '▶'}
         </span>
       </div>
+      )}
     </>
   )
 }
@@ -289,7 +314,7 @@ function StandardQuestion({ slide, show, theme, transitionKey, isPreview }) {
           </p>
         </span>
         {hasAudio && (
-          <QuestionAudioButton part={part} gainDb={data.audioGainDb} theme={theme} isPreview={isPreview} />
+          <QuestionAudio part={part} gainDb={data.audioGainDb} theme={theme} isPreview={isPreview} autoPlay={data.audioTrigger === 'advance'} />
         )}
       </motion.div>
 

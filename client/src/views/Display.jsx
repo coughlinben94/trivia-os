@@ -1221,6 +1221,16 @@ export default function Display() {
     for (const s of targets) {
       const clip = s?.data?.walkoutSong
       if (clip?.videoId) warmYoutubeAudio(clip.videoId, clip.start ?? 0)
+      // Plain-question audio set to 'advance' (SlideEditor's "▶️ On Advance")
+      // starts the instant the slide goes live, so like state-of-union's loop
+      // it can only be warmed from the slide BEFORE. 'click' mode is left to
+      // warm itself at mount — its press comes well after, same as a shiny
+      // audio question's. end matters: warm and claim must agree on the pool
+      // key, and QuestionAudio claims with the trim out-point.
+      if (s?.type === 'question' && !s.data?.isShiny && s.data?.audioTrigger === 'advance') {
+        const q = resolveShinyPart(s.data)
+        if (q.youtubeId) warmYoutubeAudio(q.youtubeId, q.youtubeStart ?? 0, q.youtubeEnd ?? null)
+      }
     }
   }, [isPreview, isDemo, show?.is_live, show?.slides, show?.current_slide_index, show?.current_slide_id])
 
