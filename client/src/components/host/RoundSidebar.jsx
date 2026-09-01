@@ -63,7 +63,17 @@ function slideLabel(slide) {
   if (type === 'scoreboard-reveal') return data.title || 'Scoreboard'
   if (type === 'title') return data.title || 'Title'
   if (type === 'multi-question') return data.seriesTitle || 'Multi-Q'
-  if (type === 'pyl-reveal') return 'PYL Reveal'
+  // Three data shapes share this one slide type (PylRevealEditor's own
+  // detection, mirrored here) — 2026-09-01, Ben live: "there are two slides
+  // labeled same thing" / "theres nothing on preview showing me this is
+  // good to go". A sidebar that always says "PYL Reveal" gives no way to
+  // tell the bare Lotto-spin slide apart from a configured Theme board.
+  if (type === 'pyl-reveal') {
+    if (data.pool) return 'PYL Spin'
+    if (data.items) return data.title || 'PYL Board'
+    if (data.stages) return data.title || 'PYL Scored Reveal'
+    return 'PYL Lotto'
+  }
   return SLIDE_TYPE_META[type]?.label ?? type
 }
 

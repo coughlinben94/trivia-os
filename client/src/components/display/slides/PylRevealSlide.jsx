@@ -156,17 +156,24 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
         >
           Press Your Luck
         </p>
-        <h2
-          style={{
-            fontFamily: `'${theme.fonts.display}', sans-serif`,
-            color: theme.colors.highlight,
-            fontSize: 'clamp(2rem, 4vw, 4rem)',
-            fontWeight: 700,
-            letterSpacing: '-0.01em',
-          }}
-        >
-          {data.title || 'Name the…'}
-        </h2>
+        {/* No placeholder fallback (2026-09-01, Ben live: "the 'name the'
+            needs to go" / "its useless") — an untitled board used to render
+            the editor's own input placeholder text as if it were real
+            content on the TV. "Press Your Luck" above already frames the
+            slide; an empty title just omits the line instead of faking one. */}
+        {data.title && (
+          <h2
+            style={{
+              fontFamily: `'${theme.fonts.display}', sans-serif`,
+              color: theme.colors.highlight,
+              fontSize: 'clamp(2rem, 4vw, 4rem)',
+              fontWeight: 700,
+              letterSpacing: '-0.01em',
+            }}
+          >
+            {data.title}
+          </h2>
+        )}
       </motion.div>
 
       {/* Items — centered as a block, not pinned to the top-left */}
