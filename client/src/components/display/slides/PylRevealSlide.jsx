@@ -63,12 +63,12 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
   // way normal Next-advance can be (useShow.js's nextSlide() skips the
   // intro card via isShinySeriesSibling when consecutive slides share a
   // series) — the board is always a hard context switch into whichever
-  // theme won. So this must force introDone/outroShown/currentPart back to
-  // a fresh-entry state on the target, the same reset nextSlide() and
-  // goLive() apply on ordinary entry (withEntryState) — otherwise a stale
-  // introDone:true left over from a prior test pass makes the theme's
-  // announce card silently skip (Ben, 2026-08-18: "the image plays before
-  // the shiny title animation").
+  // theme won. So this must force currentPart back to a fresh-entry state
+  // on the target, the same reset nextSlide() and goLive() apply on
+  // ordinary entry (withEntryState) — otherwise a stale currentPart left
+  // over from a prior test pass lands mid-series. (introDone/outroShown
+  // used to be reset here too; both are gone since the announce card became
+  // its own `shiny-title` slide, 2026-09-01.)
   async function jumpToSlide(targetSlideId) {
     if (isPreview || !targetSlideId) return
     const sorted = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
@@ -77,7 +77,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
     const target = sorted[idx]
     const newSlides = (show.slides ?? []).map(s =>
       s.id === target.id
-        ? { ...s, data: { ...s.data, introDone: false, outroShown: false, currentPart: 0 } }
+        ? { ...s, data: { ...s.data, currentPart: 0 } }
         : s
     )
     await supabase.from('shows').update({
