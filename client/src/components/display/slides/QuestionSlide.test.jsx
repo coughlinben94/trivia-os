@@ -10,6 +10,15 @@ import QuestionSlide from './QuestionSlide.jsx'
 // env vars a test run has. Never reached by these cases; only the import is.
 vi.mock('../../../lib/supabase.js', () => ({ supabase: {} }))
 
+// The warm-audio pool builds a real hidden YouTube iframe — nothing jsdom can
+// run. Stubbed so the YouTube-clip cases assert the calls the display makes
+// into it (warm at mount, claim + drive on the PLAY press) instead.
+const yt = vi.hoisted(() => ({ warm: vi.fn(), claim: vi.fn() }))
+vi.mock('../../../lib/youtubeWarmAudio.js', () => ({
+  warmYoutubeAudio: yt.warm,
+  claimYoutubeAudio: yt.claim,
+}))
+
 // A plain question can carry audio without being flipped to Shiny (2026-09-01).
 // The gate is worth a test because the failure mode is silent in both
 // directions: a wrong gate either hides a clip the host attached (dead air on
@@ -81,5 +90,64 @@ describe('<QuestionSlide> — audio on a plain question', () => {
     render(slideWith({ mediaUrl: 'https://example.test/pic.png', mediaType: 'image/png' }))
 
     expect(container.querySelector('audio')).toBe(null)
+  })
+
+  // A YouTube-sourced clip is stored the way every other clip in this app is —
+  // mediaSlots[0] as {type:'youtube',...} — and resolveShinyPart flattens it.
+  // Storing it flat on `data` instead would render nothing at all, silently.
+  describe('YouTube-sourced clip', () => {
+    const ytSlide = () => slideWith({
+      mediaSlots: [{ type: 'youtube', videoId: 'dQw4w9WgXcQ', start: 10, end: 25, volume: 80 }],
+    })
+
+    beforeEach(() => {
+      yt.warm.mockClear()
+      yt.claim.mockClear()
+    })
+
+    it('renders a play control and warms the clip, with no <audio> element', () => {
+      render(ytSlide())
+
+      expect(container.querySelector('[role="button"][aria-label="Play audio"]')).not.toBe(null)
+      expect(container.querySelector('audio')).toBe(null)
+      expect(container.textContent).toContain('Which lake is biggest?')
+      expect(yt.warm).toHaveBeenCalledWith('dQw4w9WgXcQ', 10, 25)
+    })
+
+    it('claims the warm player and starts it at the trim point at the clip volume', () => {
+      const player = {
+        setVolume: vi.fn(), unMute: vi.fn(), seekTo: vi.fn(),
+        playVideo: vi.fn(), pauseVideo: vi.fn(),
+      }
+      yt.claim.mockReturnValue({
+        whenReady: cb => cb(player),
+        onStateChange: () => {},
+        destroy: () => {},
+      })
+      render(ytSlide())
+
+      const btn = container.querySelector('[role="button"]')
+      act(() => { btn.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+
+      expect(yt.claim).toHaveBeenCalledWith('dQw4w9WgXcQ', 10, 25)
+      expect(player.setVolume).toHaveBeenCalledWith(80)
+      expect(player.seekTo).toHaveBeenCalledWith(10, true)
+      expect(player.playVideo).toHaveBeenCalled()
+      expect(container.querySelector('[role="button"][aria-label="Pause audio"]')).not.toBe(null)
+    })
+
+    it('does not warm a clip in the host preview pane', () => {
+      const slide = ytSlide()
+      act(() => {
+        root.render(
+          <ThemeProvider>
+            <QuestionSlide slide={slide} show={{ slides: [slide] }} isPreview />
+          </ThemeProvider>
+        )
+      })
+
+      expect(yt.warm).not.toHaveBeenCalled()
+      expect(container.querySelector('[role="button"][aria-label="Play audio"]')).not.toBe(null)
+    })
   })
 })

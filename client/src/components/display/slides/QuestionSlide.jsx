@@ -23,14 +23,78 @@ import { warmImages, slideImageUrls } from '../../../lib/warmImages.js'
 // graph ShinyAudioQuestion uses — audioGainDb is what makes a quietly-recorded
 // upload audible in a loud room, so a bare <audio> tag isn't a substitute —
 // but nothing else shiny: no intro beat, no waveform bars.
-function QuestionAudioButton({ mediaUrl, gainDb, theme }) {
+//
+// Source is either an uploaded file (<audio> + gain graph) or a trimmed
+// YouTube clip, resolved identically to the shiny path: the clip lives in
+// data.mediaSlots[0] and resolveShinyPart flattens it to youtubeId/Start/End/
+// volume. The YouTube half mirrors ShinyAudioQuestion's warm-player handling
+// (warm at mount, claim on first press, park at the trim point on pause)
+// rather than reimplementing playback — see youtubeWarmAudio.js. Kept as a
+// parallel implementation on purpose: this one has no parts/currentPart
+// churn, and folding both into one hook would mean editing the shiny path
+// that already works live.
+function QuestionAudioButton({ part, gainDb, theme, isPreview }) {
+  const { youtubeId, youtubeStart, youtubeEnd, volume, mediaUrl } = part
+  const isYoutube = !!youtubeId
   const [playing, setPlaying] = useState(false)
   const audioRef = useRef(null)
   const audioCtxRef = useRef(null)
+  const ytHandleRef = useRef(null)
 
   useEffect(() => {
     return () => { audioCtxRef.current?.close() }
   }, [])
+
+  useEffect(() => {
+    if (!isYoutube || isPreview) return
+    warmYoutubeAudio(youtubeId, youtubeStart ?? 0, youtubeEnd ?? null)
+  }, [isYoutube, isPreview, youtubeId, youtubeStart, youtubeEnd])
+
+  useEffect(() => {
+    if (!isYoutube) return
+    return () => {
+      ytHandleRef.current?.destroy()
+      ytHandleRef.current = null
+    }
+  }, [isYoutube, youtubeId, youtubeStart, youtubeEnd])
+
+  useEffect(() => {
+    if (!isYoutube) return
+    if (playing) {
+      let cancelled = false
+      if (!ytHandleRef.current) {
+        ytHandleRef.current = claimYoutubeAudio(youtubeId, youtubeStart ?? 0, youtubeEnd ?? null)
+        ytHandleRef.current.onStateChange(state => {
+          if (state === 0 /* ENDED */) setPlaying(false)
+        })
+      }
+      const handle = ytHandleRef.current
+      handle.whenReady(player => {
+        if (cancelled || handle !== ytHandleRef.current) return
+        player.setVolume(volume ?? 100)
+        player.unMute()
+        player.seekTo(youtubeStart ?? 0, true)
+        player.playVideo()
+      })
+      return () => { cancelled = true }
+    }
+    const handle = ytHandleRef.current
+    handle?.whenReady(player => {
+      if (handle !== ytHandleRef.current) return
+      player.pauseVideo()
+      player.seekTo(youtubeStart ?? 0, true)
+    })
+  }, [isYoutube, playing, youtubeId, youtubeStart, youtubeEnd, volume])
+
+  // A YouTube clip gives no ended event of its own, so the configured clip
+  // length times the auto-stop — backstop to the player's own `end` param.
+  useEffect(() => {
+    if (!isYoutube || !playing || !youtubeEnd) return
+    const ms = Math.max(0, (youtubeEnd - (youtubeStart || 0)) * 1000)
+    if (ms <= 0) return
+    const t = setTimeout(() => setPlaying(false), ms)
+    return () => clearTimeout(t)
+  }, [isYoutube, playing, youtubeEnd, youtubeStart])
 
   async function play() {
     if (!audioCtxRef.current && audioRef.current) {
@@ -49,14 +113,20 @@ function QuestionAudioButton({ mediaUrl, gainDb, theme }) {
 
   return (
     <>
-      <audio ref={audioRef} src={mediaUrl} onEnded={() => setPlaying(false)} preload="auto" />
+      {/* YouTube renders no element here — its player lives in a body-level
+          container owned by youtubeWarmAudio.js (an iframe reparented into
+          this tree reloads and drops its buffer). */}
+      {!isYoutube && (
+        <audio ref={audioRef} src={mediaUrl} onEnded={() => setPlaying(false)} preload="auto" />
+      )}
       <div
         data-no-step
         role="button"
         aria-label={playing ? 'Pause audio' : 'Play audio'}
         className="w-20 h-20 rounded-full flex items-center justify-center cursor-pointer shrink-0"
         onClick={() => {
-          if (playing) { audioRef.current?.pause(); setPlaying(false) }
+          if (isYoutube) { setPlaying(p => !p) }
+          else if (playing) { audioRef.current?.pause(); setPlaying(false) }
           else play().catch(() => {})
         }}
         style={{
@@ -73,7 +143,7 @@ function QuestionAudioButton({ mediaUrl, gainDb, theme }) {
   )
 }
 
-function StandardQuestion({ slide, show, theme, transitionKey }) {
+function StandardQuestion({ slide, show, theme, transitionKey, isPreview }) {
   const { data } = slide
   const part = resolveShinyPart(data)
   const rt = data._regionTransforms ?? {}
@@ -81,7 +151,9 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
   const isAssemble = transitionKey === 'assemble'
   // mediaType is the upload's real MIME ('audio/mpeg'), not the bare word —
   // startsWith covers both that and anything already stored as plain 'audio'.
-  const hasAudio = !!data.mediaUrl && String(data.mediaType ?? '').startsWith('audio')
+  // A YouTube-sourced clip has no MIME at all; resolveShinyPart already
+  // flattened it out of mediaSlots[0] into part.youtubeId.
+  const hasAudio = !!part.youtubeId || (!!part.mediaUrl && String(part.mediaType ?? '').startsWith('audio'))
   // Regular (non-shiny) questions get their sequential number prepended
   // automatically — questionNumber is already kept correct through
   // reorders/deletes by renumberRoundQuestions (useShow.js), so this stays
@@ -217,7 +289,7 @@ function StandardQuestion({ slide, show, theme, transitionKey }) {
           </p>
         </span>
         {hasAudio && (
-          <QuestionAudioButton mediaUrl={data.mediaUrl} gainDb={data.audioGainDb} theme={theme} />
+          <QuestionAudioButton part={part} gainDb={data.audioGainDb} theme={theme} isPreview={isPreview} />
         )}
       </motion.div>
 
@@ -1401,7 +1473,7 @@ function ShinyContent({ slide, show, theme, transitionKey, isPreview }) {
   if (isOrderShiny(data)) {
     return <ShinyOrderQuestion slide={slide} show={show} theme={theme} />
   }
-  return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} />
+  return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} isPreview={isPreview} />
 }
 
 export default function QuestionSlide({ slide, show, transitionKey, isPreview }) {
@@ -1425,7 +1497,7 @@ export default function QuestionSlide({ slide, show, transitionKey, isPreview })
   // the AnimatePresence below — identical output and identical DOM depth to
   // before this transition existed.
   if (!data.isShiny) {
-    return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} />
+    return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} isPreview={isPreview} />
   }
 
   const showIntro = !data.introDone

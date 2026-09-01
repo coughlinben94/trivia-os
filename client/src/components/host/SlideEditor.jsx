@@ -201,7 +201,7 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
                 // slots are in "YouTube" mode, the format-library modal, etc.)
                 // resets when switching to a different question slide instead
                 // of leaking across slides that share this same component type.
-                <QuestionEditor key={slide.id} data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} onMediaUpload={handleMediaUpload} getHostPhotos={getHostPhotos} theme={theme} show={show} slide={slide} usedPhotoUrls={usedPhotoUrls} />
+                <QuestionEditor key={slide.id} data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} theme={theme} show={show} slide={slide} usedPhotoUrls={usedPhotoUrls} />
               )}
               {slide.type === 'grading-break' && (
                 <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
@@ -426,7 +426,7 @@ function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos,
   )
 }
 
-function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, onMediaUpload, getHostPhotos, theme, show, slide, usedPhotoUrls }) {
+function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPhotos, theme, show, slide, usedPhotoUrls }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
   const { formats: shinyFormats, loading: shinyFormatsLoading } = useShinyFormats()
 
@@ -493,6 +493,34 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, onMediaUpl
     while (next.length <= i) next.push({})
     next[i] = clip ? { type: 'youtube', videoId: clip.videoId, start: clip.start, end: clip.end, volume: clip.volume } : { url: null, type: null }
     onChange('mediaSlots', next)
+  }
+
+  // Plain (non-shiny) question audio — slot 0 of the same audioModes map, so
+  // a question saved with a YouTube clip reopens in YouTube mode.
+  const regularAudioMode = audioModes[0] ?? 'upload'
+
+  function setRegularYoutube(clip) {
+    onBatchChange({
+      mediaSlots: clip
+        ? [{ type: 'youtube', videoId: clip.videoId, start: clip.start, end: clip.end, volume: clip.volume }]
+        : [],
+      mediaUrl: null,
+      mediaType: null,
+      audioGainDb: null,
+    })
+  }
+
+  async function uploadRegularAudio(file) {
+    const result = await uploadMedia(file)
+    if (result?.url) {
+      onBatchChange({
+        mediaUrl: result.url,
+        mediaType: result.type,
+        audioGainDb: file.type.startsWith('audio/') ? await analyzeAudioGain(file) : null,
+        mediaSlots: [],
+      })
+    }
+    return result
   }
 
   // Toggling series mode migrates content between the top-level fields
@@ -658,18 +686,55 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, onMediaUpl
         </Field>
         {/* Optional audio on an ordinary question (Ben, 2026-09-01) — this
             used to require flipping the question to Shiny just to get an
-            upload control. Writes the generic mediaUrl/mediaType/audioGainDb
-            fields, not mediaSlots: those are the shiny formats' slot shape,
-            and a plain question has no schema/slot count to index into. */}
+            upload control. Same Upload/YouTube choice the shiny audio slots
+            get. An uploaded file keeps the generic mediaUrl/mediaType/
+            audioGainDb fields; a YouTube clip goes to mediaSlots[0] in the
+            same {type:'youtube',...} shape every other clip uses, because
+            that is what resolveShinyPart already flattens into the
+            youtubeId/Start/End/volume the display reads. Each write clears
+            the other source in ONE batch — two sources set at once would
+            silently play the YouTube one and look like the upload was
+            ignored. */}
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1.5">Audio (optional)</label>
-          <MediaUpload
-            accept="audio"
-            currentUrl={data.mediaUrl}
-            currentType={data.mediaType}
-            onUpload={onMediaUpload}
-            onRemove={() => onBatchChange({ mediaUrl: null, mediaType: null, audioGainDb: null })}
-          />
+          <div className="flex gap-1.5 mb-2">
+            <button
+              type="button"
+              onClick={() => setAudioModes(m => ({ ...m, 0: 'upload' }))}
+              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                regularAudioMode === 'upload'
+                  ? 'bg-blue-500 border-blue-500 text-white'
+                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              📁 Upload
+            </button>
+            <button
+              type="button"
+              onClick={() => setAudioModes(m => ({ ...m, 0: 'youtube' }))}
+              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                regularAudioMode === 'youtube'
+                  ? 'bg-blue-500 border-blue-500 text-white'
+                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              ▶️ YouTube
+            </button>
+          </div>
+          {regularAudioMode === 'youtube' ? (
+            <YoutubeClipEditor
+              value={mediaSlots[0]?.type === 'youtube' ? mediaSlots[0] : null}
+              onChange={setRegularYoutube}
+            />
+          ) : (
+            <MediaUpload
+              accept="audio"
+              currentUrl={data.mediaUrl}
+              currentType={data.mediaType}
+              onUpload={uploadRegularAudio}
+              onRemove={() => onBatchChange({ mediaUrl: null, mediaType: null, audioGainDb: null })}
+            />
+          )}
         </div>
       </>
     )
