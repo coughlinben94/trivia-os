@@ -273,6 +273,20 @@ describe('computePrevStep', () => {
     expect(dataOf(back, 'a').currentPart).toBe(3) // all 3 groups, not 2
   })
 
+  // 2026-09-01: Prev's cross-slide entry used to reach withEntryState without
+  // protectInProgress, so backing into a fully graded matching/wager/order
+  // slide wiped its lock/reveal flags — reopening phone submissions and
+  // hiding the already-revealed answer on /display.
+  it('preserves lock/reveal flags when backing into a graded question', async () => {
+    const graded = { isShiny: true, shinyInputSchema: { type: 'matching' }, introDone: false, outroShown: true, matchingLocked: true, matchingRevealed: true }
+    const slides = [slide('a', 0, 'question', graded), slide('b', 1)]
+    const back = await computePrevStep({ slides, currentSlideIndex: 1 }, noTeams)
+    expect(back.current_slide_index).toBe(0)
+    expect(dataOf(back, 'a').introDone).toBe(true)
+    expect(dataOf(back, 'a').matchingLocked).toBe(true)
+    expect(dataOf(back, 'a').matchingRevealed).toBe(true)
+  })
+
   it('returns null at the start of the show', async () => {
     const slides = [slide('a', 0)]
     expect(await computePrevStep({ slides, currentSlideIndex: 0 }, noTeams)).toBe(null)

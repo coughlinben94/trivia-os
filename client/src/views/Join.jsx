@@ -609,7 +609,7 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered, overrid
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
             {d.text && (
               <p style={{
-                color: text, fontSize: 'clamp(1.15rem, 4.5vw, 1.35rem)',
+                color: text, fontSize: 'clamp(1.35rem, 5.5vw, 1.6rem)',
                 lineHeight: 1.55, margin: 0, fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
               }}>
                 {d.text}
@@ -2096,6 +2096,48 @@ export default function Join() {
   // ── Register ──────────────────────────────────────────────────────────
   async function handleRegister(name) {
     const actualShowId = show.id
+
+    // RLS ties this team's row (and its phone_answers) to this browser's own
+    // anon auth session, not just to knowing the team_id — team_id alone was
+    // never actually secret (teams SELECT is public). A returning team on
+    // the same browser already has this session restored automatically by
+    // supabase-js; only a brand-new registration needs to mint one (below,
+    // after the name check — no burning a rate-limited anon sign-in just to
+    // be told the name's taken).
+    let ownerUid = (await supabase.auth.getSession()).data.session?.user?.id
+
+    // A phone can already own a team here without a local team saved — e.g.
+    // iOS purging a backgrounded tab before `saveStoredTeam` ran (2026-08-31
+    // adversarial pass). Without this check, that phone lands back on the
+    // register screen, doesn't recognize it's already in, and creates a
+    // SECOND team under the same owner_uid: two live teams for one phone
+    // (fairness), and it breaks the lost-response recovery below for the
+    // rest of the night — `.maybeSingle()` errors once more than one row
+    // matches instead of resolving. Must run BEFORE the name-taken check:
+    // that guest's most likely move is retyping their own team name, and the
+    // name check would match their own existing row and bounce them out of
+    // the exact recovery this exists for (2026-09-01 review). Same
+    // fast-path-plus-real-enforcement shape as the name check below: no
+    // unique constraint exists on owner_uid yet (that's a migration —
+    // flagged separately, not a TOCTOU-safe fix), so this closes the common
+    // case, not the race.
+    if (ownerUid) {
+      const { data: existingTeam } = await supabase
+        .from('teams')
+        .select('id, name, color')
+        .eq('show_id', actualShowId)
+        .eq('owner_uid', ownerUid)
+        .maybeSingle()
+      if (existingTeam) {
+        const recoveredTeam = { id: existingTeam.id, name: existingTeam.name, color: existingTeam.color, showId: actualShowId }
+        setTeam(recoveredTeam)
+        saveStoredTeam(actualShowId, recoveredTeam)
+        setPowerupUsed(false)
+        setPhase(show.is_live ? 'live' : 'waiting')
+        return
+      }
+    }
+
     // Fetch all names and compare case-insensitively in JS to avoid ILIKE
     // metachar injection (% or _ in a team name would wildcard-match everything).
     // This pre-check is just a fast path for the common case — it's a
@@ -2107,12 +2149,6 @@ export default function Join() {
     const taken = (allTeams ?? []).some(t => t.name.toLowerCase() === name.toLowerCase())
     if (taken) throw new Error("That name's taken — try another")
 
-    // RLS ties this team's row (and its phone_answers) to this browser's own
-    // anon auth session, not just to knowing the team_id — team_id alone was
-    // never actually secret (teams SELECT is public). A returning team on
-    // the same browser already has this session restored automatically by
-    // supabase-js; only a brand-new registration needs to mint one.
-    let ownerUid = (await supabase.auth.getSession()).data.session?.user?.id
     if (!ownerUid) {
       // Supabase rate-limits anonymous sign-in per IP (30/hr default) — a
       // venue's shared wifi NATs every phone behind one address, so a burst
@@ -2133,32 +2169,6 @@ export default function Join() {
           ? "Too many phones joining right now — wait a minute and try again"
           : "Couldn't start your session — try again")
       }
-    }
-
-    // A phone can already own a team here without a local team saved — e.g.
-    // iOS purging a backgrounded tab before `saveStoredTeam` ran (2026-08-31
-    // adversarial pass). Without this check, that phone lands back on the
-    // register screen, doesn't recognize it's already in, and creates a
-    // SECOND team under the same owner_uid: two live teams for one phone
-    // (fairness), and it breaks the lost-response recovery above for the
-    // rest of the night — `.maybeSingle()` errors once more than one row
-    // matches instead of resolving. Same fast-path-plus-real-enforcement
-    // shape as the name check above: no unique constraint exists on
-    // owner_uid yet (that's a migration — flagged separately, not a
-    // TOCTOU-safe fix), so this closes the common case, not the race.
-    const { data: existingTeam } = await supabase
-      .from('teams')
-      .select('id, name, color')
-      .eq('show_id', actualShowId)
-      .eq('owner_uid', ownerUid)
-      .maybeSingle()
-    if (existingTeam) {
-      const recoveredTeam = { id: existingTeam.id, name: existingTeam.name, color: existingTeam.color, showId: actualShowId }
-      setTeam(recoveredTeam)
-      saveStoredTeam(actualShowId, recoveredTeam)
-      setPowerupUsed(false)
-      setPhase(show.is_live ? 'live' : 'waiting')
-      return
     }
 
     const color  = TEAM_COLORS[Math.floor(Math.random() * TEAM_COLORS.length)]

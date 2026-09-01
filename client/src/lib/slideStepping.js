@@ -129,8 +129,15 @@ export function withEntryState(slides, slide, { currentPart, introDone, protectI
   // rehearsal): this guard used to apply unconditionally, so a shiny "order"
   // slide left orderLocked:true from testing skipped straight to its content
   // on the first real Next into it, with no intro card.
-  const wouldRegressLockedQuestion = protectInProgress && introDone === false &&
+  // Two callers pass protectInProgress: goLiveFrom's jump picker (introDone:
+  // false — don't regress the intro OR the flags) and computePrevStep's
+  // cross-slide entry (introDone: true — landing on the last revealed state,
+  // so setting introDone true is fine, but the flags must still survive:
+  // Prev back into a fully graded matching/wager/order slide must not reopen
+  // phone submissions or hide the revealed answer; 2026-08-31 review).
+  const protectLockedFlags = protectInProgress &&
     (slide.data?.wagerTiersLocked || slide.data?.wagerGuessesLocked || slide.data?.matchingLocked || slide.data?.orderLocked)
+  const wouldRegressLockedQuestion = protectLockedFlags && introDone === false
   if (introDone !== undefined && slide.data?.isShiny) {
     if (!wouldRegressLockedQuestion && !!slide.data.introDone !== introDone) {
       patch.introDone = introDone
@@ -163,7 +170,7 @@ export function withEntryState(slides, slide, { currentPart, introDone, protectI
     // a Go Live jump back into a question actually in progress", where
     // clearing these WOULD be wrong: it would reopen submission on a
     // question the room already answered and that's mid-grading.
-    if (!wouldRegressLockedQuestion) {
+    if (!protectLockedFlags) {
       if (slide.data?.wagerTiersLocked) patch.wagerTiersLocked = false
       if (slide.data?.wagerGuessesLocked) patch.wagerGuessesLocked = false
       if (slide.data?.wagerRevealed) patch.wagerRevealed = false
@@ -619,7 +626,10 @@ export async function computePrevStep(show, fetchTeamCount) {
   // Backing into a shiny or team-picker slide lands on its last revealed
   // state — the natural "undo" of advancing forward through it.
   const lastPartIdx = Math.max(revealStepCount(resolvedTarget?.data ?? {}) - 1, 0)
-  const newSlides = withEntryState(bakedSlides, resolvedTarget, { currentPart: lastPartIdx, introDone: true })
+  // protectInProgress: backing into an already-locked/revealed question is a
+  // RE-entry, not a fresh one — its lock/reveal flags must survive (see
+  // withEntryState's protectLockedFlags).
+  const newSlides = withEntryState(bakedSlides, resolvedTarget, { currentPart: lastPartIdx, introDone: true, protectInProgress: true })
   return {
     slides: newSlides,
     current_slide_index: target,
