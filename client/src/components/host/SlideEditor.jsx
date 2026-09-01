@@ -1987,13 +1987,29 @@ function MultiQuestionEditor({ data, onChange, setData, scheduleSave }) {
 }
 
 function VennEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uploadMedia, getHostPhotos, usedPhotoUrls }) {
-  const leftCast = data.leftCast ?? []
-  const rightCast = data.rightCast ?? []
+  // Falls back to 3 blanks when the array is MISSING *or* EMPTY, not just
+  // missing — an empty array used to render zero input fields at all (no way
+  // to type a single name, discovered 2026-09-01 once cast.map stopped
+  // hardcoding [0,1,2] and started reflecting the real array).
+  const blankCast = () => Array.from({ length: 3 }, () => ({ name: '', mediaUrl: null }))
+  const leftCast = data.leftCast?.length ? data.leftCast : blankCast()
+  const rightCast = data.rightCast?.length ? data.rightCast : blankCast()
 
   function writeCast(side, i, patch) {
     const key = side === 'left' ? 'leftCast' : 'rightCast'
-    const arr = (data[key] ?? Array.from({ length: 3 }, () => ({ name: '', mediaUrl: null }))).slice()
+    const arr = (data[key]?.length ? data[key] : blankCast()).slice()
     arr[i] = { ...(arr[i] ?? { name: '', mediaUrl: null }), ...patch }
+    const next = { ...data, [key]: arr }
+    setData(next)
+    scheduleSave({ data: next })
+  }
+
+  // The wizard's per-side count is otherwise permanent — no way to grow a
+  // slide past whatever the host picked when creating it (2026-09-01 council
+  // finding).
+  function addCastSlot(side) {
+    const key = side === 'left' ? 'leftCast' : 'rightCast'
+    const arr = [...(data[key]?.length ? data[key] : blankCast()), { name: '', mediaUrl: null }]
     const next = { ...data, [key]: arr }
     setData(next)
     scheduleSave({ data: next })
@@ -2009,7 +2025,7 @@ function VennEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uplo
     return (
       <>
         <Divider label={label} />
-        {[0, 1, 2].map(i => (
+        {cast.map((_, i) => (
           <div key={i} className="flex flex-col gap-2 mb-3">
             <Field label={`${label.replace(' Cast', '')} ${i + 1}`}>
               <TextInput value={cast[i]?.name ?? ''} onChange={v => writeCast(side, i, { name: v })} placeholder="Actor name" />
@@ -2024,6 +2040,13 @@ function VennEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uplo
             />
           </div>
         ))}
+        <button
+          type="button"
+          onClick={() => addCastSlot(side)}
+          className="text-xs text-baynes-forest hover:text-green-800 font-medium transition-colors self-start"
+        >
+          + Add name
+        </button>
       </>
     )
   }

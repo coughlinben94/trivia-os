@@ -4,25 +4,33 @@ import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 
-function CastPhoto({ person, i, reduce }) {
+// Circle only renders when this PERSON has a photo (not per-side) — a mixed
+// side (some photos, some text-only) shows a circle just for the ones who
+// have one, and a fully text-only side (Ben's actual shows) never draws the
+// empty placeholder ring the old per-side-agnostic version always did.
+function CastPhoto({ person, i, reduce, size, font }) {
   const tIn = reduce
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2 } }
     : { initial: { opacity: 0, scale: 0.8 }, animate: { opacity: 1, scale: 1 }, transition: { duration: 0.4, delay: 0.08 * i, ease: EASE_OUT } }
   return (
-    <motion.div {...tIn} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-      <div style={{
-        width: 148, height: 148, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
-        boxShadow: '0 6px 22px rgba(0,0,0,0.55)', background: 'rgba(255,255,255,0.08)',
-        border: '2px solid rgba(255,255,255,0.2)',
-      }}>
-        {person?.mediaUrl && (
+    <motion.div {...tIn} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, maxWidth: 260 }}>
+      {person?.mediaUrl && (
+        <div style={{
+          width: size, height: size, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+          boxShadow: '0 6px 22px rgba(0,0,0,0.55)', background: 'rgba(255,255,255,0.08)',
+          border: '2px solid rgba(255,255,255,0.2)',
+        }}>
           <img src={person.mediaUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        )}
-      </div>
+        </div>
+      )}
       {person?.name && (
         <span style={{
-          fontSize: '1rem', fontWeight: 600, color: '#fff',
+          fontSize: font, fontWeight: 600, color: '#fff',
           textShadow: '0 2px 8px rgba(0,0,0,0.8)', textAlign: 'center',
+          // The top/bottom rows of a tall N=6 stack sit on a chord under
+          // ~230px inside the 620px circle — an unclamped long name bleeds
+          // over the gold ring without this (council devil's-advocate find).
+          maxWidth: '100%', overflowWrap: 'anywhere', lineHeight: 1.15,
         }}>
           {person.name}
         </span>
@@ -44,20 +52,36 @@ export default function VennDiagramSlide({ slide, show }) {
   return <VennContent slide={slide} theme={theme} />
 }
 
-// Two overlapping circles, three cast photos biased toward each circle's own
-// OUTER edge (away from the overlap) — the overlap itself stays visually
-// empty, same "empty in the middle" Ben built the real question around. No
-// crescent clipping on the photos themselves; keeping them simply offset
-// away from center reads as a Venn diagram without needing per-photo SVG
-// clip-paths for a one-off slide type.
+// Two overlapping circles, N cast entries (2-6, host's choice) biased toward
+// each circle's own OUTER edge (away from the overlap) — the overlap itself
+// stays visually empty, same "empty in the middle" Ben built the real
+// question around. No crescent clipping on the photos themselves; keeping
+// them simply offset away from center reads as a Venn diagram without
+// needing per-photo SVG clip-paths for a one-off slide type.
 function VennContent({ slide, theme }) {
   const reduce = useReducedMotion()
   const { data } = slide
-  const leftCast = (data.leftCast ?? []).slice(0, 3)
-  const rightCast = (data.rightCast ?? []).slice(0, 3)
 
   const CIRCLE = 620
   const OVERLAP = 170 // center-to-center gap = CIRCLE - OVERLAP
+
+  // No slice-to-3 (2026-09-01 council fix): the wizard now lets a host pick
+  // 2-6 per side, and silently truncating whatever they typed to 3 on the
+  // live TV — no error, no warning — was the actual bug, not the count
+  // itself. Blank wizard-seeded slots (name '' , no photo) are filtered out
+  // here — Join.jsx already did this for phones, the TV never had.
+  const has = p => p?.name || p?.mediaUrl
+  const leftCast = (data.leftCast ?? []).filter(has)
+  const rightCast = (data.rightCast ?? []).filter(has)
+  const n = Math.max(leftCast.length, rightCast.length, 1)
+  const anyPhoto = [...leftCast, ...rightCast].some(p => p.mediaUrl)
+  // ponytail: photo path sized by one linear clamp, only verified at n<=3.
+  // Past ~4 photos/side the stack outgrows the 620px ring — redo the layout
+  // then. Text-only (Ben's actual shows) has no such ceiling — six name rows
+  // fit fine, which is why the font scale below has no clamp against CIRCLE.
+  const castSize = Math.min(148, (CIRCLE * 0.78 - 28 * (n - 1)) / n)
+  const castFont = anyPhoto ? '1.15rem' : `${Math.max(1.6, 2.9 - 0.2 * n).toFixed(2)}rem`
+  const castGap  = anyPhoto ? 28 : 18
 
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
@@ -82,16 +106,16 @@ function VennContent({ slide, theme }) {
 
           <div style={{
             position: 'absolute', left: CIRCLE * 0.08, top: 0, width: CIRCLE * 0.5, height: CIRCLE,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 28,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: castGap,
           }}>
-            {leftCast.map((p, i) => <CastPhoto key={i} person={p} i={i} reduce={reduce} />)}
+            {leftCast.map((p, i) => <CastPhoto key={p.name || i} person={p} i={i} reduce={reduce} size={castSize} font={castFont} />)}
           </div>
 
           <div style={{
             position: 'absolute', right: CIRCLE * 0.08, top: 0, width: CIRCLE * 0.5, height: CIRCLE,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 28,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: castGap,
           }}>
-            {rightCast.map((p, i) => <CastPhoto key={i} person={p} i={i} reduce={reduce} />)}
+            {rightCast.map((p, i) => <CastPhoto key={p.name || i} person={p} i={i} reduce={reduce} size={castSize} font={castFont} />)}
           </div>
 
           {/* The overlap IS the mystery — a big "?" marks the empty middle so
