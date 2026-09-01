@@ -319,11 +319,17 @@ function StandardQuestion({ slide, show, theme, transitionKey, isPreview }) {
         )}
         <span data-slide-region="text" data-slide-field="text" style={xf('text')}>
           <p
-            className="text-center leading-relaxed"
+            className="text-center"
             style={{
               color: theme.colors.text,
               fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
               fontSize: rt.text?.fontSizePx ?? uniformFontSize,
+              // Matches QUESTION_BOX.lineHeight (autoFitText.js) — fitToBox's
+              // fit check and the real rendered line height must agree, or a
+              // size fitToBox okayed wraps one line past its box on screen
+              // (2026-09-01 audit: 4 of tonight's questions did exactly this
+              // under the old leading-relaxed/1.625 vs fitToBox's 1.18).
+              lineHeight: 1.25,
               fontWeight: 500,
               maxWidth: '80ch',
               textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',

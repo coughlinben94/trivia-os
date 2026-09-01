@@ -92,9 +92,9 @@ function _ctx() {
 }
 
 // greedy word-wrap at a given px size → array of line strings
-function wrapToWidth(text, family, sizePx, maxW, letterSpacing = 0) {
+function wrapToWidth(text, family, sizePx, maxW, letterSpacing = 0, weight = '') {
   const c = _ctx()
-  c.font = `${sizePx}px "${family}"`
+  c.font = weight ? `${weight} ${sizePx}px "${family}"` : `${sizePx}px "${family}"`
   const measure = s => c.measureText(s).width + Math.max(0, s.length - 1) * letterSpacing
   const words = String(text).split(/\s+/).filter(Boolean)
   if (!words.length) return ['']
@@ -109,11 +109,11 @@ function wrapToWidth(text, family, sizePx, maxW, letterSpacing = 0) {
   return lines
 }
 
-function _fits(text, family, sizePx, boxW, boxH, maxLines, lineHeight, letterSpacing) {
-  const lines = wrapToWidth(text, family, sizePx, boxW, letterSpacing)
+function _fits(text, family, sizePx, boxW, boxH, maxLines, lineHeight, letterSpacing, weight = '') {
+  const lines = wrapToWidth(text, family, sizePx, boxW, letterSpacing, weight)
   if (lines.length > maxLines) return false
   const c = _ctx()
-  c.font = `${sizePx}px "${family}"`
+  c.font = weight ? `${weight} ${sizePx}px "${family}"` : `${sizePx}px "${family}"`
   for (const ln of lines) {
     const w = c.measureText(ln).width + Math.max(0, ln.length - 1) * letterSpacing
     if (w > boxW) return false            // a single word wider than the box
@@ -132,13 +132,14 @@ export function fitToBox(text, {
   maxLines = 4,
   lineHeight = 1.12,
   letterSpacing = 0,
+  weight = '',
 }) {
   if (!String(text).trim()) return ceilPx
-  if (_fits(text, family, ceilPx, boxW, boxH, maxLines, lineHeight, letterSpacing)) return ceilPx
+  if (_fits(text, family, ceilPx, boxW, boxH, maxLines, lineHeight, letterSpacing, weight)) return ceilPx
   let lo = floorPx, hi = ceilPx
   for (let i = 0; i < 8; i++) {
     const mid = (lo + hi) / 2
-    if (_fits(text, family, mid, boxW, boxH, maxLines, lineHeight, letterSpacing)) lo = mid
+    if (_fits(text, family, mid, boxW, boxH, maxLines, lineHeight, letterSpacing, weight)) lo = mid
     else hi = mid
   }
   const px = Math.max(floorPx, lo)
@@ -153,7 +154,7 @@ export function fitToBox(text, {
   // pathologically long question gets caught by whoever wrote it, not
   // discovered by chance on a live TV (confirmed real: 1 of 1514 questions
   // in the current DB hits this, and it's real prose, not a data error).
-  if (!_fits(text, family, px, boxW, boxH, maxLines, lineHeight, letterSpacing)) {
+  if (!_fits(text, family, px, boxW, boxH, maxLines, lineHeight, letterSpacing, weight)) {
     console.warn(
       `[autoFitText] "${String(text).slice(0, 60)}${text.length > 60 ? '…' : ''}" ` +
       `doesn't fit its box even at the ${floorPx}px floor (${boxW}×${boxH}, max ${maxLines} lines). ` +
@@ -210,10 +211,20 @@ export const CUSTOM_BODY_BOX = {
   maxLines: 6, lineHeight: 1.2,
 }
 
-// Question text: the prompt line(s), above the answer area. Full width, tighter line budget.
+// Question text: the prompt line(s), above the answer area. Full width.
+// boxH/maxLines/lineHeight bumped 2026-09-01 (Ben live, "text on actual
+// questions is truly too small" — measured audit against tonight's real
+// question lengths, 190-360 chars): the 4-line/400px box was the actual
+// constraint, not the 5.5rem ceiling — nothing tonight got within 40px of
+// it. lineHeight 1.25 matches the rendered <p>'s line-height (QuestionSlide.
+// jsx dropped its mismatched `leading-relaxed` 1.625 for this same value) —
+// they must agree or fitToBox okays a size the real DOM then wraps an extra
+// line past, the actual overflow the audit caught on 4 of tonight's
+// questions. weight: '500' matches the rendered <p>'s fontWeight — Boogaloo/
+// DM Sans measure ~1.7% narrower at the browser's default 400.
 export const QUESTION_BOX = {
-  boxW: 1728, boxH: 400, floorPx: PARAGRAPH_FLOOR * 16, ceilPx: PARAGRAPH_CEIL * 16,
-  maxLines: 4, lineHeight: 1.18,
+  boxW: 1728, boxH: 600, floorPx: PARAGRAPH_FLOOR * 16, ceilPx: PARAGRAPH_CEIL * 16,
+  maxLines: 6, lineHeight: 1.25, weight: '500',
 }
 
 // Shiny question quote/subtitle: sits above the question text as context (e.g.
