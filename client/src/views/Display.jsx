@@ -909,7 +909,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
             // child exactly when the real slide changes.
             <ErrorBoundary
               key={currentSlide.id}
-              resetKey={`${currentSlide.data?.introDone}:${currentSlide.data?.currentPart}`}
+              resetKey={String(currentSlide.data?.currentPart)}
               fallback={slideFallback}
             >
               {/* mode="wait" (the default everywhere else) fully unmounts the

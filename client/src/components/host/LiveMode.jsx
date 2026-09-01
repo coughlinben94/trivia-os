@@ -114,14 +114,8 @@ function CurrentSlideCard({ slide, show }) {
         const part = resolveShinyPart(data)
         const parts = data.parts
         const partIdx = Array.isArray(parts) && parts.length > 1 ? (data.currentPart ?? 0) : null
-        const introActive = data.isShiny && !data.introDone
         return (
           <div className="flex flex-col gap-3">
-            {introActive && (
-              <p className="text-xs font-bold uppercase tracking-wider text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1 w-fit">
-                🎬 Intro showing — press Next to reveal
-              </p>
-            )}
             {data.questionNumber != null && (
               <p className="text-lg font-semibold text-gray-400">
                 {data.questionLabel || `Q${data.questionNumber}`}
@@ -890,10 +884,10 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     if (currentSlide.data?.isShiny) {
       // A shiny audio question (2026-09-01, P1 live, Round 2's "One Hit
       // Unwonder": "hitting next skips to next question, doesnt play
-      // audio"). Gated on introDone: the FIRST Next on a fresh shiny slide
-      // only dismisses its intro card (computeNextStep, slideStepping.js) —
-      // this must not steal THAT press, or the intro would never dismiss.
-      if (!isAudioShiny(currentSlide.data) || !currentSlide.data?.introDone) return false
+      // audio"). No introDone gate any more: the announce card is its own
+      // `shiny-title` slide, so a shiny content slide shows its content from
+      // its first frame and the first Next on it is the play press.
+      if (!isAudioShiny(currentSlide.data)) return false
     } else if ((currentSlide.data?.audioTrigger ?? 'click') !== 'click') {
       return false
     }

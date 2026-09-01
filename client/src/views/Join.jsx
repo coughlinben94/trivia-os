@@ -576,16 +576,21 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered, overrid
   const round     = show?.rounds?.find(r => r.id === slide.roundId) ?? null
 
   switch (slide.type) {
+    // The standalone announce card that opens every shiny series (2026-09-01)
+    // — the TV is showing the title, the question hasn't started. Same teaser
+    // line phones showed during the old introDone swap, now tied to the
+    // slide that actually IS the announce beat.
+    case 'shiny-title': {
+      const d = slide.data ?? {}
+      return (
+        <p style={{ color: `${text}b3`, fontSize: 'clamp(1rem, 4vw, 1.2rem)', lineHeight: 1.5, margin: 0, fontStyle: 'italic' }}>
+          {d.seriesTheme || d.shinyFormatName || 'Next question incoming…'}
+        </p>
+      )
+    }
+
     case 'question': {
       const d = slide.data
-      // Shiny intro beat — host is showing the teaser title, not the question yet.
-      if (d.isShiny && !d.introDone) {
-        return (
-          <p style={{ color: `${text}b3`, fontSize: 'clamp(1rem, 4vw, 1.2rem)', lineHeight: 1.5, margin: 0, fontStyle: 'italic' }}>
-            {d.isSeries && d.seriesTheme ? d.seriesTheme : 'Next question incoming…'}
-          </p>
-        )
-      }
       if (d.isShiny && isMatchingShiny(d)) {
         return <MatchingBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
       }
@@ -1260,12 +1265,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
     setLocalPart(p => (p === null ? null : Math.min(p, viewedBasePart)))
   }, [viewedIndex, hostIndex, viewedBasePart])
   const effectivePart = localPart ?? viewedBasePart
-  // Same predicate SlideContent uses to pick WagerBoard/MatchingBoard, PLUS
-  // introDone — SlideContent checks `!d.introDone` first and renders the
-  // teaser text (no board at all) during the intro beat, so treating the
-  // slide as interactive before introDone flips would force-pin every phone
-  // to a screen with no board mounted and no onAnswered wired up.
-  //
+  // Same predicate SlideContent uses to pick WagerBoard/MatchingBoard —
   // PLUS: not locked. Once wagerGuessesLocked/matchingLocked flips, the
   // board itself stops accepting input (WagerBoard's keypad and Lock In
   // button are gated on `!guessesLocked`; MatchingBoard's tapItem returns
@@ -1275,7 +1275,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   // however long the host lingers on the reveal, which is often the loudest
   // moment of the round. Pinning only makes sense while input is possible.
   const liveSlideIsInteractive = !!(
-    liveSlide?.type === 'question' && liveSlide.data?.isShiny && liveSlide.data?.introDone &&
+    liveSlide?.type === 'question' && liveSlide.data?.isShiny &&
     !liveSlide.data?.wagerGuessesLocked && !liveSlide.data?.matchingLocked && !liveSlide.data?.orderLocked &&
     (isMatchingShiny(liveSlide.data) || isWagerShiny(liveSlide.data) || isOrderShiny(liveSlide.data))
   )
@@ -1293,7 +1293,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   // interactiveSatisfied=true across the lock, and is never force-navigated
   // to the actual guess phase — the exact silent-miss bug this feature
   // exists to close, just narrowed to teams who back out after tiering.
-  const interactivePhaseKey = `${liveSlide?.id}:${liveSlide?.data?.introDone}:${liveSlide?.data?.wagerTiersLocked}:${liveSlide?.data?.wagerGuessesLocked}:${liveSlide?.data?.matchingLocked}:${liveSlide?.data?.orderLocked}`
+  const interactivePhaseKey = `${liveSlide?.id}:${liveSlide?.data?.wagerTiersLocked}:${liveSlide?.data?.wagerGuessesLocked}:${liveSlide?.data?.matchingLocked}:${liveSlide?.data?.orderLocked}`
   const [interactiveSatisfied, setInteractiveSatisfied] = useState(false)
   useEffect(() => { setInteractiveSatisfied(false) }, [interactivePhaseKey])
 

@@ -33,9 +33,10 @@ import { warmImages } from '../../lib/warmImages.js'
 // RoundSidebar/AddSlideWizard/FormatLibrary — only this display-facing badge
 // is gone.
 //
-// Shared by QuestionSlide.jsx (question type) and GridSlide.jsx (grid type)
-// — any isShiny slide type can gate its content on `data.introDone` and
-// render this first.
+// Rendered by ShinyTitleSlide.jsx, the standalone `shiny-title` slide that
+// opens every shiny series (2026-09-01). It used to be swapped in by every
+// shiny content renderer while `data.introDone` was false; that swap, and
+// the `isClosing` quiet variant the closing beat needed, are gone.
 
 const LAND_T = 1.725 // s — moment of impact; every other element keys off this (prototype's 1725ms, 1.5x slow, Ben's call)
 // Burst/spark easing — same bezier the prototype used, but the FORM matters:
@@ -75,26 +76,14 @@ const HOLD = cubicBezier(0.25, 0.25, 0.75, 0.75) // exact identity — preserves
 const SETTLE_ARRIVE = cubicBezier(0.39, 0.575, 0.565, 1) // easeOutSine — moving fast, decelerate to a standstill at the peak
 const SETTLE_SWING = cubicBezier(0.445, 0.05, 0.55, 0.95) // easeInOutSine — extremum to extremum, zero velocity at both ends
 
-// `isClosing` — this card is the CLOSING beat (Ben, 2026-08-24: "after the
-// third slide of a shiny that pans, it should then pan back down to the shiny
-// title"), not the opening announce. Same card, same destination: the title
-// and photo sit at exactly the rest values the entrance settles to (title
-// scale 1 / rotate -6, photo y 0% / rotate 0), the same layout, the same
-// theme colors, the same glow. Only the JOURNEY differs — the card is already
-// landed, so nothing spins, scales up from nothing, bursts, or rockets in.
-// The travel for this beat belongs to the container that pans it back down
-// (QuestionSlide's SHINY_PAN, run in reverse); anything moving in here on top
-// of that would be a second, competing motion.
-//
-// Mechanically this is the reduced-motion presentation — which already IS the
-// "arrive at rest, no travel" version of this screen — so the two share one
-// `quiet` flag rather than growing a third set of keyframes to keep in sync.
-// That also means the closing beat can never drift out of step with the rest
-// values the entrance lands on: they're read from the same expressions.
-export default function ShinyIntroScreen({ slide, theme, show, isClosing = false }) {
+// `quiet` — the reduced-motion presentation: the title and photo arrive at
+// exactly the rest values the entrance settles to (title scale 1 / rotate
+// -6, photo y 0% / rotate 0), same layout, same theme colors, same glow, but
+// nothing spins, scales up from nothing, bursts, or rockets in.
+export default function ShinyIntroScreen({ slide, theme, show }) {
   const { data } = slide
   const reduce = useReducedMotion()
-  const quiet = isClosing || reduce
+  const quiet = reduce
   const title = data.seriesTheme || data.shinyFormatName || 'Shiny Question'
 
   // The title is flex-centered (its own midpoint always sits at 50%/50% of
@@ -129,9 +118,9 @@ export default function ShinyIntroScreen({ slide, theme, show, isClosing = false
   //
   // Stability lives in pickPhotoForSlide's module-scoped map, not in this
   // component's state, on purpose: this component fully unmounts whenever
-  // `data.introDone` flips, and prevSlide() regresses that flag to false to
-  // step back to the title card — so component state cannot survive the one
-  // navigation that matters here. See pickPhotoForSlide's header comment.
+  // the host steps off the slide, and Prev remounts it — so component state
+  // cannot survive the one navigation that matters here. See
+  // pickPhotoForSlide's header comment.
   //
   // Draws from the SHARED cross-show pool (Ben's explicit call, 2026-08-16),
   // not a per-show folder — a per-show pool would go silently empty on any
@@ -262,10 +251,9 @@ export default function ShinyIntroScreen({ slide, theme, show, isClosing = false
         }}
       />
 
-      {/* Impact burst + sparks — pure decoration, skipped under reduced motion
-          and on the closing beat (nothing is impacting: the card is already
-          landed, so a burst would be announcing an arrival that never
-          happens). */}
+      {/* Impact burst + sparks — pure decoration, skipped under reduced
+          motion (nothing is impacting: the card is already landed, so a
+          burst would be announcing an arrival that never happens). */}
       {!quiet && (
         <>
           <motion.div

@@ -12,9 +12,11 @@ import { roundLabel } from '../../lib/scoreboardMath.js'
 // to tell them apart once they're grouped under the shared title card).
 const SHINY_TYPE_PREFIX = { image: 'P', audio: 'A', video: 'V', list: 'L', text: 'T' }
 // `total` makes every row's label self-explanatory ("S1 of 3", not just
-// "S1") — the lead row folds item 1 into itself with no sub-row of its own
-// (Ben, 2026-09-01: counted only the indented sub-rows, read a real 3-item
-// series as 2 because the old "S1 · 3" corner badge didn't say "of 3").
+// "S1") (Ben, 2026-09-01: counted only the indented sub-rows, read a real
+// 3-item series as 2 because the old "S1 · 3" corner badge didn't say "of
+// 3"). Since the same day's `shiny-title` slide, the group's lead row is the
+// title card itself and EVERY content slide gets its own numbered sub-row,
+// 1 of N through N of N — the header no longer absorbs item 1.
 function shinySiblingLabel(slide, position, total) {
   const label = `${SHINY_TYPE_PREFIX[slide.data?.shinyType] ?? 'S'}${position}`
   return total ? `${label} of ${total}` : label
@@ -42,6 +44,7 @@ const SLIDE_TYPE_META = {
   'round-intro':       { label: 'Round Intro',       icon: '🎬' },
   'swing-round-intro': { label: 'Swing Intro',       icon: '🎷' },
   'question':          { label: 'Question',          icon: '❓' },
+  'shiny-title':       { label: 'Shiny Title',       icon: '✨' },
   'grading-break':     { label: 'Grading Break',     icon: '⏸️' },
   'scoreboard-reveal': { label: 'Scoreboard',        icon: '🏆' },
   'custom':            { label: 'Custom Slide',      icon: '✏️' },
@@ -58,6 +61,7 @@ function slideLabel(slide) {
     if (data.isShiny) return data.seriesTheme || data.shinyFormatName || '✨ Shiny'
     return data.questionLabel || `Q${data.questionNumber || '?'}`
   }
+  if (type === 'shiny-title') return data.seriesTheme || data.shinyFormatName || '✨ Shiny'
   if (type === 'round-intro' || type === 'swing-round-intro') return data.roundTitle || 'Round Intro'
   if (type === 'grading-break') return 'Grading Break'
   if (type === 'scoreboard-reveal') return data.title || 'Scoreboard'
@@ -563,6 +567,17 @@ export default function RoundSidebar({
                     const groupId = group.leadSlide.id
                     const expanded = expandedGroups.has(groupId)
                     const { slide: leadSlide, idx: leadIdx } = group.items[0]
+                    // 2026-09-01: a group led by a real `shiny-title` slide
+                    // (every new creation, and every migrated show) shows
+                    // the title as a plain header and ALL its content slides
+                    // as numbered sub-rows, 1 of N through N of N. A legacy
+                    // group (lead is itself content, no title slide yet)
+                    // keeps the old "header absorbs item 1" shape until the
+                    // migration script has run on that show.
+                    const hasTitle = leadSlide.type === 'shiny-title'
+                    const content = group.items.slice(1)
+                    const contentTotal = hasTitle ? content.length : group.items.length
+                    const contentPos = i => hasTitle ? i + 1 : i + 2
                     // A sibling-group member can ALSO independently carry its
                     // own data.parts — seriesEnabled's "Part of a Series"
                     // toggle is a per-slide flag, orthogonal to the sibling
@@ -577,12 +592,12 @@ export default function RoundSidebar({
                     // Nested under the group's own expand toggle rather than
                     // a second one — "show me what's inside" already covers
                     // both meanings.
-                    function ownPartRows(slide, idx) {
+                    function ownPartRows(slide, idx, nested = true) {
                       const parts = slide.data?.isShiny && Array.isArray(slide.data.parts) && slide.data.parts.length > 0 ? slide.data.parts : null
                       if (!parts) return null
                       const activePart = selectedSlideId === slide.id ? (slide.data.currentPart ?? 0) : -1
                       return (
-                        <div className="pl-4">
+                        <div className={nested ? 'pl-4' : ''}>
                           {parts.map((_, i) => rowFor(slide, idx, {
                             key: `${slide.id}:${i}`,
                             doubleIndent: true,
@@ -596,23 +611,34 @@ export default function RoundSidebar({
                     return (
                       <div key={groupId}>
                         {rowFor(leadSlide, leadIdx, {
-                          groupCount: group.items.length,
+                          groupCount: contentTotal,
                           groupExpanded: expanded,
                           onToggleGroup: () => toggleGroup(groupId),
-                          // The lead row IS item 1 — its own sub-row is never
-                          // rendered (group.items.slice(1) below skips it), so
-                          // without this the expanded list reads as "only 5"
-                          // when the count badge says 6 (Ben, 2026-08-18, hit
-                          // this twice on a 6-slide image series).
-                          leadPartLabel: shinySiblingLabel(leadSlide, 1, group.items.length),
+                          // Legacy only: the lead row IS item 1 — its own
+                          // sub-row is never rendered, so without this the
+                          // expanded list reads as "only 5" when the count
+                          // badge says 6 (Ben, 2026-08-18, hit this twice on
+                          // a 6-slide image series). A title-led group has
+                          // no such absorbed item, so its badge is the plain
+                          // content count.
+                          leadPartLabel: hasTitle ? undefined : shinySiblingLabel(leadSlide, 1, contentTotal),
                         })}
-                        {expanded && ownPartRows(leadSlide, leadIdx)}
-                        {expanded && group.items.slice(1).map(({ slide, idx }, i) => (
-                          <div key={slide.id}>
-                            {rowFor(slide, idx, { doubleIndent: true, labelOverride: shinySiblingLabel(slide, i + 2, group.items.length) })}
-                            {ownPartRows(slide, idx)}
-                          </div>
-                        ))}
+                        {expanded && !hasTitle && ownPartRows(leadSlide, leadIdx)}
+                        {expanded && content.map(({ slide, idx }, i) => {
+                          // Title + ONE tied parts[] slide (the "3 parts on
+                          // one slide" series shape): the parts ARE the
+                          // sub-slides, so list them straight under the
+                          // title instead of an "S1 of 1" row with the
+                          // parts nested a level deeper.
+                          const soloParts = hasTitle && content.length === 1 && Array.isArray(slide.data?.parts) && slide.data.parts.length > 0
+                          if (soloParts) return <div key={slide.id}>{ownPartRows(slide, idx, false)}</div>
+                          return (
+                            <div key={slide.id}>
+                              {rowFor(slide, idx, { doubleIndent: true, labelOverride: shinySiblingLabel(slide, contentPos(i), contentTotal) })}
+                              {ownPartRows(slide, idx)}
+                            </div>
+                          )
+                        })}
                       </div>
                     )
                   })}
