@@ -1,98 +1,123 @@
-# Fact Hunt Progress — 2026-08-23
+# Fact Hunt Progress — 2026-08-26
 
-Run agent id: `fact-hunt-2026-08-23`
-Mode: full round, 100-fact target. **Inline execution** — this run is a forked subagent with no Agent/Task-tool access, so Track 1 and Track 2 ran single-threaded rather than as 2-3 parallel subagents per track as the command specifies. Noted in final report; actual fact count will fall well short of 100 as a result.
+Run agent id: `fact-hunt-2026-08-26`
+Mode: full round, **120-fact pace-setter (Ben doubled it 8:26p — Track 1: 84, Track 2: 36; per-domain cap scales to ~18)**. Normal session, full Agent-tool dispatch confirmed.
 
 ## Resume check
-- No live/dead `fact-hunt-<date>` round today. Only today-dated rows are `agent='fact-hunt-migration'` (377 rows, one-time legacy backfill, not a real round — doesn't match the round-agent pattern, and is hours stale regardless).
-- No collision. Fresh round.
+- No rows in `fact_hunt_entries` for `round_date = current_date` — fresh round, tally 0/60.
+- No sibling live run. No collision.
 
-## Taste Profile (read 800 rows of `questions`, ids 1-~800 range via 4x LIMIT 200 batches)
+## Preflight (Phase 0)
+- yt-dlp 2026.08.19 — version OK, real smoke test OK (`ytsearch1:test` returned a result). YouTube UP.
+- agent-reach doctor: youtube ok, reddit ok — reddit smoke test initially FAILED (`BROWSER_CONNECT`; OpenCLI extension was disabled in Chrome). Ben re-enabled it 8:10p; re-smoke-test PASSED (`opencli reddit search "trivia"` returned live results). **Reddit UP.** Track 2 runs all three platforms.
+- Podcasts: not separately smoke-tested (only required if both yt+reddit fail; YouTube is up).
+- Subagent dispatch: throwaway agent returned OK. Dispatch UP.
+- Phase 0 reads done: references/fact-hunt/trivia-questions.md, dispatching-parallel-agents SKILL, agent-reach SKILL + video.md.
 
-### Topic fingerprint (rough bucket of the 800 read, by recurring category)
-- Film/TV: ~20% — heavy on Disney parks/deep-cuts, MCU/superhero trivia, 80s-2020s films, sitcom deep-cuts (Office, Seinfeld, SpongeBob)
-- Music: ~18% — one-hit wonders, band-name origins, Grammy/RRHOF trivia, classic rock, country, Michigan bands (Verve Pipe)
-- History/military ops: ~10% — WW2 op code names, Cold War, Wild West, ancient history
-- Sports: ~12% — MLB/NFL/NBA records, "only team whose name ends in a vowel"-style superlatives, Michigan teams (Tigers)
-- Geography/travel: ~10% — national parks, "smallest/remotest" superlatives, Michigan towns
-- Words/etymology: ~8% — compound words, archaic terms, "shares its name with"
-- Horror/myth/legend: ~7% — cryptids, hauntings, classic monster movies
-- Food/drink/brands: ~6% — fast food history, cocktails, brand mascots
-- Michigan/local: recurring anchor across every domain above, not a separate bucket — Saginaw, Tigers, MSU/UofM, Shorts/Founders breweries, UP/Yooper culture
-- Games/toys/misc records: ~5% — Toy Hall of Fame, board games, "onlys/firsts"
-- Records/onlys/misc: scattered throughout as the connective tissue, not its own bucket
+## Bank distribution (fact_hunt_entries, status <> 'tombstoned', pulled 8:01p — 202 rows)
+Geography 33 · History 25 · Music 24 · Science/Nature 23 · Words/Etymology 23 · Film/TV 20 · Games/Toys 18 · Michigan/Local 13 · Food/Drink/Brands 11 · Sports 11 · Records/Onlys/Firsts/Misc 1
 
-### Reference universe (recurring wells)
-Michigan/Saginaw anchors (Tigers, MSU/UofM, Sault Ste Marie, Beaver Island, Shorts/Founders/Bell's breweries), Disney park deep-cuts (ride history, Imagineering trivia), classic rock/one-hit-wonder music trivia, WW2 operation code names, MCU/superhero lore, 80s-90s sitcoms (Office, Seinfeld, Full House-adjacent), horror-movie/cryptid lore, house lore (Ben, dad Shawn, the Coughlins), NFL/MLB/NBA record trivia.
+## Taste Profile (merged 2026-08-26 from 4 parallel corpus readers, ~1,580 substantive rows read in full)
+Coverage note: slices ids 339–867, 597–1119, 1120–1620, 1621–2138; ids 1–338 unread (one reader drifted); four slices converged — new pages stopped teaching.
 
-### Anatomy stats (confirmed from corpus, matches trivia-questions.md exactly)
-- Hook quotes appear on roughly 35-40% of standalone questions — e.g. "Ow! My Patella!" (Wounded Knee), "Stayin alive, stayin alive!" (pulsar), "It looks like you're writing a letter" (Operation Paper Clip)
-- "shares its name with…" bridge phrasing extremely common — dozens of instances (Colossus, Astoria, Squib, Cannonball, Maverick)
-- Trailing winks less frequent in this batch but present — sound-effect asides, parenthetical jokes
+### Topic fingerprint — BASELINE for deficit math (domain → % of substantive corpus)
+| Domain | Baseline % |
+|---|---|
+| Film/TV | 32 |
+| Music | 19 |
+| History | 8 |
+| Sports | 8 |
+| Records/Onlys/Firsts/Misc (incl. cryptids/folklore/internet) | 7 |
+| Geography | 6 |
+| Michigan/Local (as primary; garnishes far more) | 5 |
+| Food/Drink/Brands | 5 |
+| Games/Toys | 4 |
+| Science/Nature | 3 |
+| Words/Etymology | 3 |
 
-### Answer-familiarity range
-Typical (by-ear, whole-bar): Kit Kat, The Cars, Frankenstein, Denver, Dairy Queen, Wrigley Field, Alcatraz.
-Deep-cut (route, not destination-obscure): Operation Paper Clip, Colossus, Squib, Pandemonium, Hugo Strange, Manticore.
+Onlys/firsts/records is also a MODE: ~40% of all questions carry an only/first/last/most frame.
 
-### Answer-frequency (2+ repeats, hard-avoid this session)
-word/visual/audio/n/a are format-label artifacts, not real answers — filtered out. Real repeat answers: Bonnie and Clyde, Holy Grail, Seattle Mariners, Aerosmith, I Spy, Kevin Bacon, Montreal, Denver, Fabulous, Jack in the Box, Philadelphia Eagles, Bill Hader, Horses, Happy Days, Queen, Dragon, Little Drummer Boy, Clown, Jack Nicholson, Mad Hatter, Robin Thicke, Colossus, Steamboat, San Antonio Spurs, Frosty, Anthony Hopkins, Poison, Doom, Jack Sparrow, Sid — plus the skill's known list (Ludicrous, Apothecary, Headless Horseman, Kenny Loggins, Regina George, Jack Nicholson).
+Sub-obsessions: Disney/Pixar + parks (single deepest well); classic rock (Beatles, Zeppelin, Petty, supergroups, RRHOF induction classes); one-hit wonders + band-name origins; Grammy/Oscar/Razzie record-book; WW2 (op code names, oddities); cryptids/paranormal/folklore (signature well: Mothman, Amityville, Dogman); MLB/Tigers + team-name origins; national parks + superlative geography; dead retail + brand-mascot lore + breweries; cocktail lineage; retro Nintendo/board games; The Office (deepest sitcom well), Star Wars, LOTR/GoT as garnish; voice-actor crossovers; ranked-list-as-authority (Rolling Stone/Guinness/AFI cited in ~1 in 5).
 
-### Gap read (thin spots — extra quota target)
-Science/nature pure (non-animal) facts, words/etymology, food/drink/brands beyond fast-food-history, and non-Michigan-US geography (world capitals, world records) all read thinner than film/TV/music/sports in this batch — matches PYL agent's independent finding of a geography/food gap this session. Weighted Track-1 quota toward these.
+### Reference universe (wells that score bonus points)
+Michigan/Saginaw: Tigers ('84 battery, Zumaya), MSU/UofM, Frankenmuth, Mackinac, Flint (Grand Funk, Corvette), Bay City (Madonna, ? and the Mysterians), Saginaw businesses (Stable Ski Shop, car washes, dead retail), UP/Edmund Fitzgerald, Leland/Leelanau, Cedar Point, Michigan breweries (Shorts, Stroh's, Dark Horse, Frankenmuth). House lore: Shawn (Santa, PBR, couch), Carlee, Aunt Mary, Baynes itself, first-person Ben asides. Institutions: RRHOF, Grammy/Oscar record-book, Rolling Stone lists, IMDb, Guinness, Toy Hall of Fame, national parks, this-week deaths/news.
 
-## Dedupe corpus
-Live union query run at hunt start (bank `questions.answer` + `fact_hunt_entries.answer`) — checked per-candidate during hunting, not re-pasted here.
+### Anatomy stats (for wave-merge judgment)
+- Hook cold-open: ~15–40% by slice (themed shows cluster them) — quote/SFX/interjection, never explained, often secretly a clue.
+- Trailing wink: ~10–30% — ellipsis aside sneaking one more hint or joke.
+- "Shares its name with…": ~5–15% — THE workhorse bridge verb. "You could ask X…" / "If you're [artist]…" second-person bridge: ~3–8%.
+- The real signature: the unmarked second clue — nearly every question stacks a second independent route.
+
+### Texture habits
+~60% contain a digit, ~35% a year; texture numbers are load-bearing ("8,795 cans," "159 quintillion"). Median ~35–40 words, 2-sentence shape: fact → pivot + second clue. Ellipses ARE his dash (em-dash rare). ALL-CAPS SFX, stutter opens, self-interruptions, direct address. Proper nouns as texture even when not the answer.
+
+### Answer-familiarity + FACT-DEPTH BRACKET (paste into every subagent prompt)
+Typical answers (by-ear, whole bar): Kit Kat, The Cars, Pink Floyd, Morgan Freeman, Shrek, Atari, Alcatraz, TGI Fridays, Abbey Road, Justin Timberlake.
+Deepest-cut answers (still familiar-destination via a second route): Fountains of Wayne, DJ Pooh, Gilgamesh, Them Crooked Vultures, Bluestreak, Powerline, ? and the Mysterians.
+EASY FLOOR (reject — table half-knows): rickrolling origin, MythBusters tested the Titanic door, Tom was everyone's first Myspace friend, Paul barefoot on Abbey Road, backwards-masking = Zeppelin.
+GENUINE DEEP CUT (the accepted bar): Apollo 17 carried 4 mice named Fe/Fi/Fo/Fum; WW2 Navy built dedicated ice-cream barges; Tiffany's set the US silver standard (92%, 1837); HTTP error 451 = blocked for legal reasons (Fahrenheit 451); Gretzky was babysitting Robin Thicke when traded; Johnny Cash attacked by his ostrich Waldo (5 broken ribs); Andras Toma, last WW2 POW repatriated (2001).
+
+### Gap read (thin in bank relative to what plays — overflow quota targets)
+Hard science/space/inventions (pop-bridged), food-as-cuisine (vs brand lore), words/etymology as destination (wordplay is everywhere as method), international geography/history, hip hop/R&B, soccer/hockey/Olympics, women as answer subjects, visual art/architecture, post-2010 gaming, Michigan-as-entrée (it's mostly garnish).
+
+### Current fact_hunt_entries share (202 active rows) vs baseline → deficits
+Film/TV 9.9% (deficit +22) · Music 11.9% (+7) · Records/Misc 0.5% (+6.5) · Sports 5.4% (+2.6) · all others at/above baseline (Geography +10 over, Science +8 over, Words +8 over).
+Track 2 wave-1 floor: top-3 = Film/TV, Music, Records/Misc (60%); remainder tier = Sports (40%).
+
+## In-flight wave state
+- Phase 1 corpus study: 4 subagents DISPATCHED (rows 0-500 / 500-1000 / 1000-1500 / 1500-2000) + 1 dedupe-export agent (scratchpad dedupe-answers.txt / dedupe-angles.txt / repeat-answers.txt)
+- Separately (not fact-hunt): 3 concept generators running (PYL / shiny / swing) on Ben's ask.
 
 ## Wave log
-- Wave 1 (Track 1 inline, mixed domains): 12 facts drafted, 4 caught as exact dedupe collisions against the `fact-hunt-migration` legacy backfill (wombat cube-poop, narwhal/unicorn, octopus 3-hearts, Nepal flag) and deleted before commit.
-- Wave 2 (Track 1 inline, replacements): 3 facts (boxing ring, Twinkies myth, honey-never-spoils) added to replace the deleted 4.
-- Final: 11 facts committed to `fact_hunt_entries` under agent `fact-hunt-2026-08-23`. Track 2 did not run — no yt-dlp installed (YouTube off in `agent-reach doctor`) and OpenCLI's Reddit backend needs the Browser Bridge Chrome extension, not connected in this fork's environment.
+- **Wave 1 — DISPATCHED 8:28p (not yet flushed):**
+  - T1-A (Track 1, Film/TV + Music, quota 8)
+  - T1-B (Track 1, History + Sports + Records/Onlys/Firsts/Misc incl. cryptids, quota 8)
+  - T1-C (Track 1, Science/Nature + Words/Etymology + Food/Drink/Brands + international Geography, quota 8)
+  - T2-D (Track 2 YouTube, Film/TV 4 + Music 2, quota 6)
+  - T2-E (Track 2 Reddit/podcast/+Secret Base YT, Sports 4 + Records/Misc 2, quota 6)
+  - Wave quota: 36. Dedupe list frozen at scratchpad/dedupe-answers-frozen-w1.txt (1,926 answers). Shared spec: scratchpad/wave-spec.md.
+  - T1-A RETURNED 8:47p: considered 24 / self-rejected 15 / failed verification 1 / returned 8 (edge 0) → merge-gate: 0 collisions, 0 bounced, **8 accepted** (Maleficent accepted w/ angle-adjacency note: bank has Haunted Mansion answer, different route; Jim Cummings = shallowest cut per hunter). Held for wave flush. Also: Norm Peterson first-name fact held back under-sourced — rescuable next wave.
+  - T1-B RETURNED 8:55p: considered 30 / self-rejected 21 / failed verification 1 / returned 8 (edge 0) → merge-gate: 0 exact collisions, 0 bounced, **8 accepted** w/ flags: Bigfoot ≈ bank answer "Sasquatch" (synonym answer, different angle — Ben's call); Elmo's Tickle-Me-Elmo bridge collides with used bank answer (flag bridge, primary fact fresh). Held for flush.
+  - T2-D RETURNED 8:58p: considered 14 / self-rejected 7 / failed verification 1 / returned 6 (edge 0) → merge-gate: 0 collisions, 0 bounced, **6 accepted** w/ flags: Ratzenberger bridges (Cheers+Pixar+voice-acting) angle-near-match bank's "Cheers" question — primary lawsuit fact is fresh; Michael Moore verified via court opinion + CBS + Copyright Office (no Wikipedia coverage exists — institutional-grade, noted); Chumbawamba fee is a $70–100k range per sources. Per-source: RnR True Stories 4/3, Law School Data 3/3, GameSpot Universe 1/0, Music Files 0/0 (unfindable), exploratory Twenty Thousand Hertz 1/0. Held for flush.
+  - T2-E RETURNED 9:05p: considered 24 / self-rejected 18 / failed verification 0 / returned 6 (edge 0) → merge-gate: 1 cross-batch collision (Detroit Tigers, vs T1-B) resolved by re-anchoring the Disco Demolition entry's answer to "Disco Demolition Night" (event is the by-ear destination; fact/bridges unchanged); Sherlock Holmes accepted w/ angle flag (bank has Loch Ness/Loch Ness Monster on cryptid route; primary route = film-prop discovery). **6 accepted.** Per-source: r/todayilearned 14/4, Secret Base 4/2, r/interestingasfuck 1/0, NSTAAF 0/0 (RSS teasers only — transcription not spent this wave), Tifo + PMT not pulled.
+  - T1-C RETURNED 9:15p: considered 40 / self-rejected 32 / failed verification 0 / returned 8 (edge 1 — "quiz" shape-edge myth-bust) → 0 collisions, 0 bounced, **8 accepted** (tulip-festival bridge on Netherlands is adjacent to bank's tulip-mania answer — minor, noted).
+- **Wave 1 FLUSHED 9:20p — CONFIRMED: `select count(*)` = 36 rows, 36 distinct answers, agent fact-hunt-2026-08-26.** Tally 36/120.
+- Wave 1 counters: `wave 1 (both tracks, all domains): subagents 5 / quota 36 / considered 132 / self-rejected 93 / failed verification 3 / returned 36 / bounced 0 / accepted 36 / edge 1`. Accept rate 100% (36/36 returned).
+- Source scoring applied: RnR True Stories 5/4 (film-tv .925), Law School Data 4/4 (1.0), Secret Base 4/2 (sports .815), GameSpot 2/1 (.7), r/todayilearned 14/4 → **DEMOTED** (28.6% < 30% rule), r/interestingasfuck .42, Twenty Thousand Hertz added (exploratory, 1/0). Music Files unfindable via ytsearch — candidate for retirement.
+- Model note: wave 1 hunters ran on Fable 5 (session-inherited). Ben asked to "switch to Fable 5" — already the case; wave 2 stays Fable 5.
+- **Wave 2 — DISPATCHED 9:22p (not yet flushed):** same 5-slice shape, dedupe file dedupe-answers-frozen-w2.txt (1,962), deficits recomputed (238 active rows): top-3 still Film/TV +19.8 / Music +6.8 / Records +4.9, Sports +0.4 the only other positive. T2 floor: Film/TV 4 + Music 2 (YouTube), Sports 4 + Records 2 (Reddit/podcast/Secret Base).
+  - T1-B RETURNED 9:35p: considered 22 / self-rejected 14 / failed verification 0 / returned 8 (edge 1, shape-edge Chupacabra — no taste waiver consumed) → 0 collisions, 0 bounced, **8 accepted** (Rose Bowl: bank has "Rose Bowl Parade" on broadcasting angle; 1902 game fact is a different route — noted). Prominence rule killed Fielder 319-HR near-miss. Held for flush.
+  - T1-C RETURNED 9:40p: considered 24 / self-rejected 16 / failed verification 0 / returned 8 (edge 0) → 0 collisions, 0 bounced, **8 accepted** (Grape-Nuts adjacency: bank has Kellogg's/Battle Creek answers — Post side of same feud, different answer, noted). Spares cut at quota: Dave Thomas GED, Energizer/Duracell bunny (verified-adjacent, rescuable). Held for flush.
+  - T2-E RETURNED 9:48p: considered 24 / self-rejected 18 / failed verification 0 / returned 6 (edge 0) → **1 BOUNCED at merge**: Ty Cobb entry = wave 1's flushed "Detroit Tigers" 1912 strike fact (same event, different answer — cross-track duplicate). **5 accepted** w/ flags: Pokémon answer-fresh (bank uses it heavily as bridge domain only); Bubba Smith's Hightower bridge grazes bank #419 (primary steel-marker fact fresh). Guinness-seizure sub-claim correctly dropped (404). Per-source: r/TIL-via-search 8/4, Secret Base 3/1, r/EndDemocracy 1/1, r/baseball exploratory 2/0.
+  - T1-A RETURNED 9:55p: considered 18 / self-rejected 10 / failed verification 0 / returned 8 (edge 0) → 0 collisions, **8 accepted** incl. Norm rescue (transcript + IMDb sourcing landed) and Dolly Parton death — **verified real by orchestrator via WebSearch (NPR/NBC/Variety/CNN, d. 2026-08-25)** before flush. Tim Curry also died 8/25 but is a frozen answer — bridge-use only.
+  - T2-D RETURNED 9:58p: considered 28 / self-rejected 22 / failed verification 0 / returned 6 (edge 0) → 1 flag ("Mr. Brightside" — bank has The Killers as answer; song answer distinct), **6 accepted**. Law School Data + I Want My 80's Back unfindable via ytsearch this wave (same failure as Music Files — flag all three for retirement review). Per-source: RnRTS 3/1, Country Cast 4/1, GameSpot 13/4, Company Man 1/0.
+- **Wave 2 FLUSHED 10:05p — CONFIRMED: count = 71 rows, 71 distinct answers.** Tally 71/120.
+- Wave 2 counters: `wave 2 (both tracks, all domains): subagents 5 / quota 36 / considered 116 / self-rejected 80 / failed verification 0 / returned 36 / bounced 1 / accepted 35 / edge 2`. Round accept rate 71/72 = 98.6%.
+- Wave 2 source scoring applied. r/todayilearned recovered to 36% lifetime (still demoted — spec has no promotion path; flag for Ben). New: r/EndDemocracy 1/1, r/baseball 0/2. GameSpot survived demotion check (33.3%).
+- **Wave 3 (first dispatch) KILLED ~10:10p — all 5 subagents terminated by session usage limit (reset 10pm Detroit). Nothing returned, nothing lost from the table (71 rows safe). Partial leads recovered: Kingsford/Michigan (T2-E), dedupe kills Guthrie/Dropkick/Departed (T2-D). Re-dispatched post-reset as wave 3b, same slices.**
+- **Wave 3b — DISPATCHED post-reset (not yet flushed):** NOTE: machine slept twice mid-wave, killing T2-E (Michigan) twice — resumed via SendMessage both times; `caffeinate -is` now holds the Mac awake for the rest of the round.
+  - T1-A RETURNED: considered 23 / self-rejected 15 / failed verification 0 / returned 8 (edge 0) → 0 collisions, **8 accepted** (Stevie Wonder answer-fresh — bank only bridges him on "Harmonica"; Blair Witch $60K-budget viral claim correctly killed in-verification; Rocky Horror prominence caveat noted — record is lead-paragraph, never-pulled mechanics are the deep layer). Held for flush.
+  - T1-B RETURNED: considered 26 / self-rejected 18 / failed verification 0 / returned 8 (edge 0) → 0 collisions, **8 accepted** (Colosseum ≠ bank's two "Colossus" answers — noted; Conan Doyle adjacent to w2's Sherlock Holmes entry, different answer/fact; Taft = wave's 2nd myth-bust). Held for flush. Wave 3 running tally: 16.
+  - T2-E sleep-killed a 3rd time (Wikipedia MCP rate-limited, falling back to curl) — resumed again; told to return a short verified batch rather than run long. deficits recomputed (273 active): top-3 Film/TV +18.4 / Music +6.2 / Records +3.7; 40%-tier = Michigan/Local (+0.2) — Sports now at baseline. T2 floor: Film/TV 4 + Music 2 (YouTube), Michigan/Local 4 + Records 2 (Reddit/podcast — exploratory r/Michigan, r/Detroit). T1 same 3 slices. Dedupe file dedupe-answers-frozen-w3.txt (1,997).
+  - **Round abandoned here 2026-08-26 ~10:15p** — wave 3b's T2-D/T2-E never dispatched (session ended). Tally frozen at 71 (wave 2 flush) + T1-A 8 + T1-B 8 from wave 3b = **87/120**. Never resumed under this agent id.
 
-## Round closed short of 100-fact target
-Inline single-threaded execution (no Agent/Task-tool subagent dispatch available to this fork) can't reach the dual-track parallel throughput the command assumes. 11 verified facts delivered as an honest partial round rather than fabricating volume. Recommend Ben rerun `/fact-hunt` from the normal (non-forked) session so it can dispatch the real 2-3-subagents-per-track parallel waves.
+## Round resumed 2026-09-01 as `fact-hunt-2026-09-01` (5 days later — new round_date, new agent id per resume-check rules; not a same-day crash recovery)
 
----
+Ben's call, asked explicitly: "resume one wave now" rather than leave 8/26 dead or run a full fresh round. The 120-fact target from 8/26 was a one-off Ben doubled that specific night — command default is 60, and Phase 5's own rule is report the honest tally, never pad toward a number. Treated as: reuse the 8/26 Taste Profile (still substantive, not redone), recompute domain deficits fresh against the full bank (now 315 active rows across all agents, not just this round), dispatch exactly one wave, flush, stop — not a claim that digging is "exhausted" (that needs 2+ waves per track; this was Ben-scoped to one).
 
-## CONTINUATION — same 2026-08-23 round, new session with full Task/Agent access
+**Fresh deficit read (315 active rows, vs Taste Profile baseline):** Film/TV 16.5% vs 32% baseline (deficit +15.5) · Music 14.6% vs 19% (+4.4) · Records/Misc 5.1% vs 7% (+1.9) · every other domain at or over baseline (Geography, History, Words/Etymology, Science/Nature, Games/Toys all overshot; Michigan/Local ~at). Only 3 positive-deficit domains — wave targeted those three plus a mild Michigan/Local exploratory top-up on T2.
 
-Run agent id for everything from here: `fact-hunt-2026-08-23-2`. Prior run's 11 rows (agent `fact-hunt-2026-08-23`) are NOT re-researched — they count as this round's starting tally (11/100) per the resume-check's "legitimate partial result, already flushed" rule. `agent-reach doctor --json` now reports youtube: ok (yt-dlp) and reddit: ok (OpenCLI). Track 2 is live.
+**Preflight:** yt-dlp 2026.08.19 OK, real smoke test OK. agent-reach doctor: youtube ok, reddit ok (OpenCLI) — both real-smoke-tested OK this time, no BROWSER_CONNECT repeat.
 
-Taste Profile above (topic fingerprint, reference universe, anatomy stats, answer-familiarity, gap read) is reused as-is — same session/date, still fresh. Not redone.
-
-### Canonical domain wheel for THIS run's inserts (per command spec's 10-domain wheel)
-History · Science/Nature · Sports · Music · Film/TV · Geography · Food/Drink/Brands · Words/Etymology · Michigan/Local · Records/Onlys/Firsts/Misc
-(Legacy bank also contains "Games/Toys" and "Literature/Comics" as ad hoc extensions outside the spec's wheel — flagged in Phase 5 report as pre-existing drift, not reproduced by new inserts unless a candidate is unambiguously games/toys, in which case reuse "Games/Toys" to match precedent rather than mis-bucketing it.)
-
-### Domain-deficit baseline (Phase 1 topic fingerprint compressed onto the 10-domain wheel, summing to 100)
-Film/TV 19 · Music 17 · Sports 12 · History 10 · Geography 10 · Words/Etymology 8 · Food/Drink/Brands 6 · Science/Nature 5 · Michigan/Local 5 · Records/Onlys/Firsts/Misc 8
-
-### Wave log (continuation)
-- Wave 1: Track 1 x3 (Film/TV 10, Music+Records 12, Science/Nature+Geography 14 = 36) + Track 2 x2 (Film/TV+Music+History 7, Records+Geography 8 = 15). 51 facts flushed to `fact_hunt_entries` under `fact-hunt-2026-08-23-2` (1 fixed post-insert: Cleveland/Balloonfest myth-bust entry only had 1 source, added Case Western Reserve's Encyclopedia of Cleveland History as second source). `fact_hunt_sources` scoring updated for both existing (Half As Interesting, Wendover Productions) and 10 newly-discovered Track 2 sources.
-  - **Reddit was NOT actually usable this session** despite `agent-reach doctor --json` reporting `status: ok` for reddit — OpenCLI's browser-bridge backend errored (`BROWSER_CONNECT`, Chrome extension not connected) on every retry across both Track 2 subagents, no `rdt-cli` fallback installed. Track 2 ran YouTube-only both waves so far. Flag for Phase 5: doctor-vs-runtime-reality contradiction.
-  - Running tally: this run (fact-hunt-2026-08-23-2) = 51. Combined round (+ prior 11) = 62/100. Track 1 total 47/70 (23 remaining). Track 2 total 15/30 (15 remaining).
-- Wave 2 dispatch (in flight): Track 1 x3 (Sports 8; History 5 + Food/Drink/Brands 5; Words/Etymology 5 = 23) + Track 2 x2 (Film/TV 3 + Music 3 = 6; Records/Onlys/Firsts/Misc 3 + History 4 + Sports 2 = 9) — deficit recomputed against full 439-row bank, same top-3 deficit domains as wave 1 (Film/TV, Music, Records/Onlys/Firsts/Misc).
-- Wave 2 never landed in Supabase (checked 2026-08-24: only the wave 1 51 rows + prior 11 exist under this round's agents). Round left at 62/100, incomplete — not resumed by this session, see quick-mode entry below instead.
-
----
-
-## `/fact-hunt quick` — 2026-08-24, agent `fact-hunt-quick-2026-08-24`
-
-Requested run: N=10, inline (no subagent dispatch needed for this size), to sanity-check the new Blinders-off gate + prominence check added to the command spec today. Track 1 only (web/Wikipedia), Taste Profile reused as-is from 2026-08-23 above.
-
-**Result: 8 of 10 delivered.** Quality-over-quota — several strong-looking candidates were rejected, not padded around:
-- **Already in the bank/dedupe corpus** (caught by per-candidate `ilike` check against `questions` + `fact_hunt_entries`, not a guess): Kellogg's Corn Flakes, The Slinky, the word "Nice," narwhal/unicorn, Assassin's Creed.
-- **Failed the new prominence check** before it went any further: Vernors' Civil War-barrel origin story — true, but too well-worn a piece of Michigan lore (leads its own Detroit Historical Society page) to count as a deep cut.
-
-**Delivered (all `fits='regular'`, 2 sources + 1 bridge each):**
-1. Zebra — 2025 Ig Nobel (zebra-striped cattle repel flies) + zebra crossing etymology (Slough, 1951)
-2. Adobe — company named after Adobe Creek + the word's ~4,000-year Egyptian→Coptic→Arabic→Spanish journey
-3. Ian Fleming — WWII's Operation Ruthless (staged plane crash to steal Enigma codebooks) before he created James Bond
-4. Worcestershire sauce — Lea & Perrins' forgotten cellar barrel + modern Bloody Mary/Caesar salad crossover
-5. Dropkick Murphys — named for wrestler/rehab-sanatorium operator John "Dropkick" Murphy + The Departed/Bruins crossover
-6. Pittsburgh Steelers — only NFL team with a one-sided helmet logo (Rooney oversight) + it's literally the U.S. steel industry's "Steelmark" emblem
-7. Space Shuttle Enterprise — Star Trek fan letter campaign renamed it from "Constitution"
-8. Cashew — raw shells carry the same urushiol as poison ivy (and mango), never sold in-shell
-
-Verified in Supabase post-insert: all 8 rows non-null on domain/answer/fact/bridges/sources/fits/staleness/origin (`select ... where agent = 'fact-hunt-quick-2026-08-24'`), zero dedupe collisions. Fact browser UI has the entries.
-
-**Read on the new gates:** they worked as intended and cost real yield — roughly half of researched candidates this round were rejected for being too circulated or already banked, not for being false. That tracks with the point of "Blinders off." Full round would need proportionally more research volume to hit 100 at this bar.
+**Wave 1 (2026-09-01) — DISPATCHED, FLUSHED, CONFIRMED same session:**
+  - T1-A (Film/TV, quota 10): considered 30 / self-rejected 18 / failed verification 1 / returned 11 (edge 1, shape-edge — "555," breaks the proper-noun-answer convention) → 0 dedupe hits, **11 accepted**.
+  - T1-B (Music, quota 8): considered 13 / self-rejected 4 / failed verification 1 / returned 8 (edge 0) → 0 dedupe hits, **8 accepted**.
+  - T1-C (Records/Misc, quota 6): considered 17 / self-rejected 11 / failed verification 0 / returned 6 (edge 0) → 0 dedupe hits, **6 accepted**.
+  - T2-D (YouTube, Film/TV 4 + Music 2): considered 18 / self-rejected 12 / failed verification 0 / returned 6 (edge 0) → 0 dedupe hits, **6 accepted**. Sources: Law School Data 10 pulled/4 verified, Professor of Rock 1 pulled/2 hits, GameSpot Universe 2/0, Rock N' Roll True Stories 2/0, Country Cast 90 scouted/0 (channel drifted to political/tabloid clickbait — **flag for Ben: consider downgrading**), Twenty Thousand Hertz/apollomovieguy/I Want My 80's Back!/Music Files all 1 try each, mostly unfindable via ytsearch (3rd wave in a row for the ytsearch-unfindable trio).
+  - T2-E (Reddit/podcast, Records/Misc 4 + Michigan/Local 2): considered 47 / self-rejected 41 / failed verification 0 / returned 6 (edge 0) → 0 dedupe hits, **6 accepted**. r/todayilearned (already demoted) carried the batch alongside r/Michigan/r/Detroit exploratory (~55-60 raw candidates pulled, uncleanly separable by sub); Half As Interesting and Jon Bois/Secret Base each tried once, 0 hits this wave.
+  - **Cross-batch dedupe: 0 collisions** (37 distinct answers, verified via live SQL union query against `questions` + `fact_hunt_entries` before insert — all 37 clear).
+  - **FLUSHED — CONFIRMED: `select count(*)` = 37 rows, agent `fact-hunt-2026-09-01`.**
+  - Wave 1 counters: `wave 1 (both tracks, all domains): subagents 5 / quota 36 / considered 125 / self-rejected 86 / failed verification 2 / returned 37 / bounced 0 / accepted 37 / edge 1`. Accept rate 100% (37/37 returned accepted).
+  - **Source-scoring update applied.** Notable: **r/todayilearned crossed into RETIREMENT this wave** — already demoted (36% lifetime going in), this wave's ~57 attempted / 6 verified dragged the running rate to ~17.7% at 79 total attempts (≥15 threshold), triggering the spec's automatic retirement rule (`status='retired'`). Flag for Ben — it was still the single biggest Track 2 producer by volume even at a low hit rate; retiring it removes it from the default rotation but it's not gone, still queryable as historical data.
+  - Round total for this agent id after 1 wave: **37/120** (round-level target inherited from 8/26 is stale/one-off; not treated as a real target — see above). Combined with the dead 8/26 round's 87, the bank now has two partial `fact-hunt` rounds on this topic (124 combined rows), which is fine — they're independent, dedupe-safe, and both live in `fact_hunt_entries`.
+  - **Not claiming exhaustion.** Only 1 wave ran this session (Ben's explicit scope: "resume one wave now," not "run to exhaustion"). Phase 5's 2-waves-per-track minimum wasn't attempted. Round stays open — a future `/fact-hunt` invocation (or another explicit "resume" ask) can pick up more waves against the same live deficit read.

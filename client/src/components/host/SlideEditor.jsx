@@ -15,7 +15,7 @@ import { DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { overflowsBox, QUESTION_BOX } from '../../lib/autoFitText.js'
-import { isConcurrentShiny } from '../../lib/shinySeries.js'
+import { isConcurrentShiny, isConcurrentMediaShiny } from '../../lib/shinySeries.js'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 
 export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos }) {
@@ -1086,6 +1086,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, onMediaUpl
                 onRemove={() => removePart(i)}
                 onUploadMedia={file => uploadPartMedia(i, file)}
                 canRemove={data.parts.length > 1}
+                hideAnswer={isConcurrentMediaShiny(data) || (data.answer ?? '').trim().length > 0}
               />
             ))}
           </div>
@@ -1217,108 +1218,181 @@ function BulkTextDropzone({ count, onRows }) {
   )
 }
 
-function ShinyPartEditor({ part, index, schemaType, theme, onChange, onRemove, onUploadMedia, canRemove }) {
+function ShinyPartEditor({ part, index, schemaType, theme, onChange, onRemove, onUploadMedia, canRemove, hideAnswer }) {
   const media = part.mediaSlots?.[0]
   // Same upload-vs-YouTube toggle as the top-level Audio slots block, scoped
   // to this part. Derived once from whatever's already on the part; this
   // component is remounted whenever the parent QuestionEditor remounts
   // (slide switch), so the lazy init never goes stale.
   const [audioMode, setAudioMode] = useState(media?.type === 'youtube' ? 'youtube' : 'upload')
+  // Collapsed to a single pill row by default (Ben, 2026-09-01: a 4-asset
+  // question stacked 4 full-height cards in the rail — "still confused").
+  // Auto-expands only when the part still needs its main content filled in —
+  // no media yet on a media-type part, no question text yet on a text part —
+  // so an empty card is never hiding behind a collapsed row. Lazy init only;
+  // same remount-on-slide-switch contract as audioMode above.
+  const [expanded, setExpanded] = useState(() =>
+    ['image', 'audio', 'video'].includes(schemaType)
+      ? !(part.mediaSlots?.length > 0)
+      : !(part.text ?? '').trim()
+  )
 
   function setPartYoutube(clip) {
     onChange({ ...part, mediaSlots: clip ? [{ type: 'youtube', videoId: clip.videoId, start: clip.start, end: clip.end, volume: clip.volume }] : [] })
   }
 
+  const isImageMedia = media?.url && (media.type?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(media.url))
+  const filename = media?.url ? decodeURIComponent(media.url.split('/').pop().split('?')[0]) : null
+  const summary = media?.type === 'youtube'
+    ? `YouTube · ${media.videoId}`
+    : filename ?? ((part.text ?? '').trim() || 'Empty — click to fill in')
+  const icon = media?.type === 'youtube' || schemaType === 'video' ? '▶️'
+    : schemaType === 'audio' ? '🎵'
+    : schemaType === 'image' ? '🖼️'
+    : '📝'
+
   return (
-    <div className="border border-gray-200 rounded-lg p-3 space-y-2.5">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Asset {index + 1}</span>
-        {canRemove && (
-          <button onClick={onRemove} className="text-xs text-gray-300 hover:text-red-500 transition-colors">✕</button>
-        )}
-      </div>
-      <Field label="Subtitle" hint='Shown above the question — a quote, or a short label like "Villain Laughs"'>
-        <TextInput value={part.label} onChange={v => onChange({ ...part, label: v })} placeholder="Optional quote or label for this asset" />
-      </Field>
-      <Field label="Question Number" hint="Optional — each asset can read as its own numbered question instead of sharing the slide's number">
-        <NumberInput
-          value={part.questionNumber ?? ''}
-          onChange={v => onChange({ ...part, questionNumber: v === '' ? null : v })}
-        />
-      </Field>
-      {schemaType === 'image' && (
-        <MediaUpload
-          popup
-          accept="image"
-          label="Image"
-          currentUrl={media?.url}
-          currentType={media?.type}
-          onUpload={onUploadMedia}
-          onRemove={() => onChange({ ...part, mediaSlots: [] })}
-        />
-      )}
-      {schemaType === 'audio' && (
-        <>
-          <div className="flex gap-1.5">
-            <button
-              type="button"
-              onClick={() => setAudioMode('upload')}
-              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
-                audioMode === 'upload'
-                  ? 'bg-blue-500 border-blue-500 text-white'
-                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              📁 Upload
-            </button>
-            <button
-              type="button"
-              onClick={() => setAudioMode('youtube')}
-              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
-                audioMode === 'youtube'
-                  ? 'bg-blue-500 border-blue-500 text-white'
-                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              ▶️ YouTube
-            </button>
-          </div>
-          {audioMode === 'youtube' ? (
-            <YoutubeClipEditor
-              value={media?.type === 'youtube' ? media : null}
-              onChange={setPartYoutube}
-            />
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
+      {/* Always-visible pill row: thumbnail + label + filename/snippet +
+          chevron. Clicking anywhere on it toggles the fields below. */}
+      <div
+        onClick={() => setExpanded(e => !e)}
+        className="flex items-center gap-2.5 px-3 py-2 cursor-pointer select-none hover:bg-gray-50 transition-colors"
+      >
+        <div className="w-8 h-8 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center text-sm shrink-0 overflow-hidden">
+          {isImageMedia ? (
+            <img src={media.url} alt="" className="w-full h-full object-cover" />
           ) : (
-            <MediaUpload
-              accept="audio"
-              label="Audio File"
-              currentUrl={media?.url}
-              currentType={media?.type}
-              onUpload={onUploadMedia}
-              onRemove={() => onChange({ ...part, mediaSlots: [] })}
-            />
+            <span>{icon}</span>
           )}
-        </>
-      )}
-      {schemaType === 'video' && (
-        <YoutubeClipEditor
-          value={media?.type === 'youtube' ? media : null}
-          onChange={setPartYoutube}
-        />
-      )}
-      {schemaType !== 'list' && (
-        <Field label="Question Text">
-          <TextArea value={part.text} onChange={v => onChange({ ...part, text: v })} placeholder="Write the question here…" rows={2} />
-          {overflowsBox(part.text, { ...QUESTION_BOX, family: theme?.fonts?.body ?? 'DM Sans' }) && (
-            <p className="text-xs text-amber-600 mt-1.5 leading-relaxed">
-              ⚠️ This asset's text is too long to fit the display — it'll run past its box on the TV. Shorten it.
-            </p>
-          )}
-        </Field>
-      )}
-      <Field label="Answer">
-        <TextInput value={part.answer ?? ''} onChange={v => onChange({ ...part, answer: v })} placeholder="The answer…" />
-      </Field>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+            Asset {index + 1}{part.label ? ` · ${part.label}` : ''}
+          </p>
+          <p className="text-xs text-gray-500 truncate">{summary}</p>
+        </div>
+        {canRemove && (
+          <button
+            onClick={e => { e.stopPropagation(); onRemove() }}
+            className="text-xs text-gray-300 hover:text-red-500 transition-colors shrink-0"
+          >
+            ✕
+          </button>
+        )}
+        <svg
+          viewBox="0 0 20 20"
+          fill="none"
+          className={`w-4 h-4 text-gray-300 shrink-0 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+        >
+          <path d="M7.5 4.5L13 10l-5.5 5.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+
+      {/* Expandable detail — the 0fr/1fr grid-row trick animates to natural
+          height with no magic max-height cap. MediaUpload's popup mode is
+          position:fixed, so the overflow-hidden here never clips it. */}
+      <div className={`grid transition-[grid-template-rows] duration-200 ease-out ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+        <div className="overflow-hidden min-h-0">
+          <div className="px-3 pb-3 pt-1 space-y-2.5">
+            <Field label="Subtitle" hint='Shown above the question — a quote, or a short label like "Villain Laughs"'>
+              <TextInput value={part.label} onChange={v => onChange({ ...part, label: v })} placeholder="Optional quote or label for this asset" />
+            </Field>
+            <Field label="Question Number" hint="Optional — each asset can read as its own numbered question instead of sharing the slide's number">
+              <NumberInput
+                value={part.questionNumber ?? ''}
+                onChange={v => onChange({ ...part, questionNumber: v === '' ? null : v })}
+              />
+            </Field>
+            {schemaType === 'image' && (
+              <MediaUpload
+                popup
+                accept="image"
+                label="Image"
+                currentUrl={media?.url}
+                currentType={media?.type}
+                onUpload={onUploadMedia}
+                onRemove={() => onChange({ ...part, mediaSlots: [] })}
+              />
+            )}
+            {schemaType === 'audio' && (
+              <>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setAudioMode('upload')}
+                    className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                      audioMode === 'upload'
+                        ? 'bg-blue-500 border-blue-500 text-white'
+                        : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    📁 Upload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAudioMode('youtube')}
+                    className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                      audioMode === 'youtube'
+                        ? 'bg-blue-500 border-blue-500 text-white'
+                        : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    ▶️ YouTube
+                  </button>
+                </div>
+                {audioMode === 'youtube' ? (
+                  <YoutubeClipEditor
+                    value={media?.type === 'youtube' ? media : null}
+                    onChange={setPartYoutube}
+                  />
+                ) : (
+                  <MediaUpload
+                    accept="audio"
+                    label="Audio File"
+                    currentUrl={media?.url}
+                    currentType={media?.type}
+                    onUpload={onUploadMedia}
+                    onRemove={() => onChange({ ...part, mediaSlots: [] })}
+                  />
+                )}
+              </>
+            )}
+            {schemaType === 'video' && (
+              <YoutubeClipEditor
+                value={media?.type === 'youtube' ? media : null}
+                onChange={setPartYoutube}
+              />
+            )}
+            {schemaType !== 'list' && (
+              <Field label="Question Text">
+                <TextArea value={part.text} onChange={v => onChange({ ...part, text: v })} placeholder="Write the question here…" rows={2} />
+                {overflowsBox(part.text, { ...QUESTION_BOX, family: theme?.fonts?.body ?? 'DM Sans' }) && (
+                  <p className="text-xs text-amber-600 mt-1.5 leading-relaxed">
+                    ⚠️ This asset's text is too long to fit the display — it'll run past its box on the TV. Shorten it.
+                  </p>
+                )}
+              </Field>
+            )}
+            {/* Hidden whenever the top-level Shared Answer covers this question —
+                two cases: (1) concurrent-media (all-at-once) slides never read
+                part.answer at all (partsToGridView only ever forwards data.answer),
+                so the field would be pure dead clutter; (2) a SEQUENTIAL series
+                where the host has explicitly filled in Shared Answer (e.g. "We're
+                Not So Different" — 4 assets revealed one at a time, but one shared
+                answer like "All Golf Terms") — showing 4 more answer boxes here
+                after that contradicted the Shared Answer field's own hint and is
+                exactly what confused Ben into thinking 4 assets needed 4 answers
+                (2026-09-01). Left visible for the genuine per-part-answer case
+                (Shared Answer blank, each asset really is its own question). */}
+            {!hideAnswer && (
+              <Field label="Answer">
+                <TextInput value={part.answer ?? ''} onChange={v => onChange({ ...part, answer: v })} placeholder="The answer…" />
+              </Field>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
