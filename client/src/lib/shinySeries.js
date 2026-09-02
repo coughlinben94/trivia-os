@@ -305,3 +305,21 @@ export function resolveJumpIndex(sorted, targetId) {
   const sameGroup = !!sorted[idx].data?.shinyGroupId && prev.data?.shinyGroupId === sorted[idx].data.shinyGroupId
   return prev.type === 'shiny-title' && sameGroup ? idx - 1 : idx
 }
+
+// What deleting `slideId` should actually take with it. A `shiny-title`
+// leads every shiny group (buildShinyTitleSlide) — deleting the group's
+// last CONTENT slide leaves it announcing nothing, a dead Next press on the
+// TV (RoundSidebar renders the orphan as a plain row, nothing points at it
+// any more). Deleting the title itself is allowed and intentionally leaves
+// the group's content alone — only a content delete can cascade.
+export function idsToDeleteWith(slides, slideId) {
+  const target = slides.find(s => s.id === slideId)
+  const groupId = target?.data?.shinyGroupId
+  if (!target || !groupId || target.type === 'shiny-title') return [slideId]
+  const hasOtherContent = slides.some(s =>
+    s.id !== slideId && s.type !== 'shiny-title' && s.data?.shinyGroupId === groupId
+  )
+  if (hasOtherContent) return [slideId]
+  const title = slides.find(s => s.type === 'shiny-title' && s.data?.shinyGroupId === groupId)
+  return title ? [slideId, title.id] : [slideId]
+}
