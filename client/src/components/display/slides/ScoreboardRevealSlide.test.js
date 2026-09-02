@@ -3,6 +3,7 @@ import {
   SPLIT_TEAM_THRESHOLD,
   REVEAL_CHROME_CQH,
   REVEAL_SPLIT_GAP_CQW,
+  REVEAL_CONTENT_CQW,
   REVEAL_SINGLE_COLUMN_CQW,
   REVEAL_SPLIT_COLUMN_CQW,
   REVEAL_ROW_DURATION,
@@ -32,7 +33,7 @@ describe('revealTemplate', () => {
 
   it('scales its fixed tracks down in split mode: cqw stays scoped to the FULL stage even inside a half-width column (overlay commit 3d1d5a5)', () => {
     const split = revealTemplate(true)
-    expect(split).toBe('4.93cqw minmax(0, 1fr) 8.38cqw')
+    expect(split).toBe('4.63cqw minmax(0, 1fr) 7.87cqw')
 
     const fixed = t => [...t.matchAll(/([\d.]+)cqw/g)].reduce((s, m) => s + Number(m[1]), 0)
     expect(fixed(split)).toBeLessThan(fixed(revealTemplate(false)))
@@ -46,8 +47,9 @@ describe('revealTemplate', () => {
     }
   })
 
-  it('two split columns plus their gap fit inside the stage', () => {
-    expect(REVEAL_SPLIT_COLUMN_CQW * 2 + REVEAL_SPLIT_GAP_CQW).toBeCloseTo(100, 6)
+  it('two split columns plus their gap fill the slide CONTENT box, not the whole stage — they sit inside the slide padding', () => {
+    expect(REVEAL_SPLIT_COLUMN_CQW * 2 + REVEAL_SPLIT_GAP_CQW).toBeCloseTo(REVEAL_CONTENT_CQW, 6)
+    expect(REVEAL_CONTENT_CQW).toBeLessThan(100)
   })
 })
 
@@ -98,8 +100,8 @@ describe('revealMetrics', () => {
     }
   })
 
-  it('keeps names legible on a bar TV — 21 teams stays above 20px on the 918px-tall stage', () => {
-    const px = revealMetrics(21).name * 9.18 // 1cqh on the 0.85-scaled 1080p stage
+  it('keeps names legible on a bar TV — 21 teams stays above 20px on the 1080px-tall stage', () => {
+    const px = revealMetrics(21).name * 10.8 // 1cqh: scoreboard-reveal is full-bleed (Display.jsx FULL_BLEED_SLIDE_TYPES), so the stage is the whole 1920x1080
     expect(px).toBeGreaterThan(20)
   })
 

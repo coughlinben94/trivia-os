@@ -150,8 +150,15 @@ export const REVEAL_GAP_RATIO = 0.14
 // from the column's own width instead of hardcoding a stage-relative number
 // makes that mistake unrepresentable — the row keeps identical proportions in
 // either mode, just resized to the box it's actually in.
+//
+// The columns live inside the slide's own horizontal padding, so the box they
+// share is the CONTENT width, not the whole stage — deriving the split width
+// from the same exported pad the container uses means the two can't drift
+// apart if that padding is ever retuned.
+export const REVEAL_STAGE_PAD_CQW = 3
 export const REVEAL_SPLIT_GAP_CQW = 1.4
-export const REVEAL_SPLIT_COLUMN_CQW = (100 - REVEAL_SPLIT_GAP_CQW) / 2 // 49.3
+export const REVEAL_CONTENT_CQW = 100 - 2 * REVEAL_STAGE_PAD_CQW // 94
+export const REVEAL_SPLIT_COLUMN_CQW = (REVEAL_CONTENT_CQW - REVEAL_SPLIT_GAP_CQW) / 2 // 46.3
 export const REVEAL_SINGLE_COLUMN_CQW = 62
 const REVEAL_RANK_FRACTION = 0.10
 const REVEAL_SCORE_FRACTION = 0.17

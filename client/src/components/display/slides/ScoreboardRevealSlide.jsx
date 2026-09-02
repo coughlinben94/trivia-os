@@ -11,6 +11,7 @@ import {
   revealColumnWidthCqw,
   revealRowDelay,
   REVEAL_SPLIT_GAP_CQW,
+  REVEAL_STAGE_PAD_CQW,
   REVEAL_ROW_DURATION,
   REVEAL_CROWN_OFFSET,
   REVEAL_CROWN_SETTLE,
@@ -201,7 +202,7 @@ export default function ScoreboardRevealSlide({ slide, show }) {
   return (
     <div
       className="w-full h-full flex flex-col items-center overflow-hidden"
-      style={{ background: theme.colors.bg, padding: '4cqh 3cqw 3.5cqh' }}
+      style={{ background: theme.colors.bg, padding: `4cqh ${REVEAL_STAGE_PAD_CQW}cqw 3.5cqh` }}
     >
       {/* Title */}
       <motion.h2
@@ -217,6 +218,15 @@ export default function ScoreboardRevealSlide({ slide, show }) {
           marginBottom: '2.5cqh',
           fontWeight: 700,
           letterSpacing: '-0.01em',
+          // slide.data.title is free text a host typed. REVEAL_CHROME_CQH
+          // budgets exactly ONE title line; a second one pushes 8.8cqh into
+          // the rows, and because the column block is justify-center inside
+          // overflow-hidden the roster gets cut at the top AND the bottom
+          // with no scrollbar to reveal it. One line, ellipsised.
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          maxWidth: '100%',
         }}
       >
         🏆 {title}
