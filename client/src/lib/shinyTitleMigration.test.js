@@ -69,8 +69,65 @@ describe('migrateShinyTitleSlides', () => {
       slide('b', 1, 'question', { ...base, shinyGroupId: 'g2' }),
     ]
     const { slides: out } = migrateShinyTitleSlides(slides, opts())
-    expect(out.map(s => s.type)).toEqual(['shiny-title', 'question', 'shiny-title', 'question'])
+    // Two groups, but the second is a repeat of the same format in the same
+    // round — the old wizard baked introDone:true into it and it played no
+    // announce card, so no title is inserted for it (see below).
+    expect(out.map(s => s.type)).toEqual(['shiny-title', 'question', 'question'])
     expect(out[0].data.shinyGroupId).toBe('g1')
+    expect(out[1].data.shinyGroupId).toBe('g1')
     expect(out[2].data.shinyGroupId).toBe('g2')
+  })
+
+  it('inserts one title per format per round — a repeat run in the same round gets none', () => {
+    // The old wizard's formatAlreadyIntroducedThisRound baked introDone:true
+    // into the second run of a format in a round, so it played NO announce
+    // card. A round of N separately-added same-format questions must migrate
+    // to ONE title, not N.
+    const base = { isShiny: true, shinyFormatId: 'f1', shinyFormatName: 'Close Up', seriesTheme: 'Close Up' }
+    const slides = [
+      slide('a', 0, 'question', { ...base, shinyGroupId: 'g1', introDone: false }),
+      slide('mid', 1, 'question', {}),
+      slide('b', 2, 'question', { ...base, shinyGroupId: 'g2', introDone: true }),
+      slide('c', 3, 'question', { ...base, shinyGroupId: 'g3', introDone: true }),
+    ]
+    const { slides: out, inserted } = migrateShinyTitleSlides(slides, opts())
+    expect(inserted).toHaveLength(1)
+    expect(out.map(s => s.id)).toEqual([expect.stringMatching(/^t/), 'a', 'mid', 'b', 'c'])
+    // every group still keeps/gets its own id, and the flags are still stripped
+    expect(out.filter(s => s.data.isShiny && s.type !== 'shiny-title').map(s => s.data.shinyGroupId)).toEqual(['g1', 'g2', 'g3'])
+    for (const s of out) expect(s.data).not.toHaveProperty('introDone')
+  })
+
+  it('matches repeats on shinyFormatName when legacy rows have no shinyFormatId', () => {
+    const base = { isShiny: true, shinyFormatName: 'Close Up', seriesTheme: 'Close Up' }
+    const slides = [
+      slide('a', 0, 'question', { ...base, shinyGroupId: 'g1' }),
+      slide('b', 1, 'question', { ...base, shinyGroupId: 'g2' }),
+    ]
+    expect(migrateShinyTitleSlides(slides, opts()).inserted).toHaveLength(1)
+  })
+
+  it('gives the same format its own title in each round it appears in', () => {
+    const base = { isShiny: true, shinyFormatId: 'f1', shinyFormatName: 'Close Up', seriesTheme: 'Close Up' }
+    const slides = [
+      slide('a', 0, 'question', { ...base, shinyGroupId: 'g1' }, 'r1'),
+      slide('b', 1, 'question', { ...base, shinyGroupId: 'g2' }, 'r2'),
+    ]
+    const { slides: out, inserted } = migrateShinyTitleSlides(slides, opts())
+    expect(inserted).toHaveLength(2)
+    expect(out.map(s => s.type)).toEqual(['shiny-title', 'question', 'shiny-title', 'question'])
+    expect(out[0].roundId).toBe('r1')
+    expect(out[2].roundId).toBe('r2')
+  })
+
+  it('counts a title a show already has as that format\'s title for the round', () => {
+    const base = { isShiny: true, shinyFormatId: 'f1', shinyFormatName: 'Close Up', seriesTheme: 'Close Up' }
+    const slides = [
+      slide('t0', 0, 'shiny-title', { ...base, shinyGroupId: 'g1' }),
+      slide('a', 1, 'question', { ...base, shinyGroupId: 'g1' }),
+      slide('b', 2, 'question', { ...base, shinyGroupId: 'g2' }),
+    ]
+    const { inserted } = migrateShinyTitleSlides(slides, opts())
+    expect(inserted).toHaveLength(0)
   })
 })
