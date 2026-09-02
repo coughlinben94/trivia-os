@@ -16,6 +16,30 @@ function parseEnvFile(filePath) {
   )
 }
 const env = parseEnvFile(join(__dirname, '..', '.env.local'))
+// QUARANTINED 2026-09-02 — same defect class as wizard-create-verify.spec.js.
+//
+// Two facts combine into a show-destroying bug:
+//   1. `sb` below is an ANON client, and writes to `shows` are RLS-gated on a
+//      host_verified JWT. PostgREST answers an unauthorized UPDATE with
+//      "0 rows changed", not an error — so beforeAll's seeding write and
+//      afterAll's restore-to-snapshot write BOTH silently no-op.
+//   2. The drag itself runs in the browser context, which global-setup.js
+//      HAS authenticated. That write succeeds.
+// So the reorder lands and the restore doesn't. Whatever show this points at
+// is left permanently reordered.
+//
+// It was harmless only by accident: the old default (show_WLBM5jvb, the
+// deleted Test show) made beforeAll throw on `show.slides` of a null row.
+// Now that global-setup works again, `PLAYWRIGHT_SHOW_ID=<a real show>` while
+// running the suite would reorder one of Ben's actual shows.
+//
+// EXIT CRITERIA — remove this guard once `sb` uses the authenticated session
+// global-setup.js already mints (the same storageState the browser gets)
+// instead of a fresh anon createClient(), so the restore in afterAll can
+// actually write. Identical to wizard-create-verify.spec.js's exit criteria.
+//
+// To run against a throwaway show once that lands:
+//   ALLOW_DRAG_REORDER=1 PLAYWRIGHT_SHOW_ID=<throwaway> npx playwright test e2e/drag-reorder.spec.js
 const TEST_SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID || 'show_WLBM5jvb'
 const sb = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
 
@@ -26,6 +50,7 @@ let originalSlides, originalRounds
 
 // Set up a clean show with known slide order: StateOfUnion (general) AFTER Round1/Q1
 test.beforeAll(async () => {
+  test.skip(!process.env.ALLOW_DRAG_REORDER, 'Quarantined: rewrites a production show and cannot restore it (anon key vs RLS). See the header comment.')
   const { data: show } = await sb.from('shows').select('*').eq('id', TEST_SHOW_ID).single()
   originalSlides = show.slides
   originalRounds = show.rounds
