@@ -39,7 +39,7 @@ import { forwardRef, useEffect, useLayoutEffect, useImperativeHandle, useRef } f
 import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, fillOf, rng, lerp, assertLayerPeriods } from '../../lib/ringEngine.js'
 import { ringNavAction } from '../../lib/ringStationIndex.js'
 import { EASE_SURGE } from '../../lib/easings.js'
-import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, applySkyTints } from '../../lib/ringPrimitives.js'
+import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints } from '../../lib/ringPrimitives.js'
 
 // ENGINE — engine-fixed, identical for every world; never a prop (a world
 // never sets any of this, same as the reference build's own ENGINE const).
@@ -151,6 +151,9 @@ const dom = ringDom('ring-', ENGINE)
 
 // ═══ BUILD ═══ dispatches per-layer content building.
 function buildLayerContent(engine, world, arc, host, L) {
+  // 2026-09-02 palette-aware, synced with world-07-ring.html: region hues are
+  // derived from the world's own station data, never read off SKY_REGIONS.
+  const regionHues = skyRegionHues(world.stations)
   const period = authorPeriodOf(engine, L)
 
   if (L.id === 'far') {
@@ -453,7 +456,7 @@ function buildLayerContent(engine, world, arc, host, L) {
           gcx = headLeft + hw * (headlineCornerLeft ? 0.30 : 0.70)
           gcy = headTop + hh * (pairUpper ? 0.30 : 0.70)
         }
-        host.insertBefore(dom.makeSourceGlow(st.region, x0, gcx, gcy, Math.max(hw, hh)), head)
+        host.insertBefore(dom.makeSourceGlow(st.region, regionHues[st.region], x0, gcx, gcy, Math.max(hw, hh)), head)
       }
 
       // The per-station wash block that used to sit here (radial ellipse
@@ -522,7 +525,13 @@ function buildLayerContent(engine, world, arc, host, L) {
         const boostComp = st.companionBoost || ck === 'lens'
         const cw = boostComp ? Math.max(cwRoll, 380) : cwRoll
         const ch = ck === 'streak' ? cw * 0.30 : cw * (0.60 + rCompanion() * 0.28)
-        const compHue = st.hue + (st.accent ? 168 : lerp(-18, 18, rCompanion()))
+        // 2026-09-02 palette-aware, synced with world-07-ring.html: an accent's
+        // companion is now the farthest hue anchor, not a fixed +168. Same
+        // rCompanion() call count — the lerp only ever evaluated on the
+        // non-accent branch, and still does.
+        const compHue = st.accent
+          ? accentCompanionHue(st.hue, world.hueAnchors)
+          : st.hue + lerp(-18, 18, rCompanion())
         const compAlphaRoll = lerp(0.30, 0.48, lou) * 0.8
         const compAlpha = boostComp ? Math.max(compAlphaRoll, 0.55) : compAlphaRoll
         const comp = dom.makePrim(ck, cw, ch, compHue, compAlpha, rCompanion, false, fill)
@@ -688,7 +697,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     const skyInner = dom.el('surge')
     skyInner.style.transition = 'none'
     skyInner.appendChild(dom.el('void'))
-    const skyTints = dom.makeSkyTints()
+    const skyTints = dom.makeSkyTints(skyRegionHues(worldData.stations)) // 2026-09-02 palette-aware, synced with world-07-ring.html
     for (const t of Object.values(skyTints)) skyInner.appendChild(t)
     skyTintsRef.current = skyTints
     skyWeightsRef.current = skyRegionWeights(worldData.stations)

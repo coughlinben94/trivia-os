@@ -19,13 +19,9 @@ import RingAmbient from '../display/RingAmbient.jsx'
 // debounced colour-input changes — never per mousemove. The cheap readouts
 // (bar, station dots, advisory table) do track every drag tick.
 //
-// TODO(Task 4, post-show): the ring-apply exit is deliberately NOT built
-// here. When it is, prefer a small node script that writes BOTH
-// client/src/worlds/midnightGalaxy.ring.js's hue constants AND
-// concepts/world-07-ring.html's independent station array from one
-// derivePalette output — never a hand-transcribed paste block. The gate
-// (npm run verify:ring) reads ONLY the HTML file; a manual transcription
-// slip there means the gate silently certifies stale colors.
+// The ring half is applied by scripts/ring-recolor.mjs (Task 2), run by
+// Ben pasting the generated command below to a Claude agent — see that
+// script's header for the full CLI contract.
 
 const SNAP = 0.05
 const MIN_WEIGHT = 0.05
@@ -108,12 +104,15 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   const [showDetails, setShowDetails] = useState(false)
   const [showCustom, setShowCustom] = useState(false)
   const [applied, setApplied] = useState(false)
+  const [copied, setCopied] = useState(false)
   const colorDebounceRef = useRef(null)
   const appliedTimeoutRef = useRef(null)
+  const copyTimeoutRef = useRef(null)
 
   useEffect(() => () => {
     clearTimeout(appliedTimeoutRef.current)
     clearTimeout(colorDebounceRef.current)
+    clearTimeout(copyTimeoutRef.current)
   }, [])
 
   function commit(nextColors = colors, nextWeights = weights) {
@@ -187,6 +186,25 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   // per-instance refs; only the window.__world debug handle is shared,
   // last-mounted wins, harmless.)
   const previewKey = previewDerived.hues.join(',')
+
+  // Built from the committed palette, not the live drag state — matches
+  // what the preview above is actually showing.
+  const ringRecolorCommand = useMemo(() => {
+    const colorsArg = committed.colors.join(',')
+    const weightsArg = committed.weights.map(w => w.toFixed(2)).join(',')
+    return `node scripts/ring-recolor.mjs --colors '${colorsArg}' --weights '${weightsArg}' --write && npm run test:unit && npm run verify:ring`
+  }, [committed])
+
+  function copyRingRecolorCommand() {
+    // ponytail: no textarea-select fallback — clipboard API missing just
+    // means the button silently no-ops; upgrade if that's ever reported.
+    if (!navigator.clipboard?.writeText) return
+    navigator.clipboard.writeText(ringRecolorCommand).then(() => {
+      setCopied(true)
+      clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 1500)
+    }).catch(() => {})
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6" onClick={onClose}>
@@ -301,11 +319,24 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
               the values pinned in weightedPalette.test.js, the proxy is broken, not the palette.
               Run <code>npm run verify:ring</code> for the real answer.
             </p>
-            <p className="text-[11px] text-gray-400 mt-2 font-sans">
-              The hue column is a preview only. Applying these hues to the real ring is a
-              separate, gated step that is not built yet — nothing on this screen writes a
-              station hue.
-            </p>
+            <div className="text-[11px] text-gray-400 mt-2 font-sans space-y-1.5">
+              <p>
+                Click Apply for the theme half. Paste this to Claude for the ring half — it
+                needs a code change and a gate run, and the gate reports pre-existing spec
+                warnings; the regression line is what must be green.
+              </p>
+              <div className="flex items-stretch gap-2">
+                <code className="flex-1 block bg-gray-50 border border-gray-200 rounded-md px-3 py-2 text-gray-700 font-mono break-all">
+                  {ringRecolorCommand}
+                </code>
+                <button
+                  onClick={copyRingRecolorCommand}
+                  className="shrink-0 text-xs font-medium px-3 rounded-md border border-gray-200 text-gray-600 hover:border-gray-400 hover:text-gray-900"
+                >
+                  {copied ? 'Copied ✓' : 'Copy command'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -321,8 +352,8 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
           </div>
           {/* Applies ONLY the theme half (bg/bgDeep/accent/highlight),
               through the existing ungated theme_overrides pipeline. The
-              ring half is Task 4 — deferred post-show, separate gated
-              mechanism, see the TODO at the top of this file. */}
+              ring half is the separate, gated ring-recolor command in the
+              technical-details panel above — see the header comment. */}
           <button
             onClick={() => {
               onApplyThemeColors(derived.themeColors)

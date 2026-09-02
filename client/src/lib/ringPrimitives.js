@@ -2975,11 +2975,17 @@ function clampSafeBoxStarPeaks(prefix, engine, designEl) {
 // Shoulder weights are DERIVED from index distance (skyRegionWeights below),
 // never hand-authored per station.
 export const SKY_REGIONS = {
-  // Hues match the objects that cause them: aurora sits on the lit
-  // planet (140) / pulsar (120) pair, ember on the supernova (36), disco on
-  // the record (300).
-  aurora: { hue: 152, tintSat: 60, tintLight: 27, srcSat: 55, srcLight: 56, pos: '88% 112%', poolW: 58, poolH: 62 },
-  ember: { hue: 26, tintSat: 66, tintLight: 28, srcSat: 62, srcLight: 56, pos: '16% 116%', poolW: 58, poolH: 62 },
+  // 2026-09-02: no region carries a hue any more, only a `hueOffset` from
+  // its own source station's hue (skyRegionHues below resolves it at build
+  // time). A region's colour always had to match the object that causes it —
+  // that was the whole point of the source glow — but it was written down
+  // twice, once in station data and once here, so a palette change moved the
+  // object and left the sky behind. The offsets are the shipped world's own
+  // arithmetic, preserved exactly, so nothing renders differently today:
+  // aurora = pulsar (120) + 32 = 152, ember = supernova (36) - 10 = 26,
+  // disco = record (300) + 0 = 300.
+  aurora: { hueOffset: 32, tintSat: 60, tintLight: 27, srcSat: 55, srcLight: 56, pos: '88% 112%', poolW: 58, poolH: 62 },
+  ember: { hueOffset: -10, tintSat: 66, tintLight: 28, srcSat: 62, srcLight: 56, pos: '16% 116%', poolW: 58, poolH: 62 },
   // 2026-08-16, the record station — st12 at first, st10 since the same-day
   // silhouette swap (Ben: "ensure that the color wiring on s13 is noticeable
   // and fun"). Deliberately the most saturated of the three
@@ -2987,11 +2993,13 @@ export const SKY_REGIONS = {
   // and the only region whose source is a manufactured object rather than an
   // astronomical one, so it is allowed to be the loudest.
   //
-  // Hue 300 is chosen, not arbitrary: it sits between the world's violet home
-  // (sky 268, st0 256, st2 268) and its rose accent (st6, 330), so it reads
-  // as the resident palette turned up rather than a fourth unrelated colour
-  // zone. That also serves Ben's separate standing ask for the colour themes
-  // to flow as one family instead of three disconnected ones.
+  // Offset 0 is chosen, not arbitrary. The record's own hue (300) sits
+  // between the world's violet home (sky 268, st0 256, st2 268) and its rose
+  // accent (st6, 330), so the sky reads as the resident palette turned up
+  // rather than a fourth unrelated colour zone — and taking the source's hue
+  // straight, with no offset, is what keeps that true after a recolour too.
+  // That also serves Ben's separate standing ask for the colour themes to
+  // flow as one family instead of three disconnected ones.
   //
   // Side effect worth knowing before judging it live: station 0 previously
   // carried zero region weight (the ring's flattest stretch was st0-st2).
@@ -2999,7 +3007,41 @@ export const SKY_REGIONS = {
   // the 2026-08-16 record/supernova swap); disco's own shoulders are st9
   // (0.25 preview) and st11 (0.5 exit), where st11 also carries the ember
   // preview at 0.25 — overlapping shoulders stack, see skyRegionWeights.
-  disco: { hue: 300, tintSat: 74, tintLight: 30, srcSat: 70, srcLight: 60, pos: '62% 114%', poolW: 44, poolH: 50 },
+  disco: { hueOffset: 0, tintSat: 74, tintLight: 30, srcSat: 70, srcLight: 60, pos: '62% 114%', poolW: 44, poolH: 50 },
+}
+
+// Region hue = its source station's hue + the region's authored offset. The
+// source is the member carrying `regionSource: true`; a region with members
+// but no declared source falls back to its first member, so the answer is
+// always derived from station data and never silently from a hardcode.
+export function skyRegionHues(stations) {
+  const hues = {}
+  for (const key of Object.keys(SKY_REGIONS)) {
+    const src = stations.find(s => s.region === key && s.regionSource)
+      ?? stations.find(s => s.region === key)
+    if (!src) continue
+    hues[key] = (((src.hue + SKY_REGIONS[key].hueOffset) % 360) + 360) % 360
+  }
+  return hues
+}
+
+// Accent stations pair with a companion from the OTHER side of the palette:
+// the hue anchor cyclically FARTHEST from the station's own hue. Replaces the
+// fixed +168, which quietly assumed a cool world with a warm accent — under a
+// red/yellow palette that same +168 threw a yellow accent's companion into
+// cyan, a colour the world no longer contains. On the shipped Midnight Galaxy
+// world every accent lands within 18 degrees of its old +168, so this is a
+// behaviour change on paper only (see skyRegions.test.js). No random draw:
+// the seeded stream must not change.
+export function accentCompanionHue(stationHue, hueAnchors) {
+  if (!hueAnchors?.length) return stationHue + 168
+  let best = hueAnchors[0].deg, bestD = -1
+  for (const a of hueAnchors) {
+    // cyclic hue distance, 0..180 (180 = exactly opposite)
+    const d = Math.abs(((((a.deg - stationHue) % 360) + 540) % 360) - 180)
+    if (d > bestD) { bestD = d; best = a.deg }
+  }
+  return best
 }
 
 // "Weather, not a light switch" — a continuous weight curve across station
@@ -3103,11 +3145,15 @@ function skyTintBackground(cfg) {
     transparent 85%)`
 }
 
-function makeSkyTints(el) {
+// `regionHues` comes from skyRegionHues(stations) — a region whose station
+// left the world has no hue and gets no layer at all, rather than a layer
+// painted in some leftover default.
+function makeSkyTints(el, regionHues) {
   const tints = {}
   for (const key of Object.keys(SKY_REGIONS)) {
+    if (regionHues?.[key] === undefined) continue
     const t = el('sky-tint')
-    t.style.background = skyTintBackground(SKY_REGIONS[key])
+    t.style.background = skyTintBackground({ ...SKY_REGIONS[key], hue: regionHues[key] })
     t.style.opacity = '0'
     tints[key] = t
   }
@@ -3175,7 +3221,7 @@ const SRC_FEATHER_PX = 220
 // drawn after it - occludes it. Deliberately NOT a new free-floating
 // primitive: an unanchored soft shape on this system is a documented,
 // already-removed failure mode.
-function makeSourceGlow(el, engine, regionKey, x0, cx, cy, size) {
+function makeSourceGlow(el, engine, regionKey, hue, x0, cx, cy, size) {
   const cfg = SKY_REGIONS[regionKey]
   const g = el('sky-src')
   g.style.left = px(x0); g.style.top = '0'
@@ -3184,8 +3230,8 @@ function makeSourceGlow(el, engine, regionKey, x0, cx, cy, size) {
   const cxPct = (((cx - x0) / engine.W) * 100).toFixed(1)
   const cyPct = ((cy / engine.H) * 100).toFixed(1)
   g.style.background = `radial-gradient(ellipse ${rx}px ${ry}px at ${cxPct}% ${cyPct}%,
-    ${hsla(cfg.hue, cfg.srcSat, cfg.srcLight, 0.17)} 0%,
-    ${hsla(cfg.hue, cfg.srcSat, cfg.srcLight - 12, 0.09)} 40%,
+    ${hsla(hue, cfg.srcSat, cfg.srcLight, 0.17)} 0%,
+    ${hsla(hue, cfg.srcSat, cfg.srcLight - 12, 0.09)} 40%,
     transparent 74%)`
   const m = `linear-gradient(to right, transparent 0px, black ${SRC_FEATHER_PX}px,` +
     ` black calc(100% - ${SRC_FEATHER_PX}px), transparent 100%)`
@@ -3224,8 +3270,8 @@ export function ringDom(prefix, engine) {
     // duplication: an earlier version of the pair-bridge skip listed
     // 'streak'/'ribbon' only, missing 'lens', which this table already had).
     isElongatedKind: (kind) => kind in ROTATION_MAX_DEG,
-    makeSkyTints: () => makeSkyTints(el),
-    makeSourceGlow: (regionKey, x0, cx, cy, size) => makeSourceGlow(el, engine, regionKey, x0, cx, cy, size),
+    makeSkyTints: (regionHues) => makeSkyTints(el, regionHues),
+    makeSourceGlow: (regionKey, hue, x0, cx, cy, size) => makeSourceGlow(el, engine, regionKey, hue, x0, cx, cy, size),
   }
 }
 
