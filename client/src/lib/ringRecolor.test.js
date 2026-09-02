@@ -162,6 +162,18 @@ describe('blockedTargets', () => {
     expect(blockedTargets(porcelain, TARGETS)).toEqual(['concepts/world-07-ring.html'])
   })
 
+  it('follows a rename to its destination path, and ignores renames of other files', () => {
+    const porcelain = [
+      'R  client/src/lib/old-world.js -> client/src/worlds/midnightGalaxy.ring.js',
+      'RM concepts/old.html -> concepts/some-other-file.html',
+      'R  "a b.js" -> "client/src/worlds/midnightGalaxy.ring.test.js"',
+    ].join('\n')
+    expect(blockedTargets(porcelain, TARGETS)).toEqual([
+      'client/src/worlds/midnightGalaxy.ring.js',
+      'client/src/worlds/midnightGalaxy.ring.test.js',
+    ])
+  })
+
   it('catches staged and untracked targets too', () => {
     const porcelain = 'M  client/src/worlds/midnightGalaxy.ring.js\n?? concepts/world-07-ring.html'
     expect(blockedTargets(porcelain, TARGETS)).toEqual([

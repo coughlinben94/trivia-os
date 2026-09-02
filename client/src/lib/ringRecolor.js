@@ -124,10 +124,18 @@ export function rewriteHuePin(testSource, stations) {
 
 // Which of `targets` `git status --porcelain` already reports as changed.
 // Non-empty means another session is mid-edit in a file this would clobber.
+//
+// Porcelain v1 is two status chars, a space, then the path. Renames and
+// copies (R/C in either status column, so `R `, `RM`, `C ` ...) instead
+// carry `old -> new`, and the DESTINATION is the path that exists on disk
+// now — checking the left side would let a target renamed into place slip
+// past the guard and get clobbered.
 export function blockedTargets(porcelain, targets) {
-  const dirty = new Set(
-    porcelain.split('\n').filter(Boolean).map(l => l.slice(3).trim().replace(/^"|"$/g, '')),
-  )
+  const dirty = new Set(porcelain.split('\n').filter(Boolean).map(line => {
+    const field = line.slice(3)
+    const path = /[RC]/.test(line.slice(0, 2)) ? field.split(' -> ').pop() : field
+    return path.trim().replace(/^"|"$/g, '')
+  }))
   return targets.filter(t => dirty.has(t))
 }
 
