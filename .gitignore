@@ -35,3 +35,7 @@ concepts/tools/.cache/
 
 .superpowers/
 .worktrees/
+
+# Scratch output from the impeccable design-critique skill — same class as
+# .superpowers/ above: local working notes, not project history.
+.impeccable/
