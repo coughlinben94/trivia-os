@@ -1,0 +1,240 @@
+{
+ "changes": [
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "ADD",
+   "passage": "After the \"Quick mode\" section; and Phase 5's closing line \"Ben marks keep/kill by telling Claude in prose or via the trivia-os page once it exists.\"",
+   "change": "Add a `/fact-hunt grade` mode (~10 lines): Ben says keep/kill in prose (ids or answers). Orchestrator resolves answers to ids from the named round (`select id, answer from fact_hunt_entries where agent like 'fact-hunt-<date>%'`), echoes the id list, then runs: kills `update fact_hunt_entries set status='tombstoned' where id in (...)`; keeps `update fact_hunt_entries set tags = array_append(tags,'kept') where id in (...) and not ('kept' = any(tags))`. `status='used'` stays reserved for facts that ran in a show. First-ever grade run backfills `kept` onto the 15 rows listed in taste-profile \u00a75 \"Kept, 2026-09-01\" (they sit as plain `active` today, indistinguishable from unreviewed rows). Replace the Phase 5 closing line with \"Ben grades via `/fact-hunt grade`.\"",
+   "why": "All five agreed: the only learning loop is a paragraph someone retypes. Kills already land (267 tombstoned) but keeps don't, so the grader can't be shown Ben's positives from the DB. Zero migration: `tags` is free-form text[] with the `lane:n` precedent."
+  },
+  {
+   "file": "references/fact-hunt/taste-profile.md",
+   "kind": "REFACTOR",
+   "passage": "\u00a75 \"Ben's actual verdicts\" \u2014 the three hand-typed lists (Used / Kept 2026-09-01 / Killed 2026-09-01)",
+   "change": "Keep the prose as the frozen baseline but put the live query first: \"Live list (paste into hunter and grader prompts; supersedes the prose below once `/fact-hunt grade` has run): `select answer, fact, bridges from fact_hunt_entries where status='used' or 'kept' = any(tags) order by round_date desc;` \u2014 and the last 40 kills: `... where status='tombstoned' order by created_at desc limit 40;`.\" The \"What separates them\" paragraph stays.",
+   "why": "\u00a75 stops being a list someone re-types after every round; the grader's nearest-neighbor set grows for free each week. Positive-only learning preserved (kills feed only the grader's contrast pairs and dedupe)."
+  },
+  {
+   "file": "references/fact-hunt/taste-profile.md",
+   "kind": "ADD",
+   "passage": "New \u00a79 after \u00a78 \"What a 10/10 fact looks like\"",
+   "change": "Add \"\u00a79 Shape exemplars (pinned)\": 15\u201320 real bank questions quoted verbatim with id, 2\u20133 per lane, labeled with the EXACT seven lane names from fact-hunt.md (detail-inside-a-famous-thing \u00b7 name-with-a-second-life \u00b7 lyric/quote/scene \u00b7 name-origin \u00b7 according-to-list \u00b7 topical \u00b7 math/leak/four-majors) plus one hook-that-is-secretly-a-clue example; then the five typical answers (Kit Kat, The Cars, Shrek, Kirby, Tulsa) and five deepest-cut answers (Wedge Antilles, ? and the Mysterians, Powerline, DJ Pooh, Bluestreak). Pull once now from the scratchpad `bank_regular.txt` (ids already cited in \u00a73 \u2014 #686, #664, #1418, #573, #834 \u2014 are candidates).",
+   "why": "fact-hunt.md line 158 calls this paste \"the single highest-leverage line in the prompt,\" yet today it is regenerated from an 800-row read every run, so run 2 hunts against a different teacher than run 1. Pinned once, it rides in on the one Read hunters already do."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "CUT",
+   "passage": "Phase 1 lines 83\u201391: \"Read the actual question text at scale \u2014 hundreds of rows\u2026 expect to read 800+ rows; read all ~1,900 if context allows \u2014 dispatch an Explore\u2026 subagent per page-range\" and steps 1\u20136 (wells fingerprint, reference universe, anatomy stats, texture habits, shape exemplars, dedupe corpus)",
+   "change": "Phase 1 becomes three queries and a Read: (1) Read taste-profile.md; (2) drift check `select category, count(*) from questions where category is not null group by 1 order by 2 desc limit 100;` \u2014 if a top-20 tag maps to no \u00a71 well, or a \u00a71 well has no tags at all, say so in the report and steer by the live tags; (3) keep step 7 answer-frequency query as-is; (4) keep step 8 gap read as one line. Everything else in Phase 1 is deleted. Keep the two paragraphs on project id / column notes.",
+   "why": "~100\u2013150k tokens per round to re-derive a document two reviewers built from the full read this morning; the 2026-08-23 round ran out of context and lost a wave. The one cheap live query is the drift check the Devil's Advocate asked for (74c1757 was found by exactly this count)."
+  },
+  {
+   "file": "references/fact-hunt/taste-profile.md",
+   "kind": "REFACTOR",
+   "passage": "\u00a70 items 1\u20138 (\"Answer first\" \u2026 \"Shape it like his notes page\")",
+   "change": "Make \u00a70 THE numbered gate list every other file cites by number: keep 1\u20138, add 9 \"Verified: two sources; the primary work (lyric, scene, level) counts as one for detail-inside facts; never a listicle, never the video/thread that surfaced it\" and 10 \"Not already in the bank or this round: Grep FACT-HUNT-BANK.txt for the answer AND the hinge.\" Move the four `[disputed]`/myth-bust sentences into item 5. Under item 3, add the sentence: \"Frank Oz (Yoda = Miss Piggy) is a r\u00e9sum\u00e9 fact Ben KEPT; Sterling Holloway is one he killed \u2014 the shout separates them, not the shape.\"",
+   "why": "The same gates currently live in four places with four numberings (\u00a70 \u00d78, fact-hunt.md per-candidate \u00d711, the subagent-spec bullet, grader \u00d75) and already drift (\"Sounds like the Taste Profile\" exists in one). One list, one numbering; the Frank Oz line removes an in-file contradiction (line 142 says he survived; the anti-list and grader gate 3 would bounce him)."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "CUT",
+   "passage": "\"Per-candidate gates (all must pass before verification is even attempted)\" \u2014 the 11 bullets at lines 140\u2013151; and the subagent-spec bullet \"The per-candidate gates quoted in full: famous-subject/hidden-detail (with the lead-sentence-join clause)\u2026\"",
+   "change": "Replace both with one sentence: \"Hunters self-reject against taste-profile.md \u00a70 items 1\u201310 (they Read the file; do not paste the gates). Returning under quota beats padding.\" Keep the Edge-quota paragraph, trimmed to three sentences with the date clauses removed.",
+   "why": "Removes ~30 lines and one copy of the rules; hunters get the gates from the file they already Read, so the wording can't drift between the file and the paste."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "REFACTOR",
+   "passage": "\"Independent grader\" block, line 170: five binary gates \"(1) SHOUT\u2026 (2) DOOR\u2026 (3) NOT A KILL-SHAPE: not a r\u00e9sum\u00e9, lawsuit, debunk-led, patent, grim-payoff, or introduced-subject fact; (4) NOT A MINED VEIN\u2026 (5) VERIFIED\u2026 any gate failed = bounce\", the score anchors, and \"A wave where the grader bounces nothing has a broken grader\u2026 re-run the grader once\u2026 Expected bounce rate on a healthy wave: 30\u201360%.\"",
+   "change": "Four binary bounces only: \u00a70.1 sayable answer \u00b7 lawsuit/court case AS the fact (\u00a76 line 2, trademark removed from it) \u00b7 \u00a70.10 mined vein (answer or hinge hits the bank grep) \u00b7 \u00a70.9 verified. Everything else \u2014 door quality, r\u00e9sum\u00e9, debunk-led, grim, trademark, introduced subject \u2014 becomes a score input on the one question \"would Ben jot this?\" with contrast anchors from real verdicts: Frank Oz 5 vs Sterling Holloway 2 (r\u00e9sum\u00e9); Superman ice cream / Littlefeather kept vs Shepard's 24 yards killed (debunk-led \u2014 does the correction make the thing bigger?); Duracell kept vs the AT-AT suit killed (trademark vs lawsuit). Add one line: \"Name the nearest-neighbor row in the live \u00a75 list and which pile it is in.\" Delete the bounces-nothing re-run rule, the 30\u201360% expectation, and the matching Phase 5 bullet \"any wave with a 0% bounce on \u22658 entries is called out as a grader failure.\" Report the bounce rate; never target it.",
+   "why": "Scored against fact-hunt's own grader text, 5 of Ben's 15 kept rows (Littlefeather, Superman ice cream, Duracell, St. Valentine's, Devo) and 1 of his 11 used fail a binary gate. A mandated 30\u201360% bounce plus a re-run-until-it-bounces rule fills that quota with his keeps and reports health. Lawsuit-as-the-fact, unsayable answer, and mined vein are the only kill clusters with zero counter-examples in the 26 positives."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "REFACTOR",
+   "passage": "Lines 155\u2013166 \"Subagent prompt spec \u2014 nothing below counts as implemented until it is literally in the dispatched prompt (this rule has been violated three times\u2026)\" and the grader prompt-contents sentence at line 170",
+   "change": "Move both into literal template files the orchestrator fills and dispatches verbatim: `references/fact-hunt/hunter-prompt.md` (slots: {{agent}} {{track}} {{well}} {{lanes}} {{quota}} {{mined_veins}} {{round_counts}} {{track2_sources}}) and `references/fact-hunt/grader-prompt.md` (slots: {{entries}} {{random20}} {{verdict_rows}}). Hunter template body: Read taste-profile.md (one Read; \u00a79 exemplars and \u00a70 gates ride in with it) \u00b7 Grep `FACT-HUNT-BANK.txt` for answer and hinge before returning \u00b7 the 14-well `domain` picklist \u00b7 lane tag first in `tags` \u00b7 edge sentence \u00b7 Michigan pass \u00b7 `media:` line \u00b7 Fits definitions \u00b7 output shape in notes-page form with a mandatory `Shout:` line \u00b7 never draft questions \u00b7 count footer. fact-hunt.md keeps one paragraph: \"Fill the template; the template IS the spec.\"",
+   "why": "A 12-bullet spec buried at line 155 is a memory test the orchestrator has already failed three times; a file can't be skimmed into a paraphrase, and Ben can read exactly what a hunter sees. Per-hunter prompt drops from ~25\u201335k tokens to ~10k."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "CUT",
+   "passage": "Phase 0 step 1 \"Read, in this order, all three: taste-profile.md \u2026 question-anatomy.md \u2026 trivia-questions.md\"; subagent spec \"Three Reads first\"; grader \"the three reference Reads (same as hunters)\"",
+   "change": "Hunters Read taste-profile.md only. Grader gets taste-profile.md + the live \u00a75 verdict rows + 20 random regular rows. Orchestrator Reads taste-profile.md; if it needs the skill, it reads `/Users/bencoughlin/Projects/baynes-trivia/trivia-os/trivia-questions/SKILL.md` by absolute path. Delete `references/fact-hunt/trivia-questions.md` (verified byte-identical to SKILL.md except its two-line \"if this drifts, re-copy\" header). Drop the format-library sentence from step 1 (generators read it; hunters never need it).",
+   "why": "question-anatomy.md is a question-WRITER doc (pivot phrasing, connective tissue, difficulty engineering); SKILL.md's Output Template still carries a \"Draft question:\" line. Neither helps a never-draft hunter. ~15k tokens saved per hunter per wave, and one fewer copy of the skill to keep in sync (MEMORY.md already flags three)."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "REFACTOR",
+   "passage": "Resume check step 3 dedupe SQL; subagent spec \"The live dedupe answer list, PLUS the per-well mined-veins list\u2026 the hinge-level grep instruction goes in the prompt verbatim\"; crash-hardening \"Pass subagents only the answer list for dedupe\"",
+   "change": "Once per round the orchestrator writes `FACT-HUNT-BANK.txt` (one line per row: `id<TAB>answer<TAB>text` for `questions` \u222a `fact_hunt_entries`, all statuses) into cwd. Hunters and grader `Grep` it for the answer and the hinge; the pasted ~2,600-answer list and the per-candidate `ilike` SQL leave the prompts. Orchestrator keeps the answer-level and angle-level SQL for its own intake. The orchestrator produces the file itself (paged `execute_sql`, or the scratchpad `dump.py`); hunters never see the script. Flag separately: `dump.py` embeds a service-role key inline \u2014 move it to an env var before it lives anywhere hunters can Bash.",
+   "why": "Task subagents may not carry the Supabase MCP tool, so the \"grep the hinge\" gate \u2014 which caught 4 of the 22 kills on 2026-09-01 \u2014 is currently unrunnable by the hunter that needs it. Grep on a local file always works and drops ~6k tokens from every prompt."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "CUT",
+   "passage": "All 29 dated incident refs and 10 \"tombstone pile\" mentions \u2014 line 11 second half; line 30 \"collision class from 2026-07-22\"; line 52 \"(a forked session\u2026 capped 2026-08-23 at 11 facts\u2026)\"; line 54 \"on 2026-08-23-2 it reported reddit: ok\u2026\"; line 100 \"(Was 60, briefly 120\u2026)\"; line 108 \"(the wheel and its ~9/domain cap were DELETED 2026-09-02\u2026)\"; line 136 \"(simplified 2026-09-02 \u2014 the old five-step deficit floor\u2026)\"; lines 141\u2013144 parentheticals; 153 opener; 155 \"(violated three times)\"; 170 opener; 174; 176; 181 \"(that was the 2026-08 failure)\"; 182 last sentence; 186 \"(four 2026-09-01 kills\u2026)\"; 237 \"Wave 1 alone has historically\u2026\"",
+   "change": "Keep each rule, drop each story. One 3-line block under the title replaces all of it: \"Aug 2026: ~600 facts delivered, 11 used \u2014 2%. Cause: obscure subjects, r\u00e9sum\u00e9/lawsuit/debunk angles, answers nobody says. 2026-09-01 wave in the notes-page shape: 15 of 37 kept. Everything below exists to hold that.\" History lives in `git log`; no CHANGELOG file. Target \u2264140 lines.",
+   "why": "The orchestrator skims a 250-line prompt; every paragraph of scar tissue pushes the live instruction further down. The rules survive intact; the reader gets them sooner."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "REFACTOR",
+   "passage": "Phase 5 end condition: \"a full round ends only when BOTH (a) at least 2 waves have run per track AND (b) the most recent wave's accept rate fell below half the round's running rate or returned under half its quota \u2014 OR (c) context is running low\"",
+   "change": "\"A full round runs at least 2 waves per track. Dispatch a third wave only if the last wave accepted 5 or more; otherwise stop. Context running low ends the round at any point \u2014 flush first.\"",
+   "why": "Hunters are told \"returning under quota beats padding,\" so condition (b) fires on wave 2 by design; two rules pulling opposite ways means the orchestrator obeys whichever it read last."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "CUT",
+   "passage": "\"Source-scoring update (change c)\" steps 2\u20136 (0.7/0.3 moving average, clamp, demote at 5, retire at 15, exploratory picks); Phase 5 \"Source promotions/demotions section present\u2026\"; line 136 tail \"fact_hunt_sources.domain_scores keys are still old subject names\u2026\"",
+   "change": "Keep step 1 only: `total_attempted += n`, `total_verified += m`, `last_used_at = now()`, plus the insert-if-new line. Track 2's ranked list = `order by total_verified desc, last_used_at asc`. Phase 5 line becomes \"sources used this round with attempted/verified counts.\"",
+   "why": "Track 2 has produced 50 rows ever; a blended average on n=2 is arithmetic the orchestrator does by hand per source per wave and reports as \"promotions.\" Counts are enough until the table has hundreds of rows."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "CUT",
+   "passage": "Podcasts everywhere: frontmatter description \"video/podcast/reddit\"; Phase 0 step 0 \"If BOTH fail, smoke-test podcasts\u2026 If all three fail, Track 2 cannot run \u2014 STOP\"; Phase 0 step 3's Xiaoyuzhou / transcribe.sh / Jina Reader sentence; Track 2 \"Podcasts:\" bullet (line 132); Phase 4 origin value `podcast`",
+   "change": "Delete every podcast clause. Preflight = yt-dlp smoke, Reddit smoke, throwaway Task dispatch. If both platforms fail: skip Track 2 this round, say so in Phase 5, continue Track 1 \u2014 not STOP. Dispatch failure stays fatal.",
+   "why": "`fact_hunt_entries.origin` counts: web 527 / youtube 36 / wikipedia 20 / reddit 14 / podcast 0 \u2014 ever. YouTube stays (2 used of 36, the best ratio in the table). A round should not die because Reddit's bridge is down."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "REFACTOR",
+   "passage": "\"Lanes (every wave carries all of them\u2026)\" items 8 \"Michigan garnish pass \u2014 not a slice; a step\" and 9 \"`media:` note \u2014 not a lane; a field\"",
+   "change": "Lanes are 1\u20137. Move 8 and 9 below the list under \"Two steps before returning any fact: (a) one search for a Michigan tie, add as `mi:`; (b) if a natural clip/logo/photo exists, add a `media:` line.\" The \u00a79 exemplar labels use these seven lane names verbatim so `lane:<n>` and the exemplar labels are one vocabulary.",
+   "why": "`lane:<n>` is a mandatory first tag and Phase 5 counts 1\u20137; two \"not a lane\" entries numbered as lanes produce `lane:8` rows that break the count. Fixing the labels kills the third overlapping taxonomy (lanes / Phase 1 step-5 shapes / \u00a73 shapes) without inventing a new one."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "REFACTOR",
+   "passage": "Track 1 \"Wells allocation\u2026 Slice the Track 1 quota by the Phase 1 wells fingerprint, proportionally, with no cap\"; Track 2 allocation \"Give each Track 2 subagent the wells fingerprint from Phase 1\u2026\"",
+   "change": "\"Each wave: one hunter per well, walking taste-profile \u00a71 in rank order (Sitcoms, Disney, Comedy films, Nerd canon, Music\u2026); `Cool-facts` is in every wave \u2014 Ben's balance. No counting, no cap; a wave that comes back 40% one well just says so.\" Track 2 gets \u00a71's order plus this round's per-well count query. Delete the word \"fingerprint\" from the file.",
+   "why": "The proportional slice needs the corpus fingerprint, which needs the 800-row read this ruling deletes. \u00a71's ranking IS the fingerprint, built this morning. Wells stay the hunting grounds (lane-only allocation rejected below)."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "ADD",
+   "passage": "Mechanical wave-merge intake list (line 168: \"reject any returned entry with fewer than 2 named sources, a bridge no source covers, a bridge not typed\u2026\")",
+   "change": "Add: \"a `domain` not one of the 14 exact strings in taste-profile \u00a71 \u2014 normalize obvious case/spacing slips, bounce the rest.\" The hunter template carries the 14 strings as a picklist. Cut the duplicate lists at line 87 and Phase 4 line 207 \u2192 \"see taste-profile \u00a71.\"",
+   "why": "Per-well counts, Track 2 steering and Phase 5 all `group by domain`; one hunter writing \"Nerd Canon\" splits the tally silently. Three copies of the list become one."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "CUT",
+   "passage": "\"Per-wave counters (mandatory, counts only)\" 13-field line; Phase 5 report list \"tally + accept rate + grader bounce rate, the per-wave counter table, per-well and per-track breakdown, lane coverage, the source promotions/demotions section\u2026\"",
+   "change": "Wave line = `wave N (track, wells): returned Y / intake-bounced Z / grader-bounced B / accepted V / edge E` (hunters' considered/self-rejected footer stays \u2014 it costs nothing). Phase 5 report = Supabase tally + accept rate, the wave lines, a 5-line highlight reel with `Shout:` lines, unflushed-wave warning if any, and the browser link. Lane-coverage and per-well queries remain orchestrator self-checks, not printed sections.",
+   "why": "Ben reads the highlight reel and grades; he never reads a lane-coverage table. The only metric that matters \u2014 his keep rate \u2014 comes from `/fact-hunt grade`, not bookkeeping."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "REFACTOR",
+   "passage": "Quick mode bullets 1\u20132: \"if FACT-HUNT-PROGRESS.md's Taste Profile section exists\u2026 AND is a wells fingerprint (built after 2026-09-02\u2026)\u2026 pull a fast, cheap version\u2026\"",
+   "change": "Quick mode = Read taste-profile.md, run the answer-frequency query, write FACT-HUNT-BANK.txt, hunt Track 1 with the same template and grader. Add one line: \"First run after any prompt rewrite is `/fact-hunt quick 30` before a full round \u2014 one variable at a time.\"",
+   "why": "With Phase 1 gone there is no profile to check for freshness; the bullets reference a file state that no longer exists. Running quick-30 first isolates the angle rewrite from Track 2 preflight failures."
+  },
+  {
+   "file": ".claude/agents/press-your-luck-concept-generator.md",
+   "kind": "ADD",
+   "passage": "Phase 3 \"Confirm all four\" (checks 1\u20134)",
+   "change": "Add check 5, matching swing's wording: \"Kill-list survival. Would a typical item be a kill-shape per taste-profile \u00a76 \u2014 a debunk, a lawsuit, a r\u00e9sum\u00e9, a patent, a grim payoff, an answer the bar can't say? A board whose every item is one is dead even if fresh.\" Change \"all four\" to \"all five\" in the two places it appears. Also cut lines 36\u201338 \"a fabricated 15-board 'completeness strategy' table used to sit in this section\u2026 treat it as gone\" to nothing.",
+   "why": "Shiny and swing got check 5 today; PYL didn't \u2014 one generator can still ship a lawsuit or debunk board. The deleted-table warning refers to a thing that no longer exists anywhere."
+  },
+  {
+   "file": ".claude/agents/swing-round-concept-generator.md",
+   "kind": "CUT",
+   "passage": "Phase 1 lines 87\u2013128: the ten-mechanic taxonomy (answer-hidden-in-the-clue, redacted-narrative-slot, register-swap, riddle-without-proper-nouns, fixed-slot, riddle-definition, personal-lore, cross-domain crossover, detail-buried, ordering) and \"Do not skip this phase or compress it to one line\"",
+   "change": "Phase 1 = the five families from line 17, promoted from a 400-word paragraph to a bullet list (comic register swap \u00b7 one-word spine \u00b7 second-person scenario \u00b7 fandom deep-dive incl. this-week's-thing and the celebrity-relationship map \u00b7 family lore), each with its 3\u20134 real ids. Phase 2's forced-pairing examples rewrite against families (one-word spine \u00d7 Cedar Point; second-person \u00d7 this week's release; register swap \u00d7 Michigan brewery) \u2014 drop \"take the redacted-narrative mechanic from Fauxbituaries\" as the lead example.",
+   "why": "Two competing taxonomies and the visible one is mostly redacted-narrative, the shape Ben rejects. Shiny already had this rewrite today; swing didn't."
+  },
+  {
+   "file": ".claude/agents/shiny-format-idea-generator.md",
+   "kind": "CUT",
+   "passage": "Phase 1 lines 72\u2013115: the four-family list with percentages and the \"Plus the recent additions Ben built himself in Aug\u2013Sep 2026\u2026\" paragraph, and \"Do not skip this phase or compress it to one line\"",
+   "change": "Phase 1 = \"Confirm taste-profile \u00a77's four families and Ben's Aug\u2013Sep formats against the 30 live rows in five lines or fewer; note where the rows disagree with \u00a77. The house move inside hidden-link is a pun on a word in the name.\" Keep the one-paragraph \"minor strands\" list minus its six-line kill-shape warning (see the format-library cut).",
+   "why": "Lines 72\u2013104 are a copy of \u00a77 the agent has just Read; re-deriving a taxonomy it was handed burns tokens and gives it two versions to reconcile. The live rows are the point of Phase 1."
+  },
+  {
+   "file": "references/fact-hunt/format-library.md",
+   "kind": "CUT",
+   "passage": "\"Shiny / in-round \u2014 reworked batch\" table rows: The Charge Was\u2026, Name Droppers, According to Snopes, Dead Letters!, Patently Obvious!, Government Names!, Employee of the Month",
+   "change": "Delete the seven rows (all unrun proposals from 2026-07-17) and the six-line warning about them in the shiny agent (lines 109\u2013114). Add one sentence under the table: \"Rows that were kill-shapes by construction (legal charge, anonymized r\u00e9sum\u00e9, debunk, patent, corporate policy) were removed 2026-09; \u00a76 of taste-profile is the test.\"",
+   "why": "A reference that lists formats the generator must then be warned against is two files fighting. None of the seven was ever run; nothing is lost."
+  },
+  {
+   "file": ".claude/agents/ (all three generators)",
+   "kind": "REFACTOR",
+   "passage": "The near-identical blocks in each agent: hard-constraint paragraph, Phase 1.5 rejected/proposed/adopted pulls, limit-tester rule, Phase 3 rejected-row rule, Phase 4 insert, Output format, Boundary",
+   "change": "Extract to `references/fact-hunt/generator-common.md` (each agent's first line: Read it, then taste-profile.md, then format-library.md; PYL adds its \"no phone mechanics, Ben ruled\" line locally). Add one new section there, \"Verdict capture\": every chat reply ends with `ids: <survivor row ids>`; when Ben says keep/kill in prose the parent session runs `update format_idea_candidates set status='adopted' where id in (...)` / `set status='rejected', rejected_reason='Ben: <his words>', rejected_at=now() where id in (...)`. Each agent shrinks to its lane, live-bank SQL, family list, and Phase 3 checks (~80\u2013100 lines).",
+   "why": "~60% of 800 lines is triplicated; the drift has already happened once (PYL missing check 5). `adopted` is \"the only positive signal in this table\" and no prompt sets it \u2014 the ids line makes Ben's yes one update away."
+  },
+  {
+   "file": ".claude/commands/fact-hunt.md",
+   "kind": "CUT",
+   "passage": "Phase 3 bullets that restate gates now in \u00a70: \"Subject/join check (replaces the old prominence check)\u2026\" (line 181), the legend/myth-bust bullet (line 186), \"Never verify against another listicle\u2026\" (183)",
+   "change": "Phase 3 keeps five bullets: two independent sources (with the primary-work carve-out folded into \u00a70.9), disagreement = dead or `[disputed]`, superlatives stamped `staleness`, real URLs, origin recorded. The join test (\"would the resident fan already have connected these two things?\") moves into \u00a70 item 2 as its second sentence. Drop the rest.",
+   "why": "Phase 3 currently carries a third copy of the subject/legend/listicle rules. Verification bullets should be about verification."
+  }
+ ],
+ "rejected": [
+  {
+   "proposal": "Devil's Advocate #4 \u2014 Cool-facts fame test: subject must already appear in `questions.text` (hard, or advisory 0-hits-needs-4+)",
+   "why": "Redefines famous as \"already in 1,579 rows,\" pulls against \u00a70.7's hinge-grep on the same column, and bounces Genghis Khan, Slinky, Bluetooth and Konami Code \u2014 \u00a78's own 10/10s \u2014 on run one. Fame stays a grader call anchored on the live verdict rows."
+  },
+  {
+   "proposal": "Devil's Advocate #6 \u2014 allocate hunters by lane, wells float",
+   "why": "His keeps span nine wells; lanes are angles, not hunting grounds, and a hunter needs a fandom to dig in. The proportional slice is gone (it needed the corpus read); \u00a71 rank order plus Cool-facts-every-wave keeps Ben's balance without a cap."
+  },
+  {
+   "proposal": "Devil's Advocate #7 \u2014 Track 2 behind a `--deep` flag",
+   "why": "YouTube's 2 used of 36 is the best ratio in `fact_hunt_entries`; trimming podcasts and the EMA removes most of the cost while keeping the one platform with evidence."
+  },
+  {
+   "proposal": "Devil's Advocate \u2014 trim in place, no template or common files",
+   "why": "\"Violated three times\" is the strongest evidence in the file; a spec the orchestrator paraphrases is the failure mode. Net new files: hunter-prompt, grader-prompt, generator-common; net deleted: the trivia-questions snapshot. No CHANGELOG."
+  },
+  {
+   "proposal": "Devil's Advocate #1 \u2014 typed door as a scored bonus, not an intake requirement",
+   "why": "The 11 doorless positives predate the door rule and every one types in one line (Trejo `line:` \"Machete don't text\", Littlefeather `ask:` Brando). Intake keeps the format check; the grader scores door QUALITY instead of gating it \u2014 that half is adopted."
+  },
+  {
+   "proposal": "Devil's Advocate #10 \u2014 limit-testers 2\u21921, drop the \"break a convention NOT on this list\" clause",
+   "why": "Limit-testers were Ben's direct 2026-08-26 ask and no verdict evidence says they hurt; the not-on-the-list clause exists to stop stale limit-testing. Left alone."
+  },
+  {
+   "proposal": "Wildcard #2 \u2014 hunters pitch, grader triages, survivors go back for verification",
+   "why": "Task subagents are stateless: a second dispatch loses the first's research, and the grader would score unverified fluent fiction. Revisit only if run one's grader bounce exceeds 50%."
+  },
+  {
+   "proposal": "Wildcard #3 \u2014 rank each entry against 5 random bank rows, last dies",
+   "why": "Withdrawn by its author: finished questions with hook and wink beat notes-page fragments on polish every time."
+  },
+  {
+   "proposal": "Wildcard #8 \u2014 replace `lane:<n>` with \u00a73 shape names in tags",
+   "why": "\u00a73 has ~12 shapes; that is more taxonomy, not less. Instead the \u00a79 exemplar labels adopt the seven lane names so the two vocabularies collapse into one."
+  },
+  {
+   "proposal": "Systems Thinker #2 as written \u2014 set `status='used'` for Ben's keeps",
+   "why": "`used` means ran in a show and the browser reads it that way; a `kept` tag keeps the two signals separate at zero migration."
+  },
+  {
+   "proposal": "Ben Advocate #9 \u2014 grader passes a fact with note \"re-aim answer line\" when a sayable name sits inside it",
+   "why": "Re-aiming the answer line is drafting. The grader may note \"answer sits inside fact: Brando\" and score on that; it never rewrites."
+  },
+  {
+   "proposal": "Ben Advocate #3 / Pragmatist / Systems Thinker \u2014 r\u00e9sum\u00e9 as a binary grader bounce",
+   "why": "fact-hunt.md line 142 says Frank Oz survived; \u00a76 line 1 and grader gate 3 would bounce him. Ben kept Oz and killed Holloway \u2014 the shout, not the shape, separated them, so r\u00e9sum\u00e9 is a scored input with that pair as the anchor. Lawsuit-as-the-fact has no counter-example in the 26 positives and stays binary."
+  },
+  {
+   "proposal": "Wildcard #1 \u2014 hunter template embeds \u00a70 plus 30 bank rows per well instead of a Read",
+   "why": "Hunters can Read; 30 rows per hunter costs the same tokens as the Read and loses \u00a75/\u00a78. The pinned \u00a79 inside taste-profile does the job once."
+  },
+  {
+   "proposal": "Pragmatist #2 \u2014 park incident history in `references/fact-hunt/CHANGELOG.md`",
+   "why": "Nothing would load it; `git log` already holds every story with its date."
+  }
+ ],
+ "keyDisagreements": "Binary gates vs Ben's real keeps. Four members wanted the grader's kill-shape list (r\u00e9sum\u00e9, lawsuit, debunk-led, grim, trademark, doorless) as hard bounces; the Devil's Advocate re-scored the 26 positives against that text and found 5\u20136 of Ben's 15 kept rows and 1 used row fail it (Littlefeather, Superman ice cream, Duracell, St. Valentine's, Devo; Frank Oz on r\u00e9sum\u00e9). Nobody rebutted the numbers \u2014 the rebuttals were about door typing on old rows, which is a formatting artifact, not the same point. Ruling: only the four clusters with zero counter-examples stay binary (unsayable answer, lawsuit-as-the-fact, mined vein, unverified); the rest score with kept-vs-killed anchor pairs. Second disagreement: new files (templates, generator-common) vs trim in place. Ruled for templates on the \"violated three times\" evidence, but capped at three new files and one deletion. Ship order if time is short: changes 1\u20137 (grade mode, live \u00a75, \u00a79 exemplars, Phase 1 cut, \u00a70 as the gate list, grader rewrite) are what run one needs; templates, generator-common and the format-library cut can follow the first `/fact-hunt quick 30`.",
+ "devilsAdvocateImpact": "Yes \u2014 he changed the final call in two places. (1) The grader: his verdict-row audit is the only quantitative check anyone ran on today's rewrite, and it showed the new binary gates bounce a third of Ben's positives while a mandated 30\u201360% bounce rate would report that as health. The ruling drops debunk-led/grim/trademark/door/r\u00e9sum\u00e9 from the binary list and deletes the re-run-until-it-bounces rule. His Frank Oz catch also exposed an in-file contradiction the majority missed. (2) Phase 1: the majority wanted the corpus study replaced by a pinned doc; his point that \"doc over bank\" is what produced this morning's \"real-world nearly absent\" error kept one cheap live tag-count as a drift check. His fame-grep, lane-only allocation, `--deep` flag and no-new-files positions were rejected on the merits.",
+ "confidence": "medium"
+}

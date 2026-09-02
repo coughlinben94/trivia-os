@@ -7,13 +7,16 @@
 **A Ben fact is a word the bar already owns, reached by a road it hasn't walked, with a second door in.** The subject is famous. The dig is a detail — or a JOIN between two famous things — nobody at the table has noticed. It is NOT "an amazing thing nobody has heard of." *Cool = a thing everyone already loves, seen from an angle they never noticed.*
 
 1. **Answer first.** Write the answer on line 1. If the table can't say it without being told, stop. (Phil LaMarr and Sterling Holloway died on this; Frank Oz lived.)
-2. **Subject is something the bar already knows — a fandom OR a real-world thing.** Fandoms: The Office, Star Wars, Disney parks, comics, Potter/LOTR/GoT, Pokémon/Nintendo, Nicktoons, dad rock, country, 2000s pop, Tigers/MSU/"the four major sports," Frat Pack comedies, cryptids/haunted/true crime, myth, Michigan/Saginaw, toys, fast food, booze. Real world (well 14, `Cool-facts`, ~1 in 5 of the bank): Iwo Jima, Lewis and Clark, the Cold War, sloths, Tesla, Genghis Khan, Australia's fence, PT Barnum — famous subjects, not a forgotten treaty. **Genuine balance of the two, Ben's words.** What a real-world fact still needs: a §2 hinge (somebody did the math, an only/first, a name that's secretly something else, gross/dumb, a legend) and an answer the bar can say. A pop door helps; it is not required.
-3. **The hinge is the fact.** A name that's secretly something else · a real thing that leaked into fiction or vice versa · an almost-happened · somebody did the math · an only/first/last · a word origin with a pop twin. "Also voiced X" is a résumé. A lawsuit is a lawsuit. "Actually that's false" is a corpse.
+2. **Subject is something the bar already knows — a fandom OR a real-world thing.** The join test: would the resident fan already have connected these two things? If yes, it's the subject's lead sentence — keep digging; if no, it's fresh (Kirby = Jack Kirby, Tantive IV = Corvette class). Fandoms: The Office, Star Wars, Disney parks, comics, Potter/LOTR/GoT, Pokémon/Nintendo, Nicktoons, dad rock, country, 2000s pop, Tigers/MSU/"the four major sports," Frat Pack comedies, cryptids/haunted/true crime, myth, Michigan/Saginaw, toys, fast food, booze. Real world (well 14, `Cool-facts`, ~1 in 5 of the bank): Iwo Jima, Lewis and Clark, the Cold War, sloths, Tesla, Genghis Khan, Australia's fence, PT Barnum — famous subjects, not a forgotten treaty. **Genuine balance of the two, Ben's words.** What a real-world fact still needs: a §2 hinge (somebody did the math, an only/first, a name that's secretly something else, gross/dumb, a legend) and an answer the bar can say. A pop door helps; it is not required.
+3. **The hinge is the fact.** A name that's secretly something else · a real thing that leaked into fiction or vice versa · an almost-happened · somebody did the math · an only/first/last · a word origin with a pop twin. "Also voiced X" is a résumé. A lawsuit is a lawsuit. "Actually that's false" is a corpse. Frank Oz (Yoda = Miss Piggy) is a résumé fact Ben KEPT; Sterling Holloway (also voiced Kaa) is one he killed — the shout separates them, not the shape.
 4. **Bridges are doors, typed.** `name:` lives in another universe · `line:` a quote/lyric/SFX · `ask:` a character or celebrity who'd know · `mi:` Michigan/Saginaw/family · `hook:` a cold-open that's secretly a clue. Filmographies and category nouns are not bridges.
-5. **Keep the legend.** "Legend states…" is a feature. Tag doubt `[disputed]`; never lead with the debunk.
+5. **Keep the legend.** "Legend states…" is a feature. A legend stays a legend with `[disputed]`: tag the doubt, deliver it as legend, never lead with the debunk. If the only interesting thing is that it's false, drop it — a debunk that makes the thing smaller is a corpse (§6).
 6. **Gross is fine, grim is not.** Sloths dying mid-poop, bat bombs, Uranus MO, honey badger: yes. Murder trials, war wounds, a cat dying on its first mission: no.
-7. **Grep the bank for the hinge, not just the answer.** Hootie's name origin was already a swing item; so was STP's; Frank Oz was already #686.
-8. **Shape it like his notes page.** Answer, then 2–5 fragments of ≤15 words in his register, then typed doors, then `media:` if a clip/photo exists, then the five-word **shout** — what the bar yells at the reveal. No shout, no fact.
+7. **Not already mined.** Grep `FACT-HUNT-BANK.txt` (one line per bank row, `id<TAB>answer<TAB>text`, written by the orchestrator each round) for the answer AND the hinge. Hootie's name origin was already a swing item; so was STP's; Frank Oz was already #686.
+8. **Shape it like his notes page.** Answer, then 2–5 fragments of ≤15 words in his register, then typed doors, then `media:` if a clip/photo exists, then the five-word **shout** — what the bar yells at the reveal. The `Shout:` line is mandatory: no shout, no fact.
+9. **Verified: two sources;** the primary work (the lyric, the scene, the game level) counts as one for detail-inside facts; never a listicle, never the video/thread that surfaced it. Two sources disagree → dead, or the dispute becomes `[disputed]`.
+
+Hunters self-reject against 1–9. The grader's binary bounces are 1, 7, 9 and lawsuit-as-the-fact (§6); everything else is a score input.
 
 ## 1. The wells (what he actually writes about, ranked by how often the bank draws on each)
 
@@ -78,6 +81,10 @@ A bridge is a **second door into the same answer from a different fandom**, type
 
 ## 5. Ben's actual verdicts (the only positive signal — study these before hunting)
 
+**Live list (paste into hunter and grader prompts; supersedes the prose below once `/fact-hunt grade` has run):** keeps `select answer, fact, bridges from fact_hunt_entries where status='used' or 'kept' = any(tags) order by round_date desc;` — last 40 kills `select answer, fact from fact_hunt_entries where status='tombstoned' order by created_at desc limit 40;`
+
+The three lists below are the frozen 2026-09-01 baseline (hand-typed; the live queries grow past them each round).
+
 **Used in a show (11 of ~600 delivered):** Renegade (one word, three universes — the model fact) · Butterfly Effect (term → Kutcher film + Bradbury) · Patton's fake army → became "Plunder" (the operation NAME with a definition door) · 99 Luftballons (song-origin story) · Point Nemo (name → Captain Nemo) · 2025 Ig Nobel drunk bats (animal + juvenile) · Superman ice cream / Stroh's (Michigan + brewery, became #1691) · Candy Land (toy origin) · Detroit-style pizza (Michigan + the auto-parts pan) · Moxie (brand → dictionary word, became #2128 with an Earhart/Amy Adams door) · Gretzky's 99 (only number retired league-wide + the MLB 42 parallel he already loved).
 
 **Kept, 2026-09-01 wave:** Bad Company / Toad the Wet Sprocket / Supertramp / Devo (band-name origins with a strong second door) · Frank Oz (Yoda = Miss Piggy, a name collision) · Duracell invented the bunny (mascot reversal) · 555 and Bruce Almighty (Jim Carrey well) · Low Rider (Dazed and Confused + George Lopez) · Danny Trejo in Spy Kids · UMich Apollo 15 plaque (Michigan + space) · St. Valentine's guns found in Michigan · Willie Mays home run in every inning (only + ghost-runner) · "I Will Survive" won the only disco Grammy · Coco Chanel's codename Westminster · Sacheen Littlefeather.
@@ -90,7 +97,7 @@ A bridge is a **second door into the same answer from a different fandom**, type
 
 - Résumé facts ("also voiced / also starred in / was also a war hero").
 - Lawsuits, legal charges, trademark disputes, court cases as the fact.
-- Debunks that lead with the debunk or make the thing smaller. A legend stays a legend with `[disputed]`; if the only interesting thing is that it's false, drop it.
+- Debunks that lead with the debunk or make the thing smaller (the legend rule lives in §0 item 5).
 - Grim as the payoff (murder, war wounds, an animal dying on a mission). Gross/dumb/juvenile is fine.
 - Patents and patent drawings; celebrities' civilian day jobs; corporate policy trivia; CPSC recalls; rules-of-the-game trivia with no hinge.
 - Science mechanism for its own sake (a mechanism is not a hinge); etymology without a pop or everyday twin; history / geography / science whose subject needs introducing or whose only hinge is "this happened" — a famous real-world subject with a §2 hinge is well 14, not this line.
@@ -159,3 +166,48 @@ Shout: "Twister and NERF are the same guy?"
 Spares: **Sriracha** (David Tran born in the Year of the Rooster; "Huy Fong" is the freighter that carried him out of Vietnam in 1978; ask: Kevin Malone would know) · **Pringles** (inventor Fredric Baur had part of his ashes buried in a Pringles can, 2008; hook: "once you pop…").
 
 What makes these 10s and not 7s: the answer is a word the room owns; the subject is a toy/movie/game the room loves; the hinge is a name-collision or an almost-unbelievable backstory, not a résumé or a court case; each has a typed door into another fandom he already runs; each has a shout line; none needs the debunk to be interesting.
+
+## 9. Shape exemplars (pinned)
+
+Pinned 2026-09-02 so every round hunts against the same teacher; hunters and the grader get these by Reading this file. Re-pin only when Ben's taste moves.
+
+Quoted verbatim from the `questions` table (regular rows), typos and all — the typos are Ben. Labels are the seven fact-hunt lane names plus the hook, so `lane:<n>` tags and these labels are one vocabulary. Real-world rows (well 14, Cool-facts) are marked.
+
+**`detail-inside-a-famous-thing`**
+- **#262** — In his song American Pie, Don McLean references a location in his hometown of New Rochelle, New York, where he’d drive his car. What kind of place did he go, a specific type of barrier? → **Levee**
+- **#266** — Scenario: you’re staying at a Hotel in California. A woman is running the hotel, and as she’s showing you to your room, you see her guy friends dancing in what area of the hotel? → **Courtyard**
+- **#1965** — Released on October 9th, 1988, Super Mario 2 introduced a now staple when it comes to throwing items. What human food did this game introduce to the game, where it could be picked up and thrown to defeat enemies, and is still found in games to this day? → **Turnip**
+
+**`name-with-a-second-life`**
+- **#236** — What sucky Nintendo character, that was first introduced in 1992 in the game Dream Land, shares his name with the guy that was Stan Lee’s main illustrator when they both founded Marvel comics? → **Kirby**
+- **#1278** — One of the codes used to access the Nakatomi Corporation’s system is Akagi, which translates to what two-word term? One would consider a cinnabar citadel, one, as well. → **Red Castle**
+- **#300** *(Cool-facts well)* — The largest Navy operation in the latter half of the 1900s revolved around US forces attacking and overtaking oil platforms from the Iranians. The operation was named after what insect, known for having “supernatural powers”, and is sometimes voiced by Seth Rogen? → **Preying Mantis**
+
+**`lyric/quote/scene`**
+- **#143** — If you’re Tracy Chapman, and you happen to have a Fast Car, you work at what kind of establishment? → **Supermarket**
+- **#673** — Scenario: you’re wandering through Arendelle searching for your sister. Its bitter cold, so you stop into Wandering Oaken’s Trading Post to try and warm up. It’s hosting its Big Summer Blowout! What amenity is in the back of the shop? → **Sauna**
+- **#940** *(Cool-facts well)* — After President Jefferson purchased the Louisiana Territory from France in 1803, he commissioned what two people to lead the expedition across the country to the Pacific northwest? Last time I saw them, they were disagreeing behind glass in New York… → **Lewis and Clark**
+
+**`name-origin`**
+- **#963** — Ladies and gentlemen, what band, that formed in 1994 and was originally a solo project, took its name from what pilots in WW2 called UFOs? The bands founder chose the name, because he wanted it to sound like the band had multiple members, which at the time, was false. → **Foo fighters**
+- **#1230** — What restaurant chain, founded in 1969 by Dan Evans, was named after a southern gas station gathering area, the predecessor to the modern-day water cooler? Now, the term is synonyms with being plain, simple, and unsophisticated. → **Cracker barrel**
+
+**`according-to-list`**
+- **#1106** — Rolling Stone magazine listed the most iconic fake ads in cinematic history, with an ad for a particular hair product coming in first. In what film would one see this advertisement? → **Coming to America**
+- **#852** — 97X, Bam! The only surname to be shared by two men who have won the best actor award at the Oscars is what, with the two gentlemen winning in 1980/89, and 2005? → **Hoffman**
+- **#1203** — According to Forbes Magazine, what 1977 song ranks as the top grossing song of all time, in terms of overall revenue, which includes licensing deals, merchandise, and storefronts, known for selling lost saltshakers? → **Margaritaville**
+
+**`topical`**
+- **#110** — In a hilarious reveal, baseball legend Ichirio’s statue was unveiled this past week with a broken bat in hand. Ichiro will go down as one of the best contact hitters in the history of the sport, and retired with more combined hits than what MLB all-time leader? → **Pete rose**
+- **#934** — There is a great disturbance here at Baynes trivia… last week, the acting world lost Clive Revill, the actor who portrayed what character, in possibly the best film sequel ever released? → **Emperor Palpatine**
+- **#1567** — Disney’s Oogie Boogie Bash started this past weekend, with 2 new villains gracing the lineup. Guests got to meet Hades from Hercules, but also got to meet a man by the name of Dr. Heinz Doofenshmirtz. We see this man on the TV have a mortal enemy that is what animal? → **Platypus**
+
+**`math/leak/four-majors`**
+- **#875** — Biomedical engineers at Purdue University released a study saying that, on average, the answer to what brands slogan is 364? → **Tootsie pop**
+- **#894** — Tucumcari, New Mexico, seen on the next slide and located right on America’s main street, is the inspiration for what fictional town? → **Radiator Springs**
+- **#859** — Of all four major sports leagues, there is only one team whose name ends with a vowel. Taking its name from a natural phenomenon, what team, who won its last title in 2022, holds this distinction? → **Avalanche**
+
+**`hook-that-is-secretly-a-clue`**
+- **#378** *(Cool-facts well)* — “It looks like you're writing a letter. Would you like help?”. What household item code name was given to the operation that the US Armed Forces deployed, where they brought over 1600 German scientists to help give them an advantage over the Soviets after WW2? → **Operation Paper Clip**
+
+**Familiarity bracket.** Typical answers: Kit Kat (#917) · The Cars (#136) · Shrek (#1243) · Kirby (#236, #1518) · Tulsa (#1848). Deepest cuts that still ran: Wedge Antilles (#1121) · ? and the Mysterians (#1702) · Powerline (#682) · DJ Pooh (#683) · Bluestreak (#1341). Every deep cut is still a word the resident fan says out loud — the road is obscure, the destination never is (§3).

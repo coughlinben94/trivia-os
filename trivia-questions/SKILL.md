@@ -11,6 +11,8 @@ Ben runs live bar trivia at Baynes Apple Valley (mid-Michigan). This skill encod
 
 ## Taste Profile v2 (2026-09-02) — read `references/fact-hunt/taste-profile.md` in the trivia-os repo for the long form
 
+This skill lives in two copies — repo root `trivia-questions/SKILL.md` and `~/.claude/skills/trivia-questions/SKILL.md` — keep them byte-identical; there is no third snapshot under `references/fact-hunt/` any more. Fact-hunt hunters Read `taste-profile.md` only (its §0 gates and §9 exemplars ride in with the one Read); the orchestrator reads this file by absolute path, `/Users/bencoughlin/Projects/baynes-trivia/trivia-os/trivia-questions/SKILL.md`, only when it needs the skill.
+
 Built from a full read of all ~2,000 bank rows by two independent Fable 5.1 reviewers plus Ben's real keep/kill verdicts on fact-hunt output. The short form:
 
 - **The wells, ranked:** sitcom canon (The Office deepest) · Disney/Pixar/the parks · comedy films 1980–2010 · nerd canon (Star Wars, LOTR, HP, GoT, Marvel/DC, Pokémon, Nintendo, D&D, 90s Nick) · music ×3 (classic-rock record book / 90s-2000s radio + one-hit-wonders + lyric detail / country) · sports as pop culture (Tigers, MSU, team-name origins, athletes in movies, "only in the four majors") · Michigan/Saginaw/family as garnish everywhere · cryptids/haunted/hoax/true crime · brands, toys (Toy Hall of Fame ~10×), dead retail, cocktails, beer/whiskey · internet/meme culture · lists-as-authority ("according to Rolling Stone/IMDB/Guinness/Forbes/People…") · topical (deaths become questions the same week).
