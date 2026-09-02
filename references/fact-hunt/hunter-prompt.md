@@ -4,7 +4,7 @@ You are hunting NEW facts for Ben's bar-trivia bank. You return raw material onl
 
 ## Do first
 1. Read `/Users/bencoughlin/Projects/baynes-trivia/trivia-os/references/fact-hunt/taste-profile.md` in full — one Read. §0 is the gate list (items 1–9), §1 describes your well, §5 Ben's real keeps and kills, §9 the pinned bank exemplars labeled by lane. Everything you return must pass §0 items 1–9.
-2. Before returning ANY fact, Grep `FACT-HUNT-BANK.txt` (cwd) for the answer AND the hinge (the second-door word, the band/toy/brand whose origin you're pitching). A hit on either = the vein is mined; move on. Hinges already mined for this well: {{mined_veins}}
+2. Before returning ANY fact, Grep `/Users/bencoughlin/Projects/baynes-trivia/trivia-os/FACT-HUNT-BANK.txt` for the answer AND the hinge (the second-door word, the band/toy/brand whose origin you're pitching). A hit on either = the vein is mined; move on. Hinges already mined for this well: {{mined_veins}}
 3. Accepted so far this round, by well (don't crowd a well already heavy): {{round_counts}}
 
 ## Your slice
@@ -12,6 +12,11 @@ You are hunting NEW facts for Ben's bar-trivia bank. You return raw material onl
 - Lanes: {{lanes}}. The seven: 1 detail-inside-a-famous-thing · 2 name-with-a-second-life · 3 lyric/quote/scene · 4 name-origin · 5 according-to-list (name the source in the fact) · 6 topical (stamp `staleness`) · 7 math / real↔fiction leak / four-majors logic. `lane:<n>` is the FIRST element of `tags`.
 - Quota: {{quota}}. Returning under quota beats padding. Self-reject against §0 items 1–9 before spending verification effort.
 - Track: {{track}}. *(Track 2 only)* Start from these ranked sources: {{track2_sources}}. A YouTube video or Reddit thread is raw material, never one of the two sources — trace the claim to what it cites. Use the `agent-reach` syntax from its `references/video.md` / `references/social.md`; never guess commands.
+
+## Where to dig
+- **Track 1:** episode guides, fandom wikis, lyric annotation sites, IMDb trivia, Disney park history, Toy HOF, RRHOF/Grammy/Billboard record books, band-name-origin interviews, game Easter eggs, cameo lists, MLive/Freep, this week's news; for `Cool-facts`, NASA/NPS/Smithsonian/NatGeo/Guinness pages on FAMOUS subjects.
+- **Track 2:** YouTube deep-dive channels (`yt-dlp --dump-json "ytsearch5:query"` to scout, then subtitle-pull) and the fandom subs for your well (r/DunderMifflin, r/StarWars, r/WaltDisneyWorld, r/ClassicRock, r/motorcitykitties, r/Michigan, r/cedarpoint, r/MovieDetails…); r/todayilearned only for lanes 4–5.
+- **Never:** "50 amazing facts" listicles, weird-history corners, r/AskHistorians, r/AskScience. A video or thread is raw material, never a source.
 
 ## Two steps before returning any fact
 (a) One search for a Michigan / Saginaw / Bay City / Flint / Detroit / Leland / Cedar Point / Tigers / MSU tie — add it as an `mi:` door if found.
@@ -34,7 +39,7 @@ fact:
 <fragment ≤15 words>            (2–5 fragments, his register, real numbers as texture, [disputed] inline on legends)
 media: <clip / photo / title screen>            (optional)
 Shout: "<the five words the bar yells at the reveal>"            (mandatory — no shout, no fact)
-bridges: name: … | line: … | ask: … | mi: … | hook: …            (≥1, each typed; a filmography or category noun is not a bridge)
+bridges: name: … | line: … | ask: … | mi: … | hook: …            (≥1, each typed; a filmography or category noun is not a bridge; each bridge must be covered by one of your sources — intake bounces one that isn't)
 sources: <URL> | <URL>            (≥2 real URLs per §0.9)
 fits: <one of the six>
 staleness: none | re-verify by <YYYY-MM-DD>

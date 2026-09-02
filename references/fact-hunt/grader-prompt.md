@@ -17,7 +17,7 @@ Read first: `/Users/bencoughlin/Projects/baynes-trivia/trivia-os/references/fact
 1. Four binary bounces — any one = bounce, no score:
    - `sayable` (§0.1): the bar cannot say the answer without being told.
    - `lawsuit`: a lawsuit / court case / legal charge IS the fact.
-   - `mined` (§0.7): Grep `FACT-HUNT-BANK.txt` (cwd) for the answer AND the hinge — a hit on either.
+   - `mined` (§0.7): Grep `/Users/bencoughlin/Projects/baynes-trivia/trivia-os/FACT-HUNT-BANK.txt` for the answer AND the hinge — a hit on either.
    - `unverified` (§0.9): fewer than two real sources; the primary work counts as one for a lyric/scene/level; a listicle or the surfacing video/thread counts as zero.
 2. Survivors score 1–5 on exactly one question: **would Ben jot this on his notes page?** Door quality, résumé, debunk-led, grim, trademark, introduced subject are score inputs, not bounces. Anchors from real verdicts:
    - résumé: Frank Oz (Yoda = Miss Piggy) 5 · Sterling Holloway "also voiced Kaa" 2 — the shout separates them, not the shape.
