@@ -6,11 +6,22 @@
 //
 // HostPinGate only renders once a show is "loaded" — Host.jsx shows an
 // in-page ShowPicker otherwise, not a redirect — so this seeds the same
-// Test show (show_fQtKIq7M) every other spec in this suite already defaults to.
+// show every other spec in this suite already defaults to.
+//
+// 2026-09-02: the old default (show_fQtKIq7M) no longer exists in the DB.
+// A dead id here means /host falls back to the ShowPicker instead of ever
+// rendering HostPinGate, so this file timed out waiting for "Enter host
+// PIN" — a mystery failure that blocked EVERY spec in e2e/, and silently
+// made `npm run ship` exit SHIP_BLOCKED (scripts/ship.sh runs test:smoke
+// with no PLAYWRIGHT_SHOW_ID set). Now defaults to show_NyRe6x2Q (Aug 18
+// 2026 — the oldest of the three real shows on hand, so least likely to
+// get deleted or moved mid-run) and the existence check below turns any
+// future dead default into a clear error instead of a 15s timeout.
 
 import { chromium } from '@playwright/test'
+import { createClient } from '@supabase/supabase-js'
 
-const SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID || 'show_fQtKIq7M'
+const SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID || 'show_NyRe6x2Q'
 const STORAGE_STATE_PATH = 'e2e/.auth/host.json'
 
 export default async function globalSetup(config) {
@@ -53,6 +64,14 @@ export default async function globalSetup(config) {
           },
         })
     )
+  }
+
+  // Fail fast with a real reason instead of a 15s "Enter host PIN" timeout
+  // that gives no hint the actual problem is a dead show id (see note above).
+  const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY)
+  const { data: showRow } = await supabase.from('shows').select('id').eq('id', SHOW_ID).maybeSingle()
+  if (!showRow) {
+    throw new Error(`PLAYWRIGHT_SHOW_ID "${SHOW_ID}" does not exist — pick a real show id.`)
   }
 
   await page.addInitScript((id) => {

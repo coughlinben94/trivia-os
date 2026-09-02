@@ -12,6 +12,7 @@
     "backup": "node scripts/backup-db.mjs",
     "test:e2e": "playwright test",
     "test:smoke": "playwright test e2e/host-smoke.spec.js",
+    "test:e2e:join": "playwright test e2e/join-smoke.spec.js",
     "test:audit": "playwright test e2e/host-audit.spec.js",
     "test:wizard": "playwright test e2e/wizard-audit.spec.js",
     "// test:wizard-create": "QUARANTINED 2026-07-03 \u2014 beforeAll/afterAll cleanup uses the anon key against RLS-blocked tables, silently corrupts the shared Test show on failure. Skips cleanly unless ALLOW_WIZARD_CREATE=1 is set. See e2e/wizard-create-verify.spec.js header comment.",
