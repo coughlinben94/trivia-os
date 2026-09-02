@@ -88,18 +88,27 @@ import { nanoid } from 'nanoid'
 // what broke the require() calls above too).
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-// ── Env guard (hard-fail at load time) ──────────────────────────────────────
+// ── Env guard (hard-fail at load time, but only for a deliberate run) ───────
+//
+// These throws run at MODULE SCOPE, so Playwright hits them while merely
+// collecting the suite — an unset PLAYWRIGHT_SHOW_ID used to abort a plain
+// `npx playwright test` for every other spec too. That went unnoticed while
+// global-setup was itself broken (2026-09-02: its default show id had been
+// deleted, so nothing in e2e/ ran at all). The guards below now fire only
+// when ALLOW_WIZARD_CREATE says someone actually means to run this spec;
+// otherwise the quarantine skip in beforeAll handles it quietly.
 
 const EXPECTED_SHOW_ID = 'show_WLBM5jvb'
 const TEST_SHOW_ID     = process.env.PLAYWRIGHT_SHOW_ID
+const INTENDED         = !!process.env.ALLOW_WIZARD_CREATE
 
-if (!TEST_SHOW_ID) {
+if (INTENDED && !TEST_SHOW_ID) {
   throw new Error(
     '[wizard-create-verify] PLAYWRIGHT_SHOW_ID is not set.\n' +
     'Run: PLAYWRIGHT_SHOW_ID=show_WLBM5jvb npx playwright test e2e/wizard-create-verify.spec.js'
   )
 }
-if (TEST_SHOW_ID !== EXPECTED_SHOW_ID) {
+if (INTENDED && TEST_SHOW_ID !== EXPECTED_SHOW_ID) {
   throw new Error(
     `[wizard-create-verify] PLAYWRIGHT_SHOW_ID="${TEST_SHOW_ID}" but this spec ` +
     `may only run against ${EXPECTED_SHOW_ID}. Set PLAYWRIGHT_SHOW_ID=${EXPECTED_SHOW_ID}.`
