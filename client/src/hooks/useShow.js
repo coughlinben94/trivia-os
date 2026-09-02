@@ -13,6 +13,7 @@ import {
   computeNextStep,
   computePrevStep,
 } from '../lib/slideStepping.js'
+import { idsToDeleteWith } from '../lib/shinySeries.js'
 
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 const SHOW_MEDIA_BUCKET = 'trivia-show-media'
@@ -494,7 +495,11 @@ export function useShow() {
 
   async function deleteSlide(id) {
     if (!show) return
-    const newSlides = renumberRoundQuestions(show.slides.filter(s => s.id !== id))
+    // A content slide is the last non-title member of its shinyGroupId ->
+    // its shiny-title lead comes with it, or it's left announcing nothing
+    // (see shinySeries.js's idsToDeleteWith for the full rule).
+    const removeIds = new Set(idsToDeleteWith(show.slides, id))
+    const newSlides = renumberRoundQuestions(show.slides.filter(s => !removeIds.has(s.id)))
     const livePatch = liveIndexPatch(newSlides)
     setShow(prev => ({
       ...prev,

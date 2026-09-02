@@ -11,6 +11,7 @@ import {
   withShinyTitleSlide,
   withShinyGroupId,
   resolveJumpIndex,
+  idsToDeleteWith,
 } from './shinySeries.js'
 
 function seriesSlide(id, overrides = {}) {
@@ -486,5 +487,37 @@ describe('resolveJumpIndex', () => {
     const sorted = [title('t1', 'g1'), q('q1', 'g1')]
     expect(resolveJumpIndex(sorted, 't1')).toBe(0)
     expect(resolveJumpIndex(sorted, 'nope')).toBe(-1)
+  })
+})
+
+describe('idsToDeleteWith', () => {
+  // Deleting a shiny group's LAST content sibling used to leave the
+  // shiny-title slide orphaned — RoundSidebar renders it as a plain row and
+  // it's a dead Next press on the TV (an announce card for nothing).
+  const title = (id, gid) => ({ id, type: 'shiny-title', data: { isShiny: true, shinyGroupId: gid } })
+  const q = (id, gid) => ({ id, type: 'question', data: { isShiny: true, shinyGroupId: gid } })
+
+  it('deleting the last content sibling also deletes the group title', () => {
+    const slides = [title('t1', 'g1'), q('q1', 'g1')]
+    expect(idsToDeleteWith(slides, 'q1')).toEqual(['q1', 't1'])
+  })
+
+  it('deleting a content slide with other content siblings left leaves the title alone', () => {
+    const slides = [title('t1', 'g1'), q('q1', 'g1'), q('q2', 'g1')]
+    expect(idsToDeleteWith(slides, 'q1')).toEqual(['q1'])
+  })
+
+  it('a slide with no shinyGroupId only deletes itself', () => {
+    const slides = [{ id: 'x', type: 'question', data: {} }]
+    expect(idsToDeleteWith(slides, 'x')).toEqual(['x'])
+  })
+
+  it('deleting the title itself only deletes the title, leaving the group intact', () => {
+    const slides = [title('t1', 'g1'), q('q1', 'g1'), q('q2', 'g1')]
+    expect(idsToDeleteWith(slides, 't1')).toEqual(['t1'])
+  })
+
+  it('unknown id deletes only itself', () => {
+    expect(idsToDeleteWith([q('q1', 'g1')], 'nope')).toEqual(['nope'])
   })
 })
