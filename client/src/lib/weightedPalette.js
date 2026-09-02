@@ -1,4 +1,4 @@
-import { hexToRgb, rgbToOklab, oklabToRgb, lerpOklabPolar } from '../jukebox/components/AlbumGradientMesh.jsx'
+import { hexToRgb, rgbToOklab, oklabToRgb, lerpOklabPolar } from './oklab.js'
 
 // Weighted-palette engine: 2-3 colors plus weights -> a full ring hue
 // assignment and a theme color set.
@@ -249,12 +249,15 @@ export function derivePalette({ colors, weights, stationCount = 13, baseTheme, c
   // earlier swatch.
   const heaviest = weights.indexOf(Math.max(...weights))
   const fold = foldOklab(colors, weights)
-  const themeColors = {
+  // null, not a throw: scripts/ring-recolor.mjs only wants the 13 hues and
+  // the anchors — it never writes theme colors, so it calls this with no
+  // baseTheme at all. The host UI still passes one and is unaffected.
+  const themeColors = baseTheme ? {
     accent:    atLightness(colors[heaviest], baseTheme.colors.accent),
     highlight: atLightness(colors[heaviest], baseTheme.colors.highlight),
     bg:        atLightness(fold, baseTheme.colors.bg),
     bgDeep:    atLightness(fold, baseTheme.colors.bgDeep),
-  }
+  } : null
 
   const advisory = hues.map((h, i) => {
     const from = currentHues[i] ?? h

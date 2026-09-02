@@ -3,8 +3,7 @@ import {
   hexToHslHue, hueDelta, allocate, spread, hueLadder, lumaProxy,
   atLightness, derivePalette,
 } from './weightedPalette.js'
-import { rgbToOklab, oklabToRgb, hexToRgb } from '../jukebox/components/AlbumGradientMesh.jsx'
-import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
+import { rgbToOklab, oklabToRgb, hexToRgb } from './oklab.js'
 
 const BASE = {
   colors: {
@@ -13,7 +12,11 @@ const BASE = {
   },
 }
 
-const CURRENT_HUES = midnightGalaxyRing.stations.map(s => s.hue)
+// Frozen fixture, deliberately NOT read from midnightGalaxy.ring.js. The
+// algorithm assertions below describe THIS set of 13 hues; a recolor of the
+// live world (scripts/ring-recolor.mjs) must not break the engine's own
+// tests. These were the shipped values on 2026-09-02.
+const CURRENT_HUES = [256, 170, 268, 28, 140, 120, 330, 208, 214, 160, 300, 196, 36]
 const PALETTE = ['#a855f7', '#3b82f6', '#f97316'] // purple ~271, blue ~217, orange ~25
 
 const cyclicAdjacent = out => {
