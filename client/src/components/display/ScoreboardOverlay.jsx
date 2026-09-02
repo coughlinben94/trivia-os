@@ -34,6 +34,52 @@ function gridMetrics(teamCount) {
 // the single-column layout was built to avoid in the first place.
 const SPLIT_TEAM_THRESHOLD = 9
 
+// rank | team name | one per round | total. The round columns share whatever
+// the name column doesn't need (1fr each) so the numbers stay spread evenly
+// across the board instead of huddling at the right with dead space beside
+// the names — the width is the same however many rounds a show has.
+//
+// Built by hand instead of `repeat(${n}, …)`: `repeat(0, …)` is INVALID CSS
+// (the count must be a positive integer), and an invalid value makes the
+// browser drop the whole grid-template-columns declaration — every cell
+// then stacks into one implicit column: rank on line 1, name on line 2,
+// total pushed below the row's fixed height and clipped by overflow:hidden.
+// Split mode (>SPLIT_TEAM_THRESHOLD teams) has zero round columns, so that's
+// exactly what a 21-team show put on the TV live (2026-09-01, Ben: "no
+// scores are showing", "team names aren't showing", "sooo messy"). The
+// 2026-08-26 "top team's row is taller and misplaced" report (see TeamRow)
+// was this same collapse seen at 10+ teams — the overflow:hidden added then
+// only hid the totals it pushed out of view.
+//
+// The cqw unit is scoped to the STAGE (container-type: size lives on the
+// outer stage, not on each split-mode half — see the two-column render
+// below), never re-scoped per column. So a track width written as "33cqw"
+// always means 33% of the FULL STAGE, even inside a half-width split
+// column. In split mode two columns sit side by side with a 1.4cqw gap
+// between them, leaving each one (100 - 1.4) / 2 = 49.3cqw wide — but the
+// un-scaled template asked for 3.4 + 33 + 9 = 45.4cqw of fixed track width
+// alone, before the round-cell/rank/name internal padding and borders
+// TeamRow adds on top. That's most of the 49.3cqw available before a
+// single character of name text is drawn, and it explains the second live
+// failure once the repeat(0,…) collapse above was fixed (2026-09-01, Ben:
+// "half the names are cut off", "no scores showing" — the row's real
+// rendered width exceeded its column's overflow:hidden box, clipping
+// whatever fell past the right edge, i.e. the total and the tail of long
+// names). Scaling the three fixed tracks by the same 0.493 the columns
+// actually get keeps the ROW's proportions identical, just resized to fit
+// the box it's actually in — non-split mode is untouched (scale 1, same
+// output as before this fix).
+const SPLIT_COLUMN_SCALE = (100 - 1.4) / 2 / 100 // = 0.493
+
+export function gridTemplate(roundCount, isSplit = false) {
+  const scale = isSplit ? SPLIT_COLUMN_SCALE : 1
+  const rank = +(3.4 * scale).toFixed(2)
+  const nameMax = +(33 * scale).toFixed(2)
+  const total = +(9 * scale).toFixed(2)
+  const rounds = Array.from({ length: roundCount }, () => 'minmax(0, 1fr)').join(' ')
+  return `${rank}cqw minmax(0, ${nameMax}cqw) ${rounds ? `${rounds} ` : ''}${total}cqw`
+}
+
 // ─── Count-up total ────────────────────────────────────────────────────────
 // A live score edit while the board is up should read as the number climbing,
 // not a silent swap. Snaps when the user prefers reduced motion.
@@ -244,12 +290,9 @@ function ScoreboardContent({ show }) {
   const half = Math.ceil(ranked.length / 2)
   const columns = isSplit ? [ranked.slice(0, half), ranked.slice(half)] : [ranked]
   const m = gridMetrics(isSplit ? half : ranked.length)
-  // rank | team name | one per round | total. The round columns share whatever
-  // the name column doesn't need (1fr each) so the numbers stay spread evenly
-  // across the board instead of huddling at the right with dead space beside
-  // the names — the width is the same however many rounds a show has.
-  // Split mode drops the round columns (see SPLIT_TEAM_THRESHOLD above).
-  const template = `3.4cqw minmax(0, 33cqw) repeat(${splitCols.length}, minmax(0, 1fr)) 9cqw`
+  // Split mode drops the round columns and scales the fixed tracks down to
+  // its actual half-width box (see gridTemplate above).
+  const template = gridTemplate(splitCols.length, isSplit)
 
   const displayFont = `'${theme.fonts.display}', 'Boogaloo', sans-serif`
   const bodyFont = `'${theme.fonts.body}', 'DM Sans', sans-serif`
