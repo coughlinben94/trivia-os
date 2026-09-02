@@ -122,16 +122,14 @@ export function accentCompanionHue(stationHue, hueAnchors) {
   if (!hueAnchors?.length) return stationHue + 168
   let best = hueAnchors[0].deg, bestD = -1
   for (const a of hueAnchors) {
-    const d = Math.abs(((a.deg - stationHue) % 360 + 540) % 360 - 180)
-    const dist = 180 - d
-    if (dist > bestD) { bestD = dist; best = a.deg }
+    const d = 180 - Math.abs(((a.deg - stationHue) % 360 + 540) % 360 - 180) // cyclic distance 0..180
+    if (d > bestD) { bestD = d; best = a.deg }
   }
   return best
 }
 ```
 
-(`dist` is the cyclic hue distance 0..180. Verify against the pins in 1e before trusting the modular
-arithmetic — write the test first.)
+(Corrected 2026-09-02 after Task 1: the first draft inverted the distance and picked the NEAREST anchor. The pins in 1e are the authority.)
 
 ### 1c. Thread hues through the two consumers in `ringPrimitives.js`
 
