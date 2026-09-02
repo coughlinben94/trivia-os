@@ -145,13 +145,28 @@ describe('WorldPaletteEditor', () => {
     expect(host.querySelectorAll('tbody tr')).toHaveLength(13)
   })
 
-  it('says out loud that the hue column is a preview and writes nothing, once expanded', () => {
+  it('hands Ben a copyable ring-recolor command built from the committed palette, once expanded', () => {
     // The screen shows a full before/after hue table next to an Apply button.
-    // Without this sentence a host reasonably reads Apply as "apply all of
-    // this", including the ring — which it does not do and must not appear
-    // to. The ring half is a separate gated step (Task 4).
+    // Without this the host has no way to tell that Apply does NOT touch the
+    // ring — and no path to actually recolor it besides asking an engineer.
     render()
     act(() => byText('Technical details').click())
-    expect(host.textContent).toContain('nothing on this screen writes a station hue')
+    expect(host.textContent).toContain('Paste this to Claude to recolor the ring itself')
+    const code = [...host.querySelectorAll('code')].find(el => el.textContent.includes('ring-recolor.mjs'))
+    expect(code.textContent).toBe(
+      "node scripts/ring-recolor.mjs --colors '#a855f7,#3b82f6' --weights '0.65,0.35' --write && npm run test:unit && npm run verify:ring",
+    )
+  })
+
+  it('copies the ring-recolor command to the clipboard and flips the button label', async () => {
+    const writeText = vi.fn().mockResolvedValue()
+    Object.assign(navigator, { clipboard: { writeText } })
+    render()
+    act(() => byText('Technical details').click())
+    await act(async () => { byText('Copy command').click() })
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('ring-recolor.mjs'))
+    expect(byText('Copied ✓')).toBeTruthy()
+    act(() => { vi.advanceTimersByTime(1500) })
+    expect(byText('Copy command')).toBeTruthy()
   })
 })
