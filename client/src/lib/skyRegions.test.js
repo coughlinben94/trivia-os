@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { skyRegionWeights, applySkyTints } from './ringPrimitives.js'
+import { skyRegionWeights, applySkyTints, skyRegionHues, accentCompanionHue, SKY_REGIONS } from './ringPrimitives.js'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 
 // The one piece of real logic in the sky-region system: the weight curve is
@@ -133,5 +133,66 @@ describe('applySkyTints transition handling', () => {
     applySkyTints({ ember: t }, [{ ember: 0.5 }], 0, true)
     expect(t.style.transitionProperty).toBe('')
     expect(t.style.opacity).toBe('0.500')
+  })
+})
+
+// 2026-09-02 — the two places a hue used to be hardcoded OUTSIDE station
+// data. Both now derive from the palette, so a recolor of the station data
+// carries the sky and the accent companions with it instead of leaving them
+// pointing at the old world's colours.
+describe('skyRegionHues', () => {
+  it('reproduces the shipped region hues from the shipped station data', () => {
+    expect(skyRegionHues(midnightGalaxyRing.stations)).toEqual({ aurora: 152, ember: 26, disco: 300 })
+  })
+
+  it('follows the source station when its hue moves', () => {
+    const stations = midnightGalaxyRing.stations.map(s => s.key === 'pulsar' ? { ...s, hue: 10 } : s)
+    expect(skyRegionHues(stations).aurora).toBe(42)
+  })
+
+  it('omits a region with no member station', () => {
+    expect(skyRegionHues([{ hue: 5 }])).toEqual({})
+  })
+
+  it('falls back to a region member when none is declared the source', () => {
+    expect(skyRegionHues([{ region: 'ember', hue: 200 }]).ember).toBe(190)
+  })
+
+  it('wraps into 0..359 rather than emitting a negative hue', () => {
+    expect(skyRegionHues([{ region: 'ember', hue: 4, regionSource: true }]).ember).toBe(354)
+  })
+
+  it('SKY_REGIONS carries no hardcoded hue', () => {
+    for (const cfg of Object.values(SKY_REGIONS)) expect(cfg).not.toHaveProperty('hue')
+  })
+})
+
+describe('accentCompanionHue', () => {
+  const anchors = midnightGalaxyRing.hueAnchors // 276, 214, 140
+
+  it('picks the anchor farthest from the station hue', () => {
+    expect(accentCompanionHue(28, anchors)).toBe(214)   // amber planet
+    expect(accentCompanionHue(330, anchors)).toBe(140)  // rose nebula
+    expect(accentCompanionHue(36, anchors)).toBe(214)   // supernova
+  })
+
+  it('two-color palette: the other color', () => {
+    const ry = [{ deg: 0, window: 25 }, { deg: 55, window: 25 }]
+    expect(accentCompanionHue(58, ry)).toBe(0)
+    expect(accentCompanionHue(3, ry)).toBe(55)
+  })
+
+  it('falls back to +168 with no anchors', () => {
+    expect(accentCompanionHue(30, [])).toBe(198)
+  })
+
+  // The shipped world may not visibly change: every accent companion has to
+  // land within 18 degrees of the +168 it used to be hardcoded to.
+  it('shifts the shipped accent companions by no more than 18 degrees', () => {
+    for (const st of midnightGalaxyRing.stations.filter(s => s.accent)) {
+      const was = (st.hue + 168) % 360
+      const now = accentCompanionHue(st.hue, midnightGalaxyRing.hueAnchors)
+      expect(Math.abs((((now - was) % 360) + 540) % 360 - 180)).toBeLessThanOrEqual(18)
+    }
   })
 })
