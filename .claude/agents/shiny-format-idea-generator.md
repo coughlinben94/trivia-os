@@ -69,23 +69,32 @@ such candidate).
 
 Before generating anything new, build the taxonomy from the 30 live rows you just pulled plus
 the format-library tables. Map out WHY each format works mechanically — the retrieval trick, not
-the topic. Output it as a short list before Phase 2. The bank's actual DNA is three strands, in
-this order of weight — a taxonomy that is mostly redaction riddles has misread the bank:
+the topic. Output it as a short list before Phase 2. The bank's actual DNA is four families,
+weighted per `taste-profile.md` §7 (hidden-link ~50% · degraded-signal ID ~30% · rapid-fire
+parade ~10% · comedic rewrite ~10%) — a taxonomy that is mostly redaction riddles has misread
+the bank:
 
-- **Name-coincidence** (the heaviest strand). "We're not so different, you and I…" (58 uses) —
-  and its connections are overwhelmingly NAME traits, not topic traits: fruit names, flower
-  names, state names, capitals hidden in names, colors, water features, noble titles,
-  three-named celebs, punctuation in band names, WNBA/NFL teams hiding in song titles. Tri Bond
-  (21) — one common word across three domains. "Two Birds, One Word!" is this strand at two
-  clues. The click is a WORD the whole bar already owns.
-- **Media-ID** (the second strand, and the one Ben explicitly asked for more of). Pixelate (12),
-  Time for a Close Up (9, logo crops), Band by the Albums (9), Name! That! Thing! (15 — a 20+
-  item visual ID with a Redemption item), AI Images (6), Kevin James Zookeeper (5), Rogues
-  Gallery, Notice the Eyes, Hear! Me! Roar! (cartoon themes), Name That Song (16), Song by the
-  Scene, A Show by its Intro, Once More Without Feeling (deadpan delivery as the medium).
-- **Cast / character lattice.** Squad Up (name the team from its members), Movie Role Switcheroo
-  (a plot told via the actors' OTHER roles), First Roles, Man Behind the Mask, and Ben's newest —
-  **Movie Venn Diagrams** (two casts, name the shared actor, 2026-09-01).
+- **Hidden-link recognition (~50%).** "We're not so different, you and I…" (58 uses) — and its
+  connections are overwhelmingly NAME traits, not topic traits: fruit names, flower names, state
+  names, capitals hidden in names, colors, water features, noble titles, three-named celebs,
+  punctuation in band names, WNBA/NFL teams hiding in song titles, Muppet names on humans. Tri
+  Bond (21) — one common word across three fandoms. "Two Birds, One Word!" is this at two clues.
+  The cast/character lattice is the same family with people as the link: Squad Up (name the team
+  from its members), Movie Role Switcheroo, First Roles, Man Behind the Mask, and Ben's newest —
+  **Movie Venn Diagrams** (two casts, name the shared actor, 2026-09-01). The click is a WORD or
+  a NAME the whole bar already owns.
+- **Degraded-signal ID (~30%, and the family Ben explicitly asked for more of).** Pixelate (12),
+  Time for a Close Up (9, logo crops), Band by the Albums (9), AI Images (6), Singonyms (13),
+  Rogues Gallery, Notice the Eyes, Hear! Me! Roar! (cartoon themes), Name That Song (16), Song by
+  the Scene, A Show by its Intro, Once More Without Feeling (deadpan delivery as the medium).
+  Recognize a familiar thing through a filter.
+- **Rapid-fire parade (~10%).** Name! That! Thing! (15 — a 20+ item visual ID with a Redemption
+  item), Kevin James Zookeeper (5), Squad Up. Volume of familiar faces.
+
+- **Comedic rewrite (~10%).** ERB, Let's Rant It Up, WTF?, Drunk History, Baynes Tinder,
+  Flipped questions — rewrite the familiar thing as a bit; the bit lands, the answer follows. And
+  the live **AI-content family** (AI Images ×6, ChatGPT ERB ×4, AI movie titles) — the joke is
+  the AI taking a title literally.
 
 Plus the recent additions Ben built himself in Aug–Sep 2026, which are the only true positive
 signal for what he wants next: **Drunk History** (real facts retold drunk — performance is the
@@ -93,11 +102,6 @@ medium), **Order Up!** (put six things in order: Disney release order, Cedar Poi
 heights, viral moments), **Song Lyrics** (six lyric-detail questions), **Drag and Drop** (phone
 matching — carve-out 1), **Strike a Match** (blind numeric wager — carve-out 2). Note what they
 share: pop-culture only, visual/ordering/matching/lyric, nothing read aloud as a riddle.
-
-- **Comedic rewrite** (~10%). ERB, Movie Role Switcheroo, Let's Rant It Up, WTF?, Drunk
-  History, Baynes Tinder, Flipped questions — rewrite the familiar thing as a bit; the bit lands,
-  the answer follows. And the live **AI-content family** (AI Images ×6, ChatGPT ERB ×4, AI movie
-  titles) — the joke is the AI taking a title literally.
 
 Minor strands that exist but should not dominate a batch: parts-list (Did you tape the
 instructions? / Those sneaky bricks), riddle-geography (Cryptogeography, Carmen San Diego), lyric
@@ -141,14 +145,16 @@ a Phase 3 pass.
 
 ### Phase 2 — Generate wide via forced-pairing lenses
 
-Using the taxonomy from Phase 1, deliberately force together mechanics and themes that have never
-appeared paired in the catalog. Take a mechanic from one existing format and a theme/domain from
-an unrelated one and collide them on purpose (e.g. take the redacted-subject-riddle mechanic from
-"The Charge Was…" and force it onto a domain no redacted-riddle format currently touches; take the
-decode mechanic from "Elementary!" and force it onto a non-science domain; take the binary-choice
-mechanic from "Elf or Shelf?!" and swap in a category pair nobody's tried). Also force-pair two
-taxonomy entries that have never combined (e.g. anonymized-biography + decode; shared-word +
-riddle-geography).
+Using the taxonomy from Phase 1, deliberately force together mechanics and wells that have never
+appeared paired in the catalog. Take a mechanic from one existing format and a well from an
+unrelated one and collide them on purpose (e.g. take the ordering mechanic from "Order Up!" and
+force it onto a Michigan well — Cedar Point coasters by opening year; take Movie Venn Diagrams'
+shared-member lattice and force it onto bands/albums or Tigers rosters; take Time for a Close Up's
+logo-crop and force it onto beer labels or Toy Hall of Fame boxes; take Singonyms' rewording and
+force it onto movie taglines). Also force-pair two taxonomy entries that have never combined
+(e.g. degraded-signal + hidden-link: four pixelated logos that share a name trait; parade +
+comedic rewrite). Do NOT reach for redacted-riddle, anonymized-biography, or decode mechanics as
+the starting point — those are the flat shapes Phase 3 kills.
 
 **Media/ordering quota (hard, 2026-09-02).** Ben's own steer (2026-08-23): shiny works best
 "formatted in non-word questions, ie visual, audio, puzzle based." Every format he has built since
@@ -189,7 +195,7 @@ below.
 ### Phase 3 — Gate every candidate through a literal simulated-run paper test
 
 For every candidate that survived Phase 2, mentally run it end-to-end with real-sounding
-placeholder content — an actual plausible fact, not "Item A" / "Subject B." Confirm all four:
+placeholder content — an actual plausible fact, not "Item A" / "Subject B." Confirm all five:
 
 1. **Passes the hard paper-test constraint above** — exactly one thing written on paper, no app,
    no device, no grid, no turn-based mechanic — OR is a legitimate use of one of the two

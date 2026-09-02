@@ -2,7 +2,7 @@
 
 > Built 2026-09-02 from a full read of the live `questions` table (1,579 regular · 141 bonus · 281 shiny · 84 swing · 48 PYL rows) by two independent Fable 5.1 reviewers (reports A and B, merged here), plus the 11 fact-hunt facts Ben has used and his keep/kill verdicts from the 2026-09-01 wave. Ben's own words that morning: *"i dont care about era. i focus on just plain old cool things. fandoms are the goals here."* Every hunter, every grader, every generator reads this before doing anything. `question-anatomy.md` is the companion (the moves); this file is the taste (the wells, the shapes, what counts as a bridge, what gets killed).
 
-## 0. The one-page brief (paste this into every hunter and grader prompt)
+## 0. The one-page brief (every hunter and grader Reads this file; paste §0 verbatim when a prompt can't Read)
 
 **A Ben fact is a word the bar already owns, reached by a road it hasn't walked, with a second door in.** The subject is famous. The dig is a detail — or a JOIN between two famous things — nobody at the table has noticed. It is NOT "an amazing thing nobody has heard of." *Cool = a thing everyone already loves, seen from an angle they never noticed.*
 
@@ -32,6 +32,8 @@
 13. **Internet / meme culture.** Nyan cat, Peanut Butter Jelly Time, rickroll ×2, Double Rainbow, Yao Ming face, Ice Bucket, Tom from Myspace, Potter Puppet Pals ×2, the Area 51 raid, Coldplay/Astronomer, boat-kid aura, Nic Cage vampire, Jimothy the raccoon.
 14. **Lists-as-authority.** "According to [Rolling Stone / IMDB / Rotten Tomatoes / AFI / Guinness / Forbes / People / Billboard / VH1 / Bleacher Report / SI / ESPN / Toy HOF / RRHOF / Walk of Fame / Razzies / Time Out / Thrillist / MLive / Parade / ScreenJunkies / Collider / Looper / Nerdist / NatGeo]…" opens a large share of questions. "The only X to ever Y" is his favorite superlative. Bonus lists carry a constraint twist: not "top 5 musicals" but "top 5 musicals with two-word titles."
 15. **Topical.** 15–20% of regular questions open with a death, a release, an award show, a sports event, or a viral moment from that week. Deaths become questions the same week (Ichiro's statue, Maggie Smith, James Earl Jones ×4, Chuck Norris ×2, Tim Curry, Peter Cullen, Robert Carradine, Peter Yarrow) and get a mini-round. Seasonal blocks (Christmas 30+, Halloween, Thanksgiving, Masters week, March Madness, the Derby); the show/season/album that dropped this week (Stranger Things S5 swing the week it aired).
+
+**Canonical `domain` values (the 13 subject wells, exact spelling — lists-as-authority and topical are lanes, not wells):** `Sitcoms` · `Disney/Pixar/parks` · `Comedy films` · `Nerd canon` · `Music` · `Sports-as-pop-culture` · `Michigan/family` · `Cryptids/haunted/true-crime` · `Myth/folklore/D&D` · `Word-origins` · `Brands/toys/retail/drinks` · `Theme-parks/roadside/Vegas` · `Internet/meme`.
 
 **Nearly absent, despite the 2026-08 hunter allocating ~30% to them:** science, etymology, history, geography for their own sake. Each reaches a Ben question only through a pop-culture door: pulsar via the Bee Gees, Cerberus via Microsoft, Squib via Harry Potter, the Ghost Army via the word "plunder," WW2 via code names and Die Hard's Akagi. Straight history survives in one place: the hard single-answer BONUS question (Strangites, Wilmer McLean, Andras Toma, Mansa Musa, Gettysburg's guide exam) — and even there it wants a superlative or a Michigan/pop wink, never a lawsuit.
 
@@ -114,7 +116,8 @@ Naval engineer Richard James — a torsion spring fell off a shelf and "walked,"
 Wife Betty found the name in a dictionary — "sleek and graceful"
 1960: Richard left Betty and the company for a religious sect in Bolivia — she ran Slinky for 40 years
 name: Slinky Dog, Toy Story · Toy HOF class of 2000
-mi/ask: Bolivia = where Butch and Sundance ran (bank #1665, Ben's "next bucket list place")
+mi: Bolivia is Ben's stated "next bucket list place" (bank #1665)
+ask: Butch and Sundance would know — they ran there
 line: GIs in Vietnam used them as field-radio antennas
 Shout: "the Slinky guy joined a CULT?"
 ```

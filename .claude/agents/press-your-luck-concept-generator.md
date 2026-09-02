@@ -186,10 +186,10 @@ reply covers survivors only, but the DB gets every candidate that made it past P
 - **(a) Board name** — named the way Ben names things: a pun or catchphrase.
 - **(b) Why it's fresh** — the domain-gap or item-type-gap it fills, one sentence.
 - **(c) The 6-slot sketch** — for the default uniform shape, one line covers it (e.g. "6× name-the-
-  state-from-its-motto, difficulty ramping 1→6"); for the rarer mixed-mechanic variant, sketch item
-  type and rough difficulty per slot (e.g. "1. image ID, easy · 2. riddle-description, medium · 3.
-  paper matching pair, hard · ..."). Either way, item TYPE and difficulty only — never the finished
-  board.
+  state-from-its-motto, visual, difficulty ramping 1→6"); for the rarer mixed-mechanic variant,
+  sketch item type and rough difficulty per slot (e.g. "1. image ID, easy · 2. riddle-description,
+  medium · 3. paper matching pair, hard · ..."). Either way: item TYPE, the MEDIUM (visual / audio /
+  read-aloud) per slot or for the board, and difficulty only — never the finished board.
 - **(d) Explicit constraint confirmation** — one line stating it passed and why (all 6 cleanly
   adjudicable, real difficulty spread, no app/device/grid/turn-based element).
 - **(e) LIMIT-TESTER** — present only if this candidate broke a convention; name the convention it

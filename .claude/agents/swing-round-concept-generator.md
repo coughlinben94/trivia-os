@@ -242,7 +242,13 @@ per the boundary above. Confirm all four:
    colorless template that happens to repeat 6–9 times? For a topic-specialist candidate: does the
    domain genuinely reward a fan's excitement, not just fill 6 slots?
 
-Any candidate that fails any one of the four checks never gets written up in the chat reply and
+5. **Kill-list survival (added 2026-09-02).** Would a typical item of this round be a kill-shape
+   per `taste-profile.md` §6 — a debunk, a lawsuit, a résumé, a patent, a CPSC recall, a
+   rules-of-the-game fact with no hinge, a grim payoff, an answer the bar can't say? "Recall
+   Notice!" and "Sudden Death" from the 2026-07 catalog fail this by construction; "Fauxbituaries"
+   passes. A round whose every item is a kill-shape is dead even if mechanically fresh.
+
+Any candidate that fails any one of the five checks never gets written up in the chat reply and
 never reaches Ben — but it still gets a `format_idea_candidates` row (Phase 4), inserted directly
 as `status = 'rejected'` with `rejected_reason` naming which check failed. This is what feeds
 Phase 1.5's dedupe pull for future runs — a failed candidate that vanished without a row taught
