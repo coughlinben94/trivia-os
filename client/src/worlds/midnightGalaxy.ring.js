@@ -53,13 +53,12 @@ export const midnightGalaxyRing = {
     floorContrast(theme.colors.highlight, [theme.colors.bgDeep], 7),
     floorContrast(theme.colors.text ?? theme.colors.highlight, [theme.colors.bgDeep], 7),
   ],
-  // Two anchors, not one 34°-of-highlight window (spec §4): Midnight Galaxy
-  // is genuinely a violet/purple family (the theme's own highlight, 276°)
-  // plus a cool-blue family that's already live across three stations
-  // (comet 208°, binary pair 214°, open cluster 224°) — stretching one
-  // window to cover both would either exclude the blues or blur the two
-  // apart. orange nebula/supernova/rose nebula stay the world's one warm
-  // complementary accent (≤3 stations, cap already met — see below).
+  // Anchors are GENERATED, not authored: scripts/ring-recolor.mjs derives one
+  // anchor per palette colour and rewrites this block, so the count and the
+  // degrees below track whatever palette was last applied. Spec §4 allows
+  // 1–3 anchors, which is the only constraint that survives a recolour —
+  // everything specific in the reasoning that follows describes the
+  // 2026-09-02 purple/blue palette that is shipped today, not a rule.
   hueAnchors: [
     { deg: 276, window: 25 }, // violet/purple - the theme's own highlight
     { deg: 214, window: 25 }, // cool blue - comet, open cluster, binary pair already live here

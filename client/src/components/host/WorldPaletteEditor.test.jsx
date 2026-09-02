@@ -151,7 +151,11 @@ describe('WorldPaletteEditor', () => {
     // ring — and no path to actually recolor it besides asking an engineer.
     render()
     act(() => byText('Technical details').click())
-    expect(host.textContent).toContain('Paste this to Claude to recolor the ring itself')
+    expect(host.textContent.replace(/\s+/g, ' ')).toContain(
+      'Click Apply for the theme half. Paste this to Claude for the ring half — it needs '
+      + 'a code change and a gate run, and the gate reports pre-existing spec warnings; '
+      + 'the regression line is what must be green.',
+    )
     const code = [...host.querySelectorAll('code')].find(el => el.textContent.includes('ring-recolor.mjs'))
     expect(code.textContent).toBe(
       "node scripts/ring-recolor.mjs --colors '#a855f7,#3b82f6' --weights '0.65,0.35' --write && npm run test:unit && npm run verify:ring",

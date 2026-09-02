@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
   readStationHues, rewriteRingJs, rewriteHtml, rewriteHuePin,
-  formatPlan, blockedTargets,
+  formatPlan, blockedTargets, regionHueWarnings,
 } from './ringRecolor.js'
 
 // Reads the real world files. These transforms exist only to edit THOSE two
@@ -194,5 +194,54 @@ describe('formatPlan', () => {
 
   it('says so when there is nothing to warn about', () => {
     expect(formatPlan([{ key: 'a', from: 1, to: 2 }], [])).toMatch(/no warnings/i)
+  })
+})
+
+describe('regionHueWarnings', () => {
+  // The sky regions are DERIVED: skyRegionHues adds a fixed hueOffset
+  // (aurora +32) to its source station's hue, so a region can land outside
+  // every anchor window even when all 13 stations are inside one — the
+  // recolor's own output then contains a colour the palette never chose.
+  const ANCHORS = [{ deg: 0, window: 25 }, { deg: 55, window: 25 }]
+
+  it('says nothing about a region hue inside an anchor window', () => {
+    expect(regionHueWarnings({ ember: 20, disco: 60 }, ANCHORS)).toEqual([])
+  })
+
+  it('warns, naming the region and the hue, when a region lands outside every window', () => {
+    const out = regionHueWarnings({ aurora: 105 }, ANCHORS)
+    expect(out).toHaveLength(1)
+    expect(out[0]).toContain('aurora')
+    expect(out[0]).toContain('105')
+  })
+
+  it('measures the window cyclically, so 350 is inside an anchor at 10', () => {
+    expect(regionHueWarnings({ aurora: 350 }, [{ deg: 10, window: 25 }])).toEqual([])
+  })
+})
+
+// ── JS ↔ HTML hue parity ───────────────────────────────────────────────────
+// The two files carry independent copies of the same 13 hues and the same
+// anchor list, and nothing else compares them: verify:ring reads only the
+// HTML, the app renders only the .js. A hand edit to one file alone is the
+// exact failure this whole pipeline exists to stop, so it has to fail
+// test:unit, not just review.
+describe('midnightGalaxy.ring.js and world-07-ring.html agree', () => {
+  const htmlStationPairs = () => {
+    const block = HTML.match(/^([ \t]*)stations: \[\r?\n([\s\S]*?)^\1\],$/m)
+    expect(block, 'world-07-ring.html: no stations block').toBeTruthy()
+    return [...block[2].matchAll(/key:\s*'([^']+)'[\s\S]*?hue:\s*(\d+)/g)]
+      .map(m => [m[1], Number(m[2])])
+  }
+  const anchorDegs = src =>
+    [...src.match(/^([ \t]*)hueAnchors: \[\r?\n[\s\S]*?^\1\],$/m)[0].matchAll(/deg:\s*(\d+)/g)]
+      .map(m => Number(m[1]))
+
+  it('carries the same station key/hue pairs in both files', () => {
+    expect(htmlStationPairs()).toEqual(readStationHues(RING_JS).map(r => [r.key, r.hue]))
+  })
+
+  it('carries the same hueAnchors degrees in both files', () => {
+    expect(anchorDegs(HTML)).toEqual(anchorDegs(RING_JS))
   })
 })

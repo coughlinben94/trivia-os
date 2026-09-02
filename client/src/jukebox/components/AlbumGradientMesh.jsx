@@ -203,9 +203,10 @@ export function dividerAngle(tSec) {
 
 // Signed-distance edge value for a pixel at (xFrac, yFrac) — see the
 // offset/theta comment in draw() for the geometry. Pure and exported (same
-// reason as anchorDivider/lerpOklabPolar above) so the theta=0 case can be
-// pinned as a regression test against the old x/SW - divider formula it
-// replaces, without needing a canvas to run draw() itself.
+// reason as anchorDivider above, and as lerpOklabPolar in lib/oklab.js) so
+// the theta=0 case can be pinned as a regression test against the old
+// x/SW - divider formula it replaces, without needing a canvas to run
+// draw() itself.
 export function dividerEdge(xFrac, yFrac, theta, aspect, offset, sharpness) {
   const ct = Math.cos(theta), st = Math.sin(theta)
   const half = 0.5 * (aspect * Math.abs(ct) + Math.abs(st))

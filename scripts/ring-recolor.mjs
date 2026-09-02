@@ -5,7 +5,12 @@
 //   node scripts/ring-recolor.mjs --colors '#ff0000,#ffea00' --weights '0.55,0.45' --write
 //
 // Without --write it prints the plan and touches nothing. With --write it
-// rewrites all three files that carry station hues, or none of them.
+// computes all three new file contents first, then writes them in three
+// sequential writeFileSync calls — not one atomic transaction. A crash
+// between two writes leaves the tree half-recolored, which is recoverable
+// rather than dangerous: the dirty-tree guard below refuses to run at all
+// unless all three targets are clean, so `git checkout` on the targets is
+// always the undo.
 //
 // The three files exist because the app and the verification gate read
 // DIFFERENT sources: client/src/worlds/midnightGalaxy.ring.js is what
@@ -22,7 +27,7 @@ import { skyRegionHues, accentCompanionHue } from '../client/src/lib/ringPrimiti
 import { midnightGalaxyRing } from '../client/src/worlds/midnightGalaxy.ring.js'
 import {
   readStationHues, rewriteRingJs, rewriteHtml, rewriteHuePin,
-  formatPlan, blockedTargets,
+  formatPlan, blockedTargets, regionHueWarnings,
 } from '../client/src/lib/ringRecolor.js'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -91,15 +96,21 @@ function main() {
     console.log(`  ${c}  weight ${weights[i].toFixed(2)}  anchor ${derived.hueAnchors[i].deg}°  ${derived.counts[i]} stations`)
   })
   console.log()
-  console.log(formatPlan(plan, derived.warnings))
 
   // The sky regions and accent companions are DERIVED from the station hues
   // (Task 1), not authored — printing them is the only way to see, before
   // writing, what the new palette does to the parts of the world nobody
-  // edits by hand.
+  // edits by hand. Derived before the plan so a region that lands outside
+  // every anchor window prints in the same Warnings: block as the palette's.
   const byKey = new Map(stations.map(s => [s.key, s.hue]))
   const withMeta = midnightGalaxyRing.stations.map(s => ({ ...s, hue: byKey.get(s.key) ?? s.hue }))
   const regions = skyRegionHues(withMeta)
+
+  console.log(formatPlan(plan, [
+    ...derived.warnings,
+    ...regionHueWarnings(regions, derived.hueAnchors),
+  ]))
+
   console.log('\nSky regions (derived from the new hues):')
   for (const [key, hue] of Object.entries(regions)) {
     const src = withMeta.find(s => s.region === key && s.regionSource) ?? withMeta.find(s => s.region === key)
@@ -112,7 +123,12 @@ function main() {
   }
 
   if (!write) {
-    console.log('\nDry run — nothing written. Add --write to apply.\n')
+    console.log('\nDry run — nothing written. Add --write to apply.')
+  console.log('\nNext:\n  npm run test:unit && npm run verify:ring')
+  console.log(
+    '  verify:ring exits 2 while the pre-existing spec-tier deviations stand —\n' +
+    '  read the `regression tier:` line; it must say all checks green.\n',
+  )
     return
   }
 
@@ -125,9 +141,12 @@ function main() {
     )
   }
 
-  // All three strings first, then all three writes: a throw halfway through
-  // the transforms must not leave the app recolored and the gate's file on
-  // the old palette.
+  // All three strings first, then all three writes. That narrows the window
+  // to the writes themselves — a throw in the transforms cannot leave the
+  // app recolored and the gate's file on the old palette — but the writes
+  // are still three separate calls, so recovery after a crash mid-loop is
+  // `git checkout` on the targets, which the clean-tree guard above keeps
+  // available.
   const next = {
     [TARGETS.ringJs]: rewriteRingJs(ringJs, derived.hues, derived.hueAnchors),
     [TARGETS.html]: rewriteHtml(read(TARGETS.html), stations, derived.hueAnchors),
@@ -136,7 +155,11 @@ function main() {
   for (const [rel, text] of Object.entries(next)) writeFileSync(ROOT + rel, text)
 
   console.log(`\nWrote:\n  ${Object.keys(next).join('\n  ')}`)
-  console.log('\nNext:\n  npm run test:unit && npm run verify:ring\n')
+  console.log('\nNext:\n  npm run test:unit && npm run verify:ring')
+  console.log(
+    '  verify:ring exits 2 while the pre-existing spec-tier deviations stand —\n' +
+    '  read the `regression tier:` line; it must say all checks green.\n',
+  )
 }
 
 try {

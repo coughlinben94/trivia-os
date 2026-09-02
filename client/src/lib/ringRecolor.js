@@ -11,6 +11,8 @@
 // failure mode this replaces is a hue that changed in one file only: the
 // app looks recolored, the gate still measures the old world.
 
+import { hueDelta } from './weightedPalette.js'
+
 const GENERATED = '// written by scripts/ring-recolor.mjs — do not hand-edit'
 
 const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -149,4 +151,22 @@ export function formatPlan(rows, warnings) {
     ? warnings.map(x => `  ! ${x}`).join('\n')
     : '  no warnings'
   return `${table}\n\nWarnings:\n${warned}`
+}
+
+// Sky regions are derived, not authored: skyRegionHues adds a fixed
+// hueOffset to the source station's hue (aurora +32), so a region can land
+// outside every anchor window even when all 13 stations sit inside one —
+// e.g. --colors '#ff0000,#ffea00' puts the pulsar at 73 and the aurora sky
+// at 105, a green nothing in the palette asked for. The recolor can't fix
+// that (the offsets are the shipped world's own arithmetic), so it says so.
+//
+// `regionHues` is skyRegionHues' output, { region: hue }. `windowFallback`
+// covers an anchor written without its own `window`.
+export function regionHueWarnings(regionHues, hueAnchors, windowFallback = 25) {
+  return Object.entries(regionHues)
+    .filter(([, hue]) => !hueAnchors.some(a => hueDelta(hue, a.deg) <= (a.window ?? windowFallback)))
+    .map(([key, hue]) =>
+      `Sky region '${key}' lands at ${hue}° — outside every anchor window ` +
+      `(${hueAnchors.map(a => `${a.deg}°±${a.window ?? windowFallback}`).join(', ')}). ` +
+      'Its hue is the source station\'s plus a fixed offset, so the sky shows a colour the palette never chose.')
 }

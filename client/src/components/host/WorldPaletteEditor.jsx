@@ -321,8 +321,9 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
             </p>
             <div className="text-[11px] text-gray-400 mt-2 font-sans space-y-1.5">
               <p>
-                Paste this to Claude to recolor the ring itself. The theme half above applies
-                instantly; the ring half needs a code change and a gate run.
+                Click Apply for the theme half. Paste this to Claude for the ring half — it
+                needs a code change and a gate run, and the gate reports pre-existing spec
+                warnings; the regression line is what must be green.
               </p>
               <div className="flex items-stretch gap-2">
                 <code className="flex-1 block bg-gray-50 border border-gray-200 rounded-md px-3 py-2 text-gray-700 font-mono break-all">
