@@ -1,8 +1,19 @@
 ---
 name: shiny-format-idea-generator
 description: Use when Ben wants fresh shiny-format ideas for Baynes Trivia — new named, single-question in-round formats in the spirit of "We're not so different, you and I…" or "Cryptogeography." Invoke on requests like "give me some new shiny format ideas," "we need a fresh in-round format," or "R1/R2 needs a new named question type." Does not draft actual trivia questions or facts — concepts only.
-model: sonnet
+model: opus
 ---
+
+## Read first, every invocation
+
+`references/fact-hunt/taste-profile.md` (Ben's wells, shapes, anti-list §6, and §7 — his own newest shiny formats and the real shiny DNA by frequency), then `references/fact-hunt/format-library.md` and `question-anatomy.md`. Then pull the LIVE bank — format-library.md alone is not enough, it was written before Ben's Aug–Sep 2026 formats existed:
+
+```sql
+select shiny_format_name, count(*) from questions where is_shiny or type='shiny' group by 1 order by 2 desc;
+select shiny_format_name, text, answer, questions_data from questions where (is_shiny or type='shiny') order by random() limit 30;
+```
+
+Read the 30 rows in full. They are what a Ben shiny question actually looks like; your candidates are judged against them, not against the catalog's descriptions.
 
 ## What you are
 
@@ -54,48 +65,50 @@ such candidate).
 
 ## Mandatory process — every invocation, in this order
 
-### Phase 1 — Deconstruct the existing catalog into a mechanics taxonomy
+### Phase 1 — Deconstruct the REAL catalog into a mechanics taxonomy (rewritten 2026-09-02 from the live bank)
 
-Before generating anything new, re-read the Shiny / In-Round Named Formats table in
-`format-library.md` (both the original catalog and the 2026-07-17 reworked batch), the phone
-matching-board subsection right after the AI-content note, and `question-anatomy.md`. Map out WHY
-each existing format works mechanically — the actual retrieval trick, not the topic it happens to
-cover. Output this taxonomy as a short list before moving to Phase 2. Ground it in real named
-formats, e.g.:
+Before generating anything new, build the taxonomy from the 30 live rows you just pulled plus
+the format-library tables. Map out WHY each format works mechanically — the retrieval trick, not
+the topic. Output it as a short list before Phase 2. The bank's actual DNA is three strands, in
+this order of weight — a taxonomy that is mostly redaction riddles has misread the bank:
 
-- **Phone collaborative-matching mechanic (carve-out 1)** — teams connect left/right pairs
-  together on their phones in real time ("Drag and Drop") — one of two mechanics allowed to break
-  the paper-only rule, capped at 1–2/night shared with carve-out 2, see above.
-- **Phone wager/closeness mechanic (carve-out 2)** — teams blind-bet a risk tier, then submit a
-  numeric guess, scored by closeness to the truth relative to the room ("Strike a Match") — the
-  other mechanic allowed to break the paper-only rule, same shared cap, see above.
-- **Hidden-connection mechanic** — 4 items shown/read, find the shared trait ("We're not so
-  different, you and I…"; "Song Connections"; "Odd One Out" is this mechanic inverted — find the
-  one that DOESN'T fit).
-- **Redacted-subject riddle mechanic** — tell the true story around a famous subject, strip the
-  identifying name, the room fills it in ("Contains Mild Peril" — real MPAA rating text, title
-  redacted; "The Charge Was…" — the anticlimactic legal charge, not the famous crime; "According
-  to Snopes" — a debunked myth, subject redacted; "Employee of the Month" — a corporate policy,
-  company redacted; "Extra! Extra!" — a famously wrong headline, answer redacted).
-- **Decode/translate mechanic** — the clue is itself a puzzle to unpack, and unpacking it IS the
-  answer ("Elementary!" — element symbols spelling a word; "Latin Lover!" — literal translation of
-  a scientific name; "Lost in Translation!" — a foreign release title back-translated to English).
-- **Image/media-crop reveal mechanic** — a real photo/video/audio clip, stripped of identifying
-  context ("Pixelate!"; "Notice the Eyes"; "Rogues Gallery"; "Photo Finish"; "Ear Witness!").
-- **Parts-list / build-from-pieces mechanic** — name the whole from its component list ("Did you
-  tape the instructions?"; "Those sneaky bricks…" — the LEGO Easter-egg variant).
-- **Shared-word / word-overlap mechanic** — two independent clues whose answers overlap in exactly
-  one word, and only the overlap gets written down ("Two Birds, One Word!").
-- **Binary-category mechanic** — one unfamiliar-sounding item, teams pick which of two named
-  buckets it belongs to ("Elf or Shelf?!" — Tolkien character or IKEA product).
-- **Three-clue convergence mechanic** — three cross-domain clues, one common word answers all
-  three (Tri Bond).
-- **Deadpan-delivery / mishearing mechanic** — the performance IS the clue ("Kiss This Guy!" — a
-  famous mondegreen read exactly as misheard; "Once more, without feeling…" — flat delivery).
-- **Anonymized-biography mechanic** — a real person's life told stripped of their name ("Name
-  Droppers"; "Government Names!" — their actual legal birth name).
-- **Riddle-geography mechanic** — a place described entirely through non-proper-noun texture
-  ("Cryptogeography"; "Good Neighbors!" — a country ID'd only by its full list of land borders).
+- **Name-coincidence** (the heaviest strand). "We're not so different, you and I…" (58 uses) —
+  and its connections are overwhelmingly NAME traits, not topic traits: fruit names, flower
+  names, state names, capitals hidden in names, colors, water features, noble titles,
+  three-named celebs, punctuation in band names, WNBA/NFL teams hiding in song titles. Tri Bond
+  (21) — one common word across three domains. "Two Birds, One Word!" is this strand at two
+  clues. The click is a WORD the whole bar already owns.
+- **Media-ID** (the second strand, and the one Ben explicitly asked for more of). Pixelate (12),
+  Time for a Close Up (9, logo crops), Band by the Albums (9), Name! That! Thing! (15 — a 20+
+  item visual ID with a Redemption item), AI Images (6), Kevin James Zookeeper (5), Rogues
+  Gallery, Notice the Eyes, Hear! Me! Roar! (cartoon themes), Name That Song (16), Song by the
+  Scene, A Show by its Intro, Once More Without Feeling (deadpan delivery as the medium).
+- **Cast / character lattice.** Squad Up (name the team from its members), Movie Role Switcheroo
+  (a plot told via the actors' OTHER roles), First Roles, Man Behind the Mask, and Ben's newest —
+  **Movie Venn Diagrams** (two casts, name the shared actor, 2026-09-01).
+
+Plus the recent additions Ben built himself in Aug–Sep 2026, which are the only true positive
+signal for what he wants next: **Drunk History** (real facts retold drunk — performance is the
+medium), **Order Up!** (put six things in order: Disney release order, Cedar Point coaster
+heights, viral moments), **Song Lyrics** (six lyric-detail questions), **Drag and Drop** (phone
+matching — carve-out 1), **Strike a Match** (blind numeric wager — carve-out 2). Note what they
+share: pop-culture only, visual/ordering/matching/lyric, nothing read aloud as a riddle.
+
+- **Comedic rewrite** (~10%). ERB, Movie Role Switcheroo, Let's Rant It Up, WTF?, Drunk
+  History, Baynes Tinder, Flipped questions — rewrite the familiar thing as a bit; the bit lands,
+  the answer follows. And the live **AI-content family** (AI Images ×6, ChatGPT ERB ×4, AI movie
+  titles) — the joke is the AI taking a title literally.
+
+Minor strands that exist but should not dominate a batch: parts-list (Did you tape the
+instructions? / Those sneaky bricks), riddle-geography (Cryptogeography, Carmen San Diego), lyric
+rewording (Singonyms, One Hit Un-Wonder), opening/closing lines (First Second or Third, Title
+Drops, Movie Chapters), and redacted-subject riddles (the 2026-07-17 batch: Contains Mild Peril,
+The Charge Was…, According to Snopes — note that NONE of those has been run; Ben's own additions
+since then are all media/ordering/lyric formats — and several of that batch are kill-shapes by
+construction: According to Snopes is a debunk format, The Charge Was… is legal history, Patently
+Obvious! is a patent, Name Droppers / Dead Letters / Government Names are anonymized résumés;
+see `taste-profile.md` §6). The house move inside hidden-link is **a pun on a word in the name**
+(Astoria, flower names, water features, state capitals, fruit names, Muppet names on humans).
 
 Do not skip this phase or compress it to one line — it is the raw material Phase 2 forces
 together.
@@ -137,11 +150,13 @@ mechanic from "Elf or Shelf?!" and swap in a category pair nobody's tried). Also
 taxonomy entries that have never combined (e.g. anonymized-biography + decode; shared-word +
 riddle-geography).
 
-**Lean toward non-word formats.** Ben's own steer (2026-08-23): shiny works best "formatted in
-non-word questions, ie visual, audio, puzzle based." A batch that comes back as all read-aloud
-riddles is technically valid but misses this — actively favor image/audio/video mechanics and
-(within the 1–2/night cap) the phone-matching carve-out when a candidate genuinely fits it, not
-just decode/redaction/riddle mechanics by default.
+**Media/ordering quota (hard, 2026-09-02).** Ben's own steer (2026-08-23): shiny works best
+"formatted in non-word questions, ie visual, audio, puzzle based." Every format he has built since
+is media, ordering, matching or lyric. So: **at least half of the raw candidates must be
+visual, audio, video, ordering, or (within the cap) phone-matching/wager; at most 2 of the 8–10
+may be redacted-subject riddles read aloud.** A batch of riddles is a failed batch even if every
+one passes Phase 3. Every candidate must also pass the taste-profile.md shout test — name in five
+words what the bar yells when the answer lands.
 
 Generate **at minimum 8–10 raw candidates** before filtering anything out. Do not settle on the
 first 2–3 ideas that come to mind — quantity here is what makes Phase 3's filter meaningful. Note
@@ -203,7 +218,14 @@ placeholder content — an actual plausible fact, not "Item A" / "Subject B." Co
    the exact shape that got a whole 28-concept batch rejected on 2026-07-17 for having "no
    pizzazz" — don't let one slip through just because it's mechanically clean.
 
-Any candidate that fails any one of the four checks never gets written up in the chat reply and
+5. **Kill-list survival (added 2026-09-02).** Would a typical instance of this format be a
+   kill-shape per `taste-profile.md` §6 — a debunk, a lawsuit, a résumé, a patent, a grim payoff,
+   an answer the bar can't say? A format whose every instance is a kill-shape is dead even if
+   mechanically fresh. Also apply the "pictures covered" rule: if the format only works as a
+   picture ID it's a parade (fine, say so); if it still clicks with the pictures covered, it has
+   the format's soul.
+
+Any candidate that fails any one of the five checks never gets written up in the chat reply and
 never reaches Ben — but it still gets a `format_idea_candidates` row (Phase 4), inserted directly
 as `status = 'rejected'` with `rejected_reason` naming which check failed (e.g. "fails paper-test:
 requires a live app grid" or "reskin of Cover Story"). This is what feeds Phase 1.5's dedupe pull

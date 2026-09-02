@@ -7,7 +7,19 @@ description: Write trivia questions and find question-worthy facts in Ben's Bayn
 
 Ben runs live bar trivia at Baynes Apple Valley (mid-Michigan). This skill encodes his question-writing voice, distilled from 56 full shows (2024–2026, ~1,400 questions). The goal: when an agent finds facts or drafts questions, the output should be indistinguishable from something Ben wrote on a good night.
 
-**The one-sentence style:** an obscure route to a familiar destination — the ANSWER is something the whole bar knows; the PATH to it is surprising, and there are always at least two paths.
+**The one-sentence style (rewritten 2026-09-02):** a deep cut INSIDE something the whole bar already loves, with a second door in — the SUBJECT is famous (a show, film, song, game, park, team, brand, Michigan place), the DIG is a detail nobody at the table has noticed, and the second door is the answer word living in another universe, a quotable line, a character who "would know," or a Michigan tie. The old phrasing ("an obscure route to a familiar destination") was read by every automated hunter as "find an obscure thing," which produced Hans Island and Andrew Jackson's cheese wheel and a 2% keep rate. Ben's own words: *"i focus on just plain old cool things. fandoms are the goals."* Cool = a thing everyone already loves, seen from an angle they never noticed.
+
+## Taste Profile v2 (2026-09-02) — read `references/fact-hunt/taste-profile.md` in the trivia-os repo for the long form
+
+Built from a full read of all ~2,000 bank rows by two independent Fable 5.1 reviewers plus Ben's real keep/kill verdicts on fact-hunt output. The short form:
+
+- **The wells, ranked:** sitcom canon (The Office deepest) · Disney/Pixar/the parks · comedy films 1980–2010 · nerd canon (Star Wars, LOTR, HP, GoT, Marvel/DC, Pokémon, Nintendo, D&D, 90s Nick) · music ×3 (classic-rock record book / 90s-2000s radio + one-hit-wonders + lyric detail / country) · sports as pop culture (Tigers, MSU, team-name origins, athletes in movies, "only in the four majors") · Michigan/Saginaw/family as garnish everywhere · cryptids/haunted/hoax/true crime · brands, toys (Toy Hall of Fame ~10×), dead retail, cocktails, beer/whiskey · internet/meme culture · lists-as-authority ("according to Rolling Stone/IMDB/Guinness/Forbes/People…") · topical (deaths become questions the same week).
+- **Nearly absent:** science, etymology, history, geography for their own sake. Each reaches a question only through a pop-culture door (pulsar via the Bee Gees, Squib via Harry Potter, Akagi via Die Hard).
+- **The shapes:** detail-inside-a-famous-thing (~40% of the bank: Levee, Courtyard, Sauna, Turnip, Maurice) · name-with-a-second-life (Colossus, Kirby, Creed, Squib, Echo, Jericho, Plunder, Osprey, Vixen) · lyric/quote/scene detail ("If you're Tracy Chapman…") · you-could-ask-[character] bridge (Chandler Bing → Tulsa) · hook-that-is-secretly-a-clue ("Ow! My patella!" → Wounded Knee) · three-role actor riddle · according-to-[list] record-book puzzle · name-origin (band/brand/toy/mascot/team) · Michigan garnish · topical/in-memoriam.
+- **A bridge is one of exactly four doors:** (a) the answer word in a second universe; (b) a quotable line/lyric/SFX from the answer's own culture; (c) a character who "would know"; (d) a Michigan/family tie. "Another fact about the subject" and category nouns are NOT bridges.
+- **The shout test:** write the five words the bar yells at the reveal. No shout, no fact.
+- **Anti-list (real kills):** grim payoff, lawsuits/legal history, debunks that make the thing smaller, patents, celebrity day jobs, science mechanism for its own sake, etymology without a pop twin, "weird history" listicle corners, answers the bar can't say out loud.
+- **Era is irrelevant.** A 1937 Disney detail and a 2025 viral clip sit in the same round.
 
 ## The Signature Question Anatomy
 
@@ -39,7 +51,7 @@ When hunting facts (web search, lists, research), run every candidate through th
 2. **Does it bridge?** The best facts sit at the intersection of two unrelated domains: history↔pop-culture, sports↔music, geography↔film, brands↔mythology. A fact that lives in only one domain needs a found crossover before it's ready.
 3. **Superlatives, onlys, firsts:** "the only NFL team whose name ends in a vowel," "the first live-action film with a CGI lead," "the most photographed buildings." These are Ben's bread and butter — they're unambiguous, gradeable, and inherently interesting. BUT they're also the #1 staleness risk: any "current/most/latest" claim must be re-verified before use and dated in your notes.
 4. **One unambiguous answer, gradeable in seconds by ear.** If two defensible answers exist, either rewrite until only one survives or explicitly allow it: "name either," "name one of the two."
-5. **Interesting even if you miss it.** The reveal should make the room go "ohhh" — the fact IS the entertainment. A question nobody enjoys hearing the answer to is dead weight.
+5. **Interesting even if you miss it.** The reveal should make the room go "ohhh" — and the ohhh is almost always the SECOND DOOR (Kirby is JACK Kirby; Akagi is the Die Hard vault), not the fact alone. The hinge is the entertainment; the fact is the delivery. A question nobody enjoys hearing the answer to is dead weight.
 6. **VERIFY EVERY FACT via web search before proposing it.** A wrong answer in front of a live crowd is the content equivalent of a P0 bug. Confidently-remembered facts are exactly the ones that turn out wrong. Verify the setup fact AND the crossover clue independently.
 7. **Never trust a listicle.** Viral fact-lists and "50 amazing facts" content run ~5–10% quietly wrong — a July 2026 corpus review caught two that nearly entered the pipeline: "the Segway's inventor died on a Segway" (false — Dean Kamen is alive; it was Jimi Heselden, who *bought* the company, in 2010) and "the Abbey Road crossing is a UNESCO World Heritage site" (false — it's Grade II listed under English Heritage, 2010, not UNESCO). Verify against primary/institutional sources (Wikipedia + one independent), never against another listicle. If two sources disagree, the fact is dead or the dispute becomes the question.
 
@@ -68,7 +80,7 @@ Full carrier taxonomy (ranked punchiest first, with bank examples), anti-pattern
 - PG-13 bar comedy: puns, groaners, mild profanity when it lands, roast energy in special rounds. "Your momma is so old, her breast milk is powdered!" is a real hook (→ Tiffany's silver standard).
 - **Local anchors:** Michigan and Saginaw-area references recur constantly — Tigers, MSU/UofM, Michigan breweries (Shorts, Founders, Bell's), Mackinac, the UP, Saginaw businesses. When a fact has a Michigan angle, USE IT.
 - **House lore:** Ben, his dad Shawn, the Coughlin family, and Baynes itself appear as recurring characters, especially in swing rounds ("Shawn's Big Day," "Ben's historic road trip"). Personal-lore rounds mix a family anecdote with a verifiable trivia fact per item.
-- Spelling/typos in source docs are transcription artifacts, not style — write clean.
+- Spelling/typos in the bank are Ben writing fast for reading aloud, not artifacts — write clean but FRAGMENTARY: notes-page lines, not polished paragraphs.
 - Questions are read ALOUD. Favor rhythm, spoken punctuation (em-dashes, ellipses), and words that are fun to say. Avoid anything that only works in print.
 
 ## Show Structure (what slots you're writing for)
@@ -76,7 +88,7 @@ Full carrier taxonomy (ranked punchiest first, with bank examples), anti-pattern
 Current weekly skeleton (2026): **R1, R2 (question rounds) → R3 Swing Round → R4 Press! Your! Luck! → R5 (question round) → Bonus (2 questions)**. Each question round = 4–6 standalone questions + 1–2 named-format ("shiny") questions. Themed nights and championships keep the skeleton; championships cut deeper, themed nights keep every question on-theme while still bridging domains.
 
 - **Swing round:** one concept, 6–9 items, uniform answer format within the round. The concept itself is the creativity showcase — see `references/format-library.md` for the 40+ concept catalog (fauxbituaries, children's-book opening lines, poorly described plots, band-name origins, one-star landmark reviews, haikus, mean tweets…). New swing concepts are prized; propose fresh ones in this spirit.
-- **Press Your Luck:** 6-item complete lists under a theme ("Operation ailments with no bones in the name," "the six WW2-set Best Picture winners"). Lists must be verifiably COMPLETE or explicitly bounded ("the last 6…," "since 2011…"). Boards repeat across a few consecutive weeks, then rotate.
+- **Press Your Luck:** 6 independent items under one punchy topic with a twist in the title ("Operation ailments with no bones in the name," "movie product placements," "Michigan birds"), roughly half of real boards being picture or audio ID. Teams submit all 6 at once: a perfect 6/6 pays 20 per answer, one miss drops every correct answer to 10 — that gamble is the round. Boards are NOT required to be closed/complete lists (that framing was retired 2026-08-23; "Weapon of Choice" and "Mascot Examples" are curated and real). Boards repeat across a few consecutive weeks, then rotate. Full doctrine: `references/format-library.md`.
 - **Bonus:** Q1 = one deep single question; Q2 = "for ten points each, name the N…" list.
 - **Appendix A rounds:** visual name-that-X lists (20+ items) ending in a "Redemption" item.
 
@@ -104,7 +116,7 @@ That's one answer (Tupelo) with THREE bridge candidates already stacked (honey, 
 
 The notes page also contains **format seeds** ("Kidz Bop lyrics — give lyrics to the kids version, name song"; "IMDb buzz words — give 3, guess movie") and **meta ideas** (using AI to generate shiny content: AI band images, AI song covers, "ask Claude to describe something but drunk"). Treat proposed new shiny/swing concepts as first-class output alongside facts.
 
-**Fact-source habits worth mirroring when hunting:** obscure-corner listicles and datasets (IG Nobel Prizes, Board Game Geek top-50, secret-service code names, diner slang, kangaroo words, NATO phonetic alphabet trivia, IMDb parental-guide sections), origin stories of names/brands/bands, "only/first/last" record lists, Easter eggs in LEGO sets and games, deleted scenes and production trivia, word etymologies with modern crossovers, and this-week's deaths/news/sports for topical openers.
+**Fact-source habits worth mirroring when hunting (re-weighted 2026-09-02 — the old list read as "find obscure corners," which is exactly the wrong instruction):** fandom wikis and episode guides for the wells in `taste-profile.md`; Genius and lyric annotations; IMDb trivia/goofs; Disney park history sites; the Toy Hall of Fame, RRHOF, Grammy/Oscar/Billboard record books, Walk of Fame; band/brand/toy/mascot name-origin interviews; minor-league mascot pages; MLive and the Free Press for Michigan; this week's deaths/news/sports; ranked lists from a NAMED source (Rolling Stone, IMDB, Guinness, Forbes, People, Bleacher Report); Easter eggs in LEGO sets and games; deleted scenes and production legend; "only/first/last" record lists; word origins WITH a pop-culture twin. Secret-service code names and the Ig Nobels stay as a minor corner (both produced used facts). Dropped: diner slang, kangaroo words, NATO-alphabet trivia, BGG top-50, parental-guide text — obscure subjects with no fandom door.
 
 ## Question Bank Integration
 
@@ -135,7 +147,7 @@ What actually works today:
 
 **When punching up an existing question:** diagnose against the anatomy (missing hook? no second clue? answer not by-ear gradeable? two defensible answers?), then rewrite.
 
-**When asked for "facts to write about":** don't dump raw facts — deliver bridged facts (gates 1–3 already passed) so every item is a question waiting to be phrased.
+**When asked for "facts to write about" (and for every automated hunter):** don't dump raw facts and don't draft questions — deliver each fact in the NOTES-PAGE shape (see below): answer on line 1, 2–5 fragments of ≤15 words, typed doors (`name:` / `line:` / `ask:` / `mi:` / `hook:`), `media:` if a clip or photo exists, and a five-word `Shout:` line — so every item is a question waiting to be phrased. The "Draft question" line in the template above is for chat use when Ben explicitly asks for drafts; the fact-hunt pipeline never fills it.
 
 ## Hard Rules
 

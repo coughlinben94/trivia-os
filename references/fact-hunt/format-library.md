@@ -207,7 +207,7 @@ Every item: one clue or clue-set (read-aloud, projected image, or short audio/vi
 | **As Seen On TV!** | Real product's own jingle/slogan → the product | "Ch-ch-ch-Chia!" → **Chia Pet** | Commercial-jingle ID, distinct from Singonyms/Title Drops |
 | **Toy Aisle Time Capsule** (audio) | Vintage toy jingle → the toy | 1962 Slinky jingle | Audio-first, games/toys domain |
 | **Off the Menu** / **86'd!** *(overlap, see note above)* | Discontinued food product, packaging or flop story → the product | McDLT dual-container, 1984-91 | Untouched nostalgia lane |
-| **Order Up!** | Old-school diner order lingo → the real dish | "Adam and Eve on a raft" → poached eggs on toast | Diner slang, named fact-source habit, never built |
+| **Order Up!** *(NAME COLLISION — Ben shipped a live shiny called "Order Up!" in Aug 2026, a put-these-in-order format; this proposal must be renamed before use, e.g. "Short Stack!")* | Old-school diner order lingo → the real dish | "Adam and Eve on a raft" → poached eggs on toast | Diner slang, named fact-source habit, never built |
 | **Recall Notice!** / **Recall! That! Toy!** *(overlap, see note above)* | Real CPSC recall description → the product | Aqua Dots' GHB-precursor coating, 2007 | Toys/consumer products get zero current formats |
 | **Get Your Hot Dogs Here!** | Signature stadium concession, loving detail → team/venue | The Boomstick → **Rangers**, Globe Life Field | Sports+food sharing one bun |
 | **First! Or Last!** | Category + ordering rule (varies per item) → the extreme | 7 Dwarves, alphabetically first → **Bashful** | Ordering criterion changes per item — found live at id 1039, never named |
