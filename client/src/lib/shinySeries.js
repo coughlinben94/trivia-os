@@ -267,12 +267,41 @@ export function buildShinyTitleSlide(fmt, groupId, roundId = null) {
 // atomic reorder without any of those consumers learning a new rule.
 // `newGroupId` is injectable purely for tests.
 export function withShinyTitleSlide(payload, fmt, newGroupId = () => `sgrp_${nanoid(8)}`) {
+  const grouped = withShinyGroupId(payload, newGroupId)
+  const lead = grouped.slides[0]
+  return {
+    ...grouped,
+    slides: [buildShinyTitleSlide(fmt, lead?.data?.shinyGroupId, lead?.roundId), ...grouped.slides],
+  }
+}
+
+// The same grouping without the title card — for the one path that skips the
+// announce beat: a round built entirely from one shiny format only introduces
+// that format once (AddSlideWizard's formatAlreadyIntroducedThisRound). Those
+// later questions still need a shinyGroupId, or they'd be loose slides that
+// nothing groups (sidebar rows, atomic reorder, the PYL title-jump) — and
+// `shiny-title` is hidden in the picker, so no UI path could add one after
+// the fact.
+export function withShinyGroupId(payload, newGroupId = () => `sgrp_${nanoid(8)}`) {
   const { afterSlideId, slides, ...single } = payload
   const content = slides ?? [single]
   const groupId = content[0]?.data?.shinyGroupId ?? newGroupId()
-  const stamped = content.map(s => ({ ...s, data: { ...s.data, shinyGroupId: groupId } }))
   return {
     afterSlideId,
-    slides: [buildShinyTitleSlide(fmt, groupId, content[0]?.roundId), ...stamped],
+    slides: content.map(s => ({ ...s, data: { ...s.data, shinyGroupId: groupId } })),
   }
+}
+
+// Where a hard jump to `targetId` should actually land (PylRevealSlide's
+// Theme Picker board rows). A board row points at a theme's first CONTENT
+// slide — the `shiny-title` announce card now sits immediately before it, so
+// jumping to the target itself would silently skip the card the jump is
+// meant to open with. Backs up one slot when the slide before the target is
+// the title of the target's OWN group. Returns -1 when the id isn't there.
+export function resolveJumpIndex(sorted, targetId) {
+  const idx = sorted.findIndex(s => s.id === targetId)
+  if (idx <= 0) return idx
+  const prev = sorted[idx - 1]
+  const sameGroup = !!sorted[idx].data?.shinyGroupId && prev.data?.shinyGroupId === sorted[idx].data.shinyGroupId
+  return prev.type === 'shiny-title' && sameGroup ? idx - 1 : idx
 }

@@ -34,10 +34,11 @@ export async function listHostPhotos(showId) {
   return listAt(`${showId}/host-photos`)
 }
 
-// ShinyIntroScreen fully unmounts/remounts every time a host steps back or
-// forward over the intro beat (data.introDone flips), re-running its fetch
-// effect each time — without a cache that's a fresh Storage .list() call on
-// every step, even though the shared pool almost never changes mid-show.
+// ShinyIntroScreen fully unmounts/remounts every time a host steps onto the
+// announce card — since 2026-09-01 that's the `shiny-title` slide's own
+// mount, not a data.introDone flip — re-running its fetch effect each time.
+// Without a cache that's a fresh Storage .list() call on every step, even
+// though the shared pool almost never changes mid-show.
 // ponytail: plain in-memory cache, no TTL/invalidation — worst case is a
 // stale list until the next page load, fine for a "laugh folder"; add
 // invalidation if photos ever need to update live during a show.
@@ -83,10 +84,11 @@ export function pickUnshownRandomPhoto(photos, excludeUrls = new Set()) {
 // One STABLE pick per slide, for the life of the page load.
 //
 // Bug fixed 2026-08-18 (caught by review, not live): ShinyIntroScreen fully
-// unmounts and remounts every time `data.introDone` flips — and `prevSlide()`
-// regresses introDone to false (useShow.js) specifically so a host can step
-// BACK to the title card. Calling pickUnshownRandomPhoto directly on each
-// mount meant that step-back re-showed the SAME title card wearing a
+// unmounts and remounts every time the host lands on the announce card —
+// today that's the `shiny-title` slide mounting, and stepping BACK onto it
+// with prevSlide() is a normal thing to do (it was a data.introDone flip
+// under the old swap architecture). Calling pickUnshownRandomPhoto directly
+// on each mount meant that step-back re-showed the SAME title card wearing a
 // DIFFERENT Ben, which reads as the card mutating under the audience rather
 // than as the host correcting a mis-advance.
 //

@@ -24,11 +24,16 @@ import { isShinySeriesSibling, buildShinyTitleSlide } from './shinySeries.js'
 // Idempotent: a group already led by a shiny-title slide is skipped, and a
 // second pass over a migrated show changes nothing (`changed: false`).
 //
-// One title PER GROUP, deliberately — that is what the old architecture
-// played (each non-sibling shiny slide had its own intro beat), even where
-// AddSlideWizard's formatAlreadyIntroducedThisRound would now skip the
-// repeat title for a new creation. Faithful over clever; delete the extra
-// titles by hand in the editor if a migrated round reads as too many.
+// One title per FORMAT per ROUND, not one per group — mirroring the old
+// wizard's own rule (formatAlreadyIntroducedThisRound). A second run of the
+// same format in the same round was created with introDone: true baked in,
+// so it played NO announce card; inserting a title per group would give a
+// round of N separately-added same-format questions N announce cards where
+// the show actually ran 1. The skipped groups are still stamped with a
+// shinyGroupId and still have their flags stripped — they're real groups,
+// just title-less, exactly like a repeat created today (withShinyGroupId).
+// A `shiny-title` a show already has counts as that format's title for its
+// round, which is what keeps a re-run idempotent.
 export function migrateShinyTitleSlides(slides, { newGroupId = () => `sgrp_${nanoid(8)}`, newSlideId = () => `slide_${nanoid(8)}` } = {}) {
   const sorted = [...(slides ?? [])].sort((a, b) => a.order - b.order)
   const out = []
@@ -36,6 +41,8 @@ export function migrateShinyTitleSlides(slides, { newGroupId = () => `sgrp_${nan
   let stripped = 0
   let stamped = 0
   let i = 0
+  // roundId + format -> that format has already been announced in that round.
+  const titledInRound = new Set()
   while (i < sorted.length) {
     const first = sorted[i]
     if (!first.data?.isShiny) { out.push(first); i++; continue }
@@ -57,7 +64,14 @@ export function migrateShinyTitleSlides(slides, { newGroupId = () => `sgrp_${nan
       return { ...s, data: rest }
     })
 
-    if (group[0].type !== 'shiny-title') {
+    const d0 = group[0].data
+    // Legacy rows predating the format library have no shinyFormatId — fall
+    // back to the name (then the theme, which is stamped as the format name).
+    const fmtKey = `${group[0].roundId ?? ''}::${d0.shinyFormatId || d0.shinyFormatName || d0.seriesTheme || ''}`
+    const alreadyTitled = titledInRound.has(fmtKey)
+    titledInRound.add(fmtKey)
+
+    if (group[0].type !== 'shiny-title' && !alreadyTitled) {
       const d = group[0].data
       const fmt = { id: d.shinyFormatId, name: d.shinyFormatName || d.seriesTheme || 'Shiny Question', icon: d.shinyFormatIcon }
       const title = buildShinyTitleSlide(fmt, d.shinyGroupId, group[0].roundId)

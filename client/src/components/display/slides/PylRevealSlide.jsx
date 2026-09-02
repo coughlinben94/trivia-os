@@ -6,6 +6,7 @@ import { getSelectionAnimation } from './selectionAnimations.js'
 import { supabase } from '../../../lib/supabase.js'
 import { useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
+import { resolveJumpIndex } from '../../../lib/shinySeries.js'
 
 export default function PylRevealSlide({ slide, show, isPreview = false }) {
   const { theme } = useTheme()
@@ -68,13 +69,17 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
   // ordinary entry (withEntryState) — otherwise a stale currentPart left
   // over from a prior test pass lands mid-series. (introDone/outroShown
   // used to be reset here too; both are gone since the announce card became
-  // its own `shiny-title` slide, 2026-09-01.)
+  // its own `shiny-title` slide, 2026-09-01 — which is also why the LANDING
+  // index comes from resolveJumpIndex: a board row still points at the
+  // theme's first CONTENT slide, and jumping straight there would skip the
+  // announce card that now sits in front of it.)
   async function jumpToSlide(targetSlideId) {
     if (isPreview || !targetSlideId) return
     const sorted = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
     const idx = sorted.findIndex(s => s.id === targetSlideId)
     if (idx < 0) return
     const target = sorted[idx]
+    const landing = resolveJumpIndex(sorted, targetSlideId)
     const newSlides = (show.slides ?? []).map(s =>
       s.id === target.id
         ? { ...s, data: { ...s.data, currentPart: 0 } }
@@ -82,8 +87,8 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
     )
     await supabase.from('shows').update({
       slides: newSlides,
-      current_slide_index: idx,
-      current_slide_id: target.id,
+      current_slide_index: landing,
+      current_slide_id: sorted[landing].id,
     }).eq('id', show.id)
   }
 
