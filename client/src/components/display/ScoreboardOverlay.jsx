@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence, motion, useReducedMotion, animate } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
-import { deriveRoundCols, computeTotal, normalizeRoundScore, MEDALS } from '../../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, normalizeRoundScore, MEDALS, SPLIT_TEAM_THRESHOLD, splitByRank } from '../../lib/scoreboardMath.js'
 import { EASE_OUT, EASE_DROP } from '../../lib/easings.js'
 
 // ─── Layout math ───────────────────────────────────────────────────────────
@@ -25,14 +25,11 @@ function gridMetrics(teamCount) {
   }
 }
 
-// Past a team count where one column shrinks names below readable on a bar
-// TV (2026-08-19, Ben: "couldn't even read [the names]... probably needs to
-// be split into two"), split the roster into two side-by-side columns —
-// each column's row height is computed off half the count, roughly doubling
-// name size. Per-round columns are dropped in split mode (rank/name/total
-// only): fitting the same round-by-round table twice side by side is what
-// the single-column layout was built to avoid in the first place.
-const SPLIT_TEAM_THRESHOLD = 9
+// SPLIT_TEAM_THRESHOLD and splitByRank now live in lib/scoreboardMath.js so
+// ScoreboardRevealSlide splits at the same count, the same way. Per-round
+// columns are dropped in split mode here (rank/name/total only): fitting the
+// same round-by-round table twice side by side is what the single-column
+// layout was built to avoid in the first place.
 
 // rank | team name | one per round | total. The round columns share whatever
 // the name column doesn't need (1fr each) so the numbers stay spread evenly
@@ -287,9 +284,8 @@ function ScoreboardContent({ show }) {
   // Split mode ranks each half independently by its own row index within that
   // half's metrics — the left column gets the top half of ranked.length, the
   // right gets the rest, so it reads left-to-right / top-to-bottom by rank.
-  const half = Math.ceil(ranked.length / 2)
-  const columns = isSplit ? [ranked.slice(0, half), ranked.slice(half)] : [ranked]
-  const m = gridMetrics(isSplit ? half : ranked.length)
+  const columns = splitByRank(ranked, isSplit)
+  const m = gridMetrics(columns[0].length)
   // Split mode drops the round columns and scales the fixed tracks down to
   // its actual half-width box (see gridTemplate above).
   const template = gridTemplate(splitCols.length, isSplit)
