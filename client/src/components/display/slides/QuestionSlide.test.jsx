@@ -346,6 +346,19 @@ describe('<QuestionSlide> — shiny audio question, remote play via show.audio_p
     expect(p.playVideo).toHaveBeenCalled()
   })
 
+  // 2026-09-01: the announce card is its own 'shiny-title' slide now. A
+  // shiny content slide must render its content regardless of introDone —
+  // the old `!introDone -> <ShinyIntroScreen>` swap is gone.
+  it('renders content, not the intro card, even when introDone is false or missing', () => {
+    const stale = shinySlide({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg', introDone: false })
+    render(stale, { slides: [stale] })
+    expect(container.querySelector('audio')).not.toBe(null)
+
+    const { introDone, ...noFlag } = shinySlide({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' }).data
+    render({ id: 'shiny-1', type: 'question', roundId: 'round-2', data: noFlag })
+    expect(container.querySelector('audio')).not.toBe(null)
+  })
+
   it('does not play on mount without a matching audio_playing signal', () => {
     const slide = shinySlide({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' })
     render(slide, { slides: [slide], audio_playing: null })

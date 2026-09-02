@@ -1,3 +1,5 @@
+import { nanoid } from 'nanoid'
+
 // Multi-part shiny series (data.parts.length > 1) store one text/answer/media
 // per part on a single slide; ordinary shiny/regular questions keep their
 // flat top-level fields. This resolves whichever shape a slide is in down
@@ -229,4 +231,48 @@ export function reorderWithinRound(slides, fromIdx, toIdx) {
   const insertAt = groupStart < toIdx ? targetIdxInRemaining + 1 : targetIdxInRemaining
   remaining.splice(insertAt, 0, ...movedGroup)
   return remaining.map(s => s.id)
+}
+
+// ── Shiny title slide (2026-09-01, SPEC.md "Standalone Shiny Title Slide") ─
+// Every shiny series now opens with a real `shiny-title` slide — the first
+// member of the group, sharing its shinyGroupId — instead of the first
+// content slide swapping ShinyIntroScreen in while data.introDone was false.
+// This is the ONE place that shape is stamped; ShinyTitleSlide.jsx renders
+// it. Field names are exactly what ShinyIntroScreen already reads:
+// seriesTheme / shinyFormatName (title), introSubtitle (optional line — the
+// same key SlideEditor's "Optional subtitle…" input writes), hostPhotoUrl
+// (left UNSET so the random shared pool applies; `null` means "no photo").
+export function buildShinyTitleSlide(fmt, groupId, roundId = null) {
+  return {
+    type: 'shiny-title',
+    roundId: roundId ?? null,
+    data: {
+      isShiny:         true,
+      shinyGroupId:    groupId,
+      seriesTheme:     fmt.name,
+      shinyFormatId:   fmt.id,
+      shinyFormatName: fmt.name,
+      shinyFormatIcon: fmt.icon,
+    },
+  }
+}
+
+// Wraps an AddSlideWizard creation payload — either the single-slide shape
+// `{ type, roundId, afterSlideId, data }` or the batch shape
+// `{ afterSlideId, slides }` — into a batch that leads with the title slide.
+// Content slides that don't already carry a shinyGroupId (a lone
+// single-asset question, a tied parts[] series, a grid) get one stamped so
+// the title and its content group together via isShinySeriesSibling —
+// that's what makes the title the group's lead for sidebar grouping and
+// atomic reorder without any of those consumers learning a new rule.
+// `newGroupId` is injectable purely for tests.
+export function withShinyTitleSlide(payload, fmt, newGroupId = () => `sgrp_${nanoid(8)}`) {
+  const { afterSlideId, slides, ...single } = payload
+  const content = slides ?? [single]
+  const groupId = content[0]?.data?.shinyGroupId ?? newGroupId()
+  const stamped = content.map(s => ({ ...s, data: { ...s.data, shinyGroupId: groupId } }))
+  return {
+    afterSlideId,
+    slides: [buildShinyTitleSlide(fmt, groupId, content[0]?.roundId), ...stamped],
+  }
 }

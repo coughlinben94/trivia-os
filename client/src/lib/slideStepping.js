@@ -1,9 +1,9 @@
 // Shared Next/Prev step DECISION logic for a live show.
 //
 // This is the single implementation of "what does one Next/Prev press do":
-// the reveal-after-go-live beat, invoke-gated walkout audio, the shiny
-// intro-reveal beat, multi-part stepping (shiny series + team-picker), and
-// the plain advance/retreat fallback. It used to live only inside
+// the reveal-after-go-live beat, invoke-gated walkout audio, multi-part
+// stepping (shiny series + team-picker), and the plain advance/retreat
+// fallback. It used to live only inside
 // `useShow.js`'s nextSlide()/prevSlide(), which meant `/display` — a
 // separate show-state implementation (SKILL.md: "Two independent show-shape
 // implementations") — could only ever do a dumb index±1 via the anon
@@ -21,7 +21,7 @@
 // Callers own the write + their own local-state update; nothing here
 // touches the network or React.
 
-import { isShinySeriesSibling, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
+import { isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
 
 // Number of Next-reachable states for a slide's data.parts/groupSize
 // stepping. For every format except ShinyConcurrentQuestion, currentPart
@@ -40,7 +40,7 @@ import { isShinySeriesSibling, isMatchingShiny, isWagerShiny, isOrderShiny, isCo
 // Concurrent MEDIA is the third case (2026-08-26 rebuild): every asset is on
 // screen together with one shared answer, so the slide has exactly ONE
 // Next-reachable state no matter how many assets it holds — a press moves to
-// the closing beat, it never reveals a tile. "One at a time" is what
+// the next slide, it never reveals a tile. "One at a time" is what
 // sequential is for.
 function revealStepCount(data) {
   const parts = data?.parts
@@ -49,12 +49,6 @@ function revealStepCount(data) {
   if (!isConcurrentShiny(d)) return groups
   return isConcurrentMediaShiny(d) ? 1 : groups + 1
 }
-
-// Kill switch for the closing-beat branch in computeNextStep() below. Kept
-// (rather than inlined away) purely as a same-night escape hatch: flipping
-// this to false restores the straight "last part → next slide" step with no
-// other edit. See that branch for the full history.
-export const CLOSING_BEAT_ENABLED = true
 
 // Grace window after invoking a walkout song before a second press is
 // allowed to "cut it short" and advance. Between the invoke press landing
@@ -105,80 +99,48 @@ export function patchSlideData(slides, id, dataPatch) {
   return slides.map(s => s.id === id ? { ...s, data: { ...s.data, ...dataPatch } } : s)
 }
 
-// Every shiny question gets a standalone intro beat (data.introDone: false)
-// before its content — image/audio/parts — is revealed. Multi-part shiny
-// series (data.parts.length > 1) additionally step through their parts
-// once revealed. Entering a slide fresh (goLive/goLiveFrom, or crossing
-// into it from an adjacent slide) always resets to a specific state
-// rather than resuming wherever a previous visit left off, so jumping to
-// a slide is predictable.
-export function withEntryState(slides, slide, { currentPart, introDone, protectInProgress = false } = {}) {
+// Multi-part shiny series (data.parts.length > 1) step through their parts
+// with Next. Entering a slide fresh (goLive/goLiveFrom, or crossing into it
+// from an adjacent slide) always resets to a specific state rather than
+// resuming wherever a previous visit left off, so jumping to a slide is
+// predictable.
+//
+// The old introDone/outroShown swap state is gone (2026-09-01, SPEC.md
+// "Standalone Shiny Title Slide"): the announce card is a real `shiny-title`
+// slide now, so a shiny content slide has no intro/closing beat to reset —
+// it enters showing its content, like any other slide.
+export function withEntryState(slides, slide, { currentPart, protectInProgress = false } = {}) {
   if (!slide) return slides
   const patch = {}
   if (currentPart !== undefined && (slide.data?.parts?.length ?? 0) > 1 && (slide.data.currentPart ?? 0) !== currentPart) {
     patch.currentPart = currentPart
   }
-  // Only relevant for goLiveFrom's "jump to a slide" picker (the one caller
-  // that passes protectInProgress: true) — jumping away from an in-progress
-  // locked question and back to it would otherwise blank every phone back to
-  // the teaser screen with no way to submit. computeNextStep/goLive never set
-  // this: a plain Next always lands on a slide that wasn't already live, so a
-  // locked flag it finds there is stale (left over from an earlier test/
-  // rehearsal), not a question actually in progress — regressing it is the
-  // correct, expected fresh-entry reset. Bug fixed 2026-08-31 (Ben, live
-  // rehearsal): this guard used to apply unconditionally, so a shiny "order"
-  // slide left orderLocked:true from testing skipped straight to its content
-  // on the first real Next into it, with no intro card.
-  // Two callers pass protectInProgress: goLiveFrom's jump picker (introDone:
-  // false — don't regress the intro OR the flags) and computePrevStep's
-  // cross-slide entry (introDone: true — landing on the last revealed state,
-  // so setting introDone true is fine, but the flags must still survive:
-  // Prev back into a fully graded matching/wager/order slide must not reopen
-  // phone submissions or hide the revealed answer; 2026-08-31 review).
+  // protectInProgress — passed by goLiveFrom's "jump to a slide" picker and
+  // computePrevStep's cross-slide entry: jumping/backing into an in-progress
+  // or already-graded locked question is a RE-entry, not a fresh one, so its
+  // lock/reveal flags must survive (otherwise every phone reopens submission
+  // on a question the room already answered, or the revealed answer hides).
+  // computeNextStep/goLive never set this: a plain Next always lands on a
+  // slide that wasn't already live, so a locked flag it finds there is stale
+  // (left over from an earlier test/rehearsal), not a question actually in
+  // progress — regressing it is the correct, expected fresh-entry reset.
   const protectLockedFlags = protectInProgress &&
     (slide.data?.wagerTiersLocked || slide.data?.wagerGuessesLocked || slide.data?.matchingLocked || slide.data?.orderLocked)
-  const wouldRegressLockedQuestion = protectLockedFlags && introDone === false
-  if (introDone !== undefined && slide.data?.isShiny) {
-    if (!wouldRegressLockedQuestion && !!slide.data.introDone !== introDone) {
-      patch.introDone = introDone
-    }
-    // Fresh entry always restarts the closing-beat cycle too (see
-    // computeNextStep's outroShown handling below) — a stale true from a
-    // previous visit would otherwise skip straight past the closing
-    // title card next time this slide's last part is reached. This must
-    // NOT be nested inside wouldRegressLockedQuestion, on top of not being
-    // nested inside the introDone-changed check: a locked-and-scored
-    // matching/wager slide re-entered after a rehearsal (introDone:false,
-    // outroShown:true, matchingRevealed/wagerGuessesLocked true — exactly
-    // what a real Go Live after a rehearsal leaves behind) kept
-    // outroShown stuck true when this lived inside that guard, so the
-    // very next Next press skipped the closing card straight past the
-    // question into the next slide — the question was never shown at all
-    // (2026-08-24, Opus review after CLOSING_BEAT_ENABLED went live made
-    // outroShown:true reachable for the first time).
-    if (slide.data?.outroShown) patch.outroShown = false
-    // Fresh entry also clears stale wager/matching/order lock+reveal flags
-    // (2026-08-31, Ben — found by sequencing audit ahead of live show).
-    // These gate whether WagerBoard/MatchingBoard/OrderBoard mount as
-    // interactive on /join (liveSlideIsInteractive) — left true from a
-    // rehearsal, a plain Next into the slide during the real show shows the
-    // intro card fine (2026-08-31 fix above) but the phones never unlock:
-    // the boards see already-locked/revealed and stay on the teaser screen,
-    // silently skipping the whole audience-interaction round. Guarded by
-    // the SAME wouldRegressLockedQuestion check as introDone above (not
-    // unconditional like outroShown) — that guard is specifically "this is
-    // a Go Live jump back into a question actually in progress", where
-    // clearing these WOULD be wrong: it would reopen submission on a
-    // question the room already answered and that's mid-grading.
-    if (!protectLockedFlags) {
-      if (slide.data?.wagerTiersLocked) patch.wagerTiersLocked = false
-      if (slide.data?.wagerGuessesLocked) patch.wagerGuessesLocked = false
-      if (slide.data?.wagerRevealed) patch.wagerRevealed = false
-      if (slide.data?.matchingLocked) patch.matchingLocked = false
-      if (slide.data?.matchingRevealed) patch.matchingRevealed = false
-      if (slide.data?.orderLocked) patch.orderLocked = false
-      if (slide.data?.orderRevealed) patch.orderRevealed = false
-    }
+  // Fresh entry clears stale wager/matching/order lock+reveal flags
+  // (2026-08-31, Ben — found by sequencing audit ahead of live show).
+  // These gate whether WagerBoard/MatchingBoard/OrderBoard mount as
+  // interactive on /join (liveSlideIsInteractive) — left true from a
+  // rehearsal, the phones never unlock: the boards see already-locked/
+  // revealed and stay on the teaser screen, silently skipping the whole
+  // audience-interaction round.
+  if (slide.data?.isShiny && !protectLockedFlags) {
+    if (slide.data?.wagerTiersLocked) patch.wagerTiersLocked = false
+    if (slide.data?.wagerGuessesLocked) patch.wagerGuessesLocked = false
+    if (slide.data?.wagerRevealed) patch.wagerRevealed = false
+    if (slide.data?.matchingLocked) patch.matchingLocked = false
+    if (slide.data?.matchingRevealed) patch.matchingRevealed = false
+    if (slide.data?.orderLocked) patch.orderLocked = false
+    if (slide.data?.orderRevealed) patch.orderRevealed = false
   }
   // Fresh entry always re-arms invoke-gated audio too — a stale `invoked:
   // true` from an earlier rehearsal/visit would otherwise skip straight
@@ -193,7 +155,7 @@ export function withEntryState(slides, slide, { currentPart, introDone, protectI
   // completion effect computes remaining = max(startedAt + LOCK_COUNTDOWN_MS
   // - now, 0) off that stale startedAt, gets 0, and fires the real lock+score
   // IMMEDIATELY — before any team has answered, with no countdown shown to
-  // explain why. Same unconditional-truthy shape as outroShown's reset above.
+  // explain why.
   if (slide.data?.lockCountdownPhase || slide.data?.lockCountdownStartedAt) {
     patch.lockCountdownPhase = null
     patch.lockCountdownStartedAt = null
@@ -358,16 +320,20 @@ export const LOCK_COUNTDOWN_MS = 3000
 // Wager is the only mechanic with TWO lock phases on one slide (blind tiers
 // first, then the numeric guesses once the question is out), so it gets
 // checked in that order and returns null only when both are shut.
+//
+// No introDone gate any more (2026-09-01): a shiny content slide shows its
+// question from its very first frame, so the first Next on it can start the
+// countdown right away — the room has already seen the question.
 export function pendingLockPhase(slide) {
   const data = slide?.data
   if (!data) return null
-  if (isMatchingShiny(data)) return data.introDone && !data.matchingLocked ? 'matching' : null
+  if (isMatchingShiny(data)) return !data.matchingLocked ? 'matching' : null
   if (isWagerShiny(data)) {
-    if (data.introDone && !data.wagerTiersLocked) return 'wager-tiers'
-    if (data.introDone && !data.wagerGuessesLocked) return 'wager-guesses'
+    if (!data.wagerTiersLocked) return 'wager-tiers'
+    if (!data.wagerGuessesLocked) return 'wager-guesses'
     return null
   }
-  if (isOrderShiny(data)) return data.introDone && !data.orderLocked ? 'order' : null
+  if (isOrderShiny(data)) return !data.orderLocked ? 'order' : null
   return null
 }
 
@@ -389,11 +355,7 @@ export const REVEAL_FIELD = {
 //
 // Wager keys off wagerGuessesLocked, NOT wagerTiersLocked: locking tiers only
 // puts the QUESTION up, there is nothing to reveal until the guesses are in
-// and scored. Note that computeNextStep's own closing-beat `isPending` check
-// deliberately uses the WIDER wagerTiersLocked window for the same slide —
-// it is asking a different question ("may this slide pan away yet", which
-// must stay false from the very first lock), so the two are not duplicates of
-// each other and must not be collapsed.
+// and scored.
 export function pendingReveal(slide) {
   const data = slide?.data
   if (!data) return null
@@ -417,7 +379,7 @@ export async function computeNextStep(show, fetchTeamCount) {
     const targetSlide = sorted[cur]
     if (!targetSlide) return null
     const bakedSlides = await bakeTeamPickerParts(slides, targetSlide, fetchTeamCount)
-    let newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === targetSlide.id) ?? targetSlide, { currentPart: 0, introDone: false })
+    let newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === targetSlide.id) ?? targetSlide, { currentPart: 0 })
     // Invoke-gated audio (pre-show's walkout song) on the revealed slide:
     // this reveal press IS the first real Next press of the show, and per
     // design ("fires the walkout song later, not the instant Go Live lands
@@ -453,15 +415,6 @@ export async function computeNextStep(show, fetchTeamCount) {
     }
   }
 
-  // Reveal the intro's content before doing anything else. Guarded on
-  // !outroShown too (see the closing-beat branch below) — without it,
-  // the Next press that's supposed to land on the closing title card
-  // would immediately re-reveal the last part's content instead, since
-  // this check alone can't tell "never opened yet" from "just closed."
-  if (data?.isShiny && !data.introDone && !data.outroShown) {
-    return { slides: patchSlideData(slides, curSlide.id, { introDone: true }), answer_reveal: false }
-  }
-
   // Step through this slide's parts before moving to the next slide.
   // groupSize (default 1) lets a slide reveal N parts per Next press
   // instead of one — currentPart then counts GROUPS, not raw parts (Ben,
@@ -475,85 +428,20 @@ export async function computeNextStep(show, fetchTeamCount) {
       return { slides: patchSlideData(slides, curSlide.id, { currentPart: curPart + 1 }), answer_reveal: false }
     }
   }
-  // Closing beat (Ben, 2026-08-17: "then back down to the shiny title
-  // screen, which i then advance to [the next question]"): one more Next
-  // pans back down to the title card instead of jumping straight to the
-  // next slide — outroShown marks that this already happened, so the NEXT
-  // Next press (introDone false again, but outroShown true) skips the
-  // re-reveal branch above and actually moves on. Reset to false whenever
-  // this slide is entered fresh (withEntryState), so revisiting always
-  // restarts the cycle.
+  // Last part reached (or no parts at all) — advance to the next slide.
   //
-  // 2026-08-18, Ben: "pan down is always associated with pan up — if up
-  // happens, down must happen eventually." Every isShiny slide pans UP on
-  // its own (QuestionSlide's intro→content swap, keyed off introDone) —
-  // so by that rule every one of them owes a pan DOWN too, once its
-  // content is actually done, not just multi-part series (which is all
-  // this used to cover). "Done" varies by type:
-  //   - multi-part series: the LAST part (isMultiPart, handled above —
-  //     any earlier part returns before reaching here)
-  //   - matching / wager / order: once fully scored (matchingRevealed /
-  //     wagerRevealed / orderRevealed) — NOT merely locked, and NOT merely guesses-locked.
-  //     Both have a locked-but-still-scoring window (matching's "Retry
-  //     Scoring" state, wager's guesses-locked-but-not-yet-revealed state —
-  //     there is no separate Reveal control, it's the host's A key, see
-  //     pendingReveal above) that must never regress — same guard
-  //     withEntryState uses for its own jump-back case, and the reason
-  //     isPending exists below. Wager fixed 2026-08-24 (Opus review): this
-  //     used to check wagerGuessesLocked, one stage too early — the closing
-  //     beat fired the instant guesses locked but before the host ever
-  //     pressed Reveal, panning every phone back to the teaser with no way
-  //     to recover except Prev.
-  //   - everything else (a single-shot list/audio/video/image question,
-  //     no parts, not lockable): done the moment its content has been
-  //     shown at all, i.e. as soon as introDone is true.
-  const isPending = (isMatchingShiny(data) && data.matchingLocked && !data.matchingRevealed) ||
-                     (isWagerShiny(data) && data.wagerTiersLocked && !data.wagerRevealed) ||
-                     (isOrderShiny(data) && data.orderLocked && !data.orderRevealed)
-  // Disabled 2026-08-19 (Ben, day after this shipped: "shiny intros were
-  // shown after the question as well") — SlideRenderer couldn't distinguish
-  // "never shown" from "closing beat" (both read as introDone:false), so
-  // flipping it back here replayed the FULL ~2.4s entrance choreography
-  // (spin/land/gold-burst/photo-rocket) a second time instead of a quiet
-  // pan-down, and one Next press doing that instead of just advancing
-  // read as the intro firing unprompted.
-  //
-  // Re-enabled 2026-08-24, once that missing quiet variant existed: every
-  // renderer that mounts ShinyIntroScreen on !introDone (QuestionSlide,
-  // GridSlide, VennDiagramSlide) now passes `isClosing={!!data.outroShown}`,
-  // which is exactly the distinction that was missing — the closing card
-  // arrives already landed, no spin/burst/sparks/photo-rocket, and
-  // QuestionSlide pans it back down (SHINY_PAN run with dir -1) instead of
-  // up. Ben's ask, verbatim: "it should then pan back down to the shiny
-  // title ... so i can then move to the next question ring world style and
-  // have it look smooth."
-  if (CLOSING_BEAT_ENABLED && data?.isShiny && data.introDone && !data.outroShown && !isPending) {
-    // Skip the pause when the next slide continues the same shiny series
-    // — siblings only get one announce beat at the start (skipIntro
-    // below); each one pausing on its own closing title card too would
-    // break what's supposed to read as one continuous run. 2026-08-18:
-    // this is exactly how 6 separate matching slides chained as one
-    // series (isShinySeriesSibling) skip the pan-down between Q1-Q5 and
-    // only actually pause after Q6, whose next slide isn't a sibling.
-    const peekTarget = sorted[Math.min(cur + 1, sorted.length - 1)]
-    const nextIsSeriesSibling = !!peekTarget && peekTarget.id !== curSlide.id && isShinySeriesSibling(curSlide, peekTarget)
-    if (!nextIsSeriesSibling) {
-      return {
-        slides: patchSlideData(slides, curSlide.id, { introDone: false, outroShown: true }),
-        answer_reveal: false,
-      }
-    }
-  }
-
+  // History, so nobody re-adds it: from 2026-08-17 to 2026-09-01 a "closing
+  // beat" lived here (CLOSING_BEAT_ENABLED / data.outroShown) — one extra
+  // Next panned the content back down to the announce card before moving
+  // on, mirroring the pan-UP the old introDone swap did on entry. That swap
+  // is gone (the announce card is a standalone `shiny-title` slide now, so
+  // content never pans up), and with nothing on the display side left to
+  // render an outro, the beat had become a dead Next press for the host.
   const target = Math.min(cur + 1, sorted.length - 1)
   if (target === cur) return null
   const targetSlide = sorted[target]
   const bakedSlides = await bakeTeamPickerParts(slides, targetSlide, fetchTeamCount)
-  // A run of separate sibling slides sharing one shiny series (e.g. an
-  // image format where the host asked for N slides) already showed its
-  // announce beat on the first slide of the run — skip it on the rest.
-  const skipIntro = isShinySeriesSibling(curSlide, targetSlide)
-  const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === targetSlide?.id) ?? targetSlide, { currentPart: 0, introDone: skipIntro })
+  const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === targetSlide?.id) ?? targetSlide, { currentPart: 0 })
   return {
     slides: newSlides,
     current_slide_index: target,
@@ -574,23 +462,10 @@ export async function computePrevStep(show, fetchTeamCount) {
   const data = curSlide?.data
   const parts = data?.parts
 
-  // Undo the closing beat (see computeNextStep's outroShown branch) before
-  // anything else — without this, the generic parts-backward branch right
-  // below would silently decrement currentPart while still on the closing
-  // title card (introDone false there blocks any content from showing
-  // regardless of currentPart), so Prev would look like it did nothing
-  // while actually desyncing which part you'd land back on.
-  if (data?.isShiny && data.outroShown) {
-    return {
-      slides: patchSlideData(slides, curSlide.id, { introDone: true, outroShown: false }),
-      answer_reveal: false,
-    }
-  }
-
-  // Step back through this slide's parts before un-revealing its intro.
-  // Generic on purpose (matches the forward branch in computeNextStep) — not
-  // gated to isShiny/introDone, since team-picker uses this same
-  // data.parts/currentPart mechanism without either of those fields.
+  // Step back through this slide's parts before leaving the slide. Generic
+  // on purpose (matches the forward branch in computeNextStep) — not gated
+  // to isShiny, since team-picker uses this same data.parts/currentPart
+  // mechanism too.
   const stepCountBack = revealStepCount(data)
   if (Array.isArray(parts) && stepCountBack > 1) {
     const curPart = data.currentPart ?? 0
@@ -599,25 +474,10 @@ export async function computePrevStep(show, fetchTeamCount) {
     }
   }
 
-  // Back to the intro beat before moving to the previous slide — but NOT
-  // for a wager/matching/order slide that's already locked. Regressing introDone
-  // there blanks every phone back to "Next question incoming…" (Join.jsx
-  // gates the WagerBoard/MatchingBoard/OrderBoard mount on introDone, so the board
-  // unmounts entirely) with no data loss but no way to submit until the
-  // host presses Next again — and Prev is one keystroke/Stream Deck press
-  // away, the single most likely accidental trigger of this regression.
-  // ALSO not for a non-lead shiny-series sibling (bug fixed 2026-08-17,
-  // caught by review, not live): computeNextStep skips resetting introDone
-  // for these — they never show their own intro card, they share the
-  // lead slide's. This branch didn't know that, so one Prev on Q4/Q5/Q6
-  // played the full spin-in title card it was never supposed to have,
-  // and it took a SECOND Prev to actually move back a slide.
-  const prevInOrder = sorted[cur - 1]
-  const isAutoSkippedSibling = prevInOrder && isShinySeriesSibling(prevInOrder, curSlide)
-  if (data?.isShiny && data.introDone && !isAutoSkippedSibling && !(data.wagerTiersLocked || data.wagerGuessesLocked || data.matchingLocked || data.orderLocked)) {
-    return { slides: patchSlideData(slides, curSlide.id, { introDone: false }), answer_reveal: false }
-  }
-
+  // Part 0 (or no parts) — move to the previous slide. No "back to the intro
+  // beat" step here any more: the announce card is its own `shiny-title`
+  // slide, so backing out of a series' first content slide lands on it the
+  // ordinary way, as the previous slide.
   const target = Math.max(cur - 1, 0)
   if (target === cur) return null
   const targetSlide = sorted[target]
@@ -629,7 +489,7 @@ export async function computePrevStep(show, fetchTeamCount) {
   // protectInProgress: backing into an already-locked/revealed question is a
   // RE-entry, not a fresh one — its lock/reveal flags must survive (see
   // withEntryState's protectLockedFlags).
-  const newSlides = withEntryState(bakedSlides, resolvedTarget, { currentPart: lastPartIdx, introDone: true, protectInProgress: true })
+  const newSlides = withEntryState(bakedSlides, resolvedTarget, { currentPart: lastPartIdx, protectInProgress: true })
   return {
     slides: newSlides,
     current_slide_index: target,

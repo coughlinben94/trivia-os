@@ -55,29 +55,15 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
   // prop, never stale) fixes it — there's no second closure to go stale.
   useEffect(() => {
     flushSave()
-    // Selecting a specific part means "show me THAT part's content" — but
-    // introDone is one flag for the whole slide (parts live inside ONE
-    // slide, not as separate slide objects), so without also setting it
-    // true here the canvas stays gated on the shiny intro screen no matter
-    // which part sub-row is clicked: currentPart only picks a part once
-    // past the intro, and nothing was ever telling it to get past the
-    // intro. Bug fixed 2026-08-17 (Ben, live: "the animation plays on each
-    // sub slide, I just want the 4 images" — every part sub-row replayed
-    // the same title-card spin-in instead of jumping straight to its image).
-    // Clicking the slide's own row (not a numbered part sub-row) means "show
-    // me this question fresh" — for a multi-part series that's the shiny
-    // intro card, not whatever part testing/editing last left currentPart/
-    // introDone on. 2026-08-25, Ben: "when i hit song lyrics, ie the round
-    // title, it should pop up as a shiny question intro."
-    const isMultiPartShiny = !!slide.data?.isShiny && Array.isArray(slide.data?.parts) && slide.data.parts.length > 0
-    const next = initialPart != null
-      ? { ...slide.data, currentPart: initialPart, introDone: true }
-      : isMultiPartShiny
-        ? { ...slide.data, introDone: false }
-        : slide.data
+    // Selecting a specific part sub-row means "show me THAT part's content"
+    // — currentPart is what the canvas renders. (This used to also juggle
+    // data.introDone to get the canvas past the shiny intro swap; that swap
+    // is gone since the announce card became its own `shiny-title` slide,
+    // 2026-09-01, so a content slide only ever previews its content.)
+    const next = initialPart != null ? { ...slide.data, currentPart: initialPart } : slide.data
     setData(next)
     setConfirmingDelete(false)
-    if (initialPart != null || isMultiPartShiny) scheduleSave({ data: next })
+    if (initialPart != null) scheduleSave({ data: next })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slide.id, initialPart])
 
@@ -192,6 +178,9 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
             <div className="space-y-3">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Slide Content</p>
               {slide.type === 'title' && <TitleEditor data={data} onChange={change} />}
+              {slide.type === 'shiny-title' && (
+                <ShinyTitleEditor data={data} onChange={change} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} usedPhotoUrls={usedPhotoUrls} />
+              )}
               {(slide.type === 'round-intro' || slide.type === 'swing-round-intro') && (
                 <RoundIntroEditor data={data} onChange={change} isSwing={slide.type === 'swing-round-intro'}
                   uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} usedPhotoUrls={usedPhotoUrls} />
@@ -395,6 +384,32 @@ function TitleEditor({ data, onChange }) {
     <>
       <Field label="Title"><TextInput value={data.title} onChange={v => onChange('title', v)} placeholder="Baynes Apple Valley" /></Field>
       <Field label="Subtitle"><TextInput value={data.subtitle} onChange={v => onChange('subtitle', v)} placeholder="Trivia Night" /></Field>
+    </>
+  )
+}
+
+// The standalone announce card that opens every shiny series (type
+// 'shiny-title', 2026-09-01). Field names are exactly what ShinyIntroScreen
+// reads: seriesTheme (title — falls back to shinyFormatName on the TV),
+// introSubtitle, hostPhotoUrl (unset = random shared pool, null = none).
+function ShinyTitleEditor({ data, onChange, uploadMedia, getHostPhotos, usedPhotoUrls }) {
+  return (
+    <>
+      <Field label="Title" hint="The series name the room sees on the card">
+        <TextInput value={data.seriesTheme ?? ''} onChange={v => onChange('seriesTheme', v)} placeholder={data.shinyFormatName || 'Shiny Question'} />
+      </Field>
+      <Field label="Subtitle" hint='Optional — e.g. "Dog Edition" or "Bluegrass Cover"'>
+        <TextInput value={data.introSubtitle ?? ''} onChange={v => onChange('introSubtitle', v)} placeholder="Optional subtitle…" />
+      </Field>
+      <Divider label="Ben Photo" />
+      <HostPhotoLibrary
+        usedPhotoUrls={usedPhotoUrls}
+        getHostPhotos={getHostPhotos}
+        uploadMedia={uploadMedia}
+        currentPhotoUrl={data.hostPhotoUrl}
+        onSelectPhoto={url => onChange('hostPhotoUrl', url)}
+        hasRandomFallback
+      />
     </>
   )
 }
@@ -797,63 +812,28 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
         </button>
       )}
 
-      {/* Previewing — which beat the live canvas on the left shows.
-          Every shiny question gets a standalone intro beat before its
-          content, so this control exists whether or not it's a series. */}
-      {data.shinyFormatId && (
+      {/* Previewing — which PART the live canvas on the left shows. Only a
+          tied multi-part series has anything to pick between; the old
+          Intro/Content toggle is gone (the announce card is its own
+          `shiny-title` slide now — edit it there). */}
+      {data.shinyFormatId && isSeriesMode && (
         <>
           <Divider label="Previewing" />
           <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => onChange('introDone', false)}
-              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
-                !data.introDone
-                  ? 'bg-blue-500 border-blue-500 text-white'
-                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              🎬 Intro
-            </button>
-            {isSeriesMode ? (
-              data.parts.map((p, i) => (
-                <button
-                  key={i}
-                  onClick={() => onBatchChange({ introDone: true, currentPart: i })}
-                  className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
-                    !!data.introDone && (data.currentPart ?? 0) === i
-                      ? 'bg-blue-500 border-blue-500 text-white'
-                      : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  {i + 1}{p.label ? ` · ${p.label}` : ''}
-                </button>
-              ))
-            ) : (
+            {data.parts.map((p, i) => (
               <button
-                onClick={() => onChange('introDone', true)}
+                key={i}
+                onClick={() => onChange('currentPart', i)}
                 className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
-                  !!data.introDone
+                  (data.currentPart ?? 0) === i
                     ? 'bg-blue-500 border-blue-500 text-white'
                     : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
                 }`}
               >
-                Content
+                {i + 1}{p.label ? ` · ${p.label}` : ''}
               </button>
-            )}
+            ))}
           </div>
-
-          <Divider label="Intro Screen" />
-          <Field label="Subtitle" hint='Optional — e.g. "Dog Edition" or "Bluegrass Cover"'>
-            <TextInput value={data.introSubtitle ?? ''} onChange={v => onChange('introSubtitle', v)} placeholder="Optional subtitle…" />
-          </Field>
-          <HostPhotoLibrary
-            usedPhotoUrls={usedPhotoUrls}
-            getHostPhotos={getHostPhotos}
-            uploadMedia={uploadMedia}
-            currentPhotoUrl={data.hostPhotoUrl}
-            onSelectPhoto={url => onChange('hostPhotoUrl', url)}
-            hasRandomFallback
-          />
         </>
       )}
 
@@ -2161,45 +2141,6 @@ function VennEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uplo
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Previewing — matches GridEditor: every shiny slide gets a standalone
-          intro beat before its content. */}
-      {data.isShiny && (
-        <>
-          <Divider label="Previewing" />
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => onChange('introDone', false)}
-              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
-                !data.introDone ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              🎬 Intro
-            </button>
-            <button
-              onClick={() => onChange('introDone', true)}
-              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
-                !!data.introDone ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              Content
-            </button>
-          </div>
-
-          <Divider label="Intro Screen" />
-          <Field label="Subtitle" hint='Optional — e.g. "Movie Edition"'>
-            <TextInput value={data.introSubtitle ?? ''} onChange={v => onChange('introSubtitle', v)} placeholder="Optional subtitle…" />
-          </Field>
-          <HostPhotoLibrary
-            usedPhotoUrls={usedPhotoUrls}
-            getHostPhotos={getHostPhotos}
-            uploadMedia={uploadMedia}
-            currentPhotoUrl={data.hostPhotoUrl}
-            onSelectPhoto={url => onChange('hostPhotoUrl', url)}
-            hasRandomFallback
-          />
-        </>
-      )}
-
       <Divider label="Venn Diagram" />
       <Field label="Question / Prompt">
         <TextArea value={data.text ?? ''} onChange={v => onChange('text', v)} placeholder="Which actor connects these two movies?" rows={2} />
@@ -2233,45 +2174,7 @@ function GridEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uplo
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Previewing — matches QuestionEditor: every shiny slide gets a
-          standalone intro beat before its content. */}
-      {data.isShiny && (
-        <>
-          <Divider label="Previewing" />
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => onChange('introDone', false)}
-              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
-                !data.introDone ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              🎬 Intro
-            </button>
-            <button
-              onClick={() => onChange('introDone', true)}
-              className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
-                !!data.introDone ? 'bg-blue-500 border-blue-500 text-white' : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              Content
-            </button>
-          </div>
-
-          <Divider label="Intro Screen" />
-          <Field label="Subtitle" hint='Optional — e.g. "Dog Edition" or "Bird Edition"'>
-            <TextInput value={data.introSubtitle ?? ''} onChange={v => onChange('introSubtitle', v)} placeholder="Optional subtitle…" />
-          </Field>
-          <HostPhotoLibrary
-            usedPhotoUrls={usedPhotoUrls}
-            getHostPhotos={getHostPhotos}
-            uploadMedia={uploadMedia}
-            currentPhotoUrl={data.hostPhotoUrl}
-            onSelectPhoto={url => onChange('hostPhotoUrl', url)}
-            hasRandomFallback
-          />
-          <Divider label="Grid" />
-        </>
-      )}
+      {data.isShiny && <Divider label="Grid" />}
 
       {/* Question text */}
       <div>

@@ -90,24 +90,29 @@ describe('computeNextStep', () => {
     expect(patch.current_slide_index).toBe(1)
   })
 
-  it('reveals a shiny intro before its content, then steps its parts', async () => {
+  // 2026-09-01 (SPEC.md "Standalone Shiny Title Slide"): the announce card is
+  // a real `shiny-title` slide now, so a shiny content slide has NO intro
+  // beat to dismiss and NO closing beat to pan down to — the first Next on it
+  // steps its first part, and the Next after its last part advances.
+  it('steps a shiny series through its parts, then advances straight to the next slide', async () => {
     const slides = [slide('a', 0, 'question', { isShiny: true, parts: [null, null, null] }), slide('b', 1)]
-    const reveal = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-    expect(dataOf(reveal, 'a').introDone).toBe(true)
-    expect(reveal.current_slide_index).toBeUndefined()
-
-    const p1 = await computeNextStep({ slides: reveal.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    const p1 = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
     expect(dataOf(p1, 'a').currentPart).toBe(1)
+    expect(dataOf(p1, 'a')).not.toHaveProperty('introDone')
     const p2 = await computeNextStep({ slides: p1.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
     expect(dataOf(p2, 'a').currentPart).toBe(2)
-    // last part reached — one closing beat back down to the title card first
-    // (CLOSING_BEAT_ENABLED, 2026-08-24), then it actually advances
-    const close = await computeNextStep({ slides: p2.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-    expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
-    expect(close.current_slide_index).toBeUndefined()
 
-    const adv = await computeNextStep({ slides: close.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    const adv = await computeNextStep({ slides: p2.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
     expect(adv.current_slide_index).toBe(1)
+    expect(dataOf(adv, 'a')).not.toHaveProperty('outroShown')
+  })
+
+  it('a shiny-title slide is a plain slide — Next on it advances to the first content slide', async () => {
+    const grp = { isShiny: true, shinyGroupId: 'g1' }
+    const slides = [slide('t', 0, 'shiny-title', grp), slide('a', 1, 'question', { ...grp, parts: [null, null] })]
+    const adv = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 't' }, noTeams)
+    expect(adv.current_slide_index).toBe(1)
+    expect(dataOf(adv, 'a').currentPart ?? 0).toBe(0)
   })
 
   // 2026-08-25, found live the same night this format shipped: Ben clicked
@@ -123,103 +128,77 @@ describe('computeNextStep', () => {
   it('reveals a concurrent text series cumulatively, starting with nothing revealed', async () => {
     const concurrent = { isShiny: true, shinyInputSchema: { type: 'text', concurrent: true }, parts: [null, null, null] }
     const slides = [slide('a', 0, 'question', concurrent), slide('b', 1)]
-    const reveal = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-    expect(dataOf(reveal, 'a').introDone).toBe(true)
-    expect(dataOf(reveal, 'a').currentPart ?? 0).toBe(0) // nothing revealed on first content frame
-
-    const p1 = await computeNextStep({ slides: reveal.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    const p1 = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
     expect(dataOf(p1, 'a').currentPart).toBe(1) // group 0 revealed
     const p2 = await computeNextStep({ slides: p1.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
     expect(dataOf(p2, 'a').currentPart).toBe(2) // group 1 revealed
     const p3 = await computeNextStep({ slides: p2.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
     expect(dataOf(p3, 'a').currentPart).toBe(3) // group 2 (the last one) revealed — unreachable before this fix
 
-    // fully revealed — one closing beat back down to the title card next, same as any other shiny
-    const close = await computeNextStep({ slides: p3.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-    expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
+    // fully revealed — the next press advances, same as any other shiny
+    const adv = await computeNextStep({ slides: p3.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(adv.current_slide_index).toBe(1)
   })
 
-  // Ben, 2026-08-24: "after the third slide of a shiny that pans, it should
-  // then pan back down to the shiny title. ex: not so different. so i can then
-  // move to the next question ring world style." The index law that makes that
-  // one extra beat land exactly once — the pair of asserts that would have
-  // caught the 2026-08-19 regression (intro replaying after the question) had
-  // the display side not been the broken half.
-  describe('shiny closing beat', () => {
+  // The closing beat (2026-08-17 → 2026-09-01, CLOSING_BEAT_ENABLED /
+  // data.outroShown) is gone with the intro swap it mirrored. Every shiny
+  // content slide now leaves on a plain advance, whatever its lock state —
+  // these pin that down so the dead-press regression the closing beat had
+  // become (Next flipping flags nothing rendered) can't come back.
+  describe('shiny content slides advance like any other slide', () => {
     const shiny = (id, order, extra = {}) =>
-      slide(id, order, 'question', { isShiny: true, introDone: true, ...extra })
+      slide(id, order, 'question', { isShiny: true, ...extra })
 
-    it('pans back to the title card once, then advances on the next press', async () => {
+    it('a single-shot shiny question advances on its first Next, no flags written', async () => {
       const slides = [shiny('a', 0), slide('b', 1)]
-      const close = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-      expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
-
-      // outroShown must stop the intro-reveal branch re-opening the content —
-      // otherwise this press shows the question again instead of moving on.
-      const adv = await computeNextStep({ slides: close.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+      const adv = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
       expect(adv.current_slide_index).toBe(1)
+      expect(dataOf(adv, 'a')).not.toHaveProperty('introDone')
+      expect(dataOf(adv, 'a')).not.toHaveProperty('outroShown')
     })
 
-    it('never fires between two slides of the same shiny series', async () => {
-      // Q1..Qn chained as one run share a single announce beat, so a pan-down
-      // between them would break what reads as one continuous question.
-      const series = { isSeries: true, shinyFormatId: 'f1', seriesTheme: 'Not So Different' }
+    it('advances between two slides of the same shiny series without touching either', async () => {
+      const series = { isSeries: true, shinyGroupId: 'g1', shinyFormatId: 'f1', seriesTheme: 'Not So Different' }
       const slides = [shiny('a', 0, series), shiny('b', 1, series)]
       const patch = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
       expect(patch.current_slide_index).toBe(1)
-      expect(dataOf(patch, 'a').outroShown).toBeUndefined()
+      expect(dataOf(patch, 'b')).not.toHaveProperty('introDone')
     })
 
-    it('skips the closing beat but still advances for a matching slide locked but not yet scored/revealed', async () => {
+    it('advances for a matching slide whether locked, scored, or neither', async () => {
       // Ben shipped a hard block here 2026-08-25 (Next did nothing until A
       // was pressed), then reverted it live the same night — the TV gave no
       // hint why Next looked broken, and it stranded a real show mid-round.
-      // isPending still skips the closing-beat pan-down (the room hasn't
-      // seen the answer yet, no reason to pan back to the title card), but
-      // Next now falls straight through to a plain advance either way.
       const locked = { shinyInputSchema: { type: 'matching' }, matchingLocked: true }
-      const slides = [shiny('a', 0, locked), slide('b', 1)]
-      const mid = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+      const mid = await computeNextStep({ slides: [shiny('a', 0, locked), slide('b', 1)], currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
       expect(mid.current_slide_index).toBe(1)
-
-      const scored = [shiny('a', 0, { ...locked, matchingRevealed: true }), slide('b', 1)]
-      const close = await computeNextStep({ slides: scored, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-      expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
+      const scored = await computeNextStep({ slides: [shiny('a', 0, { ...locked, matchingRevealed: true }), slide('b', 1)], currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+      expect(scored.current_slide_index).toBe(1)
     })
 
-    it('skips the closing beat but still advances for an order slide locked but not yet revealed', async () => {
+    it('advances for an order slide whether locked, revealed, or neither', async () => {
       const locked = { shinyInputSchema: { type: 'order' }, orderLocked: true }
-      const slides = [shiny('a', 0, locked), slide('b', 1)]
-      const mid = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+      const mid = await computeNextStep({ slides: [shiny('a', 0, locked), slide('b', 1)], currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
       expect(mid.current_slide_index).toBe(1)
-
-      const revealed = [shiny('a', 0, { ...locked, orderRevealed: true }), slide('b', 1)]
-      const close = await computeNextStep({ slides: revealed, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-      expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
+      const revealed = await computeNextStep({ slides: [shiny('a', 0, { ...locked, orderRevealed: true }), slide('b', 1)], currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+      expect(revealed.current_slide_index).toBe(1)
     })
 
-    it('advances normally through every wager lock stage, tiers-only and guesses-locked alike', async () => {
-      // 2026-08-24 (Opus review): the OLD isPending gate used to key off
-      // wagerTiersLocked, one stage too early — tiers-locked-only is still
-      // mid-question and must fall through to a plain advance, same as
-      // guesses-locked-but-unrevealed now does too (2026-08-25 revert).
+    it('advances through every wager lock stage, tiers-only, guesses-locked and revealed alike', async () => {
       const tiersOnly = { shinyInputSchema: { type: 'wager' }, wagerTiersLocked: true }
-      const slides = [shiny('a', 0, tiersOnly), slide('b', 1)]
-      expect((await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)).current_slide_index).toBe(1)
-
-      const guessesLocked = [shiny('a', 0, { ...tiersOnly, wagerGuessesLocked: true }), slide('b', 1)]
-      const mid = await computeNextStep({ slides: guessesLocked, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-      expect(mid.current_slide_index).toBe(1)
-
-      const revealed = [shiny('a', 0, { ...tiersOnly, wagerGuessesLocked: true, wagerRevealed: true }), slide('b', 1)]
-      const close = await computeNextStep({ slides: revealed, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-      expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
+      for (const extra of [tiersOnly, { ...tiersOnly, wagerGuessesLocked: true }, { ...tiersOnly, wagerGuessesLocked: true, wagerRevealed: true }]) {
+        const patch = await computeNextStep({ slides: [shiny('a', 0, extra), slide('b', 1)], currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+        expect(patch.current_slide_index).toBe(1)
+      }
     })
 
-    it('is undone by Prev, straight back to the content it closed', async () => {
-      const slides = [shiny('a', 0, { introDone: false, outroShown: true, currentPart: 2, parts: [null, null, null] })]
-      const back = await computePrevStep({ slides, currentSlideIndex: 0 }, noTeams)
-      expect(dataOf(back, 'a')).toMatchObject({ introDone: true, outroShown: false, currentPart: 2 })
+    it('Prev on the first part of a shiny slide goes to the previous slide, not to an intro beat', async () => {
+      const grp = { isShiny: true, shinyGroupId: 'g1' }
+      const slides = [slide('t', 0, 'shiny-title', grp), slide('a', 1, 'question', { ...grp, currentPart: 0, parts: [null, null, null] })]
+      const back = await computePrevStep({ slides, currentSlideIndex: 1 }, noTeams)
+      expect(back.current_slide_index).toBe(0)
+      expect(back.current_slide_id).toBe('t')
+      expect(dataOf(back, 'a')).not.toHaveProperty('introDone')
     })
   })
 
@@ -236,17 +215,17 @@ describe('computeNextStep', () => {
 })
 
 describe('computePrevStep', () => {
-  it('steps parts backward before un-revealing the intro', async () => {
-    const slides = [slide('a', 0, 'question', { isShiny: true, introDone: true, currentPart: 2, parts: [null, null, null] })]
+  it('steps parts backward before leaving the slide', async () => {
+    const slides = [slide('a', 0, 'question', { isShiny: true, currentPart: 2, parts: [null, null, null] })]
     const back = await computePrevStep({ slides, currentSlideIndex: 0 }, noTeams)
     expect(dataOf(back, 'a').currentPart).toBe(1)
   })
 
-  it('does not regress introDone on a locked wager slide', async () => {
-    const slides = [slide('a', 0), slide('b', 1, 'question', { isShiny: true, introDone: true, wagerTiersLocked: true })]
+  it('leaves a locked wager slide backwards in one press, flags intact', async () => {
+    const slides = [slide('a', 0), slide('b', 1, 'question', { isShiny: true, wagerTiersLocked: true })]
     const back = await computePrevStep({ slides, currentSlideIndex: 1 }, noTeams)
     expect(back.current_slide_index).toBe(0)
-    expect(dataOf(back, 'b').introDone).toBe(true)
+    expect(dataOf(back, 'b').wagerTiersLocked).toBe(true)
   })
 
   it('lands on the previous slide’s last revealed state', async () => {
@@ -256,7 +235,6 @@ describe('computePrevStep', () => {
     ]
     const back = await computePrevStep({ slides, currentSlideIndex: 1 }, noTeams)
     expect(back.current_slide_index).toBe(0)
-    expect(dataOf(back, 'a').introDone).toBe(true)
     expect(dataOf(back, 'a').currentPart).toBe(2)
   })
 
@@ -269,7 +247,6 @@ describe('computePrevStep', () => {
     const slides = [slide('a', 0, 'question', concurrent), slide('b', 1)]
     const back = await computePrevStep({ slides, currentSlideIndex: 1 }, noTeams)
     expect(back.current_slide_index).toBe(0)
-    expect(dataOf(back, 'a').introDone).toBe(true)
     expect(dataOf(back, 'a').currentPart).toBe(3) // all 3 groups, not 2
   })
 
@@ -278,11 +255,10 @@ describe('computePrevStep', () => {
   // slide wiped its lock/reveal flags — reopening phone submissions and
   // hiding the already-revealed answer on /display.
   it('preserves lock/reveal flags when backing into a graded question', async () => {
-    const graded = { isShiny: true, shinyInputSchema: { type: 'matching' }, introDone: false, outroShown: true, matchingLocked: true, matchingRevealed: true }
+    const graded = { isShiny: true, shinyInputSchema: { type: 'matching' }, matchingLocked: true, matchingRevealed: true }
     const slides = [slide('a', 0, 'question', graded), slide('b', 1)]
     const back = await computePrevStep({ slides, currentSlideIndex: 1 }, noTeams)
     expect(back.current_slide_index).toBe(0)
-    expect(dataOf(back, 'a').introDone).toBe(true)
     expect(dataOf(back, 'a').matchingLocked).toBe(true)
     expect(dataOf(back, 'a').matchingRevealed).toBe(true)
   })
@@ -296,14 +272,22 @@ describe('computePrevStep', () => {
 describe('withEntryState', () => {
   it('re-arms invoke-gated audio on a fresh entry', () => {
     const s = slide('a', 0, 'pre-show', { walkoutSong: { trigger: 'invoke', videoId: 'x', invoked: true } })
-    const out = withEntryState([s], s, { currentPart: 0, introDone: false })
+    const out = withEntryState([s], s, { currentPart: 0 })
     expect(out[0].data.walkoutSong.invoked).toBe(false)
   })
 
-  it('clears a stale outroShown even when introDone is already false', () => {
-    const s = slide('a', 0, 'question', { isShiny: true, introDone: false, outroShown: true })
-    const out = withEntryState([s], s, { currentPart: 0, introDone: false })
-    expect(out[0].data.outroShown).toBe(false)
+  // 2026-08-31: stale lock/reveal flags from a rehearsal must not survive a
+  // fresh entry (phones would never unlock) — unless this is a re-entry into
+  // a question actually in progress (protectInProgress), where clearing them
+  // would reopen submission on a question the room already answered.
+  it('clears stale lock/reveal flags on a fresh entry, but keeps them on a protected re-entry', () => {
+    const s = slide('a', 0, 'question', { isShiny: true, shinyInputSchema: { type: 'matching' }, matchingLocked: true, matchingRevealed: true })
+    const fresh = withEntryState([s], s, { currentPart: 0 })
+    expect(fresh[0].data.matchingLocked).toBe(false)
+    expect(fresh[0].data.matchingRevealed).toBe(false)
+    const reentry = withEntryState([s], s, { currentPart: 0, protectInProgress: true })
+    expect(reentry[0].data.matchingLocked).toBe(true)
+    expect(reentry[0].data.matchingRevealed).toBe(true)
   })
 
   // 2026-08-25 review: a countdown interrupted before completing (Live Mode
@@ -314,10 +298,10 @@ describe('withEntryState', () => {
   // answered, with no countdown shown to explain why.
   it('clears a stale lock countdown on a fresh entry', () => {
     const s = slide('a', 0, 'question', {
-      isShiny: true, introDone: true, matchingLocked: false,
+      isShiny: true, matchingLocked: false,
       lockCountdownPhase: 'matching', lockCountdownStartedAt: Date.now() - 60_000,
     })
-    const out = withEntryState([s], s, { currentPart: 0, introDone: false })
+    const out = withEntryState([s], s, { currentPart: 0 })
     expect(out[0].data.lockCountdownPhase).toBe(null)
     expect(out[0].data.lockCountdownStartedAt).toBe(null)
   })
@@ -332,7 +316,7 @@ describe('withEntryState', () => {
     const s = slide('a', 0, 'question', {
       isShiny: true, shinyInputSchema: { type: 'text', concurrent: true }, parts: [null, null, null], currentPart: 2,
     })
-    const out = withEntryState([s], s, { currentPart: 0, introDone: false })
+    const out = withEntryState([s], s, { currentPart: 0 })
     expect(out[0].data.currentPart).toBe(0)
   })
 })
@@ -525,7 +509,7 @@ describe('pendingLockPhase', () => {
   const shiny = (type, data = {}) => slide('q', 0, 'question', { isShiny: true, shinyInputSchema: { type }, ...data })
 
   it('returns matching while a matching question is still taking answers', () => {
-    expect(pendingLockPhase(shiny('matching', { introDone: true }))).toBe('matching')
+    expect(pendingLockPhase(shiny('matching'))).toBe('matching')
   })
 
   it('returns null once matching is locked', () => {
@@ -533,7 +517,7 @@ describe('pendingLockPhase', () => {
   })
 
   it('returns order while an Order Up question is still taking answers', () => {
-    expect(pendingLockPhase(shiny('order', { introDone: true }))).toBe('order')
+    expect(pendingLockPhase(shiny('order'))).toBe('order')
   })
 
   it('returns null once Order Up is locked', () => {
@@ -544,26 +528,23 @@ describe('pendingLockPhase', () => {
   // tier lock, then the numeric-guess lock after the question reveals. They
   // must come back in that order from three consecutive Next presses.
   it('walks wager through tiers, then guesses, then null', () => {
-    expect(pendingLockPhase(shiny('wager', { introDone: true }))).toBe('wager-tiers')
-    expect(pendingLockPhase(shiny('wager', { introDone: true, wagerTiersLocked: true }))).toBe('wager-guesses')
-    expect(pendingLockPhase(shiny('wager', { introDone: true, wagerTiersLocked: true, wagerGuessesLocked: true }))).toBe(null)
+    expect(pendingLockPhase(shiny('wager'))).toBe('wager-tiers')
+    expect(pendingLockPhase(shiny('wager', { wagerTiersLocked: true }))).toBe('wager-guesses')
+    expect(pendingLockPhase(shiny('wager', { wagerTiersLocked: true, wagerGuessesLocked: true }))).toBe(null)
   })
 
   it('never skips the tier lock just because guesses are somehow already flagged', () => {
     // Out-of-order flags shouldn't let a press jump straight to scoring a
     // wager whose tiers were never locked.
-    expect(pendingLockPhase(shiny('wager', { introDone: true, wagerGuessesLocked: true }))).toBe('wager-tiers')
+    expect(pendingLockPhase(shiny('wager', { wagerGuessesLocked: true }))).toBe('wager-tiers')
   })
 
-  it('returns null for all mechanics when introDone is false, blocking locks during the intro beat', () => {
-    // The intro beat (introDone: false) is the first Next press after entering
-    // a shiny question — the FIRST Next press must reveal the question's
-    // content before anything else (like starting a countdown). Without this
-    // guard, pendingLockPhase would return a lock phase on that first press
-    // and start a 3-2-1 countdown on a question the room hasn't even seen yet.
-    expect(pendingLockPhase(shiny('matching', { introDone: false }))).toBe(null)
-    expect(pendingLockPhase(shiny('order', { introDone: false }))).toBe(null)
-    expect(pendingLockPhase(shiny('wager', { introDone: false }))).toBe(null)
+  it('ignores a stale introDone flag left on a legacy slide — content shows from frame one, so the first Next may lock', () => {
+    // Pre-2026-09-01 shows still carry introDone on their content slides
+    // until the migration script strips it. It must not gate anything.
+    expect(pendingLockPhase(shiny('matching', { introDone: false }))).toBe('matching')
+    expect(pendingLockPhase(shiny('order', { introDone: false }))).toBe('order')
+    expect(pendingLockPhase(shiny('wager', { introDone: false }))).toBe('wager-tiers')
   })
 
   it('returns null for a question that is not phone-scored at all', () => {
@@ -638,7 +619,7 @@ describe('pendingReveal', () => {
 //   concurrent media-> 1 state (every tile on screen at once, one answer)
 describe('shinyDisplay stepping', () => {
   const shinyParts = (extra) => ({
-    isShiny: true, introDone: true, currentPart: 0,
+    isShiny: true, currentPart: 0,
     parts: [null, null, null], ...extra,
   })
 
@@ -649,9 +630,9 @@ describe('shinyDisplay stepping', () => {
     expect(dataOf(p1, 'a').currentPart).toBe(1)
     const p2 = await computeNextStep({ slides: p1.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
     expect(dataOf(p2, 'a').currentPart).toBe(2)
-    // 3 assets = 3 states — the next press is the closing beat, not a 4th asset.
-    const close = await computeNextStep({ slides: p2.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-    expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
+    // 3 assets = 3 states — the next press advances, not a 4th asset.
+    const adv = await computeNextStep({ slides: p2.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(adv.current_slide_index).toBe(1)
   })
 
   it('gives a concurrent TEXT slide the extra nothing-revealed-yet state', async () => {
@@ -662,19 +643,19 @@ describe('shinyDisplay stepping', () => {
       patch = await computeNextStep({ slides: patch.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
       expect(dataOf(patch, 'a').currentPart).toBe(expected)
     }
-    const close = await computeNextStep({ slides: patch.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-    expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
+    const adv = await computeNextStep({ slides: patch.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(adv.current_slide_index).toBe(1)
   })
 
   it('never steps inside a concurrent MEDIA slide — all assets show at once', async () => {
     // Ben, 2026-08-26: concurrent media shows every asset together with one
     // shared answer. "One at a time" is what sequential is for, so a Next
-    // press here must go straight to the closing beat, not reveal a tile.
+    // press here must go straight to the next slide, not reveal a tile.
     const data = shinyParts({ shinyDisplay: 'concurrent', shinyInputSchema: { type: 'image' } })
     const slides = [slide('a', 0, 'question', data), slide('b', 1)]
-    const close = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-    expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
-    expect(dataOf(close, 'a').currentPart ?? 0).toBe(0)
+    const adv = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(adv.current_slide_index).toBe(1)
+    expect(dataOf(adv, 'a').currentPart ?? 0).toBe(0)
   })
 
   it('backs into a concurrent MEDIA slide on its single state, not its last part', async () => {
@@ -692,31 +673,26 @@ describe('shinyDisplay stepping', () => {
     expect(dataOf(back, 'a').currentPart).toBe(2)
   })
 
-  it('a separate run stamped with shinyGroupId still shares one intro beat', async () => {
-    // Separate-question runs skip the announce beat on every slide after the
-    // first — that routes through isShinySeriesSibling, which now prefers
-    // shinyGroupId over the old format+theme heuristic.
-    const run = { isShiny: true, introDone: true, isSeries: true, shinyGroupId: 'grp_1', shinyFormatId: 'f1', seriesTheme: 'Run' }
-    const slides = [slide('a', 0, 'question', run), slide('b', 1, 'question', { ...run })]
-    const patch = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-    expect(patch.current_slide_index).toBe(1)
-    expect(dataOf(patch, 'b').introDone).toBe(true) // no repeat announce card
-    expect(dataOf(patch, 'a').outroShown).toBeUndefined() // no pan-down mid-run
-  })
-
-  it('a SECOND run of the same format in the same round gets its own intro beat', async () => {
-    // The regression the groupId fix exists for: without it, run 2's first
-    // slide was treated as run 1's sibling and had its announce card skipped.
-    const base = { isShiny: true, introDone: true, isSeries: true, shinyFormatId: 'f1', seriesTheme: 'Same Format' }
+  it('two runs of the same format back to back: each announces via its OWN shiny-title slide, stepping is plain', async () => {
+    // Announce beats are slides now, so stepping needs no sibling awareness:
+    // run 1's last content slide advances onto run 2's title slide, which
+    // advances onto run 2's first content slide. Nothing is skipped or
+    // flagged along the way.
+    const base = { isShiny: true, isSeries: true, shinyFormatId: 'f1', seriesTheme: 'Same Format' }
     const slides = [
-      slide('a', 0, 'question', { ...base, shinyGroupId: 'grp_1' }),
-      slide('b', 1, 'question', { ...base, shinyGroupId: 'grp_2' }),
+      slide('t1', 0, 'shiny-title', { ...base, shinyGroupId: 'grp_1' }),
+      slide('a', 1, 'question', { ...base, shinyGroupId: 'grp_1' }),
+      slide('t2', 2, 'shiny-title', { ...base, shinyGroupId: 'grp_2' }),
+      slide('b', 3, 'question', { ...base, shinyGroupId: 'grp_2' }),
     ]
-    // Slide a is the end of run 1, so Next pans down to its closing card first.
-    const close = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-    expect(dataOf(close, 'a')).toMatchObject({ introDone: false, outroShown: true })
-    const adv = await computeNextStep({ slides: close.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-    expect(adv.current_slide_index).toBe(1)
-    expect(dataOf(adv, 'b').introDone).toBe(false) // run 2 announces itself
+    let idx = 0
+    let cur = slides
+    for (const expectedId of ['a', 't2', 'b']) {
+      const patch = await computeNextStep({ slides: cur, currentSlideIndex: idx, currentSlideId: cur[idx].id }, noTeams)
+      expect(patch.current_slide_id).toBe(expectedId)
+      idx = patch.current_slide_index
+      cur = patch.slides
+    }
+    expect(dataOf({ slides: cur }, 'b')).not.toHaveProperty('introDone')
   })
 })

@@ -17,6 +17,7 @@ import TeamPickerSlide, { REVEAL_S } from './slides/TeamPickerSlide.jsx'
 import GridSlide from './slides/GridSlide.jsx'
 import VennDiagramSlide from './slides/VennDiagramSlide.jsx'
 import PreShowSlide from './slides/PreShowSlide.jsx'
+import ShinyTitleSlide from './slides/ShinyTitleSlide.jsx'
 import OverlayLayer from './OverlayLayer.jsx'
 import { EASE_OUT, EASE_DROP, EASE_EXIT, EASE_PANEL } from '../../lib/easings.js'
 
@@ -30,11 +31,16 @@ import { EASE_OUT, EASE_DROP, EASE_EXIT, EASE_PANEL } from '../../lib/easings.js
 // same as the isRingWorldSlide computation below does implicitly.
 export function skipsLockedBackground(slide) {
   const isShiny = slide?.data?.isShiny
-  const isShinyIntroBeat = isShiny && !slide?.data?.introDone && (slide?.type === 'question' || slide?.type === 'grid' || slide?.type === 'venn')
   const isRingWorldSlide = slide?.type === 'team-preview' || slide?.type === 'grading-break' || (slide?.type === 'question' && !isShiny)
-  return isShinyIntroBeat || isRingWorldSlide ||
+  // shiny-title is the standalone announce card (ShinyTitleSlide.jsx) —
+  // ambient by design, same as the round-intro family it sits alongside.
+  // Type-only on purpose: the old data.introDone intro-beat check went with
+  // the swap it served (2026-09-01) — shiny content always gets its opaque
+  // backdrop now.
+  return isRingWorldSlide ||
     slide?.type === 'team-picker' || slide?.type === 'pre-show' ||
-    slide?.type === 'round-intro' || slide?.type === 'swing-round-intro'
+    slide?.type === 'round-intro' || slide?.type === 'swing-round-intro' ||
+    slide?.type === 'shiny-title'
 }
 
 // Per-slide content animation config — tune these without touching component logic
@@ -185,26 +191,21 @@ const SLIDE_COMPONENTS = {
   'grid':              GridSlide,
   'venn':              VennDiagramSlide,
   'pre-show':          PreShowSlide,
+  'shiny-title':       ShinyTitleSlide,
 }
 
 export default function SlideRenderer({ slide, show, direction, isPreview = false, onAdvance, holdExitForReveal = false }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const isShiny = slide?.data?.isShiny
-  // ShinyIntroScreen (the announce beat before a shiny question/grid's real
-  // content) is explicitly designed to be non-opaque — "ambient rather than
-  // full-bleed" per its own file header — so the ring-world/particle
-  // background reads through it, same spirit as team-picker/pre-show below.
-  // That intent was dead on arrival: the locked background this component
-  // paints behind every OTHER slide type sat behind it too, hiding the
-  // ambient world completely except the StageFrame's own 15% margin (2026-08-17,
-  // Ben: "i cant see the background"). Scoped tightly to the intro beat only
-  // — once introDone flips and real question/grid content mounts, that
-  // content DOES want the opaque backdrop (theme.colors.shinyBg etc, for
-  // legibility over detailed ambient art), so this must not outlive introDone.
-  // isShinyIntroBeat/isRingWorldSlide folded into the exported
-  // skipsLockedBackground() above — same rule, single source of truth so
-  // Display.jsx's ring station counter can't drift from this component.
+  // The shiny announce card (ShinyTitleSlide / ShinyIntroScreen) is
+  // non-opaque by design — "ambient rather than full-bleed" per its own file
+  // header — so the ring-world/particle background reads through it, same
+  // spirit as team-picker/pre-show below. Shiny CONTENT wants the opaque
+  // backdrop (theme.colors.shinyBg etc, for legibility over detailed ambient
+  // art). Both rules live in the exported skipsLockedBackground() above —
+  // single source of truth so Display.jsx's ring station counter can't
+  // drift from this component.
   const hidesLockedBackground = skipsLockedBackground(slide)
 
   let transitionKey = null

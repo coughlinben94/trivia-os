@@ -53,6 +53,7 @@ const SLIDE_META = {
   'winner-reveal':     { label: 'Winner',      color: 'bg-yellow-100 text-yellow-800' },
   'state-of-union':    { label: 'State of Union', color: 'bg-slate-100 text-slate-700' },
   'rules':             { label: 'Rules',          color: 'bg-red-100 text-red-700' },
+  'shiny-title':       { label: 'Shiny Title',    color: 'bg-yellow-100 text-yellow-800' },
 }
 
 function typeMeta(type) {
@@ -113,14 +114,8 @@ function CurrentSlideCard({ slide, show }) {
         const part = resolveShinyPart(data)
         const parts = data.parts
         const partIdx = Array.isArray(parts) && parts.length > 1 ? (data.currentPart ?? 0) : null
-        const introActive = data.isShiny && !data.introDone
         return (
           <div className="flex flex-col gap-3">
-            {introActive && (
-              <p className="text-xs font-bold uppercase tracking-wider text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1 w-fit">
-                🎬 Intro showing — press Next to reveal
-              </p>
-            )}
             {data.questionNumber != null && (
               <p className="text-lg font-semibold text-gray-400">
                 {data.questionLabel || `Q${data.questionNumber}`}
@@ -202,6 +197,7 @@ function UpNextCard({ slide, offset }) {
   const label = (() => {
     if (slide.type === 'question') return d.questionLabel || `Q${d.questionNumber || '?'}`
     if (slide.type === 'round-intro' || slide.type === 'swing-round-intro') return d.roundTitle || 'Round Intro'
+    if (slide.type === 'shiny-title') return d.seriesTheme || d.shinyFormatName || meta.label
     if (slide.type === 'grading-break') return 'Grading Break'
     if (slide.type === 'scoreboard-reveal') return d.title || 'Leaderboard'
     return d.title || meta.label
@@ -888,10 +884,10 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     if (currentSlide.data?.isShiny) {
       // A shiny audio question (2026-09-01, P1 live, Round 2's "One Hit
       // Unwonder": "hitting next skips to next question, doesnt play
-      // audio"). Gated on introDone: the FIRST Next on a fresh shiny slide
-      // only dismisses its intro card (computeNextStep, slideStepping.js) —
-      // this must not steal THAT press, or the intro would never dismiss.
-      if (!isAudioShiny(currentSlide.data) || !currentSlide.data?.introDone) return false
+      // audio"). No introDone gate any more: the announce card is its own
+      // `shiny-title` slide, so a shiny content slide shows its content from
+      // its first frame and the first Next on it is the play press.
+      if (!isAudioShiny(currentSlide.data)) return false
     } else if ((currentSlide.data?.audioTrigger ?? 'click') !== 'click') {
       return false
     }

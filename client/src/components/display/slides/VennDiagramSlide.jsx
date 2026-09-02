@@ -1,6 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
-import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 
@@ -39,16 +38,10 @@ function CastPhoto({ person, i, reduce, size, font, maxW }) {
   )
 }
 
-export default function VennDiagramSlide({ slide, show }) {
+// The announce card is its own permanent 'shiny-title' slide now
+// (ShinyTitleSlide.jsx, 2026-09-01) — no introDone swap here.
+export default function VennDiagramSlide({ slide }) {
   const { theme } = useTheme()
-  const { data } = slide
-
-  // outroShown ⇒ this is the closing beat, not the opening announce — same
-  // card, quiet arrival instead of the full entrance (see ShinyIntroScreen).
-  if (data.isShiny && !data.introDone) {
-    return <ShinyIntroScreen slide={slide} theme={theme} show={show} isClosing={!!data.outroShown} />
-  }
-
   return <VennContent slide={slide} theme={theme} />
 }
 

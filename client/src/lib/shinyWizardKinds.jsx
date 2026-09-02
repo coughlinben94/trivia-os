@@ -56,7 +56,9 @@ export function gridExtraControls(ctx) {
 }
 
 // ctx: { qNum, roundId, afterId, gridCols, gridRows, selectedShinyFmt,
-//        shinyQuestion, shinyAnswer, formatAlreadyIntroducedThisRound }
+//        shinyQuestion, shinyAnswer }
+// No introDone here (or in buildVennSlide): the announce card is a real
+// `shiny-title` slide AddSlideWizard prepends to whatever this returns.
 export function buildGridSlide(ctx) {
   const columns = Array.from({ length: ctx.gridCols }, () =>
     Array.from({ length: ctx.gridRows }, () => ({ color: null, mediaUrl: null }))
@@ -67,7 +69,6 @@ export function buildGridSlide(ctx) {
     questionLabel:   `Q${ctx.qNum}`,
     questionMode:    'shiny',
     isShiny:         true,
-    introDone:       ctx.formatAlreadyIntroducedThisRound(fmt.id),
     shinyFormatId:   fmt.id,
     shinyFormatName: fmt.name,
     shinyFormatIcon: fmt.icon,
@@ -119,8 +120,7 @@ export function vennExtraControls(ctx) {
 }
 
 // ctx: { qNum, roundId, afterId, vennPerSide, vennSlideCount,
-//        selectedShinyFmt, shinyQuestion, shinyAnswer,
-//        formatAlreadyIntroducedThisRound }
+//        selectedShinyFmt, shinyQuestion, shinyAnswer }
 export function buildVennSlide(ctx) {
   const fmt = ctx.selectedShinyFmt
   const vennNum = Math.min(20, Math.max(1, parseInt(ctx.vennSlideCount, 10) || 1))
@@ -139,7 +139,6 @@ export function buildVennSlide(ctx) {
         questionLabel:   `Q${ctx.qNum + i}`,
         questionMode:    'shiny',
         isShiny:         true,
-        introDone:       i > 0 || ctx.formatAlreadyIntroducedThisRound(fmt.id),
         shinyFormatId:   fmt.id,
         shinyFormatName: fmt.name,
         shinyFormatIcon: fmt.icon,
@@ -160,7 +159,6 @@ export function buildVennSlide(ctx) {
     questionLabel:   `Q${ctx.qNum}`,
     questionMode:    'shiny',
     isShiny:         true,
-    introDone:       ctx.formatAlreadyIntroducedThisRound(fmt.id),
     shinyFormatId:   fmt.id,
     shinyFormatName: fmt.name,
     shinyFormatIcon: fmt.icon,
