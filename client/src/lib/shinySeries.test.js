@@ -9,6 +9,7 @@ import {
   partsToGridView,
   buildShinyTitleSlide,
   withShinyTitleSlide,
+  withShinyGroupId,
 } from './shinySeries.js'
 
 function seriesSlide(id, overrides = {}) {
@@ -422,5 +423,37 @@ describe('buildShinyTitleSlide / withShinyTitleSlide', () => {
     )
     expect(isShinySeriesSibling(out.slides[0], out.slides[1])).toBe(true)
     expect(seriesGroupIndices(out.slides, 1)).toEqual([0, 1])
+  })
+})
+
+describe('withShinyGroupId (title-less grouping)', () => {
+  // A round built entirely from one shiny format only gets ONE announce card
+  // (AddSlideWizard's formatAlreadyIntroducedThisRound). The later questions
+  // still have to be a real group: without a shinyGroupId they'd be loose
+  // slides no sidebar row, atomic reorder or PYL title-jump could see, and
+  // `shiny-title` is hidden in the picker so nothing could ever add one later.
+  const fixedId = () => 'sgrp_test1234'
+
+  it('stamps a fresh shinyGroupId on a single-slide payload without prepending a title', () => {
+    const out = withShinyGroupId(
+      { type: 'question', roundId: 'round_1', afterSlideId: 'slide_prev', data: { isShiny: true, text: 'Q' } },
+      fixedId,
+    )
+    expect(out.afterSlideId).toBe('slide_prev')
+    expect(out.slides.map(s => s.type)).toEqual(['question'])
+    expect(out.slides[0].data.shinyGroupId).toBe('sgrp_test1234')
+    expect(out.slides[0].data.text).toBe('Q')
+    expect(out.slides[0]).not.toHaveProperty('afterSlideId')
+  })
+
+  it('groups a multi-slide batch under one id and leaves an existing group id alone', () => {
+    const slides = [1, 2].map(i => ({ type: 'question', roundId: 'round_1', data: { isShiny: true, questionNumber: i } }))
+    const out = withShinyGroupId({ afterSlideId: null, slides }, fixedId)
+    expect(out.slides).toHaveLength(2)
+    expect(out.slides.every(s => s.data.shinyGroupId === 'sgrp_test1234')).toBe(true)
+    expect(isShinySeriesSibling(out.slides[0], out.slides[1])).toBe(true)
+
+    const pre = [{ type: 'question', roundId: 'round_1', data: { isShiny: true, shinyGroupId: 'sgrp_run' } }]
+    expect(withShinyGroupId({ afterSlideId: null, slides: pre }, fixedId).slides[0].data.shinyGroupId).toBe('sgrp_run')
   })
 })

@@ -6,7 +6,7 @@ import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import { makeQuestionPasteHandler, makeCleanPasteHandler } from '../../lib/cleanPaste.js'
 import { FIXED_SHAPE_KINDS } from '../../lib/shinyWizardKinds.jsx'
-import { withShinyTitleSlide } from '../../lib/shinySeries.js'
+import { withShinyTitleSlide, withShinyGroupId } from '../../lib/shinySeries.js'
 
 export const TYPE_CARDS = [
   { type: 'pre-show',       icon: '📱', name: 'Pre-Show',            desc: 'QR code + team count while people join' },
@@ -168,8 +168,14 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
     // — single slide, tied parts[] series, N separate siblings, grid, venn —
     // sharing one shinyGroupId with its content. Content slides no longer
     // carry introDone; the title card is a real slide, not a swap state.
+    // Skipping the repeat announce card must NOT skip the grouping: without
+    // a shinyGroupId the new question is a loose slide (no sidebar group, no
+    // atomic reorder, no title to jump to), and `shiny-title` is hidden in
+    // the picker so nothing could give it one later.
     const addShiny = payload => onAddSlide(
-      formatAlreadyIntroducedThisRound(selectedShinyFmt.id) ? payload : withShinyTitleSlide(payload, selectedShinyFmt)
+      formatAlreadyIntroducedThisRound(selectedShinyFmt.id)
+        ? withShinyGroupId(payload)
+        : withShinyTitleSlide(payload, selectedShinyFmt)
     )
     const nonBonusQ   = roundSlides.filter(s => (s.type === 'question' || s.type === 'pixelate-series' || s.type === 'grid') && !s.data?.isBonus)
     const bonusQ      = roundSlides.filter(s => s.type === 'question' && s.data?.isBonus)

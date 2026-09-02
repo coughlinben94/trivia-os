@@ -267,12 +267,27 @@ export function buildShinyTitleSlide(fmt, groupId, roundId = null) {
 // atomic reorder without any of those consumers learning a new rule.
 // `newGroupId` is injectable purely for tests.
 export function withShinyTitleSlide(payload, fmt, newGroupId = () => `sgrp_${nanoid(8)}`) {
+  const grouped = withShinyGroupId(payload, newGroupId)
+  const lead = grouped.slides[0]
+  return {
+    ...grouped,
+    slides: [buildShinyTitleSlide(fmt, lead?.data?.shinyGroupId, lead?.roundId), ...grouped.slides],
+  }
+}
+
+// The same grouping without the title card — for the one path that skips the
+// announce beat: a round built entirely from one shiny format only introduces
+// that format once (AddSlideWizard's formatAlreadyIntroducedThisRound). Those
+// later questions still need a shinyGroupId, or they'd be loose slides that
+// nothing groups (sidebar rows, atomic reorder, the PYL title-jump) — and
+// `shiny-title` is hidden in the picker, so no UI path could add one after
+// the fact.
+export function withShinyGroupId(payload, newGroupId = () => `sgrp_${nanoid(8)}`) {
   const { afterSlideId, slides, ...single } = payload
   const content = slides ?? [single]
   const groupId = content[0]?.data?.shinyGroupId ?? newGroupId()
-  const stamped = content.map(s => ({ ...s, data: { ...s.data, shinyGroupId: groupId } }))
   return {
     afterSlideId,
-    slides: [buildShinyTitleSlide(fmt, groupId, content[0]?.roundId), ...stamped],
+    slides: content.map(s => ({ ...s, data: { ...s.data, shinyGroupId: groupId } })),
   }
 }
