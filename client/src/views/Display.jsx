@@ -1559,7 +1559,9 @@ export default function Display() {
             console.warn('[Display] realtime channel dropped:', status, '— rejoining in 1.5s')
             clearTimeout(retryTimer)
             retryTimer = setTimeout(() => {
-              supabase.removeChannel(channel)
+              const old = channel
+              channel = null
+              supabase.removeChannel(old)
               subscribe(showId)
             }, 1500)
           }
@@ -1570,7 +1572,13 @@ export default function Display() {
     subscribe(show.id)
     return () => {
       clearTimeout(retryTimer)
-      if (channel) supabase.removeChannel(channel)
+      // Null before removeChannel() so its synchronous CLOSED echo can't
+      // re-arm retryTimer after the clearTimeout above — otherwise the orphan
+      // timer builds a channel nobody owns 1.5s after teardown (2026-09-01,
+      // same bug as Join.jsx's scores-drawer effect, Sentry TRIVIA-OS-2/3).
+      const c = channel
+      channel = null
+      if (c) supabase.removeChannel(c)
     }
   }, [show?.id])
 
