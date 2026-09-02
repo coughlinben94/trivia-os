@@ -11,7 +11,9 @@
 
 import { test, expect } from '@playwright/test'
 
-const SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID || 'show_fQtKIq7M'
+// show_fQtKIq7M no longer exists in the DB (2026-09-02) — was silently breaking
+// global-setup.js for every spec in this suite. show_NyRe6x2Q is real, verified.
+const SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID || 'show_NyRe6x2Q'
 
 function attachErrors(page) {
   const errors = []
@@ -60,12 +62,17 @@ test('Dashboard: type cards render including Winner Reveal', async ({ page }) =>
   await seedShow(page)
   await page.goto('/host', { waitUntil: 'networkidle' })
   await expect(page.getByText('Go Live →')).toBeVisible({ timeout: 10000 })
-  await expect(page.getByText('State of the Union')).toBeVisible()
-  await expect(page.getByText('Winner Reveal')).toBeVisible()
-  await expect(page.getByText('Grading Break')).toBeVisible()
-  await expect(page.getByText('Question Database')).toBeVisible()
-  await expect(page.getByText('Music Library')).toBeVisible()
-  await expect(page.getByText('Album Transitions')).toBeVisible()
+  // Scoped to main (2026-09-02, fallout of the show_NyRe6x2Q default swap, fix A above):
+  // that show's sidebar already has a real "State of the Union" slide, so an unscoped
+  // getByText now matches it too and trips Playwright's strict-mode duplicate check.
+  // main is where the dashboard's own type-card grid actually lives.
+  const dashboard = page.locator('main')
+  await expect(dashboard.getByText('State of the Union')).toBeVisible()
+  await expect(dashboard.getByText('Winner Reveal')).toBeVisible()
+  await expect(dashboard.getByText('Grading Break')).toBeVisible()
+  await expect(dashboard.getByText('Question Database')).toBeVisible()
+  await expect(dashboard.getByText('Music Library')).toBeVisible()
+  await expect(dashboard.getByText('Album Transitions')).toBeVisible()
   expect(errors, `JS errors:\n${errors.join('\n')}`).toHaveLength(0)
 })
 
@@ -79,13 +86,17 @@ test('Display: /display loads and renders without errors', async ({ page }) => {
 })
 
 // ── 6. Display: no connection-lost state after realtime subscribe ─────────────
+// FIXED 2026-09-02 (review): the pageerror listener used to attach AFTER goto +
+// a 3s settle, then watch only a 1s window — any error during load or the
+// realtime subscribe handshake itself was already gone before anyone was
+// listening. Structurally could not fail. attachErrors() now runs before
+// navigation, same as every other test in this file, and the wait covers the
+// actual subscribe handshake instead of an already-quiet tail end.
 test('Display: no disconnect state after realtime subscribe', async ({ page }) => {
+  const errors = attachErrors(page)
   await page.goto(`/display?show=${SHOW_ID}`, { waitUntil: 'networkidle' })
   await expect(page.locator('body')).toBeVisible()
+  // Give the realtime channel time to complete its subscribe handshake.
   await page.waitForTimeout(3000)
-  // Display doesn't have the same banner, but should have no pageerrors
-  const errors = []
-  page.on('pageerror', e => errors.push(e.message))
-  await page.waitForTimeout(1000)
-  expect(errors).toHaveLength(0)
+  expect(errors, `JS errors:\n${errors.join('\n')}`).toHaveLength(0)
 })
