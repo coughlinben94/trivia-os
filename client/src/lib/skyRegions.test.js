@@ -2,6 +2,32 @@ import { describe, it, expect } from 'vitest'
 import { skyRegionWeights, applySkyTints, skyRegionHues, accentCompanionHue, SKY_REGIONS } from './ringPrimitives.js'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 
+// Frozen snapshot of the Midnight Galaxy palette as shipped 2026-09-02 — only
+// the fields these functions read. The hue tests below are tests OF THE
+// FUNCTIONS, so they pin the fixture, not the live world: scripts/ring-recolor.mjs
+// rewrites every hue in midnightGalaxy.ring.js (and the shipped-values guard in
+// midnightGalaxy.ring.test.js along with it, on purpose), and a recolor must not
+// turn `npm run test:unit` — the ship gate, and the script's own printed next
+// step — red. Layout assertions still read the live world: station order and
+// region membership are palette-independent, and a recolor must not silently
+// move them.
+const SHIPPED_STATIONS = [
+  { key: 'ringed planet', hue: 256, accent: false },
+  { key: 'spiral galaxy', hue: 170, accent: false },
+  { key: 'star cluster', hue: 268, accent: false },
+  { key: 'amber planet', hue: 28, accent: true },
+  { key: 'lit planet', hue: 140, accent: false, region: 'aurora' },
+  { key: 'pulsar', hue: 120, accent: false, region: 'aurora', regionSource: true },
+  { key: 'rose nebula', hue: 330, accent: true },
+  { key: 'comet', hue: 208, accent: false },
+  { key: 'binary pair', hue: 214, accent: false },
+  { key: 'asteroid field', hue: 160, accent: false },
+  { key: 'record', hue: 300, accent: false, region: 'disco', regionSource: true },
+  { key: 'aurora ribbon', hue: 196, accent: false },
+  { key: 'supernova', hue: 36, accent: true, region: 'ember', regionSource: true },
+]
+const SHIPPED_ANCHORS = [{ deg: 276, window: 25 }, { deg: 214, window: 25 }, { deg: 140, window: 25 }]
+
 // The one piece of real logic in the sky-region system: the weight curve is
 // DERIVED from cyclic index distance, never hand-authored per station. If
 // someone re-authors it per station, or the wrap breaks, these fail.
@@ -89,8 +115,11 @@ describe('skyRegionWeights', () => {
     expect(R(w[9].disco)).toBe(0.25)     // approach
     expect(R(w[11].disco)).toBe(0.5)     // exit — stacks with ember's 0.25 approach
     expect(midnightGalaxyRing.stations[10]).toMatchObject({
-      key: 'record', prim: 'record', hue: 300, region: 'disco', regionSource: true,
+      key: 'record', prim: 'record', region: 'disco', regionSource: true,
     })
+    // The record's own hue is a palette value, so it is pinned on the frozen
+    // fixture — midnightGalaxy.ring.test.js guards the live one.
+    expect(SHIPPED_STATIONS[10]).toMatchObject({ key: 'record', hue: 300 })
   })
 
   // The reason the curve changed. Ben, on the sky work: panning must "ALWAYS
@@ -141,12 +170,20 @@ describe('applySkyTints transition handling', () => {
 // carries the sky and the accent companions with it instead of leaving them
 // pointing at the old world's colours.
 describe('skyRegionHues', () => {
+  // The one thing a frozen fixture can silently get wrong is going stale.
+  // Key order and region wiring are palette-independent, so a recolor leaves
+  // this green while a real layout change turns it red.
+  it('the frozen fixture still matches the live world it snapshots', () => {
+    expect(SHIPPED_STATIONS.map(s => [s.key, s.region, s.regionSource, s.accent])).toEqual(
+      midnightGalaxyRing.stations.map(s => [s.key, s.region, s.regionSource, s.accent]))
+  })
+
   it('reproduces the shipped region hues from the shipped station data', () => {
-    expect(skyRegionHues(midnightGalaxyRing.stations)).toEqual({ aurora: 152, ember: 26, disco: 300 })
+    expect(skyRegionHues(SHIPPED_STATIONS)).toEqual({ aurora: 152, ember: 26, disco: 300 })
   })
 
   it('follows the source station when its hue moves', () => {
-    const stations = midnightGalaxyRing.stations.map(s => s.key === 'pulsar' ? { ...s, hue: 10 } : s)
+    const stations = SHIPPED_STATIONS.map(s => s.key === 'pulsar' ? { ...s, hue: 10 } : s)
     expect(skyRegionHues(stations).aurora).toBe(42)
   })
 
@@ -168,7 +205,7 @@ describe('skyRegionHues', () => {
 })
 
 describe('accentCompanionHue', () => {
-  const anchors = midnightGalaxyRing.hueAnchors // 276, 214, 140
+  const anchors = SHIPPED_ANCHORS // 276, 214, 140
 
   it('picks the anchor farthest from the station hue', () => {
     expect(accentCompanionHue(28, anchors)).toBe(214)   // amber planet
@@ -189,9 +226,9 @@ describe('accentCompanionHue', () => {
   // The shipped world may not visibly change: every accent companion has to
   // land within 18 degrees of the +168 it used to be hardcoded to.
   it('shifts the shipped accent companions by no more than 18 degrees', () => {
-    for (const st of midnightGalaxyRing.stations.filter(s => s.accent)) {
+    for (const st of SHIPPED_STATIONS.filter(s => s.accent)) {
       const was = (st.hue + 168) % 360
-      const now = accentCompanionHue(st.hue, midnightGalaxyRing.hueAnchors)
+      const now = accentCompanionHue(st.hue, SHIPPED_ANCHORS)
       expect(Math.abs((((now - was) % 360) + 540) % 360 - 180)).toBeLessThanOrEqual(18)
     }
   })
