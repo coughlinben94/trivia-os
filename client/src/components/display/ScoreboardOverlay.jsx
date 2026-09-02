@@ -50,9 +50,34 @@ const SPLIT_TEAM_THRESHOLD = 9
 // 2026-08-26 "top team's row is taller and misplaced" report (see TeamRow)
 // was this same collapse seen at 10+ teams — the overflow:hidden added then
 // only hid the totals it pushed out of view.
-export function gridTemplate(roundCount) {
+//
+// The cqw unit is scoped to the STAGE (container-type: size lives on the
+// outer stage, not on each split-mode half — see the two-column render
+// below), never re-scoped per column. So a track width written as "33cqw"
+// always means 33% of the FULL STAGE, even inside a half-width split
+// column. In split mode two columns sit side by side with a 1.4cqw gap
+// between them, leaving each one (100 - 1.4) / 2 = 49.3cqw wide — but the
+// un-scaled template asked for 3.4 + 33 + 9 = 45.4cqw of fixed track width
+// alone, before the round-cell/rank/name internal padding and borders
+// TeamRow adds on top. That's most of the 49.3cqw available before a
+// single character of name text is drawn, and it explains the second live
+// failure once the repeat(0,…) collapse above was fixed (2026-09-01, Ben:
+// "half the names are cut off", "no scores showing" — the row's real
+// rendered width exceeded its column's overflow:hidden box, clipping
+// whatever fell past the right edge, i.e. the total and the tail of long
+// names). Scaling the three fixed tracks by the same 0.493 the columns
+// actually get keeps the ROW's proportions identical, just resized to fit
+// the box it's actually in — non-split mode is untouched (scale 1, same
+// output as before this fix).
+const SPLIT_COLUMN_SCALE = (100 - 1.4) / 2 / 100 // = 0.493
+
+export function gridTemplate(roundCount, isSplit = false) {
+  const scale = isSplit ? SPLIT_COLUMN_SCALE : 1
+  const rank = +(3.4 * scale).toFixed(2)
+  const nameMax = +(33 * scale).toFixed(2)
+  const total = +(9 * scale).toFixed(2)
   const rounds = Array.from({ length: roundCount }, () => 'minmax(0, 1fr)').join(' ')
-  return `3.4cqw minmax(0, 33cqw) ${rounds ? `${rounds} ` : ''}9cqw`
+  return `${rank}cqw minmax(0, ${nameMax}cqw) ${rounds ? `${rounds} ` : ''}${total}cqw`
 }
 
 // ─── Count-up total ────────────────────────────────────────────────────────
@@ -265,8 +290,9 @@ function ScoreboardContent({ show }) {
   const half = Math.ceil(ranked.length / 2)
   const columns = isSplit ? [ranked.slice(0, half), ranked.slice(half)] : [ranked]
   const m = gridMetrics(isSplit ? half : ranked.length)
-  // Split mode drops the round columns (see gridTemplate above).
-  const template = gridTemplate(splitCols.length)
+  // Split mode drops the round columns and scales the fixed tracks down to
+  // its actual half-width box (see gridTemplate above).
+  const template = gridTemplate(splitCols.length, isSplit)
 
   const displayFont = `'${theme.fonts.display}', 'Boogaloo', sans-serif`
   const bodyFont = `'${theme.fonts.body}', 'DM Sans', sans-serif`
