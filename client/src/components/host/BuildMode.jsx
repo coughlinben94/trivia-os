@@ -858,7 +858,14 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                   // it's the normal single-slide shape.
                   const slidesData = slides ?? [rest]
                   const newSlides = await actions.addSiblingSlides(afterSlideId, slidesData)
-                  const slide = newSlides?.[0]
+                  // Open the editor on the first CONTENT slide, not the
+                  // `shiny-title` announce card that now leads every shiny
+                  // batch (SPEC.md 2026-09-01) — landing on the title meant
+                  // every shiny creation opened an editor for a card with
+                  // nothing to fill in, with the question itself hidden
+                  // inside a collapsed sidebar group (RoundSidebar starts
+                  // groups collapsed).
+                  const slide = newSlides?.find(s => s.type !== 'shiny-title') ?? newSlides?.[0]
                   if (!slide) return
                   // PYL shiny-theme queue (2026-08-19): more themes still
                   // need a format picked — reopen for the next one instead
