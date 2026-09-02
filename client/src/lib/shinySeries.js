@@ -291,3 +291,17 @@ export function withShinyGroupId(payload, newGroupId = () => `sgrp_${nanoid(8)}`
     slides: content.map(s => ({ ...s, data: { ...s.data, shinyGroupId: groupId } })),
   }
 }
+
+// Where a hard jump to `targetId` should actually land (PylRevealSlide's
+// Theme Picker board rows). A board row points at a theme's first CONTENT
+// slide — the `shiny-title` announce card now sits immediately before it, so
+// jumping to the target itself would silently skip the card the jump is
+// meant to open with. Backs up one slot when the slide before the target is
+// the title of the target's OWN group. Returns -1 when the id isn't there.
+export function resolveJumpIndex(sorted, targetId) {
+  const idx = sorted.findIndex(s => s.id === targetId)
+  if (idx <= 0) return idx
+  const prev = sorted[idx - 1]
+  const sameGroup = !!sorted[idx].data?.shinyGroupId && prev.data?.shinyGroupId === sorted[idx].data.shinyGroupId
+  return prev.type === 'shiny-title' && sameGroup ? idx - 1 : idx
+}

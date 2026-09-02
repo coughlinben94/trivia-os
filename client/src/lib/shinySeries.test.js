@@ -10,6 +10,7 @@ import {
   buildShinyTitleSlide,
   withShinyTitleSlide,
   withShinyGroupId,
+  resolveJumpIndex,
 } from './shinySeries.js'
 
 function seriesSlide(id, overrides = {}) {
@@ -455,5 +456,35 @@ describe('withShinyGroupId (title-less grouping)', () => {
 
     const pre = [{ type: 'question', roundId: 'round_1', data: { isShiny: true, shinyGroupId: 'sgrp_run' } }]
     expect(withShinyGroupId({ afterSlideId: null, slides: pre }, fixedId).slides[0].data.shinyGroupId).toBe('sgrp_run')
+  })
+})
+
+describe('resolveJumpIndex', () => {
+  // A PYL Theme Picker row's targetSlideId points at the theme's first
+  // CONTENT slide. Since the announce beat became its own `shiny-title`
+  // slide sitting before it, jumping straight to the target would skip the
+  // announce card the board jump is supposed to open with.
+  const title = (id, gid) => ({ id, type: 'shiny-title', data: { isShiny: true, shinyGroupId: gid } })
+  const q = (id, gid) => ({ id, type: 'question', data: { isShiny: true, shinyGroupId: gid } })
+
+  it('lands on the title card when it leads the target\'s own group', () => {
+    const sorted = [{ id: 'board', type: 'pyl-reveal', data: {} }, title('t1', 'g1'), q('q1', 'g1'), q('q2', 'g1')]
+    expect(resolveJumpIndex(sorted, 'q1')).toBe(1)
+  })
+
+  it('lands on the target itself when nothing precedes it, or the slide before is not its title', () => {
+    expect(resolveJumpIndex([q('q1', 'g1')], 'q1')).toBe(0)
+    // a title belonging to a DIFFERENT group is not this target's announce card
+    const other = [title('t1', 'g1'), q('qA', 'g1'), q('q1', 'g2')]
+    expect(resolveJumpIndex(other, 'q1')).toBe(2)
+    // and a plain slide before the target is left alone
+    const plain = [{ id: 'x', type: 'question', data: {} }, q('q1', 'g1')]
+    expect(resolveJumpIndex(plain, 'q1')).toBe(1)
+  })
+
+  it('stays put when the target IS the title card, and returns -1 for an unknown id', () => {
+    const sorted = [title('t1', 'g1'), q('q1', 'g1')]
+    expect(resolveJumpIndex(sorted, 't1')).toBe(0)
+    expect(resolveJumpIndex(sorted, 'nope')).toBe(-1)
   })
 })
