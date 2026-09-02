@@ -17,10 +17,25 @@
 //
 // Env: VITE_SUPABASE_URL + a key, read from .env.local at the repo root
 // (same file the e2e specs and the migration script read), overridable
-// from the environment. `questions` and `phone_answers` have RLS that
-// restricts SELECT to a host_verified JWT, so the anon key returns zero
-// rows for them rather than erroring — set SUPABASE_SERVICE_ROLE_KEY to
-// capture those two. Every other table reads fine with the anon key.
+// from the environment.
+//
+// `questions` and `phone_answers` restrict SELECT to a host_verified JWT.
+// With the plain anon key they come back as ZERO ROWS AND NO ERROR —
+// measured, not assumed: `select id, head:true` returns count 0 before
+// verification and 1,998 after. That silent-empty shape is why those two
+// are reported as SKIPPED rather than written as `[]`, which would look
+// like a real backup of an empty table.
+//
+// Two ways to unlock them, in the order this script tries them:
+//   1. SUPABASE_SERVICE_ROLE_KEY in the environment — bypasses RLS.
+//   2. The host PIN (TRIVIA_HOST_PIN, or PLAYWRIGHT_HOST_PIN which is
+//      already in .env.local). The script signs in anonymously and calls
+//      the verify-host-pin Edge Function, which elevates that session's
+//      app_metadata exactly as the browser's PIN gate does. No key to go
+//      find, so this is the path a cron job can actually use.
+//      Side effect worth knowing: each run creates one anonymous auth
+//      user. Supabase's own guidance is to prune anonymous users
+//      periodically; a nightly backup adds ~365 a year.
 //
 // Exit codes: 0 every attempted table was captured (tables skipped for a
 // missing service key still count as 0 — the summary line names them); 1
@@ -88,6 +103,7 @@ function parseEnvFile(path) {
 const env = { ...parseEnvFile(join(__dirname, '..', '.env.local')), ...process.env }
 const url = env.VITE_SUPABASE_URL
 const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY
+const hostPin = env.TRIVIA_HOST_PIN || env.PLAYWRIGHT_HOST_PIN
 const key = serviceKey || env.VITE_SUPABASE_ANON_KEY
 if (!url || !key) {
   console.error('Missing VITE_SUPABASE_URL / key — see the header comment.')
@@ -111,6 +127,23 @@ const outDir = join(baseDir, stamp)
 
 const sb = createClient(url, key, { auth: { persistSession: false } })
 
+// Returns true once this client's session carries host_verified, which is
+// what the RLS policies on questions/phone_answers actually check. Same
+// two steps HostPinGate.jsx performs in the browser: invoke the Edge
+// Function, then refresh so the new app_metadata lands in the JWT.
+async function elevateWithPin(pin) {
+  const { error: authErr } = await sb.auth.signInAnonymously()
+  if (authErr) throw new Error(`anonymous sign-in failed: ${authErr.message}`)
+  const { data, error: fnErr } = await sb.functions.invoke('verify-host-pin', { body: { pin } })
+  if (fnErr) throw new Error(`verify-host-pin unreachable: ${fnErr.message}`)
+  if (!data?.ok) throw new Error(`host PIN rejected: ${data?.error ?? 'unknown reason'}`)
+  const { data: refreshed } = await sb.auth.refreshSession()
+  if (refreshed?.session?.user?.app_metadata?.host_verified !== true) {
+    throw new Error('PIN accepted but the session is still not host_verified')
+  }
+  return true
+}
+
 async function fetchAll(table) {
   // .order('id') is load-bearing, not tidiness: Postgres guarantees no row
   // order between two separate range requests, so an unordered scan can
@@ -129,13 +162,29 @@ const log = (...a) => { if (!quiet) console.log(...a) }
 async function main() {
   mkdirSync(outDir, { recursive: true })
   log(`Trivia OS backup -> ${outDir}`)
-  log(serviceKey ? '  key: service role (all tables)' : '  key: anon (questions/phone_answers will be skipped)')
+
+  // Decide up front whether the RLS-locked tables are reachable, so the
+  // per-table loop below never has to guess.
+  let unlocked = !!serviceKey
+  let how = serviceKey ? 'service role' : 'anon'
+  if (!unlocked && hostPin) {
+    try {
+      await elevateWithPin(hostPin)
+      unlocked = true
+      how = 'anon + host PIN'
+    } catch (e) {
+      // Not fatal: the five open tables are still worth capturing, and the
+      // two locked ones will be reported as skipped rather than emptied.
+      log(`  note: host PIN elevation failed (${e.message}) — locked tables will be skipped`)
+    }
+  }
+  log(`  auth: ${how}${unlocked ? ' (all tables)' : ' (questions/phone_answers will be skipped)'}`)
   log('')
 
   const results = []
   for (const { name, rlsLocked } of TABLES) {
-    if (rlsLocked && !serviceKey) {
-      log(`  SKIP  ${name.padEnd(17)} needs SUPABASE_SERVICE_ROLE_KEY`)
+    if (rlsLocked && !unlocked) {
+      log(`  SKIP  ${name.padEnd(17)} needs SUPABASE_SERVICE_ROLE_KEY or the host PIN`)
       results.push({ name, status: 'skipped' })
       continue
     }
@@ -163,14 +212,14 @@ async function main() {
   writeFileSync(join(outDir, 'manifest.json'), JSON.stringify({
     takenAt: new Date().toISOString(),
     project: EXPECTED_PROJECT,
-    keyKind: serviceKey ? 'service_role' : 'anon',
+    auth: how,
     tables: results,
   }, null, 2))
 
   console.log(
     `${failed.length ? 'INCOMPLETE' : 'Backup complete'}: ` +
     `${ok.length}/${TABLES.length} tables, ${totalRows} rows -> ${outDir}` +
-    (skipped.length ? ` (${skipped.length} skipped: no service key)` : '') +
+    (skipped.length ? ` (${skipped.length} skipped: no service key or host PIN)` : '') +
     (failed.length ? ` — FAILED: ${failed.map(f => f.name).join(', ')}` : '')
   )
   if (failed.length) process.exit(2)
