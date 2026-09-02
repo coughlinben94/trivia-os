@@ -15,9 +15,13 @@
 // apply this — set SUPABASE_SERVICE_ROLE_KEY in the environment (or add it
 // to .env.local; it is NOT there today). Dry runs work with the anon key.
 //
-// Refuses to write while the show is live (is_live = true) unless --force
-// is also passed: inserting slides shifts current_slide_index under a
-// running show. Run it after the show ends.
+// Refuses to write to a show touched in the last 2 hours unless --force is
+// also passed: inserting slides shifts current_slide_index under a running
+// show. The guard is recency (shows.updated_at), NOT is_live — nothing in
+// the app ever writes is_live back to false (LiveMode's exit is local UI
+// state), so every show that has ever gone live reads as live forever and
+// an is_live guard would refuse every write, making --force the habit.
+// Run it after the show ends.
 //
 // Idempotent — re-running on a migrated show reports "nothing to do".
 // The transform itself is client/src/lib/shinyTitleMigration.js (unit
@@ -58,17 +62,24 @@ if (write && !env.SUPABASE_SERVICE_ROLE_KEY) {
 }
 const sb = createClient(url, key, { auth: { persistSession: false } })
 
-const { data: show, error } = await sb.from('shows').select('id, title, is_live, slides, current_slide_id').eq('id', showId).single()
+const { data: show, error } = await sb.from('shows').select('id, title, updated_at, slides, current_slide_id').eq('id', showId).single()
 if (error || !show) { console.error('Could not load show:', error?.message ?? 'not found'); process.exit(1) }
 
+const RECENT_MS = 2 * 60 * 60 * 1000
+const updatedAgoMs = show.updated_at ? Date.now() - new Date(show.updated_at).getTime() : Infinity
+const recentlyTouched = updatedAgoMs < RECENT_MS
+
 const result = migrateShinyTitleSlides(show.slides ?? [])
-console.log(`${show.title ?? show.id} (${show.id}) — ${show.slides?.length ?? 0} slides, live: ${!!show.is_live}`)
+console.log(`${show.title ?? show.id} (${show.id}) — ${show.slides?.length ?? 0} slides, last updated: ${show.updated_at ?? 'unknown'}`)
 if (!result.changed) { console.log('Already migrated — nothing to do.'); process.exit(0) }
 for (const t of result.inserted) console.log(`  + shiny-title "${t.title}" before ${t.before} (${t.members} member${t.members === 1 ? '' : 's'})`)
 console.log(`  ${result.inserted.length} title slide(s) to insert, ${result.stripped} slide(s) to strip introDone/outroShown from, ${result.stamped} legacy slide(s) to stamp a shinyGroupId on`)
 
 if (!write) { console.log('Dry run — pass --write to apply.'); process.exit(0) }
-if (show.is_live && !force) { console.error('Show is LIVE — refusing to write. Pass --force to override.'); process.exit(1) }
+if (recentlyTouched && !force) {
+  console.error(`Show was updated ${Math.round(updatedAgoMs / 60000)} min ago (< 2h) — it may be mid-show. Refusing to write. Pass --force to override.`)
+  process.exit(1)
+}
 
 // Keep current_slide_index pointing at the same slide it did before the
 // inserts shifted everything after them.
