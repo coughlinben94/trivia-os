@@ -68,6 +68,41 @@ describe('fetchAllPages', () => {
     await expect(fetchAllPages(flaky, 1000)).rejects.toThrow('timeout')
   })
 
+  it('throws when a row repeats across pages instead of returning a corrupt set', async () => {
+    // What an unordered Postgres scan actually does: the same row drifts
+    // into a second page while another is never served. Returning these
+    // rows would be a backup that looks clean and silently lost a row.
+    const pages = [
+      [{ id: 1 }, { id: 2 }],
+      [{ id: 2 }, { id: 4 }],
+    ]
+    let n = 0
+    const drifting = async () => ({ data: pages[n++] ?? [], error: null })
+    await expect(fetchAllPages(drifting, 2)).rejects.toThrow(/came back twice/)
+  })
+
+  it('names the offending id and the missing .order() in the message', async () => {
+    const pages = [[{ id: 'show_abc' }], [{ id: 'show_abc' }]]
+    let n = 0
+    const dupe = async () => ({ data: pages[n++] ?? [], error: null })
+    await expect(fetchAllPages(dupe, 1)).rejects.toThrow(/show_abc.*\.order\('id'\)/)
+  })
+
+  it('allows a repeated id when the caller opts out of the check', async () => {
+    const pages = [[{ id: 1 }], [{ id: 1 }], []]
+    let n = 0
+    const dupe = async () => ({ data: pages[n++] ?? [], error: null })
+    expect(await fetchAllPages(dupe, 1, { idKey: null })).toHaveLength(2)
+  })
+
+  it('ignores rows with no id rather than treating them as duplicates', async () => {
+    // Two id-less rows are not evidence of unstable paging.
+    const pages = [[{ name: 'a' }, { name: 'b' }], []]
+    let n = 0
+    const noIds = async () => ({ data: pages[n++] ?? [], error: null })
+    expect(await fetchAllPages(noIds, 2)).toHaveLength(2)
+  })
+
   it('rejects a nonsense page size rather than looping forever', async () => {
     await expect(fetchAllPages(async () => ({ data: [], error: null }), 0)).rejects.toThrow('positive integer')
   })

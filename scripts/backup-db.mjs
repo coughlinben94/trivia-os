@@ -24,8 +24,17 @@
 //
 // Exit codes: 0 every attempted table was captured (tables skipped for a
 // missing service key still count as 0 — the summary line names them); 1
-// could not start (no url/key, wrong Supabase project, bad --out); 2 at
-// least one table errored, so a cron job can alert on it.
+// bad arguments or config (no url/key, wrong Supabase project, --out with
+// no value); 2 anything that went wrong once the run had started,
+// including an unwritable destination, so a cron job can alert on it.
+//
+// What this does NOT capture, so a restore is planned with open eyes:
+// storage buckets (trivia-host-photos / trivia-show-media / trivia-fonts —
+// every uploaded image, clip and font), the schema itself (replay
+// supabase/migrations/ first, then load these rows), RLS policies and
+// RPCs, and auth.users (teams.owner_uid would point at users that no
+// longer exist). There is no restore script; these files are the raw
+// material for one, and manifest.json says which tables are trustworthy.
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -48,6 +57,9 @@ if (outFlag !== -1 && !args[outFlag + 1]) {
 // 20260817193000) — with only the anon key those come back as zero rows,
 // which is indistinguishable from an empty table, so they are reported as
 // SKIPPED rather than silently written as `[]` over a good prior backup.
+// Deliberately absent: host_pin_attempts and team_reauth_tokens. Both are
+// short-lived security state (brute-force counters, 15-minute tokens),
+// deny-all to every client, and worth nothing in a restore.
 const TABLES = [
   { name: 'shows' },
   { name: 'teams' },
@@ -100,8 +112,14 @@ const outDir = join(baseDir, stamp)
 const sb = createClient(url, key, { auth: { persistSession: false } })
 
 async function fetchAll(table) {
+  // .order('id') is load-bearing, not tidiness: Postgres guarantees no row
+  // order between two separate range requests, so an unordered scan can
+  // repeat one row across a page boundary and drop another — a silently
+  // corrupt backup. Every table here has an `id`. fetchAllPages also
+  // throws if it ever sees a duplicate id, so a future table without one
+  // fails loudly instead of quietly.
   return fetchAllPages(
-    (from, to) => sb.from(table).select('*').range(from, to),
+    (from, to) => sb.from(table).select('*').order('id').range(from, to),
     PAGE,
   )
 }
