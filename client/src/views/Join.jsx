@@ -2017,7 +2017,9 @@ export default function Join() {
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
             clearTimeout(retryTimer)
             retryTimer = setTimeout(() => {
-              supabase.removeChannel(channel)
+              const old = channel
+              channel = null
+              supabase.removeChannel(old)
               subscribe(showId)
             }, 1500)
           }
@@ -2028,7 +2030,12 @@ export default function Join() {
     subscribe(show.id)
     return () => {
       clearTimeout(retryTimer)
-      if (channel) supabase.removeChannel(channel)
+      // Null before removeChannel() so its synchronous CLOSED echo can't
+      // re-arm retryTimer after the clearTimeout — see the scores-drawer
+      // effect below for the full story (2026-09-01).
+      const c = channel
+      channel = null
+      if (c) supabase.removeChannel(c)
     }
   }, [show?.id])
 
@@ -2068,7 +2075,9 @@ export default function Join() {
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
             clearTimeout(retryTimer)
             retryTimer = setTimeout(() => {
-              supabase.removeChannel(channel)
+              const old = channel
+              channel = null
+              supabase.removeChannel(old)
               subscribeScores(showId)
             }, 1500)
           }
@@ -2078,7 +2087,18 @@ export default function Join() {
     subscribeScores(show.id)
     return () => {
       clearTimeout(retryTimer)
-      if (channel) supabase.removeChannel(channel)
+      // Null `channel` BEFORE removeChannel() (2026-09-01, Sentry TRIVIA-OS-2/3,
+      // live show): removeChannel() fires CLOSED synchronously into this
+      // generation's status callback. With `channel` still pointing at it the
+      // `channel !== myChannel` guard passed, and the CLOSED branch re-armed
+      // retryTimer AFTER the clearTimeout above. That orphan timer fired 1.5s
+      // after the drawer closed and built a channel nobody owned. Reopening the
+      // drawer then got that zombie back from supabase.channel() (same topic ⇒
+      // same object, already joined) and `.on('postgres_changes')` threw
+      // "cannot add callbacks after subscribe()", uncaught, crashing the phone.
+      const c = channel
+      channel = null
+      if (c) supabase.removeChannel(c)
     }
   }, [scoresDrawerOpen, show?.id])
 
