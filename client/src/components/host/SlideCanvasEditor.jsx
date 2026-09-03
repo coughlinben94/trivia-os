@@ -34,6 +34,7 @@ import ParticleBackground from '../display/ParticleBackground.jsx'
 import { DISPLAY_FONTS } from './ThemeCustomizeControls.jsx'
 import { EASE_OUT } from '../../lib/easings.js'
 import { SHINY_GOLD } from '../../lib/shinyGold.js'
+import CanvasIframe from './CanvasIframe.jsx'
 
 // The TV's real resolution, and it must stay that. Region transforms
 // (`_regionTransforms.fontSizePx` / `dx` / `dy`) are stored in CANVAS pixels
@@ -940,10 +941,10 @@ export default function SlideCanvasEditor({
         <div style={{ width: scaledW, height: scaledH, position: 'relative', flexShrink: 0 }}>
           {/* Clipped, scaled canvas — the SAME render tree as /display */}
           <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-            <div ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${dynScale})`, transformOrigin: 'top left', overflow: 'hidden', containerType: 'size', background: theme.colors.bg }}>
+            <CanvasIframe ref={canvasRef} width={INNER_W} height={INNER_H} scale={dynScale} background={theme.colors.bg}>
               <ParticleBackground theme={theme} />
               <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} isPreview />
-            </div>
+            </CanvasIframe>
           </div>
 
           {/* Interactive overlay — overflow visible so handles aren't clipped.
