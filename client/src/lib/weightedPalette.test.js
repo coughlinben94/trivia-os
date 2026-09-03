@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   hexToHslHue, hueDelta, allocate, spread, hueLadder, lumaProxy,
-  atLightness, derivePalette,
+  atLightness, derivePalette, rotateOklabHue, projectLadderOffset,
 } from './weightedPalette.js'
 import { rgbToOklab, oklabToRgb, hexToRgb } from './oklab.js'
 
@@ -110,6 +110,48 @@ describe('hueLadder', () => {
   })
   it('centres a lone station on its anchor', () => {
     expect(hueLadder(1, 18)).toEqual([0])
+  })
+})
+
+describe('projectLadderOffset', () => {
+  it('keeps yellow inside gold — never reaches chartreuse (68)', () => {
+    // The bug this phase fixes: the old fixed +/-18 HSL ladder put station 3
+    // at HSL 68 (chartreuse). Measured here, not assumed (rule zero) — the
+    // OKLCH projection is asymmetric around yellow (its OKLab hue sits closer
+    // to orange than to green), so the fix bounds the GREEN-ward (+) side,
+    // where the bug actually was; the orange-ward (-) side moves further but
+    // toward orange, never toward green.
+    expect(projectLadderOffset('#ffd400', 18)).toBeLessThanOrEqual(13)
+  })
+
+  // Frozen copy of WorldPaletteEditor.jsx's PRESETS, 2026-09-02 — every rung
+  // of every preset must land inside spec section 4's +/-25 window.
+  const PRESET_HEXES = [
+    '#a855f7', '#3b82f6', '#8b5cf6', '#ec4899', '#3b82f6', '#14b8a6',
+    '#f59e0b', '#f43f5e', '#10b981', '#6366f1', '#dc2626', '#eab308',
+  ]
+  it.each(PRESET_HEXES)('stays inside +/-25 for every preset anchor: %s', hex => {
+    for (const off of [-18, -12, -6, 0, 6, 12, 18]) {
+      expect(Math.abs(projectLadderOffset(hex, off))).toBeLessThanOrEqual(25)
+    }
+  })
+
+  it('is the identity at offset 0 for any anchor', () => {
+    for (const hex of ['#ffd400', '#ff2200', '#3b82f6', '#a855f7', '#111111']) {
+      expect(projectLadderOffset(hex, 0)).toBe(0)
+    }
+  })
+
+  it('does not collapse the projection to a single step (blue spans a real range)', () => {
+    const hi = projectLadderOffset('#3b82f6', 18)
+    const lo = projectLadderOffset('#3b82f6', -18)
+    expect(hi - lo).toBeGreaterThanOrEqual(25)
+  })
+})
+
+describe('rotateOklabHue', () => {
+  it('leaves a neutral untouched — no hue to rotate', () => {
+    expect(rotateOklabHue('#ffffff', 90)).toBe('#ffffff')
   })
 })
 

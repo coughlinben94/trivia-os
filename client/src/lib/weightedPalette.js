@@ -174,6 +174,21 @@ function labToHex([r, g, b]) {
   return '#' + [r, g, b].map(v => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0')).join('')
 }
 
+// Binary-search chroma down from (a, b) at fixed L only as far as sRGB
+// requires — the gamut-mapping step atLightness, withHueOf and
+// rotateOklabHue all share (channel-clipping any one of them hue-shifts or
+// washes the colour out; see withHueOf's header for the documented bug).
+function fitChroma(L, a, b) {
+  if (inGamut([L, a, b])) return [a, b]
+  let lo = 0, hi = 1
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2
+    if (inGamut([L, a * mid, b * mid])) lo = mid
+    else hi = mid
+  }
+  return [a * lo, b * lo]
+}
+
 // Set a colour's OKLab lightness while keeping its hue, gamut-mapping the
 // chroma. Teleporting L while holding chroma fixed can leave sRGB — and a
 // naive channel clip then hue-shifts or washes the colour out, which is
@@ -185,17 +200,32 @@ function labToHex([r, g, b]) {
 export function atLightness(hex, targetHex) {
   const [, a, b] = rgbToOklab(hexToRgb(hex))
   const [L] = rgbToOklab(hexToRgb(targetHex))
-  let scale = 1
-  if (!inGamut([L, a, b])) {
-    let lo = 0, hi = 1
-    for (let i = 0; i < 24; i++) {
-      const mid = (lo + hi) / 2
-      if (inGamut([L, a * mid, b * mid])) lo = mid
-      else hi = mid
-    }
-    scale = lo
-  }
-  return labToHex(oklabToRgb([L, a * scale, b * scale]))
+  const [fa, fb] = fitChroma(L, a, b)
+  return labToHex(oklabToRgb([L, fa, fb]))
+}
+
+// Rotate a colour's OKLab hue by `deg`, holding L and C fixed, gamut-mapping
+// chroma only as far as sRGB needs (same discipline as withHueOf — never
+// clip a channel directly, that's a hue shift in disguise).
+export function rotateOklabHue(hex, deg) {
+  const [L, a, b] = rgbToOklab(hexToRgb(hex))
+  const C = Math.hypot(a, b)
+  if (C < 1e-4) return hex.toLowerCase()
+  const theta = Math.atan2(b, a) + (deg * Math.PI) / 180
+  const [fa, fb] = fitChroma(L, C * Math.cos(theta), C * Math.sin(theta))
+  return labToHex(oklabToRgb([L, fa, fb]))
+}
+
+// An OKLCH ladder offset, expressed as the HSL-hue delta the ring engine
+// actually consumes. Perceptual step in, HSL step out — HSL hue is
+// wildly non-uniform (measured: 18 HSL degrees near green is ~8 perceptual
+// degrees, near cyan it's ~34), so a fixed +/-18 HSL ladder walks yellow
+// straight into chartreuse. Clamped to spec section 4's window.
+export function projectLadderOffset(anchorHex, oklchDeg, clampDeg = ANCHOR_WINDOW) {
+  const base = hexToHslHue(anchorHex)
+  const h = hexToHslHue(rotateOklabHue(anchorHex, oklchDeg))
+  let d = ((h - base + 540) % 360) - 180
+  return Math.max(-clampDeg, Math.min(clampDeg, d))
 }
 
 // Rotate a colour onto another colour's OKLab hue, keeping its OWN lightness
@@ -217,17 +247,8 @@ export function withHueOf(hex, refHex) {
   const refC = Math.hypot(ra, rb)
   if (refC < 1e-4) return hex.toLowerCase()
   const [ua, ub] = [ra / refC, rb / refC]
-  let scale = 1
-  if (!inGamut([L, ua * C, ub * C])) {
-    let lo = 0, hi = 1
-    for (let i = 0; i < 24; i++) {
-      const mid = (lo + hi) / 2
-      if (inGamut([L, ua * C * mid, ub * C * mid])) lo = mid
-      else hi = mid
-    }
-    scale = lo
-  }
-  return labToHex(oklabToRgb([L, ua * C * scale, ub * C * scale]))
+  const [fa, fb] = fitChroma(L, ua * C, ub * C)
+  return labToHex(oklabToRgb([L, fa, fb]))
 }
 
 // The one legitimate blend in this file. Folds the palette into a single
@@ -265,7 +286,8 @@ export function derivePalette({ colors, weights, stationCount = 13, baseTheme, c
   // colour get the FURTHEST-APART offsets (outside-in alternation). Two
   // neighbours forced to share a colour at least read as two distinct
   // shades of it rather than as one 2-station-wide smear.
-  const ladders = counts.map(k => hueLadder(k, LADDER_HALF))
+  const ladders = counts.map((k, c) =>
+    hueLadder(k, LADDER_HALF).map(off => projectLadderOffset(colors[c], off)))
   const seen    = counts.map(() => 0)
   const hues    = assignment.map(c => {
     const k = counts[c]
