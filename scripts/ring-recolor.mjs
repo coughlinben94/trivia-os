@@ -26,9 +26,10 @@ import { derivePalette } from '../client/src/lib/weightedPalette.js'
 import { skyRegionHues, accentCompanionHue } from '../client/src/lib/ringPrimitives.js'
 import { midnightGalaxyRing } from '../client/src/worlds/midnightGalaxy.ring.js'
 import {
-  readStationHues, rewriteRingJs, rewriteHtml, rewriteHuePin,
+  readStationHues, rewriteRingJs, rewriteHtml, rewriteHuePin, rewriteSky,
   formatPlan, blockedTargets, regionHueWarnings,
 } from '../client/src/lib/ringRecolor.js'
+import { THEMES } from '../client/src/themes/index.js'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const TARGETS = {
@@ -37,6 +38,13 @@ const TARGETS = {
   pin: 'client/src/worlds/midnightGalaxy.ring.test.js',
 }
 const STATION_COUNT = 13
+// Lightness reference for the derived sky, never its hue: derivePalette drops
+// the folded palette onto THIS theme's bg/bgDeep lightness, so the sky keeps
+// the near-black the world was tuned against and takes only its cast from the
+// palette. Read from the shipped theme, not from the world file, so repeated
+// recolours don't walk the sky somewhere darker each run.
+const BASE_THEME = THEMES.find(t => t.id === 'midnight-galaxy')
+if (!BASE_THEME) throw new Error('ring-recolor: no THEMES entry with id "midnight-galaxy"')
 
 const read = rel => readFileSync(ROOT + rel, 'utf8')
 
@@ -82,11 +90,14 @@ function main() {
   const rows = readStationHues(ringJs)
   const currentHues = rows.map(r => r.hue)
 
-  // No baseTheme: this pipeline writes station hues and anchors only. Theme
-  // colors are the host UI's job — the ring world is palette-fixed.
+  // baseTheme is passed for its bg/bgDeep LIGHTNESS only — the two values
+  // this writes are the sky's own source hexes (SKY_BG/SKY_BG_DEEP in both
+  // world files). accent/highlight from derived.themeColors are ignored:
+  // those are host-UI surface colors and stay the theme's job.
   const derived = derivePalette({
-    colors, weights, stationCount: STATION_COUNT, currentHues,
+    colors, weights, stationCount: STATION_COUNT, currentHues, baseTheme: BASE_THEME,
   })
+  const sky = { bg: derived.themeColors.bg, bgDeep: derived.themeColors.bgDeep }
 
   const plan = rows.map((r, i) => ({ key: r.key, from: r.hue, to: derived.hues[i] }))
   const stations = rows.map((r, i) => ({ key: r.key, hue: derived.hues[i] }))
@@ -116,6 +127,8 @@ function main() {
     const src = withMeta.find(s => s.region === key && s.regionSource) ?? withMeta.find(s => s.region === key)
     console.log(`  ${key.padEnd(7)} ${hue}°  (from ${src.key} at ${src.hue}°)`)
   }
+
+  console.log(`\nBase sky: ${sky.bg} → ${sky.bgDeep}  (was ${BASE_THEME.colors.bg} → ${BASE_THEME.colors.bgDeep})`)
 
   console.log('\nAccent companions:')
   for (const s of withMeta.filter(s => s.accent)) {
@@ -148,8 +161,8 @@ function main() {
   // `git checkout` on the targets, which the clean-tree guard above keeps
   // available.
   const next = {
-    [TARGETS.ringJs]: rewriteRingJs(ringJs, derived.hues, derived.hueAnchors),
-    [TARGETS.html]: rewriteHtml(read(TARGETS.html), stations, derived.hueAnchors),
+    [TARGETS.ringJs]: rewriteSky(rewriteRingJs(ringJs, derived.hues, derived.hueAnchors), sky, TARGETS.ringJs),
+    [TARGETS.html]: rewriteSky(rewriteHtml(read(TARGETS.html), stations, derived.hueAnchors), sky, TARGETS.html),
     [TARGETS.pin]: rewriteHuePin(read(TARGETS.pin), stations),
   }
   for (const [rel, text] of Object.entries(next)) writeFileSync(ROOT + rel, text)

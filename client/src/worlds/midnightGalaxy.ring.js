@@ -29,20 +29,29 @@ export const RECORD_HUE         = 300
 export const AURORA_RIBBON_HUE  = 196
 export const SUPERNOVA_HUE      = 36
 
+// ── Sky source ─────────────────────────────────────────────────────────────
+// The base sky's two source colours, GENERATED the same way the hues above
+// are: scripts/ring-recolor.mjs rewrites both from the palette, so a recolour
+// no longer leaves a purple sky over a red world. Shipped values are the
+// midnight-galaxy theme's own bg/bgDeep, so this renders byte-identical to
+// the `skyFromTheme(theme)` call it replaced. Both files carry them and
+// ringRecolor.test.js fails if the two ever disagree.
+export const SKY_BG      = '#08001a'
+export const SKY_BG_DEEP = '#040010'
+
 export const midnightGalaxyRing = {
   id: 'midnight-galaxy',
   type: 'space',
   name: 'Midnight Galaxy',
   phase: 5,
-  // Derived from the theme (ringEngine.js's skyFromTheme — single source,
-  // shared with concepts/world-07-ring.html) so the sky palette isn't a
-  // second hand-copied set of hex values.
-  // This does NOT make per-show color overrides reach the ring: the
-  // `THEMES.find` above runs once at module load, and ThemeProvider's
-  // applyOverrides returns a new spread object without mutating THEMES, so
-  // an override resolved later never reaches this value. Ring worlds are
-  // palette-fixed by design — see references/themes.md ("palette-fixed").
-  sky: skyFromTheme(theme),
+  // Built by ringEngine.js's skyFromTheme — single ramp function, shared
+  // with concepts/world-07-ring.html — from the two GENERATED source hexes
+  // above, not from the theme. A recolour moves the sky with the world.
+  // This still does NOT make per-show color overrides reach the ring: the
+  // sources are module-load constants, and ThemeProvider's applyOverrides
+  // returns a new spread object without mutating anything here. Ring worlds
+  // are palette-fixed by design — see references/themes.md ("palette-fixed").
+  sky: skyFromTheme({ colors: { bg: SKY_BG, bgDeep: SKY_BG_DEEP } }),
   // Never source question text from theme.colors.accent — it's a UI-surface
   // color (buttons/panels), not tuned for text legibility. For Midnight
   // Galaxy that was #4a1a8f, ~1.8:1 against the display bg. Both colors run

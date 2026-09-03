@@ -261,10 +261,16 @@ header.pg b{color:#ddd8e8;font-weight:500}
 // `dom` object — no call site ever passes a literal prefix string again.
 import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints } from '../client/src/lib/ringPrimitives.js';
 import { rng, lerp, skyFromTheme, fillOf, buildArc } from '../client/src/lib/ringEngine.js';
-import { THEMES } from '../client/src/themes/index.js';
 
-const midnightGalaxyTheme = THEMES.find(t => t.id === 'midnight-galaxy');
-if (!midnightGalaxyTheme) throw new Error('world-07-ring.html: no THEMES entry with id "midnight-galaxy"');
+/* The base sky's two source colours, GENERATED: scripts/ring-recolor.mjs
+   rewrites both from the palette in the same run that rewrites the hues, so
+   the sky moves with the world. Kept byte-identical to
+   client/src/worlds/midnightGalaxy.ring.js's own SKY_BG/SKY_BG_DEEP — that
+   parity is a test, see ringRecolor.test.js. Was `THEMES.find('midnight-
+   galaxy')` read straight for its bg/bgDeep, which pinned the sky to the
+   theme no matter what palette the world was recoloured to. */
+const SKY_BG      = '#08001a';
+const SKY_BG_DEEP = '#040010';
 /* ═══════════════════════════════════════════════════════════════════════
    ENGINE — identical for every theme. A world never sets any of this.
    Every number appears exactly once. Anything derivable is derived by one
@@ -353,10 +359,11 @@ const WORLD = {
   name: 'Midnight Galaxy',
   phase: 5,                             // where the arc crest falls
   // Was a hardcoded literal here, independent of client/src/worlds/
-  // midnightGalaxy.ring.js's own theme-derived sky — the two drifted
-  // (2026-08-08: this build's stops no longer matched the theme's actual
-  // colors). Both now read the same skyFromTheme(theme) in ringEngine.js.
-  sky: skyFromTheme(midnightGalaxyTheme),
+  // midnightGalaxy.ring.js's own sky — the two drifted (2026-08-08: this
+  // build's stops no longer matched the theme's actual colors). Both now
+  // run the same skyFromTheme() in ringEngine.js over the same two source
+  // hexes above.
+  sky: skyFromTheme({ colors: { bg: SKY_BG, bgDeep: SKY_BG_DEEP } }),
   qColours: ['#e2ccff', '#ffc48a'],
   /* one entry per station. `key` is the nameable thing; `accent` marks the
      stations allowed the one complementary hue. */

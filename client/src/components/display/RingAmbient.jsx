@@ -633,6 +633,13 @@ export const RING_RETURN = 'return'
 // own WORLD literal. qColours is accepted but unused here (question-colour
 // styling belongs to the out-of-scope question-rendering system).
 const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, stationOverride, showStationDebug = false }, ref) {
+  // The ground behind the stage. Was a hardcoded '#01010a' — a blue-black
+  // tuned to the purple world, which stayed blue-black under every recolour.
+  // The sky ramp's terminal stop is the same near-black, already generated
+  // from the palette (scripts/ring-recolor.mjs), so this reuses it instead of
+  // being a fourth colour to keep in sync. Falls back to black if a world
+  // ships a short sky.
+  const BACKDROP = worldData.sky[worldData.sky.length - 1] ?? '#000000'
   const stageElRef = useRef(null)
   const designElRef = useRef(null)
   const surgeElsRef = useRef({})
@@ -1274,7 +1281,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       // the fit() cover-scale above can't reach space the stage itself never
       // claimed. inset:0 alone already does the right thing: fill the true
       // parent size on every aspect ratio, identical result on a real 16:9 TV.
-      style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#01010a', pointerEvents: 'none' }}
+      style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: BACKDROP, pointerEvents: 'none' }}
     >
       <style>{RING_CSS}</style>
       <div

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
-  readStationHues, rewriteRingJs, rewriteHtml, rewriteHuePin,
+  readStationHues, rewriteRingJs, rewriteHtml, rewriteHuePin, rewriteSky,
   formatPlan, blockedTargets, regionHueWarnings,
 } from './ringRecolor.js'
 
@@ -226,6 +226,28 @@ describe('regionHueWarnings', () => {
 // HTML, the app renders only the .js. A hand edit to one file alone is the
 // exact failure this whole pipeline exists to stop, so it has to fail
 // test:unit, not just review.
+describe('rewriteSky', () => {
+  it('rewrites both sky source hexes in either world file', () => {
+    for (const [src, what] of [[RING_JS, 'ring.js'], [HTML, 'html']]) {
+      const out = rewriteSky(src, { bg: '#1a0004', bgDeep: '#0e0002' }, what)
+      expect(out).toMatch(/SKY_BG\s*=\s*'#1a0004'/)
+      expect(out).toMatch(/SKY_BG_DEEP\s*=\s*'#0e0002'/)
+      // SKY_BG's own pattern must not have eaten SKY_BG_DEEP's line.
+      expect(out).not.toMatch(/SKY_BG_DEEP\s*=\s*'#1a0004'/)
+    }
+  })
+
+  it('refuses a source file with no sky constants', () => {
+    expect(() => rewriteSky('const nope = 1\n', { bg: '#000000', bgDeep: '#000000' }, 'fixture'))
+      .toThrow(/no SKY_BG sky constant/)
+  })
+
+  it('refuses a color that is not #rrggbb', () => {
+    expect(() => rewriteSky(RING_JS, { bg: 'red', bgDeep: '#000000' }, 'ring.js'))
+      .toThrow(/not a #rrggbb color/)
+  })
+})
+
 describe('midnightGalaxy.ring.js and world-07-ring.html agree', () => {
   const htmlStationPairs = () => {
     const block = HTML.match(/^([ \t]*)stations: \[\r?\n([\s\S]*?)^\1\],$/m)
@@ -243,5 +265,14 @@ describe('midnightGalaxy.ring.js and world-07-ring.html agree', () => {
 
   it('carries the same hueAnchors degrees in both files', () => {
     expect(anchorDegs(HTML)).toEqual(anchorDegs(RING_JS))
+  })
+
+  // The sky's source hexes are the third thing a recolour writes into both
+  // files. Same failure shape as the hues: recoloured in one, and the app's
+  // sky and the gate's sky are two different skies.
+  it('carries the same sky source colors in both files', () => {
+    const skyOf = src => [/SKY_BG(\s*)=\s*'(#[0-9a-f]{6})'/i, /SKY_BG_DEEP\s*=\s*'(#[0-9a-f]{6})'/i]
+      .map(re => src.match(re).pop())
+    expect(skyOf(HTML)).toEqual(skyOf(RING_JS))
   })
 })

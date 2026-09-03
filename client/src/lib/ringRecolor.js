@@ -124,6 +124,21 @@ export function rewriteHuePin(testSource, stations) {
   return out
 }
 
+// The base sky's two source hexes, in either world file. Named constants,
+// not the `sky:` expression itself: skyFromTheme() stays the single ramp
+// function (one fact, one home) and only its two inputs are generated.
+export function rewriteSky(src, sky, what) {
+  let out = src
+  for (const [name, hex] of [['SKY_BG', sky.bg], ['SKY_BG_DEEP', sky.bgDeep]]) {
+    if (!/^#[0-9a-f]{6}$/i.test(hex)) throw new Error(`rewriteSky: not a #rrggbb color: ${hex}`)
+    // \b would match SKY_BG inside SKY_BG_DEEP; require the assignment.
+    const re = new RegExp(`(${name}(\\s*)=(\\s*)')#[0-9a-fA-F]{6}(')`)
+    if (!re.test(out)) throw new Error(`${what}: no ${name} sky constant to rewrite`)
+    out = out.replace(re, `$1${hex}$4`)
+  }
+  return out
+}
+
 // Which of `targets` `git status --porcelain` already reports as changed.
 // Non-empty means another session is mid-edit in a file this would clobber.
 //
