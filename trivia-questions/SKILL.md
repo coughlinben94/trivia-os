@@ -120,6 +120,16 @@ The notes page also contains **format seeds** ("Kidz Bop lyrics — give lyrics 
 
 **Fact-source habits worth mirroring when hunting (re-weighted 2026-09-02 — the old list read as "find obscure corners," which is exactly the wrong instruction):** fandom wikis and episode guides for the wells in `taste-profile.md`; Genius and lyric annotations; IMDb trivia/goofs; Disney park history sites; the Toy Hall of Fame, RRHOF, Grammy/Oscar/Billboard record books, Walk of Fame; band/brand/toy/mascot name-origin interviews; minor-league mascot pages; MLive and the Free Press for Michigan; this week's deaths/news/sports; ranked lists from a NAMED source (Rolling Stone, IMDB, Guinness, Forbes, People, Bleacher Report); Easter eggs in LEGO sets and games; deleted scenes and production legend; "only/first/last" record lists; word origins WITH a pop-culture twin. Secret-service code names and the Ig Nobels stay as a minor corner (both produced used facts). Dropped: diner slang, kangaroo words, NATO-alphabet trivia, BGG top-50, parental-guide text — obscure subjects with no fandom door.
 
+**Search tool for hunting: Exa MCP (`web_search_exa`, `web_fetch_exa`).** Added 2026-09-02. It is neural, not keyword — so describe the SHAPE of the fact you want in a sentence and it finds pages that match the idea. That is the whole reason it's here: keyword search returns the famous surface of a subject, which is exactly what a bar table already knows, while a described shape surfaces the deep cut inside the famous thing (gate 1). Ask for what you actually want:
+
+- "obscure production detail about a beloved 90s animated film that connects to a famous musician" — a shape, not keywords
+- "band name origin that comes from a misheard phrase" — the second-door pattern (gate 2) stated directly
+- Keyword-shaped queries ("Kit Kat facts") get you listicles, which rule 7 already tells you to distrust
+
+`web_fetch_exa` pulls a page back as clean markdown — use it to read the primary source itself rather than trusting a search snippet, which is where half of rule 7's quietly-wrong facts come from.
+
+This does NOT relax gates 6 and 7. Exa is better at FINDING candidates; it is not a verifier. Every fact still needs two independent sources, and a superlative still needs a date. A single Exa result is a lead, not a verified fact.
+
 ## Question Bank Integration
 
 The canonical store is the `questions` table (Supabase project `qwtbgusqfoypvehnungr`). **Real columns, verified 2026-07-17 against 1,901 live rows** (bulk-imported 2026-07-06 through 2026-07-15 from the legacy archive): `id, type (regular|shiny|swing|pyl|list), text, answer, is_bonus, is_shiny, shiny_type (image|text|audio|list|grid|video), shiny_format_name, questions_data (jsonb — list-shaped items for swing/pyl/multi-part shiny), created_at`.
