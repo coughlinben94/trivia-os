@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   hexToHslHue, hueDelta, allocate, spread, hueLadder, lumaProxy,
-  atLightness, derivePalette, rotateOklabHue, projectLadderOffset,
+  atLightness, derivePalette, rotateOklabHue, projectLadderOffset, driftPlan,
 } from './weightedPalette.js'
 import { rgbToOklab, oklabToRgb, hexToRgb } from './oklab.js'
 
@@ -327,5 +327,90 @@ describe('derivePalette', () => {
     expect(out.advisory[0]).toHaveProperty('fromLuma')
     expect(out.advisory[0]).toHaveProperty('toLuma')
     expect(out.advisory[0]).toHaveProperty('delta')
+  })
+})
+
+describe('drift', () => {
+  it('driftPlan sends red toward magenta (270), not toward orange (19), because magenta has more room', () => {
+    const p = driftPlan(8, 60) // red anchor at HSL 8
+    expect(p.dir).toBe(-1)
+    expect(p.arc).toBe(60)
+  })
+
+  it('driftPlan clips to the per-colour cap when the requested arc exceeds it', () => {
+    const p = driftPlan(271, 200) // purple anchor — cap is 116 per the plan's own table
+    expect(p.arc).toBe(116)
+  })
+
+  it('drift: {arc: 0} is byte-identical to no drift at all, for the frozen fixture', () => {
+    const withZero = derivePalette({
+      colors: PALETTE, weights: [0.60, 0.25, 0.15], stationCount: 13,
+      baseTheme: BASE, currentHues: CURRENT_HUES, drift: { arc: 0 },
+    })
+    const withoutField = derivePalette({
+      colors: PALETTE, weights: [0.60, 0.25, 0.15], stationCount: 13,
+      baseTheme: BASE, currentHues: CURRENT_HUES,
+    })
+    expect(withZero.hues).toEqual(withoutField.hues)
+  })
+
+  it('every station stays inside its own ROTATED anchor window at arc 60', () => {
+    const out = derivePalette({
+      colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35], stationCount: 13,
+      baseTheme: BASE, currentHues: CURRENT_HUES, drift: { arc: 60 },
+    })
+    out.hues.forEach((h, i) => {
+      const anchor = out.hueAnchorsAt[i][out.assignment[i]]
+      expect(hueDelta(h, anchor.deg)).toBeLessThanOrEqual(anchor.window)
+    })
+  })
+
+  it('station 0 and station 12 (adjacent across the wrap) have anchors within one bump-step of each other, for every colour', () => {
+    const out = derivePalette({
+      colors: ['#a855f7', '#3b82f6'], weights: [0.5, 0.5], stationCount: 13,
+      baseTheme: BASE, currentHues: CURRENT_HUES, drift: { arc: 60 },
+    })
+    const step = 0.24 * 60 // steepest per-station step at arc 60, per the plan's own derivation
+    out.hueAnchorsAt[0].forEach((a0, c) => {
+      const a12 = out.hueAnchorsAt[12][c]
+      expect(hueDelta(a0.deg, a12.deg)).toBeLessThanOrEqual(step + 1) // +1 float slack
+    })
+  })
+
+  it('no station lands in the dead band under drift, for a palette that could otherwise drift into it', () => {
+    const out = derivePalette({
+      colors: ['#ff2200', '#a855f7'], weights: [0.5, 0.5], stationCount: 13,
+      baseTheme: BASE, currentHues: CURRENT_HUES, drift: { arc: 60 },
+    })
+    out.hues.forEach(h => {
+      const inBand = h >= 45 && h < 80
+      expect(inBand).toBe(false)
+    })
+  })
+
+  it('adjacent same-colour rungs are handed out in RING ORDER under drift, not outside-in', () => {
+    // At drift 0 the ladder still alternates outside-in (unchanged behaviour).
+    // At any drift > 0, consecutive same-colour stations must get adjacent
+    // ladder rungs (6 degrees apart), because drift + outside-in fights itself.
+    const out = derivePalette({
+      colors: ['#a855f7', '#3b82f6'], weights: [0.60, 0.40], stationCount: 13,
+      baseTheme: BASE, currentHues: CURRENT_HUES, drift: { arc: 60 },
+    })
+    // Find two adjacent stations assigned the same colour (guaranteed to exist
+    // at this weight split — one colour owns 8 of 13).
+    let found = false
+    for (let i = 0; i < 13; i++) {
+      const j = (i + 1) % 13
+      if (out.assignment[i] === out.assignment[j]) {
+        found = true
+        // Their ladder-only contribution (hue minus the rotated anchor at
+        // each station) must be 6 apart, not up to 36 apart.
+        const c = out.assignment[i]
+        const rungI = hueDelta(out.hues[i], out.hueAnchorsAt[i][c].deg)
+        const rungJ = hueDelta(out.hues[j], out.hueAnchorsAt[j][c].deg)
+        expect(Math.abs(rungI - rungJ)).toBeLessThanOrEqual(6.5)
+      }
+    }
+    expect(found).toBe(true)
   })
 })

@@ -160,6 +160,19 @@ export function lumaProxy(hue) {
 const ANCHOR_WINDOW = 25   // spec section 4's stated maximum
 const LADDER_HALF   = 18   // stay inside the window with 7 degrees of margin
 
+export const DEAD_BAND = [45, 80] // HSL degrees — yellow through chartreuse; olive at object lightness (Ben's 2026-09-03 call: keep this blocked)
+
+// Which direction (and how far) a colour may drift without ever entering
+// DEAD_BAND, including the ladder's own +/-LADDER_HALF half-width. One-
+// sided: dir points toward whichever side of the dead band has more room.
+export function driftPlan(anchorDeg, requestedArc) {
+  const up = ((DEAD_BAND[0] - anchorDeg) + 360) % 360   // room going up, before hitting 45
+  const down = ((anchorDeg - DEAD_BAND[1]) + 360) % 360 // room going down, before hitting 80 from the other side
+  const dir = up >= down ? +1 : -1
+  const room = (dir > 0 ? up : down) - LADDER_HALF
+  return { dir, arc: Math.max(0, Math.min(requestedArc, room)) }
+}
+
 // In-gamut check by round-trip: oklabToRgb clamps out-of-range channels,
 // so a colour survives the round trip unchanged iff it fits in sRGB.
 // Reuses the proven conversions rather than reimplementing OKLab.
@@ -270,7 +283,7 @@ function foldOklab(colors, weights) {
   return labToHex(oklabToRgb(acc))
 }
 
-export function derivePalette({ colors, weights, stationCount = 13, baseTheme, currentHues = [] }) {
+export function derivePalette({ colors, weights, stationCount = 13, baseTheme, currentHues = [], drift = { arc: 0 } }) {
   const counts  = allocate(weights, stationCount)
   const anchors = colors.map(hex => ({ deg: Math.round(hexToHslHue(hex)), window: ANCHOR_WINDOW }))
 
@@ -286,16 +299,23 @@ export function derivePalette({ colors, weights, stationCount = 13, baseTheme, c
   // colour get the FURTHEST-APART offsets (outside-in alternation). Two
   // neighbours forced to share a colour at least read as two distinct
   // shades of it rather than as one 2-station-wide smear.
+  const plans = colors.map(hex => driftPlan(Math.round(hexToHslHue(hex)), drift.arc))
+  const rot = (c, i) => plans[c].dir * plans[c].arc * (1 - Math.cos(2 * Math.PI * i / stationCount)) / 2
   const ladders = counts.map((k, c) =>
     hueLadder(k, LADDER_HALF).map(off => projectLadderOffset(colors[c], off)))
-  const seen    = counts.map(() => 0)
-  const hues    = assignment.map(c => {
+  const seen = counts.map(() => 0)
+  const hues = assignment.map((c, i) => {
     const k = counts[c]
     const j = seen[c]++
-    const pick = j % 2 === 0 ? Math.floor(j / 2) : k - 1 - Math.floor(j / 2)
-    const h = anchors[c].deg + ladders[c][pick]
+    // Outside-in at drift 0 (unchanged behaviour); ring order under drift,
+    // so the ladder and the drift bump move the SAME way (Fable's Phase 2.5
+    // "why step 2/adjacent-rung" finding — outside-in fights drift).
+    const pick = drift.arc > 0 ? j : (j % 2 === 0 ? Math.floor(j / 2) : k - 1 - Math.floor(j / 2))
+    const h = anchors[c].deg + rot(c, i) + ladders[c][pick]
     return ((Math.round(h) % 360) + 360) % 360
   })
+  const hueAnchorsAt = Array.from({ length: stationCount }, (_, i) =>
+    anchors.map((a, c) => ({ deg: ((Math.round(a.deg + rot(c, i)) % 360) + 360) % 360, window: a.window })))
 
   // Accent/highlight follow the HEAVIEST swatch — recomputed from the live
   // weights, never hard-wired to swatch #1, or dragging the weight bar
@@ -344,5 +364,5 @@ export function derivePalette({ colors, weights, stationCount = 13, baseTheme, c
     warnings.push(`${rising} station${rising === 1 ? '' : 's'} move toward a brighter hue (proxy only — run the gate).`)
   }
 
-  return { hues, hueAnchors: anchors, themeColors, assignment, counts, advisory, warnings }
+  return { hues, hueAnchors: anchors, hueAnchorsAt, driftPlans: plans, themeColors, assignment, counts, advisory, warnings }
 }
