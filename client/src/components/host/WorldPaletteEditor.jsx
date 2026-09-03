@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { derivePalette } from '../../lib/weightedPalette.js'
+import { PRESETS } from '../../lib/paletteGenerator.js'
 import { recolorWorld } from '../../lib/ringRecolor.js'
 import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
 import RingAmbient from '../display/RingAmbient.jsx'
@@ -30,18 +31,6 @@ import RingAmbient from '../display/RingAmbient.jsx'
 const SNAP = 0.05
 const MIN_WEIGHT = 0.05
 const COLOR_DEBOUNCE_MS = 400
-
-// One-click starting points so picking a palette never requires understanding
-// hue/weight math. Each is just a (colors, weights) pair fed through the same
-// setColor/setWeights path a manual edit uses — no separate code path to drift.
-const PRESETS = [
-  { name: 'Purple & Blue',  colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] },
-  { name: 'Violet & Pink',  colors: ['#8b5cf6', '#ec4899'], weights: [0.6, 0.4] },
-  { name: 'Blue & Teal',    colors: ['#3b82f6', '#14b8a6'], weights: [0.6, 0.4] },
-  { name: 'Amber & Rose',   colors: ['#f59e0b', '#f43f5e'], weights: [0.55, 0.45] },
-  { name: 'Emerald & Indigo', colors: ['#10b981', '#6366f1'], weights: [0.55, 0.45] },
-  { name: 'Crimson & Gold', colors: ['#dc2626', '#eab308'], weights: [0.6, 0.4] },
-]
 
 const CURRENT_HUES = midnightGalaxyRing.stations.map(s => s.hue)
 
