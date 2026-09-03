@@ -11,7 +11,9 @@
 // failure mode this replaces is a hue that changed in one file only: the
 // app looks recolored, the gate still measures the old world.
 
-import { hueDelta, withHueOf, hexToHslHue } from './weightedPalette.js'
+import { hueDelta, withHueOf, hexToHslHue, derivePalette } from './weightedPalette.js'
+import { skyFromTheme } from './ringEngine.js'
+import { BASE_TINTS } from './ringPrimitives.js'
 
 const GENERATED = '// written by scripts/ring-recolor.mjs — do not hand-edit'
 
@@ -167,6 +169,57 @@ export function deriveTints(baseTints, colors) {
     }
     return [key, withHueOf(hex, colors[best])]
   }))
+}
+
+// Validate + normalize a { colors, weights } palette — the same rules
+// scripts/ring-recolor.mjs's parseArgs enforces on CLI input, moved here so
+// the app (WorldPaletteEditor's Apply, a saved theme_overrides.worldPalette)
+// validates identically to the script instead of drifting into its own
+// rules. Throws on anything a human editing JSON by hand or a malformed
+// saved override could produce; callers that want a soft failure (a display
+// reading a saved show) catch and fall back to the base world.
+export function normalizePalette({ colors, weights }) {
+  if (!Array.isArray(colors) || colors.length < 2 || colors.length > 3) {
+    throw new Error(`normalizePalette: expected 2-3 colors, got ${colors?.length}`)
+  }
+  for (const c of colors) {
+    if (!/^#[0-9a-fA-F]{6}$/.test(c)) throw new Error(`normalizePalette: not a #rrggbb color: ${c}`)
+  }
+  let w = weights ?? colors.map(() => 1)
+  if (w.length !== colors.length) {
+    throw new Error(`normalizePalette: ${w.length} weights for ${colors.length} colors`)
+  }
+  if (w.some(x => !(x > 0))) throw new Error('normalizePalette: every weight must be a positive number')
+  const total = w.reduce((a, b) => a + b, 0)
+  return { colors: colors.map(c => c.toLowerCase()), weights: w.map(x => x / total) }
+}
+
+// A NEW worldData built from the BASE world (never from a recoloured one —
+// see the note below) and one weighted palette. Hues, anchors, sky and
+// tints all move together; everything else (stations' prim/accent/region/
+// etc., phase, id, name, qColours) is the base's, untouched.
+//
+// `base` MUST be the authored module (`midnightGalaxyRing`), never a
+// previously recoloured world: `derivePalette`'s station-identity-aware
+// assignment reads `base.stations[i].hue` as "what this station is really
+// about," so recolouring a recoloured world reassigns from an already-moved
+// starting point and gives a different (wrong) result. The app satisfies
+// this by construction — ParticleBackground always imports
+// `midnightGalaxyRing` directly and calls this fresh per palette.
+export function recolorWorld(base, palette, baseTheme) {
+  const { colors, weights } = normalizePalette(palette)
+  const derived = derivePalette({
+    colors, weights, stationCount: base.stations.length,
+    currentHues: base.stations.map(s => s.hue), baseTheme,
+  })
+  return {
+    ...base,
+    hueAnchors: derived.hueAnchors,
+    stations: base.stations.map((s, i) => ({ ...s, hue: derived.hues[i] })),
+    sky: skyFromTheme({ colors: { bg: derived.themeColors.bg, bgDeep: derived.themeColors.bgDeep } }),
+    tints: deriveTints(BASE_TINTS, colors),
+    palette: { colors, weights },
+  }
 }
 
 // Which of `targets` `git status --porcelain` already reports as changed.

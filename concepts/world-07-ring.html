@@ -261,6 +261,7 @@ header.pg b{color:#ddd8e8;font-weight:500}
 // `dom` object — no call site ever passes a literal prefix string again.
 import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints, applyTints } from '../client/src/lib/ringPrimitives.js';
 import { rng, lerp, skyFromTheme, fillOf, buildArc } from '../client/src/lib/ringEngine.js';
+import { recolorWorld } from '../client/src/lib/ringRecolor.js';
 
 /* The base sky's two source colours, GENERATED: scripts/ring-recolor.mjs
    rewrites both from the palette in the same run that rewrites the hues, so
@@ -374,7 +375,7 @@ primStyle.textContent = ringCss('');
 document.head.appendChild(primStyle);
 
 /* ═══ THE WORLD — this is the only part a generator writes ═════════════ */
-const WORLD = {
+let WORLD = {
   id: 'midnight-galaxy',
   type: 'space',
   name: 'Midnight Galaxy',
@@ -443,6 +444,28 @@ const WORLD = {
     { deg: 140, window: 25 },
   ],
 };
+
+// 2026-09-03: `?colors=%23ff2200,%23ffd400&weights=0.55,0.45` builds this
+// reference world from that palette, via the SAME recolorWorld the app
+// uses. No params -> the authored base, byte-identical to before. Synced
+// with AmbientAudit.jsx's ?colors= handling. baseTheme here is the world's
+// own two sky sources — they already carry the theme's lightness, so the
+// fold lands in the same place the script's does.
+//
+// weights: undefined (not []) when the param is absent — normalizePalette
+// treats an explicit empty array as "0 weights supplied" and throws; only
+// undefined triggers its equal-weights default. `?colors=` with no
+// `&weights=` must still render, not throw.
+{
+  const q = new URLSearchParams(location.search);
+  if (q.get('colors')) {
+    const weightsParam = q.get('weights');
+    WORLD = recolorWorld(WORLD, {
+      colors: q.get('colors').split(','),
+      weights: weightsParam ? weightsParam.split(',').map(Number) : undefined,
+    }, { colors: { bg: SKY_BG, bgDeep: SKY_BG_DEEP } });
+  }
+}
 
 /* target mean luma per station — the arc: a cosine base, a seeded jitter
    (never Math.random) to break the trough's symmetric flat neighbourhood,

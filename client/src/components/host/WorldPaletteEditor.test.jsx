@@ -128,13 +128,15 @@ describe('WorldPaletteEditor', () => {
     expect(swatches()).toHaveLength(2)
   })
 
-  it('hands Apply exactly the four theme colors, and nothing ring-shaped', () => {
+  it('hands Apply the four theme colors AND the worldPalette (2026-09-03: the ring is a runtime value now)', () => {
     const applied = []
     render({ onApplyThemeColors: c => applied.push(c) })
     act(() => byText("Apply to this show's theme").click())
     expect(applied).toHaveLength(1)
-    expect(Object.keys(applied[0]).sort()).toEqual(['accent', 'bg', 'bgDeep', 'highlight'])
-    for (const v of Object.values(applied[0])) expect(v).toMatch(/^#[0-9a-f]{6}$/)
+    expect(Object.keys(applied[0]).sort()).toEqual(['themeColors', 'worldPalette'])
+    expect(Object.keys(applied[0].themeColors).sort()).toEqual(['accent', 'bg', 'bgDeep', 'highlight'])
+    for (const v of Object.values(applied[0].themeColors)) expect(v).toMatch(/^#[0-9a-f]{6}$/)
+    expect(applied[0].worldPalette).toEqual({ colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] })
   })
 
   it('lists every station with its advisory row once details are expanded', () => {
@@ -152,9 +154,8 @@ describe('WorldPaletteEditor', () => {
     render()
     act(() => byText('Technical details').click())
     expect(host.textContent.replace(/\s+/g, ' ')).toContain(
-      'Click Apply for the theme half. Paste this to Claude for the ring half — it needs '
-      + 'a code change and a gate run, and the gate reports pre-existing spec warnings; '
-      + 'the regression line is what must be green.',
+      "Apply recolours this show's theme AND its ring world. The TV picks it up when "
+      + "/display loads — reload the display if it's already open.",
     )
     const code = [...host.querySelectorAll('code')].find(el => el.textContent.includes('ring-recolor.mjs'))
     expect(code.textContent).toBe(

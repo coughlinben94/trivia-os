@@ -129,8 +129,11 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
   // shinyAccent override the host set by hand in Customize survives a
   // palette apply. Same single write path as every other override
   // (useShow.js's updateShowMeta via onUpdateOverrides) — no second one.
-  function applyPaletteColors(nextColors) {
-    const next = { ...overrides, colors: { ...overrides.colors, ...nextColors } }
+  // worldPalette rides along in the same write (2026-09-03) — the ring is
+  // now a per-show runtime value, not a file a human edits separately; see
+  // ParticleBackground.jsx's ringWorldFor.
+  function applyPaletteColors({ themeColors, worldPalette }) {
+    const next = { ...overrides, colors: { ...overrides.colors, ...themeColors }, worldPalette }
     setOverrides(next)
     onUpdateOverrides(next)
   }
@@ -139,6 +142,7 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
     const next = { ...overrides }
     delete next.colors
     delete next.fonts
+    delete next.worldPalette
     setOverrides(next)
     onUpdateOverrides(next)
   }

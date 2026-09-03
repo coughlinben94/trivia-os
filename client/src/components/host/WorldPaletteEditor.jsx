@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { derivePalette } from '../../lib/weightedPalette.js'
+import { recolorWorld } from '../../lib/ringRecolor.js'
 import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
 import RingAmbient from '../display/RingAmbient.jsx'
 
@@ -9,19 +10,22 @@ import RingAmbient from '../display/RingAmbient.jsx'
 // Weights sum to 100% by construction. Below: a live isolated RingAmbient
 // preview plus a read-only consequences panel.
 //
-// The preview instance is a throwaway clone fed a cloned worldData — never
-// the show's real instance, which keeps reading the unmutated
-// midnightGalaxyRing import (ring worlds are palette-fixed by design).
-// RingAmbient builds its DOM world ONCE on mount and never re-runs on
-// worldData change, so the preview is keyed by the derived hues and
-// REMOUNTS when the committed palette changes. A remount rebuilds a
-// ~5,000-element DOM world, so commits happen on drag-END (pointer-up) and
-// debounced colour-input changes — never per mousemove. The cheap readouts
-// (bar, station dots, advisory table) do track every drag tick.
+// The preview instance is a throwaway clone fed recolorWorld's output —
+// never the show's real instance, which keeps reading the unmutated
+// midnightGalaxyRing import. Apply now writes the palette itself into this
+// show's theme_overrides.worldPalette (2026-09-03) — the ring is a per-show
+// RUNTIME value, not a file the picker asks a human to hand-edit. RingAmbient
+// builds its DOM world ONCE on mount and never re-runs on worldData change,
+// so the preview is keyed by the derived hues and REMOUNTS when the
+// committed palette changes. A remount rebuilds a ~5,000-element DOM world,
+// so commits happen on drag-END (pointer-up) and debounced colour-input
+// changes — never per mousemove. The cheap readouts (bar, station dots,
+// advisory table) do track every drag tick.
 //
-// The ring half is applied by scripts/ring-recolor.mjs (Task 2), run by
-// Ben pasting the generated command below to a Claude agent — see that
-// script's header for the full CLI contract.
+// The copy-command panel below still exists for the OTHER thing this editor
+// can't do live: moving the certified BASE world scripts/ring-recolor.mjs
+// writes to disk (needs a code change + a gate run) — not what a show's
+// Apply button does anymore.
 
 const SNAP = 0.05
 const MIN_WEIGHT = 0.05
@@ -168,24 +172,19 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
     baseTheme, currentHues: CURRENT_HUES,
   }), [colors, weights, baseTheme])
 
-  // Committed derivation — drives the ring preview only.
-  const previewDerived = useMemo(() => derivePalette({
-    colors: committed.colors, weights: committed.weights,
-    stationCount: CURRENT_HUES.length, baseTheme, currentHues: CURRENT_HUES,
-  }), [committed, baseTheme])
-
-  const previewWorldData = useMemo(() => ({
-    ...midnightGalaxyRing,
-    hueAnchors: previewDerived.hueAnchors,
-    stations: midnightGalaxyRing.stations.map((st, i) => ({ ...st, hue: previewDerived.hues[i] })),
-  }), [previewDerived])
+  // Committed palette (recolorWorld internally derives it) — drives the ring
+  // preview only.
+  const previewWorldData = useMemo(
+    () => recolorWorld(midnightGalaxyRing, committed, baseTheme),
+    [committed, baseTheme],
+  )
 
   // Remount key: RingAmbient builds once on mount by design, so a new
   // palette needs a new instance. (Coexists fine with the theme modal's
   // own iframe-hosted instance — RingAmbient keeps all real state in
   // per-instance refs; only the window.__world debug handle is shared,
   // last-mounted wins, harmless.)
-  const previewKey = previewDerived.hues.join(',')
+  const previewKey = previewWorldData.stations.map(s => s.hue).join(',')
 
   // Built from the committed palette, not the live drag state — matches
   // what the preview above is actually showing.
@@ -321,9 +320,11 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
             </p>
             <div className="text-[11px] text-gray-400 mt-2 font-sans space-y-1.5">
               <p>
-                Click Apply for the theme half. Paste this to Claude for the ring half — it
-                needs a code change and a gate run, and the gate reports pre-existing spec
-                warnings; the regression line is what must be green.
+                Apply recolours this show's theme AND its ring world. The TV picks it up when
+                /display loads — reload the display if it's already open.
+              </p>
+              <p className="font-medium text-gray-500">
+                Change the built-in default (needs a code change and a gate run):
               </p>
               <div className="flex items-stretch gap-2">
                 <code className="flex-1 block bg-gray-50 border border-gray-200 rounded-md px-3 py-2 text-gray-700 font-mono break-all">
@@ -350,13 +351,15 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
               </span>
             ))}
           </div>
-          {/* Applies ONLY the theme half (bg/bgDeep/accent/highlight),
-              through the existing ungated theme_overrides pipeline. The
-              ring half is the separate, gated ring-recolor command in the
-              technical-details panel above — see the header comment. */}
+          {/* Applies BOTH halves through the existing theme_overrides
+              pipeline: the theme colors (bg/bgDeep/accent/highlight) AND
+              worldPalette, which /display builds the ring from at mount
+              (ParticleBackground.jsx's ringWorldFor). The copy-command
+              panel above is now only for moving the CERTIFIED BASE world —
+              see the header comment. */}
           <button
             onClick={() => {
-              onApplyThemeColors(derived.themeColors)
+              onApplyThemeColors({ themeColors: derived.themeColors, worldPalette: { colors, weights } })
               setApplied(true)
               // Visible confirmation before closing — the write itself is
               // silent (same fire-and-forget theme_overrides path every

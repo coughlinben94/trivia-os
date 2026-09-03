@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { THEMES, getTheme } from '../themes/index.js'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import RingAmbient from '../components/display/RingAmbient.jsx'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
+import { recolorWorld } from '../lib/ringRecolor.js'
 
 export default function AmbientAudit() {
   const [params] = useSearchParams()
@@ -11,12 +12,33 @@ export default function AmbientAudit() {
   const theme = themeId ? getTheme(themeId) : null
   const ringMode = params.get('ring') === '1'
   const ringRef = useRef(null)
+  // ?colors=%23ff2200,%23ffd400&weights=0.55,0.45 — same recolorWorld the
+  // app and the CLI script use, synced with world-07-ring.html's own
+  // ?colors= handling. No colors param -> the authored base, unchanged.
+  // Keyed on the raw query string so a param edit recomputes without
+  // re-running on every unrelated render.
+  const searchString = params.toString()
+  const ringWorldData = useMemo(() => {
+    const colorsParam = params.get('colors')
+    if (!colorsParam) return midnightGalaxyRing
+    const weightsParam = params.get('weights')
+    try {
+      return recolorWorld(midnightGalaxyRing, {
+        colors: colorsParam.split(','),
+        weights: weightsParam ? weightsParam.split(',').map(Number) : undefined,
+      }, getTheme('midnight-galaxy'))
+    } catch (err) {
+      console.warn('[AmbientAudit] bad ?colors= palette, using base:', err.message)
+      return midnightGalaxyRing
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchString])
   // Display-only counter — independent of RingAmbient's own internal
   // station ref, so clicking Turn re-renders THIS button without ever
   // passing a station-shaped prop into RingAmbient (which must never
   // re-render/remount; see that component's own header comment).
   const [displayStation, setDisplayStation] = useState(0)
-  const stationCount = midnightGalaxyRing.stations.length
+  const stationCount = ringWorldData.stations.length
   // Auto-play: walk the ring on a timer, exactly like a show would move
   // slide-to-slide, so a person can just watch it turn instead of clicking
   // 13 times — off by default, same manual Turn button still works.
@@ -34,7 +56,7 @@ export default function AmbientAudit() {
   if (ringMode) {
     return (
       <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
-        <RingAmbient ref={ringRef} worldData={midnightGalaxyRing} />
+        <RingAmbient ref={ringRef} worldData={ringWorldData} />
         <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 30, display: 'flex', gap: 10, alignItems: 'center' }}>
           <button
             onClick={() => {

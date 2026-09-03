@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
-import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
+import { useEffect, useRef, useMemo } from 'react'
+import { ringWorldFor } from './ParticleBackground.jsx'
+import { useTheme } from '../shared/ThemeProvider.jsx'
 import { withHueOf } from '../../lib/weightedPalette.js'
 import { hexToRgb } from '../../lib/oklab.js'
 
@@ -151,15 +152,6 @@ const H = 1080
 const CX = W / 2
 const CY = H / 2
 const TAU = Math.PI * 2
-// Same stop RingAmbient paints its stage ground with — the world's own
-// terminal sky, not a second near-black to keep in sync by hand.
-const BG = midnightGalaxyRing.sky[midnightGalaxyRing.sky.length - 1]
-
-// Graded ground rather than a flat fill — cool core, near-black rim, from the
-// world's own sky ramp. On the element's own CSS background so it costs
-// nothing per frame and rides the same opacity veil as the canvas pixels.
-const GROUND = `radial-gradient(ellipse at 50% 50%, ${midnightGalaxyRing.sky[2]} 0%, ${BG} 58%, #000005 100%)`
-
 // Spawns sit just past the 1101px half-diagonal so nothing pops into being
 // inside the frame.
 const R_MAX = 1320
@@ -190,15 +182,6 @@ const LAYERS = [
 // a channel or two of the literals these replaced.
 const rotate = (rgb, ref) => hexToRgb(withHueOf(
   '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join(''), ref))
-const COOL_REF = midnightGalaxyRing.tints.starTint3
-const WARM_REF = midnightGalaxyRing.tints.drift
-const BANDS = [
-  { c: (rotate([118, 146, 255], COOL_REF)), a: 0.42, w: 1.0 },
-  { c: (rotate([156, 186, 255], COOL_REF)), a: 0.62, w: 1.5 },
-  { c: (rotate([206, 226, 255], COOL_REF)), a: 0.84, w: 2.1 },
-  { c: (rotate([246, 251, 255], COOL_REF)), a: 1.00, w: 3.0 },
-]
-const WARM = rotate([255, 206, 146], WARM_REF)
 
 const isReduced = () =>
   typeof window !== 'undefined' && window.matchMedia &&
@@ -210,6 +193,34 @@ export default function WarpTransition({ dir = 'out', onDone }) {
   // held in a ref so the loop below never restarts because of it.
   const doneRef = useRef(onDone)
   doneRef.current = onDone
+
+  const { theme } = useTheme()
+  // The same recoloured (or base) world ParticleBackground froze at mount —
+  // ringWorldFor's own cache means this is the identical object, not a
+  // second recolour computed from scratch. Recomputed only if theme/palette
+  // identity changes (it doesn't mid-warp; this component remounts per warp).
+  const world = useMemo(() => ringWorldFor(theme), [theme])
+  // Same stop RingAmbient paints its stage ground with — the world's own
+  // terminal sky, not a second near-black to keep in sync by hand.
+  const BG = world.sky[world.sky.length - 1]
+  // Graded ground rather than a flat fill — cool core, near-black rim, from
+  // the world's own sky ramp. On the element's own CSS background so it
+  // costs nothing per frame and rides the same opacity veil as the canvas
+  // pixels.
+  const GROUND = `radial-gradient(ellipse at 50% 50%, ${world.sky[2]} 0%, ${BG} 58%, #000005 100%)`
+  // Radius bands: cold at the rim, hot white in the core, graded toward WARM
+  // as the pull deepens. The four authored steps and the warm target keep
+  // their lightness and chroma; only their hue rotates, onto the ring
+  // world's own cool star tint and warm drifter.
+  const COOL_REF = world.tints.starTint3
+  const WARM_REF = world.tints.drift
+  const BANDS = useMemo(() => [
+    { c: (rotate([118, 146, 255], COOL_REF)), a: 0.42, w: 1.0 },
+    { c: (rotate([156, 186, 255], COOL_REF)), a: 0.62, w: 1.5 },
+    { c: (rotate([206, 226, 255], COOL_REF)), a: 0.84, w: 2.1 },
+    { c: (rotate([246, 251, 255], COOL_REF)), a: 1.00, w: 3.0 },
+  ], [COOL_REF])
+  const WARM = useMemo(() => rotate([255, 206, 146], WARM_REF), [WARM_REF])
 
   useEffect(() => {
     // Reduced motion: no vortex at all, instant cut — the codebase's standing

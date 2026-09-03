@@ -5,6 +5,7 @@ import BreathingGradient from './BreathingGradient'
 import RingAmbient from './RingAmbient.jsx'
 import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
 import { deriveTint, hexToRgba } from '../../lib/colorTint.js'
+import { recolorWorld } from '../../lib/ringRecolor.js'
 
 // ─── Keyframes ────────────────────────────────────────────────────────────
 const KEYFRAMES = `
@@ -1168,6 +1169,31 @@ const RING_WORLDS = {
   'midnight-galaxy': midnightGalaxyRing,
 }
 
+// A per-show `theme.worldPalette` recolours the registered base world via the
+// SAME recolorWorld the picker's Apply and scripts/ring-recolor.mjs use — one
+// implementation, never three. Memoized at module scope (not per-component
+// state) so WarpTransition.jsx can read the identical recoloured object
+// ParticleBackground built, without either side recomputing it. Cache key is
+// theme id + the palette JSON, so distinct shows/palettes don't collide and a
+// repeat palette (a show reloaded, or two shows sharing one) reuses the same
+// recoloured world instead of rebuilding it. A malformed saved palette must
+// never blank the TV: caught and logged, base world used instead.
+const worldCache = new Map()
+export function ringWorldFor(theme) {
+  const base = RING_WORLDS[theme.id]
+  if (!base || !theme.worldPalette) return base
+  const key = theme.id + '|' + JSON.stringify(theme.worldPalette)
+  if (!worldCache.has(key)) {
+    try {
+      worldCache.set(key, recolorWorld(base, theme.worldPalette, getTheme(theme.id)))
+    } catch (err) {
+      console.warn('[ring] bad worldPalette, using base:', err.message)
+      worldCache.set(key, base)
+    }
+  }
+  return worldCache.get(key)
+}
+
 // ─── Gradient-collapse routing ──────────────────────────────────────────
 // These 12 themes retired their bespoke ambient scene in favor of the shared
 // BreathingGradient (fed theme.colors + a mood) and are no longer routed
@@ -1206,7 +1232,18 @@ if (import.meta.env.DEV) {
 export default function ParticleBackground({ theme, slideIndex, stationOverride, showStationDebug = false }) {
   const gradientMood = GRADIENT_MOODS[theme.id]
   const AmbientComponent = gradientMood ? null : AMBIENT_MAP[theme.id]
-  const ringWorld = RING_WORLDS[theme.id]
+  // The ring world is FROZEN at mount. RingAmbient builds its DOM once and
+  // never re-runs on worldData change (its own header rule), and a remount
+  // mid-show would land on station 0 (RingAmbient's lastSlideIndexRef starts
+  // equal to slideIndex, so ringNavAction says 'none') — so a palette applied
+  // while /display is open shows on the next reload, not live. Phase 4 of
+  // docs/superpowers/plans/2026-09-02-ring-palette-runtime.md is where that
+  // changes.
+  const ringWorldRef = useRef(null)
+  if (ringWorldRef.current === null) {
+    ringWorldRef.current = ringWorldFor(theme) ?? false
+  }
+  const ringWorld = ringWorldRef.current || null
   const v = theme.vignette ?? {}
   const baseTheme = getTheme(theme.id)
 

@@ -36,6 +36,9 @@ export function applyOverrides(baseTheme, overrides) {
         ...baseTheme,
         fonts: { ...baseTheme.fonts, ...(overrides.fonts ?? {}) },
         colors: { ...baseTheme.colors, ...(overrides.colors ?? {}) },
+        // Passed through untouched — floorReadableColors below never sees
+        // it, and ringWorldFor (ParticleBackground.jsx) is the only reader.
+        worldPalette: overrides?.worldPalette ?? undefined,
       }
   const flooredColors = floorReadableColors(merged.colors)
   return flooredColors === merged.colors ? merged : { ...merged, colors: flooredColors }

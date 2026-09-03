@@ -23,14 +23,13 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { derivePalette } from '../client/src/lib/weightedPalette.js'
-import { skyRegionHues, accentCompanionHue } from '../client/src/lib/ringPrimitives.js'
+import { skyRegionHues, accentCompanionHue, BASE_TINTS } from '../client/src/lib/ringPrimitives.js'
 import { midnightGalaxyRing } from '../client/src/worlds/midnightGalaxy.ring.js'
 import {
   readStationHues, rewriteRingJs, rewriteHtml, rewriteHuePin, rewriteSky,
-  rewriteTints, deriveTints,
+  rewriteTints, recolorWorld, normalizePalette,
   formatPlan, blockedTargets, regionHueWarnings,
 } from '../client/src/lib/ringRecolor.js'
-import { BASE_TINTS } from '../client/src/lib/ringPrimitives.js'
 import { THEMES } from '../client/src/themes/index.js'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -63,24 +62,13 @@ function parseArgs(argv) {
   }
 
   if (!flags.colors) throw new Error("--colors is required, e.g. --colors '#ff0000,#ffea00'")
-  const colors = flags.colors.split(',').map(s => s.trim())
-  if (colors.length < 2 || colors.length > 3) {
-    throw new Error(`--colors takes 2 or 3 colors, got ${colors.length}`)
-  }
-  for (const c of colors) {
-    if (!/^#[0-9a-fA-F]{6}$/.test(c)) throw new Error(`not a #rrggbb color: ${c}`)
-  }
-
-  let weights = colors.map(() => 1)
-  if (flags.weights) {
-    weights = flags.weights.split(',').map(s => Number(s.trim()))
-    if (weights.length !== colors.length) {
-      throw new Error(`--weights has ${weights.length} values for ${colors.length} colors`)
-    }
-    if (weights.some(w => !(w > 0))) throw new Error('every weight must be a positive number')
-  }
-  const total = weights.reduce((a, b) => a + b, 0)
-  weights = weights.map(w => w / total)
+  const rawColors = flags.colors.split(',').map(s => s.trim())
+  const rawWeights = flags.weights ? flags.weights.split(',').map(s => Number(s.trim())) : undefined
+  // normalizePalette enforces 2-3 hex colors, weight-count match, positive
+  // weights, and sums them to 1 — the SAME rules the app validates a saved
+  // palette against, so a CLI palette and a host-picked one can never drift
+  // apart on what "valid" means.
+  const { colors, weights } = normalizePalette({ colors: rawColors, weights: rawWeights })
 
   return { colors, weights, write: !!flags.write }
 }
@@ -92,18 +80,27 @@ function main() {
   const rows = readStationHues(ringJs)
   const currentHues = rows.map(r => r.hue)
 
-  // baseTheme is passed for its bg/bgDeep LIGHTNESS only — the two values
-  // this writes are the sky's own source hexes (SKY_BG/SKY_BG_DEEP in both
-  // world files). accent/highlight from derived.themeColors are ignored:
-  // those are host-UI surface colors and stay the theme's job.
+  // recolorWorld is the SAME function the app calls (WorldPaletteEditor's
+  // Apply, and any /display mount) to build a recoloured world — this
+  // script's `--write` path now only moves the CERTIFIED BASE to a new
+  // palette; the ladder/anchor/tint math itself lives in one place.
+  // baseTheme is passed for its bg/bgDeep LIGHTNESS only — accent/highlight
+  // are host-UI surface colors and stay the theme's job, not written here.
+  //
+  // derivePalette is still called directly too, for warnings/counts/
+  // assignment — diagnostics this script prints that recolorWorld's return
+  // shape deliberately doesn't carry (the app never needs them to render).
+  // Both calls are pure and deterministic on the same inputs, so this is
+  // redundant compute, not a second implementation to drift from recolorWorld.
+  const world = recolorWorld(midnightGalaxyRing, { colors, weights }, BASE_THEME)
   const derived = derivePalette({
     colors, weights, stationCount: STATION_COUNT, currentHues, baseTheme: BASE_THEME,
   })
   const sky = { bg: derived.themeColors.bg, bgDeep: derived.themeColors.bgDeep }
-  const tints = deriveTints(BASE_TINTS, colors)
+  const tints = world.tints
 
-  const plan = rows.map((r, i) => ({ key: r.key, from: r.hue, to: derived.hues[i] }))
-  const stations = rows.map((r, i) => ({ key: r.key, hue: derived.hues[i] }))
+  const plan = rows.map((r, i) => ({ key: r.key, from: r.hue, to: world.stations[i].hue }))
+  const stations = rows.map((r, i) => ({ key: r.key, hue: world.stations[i].hue }))
 
   console.log(`\nRing recolor — ${colors.length} colors`)
   colors.forEach((c, i) => {

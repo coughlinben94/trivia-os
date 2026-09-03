@@ -2,10 +2,18 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
   readStationHues, rewriteRingJs, rewriteHtml, rewriteHuePin, rewriteSky,
-  rewriteTints, deriveTints,
+  rewriteTints, deriveTints, recolorWorld, normalizePalette,
   formatPlan, blockedTargets, regionHueWarnings,
 } from './ringRecolor.js'
 import { BASE_TINTS } from './ringPrimitives.js'
+import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
+
+const THEME = {
+  colors: {
+    bg: '#08001a', bgDeep: '#040010', accent: '#4a1a8f', highlight: '#c060ff',
+    text: '#e8d0ff', textMuted: '#8050b0', shinyBg: '#120030', shinyAccent: '#ff40a0',
+  },
+}
 
 // Reads the real world files. These transforms exist only to edit THOSE two
 // files, so a fixture copy would test the fixture, not the pipeline — the
@@ -278,6 +286,81 @@ describe('tints', () => {
     const out = deriveTints({ white: '#ffffff', cool: '#eaf0ff' }, ['#ff2200'])
     expect(out.white).toBe('#ffffff')
     expect(out.cool).not.toBe('#eaf0ff')
+  })
+})
+
+describe('normalizePalette', () => {
+  it('throws on 1 color', () => {
+    expect(() => normalizePalette({ colors: ['#ff2200'] })).toThrow(/2-3/)
+  })
+  it('throws on 4 colors', () => {
+    expect(() => normalizePalette({ colors: ['#ff2200', '#ffd400', '#3b82f6', '#a855f7'] })).toThrow(/2-3/)
+  })
+  it('throws on a non-hex color', () => {
+    expect(() => normalizePalette({ colors: ['#ff2200', 'red'] })).toThrow(/rrggbb/)
+  })
+  it('throws on a zero weight', () => {
+    expect(() => normalizePalette({ colors: ['#ff2200', '#ffd400'], weights: [0, 1] })).toThrow(/positive/)
+  })
+  it('throws on a weight-count mismatch', () => {
+    expect(() => normalizePalette({ colors: ['#ff2200', '#ffd400'], weights: [1] })).toThrow(/weights/)
+  })
+  it('normalizes weights to sum to 1', () => {
+    const out = normalizePalette({ colors: ['#ff2200', '#ffd400'], weights: [3, 1] })
+    expect(out.weights[0] + out.weights[1]).toBeCloseTo(1)
+    expect(out.weights[0]).toBeCloseTo(0.75)
+  })
+  it('defaults to equal weights when none are given', () => {
+    const out = normalizePalette({ colors: ['#ff2200', '#ffd400'] })
+    expect(out.weights).toEqual([0.5, 0.5])
+  })
+})
+
+describe('recolorWorld', () => {
+  const PALETTE = { colors: ['#ff2200', '#ffd400'], weights: [0.55, 0.45] }
+
+  it('produces the same 13 station hues as the CLI dry run for the same inputs', () => {
+    // Frozen against scripts/ring-recolor.mjs's own dry-run output, 2026-09-03,
+    // post-Phase-1 ladder fix — st3 (amber planet) lands at 63, not 68.
+    const EXPECTED = [343, 36, 28, 63, 346, 40, 23, 56, 354, 46, 18, 52, 8]
+    const world = recolorWorld(midnightGalaxyRing, PALETTE, THEME)
+    expect(world.stations.map(s => s.hue)).toEqual(EXPECTED)
+  })
+
+  it('derives tints the same way ring-recolor.mjs does', () => {
+    const world = recolorWorld(midnightGalaxyRing, PALETTE, THEME)
+    expect(world.tints).toEqual(deriveTints(BASE_TINTS, PALETTE.colors))
+  })
+
+  it('builds a 4-stop sky ramp', () => {
+    const world = recolorWorld(midnightGalaxyRing, PALETTE, THEME)
+    expect(world.sky).toHaveLength(4)
+  })
+
+  it('carries one hueAnchors entry per palette color', () => {
+    const world = recolorWorld(midnightGalaxyRing, PALETTE, THEME)
+    expect(world.hueAnchors).toHaveLength(2)
+  })
+
+  it('does not mutate the base world', () => {
+    const before = JSON.parse(JSON.stringify(midnightGalaxyRing))
+    const world = recolorWorld(midnightGalaxyRing, PALETTE, THEME)
+    expect(midnightGalaxyRing).toEqual(before)
+    expect(world.stations[0]).not.toBe(midnightGalaxyRing.stations[0])
+  })
+
+  // recolorWorld MUST always take the authored module as `base` — its
+  // station-identity-aware assignment reads base's hues as "what this
+  // station is really about." Recolouring an already-recoloured world
+  // starts that assignment from a moved position. It is NOT REQUIRED to
+  // match recolouring the base once (it may coincidentally, as it does for
+  // this particular palette below — that is not a guarantee, just this
+  // palette's fixed point). Named so nobody "fixes" a future mismatch into
+  // an idempotence guarantee this function never promised.
+  it('recolouring a recoloured world runs without throwing, and is not required to be idempotent', () => {
+    const once = recolorWorld(midnightGalaxyRing, PALETTE, THEME)
+    const twice = recolorWorld(once, PALETTE, THEME)
+    expect(twice.stations).toHaveLength(13)
   })
 })
 
