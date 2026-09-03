@@ -34,6 +34,7 @@ import ParticleBackground from '../display/ParticleBackground.jsx'
 import { DISPLAY_FONTS } from './ThemeCustomizeControls.jsx'
 import { EASE_OUT } from '../../lib/easings.js'
 import { SHINY_GOLD } from '../../lib/shinyGold.js'
+import CanvasIframe from './CanvasIframe.jsx'
 
 // The TV's real resolution, and it must stay that. Region transforms
 // (`_regionTransforms.fontSizePx` / `dx` / `dy`) are stored in CANVAS pixels
@@ -50,6 +51,19 @@ const INNER_H = 1080
 const SNAP_PCT = 1.2
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
+// Converts a rect measured INSIDE an iframe's own document (unscaled,
+// relative to the iframe's own viewport) into page-relative, scaled
+// coordinates — by adding the iframe element's own page position and
+// multiplying by its outer CSS scale. Pure function: plain numbers in,
+// plain numbers out, so it's testable without a real iframe or jsdom's
+// unreliable layout engine.
+function toPageRect(iframeInternalRect, iframeElRect, scale) {
+  const left = iframeElRect.left + iframeInternalRect.left * scale
+  const top = iframeElRect.top + iframeInternalRect.top * scale
+  const width = iframeInternalRect.width * scale
+  const height = iframeInternalRect.height * scale
+  return { left, top, width, height, right: left + width, bottom: top + height }
+}
 // Drill from a region's wrapping <span data-slide-region> down to the actual
 // text-bearing leaf element (the <p>/motion.div fontSize is set on, not the
 // span) — used to read a region's REAL current font size off the DOM.
@@ -506,10 +520,19 @@ export default function SlideCanvasEditor({
   // ═══════════════════════════════════════════════════════════════════════════
   function detectRegions() {
     if (!canvasRef.current || !overlayRef.current) return
+    // canvasRef.current now lives inside CanvasIframe's own document — its
+    // getBoundingClientRect() calls are relative to the IFRAME's own
+    // viewport (unscaled), not the page. Convert through the iframe
+    // element's own page position + scale to get page-relative rects, the
+    // same coordinate space overlayRef (unchanged, top-document) is in.
+    const iframeEl = canvasRef.current.ownerDocument.defaultView?.frameElement
+    if (!iframeEl) return
+    const iframeElRect = iframeEl.getBoundingClientRect()
     const oRect = overlayRef.current.getBoundingClientRect()
     const els = canvasRef.current.querySelectorAll('[data-slide-region]')
     setRegions(Array.from(els).map(el => {
-      const r = el.getBoundingClientRect()
+      const raw = el.getBoundingClientRect()
+      const r = toPageRect(raw, iframeElRect, dynScale)
       const id = el.dataset.slideRegion
       const rt = (data._regionTransforms ?? {})[id] ?? {}
       // Store the region's BASE geometry — as if dx/dy/rotate/scale were all
@@ -751,6 +774,12 @@ export default function SlideCanvasEditor({
       el.style.cursor = originalCursor
       el.style.pointerEvents = originalElPE
       canvasEl.style.pointerEvents = originalCanvasPE
+      // The commit click lands inside the iframe's own document (overlay is
+      // pointerEvents:none while editing), so focus parks on the <iframe>
+      // element in the TOP document instead of document.body — top-level
+      // keydown shortcuts (undo/redo, Escape, Delete) go dead until this
+      // blurs it back out.
+      canvasEl.ownerDocument.defaultView?.frameElement?.blur()
       if (save) {
         const val = el.textContent.trim()
         if (val) change(region.field, val)
@@ -789,11 +818,18 @@ export default function SlideCanvasEditor({
     el.addEventListener('blur', onBlur)
     el.addEventListener('keydown', onKeyDown)
     activeEditRef.current = el
+    // el now lives inside CanvasIframe's own document (its slide-region text
+    // is portaled there along with the rest of SlideRenderer's output) — use
+    // ITS document/window for caret placement, not the top-level ones, or
+    // the selection silently targets the wrong document and nothing visible
+    // happens.
+    const doc = el.ownerDocument
+    const win = doc.defaultView
     el.focus()
-    const range = document.createRange()
+    const range = doc.createRange()
     range.selectNodeContents(el)
     range.collapse(false)
-    const sel = window.getSelection()
+    const sel = win.getSelection()
     sel?.removeAllRanges()
     sel?.addRange(range)
 
@@ -940,10 +976,10 @@ export default function SlideCanvasEditor({
         <div style={{ width: scaledW, height: scaledH, position: 'relative', flexShrink: 0 }}>
           {/* Clipped, scaled canvas — the SAME render tree as /display */}
           <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-            <div ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${dynScale})`, transformOrigin: 'top left', overflow: 'hidden', containerType: 'size', background: theme.colors.bg }}>
+            <CanvasIframe ref={canvasRef} width={INNER_W} height={INNER_H} scale={dynScale} background={theme.colors.bg}>
               <ParticleBackground theme={theme} />
               <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} isPreview />
-            </div>
+            </CanvasIframe>
           </div>
 
           {/* Interactive overlay — overflow visible so handles aren't clipped.
