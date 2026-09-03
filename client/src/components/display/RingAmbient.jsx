@@ -40,6 +40,7 @@ import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, fillOf, rng, lerp, as
 import { ringNavAction } from '../../lib/ringStationIndex.js'
 import { EASE_SURGE } from '../../lib/easings.js'
 import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints, applyTints } from '../../lib/ringPrimitives.js'
+import { SLOTS } from '../../worlds/midnightGalaxy.slots.js'
 
 // ENGINE — engine-fixed, identical for every world; never a prop (a world
 // never sets any of this, same as the reference build's own ENGINE const).
@@ -323,8 +324,19 @@ function buildLayerContent(engine, world, arc, host, L) {
       // 2026-08-12: synced from world-07-ring.html — optional per-station
       // `bandUpper` override (st11, Ben: "move to bottom right"), same
       // pattern as `cornerLeft`. Draw still always happens.
+      // 2026-09-03 (Phase 1, docs/superpowers/plans/2026-09-02-ring-station-
+      // variety.md): placement (cornerLeft/bandUpper/companionUpper/
+      // companionBoost/maxDetail) now reads from SLOTS[i], not st.* — a
+      // future noun draw can put a different prim in this slot without the
+      // slot's own corner/band grammar re-rolling underneath it. `st.*`
+      // fields of the same name may still exist in the station data as
+      // historical attribution (the comments explaining WHY a station was
+      // pinned) but are no longer read here; SLOTS is the single source of
+      // truth for placement. pairBandDraw is still rolled and discarded when
+      // overridden — the draw must always happen so this station's
+      // rPairBand stream count never changes.
       const pairBandDraw = rPairBand() < 0.5
-      const pairUpper = st.bandUpper !== undefined ? st.bandUpper : pairBandDraw // shared band draw — see bandY's forceUpper comment (spec §7.5)
+      const pairUpper = SLOTS[i].bandUpper // see bandY's forceUpper comment (spec §7.5)
       // Corner choice drawn explicitly (not inside cornerX) so the
       // occluder below can read it and place itself at the opposite corner.
       // 2026-08-12: synced from world-07-ring.html — optional per-station
@@ -333,7 +345,7 @@ function buildLayerContent(engine, world, arc, host, L) {
       // draw still always happens so this station's rHeadline stream
       // count is identical whether or not it's overridden.
       const cornerDraw = rHeadline() < 0.5
-      const headlineCornerLeft = st.cornerLeft !== undefined ? st.cornerLeft : cornerDraw
+      const headlineCornerLeft = SLOTS[i].cornerLeft
       // 2026-08-26 (ring-verify Bug C): boundary-centered placement put
       // exactly 50% of this headline's box outside st9's own frame — the
       // bleed check's own "ACCIDENTAL CLIP (>35%)" call, confirmed real by
@@ -522,7 +534,7 @@ function buildLayerContent(engine, world, arc, host, L) {
         // file's identical comment. Math.max is idempotent, so st7
         // (flag + lens) doesn't double-apply.
         const cwRoll = lerp(230, 420, rCompanion())
-        const boostComp = st.companionBoost || ck === 'lens'
+        const boostComp = SLOTS[i].companionBoost || ck === 'lens'
         const cw = boostComp ? Math.max(cwRoll, 380) : cwRoll
         const ch = ck === 'streak' ? cw * 0.30 : cw * (0.60 + rCompanion() * 0.28)
         // 2026-09-02 palette-aware, synced with world-07-ring.html: an accent's
@@ -539,7 +551,7 @@ function buildLayerContent(engine, world, arc, host, L) {
         // companionUpper (st2, 2026-08-14): synced from world-07-ring.html —
         // per-station band override (true = upper); unset keeps !pairUpper,
         // the diagonal-opposite standing rule. See that file's comment.
-        const compUpper = st.companionUpper !== undefined ? st.companionUpper : !pairUpper
+        const compUpper = SLOTS[i].companionUpper
         const compTop = dom.bandY(rCompanion, ch, compUpper, dom.rotatedBandH(ck, cw, ch))
         comp.style.left = px(compLeft)
         comp.style.top = px(compTop)
@@ -571,7 +583,7 @@ function buildLayerContent(engine, world, arc, host, L) {
       // untouched), so they're the surplus to trim. Per-station cap, not a
       // formula-wide cut, so untouched stations (already 2-5) keep their
       // loudness-scaled dot count exactly as before.
-      const dn = Math.min(Math.round(lerp(1, 4, lou)), st.maxDetail ?? 4)
+      const dn = Math.min(Math.round(lerp(1, 4, lou)), SLOTS[i].maxDetail)
       for (let k = 0; k < dn; k++) {
         const dw = k === 0 ? lerp(58, 70, rDetail()) : lerp(58, 154, rDetail())
         const d = dom.makePrim('dots', dw, dw * 0.9, st.hue, lerp(0.34, 0.60, lou) * 0.7, rDetail, false, fill)

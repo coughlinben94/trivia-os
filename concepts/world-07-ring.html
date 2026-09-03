@@ -262,6 +262,7 @@ header.pg b{color:#ddd8e8;font-weight:500}
 import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints, applyTints } from '../client/src/lib/ringPrimitives.js';
 import { rng, lerp, skyFromTheme, fillOf, buildArc } from '../client/src/lib/ringEngine.js';
 import { recolorWorld } from '../client/src/lib/ringRecolor.js';
+import { SLOTS } from '../client/src/worlds/midnightGalaxy.slots.js';
 
 /* The base sky's two source colours, GENERATED: scripts/ring-recolor.mjs
    rewrites both from the palette in the same run that rewrites the hues, so
@@ -673,8 +674,11 @@ function buildLayerContent(host, L){
       // per-station override, same pattern as `cornerLeft`: the draw still
       // always happens so the station's rPairBand stream is unaffected
       // whether overridden or not.
+      // 2026-09-03 (Phase 1, docs/superpowers/plans/2026-09-02-ring-station-
+      // variety.md): placement now reads from SLOTS[i], not st.* — synced
+      // with RingAmbient.jsx's identical comment.
       const pairBandDraw = rPairBand() < 0.5;
-      const pairUpper = st.bandUpper !== undefined ? st.bandUpper : pairBandDraw; // shared band draw — see bandY's forceUpper comment (spec §7.5)
+      const pairUpper = SLOTS[i].bandUpper; // see bandY's forceUpper comment (spec §7.5)
 
       // 2026-08-12: asteroid field (st9) straddles the boundary into st10 by
       // Ben's request — "half on one slide half on another" — instead of
@@ -758,7 +762,7 @@ function buildLayerContent(host, L){
       // count identical whether or not it's overridden, so no downstream
       // draw in this station silently shifts depending on the flag).
       const cornerDraw = rHeadline() < 0.5;
-      const headlineCornerLeft = st.cornerLeft !== undefined ? st.cornerLeft : cornerDraw;
+      const headlineCornerLeft = SLOTS[i].cornerLeft;
       // 2026-08-26 (ring-verify Bug C): boundary-centered placement put
       // exactly 50% of this headline's box outside st9's own frame — the
       // bleed check's own "ACCIDENTAL CLIP (>35%)" call, confirmed real by
@@ -1040,7 +1044,7 @@ function buildLayerContent(host, L){
         // stations happen to roll 'lens' (st0/st2/st9 this seed). Math.max
         // is idempotent, so st7 (flag + lens) doesn't double-apply.
         const cwRoll = lerp(230, 420, rCompanion());
-        const boostComp = st.companionBoost || ck === 'lens';
+        const boostComp = SLOTS[i].companionBoost || ck === 'lens';
         const cw = boostComp ? Math.max(cwRoll, 380) : cwRoll;
         const ch = ck === 'streak' ? cw*0.30 : cw*(0.60 + rCompanion()*0.28);
         // 2026-09-02 palette-aware, synced with RingAmbient.jsx: an accent's
@@ -1061,7 +1065,7 @@ function buildLayerContent(host, L){
         // band directly (true = upper); unset stations keep !pairUpper —
         // the diagonal-opposite standing rule. Opposite-CORNER (horizontal
         // side) is untouched either way.
-        const compUpper = st.companionUpper !== undefined ? st.companionUpper : !pairUpper;
+        const compUpper = SLOTS[i].companionUpper;
         const compTop = dom.bandY(rCompanion, ch, compUpper, dom.rotatedBandH(ck, cw, ch));
         comp.style.left = px(compLeft);
         comp.style.top  = px(compTop);
@@ -1102,7 +1106,7 @@ function buildLayerContent(host, L){
       // formula-wide cut, so untouched stations (already 2-5) keep their
       // loudness-scaled dot count exactly as before. Synced from
       // RingAmbient.jsx.
-      const dn = Math.min(Math.round(lerp(1, 4, lou)), st.maxDetail ?? 4);
+      const dn = Math.min(Math.round(lerp(1, 4, lou)), SLOTS[i].maxDetail);
       for (let k=0;k<dn;k++){
         const dw = k === 0 ? lerp(58, 70, rDetail()) : lerp(58, 154, rDetail());
         const d = dom.makePrim('dots', dw, dw*0.9, st.hue, lerp(0.34,0.60,lou)*0.7, rDetail, false, sfill);
