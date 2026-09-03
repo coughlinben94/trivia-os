@@ -18,7 +18,7 @@ Read first: `/Users/bencoughlin/Projects/baynes-trivia/trivia-os/references/fact
    - `sayable` (§0.1): the bar cannot say the answer without being told.
    - `lawsuit`: a lawsuit / court case / legal charge IS the fact.
    - `mined` (§0.7): Grep `/Users/bencoughlin/Projects/baynes-trivia/trivia-os/FACT-HUNT-BANK.txt` for the answer AND the hinge — a hit on either.
-   - `unverified` (§0.9): fewer than two real sources; the primary work counts as one for a lyric/scene/level; a listicle or the surfacing video/thread counts as zero.
+   - `unverified` (§0.9): fewer than two real sources; the primary work counts as one for a lyric/scene/level; a listicle or the surfacing video/thread counts as zero. Grep each source's domain against `/Users/bencoughlin/Projects/baynes-trivia/trivia-os/references/fact-hunt/content-farm-domains.txt` (one domain per line) — a hit counts as zero. Then `WebFetch` one of the two remaining source URLs — a domain not on the list but still generic (no byline/date, republishes stock facts, can't independently confirm the claim) counts as zero too.
 2. Survivors score 1–5 on exactly one question: **would Ben jot this on his notes page?** Door quality, résumé, debunk-led, grim, trademark, introduced subject are score inputs, not bounces. Anchors from real verdicts:
    - résumé: Frank Oz (Yoda = Miss Piggy) 5 · Sterling Holloway "also voiced Kaa" 2 — the shout separates them, not the shape.
    - debunk-led: Superman ice cream / Sacheen Littlefeather kept · Shepard's "only 24 yards" killed — does the correction make the thing bigger or smaller?
