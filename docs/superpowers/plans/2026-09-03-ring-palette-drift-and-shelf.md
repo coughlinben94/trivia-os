@@ -735,9 +735,12 @@ This prints the exact path (`supabase/migrations/<timestamp>_ring_palettes_table
 - [ ] **Step 2: Write the migration**
 
 ```sql
--- ring_palettes — the certification shelf. Every row is either a candidate
--- from the seeded generator (source='generated', Task 4) or a host's own
--- custom colour pick saved for later checking (source='manual'). Nothing
+-- ring_palettes — the certification shelf. Every row is a candidate from the
+-- seeded generator (source='generated', Task 4), one of the picker's 6 fixed
+-- presets or its hardcoded default (source='preset', shelved once by every
+-- --seed-batch run so Apply always has something to match — see Task 6), or
+-- a host's own custom colour pick saved for later checking (source='manual').
+-- Nothing
 -- reads worldPalette off a show's theme_overrides unless it first matched
 -- a 'certified' row here — see WorldPaletteEditor.jsx's Apply flow. status
 -- starts 'pending' and is flipped by concepts/tools/palette-sweep.mjs
@@ -759,7 +762,7 @@ create table public.ring_palettes (
   weights        jsonb not null,
   drift          jsonb not null default '{"arc": 0}'::jsonb,
   status         text not null default 'pending' check (status in ('pending', 'certified', 'failed')),
-  source         text not null check (source in ('generated', 'manual')),
+  source         text not null check (source in ('generated', 'manual', 'preset')),
   seed           text,
   ring_version   text not null,
   gate_summary   jsonb,
@@ -769,6 +772,14 @@ create table public.ring_palettes (
 );
 
 create index ring_palettes_status_version_idx on public.ring_palettes (status, ring_version);
+
+-- A re-run of --seed-batch N over the same seeds (e.g. batch 5 then batch 20)
+-- must not double-insert. seed is null for manual/pending rows (Postgres
+-- treats each null as distinct, so many pending rows coexist fine); it is
+-- always set for 'generated' and 'preset' rows, where this must hold.
+create unique index ring_palettes_source_seed_version_idx
+  on public.ring_palettes (source, seed, ring_version)
+  where seed is not null;
 
 alter table public.ring_palettes enable row level security;
 
@@ -859,8 +870,8 @@ Claude-Session: https://claude.ai/code/session_01CxbdntMLL8ayLF1D98WZPT"
 - Create: `client/src/lib/ringCertification.js` (the `RING_VERSION` constant, Task 5's migration comment references it)
 
 **Interfaces:**
-- Consumes: `runChecks` from `concepts/tools/ring-verify.mjs` (imported, never forked, per the Global Constraints); `generatePalette`/`seedFrom` from Task 4; `@supabase/supabase-js`; the auth pattern from `scripts/backup-db.mjs` (service-role key or host-PIN elevation).
-- Produces: rows in `ring_palettes` with `status` flipped to `certified`/`failed` and `gate_summary` filled in.
+- Consumes: `runChecks`/`startStaticServer`/`ensureViteServer` from `concepts/tools/ring-verify.mjs` (imported, never forked, per the Global Constraints); `generatePalette`/`seedFrom`/`BASE_PALETTE` from Task 4's `paletteGenerator.js`, plus a new `PRESETS` export this task adds to that same file (moved out of `WorldPaletteEditor.jsx`, see Step 4); `@supabase/supabase-js`; the auth pattern from `scripts/backup-db.mjs` (service-role key or host-PIN elevation).
+- Produces: rows in `ring_palettes` (both `source='preset'` and `source='generated'`) with `status` flipped to `certified`/`failed` and `gate_summary` filled in; `PRESETS` now lives in `paletteGenerator.js`, consumed by both this tool and `WorldPaletteEditor.jsx` (Task 7 rewires that file further, but does not move `PRESETS` again).
 
 - [ ] **Step 1: `RING_VERSION` constant**
 
@@ -873,17 +884,17 @@ Claude-Session: https://claude.ai/code/session_01CxbdntMLL8ayLF1D98WZPT"
 export const RING_VERSION = 'v1-2026-09-03'
 ```
 
-- [ ] **Step 2: Known-answer probe first (rule zero) — write it as a real check, not a comment**
+- [ ] **Step 2: Imports, and the known-answer probe (rule zero) — defined here, wired to `certifyPalette` in Step 3 below (function declarations hoist; this is prose order, not load order)**
 
 ```js
 // concepts/tools/palette-sweep.mjs — top-of-file, after imports, before any DB or CLI arg handling.
 // Rule zero (references/ring-world-mistakes.md): a sweep tool sits on top
 // of the gate; if the sweep's OWN plumbing is broken, every row it writes
 // is a lie. Certifying nothing until this passes is deliberate.
-import { runChecks, runStaticChecks } from './ring-verify.mjs'
+import { runChecks, startStaticServer, ensureViteServer } from './ring-verify.mjs'
 import { midnightGalaxyRing } from '../../client/src/worlds/midnightGalaxy.ring.js'
 import { RING_VERSION } from '../../client/src/lib/ringCertification.js'
-import { generatePalette, seedFrom } from '../../client/src/lib/paletteGenerator.js'
+import { generatePalette, seedFrom, BASE_PALETTE } from '../../client/src/lib/paletteGenerator.js'
 import { createClient } from '@supabase/supabase-js'
 import { chromium } from 'playwright'
 import { readFileSync } from 'node:fs'
@@ -893,23 +904,14 @@ import { dirname, join } from 'node:path'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..', '..')
 
-async function knownAnswerProbe() {
-  // The BASE palette (no colours param) must certify — if it doesn't,
-  // stop before writing anything.
-  const browser = await chromium.launch()
-  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } })
-  try {
-    const results = []
-    const origReport = globalThis.__reportOverride // not used; runChecks returns its own array in this codebase's shape — see ring-verify.mjs's runChecks return contract
-    const summary = await runAgainstUrl(page, buildAmbientUrl(null))
-    const regressionFails = summary.filter(r => r.tier === 'regression' && r.status === 'FAIL')
-    if (regressionFails.length > 0) {
-      throw new Error(`palette-sweep: known-answer probe FAILED — the BASE palette (no params) has ${regressionFails.length} regression-tier FAIL(s). The sweep's own plumbing is broken; fix it before certifying anything. Names: ${regressionFails.map(r => r.name).join(', ')}`)
-    }
-    return true
-  } finally {
-    await page.close()
-    await browser.close()
+// The BASE palette at drift 0 must certify — if it doesn't, the sweep's OWN
+// plumbing is broken (wrong URL shape, dead server, whatever) and every row
+// it's about to write would be a lie. Reuses certifyPalette (Step 3) —
+// never a second, hand-rolled check path.
+async function knownAnswerProbe(browser) {
+  const { passed, summary } = await certifyPalette(browser, { ...BASE_PALETTE, drift: { arc: 0 } })
+  if (!passed) {
+    throw new Error(`palette-sweep: known-answer probe FAILED — the BASE palette has ${summary.regression_fail_count} regression FAIL(s) (${summary.regression_fail_names.join(', ')}). The sweep's own plumbing is broken; fix it before certifying anything.`)
   }
 }
 ```
@@ -945,14 +947,32 @@ async function elevateIfNeeded() {
   await sb.auth.refreshSession()
 }
 
+// Server lifecycle: started ONCE by the CLI entry (Step 5), reused across
+// every palette this run certifies, torn down in that entry's `finally`.
+// Never started per-palette — that's what leaked a vite process before.
+let staticServer, viteServer
+async function startServers() {
+  staticServer = await startStaticServer() // serves concepts/ — returns {url, close()}, per ring-verify.mjs's own CLI block
+  viteServer = await ensureViteServer()     // returns {url, proc} on a private port, per the same block
+}
+async function stopServers() {
+  await staticServer?.close?.()
+  viteServer?.proc?.kill?.()
+}
+
+function paletteQuery({ colors, weights, drift }) {
+  return `colors=${colors.join(',')}&weights=${weights.join(',')}&drift=${drift.arc}`
+}
+
 async function certifyPalette(browser, { colors, weights, drift }) {
   // Renders BOTH builds via the URL-param routes Session 1 added, exactly
   // like a host's picker preview does — reuses runChecks, never re-derives
   // pass/fail logic.
+  const q = paletteQuery({ colors, weights, drift })
   const results = []
   for (const [label, url] of [
-    ['html', buildStaticUrl({ colors, weights, drift })],
-    ['react-live', buildAmbientUrl({ colors, weights, drift })],
+    ['html', `${staticServer.url}/world-07-ring.html?${q}`],
+    ['react-live', `${viteServer.url}/ambient?ring=1&${q}`],
   ]) {
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } })
     try {
@@ -974,16 +994,55 @@ async function certifyPalette(browser, { colors, weights, drift }) {
 }
 ```
 
-(`buildStaticUrl`/`buildAmbientUrl` — small helpers that URL-encode `colors`/`weights`/`drift` onto, respectively, a served-`concepts/world-07-ring.html` URL and a running vite dev server's `/ambient?ring=1` URL. Reuse `startStaticServer` semantics from `ring-verify.mjs`'s own CLI block for the static side, and `ensureViteServer` for the react-live side — both already exist in that file; import what's exported, and if a helper genuinely isn't exported, write the smallest possible equivalent here rather than editing `ring-verify.mjs` to export it, per the Global Constraints' "sweep tool imports the exact check code, never forks it" rule, which is about check LOGIC, not server bootstrapping.)
+`startStaticServer`/`ensureViteServer` are already exported from `ring-verify.mjs` (2026-09-03 pre-flight fix, commit `1c03530`) for exactly this reuse — confirm their real return shape (`url`, and whatever teardown handle each exposes) by reading `ring-verify.mjs`'s own CLI block before wiring `startServers`/`stopServers` above; adjust the `.close()`/`.proc.kill()` calls to match what's actually returned rather than guessing further.
 
-- [ ] **Step 4: The two batch modes**
+- [ ] **Step 4: Move the picker's presets into a shared module, so both the UI and this sweep tool read the same list**
+
+`PRESETS` currently lives only inside `WorldPaletteEditor.jsx` (a JSX file this node CLI cannot import). Move it to `paletteGenerator.js` (plain JS, already imported here) so both sides read the exact same array — no hand-duplicated copy to drift out of sync.
+
+In `client/src/lib/paletteGenerator.js`, add near `BASE_PALETTE`:
+```js
+// One-click starting points the picker offers — also the FULL list of
+// palettes that must always be shelved as certified (Task 6's --seed-batch),
+// since Apply only ever offers shelf matches (Task 7) and a preset click
+// (or the picker's own untouched default, which equals PRESETS[0]) must
+// always be able to apply instantly, even before the shelf has been seeded
+// with any generated candidates.
+export const PRESETS = [
+  { name: 'Purple & Blue',  colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] },
+  { name: 'Violet & Pink',  colors: ['#8b5cf6', '#ec4899'], weights: [0.6, 0.4] },
+  { name: 'Blue & Teal',    colors: ['#3b82f6', '#14b8a6'], weights: [0.6, 0.4] },
+  { name: 'Amber & Rose',   colors: ['#f59e0b', '#f43f5e'], weights: [0.55, 0.45] },
+  { name: 'Emerald & Indigo', colors: ['#10b981', '#6366f1'], weights: [0.55, 0.45] },
+  { name: 'Crimson & Gold', colors: ['#dc2626', '#eab308'], weights: [0.6, 0.4] },
+]
+```
+In `WorldPaletteEditor.jsx`, delete the local `const PRESETS = [...]` block (lines 37-44) and instead import it: add `PRESETS` to the existing `import { ... } from '../../lib/paletteGenerator.js'` line (create that import line if this file doesn't already import from `paletteGenerator.js`).
+
+- [ ] **Step 5: The two batch modes**
 
 ```js
 async function runSeedBatch(n, browser) {
   const rows = []
+  // Presets (and the picker's own default, which is byte-identical to
+  // PRESETS[0]) must always be on the shelf — Task 7's Apply button only
+  // ever matches against certified rows, so without this a fresh install
+  // (or a RING_VERSION bump) can't apply even the built-in starting points.
+  // Shelved at drift 60 — WorldPaletteEditor's default slider value, which
+  // is what a preset click actually commits.
+  for (const preset of PRESETS) {
+    const candidate = { colors: preset.colors, weights: preset.weights, drift: { arc: 60 } }
+    const { passed, summary } = await certifyPalette(browser, candidate)
+    rows.push({
+      colors: candidate.colors, weights: candidate.weights, drift: candidate.drift,
+      status: passed ? 'certified' : 'failed', source: 'preset', seed: preset.name,
+      ring_version: RING_VERSION, gate_summary: summary, checked_at: new Date().toISOString(),
+    })
+    console.log(`preset "${preset.name}": ${passed ? 'CERTIFIED' : 'FAILED'}`)
+  }
   for (let s = 1; s <= n; s++) {
     const candidate = generatePalette(s, midnightGalaxyRing, { colors: { bg: '#08001a', bgDeep: '#040010' } })
-    if (candidate.fallback) continue // don't shelve the fallback — it's just the base palette, already implicitly available
+    if (candidate.fallback) continue // fallback IS BASE_PALETTE, already shelved above as PRESETS[0]
     const { passed, summary } = await certifyPalette(browser, candidate)
     rows.push({
       colors: candidate.colors, weights: candidate.weights, drift: candidate.drift,
@@ -992,16 +1051,18 @@ async function runSeedBatch(n, browser) {
     })
     console.log(`seed ${s}: ${passed ? 'CERTIFIED' : 'FAILED'} (${summary.regression_fail_count} regression FAIL, ${summary.spec_fail_count} spec FAIL)`)
   }
-  await elevateIfNeeded()
   if (rows.length) {
-    const { error } = await sb.from('ring_palettes').insert(rows)
-    if (error) throw new Error(`insert failed: ${error.message}`)
+    // upsert, not insert: re-running --seed-batch over the same seeds/presets
+    // (e.g. batch 5 today, batch 20 next week) must update, not duplicate —
+    // the unique index on (source, seed, ring_version) is the conflict target.
+    const { error } = await sb.from('ring_palettes')
+      .upsert(rows, { onConflict: 'source,seed,ring_version' })
+    if (error) throw new Error(`upsert failed: ${error.message}`)
   }
   console.log(`\n${rows.filter(r => r.status === 'certified').length}/${rows.length} certified, written to ring_palettes.`)
 }
 
 async function runPending(browser) {
-  await elevateIfNeeded()
   const { data: pending, error } = await sb.from('ring_palettes').select('*').eq('status', 'pending').eq('ring_version', RING_VERSION)
   if (error) throw new Error(`select failed: ${error.message}`)
   for (const row of pending ?? []) {
@@ -1016,14 +1077,18 @@ async function runPending(browser) {
 }
 ```
 
-- [ ] **Step 5: CLI entry point**
+`elevateIfNeeded()` runs once, in the CLI entry (Step 6 below), BEFORE either batch mode starts rendering — a bad/missing PIN must fail immediately, not after 20+ Playwright renders.
+
+- [ ] **Step 6: CLI entry point**
 
 ```js
 if (import.meta.url === `file://${process.argv[1]}`) {
   const mode = process.argv[2]
+  await elevateIfNeeded() // fail fast on a bad/missing PIN, before any rendering
+  await startServers()
   const browser = await chromium.launch()
   try {
-    await knownAnswerProbe()
+    await knownAnswerProbe(browser)
     if (mode === '--seed-batch') await runSeedBatch(Number(process.argv[3] ?? 10), browser)
     else if (mode === '--pending') await runPending(browser)
     else if (mode === '--label') {
@@ -1035,33 +1100,39 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
   } finally {
     await browser.close()
+    await stopServers()
   }
 }
 ```
 
-- [ ] **Step 6: Verify — run it for real, against a handful of seeds first**
+- [ ] **Step 7: Verify — run it for real, against a handful of seeds first**
 
 ```
 lsof -nP -iTCP:5173 -sTCP:LISTEN   # must be empty
 node concepts/tools/palette-sweep.mjs --seed-batch 5
 ```
-Expected: the known-answer probe passes first (prints nothing bad, or the run aborts loudly if it doesn't — do not proceed past a probe failure); 5 seeds each print CERTIFIED or FAILED; a final line reports N/5 certified. Then:
+Expected: the known-answer probe passes first (prints nothing bad, or the run aborts loudly if it doesn't — do not proceed past a probe failure); all 6 presets print CERTIFIED (or the run's finding is real signal — see Task 8 Step 4, don't force it); 5 seeds each print CERTIFIED or FAILED; a final line reports N/(5+6) certified. Then:
 ```sql
-select id, status, source, seed, ring_version from public.ring_palettes order by created_at desc limit 10;
+select id, status, source, seed, ring_version from public.ring_palettes order by created_at desc limit 15;
 ```
-via MCP, to see the rows landed.
+via MCP, to see the rows landed — 6 `source='preset'` rows plus up to 5 `source='generated'` rows.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add concepts/tools/palette-sweep.mjs client/src/lib/ringCertification.js
+git add concepts/tools/palette-sweep.mjs client/src/lib/ringCertification.js client/src/lib/paletteGenerator.js client/src/components/host/WorldPaletteEditor.jsx
 git commit -m "palette-sweep.mjs: fills the certification shelf offline, --seed-batch and --pending modes
 
-Known-answer probe runs first, every time, per rule zero. Imports
-runChecks from ring-verify.mjs directly — never a fork. This is the tool
-that makes 'no unchecked palette ever airs' actually true without any
-live/backend job-runner: run once, ahead of time, against a batch of
-seeds or whatever hosts have saved as pending.
+Known-answer probe runs first, every time, per rule zero, reusing
+certifyPalette rather than a second hand-rolled check path. Imports
+runChecks from ring-verify.mjs directly — never a fork. --seed-batch always
+shelves the 6 built-in presets (moved to paletteGenerator.js so this CLI and
+the picker UI share one list) alongside N generated candidates, so Apply
+(Task 7) can match a preset or the untouched default even before any
+generated palette has been certified. This is the tool that makes 'no
+unchecked palette ever airs' actually true without any live/backend
+job-runner: run once, ahead of time, against a batch of seeds, the presets,
+or whatever hosts have saved as pending.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01CxbdntMLL8ayLF1D98WZPT"
@@ -1164,10 +1235,14 @@ onClick={async () => {
   }
 }}
 ```
-Add the `savedPending` state next to `applied`'s declaration, and a visible message next to the button:
+Add the `savedPending` state next to `applied`'s declaration, and a visible message next to the button — worded differently when the shelf is entirely empty (nothing has ever been certified yet, e.g. before Task 6's sweep has run once) versus a genuine one-off custom pick:
 ```jsx
 {savedPending && (
-  <p className="text-xs text-amber-700">Saved — this exact combination isn't checked yet. It'll be ready by your next show.</p>
+  <p className="text-xs text-amber-700">
+    {shelf.length === 0
+      ? "Saved — no palettes have been certified yet (the sweep tool hasn't run). This one will be checked once it does."
+      : "Saved — this exact combination isn't checked yet. It'll be ready by your next show."}
+  </p>
 )}
 ```
 Change the button's own label logic to cover this third state:
@@ -1259,7 +1334,11 @@ Expected: a mix of CERTIFIED/FAILED lines (some generated palettes will fail —
 
 - [ ] **Step 3: Manual host-UI smoke test**
 
-Open the picker on a throwaway/preview show (never a live one, per this project's production-data rule). Confirm: "Surprise me" is enabled and offers only palettes from the batch just certified; clicking it and Applying ships instantly; typing a custom hex code and clicking Apply shows "Saved, pending check" and does NOT change the live preview's committed state after reload.
+Open the picker on a throwaway/preview show (never a live one, per this project's production-data rule). Confirm, in order:
+1. On first open (default palette, untouched), clicking Apply ships INSTANTLY — no "Saved, pending check" message. This is the regression a plan-critique pass caught mid-execution: the default/preset path must match a shelved `source='preset'` row (Step 2 of Task 6) or Apply silently degrades to pending for every host who never touches the custom-colors panel.
+2. Clicking any one of the 6 presets, then Apply — also instant.
+3. "Surprise me" is enabled and offers only palettes from the batch just certified; clicking it and Applying ships instantly.
+4. Typing a custom hex code and clicking Apply shows "Saved, pending check" and does NOT change the live preview's committed state after reload.
 
 - [ ] **Step 4: Report to Ben**
 
