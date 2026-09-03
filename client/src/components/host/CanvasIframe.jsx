@@ -31,7 +31,6 @@ const CanvasIframe = forwardRef(function CanvasIframe(
 ) {
   const iframeRef = useRef(null)
   const [frameBody, setFrameBody] = useState(null)
-  const stageRef = useRef(null)
 
   useEffect(() => {
     const iframe = iframeRef.current
@@ -47,6 +46,12 @@ const CanvasIframe = forwardRef(function CanvasIframe(
     document.querySelectorAll('head link[rel="stylesheet"], head style').forEach(node => {
       doc.head.appendChild(node.cloneNode(true))
     })
+    // Dev-only quirk: this clone happens once, at mount. In dev, editing a
+    // Tailwind class updates the host's injected <style> tag live via Vite
+    // HMR, but the iframe's copy was already cloned and doesn't follow —
+    // the canvas shows stale styling until the editor remounts (e.g.
+    // switching slides). Production is unaffected: a single static <link>,
+    // unchanged after page load.
 
     doc.body.style.margin = '0'
     doc.body.style.padding = '0'
@@ -56,7 +61,6 @@ const CanvasIframe = forwardRef(function CanvasIframe(
   // Expose the wrapper div (not the iframe element itself) as the ref, so
   // callers keep using it exactly like the old plain-div canvasRef.
   function setStageRef(el) {
-    stageRef.current = el
     if (typeof forwardedRef === 'function') forwardedRef(el)
     else if (forwardedRef) forwardedRef.current = el
   }
@@ -78,7 +82,6 @@ const CanvasIframe = forwardRef(function CanvasIframe(
       {frameBody && createPortal(
         <div
           ref={setStageRef}
-          data-canvas-iframe-stage="1"
           style={{
             position: 'absolute', top: 0, left: 0,
             width, height,

@@ -525,8 +525,8 @@ export default function SlideCanvasEditor({
     // viewport (unscaled), not the page. Convert through the iframe
     // element's own page position + scale to get page-relative rects, the
     // same coordinate space overlayRef (unchanged, top-document) is in.
-    const iframeWin = canvasRef.current.ownerDocument.defaultView
-    const iframeEl = iframeWin.frameElement
+    const iframeEl = canvasRef.current.ownerDocument.defaultView?.frameElement
+    if (!iframeEl) return
     const iframeElRect = iframeEl.getBoundingClientRect()
     const oRect = overlayRef.current.getBoundingClientRect()
     const els = canvasRef.current.querySelectorAll('[data-slide-region]')
@@ -774,6 +774,12 @@ export default function SlideCanvasEditor({
       el.style.cursor = originalCursor
       el.style.pointerEvents = originalElPE
       canvasEl.style.pointerEvents = originalCanvasPE
+      // The commit click lands inside the iframe's own document (overlay is
+      // pointerEvents:none while editing), so focus parks on the <iframe>
+      // element in the TOP document instead of document.body — top-level
+      // keydown shortcuts (undo/redo, Escape, Delete) go dead until this
+      // blurs it back out.
+      canvasEl.ownerDocument.defaultView?.frameElement?.blur()
       if (save) {
         const val = el.textContent.trim()
         if (val) change(region.field, val)
