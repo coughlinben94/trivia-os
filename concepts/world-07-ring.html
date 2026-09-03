@@ -461,9 +461,11 @@ let WORLD = {
   const q = new URLSearchParams(location.search);
   if (q.get('colors')) {
     const weightsParam = q.get('weights');
+    const driftParam = q.get('drift');
     WORLD = recolorWorld(WORLD, {
       colors: q.get('colors').split(','),
       weights: weightsParam ? weightsParam.split(',').map(Number) : undefined,
+      drift: driftParam ? { arc: Number(driftParam) } : undefined,
     }, { colors: { bg: SKY_BG, bgDeep: SKY_BG_DEEP } });
   }
 }

@@ -101,9 +101,10 @@ function WeightBar({ colors, weights, onChange, onCommit }) {
 export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeColors }) {
   const [colors, setColors]   = useState(['#a855f7', '#3b82f6'])
   const [weights, setWeights] = useState([0.65, 0.35])
+  const [drift, setDrift] = useState(60) // Ben's 2026-09-03 default
   // The palette the (expensive-to-remount) ring preview actually renders.
   // Trails the live state: synced on drag-end / debounced colour change.
-  const [committed, setCommitted] = useState({ colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] })
+  const [committed, setCommitted] = useState({ colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35], drift: { arc: 60 } })
   const [previewStation, setPreviewStation] = useState(0)
   const [showDetails, setShowDetails] = useState(false)
   const [showCustom, setShowCustom] = useState(false)
@@ -119,8 +120,8 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
     clearTimeout(copyTimeoutRef.current)
   }, [])
 
-  function commit(nextColors = colors, nextWeights = weights) {
-    setCommitted({ colors: nextColors, weights: nextWeights })
+  function commit(nextColors = colors, nextWeights = weights, nextDrift = drift) {
+    setCommitted({ colors: nextColors, weights: nextWeights, drift: { arc: nextDrift } })
   }
 
   // Every immediate (non-debounced) palette change goes through this, so a
@@ -169,8 +170,8 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   // station dots, swatch row, and advisory table.
   const derived = useMemo(() => derivePalette({
     colors, weights, stationCount: CURRENT_HUES.length,
-    baseTheme, currentHues: CURRENT_HUES,
-  }), [colors, weights, baseTheme])
+    baseTheme, currentHues: CURRENT_HUES, drift: { arc: drift },
+  }), [colors, weights, baseTheme, drift])
 
   // Committed palette (recolorWorld internally derives it) — drives the ring
   // preview only.
@@ -257,6 +258,15 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
                   : <button onClick={removeThird} className="text-xs font-medium text-gray-500 hover:text-gray-900 underline">remove third color</button>}
               </div>
               <WeightBar colors={colors} weights={weights} onChange={setWeights} onCommit={() => commit()} />
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-medium text-gray-500 w-24">Drift {drift}&deg;</label>
+                <input
+                  type="range" min="0" max="90" value={drift}
+                  onChange={e => setDrift(Number(e.target.value))}
+                  onPointerUp={() => commit(colors, weights, drift)}
+                  className="flex-1"
+                />
+              </div>
             </div>
           )}
         </div>
@@ -359,7 +369,7 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
               see the header comment. */}
           <button
             onClick={() => {
-              onApplyThemeColors({ themeColors: derived.themeColors, worldPalette: { colors, weights } })
+              onApplyThemeColors({ themeColors: derived.themeColors, worldPalette: { colors, weights, drift: { arc: drift } } })
               setApplied(true)
               // Visible confirmation before closing — the write itself is
               // silent (same fire-and-forget theme_overrides path every

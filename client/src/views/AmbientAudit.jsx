@@ -22,10 +22,12 @@ export default function AmbientAudit() {
     const colorsParam = params.get('colors')
     if (!colorsParam) return midnightGalaxyRing
     const weightsParam = params.get('weights')
+    const driftParam = params.get('drift')
     try {
       return recolorWorld(midnightGalaxyRing, {
         colors: colorsParam.split(','),
         weights: weightsParam ? weightsParam.split(',').map(Number) : undefined,
+        drift: driftParam ? { arc: Number(driftParam) } : undefined,
       }, getTheme('midnight-galaxy'))
     } catch (err) {
       console.warn('[AmbientAudit] bad ?colors= palette, using base:', err.message)

@@ -136,7 +136,7 @@ describe('WorldPaletteEditor', () => {
     expect(Object.keys(applied[0]).sort()).toEqual(['themeColors', 'worldPalette'])
     expect(Object.keys(applied[0].themeColors).sort()).toEqual(['accent', 'bg', 'bgDeep', 'highlight'])
     for (const v of Object.values(applied[0].themeColors)) expect(v).toMatch(/^#[0-9a-f]{6}$/)
-    expect(applied[0].worldPalette).toEqual({ colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] })
+    expect(applied[0].worldPalette).toEqual({ colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35], drift: { arc: 60 } })
   })
 
   it('lists every station with its advisory row once details are expanded', () => {
