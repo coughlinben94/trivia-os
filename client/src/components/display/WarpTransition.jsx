@@ -1,6 +1,7 @@
 import { useEffect, useRef, useMemo } from 'react'
 import { ringWorldFor } from './ParticleBackground.jsx'
 import { useTheme } from '../shared/ThemeProvider.jsx'
+import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
 import { withHueOf } from '../../lib/weightedPalette.js'
 import { hexToRgb } from '../../lib/oklab.js'
 
@@ -199,7 +200,14 @@ export default function WarpTransition({ dir = 'out', onDone }) {
   // ringWorldFor's own cache means this is the identical object, not a
   // second recolour computed from scratch. Recomputed only if theme/palette
   // identity changes (it doesn't mid-warp; this component remounts per warp).
-  const world = useMemo(() => ringWorldFor(theme), [theme])
+  // Fallback to midnightGalaxyRing: the grading-break warp fires on EVERY
+  // theme (Display.jsx's breakEligible has no theme check), but RING_WORLDS
+  // only has a midnight-galaxy entry — ringWorldFor returns undefined for
+  // the other 20 themes. Pre-this-file's-palette-runtime-change behavior was
+  // to hardcode midnightGalaxyRing unconditionally; this preserves that,
+  // rather than throwing (a throw here is swallowed by Display.jsx's
+  // ErrorBoundary, but onDone never fires and the grading break gets stuck).
+  const world = useMemo(() => ringWorldFor(theme) ?? midnightGalaxyRing, [theme])
   // Same stop RingAmbient paints its stage ground with — the world's own
   // terminal sky, not a second near-black to keep in sync by hand.
   const BG = world.sky[world.sky.length - 1]
