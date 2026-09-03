@@ -90,7 +90,7 @@ async function stopServers() {
 }
 
 function paletteQuery({ colors, weights, drift }) {
-  return `colors=${colors.join(',')}&weights=${weights.join(',')}&drift=${drift.arc}`
+  return `colors=${colors.map(encodeURIComponent).join(',')}&weights=${weights.join(',')}&drift=${drift.arc}`
 }
 
 async function certifyPalette(browser, { colors, weights, drift }) {
@@ -106,7 +106,7 @@ async function certifyPalette(browser, { colors, weights, drift }) {
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } })
     try {
       const r = await runChecks({ label, prefix: label === 'react-live' ? 'ring-' : '', page, gotoUrl: url })
-      results.push(...r)
+      results.push(...r.regression, ...r.spec)
     } finally {
       await page.close()
     }
