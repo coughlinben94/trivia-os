@@ -5,8 +5,15 @@ import App from './App.jsx'
 import './index.css'
 import './jukebox/jukebox.css'
 
-// main.jsx executing at all means this load succeeded — clear the reload guard so a future chunk error can retry.
-sessionStorage.removeItem('chunk-reload')
+// main.jsx executing means THIS module loaded, but a lazy route chunk can still
+// 404 seconds later, well after this line — so clearing the guard here, before
+// that's had a chance to happen, doesn't prove the reload actually fixed
+// anything. A genuinely broken deploy (not just deploy-time skew) would 404 the
+// same chunk again, and an immediate clear would let it loop forever: reload,
+// clear, 404, reload, clear, 404... Wait a few seconds of the app staying up
+// before clearing, so a second failure in that window finds the guard still
+// set and throws for real instead of reloading again.
+setTimeout(() => sessionStorage.removeItem('chunk-reload'), 5000)
 
 // Set the moment we decide to reload for a stale chunk. Everything that throws
 // between that decision and the navigation is fallout from the dead chunk, not
