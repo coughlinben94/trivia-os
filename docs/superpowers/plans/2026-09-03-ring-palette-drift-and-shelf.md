@@ -1165,7 +1165,11 @@ Claude-Session: https://claude.ai/code/session_01CxbdntMLL8ayLF1D98WZPT"
 
 ```js
 // client/src/lib/ringPalettesClient.js
-import { supabase } from './supabaseClient.js' // reuse this project's existing shared client — check the exact export name/path other host components import (e.g. Dashboard.jsx's own supabase import) and match it exactly; do not create a second client instance
+// Verified 2026-09-03: every other host component (DatabaseAddPanels.jsx,
+// LateTeamPopover.jsx, HostPinGate.jsx, LiveMode.jsx, ScorePanel.jsx, etc.)
+// imports the SAME shared client from this exact path — never create a
+// second client instance.
+import { supabase } from './supabase.js'
 import { RING_VERSION } from './ringCertification.js'
 
 export async function fetchCertifiedPalettes() {
