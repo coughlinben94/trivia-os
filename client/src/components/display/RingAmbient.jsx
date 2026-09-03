@@ -39,7 +39,7 @@ import { forwardRef, useEffect, useLayoutEffect, useImperativeHandle, useRef } f
 import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, fillOf, rng, lerp, assertLayerPeriods } from '../../lib/ringEngine.js'
 import { ringNavAction } from '../../lib/ringStationIndex.js'
 import { EASE_SURGE } from '../../lib/easings.js'
-import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints } from '../../lib/ringPrimitives.js'
+import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints, applyTints } from '../../lib/ringPrimitives.js'
 
 // ENGINE — engine-fixed, identical for every world; never a prop (a world
 // never sets any of this, same as the reference build's own ENGINE const).
@@ -774,6 +774,10 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
 
     stage.style.setProperty('--surge-ms', ENGINE.SURGE_MS + 'ms')
     worldData.sky.forEach((c, i) => stage.style.setProperty('--sky-' + (i + 1), c))
+    // Same mechanism, one line down: the world's near-white tints (star
+    // temperatures, hot cores, the comet glare). Absent → ringPrimitives'
+    // BASE_TINTS defaults inside each var() stand, unchanged.
+    applyTints(stage, worldData.tints)
 
     writeOffsets()
     shootLoop()

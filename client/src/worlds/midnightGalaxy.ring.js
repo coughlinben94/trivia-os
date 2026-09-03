@@ -39,6 +39,28 @@ export const SUPERNOVA_HUE      = 36
 export const SKY_BG      = '#08001a'
 export const SKY_BG_DEEP = '#040010'
 
+// ── Near-white tints ───────────────────────────────────────────────────────
+// GENERATED, like the hues and the two sky sources above: ring-recolor
+// rotates ringPrimitives.js's BASE_TINTS onto the palette (same lightness and
+// chroma, new hue) and writes the result here and into the identical table in
+// concepts/world-07-ring.html. Shipped values ARE the baseline, so this
+// renders byte-identical to the literals it replaced. Pure whites aren't
+// here — a hot core reads white under any sky.
+export const TINTS = {
+  halo:      '#fdf7ff',
+  coreWarm:  '#fffaf0',
+  coreDim:   '#fff6e6',
+  dustWarm:  '#fff3e0',
+  glareCool: '#eaf5ff',
+  starTint1: '#f6e6ff',
+  starTint2: '#fff3e2',
+  starTint3: '#eaf0ff',
+  drift:     '#ffd9a0',
+  driftGlow: '#ffb76e',
+  shoot:     '#fff8ec',
+  shootTail: '#fff6e2',
+}
+
 export const midnightGalaxyRing = {
   id: 'midnight-galaxy',
   type: 'space',
@@ -52,6 +74,7 @@ export const midnightGalaxyRing = {
   // returns a new spread object without mutating anything here. Ring worlds
   // are palette-fixed by design — see references/themes.md ("palette-fixed").
   sky: skyFromTheme({ colors: { bg: SKY_BG, bgDeep: SKY_BG_DEEP } }),
+  tints: TINTS,
   // Never source question text from theme.colors.accent — it's a UI-surface
   // color (buttons/panels), not tuned for text legibility. For Midnight
   // Galaxy that was #4a1a8f, ~1.8:1 against the display bg. Both colors run

@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
   readStationHues, rewriteRingJs, rewriteHtml, rewriteHuePin, rewriteSky,
+  rewriteTints, deriveTints,
   formatPlan, blockedTargets, regionHueWarnings,
 } from './ringRecolor.js'
+import { BASE_TINTS } from './ringPrimitives.js'
 
 // Reads the real world files. These transforms exist only to edit THOSE two
 // files, so a fixture copy would test the fixture, not the pipeline — the
@@ -248,6 +250,37 @@ describe('rewriteSky', () => {
   })
 })
 
+describe('tints', () => {
+  it('rewrites every tint in either world file', () => {
+    const next = { ...BASE_TINTS, halo: '#112233', shootTail: '#445566' }
+    for (const [src, what] of [[RING_JS, 'ring.js'], [HTML, 'html']]) {
+      const out = rewriteTints(src, next, what)
+      expect(out).toMatch(/halo:\s*'#112233'/)
+      expect(out).toMatch(/shootTail:\s*'#445566'/)
+    }
+  })
+
+  it('refuses a file missing a tint the table names', () => {
+    expect(() => rewriteTints("const TINTS = { halo: '#fdf7ff' }", BASE_TINTS, 'fixture'))
+      .toThrow(/no tint 'coreWarm'/)
+  })
+
+  // The whole point of rotating from a fixed baseline: recolouring twice
+  // lands where recolouring once did. Rotating from the file's current values
+  // instead would drift a little further every run.
+  it('is idempotent — same palette, same result from the same baseline', () => {
+    const once = deriveTints(BASE_TINTS, ['#ff2200', '#ffd400'])
+    const twice = deriveTints(BASE_TINTS, ['#ff2200', '#ffd400'])
+    expect(twice).toEqual(once)
+  })
+
+  it('leaves a neutral neutral and moves a tinted one', () => {
+    const out = deriveTints({ white: '#ffffff', cool: '#eaf0ff' }, ['#ff2200'])
+    expect(out.white).toBe('#ffffff')
+    expect(out.cool).not.toBe('#eaf0ff')
+  })
+})
+
 describe('midnightGalaxy.ring.js and world-07-ring.html agree', () => {
   const htmlStationPairs = () => {
     const block = HTML.match(/^([ \t]*)stations: \[\r?\n([\s\S]*?)^\1\],$/m)
@@ -270,6 +303,16 @@ describe('midnightGalaxy.ring.js and world-07-ring.html agree', () => {
   // The sky's source hexes are the third thing a recolour writes into both
   // files. Same failure shape as the hues: recoloured in one, and the app's
   // sky and the gate's sky are two different skies.
+  // A tint added to one file's table and not the other's is the same
+  // one-file-edit failure the hue pairs already guard against.
+  it('carries the same tint table in both files, matching BASE_TINTS', () => {
+    const tintsOf = src => Object.fromEntries(Object.keys(BASE_TINTS)
+      .map(k => [k, (src.match(new RegExp(`\\b${k}:\\s*'(#[0-9a-f]{6})'`, 'i')) ?? [])[1]]))
+    const fromJs = tintsOf(RING_JS)
+    expect(Object.values(fromJs).every(Boolean), 'ring.js is missing a tint').toBe(true)
+    expect(tintsOf(HTML)).toEqual(fromJs)
+  })
+
   it('carries the same sky source colors in both files', () => {
     const skyOf = src => [/SKY_BG(\s*)=\s*'(#[0-9a-f]{6})'/i, /SKY_BG_DEEP\s*=\s*'(#[0-9a-f]{6})'/i]
       .map(re => src.match(re).pop())

@@ -198,6 +198,38 @@ export function atLightness(hex, targetHex) {
   return labToHex(oklabToRgb([L, a * scale, b * scale]))
 }
 
+// Rotate a colour onto another colour's OKLab hue, keeping its OWN lightness
+// and chroma. This is how every near-white tint in the world (star casts, hot
+// cores, the comet's glare) follows a recolour without changing how BRIGHT it
+// is — the luminance gate measures those, and a tint that got lighter because
+// its hue moved would be a real regression dressed up as a palette change.
+//
+// A neutral stays neutral for free: pure white has chroma ~0, so there is no
+// hue to rotate and the round trip returns it unchanged. That is the correct
+// physics as well as the cheap outcome — a hot body's core reads white in any
+// sky. Same gamut discipline as atLightness: hold L and hue, walk the chroma
+// down only as far as sRGB requires, never clip channels (that hue-shifts).
+export function withHueOf(hex, refHex) {
+  const [L, a, b] = rgbToOklab(hexToRgb(hex))
+  const C = Math.hypot(a, b)
+  if (C < 1e-4) return hex.toLowerCase()
+  const [, ra, rb] = rgbToOklab(hexToRgb(refHex))
+  const refC = Math.hypot(ra, rb)
+  if (refC < 1e-4) return hex.toLowerCase()
+  const [ua, ub] = [ra / refC, rb / refC]
+  let scale = 1
+  if (!inGamut([L, ua * C, ub * C])) {
+    let lo = 0, hi = 1
+    for (let i = 0; i < 24; i++) {
+      const mid = (lo + hi) / 2
+      if (inGamut([L, ua * C * mid, ub * C * mid])) lo = mid
+      else hi = mid
+    }
+    scale = lo
+  }
+  return labToHex(oklabToRgb([L, ua * C * scale, ub * C * scale]))
+}
+
 // The one legitimate blend in this file. Folds the palette into a single
 // weighted OKLab mean via lerpOklabPolar — the proven function, not a
 // per-channel RGB lerp (which is exactly what produces a muddy grey

@@ -259,7 +259,7 @@ header.pg b{color:#ddd8e8;font-weight:500}
 // consumes (with the "ring-" prefix) drives this reference build too. Every
 // el/makePrim/bandY/buildStars call site below goes through the returned
 // `dom` object — no call site ever passes a literal prefix string again.
-import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints } from '../client/src/lib/ringPrimitives.js';
+import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints, applyTints } from '../client/src/lib/ringPrimitives.js';
 import { rng, lerp, skyFromTheme, fillOf, buildArc } from '../client/src/lib/ringEngine.js';
 
 /* The base sky's two source colours, GENERATED: scripts/ring-recolor.mjs
@@ -271,6 +271,27 @@ import { rng, lerp, skyFromTheme, fillOf, buildArc } from '../client/src/lib/rin
    theme no matter what palette the world was recoloured to. */
 const SKY_BG      = '#08001a';
 const SKY_BG_DEEP = '#040010';
+
+/* The world's near-white tints, GENERATED alongside the hues and the sky
+   source: scripts/ring-recolor.mjs rotates ringPrimitives.js's BASE_TINTS
+   onto the palette and writes the result here and in
+   client/src/worlds/midnightGalaxy.ring.js, byte-for-byte the same table in
+   both (ringRecolor.test.js fails if they diverge). Shipped values ARE the
+   baseline, so this renders identically to the literals it replaced. */
+const TINTS = {
+  halo:      '#fdf7ff',
+  coreWarm:  '#fffaf0',
+  coreDim:   '#fff6e6',
+  dustWarm:  '#fff3e0',
+  glareCool: '#eaf5ff',
+  starTint1: '#f6e6ff',
+  starTint2: '#fff3e2',
+  starTint3: '#eaf0ff',
+  drift:     '#ffd9a0',
+  driftGlow: '#ffb76e',
+  shoot:     '#fff8ec',
+  shootTail: '#fff6e2',
+};
 /* ═══════════════════════════════════════════════════════════════════════
    ENGINE — identical for every theme. A world never sets any of this.
    Every number appears exactly once. Anything derivable is derived by one
@@ -364,6 +385,7 @@ const WORLD = {
   // run the same skyFromTheme() in ringEngine.js over the same two source
   // hexes above.
   sky: skyFromTheme({ colors: { bg: SKY_BG, bgDeep: SKY_BG_DEEP } }),
+  tints: TINTS,
   qColours: ['#e2ccff', '#ffc48a'],
   /* one entry per station. `key` is the nameable thing; `accent` marks the
      stations allowed the one complementary hue. */
@@ -1256,6 +1278,7 @@ function buildLayerContent(host, L){
   window.__shootLane = shootLane;
   stage.style.setProperty('--surge-ms', ENGINE.SURGE_MS + 'ms');
   WORLD.sky.forEach((c,i) => stage.style.setProperty('--sky-'+(i+1), c));
+  applyTints(stage, WORLD.tints);
   applySkyTints(skyTints, skyWeights, 0, false); // initial state snaps, same as the scrim's
 })();
 

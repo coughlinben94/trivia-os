@@ -1,4 +1,7 @@
 import { useEffect, useRef } from 'react'
+import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
+import { withHueOf } from '../../lib/weightedPalette.js'
+import { hexToRgb } from '../../lib/oklab.js'
 
 // Vortex transition for the jukebox grading break (2026-08-17, Ben: "like
 // the grading break itself has an Sx station tied to it. then after the slide
@@ -123,9 +126,17 @@ import { useEffect, useRef } from 'react'
 // a sibling overlay, and the ring's own station jump is coordinated entirely
 // through Display.jsx's onDone commit, exactly as before.
 //
-// Colours are fixed rather than themed, same call the previous version made:
-// this reads as the ring world's own night sky being pulled under, and a warm
-// show theme tinting it makes it read as confetti instead.
+// Colours follow the RING WORLD, never the show theme — same call the previous
+// version made, now actually wired instead of hardcoded to the world's colours
+// as they happened to be. This reads as the ring world's own night sky being
+// pulled under; a warm show theme tinting it makes it read as confetti
+// instead, so `theme` is deliberately not consulted here. What changed: the
+// world is recolourable now (scripts/ring-recolor.mjs), and a blue-black
+// vortex under a red ring is the same mismatch by a different route. The
+// sky stops come straight from the world; the mote bands and the warm grade
+// are the authored ramps rotated onto the world's own cool and warm tints
+// (withHueOf: same lightness and chroma, new hue), so the ramp's shape —
+// cold rim, hot core, warming as the pull deepens — survives any palette.
 
 // 2026-08-17, Ben, after seeing it live: "both in and out need to be twice
 // as long." Was 1250ms. Every timing beat below (wind-up threshold, snap
@@ -140,12 +151,14 @@ const H = 1080
 const CX = W / 2
 const CY = H / 2
 const TAU = Math.PI * 2
-const BG = '#01010a' // matches RingAmbient's own stage background
+// Same stop RingAmbient paints its stage ground with — the world's own
+// terminal sky, not a second near-black to keep in sync by hand.
+const BG = midnightGalaxyRing.sky[midnightGalaxyRing.sky.length - 1]
 
-// Graded ground rather than a flat fill — cool core, near-black rim. On the
-// element's own CSS background so it costs nothing per frame and rides the
-// same opacity veil as the canvas pixels.
-const GROUND = 'radial-gradient(ellipse at 50% 50%, #06061c 0%, #01010a 58%, #000005 100%)'
+// Graded ground rather than a flat fill — cool core, near-black rim, from the
+// world's own sky ramp. On the element's own CSS background so it costs
+// nothing per frame and rides the same opacity veil as the canvas pixels.
+const GROUND = `radial-gradient(ellipse at 50% 50%, ${midnightGalaxyRing.sky[2]} 0%, ${BG} 58%, #000005 100%)`
 
 // Spawns sit just past the 1101px half-diagonal so nothing pops into being
 // inside the frame.
@@ -170,15 +183,22 @@ const LAYERS = [
   { share: 0.76, speed: 1.00, alpha: 0.88, width: 1.00 },
   { share: 1.00, speed: 1.62, alpha: 1.15, width: 0.70 },
 ]
-// Radius bands: cold blue at the rim, hot white in the core. Graded toward
-// WARM as the pull deepens.
+// Radius bands: cold at the rim, hot white in the core, graded toward WARM as
+// the pull deepens. The four authored steps and the warm target keep their
+// lightness and chroma; only their hue rotates, onto the ring world's own cool
+// star tint and warm drifter. Under the shipped purple world that lands within
+// a channel or two of the literals these replaced.
+const rotate = (rgb, ref) => hexToRgb(withHueOf(
+  '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join(''), ref))
+const COOL_REF = midnightGalaxyRing.tints.starTint3
+const WARM_REF = midnightGalaxyRing.tints.drift
 const BANDS = [
-  { c: [118, 146, 255], a: 0.42, w: 1.0 },
-  { c: [156, 186, 255], a: 0.62, w: 1.5 },
-  { c: [206, 226, 255], a: 0.84, w: 2.1 },
-  { c: [246, 251, 255], a: 1.00, w: 3.0 },
+  { c: (rotate([118, 146, 255], COOL_REF)), a: 0.42, w: 1.0 },
+  { c: (rotate([156, 186, 255], COOL_REF)), a: 0.62, w: 1.5 },
+  { c: (rotate([206, 226, 255], COOL_REF)), a: 0.84, w: 2.1 },
+  { c: (rotate([246, 251, 255], COOL_REF)), a: 1.00, w: 3.0 },
 ]
-const WARM = [255, 206, 146]
+const WARM = rotate([255, 206, 146], WARM_REF)
 
 const isReduced = () =>
   typeof window !== 'undefined' && window.matchMedia &&

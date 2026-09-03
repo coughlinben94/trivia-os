@@ -27,8 +27,10 @@ import { skyRegionHues, accentCompanionHue } from '../client/src/lib/ringPrimiti
 import { midnightGalaxyRing } from '../client/src/worlds/midnightGalaxy.ring.js'
 import {
   readStationHues, rewriteRingJs, rewriteHtml, rewriteHuePin, rewriteSky,
+  rewriteTints, deriveTints,
   formatPlan, blockedTargets, regionHueWarnings,
 } from '../client/src/lib/ringRecolor.js'
+import { BASE_TINTS } from '../client/src/lib/ringPrimitives.js'
 import { THEMES } from '../client/src/themes/index.js'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -98,6 +100,7 @@ function main() {
     colors, weights, stationCount: STATION_COUNT, currentHues, baseTheme: BASE_THEME,
   })
   const sky = { bg: derived.themeColors.bg, bgDeep: derived.themeColors.bgDeep }
+  const tints = deriveTints(BASE_TINTS, colors)
 
   const plan = rows.map((r, i) => ({ key: r.key, from: r.hue, to: derived.hues[i] }))
   const stations = rows.map((r, i) => ({ key: r.key, hue: derived.hues[i] }))
@@ -130,6 +133,11 @@ function main() {
 
   console.log(`\nBase sky: ${sky.bg} → ${sky.bgDeep}  (was ${BASE_THEME.colors.bg} → ${BASE_THEME.colors.bgDeep})`)
 
+  console.log('\nNear-white tints:')
+  for (const [key, hex] of Object.entries(tints)) {
+    console.log(`  ${key.padEnd(10)} ${BASE_TINTS[key]} → ${hex}`)
+  }
+
   console.log('\nAccent companions:')
   for (const s of withMeta.filter(s => s.accent)) {
     console.log(`  ${s.key.padEnd(14)} ${s.hue}° → companion ${accentCompanionHue(s.hue, derived.hueAnchors)}°`)
@@ -161,8 +169,8 @@ function main() {
   // `git checkout` on the targets, which the clean-tree guard above keeps
   // available.
   const next = {
-    [TARGETS.ringJs]: rewriteSky(rewriteRingJs(ringJs, derived.hues, derived.hueAnchors), sky, TARGETS.ringJs),
-    [TARGETS.html]: rewriteSky(rewriteHtml(read(TARGETS.html), stations, derived.hueAnchors), sky, TARGETS.html),
+    [TARGETS.ringJs]: rewriteTints(rewriteSky(rewriteRingJs(ringJs, derived.hues, derived.hueAnchors), sky, TARGETS.ringJs), tints, TARGETS.ringJs),
+    [TARGETS.html]: rewriteTints(rewriteSky(rewriteHtml(read(TARGETS.html), stations, derived.hueAnchors), sky, TARGETS.html), tints, TARGETS.html),
     [TARGETS.pin]: rewriteHuePin(read(TARGETS.pin), stations),
   }
   for (const [rel, text] of Object.entries(next)) writeFileSync(ROOT + rel, text)

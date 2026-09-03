@@ -11,7 +11,7 @@
 // failure mode this replaces is a hue that changed in one file only: the
 // app looks recolored, the gate still measures the old world.
 
-import { hueDelta } from './weightedPalette.js'
+import { hueDelta, withHueOf, hexToHslHue } from './weightedPalette.js'
 
 const GENERATED = '// written by scripts/ring-recolor.mjs — do not hand-edit'
 
@@ -137,6 +137,36 @@ export function rewriteSky(src, sky, what) {
     out = out.replace(re, `$1${hex}$4`)
   }
   return out
+}
+
+// Every value in a world file's TINTS block, matched by key. The block's
+// hand-laid-out shape and its comments survive — only the hexes move.
+export function rewriteTints(src, tints, what) {
+  let out = src
+  for (const [key, hex] of Object.entries(tints)) {
+    if (!/^#[0-9a-f]{6}$/i.test(hex)) throw new Error(`rewriteTints: not a #rrggbb color: ${hex}`)
+    const re = new RegExp(`(\\b${key}:(\\s*)')#[0-9a-fA-F]{6}(')`)
+    if (!re.test(out)) throw new Error(`${what}: no tint '${key}' to rewrite`)
+    out = out.replace(re, `$1${hex}$3`)
+  }
+  return out
+}
+
+// Each baseline tint rotated onto whichever palette colour is NEAREST its own
+// hue, so a warm core stays the world's warm one and a cool star stays its
+// cool one instead of every tint collapsing onto swatch #1. Always computed
+// from the passed baseline (ringPrimitives' BASE_TINTS), never from a world
+// file's current values — that is what makes a second recolour land in the
+// same place as the first rather than walking the tints further each run.
+export function deriveTints(baseTints, colors) {
+  const hues = colors.map(hexToHslHue)
+  return Object.fromEntries(Object.entries(baseTints).map(([key, hex]) => {
+    let best = 0
+    for (let i = 1; i < hues.length; i++) {
+      if (hueDelta(hexToHslHue(hex), hues[i]) < hueDelta(hexToHslHue(hex), hues[best])) best = i
+    }
+    return [key, withHueOf(hex, colors[best])]
+  }))
 }
 
 // Which of `targets` `git status --porcelain` already reports as changed.

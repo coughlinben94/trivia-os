@@ -392,6 +392,65 @@ function localRng(seed) {
   }
 }
 
+// ── Near-white tints ───────────────────────────────────────────────────────
+// Every chromatic near-white in this file used to be a literal, hand-tuned
+// against the purple world: a violet nebula halo, a warm hot-body core, a
+// cool comet glare, three star temperatures. A recolour moved the 13 station
+// hues and left all of them behind, so a red world still had blue-white
+// stars in it.
+//
+// These are the AUTHORED baseline and they never move. Each one is emitted as
+// `var(--t-<key>, <baseline>)`, the same mechanism the sky ramp already uses
+// (--sky-1..4, set per world in RingAmbient's mount effect) — so this module
+// stays world-agnostic, nothing here needed a new parameter, and a build that
+// sets no variables renders byte-identical to before.
+// scripts/ring-recolor.mjs rotates a copy of this table onto the palette
+// (weightedPalette.js's withHueOf: same OKLab lightness and chroma, new hue)
+// and writes it into each world's own TINTS block; applyTints() below puts
+// them on the stage. Rotating from this fixed baseline rather than from
+// whatever a world file currently holds is what keeps repeated recolours
+// idempotent instead of walking the tints further every run.
+//
+// Pure white is deliberately NOT in here. It has no hue to rotate — a hot
+// body's core reads white under any sky — so those stay literals.
+export const BASE_TINTS = {
+  halo:      '#fdf7ff', // nebula/cloud inner glow
+  coreWarm:  '#fffaf0', // hot body core (JS gradient + .s-core class default)
+  coreDim:   '#fff6e6', // .l-core, the dimmer companion core
+  dustWarm:  '#fff3e0', // dust-ringed planet's inner stop
+  glareCool: '#eaf5ff', // comet/streak head glare
+  starTint1: '#f6e6ff', // star temperature ramp — 3 chromatic of 5; the other
+  starTint2: '#fff3e2', //   two are pure white and stay literal
+  starTint3: '#eaf0ff',
+  drift:     '#ffd9a0', // slow drifter body
+  driftGlow: '#ffb76e', //   and its glow, one step deeper
+  shoot:     '#fff8ec', // shooting-star head
+  shootTail: '#fff6e2', //   and its tail stops
+}
+
+const rgbTriplet = hex => {
+  const n = parseInt(hex.slice(1), 16)
+  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`
+}
+
+// T.<key> is the colour; T.rgb.<key> is its channels, for the handful of
+// sites that need an alpha on the same colour (a shoot tail stop, the
+// drifter's glow). Keeping both derived from ONE entry is the point: the
+// shoot head and its tail stops drifted apart by hand once already.
+const T = Object.fromEntries(Object.entries(BASE_TINTS).map(([k, v]) => [k, `var(--t-${k},${v})`]))
+T.rgb = Object.fromEntries(Object.entries(BASE_TINTS).map(([k, v]) => [k, `var(--t-${k}-rgb,${rgbTriplet(v)})`]))
+
+// Put a world's tints on an element (the stage), exactly as the sky ramp
+// does. Undefined keys are skipped, so a world may override some and inherit
+// the rest.
+export function applyTints(host, tints) {
+  for (const [k, hex] of Object.entries(tints ?? {})) {
+    if (!(k in BASE_TINTS)) continue
+    host.style.setProperty(`--t-${k}`, hex)
+    host.style.setProperty(`--t-${k}-rgb`, rgbTriplet(hex))
+  }
+}
+
 function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
   // required, no default: a silent `fill = 1` here is exactly how the same
   // dropped-parameter bug got shipped 3 separate times (fillOf never wired
@@ -832,7 +891,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       core.style.width = core.style.height = px(cs)
       core.style.left = px(w * 0.5 - cs / 2); core.style.top = px(h * 0.5 - cs / 2)
       core.style.background = `radial-gradient(circle,
-        #fdf7ff 0%, ${hsla(hue, 52, 90, A(0.75, fill))} 16%,
+        ${T.halo} 0%, ${hsla(hue, 52, 90, A(0.75, fill))} 16%,
         ${hsla(hue, 48, 76, A(0.28, fill))} 44%, transparent 70%)`
       f.appendChild(core)
       // outskirt specks (addition #3): the cluster's resolved-star halo
@@ -991,7 +1050,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     c.style.width = c.style.height = px(cs)
     c.style.marginLeft = px(-cs / 2); c.style.marginTop = px(-cs / 2)
     c.style.background = `radial-gradient(circle,
-      #fffaf0 0%, ${hsla(hue, 60, 90, 0.9)} 10%,
+      ${T.coreWarm} 0%, ${hsla(hue, 60, 90, 0.9)} 10%,
       ${hsla(hue, 80, 74, A(0.35, fill))} 26%,
       ${hsla(hue, 84, 74, A(0.18, fill))} 45%, transparent 70%)`
     f.appendChild(c)
@@ -1252,7 +1311,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       nuc.style.width = nuc.style.height = px(ns)
       nuc.style.left = px(cx - ns / 2); nuc.style.top = px(cy - ns / 2)
       nuc.style.background = `radial-gradient(circle,
-        #fff3e0 0%, ${hsla(hue, 55, 88, A(0.75, fill))} 12%,
+        ${T.dustWarm} 0%, ${hsla(hue, 55, 88, A(0.75, fill))} 12%,
         ${hsla(hue, 48, 70, A(0.28, fill))} 38%, transparent 68%)`
       f.appendChild(nuc)
     }
@@ -1412,7 +1471,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // vanished with it). Nucleus is a hot-core radial gradient now; the
     // wide soft glow lives in the coma gradient divs above — the
     // technique every other primitive in this file already uses.
-    hd.style.background = `radial-gradient(circle, #ffffff 0%, #eaf5ff 34%, ${hsla(hue, 70, 86, A(0.75, fill))} 62%, transparent 100%)`
+    hd.style.background = `radial-gradient(circle, #ffffff 0%, ${T.glareCool} 34%, ${hsla(hue, 70, 86, A(0.75, fill))} 62%, transparent 100%)`
     hd.style.boxShadow = `0 0 ${px(hs * 0.9)} ${px(hs * 0.18)} ${hsla(hue, 72, 82, A(0.55, fill))}`
     // 2026-08-13 live review (Ben, st7: "put holes in it like a moon") —
     // crater pockmarks on the nucleus. Each crater is a soft radial divot:
@@ -2846,7 +2905,7 @@ function makeNebulaRing(el, w, h, hue, fill) {
 
 // ═══ STARS ═══ every one twinkles, wide swing, 5-13s - the Sonora
 // behaviour Ben named as the bar. NEVER a blur filter on these.
-const TEMP = ['#ffffff', '#f6e6ff', '#ffffff', '#fff3e2', '#eaf0ff']
+const TEMP = ['#ffffff', T.starTint1, '#ffffff', T.starTint2, T.starTint3]
 
 function buildStars(el, engine, host, period, perFrame, sizeMul, seed) {
   const n = Math.round(perFrame * (period / engine.W))
@@ -3350,11 +3409,11 @@ export function ringCss(prefix) {
 
 .${p}d-glow{position:absolute;inset:0;border-radius:50%}
 
-.${p}s-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fffaf0}
+.${p}s-core{position:absolute;left:50%;top:50%;border-radius:50%;background:${T.coreWarm}}
 .${p}s-spk{position:absolute;left:50%;top:50%;transform-origin:50% 50%}
 
 .${p}l-disc{position:absolute;inset:0;border-radius:50%}
-.${p}l-core{position:absolute;left:50%;top:50%;border-radius:50%;background:#fff6e6}
+.${p}l-core{position:absolute;left:50%;top:50%;border-radius:50%;background:${T.coreDim}}
 .${p}l-arm{position:absolute;border-radius:50%}
 .${p}l-arm-edge{position:absolute;border-radius:999px}
 
@@ -3405,9 +3464,9 @@ export function ringCss(prefix) {
    band exists as a "slower than this reads as frozen" floor, has no gate
    check behind it, and Ben overrode it directly on screen. Named here rather
    than quietly ignored. */
-.${p}drift{position:absolute;border-radius:50%;background:#ffd9a0;
+.${p}drift{position:absolute;border-radius:50%;background:${T.drift};
   animation:${driftMove} 120s linear infinite alternate;
-  box-shadow:0 0 32px 10px rgba(255,183,110,0.75)}
+  box-shadow:0 0 32px 10px rgba(${T.rgb.driftGlow},0.75)}
 @keyframes ${driftMove}{
   0%{transform:translate(0,0)}
   8.333%{transform:translate(300px,27.5px)}
@@ -3439,8 +3498,8 @@ export function ringCss(prefix) {
    spawnShoot() now sets these per spawn from a weighted tier table (see
    that file's SHOOT_TIERS) instead of every shoot being visually identical. */
 .${p}shoot{width:var(--sw,270px);height:var(--sh,3.4px);border-radius:2px;opacity:0;
-  background:linear-gradient(90deg,transparent 0%,rgba(255,246,226,0) 14%,
-    rgba(255,246,226,.72) 72%,#fff8ec 100%);
+  background:linear-gradient(90deg,transparent 0%,rgba(${T.rgb.shootTail},0) 14%,
+    rgba(${T.rgb.shootTail},.72) 72%,${T.shoot} 100%);
   animation:${shootGo} var(--sdu) linear both}
 /* Ben (earlier): "shooting stars are sometimes going the wrong way." Root
    cause: the gradient above always brightens toward LOCAL x=100% regardless
@@ -3451,8 +3510,8 @@ export function ringCss(prefix) {
    Reversed here is the same gradient with its stops mirrored (100-x),
    applied via .rev when going left, so the bright end always leads
    whichever screen direction the star is actually travelling. */
-.${p}shoot.rev{background:linear-gradient(90deg,#fff8ec 0%,
-    rgba(255,246,226,.6) 28%,rgba(255,246,226,0) 86%,transparent 100%)}
+.${p}shoot.rev{background:linear-gradient(90deg,${T.shoot} 0%,
+    rgba(${T.rgb.shootTail},.6) 28%,rgba(${T.rgb.shootTail},0) 86%,transparent 100%)}
 @keyframes ${shootGo}{
   0%{transform:translate3d(0,0,0);opacity:0}
   10%{opacity:var(--s-op1,.95)} 74%{opacity:var(--s-op2,.85)}
