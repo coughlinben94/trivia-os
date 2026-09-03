@@ -145,6 +145,11 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
   // Suppresses the transient isPaused=true the SDK emits during auto-advance
   const transitioningRef = useRef(false)
   const fadingRef = useRef(false)
+  // Set by the mount effect below so `reconnect` (defined outside that
+  // effect, called on demand from a failed playTrack) can rebind listeners
+  // onto a freshly-built player the same way the effect's own init() does —
+  // see `reconnect`'s own comment for why this exists.
+  const bindListenersRef = useRef(null)
 
   useEffect(() => { onAdvanceRef.current = onAdvance }, [onAdvance])
   useEffect(() => { onFadeStartRef.current = onFadeStart }, [onFadeStart])
@@ -185,6 +190,7 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
         setError(`Player init failed: ${message}`)
       )
     }
+    bindListenersRef.current = bindListeners
 
     const init = async () => {
       mountCount += 1
@@ -339,6 +345,42 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
       }
     }, 300)
     monitorRef.current = intervalId
+  }, [])
+
+  // ─── Force a fresh Spotify.Player, discarding the shared singleton ──
+  // 2026-09-03: the singleton (sharedSpotifyPlayer/sharedDeviceId) is trusted
+  // forever once populated — nothing ever re-validates it. If the cached
+  // device_id goes stale (Spotify drops the Connect device during a long
+  // idle gap between grading breaks, or any other reason), every future
+  // playTrack call fails against a dead device_id with no path back except a
+  // full page reload. Jukebox.jsx's retry-once wrapper calls this before its
+  // retry so the SECOND attempt has an actual chance — retrying the exact
+  // same stale connection twice, which is all the old code did, can never
+  // recover from this class of failure.
+  const reconnect = useCallback(async () => {
+    reportJukebox('reconnect: discarding player, building fresh', { mountCount })
+    try { sharedSpotifyPlayer?.disconnect() } catch { /* best-effort */ }
+    sharedSpotifyPlayer = null
+    sharedDeviceId = null
+    deviceIdRef.current = null
+    setIsReady(false)
+
+    const token = await getToken()
+    if (!token) return false
+
+    const player = new window.Spotify.Player({
+      name: 'Trivia Jukebox',
+      getOAuthToken: cb => getToken().then(cb),
+      volume: 0,
+    })
+    sharedSpotifyPlayer = player
+    playerRef.current = player
+    bindListenersRef.current?.(player)
+    await player.connect()
+
+    const deviceId = await waitForRef(deviceIdRef, 6000)
+    if (!deviceId) reportJukebox('reconnect: fresh player never became ready', { mountCount })
+    return !!deviceId
   }, [])
 
   // ─── Play a track with custom start/stop ─────────────────────────
@@ -635,6 +677,6 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
   return {
     isReady, isPaused, currentTrack, position, duration, error,
     volume, setVolume,
-    playTrack, fadeAndPause, pause, seek,
+    playTrack, fadeAndPause, pause, seek, reconnect,
   }
 }

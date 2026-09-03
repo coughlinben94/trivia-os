@@ -753,7 +753,11 @@ const [newSetName, setNewSetName] = useState('')
         // resets/retries it.
         if (started === false) {
           if (!isRetry) {
-            attemptPlay(true)
+            // Rebuild the Spotify connection before retrying, not just the
+            // play call — retrying against the exact same (possibly-stale,
+            // e.g. after a live Connect-device drop) player/device_id can
+            // never recover on its own. See reconnect's own comment.
+            player.reconnect().then(() => attemptPlay(true))
             return
           }
           pendingLiveOpenRef.current = false
@@ -859,7 +863,10 @@ const [newSetName, setNewSetName] = useState('')
           if (started !== false) return
           if (!isRetry) {
             // Single retry — skip the one bad track, don't loop the whole set.
-            tryPlay(true)
+            // Rebuild the Spotify connection first (see reconnect's own
+            // comment) — retrying against the exact same stale player/
+            // device_id can never recover on its own.
+            player.reconnect().then(() => tryPlay(true))
           } else {
             // Retry also failed — stop lying about playback state, and actually
             // say so. This used to fail silently: music would just stop with
@@ -870,6 +877,7 @@ const [newSetName, setNewSetName] = useState('')
             setShowLive(false)
             setPlayingId(null)
             addToast('Playback stalled and auto-retry failed — hit Shuffle to restart')
+            reportJukebox('mid-break song advance exhausted its retry')
           }
         })
       }
