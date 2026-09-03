@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { slimTrack, songNeedsSlim, hasTrim, uid, totalSongs } from '../lib/track'
 import { shuffleArray, resolveNext, resolveUpcoming, buildSessionOrder } from '../lib/shuffle'
 import { loadPlayed, savePlayed } from '../lib/playedStore'
-import { useSpotifyPlayer } from '../hooks/useSpotifyPlayer'
+import { useSpotifyPlayer, reportJukebox } from '../hooks/useSpotifyPlayer'
 import { prefetchPalette } from '../hooks/usePalette'
 import { hasOverrides, TUNING_EVENT } from '../lib/gradientTuning'
 import Player from './Player'
@@ -762,6 +762,7 @@ const [newSetName, setNewSetName] = useState('')
           setShowLive(false)
           setPlayingId(null)
           addToast('Playback stalled and auto-retry failed — hit Shuffle to restart')
+          reportJukebox('grading-break auto-shuffle exhausted its retry')
           abandonHandoff()
         }
       })

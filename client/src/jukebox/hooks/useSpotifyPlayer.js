@@ -1,6 +1,22 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import * as Sentry from '@sentry/react'
 import { getToken, refreshToken } from '../lib/spotify'
 import { computeFadeBudget } from '../lib/fade'
+
+// Diagnostic-only — no client bound (local dev, no VITE_SENTRY_DSN) makes
+// these silent no-ops, same as main.jsx's conditional Sentry.init.
+// 2026-09-03: added after a live-show jukebox failure ("worked once, never
+// again") turned out to have ZERO telemetry — playTrack's failure branches
+// only ever console.error, and Jukebox.jsx's own retry-exhausted toast is
+// easy to miss on a live TV. Two root-cause theories were chased and ruled
+// out from code/git alone (a deploy-triggered reload, and a stale `ready`
+// listener) without ever landing on hard evidence. These breadcrumbs exist
+// so the NEXT occurrence leaves a real trace instead of another guessing
+// round: which break number, whether a device_id was ever held, and the
+// exact HTTP status Spotify returned.
+let mountCount = 0
+export const reportJukebox = (stage, extra = {}) =>
+  Sentry.captureMessage(`jukebox: ${stage}`, { level: 'warning', tags: { area: 'jukebox' }, extra })
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 const FADE_STEPS = 24
@@ -171,6 +187,7 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
     }
 
     const init = async () => {
+      mountCount += 1
       if (sharedSpotifyPlayer) {
         // Reuse the already-connected singleton instead of constructing a
         // second Spotify.Player — see the sharedSpotifyPlayer comment above.
@@ -178,6 +195,7 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
         if (sharedDeviceId) deviceIdRef.current = sharedDeviceId
         bindListeners(sharedSpotifyPlayer)
         setIsReady(!!sharedDeviceId)
+        if (!sharedDeviceId) reportJukebox('reused player mounted with no cached device_id', { mountCount })
         return
       }
 
@@ -350,6 +368,7 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
       if (deadRef.current) return false
       if (!deviceId) {
         setError('Spotify player still connecting — try again in a moment.')
+        reportJukebox('device_id never arrived (5s timeout)', { mountCount, hadSharedDeviceId: !!sharedDeviceId })
         transitioningRef.current = false
         return false
       }
@@ -409,11 +428,17 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
       // Timeout (AbortError) or a genuine network failure — either way the
       // play request never landed. Fail cleanly instead of hanging forever.
       console.error('[playTrack] play request timed out or failed', err)
+      reportJukebox('play request timed out or failed', { mountCount, errMessage: err?.message })
       transitioningRef.current = false
       return false
     }
     if (!playRes.ok) {
       console.error('[playTrack] play request failed', playRes.status)
+      // The status is the whole point of this breadcrumb — a 404 means
+      // Spotify no longer recognizes deviceId (the device it handed out on
+      // `ready` has since gone stale), a 403 means no active/Premium device,
+      // anything else is a different failure class entirely.
+      reportJukebox('play request failed', { mountCount, status: playRes.status })
       transitioningRef.current = false
       return false
     }
@@ -450,6 +475,7 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
       const state = await withTimeout(player.getCurrentState(), 1500)
       if (state?.track_window?.current_track?.uri !== uri) {
         console.error('[playTrack] Spotify never confirmed this track loaded — aborting')
+        reportJukebox('Spotify never confirmed track loaded', { mountCount })
         return false
       }
     }
