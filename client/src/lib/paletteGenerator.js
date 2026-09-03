@@ -32,6 +32,15 @@ export const PRESETS = [
   { name: 'Amber & Rose',   colors: ['#f59e0b', '#f43f5e'], weights: [0.55, 0.45] },
   { name: 'Emerald & Indigo', colors: ['#10b981', '#6366f1'], weights: [0.55, 0.45] },
   { name: 'Crimson & Gold', colors: ['#dc2626', '#eab308'], weights: [0.6, 0.4] },
+  // Candidates from Fable 5.1, 2026-09-03, designed to avoid the failure
+  // mode found in Blue & Teal / Emerald & Indigo: a blue/green hue landing
+  // nearest station 0's base hue (256) takes that station's lowest drift
+  // rung, pushing the ringed planet's glow past the safe-box luminance cap.
+  { name: 'Plum & Ember',      colors: ['#7e22ce', '#ea580c'], weights: [0.6, 0.4] },
+  { name: 'Purple & Crimson',  colors: ['#9333ea', '#dc2626'], weights: [0.6, 0.4] },
+  { name: 'Violet & Coral',    colors: ['#7c3aed', '#f97316'], weights: [0.6, 0.4] },
+  { name: 'Purple & Teal',     colors: ['#9333ea', '#0d9488'], weights: [0.65, 0.35] },
+  { name: 'Violet / Teal / Rose', colors: ['#7c3aed', '#0d9488', '#f43f5e'], weights: [0.5, 0.25, 0.25] },
 ]
 
 export function seedFrom(text) {
