@@ -48,7 +48,7 @@ function pickHues(r, k) {
   let guard = 0
   while (hues.length < k && guard++ < 200) {
     const h = r() * 360
-    const inBand = h >= DEAD_BAND[0] && h < DEAD_BAND[1]
+    const inBand = h >= DEAD_BAND[0] - 1 && h < DEAD_BAND[1] + 1 // ponytail: +/- 1° buffer for hex quantization up to 0.44° rounding
     if (inBand) continue
     if (hues.some(existing => Math.min(Math.abs(existing - h), 360 - Math.abs(existing - h)) < MIN_SEPARATION)) continue
     hues.push(h)

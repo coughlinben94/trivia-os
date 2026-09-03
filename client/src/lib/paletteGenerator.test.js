@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generatePalette, seedFrom } from './paletteGenerator.js'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
-import { hexToHslHue, DEAD_BAND } from './weightedPalette.js'
+import { hexToHslHue, DEAD_BAND, derivePalette } from './weightedPalette.js'
 import { regionHueWarnings } from './ringRecolor.js'
 import { skyRegionHues } from './ringPrimitives.js'
 
@@ -36,9 +36,12 @@ describe('generatePalette', () => {
           expect(Math.min(d, 360 - d)).toBeGreaterThanOrEqual(60)
         }
       }
-      const derived = { hueAnchors: hues.map(deg => ({ deg, window: 25 })) }
-      const world = midnightGalaxyRing.stations // region check needs a hue-bearing station set — the base's own is fine, this only tests region OFFSET legality, not actual derived hues
-      const regions = skyRegionHues(world)
+      const derived = derivePalette({
+        colors: p.colors, weights: p.weights, stationCount: midnightGalaxyRing.stations.length,
+        currentHues: midnightGalaxyRing.stations.map(st => st.hue), baseTheme: BASE_THEME, drift: p.drift,
+      })
+      const stations = midnightGalaxyRing.stations.map((st, i) => ({ ...st, hue: derived.hues[i] }))
+      const regions = skyRegionHues(stations)
       expect(regionHueWarnings(regions, derived.hueAnchors)).toEqual([])
       expect(p.weights.reduce((a, b) => a + b, 0)).toBeCloseTo(1)
       expect(Math.max(...p.weights)).toBeGreaterThanOrEqual(0.55)
