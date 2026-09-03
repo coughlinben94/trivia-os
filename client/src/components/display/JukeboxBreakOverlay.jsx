@@ -1,7 +1,5 @@
-import { useEffect } from 'react'
 import Jukebox from '../../jukebox/components/Jukebox.jsx'
 import SpotifyConnectGate from '../../jukebox/SpotifyConnectGate.jsx'
-import { setJukeboxActive } from '../../lib/jukeboxActive.js'
 
 // Full-screen music layer for grading breaks — an OVERLAY over the live
 // grading-break slide, not a slide type (see the 2026-08-16 jukebox plan §A1).
@@ -41,13 +39,6 @@ const disconnectedBanner = (
 )
 
 export default function JukeboxBreakOverlay({ lib, onExit }) {
-  // Marks the deploy-reload guard in main.jsx: see jukeboxActive.js for why
-  // a reload can't be allowed to land mid-break.
-  useEffect(() => {
-    setJukeboxActive(true)
-    return () => setJukeboxActive(false)
-  }, [])
-
   return (
     // data-break-overlay: Display.jsx's click/key step-through handlers bail
     // while this is mounted — the break's own b-hold is the advance path here,

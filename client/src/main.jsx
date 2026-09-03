@@ -4,7 +4,6 @@ import * as Sentry from '@sentry/react'
 import App from './App.jsx'
 import './index.css'
 import './jukebox/jukebox.css'
-import { onceJukeboxInactive } from './lib/jukeboxActive.js'
 
 // main.jsx executing means THIS module loaded, but a lazy route chunk can still
 // 404 seconds later, well after this line — so clearing the guard here, before
@@ -40,17 +39,11 @@ if (import.meta.env.VITE_SENTRY_DSN) {
 // during a deploy). Real errors are unaffected: the flag is only ever set here.
 window.addEventListener('vite:preloadError', (event) => {
   event.preventDefault()
-  if (sessionStorage.getItem('chunk-reload')) return
-  // Don't reload mid-jukebox-break: a live deploy landing during a grading
-  // break used to nuke the /display tab's Spotify Player singleton, killing
-  // jukebox playback for the rest of the show (2026-09-01 live — see
-  // jukeboxActive.js). Deferred reloads still coalesce through the
-  // sessionStorage guard once they actually fire.
-  onceJukeboxInactive(() => {
+  if (!sessionStorage.getItem('chunk-reload')) {
     sessionStorage.setItem('chunk-reload', '1')
     reloadingForStaleChunk = true
     window.location.reload()
-  })
+  }
 })
 
 ReactDOM.createRoot(document.getElementById('root')).render(
