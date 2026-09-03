@@ -400,7 +400,7 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
                 appliedTimeoutRef.current = setTimeout(onClose, 1200)
               }
             }}
-            disabled={applied || savedPending}
+            disabled={applied || savedPending || shelfLoading}
             className="ml-auto text-sm font-semibold px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-70"
           >
             {applied ? 'Applied ✓' : savedPending ? 'Saved, pending check' : "Apply to this show's theme"}

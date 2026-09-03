@@ -194,6 +194,13 @@ describe('WorldPaletteEditor', () => {
     expect(byText('Saved, pending check')).toBeFalsy()
   })
 
+  it('disables Apply while the shelf is still loading, so the default preset cannot race the fetch into a false "pending"', async () => {
+    render()
+    expect(byText("Apply to this show's theme").disabled).toBe(true) // shelf fetch hasn't resolved yet
+    await act(async () => { await Promise.resolve() }) // let it resolve
+    expect(byText("Apply to this show's theme").disabled).toBe(false)
+  })
+
   it('Apply on a NON-matching custom palette saves as pending instead of applying', async () => {
     const applied = []
     render({ onApplyThemeColors: c => applied.push(c) })
