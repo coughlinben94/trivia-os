@@ -34,7 +34,7 @@
 - Produces: `CanvasIframe` — a `forwardRef` component. Props: `{ width: number, height: number, scale: number, background: string, children: ReactNode }`. The forwarded ref resolves to the wrapper `<div>` **inside** the iframe's own document (same role `canvasRef.current` played before this task — a real DOM node with `querySelector`/`offsetWidth`/etc., just now owned by a different `document`). Also attaches that wrapper div as `el.dataset.canvasIframeStage = '1'` so later tasks can find the iframe element itself via `el.ownerDocument.defaultView.frameElement`.
 - Consumes: nothing from earlier tasks (first task).
 
-- [ ] **Step 1: Write `CanvasIframe.jsx`**
+- [x] **Step 1: Write `CanvasIframe.jsx`**
 
 ```jsx
 // CanvasIframe — renders children inside a real <iframe>, sized to a fixed
@@ -125,7 +125,7 @@ const CanvasIframe = forwardRef(function CanvasIframe(
 export default CanvasIframe
 ```
 
-- [ ] **Step 2: Fix the return statement — portal the stage div in once `frameBody` is ready**
+- [x] **Step 2: Fix the return statement — portal the stage div in once `frameBody` is ready**
 
 Replace the `return` block from Step 1 with:
 
@@ -166,7 +166,7 @@ Replace the `return` block from Step 1 with:
 
 Remove the placeholder `return` and trailing comment from Step 1 — this is the file's real, final return.
 
-- [ ] **Step 3: Wire it into `SlideCanvasEditor.jsx`**
+- [x] **Step 3: Wire it into `SlideCanvasEditor.jsx`**
 
 Add the import near the other host component imports (after the `SHINY_GOLD` import, `client/src/components/host/SlideCanvasEditor.jsx:36`):
 
@@ -194,7 +194,7 @@ with:
 
 The outer clipping wrapper (`client/src/components/host/SlideCanvasEditor.jsx:941-942`, `<div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>`) stays unchanged around it.
 
-- [ ] **Step 4: Verify — build, then a scripted Playwright check against the real dev server**
+- [x] **Step 4: Verify — build, then a scripted Playwright check against the real dev server**
 
 ```bash
 cd /Users/bencoughlin/Projects/baynes-trivia/trivia-os
@@ -256,7 +256,7 @@ Run it twice, once with `--width=1400` and once with `--width=800`, alongside
 
 Expected: `fontPx` is close to `expectedPx` (96, the `6rem` clamp ceiling — a 1920px iframe viewport puts `7vw` past the ceiling) **regardless of the real browser window's width** — confirm this by re-running with `viewport: { width: 800, height: 600 }` and getting the same `fontPx`. Before this task, the same check against the OLD plain-div canvas would have returned a font size scaled to the REAL viewport width (800px window → `7vw` = 56px, wrong).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/src/components/host/CanvasIframe.jsx client/src/components/host/SlideCanvasEditor.jsx
@@ -301,7 +301,7 @@ Do not push yet — Task 2 fixes the region-detection regression this task delib
 
 **Context — why this needs a fix:** Before Task 1, `canvasRef`'s content was a direct child of the top document with `transform: scale(dynScale)` applied to the SAME element whose descendants get measured — the browser resolves that ancestor transform automatically when you call `el.getBoundingClientRect()` on a descendant, so `detectRegions()` could freely mix `canvasRef`-descendant rects with `overlayRef.current.getBoundingClientRect()` (both already page-relative, both already scaled). After Task 1, `canvasRef`'s content lives inside the iframe's OWN document — `getBoundingClientRect()` calls made from inside that document return coordinates relative to the IFRAME'S OWN viewport (unscaled, as if it were an independent 1920×1080 window), not the page. `offsetWidth`/`offsetHeight` were already being treated as unscaled values in the pre-existing code (`el.offsetWidth * dynScale` at the old line 532) — that math is untouched and already correct for the new architecture. Only the `r = el.getBoundingClientRect()` branch (used when the region has no rotate/scale transform active) needs a page-offset added.
 
-- [ ] **Step 1: Add the `toPageRect` helper**
+- [x] **Step 1: Add the `toPageRect` helper**
 
 Add near the top of `SlideCanvasEditor.jsx`, after the `clamp` function (`client/src/components/host/SlideCanvasEditor.jsx:52`):
 
@@ -321,7 +321,7 @@ function toPageRect(iframeInternalRect, iframeElRect, scale) {
 }
 ```
 
-- [ ] **Step 2: Write a unit test for `toPageRect` before wiring it in**
+- [x] **Step 2: Write a unit test for `toPageRect` before wiring it in**
 
 Create `client/src/components/host/CanvasIframe.test.js` (co-located, matching the repo's existing `lib/*.test.js` convention):
 
@@ -375,7 +375,7 @@ describe('toPageRect', () => {
 })
 ```
 
-- [ ] **Step 3: Run the test — should pass immediately (pure function, no wiring needed yet)**
+- [x] **Step 3: Run the test — should pass immediately (pure function, no wiring needed yet)**
 
 ```bash
 cd /Users/bencoughlin/Projects/baynes-trivia/trivia-os
@@ -384,7 +384,7 @@ npx vitest run client/src/components/host/CanvasIframe.test.js 2>&1 | tail -10
 
 Expected: 3 passed. (This test validates the formula in isolation, before Step 4 wires the real one into `detectRegions()` — if Step 4's copy ever drifts from this golden master, this file is the place to update deliberately.)
 
-- [ ] **Step 4: Fix `detectRegions()`**
+- [x] **Step 4: Fix `detectRegions()`**
 
 Replace (`client/src/components/host/SlideCanvasEditor.jsx`, current `detectRegions` body):
 
@@ -441,7 +441,7 @@ with:
 
 `el.offsetWidth`/`el.offsetHeight` are untouched — they were already unscaled-layout values multiplied by `dynScale`, which is exactly right whether the element lives in the top document or the iframe's document (offsetWidth never reflects an ANCESTOR's CSS transform, only the element's own layout box, regardless of which document it's measured from).
 
-- [ ] **Step 5: Fix `enterEditMode()`'s document/window references**
+- [x] **Step 5: Fix `enterEditMode()`'s document/window references**
 
 Replace (`client/src/components/host/SlideCanvasEditor.jsx`, inside `enterEditMode`, the caret-placement block near the end of the function):
 
@@ -474,7 +474,7 @@ with:
     sel?.addRange(range)
 ```
 
-- [ ] **Step 6: Verify — build, then a scripted Playwright check of the full region gesture set**
+- [x] **Step 6: Verify — build, then a scripted Playwright check of the full region gesture set**
 
 ```bash
 npm run test:unit 2>&1 | tail -5
@@ -493,7 +493,7 @@ Then, against the real dev server (same harness pattern as Task 1 Step 4 — aut
 
 Every check above is a manual/scripted assertion against the real running app — there is no automated test suite for this gesture surface to lean on (see Global Constraints). Take a screenshot at each step and visually confirm rather than assuming from the absence of a thrown error.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add client/src/components/host/SlideCanvasEditor.jsx client/src/components/host/CanvasIframe.test.js
@@ -537,7 +537,7 @@ EOF
 
 **Context:** Per the Global Constraints, every overlay gesture handler (`startOverlayDrag`, `startOverlayResize`, `startOverlayRotate`, snap-guide math, `centerOverlayH`/`centerOverlayV`) computes geometry from `overlayRef.current.getBoundingClientRect()` (top-document, unchanged) combined with `e.clientX`/`e.clientY` (also top-document, since the pointer is physically over the top-level page) and pure percent-of-`scaledW`/`scaledH` arithmetic — none of it reads `canvasRef`'s content. This task exists to actually confirm that claim against the running app rather than leave it as an assumption, and to sweep the 15 files with real `vw`/`vh` usages for any that still look wrong.
 
-- [ ] **Step 1: Overlay gesture smoke test** — against the real dev server, in build mode with "Edit layout" on:
+- [x] **Step 1: Overlay gesture smoke test** — against the real dev server, in build mode with "Edit layout" on:
   1. Insert a text overlay — confirm it appears at the expected position.
   2. Drag it — confirm smooth movement, snap guides appear near canvas center/other overlays.
   3. Resize and rotate it via its handles.
@@ -547,7 +547,7 @@ EOF
 
   If every one of these behaves identically to before Task 1 (compare against the pre-change build if in doubt — `git stash` the `CanvasIframe` changes temporarily, or trust the architecture analysis if it's unambiguous), the Global Constraints claim holds and no overlay code changes are needed.
 
-- [ ] **Step 2: vw/vh sweep across real content** — open at least one slide of each type listed below in build mode, at two different real browser window widths (e.g. 1400px and 900px), and confirm the un-overridden text size looks the SAME relative proportion in both (not literally identical pixels — the canvas itself scales with the panel — but the same fraction of the canvas):
+- [x] **Step 2: vw/vh sweep across real content** — open at least one slide of each type listed below in build mode, at two different real browser window widths (e.g. 1400px and 900px), and confirm the un-overridden text size looks the SAME relative proportion in both (not literally identical pixels — the canvas itself scales with the panel — but the same fraction of the canvas):
    - `TitleSlide.jsx:42,61` — title + subtitle
    - `RoundIntroSlide.jsx:56,75` — round number + title
    - `QuestionSlide.jsx:1091,1249` — question text at two different font-size call sites
@@ -557,7 +557,7 @@ EOF
 
    This is the direct fix verification — before this plan, at least one of these would visibly change proportion when you resized the browser window; after, none should.
 
-- [ ] **Step 3: Report findings inline in the plan's tracking (no separate file)** — if Step 1 or Step 2 surfaces anything unexpected, stop and write a new task (do not patch inline mid-verification).
+- [x] **Step 3: Report findings inline in the plan's tracking (no separate file)** — if Step 1 or Step 2 surfaces anything unexpected, stop and write a new task (do not patch inline mid-verification). Nothing unexpected surfaced; zero commits, findings logged in the SDD ledger only.
 
 ---
 
@@ -569,9 +569,9 @@ EOF
 **Interfaces:**
 - Consumes: Tasks 1-3 complete and confirmed.
 
-- [ ] **Step 1: YouTube/audio embed spot-check** — open a shiny video question (uses `QuestionSlide.jsx:1008`'s plain `<iframe src={embedSrc}>`) and a slide with a walkout song or shiny audio question (uses `youtubeWarmAudio.js`'s hidden top-document player) in build mode. Confirm both still play correctly. Per the Global Constraints, `youtubeWarmAudio.js` was already architected to target `document.body` directly regardless of any calling component's portal target, so this should need no code change — this step exists to confirm that reasoning against the real app, not to leave it as a read-only code-review claim.
+- [x] **Step 1: YouTube/audio embed spot-check** — open a shiny video question (uses `QuestionSlide.jsx:1008`'s plain `<iframe src={embedSrc}>`) and a slide with a walkout song or shiny audio question (uses `youtubeWarmAudio.js`'s hidden top-document player) in build mode. Confirm both still play correctly. Per the Global Constraints, `youtubeWarmAudio.js` was already architected to target `document.body` directly regardless of any calling component's portal target, so this should need no code change — this step exists to confirm that reasoning against the real app, not to leave it as a read-only code-review claim. Confirmed both paths live: no real show had an `isVideoShiny` slide (the two seed video formats in the library both have `slots: null`, so SlideEditor.jsx's own media UI can't reach them either — pre-existing, unrelated to this plan), so a throwaway show/slide was created via the app's own UI, verified, then deleted (see task-4-report.md). Audio path verified read-only against the real show (`show_NyRe6x2Q`, an existing "Name That Song" slide) — confirmed byte-identical afterward.
 
-- [ ] **Step 2: Full regression pass**
+- [x] **Step 2: Full regression pass**
 
 ```bash
 cd /Users/bencoughlin/Projects/baynes-trivia/trivia-os
@@ -581,6 +581,6 @@ npm run build 2>&1 | tail -3
 
 Expected: same pass count as `main` before this branch started, plus the 3 new `CanvasIframe.test.js` tests.
 
-- [ ] **Step 3: Update this plan's own status** — mark every checkbox above `[x]` as completed, or note explicitly which steps were skipped/deferred and why, before handing off for merge review.
+- [x] **Step 3: Update this plan's own status** — mark every checkbox above `[x]` as completed, or note explicitly which steps were skipped/deferred and why, before handing off for merge review. (This edit.)
 
-- [ ] **Step 4: Hand off for merge** — per this repo's established pattern this session: commit on a `fix/`-prefixed branch, verify tests + build on the merged result, merge to `main`, push, report the exact commits and verification evidence — do not merge/push without being asked.
+- [ ] **Step 4: Hand off for merge** — per this repo's established pattern this session: commit on a `fix/`-prefixed branch, verify tests + build on the merged result, merge to `main`, push, report the exact commits and verification evidence — do not merge/push without being asked. **Deliberately NOT done by this task** — the controller ruled this step is handled after a separate whole-branch review, not inside the last task's brief (see SDD ledger, Task 4 ruling). No commits were made in this task; the tree is clean at the same HEAD Task 3 left it (`f310365`).
