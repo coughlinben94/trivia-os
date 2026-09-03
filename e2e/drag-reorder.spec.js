@@ -1,22 +1,8 @@
 // drag-reorder.spec.js — tests slide + round reordering in the sidebar
 import { test, expect } from '@playwright/test'
-import { createClient } from '@supabase/supabase-js'
 import { nanoid } from 'nanoid'
-import { readFileSync } from 'fs'
-import { join, dirname } from 'path'
-import { fileURLToPath } from 'url'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-
-function parseEnvFile(filePath) {
-  return Object.fromEntries(
-    readFileSync(filePath, 'utf8').split('\n')
-      .filter(l => l.trim() && !l.trim().startsWith('#') && l.includes('='))
-      .map(l => { const idx = l.indexOf('='); const key = l.slice(0, idx).trim(); let val = l.slice(idx + 1).trim(); if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) val = val.slice(1, -1); return [key, val] })
-  )
-}
-const env = parseEnvFile(join(__dirname, '..', '.env.local'))
-// QUARANTINED 2026-09-02 — same defect class as wizard-create-verify.spec.js.
+import { authedClient, updateShowVerified } from './authed-client.js'
+// OPT-IN — needs a THROWAWAY show. Not quarantined any more; history below.
 //
 // Two facts combine into a show-destroying bug:
 //   1. `sb` below is an ANON client, and writes to `shows` are RLS-gated on a
@@ -33,15 +19,27 @@ const env = parseEnvFile(join(__dirname, '..', '.env.local'))
 // Now that global-setup works again, `PLAYWRIGHT_SHOW_ID=<a real show>` while
 // running the suite would reorder one of Ben's actual shows.
 //
-// EXIT CRITERIA — remove this guard once `sb` uses the authenticated session
-// global-setup.js already mints (the same storageState the browser gets)
-// instead of a fresh anon createClient(), so the restore in afterAll can
-// actually write. Identical to wizard-create-verify.spec.js's exit criteria.
+// RESOLVED 2026-09-02 — `sb` is now the authenticated host session (see
+// authed-client.js), and every `shows` write goes through updateShowVerified(),
+// which throws on a 0-row result instead of letting a blocked write pass for
+// success. The restore in afterAll can therefore actually land, and cannot
+// fail silently if it ever stops landing.
 //
-// To run against a throwaway show once that lands:
+// The ALLOW_DRAG_REORDER gate STAYS. It is no longer about the broken client:
+// this spec reorders whatever show it points at, so it must be aimed at a
+// throwaway, never at a show Ben intends to run. There is no dedicated test
+// show right now (show_WLBM5jvb was deleted), so there is no safe default.
+//
+// To run:
 //   ALLOW_DRAG_REORDER=1 PLAYWRIGHT_SHOW_ID=<throwaway> npx playwright test e2e/drag-reorder.spec.js
-const TEST_SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID || 'show_WLBM5jvb'
-const sb = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
+const TEST_SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID
+
+// Built lazily inside beforeAll, never at module scope: authedClient() throws
+// when the saved session is missing or expired, and a module-scope throw
+// aborts collection of the WHOLE playwright run (the 2026-09-02 defect this
+// suite just dug itself out of). Behind the skip guard, it can only ever fail
+// the run someone deliberately asked for.
+let sb
 
 test.describe.configure({ mode: 'serial' })
 test.use({ viewport: { width: 1280, height: 720 }, baseURL: 'https://trivia-os.vercel.app' })
@@ -50,7 +48,9 @@ let originalSlides, originalRounds
 
 // Set up a clean show with known slide order: StateOfUnion (general) AFTER Round1/Q1
 test.beforeAll(async () => {
-  test.skip(!process.env.ALLOW_DRAG_REORDER, 'Quarantined: rewrites a production show and cannot restore it (anon key vs RLS). See the header comment.')
+  test.skip(!process.env.ALLOW_DRAG_REORDER, 'Reorders whatever show it targets — set ALLOW_DRAG_REORDER=1 and PLAYWRIGHT_SHOW_ID=<throwaway>. See the header comment.')
+  if (!TEST_SHOW_ID) throw new Error('[drag-reorder] set PLAYWRIGHT_SHOW_ID to a THROWAWAY show — this spec permanently reorders it.')
+  sb = authedClient()
   const { data: show } = await sb.from('shows').select('*').eq('id', TEST_SHOW_ID).single()
   originalSlides = show.slides
   originalRounds = show.rounds
@@ -67,11 +67,11 @@ test.beforeAll(async () => {
     { id: souId, type: 'title',    roundId: null,      order: 1, data: { title: 'State of Union', subtitle: '' } },
   ]
 
-  await sb.from('shows').update({ is_live: false, current_slide_id: null, slides, rounds }).eq('id', TEST_SHOW_ID)
+  await updateShowVerified(sb, TEST_SHOW_ID, { is_live: false, current_slide_id: null, slides, rounds })
 })
 
 test.afterAll(async () => {
-  await sb.from('shows').update({ slides: originalSlides, rounds: originalRounds }).eq('id', TEST_SHOW_ID)
+  await updateShowVerified(sb, TEST_SHOW_ID, { slides: originalSlides, rounds: originalRounds })
 })
 
 async function gotoEditor(page) {
@@ -127,7 +127,7 @@ test('drag State of Union over Round 1 header drops before the round', async ({ 
     if (s.type === 'title') return { ...s, order: 1 }
     return { ...s, order: 0 }
   })
-  await sb.from('shows').update({ slides }).eq('id', TEST_SHOW_ID)
+  await updateShowVerified(sb, TEST_SHOW_ID, { slides })
 
   await gotoEditor(page)
 
