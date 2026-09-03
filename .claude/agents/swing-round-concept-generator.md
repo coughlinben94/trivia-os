@@ -80,4 +80,4 @@ Topic-specialist (never finished items):
 - **(c)** The 6-slot item-type sketch ("1. visual · 2. audio · 3. deep-cut fact · 4. connect-the-dots · 5. date/timeline · 6. obscure-detail").
 - **(d)** The topic has real depth for 6 items, and whether any slot uses the phone-matching carve-out (counts against the shared cap).
 
-End with the `ids:` line. Boundary per generator-common.md.
+Boundary per generator-common.md.

@@ -69,4 +69,4 @@ Run every survivor end-to-end. Confirm all five:
 - **(c) The 6-slot sketch** — uniform shape in one line ("6× name-the-state-from-its-motto, visual, difficulty ramping 1→6"); mixed variant per slot ("1. image ID, easy · 2. riddle-description, medium · 3. paper matching pair, hard · …"). Item TYPE, MEDIUM (visual / audio / read-aloud), difficulty only — never the finished board.
 - **(d)** All 6 cleanly adjudicable, real difficulty spread, no app/device/grid/turn-based/phone element.
 
-End with the `ids:` line. Boundary per generator-common.md: no real state mottos, no real taglines, no real answer key.
+Boundary per generator-common.md: no real state mottos, no real taglines, no real answer key.

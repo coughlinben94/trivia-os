@@ -17,20 +17,32 @@ Real, shipped, Ben-loved phone mechanics — not a general reopening of "app is 
 
 Who may use them: a shiny candidate may use either. A topic-specialist swing round may put carve-out 1 in ONE of its 6 slots, still against the same shared cap, never a separate allowance [swing]. PYL never — see the PYL agent. A limit-tester that STRETCHES a carve-out mechanic is the DOA case, not the interesting one [shiny].
 
-## Phase 1.5 — pull what's already off-limits
+## Phase 1.5 — pull what's already off-limits, and what's actually shipped
 
-Before generating anything new:
+Before generating anything new, two pulls against two different tables.
+
+**Dedupe wall** — `format_idea_candidates`, this agent's own past runs:
 
 ```sql
 select id, concept_name, mechanic, rejected_reason from format_idea_candidates where family = '<family>' and status = 'rejected';
 select id, concept_name, mechanic from format_idea_candidates where family = '<family>' and status = 'proposed';
-select id, concept_name, mechanic from format_idea_candidates where family = '<family>' and status = 'adopted';
+```
+
+**Positive signal** — not this table. Ben's real yes already lands in `questions` every time he ships a format he liked, as a side effect of work he does anyway — no separate approval step required. Run only your own family's line (the ground-truth column differs by family):
+
+```sql
+-- shiny
+select distinct shiny_format_name, min(created_at) as first_shipped from questions where type='shiny' and shiny_format_name is not null group by 1 order by 2 desc;
+-- swing (excludes the generic "Swing Round" placeholder value, and rows with no title)
+select distinct round_title, min(created_at) as first_shipped from questions where type='swing' and round_title is not null and round_title <> 'Swing Round' group by 1 order by 2 desc;
+-- pyl
+select distinct round_title, min(created_at) as first_shipped from questions where type='pyl' and round_title is not null group by 1 order by 2 desc;
 ```
 
 - **rejected** — permanently off-limits: not just the exact name but the same mechanic + theme pairing under a new name. A renamed reskin of a killed idea is still a killed idea. If a Phase 2 candidate is a close variant, drop it in Phase 2 rather than waste a Phase 3 pass. Exception: rows whose `rejected_reason` starts `LIMIT-TESTER: ` — same-name/same-concept still off-limits, but the convention-break underneath is fair game again.
 - **proposed** — cleared a past run's Phase 3. Ben has not necessarily seen or endorsed these; `proposed` is agent-signal, never Ben's taste. Two uses only: don't re-propose an exact concept on it, and a `[LIMIT-TESTER: ` prefix means that convention-break cleared the gate before, so it stays fair game. Never an off-limits list.
-- **adopted** — Ben approved directly. The only positive signal in this table; push further along adopted directions. Zero adopted rows = no positive signal yet, proceed on the catalog / coverage map alone.
-- [pyl] This table only captures this agent's own past runs, not Ben's real board rotation — a PYL candidate must also be checked against `format-library.md`'s "actually run" list; a close variant of anything on either list (renamed, or same topic from another angle) is off-limits.
+- **shipped** (from `questions`) — what Ben has actually built and put in front of the bar, not a machine-graded signal. The only positive signal that exists; push further along shipped directions — a fresh format that shares a well, a wink, or a mechanic with something on this list is the good kind of derivative. Empty result = no positive signal yet, proceed on the catalog / coverage map alone.
+- [pyl] `format_idea_candidates` only captures this agent's own past runs, not Ben's real board rotation — a PYL candidate must also be checked against `format-library.md`'s "actually run" list; a close variant of anything on either list (renamed, or same topic from another angle) is off-limits.
 
 ## Phase 2 — generate wide
 
@@ -56,7 +68,7 @@ insert into format_idea_candidates (family, concept_name, mechanic, worked_examp
 values ('<family>', $1, $2, $3, $4, $5, $6, $7) returning id;
 ```
 
-Survivors: `status = 'proposed'`, `rejected_reason`/`rejected_at` null. Phase-3 failures: `status = 'rejected'`, `rejected_reason` = the specific failed check, `rejected_at = now()`. Limit-testers: prefix `mechanic` with `[LIMIT-TESTER: <convention broken>] `. Do this after Phase 3, before the chat reply — the reply covers survivors only, the DB gets everything past Phase 2. Status values that exist: `proposed` / `rejected` / `adopted` — nothing else. Each agent says what its `mechanic` / `worked_example` columns hold.
+Survivors: `status = 'proposed'`, `rejected_reason`/`rejected_at` null. Phase-3 failures: `status = 'rejected'`, `rejected_reason` = the specific failed check, `rejected_at = now()`. Limit-testers: prefix `mechanic` with `[LIMIT-TESTER: <convention broken>] `. Do this after Phase 3, before the chat reply — the reply covers survivors only, the DB gets everything past Phase 2. Status values that exist: `proposed` / `rejected` — nothing else. Each agent says what its `mechanic` / `worked_example` columns hold.
 
 ## Output format — every surviving candidate, in chat
 
@@ -67,17 +79,6 @@ Chat reply AND the Phase 4 write — never one instead of the other. Per candida
 - **(c) Worked example / sketch** — real, plausible placeholder content for a mechanic; an item-TYPE sketch (never finished items) for a topic pick. Each agent defines its own (c).
 - **(d) Explicit constraint confirmation** — one line: passed, and why (what the single written answer is; no app/grid/device/turn-based element — or which carve-out it uses and that it counts against the 1–2/night cap).
 - **(e) LIMIT-TESTER** — only if it broke a convention; name the convention.
-
-## Verdict capture (added 2026-09-02)
-
-Every chat reply ends with one line: `ids: <survivor row ids from Phase 4, comma-separated>`. When Ben says keep/kill in prose, the parent session resolves his words to ids from that line and runs:
-
-```sql
-update format_idea_candidates set status = 'adopted' where id in (...);
-update format_idea_candidates set status = 'rejected', rejected_reason = 'Ben: <his words>', rejected_at = now() where id in (...);
-```
-
-`adopted` rows are the only positive signal Phase 1.5 ever reads — this line is what makes Ben's yes one update away.
 
 ## Boundary — read this every time
 

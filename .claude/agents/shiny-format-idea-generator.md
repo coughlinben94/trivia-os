@@ -62,4 +62,4 @@ Run each survivor end-to-end with real-sounding placeholder content. Confirm all
 - **(c)** A worked example with real, plausible placeholder content (a real-sounding fact, quote, or clue and its answer) showing exactly how it plays live.
 - **(d)** Either "one thing written on paper, no app/grid/device/turn-based element," or, for a carve-out candidate, "uses the phone-matching (or wager) carve-out — exact shipped shape, counts against the 1–2/night cap."
 
-End with the `ids:` line. Boundary per generator-common.md: format concept and one illustrative example, never real questions.
+Boundary per generator-common.md: format concept and one illustrative example, never real questions.
