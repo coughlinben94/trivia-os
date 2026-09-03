@@ -252,12 +252,7 @@ await browser.close()
 ```
 
 Run it twice, once with `--width=1400` and once with `--width=800`, alongside
-`npm run dev` running in another terminal. `fontPx` must be the SAME both
-times (the iframe's own fixed 1920px viewport, not the real window width).
-Before this task, the same check against the OLD plain-div canvas would have
-returned a font size scaled to the real viewport width — different at 1400
-vs 800.
-```
+`npm run dev` running in another terminal.
 
 Expected: `fontPx` is close to `expectedPx` (96, the `6rem` clamp ceiling — a 1920px iframe viewport puts `7vw` past the ceiling) **regardless of the real browser window's width** — confirm this by re-running with `viewport: { width: 800, height: 600 }` and getting the same `fontPx`. Before this task, the same check against the OLD plain-div canvas would have returned a font size scaled to the REAL viewport width (800px window → `7vw` = 56px, wrong).
 
