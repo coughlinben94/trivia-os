@@ -35,8 +35,16 @@ import { DISPLAY_FONTS } from './ThemeCustomizeControls.jsx'
 import { EASE_OUT } from '../../lib/easings.js'
 import { SHINY_GOLD } from '../../lib/shinyGold.js'
 
-const INNER_W = 1280
-const INNER_H = 720
+// The TV's real resolution, and it must stay that. Region transforms
+// (`_regionTransforms.fontSizePx` / `dx` / `dy`) are stored in CANVAS pixels
+// and read back verbatim by the slide components on /display, so any other
+// size silently rescales every hand-placed region between here and the wall —
+// at the old 1280x720 a 40px font covered 40/720 of the canvas while landing
+// as 40/1080 on the TV, 1.5x smaller than it looked while placing it.
+// Container-query units resolve against this box too, via `containerType`
+// on the canvas div below. ThemePickerModal.jsx pins the same numbers.
+const INNER_W = 1920
+const INNER_H = 1080
 // Snap catch-radius, in PERCENT of canvas (width for x, height for y — the
 // overlay coordinate space, never pixels). ~1% per the PowerPoint-style feel.
 const SNAP_PCT = 1.2
@@ -932,7 +940,7 @@ export default function SlideCanvasEditor({
         <div style={{ width: scaledW, height: scaledH, position: 'relative', flexShrink: 0 }}>
           {/* Clipped, scaled canvas — the SAME render tree as /display */}
           <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-            <div ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${dynScale})`, transformOrigin: 'top left', overflow: 'hidden', background: theme.colors.bg }}>
+            <div ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: INNER_W, height: INNER_H, transform: `scale(${dynScale})`, transformOrigin: 'top left', overflow: 'hidden', containerType: 'size', background: theme.colors.bg }}>
               <ParticleBackground theme={theme} />
               <SlideRenderer slide={{ ...slide, data }} show={show} direction={1} isPreview />
             </div>
