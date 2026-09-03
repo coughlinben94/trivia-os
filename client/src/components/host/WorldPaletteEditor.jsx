@@ -3,6 +3,7 @@ import { derivePalette } from '../../lib/weightedPalette.js'
 import { PRESETS } from '../../lib/paletteGenerator.js'
 import { recolorWorld } from '../../lib/ringRecolor.js'
 import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
+import { fetchCertifiedPalettes, saveAsPending, findMatch } from '../../lib/ringPalettesClient.js'
 import RingAmbient from '../display/RingAmbient.jsx'
 
 // Weighted world-palette picker (Midnight Galaxy only — one world exists;
@@ -98,10 +99,17 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   const [showDetails, setShowDetails] = useState(false)
   const [showCustom, setShowCustom] = useState(false)
   const [applied, setApplied] = useState(false)
+  const [savedPending, setSavedPending] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [shelf, setShelf] = useState([])
+  const [shelfLoading, setShelfLoading] = useState(true)
   const colorDebounceRef = useRef(null)
   const appliedTimeoutRef = useRef(null)
   const copyTimeoutRef = useRef(null)
+
+  useEffect(() => {
+    fetchCertifiedPalettes().then(setShelf).catch(() => setShelf([])).finally(() => setShelfLoading(false))
+  }, [])
 
   useEffect(() => () => {
     clearTimeout(appliedTimeoutRef.current)
@@ -223,12 +231,30 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
               </button>
             ))}
           </div>
-          <button
-            onClick={() => setShowCustom(v => !v)}
-            className="text-xs font-medium text-gray-500 hover:text-gray-900 underline"
-          >
-            {showCustom ? 'Hide custom colors' : 'Custom colors'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowCustom(v => !v)}
+              className="text-xs font-medium text-gray-500 hover:text-gray-900 underline"
+            >
+              {showCustom ? 'Hide custom colors' : 'Custom colors'}
+            </button>
+            <button
+              onClick={() => {
+                if (!shelf.length) return
+                const pick = shelf[Math.floor(Math.random() * shelf.length)]
+                // Math.random is fine HERE — this is host-UI selection among
+                // ALREADY-CERTIFIED rows, not world construction; the Global
+                // Constraints' no-Math.random rule is about concepts/world-07-ring.html's
+                // own build, which this file is not.
+                applyPalette(pick.colors, pick.weights)
+                setDrift(pick.drift.arc)
+              }}
+              disabled={shelfLoading || !shelf.length}
+              className="text-xs font-medium px-3 py-1.5 rounded-full border border-gray-200 hover:border-gray-400 disabled:opacity-40"
+            >
+              {shelfLoading ? 'Loading palettes…' : shelf.length ? `🎲 Surprise me (${shelf.length} ready)` : 'No certified palettes yet'}
+            </button>
+          </div>
           {showCustom && (
             <div className="space-y-3 pt-1">
               <div className="flex items-center gap-3">
@@ -357,21 +383,36 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
               panel above is now only for moving the CERTIFIED BASE world —
               see the header comment. */}
           <button
-            onClick={() => {
-              onApplyThemeColors({ themeColors: derived.themeColors, worldPalette: { colors, weights, drift: { arc: drift } } })
-              setApplied(true)
-              // Visible confirmation before closing — the write itself is
-              // silent (same fire-and-forget theme_overrides path every
-              // other control here uses), so with no feedback at all the
-              // click read as dead on a live show tonight (Ben, 2026-09-01).
-              appliedTimeoutRef.current = setTimeout(onClose, 700)
+            onClick={async () => {
+              const current = { colors, weights, drift: { arc: drift } }
+              const match = findMatch(shelf, current)
+              if (match) {
+                onApplyThemeColors({ themeColors: derived.themeColors, worldPalette: { colors, weights, drift: { arc: drift } } })
+                setApplied(true)
+                // Visible confirmation before closing — the write itself is
+                // silent (same fire-and-forget theme_overrides path every
+                // other control here uses), so with no feedback at all the
+                // click read as dead on a live show tonight (Ben, 2026-09-01).
+                appliedTimeoutRef.current = setTimeout(onClose, 700)
+              } else {
+                await saveAsPending(current)
+                setSavedPending(true)
+                appliedTimeoutRef.current = setTimeout(onClose, 1200)
+              }
             }}
-            disabled={applied}
+            disabled={applied || savedPending}
             className="ml-auto text-sm font-semibold px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-70"
           >
-            {applied ? 'Applied ✓' : "Apply to this show's theme"}
+            {applied ? 'Applied ✓' : savedPending ? 'Saved, pending check' : "Apply to this show's theme"}
           </button>
         </div>
+        {savedPending && (
+          <p className="px-5 pb-3 text-xs text-amber-700">
+            {shelf.length === 0
+              ? "Saved — no palettes have been certified yet (the sweep tool hasn't run). This one will be checked once it does."
+              : "Saved — this exact combination isn't checked yet. It'll be ready by your next show."}
+          </p>
+        )}
       </div>
     </div>
   )
