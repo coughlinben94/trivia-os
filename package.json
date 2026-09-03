@@ -15,8 +15,8 @@
     "test:e2e:join": "playwright test e2e/join-smoke.spec.js",
     "test:audit": "playwright test e2e/host-audit.spec.js",
     "test:wizard": "playwright test e2e/wizard-audit.spec.js",
-    "// test:wizard-create": "QUARANTINED 2026-07-03 \u2014 beforeAll/afterAll cleanup uses the anon key against RLS-blocked tables, silently corrupts the shared Test show on failure. Skips cleanly unless ALLOW_WIZARD_CREATE=1 is set. See e2e/wizard-create-verify.spec.js header comment.",
-    "test:wizard-create": "PLAYWRIGHT_SHOW_ID=show_WLBM5jvb playwright test e2e/wizard-create-verify.spec.js",
+    "// test:wizard-create": "OPT-IN \u2014 creates slides in the show it targets, so it needs a THROWAWAY show id and skips cleanly without one. The anon-key/RLS cleanup defect is fixed (e2e/authed-client.js). Run: ALLOW_WIZARD_CREATE=1 PLAYWRIGHT_SHOW_ID=<throwaway> npm run test:wizard-create",
+    "test:wizard-create": "playwright test e2e/wizard-create-verify.spec.js",
     "verify:ring": "node concepts/tools/ring-verify.mjs concepts/world-07-ring.html"
   },
   "dependencies": {

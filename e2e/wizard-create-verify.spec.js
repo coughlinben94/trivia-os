@@ -2,51 +2,43 @@
  * wizard-create-verify.spec.js
  *
  * ╔═══════════════════════════════════════════════════════════════════════╗
- * ║ QUARANTINED — 2026-07-03. DO NOT REMOVE THIS GUARD WITHOUT READING IT. ║
+ * ║ OPT-IN — needs a THROWAWAY show. Not quarantined any more.            ║
  * ╚═══════════════════════════════════════════════════════════════════════╝
  *
- * beforeAll/afterAll below write via a bare anon-key Supabase client (`sb`,
- * created straight from VITE_SUPABASE_ANON_KEY — NOT the authenticated
- * session global-setup.js mints via HostPinGate). RLS policies now require
- * that authenticated/host_verified session for writes to `shows`. A blocked
- * UPDATE against a table the anon key can no longer write returns 0 rows
- * affected with NO error — Supabase's client doesn't treat "matched nothing"
- * as a failure — so this file's own "[RESTORE FAILED]" guard (in afterAll)
- * never fires. Cleanup just silently no-ops.
+ * HISTORY. Quarantined 2026-07-03: beforeAll/afterAll wrote via a bare
+ * anon-key client, RLS answers an unauthorized UPDATE with "0 rows changed"
+ * and no error, so this file's own "[RESTORE FAILED]" guard never fired and
+ * cleanup silently no-opped. Any failure after the first successful create
+ * left a permanent stray slide in the shared production Test show. Confirmed
+ * 3x in one session.
  *
- * Net effect: any test failure after the first successful create leaves a
- * permanent stray slide in the shared PRODUCTION Test show (show_WLBM5jvb),
- * because afterAll's restore-to-snapshot write silently does nothing.
- * Confirmed 3x in one session (2026-07-03) — each time required manually
- * deleting the stray slide through the real host UI (PIN-gated, so even that
- * cleanup path needs the authenticated session, not the anon key).
+ * FIXED 2026-09-02, exactly as the old exit criteria specified:
+ *   - `sb` is now authedClient() — the same host session global-setup.js
+ *     mints for the browser — so writes actually pass RLS.
+ *   - every `shows` write goes through updateShowVerified(), which throws on
+ *     a 0-row result, so a blocked write can never again read as success.
+ *   - the client is built inside beforeAll, not at module scope: authedClient()
+ *     throws on a stale session, and a module-scope throw aborts collection of
+ *     the whole run (the separate 2026-09-02 defect).
+ * See e2e/authed-client.js. Check session health with: node e2e/authed-client.js
  *
- * Guarded by test.skip(!process.env.ALLOW_WIZARD_CREATE, ...) inside
- * beforeAll itself (not just the individual test bodies) — Playwright's
- * beforeAll runs once before any test in the file regardless of what
- * individual tests decide to do, so guarding only the test bodies would
- * still let the seeding write in beforeAll fire. See the guard below and
- * the matching one in afterAll for the exact mechanism.
+ * WHY THE GUARD REMAINS. This spec creates slides in whatever show it targets.
+ * The restore lands now and shouts if it stops landing, but a crashed run can
+ * still die between create and restore. So it needs a show nobody cares about.
+ * The old pin (show_WLBM5jvb, the Test show) was DELETED, so there is no safe
+ * default left — the id must be passed explicitly, every run.
  *
- * EXIT CRITERIA — safe to remove this guard once:
- *   Both `sb` (module scope, ~line 91) and its uses in beforeAll/afterAll
- *   are switched to an authenticated client — reuse the same storageState/
- *   token session global-setup.js already mints for the browser context,
- *   rather than a fresh anon-key `createClient()`. Once writes there
- *   actually succeed against RLS, this guard (and the big comment above it)
- *   can come out.
- *
- * To run anyway (e.g. once the fix above lands and you're verifying it):
- *   ALLOW_WIZARD_CREATE=1 PLAYWRIGHT_SHOW_ID=show_WLBM5jvb npm run test:wizard-create
+ * To run:
+ *   ALLOW_WIZARD_CREATE=1 PLAYWRIGHT_SHOW_ID=<throwaway> npm run test:wizard-create
  *
  * ───────────────────────────────────────────────────────────────────────
  *
  * CREATE-AND-VERIFY Playwright spec for the AddSlideWizard modal.
- * Targets show_WLBM5jvb (the Test show) ONLY.
- * Hard-fails at module load if PLAYWRIGHT_SHOW_ID is missing or wrong.
+ * Targets whatever PLAYWRIGHT_SHOW_ID names — which must be a throwaway.
+ * Hard-fails at module load if PLAYWRIGHT_SHOW_ID is missing on a deliberate run.
  *
- * SAFETY: beforeAll snapshots show.slides + show.rounds; afterAll restores verbatim.
- * Safe to re-run when the client below is authenticated — see QUARANTINED notice above.
+ * SAFETY: beforeAll snapshots show.slides + show.rounds; afterAll restores verbatim,
+ * through an authenticated client that cannot fail silently — see the notice above.
  *
  * ── CONFIRMED SELECTORS (from source grep) ──────────────────────────────────
  *   Dashboard squares: getByRole('button',{name:/CardName/}) — button has icon+name+desc spans
@@ -77,16 +69,8 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { createClient } from '@supabase/supabase-js'
-import { readFileSync } from 'fs'
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
 import { nanoid } from 'nanoid'
-
-// require()'s __dirname has no ESM equivalent built in — this project has
-// "type": "module" in package.json, so this file loads as real ESM (that's
-// what broke the require() calls above too).
-const __dirname = dirname(fileURLToPath(import.meta.url))
+import { authedClient, updateShowVerified } from './authed-client.js'
 
 // ── Env guard (hard-fail at load time, but only for a deliberate run) ───────
 //
@@ -96,48 +80,30 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 // global-setup was itself broken (2026-09-02: its default show id had been
 // deleted, so nothing in e2e/ ran at all). The guards below now fire only
 // when ALLOW_WIZARD_CREATE says someone actually means to run this spec;
-// otherwise the quarantine skip in beforeAll handles it quietly.
+// otherwise the opt-in skip in beforeAll handles it quietly.
 
-const EXPECTED_SHOW_ID = 'show_WLBM5jvb'
-const TEST_SHOW_ID     = process.env.PLAYWRIGHT_SHOW_ID
-const INTENDED         = !!process.env.ALLOW_WIZARD_CREATE
+// Throwaway show only, passed explicitly — see the header box for why.
+const TEST_SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID
+const INTENDED     = !!process.env.ALLOW_WIZARD_CREATE
 
 if (INTENDED && !TEST_SHOW_ID) {
   throw new Error(
-    '[wizard-create-verify] PLAYWRIGHT_SHOW_ID is not set.\n' +
-    'Run: PLAYWRIGHT_SHOW_ID=show_WLBM5jvb npx playwright test e2e/wizard-create-verify.spec.js'
-  )
-}
-if (INTENDED && TEST_SHOW_ID !== EXPECTED_SHOW_ID) {
-  throw new Error(
-    `[wizard-create-verify] PLAYWRIGHT_SHOW_ID="${TEST_SHOW_ID}" but this spec ` +
-    `may only run against ${EXPECTED_SHOW_ID}. Set PLAYWRIGHT_SHOW_ID=${EXPECTED_SHOW_ID}.`
+    '[wizard-create-verify] set PLAYWRIGHT_SHOW_ID to a THROWAWAY show — this spec ' +
+    'creates slides in it.\n' +
+    'Run: ALLOW_WIZARD_CREATE=1 PLAYWRIGHT_SHOW_ID=<throwaway> npm run test:wizard-create'
   )
 }
 
-// ── Supabase client (reads .env.local next to package.json) ─────────────────
-// __dirname is the CJS built-in — available in Playwright's transform context.
-
-function parseEnvFile(filePath) {
-  return Object.fromEntries(
-    readFileSync(filePath, 'utf8')
-      .split('\n')
-      .filter(l => l.trim() && !l.trim().startsWith('#') && l.includes('='))
-      .map(l => {
-        const idx = l.indexOf('=')
-        const key = l.slice(0, idx).trim()
-        let val   = l.slice(idx + 1).trim()
-        if (
-          (val.startsWith('"') && val.endsWith('"')) ||
-          (val.startsWith("'") && val.endsWith("'"))
-        ) val = val.slice(1, -1)
-        return [key, val]
-      })
-  )
-}
-
-const env = parseEnvFile(join(__dirname, '..', '.env.local'))
-const sb  = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
+// ── Supabase client ─────────────────────────────────────────────────────────
+// The authenticated host session, NOT a fresh anon client — see
+// authed-client.js for why that distinction is the whole ballgame here.
+//
+// Built lazily inside beforeAll, never at module scope: authedClient() throws
+// when the saved session is missing or expired, and a module-scope throw
+// aborts collection of the WHOLE playwright run (the 2026-09-02 defect this
+// suite just dug itself out of). Behind the skip guard, it can only ever fail
+// the run someone deliberately asked for.
+let sb
 
 // ── Module-level snapshot (set in beforeAll, used in afterAll) ───────────────
 
@@ -177,21 +143,21 @@ test.use({ viewport: { width: 1280, height: 720 } })
 // ── beforeAll: snapshot + ensure ≥ 2 rounds ─────────────────────────────────
 
 test.beforeAll(async () => {
-  // QUARANTINE GUARD — see the file-header comment for why. Must be the
-  // first statement in this hook: beforeAll runs once before any test in
-  // the file regardless of individual test.skip() calls in test bodies, so
-  // guarding only the tests would still let the seeding write below fire.
+  // OPT-IN GUARD — see the file-header comment. Must be the first statement
+  // in this hook: beforeAll runs once before any test in the file regardless
+  // of individual test.skip() calls in test bodies, so guarding only the
+  // tests would still let the seeding write below fire.
   test.skip(
     !process.env.ALLOW_WIZARD_CREATE,
-    'quarantined: beforeAll/afterAll cleanup uses the anon key against ' +
-    'RLS-blocked tables — silently corrupts the shared Test show on any ' +
-    'failure (confirmed 3x 2026-07-03). Fix cleanup to use the ' +
-    'authenticated session (storageState/token, same as global-setup.js) ' +
-    'before removing this guard. Set ALLOW_WIZARD_CREATE=1 to bypass.'
+    'creates slides in the show it targets — set ALLOW_WIZARD_CREATE=1 and ' +
+    'PLAYWRIGHT_SHOW_ID=<throwaway>. The anon-key/RLS cleanup defect is fixed ' +
+    '(authed-client.js); this guard now only stops it running against a show ' +
+    'that matters.'
   )
+  sb = authedClient()
 
   // Ensure the show is not live — LiveMode renders no <aside> and the test would fail
-  await sb.from('shows').update({ is_live: false, current_slide_id: null }).eq('id', TEST_SHOW_ID)
+  await updateShowVerified(sb, TEST_SHOW_ID, { is_live: false, current_slide_id: null })
 
   const show = await readShowRow()
   snapshotSlides = JSON.parse(JSON.stringify(show.slides ?? []))
