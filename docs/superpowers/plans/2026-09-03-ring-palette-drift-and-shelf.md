@@ -947,16 +947,27 @@ async function elevateIfNeeded() {
   await sb.auth.refreshSession()
 }
 
-// Server lifecycle: started ONCE by the CLI entry (Step 5), reused across
+// Server lifecycle: started ONCE by the CLI entry (Step 6), reused across
 // every palette this run certifies, torn down in that entry's `finally`.
 // Never started per-palette — that's what leaked a vite process before.
-let staticServer, viteServer
+//
+// Real signatures, verified 2026-09-03 by reading ring-verify.mjs's own CLI
+// block directly (concepts/tools/ring-verify.mjs:1435-1481) rather than
+// guessing: `startStaticServer(rootDir)` takes the root to serve and
+// resolves to a raw node http.Server (get its port via
+// `server.address().port`, close it via `server.close(cb)` — no `.url` or
+// `.close()` convenience method exists on it). `ensureViteServer()` takes
+// no args and resolves to `{ proc, url }` where `url` is ALREADY the full
+// `http://host:port/ambient?ring=1` path (`proc` is `null` when it reused
+// an already-running dev server instead of spawning one — guard the kill).
+let staticServer, staticPort, viteServer
 async function startServers() {
-  staticServer = await startStaticServer() // serves concepts/ — returns {url, close()}, per ring-verify.mjs's own CLI block
-  viteServer = await ensureViteServer()     // returns {url, proc} on a private port, per the same block
+  staticServer = await startStaticServer(ROOT)
+  staticPort = staticServer.address().port
+  viteServer = await ensureViteServer()
 }
 async function stopServers() {
-  await staticServer?.close?.()
+  await new Promise(resolve => staticServer.close(resolve))
   viteServer?.proc?.kill?.()
 }
 
@@ -971,8 +982,8 @@ async function certifyPalette(browser, { colors, weights, drift }) {
   const q = paletteQuery({ colors, weights, drift })
   const results = []
   for (const [label, url] of [
-    ['html', `${staticServer.url}/world-07-ring.html?${q}`],
-    ['react-live', `${viteServer.url}/ambient?ring=1&${q}`],
+    ['html', `http://127.0.0.1:${staticPort}/concepts/world-07-ring.html?${q}`],
+    ['react-live', `${viteServer.url}&${q}`], // viteServer.url already ends in /ambient?ring=1
   ]) {
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } })
     try {
@@ -994,7 +1005,7 @@ async function certifyPalette(browser, { colors, weights, drift }) {
 }
 ```
 
-`startStaticServer`/`ensureViteServer` are already exported from `ring-verify.mjs` (2026-09-03 pre-flight fix, commit `1c03530`) for exactly this reuse — confirm their real return shape (`url`, and whatever teardown handle each exposes) by reading `ring-verify.mjs`'s own CLI block before wiring `startServers`/`stopServers` above; adjust the `.close()`/`.proc.kill()` calls to match what's actually returned rather than guessing further.
+`startStaticServer`/`ensureViteServer` are already exported from `ring-verify.mjs` (2026-09-03 pre-flight fix, commit `1c03530`) for exactly this reuse.
 
 - [ ] **Step 4: Move the picker's presets into a shared module, so both the UI and this sweep tool read the same list**
 
