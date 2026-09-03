@@ -13,7 +13,7 @@ import { derivePalette, hexToHslHue, DEAD_BAND } from './weightedPalette.js'
 import { regionHueWarnings } from './ringRecolor.js'
 import { skyRegionHues } from './ringPrimitives.js'
 
-export const MIN_SEPARATION = 70 // +10 buffer for HSL→hex→HSL round-trip rounding loss
+export const MIN_SEPARATION = 60
 export const DRIFT_MIN = 30
 export const DRIFT_MAX = 90
 export const LUMA_RISE_MAX = null // STAYS HUMAN — set once Task 6's sweep has run against real palettes; null = check disabled
@@ -90,9 +90,9 @@ function accept({ colors, weights, drift }, base, baseTheme) {
     return false
   }
   if (derived.warnings.some(w => w.includes('overlap'))) return false
-  const regions = skyRegionHues(base.stations)
-  const hueAnchors = colors.map(hex => ({ deg: hexToHslHue(hex), window: 25 }))
-  if (regionHueWarnings(regions, hueAnchors).length) return false
+  const stations = base.stations.map((s, i) => ({ ...s, hue: derived.hues[i] }))
+  const regions = skyRegionHues(stations)
+  if (regionHueWarnings(regions, derived.hueAnchors).length) return false
   if (LUMA_RISE_MAX != null) {
     const rise = Math.max(...derived.advisory.map(a => a.delta))
     if (rise > LUMA_RISE_MAX) return false
