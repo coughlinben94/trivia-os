@@ -542,7 +542,7 @@ function buildLayerContent(engine, world, arc, host, L) {
         // rCompanion() call count — the lerp only ever evaluated on the
         // non-accent branch, and still does.
         const compHue = st.accent
-          ? accentCompanionHue(st.hue, world.hueAnchors)
+          ? accentCompanionHue(st.hue, st.hueAnchors ?? world.hueAnchors)
           : st.hue + lerp(-18, 18, rCompanion())
         const compAlphaRoll = lerp(0.30, 0.48, lou) * 0.8
         const compAlpha = boostComp ? Math.max(compAlphaRoll, 0.55) : compAlphaRoll
