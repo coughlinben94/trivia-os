@@ -77,7 +77,18 @@ test.afterAll(async () => {
 async function gotoEditor(page) {
   await page.addInitScript((id) => { localStorage.setItem('trivia-os:activeShowId', id) }, TEST_SHOW_ID)
   await page.goto('/host', { waitUntil: 'networkidle' })
-  await page.locator('aside').waitFor({ state: 'visible', timeout: 15_000 })
+  const aside = page.locator('aside')
+  await aside.waitFor({ state: 'visible', timeout: 15_000 })
+
+  // RoundSidebar.jsx seeds every round id into `collapsedRounds` on mount, so
+  // Round 1 always loads collapsed and Q1 is not in the sidebar yet. Expand it
+  // (Ben, 2026-09-02: verified live — the caret toggle has no aria-label, so
+  // its rendered glyph IS its accessible name).
+  const roundToggle = aside.getByRole('button', { name: '▶' }).first()
+  if (await roundToggle.count()) {
+    await roundToggle.click()
+    await aside.getByRole('button', { name: '▼' }).first().waitFor({ state: 'visible', timeout: 5_000 })
+  }
 }
 
 async function getSlideOrder() {
