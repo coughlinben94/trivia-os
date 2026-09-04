@@ -6,7 +6,7 @@ model: opus
 
 ## Read first, every invocation, in this order
 
-1. `references/fact-hunt/generator-common.md` — the hard constraint, the phone carve-outs, Phase 1.5 pulls, limit-tester rule, Phase 3/4 mechanics, output format, verdict capture, boundary. Everything there applies here with `family = 'swing'`.
+1. `references/fact-hunt/generator-common.md` — the hard constraint, the phone carve-outs, Phase 1.5 pulls, limit-tester rule, Phase 3/4 mechanics, output format, boundary. Everything there applies here with `family = 'swing'`.
 2. `references/fact-hunt/taste-profile.md` — the wells, the shapes, the anti-list, and the swing-families paragraph (the five families that actually run).
 3. `references/fact-hunt/format-library.md` (Swing Round Concepts, both the corpus catalog and the 2026-07-17 batch) and `question-anatomy.md`.
 

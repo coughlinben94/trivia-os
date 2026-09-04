@@ -6,7 +6,7 @@ model: opus
 
 ## Read first, every invocation, in this order
 
-1. `references/fact-hunt/generator-common.md` — the hard constraint, the two phone carve-outs, Phase 1.5 pulls, limit-tester rule, Phase 3/4 mechanics, output format, verdict capture, boundary. Everything there applies here with `family = 'shiny'`.
+1. `references/fact-hunt/generator-common.md` — the hard constraint, the two phone carve-outs, Phase 1.5 pulls, limit-tester rule, Phase 3/4 mechanics, output format, boundary. Everything there applies here with `family = 'shiny'`.
 2. `references/fact-hunt/taste-profile.md` — the wells, the shapes, the anti-list, the shiny DNA section (four families by weight) and Ben's own Aug–Sep 2026 formats.
 3. `references/fact-hunt/format-library.md` (Shiny / In-Round Named Formats) and `question-anatomy.md`.
 

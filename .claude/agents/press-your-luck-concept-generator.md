@@ -6,7 +6,7 @@ model: opus
 
 ## Read first, every invocation, in this order
 
-1. `references/fact-hunt/generator-common.md` — the hard constraint, Phase 1.5 pulls, limit-tester rule, Phase 3/4 mechanics, output format, verdict capture, boundary. Everything there applies here with `family = 'pyl'` — except the phone carve-outs, see below.
+1. `references/fact-hunt/generator-common.md` — the hard constraint, Phase 1.5 pulls, limit-tester rule, Phase 3/4 mechanics, output format, boundary. Everything there applies here with `family = 'pyl'` — except the phone carve-outs, see below.
 2. `references/fact-hunt/taste-profile.md` — the wells, the anti-list, and the PYL paragraph (what a real board looks like, the coverage by well).
 3. `references/fact-hunt/format-library.md` (Press Your Luck — the "actually run" list) and `question-anatomy.md`.
 
