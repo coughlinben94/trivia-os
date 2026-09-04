@@ -173,11 +173,20 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   }), [colors, weights, baseTheme, drift])
 
   // Committed palette (recolorWorld internally derives it) — drives the ring
-  // preview only.
-  const previewWorldData = useMemo(
-    () => recolorWorld(midnightGalaxyRing, committed, baseTheme),
-    [committed, baseTheme],
-  )
+  // preview only. Mirrors ringWorldFor's own fallback (ParticleBackground.jsx):
+  // a malformed committed palette (e.g. a "Surprise me" pick whose drift
+  // somehow isn't a finite number) must never throw during render — Host.jsx's
+  // ErrorBoundary sits above the WHOLE control surface, not just this modal,
+  // so an uncaught throw here would take down a live show's host screen, not
+  // just fail to preview a colour.
+  const previewWorldData = useMemo(() => {
+    try {
+      return recolorWorld(midnightGalaxyRing, committed, baseTheme)
+    } catch (err) {
+      console.warn('[palette editor] bad committed palette, showing base world:', err.message)
+      return midnightGalaxyRing
+    }
+  }, [committed, baseTheme])
 
   // Remount key: RingAmbient builds once on mount by design, so a new
   // palette needs a new instance. (Coexists fine with the theme modal's
@@ -386,6 +395,7 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
               see the header comment. */}
           <button
             onClick={async () => {
+              setSaveFailed(false) // clear any stale failure from a prior attempt before this one starts
               const current = { colors, weights, drift: { arc: drift } }
               const match = findMatch(shelf, current)
               if (match) {
