@@ -15,7 +15,7 @@
     "test:e2e:join": "playwright test e2e/join-smoke.spec.js",
     "test:audit": "playwright test e2e/host-audit.spec.js",
     "test:wizard": "playwright test e2e/wizard-audit.spec.js",
-    "// test:wizard-create": "OPT-IN \u2014 creates slides in the show it targets, so it needs a THROWAWAY show id and skips cleanly without one. The anon-key/RLS cleanup defect is fixed (e2e/authed-client.js). Run: ALLOW_WIZARD_CREATE=1 PLAYWRIGHT_SHOW_ID=<throwaway> npm run test:wizard-create",
+    "// test:wizard-create": "OPT-IN — creates slides in the show it targets, so it needs a THROWAWAY show id and skips cleanly without one. The anon-key/RLS cleanup defect is fixed (e2e/authed-client.js). Run: ALLOW_WIZARD_CREATE=1 PLAYWRIGHT_SHOW_ID=<throwaway> npm run test:wizard-create",
     "test:wizard-create": "playwright test e2e/wizard-create-verify.spec.js",
     "verify:ring": "node concepts/tools/ring-verify.mjs concepts/world-07-ring.html"
   },
@@ -30,7 +30,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",
-    "sharp": "^0.35.2"
+    "sharp": "^0.35.2",
+    "tone": "^15.1.22"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
