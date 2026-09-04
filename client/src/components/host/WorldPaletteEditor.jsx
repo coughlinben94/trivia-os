@@ -1,7 +1,9 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { derivePalette } from '../../lib/weightedPalette.js'
+import { PRESETS } from '../../lib/paletteGenerator.js'
 import { recolorWorld } from '../../lib/ringRecolor.js'
 import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
+import { fetchCertifiedPalettes, saveAsPending, findMatch } from '../../lib/ringPalettesClient.js'
 import RingAmbient from '../display/RingAmbient.jsx'
 
 // Weighted world-palette picker (Midnight Galaxy only — one world exists;
@@ -30,18 +32,6 @@ import RingAmbient from '../display/RingAmbient.jsx'
 const SNAP = 0.05
 const MIN_WEIGHT = 0.05
 const COLOR_DEBOUNCE_MS = 400
-
-// One-click starting points so picking a palette never requires understanding
-// hue/weight math. Each is just a (colors, weights) pair fed through the same
-// setColor/setWeights path a manual edit uses — no separate code path to drift.
-const PRESETS = [
-  { name: 'Purple & Blue',  colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] },
-  { name: 'Violet & Pink',  colors: ['#8b5cf6', '#ec4899'], weights: [0.6, 0.4] },
-  { name: 'Blue & Teal',    colors: ['#3b82f6', '#14b8a6'], weights: [0.6, 0.4] },
-  { name: 'Amber & Rose',   colors: ['#f59e0b', '#f43f5e'], weights: [0.55, 0.45] },
-  { name: 'Emerald & Indigo', colors: ['#10b981', '#6366f1'], weights: [0.55, 0.45] },
-  { name: 'Crimson & Gold', colors: ['#dc2626', '#eab308'], weights: [0.6, 0.4] },
-]
 
 const CURRENT_HUES = midnightGalaxyRing.stations.map(s => s.hue)
 
@@ -101,17 +91,27 @@ function WeightBar({ colors, weights, onChange, onCommit }) {
 export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeColors }) {
   const [colors, setColors]   = useState(['#a855f7', '#3b82f6'])
   const [weights, setWeights] = useState([0.65, 0.35])
+  const [drift, setDrift] = useState(60) // Ben's 2026-09-03 default
   // The palette the (expensive-to-remount) ring preview actually renders.
   // Trails the live state: synced on drag-end / debounced colour change.
-  const [committed, setCommitted] = useState({ colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] })
+  const [committed, setCommitted] = useState({ colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35], drift: { arc: 60 } })
   const [previewStation, setPreviewStation] = useState(0)
   const [showDetails, setShowDetails] = useState(false)
   const [showCustom, setShowCustom] = useState(false)
   const [applied, setApplied] = useState(false)
+  const [savedPending, setSavedPending] = useState(false)
+  const [saveFailed, setSaveFailed] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [shelf, setShelf] = useState([])
+  const [shelfLoading, setShelfLoading] = useState(true)
+  const [shelfError, setShelfError] = useState(false)
   const colorDebounceRef = useRef(null)
   const appliedTimeoutRef = useRef(null)
   const copyTimeoutRef = useRef(null)
+
+  useEffect(() => {
+    fetchCertifiedPalettes().then(setShelf).catch(() => { setShelf([]); setShelfError(true) }).finally(() => setShelfLoading(false))
+  }, [])
 
   useEffect(() => () => {
     clearTimeout(appliedTimeoutRef.current)
@@ -119,18 +119,18 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
     clearTimeout(copyTimeoutRef.current)
   }, [])
 
-  function commit(nextColors = colors, nextWeights = weights) {
-    setCommitted({ colors: nextColors, weights: nextWeights })
+  function commit(nextColors = colors, nextWeights = weights, nextDrift = drift) {
+    setCommitted({ colors: nextColors, weights: nextWeights, drift: { arc: nextDrift } })
   }
 
   // Every immediate (non-debounced) palette change goes through this, so a
   // stale debounced drag-commit (below) can never fire afterward and clobber
   // it back to the abandoned in-progress drag colour.
-  function applyPalette(nextColors, nextWeights) {
+  function applyPalette(nextColors, nextWeights, nextDrift = drift) {
     clearTimeout(colorDebounceRef.current)
     setColors(nextColors)
     setWeights(nextWeights)
-    commit(nextColors, nextWeights)
+    commit(nextColors, nextWeights, nextDrift)
   }
 
   function commitColorsDebounced(nextColors, nextWeights) {
@@ -169,15 +169,24 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   // station dots, swatch row, and advisory table.
   const derived = useMemo(() => derivePalette({
     colors, weights, stationCount: CURRENT_HUES.length,
-    baseTheme, currentHues: CURRENT_HUES,
-  }), [colors, weights, baseTheme])
+    baseTheme, currentHues: CURRENT_HUES, drift: { arc: drift },
+  }), [colors, weights, baseTheme, drift])
 
   // Committed palette (recolorWorld internally derives it) — drives the ring
-  // preview only.
-  const previewWorldData = useMemo(
-    () => recolorWorld(midnightGalaxyRing, committed, baseTheme),
-    [committed, baseTheme],
-  )
+  // preview only. Mirrors ringWorldFor's own fallback (ParticleBackground.jsx):
+  // a malformed committed palette (e.g. a "Surprise me" pick whose drift
+  // somehow isn't a finite number) must never throw during render — Host.jsx's
+  // ErrorBoundary sits above the WHOLE control surface, not just this modal,
+  // so an uncaught throw here would take down a live show's host screen, not
+  // just fail to preview a colour.
+  const previewWorldData = useMemo(() => {
+    try {
+      return recolorWorld(midnightGalaxyRing, committed, baseTheme)
+    } catch (err) {
+      console.warn('[palette editor] bad committed palette, showing base world:', err.message)
+      return midnightGalaxyRing
+    }
+  }, [committed, baseTheme])
 
   // Remount key: RingAmbient builds once on mount by design, so a new
   // palette needs a new instance. (Coexists fine with the theme modal's
@@ -233,12 +242,30 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
               </button>
             ))}
           </div>
-          <button
-            onClick={() => setShowCustom(v => !v)}
-            className="text-xs font-medium text-gray-500 hover:text-gray-900 underline"
-          >
-            {showCustom ? 'Hide custom colors' : 'Custom colors'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowCustom(v => !v)}
+              className="text-xs font-medium text-gray-500 hover:text-gray-900 underline"
+            >
+              {showCustom ? 'Hide custom colors' : 'Custom colors'}
+            </button>
+            <button
+              onClick={() => {
+                if (!shelf.length) return
+                const pick = shelf[Math.floor(Math.random() * shelf.length)]
+                // Math.random is fine HERE — this is host-UI selection among
+                // ALREADY-CERTIFIED rows, not world construction; the Global
+                // Constraints' no-Math.random rule is about concepts/world-07-ring.html's
+                // own build, which this file is not.
+                applyPalette(pick.colors, pick.weights, pick.drift.arc)
+                setDrift(pick.drift.arc)
+              }}
+              disabled={shelfLoading || !shelf.length}
+              className="text-xs font-medium px-3 py-1.5 rounded-full border border-gray-200 hover:border-gray-400 disabled:opacity-40"
+            >
+              {shelfLoading ? 'Loading palettes…' : shelfError ? "Couldn't load palettes — try again" : shelf.length ? `🎲 Surprise me (${shelf.length} ready)` : 'No certified palettes yet'}
+            </button>
+          </div>
           {showCustom && (
             <div className="space-y-3 pt-1">
               <div className="flex items-center gap-3">
@@ -257,6 +284,15 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
                   : <button onClick={removeThird} className="text-xs font-medium text-gray-500 hover:text-gray-900 underline">remove third color</button>}
               </div>
               <WeightBar colors={colors} weights={weights} onChange={setWeights} onCommit={() => commit()} />
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-medium text-gray-500 w-24">Drift {drift}&deg;</label>
+                <input
+                  type="range" min="0" max="90" value={drift}
+                  onChange={e => setDrift(Number(e.target.value))}
+                  onPointerUp={() => commit(colors, weights, drift)}
+                  className="flex-1"
+                />
+              </div>
             </div>
           )}
         </div>
@@ -358,21 +394,46 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
               panel above is now only for moving the CERTIFIED BASE world —
               see the header comment. */}
           <button
-            onClick={() => {
-              onApplyThemeColors({ themeColors: derived.themeColors, worldPalette: { colors, weights } })
-              setApplied(true)
-              // Visible confirmation before closing — the write itself is
-              // silent (same fire-and-forget theme_overrides path every
-              // other control here uses), so with no feedback at all the
-              // click read as dead on a live show tonight (Ben, 2026-09-01).
-              appliedTimeoutRef.current = setTimeout(onClose, 700)
+            onClick={async () => {
+              setSaveFailed(false) // clear any stale failure from a prior attempt before this one starts
+              const current = { colors, weights, drift: { arc: drift } }
+              const match = findMatch(shelf, current)
+              if (match) {
+                onApplyThemeColors({ themeColors: derived.themeColors, worldPalette: { colors, weights, drift: { arc: drift } } })
+                setApplied(true)
+                // Visible confirmation before closing — the write itself is
+                // silent (same fire-and-forget theme_overrides path every
+                // other control here uses), so with no feedback at all the
+                // click read as dead on a live show tonight (Ben, 2026-09-01).
+                appliedTimeoutRef.current = setTimeout(onClose, 700)
+              } else {
+                try {
+                  await saveAsPending(current)
+                  setSavedPending(true)
+                  appliedTimeoutRef.current = setTimeout(onClose, 1200)
+                } catch {
+                  setSaveFailed(true) // new state, mirrors applied/savedPending's pattern
+                }
+              }
             }}
-            disabled={applied}
+            disabled={applied || savedPending || shelfLoading}
             className="ml-auto text-sm font-semibold px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-70"
           >
-            {applied ? 'Applied ✓' : "Apply to this show's theme"}
+            {saveFailed ? "Couldn't save — try again" : applied ? 'Applied ✓' : savedPending ? 'Saved, pending check' : "Apply to this show's theme"}
           </button>
         </div>
+        {saveFailed && (
+          <p className="px-5 pb-3 text-xs text-red-700">
+            Couldn't save this pick — check your connection and try again.
+          </p>
+        )}
+        {savedPending && (
+          <p className="px-5 pb-3 text-xs text-amber-700">
+            {shelf.length === 0
+              ? "Saved — no palettes have been certified yet (the sweep tool hasn't run). This one will be checked once it does."
+              : "Saved — this exact combination isn't checked yet. It'll be ready by your next show."}
+          </p>
+        )}
       </div>
     </div>
   )

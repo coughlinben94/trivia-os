@@ -14,6 +14,14 @@ import { createRoot } from 'react-dom/client'
 // deliberately never re-runs it when worldData changes, so handing it a fresh
 // worldData under a stable key updates nothing on screen. Only a remount
 // re-renders the preview, so only a remount counts.
+vi.mock('../../lib/ringPalettesClient.js', () => ({
+  fetchCertifiedPalettes: vi.fn().mockResolvedValue([
+    { id: '1', colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35], drift: { arc: 60 }, source: 'generated', seed: '42' },
+  ]),
+  saveAsPending: vi.fn().mockResolvedValue(undefined),
+  findMatch: (shelf, p) => shelf.find(s => JSON.stringify(s.colors) === JSON.stringify(p.colors) && JSON.stringify(s.weights) === JSON.stringify(p.weights) && JSON.stringify(s.drift) === JSON.stringify(p.drift)),
+}))
+
 const mounts = []
 vi.mock('../display/RingAmbient.jsx', async () => {
   const { useEffect } = await import('react')
@@ -128,15 +136,16 @@ describe('WorldPaletteEditor', () => {
     expect(swatches()).toHaveLength(2)
   })
 
-  it('hands Apply the four theme colors AND the worldPalette (2026-09-03: the ring is a runtime value now)', () => {
+  it('hands Apply the four theme colors AND the worldPalette (2026-09-03: the ring is a runtime value now)', async () => {
     const applied = []
     render({ onApplyThemeColors: c => applied.push(c) })
+    await act(async () => { await Promise.resolve() }) // let the shelf fetch resolve — default palette matches the mocked shelf row
     act(() => byText("Apply to this show's theme").click())
     expect(applied).toHaveLength(1)
     expect(Object.keys(applied[0]).sort()).toEqual(['themeColors', 'worldPalette'])
     expect(Object.keys(applied[0].themeColors).sort()).toEqual(['accent', 'bg', 'bgDeep', 'highlight'])
     for (const v of Object.values(applied[0].themeColors)) expect(v).toMatch(/^#[0-9a-f]{6}$/)
-    expect(applied[0].worldPalette).toEqual({ colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] })
+    expect(applied[0].worldPalette).toEqual({ colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35], drift: { arc: 60 } })
   })
 
   it('lists every station with its advisory row once details are expanded', () => {
@@ -173,5 +182,35 @@ describe('WorldPaletteEditor', () => {
     expect(byText('Copied ✓')).toBeTruthy()
     act(() => { vi.advanceTimersByTime(1500) })
     expect(byText('Copy command')).toBeTruthy()
+  })
+
+  it('Apply on a shelf-matching palette applies immediately, no pending message', async () => {
+    const applied = []
+    render({ onApplyThemeColors: c => applied.push(c) })
+    await act(async () => { await Promise.resolve() }) // let the shelf fetch resolve
+    act(() => byText("Apply to this show's theme").click())
+    await act(async () => { await Promise.resolve() })
+    expect(applied).toHaveLength(1)
+    expect(byText('Saved, pending check')).toBeFalsy()
+  })
+
+  it('disables Apply while the shelf is still loading, so the default preset cannot race the fetch into a false "pending"', async () => {
+    render()
+    expect(byText("Apply to this show's theme").disabled).toBe(true) // shelf fetch hasn't resolved yet
+    await act(async () => { await Promise.resolve() }) // let it resolve
+    expect(byText("Apply to this show's theme").disabled).toBe(false)
+  })
+
+  it('Apply on a NON-matching custom palette saves as pending instead of applying', async () => {
+    const applied = []
+    render({ onApplyThemeColors: c => applied.push(c) })
+    await act(async () => { await Promise.resolve() })
+    act(() => byText('Custom colors').click())
+    setColor(0, '#112233') // guaranteed not to match the mocked shelf's purple
+    act(() => { vi.advanceTimersByTime(500) })
+    act(() => byText("Apply to this show's theme").click())
+    await act(async () => { await Promise.resolve() })
+    expect(applied).toHaveLength(0)
+    expect(byText('Saved, pending check')).toBeTruthy()
   })
 })

@@ -178,7 +178,7 @@ export function deriveTints(baseTints, colors) {
 // rules. Throws on anything a human editing JSON by hand or a malformed
 // saved override could produce; callers that want a soft failure (a display
 // reading a saved show) catch and fall back to the base world.
-export function normalizePalette({ colors, weights }) {
+export function normalizePalette({ colors, weights, drift }) {
   if (!Array.isArray(colors) || colors.length < 2 || colors.length > 3) {
     throw new Error(`normalizePalette: expected 2-3 colors, got ${colors?.length}`)
   }
@@ -191,7 +191,11 @@ export function normalizePalette({ colors, weights }) {
   }
   if (w.some(x => !(x > 0))) throw new Error('normalizePalette: every weight must be a positive number')
   const total = w.reduce((a, b) => a + b, 0)
-  return { colors: colors.map(c => c.toLowerCase()), weights: w.map(x => x / total) }
+  const d = drift ?? { arc: 0 }
+  if (typeof d.arc !== 'number' || !Number.isFinite(d.arc)) {
+    throw new Error(`normalizePalette: drift.arc must be a finite number, got ${d.arc}`)
+  }
+  return { colors: colors.map(c => c.toLowerCase()), weights: w.map(x => x / total), drift: d }
 }
 
 // A NEW worldData built from the BASE world (never from a recoloured one —
@@ -207,18 +211,18 @@ export function normalizePalette({ colors, weights }) {
 // this by construction — ParticleBackground always imports
 // `midnightGalaxyRing` directly and calls this fresh per palette.
 export function recolorWorld(base, palette, baseTheme) {
-  const { colors, weights } = normalizePalette(palette)
+  const { colors, weights, drift } = normalizePalette(palette)
   const derived = derivePalette({
     colors, weights, stationCount: base.stations.length,
-    currentHues: base.stations.map(s => s.hue), baseTheme,
+    currentHues: base.stations.map(s => s.hue), baseTheme, drift,
   })
   return {
     ...base,
     hueAnchors: derived.hueAnchors,
-    stations: base.stations.map((s, i) => ({ ...s, hue: derived.hues[i] })),
+    stations: base.stations.map((s, i) => ({ ...s, hue: derived.hues[i], hueAnchors: derived.hueAnchorsAt[i] })),
     sky: skyFromTheme({ colors: { bg: derived.themeColors.bg, bgDeep: derived.themeColors.bgDeep } }),
     tints: deriveTints(BASE_TINTS, colors),
-    palette: { colors, weights },
+    palette: { colors, weights, drift },
   }
 }
 

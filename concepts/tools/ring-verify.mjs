@@ -1324,10 +1324,18 @@ export async function runChecks({ page, label, prefix, gotoUrl }) {
 // ═══════════════════════════════════════════════════════════════════════
 // HTML-file static server (unchanged mechanism — CORS on file:// ES module
 // imports otherwise blocks concepts/world-07-ring.html's <script type="module">).
+//
+// Exported (2026-09-03, docs/superpowers/plans/2026-09-03-ring-palette-
+// drift-and-shelf.md, Task 6 pre-flight ruling): concepts/tools/palette-
+// sweep.mjs needs the SAME server-bootstrapping this file's own CLI block
+// uses, and hand-copying it into a second file is exactly the kind of
+// duplication this project's ledger warns about repeatedly ("one fact,
+// one home"). No pass/fail logic changed — this is a pure visibility
+// change on server plumbing, not the gate's check code.
 // ═══════════════════════════════════════════════════════════════════════
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript' };
-function startStaticServer(rootDir) {
+export function startStaticServer(rootDir) {
   return new Promise((resolve) => {
     const server = createServer(async (req, res) => {
       try {
@@ -1403,7 +1411,7 @@ async function spawnViteOn(port) {
   throw new Error(`vite dev server on port ${port} did not become ready within 20s`);
 }
 
-async function ensureViteServer() {
+export async function ensureViteServer() {
   const base = `http://localhost:${VITE_PORT}`;
   if (await isUp(base + '/') && await serverMatchesThisWorktree(base)) {
     return { proc: null, url: base + '/ambient?ring=1' };

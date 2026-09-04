@@ -55,6 +55,7 @@ function parseArgs(argv) {
     if (!argv[i].startsWith('--')) throw new Error(`unexpected argument: ${argv[i]}`)
     const name = argv[i].slice(2)
     if (name === 'write') { flags.write = true; continue }
+    if (name === 'drift') { flags.drift = argv[++i]; continue }
     if (name !== 'colors' && name !== 'weights') throw new Error(`unknown flag: --${name}`)
     const value = argv[++i]
     if (value === undefined) throw new Error(`--${name} needs a value`)
@@ -70,11 +71,15 @@ function parseArgs(argv) {
   // apart on what "valid" means.
   const { colors, weights } = normalizePalette({ colors: rawColors, weights: rawWeights })
 
-  return { colors, weights, write: !!flags.write }
+  const drift = { arc: flags.drift ? Number(flags.drift) : 0 }
+  if (flags.write && drift.arc !== 0) {
+    throw new Error('--write refuses a non-zero --drift — the certified base world stays drift 0. Use --drift for the dry-run table only.')
+  }
+  return { colors, weights, drift, write: !!flags.write }
 }
 
 function main() {
-  const { colors, weights, write } = parseArgs(process.argv.slice(2))
+  const { colors, weights, drift, write } = parseArgs(process.argv.slice(2))
 
   const ringJs = read(TARGETS.ringJs)
   const rows = readStationHues(ringJs)
@@ -92,9 +97,9 @@ function main() {
   // shape deliberately doesn't carry (the app never needs them to render).
   // Both calls are pure and deterministic on the same inputs, so this is
   // redundant compute, not a second implementation to drift from recolorWorld.
-  const world = recolorWorld(midnightGalaxyRing, { colors, weights }, BASE_THEME)
+  const world = recolorWorld(midnightGalaxyRing, { colors, weights, drift }, BASE_THEME)
   const derived = derivePalette({
-    colors, weights, stationCount: STATION_COUNT, currentHues, baseTheme: BASE_THEME,
+    colors, weights, drift, stationCount: STATION_COUNT, currentHues, baseTheme: BASE_THEME,
   })
   const sky = { bg: derived.themeColors.bg, bgDeep: derived.themeColors.bgDeep }
   const tints = world.tints

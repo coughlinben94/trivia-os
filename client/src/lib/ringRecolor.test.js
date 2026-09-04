@@ -5,6 +5,7 @@ import {
   rewriteTints, deriveTints, recolorWorld, normalizePalette,
   formatPlan, blockedTargets, regionHueWarnings,
 } from './ringRecolor.js'
+import { hueDelta } from './weightedPalette.js'
 import { BASE_TINTS } from './ringPrimitives.js'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 
@@ -400,5 +401,28 @@ describe('midnightGalaxy.ring.js and world-07-ring.html agree', () => {
     const skyOf = src => [/SKY_BG(\s*)=\s*'(#[0-9a-f]{6})'/i, /SKY_BG_DEEP\s*=\s*'(#[0-9a-f]{6})'/i]
       .map(re => src.match(re).pop())
     expect(skyOf(HTML)).toEqual(skyOf(RING_JS))
+  })
+})
+
+describe('recolorWorld drift', () => {
+  const PALETTE = { colors: ['#ff2200', '#ffd400'], weights: [0.55, 0.45] }
+
+  it('drift: {arc: 0} matches no-drift output exactly', () => {
+    const zero = recolorWorld(midnightGalaxyRing, { ...PALETTE, drift: { arc: 0 } }, THEME)
+    const none = recolorWorld(midnightGalaxyRing, PALETTE, THEME)
+    expect(zero.stations.map(s => s.hue)).toEqual(none.stations.map(s => s.hue))
+  })
+
+  it('writes each station its OWN rotated hueAnchors', () => {
+    const world = recolorWorld(midnightGalaxyRing, { ...PALETTE, drift: { arc: 60 } }, THEME)
+    world.stations.forEach((s, i) => {
+      expect(s.hueAnchors).toHaveLength(PALETTE.colors.length)
+      expect(hueDelta(s.hue, s.hueAnchors.find(a => hueDelta(s.hue, a.deg) <= a.window)?.deg ?? -999)).toBeLessThanOrEqual(25)
+    })
+  })
+
+  it('echoes drift back on the palette field', () => {
+    const world = recolorWorld(midnightGalaxyRing, { ...PALETTE, drift: { arc: 60 } }, THEME)
+    expect(world.palette.drift).toEqual({ arc: 60 })
   })
 })
