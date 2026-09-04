@@ -4,8 +4,8 @@ import { FIXED_SHAPE_KINDS, buildGridSlide, buildVennSlide } from './shinyWizard
 const baseFmt = { id: 'fmt_1', name: 'Test Format', icon: '✨' }
 
 describe('FIXED_SHAPE_KINDS registry', () => {
-  it('has exactly the five known fixed-shape kinds', () => {
-    expect(Object.keys(FIXED_SHAPE_KINDS).sort()).toEqual(['grid', 'matching', 'order', 'venn', 'wager'])
+  it('has exactly the six known fixed-shape kinds', () => {
+    expect(Object.keys(FIXED_SHAPE_KINDS).sort()).toEqual(['bendle', 'grid', 'matching', 'order', 'venn', 'wager'])
   })
 
   it('matching/wager/order have no own controls or builder — they fall through to the generic flat-asset path', () => {

@@ -25,6 +25,7 @@ export const FIXED_SHAPE_KINDS = {
   order:    { hasOwnControls: false },
   grid:     { hasOwnControls: true, extraControls: gridExtraControls, buildSlideData: buildGridSlide },
   venn:     { hasOwnControls: true, extraControls: vennExtraControls, buildSlideData: buildVennSlide },
+  bendle:   { hasOwnControls: true, extraControls: bendleExtraControls, buildSlideData: buildBendleSlide },
 }
 
 // ── Grid ───────────────────────────────────────────────────────────────────
@@ -168,4 +169,52 @@ export function buildVennSlide(ctx) {
     answer:    ctx.shinyAnswer.trim(),
   }
   return { type: 'venn', roundId: ctx.roundId ?? null, afterSlideId: ctx.afterId, data }
+}
+
+// ── Bendle ───────────────────────────────────────────────────────────────
+
+// ctx: { bendleSongs, bendleSongId, setBendleSongId }
+export function bendleExtraControls(ctx) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-500 mb-1.5">Song</label>
+      <select
+        value={ctx.bendleSongId ?? ''}
+        onChange={e => ctx.setBendleSongId(e.target.value || null)}
+        className="w-full border border-gray-200 rounded-lg px-3 py-3 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+      >
+        <option value="">Pick a song…</option>
+        {(ctx.bendleSongs ?? []).map(s => (
+          <option key={s.id} value={s.id}>{s.title}</option>
+        ))}
+      </select>
+      {(ctx.bendleSongs ?? []).length === 0 && (
+        <p className="text-[11px] text-gray-400 mt-1">
+          No songs prepped yet — upload stems from the Bendle admin panel first.
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ctx: { qNum, roundId, afterId, selectedShinyFmt, shinyQuestion, bendleSongId, bendleSongs }
+export function buildBendleSlide(ctx) {
+  const fmt = ctx.selectedShinyFmt
+  const song = (ctx.bendleSongs ?? []).find(s => s.id === ctx.bendleSongId)
+  const data = {
+    questionNumber:  ctx.qNum,
+    questionLabel:   `Q${ctx.qNum}`,
+    questionMode:    'shiny',
+    isShiny:         true,
+    shinyFormatId:   fmt.id,
+    shinyFormatName: fmt.name,
+    shinyFormatIcon: fmt.icon,
+    shinyInputSchema: fmt.input_schema ?? { type: 'bendle' },
+    bendleSongId:    ctx.bendleSongId ?? null,
+    text:            ctx.shinyQuestion.trim(),
+    answer:          song?.answer ?? '',
+    bendleGuessesLocked: false,
+    bendleRevealed:      false,
+  }
+  return { type: 'question', roundId: ctx.roundId ?? null, afterSlideId: ctx.afterId, data }
 }

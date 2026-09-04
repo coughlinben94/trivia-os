@@ -7,7 +7,12 @@ import { createRoot } from 'react-dom/client'
 // both of which reach the real Supabase client at import time. Stub the client
 // itself — one mock covers every path into it, and jukeboxSupabase's own
 // try/catch turns the resulting TypeError into the `null` it already handles.
-vi.mock('../../lib/supabase.js', () => ({ supabase: {} }))
+// `.from` additionally needs a real chain now that the wizard's own bendle_songs
+// fetch effect calls `supabase.from(...).select(...).order(...)` unconditionally
+// on mount (Task 5) — an empty object made that throw on every render.
+vi.mock('../../lib/supabase.js', () => ({
+  supabase: { from: () => ({ select: () => ({ order: () => Promise.resolve({ data: [] }) }) }) },
+}))
 
 const { default: AddSlideWizard } = await import('./AddSlideWizard.jsx')
 

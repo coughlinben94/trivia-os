@@ -7,6 +7,7 @@ import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import { makeQuestionPasteHandler, makeCleanPasteHandler } from '../../lib/cleanPaste.js'
 import { FIXED_SHAPE_KINDS } from '../../lib/shinyWizardKinds.jsx'
 import { withShinyTitleSlide, withShinyGroupId } from '../../lib/shinySeries.js'
+import { supabase } from '../../lib/supabase.js'
 
 export const TYPE_CARDS = [
   { type: 'pre-show',       icon: '📱', name: 'Pre-Show',            desc: 'QR code + team count while people join' },
@@ -108,6 +109,15 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const [gridCols, setGridCols] = useState(4)
   const [gridRows, setGridRows] = useState(3)
   const [vennPerSide, setVennPerSide] = useState(3)
+  const [bendleSongs, setBendleSongs] = useState([])
+  const [bendleSongId, setBendleSongId] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    supabase.from('bendle_songs').select('id, title, answer, aliases').order('title')
+      .then(({ data }) => { if (!cancelled) setBendleSongs(data ?? []) })
+    return () => { cancelled = true }
+  }, [])
   // "How many assets" for venn means how many SEPARATE venn questions to
   // create in one go (Ben, 2026-09-01: "I'll be asking three separate venn
   // diagrams" — a round of 3 standalone puzzles, not 3 people on one side).
@@ -208,6 +218,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             qNum, roundId, afterId, selectedShinyFmt,
             shinyQuestion, shinyAnswer,
             gridCols, gridRows, vennPerSide, vennSlideCount,
+            bendleSongId, bendleSongs,
           }))
           return
         }
@@ -408,10 +419,16 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // Separate questions can't share one typed answer — those slides start
   // blank and get filled in the editor, exactly as the old batch path did.
   const showSharedFields = effectiveRel !== 'separate' && !(isVenn && vennNum > 1)
+  // Bendle's answer comes from the picked song, not free text — the generic
+  // Answer field doesn't apply, so it's gated separately from Question-text.
+  const showAnswerField  = showSharedFields && shinyFmtType !== 'bendle'
   // A plain single-asset question — and every fixed-shape format — still
   // needs its answer up front, unchanged. Multi-asset tied questions usually
   // answer per-asset in the editor, so the shared answer is optional there.
-  const sharedAnswerRequired = showSharedFields && (isFixedShapeFmt || assetNum === 1)
+  // Bendle has no typed answer to require (see showAnswerField above) — its
+  // song is optional here too, since Task 6's upload panel may not have
+  // shipped any songs yet.
+  const sharedAnswerRequired = showAnswerField && (isFixedShapeFmt || assetNum === 1)
   const canAddShiny    = !!roundId && (!sharedAnswerRequired || shinyAnswer.trim().length > 0)
   const isPlainOnly    = type === 'question'
   const isShinyOnly    = type === 'shiny-question'
@@ -586,42 +603,43 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             {fixedShapeKind?.extraControls?.({
               gridCols, setGridCols, gridRows, setGridRows,
               vennSlideCount, setVennSlideCount, vennNum, vennPerSide, setVennPerSide,
+              bendleSongs, bendleSongId, setBendleSongId,
             })}
 
             {/* Question + answer — the two tied modes share one of each.
                 Separate questions can't, so those slides start blank. */}
             {showSharedFields && (
-              <>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                    Question text <span className="font-normal text-gray-400">(optional)</span>
-                  </label>
-                  <textarea
-                    value={shinyQuestion}
-                    onChange={e => setShinyQuestion(e.target.value)}
-                    placeholder="e.g. What connects these four images?"
-                    rows={3}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                    Answer
-                    {!sharedAnswerRequired && <span className="font-normal text-gray-400"> (optional — each asset can have its own)</span>}
-                  </label>
-                  <input
-                    type="text"
-                    value={shinyAnswer}
-                    onChange={e => setShinyAnswer(e.target.value)}
-                    // Fixed-shape formats render no count input, so the answer
-                    // takes the focus the count would otherwise have had —
-                    // except venn, which has its own count input to focus.
-                    autoFocus={isFixedShapeFmt && !isVenn}
-                    placeholder={sharedAnswerRequired ? 'The answer…' : 'Leave blank for per-asset answers'}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                  />
-                </div>
-              </>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                  Question text <span className="font-normal text-gray-400">(optional)</span>
+                </label>
+                <textarea
+                  value={shinyQuestion}
+                  onChange={e => setShinyQuestion(e.target.value)}
+                  placeholder="e.g. What connects these four images?"
+                  rows={3}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                />
+              </div>
+            )}
+            {showAnswerField && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                  Answer
+                  {!sharedAnswerRequired && <span className="font-normal text-gray-400"> (optional — each asset can have its own)</span>}
+                </label>
+                <input
+                  type="text"
+                  value={shinyAnswer}
+                  onChange={e => setShinyAnswer(e.target.value)}
+                  // Fixed-shape formats render no count input, so the answer
+                  // takes the focus the count would otherwise have had —
+                  // except venn, which has its own count input to focus.
+                  autoFocus={isFixedShapeFmt && !isVenn}
+                  placeholder={sharedAnswerRequired ? 'The answer…' : 'Leave blank for per-asset answers'}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                />
+              </div>
             )}
 
             <div className="flex flex-col gap-1.5 pt-1">
