@@ -41,6 +41,15 @@ const FADE_MS = 2500
 // close over its own React state setters) get rebound each time.
 let sharedSpotifyPlayer = null
 let sharedDeviceId = null
+// Set while reconnect() is rebuilding the shared singleton (see reconnect's
+// own comment). A mount's init() effect can fire in that same window — e.g.
+// break 3 mounting while break 2's failed playTrack is still reconnecting —
+// and without this, init() would see sharedSpotifyPlayer as null (reconnect
+// nulls it synchronously before its first await) and build a SECOND
+// Spotify.Player concurrently, orphaning one of the two Connect devices
+// Spotify registers server-side per connect(). init() awaits this instead of
+// racing it (2026-09-04, second-opinion review of 57f0b97).
+let reconnectPromise = null
 
 // Root cause of the 2026-07-28 "shuffle plays nothing, forever" bug: every
 // other awaited network step in this file (deviceId poll, play-confirmation
@@ -194,6 +203,10 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
 
     const init = async () => {
       mountCount += 1
+      // A reconnect() from a different mount is mid-flight — wait for it
+      // instead of racing it (see reconnectPromise's own comment above).
+      if (reconnectPromise) await reconnectPromise
+      if (deadRef.current) return
       if (sharedSpotifyPlayer) {
         // Reuse the already-connected singleton instead of constructing a
         // second Spotify.Player — see the sharedSpotifyPlayer comment above.
@@ -357,30 +370,74 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
   // retry so the SECOND attempt has an actual chance — retrying the exact
   // same stale connection twice, which is all the old code did, can never
   // recover from this class of failure.
+  // 2026-09-04, second-opinion review of the above: two real gaps fixed here.
+  // (1) reconnectPromise dedupes concurrent callers (two failed breaks
+  // retrying near-simultaneously, or init() racing this — see
+  // reconnectPromise's own comment) so only one rebuild ever runs at a time.
+  // If the mount that STARTED a reconnect dies before it resolves, that's
+  // fine and needs no special-casing: bindListenersRef.current still holds
+  // that mount's closure (never cleared on unmount), and its setters are
+  // harmless no-ops on a dead component in React 18 — the module-scope
+  // sharedSpotifyPlayer/sharedDeviceId still get populated correctly for
+  // whichever mount checks next. (Binding listeners can NOT be skipped for a
+  // "dead" caller, tempting as that looks — 'ready' only reliably fires ONCE
+  // per Spotify.Player instance for its whole lifetime, so a player built
+  // and connect()-ed with no listener attached would never have its
+  // device_id captured by anyone, including a later mount that tries to
+  // reuse it.)
+  // (2) Fable review, 2026-09-04: `disconnect()` returns void, not a Promise
+  // (confirmed against the SDK) — there's nothing to await here, the SDK
+  // gives no completion signal, so this is a fire-and-forget best-effort
+  // call, not a capped wait. Left as a plain call rather than dressed up in
+  // `withTimeout` around nothing.
   const reconnect = useCallback(async () => {
-    reportJukebox('reconnect: discarding player, building fresh', { mountCount })
-    try { sharedSpotifyPlayer?.disconnect() } catch { /* best-effort */ }
-    sharedSpotifyPlayer = null
-    sharedDeviceId = null
-    deviceIdRef.current = null
-    setIsReady(false)
+    // Same review: a dead mount can still reach this call (e.g. the 401 ->
+    // refreshToken -> retry branch inside playTrack, which has no deadRef
+    // check of its own) well after it unmounted. If that lands after a LATER
+    // mount has already reused the singleton this dead mount is trying to
+    // tear down, it would clobber a connection that's currently working.
+    // Bail before even joining/starting a rebuild.
+    if (deadRef.current) return false
+    if (reconnectPromise) return reconnectPromise
+    reconnectPromise = (async () => {
+      reportJukebox('reconnect: discarding player, building fresh', { mountCount })
+      try { sharedSpotifyPlayer?.disconnect() } catch { /* best-effort */ }
+      sharedSpotifyPlayer = null
+      sharedDeviceId = null
+      deviceIdRef.current = null
+      // Also null playerRef (Fable review): an unrelated playTrack call
+      // racing this exact window (e.g. a manual Skip while a different
+      // failure's reconnect is mid-flight) would otherwise read the
+      // just-disconnected player straight out of playerRef and run the full
+      // play pipeline against a dead connection. Every playTrack consumer
+      // already handles a null playerRef via its own waitForRef(playerRef)
+      // branch, so this just routes that race into the existing wait path
+      // instead of a silent failure against a corpse.
+      playerRef.current = null
+      setIsReady(false)
 
-    const token = await getToken()
-    if (!token) return false
+      const token = await getToken()
+      if (!token) return false
 
-    const player = new window.Spotify.Player({
-      name: 'Trivia Jukebox',
-      getOAuthToken: cb => getToken().then(cb),
-      volume: 0,
-    })
-    sharedSpotifyPlayer = player
-    playerRef.current = player
-    bindListenersRef.current?.(player)
-    await player.connect()
+      const player = new window.Spotify.Player({
+        name: 'Trivia Jukebox',
+        getOAuthToken: cb => getToken().then(cb),
+        volume: 0,
+      })
+      sharedSpotifyPlayer = player
+      playerRef.current = player
+      bindListenersRef.current?.(player)
+      await player.connect()
 
-    const deviceId = await waitForRef(deviceIdRef, 6000)
-    if (!deviceId) reportJukebox('reconnect: fresh player never became ready', { mountCount })
-    return !!deviceId
+      const deviceId = await waitForRef(deviceIdRef, 6000)
+      if (!deviceId) reportJukebox('reconnect: fresh player never became ready', { mountCount })
+      return !!deviceId
+    })()
+    try {
+      return await reconnectPromise
+    } finally {
+      reconnectPromise = null
+    }
   }, [])
 
   // ─── Play a track with custom start/stop ─────────────────────────
