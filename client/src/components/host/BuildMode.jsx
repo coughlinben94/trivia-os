@@ -6,6 +6,7 @@ import SlideEditor from './SlideEditor.jsx'
 import AddSlideWizard, { TYPE_CARDS } from './AddSlideWizard.jsx'
 import AddRoundWizard from './AddRoundWizard.jsx'
 import FormatLibrary from './FormatLibrary.jsx'
+import BendleAdmin from './BendleAdmin.jsx'
 import ThemePickerModal from './ThemePickerModal.jsx'
 import SwingRoundWizard from './SwingRoundWizard.jsx'
 import PYLWizard from './PYLWizard.jsx'
@@ -88,6 +89,7 @@ const CARD_STYLE = {
   'theme':         'bg-gradient-to-br from-pink-50   to-fuchsia-100 border-pink-200   hover:border-pink-400',
   'ticker':        'bg-gradient-to-br from-sky-50    to-cyan-100    border-sky-200    hover:border-sky-400',
   'shiny':         'bg-gradient-to-br from-yellow-50 to-amber-100   border-yellow-200 hover:border-yellow-400',
+  'bendle':        'bg-gradient-to-br from-emerald-50 to-teal-100   border-emerald-200 hover:border-emerald-400',
   'swing':         'bg-gradient-to-br from-orange-50 to-red-100     border-orange-200 hover:border-orange-400',
   'pyl':           'bg-gradient-to-br from-teal-50   to-blue-100    border-teal-200   hover:border-teal-400',
   'data':          'bg-gradient-to-br from-purple-50 to-violet-100  border-purple-200 hover:border-purple-400',
@@ -113,7 +115,7 @@ const REST_STATE_BOX_ORDER_KEY = 'trivia-os:rest-state-box-order'
 function defaultRestStateBoxOrder() {
   return [
     ...TYPE_CARDS.filter(c => !c.hidden).map(c => c.type),
-    'theme', 'swing', 'pyl', 'shiny', 'database', 'ticker', 'data', 'shows', 'music',
+    'theme', 'swing', 'pyl', 'shiny', 'bendle', 'database', 'ticker', 'data', 'shows', 'music',
   ]
 }
 
@@ -308,6 +310,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
   // fetch instead of each running its own.
   const { formats: shinyFormats, loading: shinyFormatsLoading, createFormat, updateFormat, deleteFormat } = useShinyFormats()
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
+  const [showBendleAdmin, setShowBendleAdmin] = useState(false)
   const [showThemePicker, setShowThemePicker] = useState(false)
   const [mode, setMode] = useState('wizard')
   const [selectedSlide, setSelectedSlide] = useState(null)
@@ -737,6 +740,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                       swing:    { icon: '🎷', name: 'Swing Round', desc: 'Bulk-add all swing questions at once', styleKey: 'swing', onClick: () => setShowSwingWizard(true) },
                       pyl:      { icon: '🎰', name: 'Press Your Luck!', desc: 'Set up PYL themes and slides', styleKey: 'pyl', onClick: () => setShowPylMenu(v => !v), menu: true },
                       shiny:    { icon: '✨', name: 'Shiny Formats', desc: 'Add or edit shiny question styles', styleKey: 'shiny', onClick: () => setShowFormatLibrary(true) },
+                      bendle:   { icon: '🎧', name: 'Bendle Songs', desc: 'Upload stems for the Bendle format', styleKey: 'bendle', onClick: () => setShowBendleAdmin(true) },
                       database: { icon: '🗃️', name: 'Question Database', desc: 'Browse and search your archive', styleKey: 'database', onClick: () => window.open('/questions', '_blank') },
                       ticker:   { icon: '👥', name: 'Team List', desc: 'Show all team names on screen', styleKey: 'ticker', onClick: () => openAddModal({ type: 'team-preview', roundId: activeRoundId }) },
                       data:     { icon: '📊', name: 'Data', desc: 'Shows history & analytics', styleKey: 'data', onClick: () => window.open('/dashboard', '_blank') },
@@ -928,6 +932,10 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
           updateFormat={updateFormat}
           deleteFormat={deleteFormat}
         />
+      )}
+
+      {showBendleAdmin && (
+        <BendleAdmin onClose={() => setShowBendleAdmin(false)} />
       )}
 
       {showThemePicker && (
