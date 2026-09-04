@@ -191,7 +191,11 @@ export function normalizePalette({ colors, weights, drift }) {
   }
   if (w.some(x => !(x > 0))) throw new Error('normalizePalette: every weight must be a positive number')
   const total = w.reduce((a, b) => a + b, 0)
-  return { colors: colors.map(c => c.toLowerCase()), weights: w.map(x => x / total), drift: drift ?? { arc: 0 } }
+  const d = drift ?? { arc: 0 }
+  if (typeof d.arc !== 'number' || !Number.isFinite(d.arc)) {
+    throw new Error(`normalizePalette: drift.arc must be a finite number, got ${d.arc}`)
+  }
+  return { colors: colors.map(c => c.toLowerCase()), weights: w.map(x => x / total), drift: d }
 }
 
 // A NEW worldData built from the BASE world (never from a recoloured one —

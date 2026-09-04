@@ -100,15 +100,17 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   const [showCustom, setShowCustom] = useState(false)
   const [applied, setApplied] = useState(false)
   const [savedPending, setSavedPending] = useState(false)
+  const [saveFailed, setSaveFailed] = useState(false)
   const [copied, setCopied] = useState(false)
   const [shelf, setShelf] = useState([])
   const [shelfLoading, setShelfLoading] = useState(true)
+  const [shelfError, setShelfError] = useState(false)
   const colorDebounceRef = useRef(null)
   const appliedTimeoutRef = useRef(null)
   const copyTimeoutRef = useRef(null)
 
   useEffect(() => {
-    fetchCertifiedPalettes().then(setShelf).catch(() => setShelf([])).finally(() => setShelfLoading(false))
+    fetchCertifiedPalettes().then(setShelf).catch(() => { setShelf([]); setShelfError(true) }).finally(() => setShelfLoading(false))
   }, [])
 
   useEffect(() => () => {
@@ -124,11 +126,11 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   // Every immediate (non-debounced) palette change goes through this, so a
   // stale debounced drag-commit (below) can never fire afterward and clobber
   // it back to the abandoned in-progress drag colour.
-  function applyPalette(nextColors, nextWeights) {
+  function applyPalette(nextColors, nextWeights, nextDrift = drift) {
     clearTimeout(colorDebounceRef.current)
     setColors(nextColors)
     setWeights(nextWeights)
-    commit(nextColors, nextWeights)
+    commit(nextColors, nextWeights, nextDrift)
   }
 
   function commitColorsDebounced(nextColors, nextWeights) {
@@ -246,13 +248,13 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
                 // ALREADY-CERTIFIED rows, not world construction; the Global
                 // Constraints' no-Math.random rule is about concepts/world-07-ring.html's
                 // own build, which this file is not.
-                applyPalette(pick.colors, pick.weights)
+                applyPalette(pick.colors, pick.weights, pick.drift.arc)
                 setDrift(pick.drift.arc)
               }}
               disabled={shelfLoading || !shelf.length}
               className="text-xs font-medium px-3 py-1.5 rounded-full border border-gray-200 hover:border-gray-400 disabled:opacity-40"
             >
-              {shelfLoading ? 'Loading palettes…' : shelf.length ? `🎲 Surprise me (${shelf.length} ready)` : 'No certified palettes yet'}
+              {shelfLoading ? 'Loading palettes…' : shelfError ? "Couldn't load palettes — try again" : shelf.length ? `🎲 Surprise me (${shelf.length} ready)` : 'No certified palettes yet'}
             </button>
           </div>
           {showCustom && (
@@ -395,17 +397,26 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
                 // click read as dead on a live show tonight (Ben, 2026-09-01).
                 appliedTimeoutRef.current = setTimeout(onClose, 700)
               } else {
-                await saveAsPending(current)
-                setSavedPending(true)
-                appliedTimeoutRef.current = setTimeout(onClose, 1200)
+                try {
+                  await saveAsPending(current)
+                  setSavedPending(true)
+                  appliedTimeoutRef.current = setTimeout(onClose, 1200)
+                } catch {
+                  setSaveFailed(true) // new state, mirrors applied/savedPending's pattern
+                }
               }
             }}
             disabled={applied || savedPending || shelfLoading}
             className="ml-auto text-sm font-semibold px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-70"
           >
-            {applied ? 'Applied ✓' : savedPending ? 'Saved, pending check' : "Apply to this show's theme"}
+            {saveFailed ? "Couldn't save — try again" : applied ? 'Applied ✓' : savedPending ? 'Saved, pending check' : "Apply to this show's theme"}
           </button>
         </div>
+        {saveFailed && (
+          <p className="px-5 pb-3 text-xs text-red-700">
+            Couldn't save this pick — check your connection and try again.
+          </p>
+        )}
         {savedPending && (
           <p className="px-5 pb-3 text-xs text-amber-700">
             {shelf.length === 0
