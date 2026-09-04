@@ -21,7 +21,7 @@
 // Callers own the write + their own local-state update; nothing here
 // touches the network or React.
 
-import { isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
+import { isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
 
 // Number of Next-reachable states for a slide's data.parts/groupSize
 // stepping. For every format except ShinyConcurrentQuestion, currentPart
@@ -334,6 +334,7 @@ export function pendingLockPhase(slide) {
     return null
   }
   if (isOrderShiny(data)) return !data.orderLocked ? 'order' : null
+  if (isBendleShiny(data)) return !data.bendleGuessesLocked ? 'bendle' : null
   return null
 }
 
@@ -344,6 +345,7 @@ export const REVEAL_FIELD = {
   matching: 'matchingRevealed',
   wager: 'wagerRevealed',
   order: 'orderRevealed',
+  bendle: 'bendleRevealed',
 }
 
 // Which mechanic on this slide is locked but NOT yet revealed — i.e. what the
@@ -362,6 +364,7 @@ export function pendingReveal(slide) {
   if (isMatchingShiny(data)) return data.matchingLocked && !data.matchingRevealed ? 'matching' : null
   if (isWagerShiny(data)) return data.wagerGuessesLocked && !data.wagerRevealed ? 'wager' : null
   if (isOrderShiny(data)) return data.orderLocked && !data.orderRevealed ? 'order' : null
+  if (isBendleShiny(data)) return data.bendleGuessesLocked && !data.bendleRevealed ? 'bendle' : null
   return null
 }
 

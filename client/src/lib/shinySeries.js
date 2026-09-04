@@ -96,6 +96,10 @@ export function isOrderShiny(data) {
   return data.shinyInputSchema?.type === 'order'
 }
 
+export function isBendleShiny(data) {
+  return data.shinyInputSchema?.type === 'bendle'
+}
+
 export function isVennShiny(data) {
   return data.shinyInputSchema?.type === 'venn'
 }

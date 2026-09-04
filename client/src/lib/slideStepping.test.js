@@ -524,6 +524,14 @@ describe('pendingLockPhase', () => {
     expect(pendingLockPhase(shiny('order', { orderLocked: true }))).toBe(null)
   })
 
+  it('returns "bendle" for an unlocked bendle slide', () => {
+    expect(pendingLockPhase(shiny('bendle'))).toBe('bendle')
+  })
+
+  it('returns null for a locked bendle slide', () => {
+    expect(pendingLockPhase(shiny('bendle', { bendleGuessesLocked: true }))).toBe(null)
+  })
+
   // Wager is the only mechanic with two lock phases on ONE slide: the blind
   // tier lock, then the numeric-guess lock after the question reveals. They
   // must come back in that order from three consecutive Next presses.
@@ -602,10 +610,22 @@ describe('pendingReveal', () => {
     expect(pendingReveal({ id: 'q' })).toBe(null)
   })
 
+  it('returns "bendle" for a locked-but-not-revealed bendle slide', () => {
+    expect(pendingReveal(shiny('bendle', { bendleGuessesLocked: true }))).toBe('bendle')
+  })
+
+  it('returns null for a bendle slide not yet locked', () => {
+    expect(pendingReveal(shiny('bendle'))).toBe(null)
+  })
+
+  it('returns null for an already-revealed bendle slide', () => {
+    expect(pendingReveal(shiny('bendle', { bendleGuessesLocked: true, bendleRevealed: true }))).toBe(null)
+  })
+
   it('maps every mechanic it can return to a real slide.data flag', () => {
     // REVEAL_FIELD is what LiveMode.jsx writes off this return value — a
     // mechanic missing from it would silently write `undefined: true`.
-    for (const mechanic of ['matching', 'wager', 'order']) {
+    for (const mechanic of ['matching', 'wager', 'order', 'bendle']) {
       expect(REVEAL_FIELD[mechanic]).toBeTruthy()
     }
   })
