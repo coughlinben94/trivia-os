@@ -3,7 +3,7 @@
 // (docs/superpowers/plans/2026-09-02-ring-station-variety.md §2.4). This is
 // a read of midnightGalaxy.ring.js + midnightGalaxy.slots.js, not a second
 // source of truth — if either of those files changes, ringPool.test.js's
-// hue-constant check catches drift immediately.
+// hue-constant checks and family assertions catch drift immediately.
 //
 // `record` stays in the pool as shipped. The 2026-09-05 decision to retire
 // it for an `eclipse` noun (docs/superpowers/plans/
@@ -15,20 +15,23 @@ import {
   RINGED_PLANET_HUE, SPIRAL_GALAXY_HUE, STAR_CLUSTER_HUE, AMBER_PLANET_HUE, LIT_PLANET_HUE,
   PULSAR_HUE, ROSE_NEBULA_HUE, COMET_HUE, BINARY_PAIR_HUE, ASTEROID_FIELD_HUE, RECORD_HUE,
   AURORA_RIBBON_HUE, SUPERNOVA_HUE,
+  midnightGalaxyRing,
 } from './midnightGalaxy.ring.js'
+import { SLOTS } from './midnightGalaxy.slots.js'
 
-export const RING_POOL = [
-  { key: 'ringed planet',  prim: 'ring',          hue: RINGED_PLANET_HUE,  accent: false, family: 'radial-mass' },
-  { key: 'spiral galaxy',  prim: 'lens',           hue: SPIRAL_GALAXY_HUE,  accent: false, family: 'lens' },
-  { key: 'star cluster',   prim: 'dots',           hue: STAR_CLUSTER_HUE,   accent: false, family: 'cluster' },
-  { key: 'amber planet',   prim: 'ring',           hue: AMBER_PLANET_HUE,   accent: true,  family: 'radial-mass' },
-  { key: 'lit planet',     prim: 'planet',         hue: LIT_PLANET_HUE,     accent: false, family: 'radial-mass' },
-  { key: 'pulsar',         prim: 'pulsar',         hue: PULSAR_HUE,         accent: false, family: 'burst' },
-  { key: 'rose nebula',    prim: 'nebulaCloud',    hue: ROSE_NEBULA_HUE,    accent: true,  family: 'cloud' },
-  { key: 'comet',          prim: 'streak',         hue: COMET_HUE,          accent: false, family: 'streak' },
-  { key: 'binary pair',    prim: 'binary',         hue: BINARY_PAIR_HUE,    accent: false, family: 'radial-mass' },
-  { key: 'asteroid field', prim: 'asteroidField',  hue: ASTEROID_FIELD_HUE, accent: false, family: 'cluster' },
-  { key: 'record',         prim: 'record',         hue: RECORD_HUE,         accent: false, family: 'radial-mass' },
-  { key: 'aurora ribbon',  prim: 'ribbon',         hue: AURORA_RIBBON_HUE,  accent: false, family: 'streak' },
-  { key: 'supernova',      prim: 'spikes',         hue: SUPERNOVA_HUE,      accent: true,  family: 'burst' },
+// Hue constants in the same order as the stations, to preserve explicit constant
+// references for the test's drift-detection. Key, prim, and accent come from the
+// stations array; family comes from SLOTS. This eliminates hand-typed literals.
+const HUE_CONSTANTS = [
+  RINGED_PLANET_HUE, SPIRAL_GALAXY_HUE, STAR_CLUSTER_HUE, AMBER_PLANET_HUE, LIT_PLANET_HUE,
+  PULSAR_HUE, ROSE_NEBULA_HUE, COMET_HUE, BINARY_PAIR_HUE, ASTEROID_FIELD_HUE, RECORD_HUE,
+  AURORA_RIBBON_HUE, SUPERNOVA_HUE,
 ]
+
+export const RING_POOL = midnightGalaxyRing.stations.map((station, i) => ({
+  key: station.key,
+  prim: station.prim,
+  hue: HUE_CONSTANTS[i],
+  accent: station.accent,
+  family: SLOTS[i].family,
+}))
