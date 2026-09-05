@@ -714,10 +714,13 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       // Same class of refusal as Wager's parseWagerNumber guard: without a
       // song there is no answer to match against, and scoreBendleRound would
       // happily mark every guess wrong and write a room-wide 0 to the
-      // scoreboard. A slide built by the wizard always has one; a hand-edited
-      // or half-built slide might not.
+      // scoreboard. AddSlideWizard now requires a song before create (Fix 1,
+      // 2026-09-05 whole-branch review), so this should be unreachable for any
+      // slide built through the wizard — kept as a defensive fallback for a
+      // hand-edited slide, since SlideEditor has no bendle-song-picker control
+      // to send the host to.
       if (!slide.data.bendleSongId) {
-        setBendleError('This slide has no song attached — pick one in the slide editor, then score')
+        setBendleError('This slide has no song attached — this shouldn’t be possible. Delete and recreate the slide.')
         return
       }
       // See handleLockAndScoreMatching's identical lockedAt cutoff comment —

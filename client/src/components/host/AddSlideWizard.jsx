@@ -429,7 +429,15 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // song is optional here too, since Task 6's upload panel may not have
   // shipped any songs yet.
   const sharedAnswerRequired = showAnswerField && (isFixedShapeFmt || assetNum === 1)
-  const canAddShiny    = !!roundId && (!sharedAnswerRequired || shinyAnswer.trim().length > 0)
+  // Bendle has no typed answer to gate on (see showAnswerField above), but it
+  // still needs SOMETHING required before create — a song. Without this, "Pick
+  // a song…" (the blank option) + Create silently ships bendleSongId: null,
+  // and there is no recovery path afterward (TV spins forever, editor has no
+  // song picker) — 2026-09-05 whole-branch review, Fix 1.
+  const bendleSongRequired = isFixedShapeFmt && shinyFmtType === 'bendle'
+  const canAddShiny    = !!roundId
+    && (!sharedAnswerRequired || shinyAnswer.trim().length > 0)
+    && (!bendleSongRequired || !!bendleSongId)
   const isPlainOnly    = type === 'question'
   const isShinyOnly    = type === 'shiny-question'
   const isQuestionType = isPlainOnly || isShinyOnly
@@ -652,7 +660,9 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               </button>
               {!canAddShiny && (
                 <p className="text-xs text-gray-400 text-center">
-                  {!roundId ? 'Select a round to continue' : 'Add an answer to continue'}
+                  {!roundId ? 'Select a round to continue'
+                    : (bendleSongRequired && !bendleSongId) ? 'Pick a song to continue'
+                    : 'Add an answer to continue'}
                 </p>
               )}
             </div>

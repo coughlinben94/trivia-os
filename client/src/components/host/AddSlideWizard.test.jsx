@@ -11,7 +11,13 @@ import { createRoot } from 'react-dom/client'
 // fetch effect calls `supabase.from(...).select(...).order(...)` unconditionally
 // on mount (Task 5) — an empty object made that throw on every render.
 vi.mock('../../lib/supabase.js', () => ({
-  supabase: { from: () => ({ select: () => ({ order: () => Promise.resolve({ data: [] }) }) }) },
+  supabase: {
+    from: () => ({
+      select: () => ({
+        order: () => Promise.resolve({ data: [{ id: 'song_1', title: 'Test Song', answer: 'Test Song', aliases: [] }] }),
+      }),
+    }),
+  },
 }))
 
 const { default: AddSlideWizard } = await import('./AddSlideWizard.jsx')
@@ -25,6 +31,7 @@ const FORMATS = [
   fmt('fmt_grid', 'Grid Fmt', 'grid'),
   fmt('fmt_venn', 'Venn Fmt', 'venn'),
   fmt('fmt_matching', 'Matching Fmt', 'matching'),
+  fmt('fmt_bendle', 'Bendle Fmt', 'bendle'),
 ]
 
 const GRID_STRINGS = ['Columns', 'Rows']
@@ -82,5 +89,45 @@ describe('AddSlideWizard shiny details — registry wiring', () => {
   it('renders neither for a hasOwnControls:false kind (matching)', () => {
     openDetails('Matching Fmt')
     for (const s of [...GRID_STRINGS, ...VENN_STRINGS]) expect(host.textContent).not.toContain(s)
+  })
+})
+
+// 2026-09-05 whole-branch review, Fix 1: a Bendle slide used to create with
+// bendleSongId: null (canAddShiny only checked roundId+answer, and Bendle has
+// no typed answer to check) — dead end downstream, no recovery path. Asserts
+// the create-gate itself, not just that a control renders.
+function createButtonFor(name) {
+  return [...host.querySelectorAll('button')].find(b => b.textContent.trim().startsWith(`Add ${name}`))
+}
+
+describe('AddSlideWizard shiny details — bendle song gate', () => {
+  it('disables create with no song picked, and enables it once one is', async () => {
+    act(() => root.render(
+      <AddSlideWizard
+        show={{ id: 'show_1', rounds: [{ id: 'round_1', number: 1, title: 'Round 1' }] }}
+        shinyFormats={FORMATS}
+        shinyLoading={false}
+        initialData={{ type: 'shiny-question', roundId: 'round_1' }}
+        onAddSlide={() => {}}
+        onClose={() => {}}
+        onTypeChange={() => {}}
+      />,
+    ))
+    click('Bendle Fmt')
+    click('Add Bendle Fmt')
+    // bendle_songs fetch is async — flush it before checking the select's options.
+    await act(async () => { await Promise.resolve() })
+
+    expect(createButtonFor('Bendle Fmt').disabled).toBe(true)
+    expect(host.textContent).toContain('Pick a song to continue')
+
+    const songSelect = [...host.querySelectorAll('select')]
+      .find(s => [...s.options].some(o => o.value === 'song_1'))
+    act(() => {
+      songSelect.value = 'song_1'
+      songSelect.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+
+    expect(createButtonFor('Bendle Fmt').disabled).toBe(false)
   })
 })
