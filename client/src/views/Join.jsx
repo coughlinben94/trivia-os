@@ -7,6 +7,7 @@ import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
 import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isBendleShiny } from '../lib/shinySeries.js'
 import { getWagerTier } from '../lib/wagerScoring.js'
+import { PHONE_MECHANICS } from '../lib/slideStepping.js'
 import MatchingBoard from '../components/join/MatchingBoard.jsx'
 import WagerBoard from '../components/join/WagerBoard.jsx'
 import OrderBoard from '../components/join/OrderBoard.jsx'
@@ -1280,8 +1281,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   // moment of the round. Pinning only makes sense while input is possible.
   const liveSlideIsInteractive = !!(
     liveSlide?.type === 'question' && liveSlide.data?.isShiny &&
-    !liveSlide.data?.wagerGuessesLocked && !liveSlide.data?.matchingLocked && !liveSlide.data?.orderLocked && !liveSlide.data?.bendleGuessesLocked &&
-    (isMatchingShiny(liveSlide.data) || isWagerShiny(liveSlide.data) || isOrderShiny(liveSlide.data) || isBendleShiny(liveSlide.data))
+    Object.values(PHONE_MECHANICS).some(m => m.guard(liveSlide.data) && !liveSlide.data?.[m.lockFields[m.lockFields.length - 1]])
   )
 
   // Whether THIS team has done what the live interactive slide currently
@@ -1297,7 +1297,10 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   // interactiveSatisfied=true across the lock, and is never force-navigated
   // to the actual guess phase — the exact silent-miss bug this feature
   // exists to close, just narrowed to teams who back out after tiering.
-  const interactivePhaseKey = `${liveSlide?.id}:${liveSlide?.data?.wagerTiersLocked}:${liveSlide?.data?.wagerGuessesLocked}:${liveSlide?.data?.matchingLocked}:${liveSlide?.data?.orderLocked}:${liveSlide?.data?.bendleGuessesLocked}`
+  const interactivePhaseKey = [
+    liveSlide?.id,
+    ...Object.values(PHONE_MECHANICS).flatMap(m => m.lockFields.map(f => liveSlide?.data?.[f])),
+  ].join(':')
   const [interactiveSatisfied, setInteractiveSatisfied] = useState(false)
   useEffect(() => { setInteractiveSatisfied(false) }, [interactivePhaseKey])
 

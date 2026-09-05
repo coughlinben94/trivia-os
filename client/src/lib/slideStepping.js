@@ -125,22 +125,22 @@ export function withEntryState(slides, slide, { currentPart, protectInProgress =
   // (left over from an earlier test/rehearsal), not a question actually in
   // progress — regressing it is the correct, expected fresh-entry reset.
   const protectLockedFlags = protectInProgress &&
-    (slide.data?.wagerTiersLocked || slide.data?.wagerGuessesLocked || slide.data?.matchingLocked || slide.data?.orderLocked)
-  // Fresh entry clears stale wager/matching/order lock+reveal flags
-  // (2026-08-31, Ben — found by sequencing audit ahead of live show).
-  // These gate whether WagerBoard/MatchingBoard/OrderBoard mount as
-  // interactive on /join (liveSlideIsInteractive) — left true from a
-  // rehearsal, the phones never unlock: the boards see already-locked/
-  // revealed and stay on the teaser screen, silently skipping the whole
-  // audience-interaction round.
+    Object.values(PHONE_MECHANICS).some(m => m.lockFields.some(f => slide.data?.[f]))
+  // Fresh entry clears stale phone-scored lock+reveal flags (2026-08-31,
+  // Ben — found by sequencing audit ahead of live show; extended to cover
+  // every PHONE_MECHANICS entry, not just the three restated here at the
+  // time, 2026-09-05 C1 fix). These gate whether WagerBoard/MatchingBoard/
+  // OrderBoard/BendleBoard mount as interactive on /join
+  // (liveSlideIsInteractive) — left true from a rehearsal, the phones never
+  // unlock: the boards see already-locked/revealed and stay on the teaser
+  // screen, silently skipping the whole audience-interaction round.
   if (slide.data?.isShiny && !protectLockedFlags) {
-    if (slide.data?.wagerTiersLocked) patch.wagerTiersLocked = false
-    if (slide.data?.wagerGuessesLocked) patch.wagerGuessesLocked = false
-    if (slide.data?.wagerRevealed) patch.wagerRevealed = false
-    if (slide.data?.matchingLocked) patch.matchingLocked = false
-    if (slide.data?.matchingRevealed) patch.matchingRevealed = false
-    if (slide.data?.orderLocked) patch.orderLocked = false
-    if (slide.data?.orderRevealed) patch.orderRevealed = false
+    for (const m of Object.values(PHONE_MECHANICS)) {
+      for (const f of m.lockFields) {
+        if (slide.data?.[f]) patch[f] = false
+      }
+      if (slide.data?.[m.revealField]) patch[m.revealField] = false
+    }
   }
   // Fresh entry always re-arms invoke-gated audio too — a stale `invoked:
   // true` from an earlier rehearsal/visit would otherwise skip straight
@@ -317,6 +317,30 @@ export const LOCK_COUNTDOWN_MS = 3000
 // to arbitrate. Starting it is safe from either window too: one physical
 // keypress reaches only the one OS-focused listener.
 //
+// One definition of "what does mechanic X need to lock/reveal/reset" — every
+// place that used to restate this list by hand (pendingLockPhase,
+// pendingReveal, REVEAL_FIELD, withEntryState's clear/protect lists,
+// Join.jsx's liveSlideIsInteractive/interactivePhaseKey) now derives from
+// here. Bendle shipped without its lockFields being added to withEntryState's
+// clear list (2026-09-05 whole-branch audit, C1) — a rehearsal-locked Bendle
+// slide stayed locked live, silently. One table instead of seven hand-written
+// lists is how the next mechanic doesn't repeat that.
+//
+// lockFields order matters: wager is the one two-phase mechanic (a blind
+// tier pick, then the numeric guess), and callers that need "which phase is
+// still open" (pendingLockPhase) walk lockFields in order and return the
+// first one not yet set. Callers that need "is ANY locking still pending at
+// all" (liveSlideIsInteractive) check only the LAST field — wager stays
+// interactive through both phases, only releasing once the guess locks, not
+// the moment tiers lock (a team still has to enter a number once the
+// question is revealed).
+export const PHONE_MECHANICS = {
+  matching: { guard: isMatchingShiny, lockFields: ['matchingLocked'], revealField: 'matchingRevealed' },
+  wager:    { guard: isWagerShiny,    lockFields: ['wagerTiersLocked', 'wagerGuessesLocked'], revealField: 'wagerRevealed' },
+  order:    { guard: isOrderShiny,    lockFields: ['orderLocked'], revealField: 'orderRevealed' },
+  bendle:   { guard: isBendleShiny,   lockFields: ['bendleGuessesLocked'], revealField: 'bendleRevealed' },
+}
+
 // Wager is the only mechanic with TWO lock phases on one slide (blind tiers
 // first, then the numeric guesses once the question is out), so it gets
 // checked in that order and returns null only when both are shut.
@@ -327,26 +351,31 @@ export const LOCK_COUNTDOWN_MS = 3000
 export function pendingLockPhase(slide) {
   const data = slide?.data
   if (!data) return null
-  if (isMatchingShiny(data)) return !data.matchingLocked ? 'matching' : null
-  if (isWagerShiny(data)) {
-    if (!data.wagerTiersLocked) return 'wager-tiers'
-    if (!data.wagerGuessesLocked) return 'wager-guesses'
+  for (const [key, m] of Object.entries(PHONE_MECHANICS)) {
+    if (!m.guard(data)) continue
+    if (m.lockFields.length === 1) {
+      return !data[m.lockFields[0]] ? key : null
+    }
+    // Multi-phase (wager today): first unlocked field in order, phase-named
+    // as `${key}-${fieldSuffix}` to preserve the exact existing phase
+    // strings ('wager-tiers'/'wager-guesses') lockHandlersRef keys off.
+    for (const field of m.lockFields) {
+      if (!data[field]) {
+        const suffix = field === 'wagerTiersLocked' ? 'tiers' : field === 'wagerGuessesLocked' ? 'guesses' : field
+        return `${key}-${suffix}`
+      }
+    }
     return null
   }
-  if (isOrderShiny(data)) return !data.orderLocked ? 'order' : null
-  if (isBendleShiny(data)) return !data.bendleGuessesLocked ? 'bendle' : null
   return null
 }
 
 // The slide.data flag each phone-scored mechanic flips when its answer is
 // finally shown to the room. One map, so nothing has to restate the field
 // names it is about to write (LiveMode.jsx's A-key reveal is the only writer).
-export const REVEAL_FIELD = {
-  matching: 'matchingRevealed',
-  wager: 'wagerRevealed',
-  order: 'orderRevealed',
-  bendle: 'bendleRevealed',
-}
+export const REVEAL_FIELD = Object.fromEntries(
+  Object.entries(PHONE_MECHANICS).map(([key, m]) => [key, m.revealField])
+)
 
 // Which mechanic on this slide is locked but NOT yet revealed — i.e. what the
 // host's A press should reveal, or null when A should do its ordinary
@@ -361,10 +390,11 @@ export const REVEAL_FIELD = {
 export function pendingReveal(slide) {
   const data = slide?.data
   if (!data) return null
-  if (isMatchingShiny(data)) return data.matchingLocked && !data.matchingRevealed ? 'matching' : null
-  if (isWagerShiny(data)) return data.wagerGuessesLocked && !data.wagerRevealed ? 'wager' : null
-  if (isOrderShiny(data)) return data.orderLocked && !data.orderRevealed ? 'order' : null
-  if (isBendleShiny(data)) return data.bendleGuessesLocked && !data.bendleRevealed ? 'bendle' : null
+  for (const [key, m] of Object.entries(PHONE_MECHANICS)) {
+    if (!m.guard(data)) continue
+    const lastField = m.lockFields[m.lockFields.length - 1]
+    return data[lastField] && !data[m.revealField] ? key : null
+  }
   return null
 }
 

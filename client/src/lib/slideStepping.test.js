@@ -12,6 +12,7 @@ import {
   pendingLockPhase,
   pendingReveal,
   REVEAL_FIELD,
+  PHONE_MECHANICS,
   nextSlideAfter,
 } from './slideStepping.js'
 
@@ -567,6 +568,15 @@ describe('pendingLockPhase', () => {
     expect(pendingLockPhase(undefined)).toBe(null)
     expect(pendingLockPhase({ id: 'q' })).toBe(null)
   })
+
+  it('pendingLockPhase still walks wager tiers-then-guesses in order after the refactor', () => {
+    const untiered = { data: { isShiny: true, shinyInputSchema: { type: 'wager' }, wagerTiersLocked: false, wagerGuessesLocked: false } }
+    expect(pendingLockPhase(untiered)).toBe('wager-tiers')
+    const tiered = { data: { isShiny: true, shinyInputSchema: { type: 'wager' }, wagerTiersLocked: true, wagerGuessesLocked: false } }
+    expect(pendingLockPhase(tiered)).toBe('wager-guesses')
+    const both = { data: { isShiny: true, shinyInputSchema: { type: 'wager' }, wagerTiersLocked: true, wagerGuessesLocked: true } }
+    expect(pendingLockPhase(both)).toBeNull()
+  })
 })
 
 // The other half of the same law: what the host's A press does. A wrong
@@ -628,6 +638,42 @@ describe('pendingReveal', () => {
     for (const mechanic of ['matching', 'wager', 'order', 'bendle']) {
       expect(REVEAL_FIELD[mechanic]).toBeTruthy()
     }
+  })
+
+  it('pendingReveal keys wager off wagerGuessesLocked alone, not both lock fields', () => {
+    // tiers locked, guesses not — no reveal owed yet, matching current live behavior
+    const midWager = { data: { isShiny: true, shinyInputSchema: { type: 'wager' }, wagerTiersLocked: true, wagerGuessesLocked: false, wagerRevealed: false } }
+    expect(pendingReveal(midWager)).toBeNull()
+    const readyWager = { data: { isShiny: true, shinyInputSchema: { type: 'wager' }, wagerTiersLocked: true, wagerGuessesLocked: true, wagerRevealed: false } }
+    expect(pendingReveal(readyWager)).toBe('wager')
+  })
+})
+
+// C1 (2026-09-05 whole-branch audit): Bendle shipped without its lockFields
+// being added to withEntryState's clear list — a rehearsal-locked Bendle
+// slide stayed silently locked live, since nothing else surfaced the
+// mismatch. PHONE_MECHANICS is now the one table everything derives from,
+// so a mechanic missing lockFields/revealField fails loudly here instead.
+describe('C1 regression', () => {
+  it('PHONE_MECHANICS lists a lockFields entry and revealField for every mechanic REVEAL_FIELD lists', () => {
+    for (const key of Object.keys(REVEAL_FIELD)) {
+      expect(PHONE_MECHANICS[key]).toBeDefined()
+      expect(PHONE_MECHANICS[key].lockFields.length).toBeGreaterThan(0)
+      expect(PHONE_MECHANICS[key].revealField).toBe(REVEAL_FIELD[key])
+    }
+  })
+
+  it('withEntryState clears a stale bendleGuessesLocked flag on fresh entry (C1)', () => {
+    const s = { id: 's1', data: { isShiny: true, shinyInputSchema: { type: 'bendle' }, bendleGuessesLocked: true, bendleRevealed: true } }
+    const [result] = withEntryState([s], s, {})
+    expect(result.data.bendleGuessesLocked).toBe(false)
+    expect(result.data.bendleRevealed).toBe(false)
+  })
+
+  it('withEntryState protects a locked bendle slide during re-entry (protectInProgress)', () => {
+    const s = { id: 's1', data: { isShiny: true, shinyInputSchema: { type: 'bendle' }, bendleGuessesLocked: true, bendleRevealed: false } }
+    const [result] = withEntryState([s], s, { protectInProgress: true })
+    expect(result.data.bendleGuessesLocked).toBe(true)
   })
 })
 
