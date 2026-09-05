@@ -699,11 +699,10 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       // scoreboard. AddSlideWizard now requires a song before create (Fix 1,
       // 2026-09-05 whole-branch review), so this should be unreachable for any
       // slide built through the wizard — kept as a defensive fallback for a
-      // hand-edited slide, since SlideEditor has no bendle-song-picker control
-      // to send the host to.
+      // hand-edited slide. SlideEditor's BendleBuilder can fix this in place.
       preCheck: s => s.data.bendleSongId
         ? null
-        : 'This slide has no song attached — this shouldn’t be possible. Delete and recreate the slide.',
+        : 'This slide has no song attached — open the slide editor, pick a song, then retry.',
       // Aliases live on the song row, not the slide, so the match has to read
       // the row rather than slide.data.answer (which is only the canonical
       // title the wizard copied in at build time).
