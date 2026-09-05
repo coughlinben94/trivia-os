@@ -23,6 +23,20 @@ draw, the per-station-palette idea rejected in favor of one whole-ring palette p
 `showSeed`/`nounSeed`/`palSeed` split, and why `assertWorld` checks what it checks) and §9 build-order
 step 3.
 
+## Known landmine inherited from Phase 2, must be resolved here or explicitly deferred again
+
+`drawStations(pool, {seed: 'authored'})` returns `pool.slice()` unchanged, ignoring `slots` entirely
+(found by an independent Fable critique after Phase 2's implementation shipped, not by the
+mechanical reviews). This is only correct while `pool.length === slots === 13`, today's live shape.
+The moment a pool grows past 13 (Phase 4/6 art-project work), `'authored'` silently returns a
+wrong-length array, skips `assertRing`, and — combined with `drawWorld`'s planned "fall back to the
+authored world on a throw" behavior — would hand `RingAmbient` a malformed world instead of a safe
+fallback. This plan's `drawWorld`/`assertWorld` work does not currently guard against this because
+Phase 2's pool hasn't grown yet, but do not let this plan ship without an explicit decision: either
+(a) `assertWorld` also rejects a station-count mismatch against the world's expected `slots`, closing
+the gap here, or (b) the decision is explicitly re-flagged to Ben as still open at this plan's
+completion, same as its own §11a-style STAYS HUMAN list. Do not let it evaporate a third time.
+
 ## Global Constraints
 
 - Same no-`Math.random` rule as `ringDraw.js` — sub-seeds come from `ringEngine.js`'s `hash32`, the show
