@@ -7,10 +7,12 @@ Status: design approved by Ben in chat, writing this doc to formalize before pla
 
 A new shiny question format, **Bendle** (Ben + Bandle — Bandle is a Wordle-style
 daily game that reveals a song from layered instrument stems). A song plays on
-`/display` starting with drums only; bass, then "other" (guitar/piano/everything
-non-drum/bass/vocal), then vocals fade in over the round. Teams guess the song on
-their phone at any point — the earlier the correct guess, the more points, since
-fewer layers is a harder guess. Mirrors the two live mechanics Ben has responded
+`/display` starting with drums only; bass fades in next, then "other" and
+vocals together for the final step (vocals are the giveaway, so they land with
+everything else rather than getting a step of their own — see the 3-step
+retune under Data Model). Teams guess the song on their phone at any point —
+the earlier the correct guess, the more points, since fewer layers is a harder
+guess. Mirrors the two live mechanics Ben has responded
 to well this session: **wagering/tiered risk** (`ShinyWagerQuestion`) and **the
 idea of finding a fact hidden in something familiar** — here the "fact" is the
 song, hidden under fewer and fewer layers of obscuring instrumentation.
@@ -91,7 +93,7 @@ Slide `data` shape, following `data.wagerXxx` naming convention exactly:
   bendleSongId:        string          -- FK into bendle_songs, resolved once at slide-build time
   text:                string          -- optional flavor text/hook, shown pre-reveal like wager's data.text
   answer:              string          -- copied from bendle_songs at build time (same "copy don't join" pattern questions_data uses)
-  bendleTiers:          [{ id, label, atSeconds, points }]  -- default 4-tier ladder, editable per-slide like wager's fixed tiers are NOT editable but this is closer to grid's per-slide config
+  bendleTiers:          [{ id, label, atSeconds, points, stems }]  -- default 3-step ladder (see below), editable per-slide like wager's fixed tiers are NOT editable but this is closer to grid's per-slide config
   bendleGuessesLocked:  boolean
   bendleRevealed:       boolean
   bendleResults:        [{ teamId, teamName, guess, correct, tierId, points }]  -- written at lock time, same shape family as data.wagerResults
@@ -102,14 +104,18 @@ Default tier ladder (Ben can retune later, not exposed in this build's UI beyond
 the defaults — mirrors wager's fixed-not-configurable WAGER_TIERS). Points roughly
 halve rather than step down evenly — an even step rewards waiting one more layer,
 since a wrong guess costs nothing (2026-09-05 retune, see `bendleScoring.js`'s
-comment for the full incentive math):
+comment for the full incentive math). **2026-09-05, second revision:** collapsed
+from 4 tiers to 3 "steps" — vocals are the giveaway, so the final step brings in
+`other` and `vocals` together rather than dropping a step earlier; the last reveal
+beat is the whole song landing at once. Each tier now carries a `stems` array
+(one-to-many) instead of a 1:1 tier-id-to-stem mapping, and round length drops
+from ~80s to ~60s since it's derived from the last tier's `atSeconds`:
 
 ```js
 export const BENDLE_TIERS = [
-  { id: 'drums',  label: 'Drums Only',        atSeconds: 0,  points: 30 },
-  { id: 'bass',   label: '+ Bass',            atSeconds: 20, points: 15 },
-  { id: 'other',  label: '+ Everything Else', atSeconds: 40, points: 10 },
-  { id: 'vocals', label: '+ Vocals',          atSeconds: 60, points: 5  },
+  { id: 'drums', label: 'Drums Only',        atSeconds: 0,  points: 30, stems: ['drums'] },
+  { id: 'bass',  label: '+ Bass',            atSeconds: 20, points: 15, stems: ['bass'] },
+  { id: 'full',  label: '+ Everything Else', atSeconds: 40, points: 10, stems: ['other', 'vocals'] },
 ]
 ```
 
@@ -193,7 +199,10 @@ client-reported field, which stays advisory).
 > alternative from without new infrastructure. The controller reviewed and
 > accepted this gap: casual, host-supervised bar trivia, not an adversarial
 > environment — a spoofed `elapsedSeconds` is low-probability, low-consequence,
-> and bounded to that one team's own score. Building server-side slide-open
+> and bounded to that one team's own score. The likelier exposure is
+> accidental, not hostile: a phone reload mid-round, or a team joining late,
+> restarts `BendleBoard`'s clock at zero, awarding an unearned early tier —
+> also bounded to that one team's own score. Building server-side slide-open
 > timing stays out of scope. See the TRUST NOTE on `scoreBendleRound` in
 > `bendleScoring.js`.
 

@@ -80,6 +80,11 @@ export function resolveBendleTier(elapsedSeconds, tiers) {
 // casual, host-supervised bar-trivia game, not an adversarial one; a team
 // spoofing a faster elapsedSeconds via a hand-edited request is
 // low-probability, low-consequence, and bounded to that one team's own score.
+// The likelier exposure is accidental, not hostile: a phone reload mid-round,
+// or a team opening /join late, restarts BendleBoard's openedAtRef at zero —
+// a guess made at real t=55s reports elapsedSeconds≈5 and lands in the
+// drums-only tier it never actually heard. Also bounded to that one team's
+// own score, and rare enough in practice not to justify server-side timing.
 // Building server-side slide-open timing is explicitly OUT of scope.
 export function scoreBendleRound({ entries, song, tiers = BENDLE_TIERS }) {
   const rows = (entries ?? []).map(e => {
