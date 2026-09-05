@@ -184,6 +184,19 @@ awarded is whichever `bendleTiers[]` entry was active at
 `submitted_at - slideOpenedAt` (server `submitted_at` timestamp, not the
 client-reported field, which stays advisory).
 
+> **2026-09-05 implementation note (whole-branch review, Fix 2):** the
+> shipped code does NOT do this. `scoreBendleRound` resolves tier directly
+> from the client-reported `elapsedSeconds` (`BendleBoard.jsx`'s
+> `Date.now() - openedAtRef.current`); the server `submitted_at` timestamp is
+> used only for the late-answer lock cutoff, never for tier resolution — no
+> server-recorded `slideOpenedAt` exists to compute the original design's
+> alternative from without new infrastructure. The controller reviewed and
+> accepted this gap: casual, host-supervised bar trivia, not an adversarial
+> environment — a spoofed `elapsedSeconds` is low-probability, low-consequence,
+> and bounded to that one team's own score. Building server-side slide-open
+> timing stays out of scope. See the TRUST NOTE on `scoreBendleRound` in
+> `bendleScoring.js`.
+
 ## Scoring lib: `bendleScoring.js`
 
 New file, sibling to `wagerScoring.js`, same conventions:

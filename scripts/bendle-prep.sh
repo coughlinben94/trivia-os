@@ -23,7 +23,6 @@ echo "Downloading audio from ${URL}..."
 yt-dlp "${URL}" -x --audio-format wav -o "${OUT_DIR}/source.wav"
 
 echo "Separating stems with Demucs..."
-demucs --two-stems=vocals -o "${OUT_DIR}/_demucs_tmp" "${OUT_DIR}/source.wav" >/dev/null 2>&1 || true
 demucs -o "${OUT_DIR}/_demucs_tmp" "${OUT_DIR}/source.wav"
 
 MODEL_DIR=$(find "${OUT_DIR}/_demucs_tmp" -mindepth 2 -maxdepth 2 -type d | head -1)
