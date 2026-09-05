@@ -1459,7 +1459,7 @@ function ShinyContent({ slide, show, theme, transitionKey, isPreview }) {
     return <ShinyListQuestion slide={slide} theme={theme} />
   }
   if (isMatchingShiny(data)) {
-    return <ShinyMatchingQuestion slide={slide} theme={theme} />
+    return <ShinyMatchingQuestion slide={slide} show={show} theme={theme} />
   }
   if (isWagerShiny(data)) {
     return <ShinyWagerQuestion slide={slide} show={show} theme={theme} />

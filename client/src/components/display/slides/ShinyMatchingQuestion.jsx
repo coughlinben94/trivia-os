@@ -1,8 +1,10 @@
+import { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { SHINY_GOLD } from '../../../lib/shinyGold.js'
-import { EASE_PANEL } from '../../../lib/easings.js'
+import { EASE_PANEL, EASE_OUT } from '../../../lib/easings.js'
 import { seededShuffle } from '../../../lib/matchingScoring.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
+import { supabase } from '../../../lib/supabase.js'
 
 // Two-beat pan reveal (2026-08-18, Ben: "make it not so different — pans
 // up, so does the swing round questions") — same mechanic as
@@ -20,12 +22,35 @@ import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 // avoidance (matchingScoring.js) still matters here for a different
 // reason — without it, beat 1 could by chance show a pair already
 // side-by-side, giving the answer away before the pan.
-export default function ShinyMatchingQuestion({ slide, theme }) {
+export default function ShinyMatchingQuestion({ slide, show, theme }) {
   const { data } = slide
   const pairs = data.pairs ?? []
   const locked = !!data.matchingLocked
   const revealed = !!data.matchingRevealed
   const reduce = useReducedMotion()
+
+  const [submittedCount, setSubmittedCount] = useState(0)
+  const [teamCount, setTeamCount] = useState(0)
+
+  useEffect(() => {
+    if (locked || revealed) return
+    let cancelled = false
+    async function load() {
+      const { data: count } = await supabase.rpc('phone_answers_count', { p_slide_id: slide.id })
+      if (!cancelled) setSubmittedCount(count ?? 0)
+    }
+    load()
+    const interval = setInterval(load, 2000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [slide.id, locked, revealed])
+
+  useEffect(() => {
+    if (!show?.id || revealed) return
+    let cancelled = false
+    supabase.from('teams').select('id', { count: 'exact', head: true }).eq('show_id', show.id)
+      .then(({ count }) => { if (!cancelled) setTeamCount(count ?? 0) })
+    return () => { cancelled = true }
+  }, [show?.id, revealed])
 
   const leftItems = pairs.map((p, i) => ({ id: p.id, label: p.left, image: p.leftImage, pairRank: i }))
   const shuffledRight = seededShuffle(pairs, slide.id ?? 'preview')
@@ -51,7 +76,10 @@ export default function ShinyMatchingQuestion({ slide, theme }) {
               a second; now the host holds it (reveal is the A key) and the
               room would be staring at a board that still looks open for
               submissions. This band is the missing state. */}
-          <StatusSlot>{locked && !revealed ? <AnswersLockedBadge theme={theme} /> : null}</StatusSlot>
+          <StatusSlot theme={theme}>
+            {locked && !revealed ? <AnswersLockedBadge theme={theme} /> :
+             !revealed ? <CountLine n={submittedCount} total={teamCount} /> : null}
+          </StatusSlot>
         </div>
 
         {/* Beat 2 — matched order, revealed by the pan */}
@@ -64,7 +92,7 @@ export default function ShinyMatchingQuestion({ slide, theme }) {
               height than the one it left, reading as a jump rather than a
               pan (the same trap ShinyOrderQuestion's beat-2 StatusSlot
               documents finding the hard way). */}
-          <StatusSlot />
+          <StatusSlot theme={theme} />
         </div>
       </motion.div>
     </div>
@@ -74,14 +102,30 @@ export default function ShinyMatchingQuestion({ slide, theme }) {
 // Fixed-height band under the board holding whichever status line the beat
 // has, or nothing. Both beats render one so the board above never changes
 // height between them — see beat 2's comment.
-function StatusSlot({ children }) {
+function StatusSlot({ theme, children }) {
   return (
     <div style={{
       minHeight: '3.4rem', flexShrink: 0,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: `${theme.colors.text}d9`,
+      fontSize: 'clamp(1.6rem, 2vw, 2.3rem)',
+      fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
     }}>
       {children}
     </div>
+  )
+}
+
+function CountLine({ n, total }) {
+  return (
+    <motion.span
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3, ease: EASE_OUT }}
+      style={{ fontVariantNumeric: 'tabular-nums' }}
+    >
+      {total > 0 ? `${n} of ${total} teams submitted` : `${n} team${n === 1 ? '' : 's'} submitted`}
+    </motion.span>
   )
 }
 
