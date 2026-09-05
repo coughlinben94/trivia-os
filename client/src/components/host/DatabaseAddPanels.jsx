@@ -193,10 +193,6 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
   // Undefined/legacy concurrent formats default to true — the behavior
   // concurrent formats have always had (each asset its own answer).
   const isQuestionSeriesFmt = selectedShinyFmt?.input_schema?.questionSeries !== false
-  // A format can preset its asset count (slots). When it does, use that and
-  // hide this panel's own "How many assets?" input; when blank, prompt here.
-  const fmtAssetPreset = selectedShinyFmt?.input_schema?.slots
-  const hasAssetPreset = typeof fmtAssetPreset === 'number' && fmtAssetPreset > 0
   const effectiveAssets = assetCount
   const numEntries = Math.max(1, parseInt(entryCount, 10) || 1)
   // Item list (one text/answer row per asset) only applies to a true
@@ -513,7 +509,11 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
                 setSelectedShinyFmt(fmt)
                 if (fmt) {
                   const preset = fmt.input_schema?.slots
-                  if (typeof preset === 'number' && preset > 0) setAssetCount(preset)
+                  if (typeof preset === 'number' && preset > 0) {
+                    setAssetCount(preset)
+                  } else {
+                    setAssetCount(3) // Reset to default when no preset
+                  }
                 }
               }}
             />
@@ -521,9 +521,7 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
               <div className="mt-auto pt-2">
                 <button
                   onClick={() => {
-                    // A format with a preset asset count seeds its item rows to
-                    // that count up front (the "How many assets?" input is
-                    // hidden for it).
+                    // Seed currentItems to match the pre-filled assetCount
                     const preset = selectedShinyFmt.input_schema?.slots
                     if (typeof preset === 'number' && preset > 0) {
                       setCurrentItems(Array.from({ length: preset }, () => ({ text: '', answer: '' })))
