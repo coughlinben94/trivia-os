@@ -68,11 +68,11 @@ describe('scoreBendleRound', () => {
   // rises more than the points fall (0.6 x 40 = 24 loses to 0.85 x 30 = 25.5).
   //
   // The drums-only cliff is the one that has to be steep: that's where the
-  // real decision lives, and by the later rungs the room has heard most of the
+  // real decision lives, and by the last rung the room has heard most of the
   // song and is near-certain anyway. So this asserts a hard halving on rung
   // 1 -> 2 and only monotonic decline after, which keeps the scoreboard on
-  // round numbers instead of forcing 30/16/8/4. Ratios, not values, so a
-  // retune stays free but can't quietly flatten the incentive.
+  // round numbers. Ratios, not values, so a retune stays free but can't
+  // quietly flatten the incentive.
   it('drops steeply off drums-only so guessing early beats waiting', () => {
     expect(tiers[1].points).toBeLessThanOrEqual(tiers[0].points * 0.6)
     for (let i = 1; i < tiers.length; i++) {
@@ -80,12 +80,26 @@ describe('scoreBendleRound', () => {
     }
   })
 
+  // House rule, not a Bendle preference (Ben: "all shiny step questions will
+  // always be 3 steps"). Also guards the half of the contract that lives in
+  // ShinyBendleQuestion: it fades in each tier's `stems` on the transport, so
+  // every stem must be a real bendle_songs column and every stem must appear
+  // exactly once — a typo or a duplicate would silently drop a layer from
+  // playback or double-fade one, neither of which shows up as a test failure
+  // anywhere else.
+  it('is exactly three steps covering all four stems once each', () => {
+    expect(BENDLE_TIERS).toHaveLength(3)
+    const stems = BENDLE_TIERS.flatMap(t => t.stems)
+    expect([...stems].sort()).toEqual(['bass', 'drums', 'other', 'vocals'])
+    expect(BENDLE_TIERS.map(t => t.atSeconds)).toEqual([0, 20, 40])
+  })
+
   it('awards fewer points to a correct later guess', () => {
     const results = scoreBendleRound({
       entries: [{ teamId: 't1', teamName: 'Alpha', guess: 'Hey Jude', elapsedSeconds: 45 }],
       song,
     })
-    expect(results[0]).toMatchObject({ tierId: 'other', points: tiers[2].points })
+    expect(results[0]).toMatchObject({ tierId: 'full', points: tiers[2].points })
   })
 
   it('awards zero points to a wrong guess regardless of timing', () => {

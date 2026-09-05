@@ -37,10 +37,12 @@ vi.mock('../../../lib/supabase.js', () => ({
       }),
     }),
     // A row ARRAY, matching the real bendle_answer_counts, which is declared
-    // `returns table(answered int, total int)` — NOT wager_answer_counts'
-    // `returns jsonb`. Mocking it as a bare object hides the exact bug this
-    // component shipped with (`counts?.answered` on an array is undefined).
-    rpc: () => Promise.resolve({ data: [{ answered: answeredCount, total: 0 }] }),
+    // `returns table(answered int)` — NOT wager_answer_counts' `returns
+    // jsonb`. Mocking it as a bare object hides the exact bug this component
+    // shipped with (`counts?.answered` on an array is undefined). `total`
+    // dropped from the RPC's shape 2026-09-05 (Fix 3, whole-branch review) —
+    // it was never read here.
+    rpc: () => Promise.resolve({ data: [{ answered: answeredCount }] }),
   },
 }))
 
@@ -111,14 +113,16 @@ describe('<ShinyBendleQuestion>', () => {
     expect(transport.start).not.toHaveBeenCalled()
   })
 
-  it('plays: starts the Transport, schedules the three layer-ins, shows the count', async () => {
+  it('plays: starts the Transport, schedules the later stems, shows the count', async () => {
     await render(bendleSlide({}))
     await settle()
 
     expect(transport.start).toHaveBeenCalled()
-    // drums is audible from the first frame, so only bass/other/vocals are scheduled.
+    // Three steps, four stems: drums is audible from the first frame, bass
+    // comes in at 20, and the last step lands `other` AND `vocals` together at
+    // 40 — so three fades are scheduled but only two of them are new steps.
     expect(transport.scheduleOnce).toHaveBeenCalledTimes(3)
-    expect(transport.scheduleOnce.mock.calls.map(c => c[1])).toEqual([20, 40, 60])
+    expect(transport.scheduleOnce.mock.calls.map(c => c[1])).toEqual([20, 40, 40])
     expect(container.textContent).toContain('2 of 5 teams guessed')
     expect(container.textContent).not.toContain('Loading song')
   })
@@ -171,8 +175,8 @@ describe('<ShinyBendleQuestion>', () => {
       bendleGuessesLocked: true,
       bendleRevealed: true,
       bendleResults: [
-        { teamId: 't1', teamName: 'Alpha', correct: true, tierId: 'drums', points: 40 },
-        { teamId: 't2', teamName: 'Beta', correct: true, tierId: 'vocals', points: 10 },
+        { teamId: 't1', teamName: 'Alpha', correct: true, tierId: 'drums', points: 30 },
+        { teamId: 't2', teamName: 'Beta', correct: true, tierId: 'full', points: 10 },
         { teamId: 't3', teamName: 'Gamma', correct: false, tierId: null, points: 0 },
       ],
     })
@@ -183,8 +187,8 @@ describe('<ShinyBendleQuestion>', () => {
     expect(container.textContent).toContain('Hey Jude')
     expect(container.textContent).toContain('Alpha')
     expect(container.textContent).toContain('Drums Only')
-    expect(container.textContent).toContain('+40')
-    expect(container.textContent).toContain('+ Vocals')
+    expect(container.textContent).toContain('+30')
+    expect(container.textContent).toContain('+ Everything Else')
     expect(container.textContent).toContain('+10')
     // A wrong guess shows a dash and a zero, never the guess itself.
     expect(container.textContent).toContain('Gamma')

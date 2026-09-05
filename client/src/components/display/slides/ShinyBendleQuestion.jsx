@@ -52,7 +52,11 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
 
   useEffect(() => {
     let cancelled = false
-    if (!data.bendleSongId) return
+    // Should be unreachable post-fix (AddSlideWizard now requires a song
+    // before create), but defense-in-depth: without this, loadState never
+    // leaves 'loading' and the TV shows "Loading song…" forever with no way
+    // out — 2026-09-05 whole-branch review, Fix 1.
+    if (!data.bendleSongId) { setLoadState('error'); return }
     supabase.from('bendle_songs').select('*').eq('id', data.bendleSongId).single()
       .then(({ data: row }) => { if (!cancelled) setSong(row) })
     return () => { cancelled = true }
@@ -106,16 +110,23 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
 
       if (Object.keys(players).length === 0) { setLoadState('error'); return }
 
-      // Drums are audible from the first frame; every other layer waits
-      // silent and is faded up when its tier's atSeconds arrives.
-      if (players.drums) players.drums.volume.value = 0
+      // The first tier's stems are audible from the first frame; every later
+      // layer waits silent and is faded up when its tier's atSeconds arrives.
+      // Driven by tier.stems, not tier.id — a tier can bring in more than one
+      // stem (the last one lands `other` and `vocals` together), so the two
+      // lists are not one-to-one. See BENDLE_TIERS.
+      for (const key of BENDLE_TIERS[0].stems) {
+        if (players[key]) players[key].volume.value = 0
+      }
       for (const tier of BENDLE_TIERS.slice(1)) {
-        const player = players[tier.id]
-        if (!player) continue
-        transport.scheduleOnce(time => {
-          player.volume.setValueAtTime(FADE_FLOOR_DB, time)
-          player.volume.rampTo(0, FADE_SECONDS, time)
-        }, tier.atSeconds)
+        for (const key of tier.stems) {
+          const player = players[key]
+          if (!player) continue
+          transport.scheduleOnce(time => {
+            player.volume.setValueAtTime(FADE_FLOOR_DB, time)
+            player.volume.rampTo(0, FADE_SECONDS, time)
+          }, tier.atSeconds)
+        }
       }
 
       // Fire-and-forget, exactly like RulesSlide's ctx.resume().catch(() => {}):
@@ -153,13 +164,14 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
       const { data: counts } = await supabase.rpc('bendle_answer_counts', { p_slide_id: slide.id })
       if (cancelled) return
       // Row ARRAY, not an object: bendle_answer_counts is declared
-      // `returns table(answered int, total int)` where wager_answer_counts is
-      // `returns jsonb`, so supabase-js hands back [{ answered, total }].
-      // Copying Wager's `counts?.answered` verbatim reads undefined and pins
-      // the TV at "0 of N teams guessed" for the whole round. `total` is
-      // deliberately ignored — it derives the show from the first phone_answer,
-      // so it is 0 until someone has guessed; the teams head-count below is
-      // right from the first frame.
+      // `returns table(answered int)` where wager_answer_counts is `returns
+      // jsonb`, so supabase-js hands back [{ answered }]. Copying Wager's
+      // `counts?.answered` verbatim reads undefined and pins the TV at "0 of
+      // N teams guessed" for the whole round. (The RPC used to also return
+      // `total`, computed via a jsonb_array_elements scan over `shows` for a
+      // value this component always discarded — dropped in the
+      // 2026-09-05 migration; the teams head-count below, from a plain
+      // `teams` query, is right from the first frame regardless.)
       setAnswered(counts?.[0]?.answered ?? 0)
     }
     load()

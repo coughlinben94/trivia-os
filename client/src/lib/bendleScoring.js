@@ -15,15 +15,22 @@ import { normalizeRoundScore } from './scoreboardMath.js'
 // Keep the cliff between rung 1 and rung 2 steep if these get retuned — the
 // gap is what does the work, not the absolute numbers.
 //
-// Four entries because there are four stems: ShinyBendleQuestion fades each
-// one in at its tier's atSeconds and derives round length from the last, so
-// dropping a tier silently drops a layer from playback. Retune `points`
-// freely; change the COUNT only alongside that scheduling.
+// THREE steps, always (2026-09-05, Ben: "all shiny step questions will always
+// be 3 steps") — that's a house rule across the shiny step formats, not a
+// Bendle detail, so keep the count at three if these get retuned.
+//
+// Stems and steps are deliberately NOT one-to-one. Source separation gives
+// four tracks (drums/bass/other/vocals, the four NOT NULL url columns on
+// bendle_songs), and the last step brings in `other` AND `vocals` together —
+// so the final reveal is the whole song landing at once, which is the better
+// payoff moment anyway, and vocals are the giveaway so an "everything but
+// vocals" rung was the least interesting of the four. ShinyBendleQuestion
+// fades in every stem named in `stems` at that tier's atSeconds and derives
+// round length from the last tier, so `stems` must name real STEM_KEYS.
 export const BENDLE_TIERS = [
-  { id: 'drums',  label: 'Drums Only',        atSeconds: 0,  points: 30 },
-  { id: 'bass',   label: '+ Bass',            atSeconds: 20, points: 15 },
-  { id: 'other',  label: '+ Everything Else', atSeconds: 40, points: 10 },
-  { id: 'vocals', label: '+ Vocals',          atSeconds: 60, points: 5  },
+  { id: 'drums', label: 'Drums Only',        atSeconds: 0,  points: 30, stems: ['drums'] },
+  { id: 'bass',  label: '+ Bass',            atSeconds: 20, points: 15, stems: ['bass'] },
+  { id: 'full',  label: '+ Everything Else', atSeconds: 40, points: 10, stems: ['other', 'vocals'] },
 ]
 
 function normalize(s) {
@@ -58,10 +65,34 @@ export function resolveBendleTier(elapsedSeconds, tiers) {
 // entries: [{ teamId, teamName, guess, elapsedSeconds }]. song: { answer, aliases }.
 // A team with no guess (guess == null) scores 0, sorted last — same "no
 // guess isn't a bad guess, it's no guess" convention scoreWagerRound uses.
+//
+// TRUST NOTE (deliberate, reviewed — do not "fix" without re-litigating):
+// `elapsedSeconds` on each entry is CLIENT-REPORTED (BendleBoard.jsx computes
+// it as Date.now() minus the phone's own slide-open timestamp) and this
+// function trusts it as-is for tier resolution. There is no server-recorded
+// "slide opened at" timestamp to check it against; the server's
+// `submitted_at` is used only for the late-answer lock cutoff, never for tier
+// resolution. The original spec (docs/superpowers/specs/
+// 2026-09-04-bendle-layered-audio-question-design.md, "Tier resolution at
+// lock time") called for resolving tier server-side from a server timestamp,
+// treating the client value as advisory only — this implementation inverts
+// that. The controller reviewed and accepted the gap 2026-09-05: this is a
+// casual, host-supervised bar-trivia game, not an adversarial one; a team
+// spoofing a faster elapsedSeconds via a hand-edited request is
+// low-probability, low-consequence, and bounded to that one team's own score.
+// Building server-side slide-open timing is explicitly OUT of scope.
 export function scoreBendleRound({ entries, song, tiers = BENDLE_TIERS }) {
   const rows = (entries ?? []).map(e => {
-    const correct = e.guess != null && matchesBendleAnswer(e.guess, song?.answer, song?.aliases)
-    const tier = correct && e.elapsedSeconds != null ? resolveBendleTier(e.elapsedSeconds, tiers) : null
+    // elapsedSeconds is REQUIRED for a correct guess to score, same as guess
+    // itself: unreachable through the shipped BendleBoard.jsx (it always
+    // sends a real elapsedSeconds), but a malformed/manual insert with
+    // elapsedSeconds missing should not fall back to the earliest/highest
+    // tier for free — that would score a team on data that was never
+    // actually timed. Treated the same as "no guess": correct: false,
+    // points: 0, sorted last (2026-09-05 whole-branch review, Fix 5).
+    const correct = e.guess != null && e.elapsedSeconds != null
+      && matchesBendleAnswer(e.guess, song?.answer, song?.aliases)
+    const tier = correct ? resolveBendleTier(e.elapsedSeconds, tiers) : null
     return {
       teamId: e.teamId,
       teamName: e.teamName ?? null,
