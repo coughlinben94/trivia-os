@@ -99,14 +99,17 @@ Slide `data` shape, following `data.wagerXxx` naming convention exactly:
 ```
 
 Default tier ladder (Ben can retune later, not exposed in this build's UI beyond
-the defaults — mirrors wager's fixed-not-configurable WAGER_TIERS):
+the defaults — mirrors wager's fixed-not-configurable WAGER_TIERS). Points roughly
+halve rather than step down evenly — an even step rewards waiting one more layer,
+since a wrong guess costs nothing (2026-09-05 retune, see `bendleScoring.js`'s
+comment for the full incentive math):
 
 ```js
 export const BENDLE_TIERS = [
-  { id: 'drums',  label: 'Drums Only',        atSeconds: 0,  points: 40 },
-  { id: 'bass',   label: '+ Bass',            atSeconds: 20, points: 30 },
-  { id: 'other',  label: '+ Everything Else', atSeconds: 40, points: 20 },
-  { id: 'vocals', label: '+ Vocals',          atSeconds: 60, points: 10 },
+  { id: 'drums',  label: 'Drums Only',        atSeconds: 0,  points: 30 },
+  { id: 'bass',   label: '+ Bass',            atSeconds: 20, points: 15 },
+  { id: 'other',  label: '+ Everything Else', atSeconds: 40, points: 10 },
+  { id: 'vocals', label: '+ Vocals',          atSeconds: 60, points: 5  },
 ]
 ```
 
