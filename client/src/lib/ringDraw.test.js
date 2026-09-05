@@ -175,4 +175,29 @@ describe('drawStations', () => {
     const r1Numeric = drawStations(SYNTHETIC_POOL, { seed: seed1, slots: 8, pinAt: 6 })
     expect(r1).toEqual(r1Numeric)
   })
+
+  it('production-scale stress test: 1,000 seeds at 13 slots, all valid', () => {
+    // This test validates the fix for the dropped regression case: drawStations
+    // with a satisfiable pool at slots=13 (production scale) across many seeds.
+    // Original spec (docs/superpowers/plans/2026-09-02-ring-station-variety.md §8
+    // Phase 2) required stress-testing at 13 slots; an independent manual run
+    // (10,000 seeds, all passed, max 58ms) confirmed it works. This adds that
+    // missing regression test so it stays proven going forward.
+    //
+    // Pool design: 4 families × 3-4 members each = 14 total members.
+    // LANE_CAP(13) = 4, so each family respects the cap. We can always choose
+    // 4+4+4+1=13 or similar valid distributions.
+    const POOL_PRODUCTION = [
+      s('a1', 'familyA'), s('a2', 'familyA'), s('a3', 'familyA'), s('a4', 'familyA'),
+      s('b1', 'familyB'), s('b2', 'familyB'), s('b3', 'familyB'), s('b4', 'familyB'),
+      s('g1', 'familyG'), s('g2', 'familyG'), s('g3', 'familyG'), s('g4', 'familyG'),
+      s('record', 'familyD'), s('d2', 'familyD'),
+    ]
+
+    for (let seed = 0; seed < 1000; seed++) {
+      const result = drawStations(POOL_PRODUCTION, { seed, slots: 13, pinAt: 10 })
+      expect(result).toHaveLength(13)
+      expect(assertRing(result, { slots: 13 })).toBe(true)
+    }
+  })
 })
