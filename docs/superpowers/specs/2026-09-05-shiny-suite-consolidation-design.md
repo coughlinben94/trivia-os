@@ -143,22 +143,49 @@ attached to an existing slide, can't change it, can't preview it. `LiveMode.jsx`
 own no-song-refusal message (`:719` area, exact line may have shifted since the
 final Bendle review — verify) already admits this gap.
 
-**Fix:** new `BendleBuilder` component, modeled directly on the existing
-`WagerBuilder` (`SlideEditor.jsx:1729`) — read that function in full before
-writing this one, match its structure (props shape, how it reads/writes
-`slide.data` via whatever update callback `WagerBuilder` uses, its layout
-conventions) rather than inventing a different shape. Contents:
-- Song dropdown — same `bendle_songs` fetch AddSlideWizard's song picker already
-  uses (reuse the query, don't duplicate a second fetch pattern).
-- Read-only tier ladder display (mirror however `WagerBuilder` shows
-  `WAGER_TIERS` read-only, if it does — check).
-- A `BendleBoard` phone-preview, same pattern as whatever preview
-  `WagerBuilder`/`MatchingBuilder`/`OrderBuilder` already render for their
-  mechanics.
+**Fix, verified against the real `WagerBuilder`/wiring shape:**
+`WagerBuilder` (`SlideEditor.jsx:1729-1767`) is simpler than Fable's critique
+implied — it takes one prop, `{ answer }`, and is purely informational/
+validating (shows the fixed `WAGER_TIERS` ladder read-only, and warns if
+`answer` is missing or non-numeric). It has NO edit callback of its own —
+Bendle's song selection needs one, since (unlike wager's plain numeric
+answer) it's a dropdown pick from `bendle_songs`, not free text in the
+existing shared Answer field.
 
-Wire it into `SlideEditor.jsx`'s dispatcher (find where `WagerBuilder`/
-`MatchingBuilder`/`OrderBuilder` get selected for their slide type, add the
-`isBendleShiny` branch alongside).
+The real dispatch pattern (`SlideEditor.jsx:950-995`, `schema.type === 'X'`
+branches) always pairs a Builder with a live "Phone preview" block rendering
+the real `*Board` component with a `preview` prop and a synthesized
+preview `team`/`slide` (see `:960-970` for Matching's exact shape, `:983-993`
+for Wager's).
+
+**Real gap found, must be fixed as part of this task:** `BendleBoard.jsx` has
+**no `preview` prop at all** today (`grep preview client/src/components/join/BendleBoard.jsx`
+→ zero matches, vs. `WagerBoard.jsx`'s `preview = false` param used at 5 call
+sites to skip the real mount-check fetch and no-op the submit handler). Add
+the same `preview` support to `BendleBoard.jsx` FIRST — mirror
+`WagerBoard.jsx`'s exact `preview` guards (skip the `phone_answers` mount-check
+query, make `handleSubmit` a no-op, use a synthetic team count if it fetches
+one) — before wiring it into a preview pane, or the preview would attempt
+real Supabase reads/writes against a fake `__preview__` team/show that don't
+exist.
+
+Then:
+1. New `BendleBuilder({ songId, onChangeSongId })` in `SlideEditor.jsx`
+   (near `WagerBuilder`): fetches `bendle_songs` (same query
+   `AddSlideWizard.jsx`'s song picker already uses — reuse it, don't
+   duplicate a second fetch), renders a dropdown bound to `songId`/
+   `onChangeSongId`, and a read-only `BENDLE_TIERS` ladder display (same
+   informational shape as `WagerBuilder`'s tier list, adapted to Bendle's 3
+   steps/`stems` fields — see `bendleScoring.js`'s `BENDLE_TIERS`).
+2. Wire it into `SlideEditor.jsx`'s dispatcher: add a
+   `{schema.type === 'bendle' && (...)}` branch alongside the existing
+   matching/wager/order branches (`:950-1010`), passing
+   `songId={data.bendleSongId}` and `onChangeSongId={id => onChange('bendleSongId', id)}`
+   (confirm `onChange`'s real signature against how the other builders call
+   it, e.g. `:956-957`'s `onChangePairs`/`onChangePoints` — match that exact
+   pattern, don't invent a different update mechanism), plus a
+   `BendleBoard preview` phone-preview block matching Matching/Wager's shape
+   exactly (`:960-970`, `:983-993`).
 
 ## H4 — port the wizard's count+relationship fix into `DatabaseAddPanels.jsx`
 
@@ -174,19 +201,41 @@ real wizard rebuild fixed everywhere else, still live here.
 real usage today. Don't lose the functionality — port the fix rather than
 deleting the path.
 
-**Fix:** bring the same count + relationship UI shape `AddSlideWizard.jsx`
-already uses (post-2026-08-25-rebuild: a single "how many assets" count that
-the format's `slots` preset only pre-fills, never overrides, plus the
-tied-together/separate relationship picker) into `DatabaseAddPanels.jsx`'s
-`QuestionInputPanel`, replacing the `isImageFmt`/`isConcurrentFmt`/
-`hasAssetPreset`/`effectiveAssets` branch. Read `AddSlideWizard.jsx`'s real
-current count/relationship logic in full first (the same lines H1/H2's
-implementers will already be reading) and adapt it to this panel's simpler
-context (no live slide, archive-only entry, no round attachment) — don't
-invent a third variant of this UI, mirror the real wizard's fixed shape.
-Keep the regular/swing/PYL bulk-entry paths in this file untouched — this
-fix is scoped to the shiny-question branch only, and the panel's existing
-functionality (bulk archive entry) must not regress or disappear.
+**Fix, verified precise scope (this panel is simpler than `AddSlideWizard` —
+no live slide, no round, no tied/separate relationship concept, just
+`useItemList` — don't port the wizard's full 3-way relationship picker, that
+would be new complexity this panel doesn't need):**
+
+`DatabaseAddPanels.jsx:191-200` computes:
+```js
+const fmtAssetPreset = selectedShinyFmt?.input_schema?.slots
+const hasAssetPreset = typeof fmtAssetPreset === 'number' && fmtAssetPreset > 0
+const effectiveAssets = hasAssetPreset ? fmtAssetPreset : assetCount
+```
+and `:392-393` gates the "How many assets?" input's visibility on
+`!hasAssetPreset` — hiding it entirely and silently hard-overriding whatever
+`assetCount` holds whenever the picked format has a `slots` preset. This is
+the exact "preset lock" bug class (hides the control, overrides the typed
+value) the 2026-08-25 wizard rebuild fixed everywhere else.
+
+Minimal, precise fix (three changes, same file):
+1. `:200` — `effectiveAssets` becomes just `assetCount` (drop the
+   `hasAssetPreset ? fmtAssetPreset : ...` branch entirely — the preset never
+   overrides once this lands, matching the real wizard's rule).
+2. `:393` — remove the `{!hasAssetPreset && (...)}` gate so the "How many
+   assets?" input always renders, for every format.
+3. When `selectedShinyFmt` changes (find wherever the format-picker's
+   `onClick`/`onChange` sets `selectedShinyFmt` — likely near the pick-step
+   UI earlier in this file), pre-fill `assetCount` from `fmtAssetPreset` if
+   one exists, else leave it at its current default — a **pre-fill**, not an
+   override, so a host who then edits the field keeps whatever they typed.
+
+Keep the regular/swing/PYL bulk-entry paths in this file completely
+untouched — this fix is scoped to these three exact lines/behaviors, and the
+panel's existing functionality (bulk archive entry) must not regress or
+disappear. Do not introduce a relationship/tied-vs-separate concept here;
+`useItemList` (`:207`, already correct, unaffected by this fix) already
+covers what this panel needs.
 
 ## H5 — submitted-count line for `ShinyMatchingQuestion.jsx`
 
