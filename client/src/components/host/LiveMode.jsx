@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
-import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isAudioShiny, isBendleShiny } from '../../lib/shinySeries.js'
+import { resolveShinyPart, isAudioShiny } from '../../lib/shinySeries.js'
 import ScorePanel from './ScorePanel.jsx'
 import LateTeamPopover from './LateTeamPopover.jsx'
 import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
@@ -11,7 +11,7 @@ import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 import { scoreBendleRound, computeBendleScoreUpdates } from '../../lib/bendleScoring.js'
-import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
+import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
 // override for it — every other wager error is a real, unrecoverable-by-
@@ -298,14 +298,22 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     if (preShowReturnIndex != null && currentIndex !== preShowIndex) setPreShowReturnIndex(null)
   }, [currentIndex, preShowIndex, preShowReturnIndex])
 
+  // Which phone-scored mechanic (if any) this slide is — the ONE lookup the
+  // lock/score control panel and the scoreboard-modal gate below both key off,
+  // derived from PHONE_MECHANICS rather than four hand-written isXShiny calls.
+  // A slide is exactly one shiny type, so `find` is the whole answer.
+  const phoneMechanic = currentSlide?.type === 'question'
+    ? (Object.keys(PHONE_MECHANICS).find(k => PHONE_MECHANICS[k].guard(currentSlide?.data)) ?? null)
+    : null
+
   // B6: the scoreboard modal (Host.jsx, fixed inset-0 z-50) renders full-screen
-  // on top of everything, including this wager panel's "Lock Answers & Score"
-  // button. Opening it mid-wager hides the exact button the host needs next —
-  // gate the modal-open trigger instead of fighting z-index against a
-  // deliberately full-screen modal.
-  const wagerActionShowing = currentSlide?.type === 'question'
-    && isWagerShiny(currentSlide?.data)
-    && !currentSlide?.data?.wagerRevealed
+  // on top of everything, including the lock/score panel's "Lock Answers &
+  // Score" button. Opening it mid-round hides the exact button the host needs
+  // next — gate the modal-open trigger instead of fighting z-index against a
+  // deliberately full-screen modal. Was wager-only when B6 was found; it is
+  // the same trap on all four phone mechanics, so it now covers all four.
+  const phoneActionShowing = !!phoneMechanic
+    && !currentSlide?.data?.[REVEAL_FIELD[phoneMechanic]]
 
   const theme = getTheme(show.theme ?? show.theme_id)
 
@@ -348,15 +356,60 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     }
   }
 
-  // Locking stops teams from submitting more answers, so it's written first and
-  // stays written even if scoring below fails — but the button (see JSX) stays
-  // visible as "Retry Scoring" for as long as matchingRevealed is false, so a
-  // transient fetch/write failure never strands the slide with no recovery path
-  // short of hand-editing slide JSON.
-  async function handleLockAndScoreMatching(slide) {
-    setMatchingBusy(true)
-    setMatchingScoreError(null)
+  // ── The one lock-and-score path, shared by all four phone mechanics ────
+  //
+  // Matching, Order, Wager (guesses) and Bendle each used to own a
+  // hand-copied version of this exact sequence. Every fetch, the lock-cutoff
+  // filter, the late-write warning, the unmatched-scoreboard refusal and the
+  // upsert were byte-identical across the four except for field names — and
+  // they had already started drifting (each fix landed on whichever handler
+  // the bug was found in). One implementation, four small configs
+  // (2026-09-05 consolidation).
+  //
+  // Locking stops teams from submitting more answers, so it's written FIRST
+  // and stays written even if scoring below fails — the panel button (see
+  // JSX) stays visible as "Retry Scoring" until the slide is revealed, so a
+  // transient fetch/write failure never strands the slide with no recovery
+  // path short of hand-editing slide JSON.
+  //
+  // The one place the four genuinely differ is buildResults:
+  //   · matching/order call their compute*ScoreUpdates straight on the raw
+  //     `answers` and persist no results array;
+  //   · wager/bendle first build one entry per REGISTERED team (a team that
+  //     never guessed is a real 0, not a skip), score that with
+  //     score*Round, THEN compute updates, and persist a `*Results` array
+  //     the TV reveal and the phone popup both read.
+  // That also decides which population's empty-updates case counts as a real
+  // "couldn't match the scoreboard" error, so buildResults returns its own
+  // unmatchedError rather than this helper guessing.
+  //
+  // zeroAnswersErrorMsg is opt-in and only wager/bendle pass one: they score
+  // from `teams`, so a success-with-no-rows fetch is indistinguishable from
+  // "nobody guessed" and would silently write a room-wide 0. Matching and
+  // order score from `answers` themselves — zero answers there simply scores
+  // nothing, which is the correct outcome, and they have never had (or
+  // offered a UI override for) this refusal.
+  async function lockAndScore({
+    slide,
+    lockField,               // e.g. 'matchingLocked', 'wagerGuessesLocked'
+    lockedAtField,           // e.g. 'matchingLockedAt', 'wagerGuessesLockedAt'
+    resultsField = null,     // 'wagerResults' | 'bendleResults' | null
+    preCheck,                // optional: (slide) => error string | null, before any write
+    loadExtra,               // optional: async (slide) => extra — `undefined` means it already set its own error and we bail
+    buildResults,            // ({ answers, teams, scoreboardTeams, roundKey, slideId, extra }) => { results, updates, unmatchedError }
+    zeroAnswersErrorMsg = null,
+    lateLogLabel,            // e.g. 'matching lock', 'wager-guess lock'
+    force = false,
+    setBusy, setError,
+  }) {
+    setBusy(true)
+    setError(null)
     try {
+      if (preCheck) {
+        const err = preCheck(slide)
+        if (err) { setError(err); return }
+      }
+
       // Lock cutoff (2026-08-19, Ben: the lock system "needs to be reviewed"
       // — it was pure client-trust, a fixed 700ms sleep guessing Realtime
       // delivery time with no DB-side backstop). Any phone_answers row
@@ -366,21 +419,21 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       // success).
       //
       // Persisted in slide.data, NOT recomputed each call — this function is
-      // also the "🔁 Retry Scoring" handler for an already-locked slide
-      // (matchingRevealed false), and a fresh `new Date()` on that second
-      // call would silently reopen the exact window this guards: any answer
-      // submitted between the real lock and the retry tap would pass a
-      // recomputed cutoff. First lock wins; every retry reuses it.
-      let lockedAt = slide.data.matchingLockedAt
-      if (!slide.data.matchingLocked) {
+      // also the "🔁 Retry Scoring" handler for an already-locked slide, and
+      // the `force: true` override re-enters here too. A fresh `new Date()`
+      // on either would silently reopen the exact window this guards: any
+      // answer submitted between the real lock and the retry tap would pass
+      // a recomputed cutoff. First lock wins; every retry reuses it.
+      let lockedAt = slide.data[lockedAtField]
+      if (!slide.data[lockField]) {
         lockedAt = new Date().toISOString()
         // updateSlide is a debounced 600ms write, not a real await — without
         // flushSlides + a buffer here, the phone_answers read below used to
         // run BEFORE the lock had even reached the database, let alone the
-        // phones over Realtime. A pair tapped in that gap saved successfully
-        // and stayed colored on the phone, but was invisible to this fetch —
-        // silently unscored while the phone showed it as submitted.
-        actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true, matchingLockedAt: lockedAt } })
+        // phones over Realtime. An answer tapped in that gap saved
+        // successfully and stayed shown as submitted on the phone, but was
+        // invisible to this fetch — silently unscored.
+        actions.updateSlide(slide.id, { data: { ...slide.data, [lockField]: true, [lockedAtField]: lockedAt } })
         await actions.flushSlides()
         await new Promise(r => setTimeout(r, 700))
       }
@@ -389,132 +442,123 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         .from('phone_answers')
         .select('team_id, answer, submitted_at')
         .eq('slide_id', slide.id)
-      if (fetchError) { console.error('phone_answers fetch failed:', fetchError); setMatchingScoreError('Scoring failed — check connection and retry'); return }
+      if (fetchError) { console.error('phone_answers fetch failed:', fetchError); setError('Scoring failed — check connection and retry'); return }
       const answers = rawAnswers?.filter(a => !a.submitted_at || a.submitted_at <= lockedAt) ?? []
       const lateCount = (rawAnswers?.length ?? 0) - answers.length
-      if (lateCount > 0) console.warn(`[LiveMode] discarded ${lateCount} phone_answers row(s) submitted after matching lock`)
+      if (lateCount > 0) console.warn(`[LiveMode] discarded ${lateCount} phone_answers row(s) submitted after ${lateLogLabel}`)
 
       const { data: teams, error: teamsError } = await supabase
         .from('teams')
         .select('id, name')
         .eq('show_id', show.id)
-      if (teamsError) { console.error('teams fetch failed:', teamsError); setMatchingScoreError('Scoring failed — check connection and retry'); return }
+      if (teamsError) { console.error('teams fetch failed:', teamsError); setError('Scoring failed — check connection and retry'); return }
 
       const { data: scoreboardTeams, error: sbError } = await supabase
         .from('scoreboard_teams')
         .select('id, show_id, name, scores, sort_order')
         .eq('show_id', show.id)
-      if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); setMatchingScoreError('Scoring failed — check connection and retry'); return }
+      if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); setError('Scoring failed — check connection and retry'); return }
 
-      const round = show.rounds.find(r => r.id === slide.roundId)
-      const roundKey = round ? `r_${round.id}` : 'bonus'
-      const pointsPerMatch = slide.data.pointsPerMatch ?? 2
-
-      const updates = computeMatchingScoreUpdates({ answers, teams, scoreboardTeams, roundKey, pointsPerMatch, slideId: slide.id })
-
-      // Answers exist but none could be attributed to a scoreboard row — a
-      // real problem (team-name mismatch, or nobody's been added to the
-      // scoreboard yet), not a legitimate "nothing to score" case. Treat it
-      // like any other scoring failure: don't reveal, stay on Retry Scoring.
-      if ((answers?.length ?? 0) > 0 && updates.length === 0) {
-        setMatchingScoreError('No answers could be matched to the scoreboard — check team names match, then retry')
+      // `force` (2026-08-17, Ben) skips this ONE check — the UI only offers
+      // it after this exact error has already fired once, as a deliberate
+      // "yes, actually score everyone at 0" override, never a way past any
+      // of the other refusals.
+      if (zeroAnswersErrorMsg && !force && answers.length === 0 && (teams?.length ?? 0) > 0) {
+        setError(zeroAnswersErrorMsg)
         return
       }
 
-      if (updates.length > 0) {
-        const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
-        if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setMatchingScoreError('Scoring failed — check connection and retry'); return }
+      let extra
+      if (loadExtra) {
+        extra = await loadExtra(slide)
+        if (extra === undefined) return // loadExtra already set its own error
       }
 
-      // matchingLockedAt explicit here too, not just relying on the ...slide.data
-      // spread — `slide` is this call's original param and never updates
-      // mid-function, so on a first-lock-then-score-in-one-call it would
-      // otherwise spread the PRE-lock data and wipe the stamp just written above.
-      // No matchingRevealed here (2026-08-25, Ben: "the answer reveal
-      // animation for phone questions should only invoke when i hit A"). This
-      // write locks and scores; the room sees a held "Answers locked" state
-      // until the host presses A (see revealCurrentSlide below). Same split in
-      // handleLockAndScoreOrder/handleLockAndScoreWagers.
-      await actions.updateSlide(slide.id, { data: { ...slide.data, matchingLocked: true, matchingLockedAt: lockedAt } })
+      const { results, updates, unmatchedError } = buildResults({
+        answers, teams, scoreboardTeams,
+        roundKey: roundKeyFor(show, slide),
+        slideId: slide.id,
+        extra,
+      })
+
+      // Something was there to score but none of it could be attributed to a
+      // scoreboard row — a real problem (team-name mismatch, or nobody's been
+      // added to the scoreboard yet), not a legitimate "nothing to score"
+      // case. Treat it like any other scoring failure: don't reveal, stay on
+      // Retry Scoring.
+      if (unmatchedError) { setError(unmatchedError); return }
+
+      if (updates.length > 0) {
+        const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
+        if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setError('Scoring failed — check connection and retry'); return }
+      }
+
+      // The lock fields are restated explicitly, not just left to the
+      // ...slide.data spread — `slide` is this call's original param and
+      // never updates mid-function, so on a first-lock-then-score-in-one-call
+      // it would otherwise spread the PRE-lock data and wipe the stamp
+      // written above. No `*Revealed` here (2026-08-25, Ben: "the answer
+      // reveal animation for phone questions should only invoke when i hit
+      // A") — this write locks and scores, the room sees a held "Answers
+      // locked" state until the host presses A (see revealCurrentSlide
+      // below). Results, where a mechanic has them, are still computed and
+      // stored NOW; A only decides when the room gets to see them.
+      const finalData = { ...slide.data, [lockField]: true, [lockedAtField]: lockedAt }
+      if (resultsField && results) finalData[resultsField] = results
+      await actions.updateSlide(slide.id, { data: finalData })
     } finally {
-      setMatchingBusy(false)
+      setBusy(false)
     }
   }
 
-  // Order question: same lock-then-score shape as handleLockAndScoreMatching
-  // above (Order has no Wager-style blind-tier phase to split into a
-  // separate first lock). Reveal is a separate later host action (the A
-  // key, see revealCurrentSlide below), not part of this write. Kept as its
-  // own function rather than parameterizing the Matching handler, same
-  // reasoning MatchingBoard/Wager already establish: each mechanic's
-  // scoring call, data-shape keys
-  // (orderLocked/orderRevealed vs matchingLocked/matchingRevealed) and error
-  // copy differ enough that sharing one function would need its own branch
-  // per mechanic anyway.
+  async function handleLockAndScoreMatching(slide) {
+    await lockAndScore({
+      slide,
+      lockField: 'matchingLocked', lockedAtField: 'matchingLockedAt',
+      lateLogLabel: 'matching lock',
+      buildResults: ({ answers, teams, scoreboardTeams, roundKey, slideId }) => {
+        const updates = computeMatchingScoreUpdates({
+          answers, teams, scoreboardTeams, roundKey,
+          pointsPerMatch: slide.data.pointsPerMatch ?? 2,
+          slideId,
+        })
+        return {
+          results: null,
+          updates,
+          unmatchedError: answers.length > 0 && updates.length === 0
+            ? 'No answers could be matched to the scoreboard — check team names match, then retry'
+            : null,
+        }
+      },
+      setBusy: setMatchingBusy, setError: setMatchingScoreError,
+    })
+  }
+
+  // Order Up: same shape as Matching (no Wager-style blind-tier phase to
+  // split into a separate first lock), differing only in its scoring call and
+  // its field names.
   async function handleLockAndScoreOrder(slide) {
-    setOrderBusy(true)
-    setOrderScoreError(null)
-    try {
-      // Same lock-cutoff reasoning as handleLockAndScoreMatching: persisted,
-      // not recomputed, so this is also the safe "🔁 Retry Scoring" handler
-      // for a slide that's already locked (orderRevealed still false).
-      let lockedAt = slide.data.orderLockedAt
-      if (!slide.data.orderLocked) {
-        lockedAt = new Date().toISOString()
-        actions.updateSlide(slide.id, { data: { ...slide.data, orderLocked: true, orderLockedAt: lockedAt } })
-        await actions.flushSlides()
-        await new Promise(r => setTimeout(r, 700))
-      }
-
-      const { data: rawAnswers, error: fetchError } = await supabase
-        .from('phone_answers')
-        .select('team_id, answer, submitted_at')
-        .eq('slide_id', slide.id)
-      if (fetchError) { console.error('phone_answers fetch failed:', fetchError); setOrderScoreError('Scoring failed — check connection and retry'); return }
-      const answers = rawAnswers?.filter(a => !a.submitted_at || a.submitted_at <= lockedAt) ?? []
-      const lateCount = (rawAnswers?.length ?? 0) - answers.length
-      if (lateCount > 0) console.warn(`[LiveMode] discarded ${lateCount} phone_answers row(s) submitted after order lock`)
-
-      const { data: teams, error: teamsError } = await supabase
-        .from('teams')
-        .select('id, name')
-        .eq('show_id', show.id)
-      if (teamsError) { console.error('teams fetch failed:', teamsError); setOrderScoreError('Scoring failed — check connection and retry'); return }
-
-      const { data: scoreboardTeams, error: sbError } = await supabase
-        .from('scoreboard_teams')
-        .select('id, show_id, name, scores, sort_order')
-        .eq('show_id', show.id)
-      if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); setOrderScoreError('Scoring failed — check connection and retry'); return }
-
-      const updates = computeOrderScoreUpdates({
-        answers, teams, scoreboardTeams,
-        roundKey: roundKeyFor(show, slide),
-        points: slide.data.pointsForOrder ?? DEFAULT_ORDER_POINTS,
-        correctOrder: slide.data.correctOrder ?? [],
-        slideId: slide.id,
-      })
-
-      // Same real-problem-vs-nothing-to-score distinction as Matching's own
-      // guard — answers exist but none could be attributed to the
-      // scoreboard means a name mismatch or an empty admin scoreboard, not
-      // "no one played."
-      if ((answers?.length ?? 0) > 0 && updates.length === 0) {
-        setOrderScoreError('No answers could be matched to the scoreboard — check team names match, then retry')
-        return
-      }
-
-      if (updates.length > 0) {
-        const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
-        if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setOrderScoreError('Scoring failed — check connection and retry'); return }
-      }
-
-      // Reveal is the host's A press, not part of this write — see
-      // handleLockAndScoreMatching's final write.
-      await actions.updateSlide(slide.id, { data: { ...slide.data, orderLocked: true, orderLockedAt: lockedAt } })
-    } finally {
-      setOrderBusy(false)
-    }
+    await lockAndScore({
+      slide,
+      lockField: 'orderLocked', lockedAtField: 'orderLockedAt',
+      lateLogLabel: 'order lock',
+      buildResults: ({ answers, teams, scoreboardTeams, roundKey, slideId }) => {
+        const updates = computeOrderScoreUpdates({
+          answers, teams, scoreboardTeams, roundKey,
+          points: slide.data.pointsForOrder ?? DEFAULT_ORDER_POINTS,
+          correctOrder: slide.data.correctOrder ?? [],
+          slideId,
+        })
+        return {
+          results: null,
+          updates,
+          unmatchedError: answers.length > 0 && updates.length === 0
+            ? 'No answers could be matched to the scoreboard — check team names match, then retry'
+            : null,
+        }
+      },
+      setBusy: setOrderBusy, setError: setOrderScoreError,
+    })
   }
 
   // ── Wager question: two locks, in order ────────────────────────────────
@@ -578,113 +622,43 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // fails, and the button stays available as "Retry Scoring" until the slide
   // is revealed, so a transient failure never strands the slide.
   async function handleLockAndScoreWagers(slide, { force = false } = {}) {
-    setWagerBusy(true)
-    setWagerError(null)
-    try {
-      if (parseWagerNumber(slide.data.answer) == null) {
-        setWagerError('This slide’s Answer isn’t a number — fix it in the slide editor, then score')
-        return
-      }
-      // Defensive: this handler only makes sense once handleLockWagers has
-      // actually written a tier snapshot. Reaching it without one (shouldn't
-      // happen now that the button dispatch above branches on wagerTiers
-      // presence rather than the lock flag — see that fix's comment for
-      // exactly the trap this closes) would score every team at the Safe
-      // default silently. Refuse instead.
-      if (slide.data.wagerTiers == null) {
-        setWagerError('Wagers were never locked — tap Lock Wagers first')
-        return
-      }
-      // See handleLockAndScoreMatching's identical lockedAt cutoff comment —
-      // persisted, not recomputed, because `force: true` above is a real
-      // retry path (the "yes, actually score everyone at 0" override), and a
-      // fresh timestamp on that retry would reopen the cutoff window.
-      let lockedAt = slide.data.wagerGuessesLockedAt
-      if (!slide.data.wagerGuessesLocked) {
-        lockedAt = new Date().toISOString()
-        // Same fake-await problem as the tier lock above — flush the real
-        // write and give phones a moment to actually receive the lock
-        // before reading what they submitted, instead of racing the read
-        // against a write that hadn't left the browser yet.
-        actions.updateSlide(slide.id, { data: { ...slide.data, wagerGuessesLocked: true, wagerGuessesLockedAt: lockedAt } })
-        await actions.flushSlides()
-        await new Promise(r => setTimeout(r, 700))
-      }
-
-      const { data: rawAnswers, error: fetchError } = await supabase
-        .from('phone_answers')
-        .select('team_id, answer, submitted_at')
-        .eq('slide_id', slide.id)
-      if (fetchError) { console.error('phone_answers fetch failed:', fetchError); setWagerError('Scoring failed — check connection and retry'); return }
-      const answers = rawAnswers?.filter(a => !a.submitted_at || a.submitted_at <= lockedAt) ?? []
-      const lateCount = (rawAnswers?.length ?? 0) - answers.length
-      if (lateCount > 0) console.warn(`[LiveMode] discarded ${lateCount} phone_answers row(s) submitted after wager-guess lock`)
-
-      const { data: teams, error: teamsError } = await supabase
-        .from('teams')
-        .select('id, name')
-        .eq('show_id', show.id)
-      if (teamsError) { console.error('teams fetch failed:', teamsError); setWagerError('Scoring failed — check connection and retry'); return }
-
-      const { data: scoreboardTeams, error: sbError } = await supabase
-        .from('scoreboard_teams')
-        .select('id, show_id, name, scores, sort_order')
-        .eq('show_id', show.id)
-      if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); setWagerError('Scoring failed — check connection and retry'); return }
-
-      // Unlike matching, entries here come from `teams`, not `answers` — every
-      // registered team gets scored regardless of whether the fetch above
-      // actually returned anything. That's correct for a team that genuinely
-      // never guessed (a real 0), but it means an EMPTY answers fetch (RLS
-      // hiccup, a Realtime/PostgREST blip, anything that returns
-      // success-with-no-rows) is indistinguishable from "nobody guessed" —
-      // every team silently scores 0 and the room gets a reveal where no one
-      // won, no error, no retry path. Refuse instead when teams exist but the
-      // fetch came back suspicious-empty; matching has an equivalent guard
-      // for its own empty-fetch shape (answers exist but can't be matched).
-      // `force` (2026-08-17, Ben) skips this ONE check — the UI only offers
-      // it after this exact error has already fired once, as a deliberate
-      // "yes, actually score everyone at 0" override, not a way to bypass
-      // any of the other refusals above.
-      if (!force && (answers?.length ?? 0) === 0 && (teams?.length ?? 0) > 0) {
-        setWagerError(WAGER_ZERO_ANSWERS_ERROR)
-        return
-      }
-
-      // Every registered team gets an entry, not just the ones that submitted
-      // — a team that never guessed is a real 0 that should be written to the
-      // scoreboard and shown in the reveal, not silently skipped.
-      const guessByTeam = new Map((answers ?? []).map(r => [r.team_id, r.answer?.guess]))
-      const tierSnapshot = slide.data.wagerTiers ?? {}
-      const entries = (teams ?? []).map(t => ({
-        teamId: t.id,
-        teamName: t.name,
-        tier: tierSnapshot[t.id] ?? DEFAULT_TIER_ID,
-        guess: guessByTeam.get(t.id),
-      }))
-
-      const results = scoreWagerRound({ entries, correctAnswer: slide.data.answer })
-      const updates = computeWagerScoreUpdates({ results, teams, scoreboardTeams, roundKey: roundKeyFor(show, slide), slideId: slide.id })
-
-      if (entries.length > 0 && updates.length === 0) {
-        setWagerError('No teams could be matched to the scoreboard — check team names match, then retry')
-        return
-      }
-
-      if (updates.length > 0) {
-        const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
-        if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setWagerError('Scoring failed — check connection and retry'); return }
-      }
-
-      await actions.updateSlide(slide.id, {
-        data: {
-          ...slide.data,
-          wagerGuessesLocked: true,
-          wagerGuessesLockedAt: lockedAt,
-          // No wagerRevealed here — the host's A press flips it (see
-          // handleLockAndScoreMatching's final write). wagerResults is still
-          // computed and stored NOW, at lock time; A only decides when the
-          // room gets to see it.
+    await lockAndScore({
+      slide, force,
+      lockField: 'wagerGuessesLocked', lockedAtField: 'wagerGuessesLockedAt',
+      resultsField: 'wagerResults',
+      lateLogLabel: 'wager-guess lock',
+      // Unlike matching, entries below come from `teams`, not `answers`, so an
+      // empty answers fetch would silently score the whole room at 0 with no
+      // error and no retry path — see WAGER_ZERO_ANSWERS_ERROR's comment.
+      zeroAnswersErrorMsg: WAGER_ZERO_ANSWERS_ERROR,
+      preCheck: s => {
+        if (parseWagerNumber(s.data.answer) == null) {
+          return 'This slide’s Answer isn’t a number — fix it in the slide editor, then score'
+        }
+        // Defensive: this handler only makes sense once handleLockWagers has
+        // actually written a tier snapshot. Reaching it without one (shouldn't
+        // happen now that the button dispatch below branches on wagerTiers
+        // presence rather than the lock flag — see that fix's comment for
+        // exactly the trap this closes) would score every team at the Safe
+        // default silently. Refuse instead.
+        if (s.data.wagerTiers == null) return 'Wagers were never locked — tap Lock Wagers first'
+        return null
+      },
+      buildResults: ({ answers, teams, scoreboardTeams, roundKey, slideId }) => {
+        // Every registered team gets an entry, not just the ones that
+        // submitted — a team that never guessed is a real 0 that should be
+        // written to the scoreboard and shown in the reveal, not skipped.
+        const guessByTeam = new Map((answers ?? []).map(r => [r.team_id, r.answer?.guess]))
+        const tierSnapshot = slide.data.wagerTiers ?? {}
+        const entries = (teams ?? []).map(t => ({
+          teamId: t.id,
+          teamName: t.name,
+          tier: tierSnapshot[t.id] ?? DEFAULT_TIER_ID,
+          guess: guessByTeam.get(t.id),
+        }))
+        const results = scoreWagerRound({ entries, correctAnswer: slide.data.answer })
+        const updates = computeWagerScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
+        return {
           // What the TV reveal renders, plus the phone-side result popup's
           // own lookup (Join.jsx). teamId IS included — unlike the original
           // "no team ids, no beatFraction, so the jsonb doesn't bloat" call,
@@ -692,14 +666,17 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           // it two teams whose names normalize identically would show EACH
           // OTHER's win/lose result on the popup (same ambiguity class as
           // the scoring fold-in's name matching, just now user-visible).
-          wagerResults: results.map(r => ({
+          results: results.map(r => ({
             teamId: r.teamId, teamName: r.teamName, guess: r.guess, tier: r.tier, points: r.points, won: r.won,
           })),
-        },
-      })
-    } finally {
-      setWagerBusy(false)
-    }
+          updates,
+          unmatchedError: entries.length > 0 && updates.length === 0
+            ? 'No teams could be matched to the scoreboard — check team names match, then retry'
+            : null,
+        }
+      },
+      setBusy: setWagerBusy, setError: setWagerError,
+    })
   }
 
   // Bendle: ONE lock, not Wager's two — there's no blind pre-question phase to
@@ -708,9 +685,14 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // fold in, stash results) with Bendle's field names, and the same reveal
   // split: no bendleRevealed here, the host's A press flips it.
   async function handleLockAndScoreBendle(slide, { force = false } = {}) {
-    setBendleBusy(true)
-    setBendleError(null)
-    try {
+    await lockAndScore({
+      slide, force,
+      lockField: 'bendleGuessesLocked', lockedAtField: 'bendleGuessesLockedAt',
+      resultsField: 'bendleResults',
+      lateLogLabel: 'bendle lock',
+      // Same refusal (and same one-shot `force` override) as Wager's — see
+      // BENDLE_ZERO_ANSWERS_ERROR's comment at the top of this file.
+      zeroAnswersErrorMsg: BENDLE_ZERO_ANSWERS_ERROR,
       // Same class of refusal as Wager's parseWagerNumber guard: without a
       // song there is no answer to match against, and scoreBendleRound would
       // happily mark every guess wrong and write a room-wide 0 to the
@@ -719,102 +701,52 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       // slide built through the wizard — kept as a defensive fallback for a
       // hand-edited slide, since SlideEditor has no bendle-song-picker control
       // to send the host to.
-      if (!slide.data.bendleSongId) {
-        setBendleError('This slide has no song attached — this shouldn’t be possible. Delete and recreate the slide.')
-        return
-      }
-      // See handleLockAndScoreMatching's identical lockedAt cutoff comment —
-      // persisted in slide.data, NOT recomputed, because both "🔁 Retry
-      // Scoring" and the `force: true` override re-enter here, and a fresh
-      // timestamp on either would reopen the very window this closes.
-      let lockedAt = slide.data.bendleGuessesLockedAt
-      if (!slide.data.bendleGuessesLocked) {
-        lockedAt = new Date().toISOString()
-        // updateSlide is debounced, not awaited — flush the real write and
-        // give Realtime a moment to deliver the lock to the phones before
-        // reading what they submitted (same race the other locks document).
-        actions.updateSlide(slide.id, { data: { ...slide.data, bendleGuessesLocked: true, bendleGuessesLockedAt: lockedAt } })
-        await actions.flushSlides()
-        await new Promise(r => setTimeout(r, 700))
-      }
-
-      const { data: rawAnswers, error: fetchError } = await supabase
-        .from('phone_answers')
-        .select('team_id, answer, submitted_at')
-        .eq('slide_id', slide.id)
-      if (fetchError) { console.error('phone_answers fetch failed:', fetchError); setBendleError('Scoring failed — check connection and retry'); return }
-      const answers = rawAnswers?.filter(a => !a.submitted_at || a.submitted_at <= lockedAt) ?? []
-      const lateCount = (rawAnswers?.length ?? 0) - answers.length
-      if (lateCount > 0) console.warn(`[LiveMode] discarded ${lateCount} phone_answers row(s) submitted after bendle lock`)
-
-      const { data: teams, error: teamsError } = await supabase
-        .from('teams')
-        .select('id, name')
-        .eq('show_id', show.id)
-      if (teamsError) { console.error('teams fetch failed:', teamsError); setBendleError('Scoring failed — check connection and retry'); return }
-
-      const { data: scoreboardTeams, error: sbError } = await supabase
-        .from('scoreboard_teams')
-        .select('id, show_id, name, scores, sort_order')
-        .eq('show_id', show.id)
-      if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); setBendleError('Scoring failed — check connection and retry'); return }
-
-      // Same refusal (and same one-shot `force` override) as Wager's — see
-      // BENDLE_ZERO_ANSWERS_ERROR's comment at the top of this file.
-      if (!force && (answers?.length ?? 0) === 0 && (teams?.length ?? 0) > 0) {
-        setBendleError(BENDLE_ZERO_ANSWERS_ERROR)
-        return
-      }
-
+      preCheck: s => s.data.bendleSongId
+        ? null
+        : 'This slide has no song attached — this shouldn’t be possible. Delete and recreate the slide.',
       // Aliases live on the song row, not the slide, so the match has to read
       // the row rather than slide.data.answer (which is only the canonical
       // title the wizard copied in at build time).
-      const { data: song, error: songError } = await supabase
-        .from('bendle_songs')
-        .select('answer, aliases')
-        .eq('id', slide.data.bendleSongId)
-        .single()
-      if (songError || !song) { console.error('bendle_songs fetch failed:', songError); setBendleError('Couldn’t read the song — check connection and retry'); return }
-
-      // Every registered team gets an entry, not just the ones that submitted
-      // — a team that never guessed is a real 0 that belongs on the scoreboard
-      // and in the reveal, not silently skipped (same as Wager).
-      const answerByTeam = new Map((answers ?? []).map(r => [r.team_id, r.answer]))
-      const entries = (teams ?? []).map(t => {
-        const a = answerByTeam.get(t.id)
-        return { teamId: t.id, teamName: t.name, guess: a?.guess ?? null, elapsedSeconds: a?.elapsedSeconds ?? null }
-      })
-
-      const results = scoreBendleRound({ entries, song })
-      const updates = computeBendleScoreUpdates({ results, teams, scoreboardTeams, roundKey: roundKeyFor(show, slide), slideId: slide.id })
-
-      if (entries.length > 0 && updates.length === 0) {
-        setBendleError('No teams could be matched to the scoreboard — check team names match, then retry')
-        return
-      }
-
-      if (updates.length > 0) {
-        const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
-        if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setBendleError('Scoring failed — check connection and retry'); return }
-      }
-
-      await actions.updateSlide(slide.id, {
-        data: {
-          ...slide.data,
-          bendleGuessesLocked: true,
-          bendleGuessesLockedAt: lockedAt,
+      loadExtra: async s => {
+        const { data: song, error: songError } = await supabase
+          .from('bendle_songs')
+          .select('answer, aliases')
+          .eq('id', s.data.bendleSongId)
+          .single()
+        if (songError || !song) {
+          console.error('bendle_songs fetch failed:', songError)
+          setBendleError('Couldn’t read the song — check connection and retry')
+          return undefined
+        }
+        return song
+      },
+      buildResults: ({ answers, teams, scoreboardTeams, roundKey, slideId, extra: song }) => {
+        // Every registered team gets an entry, not just the ones that
+        // submitted — a team that never guessed is a real 0 that belongs on
+        // the scoreboard and in the reveal, not skipped (same as Wager).
+        const answerByTeam = new Map((answers ?? []).map(r => [r.team_id, r.answer]))
+        const entries = (teams ?? []).map(t => {
+          const a = answerByTeam.get(t.id)
+          return { teamId: t.id, teamName: t.name, guess: a?.guess ?? null, elapsedSeconds: a?.elapsedSeconds ?? null }
+        })
+        const results = scoreBendleRound({ entries, song })
+        const updates = computeBendleScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
+        return {
           // Exactly what ShinyBendleQuestion's reveal and BendleBoard's phone
           // popup read — teamId included for the same reason wagerResults
           // carries one (two teams whose names normalize alike would otherwise
           // show each other's result on the phone).
-          bendleResults: results.map(r => ({
+          results: results.map(r => ({
             teamId: r.teamId, teamName: r.teamName, guess: r.guess, correct: r.correct, tierId: r.tierId, points: r.points,
           })),
-        },
-      })
-    } finally {
-      setBendleBusy(false)
-    }
+          updates,
+          unmatchedError: entries.length > 0 && updates.length === 0
+            ? 'No teams could be matched to the scoreboard — check team names match, then retry'
+            : null,
+        }
+      },
+      setBusy: setBendleBusy, setError: setBendleError,
+    })
   }
 
   // Holds the setTimeout id for the ArrowRight reveal-then-advance sequence
@@ -1348,10 +1280,10 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           {onOpenScoreboard && (
             <button
               onClick={onOpenScoreboard}
-              disabled={wagerActionShowing}
-              title={wagerActionShowing ? 'Lock/score the wager first — the scoreboard covers that button' : undefined}
+              disabled={phoneActionShowing}
+              title={phoneActionShowing ? 'Lock/score this question first — the scoreboard covers that button' : undefined}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ml-1 ${
-                wagerActionShowing
+                phoneActionShowing
                   ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
@@ -1381,142 +1313,108 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         <div className="flex flex-col gap-3" style={{ flex: '0 0 60%' }}>
           <CurrentSlideCard slide={currentSlide} show={show} />
 
-          {/* `|| matchingScoreError` (2026-08-25): reveal is no longer bundled
-              into scoring, so the host can press A on a slide whose scoring
-              actually failed — without this the panel (and its only Retry
-              Scoring button) would vanish the moment he did, stranding the
-              slide exactly the way this button's own comment exists to
-              prevent. Same clause on the Order and Wager panels below. */}
-          {currentSlide?.type === 'question' && isMatchingShiny(currentSlide?.data) && (!currentSlide?.data?.matchingRevealed || matchingScoreError) && (
-            <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
-              <p className="text-xs text-gray-400 mb-3">
-                {currentSlide?.data?.matchingLocked
-                  ? 'Answers locked and scored — press A to reveal them on the TV.'
-                  : 'Matching question — teams are submitting on their phones'}
-              </p>
-              <button
-                onClick={() => handleLockAndScoreMatching(currentSlide)}
-                disabled={matchingBusy}
-                className={`w-full py-3 rounded-xl border-2 font-semibold text-sm transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
-                  matchingBusy
-                    ? 'border-gray-100 text-gray-300 cursor-not-allowed'
-                    : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'
-                }`}
-              >
-                {matchingBusy ? 'Scoring…' : currentSlide?.data?.matchingLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score'}
-              </button>
-              {matchingScoreError && (
-                <p className="text-xs text-red-600 mt-2 text-center">{matchingScoreError}</p>
-              )}
-            </div>
-          )}
+          {/* One lock/score panel for all four phone mechanics — the four
+              hand-copied cards this replaces were the same card, the same
+              button and the same error line, differing only in copy and which
+              handler/state pair they read.
 
-          {currentSlide?.type === 'question' && isOrderShiny(currentSlide?.data) && (!currentSlide?.data?.orderRevealed || orderScoreError) && (
-            <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
-              <p className="text-xs text-gray-400 mb-3">
-                {currentSlide?.data?.orderLocked
+              Shown while `!revealed || error` (2026-08-25): reveal is no
+              longer bundled into scoring, so the host can press A on a slide
+              whose scoring actually failed — without the `|| error` half the
+              panel (and its only Retry Scoring button) vanishes the moment he
+              does, stranding the slide exactly the way the Retry button exists
+              to prevent. */}
+          {(() => {
+            if (!phoneMechanic) return null
+            const d = currentSlide.data ?? {}
+            const panel = {
+              matching: {
+                busy: matchingBusy, error: matchingScoreError, zeroErr: null,
+                status: d.matchingLocked
                   ? 'Answers locked and scored — press A to reveal them on the TV.'
-                  : 'Order Up question — teams are submitting on their phones'}
-              </p>
-              <button
-                onClick={() => handleLockAndScoreOrder(currentSlide)}
-                disabled={orderBusy}
-                className={`w-full py-3 rounded-xl border-2 font-semibold text-sm transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
-                  orderBusy
-                    ? 'border-gray-100 text-gray-300 cursor-not-allowed'
-                    : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'
-                }`}
-              >
-                {orderBusy ? 'Scoring…' : currentSlide?.data?.orderLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score'}
-              </button>
-              {orderScoreError && (
-                <p className="text-xs text-red-600 mt-2 text-center">{orderScoreError}</p>
-              )}
-            </div>
-          )}
-
-          {currentSlide?.type === 'question' && isWagerShiny(currentSlide?.data) && (!currentSlide?.data?.wagerRevealed || wagerError) && (
-            <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
-              <p className="text-xs text-gray-400 mb-3">
-                {currentSlide?.data?.wagerTiers == null
+                  : 'Matching question — teams are submitting on their phones',
+                label: matchingBusy ? 'Scoring…' : d.matchingLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score',
+                act: () => handleLockAndScoreMatching(currentSlide),
+              },
+              order: {
+                busy: orderBusy, error: orderScoreError, zeroErr: null,
+                status: d.orderLocked
+                  ? 'Answers locked and scored — press A to reveal them on the TV.'
+                  : 'Order Up question — teams are submitting on their phones',
+                label: orderBusy ? 'Scoring…' : d.orderLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score',
+                act: () => handleLockAndScoreOrder(currentSlide),
+              },
+              // Wager is the one two-phase mechanic: before a tier snapshot
+              // exists the button runs handleLockWagers (tiers only, no
+              // scoring), after it the shared lock-and-score path. Branching
+              // on wagerTiers presence rather than the lock flag is deliberate
+              // — see handleLockAndScoreWagers' preCheck.
+              wager: {
+                busy: wagerBusy, error: wagerError, zeroErr: WAGER_ZERO_ANSWERS_ERROR,
+                status: d.wagerTiers == null
                   ? 'Wager question — teams are picking a risk tier. The question is hidden everywhere until you lock.'
-                  : currentSlide?.data?.wagerGuessesLocked
+                  : d.wagerGuessesLocked
                     ? 'Guesses locked and scored — press A to reveal the answer on the TV.'
-                    : 'Wagers locked — the question is up and teams are entering numbers.'}
-              </p>
-              <button
-                onClick={() => (currentSlide?.data?.wagerTiers != null
-                  ? handleLockAndScoreWagers(currentSlide)
-                  : handleLockWagers(currentSlide))}
-                disabled={wagerBusy}
-                className={`w-full py-3 rounded-xl border-2 font-semibold text-sm transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
-                  wagerBusy
-                    ? 'border-gray-100 text-gray-300 cursor-not-allowed'
-                    : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'
-                }`}
-              >
-                {wagerBusy
+                    : 'Wagers locked — the question is up and teams are entering numbers.',
+                label: wagerBusy
                   ? 'Working…'
-                  : currentSlide?.data?.wagerTiers == null
+                  : d.wagerTiers == null
                     ? '🎲 Lock Wagers & Reveal Question'
-                    : currentSlide?.data?.wagerGuessesLocked
+                    : d.wagerGuessesLocked
                       ? '🔁 Retry Scoring'
-                      : '🔒 Lock Answers & Score'}
-              </button>
-              {wagerError && (
-                <p className="text-xs text-red-600 mt-2 text-center">{wagerError}</p>
-              )}
-              {/* Manual override — ONLY for the empty-answers refusal, and
-                  only after it's actually fired once. Retry alone can't get
-                  past this if it's a genuine zero-submission round (small
-                  crowd, phones failed) rather than a transient fetch blip —
-                  before this existed, Retry just hit the same wall forever. */}
-              {wagerError === WAGER_ZERO_ANSWERS_ERROR && (
-                <button
-                  onClick={() => handleLockAndScoreWagers(currentSlide, { force: true })}
-                  disabled={wagerBusy}
-                  className="w-full mt-2 py-2 rounded-lg border border-amber-300 text-amber-700 text-xs font-semibold hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Score anyway — 0 for every team
-                </button>
-              )}
-            </div>
-          )}
-
-          {currentSlide?.type === 'question' && isBendleShiny(currentSlide?.data) && (!currentSlide?.data?.bendleRevealed || bendleError) && (
-            <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
-              <p className="text-xs text-gray-400 mb-3">
-                {currentSlide?.data?.bendleGuessesLocked
+                      : '🔒 Lock Answers & Score',
+                act: () => (d.wagerTiers != null
+                  ? handleLockAndScoreWagers(currentSlide)
+                  : handleLockWagers(currentSlide)),
+                force: () => handleLockAndScoreWagers(currentSlide, { force: true }),
+              },
+              bendle: {
+                busy: bendleBusy, error: bendleError, zeroErr: BENDLE_ZERO_ANSWERS_ERROR,
+                status: d.bendleGuessesLocked
                   ? 'Guesses locked and scored — press A to reveal the song on the TV.'
-                  : 'Bendle is playing — teams are guessing as the layers come in.'}
-              </p>
-              <button
-                onClick={() => handleLockAndScoreBendle(currentSlide)}
-                disabled={bendleBusy}
-                className={`w-full py-3 rounded-xl border-2 font-semibold text-sm transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
-                  bendleBusy
-                    ? 'border-gray-100 text-gray-300 cursor-not-allowed'
-                    : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'
-                }`}
-              >
-                {bendleBusy ? 'Working…' : currentSlide?.data?.bendleGuessesLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score'}
-              </button>
-              {bendleError && (
-                <p className="text-xs text-red-600 mt-2 text-center">{bendleError}</p>
-              )}
-              {/* Same one-shot override as the Wager panel above, offered only
-                  after the empty-guesses refusal has actually fired. */}
-              {bendleError === BENDLE_ZERO_ANSWERS_ERROR && (
+                  : 'Bendle is playing — teams are guessing as the layers come in.',
+                label: bendleBusy ? 'Working…' : d.bendleGuessesLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score',
+                act: () => handleLockAndScoreBendle(currentSlide),
+                force: () => handleLockAndScoreBendle(currentSlide, { force: true }),
+              },
+            }[phoneMechanic]
+            if (d[REVEAL_FIELD[phoneMechanic]] && !panel.error) return null
+            return (
+              <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
+                <p className="text-xs text-gray-400 mb-3">{panel.status}</p>
                 <button
-                  onClick={() => handleLockAndScoreBendle(currentSlide, { force: true })}
-                  disabled={bendleBusy}
-                  className="w-full mt-2 py-2 rounded-lg border border-amber-300 text-amber-700 text-xs font-semibold hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={panel.act}
+                  disabled={panel.busy}
+                  className={`w-full py-3 rounded-xl border-2 font-semibold text-sm transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
+                    panel.busy
+                      ? 'border-gray-100 text-gray-300 cursor-not-allowed'
+                      : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'
+                  }`}
                 >
-                  Score anyway — 0 for every team
+                  {panel.label}
                 </button>
-              )}
-            </div>
-          )}
+                {panel.error && (
+                  <p className="text-xs text-red-600 mt-2 text-center">{panel.error}</p>
+                )}
+                {/* Manual override — ONLY for the empty-answers refusal, only
+                    on the two mechanics that HAVE one (wager/bendle score from
+                    `teams`, so an empty fetch is ambiguous), and only after it
+                    has actually fired once. Retry alone can't get past it if
+                    it's a genuine zero-submission round (small crowd, phones
+                    failed) rather than a transient fetch blip — before this
+                    existed, Retry just hit the same wall forever. */}
+                {panel.zeroErr && panel.error === panel.zeroErr && (
+                  <button
+                    onClick={panel.force}
+                    disabled={panel.busy}
+                    className="w-full mt-2 py-2 rounded-lg border border-amber-300 text-amber-700 text-xs font-semibold hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Score anyway — 0 for every team
+                  </button>
+                )}
+              </div>
+            )
+          })()}
 
           {currentSlide?.type === 'question' && currentSlide?.data?.shinyType === 'visual' && (
             <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
