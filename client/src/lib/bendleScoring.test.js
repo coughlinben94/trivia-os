@@ -58,7 +58,26 @@ describe('scoreBendleRound', () => {
       entries: [{ teamId: 't1', teamName: 'Alpha', guess: 'Hey Jude', elapsedSeconds: 5 }],
       song,
     })
-    expect(results[0]).toMatchObject({ teamId: 't1', correct: true, tierId: 'drums', points: 40 })
+    expect(results[0]).toMatchObject({ teamId: 't1', correct: true, tierId: 'drums', points: tiers[0].points })
+  })
+
+  // The ladder's reason for existing: guessing on the thinnest mix has to be
+  // the better play, or the format just trains everyone to wait for vocals.
+  // A wrong guess costs nothing, so the ONLY pressure is the size of the drop
+  // — an even step would make waiting correct for any team whose confidence
+  // rises more than the points fall (0.6 x 40 = 24 loses to 0.85 x 30 = 25.5).
+  //
+  // The drums-only cliff is the one that has to be steep: that's where the
+  // real decision lives, and by the later rungs the room has heard most of the
+  // song and is near-certain anyway. So this asserts a hard halving on rung
+  // 1 -> 2 and only monotonic decline after, which keeps the scoreboard on
+  // round numbers instead of forcing 30/16/8/4. Ratios, not values, so a
+  // retune stays free but can't quietly flatten the incentive.
+  it('drops steeply off drums-only so guessing early beats waiting', () => {
+    expect(tiers[1].points).toBeLessThanOrEqual(tiers[0].points * 0.6)
+    for (let i = 1; i < tiers.length; i++) {
+      expect(tiers[i].points).toBeLessThan(tiers[i - 1].points)
+    }
   })
 
   it('awards fewer points to a correct later guess', () => {
@@ -66,7 +85,7 @@ describe('scoreBendleRound', () => {
       entries: [{ teamId: 't1', teamName: 'Alpha', guess: 'Hey Jude', elapsedSeconds: 45 }],
       song,
     })
-    expect(results[0]).toMatchObject({ tierId: 'other', points: 20 })
+    expect(results[0]).toMatchObject({ tierId: 'other', points: tiers[2].points })
   })
 
   it('awards zero points to a wrong guess regardless of timing', () => {

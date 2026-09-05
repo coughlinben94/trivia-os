@@ -4,11 +4,26 @@ import { normalizeRoundScore } from './scoreboardMath.js'
 // more. Not exposed for per-slide editing in this build (mirrors WAGER_TIERS
 // being fixed, not configurable) — a follow-up if the defaults don't hold up
 // live. See docs/superpowers/specs/2026-09-04-bendle-layered-audio-question-design.md.
+//
+// The ladder ROUGHLY HALVES rather than stepping down evenly, and that's the
+// whole mechanic (2026-09-05, Ben: "i want them to guess earlier, ie less
+// instruments ... so theyd get rewarded for doing so"). An even -10 step
+// actually rewards WAITING: a wrong guess costs nothing, so a team 60% sure on
+// drums-only compares 0.6 x 40 = 24 against waiting one layer for 0.85 x 30 =
+// 25.5 and correctly sits on its hands. Halving flips that (0.6 x 30 = 18 vs
+// 0.85 x 15 = 12.75), so committing on the thinnest mix is the right play.
+// Keep the cliff between rung 1 and rung 2 steep if these get retuned — the
+// gap is what does the work, not the absolute numbers.
+//
+// Four entries because there are four stems: ShinyBendleQuestion fades each
+// one in at its tier's atSeconds and derives round length from the last, so
+// dropping a tier silently drops a layer from playback. Retune `points`
+// freely; change the COUNT only alongside that scheduling.
 export const BENDLE_TIERS = [
-  { id: 'drums',  label: 'Drums Only',        atSeconds: 0,  points: 40 },
-  { id: 'bass',   label: '+ Bass',            atSeconds: 20, points: 30 },
-  { id: 'other',  label: '+ Everything Else', atSeconds: 40, points: 20 },
-  { id: 'vocals', label: '+ Vocals',          atSeconds: 60, points: 10 },
+  { id: 'drums',  label: 'Drums Only',        atSeconds: 0,  points: 30 },
+  { id: 'bass',   label: '+ Bass',            atSeconds: 20, points: 15 },
+  { id: 'other',  label: '+ Everything Else', atSeconds: 40, points: 10 },
+  { id: 'vocals', label: '+ Vocals',          atSeconds: 60, points: 5  },
 ]
 
 function normalize(s) {
