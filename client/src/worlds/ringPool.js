@@ -11,27 +11,17 @@
 // provisional pending Ben's TV sign-off) is separate art-project work — see
 // that doc's §9 build-order step 1. This plan does not depend on it and
 // does not pre-empt it.
-import {
-  RINGED_PLANET_HUE, SPIRAL_GALAXY_HUE, STAR_CLUSTER_HUE, AMBER_PLANET_HUE, LIT_PLANET_HUE,
-  PULSAR_HUE, ROSE_NEBULA_HUE, COMET_HUE, BINARY_PAIR_HUE, ASTEROID_FIELD_HUE, RECORD_HUE,
-  AURORA_RIBBON_HUE, SUPERNOVA_HUE,
-  midnightGalaxyRing,
-} from './midnightGalaxy.ring.js'
+import { midnightGalaxyRing } from './midnightGalaxy.ring.js'
 import { SLOTS } from './midnightGalaxy.slots.js'
 
-// Hue constants in the same order as the stations, to preserve explicit constant
-// references for the test's drift-detection. Key, prim, and accent come from the
-// stations array; family comes from SLOTS. This eliminates hand-typed literals.
-const HUE_CONSTANTS = [
-  RINGED_PLANET_HUE, SPIRAL_GALAXY_HUE, STAR_CLUSTER_HUE, AMBER_PLANET_HUE, LIT_PLANET_HUE,
-  PULSAR_HUE, ROSE_NEBULA_HUE, COMET_HUE, BINARY_PAIR_HUE, ASTEROID_FIELD_HUE, RECORD_HUE,
-  AURORA_RIBBON_HUE, SUPERNOVA_HUE,
-]
-
+// Key, prim, hue, and accent come straight from the stations array; family
+// comes from SLOTS. Reading hue off the station (rather than a separate,
+// position-matched constants array) means a reshuffle of stations can't
+// silently pair the wrong hue to the wrong station.
 export const RING_POOL = midnightGalaxyRing.stations.map((station, i) => ({
   key: station.key,
   prim: station.prim,
-  hue: HUE_CONSTANTS[i],
+  hue: station.hue,
   accent: station.accent,
   family: SLOTS[i].family,
 }))

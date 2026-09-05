@@ -87,6 +87,17 @@ describe('drawStations', () => {
     expect(() => drawStations(noRecord, { seed: 1, slots: 12 })).toThrow(/pinKey "record" not found/)
   })
 
+  it('throws if seed is missing', () => {
+    expect(() => drawStations(RING_POOL, { slots: 12 })).toThrow(/seed is required/)
+    expect(() => drawStations(RING_POOL, { seed: null, slots: 12 })).toThrow(/seed is required/)
+  })
+
+  it('throws if pinAt is out of range or non-integer', () => {
+    expect(() => drawStations(RING_POOL, { seed: 1, slots: 12, pinAt: 12 })).toThrow(/pinAt \(12\) must be an integer in \[0, 12\)/)
+    expect(() => drawStations(RING_POOL, { seed: 1, slots: 12, pinAt: -1 })).toThrow(/pinAt \(-1\)/)
+    expect(() => drawStations(RING_POOL, { seed: 1, slots: 12, pinAt: 1.5 })).toThrow(/pinAt \(1.5\)/)
+  })
+
   const SYNTHETIC_POOL = [
     { key: 'p1', prim: 'ring', hue: 10, accent: false, family: 'radial-mass' },
     { key: 'p2', prim: 'planet', hue: 40, accent: false, family: 'radial-mass' },
@@ -119,6 +130,31 @@ describe('drawStations', () => {
     // just that both are independently valid — the real claim under test.
     expect(assertRing(r1, { slots: 8 })).toBe(true)
     expect(assertRing(r2, { slots: 8 })).toBe(true)
+  })
+
+  it('retries past a greedy dead end instead of falsely reporting the pool as too narrow', () => {
+    // This exact pool+seed was found by brute-force search specifically
+    // because a single, non-retried greedy attempt gets stuck at 7 of 8
+    // chosen (an unlucky pick order burns the caps early) even though a
+    // valid 8-of-9 selection exists — verified by re-running the pre-fix
+    // single-attempt algorithm against this pool/seed offline. With the
+    // bounded-retry loop, drawStations must succeed instead of throwing.
+    const pool = [
+      { key: 'p0', prim: 'p_pin', hue: 0, accent: false, family: 'fam_pin' },
+      { key: 'x0', prim: 'pr2', hue: 0, accent: false, family: 'fam2' },
+      { key: 'x1', prim: 'pr0', hue: 1, accent: false, family: 'fam3' },
+      { key: 'x2', prim: 'pr2', hue: 2, accent: true, family: 'fam0' },
+      { key: 'x3', prim: 'pr0', hue: 3, accent: false, family: 'fam2' },
+      { key: 'x4', prim: 'pr0', hue: 4, accent: true, family: 'fam1' },
+      { key: 'x5', prim: 'pr1', hue: 5, accent: false, family: 'fam1' },
+      { key: 'x6', prim: 'pr1', hue: 6, accent: true, family: 'fam4' },
+      { key: 'x7', prim: 'pr2', hue: 7, accent: true, family: 'fam1' },
+    ]
+    const result = drawStations(pool, { seed: 0, slots: 8, pinKey: 'p0', pinAt: 0 })
+    expect(result).toHaveLength(8)
+    expect(assertRing(result, { slots: 8 })).toBe(true)
+    // Deterministic: same seed always retries the same way to the same result.
+    expect(drawStations(pool, { seed: 0, slots: 8, pinKey: 'p0', pinAt: 0 })).toEqual(result)
   })
 
   it('string seeds no longer collapse to 0 — different strings hash differently', () => {
