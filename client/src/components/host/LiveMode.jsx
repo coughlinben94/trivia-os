@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
-import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isAudioShiny } from '../../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isAudioShiny, isBendleShiny } from '../../lib/shinySeries.js'
 import ScorePanel from './ScorePanel.jsx'
 import LateTeamPopover from './LateTeamPopover.jsx'
 import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
@@ -10,6 +10,7 @@ import { deriveRoundCols, computeTotal, pickableTeams } from '../../lib/scoreboa
 import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
+import { scoreBendleRound, computeBendleScoreUpdates } from '../../lib/bendleScoring.js'
 import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
@@ -22,6 +23,14 @@ import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, R
 // 2026-08-17: "idk why that keeps popping up ... something different" —
 // found while investigating: this is the one message with no path forward).
 const WAGER_ZERO_ANSWERS_ERROR = 'No wager answers came back — check connection and retry before scoring'
+
+// Bendle's equivalent of the refusal above, and for the identical reason: an
+// empty phone_answers fetch is indistinguishable from a genuine
+// nobody-guessed round, and Bendle scores from `teams` (not `answers`), so
+// without this every team would silently take a real 0 with no retry path.
+// Module-level, not inline in the handler, because the JSX below compares
+// against it to decide whether to offer the manual override.
+const BENDLE_ZERO_ANSWERS_ERROR = 'No guesses came back — check connection and retry before scoring'
 
 // PYL "Pick animation" tiles — same visual language as BuildMode's CARD_STYLE
 // (soft gradient + colored border that brightens on hover) but keyed by
@@ -239,6 +248,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [wagerError, setWagerError] = useState(null)
   const [orderBusy, setOrderBusy] = useState(false)
   const [orderScoreError, setOrderScoreError] = useState(null)
+  const [bendleBusy, setBendleBusy] = useState(false)
+  const [bendleError, setBendleError] = useState(null)
 
   // scoringBusy + the 12s cap below (2026-08-31, Opus second-opinion review
   // of the maybeStartLockCountdown fix): the fix that blocks Next during
@@ -249,7 +260,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // a real scoring round (three SELECTs + one upsert, normally 1-2s); past
   // that the host gets Next back and any real failure is already showing
   // its error on-screen via the Retry Scoring button.
-  const scoringBusy = matchingBusy || orderBusy || wagerBusy
+  const scoringBusy = matchingBusy || orderBusy || wagerBusy || bendleBusy
   const scoringSinceRef = useRef(0)
   useEffect(() => { scoringSinceRef.current = scoringBusy ? Date.now() : 0 }, [scoringBusy])
 
@@ -271,6 +282,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     setWagerError(null)
     setMatchingScoreError(null)
     setOrderScoreError(null)
+    setBendleError(null)
   }, [currentSlide?.id])
   // Jump-to-QR — a late team scans in mid-show. Only shown if the show
   // actually has a Pre-Show slide; jumps the TV there without touching the
@@ -690,6 +702,118 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     }
   }
 
+  // Bendle: ONE lock, not Wager's two — there's no blind pre-question phase to
+  // snapshot, the layers just play and teams guess against a running clock. So
+  // this is exactly handleLockAndScoreWagers' second half (lock, read, score,
+  // fold in, stash results) with Bendle's field names, and the same reveal
+  // split: no bendleRevealed here, the host's A press flips it.
+  async function handleLockAndScoreBendle(slide, { force = false } = {}) {
+    setBendleBusy(true)
+    setBendleError(null)
+    try {
+      // Same class of refusal as Wager's parseWagerNumber guard: without a
+      // song there is no answer to match against, and scoreBendleRound would
+      // happily mark every guess wrong and write a room-wide 0 to the
+      // scoreboard. A slide built by the wizard always has one; a hand-edited
+      // or half-built slide might not.
+      if (!slide.data.bendleSongId) {
+        setBendleError('This slide has no song attached — pick one in the slide editor, then score')
+        return
+      }
+      // See handleLockAndScoreMatching's identical lockedAt cutoff comment —
+      // persisted in slide.data, NOT recomputed, because both "🔁 Retry
+      // Scoring" and the `force: true` override re-enter here, and a fresh
+      // timestamp on either would reopen the very window this closes.
+      let lockedAt = slide.data.bendleGuessesLockedAt
+      if (!slide.data.bendleGuessesLocked) {
+        lockedAt = new Date().toISOString()
+        // updateSlide is debounced, not awaited — flush the real write and
+        // give Realtime a moment to deliver the lock to the phones before
+        // reading what they submitted (same race the other locks document).
+        actions.updateSlide(slide.id, { data: { ...slide.data, bendleGuessesLocked: true, bendleGuessesLockedAt: lockedAt } })
+        await actions.flushSlides()
+        await new Promise(r => setTimeout(r, 700))
+      }
+
+      const { data: rawAnswers, error: fetchError } = await supabase
+        .from('phone_answers')
+        .select('team_id, answer, submitted_at')
+        .eq('slide_id', slide.id)
+      if (fetchError) { console.error('phone_answers fetch failed:', fetchError); setBendleError('Scoring failed — check connection and retry'); return }
+      const answers = rawAnswers?.filter(a => !a.submitted_at || a.submitted_at <= lockedAt) ?? []
+      const lateCount = (rawAnswers?.length ?? 0) - answers.length
+      if (lateCount > 0) console.warn(`[LiveMode] discarded ${lateCount} phone_answers row(s) submitted after bendle lock`)
+
+      const { data: teams, error: teamsError } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('show_id', show.id)
+      if (teamsError) { console.error('teams fetch failed:', teamsError); setBendleError('Scoring failed — check connection and retry'); return }
+
+      const { data: scoreboardTeams, error: sbError } = await supabase
+        .from('scoreboard_teams')
+        .select('id, show_id, name, scores, sort_order')
+        .eq('show_id', show.id)
+      if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); setBendleError('Scoring failed — check connection and retry'); return }
+
+      // Same refusal (and same one-shot `force` override) as Wager's — see
+      // BENDLE_ZERO_ANSWERS_ERROR's comment at the top of this file.
+      if (!force && (answers?.length ?? 0) === 0 && (teams?.length ?? 0) > 0) {
+        setBendleError(BENDLE_ZERO_ANSWERS_ERROR)
+        return
+      }
+
+      // Aliases live on the song row, not the slide, so the match has to read
+      // the row rather than slide.data.answer (which is only the canonical
+      // title the wizard copied in at build time).
+      const { data: song, error: songError } = await supabase
+        .from('bendle_songs')
+        .select('answer, aliases')
+        .eq('id', slide.data.bendleSongId)
+        .single()
+      if (songError || !song) { console.error('bendle_songs fetch failed:', songError); setBendleError('Couldn’t read the song — check connection and retry'); return }
+
+      // Every registered team gets an entry, not just the ones that submitted
+      // — a team that never guessed is a real 0 that belongs on the scoreboard
+      // and in the reveal, not silently skipped (same as Wager).
+      const answerByTeam = new Map((answers ?? []).map(r => [r.team_id, r.answer]))
+      const entries = (teams ?? []).map(t => {
+        const a = answerByTeam.get(t.id)
+        return { teamId: t.id, teamName: t.name, guess: a?.guess ?? null, elapsedSeconds: a?.elapsedSeconds ?? null }
+      })
+
+      const results = scoreBendleRound({ entries, song })
+      const updates = computeBendleScoreUpdates({ results, teams, scoreboardTeams, roundKey: roundKeyFor(show, slide), slideId: slide.id })
+
+      if (entries.length > 0 && updates.length === 0) {
+        setBendleError('No teams could be matched to the scoreboard — check team names match, then retry')
+        return
+      }
+
+      if (updates.length > 0) {
+        const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
+        if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setBendleError('Scoring failed — check connection and retry'); return }
+      }
+
+      await actions.updateSlide(slide.id, {
+        data: {
+          ...slide.data,
+          bendleGuessesLocked: true,
+          bendleGuessesLockedAt: lockedAt,
+          // Exactly what ShinyBendleQuestion's reveal and BendleBoard's phone
+          // popup read — teamId included for the same reason wagerResults
+          // carries one (two teams whose names normalize alike would otherwise
+          // show each other's result on the phone).
+          bendleResults: results.map(r => ({
+            teamId: r.teamId, teamName: r.teamName, guess: r.guess, correct: r.correct, tierId: r.tierId, points: r.points,
+          })),
+        },
+      })
+    } finally {
+      setBendleBusy(false)
+    }
+  }
+
   // Holds the setTimeout id for the ArrowRight reveal-then-advance sequence
   // (280ms below) while it's pending, else null. A second ArrowRight in that
   // window bails instead of double-firing nextSlide(); ArrowLeft in that
@@ -935,6 +1059,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     'wager-tiers': handleLockWagers,
     'wager-guesses': handleLockAndScoreWagers,
     order: handleLockAndScoreOrder,
+    bendle: handleLockAndScoreBendle,
   }
 
   // Mirrors currentSlide into a ref for the same reason actionsRef exists —
@@ -1347,6 +1472,41 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                 <button
                   onClick={() => handleLockAndScoreWagers(currentSlide, { force: true })}
                   disabled={wagerBusy}
+                  className="w-full mt-2 py-2 rounded-lg border border-amber-300 text-amber-700 text-xs font-semibold hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Score anyway — 0 for every team
+                </button>
+              )}
+            </div>
+          )}
+
+          {currentSlide?.type === 'question' && isBendleShiny(currentSlide?.data) && (!currentSlide?.data?.bendleRevealed || bendleError) && (
+            <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
+              <p className="text-xs text-gray-400 mb-3">
+                {currentSlide?.data?.bendleGuessesLocked
+                  ? 'Guesses locked and scored — press A to reveal the song on the TV.'
+                  : 'Bendle is playing — teams are guessing as the layers come in.'}
+              </p>
+              <button
+                onClick={() => handleLockAndScoreBendle(currentSlide)}
+                disabled={bendleBusy}
+                className={`w-full py-3 rounded-xl border-2 font-semibold text-sm transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
+                  bendleBusy
+                    ? 'border-gray-100 text-gray-300 cursor-not-allowed'
+                    : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'
+                }`}
+              >
+                {bendleBusy ? 'Working…' : currentSlide?.data?.bendleGuessesLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score'}
+              </button>
+              {bendleError && (
+                <p className="text-xs text-red-600 mt-2 text-center">{bendleError}</p>
+              )}
+              {/* Same one-shot override as the Wager panel above, offered only
+                  after the empty-guesses refusal has actually fired. */}
+              {bendleError === BENDLE_ZERO_ANSWERS_ERROR && (
+                <button
+                  onClick={() => handleLockAndScoreBendle(currentSlide, { force: true })}
+                  disabled={bendleBusy}
                   className="w-full mt-2 py-2 rounded-lg border border-amber-300 text-amber-700 text-xs font-semibold hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Score anyway — 0 for every team
