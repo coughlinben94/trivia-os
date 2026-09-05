@@ -5,7 +5,8 @@ import WaveformBars from '../WaveformBars.jsx'
 import ShinyMatchingQuestion from './ShinyMatchingQuestion.jsx'
 import ShinyWagerQuestion from './ShinyWagerQuestion.jsx'
 import ShinyOrderQuestion from './ShinyOrderQuestion.jsx'
-import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView } from '../../../lib/shinySeries.js'
+import ShinyBendleQuestion from './ShinyBendleQuestion.jsx'
+import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView } from '../../../lib/shinySeries.js'
 import { GridContent } from './GridSlide.jsx'
 import { fitToBox, QUESTION_BOX, QUOTE_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js'
@@ -1474,6 +1475,13 @@ function ShinyContent({ slide, show, theme, transitionKey, isPreview }) {
   }
   if (isOrderShiny(data)) {
     return <ShinyOrderQuestion slide={slide} show={show} theme={theme} />
+  }
+  // isPreview is passed through (unlike Wager/Order, which have no audio):
+  // SlideCanvasEditor renders this same tree in the build-mode preview pane,
+  // and without the flag opening a Bendle slide for editing would start
+  // playing its stems at the host.
+  if (isBendleShiny(data)) {
+    return <ShinyBendleQuestion slide={slide} show={show} theme={theme} isPreview={isPreview} />
   }
   return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} isPreview={isPreview} />
 }
