@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { LANE_CAP, assertRing } from './ringDraw.js'
+import { LANE_CAP, assertRing, drawStations } from './ringDraw.js'
+import { RING_POOL } from '../worlds/ringPool.js'
 
 const s = (key, family, prim = key, accent = false) => ({ key, family, prim, accent })
 
@@ -61,5 +62,61 @@ describe('assertRing', () => {
     const order = [s('a0', 'A'), s('b', 'B'), s('c', 'C'), s('a1', 'A')]
     // slot 3 and slot 0 are cyclically 1 apart (4-slot ring) — same family, must throw
     expect(() => assertRing(order, { slots: 4 })).toThrow(/family "A".*need >=3/)
+  })
+})
+
+describe('drawStations', () => {
+  it('seed "authored" returns todays 13 stations byte-for-byte, unchanged order', () => {
+    const result = drawStations(RING_POOL, { seed: 'authored' })
+    expect(result).toEqual(RING_POOL)
+  })
+
+  it('throws for a real seed on the current 13-entry pool — radial-mass has 5 members, cap is 4', () => {
+    // This is the documented, expected failure (docs/superpowers/plans/
+    // 2026-09-05-ring-unified-noun-color-draw-design.md §9): with pool.length
+    // === slots, every member must be chosen, and today's pool has 5
+    // radial-mass nouns against LANE_CAP(13)=4. The throw IS the proof the
+    // cap is enforced, not a bug — pool growth (a separate art-project task)
+    // is what makes a real seed succeed.
+    expect(() => drawStations(RING_POOL, { seed: 42 })).toThrow(/cannot fill 13 slots under the caps/)
+  })
+
+  it('throws if pinKey is not in the pool (non-authored seed)', () => {
+    const noRecord = RING_POOL.filter(s => s.key !== 'record')
+    expect(() => drawStations(noRecord, { seed: 1, slots: 12 })).toThrow(/pinKey "record" not found/)
+  })
+
+  const SYNTHETIC_POOL = [
+    { key: 'p1', prim: 'ring', hue: 10, accent: false, family: 'radial-mass' },
+    { key: 'p2', prim: 'planet', hue: 40, accent: false, family: 'radial-mass' },
+    { key: 'c1', prim: 'dots', hue: 90, accent: false, family: 'cluster' },
+    { key: 'c2', prim: 'asteroidField', hue: 130, accent: false, family: 'cluster' },
+    { key: 'c3', prim: 'neutron', hue: 140, accent: false, family: 'cluster' },
+    { key: 'b1', prim: 'pulsar', hue: 170, accent: false, family: 'burst' },
+    { key: 'b2', prim: 'spikes', hue: 210, accent: true, family: 'burst' },
+    { key: 'record', prim: 'record', hue: 300, accent: false, family: 'radial-mass' },
+    { key: 's1', prim: 'streak', hue: 250, accent: false, family: 'streak' },
+    { key: 's2', prim: 'wave', hue: 260, accent: false, family: 'streak' },
+  ]
+
+  it('a satisfiable synthetic pool: same seed twice gives identical results, and each result is valid', () => {
+    const r1 = drawStations(SYNTHETIC_POOL, { seed: 777, slots: 8, pinAt: 6 })
+    const r2 = drawStations(SYNTHETIC_POOL, { seed: 777, slots: 8, pinAt: 6 })
+    expect(r1).toEqual(r2)
+    expect(assertRing(r1, { slots: 8 })).toBe(true)
+  })
+
+  it('pins "record" at pinAt regardless of where the internal draw placed it', () => {
+    const result = drawStations(SYNTHETIC_POOL, { seed: 777, slots: 8, pinAt: 6 })
+    expect(result[6].key).toBe('record')
+  })
+
+  it('different seeds can produce different arrangements of the same satisfiable pool', () => {
+    const r1 = drawStations(SYNTHETIC_POOL, { seed: 1, slots: 8, pinAt: 6 })
+    const r2 = drawStations(SYNTHETIC_POOL, { seed: 2, slots: 8, pinAt: 6 })
+    // not asserting they always differ (small search space could coincide),
+    // just that both are independently valid — the real claim under test.
+    expect(assertRing(r1, { slots: 8 })).toBe(true)
+    expect(assertRing(r2, { slots: 8 })).toBe(true)
   })
 })
