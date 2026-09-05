@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { LANE_CAP, assertRing, drawStations } from './ringDraw.js'
+import { seedFrom } from './paletteGenerator.js'
 import { RING_POOL } from '../worlds/ringPool.js'
 
 const s = (key, family, prim = key, accent = false) => ({ key, family, prim, accent })
@@ -118,5 +119,24 @@ describe('drawStations', () => {
     // just that both are independently valid — the real claim under test.
     expect(assertRing(r1, { slots: 8 })).toBe(true)
     expect(assertRing(r2, { slots: 8 })).toBe(true)
+  })
+
+  it('string seeds no longer collapse to 0 — different strings hash differently', () => {
+    // seedFrom uses FNV-1a hashing, not the broken hash32(String(x), 0) path
+    const seed1 = seedFrom('show-alpha')
+    const seed2 = seedFrom('show-beta')
+    // Both must be non-zero and different
+    expect(seed1).not.toBe(0)
+    expect(seed2).not.toBe(0)
+    expect(seed1).not.toBe(seed2)
+    // Both string seeds work with drawStations and produce valid results
+    const r1 = drawStations(SYNTHETIC_POOL, { seed: 'show-alpha', slots: 8, pinAt: 6 })
+    const r2 = drawStations(SYNTHETIC_POOL, { seed: 'show-beta', slots: 8, pinAt: 6 })
+    expect(assertRing(r1, { slots: 8 })).toBe(true)
+    expect(assertRing(r2, { slots: 8 })).toBe(true)
+    // Verify that the two different string seeds produce results consistent
+    // with the same numeric seeds they hash to (as a sanity check)
+    const r1Numeric = drawStations(SYNTHETIC_POOL, { seed: seed1, slots: 8, pinAt: 6 })
+    expect(r1).toEqual(r1Numeric)
   })
 })

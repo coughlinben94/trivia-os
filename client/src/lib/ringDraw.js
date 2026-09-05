@@ -4,6 +4,7 @@
 // 2026-09-02-ring-station-variety.md §2.4). See that doc's invariant table
 // (§2.3) for where each rule below comes from.
 import { rng, hash32 } from './ringEngine.js'
+import { seedFrom } from './paletteGenerator.js'
 
 export const LANE_CAP = (slots) => Math.floor(slots / 3)
 
@@ -62,7 +63,7 @@ export function drawStations(pool, { seed, slots = 13, pinKey = 'record', pinAt 
   const pinned = pool.find(s => s.key === pinKey)
   if (!pinned) throw new Error(`ringDraw: pinKey "${pinKey}" not found in pool`)
 
-  const numericSeed = typeof seed === 'number' ? seed : hash32(String(seed), 0)
+  const numericSeed = typeof seed === 'number' ? seed : seedFrom(String(seed))
   const r = rng(numericSeed, 0xD0A1)
 
   const laneCap = LANE_CAP(slots)
