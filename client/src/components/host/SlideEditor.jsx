@@ -3,6 +3,7 @@ import { analyzeAudioGain } from '../../lib/audioNormalize.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import { getUsedHostPhotoUrls } from '../../lib/hostPhotos.js'
+import { supabase } from '../../lib/supabase.js'
 import MediaUpload from './MediaUpload.jsx'
 import YoutubeClipEditor from './YoutubeClipEditor.jsx'
 import HostPhotoLibrary from './HostPhotoLibrary.jsx'
@@ -11,8 +12,10 @@ import SlideCanvasEditor from './SlideCanvasEditor.jsx'
 import MatchingBoard from '../join/MatchingBoard.jsx'
 import WagerBoard from '../join/WagerBoard.jsx'
 import OrderBoard from '../join/OrderBoard.jsx'
+import BendleBoard from '../join/BendleBoard.jsx'
 import { DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
+import { BENDLE_TIERS } from '../../lib/bendleScoring.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { overflowsBox, QUESTION_BOX } from '../../lib/autoFitText.js'
 import { isConcurrentShiny, isConcurrentMediaShiny } from '../../lib/shinySeries.js'
@@ -994,6 +997,23 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
             </>
           )}
 
+          {schema.type === 'bendle' && (
+            <>
+              <BendleBuilder songId={data.bendleSongId} onChangeSongId={id => onChange('bendleSongId', id)} />
+              <div className="flex flex-col gap-2">
+                <label className="block text-xs font-medium text-gray-700">Phone preview — what teams see once guesses are open</label>
+                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
+                  <BendleBoard
+                    preview
+                    theme={theme}
+                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
+                    slide={{ id: slide.id, showId: show?.id, data: { ...data, bendleGuessesLocked: false, bendleRevealed: false } }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
           {/* Order builder — upload each image, then set its correct
               position. A numbered dropdown per item, not tap-to-sequence
               on the host side: this file has no existing tap-to-sequence
@@ -1762,6 +1782,47 @@ function WagerBuilder({ answer }) {
       ) : (
         <p className="text-xs text-gray-400">Guesses will be scored against <strong>{trueNumber}</strong>.</p>
       )}
+    </div>
+  )
+}
+
+function BendleBuilder({ songId, onChangeSongId }) {
+  const [songs, setSongs] = useState([])
+  useEffect(() => {
+    let cancelled = false
+    supabase.from('bendle_songs').select('id, title, answer, aliases').order('title')
+      .then(({ data }) => { if (!cancelled) setSongs(data ?? []) })
+    return () => { cancelled = true }
+  }, [])
+  const selected = songs.find(s => s.id === songId)
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">Song</label>
+        <select
+          value={songId ?? ''}
+          onChange={e => onChangeSongId(e.target.value || null)}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+        >
+          <option value="">Pick a song…</option>
+          {songs.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+        </select>
+        {!selected && (
+          <p className="text-xs text-amber-600 mt-1">⚠️ Pick a song — without one this question can't be scored.</p>
+        )}
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">Bendle steps</label>
+        <div className="flex flex-col gap-1.5">
+          {BENDLE_TIERS.map(t => (
+            <div key={t.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+              <span className="text-sm font-medium text-gray-800 flex-1">{t.label}</span>
+              <span className="text-sm font-semibold text-gray-900 tabular-nums">{t.points} pts</span>
+              <span className="text-xs text-gray-400">at {t.atSeconds}s</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

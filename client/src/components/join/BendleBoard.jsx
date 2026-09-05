@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
 
-export default function BendleBoard({ slide, team, theme, onAnswered }) {
+export default function BendleBoard({ slide, team, theme, preview = false, onAnswered }) {
   const { data } = slide
   const guessesLocked = !!data.bendleGuessesLocked
   const revealed = !!data.bendleRevealed
@@ -12,14 +12,18 @@ export default function BendleBoard({ slide, team, theme, onAnswered }) {
 
   useEffect(() => { openedAtRef.current = Date.now() }, [slide.id])
 
+  // Restore this team's own row so a phone that reloads mid-question keeps
+  // its submitted state — skipped in preview (mirrors WagerBoard.jsx:116).
   useEffect(() => {
+    if (preview) return
     let cancelled = false
     supabase.from('phone_answers').select('answer').eq('slide_id', slide.id).eq('team_id', team.id).maybeSingle()
       .then(({ data: row }) => { if (!cancelled && row) setSubmitted(true) })
     return () => { cancelled = true }
-  }, [slide.id, team.id])
+  }, [preview, slide.id, team.id])
 
   async function handleSubmit() {
+    if (preview) return
     if (!guess.trim() || submitted || guessesLocked) return
     setError(null)
     const elapsedSeconds = (Date.now() - openedAtRef.current) / 1000
