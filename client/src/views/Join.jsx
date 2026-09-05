@@ -1280,7 +1280,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   // moment of the round. Pinning only makes sense while input is possible.
   const liveSlideIsInteractive = !!(
     liveSlide?.type === 'question' && liveSlide.data?.isShiny &&
-    !liveSlide.data?.wagerGuessesLocked && !liveSlide.data?.matchingLocked && !liveSlide.data?.orderLocked &&
+    !liveSlide.data?.wagerGuessesLocked && !liveSlide.data?.matchingLocked && !liveSlide.data?.orderLocked && !liveSlide.data?.bendleGuessesLocked &&
     (isMatchingShiny(liveSlide.data) || isWagerShiny(liveSlide.data) || isOrderShiny(liveSlide.data) || isBendleShiny(liveSlide.data))
   )
 
@@ -1297,7 +1297,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   // interactiveSatisfied=true across the lock, and is never force-navigated
   // to the actual guess phase — the exact silent-miss bug this feature
   // exists to close, just narrowed to teams who back out after tiering.
-  const interactivePhaseKey = `${liveSlide?.id}:${liveSlide?.data?.wagerTiersLocked}:${liveSlide?.data?.wagerGuessesLocked}:${liveSlide?.data?.matchingLocked}:${liveSlide?.data?.orderLocked}`
+  const interactivePhaseKey = `${liveSlide?.id}:${liveSlide?.data?.wagerTiersLocked}:${liveSlide?.data?.wagerGuessesLocked}:${liveSlide?.data?.matchingLocked}:${liveSlide?.data?.orderLocked}:${liveSlide?.data?.bendleGuessesLocked}`
   const [interactiveSatisfied, setInteractiveSatisfied] = useState(false)
   useEffect(() => { setInteractiveSatisfied(false) }, [interactivePhaseKey])
 
