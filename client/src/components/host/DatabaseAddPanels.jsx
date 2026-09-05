@@ -197,7 +197,7 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
   // hide this panel's own "How many assets?" input; when blank, prompt here.
   const fmtAssetPreset = selectedShinyFmt?.input_schema?.slots
   const hasAssetPreset = typeof fmtAssetPreset === 'number' && fmtAssetPreset > 0
-  const effectiveAssets = hasAssetPreset ? fmtAssetPreset : assetCount
+  const effectiveAssets = assetCount
   const numEntries = Math.max(1, parseInt(entryCount, 10) || 1)
   // Item list (one text/answer row per asset) only applies to a true
   // question series — each asset really is its own independent mini-question.
@@ -389,25 +389,22 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 text-center placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
-                {/* Format presets its asset count — only prompt here when blank. */}
-                {!hasAssetPreset && (
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">How many assets?</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={assetCount}
-                      disabled={collectedEntries.length > 0}
-                      onChange={e => {
-                        const n = Math.max(1, parseInt(e.target.value) || 1)
-                        setAssetCount(n)
-                        setCurrentItems(prev => Array.from({ length: n }, (_, i) => prev[i] ?? { text: '', answer: '' }))
-                      }}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                  </div>
-                )}
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">How many assets?</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={assetCount}
+                    disabled={collectedEntries.length > 0}
+                    onChange={e => {
+                      const n = Math.max(1, parseInt(e.target.value) || 1)
+                      setAssetCount(n)
+                      setCurrentItems(prev => Array.from({ length: n }, (_, i) => prev[i] ?? { text: '', answer: '' }))
+                    }}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
               </div>
             )}
 
@@ -512,7 +509,13 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
               formats={shinyFormats}
               loading={shinyLoading}
               selectedId={selectedShinyFmt?.id}
-              onSelect={setSelectedShinyFmt}
+              onSelect={(fmt) => {
+                setSelectedShinyFmt(fmt)
+                if (fmt) {
+                  const preset = fmt.input_schema?.slots
+                  if (typeof preset === 'number' && preset > 0) setAssetCount(preset)
+                }
+              }}
             />
             {selectedShinyFmt && (
               <div className="mt-auto pt-2">
