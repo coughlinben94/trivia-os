@@ -38,7 +38,7 @@ export function assertWorld(world) {
 const NOUN_SALT = 0x4E4F554E // 'NOUN'
 const COLR_SALT = 0x434F4C52 // 'COLR'
 
-export function drawWorld({ base, pool, shelf, showId, baseTheme, pinKey = 'record', pinAt = 10 }) {
+export function drawWorld({ base, pool, shelf, showId, baseTheme, pinKey = 'eclipse', pinAt = 10 }) {
   if (!shelf.length) throw new Error('drawWorld: no certified palettes on the shelf')
 
   const showSeed = seedFrom(showId)

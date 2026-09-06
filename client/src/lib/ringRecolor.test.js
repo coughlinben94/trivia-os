@@ -31,7 +31,7 @@ const PIN     = readFileSync(new URL('../worlds/midnightGalaxy.ring.test.js', im
 const STATION_KEYS = [
   'ringed planet', 'spiral galaxy', 'star cluster', 'amber planet',
   'lit planet', 'pulsar', 'rose nebula', 'comet', 'binary pair',
-  'asteroid field', 'record', 'aurora ribbon', 'supernova',
+  'asteroid field', 'eclipse', 'aurora ribbon', 'supernova',
 ]
 const ANCHORS = [
   { deg: 276, window: 25 }, { deg: 214, window: 25 }, { deg: 140, window: 25 },

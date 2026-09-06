@@ -55,7 +55,7 @@ export function assertRing(order, { slots = order.length, maxAccents = 3, maxPer
 
 const MAX_DRAW_ATTEMPTS = 50
 
-export function drawStations(pool, { seed, slots = 13, pinKey = 'record', pinAt = 10 } = {}) {
+export function drawStations(pool, { seed, slots = 13, pinKey = 'eclipse', pinAt = 10 } = {}) {
   if (seed === 'authored') return pool.slice()
 
   if (seed == null) throw new Error('drawStations: seed is required')

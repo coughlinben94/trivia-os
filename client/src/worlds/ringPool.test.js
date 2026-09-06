@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { RING_POOL } from './ringPool.js'
 import {
   RINGED_PLANET_HUE, SPIRAL_GALAXY_HUE, STAR_CLUSTER_HUE, AMBER_PLANET_HUE, LIT_PLANET_HUE,
-  PULSAR_HUE, ROSE_NEBULA_HUE, COMET_HUE, BINARY_PAIR_HUE, ASTEROID_FIELD_HUE, RECORD_HUE,
+  PULSAR_HUE, ROSE_NEBULA_HUE, COMET_HUE, BINARY_PAIR_HUE, ASTEROID_FIELD_HUE, ECLIPSE_HUE,
   AURORA_RIBBON_HUE, SUPERNOVA_HUE,
 } from './midnightGalaxy.ring.js'
 
@@ -11,7 +11,7 @@ import {
 // expectations mismatch and the test fails — that's the drift detector.
 const EXPECTED_KEYS = [
   'ringed planet', 'spiral galaxy', 'star cluster', 'amber planet', 'lit planet',
-  'pulsar', 'rose nebula', 'comet', 'binary pair', 'asteroid field', 'record',
+  'pulsar', 'rose nebula', 'comet', 'binary pair', 'asteroid field', 'eclipse',
   'aurora ribbon', 'supernova',
 ]
 
@@ -32,7 +32,7 @@ describe('RING_POOL', () => {
   it('every hue matches the live authored constant, not a copied literal', () => {
     const hues = [
       RINGED_PLANET_HUE, SPIRAL_GALAXY_HUE, STAR_CLUSTER_HUE, AMBER_PLANET_HUE, LIT_PLANET_HUE,
-      PULSAR_HUE, ROSE_NEBULA_HUE, COMET_HUE, BINARY_PAIR_HUE, ASTEROID_FIELD_HUE, RECORD_HUE,
+      PULSAR_HUE, ROSE_NEBULA_HUE, COMET_HUE, BINARY_PAIR_HUE, ASTEROID_FIELD_HUE, ECLIPSE_HUE,
       AURORA_RIBBON_HUE, SUPERNOVA_HUE,
     ]
     expect(RING_POOL.map(s => s.hue)).toEqual(hues)

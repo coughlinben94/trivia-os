@@ -11,7 +11,7 @@ describe('midnightGalaxyRing station hues', () => {
       ['ringed planet', 256], ['spiral galaxy', 170], ['star cluster', 268],
       ['amber planet', 28], ['lit planet', 140], ['pulsar', 120],
       ['rose nebula', 330], ['comet', 208], ['binary pair', 214],
-      ['asteroid field', 160], ['record', 300], ['aurora ribbon', 196],
+      ['asteroid field', 160], ['eclipse', 300], ['aurora ribbon', 196],
       ['supernova', 36],
     ])
   })
