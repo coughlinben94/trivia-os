@@ -31,7 +31,11 @@ export const AURORA_RIBBON_HUE  = 196
 // LiveScreen.jsx reads it for the jukebox's own ring-mode scrim tint ("one
 // source of truth for what colour the music station is"); the jukebox code
 // is out of scope for the 2026-09-06 record->eclipse swap, so the alias stays
-// until that import is renamed. Same value, never diverges.
+// until that import is renamed. Same value, never diverges. Must stay a
+// REFERENCE, never a literal — ringRecolor.js's readStationHues() parser
+// only registers `*_HUE = <digits>` and then throws on any registered
+// constant no station reads, so inlining `300` here would break every
+// recolor.
 export const RECORD_HUE         = ECLIPSE_HUE
 export const SUPERNOVA_HUE      = 36
 

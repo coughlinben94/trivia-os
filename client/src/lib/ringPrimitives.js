@@ -2009,8 +2009,13 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // 1. Outer corona: a soft DONUT of light, transparent inside R so the
     //    hole is sky and never a painted disc. The d-glow box is D-square so
     //    closest-side radius = D/2 and the hole edge lands at 60% of it.
-    //    The outer stop is clamped >= 72 so a low-fill station (fillMin
-    //    0.35 -> E(96)=64) can never push it inside the hole's own stops.
+    //    The outer stop is a constant 96%, NOT E(96, fill): at st10's real
+    //    fill (~0.45) E(96) is ~82, which lands BELOW the 88% stop, and CSS
+    //    clamps an out-of-order stop up to its predecessor — a zero-length
+    //    transition at 88%, i.e. a faint hard-edged ring at r=0.44D instead
+    //    of a fade (independent review, 2026-09-06). Every other kind's
+    //    E()-scaled terminator has no stop after it, so the clamp only ever
+    //    bites here; fill still scales every alpha via A().
     const glow = el('d-glow')
     glow.style.left = px((w - D) / 2); glow.style.top = px((h - D) / 2)
     glow.style.width = glow.style.height = px(D)
@@ -2034,7 +2039,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       ${hsla(hue, 58, 76, A(0.18, fill))} 68%,
       ${hsla(hue, 60, 66, A(0.12, fill))} 78%,
       ${hsla(hue - 8, 60, 58, A(0.04, fill))} 88%,
-      transparent ${Math.max(72, E(96, fill)).toFixed(0)}%)`
+      transparent 96%)`
     f.appendChild(glow)
 
     // 2. Streamers: three tapered arms rooted at the annulus's outer edge,
@@ -2127,9 +2132,11 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // 4. Baily's bead — one bright point on the rim at ~1 o'clock, the
     //    "diamond ring" moment. Small, so it reads as a point of light on
     //    the edge rather than a moon of its own.
-    circle(0, { cx: bx.toFixed(1), cy: by.toFixed(1), r: (ringW * 2.2).toFixed(1), fill: hsla(hue, 50, 90, A(0.28, fill)) })
+    //    circle() centres on the disc; the bead sits on the rim, so cx/cy are
+    //    overridden through attrs (applied after the defaults, by design).
+    circle(ringW * 2.2, { cx: bx.toFixed(1), cy: by.toFixed(1), fill: hsla(hue, 50, 90, A(0.28, fill)) })
       .setAttribute('style', `filter:blur(${(ringW * 1.2).toFixed(1)}px)`)
-    circle(0, { cx: bx.toFixed(1), cy: by.toFixed(1), r: (ringW * 0.95).toFixed(1), fill: hsla(hue, 20, 98, A(0.95, fill)) })
+    circle(ringW * 0.95, { cx: bx.toFixed(1), cy: by.toFixed(1), fill: hsla(hue, 20, 98, A(0.95, fill)) })
     f.appendChild(svg)
   }
 

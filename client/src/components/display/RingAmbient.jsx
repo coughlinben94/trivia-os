@@ -883,7 +883,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   // ── Station override: the jukebox grading-break's dedicated slot ──
   // Every other caller advances the ring by exactly one station per slide.
   // The break is the one moment that must land on a SPECIFIC station (10, the
-  // record — see Display.jsx's MUSIC_STATION) no matter where the rotation
+  // eclipse — see Display.jsx's MUSIC_STATION) no matter where the rotation
   // happens to be, so it is the one caller that jumps instead of turning.
   //
   // jumpTo() snaps rather than glides, and that is deliberate rather than a
@@ -897,8 +897,8 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   // uses.
   //
   // Contract for the jukebox-side layer (jukebox-ring-fusion branch): by the
-  // time that overlay paints, stationRef is MUSIC_STATION (10), the record is
-  // the station in frame, and the disco sky tint is at full weight (snapped,
+  // time that overlay paints, stationRef is MUSIC_STATION (10), the eclipse is
+  // the station in frame, and the corona sky tint is at full weight (snapped,
   // not transitioning — jumpTo passes animate:false, see applySkyTints).
   //
   // 2026-08-17 (Ben) — the override is now a ROUND TRIP, not a one-way jump:

@@ -24,7 +24,7 @@ import { hexToRgb } from '../../lib/oklab.js'
 //   dir='out'  — the vortex winds up, spins into a spiral pull, flashes at
 //                peak force, and the drain core swallows the screen to opaque
 //                black. Display mounts JukeboxBreakOverlay (and jumps the ring
-//                onto the record) in the commit onDone triggers, so the
+//                onto the eclipse) in the commit onDone triggers, so the
 //                station change lands behind a full-black frame.
 //   dir='back' — the true time-reverse. Opens on that same black core mid-
 //                flash, which blooms open as the vortex unwinds and flings its
