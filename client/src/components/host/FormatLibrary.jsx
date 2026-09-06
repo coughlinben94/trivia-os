@@ -6,6 +6,7 @@ const EMPTY_FORMAT = {
   name: '',
   description: '',
   icon: '✨',
+  default_subtitle: '',
   input_schema: { type: 'image', slots: 1, seriesEnabled: false, labels: [] },
 }
 
@@ -21,19 +22,23 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
   }
 
   function startEdit(fmt) {
-    setDraft({ name: fmt.name, description: fmt.description, icon: fmt.icon, input_schema: fmt.input_schema })
+    setDraft({ name: fmt.name, description: fmt.description, icon: fmt.icon, default_subtitle: fmt.default_subtitle ?? '', input_schema: fmt.input_schema })
     setEditing(fmt.id)
     setCreating(false)
   }
 
   async function handleSave() {
     if (!draft.name.trim()) return
-    if (editing) {
-      await updateFormat(editing, draft)
-      setEditing(null)
-    } else {
-      await createFormat(draft)
-      setCreating(false)
+    try {
+      if (editing) {
+        await updateFormat(editing, draft)
+        setEditing(null)
+      } else {
+        await createFormat(draft)
+        setCreating(false)
+      }
+    } catch (err) {
+      alert(`Couldn't save format: ${err.message}`)
     }
   }
 
@@ -72,7 +77,11 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                 </div>
                 {!onSelectFormat && (
                   <button
-                    onClick={e => { e.stopPropagation(); deleteFormat(fmt.id) }}
+                    onClick={e => {
+                      e.stopPropagation()
+                      if (!confirm(`Delete "${fmt.name}"?`)) return
+                      deleteFormat(fmt.id).catch(err => alert(`Couldn't delete format: ${err.message}`))
+                    }}
                     className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 text-xs ml-1"
                   >✕</button>
                 )}
@@ -123,6 +132,20 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                     value={draft.description}
                     onChange={e => setDraft(d => ({ ...d, description: e.target.value }))}
                     placeholder="Brief description for your reference"
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+
+                {/* Default subtitle — pre-fills the title slide's intro line
+                    (data.introSubtitle) every time this format is used, so
+                    the host isn't retyping the same tagline weekly. Still
+                    editable per-slide in SlideEditor after creation. */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-500">Default Subtitle</label>
+                  <input
+                    value={draft.default_subtitle ?? ''}
+                    onChange={e => setDraft(d => ({ ...d, default_subtitle: e.target.value }))}
+                    placeholder="e.g. Name the song, not the artist"
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
                   />
                 </div>

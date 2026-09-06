@@ -261,6 +261,7 @@ export function buildShinyTitleSlide(fmt, groupId, roundId = null) {
       shinyFormatId:   fmt.id,
       shinyFormatName: fmt.name,
       shinyFormatIcon: fmt.icon,
+      ...(fmt.default_subtitle ? { introSubtitle: fmt.default_subtitle } : {}),
     },
   }
 }
