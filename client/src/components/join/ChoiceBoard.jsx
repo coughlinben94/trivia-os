@@ -202,8 +202,43 @@ export default function ChoiceBoard({ slide, team, theme, preview = false, onAns
 // Image options size/behave like OrderTile (letter badge, outline ring on
 // selection); text options render as a wrapping chip, like MatchTile's text
 // branch but with a single highlight color instead of a match-pair palette.
+//
+// Failed-load retry copied from MatchTile/QuestionImage's fix (2026-08-25,
+// Ben live: "couldn't see pictures at all") — OrderTile never got this same
+// fix and ChoiceTile was originally modeled on OrderTile's image branch
+// verbatim, so it silently carried the same gap. A failed <img> used to
+// leave blank space with no way to recover; this swaps the whole tile to a
+// retry button instead.
 function ChoiceTile({ label, image, letter, selected, disabled, onTap, textColor, highlight }) {
+  const [imgFailed, setImgFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  // A host swapping this option's image while the slide stays live must not
+  // leave a phone that already failed on the OLD image stuck failed.
+  useEffect(() => { setImgFailed(false); setAttempt(0) }, [image])
+
   if (image) {
+    if (imgFailed) {
+      return (
+        <button
+          onClick={() => { setImgFailed(false); setAttempt(a => a + 1) }}
+          style={{
+            position: 'relative',
+            width: 'calc(50% - 0.3rem)',
+            minHeight: 96,
+            padding: 6,
+            borderRadius: 14,
+            border: '1px solid rgba(255,255,255,0.15)',
+            background: 'rgba(255,255,255,0.04)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          <span style={{ fontSize: '0.75rem', color: `${textColor}99`, textAlign: 'center' }}>
+            🖼️ Picture didn&apos;t load — tap to retry
+          </span>
+        </button>
+      )
+    }
     return (
       <button
         onClick={onTap}
@@ -222,7 +257,13 @@ function ChoiceTile({ label, image, letter, selected, disabled, onTap, textColor
           WebkitTapHighlightColor: 'transparent',
         }}
       >
-        <img src={image} alt={label || ''} style={{ maxWidth: '100%', maxHeight: 84, objectFit: 'contain' }} />
+        <img
+          key={attempt}
+          src={attempt ? `${image}${image.includes('?') ? '&' : '?'}retry=${attempt}` : image}
+          alt={label || ''}
+          onError={() => setImgFailed(true)}
+          style={{ maxWidth: '100%', maxHeight: 84, objectFit: 'contain' }}
+        />
         <span style={{
           position: 'absolute', top: -8, left: -8,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
