@@ -83,8 +83,8 @@ describe('drawStations', () => {
   })
 
   it('throws if pinKey is not in the pool (non-authored seed)', () => {
-    const noRecord = RING_POOL.filter(s => s.key !== 'record')
-    expect(() => drawStations(noRecord, { seed: 1, slots: 12 })).toThrow(/pinKey "record" not found/)
+    const noEclipse = RING_POOL.filter(s => s.key !== 'eclipse')
+    expect(() => drawStations(noEclipse, { seed: 1, slots: 12 })).toThrow(/pinKey "eclipse" not found/)
   })
 
   it('throws if seed is missing', () => {
@@ -106,7 +106,7 @@ describe('drawStations', () => {
     { key: 'c3', prim: 'neutron', hue: 140, accent: false, family: 'cluster' },
     { key: 'b1', prim: 'pulsar', hue: 170, accent: false, family: 'burst' },
     { key: 'b2', prim: 'spikes', hue: 210, accent: true, family: 'burst' },
-    { key: 'record', prim: 'record', hue: 300, accent: false, family: 'radial-mass' },
+    { key: 'eclipse', prim: 'eclipse', hue: 300, accent: false, family: 'radial-mass' },
     { key: 's1', prim: 'streak', hue: 250, accent: false, family: 'streak' },
     { key: 's2', prim: 'wave', hue: 260, accent: false, family: 'streak' },
   ]
@@ -118,9 +118,9 @@ describe('drawStations', () => {
     expect(assertRing(r1, { slots: 8 })).toBe(true)
   })
 
-  it('pins "record" at pinAt regardless of where the internal draw placed it', () => {
+  it('pins "eclipse" at pinAt regardless of where the internal draw placed it', () => {
     const result = drawStations(SYNTHETIC_POOL, { seed: 777, slots: 8, pinAt: 6 })
-    expect(result[6].key).toBe('record')
+    expect(result[6].key).toBe('eclipse')
   })
 
   it('different seeds can produce different arrangements of the same satisfiable pool', () => {
@@ -191,7 +191,7 @@ describe('drawStations', () => {
       s('a1', 'familyA'), s('a2', 'familyA'), s('a3', 'familyA'), s('a4', 'familyA'),
       s('b1', 'familyB'), s('b2', 'familyB'), s('b3', 'familyB'), s('b4', 'familyB'),
       s('g1', 'familyG'), s('g2', 'familyG'), s('g3', 'familyG'), s('g4', 'familyG'),
-      s('record', 'familyD'), s('d2', 'familyD'),
+      s('eclipse', 'familyD'), s('d2', 'familyD'),
     ]
 
     for (let seed = 0; seed < 1000; seed++) {

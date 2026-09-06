@@ -110,6 +110,10 @@ const ROTATION_MAX_DEG = { lens: 30, streak: 26, ribbon: 18 }
 // the (separately reviewed) body/tail gradient paint, so the fix narrows
 // this kind's peak swing instead of dimming the curtain's resting look.
 const PA2_MULT = { ribbon: 1.25 }
+// Per-call id for the eclipse rim's SVG <linearGradient> — a counter, not
+// an r() draw, for the same reason occCounter (below) is: a seeded draw
+// here would shift every later draw in the caller's stream.
+let eclipseCounter = 0
 
 // Worst-case post-rotation bounding-box height for a kind that may rotate
 // after placement — closes the KNOWN GAP bandY's own history above flagged
@@ -1956,111 +1960,190 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     f.appendChild(ringHalf(0, false)) // front half — in front of the body
   }
 
-  else if (kind === 'record') {
-    // The music object (2026-08-16, Ben: the jukebox break "needs to have its
-    // own ring slot" + "add things to s13 to make it look like an actual
-    // slide that fits into the world"). Added at station 12, swapped to
-    // station 10 the same day for silhouette-family spacing — this branch is
-    // index-agnostic; Display.jsx's MUSIC_STATION carries the routing index.
+  else if (kind === 'eclipse') {
+    // Total eclipse — the music station's object since 2026-09-06, replacing
+    // `record` (Ben's call, final: the drawn record duplicated the real
+    // Jukebox player that sits over this station every grading break —
+    // docs/superpowers/plans/2026-09-05-ring-unified-noun-color-draw-design.md
+    // header + §5). Index-agnostic like every branch here; Display.jsx's
+    // MUSIC_STATION carries the routing index.
     //
-    // Built on `ring`'s already-accepted anatomy rather than a new visual
-    // grammar: same SVG-arc-in-a-viewBox idiom, same tilt (-10deg), same
-    // d-glow outer wash, same A()/E() fill scaling. A record IS a tilted
-    // disc, so that perspective language transfers directly and this object
-    // reads as a member of the same world instead of a UI icon dropped in.
+    // Built CORONA-FIRST (design doc §5.1): every element in this branch is
+    // additive light shaped as a donut. The "dark disc" is not drawn at all —
+    // it is the sky showing through the hole in that light. Nothing here is
+    // a makeOccluder-class element (that helper paints an opaque
+    // drawPlanetDisc body, i.e. it SUBTRACTS from the sky, which spec §7.2
+    // bans on bottom-third-by-arc slots and which this quiet slot sits one
+    // rank above). A pure-additive annulus sidesteps the ban by construction
+    // rather than by exception. Known consequence, flagged not hidden: stars
+    // in the far/near layers can show through the hole. Ben judges live
+    // whether that reads as a defect; if it does, the fix is a dark fill,
+    // which re-opens the §7.2 question — not a tweak to make here.
     //
-    // What makes it a record and not another planet, deliberately, since
-    // "looks like a planet" is the recurring failure this world has already
-    // hit three times (st3's blob rebuild, the far-layer washes, the
-    // occluders — all in FAILURE-LEDGER/the removal notes above):
-    //   - NO drawPlanetDisc. Vinyl is flat and self-lit; a terminator would
-    //     immediately re-read as a sphere. Every other radial-mass station
-    //     (st0/st4/st8) uses the terminator, so skipping it is the single
-    //     clearest silhouette separator available.
-    //   - real LP proportions: label 0.36 of the disc radius, grooves
-    //     stopping short of both the rim and the label.
-    //   - a raked specular sheen. This is vinyl's actual visual signature;
-    //     without it concentric rings read as a bullseye/target, which is
-    //     the exact critique that killed `ring`'s first version (see its
-    //     comment above).
+    // What makes it an eclipse and not a ringed planet / sun / UFO — the
+    // noun test, decided before drawing:
+    //   - the hole. A ring planet has a lit body inside its ring; a sun has a
+    //     bright core; this has black inside a bright rim. No terminator, no
+    //     body gradient, no core dot — the emptiness IS the read.
+    //   - the annulus is thin and CRISP (>=4px, spec §6.1's hard-edge floor)
+    //     and near-white, not the station hue at full saturation: a corona
+    //     is pearly, the hue lives in the soft outer glow and the flares.
+    //   - a single Baily's-bead "diamond" on the rim, off-axis. This is the
+    //     one cue that only an eclipse has; a ring planet never gets a bead.
+    //   - 3 short tapered streamers at hand-picked irregular angles (not 8
+    //     at even spacing — that is `spikes`' asterisk failure, see its
+    //     2026-08-13 note). Same taper/clip technique as spikes, own
+    //     element, sparser and shorter.
+    //   - no tilt. `ring` and the old record share a -10deg ellipse
+    //     perspective; an eclipse is seen face-on, so it stays a true
+    //     circle — another silhouette separator from st0/st3.
+    // Static apart from the shared .pf-breathe container fade — nothing for
+    // ring-verify's freezeFrame() to pin (instruments eight/nine).
     const NS = 'http://www.w3.org/2000/svg'
     const cx = w / 2, cy = h / 2
-    const tilt = -10 // matches `ring` — one perspective convention per world
-    const rx = Math.min(w, h) * 0.46, ry = rx * 0.34
-    const rot = `rotate(${tilt} ${cx.toFixed(1)} ${cy.toFixed(1)})`
+    const D = Math.min(w, h)
+    const R = D * 0.30                          // hole radius — the moon
+    const ringW = Math.max(4, D * 0.022)        // annulus stroke, >=4px floor
+    const rRing = R + ringW / 2
 
-    // outer glow first so everything else paints over it — same closest-side
-    // wash and fill scaling as every other kind.
+    // 1. Outer corona: a soft DONUT of light, transparent inside R so the
+    //    hole is sky and never a painted disc. The d-glow box is D-square so
+    //    closest-side radius = D/2 and the hole edge lands at 60% of it.
+    //    The outer stop is a constant 96%, NOT E(96, fill): at st10's real
+    //    fill (~0.45) E(96) is ~82, which lands BELOW the 88% stop, and CSS
+    //    clamps an out-of-order stop up to its predecessor — a zero-length
+    //    transition at 88%, i.e. a faint hard-edged ring at r=0.44D instead
+    //    of a fade (independent review, 2026-09-06). Every other kind's
+    //    E()-scaled terminator has no stop after it, so the clamp only ever
+    //    bites here; fill still scales every alpha via A().
     const glow = el('d-glow')
-    const gd = w * 0.95
-    glow.style.left = px((w - gd) / 2); glow.style.top = px((h - gd) / 2)
-    glow.style.width = glow.style.height = px(gd)
-    glow.style.background = `radial-gradient(circle closest-side, ${hsla(hue, 62, 68, A(0.28, fill))} 0%, transparent ${E(94, fill).toFixed(0)}%)`
+    glow.style.left = px((w - D) / 2); glow.style.top = px((h - D) / 2)
+    glow.style.width = glow.style.height = px(D)
+    //    Attempt 2 (2026-09-06, rendered and looked, strike one): with the
+    //    corona at 0.30 the hole was the same purple as the sky beside it and
+    //    the whole thing read as a drawn ring. The disc only reads DARK by
+    //    contrast, so the light has to peak hard right at the rim and fall
+    //    off fast — a bright inner corona hugging the edge, not a wide dim
+    //    wash. Numbers below are that: ~2x alpha at 61%, a steeper first
+    //    falloff, the same far tail.
+    //    Safe-box pass (same day, measured with safebox-hit-test.mjs, gate
+    //    math): the annulus + this stop's lower-left arc sit inside the safe
+    //    box at slot 10's placement and put st10's p99.5 at 85 against the
+    //    68 cap (record was 31). The p99.5 pixels were the r~190 ring — this
+    //    stop and the rim — so both are dialed back here, and the rim gets
+    //    the diamond-ring asymmetry below so the OUT-of-box side keeps its
+    //    brightness. 0.62 -> 0.40 at 61%, 0.30 -> 0.18 at 68%.
+    glow.style.background = `radial-gradient(circle closest-side,
+      transparent 0%, transparent 58%,
+      ${hsla(hue, 50, 88, A(0.40, fill))} 61%,
+      ${hsla(hue, 58, 76, A(0.18, fill))} 68%,
+      ${hsla(hue, 60, 66, A(0.12, fill))} 78%,
+      ${hsla(hue - 8, 60, 58, A(0.04, fill))} 88%,
+      transparent 96%)`
     f.appendChild(glow)
 
+    // 2. Streamers: two soft PLUMES rooted at the annulus's outer edge,
+    //    pivoting on the disc centre (transform-origin 0 50%, then pushed out
+    //    along their own axis by rRing). Angles are deliberate constants, not
+    //    r() draws (a draw here would reorder the caller's rHeadline stream —
+    //    the blob-branch bug class). Rendered history: attempts 1-4 drew
+    //    three hard tapered wedges (spikes' clip technique, 4px blur, alpha
+    //    0.62, ~3x ringW at the base) — an independent design critique
+    //    (2026-09-06) read them as cartoon sun-rays / compass points up
+    //    close and as nothing at distance. A real coronal streamer is the
+    //    opposite on every axis: narrow at the root and WIDENING outward,
+    //    heavily blurred, low-contrast, longer than the disc radius. So:
+    //    root ~1x ringW opening to ~4x at the tip, blur ~4% of D (~25px at
+    //    headline size), alpha 0.12-0.16, length 1.2-1.7 R. Two, not
+    //    three — one off the bead's side, one opposite, so the corona is
+    //    lopsided like the rim. 196deg (left, a touch below horizontal)
+    //    keeps the plume out of the safe box at slot 10's placement.
+    ;[
+      { ang: 337, len: 1.7, a: 0.16 },
+      { ang: 196, len: 1.2, a: 0.12 },
+    ].forEach(({ ang, len, a }) => {
+      const s = el('ec-flare')
+      const L = R * len, T = ringW * 4
+      s.style.width = px(L); s.style.height = px(T)
+      s.style.marginTop = px(-T / 2)
+      s.style.transform = `rotate(${ang}deg) translateX(${px(rRing)})`
+      s.style.clipPath = 'polygon(0% 38%, 100% 0%, 100% 100%, 0% 62%)'
+      s.style.background = `linear-gradient(90deg, ${hsla(hue, 50, 88, A(a, fill))} 0%, ${hsla(hue, 60, 78, A(a * 0.7, fill))} 55%, transparent 100%)`
+      s.style.filter = `blur(${(D * 0.04).toFixed(1)}px)`
+      f.appendChild(s)
+    })
+
+    // 3. The annulus itself — SVG circles, crisp. An inner near-white line
+    //    (the chromosphere rim, the thing that reads at 20ft) and a wider,
+    //    dimmer, blurred band just outside it (inner corona) so the edge has
+    //    body without becoming a Saturn stroke.
     const svg = document.createElementNS(NS, 'svg')
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
     svg.style.position = 'absolute'; svg.style.inset = '0'
     svg.style.width = '100%'; svg.style.height = '100%'
-
-    const ellipse = (krx, kry, attrs) => {
-      const e = document.createElementNS(NS, 'ellipse')
-      e.setAttribute('cx', cx.toFixed(1)); e.setAttribute('cy', cy.toFixed(1))
-      e.setAttribute('rx', krx.toFixed(1)); e.setAttribute('ry', kry.toFixed(1))
-      e.setAttribute('transform', rot)
-      for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v)
-      svg.appendChild(e)
-      return e
+    const circle = (r, attrs) => {
+      const c = document.createElementNS(NS, 'circle')
+      c.setAttribute('cx', cx.toFixed(1)); c.setAttribute('cy', cy.toFixed(1))
+      c.setAttribute('r', r.toFixed(1))
+      for (const [k, v] of Object.entries(attrs)) c.setAttribute(k, v)
+      svg.appendChild(c)
+      return c
     }
+    //    The rim is NOT uniform: a linear gradient runs from the bead's side
+    //    of the disc (full white) to the far side (dimmer, more hue). That
+    //    is what a "diamond ring" eclipse actually looks like — the
+    //    chromosphere shows on the bead's side and the rim thins out
+    //    opposite — and it is also the safe-box fix: at slot 10 the in-box
+    //    arc is the lower-left, opposite the bead, so the far-side stops are
+    //    what the gate measures. Gradient is userSpaceOnUse along the
+    //    bead->antipode chord; id comes from a module counter (same pattern
+    //    as occCounter below — NOT r(), which would reorder the caller's
+    //    seeded stream) so two eclipses in one document don't collide.
+    const bAng = -58 * Math.PI / 180
+    const bx = cx + Math.cos(bAng) * rRing, by = cy + Math.sin(bAng) * rRing
+    const gradId = `ec-rim-${eclipseCounter++}`
+    const defs = document.createElementNS(NS, 'defs')
+    const grad = document.createElementNS(NS, 'linearGradient')
+    grad.setAttribute('id', gradId)
+    grad.setAttribute('gradientUnits', 'userSpaceOnUse')
+    grad.setAttribute('x1', bx.toFixed(1)); grad.setAttribute('y1', by.toFixed(1))
+    grad.setAttribute('x2', (2 * cx - bx).toFixed(1)); grad.setAttribute('y2', (2 * cy - by).toFixed(1))
+    ;[
+      [0, hsla(hue, 28, 96, A(0.95, fill))],
+      [0.5, hsla(hue, 40, 88, A(0.62, fill))],
+      [1, hsla(hue, 50, 78, A(0.40, fill))],
+    ].forEach(([off, col]) => {
+      const st = document.createElementNS(NS, 'stop')
+      st.setAttribute('offset', off); st.setAttribute('stop-color', col)
+      grad.appendChild(st)
+    })
+    defs.appendChild(grad); svg.appendChild(defs)
 
-    // disc face — dark vinyl carrying the station hue at low lightness, so it
-    // belongs to the palette instead of punching a black hole in the sky.
-    ellipse(rx, ry, { fill: hsla(hue, 44, 13, A(0.92, fill)) })
-
-    // grooves: 9 concentric ellipses from the label edge (0.40) to just
-    // inside the rim (0.94), brightening outward so the disc reads as
-    // catching light at its perimeter the way a real LP does.
-    const GROOVES = 9
-    for (let g = 0; g < GROOVES; g++) {
-      const t = g / (GROOVES - 1)
-      const k = lerp(0.40, 0.94, t)
-      ellipse(rx * k, ry * k, {
-        fill: 'none',
-        stroke: hsla(hue + 6, 58, lerp(38, 72, t), A(lerp(0.14, 0.38, t), fill)),
-        'stroke-width': Math.max(1, w * 0.0025).toFixed(2),
-      })
-    }
-
-    // rim — the one crisp edge, so the silhouette closes against the sky
-    // instead of dissolving into the outermost groove.
-    ellipse(rx, ry, {
+    circle(R + ringW * 2.2, {
       fill: 'none',
-      stroke: hsla(hue + 10, 76, 78, A(0.44, fill)),
-      'stroke-width': Math.max(1.5, w * 0.004).toFixed(2),
+      stroke: hsla(hue, 56, 84, A(0.30, fill)),
+      'stroke-width': (ringW * 3.2).toFixed(1),
+    }).setAttribute('style', `filter:blur(${(ringW * 1.1).toFixed(1)}px)`)
+    circle(rRing, {
+      fill: 'none',
+      stroke: `url(#${gradId})`,
+      'stroke-width': ringW.toFixed(1),
     })
 
-    // centre label — the bright saturated core. This is the element that
-    // carries the object at frame scale and from the back of a taproom.
-    ellipse(rx * 0.36, ry * 0.36, { fill: hsla(hue, 84, 64, A(0.86, fill)) })
-    // spindle hole
-    ellipse(rx * 0.045, ry * 0.045, { fill: hsla(hue, 40, 8, 0.95) })
-
+    // 4. Baily's bead — the "diamond ring" moment at ~1 o'clock. Rendered
+    //    history: attempts 1-4 drew a hard dot (0.95 ringW) with a small faint
+    //    halo (2.2 ringW, alpha 0.28) — the design critique read it as "a
+    //    ball sitting on the hoop", an orbit-diagram icon. The real thing is
+    //    light OVERWHELMING that point on the rim, so: a much smaller hard
+    //    core (0.6 ringW) inside a big soft bloom (6 ringW, alpha 0.6, blur
+    //    ~2.5 ringW) that locally swamps the rim. Sits at the top-right of
+    //    the disc, well clear of the safe box at slot 10's placement.
+    //    circle() centres on the disc; the bead sits on the rim, so cx/cy are
+    //    overridden through attrs (applied after the defaults, by design).
+    circle(ringW * 6, { cx: bx.toFixed(1), cy: by.toFixed(1), fill: hsla(hue, 45, 92, A(0.6, fill)) })
+      .setAttribute('style', `filter:blur(${(ringW * 2.5).toFixed(1)}px)`)
+    circle(ringW * 0.6, { cx: bx.toFixed(1), cy: by.toFixed(1), fill: hsla(hue, 20, 98, A(0.95, fill)) })
     f.appendChild(svg)
-
-    // Specular sheen, raked across the grooves. Static — no animation — so
-    // ring-verify's freezeFrame() has nothing to pin and the safe-box p99.5
-    // stays deterministic (instruments eight and nine, FAILURE-LEDGER: every
-    // measurement bug on this project so far has been an unfrozen frame).
-    const sheen = el('rc-sheen')
-    const sw = rx * 2, sh = ry * 2
-    sheen.style.left = px(cx - sw / 2); sheen.style.top = px(cy - sh / 2)
-    sheen.style.width = px(sw); sheen.style.height = px(sh)
-    sheen.style.transform = `rotate(${tilt}deg)`
-    sheen.style.background = `linear-gradient(112deg, transparent 26%, ` +
-      `${hsla(hue + 16, 72, 84, A(0.18, fill))} 44%, ` +
-      `${hsla(hue + 16, 62, 92, A(0.26, fill))} 50%, ` +
-      `${hsla(hue + 16, 72, 84, A(0.14, fill))} 56%, transparent 74%)`
-    f.appendChild(sheen)
   }
 
   else if (kind === 'binary') {
@@ -3042,17 +3125,23 @@ export const SKY_REGIONS = {
   // object and left the sky behind. The offsets are the shipped world's own
   // arithmetic, preserved exactly, so nothing renders differently today:
   // aurora = pulsar (120) + 32 = 152, ember = supernova (36) - 10 = 26,
-  // disco = record (300) + 0 = 300.
+  // corona = eclipse (300) + 0 = 300.
   aurora: { hueOffset: 32, tintSat: 60, tintLight: 27, srcSat: 55, srcLight: 56, pos: '88% 112%', poolW: 58, poolH: 62 },
   ember: { hueOffset: -10, tintSat: 66, tintLight: 28, srcSat: 62, srcLight: 56, pos: '16% 116%', poolW: 58, poolH: 62 },
-  // 2026-08-16, the record station — st12 at first, st10 since the same-day
-  // silhouette swap (Ben: "ensure that the color wiring on s13 is noticeable
-  // and fun"). Deliberately the most saturated of the three
-  // (tintSat 74 vs 60/66, one lightness step up) — this is the party moment,
-  // and the only region whose source is a manufactured object rather than an
-  // astronomical one, so it is allowed to be the loudest.
+  // The eclipse station (st10, the music slot). Was `disco`, the record's
+  // region, 2026-08-16 -> 2026-09-06: that one was deliberately the loudest
+  // of the three (tintSat 74, "the party moment") because its source was a
+  // manufactured object. With the record retired the justification went with
+  // it — a corona lighting the sky around the ring's 5th-quietest slot is a
+  // plausible astronomical source, not a party, so it sits between aurora
+  // and ember in saturation (62) and a step darker (28), per the design
+  // doc's §5.3 option 1 (docs/superpowers/plans/2026-09-05-ring-unified-
+  // noun-color-draw-design.md). pos re-anchored to the top-right corner
+  // (was disco's bottom-centre '62% 114%') so the tint pools where the
+  // eclipse actually is — see skyTintBackground's comment on why this is the
+  // one region allowed above the bottom edge. Pool size unchanged.
   //
-  // Offset 0 is chosen, not arbitrary. The record's own hue (300) sits
+  // Offset 0 is chosen, not arbitrary. The eclipse's own hue (300) sits
   // between the world's violet home (sky 268, st0 256, st2 268) and its rose
   // accent (st6, 330), so the sky reads as the resident palette turned up
   // rather than a fourth unrelated colour zone — and taking the source's hue
@@ -3062,11 +3151,11 @@ export const SKY_REGIONS = {
   //
   // Side effect worth knowing before judging it live: station 0 previously
   // carried zero region weight (the ring's flattest stretch was st0-st2).
-  // It now carries ember at 0.5 on the way out of the supernova (st12 since
-  // the 2026-08-16 record/supernova swap); disco's own shoulders are st9
-  // (0.25 preview) and st11 (0.5 exit), where st11 also carries the ember
-  // preview at 0.25 — overlapping shoulders stack, see skyRegionWeights.
-  disco: { hueOffset: 0, tintSat: 74, tintLight: 30, srcSat: 70, srcLight: 60, pos: '62% 114%', poolW: 44, poolH: 50 },
+  // It now carries ember at 0.5 on the way out of the supernova (st12);
+  // corona's own shoulders are st9 (0.25 preview) and st11 (0.5 exit), where
+  // st11 also carries the ember preview at 0.25 — overlapping shoulders
+  // stack, see skyRegionWeights.
+  corona: { hueOffset: 0, tintSat: 62, tintLight: 28, srcSat: 70, srcLight: 60, pos: '86% -4%', poolW: 44, poolH: 50 },
 }
 
 // Region hue = its source station's hue + the region's authored offset. The
@@ -3130,7 +3219,7 @@ function cyclicOffset(i, j, n) {
   return raw * 2 <= n ? raw : raw - n
 }
 
-// -> array[stationIndex] = { aurora: w, ember: w, disco: w }.
+// -> array[stationIndex] = { aurora: w, ember: w, corona: w }.
 //
 // Geometric falloff in signed cyclic distance, asymmetric by direction:
 // REGION_W_APPROACH per step ahead, REGION_W_EXIT per step behind, so
@@ -3147,7 +3236,7 @@ function cyclicOffset(i, j, n) {
 // core than a one-station region, which is a density artefact rather than
 // intent. Regions are still scored independently OF EACH OTHER, so
 // overlapping shoulders stack the layers' opacities as before (st11 carries
-// disco's exit and ember's approach at the same time).
+// corona's exit and ember's approach at the same time).
 //
 // Deliberately NOT normalized to a constant per-station total. Flattening the
 // total would pull the quiet stations up to near core strength, which is the
@@ -3193,9 +3282,16 @@ export const SKY_TINT_EASE = 'cubic-bezier(.25,.46,.45,.94)'
 // anchor (SKY_REGIONS' pos/poolW/poolH) instead of the shared full-width
 // shape, so no station has a straight-edge boundary and adjacent stations
 // with different regions read as different shapes, not just different hues.
-// Still bottom-weighted (every pos sits AT or BELOW the frame's bottom edge,
-// >100% y) so the top ~40% of sky stays the world's own midnight purple —
-// same guardrail the old bar kept, just no longer full-width to do it.
+// aurora and ember are bottom-weighted (pos AT or BELOW the frame's bottom
+// edge, >100% y) so the top ~40% of sky stays the world's own midnight purple
+// — same guardrail the old bar kept, just no longer full-width to do it.
+// `corona` is the one exception (2026-09-06): its pos is the top-RIGHT
+// corner, because that is where its source — the eclipse at slot 10 — sits,
+// and a tint with no visible cause reads as a filter (design critique; the
+// inherited `disco` pos pooled it bottom-centre, ~500px from the object).
+// Same pool size as before, so it is a corner pool, not a top band; rendered
+// st9/st11 (concepts/.audit-shots/eclipse-swap-2026-09-06/attempt-5/) read
+// as a corner afterglow, not a jump.
 function skyTintBackground(cfg) {
   return `radial-gradient(ellipse ${cfg.poolW}% ${cfg.poolH}% at ${cfg.pos},
     ${hsla(cfg.hue, cfg.tintSat, cfg.tintLight, 0.62)} 0%,
@@ -3425,12 +3521,12 @@ export function ringCss(prefix) {
 
 .${p}rg-ring{position:absolute;border-radius:50%}
 
-/* record (the music station — st10 since the 2026-08-16 swap). Only the sheen
-   needs a class — the disc/grooves/label
-   are SVG ellipses styled inline. mix-blend-mode:screen so the highlight adds
-   light to the grooves underneath instead of flatly covering them, which is
-   what separates a specular sweep from a grey smear. */
-.${p}rc-sheen{position:absolute;border-radius:50%;mix-blend-mode:screen;pointer-events:none}
+/* eclipse (the music station, st10). Only the streamers need a class — the
+   annulus and bead are SVG circles styled inline, the corona is a .d-glow.
+   Pivot at the LEFT-CENTRE of the arm (0 50%): the arm is rotated about the
+   disc centre and then pushed out along its own axis, so its root sits on
+   the annulus — see makePrim's eclipse branch. */
+.${p}ec-flare{position:absolute;left:50%;top:50%;transform-origin:0 50%;pointer-events:none}
 
 .${p}pair-bridge{position:absolute;height:2px;transform-origin:0 50%;pointer-events:none}
 

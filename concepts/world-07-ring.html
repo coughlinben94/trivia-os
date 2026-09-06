@@ -199,8 +199,9 @@ header.pg b{color:#ddd8e8;font-weight:500}
   exactly thirteen turns, so a station always lands on the composition it was authored
   with. <b>Each station has its own brightness target</b>, so some are quiet and two
   or three are loud, instead of thirteen panes that all read the same. Station 10
-  is the <b>record</b> — the jukebox grading break's own slot, added 2026-08-16
-  at station 12 and swapped to 10 the same day for silhouette spacing.</p>
+  is the <b>eclipse</b> — the jukebox grading break's own slot (added 2026-08-16 as
+  a record, at station 12, swapped to 10 the same day for silhouette spacing;
+  the record became an eclipse 2026-09-06 because it duplicated the real player).</p>
 </div></header>
 
 <div class="wrap">
@@ -303,9 +304,10 @@ const TINTS = {
 const ENGINE = {
   W: 1920, H: 1080,
   // 12 -> 13 on 2026-08-16: the jukebox grading-break got its own dedicated
-  // stop (Ben: "it needs to have its own ring slot"), the `record` station
+  // stop (Ben: "it needs to have its own ring slot"), the music station
   // appended below (at st12; swapped to st10 the same day for silhouette
-  // spacing — see its own entry). NOTE this moves the arc: arcAt() is
+  // spacing; a `record` until 2026-09-06, now `eclipse` — see its own
+  // entry). NOTE this moves the arc: arcAt() is
   // cos(2*PI*(i+phase)/PANES), so every station's loudness/fill/ink shifts,
   // not just the new one. It also moves the WRAP POINT from 11->0 to 12->0 —
   // both new legs are covered by ringEngine.test.js's 13-pane wrap-glide
@@ -425,7 +427,7 @@ let WORLD = {
     { key:'comet',          prim:'streak',       hue:208, accent:false, cornerLeft:false, companionBoost:true, companionKind:'lens', maskSpots:[[0.5957278481012659,0.13787798874824192,0.04509493670886067,0.07876230661040787]] }, // was st4 — elongated streak; cornerLeft:false 2026-08-13 — the redesigned streak draws more seeded points (ion tail), which reordered this station's corner draw toward frame-center; a comet head near center risks the safe box, and Ben's standing rule is corners; companionBoost 2026-08-13 (Ben: "need something else bottom left" — this is the ARC's quietest station, lou=0, companion alpha bottomed out invisible; see the companion block); companionKind:'lens' same date — the roll landed on 'dots', whose 3-4px specks + dim halo stay illegible at frame scale even boosted (rendered and confirmed, round 2); forced to the defined-shape lens instead, st1-companionKind precedent
     { key:'binary pair',    prim:'binary',       hue:214, accent:false }, // was st7 — radial mass; orangeWash REMOVED 2026-08-16: an orange wash over a BLUE object had no visible cause, which is precisely why it read as a filter rather than a place. The warm region moved to st10, whose own object (the supernova) is already amber — a data-level fix, not another alpha re-tune
     { key:'asteroid field', prim:'asteroidField',hue:160, accent:false }, // NEW — scattered cluster; fillCorner (2026-08-12, Ben: "need something here" on the bottom-left) REMOVED 2026-08-26 (ring-verify Bug B + Bug A): it drew via makeOccluder, a subtractive element — banned outright here by spec §7.2 (st9 is one of the bottom-third-by-arc quietest stations), and cutting it also brings st9's own element count from 6 into the 2-5 band (Bug A) in the same edit.
-    { key:'record',         prim:'record',       hue:300, accent:false, region:'disco', regionSource:true, maxDetail:1 }, // was st12 — swapped with the supernova 2026-08-16 (Ben: "it can just flip it with another station, correct?"), resolving the tradeoff its original entry flagged: at st12 the disc sat 1 station from the ringed planet (st0), the pair most alike in the whole ring (disc+ring vs disc+grooves). Here both neighbours are the world's two least-round silhouettes — asteroid field (st9, scattered rocks) and aurora ribbon (st11, horizontal streak). Spacing arithmetic, stated in full: radial masses {0,3,4,8} are fixed (none can move — every slot is within 2 of one of them, exclusion zones cover all 13), so a slot >=3 from ALL of them does not exist for any new round object; st10 is one of only two slots (6, 10) with zero radial-mass NEIGHBOURS, and the one that keeps the disc >=3 from the ringed planet (d=3) with a single residual d=2 to the binary pair (st8) — st6 would have carried d=2 to both st4 and st8. Ben's call whether that residual d=2 stands, same precedent as st3's own flagged exception. Also flagged: st10's arc is quieter (11.8 vs st12's 21.3), so the record's own headline renders dimmer than it did at st12; the disco region + source glow are weight-driven (full at the member station regardless of arc) and lose nothing. Primitive unchanged — built on `ring`'s accepted anatomy minus drawPlanetDisc, see makePrim's `record` branch. region:'disco' + regionSource (Ben: "ensure that the color wiring on s13 is noticeable and fun") — the record's label lights its own sky, same contract as the pulsar/supernova; hue 300 keeps it inside the world's violet family. accent:false — the warm-complementary cap (<=3 stations) is already met by st3/st6/st12. MUSIC_STATION in Display.jsx moved 12->10 in the same commit — the break-routing contract follows the record, not the index.
+    { key:'eclipse',        prim:'eclipse',      hue:300, accent:false, region:'corona', regionSource:true, maxDetail:1 }, // The music station (Display.jsx MUSIC_STATION = 10). Total eclipse since 2026-09-06, replacing the record — Ben's call, final: the drawn record sat under the real Jukebox player every grading break (docs/superpowers/plans/2026-09-05-ring-unified-noun-color-draw-design.md, header + §5). Built corona-first (makePrim's `eclipse` branch): the ink is a bright >=4px annulus, a Baily's bead and three short streamers; the dark disc is the sky through the hole, not a painted body, so no makeOccluder-class element is involved and spec §7.2's subtractive ban on bottom-third-by-arc slots never applies (st10 is 5th-quietest, one rank above that band anyway — §5.1). Family radial-mass only, not a burst hybrid: as a burst it would sit d=2 from the supernova (st12) and re-create the signed-exception pattern; under the three-lane reading radial-mass owns lane B {1,4,7,10}, so the pin at 10 is a consequence of the lane, not a special case (§5.2). A quiet slot suits it — "renders dimmer at 10" was a defect for a record and is the noun for an eclipse; headline-ink floor (0.04) is the number to watch. Hue 300 carried over from the record: inside the world's violet family, between the sky (268) and the rose accent (330). region:'corona' + regionSource — the corona lights its own sky, same contract as the pulsar/supernova; see SKY_REGIONS for why it is quieter than `disco` was. accent:false — warm-complementary cap (<=3) already met by st3/st6/st12. maxDetail 1 carried over (2026-08-26 Bug A). Synced with midnightGalaxy.ring.js's st10 entry. Placement at 10 is Ben's OPEN call (§11a item 4, "idk") — a working default until he sees it on the TV, not an approval.
     { key:'aurora ribbon',  prim:'ribbon',       hue:196, accent:false, bandUpper:false, maxDetail:1 }, // was st11 (unchanged) — elongated streak; bandUpper:false 2026-08-12 (Ben: "move to bottom right" — was top-right, horizontal already right)
   { key:'supernova',      prim:'spikes',       hue:36,  accent:true, region:'ember', regionSource:true, maxDetail:1 }, // was st2, then st10; swapped with the record 2026-08-16 — radiant burst, family {5,12} now d=6 (was {5,10}=5), and the world's loudest accent object lands on a louder arc slot (21.3 vs st10's 11.8), which suits an exploding star. region:'ember' 2026-08-16 (moved from st8) — an actual exploding star is an undeniable source for a warm sky; single-station core, so st11 previews at 0.25 and st0 fades out at 0.5 (skyRegionWeights derives both from index distance); noWash flag removed 2026-08-13 — the far-layer wash loop it opted out of is gone entirely now (see buildLayerContent's far-layer removal note), so the flag had nothing left to read
   ],
@@ -921,7 +923,11 @@ function buildLayerContent(host, L){
          forced the same mask onto the planet's own d-glow), and can't paint
          over the PREVIOUS station's objects either, which sharing this mid-
          layer host would otherwise allow. */
-      if (st.regionSource && SKY_REGIONS[st.region]){
+      /* Not for `eclipse` (2026-09-06): the glow peaks at the object's centre,
+         which for the eclipse is a hole showing sky — it lit the "moon" from
+         inside. Its own donut d-glow is the corona's light. Same skip in
+         RingAmbient.jsx. */
+      if (st.regionSource && SKY_REGIONS[st.region] && st.prim !== 'eclipse'){
         /* Visual centre, not box centre: `spikes` re-centres its core+rays
            (and its own d-glow) on the corner point above, so the light has to
            follow them or it reads as a second, offset source. */

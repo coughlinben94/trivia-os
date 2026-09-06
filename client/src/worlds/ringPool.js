@@ -5,12 +5,12 @@
 // source of truth — if either of those files changes, ringPool.test.js's
 // hue-constant checks and family assertions catch drift immediately.
 //
-// `record` stays in the pool as shipped. The 2026-09-05 decision to retire
-// it for an `eclipse` noun (docs/superpowers/plans/
-// 2026-09-05-ring-unified-noun-color-draw-design.md §11a item 4, still
-// provisional pending Ben's TV sign-off) is separate art-project work — see
-// that doc's §9 build-order step 1. This plan does not depend on it and
-// does not pre-empt it.
+// The 2026-09-05 decision to retire `record` for an `eclipse` noun
+// (docs/superpowers/plans/2026-09-05-ring-unified-noun-color-draw-design.md
+// §11a item 4) landed 2026-09-06: station 10 is `eclipse` in both builds and
+// ringDraw/drawWorld pin that key by default. Placement at 10 is still
+// provisional pending Ben's TV sign-off; the pool itself just reads whatever
+// the station data says.
 import { midnightGalaxyRing } from './midnightGalaxy.ring.js'
 import { SLOTS } from './midnightGalaxy.slots.js'
 

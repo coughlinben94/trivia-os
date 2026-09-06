@@ -22,7 +22,7 @@ const SHIPPED_STATIONS = [
   { key: 'comet', hue: 208, accent: false },
   { key: 'binary pair', hue: 214, accent: false },
   { key: 'asteroid field', hue: 160, accent: false },
-  { key: 'record', hue: 300, accent: false, region: 'disco', regionSource: true },
+  { key: 'eclipse', hue: 300, accent: false, region: 'corona', regionSource: true },
   { key: 'aurora ribbon', hue: 196, accent: false },
   { key: 'supernova', hue: 36, accent: true, region: 'ember', regionSource: true },
 ]
@@ -94,32 +94,35 @@ describe('skyRegionWeights', () => {
 
   // Record/supernova swap 2026-08-16 (same day the record landed at st12):
   // the record moved st12 -> st10 for silhouette-family spacing, the
-  // supernova st10 -> st12. Disco follows the record; ember follows the
-  // supernova. See the station entries' own comments for the arithmetic.
-  it('matches the shipped Midnight Galaxy layout (aurora st4-5, disco st10, ember st12)', () => {
+  // supernova st10 -> st12. The record became the eclipse 2026-09-06 and its
+  // region `disco` became `corona` — same station, same weights. The region
+  // follows the music station; ember follows the supernova. See the station
+  // entries' own comments for the arithmetic.
+  it('matches the shipped Midnight Galaxy layout (aurora st4-5, corona st10, ember st12)', () => {
     const w = skyRegionWeights(midnightGalaxyRing.stations)
     expect(midnightGalaxyRing.stations).toHaveLength(13)
     expect(w.map(x => R(x.aurora))).toEqual(
       [0.003906, 0.015625, 0.0625, 0.25, 1, 1, 0.5, 0.25, 0.125, 0.0625, 0.03125, 0.015625, 0.000977])
     expect(w.map(x => R(x.ember))).toEqual(
       [0.5, 0.25, 0.125, 0.0625, 0.03125, 0.015625, 0.000244, 0.000977, 0.003906, 0.015625, 0.0625, 0.25, 1])
-    expect(w.map(x => R(x.disco))).toEqual(
+    expect(w.map(x => R(x.corona))).toEqual(
       [0.125, 0.0625, 0.03125, 0.015625, 0.000244, 0.000977, 0.003906, 0.015625, 0.0625, 0.25, 1, 0.5, 0.25])
   })
 
   // Ben, 2026-08-16: "ensure that the color wiring on s13 is noticeable and
-  // fun." The disco region is what delivers that.
+  // fun." The music station's own region (corona, since 2026-09-06; disco
+  // before that) is what delivers that.
   it('gives the music station its own region, and lights st9 and st11 on the way through', () => {
     const w = skyRegionWeights(midnightGalaxyRing.stations)
-    expect(w[10].disco).toBe(1)          // core — the record is its own light source
-    expect(R(w[9].disco)).toBe(0.25)     // approach
-    expect(R(w[11].disco)).toBe(0.5)     // exit — stacks with ember's 0.25 approach
+    expect(w[10].corona).toBe(1)          // core — the eclipse is its own light source
+    expect(R(w[9].corona)).toBe(0.25)     // approach
+    expect(R(w[11].corona)).toBe(0.5)     // exit — stacks with ember's 0.25 approach
     expect(midnightGalaxyRing.stations[10]).toMatchObject({
-      key: 'record', prim: 'record', region: 'disco', regionSource: true,
+      key: 'eclipse', prim: 'eclipse', region: 'corona', regionSource: true,
     })
-    // The record's own hue is a palette value, so it is pinned on the frozen
+    // The eclipse's own hue is a palette value, so it is pinned on the frozen
     // fixture — midnightGalaxy.ring.test.js guards the live one.
-    expect(SHIPPED_STATIONS[10]).toMatchObject({ key: 'record', hue: 300 })
+    expect(SHIPPED_STATIONS[10]).toMatchObject({ key: 'eclipse', hue: 300 })
   })
 
   // The reason the curve changed. Ben, on the sky work: panning must "ALWAYS
@@ -179,7 +182,7 @@ describe('skyRegionHues', () => {
   })
 
   it('reproduces the shipped region hues from the shipped station data', () => {
-    expect(skyRegionHues(SHIPPED_STATIONS)).toEqual({ aurora: 152, ember: 26, disco: 300 })
+    expect(skyRegionHues(SHIPPED_STATIONS)).toEqual({ aurora: 152, ember: 26, corona: 300 })
   })
 
   it('follows the source station when its hue moves', () => {

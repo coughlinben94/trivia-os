@@ -53,7 +53,7 @@ export const SLOTS = [
   { cornerLeft: false, bandUpper: true,  companionUpper: false, companionBoost: true,  maxDetail: 4, family: 'streak' },      // 7 comet
   { cornerLeft: true,  bandUpper: false, companionUpper: true,  companionBoost: false, maxDetail: 4, family: 'radial-mass' }, // 8 binary pair
   { cornerLeft: true,  bandUpper: true,  companionUpper: false, companionBoost: false, maxDetail: 4, family: 'cluster' },     // 9 asteroid field
-  { cornerLeft: false, bandUpper: true,  companionUpper: false, companionBoost: false, maxDetail: 1, family: 'radial-mass' }, // 10 record
+  { cornerLeft: false, bandUpper: true,  companionUpper: false, companionBoost: false, maxDetail: 1, family: 'radial-mass' }, // 10 eclipse
   { cornerLeft: false, bandUpper: false, companionUpper: true,  companionBoost: false, maxDetail: 1, family: 'streak' },      // 11 aurora ribbon
   { cornerLeft: true,  bandUpper: false, companionUpper: true,  companionBoost: false, maxDetail: 1, family: 'burst' },       // 12 supernova
 ]

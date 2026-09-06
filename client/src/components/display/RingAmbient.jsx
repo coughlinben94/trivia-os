@@ -459,7 +459,15 @@ function buildLayerContent(engine, world, arc, host, L) {
       // corner-anchored headline's glow can't spill onto the neighbouring
       // slide (the mask also stops it painting over the PREVIOUS station's
       // objects, which sharing this mid-layer host would otherwise allow).
-      if (st.regionSource && SKY_REGIONS[st.region]) {
+      // NOT for `eclipse` (2026-09-06, design critique): this glow peaks at
+      // the object's centre on the assumption the object is opaque and
+      // silhouettes in front of it. The eclipse is corona-first — its centre
+      // is a HOLE showing sky — so the shared glow shone straight through
+      // it and made the "moon" the brightest broad region in frame. Its own
+      // donut-shaped d-glow already lights the sky around the rim in the
+      // region hue, so it needs no separate source. Same skip in
+      // world-07-ring.html.
+      if (st.regionSource && SKY_REGIONS[st.region] && st.prim !== 'eclipse') {
         // Visual centre, not box centre: `spikes` re-centres its core+rays
         // (and its own d-glow) on the corner point above, so the light has
         // to follow them or it reads as a second, offset source.
@@ -883,7 +891,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   // ── Station override: the jukebox grading-break's dedicated slot ──
   // Every other caller advances the ring by exactly one station per slide.
   // The break is the one moment that must land on a SPECIFIC station (10, the
-  // record — see Display.jsx's MUSIC_STATION) no matter where the rotation
+  // eclipse — see Display.jsx's MUSIC_STATION) no matter where the rotation
   // happens to be, so it is the one caller that jumps instead of turning.
   //
   // jumpTo() snaps rather than glides, and that is deliberate rather than a
@@ -897,8 +905,8 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   // uses.
   //
   // Contract for the jukebox-side layer (jukebox-ring-fusion branch): by the
-  // time that overlay paints, stationRef is MUSIC_STATION (10), the record is
-  // the station in frame, and the disco sky tint is at full weight (snapped,
+  // time that overlay paints, stationRef is MUSIC_STATION (10), the eclipse is
+  // the station in frame, and the corona sky tint is at full weight (snapped,
   // not transitioning — jumpTo passes animate:false, see applySkyTints).
   //
   // 2026-08-17 (Ben) — the override is now a ROUND TRIP, not a one-way jump:

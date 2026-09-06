@@ -647,15 +647,17 @@ async function stepShow(showRow, direction) {
 
 // ─── Live display ──────────────────────────────────────────────────────────
 
-// The ring's dedicated music slot — index 10, the `record` station added
-// 2026-08-16 at index 12 and swapped to 10 the same day for silhouette-family
-// spacing (see client/src/worlds/midnightGalaxy.ring.js's record entry). Ben:
-// the jukebox grading-break "needs to have its own ring slot" rather than
-// consuming an arbitrary station and hiding it under the overlay, which is
-// what it did before. Declared here rather than imported from the world module
-// so a non-ring theme still compiles — the value is simply never used unless a
+// The ring's dedicated music slot — index 10, the `eclipse` station (added
+// 2026-08-16 as a `record` at index 12, swapped to 10 the same day for
+// silhouette-family spacing, and swapped record->eclipse 2026-09-06 because a
+// drawn record under the real Jukebox player was a duplicate — see
+// client/src/worlds/midnightGalaxy.ring.js's eclipse entry). Ben: the jukebox
+// grading-break "needs to have its own ring slot" rather than consuming an
+// arbitrary station and hiding it under the overlay, which is what it did
+// before. Declared here rather than imported from the world module so a
+// non-ring theme still compiles — the value is simply never used unless a
 // ring world is mounted. This constant must always point at the station whose
-// prim is 'record' — the routing contract follows the record, not the index.
+// prim is 'eclipse' — the routing contract follows the eclipse, not the index.
 const MUSIC_STATION = 10
 
 // How long the grading-break slide holds before the warp takes the TV.
@@ -693,7 +695,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
   const breakActive = breakEligible && activeBreakId === currentSlide?.id
 
   // ── The warp (2026-08-17, Ben) ──
-  // 'out'  = leaving the break's own station for the jukebox's record.
+  // 'out'  = leaving the break's own station for the jukebox's eclipse.
   // 'back' = the mirrored return onto that same station.
   // null the rest of the time. See WarpTransition.jsx for the effect itself and
   // RingAmbient.jsx's stationOverride effect for the Sx memory.
@@ -739,7 +741,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
   // Space.
   // The timer no longer opens the overlay directly: it starts the warp, and the
   // warp's own completion mounts the jukebox (see WarpTransition below), so the
-  // ring's snap onto the record happens behind the streaks instead of as a
+  // ring's snap onto the eclipse happens behind the streaks instead of as a
   // silent hard cut under an opaque panel.
   useEffect(() => {
     if (!breakEligible || breakActive || warp) return
@@ -977,7 +979,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           it never disconnects (the shared-player singleton stays connected
           for the whole page session), so the fade has to happen at the
           Jukebox level, not here. */}
-      {/* Hyperspace between the ring's own station and the jukebox's record.
+      {/* Hyperspace between the ring's own station and the jukebox's eclipse.
           'out' finishing is what makes the overlay below VISIBLE and flips
           stationOverride to MUSIC_STATION — one commit, so the jump lands on
           the warp's last (fully black) frame. 'back' mounts in the same commit
