@@ -17,6 +17,20 @@ import { useState, useLayoutEffect } from 'react'
 //
 // When outerRef has no height of its own (a plain block context, e.g.
 // SlideEditor's phone preview) the measurement is skipped and k stays 1.
+//
+// Also caps `avail` at window.visualViewport.height, not just
+// outerRef.clientHeight (2026-09-06 audit) — the one screen in this tree
+// with a real <input> (Join.jsx's registration name field) sits inside a
+// hard height:100dvh + overflow:hidden box with no scroll escape hatch.
+// `dvh` is SUPPOSED to track the on-screen keyboard, but real iOS Safari
+// versions are inconsistent about updating it the instant the keyboard
+// opens — if outerRef's layout height doesn't shrink, a plain
+// ResizeObserver-only recompute would reproduce the exact same stale
+// number. visualViewport.height reflects the true visible area regardless
+// of whether dvh cooperated, so taking the min of the two is correct either
+// way: a no-op when dvh already updated (they already agree), the actual
+// fix when it didn't. Listened on its own resize event too, since a
+// keyboard open/close doesn't necessarily fire a ResizeObserver at all.
 export function useShrinkToFit(outerRef, contentRef, enabled = true) {
   const [k, setK] = useState(1)
   useLayoutEffect(() => {
@@ -25,7 +39,8 @@ export function useShrinkToFit(outerRef, contentRef, enabled = true) {
     const content = contentRef.current
     if (!outer || !content) return
     const recompute = () => {
-      const avail = outer.clientHeight
+      const vvh = window.visualViewport?.height
+      const avail = vvh != null ? Math.min(outer.clientHeight, vvh) : outer.clientHeight
       const natural = content.offsetHeight
       if (!avail || !natural) return
       setK(Math.min(1, avail / natural))
@@ -34,7 +49,11 @@ export function useShrinkToFit(outerRef, contentRef, enabled = true) {
     const ro = new ResizeObserver(recompute)
     ro.observe(outer)
     ro.observe(content)
-    return () => ro.disconnect()
+    window.visualViewport?.addEventListener('resize', recompute)
+    return () => {
+      ro.disconnect()
+      window.visualViewport?.removeEventListener('resize', recompute)
+    }
   }, [outerRef, contentRef, enabled])
   return k
 }
