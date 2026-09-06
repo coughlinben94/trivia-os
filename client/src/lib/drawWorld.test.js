@@ -129,6 +129,26 @@ describe('drawWorld', () => {
       base: BASE, pool: SATISFIABLE_POOL, shelf: [], baseTheme: THEME, showId: 'x', pinKey: 'record', pinAt: 10,
     })).toThrow(/no certified palettes/)
   })
+
+  // Every test above uses pool.length === base.stations.length (13 == 13),
+  // so drawStations never has to actually select a subset — it just
+  // arranges all of them. This pool adds 2 extra entries (15 total) to
+  // families with room under LANE_CAP(13)=4 ('streak' 2->3, 'cloud' 1->2,
+  // both still under cap even if fully selected), so drawStations must
+  // genuinely pick 13 of 15 rather than just reorder everything.
+  const LARGER_POOL = [
+    ...SATISFIABLE_POOL,
+    { key: 's3', prim: 'comet', hue: 340, accent: false, family: 'streak' },
+    { key: 'cl2', prim: 'haze', hue: 20, accent: false, family: 'cloud' },
+  ]
+
+  it('selects a subset when the pool is larger than the station count', () => {
+    const { world } = drawWorld({
+      base: BASE, pool: LARGER_POOL, shelf: SHELF, baseTheme: THEME,
+      showId: 'show-subset', pinKey: 'record', pinAt: 10,
+    })
+    expect(world.stations).toHaveLength(13)
+  })
 })
 
 function assertWorldPassed() { return true } // assertWorld already ran inside drawWorld; a throw would have failed the test above
