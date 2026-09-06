@@ -22,8 +22,8 @@ import { normalizeRoundScore } from './scoreboardMath.js'
 // just be quietly incorrect. Keep threshold ascending safe < fire < sun.
 export const WAGER_TIERS = [
   { id: 'safe', emoji: '🕯️', label: 'Play It Safe',         points: 10, threshold: 0.50 },
-  { id: 'fire', emoji: '🔥', label: 'Play With Fire',        points: 20, threshold: 0.75 },
-  { id: 'sun',  emoji: '☀️', label: 'Fly Close To The Sun',  points: 30, threshold: 0.90 },
+  { id: 'fire', emoji: '🔥', label: 'Play With Fire',        points: 15, threshold: 0.75 },
+  { id: 'sun',  emoji: '☀️', label: 'Fly Close To The Sun',  points: 20, threshold: 0.90 },
 ]
 
 // Safe is the implicit no-risk default: a team that never picked a tier (joined

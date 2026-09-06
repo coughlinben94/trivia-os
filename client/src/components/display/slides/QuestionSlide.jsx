@@ -6,7 +6,8 @@ import ShinyMatchingQuestion from './ShinyMatchingQuestion.jsx'
 import ShinyWagerQuestion from './ShinyWagerQuestion.jsx'
 import ShinyOrderQuestion from './ShinyOrderQuestion.jsx'
 import ShinyBendleQuestion from './ShinyBendleQuestion.jsx'
-import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView } from '../../../lib/shinySeries.js'
+import ShinyChoiceQuestion from './ShinyChoiceQuestion.jsx'
+import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isChoiceShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView } from '../../../lib/shinySeries.js'
 import { GridContent } from './GridSlide.jsx'
 import { fitToBox, QUESTION_BOX, QUOTE_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js'
@@ -1482,6 +1483,9 @@ function ShinyContent({ slide, show, theme, transitionKey, isPreview }) {
   // playing its stems at the host.
   if (isBendleShiny(data)) {
     return <ShinyBendleQuestion slide={slide} show={show} theme={theme} isPreview={isPreview} />
+  }
+  if (isChoiceShiny(data)) {
+    return <ShinyChoiceQuestion slide={slide} show={show} theme={theme} />
   }
   return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} isPreview={isPreview} />
 }

@@ -5,13 +5,14 @@ import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
-import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isBendleShiny } from '../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isBendleShiny, isChoiceShiny } from '../lib/shinySeries.js'
 import { getWagerTier } from '../lib/wagerScoring.js'
 import { PHONE_MECHANICS } from '../lib/slideStepping.js'
 import MatchingBoard from '../components/join/MatchingBoard.jsx'
 import WagerBoard from '../components/join/WagerBoard.jsx'
 import OrderBoard from '../components/join/OrderBoard.jsx'
 import BendleBoard from '../components/join/BendleBoard.jsx'
+import ChoiceBoard from '../components/join/ChoiceBoard.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
 import { EASE_OUT, EASE_PANEL, EASE_BAR } from '../lib/easings.js'
@@ -607,6 +608,9 @@ function SlideContent({ slide, show, theme, team, onInteractiveAnswered, overrid
       }
       if (d.isShiny && isBendleShiny(d)) {
         return <BendleBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
+      }
+      if (d.isShiny && isChoiceShiny(d)) {
+        return <ChoiceBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
       }
       // All-at-once media (2026-08-26 rebuild): the TV shows every asset
       // together, so a phone stepping one asset at a time through

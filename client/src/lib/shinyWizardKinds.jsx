@@ -23,6 +23,7 @@ export const FIXED_SHAPE_KINDS = {
   matching: { hasOwnControls: false },
   wager:    { hasOwnControls: false },
   order:    { hasOwnControls: false },
+  choice:   { hasOwnControls: false },
   grid:     { hasOwnControls: true, extraControls: gridExtraControls, buildSlideData: buildGridSlide },
   venn:     { hasOwnControls: true, extraControls: vennExtraControls, buildSlideData: buildVennSlide },
   bendle:   { hasOwnControls: true, extraControls: bendleExtraControls, buildSlideData: buildBendleSlide },

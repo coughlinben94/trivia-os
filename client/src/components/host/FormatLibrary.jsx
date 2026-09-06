@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-const INPUT_TYPES = ['image', 'audio', 'video', 'text', 'list', 'grid', 'matching', 'wager', 'venn', 'order', 'bendle']
+const INPUT_TYPES = ['image', 'audio', 'video', 'text', 'list', 'grid', 'matching', 'wager', 'venn', 'order', 'bendle', 'choice']
 
 const EMPTY_FORMAT = {
   name: '',
@@ -242,6 +242,25 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                       className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.columnLabels !== false ? 'bg-gray-900' : 'bg-gray-200'}`}
                     >
                       <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.columnLabels !== false ? 'translate-x-5' : 'translate-x-0'}`}/>
+                    </button>
+                  </div>
+                )}
+
+                {/* Choice — single (Mandela Effect: pick the real one) vs
+                    multi (Mixology 101: tap every ingredient) select. Options
+                    themselves and which are correct are set per-slide in the
+                    editor, same as Order's items/correctOrder. */}
+                {schema.type === 'choice' && (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Multi-select?</p>
+                      <p className="text-xs text-gray-400">Off — teams tap one option (radio). On — teams tap any number (checkbox).</p>
+                    </div>
+                    <button
+                      onClick={() => updateSchema('multiSelect', !schema.multiSelect)}
+                      className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.multiSelect ? 'bg-gray-900' : 'bg-gray-200'}`}
+                    >
+                      <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.multiSelect ? 'translate-x-5' : 'translate-x-0'}`}/>
                     </button>
                   </div>
                 )}

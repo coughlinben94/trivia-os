@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase.js'
 import { deriveRoundCols, computeTotal, pickableTeams } from '../../lib/scoreboardMath.js'
 import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
+import { computeChoiceScoreUpdates, DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 import { scoreBendleRound, computeBendleScoreUpdates } from '../../lib/bendleScoring.js'
 import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
@@ -250,6 +251,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [orderScoreError, setOrderScoreError] = useState(null)
   const [bendleBusy, setBendleBusy] = useState(false)
   const [bendleError, setBendleError] = useState(null)
+  const [choiceBusy, setChoiceBusy] = useState(false)
+  const [choiceScoreError, setChoiceScoreError] = useState(null)
 
   // scoringBusy + the 12s cap below (2026-08-31, Opus second-opinion review
   // of the maybeStartLockCountdown fix): the fix that blocks Next during
@@ -260,7 +263,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // a real scoring round (three SELECTs + one upsert, normally 1-2s); past
   // that the host gets Next back and any real failure is already showing
   // its error on-screen via the Retry Scoring button.
-  const scoringBusy = matchingBusy || orderBusy || wagerBusy || bendleBusy
+  const scoringBusy = matchingBusy || orderBusy || wagerBusy || bendleBusy || choiceBusy
   const scoringSinceRef = useRef(0)
   useEffect(() => { scoringSinceRef.current = scoringBusy ? Date.now() : 0 }, [scoringBusy])
 
@@ -283,6 +286,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     setMatchingScoreError(null)
     setOrderScoreError(null)
     setBendleError(null)
+    setChoiceScoreError(null)
   }, [currentSlide?.id])
   // Jump-to-QR — a late team scans in mid-show. Only shown if the show
   // actually has a Pre-Show slide; jumps the TV there without touching the
@@ -558,6 +562,32 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         }
       },
       setBusy: setOrderBusy, setError: setOrderScoreError,
+    })
+  }
+
+  // Choice: same shape as Order — one lock field, no reveal-worthy result
+  // object, just a scoreboard fold-in.
+  async function handleLockAndScoreChoice(slide) {
+    await lockAndScore({
+      slide,
+      lockField: 'choiceLocked', lockedAtField: 'choiceLockedAt',
+      lateLogLabel: 'choice lock',
+      buildResults: ({ answers, teams, scoreboardTeams, roundKey, slideId }) => {
+        const updates = computeChoiceScoreUpdates({
+          answers, teams, scoreboardTeams, roundKey,
+          points: slide.data.pointsForChoice ?? DEFAULT_CHOICE_POINTS,
+          correctIds: slide.data.correctIds ?? [],
+          slideId,
+        })
+        return {
+          results: null,
+          updates,
+          unmatchedError: answers.length > 0 && updates.length === 0
+            ? 'No answers could be matched to the scoreboard — check team names match, then retry'
+            : null,
+        }
+      },
+      setBusy: setChoiceBusy, setError: setChoiceScoreError,
     })
   }
 
@@ -994,6 +1024,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     'wager-guesses': handleLockAndScoreWagers,
     order: handleLockAndScoreOrder,
     bendle: handleLockAndScoreBendle,
+    choice: handleLockAndScoreChoice,
   }
 
   // Mirrors currentSlide into a ref for the same reason actionsRef exists —
@@ -1375,6 +1406,14 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                 label: bendleBusy ? 'Working…' : d.bendleGuessesLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score',
                 act: () => handleLockAndScoreBendle(currentSlide),
                 force: () => handleLockAndScoreBendle(currentSlide, { force: true }),
+              },
+              choice: {
+                busy: choiceBusy, error: choiceScoreError, zeroErr: null,
+                status: d.choiceLocked
+                  ? 'Answers locked and scored — press A to reveal the correct answer on the TV.'
+                  : 'Choice question — teams are picking on their phones',
+                label: choiceBusy ? 'Scoring…' : d.choiceLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score',
+                act: () => handleLockAndScoreChoice(currentSlide),
               },
             }[phoneMechanic]
             if (d[REVEAL_FIELD[phoneMechanic]] && !panel.error) return null

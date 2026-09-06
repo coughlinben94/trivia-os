@@ -17,8 +17,8 @@ describe('WAGER_TIERS', () => {
   it('is exactly the three tiers at the spec point values and thresholds', () => {
     expect(WAGER_TIERS.map(t => [t.id, t.points, t.threshold])).toEqual([
       ['safe', 10, 0.5],
-      ['fire', 20, 0.75],
-      ['sun', 30, 0.9],
+      ['fire', 15, 0.75],
+      ['sun', 20, 0.9],
     ])
   })
   it('carries an escalating emoji per tier — candle, fire, plain sun', () => {
@@ -245,9 +245,9 @@ describe('scoreWagerRound — relative-to-the-room ranking', () => {
 
   it('Fire needs 75% and Sun needs 90% of the same 8-team room', () => {
     const fire = scoreWagerRound({ entries: eight.map(e => ({ ...e, tier: 'fire' })), correctAnswer: 100 })
-    expect(fire.map(r => r.points)).toEqual([20, 20, 0, 0, 0, 0, 0, 0])
+    expect(fire.map(r => r.points)).toEqual([15, 15, 0, 0, 0, 0, 0, 0])
     const sun = scoreWagerRound({ entries: eight.map(e => ({ ...e, tier: 'sun' })), correctAnswer: 100 })
-    expect(sun.map(r => r.points)).toEqual([30, 0, 0, 0, 0, 0, 0, 0])
+    expect(sun.map(r => r.points)).toEqual([20, 0, 0, 0, 0, 0, 0, 0])
   })
 
   it('missing your tier threshold is a flat zero — no fallback to a tier you would have made', () => {
@@ -374,7 +374,7 @@ describe('scoreWagerRound — non-answerers and degenerate rooms', () => {
   it('a single answering team beats the whole (empty) rest of the room', () => {
     const results = scoreWagerRound({ entries: [{ teamId: 'solo', tier: 'sun', guess: 5 }], correctAnswer: 100 })
     expect(results[0].beatFraction).toBe(1)
-    expect(results[0].points).toBe(30)
+    expect(results[0].points).toBe(20)
   })
 
   it('handles an empty room', () => {

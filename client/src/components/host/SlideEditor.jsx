@@ -13,7 +13,9 @@ import MatchingBoard from '../join/MatchingBoard.jsx'
 import WagerBoard from '../join/WagerBoard.jsx'
 import OrderBoard from '../join/OrderBoard.jsx'
 import BendleBoard from '../join/BendleBoard.jsx'
+import ChoiceBoard from '../join/ChoiceBoard.jsx'
 import { DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
+import { DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
 import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
 import { BENDLE_TIERS } from '../../lib/bendleScoring.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
@@ -459,6 +461,12 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
   // (if provisional) position instead of no position at all.
   const orderItems = data.items ?? [{ id: 'o0', url: '' }, { id: 'o1', url: '' }]
   const orderCorrectOrder = data.correctOrder ?? orderItems.map(i => i.id)
+
+  // Choice defaults — 2 blank options to start (Mandela Effect adds a 3rd
+  // per-question; Mixology 101 grows to 10-12), same "minimum viable" shape
+  // as Order/Matching's own defaults.
+  const choiceOptions = data.options ?? [{ id: 'c0', label: '', image: '' }, { id: 'c1', label: '', image: '' }]
+  const choiceCorrectIds = data.correctIds ?? []
 
   // Persists correctOrder into `data` the moment real items exist, instead of
   // only ever computing it as the local `orderCorrectOrder` fallback above —
@@ -1047,6 +1055,38 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
             </>
           )}
 
+          {/* Choice builder — Mandela Effect (multiSelect off) and Mixology
+              101 (multiSelect on) are both this one input type; the format's
+              own multiSelect flag (set in FormatLibrary) decides the phone's
+              radio-vs-checkbox behavior, this panel just authors the option
+              set + which are correct. */}
+          {schema.type === 'choice' && (
+            <>
+              <ChoiceBuilder
+                options={choiceOptions}
+                correctIds={choiceCorrectIds}
+                multiSelect={!!schema.multiSelect}
+                pointsForChoice={data.pointsForChoice ?? DEFAULT_CHOICE_POINTS}
+                onChangeOptions={opts => onChange('options', opts)}
+                onChangeCorrectIds={ids => onChange('correctIds', ids)}
+                onChangePoints={pts => onChange('pointsForChoice', pts)}
+                onBatchChange={onBatchChange}
+                onMediaUpload={async file => { const r = await uploadMedia(file); return r?.url }}
+              />
+              <div className="flex flex-col gap-2">
+                <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
+                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
+                  <ChoiceBoard
+                    preview
+                    theme={theme}
+                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
+                    slide={{ id: slide.id, showId: show?.id, data: { ...data, options: choiceOptions, choiceLocked: false } }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
           {/* Question text — not for list or matching types */}
           {schema.type !== 'list' && schema.type !== 'matching' && (
             <Field label="Question Text">
@@ -1062,19 +1102,24 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
             </Field>
           )}
 
-          {/* Answer — all shiny types. For a wager question this field is not
-              just the reveal text, it's the number every guess is measured
-              against, so it says so. */}
-          <Field
-            label={schema.type === 'wager' ? 'Answer — the true number' : 'Answer'}
-            hint={schema.type === 'wager' ? 'Every guess is scored by how close it lands to this. Must be a number.' : undefined}
-          >
-            <TextInput
-              value={data.answer ?? ''}
-              onChange={v => onChange('answer', v)}
-              placeholder={schema.type === 'wager' ? 'e.g. 412' : 'The answer…'}
-            />
-          </Field>
+          {/* Answer — all shiny types except Choice, which has its own
+              correct-answer mechanism (the radio/checkbox marks in
+              ChoiceBuilder above, stored as correctIds). Showing this generic
+              field too gave the host two "what's correct" controls on
+              screen, only one of which scoring ever reads — found live
+              2026-09-06 walking through a real Mandela Effect slide. */}
+          {schema.type !== 'choice' && (
+            <Field
+              label={schema.type === 'wager' ? 'Answer — the true number' : 'Answer'}
+              hint={schema.type === 'wager' ? 'Every guess is scored by how close it lands to this. Must be a number.' : undefined}
+            >
+              <TextInput
+                value={data.answer ?? ''}
+                onChange={v => onChange('answer', v)}
+                placeholder={schema.type === 'wager' ? 'e.g. 412' : 'The answer…'}
+              />
+            </Field>
+          )}
         </>
       )}
 
@@ -1737,6 +1782,141 @@ function OrderBuilder({ items, correctOrder, pointsForOrder, onChangeItems, onCh
         <input
           type="number"
           value={pointsForOrder}
+          onChange={e => onChangePoints(Number(e.target.value))}
+          min={0}
+          className="w-16 border border-gray-200 rounded px-2 py-1.5 text-sm text-center text-gray-900 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+        />
+      </div>
+    </div>
+  )
+}
+
+// Mandela Effect (multiSelect off — one correct option, others get
+// unchecked automatically like a radio) and Mixology 101 (multiSelect on —
+// any number of correct options) share this builder; only which correct-mark
+// behavior applies differs. Same batched add/remove-touches-two-fields
+// pattern as OrderBuilder's addItem/removeItem, for the same reason: options
+// and correctIds must never desync mid-render.
+function ChoiceBuilder({ options, correctIds, multiSelect, pointsForChoice, onChangeOptions, onChangeCorrectIds, onChangePoints, onBatchChange, onMediaUpload }) {
+  const [bulkText, setBulkText] = useState('')
+
+  function updateOption(i, patch) {
+    onChangeOptions(options.map((o, idx) => idx === i ? { ...o, ...patch } : o))
+  }
+  function addOption() {
+    const id = `c${Date.now()}_${options.length}`
+    onBatchChange({ options: [...options, { id, label: '', image: '' }], correctIds })
+  }
+  function removeOption(i) {
+    const removed = options[i]
+    onBatchChange({
+      options: options.filter((_, idx) => idx !== i),
+      correctIds: correctIds.filter(id => id !== removed.id),
+    })
+  }
+  // Multi-select formats (Mixology 101: 10-12 text ingredients) are painful
+  // to author one "+ Add option" click at a time. Paste-one-per-line adds
+  // them all in a single batch — text-only, since a bulk paste can't carry
+  // photos. Blank lines are dropped so a trailing newline doesn't create an
+  // empty option.
+  function addBulk() {
+    const lines = bulkText.split('\n').map(l => l.trim()).filter(Boolean)
+    if (lines.length === 0) return
+    const newOptions = lines.map((label, i) => ({ id: `c${Date.now()}_${options.length + i}`, label, image: '' }))
+    onChangeOptions([...options, ...newOptions])
+    setBulkText('')
+  }
+  async function uploadImage(i, file) {
+    if (!file) return
+    const url = await onMediaUpload(file)
+    if (url) updateOption(i, { image: url })
+  }
+  function toggleCorrect(id) {
+    if (multiSelect) {
+      onChangeCorrectIds(correctIds.includes(id) ? correctIds.filter(x => x !== id) : [...correctIds, id])
+    } else {
+      onChangeCorrectIds(correctIds[0] === id ? [] : [id])
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="block text-xs font-medium text-gray-700 mb-1.5">Choice Options</label>
+      <p className="text-xs text-gray-400 -mt-2">
+        Each option can be text or a photo — add a photo to make it an image tile. Check the {multiSelect ? 'ones' : 'one'} that's correct.
+      </p>
+      {/* No correct answer set yet — every submission scores 0 until this is
+          fixed. Same amber-warning pattern as WagerBuilder's missing-answer
+          and BendleBuilder's missing-song checks (found missing here in the
+          2026-09-06 design critique — this was the one real P0). */}
+      {correctIds.length === 0 && (
+        <p className="text-xs text-amber-600 -mt-1">
+          ⚠️ Check {multiSelect ? 'the correct options' : 'the correct option'} below — without it every team scores 0 on this question.
+        </p>
+      )}
+      {options.map((opt, i) => (
+        <div key={opt.id} className="flex flex-col gap-2 pb-4 mb-1 border-b border-gray-100 last:border-0 last:pb-0">
+          <div className="flex gap-2 items-center">
+            <input
+              type={multiSelect ? 'checkbox' : 'radio'}
+              checked={correctIds.includes(opt.id)}
+              onChange={() => toggleCorrect(opt.id)}
+              className="shrink-0"
+            />
+            <input
+              value={opt.label}
+              onChange={e => updateOption(i, { label: e.target.value })}
+              placeholder={`Option ${i + 1}…`}
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+            />
+            {options.length > 2 && (
+              <button
+                onClick={() => removeOption(i)}
+                className="text-xs text-gray-300 hover:text-red-400 shrink-0"
+              >✕</button>
+            )}
+          </div>
+          {/* Photo upload hidden for multi-select formats (Mixology 101) —
+              they're always a flat list of ingredient names, and dragging an
+              unused upload widget into every one of 10-12 rows was pure
+              friction (2026-09-06 critique, P1). Single-select (Mandela
+              Effect) is image-driven by design and keeps it. */}
+          {!multiSelect && (
+            <div className="pl-7">
+              <MediaUpload
+                accept="image" label="Photo (optional)"
+                currentUrl={opt.image || null} currentType={opt.image ? 'image/jpeg' : null}
+                onUpload={file => uploadImage(i, file)}
+                onRemove={() => updateOption(i, { image: '' })}
+              />
+            </div>
+          )}
+        </div>
+      ))}
+      <button
+        onClick={addOption}
+        className="text-xs text-baynes-forest hover:text-green-800 font-medium text-left"
+      >
+        + Add option
+      </button>
+      {multiSelect && (
+        <div className="flex flex-col gap-1.5 mt-1 pt-3 border-t border-gray-100">
+          <label className="text-xs font-medium text-gray-700">Add many at once — one per line</label>
+          <TextArea value={bulkText} onChange={setBulkText} placeholder={'Gin\nCampari\nSweet vermouth\n…'} rows={3} />
+          <button
+            onClick={addBulk}
+            disabled={!bulkText.trim()}
+            className="text-xs text-baynes-forest hover:text-green-800 font-medium text-left disabled:text-gray-300 disabled:cursor-not-allowed"
+          >
+            + Add all lines as options
+          </button>
+        </div>
+      )}
+      <div className="flex items-center gap-2 mt-1 pt-3 border-t border-gray-100">
+        <label className="text-xs font-medium text-gray-700">Points for correct answer</label>
+        <input
+          type="number"
+          value={pointsForChoice}
           onChange={e => onChangePoints(Number(e.target.value))}
           min={0}
           className="w-16 border border-gray-200 rounded px-2 py-1.5 text-sm text-center text-gray-900 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
