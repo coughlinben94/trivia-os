@@ -110,6 +110,10 @@ const ROTATION_MAX_DEG = { lens: 30, streak: 26, ribbon: 18 }
 // the (separately reviewed) body/tail gradient paint, so the fix narrows
 // this kind's peak swing instead of dimming the curtain's resting look.
 const PA2_MULT = { ribbon: 1.25 }
+// Per-call id for the eclipse rim's SVG <linearGradient> — a counter, not
+// an r() draw, for the same reason occCounter (below) is: a seeded draw
+// here would shift every later draw in the caller's stream.
+let eclipseCounter = 0
 
 // Worst-case post-rotation bounding-box height for a kind that may rotate
 // after placement — closes the KNOWN GAP bandY's own history above flagged
@@ -2017,10 +2021,17 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     //    off fast — a bright inner corona hugging the edge, not a wide dim
     //    wash. Numbers below are that: ~2x alpha at 61%, a steeper first
     //    falloff, the same far tail.
+    //    Safe-box pass (same day, measured with safebox-hit-test.mjs, gate
+    //    math): the annulus + this stop's lower-left arc sit inside the safe
+    //    box at slot 10's placement and put st10's p99.5 at 85 against the
+    //    68 cap (record was 31). The p99.5 pixels were the r~190 ring — this
+    //    stop and the rim — so both are dialed back here, and the rim gets
+    //    the diamond-ring asymmetry below so the OUT-of-box side keeps its
+    //    brightness. 0.62 -> 0.40 at 61%, 0.30 -> 0.18 at 68%.
     glow.style.background = `radial-gradient(circle closest-side,
       transparent 0%, transparent 58%,
-      ${hsla(hue, 50, 88, A(0.62, fill))} 61%,
-      ${hsla(hue, 58, 76, A(0.30, fill))} 68%,
+      ${hsla(hue, 50, 88, A(0.40, fill))} 61%,
+      ${hsla(hue, 58, 76, A(0.18, fill))} 68%,
       ${hsla(hue, 60, 66, A(0.12, fill))} 78%,
       ${hsla(hue - 8, 60, 58, A(0.04, fill))} 88%,
       transparent ${Math.max(72, E(96, fill)).toFixed(0)}%)`
@@ -2035,9 +2046,14 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     //    Attempt 2: the first pass's arms (0.34 alpha, 1.2-1.7 ringW thick)
     //    vanished into the corona at frame scale. Roughly doubled alpha and
     //    base thickness, lengths up a step but still all under one R.
+    //    Safe-box pass: the 152deg arm pointed straight into the safe box
+    //    at slot 10's placement (its root is rim-bright); now 196deg — left,
+    //    a touch below horizontal — so all three arms leave the box. A real
+    //    corona is lopsided anyway; three arms bunched on one side is truer
+    //    than three spread evenly.
     ;[
       { ang: 337, len: 0.78, th: 3.0 },
-      { ang: 152, len: 0.58, th: 2.4 },
+      { ang: 196, len: 0.58, th: 2.4 },
       { ang: 248, len: 0.44, th: 2.0 },
     ].forEach(({ ang, len, th }) => {
       const s = el('ec-flare')
@@ -2067,22 +2083,50 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       svg.appendChild(c)
       return c
     }
+    //    The rim is NOT uniform: a linear gradient runs from the bead's side
+    //    of the disc (full white) to the far side (dimmer, more hue). That
+    //    is what a "diamond ring" eclipse actually looks like — the
+    //    chromosphere shows on the bead's side and the rim thins out
+    //    opposite — and it is also the safe-box fix: at slot 10 the in-box
+    //    arc is the lower-left, opposite the bead, so the far-side stops are
+    //    what the gate measures. Gradient is userSpaceOnUse along the
+    //    bead->antipode chord; id comes from a module counter (same pattern
+    //    as occCounter below — NOT r(), which would reorder the caller's
+    //    seeded stream) so two eclipses in one document don't collide.
+    const bAng = -58 * Math.PI / 180
+    const bx = cx + Math.cos(bAng) * rRing, by = cy + Math.sin(bAng) * rRing
+    const gradId = `ec-rim-${eclipseCounter++}`
+    const defs = document.createElementNS(NS, 'defs')
+    const grad = document.createElementNS(NS, 'linearGradient')
+    grad.setAttribute('id', gradId)
+    grad.setAttribute('gradientUnits', 'userSpaceOnUse')
+    grad.setAttribute('x1', bx.toFixed(1)); grad.setAttribute('y1', by.toFixed(1))
+    grad.setAttribute('x2', (2 * cx - bx).toFixed(1)); grad.setAttribute('y2', (2 * cy - by).toFixed(1))
+    ;[
+      [0, hsla(hue, 28, 96, A(0.95, fill))],
+      [0.5, hsla(hue, 40, 88, A(0.62, fill))],
+      [1, hsla(hue, 50, 78, A(0.40, fill))],
+    ].forEach(([off, col]) => {
+      const st = document.createElementNS(NS, 'stop')
+      st.setAttribute('offset', off); st.setAttribute('stop-color', col)
+      grad.appendChild(st)
+    })
+    defs.appendChild(grad); svg.appendChild(defs)
+
     circle(R + ringW * 2.2, {
       fill: 'none',
-      stroke: hsla(hue, 56, 84, A(0.48, fill)),
+      stroke: hsla(hue, 56, 84, A(0.30, fill)),
       'stroke-width': (ringW * 3.2).toFixed(1),
     }).setAttribute('style', `filter:blur(${(ringW * 1.1).toFixed(1)}px)`)
     circle(rRing, {
       fill: 'none',
-      stroke: hsla(hue, 30, 94, A(0.92, fill)),
+      stroke: `url(#${gradId})`,
       'stroke-width': ringW.toFixed(1),
     })
 
     // 4. Baily's bead — one bright point on the rim at ~1 o'clock, the
     //    "diamond ring" moment. Small, so it reads as a point of light on
     //    the edge rather than a moon of its own.
-    const bAng = -58 * Math.PI / 180
-    const bx = cx + Math.cos(bAng) * rRing, by = cy + Math.sin(bAng) * rRing
     circle(0, { cx: bx.toFixed(1), cy: by.toFixed(1), r: (ringW * 2.2).toFixed(1), fill: hsla(hue, 50, 90, A(0.28, fill)) })
       .setAttribute('style', `filter:blur(${(ringW * 1.2).toFixed(1)}px)`)
     circle(0, { cx: bx.toFixed(1), cy: by.toFixed(1), r: (ringW * 0.95).toFixed(1), fill: hsla(hue, 20, 98, A(0.95, fill)) })
