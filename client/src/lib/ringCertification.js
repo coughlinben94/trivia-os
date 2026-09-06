@@ -4,4 +4,4 @@
 // assignment), ringRecolor.js, or RingAmbient.jsx. A shelf row's
 // ring_version must match this exactly or it is stale — see
 // supabase/migrations/<...>_ring_palettes_table.sql.
-export const RING_VERSION = 'v1-2026-09-03'
+export const RING_VERSION = 'v1-2026-09-06'
