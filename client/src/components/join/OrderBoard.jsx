@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { seededShuffle } from '../../lib/orderScoring.js'
+import ShrinkToFit from './ShrinkToFit.jsx'
 
 // preview: true mounts this component read-only-ish for a host building the
 // question (SlideEditor's live phone preview) — taps still animate locally so
@@ -141,6 +142,7 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
   }, [onAnswered, committedAnswer, items.length])
 
   return (
+    <ShrinkToFit disabled={preview}>
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 480, width: '100%', margin: '0 auto' }}>
       {/* The ordering criterion — "by when the state joined the Union" — is the
           whole question, and until 2026-08-25 it only existed on the TV: a
@@ -240,6 +242,7 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
         </p>
       )}
     </div>
+    </ShrinkToFit>
   )
 }
 

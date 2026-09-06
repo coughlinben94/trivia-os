@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
 import { WAGER_TIERS, wagerOddsLine, wagerTierReachable, parseWagerNumber } from '../../lib/wagerScoring.js'
+import ShrinkToFit from './ShrinkToFit.jsx'
 
 // Tier signal colors are FIXED across all 21 themes, the same way SHINY_GOLD
 // is and the same way MatchingBoard's pair palette is: the escalation from
@@ -210,10 +211,11 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
   const dirty = digits !== '' && digits !== committed
 
   return (
-    // maxWidth caps tier cards and the numeric keypad at a comfortable
-    // thumb-reach width — a no-op on phone widths (already narrower than
-    // this), but without it the 3-column keypad grid stretches its keys
-    // into wide, awkward rectangles on an iPad's ~560px content column.
+    <ShrinkToFit disabled={preview}>
+    {/* maxWidth caps tier cards and the numeric keypad at a comfortable
+        thumb-reach width — a no-op on phone widths (already narrower than
+        this), but without it the 3-column keypad grid stretches its keys
+        into wide, awkward rectangles on an iPad's ~560px content column. */}
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: 420, width: '100%', margin: '0 auto' }}>
 
       <AnimatePresence>
@@ -454,6 +456,7 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
         </p>
       )}
     </div>
+    </ShrinkToFit>
   )
 }
 

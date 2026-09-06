@@ -13,6 +13,7 @@ import WagerBoard from '../components/join/WagerBoard.jsx'
 import OrderBoard from '../components/join/OrderBoard.jsx'
 import BendleBoard from '../components/join/BendleBoard.jsx'
 import ChoiceBoard from '../components/join/ChoiceBoard.jsx'
+import ShrinkToFit from '../components/join/ShrinkToFit.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
 import { EASE_OUT, EASE_PANEL, EASE_BAR } from '../lib/easings.js'
@@ -242,14 +243,21 @@ function RegistrationScreen({ onRegister, show, theme }) {
   const highlight = theme?.colors?.highlight ?? '#4dffc3'
   const text      = theme?.colors?.text      ?? '#ffffff'
 
+  // Capped height + ShrinkToFit, not minHeight (2026-09-06 phone audit): the
+  // photo + heading + form column is ~490px tall before the iOS
+  // Add-to-Home-Screen banner, so at iPhone SE landscape (375px) the Join
+  // button sat below the fold and the page scrolled. Same rule as every
+  // slide — shrink, never scroll. The column top-aligns instead of centering
+  // (ShrinkToFit anchors at the top); no landscape phone is tall enough for
+  // that to leave a visible gap.
   return (
     <div style={{
-      minHeight: '100dvh', background: bg,
+      height: '100dvh', overflow: 'hidden', boxSizing: 'border-box', background: bg,
       display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
       padding: '1.5rem', fontFamily: 'DM Sans, sans-serif',
     }}>
-      <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      <ShrinkToFit>
+      <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
 
         {/* Ben photo — container reserves 100px so heading doesn't shift when photo loads */}
         <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -354,6 +362,7 @@ function RegistrationScreen({ onRegister, show, theme }) {
 
         <AddToHomeScreenBanner text={text} accent={accent} />
       </div>
+      </ShrinkToFit>
     </div>
   )
 }
@@ -573,7 +582,24 @@ function QuestionImage({ src, alt }) {
   )
 }
 
-function SlideContent({ slide, show, theme, team, onInteractiveAnswered, overridePart }) {
+// Every slide type shrinks to fit the phone screen (2026-09-06, Ben: "the
+// phone audit needs to be suite wide... all slide types... even questions
+// not phone based, just there to visually go back to") — one ShrinkToFit
+// around SlideBody, not one per branch. Two things render bare: the five
+// answer boards, which already carry their own ShrinkToFit at their root
+// (nesting two would leave both measuring a zero-height box), and the
+// concurrent-media image stack, the one surface Ben explicitly approved to
+// scroll inside .join-content instead.
+function SlideContent(props) {
+  const { slide } = props
+  if (!slide) return null
+  const d = slide.data ?? {}
+  const bare = slide.type === 'question' && d.isShiny &&
+    (Object.values(PHONE_MECHANICS).some(m => m.guard(d)) || isConcurrentMediaShiny(d))
+  return bare ? <SlideBody {...props} /> : <ShrinkToFit><SlideBody {...props} /></ShrinkToFit>
+}
+
+function SlideBody({ slide, show, theme, team, onInteractiveAnswered, overridePart }) {
   if (!slide) return null
   const text      = theme?.colors?.text      ?? '#ffffff'
   const round     = show?.rounds?.find(r => r.id === slide.roundId) ?? null
@@ -1456,7 +1482,13 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
 
   return (
     <>
-    <div style={{ minHeight: '100dvh', background: `linear-gradient(180deg, ${bg} 0%, ${bgDeep} 100%)`, display: 'flex', flexDirection: 'column', fontFamily: 'DM Sans, sans-serif' }}>
+    {/* Hard-capped height + overflow hidden, not minHeight (2026-09-06, Ben:
+        "i dont ever want it scrollable"): the page itself can never grow
+        past the viewport, so .join-content below is the one bounded scroll
+        box, and the answer boards (ShrinkToFit.jsx) scale down to fit it
+        rather than pushing the document taller. Other slide types that run
+        long (the concurrent-media stack) still scroll inside .join-content. */}
+    <div style={{ height: '100dvh', overflow: 'hidden', background: `linear-gradient(180deg, ${bg} 0%, ${bgDeep} 100%)`, display: 'flex', flexDirection: 'column', fontFamily: 'DM Sans, sans-serif' }}>
 
       {/* TOP BAR — safe-area padding (top for the notch, left/right for the
           same hardware once the phone is on its side) and the compact
@@ -1519,7 +1551,15 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
             team's input. Vertical scroll through long question text keeps
             working natively — framer's own x-axis drag lock leaves the
             y-axis alone (sets touch-action: pan-y on the dragged element),
-            same idiom ScoresDrawer already uses. */}
+            same idiom ScoresDrawer already uses.
+
+            The flex-column chain from here down to the slide (this div, the
+            relative clip div, the keyed carousel div) exists for
+            ShrinkToFit.jsx: `flex: 1 0 auto` grows each wrapper to fill the
+            leftover height (so an answer board learns how much room it
+            really has) but never shrinks one below its content — so the one
+            bare slide (the concurrent-media stack) still overflows into
+            .join-content's own scroll instead of being clipped. */}
         <motion.div
           drag={!forceInteractive && (canGoBack || isBehindLive) ? 'x' : false}
           dragConstraints={{ left: 0, right: 0 }}
@@ -1529,9 +1569,9 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
             if (info.offset.x < 0) { setSwipeDirection(1); handleForward() }
             else { setSwipeDirection(-1); handleBack() }
           }}
-          style={{ minHeight: '100%' }}
+          style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}
         >
-          <div style={{ position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'relative', overflow: 'hidden', flex: '1 0 auto', display: 'flex', flexDirection: 'column' }}>
             <AnimatePresence initial={false} mode="popLayout" custom={swipeDirection}>
               <motion.div
                 key={`${viewedIndex}:${effectivePart}`}
@@ -1543,6 +1583,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
                 transition={pref
                   ? { opacity: { duration: 0.15 } }
                   : { x: { type: 'spring', stiffness: 380, damping: 32 }, opacity: { duration: 0.18 } }}
+                style={{ flex: '1 0 auto', display: 'flex', flexDirection: 'column' }}
               >
                 {/* Keyed on the actual slide id (not the carousel's
                     index:part key above) — a tripped boundary must only stay

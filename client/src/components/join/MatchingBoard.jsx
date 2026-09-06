@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
 import { seededShuffle, buildMatchAnswer } from '../../lib/matchingScoring.js'
+import ShrinkToFit from './ShrinkToFit.jsx'
 
 // A matched tile paints the whole button and switches its label to #1a1a1a,
 // so every entry here has to clear AA against that near-black, not against
@@ -188,8 +189,9 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
   }, [onAnswered, committedConnections, pairs.length])
 
   return (
-    // maxWidth keeps the two tile columns from stretching wide and sparse on
-    // an iPad's ~560px content column — a no-op on phone widths.
+    <ShrinkToFit disabled={preview}>
+    {/* maxWidth keeps the two tile columns from stretching wide and sparse on
+        an iPad's ~560px content column — a no-op on phone widths. */}
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 480, width: '100%', margin: '0 auto' }}>
       <AnimatePresence>
         {showLockPop && (
@@ -268,6 +270,7 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
         </p>
       )}
     </div>
+    </ShrinkToFit>
   )
 }
 

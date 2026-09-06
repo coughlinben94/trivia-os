@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
+import ShrinkToFit from './ShrinkToFit.jsx'
 
 export default function BendleBoard({ slide, team, theme, preview = false, onAnswered }) {
   const { data } = slide
@@ -48,6 +49,7 @@ export default function BendleBoard({ slide, team, theme, preview = false, onAns
   }
 
   return (
+    <ShrinkToFit disabled={preview}>
     <div style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       {submitted || guessesLocked ? (
         <p style={{ fontSize: '1.2rem', textAlign: 'center', color: theme.colors.text }}>
@@ -72,5 +74,6 @@ export default function BendleBoard({ slide, team, theme, preview = false, onAns
         </>
       )}
     </div>
+    </ShrinkToFit>
   )
 }

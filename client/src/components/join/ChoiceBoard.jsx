@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
+import ShrinkToFit from './ShrinkToFit.jsx'
 
 // The phone side of a Choice question — Mandela Effect (single-select, pick
 // the real image) and Mixology 101 (multi-select, tap every ingredient) are
@@ -29,6 +30,15 @@ export default function ChoiceBoard({ slide, team, theme, preview = false, onAns
   // gate on a CONFIRMED save.
   const [selected, setSelected] = useState([])
   const [committedSelected, setCommittedSelected] = useState([])
+  // "Clear all" sits right above Lock In; one mis-tap wiped a whole Mixology
+  // selection with no undo. Two-tap arm — disarms itself after 2.5s or on
+  // any option tap (2026-09-06 critique).
+  const [clearArmed, setClearArmed] = useState(false)
+  useEffect(() => {
+    if (!clearArmed) return
+    const t = setTimeout(() => setClearArmed(false), 2500)
+    return () => clearTimeout(t)
+  }, [clearArmed])
 
   const optionsKey = options.map(o => o.id).join(',')
 
@@ -71,6 +81,7 @@ export default function ChoiceBoard({ slide, team, theme, preview = false, onAns
   // the selected option again clears it); multi-select toggles in/out.
   function tapOption(id) {
     if (locked) return
+    setClearArmed(false)
     if (multiSelect) {
       setSelected(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id])
     } else {
@@ -116,7 +127,13 @@ export default function ChoiceBoard({ slide, team, theme, preview = false, onAns
   }, [onAnswered, committedSelected])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 480, width: '100%', margin: '0 auto' }}>
+    <ShrinkToFit disabled={preview}>
+    {/* No maxWidth cap here — Join.jsx's .join-content wrapper already caps
+        at 560px (Join.jsx:1493). A second, smaller cap here was pure waste:
+        80px of unused width on every phone regardless of size (2026-09-06
+        critique correction — an earlier pass claimed this scaled with screen
+        size; it doesn't, the parent's cap already bounds it). */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', margin: '0 auto' }}>
       {data.text && (
         <p style={{
           color: text, fontSize: 'clamp(1.15rem, 4.5vw, 1.35rem)',
@@ -133,6 +150,7 @@ export default function ChoiceBoard({ slide, team, theme, preview = false, onAns
             image={opt.image}
             letter={String.fromCharCode(65 + i)}
             selected={selected.includes(opt.id)}
+            multiSelect={multiSelect}
             disabled={locked}
             onTap={() => tapOption(opt.id)}
             textColor={text}
@@ -145,19 +163,23 @@ export default function ChoiceBoard({ slide, team, theme, preview = false, onAns
           point on bad wifi under time pressure (2026-09-06 critique). */}
       {!locked && multiSelect && (
         <button
-          onClick={() => setSelected([])}
+          onClick={() => {
+            if (!clearArmed) { setClearArmed(true); return }
+            setClearArmed(false)
+            setSelected([])
+          }}
           disabled={selected.length === 0}
           style={{
             width: '100%', minHeight: 44, borderRadius: 12,
-            border: `1px solid ${text}20`,
+            border: clearArmed ? '1px solid #ff6b6b' : `1px solid ${text}20`,
             background: 'transparent',
-            color: selected.length > 0 ? text : `${text}40`,
+            color: clearArmed ? '#ff6b6b' : selected.length > 0 ? text : `${text}40`,
             fontSize: '0.85rem', fontWeight: 600, fontFamily: 'DM Sans, sans-serif',
             cursor: selected.length > 0 ? 'pointer' : 'default',
             WebkitTapHighlightColor: 'transparent',
           }}
         >
-          Clear all
+          {clearArmed ? 'Tap again to clear all' : 'Clear all'}
         </button>
       )}
       {!locked && (
@@ -196,6 +218,7 @@ export default function ChoiceBoard({ slide, team, theme, preview = false, onAns
         </p>
       )}
     </div>
+    </ShrinkToFit>
   )
 }
 
@@ -209,7 +232,7 @@ export default function ChoiceBoard({ slide, team, theme, preview = false, onAns
 // verbatim, so it silently carried the same gap. A failed <img> used to
 // leave blank space with no way to recover; this swaps the whole tile to a
 // retry button instead.
-function ChoiceTile({ label, image, letter, selected, disabled, onTap, textColor, highlight }) {
+function ChoiceTile({ label, image, letter, selected, multiSelect, disabled, onTap, textColor, highlight }) {
   const [imgFailed, setImgFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
   // A host swapping this option's image while the slide stays live must not
@@ -224,7 +247,7 @@ function ChoiceTile({ label, image, letter, selected, disabled, onTap, textColor
           style={{
             position: 'relative',
             width: 'calc(50% - 0.3rem)',
-            minHeight: 96,
+            minHeight: 'clamp(96px, 13vw, 160px)',
             padding: 6,
             borderRadius: 14,
             border: '1px solid rgba(255,255,255,0.15)',
@@ -246,7 +269,7 @@ function ChoiceTile({ label, image, letter, selected, disabled, onTap, textColor
         style={{
           position: 'relative',
           width: 'calc(50% - 0.3rem)',
-          minHeight: 96,
+          minHeight: 'clamp(96px, 13vw, 160px)',
           padding: 6,
           borderRadius: 14,
           border: '1px solid rgba(255,255,255,0.15)',
@@ -262,7 +285,7 @@ function ChoiceTile({ label, image, letter, selected, disabled, onTap, textColor
           src={attempt ? `${image}${image.includes('?') ? '&' : '?'}retry=${attempt}` : image}
           alt={label || ''}
           onError={() => setImgFailed(true)}
-          style={{ maxWidth: '100%', maxHeight: 84, objectFit: 'contain' }}
+          style={{ maxWidth: '100%', maxHeight: 'clamp(84px, 11vw, 140px)', objectFit: 'contain' }}
         />
         <span style={{
           position: 'absolute', top: -8, left: -8,
@@ -278,6 +301,12 @@ function ChoiceTile({ label, image, letter, selected, disabled, onTap, textColor
       </button>
     )
   }
+  // Selected paints the whole chip solid with dark text (same treatment as
+  // MatchTile's matched state) — the old 15%-alpha fill + thin ring was hard
+  // to pick out at a glance across 10-12 wrapped Mixology chips. The leading
+  // glyph doubles as the checkbox/radio affordance so multi vs single-select
+  // reads on the tile itself, not only from the caption (2026-09-06 critique).
+  const glyph = multiSelect ? (selected ? '☑' : '☐') : (selected ? '●' : '○')
   return (
     <button
       onClick={onTap}
@@ -288,8 +317,8 @@ function ChoiceTile({ label, image, letter, selected, disabled, onTap, textColor
         padding: '0.7rem 1rem',
         borderRadius: 999,
         border: selected ? `2px solid ${highlight}` : '1px solid rgba(255,255,255,0.15)',
-        background: selected ? `${highlight}26` : 'rgba(255,255,255,0.06)',
-        color: textColor,
+        background: selected ? highlight : 'rgba(255,255,255,0.06)',
+        color: selected ? '#1a1a1a' : textColor,
         fontSize: '0.95rem',
         fontWeight: 600,
         fontFamily: 'DM Sans, sans-serif',
@@ -297,7 +326,8 @@ function ChoiceTile({ label, image, letter, selected, disabled, onTap, textColor
         WebkitTapHighlightColor: 'transparent',
       }}
     >
-      {selected ? '✓ ' : ''}{label}
+      <span aria-hidden="true" style={{ marginRight: '0.4rem', opacity: selected ? 1 : 0.6 }}>{glyph}</span>
+      {label}
     </button>
   )
 }
