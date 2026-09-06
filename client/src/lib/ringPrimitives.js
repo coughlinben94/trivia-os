@@ -2042,33 +2042,34 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       transparent 96%)`
     f.appendChild(glow)
 
-    // 2. Streamers: three tapered arms rooted at the annulus's outer edge,
+    // 2. Streamers: two soft PLUMES rooted at the annulus's outer edge,
     //    pivoting on the disc centre (transform-origin 0 50%, then pushed out
-    //    along their own axis by rRing). Lengths in units of R, all short —
-    //    the corona's inner streamers, not spikes' full rays. Angles are
-    //    deliberate constants, not r() draws (a draw here would reorder the
-    //    caller's rHeadline stream — the blob-branch bug class).
-    //    Attempt 2: the first pass's arms (0.34 alpha, 1.2-1.7 ringW thick)
-    //    vanished into the corona at frame scale. Roughly doubled alpha and
-    //    base thickness, lengths up a step but still all under one R.
-    //    Safe-box pass: the 152deg arm pointed straight into the safe box
-    //    at slot 10's placement (its root is rim-bright); now 196deg — left,
-    //    a touch below horizontal — so all three arms leave the box. A real
-    //    corona is lopsided anyway; three arms bunched on one side is truer
-    //    than three spread evenly.
+    //    along their own axis by rRing). Angles are deliberate constants, not
+    //    r() draws (a draw here would reorder the caller's rHeadline stream —
+    //    the blob-branch bug class). Rendered history: attempts 1-4 drew
+    //    three hard tapered wedges (spikes' clip technique, 4px blur, alpha
+    //    0.62, ~3x ringW at the base) — an independent design critique
+    //    (2026-09-06) read them as cartoon sun-rays / compass points up
+    //    close and as nothing at distance. A real coronal streamer is the
+    //    opposite on every axis: narrow at the root and WIDENING outward,
+    //    heavily blurred, low-contrast, longer than the disc radius. So:
+    //    root ~1x ringW opening to ~4x at the tip, blur ~4% of D (~25px at
+    //    headline size), alpha 0.12-0.16, length 1.2-1.7 R. Two, not
+    //    three — one off the bead's side, one opposite, so the corona is
+    //    lopsided like the rim. 196deg (left, a touch below horizontal)
+    //    keeps the plume out of the safe box at slot 10's placement.
     ;[
-      { ang: 337, len: 0.78, th: 3.0 },
-      { ang: 196, len: 0.58, th: 2.4 },
-      { ang: 248, len: 0.44, th: 2.0 },
-    ].forEach(({ ang, len, th }) => {
+      { ang: 337, len: 1.7, a: 0.16 },
+      { ang: 196, len: 1.2, a: 0.12 },
+    ].forEach(({ ang, len, a }) => {
       const s = el('ec-flare')
-      const L = R * len, T = ringW * th
+      const L = R * len, T = ringW * 4
       s.style.width = px(L); s.style.height = px(T)
       s.style.marginTop = px(-T / 2)
-      s.style.transform = `rotate(${ang}deg) translateX(${px(rRing - ringW * 0.3)})`
-      s.style.clipPath = 'polygon(0% 0%, 100% 50%, 0% 100%)'
-      s.style.background = `linear-gradient(90deg, ${hsla(hue, 40, 92, A(0.62, fill))} 0%, ${hsla(hue, 66, 82, A(0.34, fill))} 40%, transparent 96%)`
-      s.style.filter = `blur(${Math.max(1, D * 0.004).toFixed(1)}px)`
+      s.style.transform = `rotate(${ang}deg) translateX(${px(rRing)})`
+      s.style.clipPath = 'polygon(0% 38%, 100% 0%, 100% 100%, 0% 62%)'
+      s.style.background = `linear-gradient(90deg, ${hsla(hue, 50, 88, A(a, fill))} 0%, ${hsla(hue, 60, 78, A(a * 0.7, fill))} 55%, transparent 100%)`
+      s.style.filter = `blur(${(D * 0.04).toFixed(1)}px)`
       f.appendChild(s)
     })
 
@@ -2129,14 +2130,19 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
       'stroke-width': ringW.toFixed(1),
     })
 
-    // 4. Baily's bead — one bright point on the rim at ~1 o'clock, the
-    //    "diamond ring" moment. Small, so it reads as a point of light on
-    //    the edge rather than a moon of its own.
+    // 4. Baily's bead — the "diamond ring" moment at ~1 o'clock. Rendered
+    //    history: attempts 1-4 drew a hard dot (0.95 ringW) with a small faint
+    //    halo (2.2 ringW, alpha 0.28) — the design critique read it as "a
+    //    ball sitting on the hoop", an orbit-diagram icon. The real thing is
+    //    light OVERWHELMING that point on the rim, so: a much smaller hard
+    //    core (0.6 ringW) inside a big soft bloom (6 ringW, alpha 0.6, blur
+    //    ~2.5 ringW) that locally swamps the rim. Sits at the top-right of
+    //    the disc, well clear of the safe box at slot 10's placement.
     //    circle() centres on the disc; the bead sits on the rim, so cx/cy are
     //    overridden through attrs (applied after the defaults, by design).
-    circle(ringW * 2.2, { cx: bx.toFixed(1), cy: by.toFixed(1), fill: hsla(hue, 50, 90, A(0.28, fill)) })
-      .setAttribute('style', `filter:blur(${(ringW * 1.2).toFixed(1)}px)`)
-    circle(ringW * 0.95, { cx: bx.toFixed(1), cy: by.toFixed(1), fill: hsla(hue, 20, 98, A(0.95, fill)) })
+    circle(ringW * 6, { cx: bx.toFixed(1), cy: by.toFixed(1), fill: hsla(hue, 45, 92, A(0.6, fill)) })
+      .setAttribute('style', `filter:blur(${(ringW * 2.5).toFixed(1)}px)`)
+    circle(ringW * 0.6, { cx: bx.toFixed(1), cy: by.toFixed(1), fill: hsla(hue, 20, 98, A(0.95, fill)) })
     f.appendChild(svg)
   }
 
@@ -3130,8 +3136,10 @@ export const SKY_REGIONS = {
   // plausible astronomical source, not a party, so it sits between aurora
   // and ember in saturation (62) and a step darker (28), per the design
   // doc's §5.3 option 1 (docs/superpowers/plans/2026-09-05-ring-unified-
-  // noun-color-draw-design.md). Anchor pos/pool unchanged: the sky shape at
-  // st10 was never the complaint.
+  // noun-color-draw-design.md). pos re-anchored to the top-right corner
+  // (was disco's bottom-centre '62% 114%') so the tint pools where the
+  // eclipse actually is — see skyTintBackground's comment on why this is the
+  // one region allowed above the bottom edge. Pool size unchanged.
   //
   // Offset 0 is chosen, not arbitrary. The eclipse's own hue (300) sits
   // between the world's violet home (sky 268, st0 256, st2 268) and its rose
@@ -3147,7 +3155,7 @@ export const SKY_REGIONS = {
   // corona's own shoulders are st9 (0.25 preview) and st11 (0.5 exit), where
   // st11 also carries the ember preview at 0.25 — overlapping shoulders
   // stack, see skyRegionWeights.
-  corona: { hueOffset: 0, tintSat: 62, tintLight: 28, srcSat: 70, srcLight: 60, pos: '62% 114%', poolW: 44, poolH: 50 },
+  corona: { hueOffset: 0, tintSat: 62, tintLight: 28, srcSat: 70, srcLight: 60, pos: '86% -4%', poolW: 44, poolH: 50 },
 }
 
 // Region hue = its source station's hue + the region's authored offset. The
@@ -3274,9 +3282,16 @@ export const SKY_TINT_EASE = 'cubic-bezier(.25,.46,.45,.94)'
 // anchor (SKY_REGIONS' pos/poolW/poolH) instead of the shared full-width
 // shape, so no station has a straight-edge boundary and adjacent stations
 // with different regions read as different shapes, not just different hues.
-// Still bottom-weighted (every pos sits AT or BELOW the frame's bottom edge,
-// >100% y) so the top ~40% of sky stays the world's own midnight purple —
-// same guardrail the old bar kept, just no longer full-width to do it.
+// aurora and ember are bottom-weighted (pos AT or BELOW the frame's bottom
+// edge, >100% y) so the top ~40% of sky stays the world's own midnight purple
+// — same guardrail the old bar kept, just no longer full-width to do it.
+// `corona` is the one exception (2026-09-06): its pos is the top-RIGHT
+// corner, because that is where its source — the eclipse at slot 10 — sits,
+// and a tint with no visible cause reads as a filter (design critique; the
+// inherited `disco` pos pooled it bottom-centre, ~500px from the object).
+// Same pool size as before, so it is a corner pool, not a top band; rendered
+// st9/st11 (concepts/.audit-shots/eclipse-swap-2026-09-06/attempt-5/) read
+// as a corner afterglow, not a jump.
 function skyTintBackground(cfg) {
   return `radial-gradient(ellipse ${cfg.poolW}% ${cfg.poolH}% at ${cfg.pos},
     ${hsla(cfg.hue, cfg.tintSat, cfg.tintLight, 0.62)} 0%,

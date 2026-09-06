@@ -923,7 +923,11 @@ function buildLayerContent(host, L){
          forced the same mask onto the planet's own d-glow), and can't paint
          over the PREVIOUS station's objects either, which sharing this mid-
          layer host would otherwise allow. */
-      if (st.regionSource && SKY_REGIONS[st.region]){
+      /* Not for `eclipse` (2026-09-06): the glow peaks at the object's centre,
+         which for the eclipse is a hole showing sky — it lit the "moon" from
+         inside. Its own donut d-glow is the corona's light. Same skip in
+         RingAmbient.jsx. */
+      if (st.regionSource && SKY_REGIONS[st.region] && st.prim !== 'eclipse'){
         /* Visual centre, not box centre: `spikes` re-centres its core+rays
            (and its own d-glow) on the corner point above, so the light has to
            follow them or it reads as a second, offset source. */

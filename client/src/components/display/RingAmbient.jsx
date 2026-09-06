@@ -459,7 +459,15 @@ function buildLayerContent(engine, world, arc, host, L) {
       // corner-anchored headline's glow can't spill onto the neighbouring
       // slide (the mask also stops it painting over the PREVIOUS station's
       // objects, which sharing this mid-layer host would otherwise allow).
-      if (st.regionSource && SKY_REGIONS[st.region]) {
+      // NOT for `eclipse` (2026-09-06, design critique): this glow peaks at
+      // the object's centre on the assumption the object is opaque and
+      // silhouettes in front of it. The eclipse is corona-first — its centre
+      // is a HOLE showing sky — so the shared glow shone straight through
+      // it and made the "moon" the brightest broad region in frame. Its own
+      // donut-shaped d-glow already lights the sky around the rim in the
+      // region hue, so it needs no separate source. Same skip in
+      // world-07-ring.html.
+      if (st.regionSource && SKY_REGIONS[st.region] && st.prim !== 'eclipse') {
         // Visual centre, not box centre: `spikes` re-centres its core+rays
         // (and its own d-glow) on the corner point above, so the light has
         // to follow them or it reads as a second, offset source.
