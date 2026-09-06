@@ -10,7 +10,7 @@ const EMPTY_FORMAT = {
   input_schema: { type: 'image', slots: 1, seriesEnabled: false, labels: [] },
 }
 
-export default function FormatLibrary({ onClose, onSelectFormat, formats, loading, createFormat, updateFormat, deleteFormat }) {
+export default function FormatLibrary({ onClose, onSelectFormat, formats, loading, loadError, createFormat, updateFormat, deleteFormat }) {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState(null)
   const [draft, setDraft] = useState(EMPTY_FORMAT)
@@ -64,6 +64,8 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
           <div className="w-64 border-r border-gray-100 overflow-y-auto p-3 flex flex-col gap-1">
             {loading ? (
               <p className="text-xs text-gray-400 p-2">Loading...</p>
+            ) : loadError ? (
+              <p className="text-xs text-red-400 p-2">Couldn't load formats: {loadError.message}</p>
             ) : formats.map(fmt => (
               <div
                 key={fmt.id}
@@ -80,7 +82,9 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                     onClick={e => {
                       e.stopPropagation()
                       if (!confirm(`Delete "${fmt.name}"?`)) return
-                      deleteFormat(fmt.id).catch(err => alert(`Couldn't delete format: ${err.message}`))
+                      deleteFormat(fmt.id)
+                        .then(() => { if (editing === fmt.id) { setEditing(null); setDraft(EMPTY_FORMAT) } })
+                        .catch(err => alert(`Couldn't delete format: ${err.message}`))
                     }}
                     className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 text-xs ml-1"
                   >✕</button>

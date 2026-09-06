@@ -5,14 +5,16 @@ import { nanoid } from 'nanoid'
 export function useShinyFormats() {
   const [formats, setFormats] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
 
   useEffect(() => {
     supabase
       .from('shiny_formats')
       .select('*')
       .order('created_at', { ascending: true })
-      .then(({ data }) => {
-        if (data) setFormats(data)
+      .then(({ data, error }) => {
+        if (error) setLoadError(error)
+        else setFormats(data)
         setLoading(false)
       })
   }, [])
@@ -44,5 +46,5 @@ export function useShinyFormats() {
     setFormats(prev => prev.filter(f => f.id !== id))
   }
 
-  return { formats, loading, createFormat, updateFormat, deleteFormat }
+  return { formats, loading, loadError, createFormat, updateFormat, deleteFormat }
 }

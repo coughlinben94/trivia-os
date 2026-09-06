@@ -308,7 +308,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
   // Preloaded on dashboard mount (not on modal open) so FormatLibrary and
   // AddSlideWizard never show a blank-then-pop-in flash, and both share one
   // fetch instead of each running its own.
-  const { formats: shinyFormats, loading: shinyFormatsLoading, createFormat, updateFormat, deleteFormat } = useShinyFormats()
+  const { formats: shinyFormats, loading: shinyFormatsLoading, loadError: shinyFormatsLoadError, createFormat, updateFormat, deleteFormat } = useShinyFormats()
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
   const [showBendleAdmin, setShowBendleAdmin] = useState(false)
   const [showThemePicker, setShowThemePicker] = useState(false)
@@ -928,6 +928,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
           onClose={() => setShowFormatLibrary(false)}
           formats={shinyFormats}
           loading={shinyFormatsLoading}
+          loadError={shinyFormatsLoadError}
           createFormat={createFormat}
           updateFormat={updateFormat}
           deleteFormat={deleteFormat}
