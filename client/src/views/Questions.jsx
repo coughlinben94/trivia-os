@@ -226,8 +226,8 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
             <ol className="list-decimal list-inside space-y-1 text-sm text-gray-700">
               {shownItems.map((q, qi) => (
                 <li key={qi}>
-                  <span className="font-medium">{q.text}</span>
-                  {q.answer && <span className="text-[#1a6b4a] font-medium"> — {q.answer}</span>}
+                  <span className="font-medium">{q.text || q.left}</span>
+                  {(q.answer || q.right) && <span className="text-[#1a6b4a] font-medium"> — {q.answer || q.right}</span>}
                 </li>
               ))}
             </ol>
@@ -268,9 +268,17 @@ function QuestionCard({ row, isEditing, editDraft, setEditDraft, onStartEdit, on
         </div>
       ) : (
         <div>
-          <p className="text-sm text-gray-800 leading-relaxed">
-            {text ? shownText : <span className="text-gray-400 italic">No question text</span>}
-          </p>
+          {row.questions_data?.leftCast || row.questions_data?.rightCast ? (
+            <p className="text-sm text-gray-800 leading-relaxed">
+              <span className="font-medium">{(row.questions_data.leftCast ?? []).map(c => c.name).filter(Boolean).join(', ')}</span>
+              {' '}vs{' '}
+              <span className="font-medium">{(row.questions_data.rightCast ?? []).map(c => c.name).filter(Boolean).join(', ')}</span>
+            </p>
+          ) : (
+            <p className="text-sm text-gray-800 leading-relaxed">
+              {text ? shownText : <span className="text-gray-400 italic">No question text</span>}
+            </p>
+          )}
           {(isLong || answerIsLong) && (
             <button
               onClick={() => setExpanded(e => !e)}
