@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, normalizeRoundScore, MEDALS } from '../lib/scoreboardMath.js'
+import { sortSlides } from '../lib/slideStepping.js'
 
 function getRoundLabel(round, slides) {
   const roundSlides = slides.filter(s => s.roundId === round.id)
@@ -82,16 +83,16 @@ export default function ShowDetail() {
     .sort((a, b) => (a.roundNumber ?? a.number ?? 0) - (b.roundNumber ?? b.number ?? 0))
     .map(r => ({
       round: r,
-      questions: slides
-        .filter(s => s.roundId === r.id && s.type === 'question')
-        .sort((a, b) => a.order - b.order),
+      questions: sortSlides(
+        slides.filter(s => s.roundId === r.id && s.type === 'question')
+      ),
     }))
     .filter(g => g.questions.length > 0)
 
   // Slides with no roundId (orphans)
-  const orphanQuestions = slides.filter(
-    s => s.type === 'question' && !rounds.find(r => r.id === s.roundId)
-  ).sort((a, b) => a.order - b.order)
+  const orphanQuestions = sortSlides(
+    slides.filter(s => s.type === 'question' && !rounds.find(r => r.id === s.roundId))
+  )
 
   const dateLabel = show.date
     ? new Date(show.date + 'T12:00:00').toLocaleDateString('en-US', {

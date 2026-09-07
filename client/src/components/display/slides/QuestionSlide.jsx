@@ -8,7 +8,7 @@ import ShinyOrderQuestion from './ShinyOrderQuestion.jsx'
 import ShinyBendleQuestion from './ShinyBendleQuestion.jsx'
 import ShinyChoiceQuestion from './ShinyChoiceQuestion.jsx'
 import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isChoiceShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView, isFirstOfShinyGroup } from '../../../lib/shinySeries.js'
-import { sortSlides } from '../../../lib/slideStepping.js'
+import { sortSlides, chunkParts } from '../../../lib/slideStepping.js'
 import ShinyGroupAnnounce from '../ShinyGroupAnnounce.jsx'
 import { GridContent } from './GridSlide.jsx'
 import { fitToBox, QUESTION_BOX, QUOTE_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
@@ -1173,11 +1173,10 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
   // reveal groups instead — several rows reveal TOGETHER on one Next press
   // (2026-08-25, Ben: Disney wants "three and three" — 6 rows, only 2
   // reveal presses). Parts stay flat so the existing part-editor UI keeps
-  // working; slideStepping.js's stepCount mirrors this chunking so Next/Prev
-  // cap at group count, not raw part count.
+  // working; chunkParts (slideStepping.js) is the single implementation this
+  // and revealStepCount's Next/Prev step count both derive from.
   const groupSize = data.groupSize || 1
-  const rowGroups = []
-  for (let i = 0; i < parts.length; i += groupSize) rowGroups.push(parts.slice(i, i + groupSize))
+  const rowGroups = chunkParts(parts, groupSize)
   const rows = rowGroups.flatMap((g, gi) => g.map(r => ({ ...r, _group: gi })))
   // currentPart counts groups ALREADY revealed here, not "the part currently
   // on screen" — 0 means nothing revealed yet. (Fixed 2026-08-25, live show

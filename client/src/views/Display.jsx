@@ -576,7 +576,7 @@ function AnswerRevealOverlay({ show, currentSlide }) {
 // RLS-denied (0 rows). The RPC is the one nav write anon may perform, and it
 // reports success explicitly so a denial can't be silent again.
 async function advanceAfterBreak(showRow) {
-  const sorted = [...(showRow.slides ?? [])].sort((a, b) => a.order - b.order)
+  const sorted = sortSlides(showRow.slides)
   const cur = showRow.current_slide_index ?? 0
   const lastSlideIsWinner = sorted[sorted.length - 1]?.type === 'winner-reveal'
   const noMoreGradingBreaks = !sorted.slice(cur + 1).some(s => s.type === 'grading-break')
@@ -688,7 +688,7 @@ const SHINY_WARP_MS = 1100
 function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRingStateChange }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
-  const sortedSlides = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
+  const sortedSlides = sortSlides(show.slides)
   const currentSlide = sortedSlides[show.current_slide_index ?? 0] ?? null
 
   // ── Grading-break music overlay ──
@@ -1767,7 +1767,7 @@ export default function Display() {
         <PersistentRing
           slideIndex={show.is_live && show.current_slide_index != null
             ? (() => {
-                const sorted = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
+                const sorted = sortSlides(show.slides)
                 return ringVisibleStationIndex(sorted, ringPeekIndex(sorted, show.current_slide_index), isRingVisible)
               })()
             : null}

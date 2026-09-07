@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { useRafLoop } from '../hooks/useRafLoop.js'
 import { blendDurationMs } from '../lib/gradientTuning.js'
-import { lerpOklabPolar, rgbToOklab, oklabToRgb } from './AlbumGradientMesh.jsx'
+import { lerpOklabPolar, rgbToOklab, oklabToRgb, hexToRgb } from './AlbumGradientMesh.jsx'
 
 // StationRingLayer — "Station Thirteen" ambient layer for the grading-break
 // jukebox (ring-world fusion, 2026-08-16). Transparent ADDITIVE canvas that
@@ -77,10 +78,6 @@ function mulberry(seed) {
 }
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v))
 const lerp = (a, b, t) => a + (b - a) * t
-const hexRgb = h => {
-  const p = parseInt(h.slice(1), 16)
-  return [p >> 16 & 255, p >> 8 & 255, p & 255]
-}
 const mixRgb = (a, b, t) => a.map((v, i) => Math.round(lerp(v, b[i], t)))
 const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`
 
@@ -91,7 +88,7 @@ function parseColors(colors) {
     colors[i].toLowerCase() !== LOADING_SENTINEL
       ? colors[i]
       : FALLBACK_COLORS[i]
-  return [hexRgb(safe(0)), hexRgb(safe(1))]
+  return [hexToRgb(safe(0)), hexToRgb(safe(1))]
 }
 
 // Static/authored record radius by breakpoint (Tailwind w-[352px] /
@@ -234,19 +231,23 @@ export default function StationRingLayer({
   transitioning = false, transitionStartMs = null, recordScaleMV = null,
 }) {
   const canvasRef = useRef(null)
-  const rafRef = useRef(null)
-  const mountedRef = useRef(false)
-  const activeRef = useRef(active)
   const progressRef = useRef(progress)
   const rgbRef = useRef(parseColors(colors))
   const sizeRef = useRef({ w: 0, h: 0 })
   const geomRef = useRef(null)      // { cx, cy, recordR } — measured from the real record box
   const lastMeasureRef = useRef(0)
-  // Event Horizon transition state — refs, not direct closure reads, for the
-  // same reason progressRef/rgbRef already are: draw()/tick() are redefined
-  // every render but the rAF loop keeps calling whichever tick() closure was
-  // captured when startLoop() last ran, so anything that changes over time
-  // has to be read through a ref to stay current inside that stale closure.
+  // Event Horizon transition state — refs, not direct closure reads. Not for
+  // the stale-closure reason this comment used to give: useRafLoop's own
+  // callbackRef (see useRafLoop.js) already makes tick() call the CURRENT
+  // render's frame()/draw() every frame, so a fresh render's closure is never
+  // stale. The real reason is cadence — draw() runs on every rAF tick (~60/s),
+  // far more often than the component re-renders, so a value read straight
+  // from a prop closure would only ever be as fresh as the last render.
+  // recordScaleMV makes this concrete: it's a Framer Motion value that
+  // updates every frame WITHOUT triggering a re-render at all, so draw() can
+  // only see its live value by reading it off a ref each tick — exactly like
+  // progressRef/rgbRef here (rgbRef also gets WRITTEN inside draw() itself,
+  // to carry the color-blend interpolation forward from one frame to the next).
   const transitioningRef = useRef(transitioning)
   const transitionStartRef = useRef(transitionStartMs)
   const recordScaleRef = useRef(recordScaleMV)
@@ -272,6 +273,16 @@ export default function StationRingLayer({
     () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     [],
   )
+
+  // frame/draw are function declarations below (hoisted) — safe to reference
+  // here even though they're defined further down; useRafLoop only calls
+  // `frame` later, once React has finished this render. startLoop() itself
+  // no-ops while reducedMotion is true, so every call site below can stop
+  // checking that flag by hand — the static-frame redraw effect further down
+  // (keyed off colors/progress) is the piece that stays outside this hook,
+  // since only this component knows which prop changes should trigger it.
+  const { startLoop, mountedRef, activeRef, rafRef } =
+    useRafLoop(frame, { active, reducedMotion })
 
   useEffect(() => { progressRef.current = clamp(progress, 0, 1) }, [progress])
   useEffect(() => {
@@ -464,23 +475,18 @@ export default function StationRingLayer({
     }
   }
 
-  function startLoop() {
-    rafRef.current = requestAnimationFrame(tick)
+  // useRafLoop's per-frame callback. Passes the hook's rAF timestamp (ms,
+  // same clock as performance.now()) straight through in seconds — the old
+  // tick() ignored that timestamp and called performance.now() itself; same
+  // clock, same value modulo the few microseconds of code between them.
+  function frame(ts) {
+    draw(ts / 1000)
   }
 
-  function tick() {
-    draw(performance.now() / 1000)
-    if (mountedRef.current && activeRef.current) {
-      rafRef.current = requestAnimationFrame(tick)
-    } else {
-      rafRef.current = null
-    }
-  }
-
-  // Same rAF-pause discipline as AlbumGradientMesh's active prop.
+  // Same rAF-pause discipline as AlbumGradientMesh's active prop. activeRef
+  // itself is synced by useRafLoop internally; this effect only decides
+  // whether a change in `active` should (re)start the loop.
   useEffect(() => {
-    activeRef.current = active
-    if (reducedMotion) return
     if (active && !rafRef.current && mountedRef.current) startLoop()
   }, [active])
 
@@ -510,13 +516,12 @@ export default function StationRingLayer({
     resize()
     window.addEventListener('resize', resize)
 
-    mountedRef.current = true
-    if (activeRef.current && !rafRef.current && !reducedMotion) startLoop()
+    // mountedRef starts true (useRafLoop's initial ref value) and unmount
+    // cleanup (mountedRef=false, cancelAnimationFrame) is owned by the hook,
+    // not this effect. startLoop() itself no-ops under reducedMotion.
+    if (activeRef.current && !rafRef.current) startLoop()
 
     return () => {
-      mountedRef.current = false
-      cancelAnimationFrame(rafRef.current)
-      rafRef.current = null
       window.removeEventListener('resize', resize)
     }
   }, [])

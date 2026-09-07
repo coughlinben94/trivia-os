@@ -13,6 +13,7 @@ import PYLWizard from './PYLWizard.jsx'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 import { EASE_OUT } from '../../lib/easings.js'
+import { sortSlides } from '../../lib/slideStepping.js'
 
 const BTN = 'host-button'
 
@@ -431,7 +432,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
   async function handleSwingAdd(questions, roundId) {
     setShowSwingWizard(false)
     const targetRoundId = await ensureRound(roundId, { roundType: 'swing', title: 'Swing Round' })
-    const sortedAll = [...(show?.slides ?? [])].sort((a, b) => a.order - b.order)
+    const sortedAll = sortSlides(show?.slides)
     const roundSlides = sortedAll.filter(s => s.roundId === targetRoundId)
     const existingQCount = roundSlides.filter(s => s.type === 'question' && !s.data?.isBonus).length
     // Insert after last slide in the round, or end of show if no round selected / round empty
@@ -472,7 +473,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
   async function handlePYLAdd(themes, roundId) {
     setShowPylWizard(false)
     const targetRoundId = await ensureRound(roundId, { roundType: 'pyl', title: 'Press Your Luck!' })
-    const sortedAll = [...(show?.slides ?? [])].sort((a, b) => a.order - b.order)
+    const sortedAll = sortSlides(show?.slides)
     const roundSlides = sortedAll.filter(s => s.roundId === targetRoundId)
     const afterId = roundSlides.length > 0
       ? roundSlides[roundSlides.length - 1].id

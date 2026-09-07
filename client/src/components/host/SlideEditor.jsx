@@ -22,6 +22,7 @@ import { useTheme } from '../shared/ThemeProvider.jsx'
 import { overflowsBox, QUESTION_BOX } from '../../lib/autoFitText.js'
 import { isConcurrentShiny, isConcurrentMediaShiny } from '../../lib/shinySeries.js'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
+import { sortSlides } from '../../lib/slideStepping.js'
 
 export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos }) {
   const { theme } = useTheme()
@@ -2552,9 +2553,9 @@ function PylRevealEditor({ data, onChange, setData, scheduleSave, show, slide })
   // Same-round slides only (2026-08-18, Ben: click a theme, jump straight to
   // that theme's own content) — every other round's slides are irrelevant
   // jump targets and would just clutter the picker.
-  const roundSlides = (show?.slides ?? [])
-    .filter(s => s.roundId === slide?.roundId && s.id !== slide?.id)
-    .sort((a, b) => a.order - b.order)
+  const roundSlides = sortSlides(
+    (show?.slides ?? []).filter(s => s.roundId === slide?.roundId && s.id !== slide?.id)
+  )
 
   function addRow() {
     const next = { ...data, [listKey]: [...list, isBoard ? { text: '' } : { text: '', points: 20, revealed: false }] }

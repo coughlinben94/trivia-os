@@ -7,6 +7,7 @@ import { supabase } from '../../../lib/supabase.js'
 import { useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { resolveJumpIndex } from '../../../lib/shinySeries.js'
+import { sortSlides } from '../../../lib/slideStepping.js'
 
 export default function PylRevealSlide({ slide, show, isPreview = false }) {
   const { theme } = useTheme()
@@ -46,7 +47,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
   })
 
   async function advancePYL() {
-    const sorted = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
+    const sorted = sortSlides(show.slides ?? [])
     const cur = show.current_slide_index ?? 0
     const next = Math.min(cur + 1, sorted.length - 1)
     await supabase.from('shows').update({
@@ -75,7 +76,7 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
   // announce card that now sits in front of it.)
   async function jumpToSlide(targetSlideId) {
     if (isPreview || !targetSlideId) return
-    const sorted = [...(show.slides ?? [])].sort((a, b) => a.order - b.order)
+    const sorted = sortSlides(show.slides ?? [])
     const idx = sorted.findIndex(s => s.id === targetSlideId)
     if (idx < 0) return
     const target = sorted[idx]

@@ -7,7 +7,7 @@ import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
 import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isBendleShiny, isChoiceShiny } from '../lib/shinySeries.js'
 import { getWagerTier } from '../lib/wagerScoring.js'
-import { PHONE_MECHANICS } from '../lib/slideStepping.js'
+import { PHONE_MECHANICS, sortSlides } from '../lib/slideStepping.js'
 import MatchingBoard from '../components/join/MatchingBoard.jsx'
 import WagerBoard from '../components/join/WagerBoard.jsx'
 import OrderBoard from '../components/join/OrderBoard.jsx'
@@ -1263,7 +1263,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   }
 
   const slides = useMemo(
-    () => (show?.slides ?? []).slice().sort((a, b) => a.order - b.order),
+    () => sortSlides(show?.slides),
     [show?.slides]
   )
   const hostIndex = show?.current_slide_index ?? 0

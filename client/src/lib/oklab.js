@@ -13,6 +13,27 @@ export function hexToRgb(hex) {
   ]
 }
 
+// Inverse of hexToRgb — clamped + rounded so callers feeding raw OKLab
+// round-trip floats (weightedPalette.js's old labToHex) don't need their own
+// clamp pass. Array in (matching hexToRgb/rgbToOklab/oklabToRgb's own
+// convention), hex string out. Callers that carry {r,g,b} objects (contrast.js,
+// TeamPickerSlide.jsx) adapt at their own call site rather than this module
+// taking on their shape.
+export function rgbToHex([r, g, b]) {
+  const toHex = v => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0')
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+}
+
+// ITU-R BT.709 luma coefficients. Shared verbatim by three DELIBERATELY
+// different luminance formulas in this repo — contrast.js's WCAG
+// sRGB-gamma-corrected version, weightedPalette.js's lumaProxy
+// un-gamma-corrected advisory version, and ring-verify.mjs's lumaAt raw-pixel
+// version. Same physical constant, different formulas built on it — importing
+// this only removes the duplicated magic numbers, it does not and must not
+// make those three formulas the same. See
+// docs/superpowers/plans/2026-09-07-shared-function-cleanup.md.
+export const REC709_WEIGHTS = [0.2126, 0.7152, 0.0722]
+
 function lerp(a, b, t) { return a + (b - a) * t }
 
 // Signed shortest angular delta h1->h2, in (-pi, pi].

@@ -3,13 +3,16 @@
 // legible on a TV at distance without hand-editing every theme's palette —
 // see references/themes.md's "textMuted contrast" audit finding.
 
+import { hexToRgb as hexToRgbArr, rgbToHex as rgbToHexArr, REC709_WEIGHTS } from './oklab.js'
+
+const [W_R, W_G, W_B] = REC709_WEIGHTS
+
+// Local {r,g,b}-object shape kept for this file's own call sites (rgbToHsl,
+// hslToRgb below); the actual hex parsing delegates to oklab.js's canonical
+// array-return implementation.
 function hexToRgb(hex) {
-  const h = hex.replace('#', '')
-  return {
-    r: parseInt(h.slice(0, 2), 16),
-    g: parseInt(h.slice(2, 4), 16),
-    b: parseInt(h.slice(4, 6), 16),
-  }
+  const [r, g, b] = hexToRgbArr(hex)
+  return { r, g, b }
 }
 
 function relativeLuminanceOfRgb({ r, g, b }) {
@@ -17,7 +20,7 @@ function relativeLuminanceOfRgb({ r, g, b }) {
     const s = v / 255
     return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
   })
-  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs
+  return W_R * rs + W_G * gs + W_B * bs
 }
 
 // WCAG 2 relative luminance, 0 (black) to 1 (white).
@@ -77,8 +80,7 @@ function hslToRgb({ h, s, l }) {
 }
 
 function rgbToHex({ r, g, b }) {
-  const toHex = v => v.toString(16).padStart(2, '0')
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+  return rgbToHexArr([r, g, b])
 }
 
 // Nudges fgHex's LIGHTNESS ONLY (hue/saturation untouched) until its contrast

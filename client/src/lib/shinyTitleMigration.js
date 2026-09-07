@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid'
 import { isShinySeriesSibling, buildShinyTitleSlide } from './shinySeries.js'
+import { sortSlides } from './slideStepping.js'
 
 // Pure transform behind scripts/migrate-shiny-title-slides.mjs — the
 // one-time migration of a show built under the OLD shiny architecture
@@ -35,7 +36,7 @@ import { isShinySeriesSibling, buildShinyTitleSlide } from './shinySeries.js'
 // A `shiny-title` a show already has counts as that format's title for its
 // round, which is what keeps a re-run idempotent.
 export function migrateShinyTitleSlides(slides, { newGroupId = () => `sgrp_${nanoid(8)}`, newSlideId = () => `slide_${nanoid(8)}` } = {}) {
-  const sorted = [...(slides ?? [])].sort((a, b) => a.order - b.order)
+  const sorted = sortSlides(slides)
   const out = []
   const inserted = []
   let stripped = 0

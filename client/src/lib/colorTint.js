@@ -5,6 +5,8 @@
 // original color unchanged — so every theme renders pixel-identical to
 // its hardcoded design until a host actually overrides a color.
 
+import { rgbToHex as rgbToHexArr } from './oklab.js'
+
 function clamp01(n) {
   return Math.min(1, Math.max(0, n))
 }
@@ -87,10 +89,7 @@ function hslToRgb(h, s, l) {
 
 function formatColor({ r, g, b, a }, format) {
   r = Math.round(r); g = Math.round(g); b = Math.round(b)
-  if (format === 'hex') {
-    const toHex = n => n.toString(16).padStart(2, '0')
-    return `#${toHex(r)}${toHex(g)}${toHex(b)}`
-  }
+  if (format === 'hex') return rgbToHexArr([r, g, b])
   if (format === 'rgba') return `rgba(${r},${g},${b},${a})`
   return `rgb(${r},${g},${b})`
 }
