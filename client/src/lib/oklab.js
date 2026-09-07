@@ -30,7 +30,8 @@ export function rgbToHex([r, g, b]) {
 // un-gamma-corrected advisory version, and ring-verify.mjs's lumaAt raw-pixel
 // version. Same physical constant, different formulas built on it — importing
 // this only removes the duplicated magic numbers, it does not and must not
-// make those three formulas the same. See task-4-brief.md.
+// make those three formulas the same. See
+// docs/superpowers/plans/2026-09-07-shared-function-cleanup.md.
 export const REC709_WEIGHTS = [0.2126, 0.7152, 0.0722]
 
 function lerp(a, b, t) { return a + (b - a) * t }

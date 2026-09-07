@@ -31,7 +31,7 @@ import { isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isChoiceShi
 // exactly the kind of drift that shipped the off-by-one revealStepCount's own
 // comment below documents.
 export function chunkParts(parts, groupSize) {
-  const size = groupSize || 1
+  const size = groupSize > 0 ? groupSize : 1
   const groups = []
   for (let i = 0; i < (parts?.length ?? 0); i += size) groups.push(parts.slice(i, i + size))
   return groups

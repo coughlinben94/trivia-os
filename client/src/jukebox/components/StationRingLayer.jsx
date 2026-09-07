@@ -236,11 +236,18 @@ export default function StationRingLayer({
   const sizeRef = useRef({ w: 0, h: 0 })
   const geomRef = useRef(null)      // { cx, cy, recordR } — measured from the real record box
   const lastMeasureRef = useRef(0)
-  // Event Horizon transition state — refs, not direct closure reads, for the
-  // same reason progressRef/rgbRef already are: draw()/tick() are redefined
-  // every render but the rAF loop keeps calling whichever tick() closure was
-  // captured when startLoop() last ran, so anything that changes over time
-  // has to be read through a ref to stay current inside that stale closure.
+  // Event Horizon transition state — refs, not direct closure reads. Not for
+  // the stale-closure reason this comment used to give: useRafLoop's own
+  // callbackRef (see useRafLoop.js) already makes tick() call the CURRENT
+  // render's frame()/draw() every frame, so a fresh render's closure is never
+  // stale. The real reason is cadence — draw() runs on every rAF tick (~60/s),
+  // far more often than the component re-renders, so a value read straight
+  // from a prop closure would only ever be as fresh as the last render.
+  // recordScaleMV makes this concrete: it's a Framer Motion value that
+  // updates every frame WITHOUT triggering a re-render at all, so draw() can
+  // only see its live value by reading it off a ref each tick — exactly like
+  // progressRef/rgbRef here (rgbRef also gets WRITTEN inside draw() itself,
+  // to carry the color-blend interpolation forward from one frame to the next).
   const transitioningRef = useRef(transitioning)
   const transitionStartRef = useRef(transitionStartMs)
   const recordScaleRef = useRef(recordScaleMV)
