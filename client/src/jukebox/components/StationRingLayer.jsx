@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useRafLoop } from '../hooks/useRafLoop.js'
 import { blendDurationMs } from '../lib/gradientTuning.js'
-import { lerpOklabPolar, rgbToOklab, oklabToRgb } from './AlbumGradientMesh.jsx'
+import { lerpOklabPolar, rgbToOklab, oklabToRgb, hexToRgb } from './AlbumGradientMesh.jsx'
 
 // StationRingLayer — "Station Thirteen" ambient layer for the grading-break
 // jukebox (ring-world fusion, 2026-08-16). Transparent ADDITIVE canvas that
@@ -78,10 +78,6 @@ function mulberry(seed) {
 }
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v))
 const lerp = (a, b, t) => a + (b - a) * t
-const hexRgb = h => {
-  const p = parseInt(h.slice(1), 16)
-  return [p >> 16 & 255, p >> 8 & 255, p & 255]
-}
 const mixRgb = (a, b, t) => a.map((v, i) => Math.round(lerp(v, b[i], t)))
 const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`
 
@@ -92,7 +88,7 @@ function parseColors(colors) {
     colors[i].toLowerCase() !== LOADING_SENTINEL
       ? colors[i]
       : FALLBACK_COLORS[i]
-  return [hexRgb(safe(0)), hexRgb(safe(1))]
+  return [hexToRgb(safe(0)), hexToRgb(safe(1))]
 }
 
 // Static/authored record radius by breakpoint (Tailwind w-[352px] /

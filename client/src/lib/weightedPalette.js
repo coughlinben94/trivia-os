@@ -1,4 +1,6 @@
-import { hexToRgb, rgbToOklab, oklabToRgb, lerpOklabPolar } from './oklab.js'
+import { hexToRgb, rgbToHex, rgbToOklab, oklabToRgb, lerpOklabPolar, REC709_WEIGHTS } from './oklab.js'
+
+const [W_R, W_G, W_B] = REC709_WEIGHTS
 
 // Weighted-palette engine: 2-3 colors plus weights -> a full ring hue
 // assignment and a theme color set.
@@ -154,7 +156,7 @@ export function lumaProxy(hue) {
   else if (hue < 240) [r, g, b] = [0, x, c]
   else if (hue < 300) [r, g, b] = [x, 0, c]
   else [r, g, b] = [c, 0, x]
-  return (0.2126 * (r + m) + 0.7152 * (g + m) + 0.0722 * (b + m)) * 255
+  return (W_R * (r + m) + W_G * (g + m) + W_B * (b + m)) * 255
 }
 
 const ANCHOR_WINDOW = 25   // spec section 4's stated maximum
@@ -181,10 +183,6 @@ function inGamut(lab) {
   return Math.abs(back[0] - lab[0]) < 1e-4
     && Math.abs(back[1] - lab[1]) < 1e-4
     && Math.abs(back[2] - lab[2]) < 1e-4
-}
-
-function labToHex([r, g, b]) {
-  return '#' + [r, g, b].map(v => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0')).join('')
 }
 
 // Binary-search chroma down from (a, b) at fixed L only as far as sRGB
@@ -214,7 +212,7 @@ export function atLightness(hex, targetHex) {
   const [, a, b] = rgbToOklab(hexToRgb(hex))
   const [L] = rgbToOklab(hexToRgb(targetHex))
   const [fa, fb] = fitChroma(L, a, b)
-  return labToHex(oklabToRgb([L, fa, fb]))
+  return rgbToHex(oklabToRgb([L, fa, fb]))
 }
 
 // Rotate a colour's OKLab hue by `deg`, holding L and C fixed, gamut-mapping
@@ -226,7 +224,7 @@ export function rotateOklabHue(hex, deg) {
   if (C < 1e-4) return hex.toLowerCase()
   const theta = Math.atan2(b, a) + (deg * Math.PI) / 180
   const [fa, fb] = fitChroma(L, C * Math.cos(theta), C * Math.sin(theta))
-  return labToHex(oklabToRgb([L, fa, fb]))
+  return rgbToHex(oklabToRgb([L, fa, fb]))
 }
 
 // An OKLCH ladder offset, expressed as the HSL-hue delta the ring engine
@@ -261,7 +259,7 @@ export function withHueOf(hex, refHex) {
   if (refC < 1e-4) return hex.toLowerCase()
   const [ua, ub] = [ra / refC, rb / refC]
   const [fa, fb] = fitChroma(L, ua * C, ub * C)
-  return labToHex(oklabToRgb([L, fa, fb]))
+  return rgbToHex(oklabToRgb([L, fa, fb]))
 }
 
 // The one legitimate blend in this file. Folds the palette into a single
@@ -280,7 +278,7 @@ function foldOklab(colors, weights) {
     acc = lerpOklabPolar(acc, rgbToOklab(hexToRgb(colors[i])), t)
     accW += w
   }
-  return labToHex(oklabToRgb(acc))
+  return rgbToHex(oklabToRgb(acc))
 }
 
 export function derivePalette({ colors, weights, stationCount = 13, baseTheme, currentHues = [], drift = { arc: 0 } }) {

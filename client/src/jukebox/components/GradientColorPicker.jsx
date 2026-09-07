@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { rgbToHex } from '../../lib/oklab.js'
 
 // Separate pop-up window for picking a song's two gradient colors — split out
 // of SongDetailModal 2026-08-04 (owner: wanted the eyedropper on a bigger
@@ -7,10 +8,6 @@ import { useEffect, useRef, useState } from 'react'
 // one long scrolling sheet). This is a controlled component: SongDetailModal
 // owns the actual color state and passes it down, this component only owns
 // the eyedropper's "which slot is armed" interaction.
-
-function rgbToHex(r, g, b) {
-  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')
-}
 
 export default function GradientColorPicker({
   track,
@@ -60,7 +57,7 @@ export default function GradientColorPicker({
       const ctx = canvas.getContext('2d')
       ctx.drawImage(el, 0, 0)
       const [r, g, b] = ctx.getImageData(Math.floor(x / scale), Math.floor(y / scale), 1, 1).data
-      onPick(slot, rgbToHex(r, g, b))
+      onPick(slot, rgbToHex([r, g, b]))
       setArmedSlot(null)
     } catch {
       onToast?.('Could not sample that color — try again')

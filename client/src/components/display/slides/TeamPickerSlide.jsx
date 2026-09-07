@@ -4,6 +4,7 @@ import { supabase } from '../../../lib/supabase.js';
 import { useTheme } from '../../shared/ThemeProvider.jsx';
 import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js';
 import { nextSlideAfter } from '../../../lib/slideStepping.js';
+import { hexToRgb as hexToRgbArr } from '../../../lib/oklab.js';
 
 const DISP_CAP = 150, SS = 1.6;
 const CAP = DISP_CAP * SS, MAXW = 1520 * SS;
@@ -81,8 +82,8 @@ function seededShuffle(arr, seedStr) {
 }
 
 function hexToRgb(hex) {
-  const n = parseInt(String(hex).replace('#', ''), 16);
-  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  const [r, g, b] = hexToRgbArr(hex);
+  return { r, g, b };
 }
 
 const F = (px, fontFamily) => `700 ${px}px ${fontFamily}`;

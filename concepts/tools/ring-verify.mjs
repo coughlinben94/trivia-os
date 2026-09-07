@@ -71,6 +71,9 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { PNG } from 'pngjs';
+import { REC709_WEIGHTS } from '../../client/src/lib/oklab.js';
+
+const [LUMA_W_R, LUMA_W_G, LUMA_W_B] = REC709_WEIGHTS;
 
 const readFileAsync = promisify(readFile);
 
@@ -350,7 +353,7 @@ export function runStaticChecks(htmlPath) {
 // PIXEL HELPERS — shared by every dynamic check that reads real screenshots.
 // ═══════════════════════════════════════════════════════════════════════
 
-function lumaAt(data, idx) { return 0.2126 * data[idx] + 0.7152 * data[idx + 1] + 0.0722 * data[idx + 2]; }
+function lumaAt(data, idx) { return LUMA_W_R * data[idx] + LUMA_W_G * data[idx + 1] + LUMA_W_B * data[idx + 2]; }
 
 // Histogram over an axis-aligned pixel rect, clamped to the PNG's own bounds.
 // A 256-bucket luma histogram is enough precision for median/mean/percentile and is
