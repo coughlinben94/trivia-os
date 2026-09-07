@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { useRafLoop } from '../hooks/useRafLoop.js'
 import { blendDurationMs } from '../lib/gradientTuning.js'
 import { lerpOklabPolar, rgbToOklab, oklabToRgb } from './AlbumGradientMesh.jsx'
 
@@ -234,9 +235,6 @@ export default function StationRingLayer({
   transitioning = false, transitionStartMs = null, recordScaleMV = null,
 }) {
   const canvasRef = useRef(null)
-  const rafRef = useRef(null)
-  const mountedRef = useRef(false)
-  const activeRef = useRef(active)
   const progressRef = useRef(progress)
   const rgbRef = useRef(parseColors(colors))
   const sizeRef = useRef({ w: 0, h: 0 })
@@ -272,6 +270,16 @@ export default function StationRingLayer({
     () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     [],
   )
+
+  // frame/draw are function declarations below (hoisted) — safe to reference
+  // here even though they're defined further down; useRafLoop only calls
+  // `frame` later, once React has finished this render. startLoop() itself
+  // no-ops while reducedMotion is true, so every call site below can stop
+  // checking that flag by hand — the static-frame redraw effect further down
+  // (keyed off colors/progress) is the piece that stays outside this hook,
+  // since only this component knows which prop changes should trigger it.
+  const { startLoop, mountedRef, activeRef, rafRef } =
+    useRafLoop(frame, { active, reducedMotion })
 
   useEffect(() => { progressRef.current = clamp(progress, 0, 1) }, [progress])
   useEffect(() => {
@@ -464,23 +472,18 @@ export default function StationRingLayer({
     }
   }
 
-  function startLoop() {
-    rafRef.current = requestAnimationFrame(tick)
+  // useRafLoop's per-frame callback. Passes the hook's rAF timestamp (ms,
+  // same clock as performance.now()) straight through in seconds — the old
+  // tick() ignored that timestamp and called performance.now() itself; same
+  // clock, same value modulo the few microseconds of code between them.
+  function frame(ts) {
+    draw(ts / 1000)
   }
 
-  function tick() {
-    draw(performance.now() / 1000)
-    if (mountedRef.current && activeRef.current) {
-      rafRef.current = requestAnimationFrame(tick)
-    } else {
-      rafRef.current = null
-    }
-  }
-
-  // Same rAF-pause discipline as AlbumGradientMesh's active prop.
+  // Same rAF-pause discipline as AlbumGradientMesh's active prop. activeRef
+  // itself is synced by useRafLoop internally; this effect only decides
+  // whether a change in `active` should (re)start the loop.
   useEffect(() => {
-    activeRef.current = active
-    if (reducedMotion) return
     if (active && !rafRef.current && mountedRef.current) startLoop()
   }, [active])
 
@@ -510,13 +513,12 @@ export default function StationRingLayer({
     resize()
     window.addEventListener('resize', resize)
 
-    mountedRef.current = true
-    if (activeRef.current && !rafRef.current && !reducedMotion) startLoop()
+    // mountedRef starts true (useRafLoop's initial ref value) and unmount
+    // cleanup (mountedRef=false, cancelAnimationFrame) is owned by the hook,
+    // not this effect. startLoop() itself no-ops under reducedMotion.
+    if (activeRef.current && !rafRef.current) startLoop()
 
     return () => {
-      mountedRef.current = false
-      cancelAnimationFrame(rafRef.current)
-      rafRef.current = null
       window.removeEventListener('resize', resize)
     }
   }, [])

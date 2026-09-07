@@ -1,4 +1,5 @@
 import { useEffect, useRef, useMemo } from 'react'
+import { useRafLoop } from '../hooks/useRafLoop.js'
 import {
   blendDurationMs, brightnessOffset, flowSpeedBase,
   dividerOffsetCap, mixSharpness, noiseContrast,
@@ -249,9 +250,17 @@ function makeColorSeeds() {
 export default function AlbumGradientMesh({ colors = [], nextColors = [], active = true, shuffleKey = 0, entranceActive = false }) {
   const canvasRef          = useRef(null)
   const smallCanvasRef     = useRef(null)
-  const activeRef          = useRef(active)
-  const mountedRef         = useRef(true)
-  const rafRef             = useRef(null)
+  // frame/draw are function declarations below (hoisted) — safe to reference
+  // here even though they're defined further down; useRafLoop only calls
+  // `frame` later, once React has finished this render.
+  //
+  // reducedMotion always false here — unlike StationRingLayer, this file has
+  // never gated on prefers-reduced-motion; the gradient always animates.
+  // Confirmed via 2026-09-07 audit (task 3) before extracting useRafLoop —
+  // not forcing the two files to match, since that would be a real behavior
+  // change, not a refactor.
+  const { startLoop: rafStartLoop, mountedRef, activeRef, rafRef } =
+    useRafLoop(frame, { active, reducedMotion: false })
   const isFirst             = useRef(true)
   const isFirstNext         = useRef(true)
   const isFirstKey          = useRef(true)
@@ -472,7 +481,8 @@ export default function AlbumGradientMesh({ colors = [], nextColors = [], active
   }, [])
 
   useEffect(() => {
-    activeRef.current = active
+    // activeRef itself is synced by useRafLoop internally — this effect only
+    // decides whether a change in `active` should (re)start the loop.
     if (active && !rafRef.current && mountedRef.current) startLoop()
   }, [active])
 
@@ -480,16 +490,15 @@ export default function AlbumGradientMesh({ colors = [], nextColors = [], active
     // Drop the previous run's last frame timestamp so the first frame of this
     // run integrates dt = 0 instead of the whole gap since the loop stopped.
     flowPhaseTsRef.current = null
-    rafRef.current = requestAnimationFrame(tick)
+    rafStartLoop()
   }
 
-  function tick(ts) {
+  // useRafLoop's per-frame callback — draw, then tell the hook whether to
+  // keep looping even if `active` has gone false: an in-flight color blend
+  // (blendStart >= 0) must be allowed to finish.
+  function frame(ts) {
     draw(ts)
-    if (mountedRef.current && (activeRef.current || st.current.blendStart >= 0)) {
-      rafRef.current = requestAnimationFrame(tick)
-    } else {
-      rafRef.current = null
-    }
+    return st.current.blendStart >= 0
   }
 
   function draw(ts) {
@@ -755,22 +764,16 @@ export default function AlbumGradientMesh({ colors = [], nextColors = [], active
     resize()
     window.addEventListener('resize', resize)
 
-    mountedRef.current = true
-    // !rafRef.current guard added (2026-08-07, Opus review) for consistency
-    // with every other startLoop() call site (:346, :459, :467) — on
-    // FIRST mount this was harmless in practice (React runs effects in
-    // declaration order, so the [active] effect above already ran and
-    // bailed on `mountedRef.current === false` at that point, meaning this
-    // was the only startLoop() call). But it's still a real gap on any
-    // later re-run of THIS effect (its own dep is [colorSeeds], which is a
-    // stable useMemo so that's rare, but not impossible) without a matching
-    // unmount/cleanup having nulled rafRef first. Cheap to close either way.
+    // !rafRef.current guard (2026-08-07, Opus review) for consistency with
+    // every other startLoop() call site — cheap insurance against a double
+    // rAF on any later re-run of this effect (its own dep is [colorSeeds], a
+    // stable useMemo, so re-runs are rare but not impossible). mountedRef
+    // itself starts true (useRafLoop's initial ref value) and unmount
+    // cleanup (mountedRef=false, cancelAnimationFrame) is now owned by the
+    // hook, not this effect.
     if (activeRef.current && !rafRef.current) startLoop()
 
     return () => {
-      mountedRef.current = false
-      cancelAnimationFrame(rafRef.current)
-      rafRef.current = null
       window.removeEventListener('resize', resize)
     }
   }, [colorSeeds])
