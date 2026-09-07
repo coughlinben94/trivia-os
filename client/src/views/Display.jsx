@@ -678,6 +678,13 @@ const BREAK_DELAY_MS = 10000
 // One-line tunable if it still needs to move.
 const HEAD_START_DELAY_MS = 1200
 
+// Duration for the shiny-question-exit warp — same vortex as the jukebox
+// handoff (WarpTransition.jsx), much shorter: this fires on every shiny
+// exit, potentially several times a round, where the jukebox's 2.5s
+// cinematic pacing would feel slow. Start conservative; this is the one
+// number to retune live if it reads too fast or too slow.
+const SHINY_WARP_MS = 1100
+
 function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRingStateChange }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
@@ -702,6 +709,43 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
   const [warp, setWarp] = useState(null)
   const breakWasActiveRef = useRef(false)
   const lastSlideIdRef = useRef(currentSlide?.id)
+
+  // ── The shiny-exit warp (Task 5) ──
+  // Independent of the jukebox `warp` state above — different dir semantics
+  // (always 'back', the mirrored-return look, never 'out'), and must never
+  // collide with a break's own warp if a break slide and a shiny slide are
+  // somehow adjacent.
+  //
+  // Trigger is derived DURING RENDER, not in an effect — React's own
+  // "adjusting state when a prop changes" pattern (react.dev, "You Might Not
+  // Need an Effect"), specifically sanctioned for calling a setter mid-render
+  // when a value has visibly changed since the last render. A useLayoutEffect
+  // version of this (this task's first draft, matching the brief's Step 3
+  // verbatim) was live-verified with Playwright and found to FALSE-FIRE a
+  // bogus vortex on initial mount, whenever DisplayInner mounts directly onto
+  // a live shiny slide (e.g. the Go Live picker jumping straight to one):
+  // React 18 StrictMode's dev-only double-invoke of effects ran the layout
+  // effect twice on the same mount, and the ref it used to remember "was the
+  // previous slide shiny" got mutated by the FIRST (React-discarded) pass and
+  // then read back stale-true by the SECOND — no real slide transition ever
+  // happened, but the condition still tripped. Regular component state
+  // doesn't have this failure mode: both of StrictMode's render passes read
+  // the same already-committed prevSlideId/prevWasShiny and reach the same
+  // conclusion, instead of a ref accumulating a mutation across a pass React
+  // throws away. See task-5-report.md for the captured frame log.
+  const [shinyWarp, setShinyWarp] = useState(null) // null | 'active'
+  const [prevShinySlideId, setPrevShinySlideId] = useState(currentSlide?.id)
+  const [prevWasShiny, setPrevWasShiny] = useState(() => !!currentSlide?.data?.isShiny)
+  if (currentSlide?.id !== prevShinySlideId) {
+    // Only fires leaving a shiny slide for a genuinely different slide that
+    // is NOT the standalone announce card (that one gets its own
+    // ShinyGroupAnnounce beat instead of a vortex over a vortex — Task 4).
+    if (prevWasShiny && currentSlide?.type !== 'shiny-title') {
+      setShinyWarp('active')
+    }
+    setPrevWasShiny(!!currentSlide?.data?.isShiny)
+    setPrevShinySlideId(currentSlide?.id)
+  }
 
   // Gates the jukebox head-start mount (below) to HEAD_START_DELAY_MS after
   // the warp actually starts, instead of the instant it does. See
@@ -1007,6 +1051,23 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
               if (warp === 'out') setActiveBreakId(currentSlide?.id)
               setWarp(null)
             }}
+          />
+        </ErrorBoundary>
+      )}
+
+      {/* The shiny-exit warp (Task 5) — same vortex, independent trigger.
+          Always dir="back" (the mirrored-return look, never the jukebox's
+          'out' wind-into-black), shorter duration (SHINY_WARP_MS). Same
+          key-by-state-value reasoning as the jukebox block above: keying on
+          shinyWarp alone (not the slide id) means a real advance mid-warp
+          can't stutter-remount this canvas. */}
+      {shinyWarp && (
+        <ErrorBoundary fallback={null}>
+          <WarpTransition
+            key={shinyWarp}
+            dir="back"
+            durationMs={SHINY_WARP_MS}
+            onDone={() => setShinyWarp(null)}
           />
         </ErrorBoundary>
       )}
