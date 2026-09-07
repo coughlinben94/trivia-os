@@ -471,8 +471,19 @@ export async function computeNextStep(show, fetchTeamCount) {
   // is gone (the announce card is a standalone `shiny-title` slide now, so
   // content never pans up), and with nothing on the display side left to
   // render an outro, the beat had become a dead Next press for the host.
-  const target = Math.min(cur + 1, sorted.length - 1)
+  let target = Math.min(cur + 1, sorted.length - 1)
   if (target === cur) return null
+  // A shiny-title slide is never a real stop when arrived at going FORWARD —
+  // see the "closing beat" history note above: a dead Next press here was
+  // already fought and removed once (2026-09-01). Its first content slide is
+  // guaranteed to exist immediately after it (buildShinyTitleSlide/
+  // withShinyTitleSlide always insert the title as slides[0] of its group,
+  // content following), so target+1 is always safe. Going BACKWARD
+  // (computePrevStep, unchanged) still lands on the title on purpose — a host
+  // revisiting a shiny series intentionally is a different action.
+  if (sorted[target]?.type === 'shiny-title' && target + 1 < sorted.length) {
+    target = target + 1
+  }
   const targetSlide = sorted[target]
   const bakedSlides = await bakeTeamPickerParts(slides, targetSlide, fetchTeamCount)
   const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === targetSlide?.id) ?? targetSlide, { currentPart: 0 })
