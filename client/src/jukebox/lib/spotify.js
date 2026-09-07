@@ -1,3 +1,5 @@
+import * as Sentry from '@sentry/react'
+
 const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID
 const REDIRECT_URI = import.meta.env.DEV
   ? 'http://127.0.0.1:5173/spotify-callback'
@@ -125,9 +127,30 @@ async function doRefreshToken() {
   // A failed refresh (expired/revoked refresh token, bad request) still
   // returns JSON, so without checking res.ok the stale token stayed in
   // localStorage and the UI kept claiming "connected" with dead credentials.
+  //
+  // 2026-09-07: logout() used to fire on ANY !res.ok — including a
+  // transient 429/5xx during a live show. That wipes spotify_refresh_token
+  // outright, and every grading break mounts a fresh SpotifyConnectGate
+  // that calls getToken() -> here again; with no refresh token left in
+  // localStorage this short-circuits to null with zero network call,
+  // forever, until someone runs the full login() redirect on the physical
+  // device mid-show — a permanent brick from one network blip. Spotify's
+  // own docs: the token endpoint returns error=invalid_grant specifically
+  // when a refresh token is expired/revoked/invalid, and recommend
+  // discarding + reauthing only on that. Narrowed to match: logout() only
+  // on a confirmed invalid_grant. Any other failure (rate limit, 5xx, an
+  // unparseable body) leaves localStorage untouched so the NEXT break's
+  // fresh mount gets a genuine retry instead of a guaranteed-dead one.
   if (!res.ok) {
-    console.error('[refreshToken] refresh failed', res.status)
-    logout()
+    let body = null
+    try { body = await res.json() } catch { /* non-JSON error body */ }
+    console.error('[refreshToken] refresh failed', res.status, body?.error)
+    Sentry.captureMessage('jukebox: token refresh failed', {
+      level: 'warning',
+      tags: { area: 'jukebox' },
+      extra: { status: res.status, error: body?.error },
+    })
+    if (body?.error === 'invalid_grant') logout()
     return null
   }
 

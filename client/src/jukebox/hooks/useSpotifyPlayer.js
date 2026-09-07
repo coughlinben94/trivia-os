@@ -223,7 +223,13 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
 
       const player = new window.Spotify.Player({
         name: 'Trivia Jukebox',
-        getOAuthToken: cb => getToken().then(cb),
+        // .catch (2026-09-07, second-opinion review): getToken() can still
+        // reject on a malformed-but-200 refresh response (bare `await
+        // res.json()` on the success path in spotify.js). An unhandled
+        // rejection here means the SDK's own internal token refresh never
+        // gets called back at all — cb(null) at least lets it fail visibly
+        // instead of hanging.
+        getOAuthToken: cb => getToken().then(cb).catch(() => cb(null)),
         volume: 0,
       })
       // Assigned here, before connect() resolves, not after (2026-08-24,
@@ -417,11 +423,20 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
       setIsReady(false)
 
       const token = await getToken()
-      if (!token) return false
+      if (!token) {
+        reportJukebox('reconnect: no token (refresh failed or logged out)', { mountCount })
+        return false
+      }
 
       const player = new window.Spotify.Player({
         name: 'Trivia Jukebox',
-        getOAuthToken: cb => getToken().then(cb),
+        // .catch (2026-09-07, second-opinion review): getToken() can still
+        // reject on a malformed-but-200 refresh response (bare `await
+        // res.json()` on the success path in spotify.js). An unhandled
+        // rejection here means the SDK's own internal token refresh never
+        // gets called back at all — cb(null) at least lets it fail visibly
+        // instead of hanging.
+        getOAuthToken: cb => getToken().then(cb).catch(() => cb(null)),
         volume: 0,
       })
       sharedSpotifyPlayer = player
@@ -484,6 +499,7 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
     const token = await getToken()
     if (!token) {
       console.error('[playTrack] token refresh failed — aborting play')
+      reportJukebox('playTrack: no token (refresh failed or logged out)', { mountCount })
       transitioningRef.current = false
       return false
     }
