@@ -1,3 +1,5 @@
+import { sortSlides } from './slideStepping.js'
+
 // Auto-numbering for question/pixelate-series slides.
 //
 // questionNumber/questionLabel used to be set once at creation time
@@ -45,9 +47,7 @@ export function renumberRoundQuestions(slides) {
   const patches = new Map() // slide id -> { questionNumber, questionLabel }
   for (const [key, group] of groups) {
     const isBonus = key.endsWith('::true')
-    group
-      .slice()
-      .sort((a, b) => a.order - b.order)
+    sortSlides(group)
       .forEach((s, i) => {
         const num = i + 1
         patches.set(s.id, {

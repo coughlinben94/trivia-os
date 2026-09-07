@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { THEMES } from '../themes/index.js'
 import { MEDALS } from '../lib/scoreboardMath.js'
+import { sortSlides } from '../lib/slideStepping.js'
 
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 
@@ -243,15 +244,15 @@ export default function Shows() {
                   .sort((a, b) => (a.roundNumber ?? a.number ?? 0) - (b.roundNumber ?? b.number ?? 0))
                   .map(r => ({
                     round: r,
-                    questions: slides
-                      .filter(s => s.roundId === r.id && s.type === 'question')
-                      .sort((a, b) => a.order - b.order),
+                    questions: sortSlides(
+                      slides.filter(s => s.roundId === r.id && s.type === 'question')
+                    ),
                   }))
                   .filter(g => g.questions.length > 0)
 
-                const orphanQuestions = slides
-                  .filter(s => s.type === 'question' && !rounds.find(r => r.id === s.roundId))
-                  .sort((a, b) => a.order - b.order)
+                const orphanQuestions = sortSlides(
+                  slides.filter(s => s.type === 'question' && !rounds.find(r => r.id === s.roundId))
+                )
 
                 return (
                   <>

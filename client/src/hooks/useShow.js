@@ -12,6 +12,7 @@ import {
   bakeTeamPickerParts as bakeParts,
   computeNextStep,
   computePrevStep,
+  sortSlides,
 } from '../lib/slideStepping.js'
 import { idsToDeleteWith } from '../lib/shinySeries.js'
 
@@ -45,7 +46,7 @@ function normalizeShow(row) {
 
 export function sortedSlides(show) {
   if (!show?.slides) return []
-  return [...show.slides].sort((a, b) => a.order - b.order)
+  return sortSlides(show.slides)
 }
 
 export function useShow() {
@@ -389,7 +390,7 @@ export function useShow() {
     if (!show?.showState?.isLive) return {}
     const id = show.showState.currentSlideId
     if (id == null) return {}
-    const idx = [...newSlides].sort((a, b) => a.order - b.order).findIndex(s => s.id === id)
+    const idx = sortSlides(newSlides).findIndex(s => s.id === id)
     if (idx === -1 || idx === show.showState.currentSlideIndex) return {}
     return { current_slide_index: idx }
   }
