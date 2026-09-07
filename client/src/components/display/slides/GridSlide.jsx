@@ -4,6 +4,9 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { useFitToBox, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
+import { isFirstOfShinyGroup } from '../../../lib/shinySeries.js'
+import { sortSlides } from '../../../lib/slideStepping.js'
+import ShinyGroupAnnounce from '../ShinyGroupAnnounce.jsx'
 
 function Tile({ tile, size, reduce }) {
   const common = { width: size, height: size, borderRadius: 10, overflow: 'hidden', boxShadow: '0 6px 22px rgba(0,0,0,0.55)' }
@@ -14,10 +17,21 @@ function Tile({ tile, size, reduce }) {
 }
 
 // The announce card is its own permanent 'shiny-title' slide now
-// (ShinyTitleSlide.jsx, 2026-09-01) — no introDone swap here.
-export default function GridSlide({ slide }) {
+// (ShinyTitleSlide.jsx, 2026-09-01) — no introDone swap here. This still
+// mounts ShinyGroupAnnounce itself (Task 4) for a REAL `grid` slide that's
+// the first content slide of its shiny group — GridContent is not the right
+// place, since QuestionSlide's concurrent-media branch also reuses it via
+// the partsToGridView adapter and already mounts its own announce.
+export default function GridSlide({ slide, show }) {
   const { theme } = useTheme()
-  return <GridContent slide={slide} theme={theme} />
+  return (
+    <>
+      <GridContent slide={slide} theme={theme} />
+      {isFirstOfShinyGroup(sortSlides(show?.slides), slide) && (
+        <ShinyGroupAnnounce name={slide.data?.shinyFormatName} icon={slide.data?.shinyFormatIcon} />
+      )}
+    </>
+  )
 }
 
 // Exported for QuestionSlide.jsx's concurrent-media branch: an "all at once"

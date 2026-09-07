@@ -147,6 +147,10 @@ import { hexToRgb } from '../../lib/oklab.js'
 // stretches the whole choreography proportionally -- the wind-up still
 // holds for the first 22%, the snap still peaks at t=0.82, etc. -- rather
 // than needing every beat retuned by hand.
+//
+// durationMs is a prop (default below) so a faster non-jukebox use of this
+// same vortex (the shiny-question exit) can run a shorter choreography
+// without touching this tuned default.
 const DURATION_MS = 2500
 const W = 1920
 const H = 1080
@@ -188,7 +192,7 @@ const isReduced = () =>
   typeof window !== 'undefined' && window.matchMedia &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export default function WarpTransition({ dir = 'out', onDone }) {
+export default function WarpTransition({ dir = 'out', onDone, durationMs = DURATION_MS }) {
   const canvasRef = useRef(null)
   // onDone is an inline arrow in Display's JSX (new identity every render) —
   // held in a ref so the loop below never restarts because of it.
@@ -350,7 +354,7 @@ export default function WarpTransition({ dir = 'out', onDone }) {
       if (!start) { start = now; last = now }
       const dtn = Math.min(26, now - last) / 16.6667 // frame-rate independent, capped
       last = now
-      const p = Math.min(1, (now - start) / DURATION_MS)
+      const p = Math.min(1, (now - start) / durationMs)
       // Intensity ramps in on 'out' and decays on 'back' — the same curve read
       // in opposite directions, which is what makes the pair read as one round
       // trip rather than two effects.
@@ -365,7 +369,7 @@ export default function WarpTransition({ dir = 'out', onDone }) {
       // Veil: how much of the screen the canvas owns. Squared so the scene
       // stays readable while the vortex spins up, then the cover slams on.
       // Deliberately saturates at t=0.94 rather than 1.0: rAF timestamps
-      // almost never land exactly on DURATION_MS, so a veil that only reaches
+      // almost never land exactly on durationMs, so a veil that only reaches
       // 1 in the limit leaves the real final frame at ~0.97 and the live scene
       // ghosts through the handover. Reaching full cover early makes the
       // "ends fully opaque" contract hold regardless of where frames fall.
@@ -560,10 +564,10 @@ export default function WarpTransition({ dir = 'out', onDone }) {
     // rAF stops entirely in a backgrounded tab, which would strand the break
     // sequence waiting on an onDone that never comes. finish() is idempotent,
     // so this only ever fires when the loop genuinely didn't.
-    const watchdog = setTimeout(finish, DURATION_MS + 400)
+    const watchdog = setTimeout(finish, durationMs + 400)
 
     return () => { cancelAnimationFrame(raf); clearTimeout(watchdog) }
-  }, [dir])
+  }, [dir, durationMs])
 
   return (
     <canvas

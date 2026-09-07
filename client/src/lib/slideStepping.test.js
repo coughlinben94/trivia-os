@@ -116,6 +116,28 @@ describe('computeNextStep', () => {
     expect(dataOf(adv, 'a').currentPart ?? 0).toBe(0)
   })
 
+  // 2026-09-07 (shiny-exit-warp Task 3): a forward Next press that WOULD
+  // land on a shiny-title announce slide is a dead stop — the title is a
+  // label, not a destination. Skip one further step onto its first content
+  // sibling instead.
+  it('skips forward past a shiny-title landing onto its first content slide', async () => {
+    const slides = [
+      slide('q1', 0),
+      slide('title', 1, 'shiny-title', { shinyGroupId: 'g1' }),
+      slide('q2', 2, 'question', { shinyGroupId: 'g1', isShiny: true }),
+    ]
+    const patch = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'q1' }, noTeams)
+    expect(patch.current_slide_index).toBe(2)
+    expect(patch.current_slide_id).toBe('q2')
+  })
+
+  it('does NOT skip when Next lands on an ordinary slide (no regression)', async () => {
+    const slides = [slide('q1', 0), slide('q2', 1)]
+    const patch = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'q1' }, noTeams)
+    expect(patch.current_slide_index).toBe(1)
+    expect(patch.current_slide_id).toBe('q2')
+  })
+
   // 2026-08-25, found live the same night this format shipped: Ben clicked
   // into a PYL "Song Lyrics" (ShinyConcurrentQuestion) slide and the first
   // row's answer was already showing before any Next press. Root cause was
@@ -739,11 +761,14 @@ describe('shinyDisplay stepping', () => {
     expect(dataOf(back, 'a').currentPart).toBe(2)
   })
 
-  it('two runs of the same format back to back: each announces via its OWN shiny-title slide, stepping is plain', async () => {
-    // Announce beats are slides now, so stepping needs no sibling awareness:
-    // run 1's last content slide advances onto run 2's title slide, which
-    // advances onto run 2's first content slide. Nothing is skipped or
-    // flagged along the way.
+  // 2026-09-07 (shiny-exit-warp Task 3): updated from the original "stepping
+  // is plain" version. A forward Next landing on ANY shiny-title slide is
+  // now a dead stop that gets skipped onto its first content sibling — that
+  // rule doesn't carve out an exception for a second series' own title, so
+  // run 1's last content slide now advances straight onto run 2's first
+  // content slide, and t2 is never a Next-reachable destination going
+  // forward (computePrevStep can still land a host on it deliberately).
+  it('two runs of the same format back to back: run 1 advances straight past run 2s own shiny-title', async () => {
     const base = { isShiny: true, isSeries: true, shinyFormatId: 'f1', seriesTheme: 'Same Format' }
     const slides = [
       slide('t1', 0, 'shiny-title', { ...base, shinyGroupId: 'grp_1' }),
@@ -753,7 +778,7 @@ describe('shinyDisplay stepping', () => {
     ]
     let idx = 0
     let cur = slides
-    for (const expectedId of ['a', 't2', 'b']) {
+    for (const expectedId of ['a', 'b']) {
       const patch = await computeNextStep({ slides: cur, currentSlideIndex: idx, currentSlideId: cur[idx].id }, noTeams)
       expect(patch.current_slide_id).toBe(expectedId)
       idx = patch.current_slide_index
