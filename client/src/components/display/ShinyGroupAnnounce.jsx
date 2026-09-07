@@ -14,21 +14,24 @@ import { useReducedMotion } from 'framer-motion'
 // other component in this codebase (QuestionSlide, GridSlide, etc.) guards
 // its own CSS transitions individually via framer-motion's
 // useReducedMotion(), so this does the same rather than relying on a global
-// rule that doesn't exist for this case.
+// rule that doesn't exist for this case. Reduced motion suppresses the FADE
+// only, not the content — the name/icon still render and still auto-hide on
+// the same ~1.2s timer (that's timing, not motion), it just snaps in/out
+// instead of transitioning opacity (final-review fix, 2026-09-07).
 export default function ShinyGroupAnnounce({ name, icon }) {
   const played = useRef(false)
   const [visible, setVisible] = useState(false)
   const reduce = useReducedMotion()
 
   useEffect(() => {
-    if (reduce || played.current) return
+    if (played.current) return
     played.current = true
     setVisible(true)
     const t = setTimeout(() => setVisible(false), 1200)
     return () => clearTimeout(t)
-  }, [reduce])
+  }, [])
 
-  if (!name || reduce) return null
+  if (!name) return null
 
   return (
     <div
@@ -43,7 +46,7 @@ export default function ShinyGroupAnnounce({ name, icon }) {
         alignItems: 'center',
         gap: '0.5rem',
         opacity: visible ? 1 : 0,
-        transition: 'opacity 0.4s ease',
+        transition: reduce ? 'none' : 'opacity 0.4s ease',
         pointerEvents: 'none',
       }}
     >
