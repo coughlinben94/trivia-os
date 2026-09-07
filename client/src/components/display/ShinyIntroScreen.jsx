@@ -17,14 +17,56 @@ import { warmImages } from '../../lib/warmImages.js'
 // Entrance choreography ported from the approved WAAPI prototype
 // (shiny-spin-land-drop.html, Ben-approved after two slow-down corrections):
 // title spins in through ~1 tame rotation while scaling up, lands at
-// LAND_T with a two-oscillation spring "boing", a gold burst ring + 8
-// sparks fire at impact, then the host photo rockets up from below the frame
-// — sequenced, not simultaneous. Keyframe values, offsets, and durations are
-// the prototype's numbers (linear-eased tracks map exactly via Framer's
-// times arrays). Two deliberate divergences: the burst/sparks fire AT the
-// landing instant rather than the prototype's early-warped timing (see
-// IMPACT_EASE note below), and the glow settles at full opacity to match
-// this screen's shipped always-on wash instead of the prototype's 0.55.
+// LAND_T, a gold burst ring + 8 sparks fire at impact, then the host photo
+// rockets up from below the frame — sequenced, not simultaneous. Keyframe
+// values, offsets, and durations are the prototype's numbers (linear-eased
+// tracks map exactly via Framer's times arrays). Two deliberate divergences:
+// the burst/sparks fire AT the landing instant rather than the prototype's
+// early-warped timing (see IMPACT_EASE note below), and the glow settles at
+// full opacity to match this screen's shipped always-on wash instead of the
+// prototype's 0.55.
+//
+// TITLE_TREATMENTS (2026-09-07): a round showing the same fixed spin
+// back-to-back read as one clip repeated, so the title's entrance is now one
+// of 6 variants, picked once per slide (stable across Prev/replay — same
+// STABILITY GOAL as pickPhotoForSlide, but via a pure hash of slide.id rather
+// than that function's mutable module-scoped Map; deliberately not the same
+// mechanism, just the same "pick once, stable" outcome). Design brief, fully
+// brainstormed + critiqued (two independent review passes) before this landed:
+//   - The show's rest-tilt convention (-6deg / +6deg) is preserved everywhere
+//     — direction of spin/roll/turn always implies which tilt it lands on,
+//     never an arbitrary coin flip independent of the motion.
+//   - Ben's explicit call: no bounce, ANY variant — grows/rolls/turns to its
+//     landing value and stops dead, no post-impact wobble. This drops the
+//     title's 3-cycle decaying spring "boing" the original prototype had
+//     (SETTLE_SWING is no longer used by the title track for this reason —
+//     it's still used by the host photo below, which is unchanged/untouched
+//     by this pass).
+//   - Every variant keeps the EXACT SAME impact instant (times fraction 0.8
+//     of LAND_T) the original bounce used to peak-overshoot at. Burst,
+//     sparks, and glow all key their own timing off that same instant
+//     already — by landing every variant's real rest value AT 0.8 instead of
+//     an overshoot, all three stay in sync with zero changes needed to their
+//     own transitions. From 0.8 to 1.0 the title just holds its landed value
+//     (still costs a keyframe/ease-array slot so `times` stays literal per
+//     the IMPACT_EASE mechanism below — a shorter array would just mean the
+//     title finishes before the burst does).
+//   - Two axes beyond the original Z-axis spin: rotateX ("Roll Forward" /
+//     "Roll Backward" — tumbles toward camera like a ball) and rotateY
+//     ("Turn Right" / "Turn Left" — spins like a coin). Both need
+//     TITLE_PERSPECTIVE_PX (below) and backfaceVisibility:'hidden' (in the
+//     motion.p's style) to read as real 3D depth rather than squashing flat
+//     at 90deg — verified against this file's Framer Motion version:
+//     rotateX/rotateY/transformPerspective are independent first-class
+//     transform props, no parent CSS `perspective` needed. For these two
+//     axes the Z-axis `rotate` track carries ONLY the tilt (0 through the
+//     roll, resolving to -6/+6 in the same final decel segment the 3D axis
+//     lands in) — so the tilt reads as the roll settling into the show's
+//     convention, not a separate bolt-on nudge.
+//   - TITLE_PERSPECTIVE_PX and the rotateX/Y turn counts below are first-cut
+//     numbers, not verified on the real TV yet (this session had no live
+//     display to check foreshortening against) — tune live before trusting
+//     them as final.
 //
 // The format-icon badge (prototype "iconBadge" track) was removed from this
 // screen 2026-08-17 (Ben: format icons are a backend/host-only affordance —
@@ -74,7 +116,50 @@ const IMPACT_EASE = cubicBezier(0.16, 1, 0.3, 1)
 // through WAAPI, warping every offset. Keep the function form.)
 const HOLD = cubicBezier(0.25, 0.25, 0.75, 0.75) // exact identity — preserves the approved spin/hold segments unchanged
 const SETTLE_ARRIVE = cubicBezier(0.39, 0.575, 0.565, 1) // easeOutSine — moving fast, decelerate to a standstill at the peak
-const SETTLE_SWING = cubicBezier(0.445, 0.05, 0.55, 0.95) // easeInOutSine — extremum to extremum, zero velocity at both ends
+const SETTLE_SWING = cubicBezier(0.445, 0.05, 0.55, 0.95) // easeInOutSine — extremum to extremum, zero velocity at both ends (host photo only — see TITLE_TREATMENTS above)
+
+// Shared by every title-entrance variant: same `times` (impact at 0.8 of
+// LAND_T, held flat through 1.0 — see TITLE_TREATMENTS above) and the same
+// per-segment eases (HOLD for the untouched spin/hold feel, SETTLE_ARRIVE to
+// decelerate into the landing, HOLD again for the flat hold after).
+const TITLE_TIMES = [0, 0.03, 0.42, 0.68, 0.8, 1]
+const TITLE_EASE = [HOLD, HOLD, HOLD, SETTLE_ARRIVE, HOLD]
+const TITLE_PERSPECTIVE_PX = 1600 // tune live on the real TV — see file-header note
+
+// Six variants, one Z-axis (the original spin) and two 3D axes (roll toward
+// camera / turn like a coin), each with a "forward"/"backward" pair so the
+// show's -6deg/+6deg tilt convention is always reachable in either direction
+// with no arbitrary coin flip: the SIGN of the spin/roll/turn always implies
+// which tilt it lands on.
+//   axis:  which transform key besides `scale` carries the entrance motion
+//   spin:  that key's 6 keyframe values (mirrors TITLE_TIMES exactly)
+//   tilt:  the Z-axis `rotate` keyframes — for the spin variants this IS the
+//          `spin` array; for the two 3D axes it's a separate track that
+//          starts at 0 and only resolves to the tilt in the same final decel
+//          segment the 3D roll lands in, so the tilt reads as part of the
+//          roll settling, not a separate bolt-on nudge
+const TITLE_TREATMENTS = {
+  // Land on the UNWRAPPED continuation (354 / -354), not the short-form -6 / 6 —
+  // Framer interpolates raw numbers with no mod-360 wraparound, so jumping the
+  // final segment from 336 straight to -6 would be a -342deg snap backward
+  // instead of the intended +18deg finish. 354deg and -6deg render identically
+  // (same for -354/6), so this changes nothing visually, only the path taken.
+  'spin-right': { axis: 'rotate', spin: [0, 0, 196, 336, 354, 354] },
+  'spin-left': { axis: 'rotate', spin: [0, 0, -196, -336, -354, -354] },
+  'roll-forward': { axis: 'rotateX', spin: [-740, -740, -420, -140, 0, 0], tilt: [0, 0, 0, 0, -6, -6] },
+  'roll-backward': { axis: 'rotateX', spin: [740, 740, 420, 140, 0, 0], tilt: [0, 0, 0, 0, 6, 6] },
+  'turn-right': { axis: 'rotateY', spin: [-740, -740, -420, -140, 0, 0], tilt: [0, 0, 0, 0, -6, -6] },
+  'turn-left': { axis: 'rotateY', spin: [740, 740, 420, 140, 0, 0], tilt: [0, 0, 0, 0, 6, 6] },
+}
+const TITLE_TREATMENT_KEYS = Object.keys(TITLE_TREATMENTS)
+
+// Stable per slide, not per mount — pure hash of slide.id (no stored state),
+// so Prev/replay never changes which variant a given shiny-title shows.
+function pickTitleTreatment(id) {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
+  return TITLE_TREATMENT_KEYS[h % TITLE_TREATMENT_KEYS.length]
+}
 
 // `quiet` — the reduced-motion presentation: the title and photo arrive at
 // exactly the rest values the entrance settles to (title scale 1 / rotate
@@ -101,6 +186,9 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
   // char-count text sizing (see autoFitText.js).
   const titleRef = useRef(null)
   const [titleWrapped, setTitleWrapped] = useState(false)
+  const treatmentKey = useMemo(() => pickTitleTreatment(slide.id), [slide.id])
+  const treatment = TITLE_TREATMENTS[treatmentKey]
+  const restTilt = treatment.axis === 'rotate' ? treatment.spin[treatment.spin.length - 1] : treatment.tilt[treatment.tilt.length - 1]
 
   // Same drag/rotate/resize region system StateOfUnionSlide's photo already
   // uses (SlideCanvasEditor's [data-slide-region] detection — generic, no
@@ -354,45 +442,39 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
       />
       </div>
 
-      {/* Title — big, tilted, marker-style. Spins in through one tame
-          controlled turn while scaling up, lands with a two-oscillation
-          spring "boing". Final rest angle is 354deg ≡ exactly -6deg (360-6),
-          matching this file's tilt convention — not a leftover spin remainder. */}
+      {/* Title — big, tilted, marker-style. Entrance is one of 6 treatments
+          (TITLE_TREATMENTS, picked stably per slide — see the file-header
+          note); every one grows/rolls/turns to its rest value and stops
+          dead, no bounce. Final rest angle is always -6deg or +6deg,
+          matching this file's tilt convention — never a leftover spin
+          remainder. */}
       <motion.p
-        initial={quiet ? { opacity: 0, scale: 1, rotate: -6 } : { opacity: 0, scale: 0.05, rotate: 0 }}
+        initial={
+          quiet
+            ? { opacity: 0, scale: 1, rotate: restTilt, rotateX: 0, rotateY: 0 }
+            : {
+                opacity: 0,
+                scale: 0.05,
+                rotate: treatment.axis === 'rotate' ? 0 : treatment.tilt[0],
+                rotateX: treatment.axis === 'rotateX' ? treatment.spin[0] : 0,
+                rotateY: treatment.axis === 'rotateY' ? treatment.spin[0] : 0,
+              }
+        }
         animate={
           quiet
-            ? { opacity: 1, scale: 1, rotate: -6 }
+            ? { opacity: 1, scale: 1, rotate: restTilt, rotateX: 0, rotateY: 0 }
             : {
-                opacity: [0, 1, 1, 1, 1, 1, 1, 1],
-                // Bounce amplitudes now DECAY geometrically toward rest instead of
-                // stalling. Measured from the rest values (rotate 354, scale 1):
-                //   rotate  +12 → -4 → +1.5   (ratio ~0.35 each half-cycle)
-                //   scale  +0.22 → -0.09 → +0.04 (ratio ~0.42)
-                // The old third bounce was +4 / +0.08 — the SAME size as the second
-                // (12 → 4 → 4), so the card ticked back and forth at a constant
-                // amplitude and then stopped, which is a ratchet, not a spring.
-                scale: [0.05, 0.05, 0.42, 0.85, 1.22, 0.91, 1.04, 1],
-                rotate: [0, 0, 196, 336, 366, 350, 355.5, 354],
+                opacity: [0, 1, 1, 1, 1, 1],
+                scale: [0.05, 0.05, 0.42, 0.85, 1, 1],
+                rotate: treatment.axis === 'rotate' ? treatment.spin : treatment.tilt,
+                rotateX: treatment.axis === 'rotateX' ? treatment.spin : [0, 0, 0, 0, 0, 0],
+                rotateY: treatment.axis === 'rotateY' ? treatment.spin : [0, 0, 0, 0, 0, 0],
               }
         }
         transition={
           quiet
             ? { duration: 0.3, ease: EASE_OUT }
-            : {
-                duration: LAND_T,
-                // Tail offsets equalised: the old 0.9 / 0.96 / 1 gave half-periods of
-                // 172ms → 104ms → 69ms, so the wobble sped UP as it died — a real
-                // spring holds a constant frequency while only the amplitude shrinks.
-                // The last beat was also only ~4 frames at 60fps, too short to read as
-                // motion at all. 0.8 (the impact peak, which the burst/spark tracks key
-                // off) is untouched; only the two post-impact offsets moved.
-                times: [0, 0.03, 0.42, 0.68, 0.8, 0.867, 0.934, 1],
-                // One ease per segment (7 for 8 keyframes). Spin/hold segments keep the
-                // approved constant-velocity feel via the exact identity curve; only
-                // the four post-impact segments change.
-                ease: [HOLD, HOLD, HOLD, SETTLE_ARRIVE, SETTLE_SWING, SETTLE_SWING, SETTLE_SWING],
-              }
+            : { duration: LAND_T, times: TITLE_TIMES, ease: TITLE_EASE }
         }
         ref={titleRef}
         className="relative z-10 text-center px-20"
@@ -409,6 +491,8 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
           fontWeight: 700,
           lineHeight: 1.08,
           textShadow: `0 3px 0 rgba(0,0,0,0.25), 0 2px 10px ${SHINY_GOLD_GLOW}40`,
+          transformPerspective: TITLE_PERSPECTIVE_PX,
+          backfaceVisibility: 'hidden',
         }}
       >
         {title}
