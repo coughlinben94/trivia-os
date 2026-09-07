@@ -23,6 +23,20 @@
 
 import { isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isChoiceShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
 
+// Chunks `parts` into fixed-size reveal groups of `groupSize`, in authored
+// order — the single implementation both revealStepCount's Next/Prev step
+// count and ShinyConcurrentQuestion's row-grouping render logic derive from.
+// Previously two hand-synced implementations (a comment in QuestionSlide.jsx
+// read "slideStepping.js's stepCount mirrors this chunking"), which is
+// exactly the kind of drift that shipped the off-by-one revealStepCount's own
+// comment below documents.
+export function chunkParts(parts, groupSize) {
+  const size = groupSize || 1
+  const groups = []
+  for (let i = 0; i < (parts?.length ?? 0); i += size) groups.push(parts.slice(i, i + size))
+  return groups
+}
+
 // Number of Next-reachable states for a slide's data.parts/groupSize
 // stepping. For every format except ShinyConcurrentQuestion, currentPart
 // indexes the part currently on screen, so there are exactly `groups`
@@ -42,9 +56,8 @@ import { isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isChoiceShi
 // Next-reachable state no matter how many assets it holds — a press moves to
 // the next slide, it never reveals a tile. "One at a time" is what
 // sequential is for.
-function revealStepCount(data) {
-  const parts = data?.parts
-  const groups = Math.ceil((parts?.length ?? 0) / (data?.groupSize || 1))
+export function revealStepCount(data) {
+  const groups = chunkParts(data?.parts, data?.groupSize || 1).length
   const d = data ?? {}
   if (!isConcurrentShiny(d)) return groups
   return isConcurrentMediaShiny(d) ? 1 : groups + 1

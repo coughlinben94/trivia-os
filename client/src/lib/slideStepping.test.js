@@ -14,6 +14,8 @@ import {
   REVEAL_FIELD,
   PHONE_MECHANICS,
   nextSlideAfter,
+  chunkParts,
+  revealStepCount,
 } from './slideStepping.js'
 
 const noTeams = async () => 0
@@ -785,5 +787,47 @@ describe('shinyDisplay stepping', () => {
       cur = patch.slides
     }
     expect(dataOf({ slides: cur }, 'b')).not.toHaveProperty('introDone')
+  })
+})
+
+// chunkParts is the single implementation ShinyConcurrentQuestion's row
+// grouping and revealStepCount's Next/Prev step count both derive from — see
+// slideStepping.js's revealStepCount comment for the live bug (2026-08-25)
+// this fixes the risk of recurring: two hand-synced chunking implementations
+// drifting apart.
+describe('chunkParts', () => {
+  it('chunks parts into fixed-size groups, in order', () => {
+    expect(chunkParts([1, 2, 3, 4, 5, 6], 3)).toEqual([[1, 2, 3], [4, 5, 6]])
+  })
+
+  it('a trailing partial group keeps its actual (shorter) size', () => {
+    expect(chunkParts([1, 2, 3, 4, 5, 6, 7], 3)).toEqual([[1, 2, 3], [4, 5, 6], [7]])
+  })
+
+  it('groupSize 1 (the default) is one group per part', () => {
+    expect(chunkParts([1, 2, 3], 1)).toEqual([[1], [2], [3]])
+  })
+
+  it('empty parts chunk to no groups', () => {
+    expect(chunkParts([], 3)).toEqual([])
+  })
+
+  // revealStepCount derives its Next/Prev step count from chunkParts(...).length
+  // (plus one for the concurrent-shiny format — see revealStepCount's own
+  // comment). This pins the two together directly, across non-even divisions,
+  // so they can never again drift apart the way the hand-synced originals did.
+  it('revealStepCount agrees with chunkParts(...).length, including non-even divisions', () => {
+    const cases = [
+      [6, 3], // even division
+      [7, 3], // non-even — the exact shape (Disney-style "3 and 3" plus a leftover) that broke before
+      [1, 1],
+      [5, 1],
+      [0, 3],
+      [10, 4],
+    ]
+    for (const [partsLength, groupSize] of cases) {
+      const parts = Array.from({ length: partsLength }, (_, i) => i)
+      expect(revealStepCount({ parts, groupSize })).toBe(chunkParts(parts, groupSize).length)
+    }
   })
 })
