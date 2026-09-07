@@ -332,3 +332,16 @@ export function idsToDeleteWith(slides, slideId) {
   const title = slides.find(s => s.type === 'shiny-title' && s.data?.shinyGroupId === groupId)
   return title ? [slideId, title.id] : [slideId]
 }
+
+// Is `slide` the first CONTENT slide of its shiny group — i.e. does a
+// `shiny-title` for the same shinyGroupId sit immediately before it in show
+// order? Used to decide whether to play the format-name announce beat on
+// mount (ShinyGroupAnnounce.jsx) instead of on every slide in the group.
+export function isFirstOfShinyGroup(sortedSlides, slide) {
+  const groupId = slide?.data?.shinyGroupId
+  if (!groupId || slide.type === 'shiny-title') return false
+  const idx = sortedSlides.findIndex(s => s.id === slide.id)
+  if (idx <= 0) return false
+  const prev = sortedSlides[idx - 1]
+  return prev.type === 'shiny-title' && prev.data?.shinyGroupId === groupId
+}

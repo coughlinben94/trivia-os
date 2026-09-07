@@ -12,6 +12,7 @@ import {
   withShinyGroupId,
   resolveJumpIndex,
   idsToDeleteWith,
+  isFirstOfShinyGroup,
 } from './shinySeries.js'
 
 function seriesSlide(id, overrides = {}) {
@@ -519,5 +520,55 @@ describe('idsToDeleteWith', () => {
 
   it('unknown id deletes only itself', () => {
     expect(idsToDeleteWith([q('q1', 'g1')], 'nope')).toEqual(['nope'])
+  })
+})
+
+describe('isFirstOfShinyGroup', () => {
+  it('is true for the slide immediately after its group\'s shiny-title', () => {
+    const sorted = [
+      { id: 'a', type: 'shiny-title', data: { shinyGroupId: 'g1' } },
+      { id: 'b', type: 'question', data: { shinyGroupId: 'g1', isShiny: true } },
+      { id: 'c', type: 'question', data: { shinyGroupId: 'g1', isShiny: true } },
+    ]
+    expect(isFirstOfShinyGroup(sorted, sorted[1])).toBe(true)
+  })
+
+  it('is false for a later slide in the same group', () => {
+    const sorted = [
+      { id: 'a', type: 'shiny-title', data: { shinyGroupId: 'g1' } },
+      { id: 'b', type: 'question', data: { shinyGroupId: 'g1', isShiny: true } },
+      { id: 'c', type: 'question', data: { shinyGroupId: 'g1', isShiny: true } },
+    ]
+    expect(isFirstOfShinyGroup(sorted, sorted[2])).toBe(false)
+  })
+
+  it('is false when the preceding slide is a shiny-title from a DIFFERENT group', () => {
+    const sorted = [
+      { id: 'a', type: 'shiny-title', data: { shinyGroupId: 'g1' } },
+      { id: 'b', type: 'question', data: { shinyGroupId: 'g2', isShiny: true } },
+    ]
+    expect(isFirstOfShinyGroup(sorted, sorted[1])).toBe(false)
+  })
+
+  it('is false for a slide with no shinyGroupId', () => {
+    const sorted = [
+      { id: 'a', type: 'shiny-title', data: { shinyGroupId: 'g1' } },
+      { id: 'b', type: 'question', data: {} },
+    ]
+    expect(isFirstOfShinyGroup(sorted, sorted[1])).toBe(false)
+  })
+
+  it('is false for the group\'s own shiny-title slide', () => {
+    const sorted = [
+      { id: 'a', type: 'shiny-title', data: { shinyGroupId: 'g1' } },
+    ]
+    expect(isFirstOfShinyGroup(sorted, sorted[0])).toBe(false)
+  })
+
+  it('is false when the slide is first in the whole show (no predecessor)', () => {
+    const sorted = [
+      { id: 'a', type: 'question', data: { shinyGroupId: 'g1', isShiny: true } },
+    ]
+    expect(isFirstOfShinyGroup(sorted, sorted[0])).toBe(false)
   })
 })
