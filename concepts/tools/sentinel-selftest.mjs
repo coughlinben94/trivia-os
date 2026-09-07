@@ -19,25 +19,20 @@ import { chromium } from 'playwright';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer } from 'node:http';
-import { runChecks } from './ring-verify.mjs';
+import { runChecks, startStaticServer } from './ring-verify.mjs';
 import { runSentinel } from './sweep-sentinel.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../..');
 const TARGET_HTML = path.join(REPO_ROOT, 'concepts/world-07-ring.html');
 
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript' };
-const server = createServer(async (req, res) => {
-  try {
-    const urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-    const filePath = path.join(REPO_ROOT, path.normalize(urlPath));
-    const data = readFileSync(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
-    res.end(data);
-  } catch { res.writeHead(404); res.end('Not found'); }
-});
-await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+// Shared with palette-sweep.mjs — see ring-verify.mjs's own header note on
+// this being the one home for server-bootstrapping (one fact, one home),
+// plus the belt-and-suspenders path-traversal guard a hand-rolled copy here
+// previously lacked (path.normalize already stripped '..' before this
+// existed, so the old copy wasn't actually exploitable — this closes the
+// gap on principle, not a live hole).
+const server = await startStaticServer(REPO_ROOT);
 const port = server.address().port;
 const targetUrl = `http://127.0.0.1:${port}/concepts/world-07-ring.html`;
 
