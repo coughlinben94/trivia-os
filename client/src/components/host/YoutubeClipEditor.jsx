@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { extractYoutubeId } from '../../lib/youtube.js'
+import { formatTime } from '../../lib/formatTime.js'
 
 // Module-level singleton loader — the YouTube IFrame Player API script
 // registers one global `window.onYouTubeIframeAPIReady` callback, so if two
@@ -26,13 +27,6 @@ export function loadYoutubeIframeApi() {
     }
   })
   return ytApiPromise
-}
-
-function formatTime(seconds) {
-  const s = Math.max(0, Math.round(seconds || 0))
-  const m = Math.floor(s / 60)
-  const sec = s % 60
-  return `${m}:${String(sec).padStart(2, '0')}`
 }
 
 // props: value = { videoId, start, end } | null, onChange(next) — next is

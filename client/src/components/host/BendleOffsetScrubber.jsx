@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { ROUND_LENGTH_SECONDS, clampBendleOffset } from '../../lib/bendleScoring.js'
 import { computeRmsEnvelope, resampleEnvelope, normalizeEnvelope } from '../../lib/bendleAudioAnalysis.js'
+import { formatTime as formatOffsetTime } from '../../lib/formatTime.js'
+export { formatOffsetTime }
 
 // Which stems get a bar graph — drums/bass/other are the three in-round
 // tiers (see BENDLE_TIERS), so this is literally "show me where all three
@@ -16,13 +18,6 @@ const GRAPH_ROWS = [
 const BUCKET_COUNT = 100
 const PREVIEW_SECONDS = 5
 
-export function formatOffsetTime(seconds) {
-  const s = Math.max(0, Math.round(seconds || 0))
-  const m = Math.floor(s / 60)
-  const sec = s % 60
-  return `${m}:${String(sec).padStart(2, '0')}`
-}
-
 // props: song = { id, drums_url, bass_url, other_url, start_offset_seconds }
 export default function BendleOffsetScrubber({ song }) {
   const [envelopes, setEnvelopes] = useState(null)
@@ -33,6 +28,16 @@ export default function BendleOffsetScrubber({ song }) {
   const [saveError, setSaveError] = useState(false)
   const audioRef = useRef(null)
   const previewTimerRef = useRef(null)
+
+  // Re-syncs the local offset when the DB value changes out from under this
+  // component — e.g. a second host device saves a different start point for
+  // the same song while this one is still mounted (BendleAdmin's realtime
+  // subscription merges the row update in without remounting the scrubber).
+  // Without this, a stale local `offset` could get written right back over
+  // the other host's save the next time "Set Start Here" is clicked.
+  useEffect(() => {
+    setOffset(song.start_offset_seconds ?? 0)
+  }, [song.start_offset_seconds])
 
   // Decodes drums/bass/other once per song via the Web Audio API (never
   // Tone.js — see this plan's Global Constraints on keeping Tone out of the

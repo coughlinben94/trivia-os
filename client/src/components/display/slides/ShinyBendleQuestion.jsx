@@ -14,12 +14,14 @@ import { BENDLE_TIERS, ROUND_LENGTH_SECONDS, clampBendleOffset } from '../../../
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 
 const STEM_KEYS = ['drums', 'bass', 'other', 'vocals']
-// The round-playing effect (below) only ever needs three of the four real
-// stems — vocals is never scheduled into a tier (see BENDLE_TIERS in
+// The round-playing effect (below) only ever needs the stems BENDLE_TIERS
+// actually schedules — vocals is deliberately excluded there (see
 // bendleScoring.js), so fetching it during the round would just be a wasted
-// download on show wifi for audio nobody will hear yet. STEM_KEYS (all
-// four) is still what the reveal effect loads.
-const ROUND_STEM_KEYS = ['drums', 'bass', 'other']
+// download on show wifi for audio nobody will hear yet. Derived from
+// BENDLE_TIERS instead of hand-copied so a future tier retune can't silently
+// drift the two lists apart. STEM_KEYS (all four) is still what the reveal
+// effect loads.
+const ROUND_STEM_KEYS = BENDLE_TIERS.flatMap(tier => tier.stems)
 const FADE_SECONDS = 1.5
 // A layer waits at -Infinity dB (gain 0 — provably silent, no information
 // leaks under the drums) and is stepped to this floor at the instant its
