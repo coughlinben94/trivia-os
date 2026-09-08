@@ -1971,7 +1971,7 @@ function BendleBuilder({ songId, onChangeSongId }) {
   const [songs, setSongs] = useState([])
   useEffect(() => {
     let cancelled = false
-    supabase.from('bendle_songs').select('id, title, answer, aliases').order('title')
+    supabase.from('bendle_songs').select('id, title, answer, aliases').eq('status', 'ready').order('title')
       .then(({ data }) => { if (!cancelled) setSongs(data ?? []) })
     return () => { cancelled = true }
   }, [])

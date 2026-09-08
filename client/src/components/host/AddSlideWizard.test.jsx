@@ -10,10 +10,14 @@ import { createRoot } from 'react-dom/client'
 // `.from` additionally needs a real chain now that the wizard's own bendle_songs
 // fetch effect calls `supabase.from(...).select(...).order(...)` unconditionally
 // on mount (Task 5) — an empty object made that throw on every render.
+const bendleEqSpy = vi.fn(() => ({
+  order: () => Promise.resolve({ data: [{ id: 'song_1', title: 'Test Song', answer: 'Test Song', aliases: [] }] }),
+}))
 vi.mock('../../lib/supabase.js', () => ({
   supabase: {
     from: () => ({
       select: () => ({
+        eq: bendleEqSpy,
         order: () => Promise.resolve({ data: [{ id: 'song_1', title: 'Test Song', answer: 'Test Song', aliases: [] }] }),
       }),
     }),
@@ -129,5 +133,9 @@ describe('AddSlideWizard shiny details — bendle song gate', () => {
     })
 
     expect(createButtonFor('Bendle Fmt').disabled).toBe(false)
+  })
+
+  it('only queries ready bendle songs for the picker', () => {
+    expect(bendleEqSpy).toHaveBeenCalledWith('status', 'ready')
   })
 })

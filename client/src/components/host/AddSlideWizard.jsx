@@ -114,7 +114,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
 
   useEffect(() => {
     let cancelled = false
-    supabase.from('bendle_songs').select('id, title, answer, aliases').order('title')
+    supabase.from('bendle_songs').select('id, title, answer, aliases').eq('status', 'ready').order('title')
       .then(({ data }) => { if (!cancelled) setBendleSongs(data ?? []) })
     return () => { cancelled = true }
   }, [])
