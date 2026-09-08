@@ -108,19 +108,12 @@ textarea {
   .join-content { padding-top: 3rem; }
 }
 
-/* Portrait gate: /join is landscape-only. The gate element always renders
-   (RotateGate in Join.jsx, display: flex inline) and this toggle is the
-   whole mechanism — no JS orientation listeners. Opacity, not display: a
-   display swap can't transition, so the gate used to slam onto screen, and
-   near the 45° orientation boundary the media query can flip fast enough to
-   flicker; a 200ms opacity fade smooths both directions the same way (the
-   fade-out doubles as the "exit" — the user's own phone rotation is already
-   the real animation there, nothing slower needed). pointer-events keeps it
-   untappable while transparent instead of relying on z-index/opacity alone. */
-.join-rotate-gate { opacity: 0; pointer-events: none; transition: opacity 200ms ease-out; }
-@media (orientation: portrait) {
-  .join-rotate-gate { opacity: 1; pointer-events: auto; }
-}
+/* Landscape-only rotate gate DISABLED 2026-09-08 (Ben: "it should be
+   portrait" — /join forcing a rotate was wrong, reverted). RotateGate in
+   Join.jsx still renders but this class now stays permanently invisible/
+   untappable — no media query flips it on. Left in place (not deleted) so
+   re-enabling later is a one-line change, not a rebuild. */
+.join-rotate-gate { opacity: 0; pointer-events: none; }
 @keyframes joinRotateHint {
   0%, 20%  { transform: rotate(0deg); }
   55%, 90% { transform: rotate(90deg); }
