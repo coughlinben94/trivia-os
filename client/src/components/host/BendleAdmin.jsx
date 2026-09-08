@@ -2,8 +2,16 @@
 import { useState, useEffect } from 'react'
 import { nanoid } from 'nanoid'
 import { supabase } from '../../lib/supabase.js'
+import BendleSongSearch from './BendleSongSearch.jsx'
 
 const STEM_KEYS = ['drums', 'bass', 'other', 'vocals']
+
+function cleanSpotifyTitle(title) {
+  return title
+    .replace(/\s*-\s*(remaster(ed)?|mono|stereo|single|album)\b.*$/i, '')
+    .replace(/\s*[\(\[](feat\.?|with|remaster|mono|stereo)[^)\]]*[\)\]]/gi, '')
+    .trim()
+}
 
 export default function BendleAdmin({ onClose }) {
   const [songs, setSongs] = useState([])
@@ -17,13 +25,33 @@ export default function BendleAdmin({ onClose }) {
 
   useEffect(() => {
     let cancelled = false
-    supabase.from('bendle_songs').select('id, title, created_at').order('created_at', { ascending: false })
+    supabase.from('bendle_songs').select('id, title, created_at, status, artist, error_text').order('created_at', { ascending: false })
       .then(({ data }) => { if (!cancelled) setSongs(data ?? []) })
     return () => { cancelled = true }
   }, [])
 
   function reset() {
     setTitle(''); setAnswer(''); setAliasesText(''); setSourceUrl(''); setFiles({}); setError(null)
+  }
+
+  async function handleSpotifyPick(track) {
+    setError(null)
+    const id = `bnd_${nanoid(8)}`
+    const cleanAnswer = cleanSpotifyTitle(track.title)
+    const { error: insertError } = await supabase.from('bendle_songs').insert({
+      id,
+      title: track.title,
+      answer: cleanAnswer,
+      aliases: cleanAnswer === track.title ? [] : [track.title],
+      status: 'requested',
+      spotify_id: track.spotifyId,
+      artist: track.artist,
+      artwork_url: track.artworkUrl,
+      drums_url: null, bass_url: null, other_url: null, vocals_url: null,
+    })
+    if (insertError) { setError(insertError.message); return }
+    const { data } = await supabase.from('bendle_songs').select('id, title, created_at, status, artist, error_text').order('created_at', { ascending: false })
+    setSongs(data ?? [])
   }
 
   async function handleSave() {
@@ -50,7 +78,7 @@ export default function BendleAdmin({ onClose }) {
         source_url: sourceUrl.trim() || null, ...urls,
       })
       if (insertError) throw insertError
-      const { data } = await supabase.from('bendle_songs').select('id, title, created_at').order('created_at', { ascending: false })
+      const { data } = await supabase.from('bendle_songs').select('id, title, created_at, status, artist, error_text').order('created_at', { ascending: false })
       setSongs(data ?? [])
       reset()
     } catch (e) {
@@ -68,6 +96,11 @@ export default function BendleAdmin({ onClose }) {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
         </div>
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+          <div className="border-b border-gray-100 pb-4">
+            <p className="text-xs font-medium text-gray-500 mb-2">Pick from Spotify (automatic)</p>
+            <BendleSongSearch onPick={handleSpotifyPick} />
+          </div>
+          <p className="text-xs text-gray-400 text-center">— or upload stems manually below —</p>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Title</label>
             <input value={title} onChange={e => setTitle(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm" placeholder="e.g. Hey Jude" />
