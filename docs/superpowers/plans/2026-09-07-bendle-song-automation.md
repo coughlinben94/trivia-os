@@ -256,10 +256,10 @@ Paste the value from the Prerequisite step when prompted. **Checkpoint: confirm 
 
 - [ ] **Step 4: Manual verification**
 
-`vercel dev` needs the env vars pulled locally first (it doesn't read the dashboard automatically):
+`vercel dev` needs the env vars pulled locally first (it doesn't read the dashboard automatically). Pull **Preview**, not the default Development — `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` are only set on Production+Preview in this project (confirmed via `vercel env ls`), so a default `vercel env pull` gets neither and `spotify-search.js`'s `createClient(undefined, undefined)` throws before the auth check even runs:
 
 ```bash
-vercel env pull .env.vercel
+vercel env pull .env.vercel --environment=preview
 vercel dev &
 sleep 3
 ```
