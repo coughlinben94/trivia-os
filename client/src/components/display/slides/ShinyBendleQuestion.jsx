@@ -10,11 +10,16 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
-import { BENDLE_TIERS } from '../../../lib/bendleScoring.js'
+import { BENDLE_TIERS, ROUND_LENGTH_SECONDS, clampBendleOffset } from '../../../lib/bendleScoring.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 
 const STEM_KEYS = ['drums', 'bass', 'other', 'vocals']
-const ROUND_LENGTH_SECONDS = BENDLE_TIERS[BENDLE_TIERS.length - 1].atSeconds + 20
+// The round-playing effect (below) only ever needs three of the four real
+// stems — vocals is never scheduled into a tier (see BENDLE_TIERS in
+// bendleScoring.js), so fetching it during the round would just be a wasted
+// download on show wifi for audio nobody will hear yet. STEM_KEYS (all
+// four) is still what the reveal effect loads.
+const ROUND_STEM_KEYS = ['drums', 'bass', 'other']
 const FADE_SECONDS = 1.5
 // A layer waits at -Infinity dB (gain 0 — provably silent, no information
 // leaks under the drums) and is stepped to this floor at the instant its
@@ -85,7 +90,7 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
       transport.seconds = 0
 
       const players = {}
-      for (const key of STEM_KEYS) {
+      for (const key of ROUND_STEM_KEYS) {
         const url = song[`${key}_url`]
         if (!url) continue
         let player = null
@@ -102,13 +107,25 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
           continue
         }
         if (killed) { player.dispose(); return }
-        player.sync().start(0)
         created.push(player)
         players[key] = player
       }
       if (killed) return
 
       if (Object.keys(players).length === 0) { setLoadState('error'); return }
+
+      // One shared offset for every stem, computed from the SHORTEST loaded
+      // buffer. Clamping each stem independently off its own buffer.duration
+      // risks two stems landing on different offsets (if their encoded
+      // lengths ever differ even slightly) and drifting out of sync with
+      // each other on a live TV — computing once from the minimum and
+      // applying it to all of them keeps every stem starting at the exact
+      // same point.
+      const roundOffsetSeconds = clampBendleOffset(
+        song.start_offset_seconds,
+        Math.min(...Object.values(players).map(p => p.buffer.duration)),
+      )
+      for (const player of Object.values(players)) player.sync().start(0, roundOffsetSeconds)
 
       // The first tier's stems are audible from the first frame; every later
       // layer waits silent and is faded up when its tier's atSeconds arrives.
@@ -191,7 +208,7 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
   }, [show?.id])
 
   if (revealed) {
-    return <BendleReveal data={data} song={song} theme={theme} shouldReduceMotion={shouldReduceMotion} />
+    return <BendleReveal data={data} song={song} theme={theme} shouldReduceMotion={shouldReduceMotion} isPreview={isPreview} />
   }
 
   return (
@@ -279,12 +296,77 @@ function CountLine({ n, total, text, bodyFont }) {
 
 // The payoff. The song lands first on its own, then the room's results
 // cascade in underneath it — the order the host would say them out loud.
-function BendleReveal({ data, song, theme, shouldReduceMotion }) {
+function BendleReveal({ data, song, theme, shouldReduceMotion, isPreview }) {
   const results = data.bendleResults ?? []
   const text = theme.colors.text
   const displayFont = `'${theme.fonts.display}', 'Boogaloo', sans-serif`
   const bodyFont = `'${theme.fonts.body}', 'DM Sans', sans-serif`
   const twoCol = results.length > 8
+
+  // The reveal beat's own audio lifecycle, separate from the round-playing
+  // effect above: that effect's cleanup already ran the instant `revealed`
+  // flipped true (it's in that effect's own dependency array), so by the
+  // time this component mounts there are no live players or scheduled
+  // fades left to collide with. Every stem that has a URL plays together,
+  // full volume, from the same start_offset_seconds the round used — no
+  // tier scheduling needed, this is the "whole song, vocals included"
+  // payoff landing all at once. Loads are fired in parallel (Promise.all),
+  // not one at a time — the round is already over and the reveal text is
+  // already on screen, so four sequential fetches over show wifi would be
+  // an awkward silent gap before the payoff actually lands. Same isPreview
+  // guard as the round-playing effect: the build-mode canvas never plays
+  // audio.
+  useEffect(() => {
+    if (!song || isPreview) return
+    const transport = Tone.getTransport()
+    let killed = false
+    const created = []
+
+    async function setup() {
+      transport.stop()
+      transport.cancel(0)
+      transport.seconds = 0
+
+      const loaded = await Promise.all(STEM_KEYS.map(async key => {
+        const url = song[`${key}_url`]
+        if (!url) return null
+        const player = new Tone.Player().toDestination()
+        try {
+          await player.load(url)
+          return player
+        } catch (e) {
+          console.error(`[Bendle] reveal stem load failed for "${key}":`, e)
+          player.dispose()
+          return null
+        }
+      }))
+      if (killed) { loaded.forEach(p => p?.dispose()); return }
+
+      const players = loaded.filter(Boolean)
+      if (players.length === 0) return
+      players.forEach(p => created.push(p))
+
+      // Same shared-offset reasoning as the round-playing effect: one value,
+      // derived from the shortest loaded buffer, applied to every stem.
+      const revealOffsetSeconds = clampBendleOffset(
+        song.start_offset_seconds,
+        Math.min(...players.map(p => p.buffer.duration)),
+      )
+      players.forEach(p => p.sync().start(0, revealOffsetSeconds))
+
+      Tone.start().catch(() => {})
+      transport.start()
+    }
+    setup()
+
+    return () => {
+      killed = true
+      transport.stop()
+      transport.cancel(0)
+      created.forEach(p => p.dispose())
+      created.length = 0
+    }
+  }, [song, isPreview])
 
   return (
     <div style={{
