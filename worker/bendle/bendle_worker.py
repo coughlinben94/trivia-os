@@ -47,8 +47,18 @@ def process_song(sb, song):
         output_template = f"{tmp}/audio.%(ext)s"
         query = build_search_query(song["title"], song.get("artist"))
 
+        # player_client=android works around YouTube's SABR-streaming rollout
+        # breaking the default web-client extraction path as of late 2025/2026
+        # (yt-dlp issue #12482 — "the page needs to be reloaded", every
+        # extraction fails with the default client set). Discovered live
+        # during Task 8's smoke test: real songs failed 100% of the time
+        # without this. android skips the PO-token-gated formats and falls
+        # back to a lower-bitrate but perfectly adequate format for a stem-
+        # separation source — quality loss here is inaudible after Demucs
+        # splits it further. Revisit if yt-dlp ships a real fix upstream.
         result = subprocess.run(
-            [sys.executable, "-m", "yt_dlp", f"ytsearch1:{query}", "-x", "--audio-format", "wav", "-o", output_template],
+            [sys.executable, "-m", "yt_dlp", f"ytsearch1:{query}", "-x", "--audio-format", "wav",
+             "--extractor-args", "youtube:player_client=android", "-o", output_template],
             capture_output=True, text=True,
         )
         matches = glob.glob(f"{tmp}/audio.*")
