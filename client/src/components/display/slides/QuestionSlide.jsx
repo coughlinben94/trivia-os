@@ -1002,7 +1002,7 @@ function ShinyVideoQuestion({ slide, theme }) {
         transition={{ delay: 0.15, duration: 0.3 }}
         className="relative z-10 rounded-2xl overflow-hidden"
         style={{
-          width: 'min(60vw, 980px)',
+          width: 'min(90vw, calc(62vh * 16 / 9))',
           aspectRatio: '16 / 9',
           background: theme.colors.bgDeep,
           boxShadow: `0 0 0 1px ${SHINY_GOLD}30`,

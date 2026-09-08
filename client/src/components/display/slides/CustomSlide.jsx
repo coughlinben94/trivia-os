@@ -31,8 +31,8 @@ function CustomSlideVideo({ video, reduce }) {
       initial={{ opacity: 0, scale: reduce ? 1 : 1.05 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.35, ease: EASE_OUT }}
-      className="relative z-10 mb-10 w-full max-w-4xl rounded-2xl overflow-hidden bg-black"
-      style={{ aspectRatio: '16 / 9' }}
+      className="relative z-10 mb-10 rounded-2xl overflow-hidden bg-black"
+      style={{ aspectRatio: '16 / 9', width: 'min(94vw, calc(78vh * 16 / 9))' }}
     >
       <iframe
         key={`${video.videoId}:${video.start ?? 0}:${video.end ?? ''}`}

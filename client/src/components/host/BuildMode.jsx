@@ -958,7 +958,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.1 } }}
             transition={{ duration: 0.15, ease: EASE_OUT }}
-            onClick={() => setShowSwingWizard(false)}
           >
             <motion.div
               initial={{ opacity: 0, scale: reducedMotion ? 1 : 0.96 }}
@@ -986,7 +985,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.1 } }}
             transition={{ duration: 0.15, ease: EASE_OUT }}
-            onClick={() => setShowPylWizard(false)}
           >
             <motion.div
               className="w-full max-w-sm"
