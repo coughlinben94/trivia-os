@@ -8,7 +8,16 @@ from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client
 
-load_dotenv()
+# Deliberately NOT worker/bendle/.env (i.e. not load_dotenv()'s cwd-relative
+# default). This directory sits inside Kingo's Tier 3 Bash scope (arbitrary
+# Bash, cwd-anchored at the trivia-os repo root) — verified live 2026-09-07
+# that Tier 3's gate (bash-gate.ts) only checks a path STAYS INSIDE that
+# scope, with no secret-filename denylist on the Bash path (that protection
+# only exists on Kingo's separate Read-tool scope, read-scope.ts). A
+# service-role key here would be readable by any Tier 3 Bash command ever
+# run against this repo. Application Support is unconditionally outside
+# that scope regardless of what Bash runs.
+load_dotenv(os.path.expanduser("~/Library/Application Support/bendle-worker/.env"))
 
 POLL_SECONDS = 30
 STEMS = ["drums", "bass", "other", "vocals"]
