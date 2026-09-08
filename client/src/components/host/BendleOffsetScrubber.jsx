@@ -26,7 +26,12 @@ export default function BendleOffsetScrubber({ song }) {
   const [offset, setOffset] = useState(song.start_offset_seconds ?? 0)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(false)
-  const audioRef = useRef(null)
+  // Keyed by GRAPH_ROWS' row.key (drums_url/bass_url/other_url) — one
+  // <audio> per in-round stem so Preview actually plays what the round
+  // sounds like (layered drums+bass+other), not just one track. Was a
+  // single ref hardcoded to other_url only (bug, 2026-09-08 — Ben: "is it
+  // all three combined? just one of the three steps?").
+  const audioRefs = useRef({})
   const previewTimerRef = useRef(null)
 
   // Re-syncs the local offset when the DB value changes out from under this
@@ -94,15 +99,21 @@ export default function BendleOffsetScrubber({ song }) {
   function handleSeek(e) {
     const value = Number(e.target.value)
     setOffset(value)
-    if (audioRef.current) audioRef.current.currentTime = value
+    for (const el of Object.values(audioRefs.current)) {
+      if (el) el.currentTime = value
+    }
   }
 
   function playPreview() {
-    if (!audioRef.current) return
     clearTimeout(previewTimerRef.current)
-    audioRef.current.currentTime = offset
-    audioRef.current.play().catch(() => {})
-    previewTimerRef.current = setTimeout(() => audioRef.current?.pause(), PREVIEW_SECONDS * 1000)
+    for (const el of Object.values(audioRefs.current)) {
+      if (!el) continue
+      el.currentTime = offset
+      el.play().catch(() => {})
+    }
+    previewTimerRef.current = setTimeout(() => {
+      for (const el of Object.values(audioRefs.current)) el?.pause()
+    }, PREVIEW_SECONDS * 1000)
   }
 
   async function handleSetStart() {
@@ -126,8 +137,10 @@ export default function BendleOffsetScrubber({ song }) {
 
   return (
     <div className="space-y-2">
-      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-      <audio ref={audioRef} src={song.other_url} />
+      {GRAPH_ROWS.map(row => (
+        // eslint-disable-next-line jsx-a11y/media-has-caption
+        <audio key={row.key} ref={el => { audioRefs.current[row.key] = el }} src={song[row.key]} />
+      ))}
       <div className="space-y-0.5" data-testid="bendle-envelope-graph">
         {/* Renders every bucket across the FULL song (not just the legal
             [0, maxOffset] range) so the slider's cutoff reads as a real

@@ -92,6 +92,22 @@ describe('<BendleOffsetScrubber>', () => {
     expect(updateSpy).toHaveBeenCalledWith({ start_offset_seconds: 45 })
   })
 
+  it('previews all three in-round stems together, not just one', async () => {
+    // Bug (2026-09-08, Ben: "is it all three combined? just one of the
+    // three steps?"): playPreview used to control a single <audio> hardcoded
+    // to other_url. Every in-round stem must seek+play together so Preview
+    // actually sounds like the round.
+    const playSpy = vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve())
+    act(() => { root.render(<BendleOffsetScrubber song={SONG} />) })
+    await settle()
+    const audios = [...container.querySelectorAll('audio')]
+    expect(audios.map(a => a.getAttribute('src')).sort()).toEqual(['b.mp3', 'd.mp3', 'o.mp3'])
+    const button = [...container.querySelectorAll('button')].find(b => b.textContent.includes('Preview'))
+    act(() => { button.click() })
+    expect(playSpy).toHaveBeenCalledTimes(3)
+    for (const a of audios) expect(a.currentTime).toBe(0)
+  })
+
   it('renders a bar for every bucket of the full song, dimming past the legal scrub range', async () => {
     act(() => { root.render(<BendleOffsetScrubber song={SONG} />) })
     await settle()
