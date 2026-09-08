@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.bencoughlin.bendle-worker</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/bencoughlin/Projects/baynes-trivia/trivia-os/worker/bendle/venv/bin/python3</string>
+    <string>/Users/bencoughlin/Projects/baynes-trivia/trivia-os/worker/bendle/bendle_worker.py</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/bencoughlin/Projects/baynes-trivia/trivia-os/worker/bendle</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/Users/bencoughlin/Library/Logs/bendle-worker.log</string>
+  <key>StandardErrorPath</key><string>/Users/bencoughlin/Library/Logs/bendle-worker.log</string>
+</dict>
+</plist>
