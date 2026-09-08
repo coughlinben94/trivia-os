@@ -5,15 +5,16 @@ import { normalizeRoundScore } from './scoreboardMath.js'
 // being fixed, not configurable) — a follow-up if the defaults don't hold up
 // live. See docs/superpowers/specs/2026-09-04-bendle-layered-audio-question-design.md.
 //
-// The ladder ROUGHLY HALVES rather than stepping down evenly, and that's the
-// whole mechanic (2026-09-05, Ben: "i want them to guess earlier, ie less
-// instruments ... so theyd get rewarded for doing so"). An even -10 step
-// actually rewards WAITING: a wrong guess costs nothing, so a team 60% sure on
-// drums-only compares 0.6 x 40 = 24 against waiting one layer for 0.85 x 30 =
-// 25.5 and correctly sits on its hands. Halving flips that (0.6 x 30 = 18 vs
-// 0.85 x 15 = 12.75), so committing on the thinnest mix is the right play.
-// Keep the cliff between rung 1 and rung 2 steep if these get retuned — the
-// gap is what does the work, not the absolute numbers.
+// Earlier layers pay more so committing on a thinner mix is the right play
+// (2026-09-05, Ben: "i want them to guess earlier, ie less instruments ...
+// so theyd get rewarded for doing so"). An even step rewards WAITING
+// instead: a wrong guess costs nothing, so a team just sitting on a
+// close-behind tier and waiting for more confidence loses nothing by doing
+// so. Keep rung 1 enough above rung 2 that a same-confidence bet always
+// favors committing early if these get retuned — the gap is what does the
+// work, not the absolute numbers. (2026-09-08, Ben: retuned 30/15/10 to
+// 20/15/10 — the steep-cliff property above no longer strictly holds at
+// every confidence level; his call.)
 //
 // THREE steps, always (2026-09-05, Ben: "all shiny step questions will always
 // be 3 steps") — that's a house rule across the shiny step formats, not a
@@ -30,7 +31,7 @@ import { normalizeRoundScore } from './scoreboardMath.js'
 // (see BendleReveal in ShinyBendleQuestion.jsx), together with the other
 // three stems, as the "here's the answer" payoff.
 export const BENDLE_TIERS = [
-  { id: 'drums', label: 'Drums Only',        atSeconds: 0,  points: 30, stems: ['drums'] },
+  { id: 'drums', label: 'Drums Only',        atSeconds: 0,  points: 20, stems: ['drums'] },
   { id: 'bass',  label: '+ Bass',            atSeconds: 20, points: 15, stems: ['bass'] },
   { id: 'full',  label: '+ Everything Else', atSeconds: 40, points: 10, stems: ['other'] },
 ]
