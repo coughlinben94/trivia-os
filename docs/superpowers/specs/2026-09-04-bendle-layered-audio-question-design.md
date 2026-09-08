@@ -26,9 +26,18 @@ mechanic reveals texture layers, not named instruments).
 
 ## Content pipeline (offline, NOT part of the live app)
 
-Stem separation does not run in Trivia OS or on any server the app calls live.
-It is a **local, one-time-per-song, off-show-night** step Ben runs on his own
-machine:
+**2026-09-07 update:** the manual pipeline below is now the fallback path.
+The primary path is automatic — see
+docs/superpowers/plans/2026-09-07-bendle-song-automation.md. Ben picks a song
+via Spotify search in BendleAdmin; a worker on bens-server (launchd service,
+polling `bendle_songs.status`) handles yt-dlp + Demucs + upload with no
+manual file handling. Live-verified end to end 2026-09-07.
+
+Stem separation does not run in Trivia OS or on any server the app calls live
+(the worker below is a separate polling process on a machine Ben already
+runs, not a server the app calls synchronously). The pipeline below remains a
+**local, one-time-per-song, off-show-night** manual fallback Ben can still run
+on his own machine:
 
 1. `yt-dlp <youtube-url> -x --audio-format wav -o song.wav` — pull audio from a
    YouTube URL (Spotify is DRM-locked, not usable as a source).
