@@ -198,24 +198,42 @@ export function bendleExtraControls(ctx) {
   )
 }
 
+// 3 REAL sibling slides, one per step (2026-09-08, Ben: "i asked you for
+// three different slides. one each for each diff step" — not parts on one
+// slide). Manual grading, not phone-scored: teams write the answer down,
+// Ben walks around and enters points via Quick Entry like any other
+// question — so no bendleGuessesLocked/bendleRevealed/bendleResults state
+// machine, no BendleBoard phone flow. Each slide carries the real `answer`
+// field, so the standard "A" key answer-reveal overlay (AnswerRevealOverlay
+// in Display.jsx, already generic — reads resolveShinyPart(data).answer on
+// ANY slide) works on Bendle with zero Bendle-specific code, same as a
+// regular question.
+const BENDLE_STEP_COUNT = 3
+
 // ctx: { qNum, roundId, afterId, selectedShinyFmt, shinyQuestion, bendleSongId, bendleSongs }
 export function buildBendleSlide(ctx) {
   const fmt = ctx.selectedShinyFmt
   const song = (ctx.bendleSongs ?? []).find(s => s.id === ctx.bendleSongId)
-  const data = {
-    questionNumber:  ctx.qNum,
-    questionLabel:   `Q${ctx.qNum}`,
-    questionMode:    'shiny',
-    isShiny:         true,
-    shinyFormatId:   fmt.id,
-    shinyFormatName: fmt.name,
-    shinyFormatIcon: fmt.icon,
-    shinyInputSchema: fmt.input_schema ?? { type: 'bendle' },
-    bendleSongId:    ctx.bendleSongId ?? null,
-    text:            ctx.shinyQuestion.trim(),
-    answer:          song?.answer ?? '',
-    bendleGuessesLocked: false,
-    bendleRevealed:      false,
-  }
-  return { type: 'question', roundId: ctx.roundId ?? null, afterSlideId: ctx.afterId, data }
+  const slides = Array.from({ length: BENDLE_STEP_COUNT }, (_, i) => ({
+    type: 'question',
+    roundId: ctx.roundId ?? null,
+    data: {
+      questionNumber:  ctx.qNum + i,
+      questionLabel:   `Q${ctx.qNum + i}`,
+      questionMode:    'shiny',
+      isShiny:         true,
+      shinyFormatId:   fmt.id,
+      shinyFormatName: fmt.name,
+      shinyFormatIcon: fmt.icon,
+      shinyInputSchema: fmt.input_schema ?? { type: 'bendle' },
+      isSeries:        true,
+      seriesTheme:     fmt.name,
+      bendleSongId:    ctx.bendleSongId ?? null,
+      bendleTierOrder: null,
+      bendleStepIndex: i,
+      text:            ctx.shinyQuestion.trim(),
+      answer:          song?.answer ?? '',
+    },
+  }))
+  return { afterSlideId: ctx.afterId, slides }
 }

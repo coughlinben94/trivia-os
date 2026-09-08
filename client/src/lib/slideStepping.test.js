@@ -549,14 +549,6 @@ describe('pendingLockPhase', () => {
     expect(pendingLockPhase(shiny('order', { orderLocked: true }))).toBe(null)
   })
 
-  it('returns "bendle" for an unlocked bendle slide', () => {
-    expect(pendingLockPhase(shiny('bendle'))).toBe('bendle')
-  })
-
-  it('returns null for a locked bendle slide', () => {
-    expect(pendingLockPhase(shiny('bendle', { bendleGuessesLocked: true }))).toBe(null)
-  })
-
   // Wager is the only mechanic with two lock phases on ONE slide: the blind
   // tier lock, then the numeric-guess lock after the question reveals. They
   // must come back in that order from three consecutive Next presses.
@@ -585,6 +577,14 @@ describe('pendingLockPhase', () => {
     expect(pendingLockPhase(shiny('image'))).toBe(null)
     expect(pendingLockPhase(slide('q', 0))).toBe(null)
     expect(pendingLockPhase(slide('tp', 0, 'team-picker', { parts: [null, null] }))).toBe(null)
+  })
+
+  // Bendle is manually graded (2026-09-08 rebuild: 3 real host-advanced
+  // slides, teams write the answer down, Ben walks around and enters points
+  // via Quick Entry) — deliberately absent from PHONE_MECHANICS, so it must
+  // never offer a lock phase or a reveal, same as a plain question.
+  it('never offers a lock phase for bendle — it is manually graded, not phone-scored', () => {
+    expect(pendingLockPhase(shiny('bendle'))).toBe(null)
   })
 
   it('returns null for no slide / no data rather than throwing mid-press', () => {
@@ -644,22 +644,10 @@ describe('pendingReveal', () => {
     expect(pendingReveal({ id: 'q' })).toBe(null)
   })
 
-  it('returns "bendle" for a locked-but-not-revealed bendle slide', () => {
-    expect(pendingReveal(shiny('bendle', { bendleGuessesLocked: true }))).toBe('bendle')
-  })
-
-  it('returns null for a bendle slide not yet locked', () => {
-    expect(pendingReveal(shiny('bendle'))).toBe(null)
-  })
-
-  it('returns null for an already-revealed bendle slide', () => {
-    expect(pendingReveal(shiny('bendle', { bendleGuessesLocked: true, bendleRevealed: true }))).toBe(null)
-  })
-
   it('maps every mechanic it can return to a real slide.data flag', () => {
     // REVEAL_FIELD is what LiveMode.jsx writes off this return value — a
     // mechanic missing from it would silently write `undefined: true`.
-    for (const mechanic of ['matching', 'wager', 'order', 'bendle']) {
+    for (const mechanic of ['matching', 'wager', 'order']) {
       expect(REVEAL_FIELD[mechanic]).toBeTruthy()
     }
   })
@@ -687,17 +675,20 @@ describe('C1 regression', () => {
     }
   })
 
-  it('withEntryState clears a stale bendleGuessesLocked flag on fresh entry (C1)', () => {
-    const s = { id: 's1', data: { isShiny: true, shinyInputSchema: { type: 'bendle' }, bendleGuessesLocked: true, bendleRevealed: true } }
+  // Bendle used to be the example here (it's how C1 was originally found) —
+  // now manually graded and deliberately out of PHONE_MECHANICS (2026-09-08
+  // rebuild), so 'order' carries the same regression coverage instead.
+  it('withEntryState clears a stale orderLocked flag on fresh entry (C1)', () => {
+    const s = { id: 's1', data: { isShiny: true, shinyInputSchema: { type: 'order' }, orderLocked: true, orderRevealed: true } }
     const [result] = withEntryState([s], s, {})
-    expect(result.data.bendleGuessesLocked).toBe(false)
-    expect(result.data.bendleRevealed).toBe(false)
+    expect(result.data.orderLocked).toBe(false)
+    expect(result.data.orderRevealed).toBe(false)
   })
 
-  it('withEntryState protects a locked bendle slide during re-entry (protectInProgress)', () => {
-    const s = { id: 's1', data: { isShiny: true, shinyInputSchema: { type: 'bendle' }, bendleGuessesLocked: true, bendleRevealed: false } }
+  it('withEntryState protects a locked order slide during re-entry (protectInProgress)', () => {
+    const s = { id: 's1', data: { isShiny: true, shinyInputSchema: { type: 'order' }, orderLocked: true, orderRevealed: false } }
     const [result] = withEntryState([s], s, { protectInProgress: true })
-    expect(result.data.bendleGuessesLocked).toBe(true)
+    expect(result.data.orderLocked).toBe(true)
   })
 })
 

@@ -5,13 +5,12 @@ import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
-import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isBendleShiny, isChoiceShiny } from '../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isChoiceShiny } from '../lib/shinySeries.js'
 import { getWagerTier } from '../lib/wagerScoring.js'
 import { PHONE_MECHANICS, sortSlides } from '../lib/slideStepping.js'
 import MatchingBoard from '../components/join/MatchingBoard.jsx'
 import WagerBoard from '../components/join/WagerBoard.jsx'
 import OrderBoard from '../components/join/OrderBoard.jsx'
-import BendleBoard from '../components/join/BendleBoard.jsx'
 import ChoiceBoard from '../components/join/ChoiceBoard.jsx'
 import ShrinkToFit from '../components/join/ShrinkToFit.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
@@ -631,9 +630,6 @@ function SlideBody({ slide, show, theme, team, onInteractiveAnswered, overridePa
       }
       if (d.isShiny && isOrderShiny(d)) {
         return <OrderBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
-      }
-      if (d.isShiny && isBendleShiny(d)) {
-        return <BendleBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
       }
       if (d.isShiny && isChoiceShiny(d)) {
         return <ChoiceBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />

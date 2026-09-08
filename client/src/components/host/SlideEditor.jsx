@@ -12,7 +12,6 @@ import SlideCanvasEditor from './SlideCanvasEditor.jsx'
 import MatchingBoard from '../join/MatchingBoard.jsx'
 import WagerBoard from '../join/WagerBoard.jsx'
 import OrderBoard from '../join/OrderBoard.jsx'
-import BendleBoard from '../join/BendleBoard.jsx'
 import ChoiceBoard from '../join/ChoiceBoard.jsx'
 import { DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
@@ -1031,25 +1030,24 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
           )}
 
           {schema.type === 'bendle' && (
-            <>
-              <BendleBuilder
-                songId={data.bendleSongId}
-                onChangeSongId={id => onChange('bendleSongId', id)}
-                tierOrder={data.bendleTierOrder}
-                onChangeTierOrder={order => onChange('bendleTierOrder', order)}
-              />
-              <div className="flex flex-col gap-2">
-                <label className="block text-xs font-medium text-gray-700">Phone preview — what teams see once guesses are open</label>
-                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
-                  <BendleBoard
-                    preview
-                    theme={theme}
-                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
-                    slide={{ id: slide.id, showId: show?.id, data: { ...data, bendleGuessesLocked: false, bendleRevealed: false } }}
-                  />
-                </div>
-              </div>
-            </>
+            // No phone preview — Bendle is manually graded (2026-09-08
+            // rebuild: teams write the answer down, Ben walks around and
+            // enters points via Quick Entry), so there's nothing for a
+            // team's phone to show.
+            //
+            // KNOWN GAP: song/order are stamped once, identically, on all 3
+            // sibling step-slides at creation time. Editing this field on
+            // just ONE sibling here does NOT propagate to the other two —
+            // acceptable since a host normally sets these once at creation
+            // and never revisits a single step in isolation, but a real
+            // edit-after-creation could desync the group's audio.
+            <BendleBuilder
+              songId={data.bendleSongId}
+              onChangeSongId={id => onChange('bendleSongId', id)}
+              tierOrder={data.bendleTierOrder}
+              onChangeTierOrder={order => onChange('bendleTierOrder', order)}
+              stepIndex={data.bendleStepIndex}
+            />
           )}
 
           {/* Order builder — upload each image, then set its correct
@@ -1996,7 +1994,7 @@ function WagerBuilder({ answer }) {
   )
 }
 
-function BendleBuilder({ songId, onChangeSongId, tierOrder, onChangeTierOrder }) {
+function BendleBuilder({ songId, onChangeSongId, tierOrder, onChangeTierOrder, stepIndex }) {
   const [songs, setSongs] = useState([])
   useEffect(() => {
     let cancelled = false
@@ -2032,7 +2030,7 @@ function BendleBuilder({ songId, onChangeSongId, tierOrder, onChangeTierOrder })
           {songs.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
         </select>
         {!selected && (
-          <p className="text-xs text-amber-600 mt-1">⚠️ Pick a song — without one this question can't be scored.</p>
+          <p className="text-xs text-amber-600 mt-1">⚠️ Pick a song — without one this slide has no audio to play.</p>
         )}
       </div>
       <div>
@@ -2051,14 +2049,21 @@ function BendleBuilder({ songId, onChangeSongId, tierOrder, onChangeTierOrder })
           <span className="flex-1 text-xs text-gray-400 px-2 py-1.5">then {STEM_LABELS[order[2]]}</span>
         </div>
         <div className="flex flex-col gap-1.5">
-          {tiers.map(t => (
-            <div key={t.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
-              <span className="text-sm font-medium text-gray-800 flex-1">{t.label}</span>
+          {tiers.map((t, i) => (
+            <div
+              key={t.id}
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border ${i === stepIndex ? 'bg-[#1a6b4a]/10 border-[#1a6b4a]/40' : 'bg-gray-50 border-gray-100'}`}
+            >
+              <span className="text-sm font-medium text-gray-800 flex-1">
+                {t.label}{i === stepIndex ? ' — this slide' : ''}
+              </span>
               <span className="text-sm font-semibold text-gray-900 tabular-nums">{t.points} pts</span>
-              <span className="text-xs text-gray-400">at {t.atSeconds}s</span>
             </div>
           ))}
         </div>
+        <p className="text-[11px] text-gray-400 mt-1">
+          Reference for manual grading — points aren&rsquo;t auto-scored. Same order applies to all 3 step slides.
+        </p>
       </div>
     </div>
   )

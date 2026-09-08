@@ -21,7 +21,7 @@
 // Callers own the write + their own local-state update; nothing here
 // touches the network or React.
 
-import { isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isChoiceShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
+import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
 
 // Chunks `parts` into fixed-size reveal groups of `groupSize`, in authored
 // order — the single implementation both revealStepCount's Next/Prev step
@@ -143,7 +143,7 @@ export function withEntryState(slides, slide, { currentPart, protectInProgress =
   // Ben — found by sequencing audit ahead of live show; extended to cover
   // every PHONE_MECHANICS entry, not just the three restated here at the
   // time, 2026-09-05 C1 fix). These gate whether WagerBoard/MatchingBoard/
-  // OrderBoard/BendleBoard mount as interactive on /join
+  // OrderBoard mount as interactive on /join
   // (liveSlideIsInteractive) — left true from a rehearsal, the phones never
   // unlock: the boards see already-locked/revealed and stay on the teaser
   // screen, silently skipping the whole audience-interaction round.
@@ -351,7 +351,6 @@ export const PHONE_MECHANICS = {
   matching: { guard: isMatchingShiny, lockFields: ['matchingLocked'], revealField: 'matchingRevealed' },
   wager:    { guard: isWagerShiny,    lockFields: ['wagerTiersLocked', 'wagerGuessesLocked'], revealField: 'wagerRevealed' },
   order:    { guard: isOrderShiny,    lockFields: ['orderLocked'], revealField: 'orderRevealed' },
-  bendle:   { guard: isBendleShiny,   lockFields: ['bendleGuessesLocked'], revealField: 'bendleRevealed' },
   choice:   { guard: isChoiceShiny,   lockFields: ['choiceLocked'], revealField: 'choiceRevealed' },
 }
 

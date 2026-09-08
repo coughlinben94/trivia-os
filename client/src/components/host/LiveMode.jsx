@@ -11,7 +11,6 @@ import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { computeChoiceScoreUpdates, DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
-import { scoreBendleRound, computeBendleScoreUpdates, buildBendleTiers } from '../../lib/bendleScoring.js'
 import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
@@ -24,14 +23,6 @@ import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, P
 // 2026-08-17: "idk why that keeps popping up ... something different" —
 // found while investigating: this is the one message with no path forward).
 const WAGER_ZERO_ANSWERS_ERROR = 'No wager answers came back — check connection and retry before scoring'
-
-// Bendle's equivalent of the refusal above, and for the identical reason: an
-// empty phone_answers fetch is indistinguishable from a genuine
-// nobody-guessed round, and Bendle scores from `teams` (not `answers`), so
-// without this every team would silently take a real 0 with no retry path.
-// Module-level, not inline in the handler, because the JSX below compares
-// against it to decide whether to offer the manual override.
-const BENDLE_ZERO_ANSWERS_ERROR = 'No guesses came back — check connection and retry before scoring'
 
 // PYL "Pick animation" tiles — same visual language as BuildMode's CARD_STYLE
 // (soft gradient + colored border that brightens on hover) but keyed by
@@ -249,8 +240,6 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [wagerError, setWagerError] = useState(null)
   const [orderBusy, setOrderBusy] = useState(false)
   const [orderScoreError, setOrderScoreError] = useState(null)
-  const [bendleBusy, setBendleBusy] = useState(false)
-  const [bendleError, setBendleError] = useState(null)
   const [choiceBusy, setChoiceBusy] = useState(false)
   const [choiceScoreError, setChoiceScoreError] = useState(null)
 
@@ -263,7 +252,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // a real scoring round (three SELECTs + one upsert, normally 1-2s); past
   // that the host gets Next back and any real failure is already showing
   // its error on-screen via the Retry Scoring button.
-  const scoringBusy = matchingBusy || orderBusy || wagerBusy || bendleBusy || choiceBusy
+  const scoringBusy = matchingBusy || orderBusy || wagerBusy || choiceBusy
   const scoringSinceRef = useRef(0)
   useEffect(() => { scoringSinceRef.current = scoringBusy ? Date.now() : 0 }, [scoringBusy])
 
@@ -285,7 +274,6 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     setWagerError(null)
     setMatchingScoreError(null)
     setOrderScoreError(null)
-    setBendleError(null)
     setChoiceScoreError(null)
   }, [currentSlide?.id])
   // Jump-to-QR — a late team scans in mid-show. Only shown if the show
@@ -397,7 +385,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     slide,
     lockField,               // e.g. 'matchingLocked', 'wagerGuessesLocked'
     lockedAtField,           // e.g. 'matchingLockedAt', 'wagerGuessesLockedAt'
-    resultsField = null,     // 'wagerResults' | 'bendleResults' | null
+    resultsField = null,     // 'wagerResults' | 'matchingResults' | null
     preCheck,                // optional: (slide) => error string | null, before any write
     loadExtra,               // optional: async (slide) => extra — `undefined` means it already set its own error and we bail
     buildResults,            // ({ answers, teams, scoreboardTeams, roundKey, slideId, extra }) => { results, updates, unmatchedError }
@@ -709,75 +697,6 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     })
   }
 
-  // Bendle: ONE lock, not Wager's two — there's no blind pre-question phase to
-  // snapshot, the layers just play and teams guess against a running clock. So
-  // this is exactly handleLockAndScoreWagers' second half (lock, read, score,
-  // fold in, stash results) with Bendle's field names, and the same reveal
-  // split: no bendleRevealed here, the host's A press flips it.
-  async function handleLockAndScoreBendle(slide, { force = false } = {}) {
-    await lockAndScore({
-      slide, force,
-      lockField: 'bendleGuessesLocked', lockedAtField: 'bendleGuessesLockedAt',
-      resultsField: 'bendleResults',
-      lateLogLabel: 'bendle lock',
-      // Same refusal (and same one-shot `force` override) as Wager's — see
-      // BENDLE_ZERO_ANSWERS_ERROR's comment at the top of this file.
-      zeroAnswersErrorMsg: BENDLE_ZERO_ANSWERS_ERROR,
-      // Same class of refusal as Wager's parseWagerNumber guard: without a
-      // song there is no answer to match against, and scoreBendleRound would
-      // happily mark every guess wrong and write a room-wide 0 to the
-      // scoreboard. AddSlideWizard now requires a song before create (Fix 1,
-      // 2026-09-05 whole-branch review), so this should be unreachable for any
-      // slide built through the wizard — kept as a defensive fallback for a
-      // hand-edited slide. SlideEditor's BendleBuilder can fix this in place.
-      preCheck: s => s.data.bendleSongId
-        ? null
-        : 'This slide has no song attached — open the slide editor, pick a song, then retry.',
-      // Aliases live on the song row, not the slide, so the match has to read
-      // the row rather than slide.data.answer (which is only the canonical
-      // title the wizard copied in at build time).
-      loadExtra: async s => {
-        const { data: song, error: songError } = await supabase
-          .from('bendle_songs')
-          .select('answer, aliases')
-          .eq('id', s.data.bendleSongId)
-          .single()
-        if (songError || !song) {
-          console.error('bendle_songs fetch failed:', songError)
-          setBendleError('Couldn’t read the song — check connection and retry')
-          return undefined
-        }
-        return song
-      },
-      buildResults: ({ answers, teams, scoreboardTeams, roundKey, slideId, extra: song }) => {
-        // Every registered team gets an entry, not just the ones that
-        // submitted — a team that never guessed is a real 0 that belongs on
-        // the scoreboard and in the reveal, not skipped (same as Wager).
-        const answerByTeam = new Map((answers ?? []).map(r => [r.team_id, r.answer]))
-        const entries = (teams ?? []).map(t => {
-          const a = answerByTeam.get(t.id)
-          return { teamId: t.id, teamName: t.name, guess: a?.guess ?? null, elapsedSeconds: a?.elapsedSeconds ?? null }
-        })
-        const tiers = buildBendleTiers(slide.data.bendleTierOrder)
-        const results = scoreBendleRound({ entries, song, tiers })
-        const updates = computeBendleScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
-        return {
-          // Exactly what ShinyBendleQuestion's reveal and BendleBoard's phone
-          // popup read — teamId included for the same reason wagerResults
-          // carries one (two teams whose names normalize alike would otherwise
-          // show each other's result on the phone).
-          results: results.map(r => ({
-            teamId: r.teamId, teamName: r.teamName, guess: r.guess, correct: r.correct, tierId: r.tierId, points: r.points,
-          })),
-          updates,
-          unmatchedError: entries.length > 0 && updates.length === 0
-            ? 'No teams could be matched to the scoreboard — check team names match, then retry'
-            : null,
-        }
-      },
-      setBusy: setBendleBusy, setError: setBendleError,
-    })
-  }
 
   // Holds the setTimeout id for the ArrowRight reveal-then-advance sequence
   // (280ms below) while it's pending, else null. A second ArrowRight in that
@@ -1024,7 +943,6 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     'wager-tiers': handleLockWagers,
     'wager-guesses': handleLockAndScoreWagers,
     order: handleLockAndScoreOrder,
-    bendle: handleLockAndScoreBendle,
     choice: handleLockAndScoreChoice,
   }
 
@@ -1398,15 +1316,6 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                   ? handleLockAndScoreWagers(currentSlide)
                   : handleLockWagers(currentSlide)),
                 force: () => handleLockAndScoreWagers(currentSlide, { force: true }),
-              },
-              bendle: {
-                busy: bendleBusy, error: bendleError, zeroErr: BENDLE_ZERO_ANSWERS_ERROR,
-                status: d.bendleGuessesLocked
-                  ? 'Guesses locked and scored — press A to reveal the song on the TV.'
-                  : 'Bendle is playing — teams are guessing as the layers come in.',
-                label: bendleBusy ? 'Working…' : d.bendleGuessesLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score',
-                act: () => handleLockAndScoreBendle(currentSlide),
-                force: () => handleLockAndScoreBendle(currentSlide, { force: true }),
               },
               choice: {
                 busy: choiceBusy, error: choiceScoreError, zeroErr: null,

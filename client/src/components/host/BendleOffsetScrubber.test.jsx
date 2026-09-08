@@ -66,12 +66,12 @@ describe('<BendleOffsetScrubber>', () => {
     expect(container.querySelector('input[type="range"]')).toBeTruthy()
   })
 
-  it('caps the range at duration minus a full round length', async () => {
+  it('caps the range at duration minus the minimum playable length', async () => {
     act(() => { root.render(<BendleOffsetScrubber song={SONG} />) })
     await settle()
     const range = container.querySelector('input[type="range"]')
-    // duration 120, round needs 60 -> max is 60
-    expect(range.max).toBe('60')
+    // duration 120, needs MIN_PLAYABLE_SECONDS (5) left -> max is 115
+    expect(range.max).toBe('115')
   })
 
   it('saves the clamped start offset (and end offset defaulted to duration) when saved', async () => {
@@ -125,8 +125,8 @@ describe('<BendleOffsetScrubber>', () => {
     })
     const button = [...container.querySelectorAll('button')].find(b => b.textContent.includes('Set Start'))
     await act(async () => { button.click(); await new Promise(r => setTimeout(r, 0)) })
-    // start_offset_seconds clamps to maxOffset (60) since 40 <= 60; end must
-    // be at least MIN_END_GAP_SECONDS (3) past that.
+    // start_offset_seconds clamps to maxOffset (115) since 40 <= 115; end
+    // must be at least MIN_END_GAP_SECONDS (3) past that.
     expect(updateSpy).toHaveBeenCalledWith({ start_offset_seconds: 40, end_offset_seconds: 43 })
   })
 
@@ -149,13 +149,13 @@ describe('<BendleOffsetScrubber>', () => {
   it('renders a bar for every bucket of the full song, dimming past the legal scrub range', async () => {
     act(() => { root.render(<BendleOffsetScrubber song={SONG} />) })
     await settle()
-    // duration 120, maxOffset 60 -> ceil(100 * 60 / 120) = 50 legal buckets
+    // duration 120, maxOffset 115 -> ceil(100 * 115 / 120) = 96 legal buckets
     // out of 100 total — the graph covers the whole song, not just the
     // scrubbable range, so the off-limits tail is visible instead of hidden.
     const firstRow = container.querySelector('[data-testid="bendle-envelope-graph"] > div')
     expect(firstRow.children).toHaveLength(100)
-    expect(firstRow.children[49].style.opacity).toBe('1')
-    expect(firstRow.children[50].style.opacity).toBe('0.2')
+    expect(firstRow.children[95].style.opacity).toBe('1')
+    expect(firstRow.children[96].style.opacity).toBe('0.2')
   })
 
   it('shows an error and no silent success when the save affects zero rows', async () => {
@@ -167,11 +167,11 @@ describe('<BendleOffsetScrubber>', () => {
     expect(container.textContent).toContain("Couldn’t save the start/end points")
   })
 
-  it('shows the too-short message when the song is under one round length', async () => {
+  it('shows the too-short message when the song is under the minimum playable length', async () => {
     window.AudioContext = class {
       async decodeAudioData() {
         const data = new Float32Array(100).fill(0.5)
-        return { duration: 30, sampleRate: 100, getChannelData: () => data }
+        return { duration: 3, sampleRate: 100, getChannelData: () => data }
       }
       async close() {}
     }

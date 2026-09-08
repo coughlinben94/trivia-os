@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase.js'
-import { ROUND_LENGTH_SECONDS, clampBendleOffset } from '../../lib/bendleScoring.js'
+import { MIN_PLAYABLE_SECONDS, clampBendleOffset } from '../../lib/bendleScoring.js'
 import { computeRmsEnvelope, resampleEnvelope, normalizeEnvelope } from '../../lib/bendleAudioAnalysis.js'
 import { formatTime as formatOffsetTime } from '../../lib/formatTime.js'
 export { formatOffsetTime }
@@ -106,7 +106,7 @@ export default function BendleOffsetScrubber({ song }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [song.id])
 
-  const maxOffset = duration ? Math.max(0, duration - ROUND_LENGTH_SECONDS) : 0
+  const maxOffset = duration ? Math.max(0, duration - MIN_PLAYABLE_SECONDS) : 0
   const tooShort = duration > 0 && maxOffset === 0
 
   function handleSeek(e) {
@@ -211,9 +211,9 @@ export default function BendleOffsetScrubber({ song }) {
             <span>{formatOffsetTime(maxOffset)}</span>
           </div>
 
-          {/* End point — where the REVEAL beat's playback stops (the round
-              itself is unaffected: always ROUND_LENGTH_SECONDS from `offset`,
-              see BENDLE_TIERS). Ranges from the current start up to the full
+          {/* End point — where the REVEAL beat's playback stops (each step
+              beat is unaffected: it always plays to its own natural end).
+              Ranges from the current start up to the full
               song duration this component knows (drums/bass/other's shared
               min — vocals isn't decoded here, so an end point right at
               `duration` may cut vocals slightly early; acceptable given this
