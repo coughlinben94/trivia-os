@@ -215,7 +215,7 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
                 <ScoreboardRevealEditor data={data} onChange={change} show={show} />
               )}
               {slide.type === 'custom' && (
-                <CustomEditor data={data} onChange={change} theme={theme} />
+                <CustomEditor data={data} onChange={change} uploadMedia={uploadMedia} />
               )}
               {slide.type === 'pixelate-series' && (
                 <PixelateSeriesEditor data={data} onChange={change} onStageUpload={handleStageUpload} theme={theme} />
@@ -2207,17 +2207,40 @@ function ScoreboardRevealEditor({ data, onChange, show }) {
   )
 }
 
-// All images on a slide go through the freeform overlay system now (the
-// "✏️ Design" toolbar's Insert Image — multi-select, drag, resize) — one
-// image-adding workflow instead of two. 2026-08-25, Ben: "why not make them
-// one in the same" after this editor's own single-image field and the
-// overlay tool sat side by side. CustomSlide.jsx still renders data.mediaUrl
-// for any slide that already has one saved from before this change.
-function CustomEditor({ data, onChange }) {
+// data.images (array of {url}) is the row CustomSlide.jsx renders above the
+// title/body — separate from the freeform overlay system's own drag/resize
+// images (kind:'image' overlays). This is the dedicated add/remove list for
+// that array; each MediaUpload slot writes back in place, plus one trailing
+// empty slot to append a new image. CustomSlide.jsx still renders the legacy
+// data.mediaUrl single-image field for any slide saved before data.images existed.
+export function CustomEditor({ data, onChange, uploadMedia }) {
+  const images = data.images ?? []
+  const setImages = next => onChange('images', next)
+
+  async function uploadAt(i, file) {
+    const r = await uploadMedia(file)
+    if (r?.url) setImages(images.map((img, idx) => (idx === i ? { url: r.url } : img)))
+  }
+  async function uploadNew(file) {
+    const r = await uploadMedia(file)
+    if (r?.url) setImages([...images, { url: r.url }])
+  }
+
   return (
     <>
       <Field label="Title"><TextInput value={data.title} onChange={v => onChange('title', v)} placeholder="Slide title" /></Field>
       <Field label="Body"><TextArea value={data.body} onChange={v => onChange('body', v)} placeholder="Slide content…" rows={6} /></Field>
+      <Field label="Video (optional)" hint="Plays visibly on the TV, not just its audio.">
+        <YoutubeClipEditor value={data.video ?? null} onChange={clip => onChange('video', clip)} />
+      </Field>
+      <Field label="Images">
+        {images.map((img, i) => (
+          <div key={img.url ?? i} className="mb-2">
+            <MediaUpload accept="image" currentUrl={img.url} onUpload={file => uploadAt(i, file)} onRemove={() => setImages(images.filter((_, idx) => idx !== i))} />
+          </div>
+        ))}
+        <MediaUpload accept="image" label="+ Add image" currentUrl={null} onUpload={uploadNew} />
+      </Field>
     </>
   )
 }

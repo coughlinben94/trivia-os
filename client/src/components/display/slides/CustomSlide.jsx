@@ -3,6 +3,49 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { fitToBox, CUSTOM_BODY_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
+import { youtubeEmbedUrl } from '../../../lib/youtube.js'
+
+// Visible YouTube video for Custom Slide — Ben wants it playing on the TV,
+// not just its audio (every other YouTube integration here, e.g.
+// QuestionSlide's hidden warmYoutubeAudio iframe, is audio-only). Mirrors
+// QuestionSlide's ShinyVideoQuestion: a plain <iframe> built from
+// youtubeEmbedUrl, no IFrame Player API/window.YT needed on /display for
+// this. Unlike that question-reveal pattern (host taps Play each time),
+// this autoplays the moment the slide mounts — Custom Slide is a freeform
+// announcement, not a gated question — riding /display's sticky user
+// activation from the show's setup ritual (tap the TV once). controls stay
+// on (unlike ShinyVideoQuestion's controls:false) as the fallback if
+// autoplay is ever blocked: a plain iframe can't report its own play state
+// back to this component, so the simplest honest fallback is leaving
+// YouTube's own visible Play button in the embed rather than a silently
+// stuck slide. `.volume` (set in the host's YoutubeClipEditor for A/B
+// matching by ear) has no equivalent on a plain embed URL — same
+// limitation ShinyVideoQuestion already has for visible video.
+function CustomSlideVideo({ video, reduce }) {
+  const embedSrc = video?.videoId
+    ? youtubeEmbedUrl(video.videoId, { start: video.start, end: video.end, autoplay: true, controls: true })
+    : null
+  if (!embedSrc) return null
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: reduce ? 1 : 1.05 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.35, ease: EASE_OUT }}
+      className="relative z-10 mb-10 w-full max-w-4xl rounded-2xl overflow-hidden bg-black"
+      style={{ aspectRatio: '16 / 9' }}
+    >
+      <iframe
+        key={`${video.videoId}:${video.start ?? 0}:${video.end ?? ''}`}
+        src={embedSrc}
+        title="Slide video"
+        className="w-full h-full"
+        style={{ border: 0, display: 'block' }}
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowFullScreen
+      />
+    </motion.div>
+  )
+}
 
 export default function CustomSlide({ slide }) {
   const { theme } = useTheme()
@@ -21,6 +64,7 @@ export default function CustomSlide({ slide }) {
   // data.images is the current shape (host can attach any number); data.mediaUrl
   // is the legacy single-image shape, still read for slides built before this.
   const images = data.images?.length ? data.images.filter(i => i.url) : (data.mediaUrl ? [{ url: data.mediaUrl }] : [])
+  const hasVideo = !!data.video?.videoId
 
   return (
     <div
@@ -35,7 +79,11 @@ export default function CustomSlide({ slide }) {
         }}
       />
 
-      {images.length > 0 && (
+      {/* Video takes priority as the main visual when present — keeps the
+          slide clean instead of stacking a video and an image row. */}
+      {hasVideo ? (
+        <CustomSlideVideo video={data.video} reduce={reduce} />
+      ) : images.length > 0 && (
         <motion.div
           initial={{ opacity: 0, scale: reduce ? 1 : 1.05 }}
           animate={{ opacity: 1, scale: 1 }}
