@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 // ponytail: static import — Tone costs ~61kB gzip on the SlideRenderer chunk
 // (72.6 → 134.0), paid once at /display page load whether or not tonight has a
 // Bendle slide. Deliberately NOT a dynamic import: that would move the fetch to
@@ -10,7 +10,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
-import { ROUND_LENGTH_SECONDS, clampBendleOffset, buildBendleTiers } from '../../../lib/bendleScoring.js'
+import { clampBendleOffset, buildBendleTiers } from '../../../lib/bendleScoring.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 
 const STEM_KEYS = ['drums', 'bass', 'other', 'vocals']
@@ -24,11 +24,17 @@ const FADE_SECONDS = 1.5
 const FADE_FLOOR_DB = -50
 
 // The TV side of a Bendle question. Three beats, one component:
-//   1. Playing — the drums are already going; bass and everything-else layer
-//      in on the BENDLE_TIERS clock while the room guesses.
+//   1. Playing — a 3-step host-advanced series (data.parts/currentPart, same
+//      generic stepping every other sequential shiny series uses — see
+//      computeNextStep in slideStepping.js). Step 0's stem is already going;
+//      each Next press fades in the next step's stem IN PLACE on the same
+//      already-running, already-synced players — never a restart. (2026-09-08
+//      rebuild, Ben: "i dont buy the mechanism. i want three subslides, one
+//      per step" — replaces the old internal Tone.Transport.scheduleOnce
+//      auto-fade timer with fades triggered directly by data.currentPart.)
 //   2. Locked  — held after "lock guesses" until the host presses A, audio
 //      stopped (same held, legible-from-the-bar badge Wager/Order use).
-//   3. Reveal  — the song, then who got it and at which tier.
+//   3. Reveal  — the song, then who got it and at which step.
 //
 // No separate "arm" beat: /display's audible autoplay already rides the
 // tab's sticky user activation from the show's setup ritual (tap the TV
@@ -44,6 +50,17 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
   const [loadState, setLoadState] = useState('loading') // 'loading' | 'ready' | 'error'
   const [answered, setAnswered] = useState(0)
   const [teamCount, setTeamCount] = useState(0)
+
+  const tiers = buildBendleTiers(data.bendleTierOrder)
+  const currentPart = Math.min(Math.max(data.currentPart ?? 0, 0), tiers.length - 1)
+  // Populated once by the load effect below; read (never reloaded) by the
+  // separate currentPart-watching effect so a Next press fades an
+  // already-loaded, already-synced player instead of tearing everything
+  // down and reloading — a rebuild-per-step would mean a real reload/seek
+  // gap live on the TV every time the host presses Next.
+  const playersRef = useRef({})
+  const tiersRef = useRef([])
+  const prevPartRef = useRef(0)
 
   const text = theme.colors.text
   const displayFont = `'${theme.fonts.display}', 'Boogaloo', sans-serif`
@@ -61,14 +78,21 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
     return () => { cancelled = true }
   }, [data.bendleSongId])
 
-  // Load the stems, schedule the layer-in fades, run the Transport — and own
-  // the teardown of everything it built. One effect on purpose: the players,
-  // the scheduled events and the Transport are one lifecycle, and splitting
-  // them (as the plan sketched) let a re-run overwrite playersRef with a
-  // second set of Players while the first set stayed synced to the Transport
-  // and audible — the same song playing twice, half a beat apart, on a live
-  // TV. Cleanup runs on unmount AND the moment guesses lock, so a locked or
-  // left slide can never keep playing under the next one.
+  // Load the stems, start them all synced from the same point, run the
+  // Transport — and own the teardown of everything it built. One effect on
+  // purpose: the players and the Transport are one lifecycle, and splitting
+  // them let a re-run overwrite playersRef with a second set of Players
+  // while the first set stayed synced to the Transport and audible — the
+  // same song playing twice, half a beat apart, on a live TV. Cleanup runs
+  // on unmount AND the moment guesses lock, so a locked or left slide can
+  // never keep playing under the next one.
+  //
+  // Deliberately NOT keyed on data.currentPart — a Next press must fade the
+  // already-loaded players in place (the effect below), not reload/restart
+  // them. This effect only runs on song/order change (a genuinely new
+  // playback setup), reading whatever currentPart is live at that moment as
+  // the STARTING state (covers a slide that (re)mounts mid-round already
+  // past step 0 — e.g. after a lock/unlock or a Go Live jump).
   useEffect(() => {
     if (!song || guessesLocked || revealed || isPreview) return
     const transport = Tone.getTransport()
@@ -77,14 +101,11 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
 
     async function setup() {
       transport.stop()
-      // Clears any scheduleOnce still queued from an earlier Bendle slide —
-      // the Transport is a global singleton, so without this a previous
-      // round's un-fired fades ride along into this one.
       transport.cancel(0)
       transport.seconds = 0
 
-      const tiers = buildBendleTiers(data.bendleTierOrder)
-      const roundStemKeys = tiers.flatMap(tier => tier.stems)
+      const loadTiers = buildBendleTiers(data.bendleTierOrder)
+      const roundStemKeys = loadTiers.flatMap(tier => tier.stems)
 
       const players = {}
       for (const key of roundStemKeys) {
@@ -97,8 +118,8 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
           await player.load(url)
         } catch (e) {
           // Per-stem failure skips that layer rather than blocking the whole
-          // round on a live TV: it is left out of `players`, so the schedule
-          // below simply never fades it in and the rest of the song plays.
+          // round on a live TV: it is left out of `players`, so it just
+          // never becomes audible and the rest of the song plays.
           console.error(`[Bendle] stem load failed for "${key}":`, e)
           player?.dispose()
           continue
@@ -124,26 +145,19 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
       )
       for (const player of Object.values(players)) player.sync().start(0, roundOffsetSeconds)
 
-      // The first tier's stems are audible from the first frame; every later
-      // layer waits silent and is faded up when its tier's atSeconds arrives.
-      // Driven by tier.stems, not tier.id — each tier currently only ever
-      // fades in one stem, but this stays keyed off tier.stems rather than
-      // tier.id so it isn't hardcoded to a one-to-one shape. Vocals is
-      // deliberately never among them; it plays only at reveal. See
-      // BENDLE_TIERS.
-      for (const key of tiers[0].stems) {
-        if (players[key]) players[key].volume.value = 0
-      }
-      for (const tier of tiers.slice(1)) {
+      // Every step up through whatever part is already live goes straight to
+      // full volume (a snap, not a fade — this is the slide's starting
+      // state, not a step the host just took); later steps stay silent until
+      // a Next press reveals them (the effect below).
+      const startPart = Math.min(Math.max(data.currentPart ?? 0, 0), loadTiers.length - 1)
+      loadTiers.forEach((tier, i) => {
         for (const key of tier.stems) {
-          const player = players[key]
-          if (!player) continue
-          transport.scheduleOnce(time => {
-            player.volume.setValueAtTime(FADE_FLOOR_DB, time)
-            player.volume.rampTo(0, FADE_SECONDS, time)
-          }, tier.atSeconds)
+          if (players[key]) players[key].volume.value = i <= startPart ? 0 : -Infinity
         }
-      }
+      })
+      playersRef.current = players
+      tiersRef.current = loadTiers
+      prevPartRef.current = startPart
 
       // Fire-and-forget, exactly like RulesSlide's ctx.resume().catch(() => {}):
       // a no-op when the context is already running (the normal case after the
@@ -162,8 +176,46 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
       transport.cancel(0)
       created.forEach(p => p.dispose())
       created.length = 0
+      playersRef.current = {}
+      tiersRef.current = []
     }
   }, [song, guessesLocked, revealed, isPreview, data.bendleTierOrder])
+
+  // The actual step-advance: fades the newly-revealed step's stem in on the
+  // SAME players the load effect above already started — no reload, no
+  // restart, just a volume change on an already-running, already-synced
+  // Tone.Player, exactly like the old scheduled fade did, just triggered by
+  // a host Next press (data.currentPart) instead of the Transport clock.
+  // Recomputes every step's target volume from scratch each time (not just
+  // the delta) so it's correct after a Prev press or a jump, not only a
+  // simple forward step.
+  useEffect(() => {
+    if (!song || guessesLocked || revealed || isPreview) return
+    const tiers = tiersRef.current
+    const players = playersRef.current
+    if (tiers.length === 0 || Object.keys(players).length === 0) return
+    const nowPart = Math.min(Math.max(currentPart, 0), tiers.length - 1)
+    if (nowPart === prevPartRef.current) return
+    const prevPart = prevPartRef.current
+    tiers.forEach((tier, i) => {
+      for (const key of tier.stems) {
+        const player = players[key]
+        if (!player) continue
+        if (i <= nowPart && i > prevPart) {
+          // Newly revealed by this step — audible fade, same floor-then-ramp
+          // trick as before (a straight rampTo from -Infinity would spend
+          // most of its time below hearing — see FADE_FLOOR_DB below).
+          player.volume.setValueAtTime(FADE_FLOOR_DB, Tone.now())
+          player.volume.rampTo(0, FADE_SECONDS, Tone.now())
+        } else if (i <= nowPart) {
+          player.volume.value = 0
+        } else {
+          player.volume.value = -Infinity
+        }
+      }
+    })
+    prevPartRef.current = nowPart
+  }, [currentPart, song, guessesLocked, revealed, isPreview])
 
   // Polled, not a postgres_changes subscription — same reason
   // ShinyWagerQuestion documents at length: phone_answers' SELECT policy only
@@ -244,7 +296,9 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
           Couldn&rsquo;t load this song&rsquo;s audio — lock and retry on the host panel.
         </p>
       )}
-      {loadState === 'ready' && !guessesLocked && <BendleProgressBar />}
+      {loadState === 'ready' && !guessesLocked && (
+        <StepIndicator tiers={tiers} currentPart={currentPart} text={text} bodyFont={bodyFont} />
+      )}
 
       {/* Reserved-height slot, same reasoning ShinyWagerQuestion's carries:
           the badge is taller than the count line it replaces and this column
@@ -263,19 +317,28 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
   )
 }
 
-// How far into the song the room is. Polled off the Transport rather than a
-// React-side timer so it can never drift away from what people are hearing.
-function BendleProgressBar() {
-  const [progress, setProgress] = useState(0)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setProgress(Math.min(1, (Tone.getTransport().seconds ?? 0) / ROUND_LENGTH_SECONDS))
-    }, 100)
-    return () => clearInterval(interval)
-  }, [])
+// Which step the room is on — a dot per tier (filled up through currentPart)
+// plus the active tier's own label. Replaces the old elapsed-time progress
+// bar (2026-09-08 rebuild to host-advanced steps): there's no clock left to
+// show progress against, the host's own Next presses ARE the progress.
+function StepIndicator({ tiers, currentPart, text, bodyFont }) {
   return (
-    <div style={{ width: '100%', maxWidth: 900, height: 14, borderRadius: 7, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-      <div style={{ width: `${progress * 100}%`, height: '100%', background: SHINY_GOLD, transition: 'width 100ms linear' }} />
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+      <div style={{ display: 'flex', gap: '0.6rem' }}>
+        {tiers.map((tier, i) => (
+          <div
+            key={tier.id}
+            style={{
+              width: 14, height: 14, borderRadius: '50%',
+              background: i <= currentPart ? SHINY_GOLD : 'rgba(255,255,255,0.12)',
+              transition: 'background 200ms ease',
+            }}
+          />
+        ))}
+      </div>
+      <p style={{ margin: 0, color: `${text}70`, fontSize: '1.1rem', fontFamily: bodyFont }}>
+        {tiers[currentPart]?.label}
+      </p>
     </div>
   )
 }

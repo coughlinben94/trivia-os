@@ -26,26 +26,28 @@ describe('matchesBendleAnswer', () => {
   })
 })
 
+// partIndex, not elapsed seconds (2026-09-08 rebuild to 3 host-advanced
+// steps) — resolveBendleTier is now just a clamped array index: tier[i] is
+// whichever step (data.currentPart) was live when the guess was submitted.
 describe('resolveBendleTier', () => {
   const tiers = [
     { id: 'drums', label: 'Drums Only', atSeconds: 0, points: 40 },
     { id: 'bass', label: '+ Bass', atSeconds: 20, points: 30 },
     { id: 'other', label: '+ Everything Else', atSeconds: 40, points: 20 },
-    { id: 'vocals', label: '+ Vocals', atSeconds: 60, points: 10 },
   ]
-  it('returns the drums tier for elapsed=0', () => {
+  it('returns the tier at index 0', () => {
     expect(resolveBendleTier(0, tiers).id).toBe('drums')
   })
-  it('returns the drums tier just before the bass boundary', () => {
-    expect(resolveBendleTier(19.9, tiers).id).toBe('drums')
+  it('returns the tier at index 1', () => {
+    expect(resolveBendleTier(1, tiers).id).toBe('bass')
   })
-  it('returns the bass tier exactly at its boundary', () => {
-    expect(resolveBendleTier(20, tiers).id).toBe('bass')
+  it('returns the tier at index 2', () => {
+    expect(resolveBendleTier(2, tiers).id).toBe('other')
   })
-  it('returns the vocals tier for elapsed past the last boundary', () => {
-    expect(resolveBendleTier(500, tiers).id).toBe('vocals')
+  it('clamps an out-of-range index to the last tier', () => {
+    expect(resolveBendleTier(99, tiers).id).toBe('other')
   })
-  it('returns the drums tier for negative elapsed (defensive)', () => {
+  it('clamps a negative index to the first tier (defensive)', () => {
     expect(resolveBendleTier(-5, tiers).id).toBe('drums')
   })
 })
@@ -54,9 +56,9 @@ describe('scoreBendleRound', () => {
   const song = { answer: 'Hey Jude', aliases: [] }
   const tiers = BENDLE_TIERS
 
-  it('awards the drums-tier points to a correct early guess', () => {
+  it('awards the drums-tier points to a correct step-0 guess', () => {
     const results = scoreBendleRound({
-      entries: [{ teamId: 't1', teamName: 'Alpha', guess: 'Hey Jude', elapsedSeconds: 5 }],
+      entries: [{ teamId: 't1', teamName: 'Alpha', guess: 'Hey Jude', submittedAtPart: 0 }],
       song,
     })
     expect(results[0]).toMatchObject({ teamId: 't1', correct: true, tierId: 'drums', points: tiers[0].points })
@@ -89,17 +91,17 @@ describe('scoreBendleRound', () => {
     expect(BENDLE_TIERS.map(t => t.atSeconds)).toEqual([0, 20, 40])
   })
 
-  it('awards fewer points to a correct later guess', () => {
+  it('awards fewer points to a correct later-step guess', () => {
     const results = scoreBendleRound({
-      entries: [{ teamId: 't1', teamName: 'Alpha', guess: 'Hey Jude', elapsedSeconds: 45 }],
+      entries: [{ teamId: 't1', teamName: 'Alpha', guess: 'Hey Jude', submittedAtPart: 2 }],
       song,
     })
     expect(results[0]).toMatchObject({ tierId: 'full', points: tiers[2].points })
   })
 
-  it('awards zero points to a wrong guess regardless of timing', () => {
+  it('awards zero points to a wrong guess regardless of step', () => {
     const results = scoreBendleRound({
-      entries: [{ teamId: 't1', teamName: 'Alpha', guess: 'Yesterday', elapsedSeconds: 5 }],
+      entries: [{ teamId: 't1', teamName: 'Alpha', guess: 'Yesterday', submittedAtPart: 0 }],
       song,
     })
     expect(results[0]).toMatchObject({ correct: false, tierId: null, points: 0 })
@@ -107,7 +109,7 @@ describe('scoreBendleRound', () => {
 
   it('awards zero points to a team that never guessed', () => {
     const results = scoreBendleRound({
-      entries: [{ teamId: 't1', teamName: 'Alpha', guess: null, elapsedSeconds: null }],
+      entries: [{ teamId: 't1', teamName: 'Alpha', guess: null, submittedAtPart: null }],
       song,
     })
     expect(results[0]).toMatchObject({ correct: false, tierId: null, points: 0 })
@@ -116,18 +118,18 @@ describe('scoreBendleRound', () => {
   it('matches an alias for full credit', () => {
     const aliasSong = { answer: 'Sweet Child o\' Mine', aliases: ['sweet child of mine'] }
     const results = scoreBendleRound({
-      entries: [{ teamId: 't1', teamName: 'Alpha', guess: 'sweet child of mine', elapsedSeconds: 5 }],
+      entries: [{ teamId: 't1', teamName: 'Alpha', guess: 'sweet child of mine', submittedAtPart: 0 }],
       song: aliasSong,
     })
     expect(results[0].correct).toBe(true)
   })
 
-  it('sorts correct-and-earliest first', () => {
+  it('sorts correct-and-earliest-step first', () => {
     const results = scoreBendleRound({
       entries: [
-        { teamId: 't1', teamName: 'Late', guess: 'Hey Jude', elapsedSeconds: 55 },
-        { teamId: 't2', teamName: 'Early', guess: 'Hey Jude', elapsedSeconds: 2 },
-        { teamId: 't3', teamName: 'Wrong', guess: 'Nope', elapsedSeconds: 1 },
+        { teamId: 't1', teamName: 'Late', guess: 'Hey Jude', submittedAtPart: 2 },
+        { teamId: 't2', teamName: 'Early', guess: 'Hey Jude', submittedAtPart: 0 },
+        { teamId: 't3', teamName: 'Wrong', guess: 'Nope', submittedAtPart: 0 },
       ],
       song,
     })

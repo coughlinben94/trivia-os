@@ -198,6 +198,18 @@ export function bendleExtraControls(ctx) {
   )
 }
 
+// A Bendle round is 3 host-advanced steps (Drums Only / +Bass / +Everything
+// Else), not a fixed 60s auto-fade timer (2026-09-08, Ben: "i dont buy the
+// mechanism. i want three subslides, one per step"). Reuses the SAME
+// data.parts/currentPart stepping every other sequential shiny series
+// already has — computeNextStep/computePrevStep in slideStepping.js walk
+// currentPart 0->1->2 on Next/Prev before ever advancing to the next real
+// slide, entirely generically, no Bendle-specific stepping code needed.
+// Part content itself is unused (ShinyBendleQuestion derives what plays from
+// bendleTierOrder + currentPart, not from parts[i]) — this array exists only
+// so revealStepCount sees length > 1 and the generic stepper engages.
+const BENDLE_PART_COUNT = 3
+
 // ctx: { qNum, roundId, afterId, selectedShinyFmt, shinyQuestion, bendleSongId, bendleSongs }
 export function buildBendleSlide(ctx) {
   const fmt = ctx.selectedShinyFmt
@@ -212,6 +224,11 @@ export function buildBendleSlide(ctx) {
     shinyFormatIcon: fmt.icon,
     shinyInputSchema: fmt.input_schema ?? { type: 'bendle' },
     bendleSongId:    ctx.bendleSongId ?? null,
+    bendleTierOrder: null,
+    isSeries:        true,
+    shinyDisplay:    'sequential',
+    currentPart:     0,
+    parts:           Array.from({ length: BENDLE_PART_COUNT }, () => ({})),
     text:            ctx.shinyQuestion.trim(),
     answer:          song?.answer ?? '',
     bendleGuessesLocked: false,

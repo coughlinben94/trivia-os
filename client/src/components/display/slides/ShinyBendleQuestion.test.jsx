@@ -57,6 +57,7 @@ const transport = {
 vi.mock('tone', () => ({
   getTransport: () => transport,
   start: () => Promise.resolve(),
+  now: () => 0,
   Player: vi.fn().mockImplementation(function () {
     const player = {
       volume: { value: 0, rampTo: vi.fn(), setValueAtTime: vi.fn() },
@@ -117,18 +118,48 @@ describe('<ShinyBendleQuestion>', () => {
     expect(transport.start).not.toHaveBeenCalled()
   })
 
-  it('plays: starts the Transport, schedules the later stems, shows the count', async () => {
+  it('plays: starts the Transport, sets initial per-step volumes, shows the count', async () => {
     await render(bendleSlide({}))
     await settle()
 
     expect(transport.start).toHaveBeenCalled()
     // Three steps, but vocals is never one of them (2026-09-07: vocals only
-    // plays at reveal) — drums is audible from the first frame, bass comes
-    // in at 20, `other` alone lands at 40.
-    expect(transport.scheduleOnce).toHaveBeenCalledTimes(2)
-    expect(transport.scheduleOnce.mock.calls.map(c => c[1])).toEqual([20, 40])
+    // plays at reveal). currentPart defaults to 0 (step 1, drums only) —
+    // drums audible from the first frame, bass/other silent until a Next
+    // press advances currentPart (2026-09-08 rebuild — no more Transport
+    // schedule, host-advanced steps instead).
+    const players = Tone.Player.mock.results.map(r => r.value)
+    expect(players).toHaveLength(3)
+    expect(players[0].volume.value).toBe(0)
+    expect(players[1].volume.value).toBe(-Infinity)
+    expect(players[2].volume.value).toBe(-Infinity)
     expect(container.textContent).toContain('2 of 5 teams guessed')
     expect(container.textContent).not.toContain('Loading song')
+  })
+
+  it('fades in the next step\'s stem in place on a Next press, without reloading any player', async () => {
+    await render(bendleSlide({ currentPart: 0 }))
+    await settle()
+    const players = Tone.Player.mock.results.map(r => r.value)
+    expect(players).toHaveLength(3)
+    Tone.Player.mockClear()
+
+    await render(bendleSlide({ currentPart: 1 }))
+    await settle()
+
+    // Same player instances — no reload/restart on a step advance.
+    expect(Tone.Player).not.toHaveBeenCalled()
+    expect(players[1].volume.setValueAtTime).toHaveBeenCalledWith(-50, 0)
+    expect(players[1].volume.rampTo).toHaveBeenCalledWith(0, 1.5, 0)
+    // Step 2's stem (index 2, 'other') is still un-revealed.
+    expect(players[2].volume.value).toBe(-Infinity)
+
+    await render(bendleSlide({ currentPart: 0 }))
+    await settle()
+
+    // Stepping back mutes the stem again, still without reloading.
+    expect(Tone.Player).not.toHaveBeenCalled()
+    expect(players[1].volume.value).toBe(-Infinity)
   })
 
   it('starts every round stem player at the song\'s start_offset_seconds', async () => {
@@ -154,14 +185,18 @@ describe('<ShinyBendleQuestion>', () => {
   })
 
   it('skips a failed stem instead of failing the whole round', async () => {
-    loadFails = new Set(['o.mp3']) // the tier-3 stem dies
+    loadFails = new Set(['o.mp3']) // the step-3 stem dies
     await render(bendleSlide({}))
     await settle()
 
     expect(transport.start).toHaveBeenCalled()
-    // bass still scheduled at 20; other's would-be 40s fade is skipped since
-    // its player never loaded.
-    expect(transport.scheduleOnce.mock.calls.map(c => c[1])).toEqual([20])
+    // drums + bass load fine; 'other' is constructed (one Player() call per
+    // attempted stem) but disposed on its own load failure and never synced
+    // — the round still plays with two working stems instead of failing.
+    const players = Tone.Player.mock.results.map(r => r.value)
+    expect(players).toHaveLength(3)
+    const failed = players.find(p => p.dispose.mock.calls.length > 0)
+    expect(failed).toBeTruthy()
     expect(container.textContent).not.toContain('Couldn')
   })
 

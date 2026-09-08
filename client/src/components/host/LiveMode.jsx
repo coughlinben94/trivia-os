@@ -756,7 +756,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         const answerByTeam = new Map((answers ?? []).map(r => [r.team_id, r.answer]))
         const entries = (teams ?? []).map(t => {
           const a = answerByTeam.get(t.id)
-          return { teamId: t.id, teamName: t.name, guess: a?.guess ?? null, elapsedSeconds: a?.elapsedSeconds ?? null }
+          return { teamId: t.id, teamName: t.name, guess: a?.guess ?? null, submittedAtPart: a?.submittedAtPart ?? null }
         })
         const tiers = buildBendleTiers(slide.data.bendleTierOrder)
         const results = scoreBendleRound({ entries, song, tiers })
