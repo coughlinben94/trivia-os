@@ -33,6 +33,12 @@ export default function BendleOffsetScrubber({ song }) {
   const [endOffset, setEndOffset] = useState(song.end_offset_seconds ?? null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(false)
+  // .play() rejects silently on a real failure (blocked autoplay, a bad
+  // decode, a network blip) — was swallowed outright (`.catch(() => {})`),
+  // so a broken preview looked identical to a working one with no sound:
+  // no error, no feedback, nothing (Ben, 2026-09-08: "there isnt a
+  // preview"). Surfaced instead of silently eaten.
+  const [previewError, setPreviewError] = useState(false)
   // Keyed by GRAPH_ROWS' row.key (drums_url/bass_url/other_url) — one
   // <audio> per in-round stem so Preview actually plays what the round
   // sounds like (layered drums+bass+other), not just one track. Was a
@@ -109,8 +115,7 @@ export default function BendleOffsetScrubber({ song }) {
   const maxOffset = duration ? Math.max(0, duration - MIN_PLAYABLE_SECONDS) : 0
   const tooShort = duration > 0 && maxOffset === 0
 
-  function handleSeek(e) {
-    const value = Number(e.target.value)
+  function handleSeek(value) {
     setOffset(value)
     for (const el of Object.values(audioRefs.current)) {
       if (el) el.currentTime = value
@@ -119,18 +124,24 @@ export default function BendleOffsetScrubber({ song }) {
 
   function playPreview() {
     clearTimeout(previewTimerRef.current)
+    setPreviewError(false)
+    let anyPlayed = false
     for (const el of Object.values(audioRefs.current)) {
       if (!el) continue
       el.currentTime = offset
-      el.play().catch(() => {})
+      el.play().then(() => { anyPlayed = true }).catch(e => {
+        console.error('[Bendle] preview playback failed:', e)
+        setPreviewError(true)
+      })
     }
     previewTimerRef.current = setTimeout(() => {
       for (const el of Object.values(audioRefs.current)) el?.pause()
+      if (!anyPlayed) setPreviewError(true)
     }, PREVIEW_SECONDS * 1000)
   }
 
-  function handleSeekEnd(e) {
-    setEndOffset(Number(e.target.value))
+  function handleSeekEnd(value) {
+    setEndOffset(value)
   }
 
   // Saves both the start and end point in one round-trip — the reveal beat
@@ -194,43 +205,53 @@ export default function BendleOffsetScrubber({ song }) {
         <p className="text-xs text-gray-400">Song&rsquo;s too short to pick a start point — it&rsquo;ll always play from 0:00.</p>
       ) : (
         <>
-          {/* Width-capped to the same fraction of the row as the graph's
-              undimmed (legal) portion above, so the slider's track lines up
-              with where the graph actually goes dim instead of spanning the
-              full song width at a different scale. */}
-          <div style={{ width: `${(maxOffset / duration) * 100}%` }}>
+          {/* One track, two handles — IN (start) and OUT (end) — instead of
+              two stacked sliders (Ben, 2026-09-08: "why is there still two
+              scrub lines" / "one in one out"). A native <input type="range">
+              only ever has one thumb, so this stacks two of them on the same
+              track with their own backgrounds made transparent (see the
+              inline <style> below) — only each one's thumb stays clickable,
+              same trick noUiSlider-style dual sliders use. Both share the
+              same 0..duration domain so they can share one visual track; the
+              business-rule clamp (start can't pass maxOffset, end can't sit
+              closer than MIN_END_GAP_SECONDS past start) happens in the
+              onChange handlers below, not the DOM min/max. */}
+          <style>{`
+            .bendle-dual-range { pointer-events: none; background: transparent; -webkit-appearance: none; appearance: none; }
+            .bendle-dual-range::-webkit-slider-runnable-track { background: transparent; }
+            .bendle-dual-range::-webkit-slider-thumb { pointer-events: auto; }
+            .bendle-dual-range::-moz-range-track { background: transparent; }
+            .bendle-dual-range::-moz-range-thumb { pointer-events: auto; }
+          `}</style>
+          <div className="relative h-5">
+            {/* Visual track: full song in light gray, the selected
+                start->end window highlighted on top. */}
+            <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-gray-200" />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-baynes-forest/70"
+              style={{
+                left: `${(Math.min(offset, maxOffset) / duration) * 100}%`,
+                right: `${100 - (Math.min(Math.max(endOffset ?? duration, offset), duration) / duration) * 100}%`,
+              }}
+            />
             <input
-              type="range" min="0" max={maxOffset} step="1" value={Math.min(offset, maxOffset)}
-              onChange={handleSeek}
-              className="w-full accent-baynes-forest"
+              type="range" min={0} max={duration} step="1" value={Math.min(offset, maxOffset)}
+              onChange={e => handleSeek(Math.min(Number(e.target.value), maxOffset))}
+              className="bendle-dual-range absolute inset-0 w-full accent-baynes-forest"
               aria-label="Start point"
+            />
+            <input
+              type="range" min={0} max={duration} step="1" value={Math.min(Math.max(endOffset ?? duration, offset), duration)}
+              onChange={e => handleSeekEnd(Math.max(Number(e.target.value), Math.min(offset, maxOffset) + MIN_END_GAP_SECONDS))}
+              className="bendle-dual-range absolute inset-0 w-full accent-baynes-forest"
+              aria-label="End point"
             />
           </div>
           <div className="flex items-center justify-between text-[11px] text-gray-500">
-            <span>{formatOffsetTime(offset)}</span>
-            <span>{formatOffsetTime(maxOffset)}</span>
+            <span>IN {formatOffsetTime(offset)}</span>
+            <span>OUT {formatOffsetTime(endOffset ?? duration)}</span>
           </div>
-
-          {/* End point — where the REVEAL beat's playback stops (each step
-              beat is unaffected: it always plays to its own natural end).
-              Ranges from the current start up to the full
-              song duration this component knows (drums/bass/other's shared
-              min — vocals isn't decoded here, so an end point right at
-              `duration` may cut vocals slightly early; acceptable given this
-              component never loads vocals at all). */}
-          <div className="pt-1">
-            <label className="text-xs font-medium text-gray-600">End point (reveal stops here)</label>
-            <input
-              type="range" min={offset} max={duration} step="1" value={Math.min(Math.max(endOffset ?? duration, offset), duration)}
-              onChange={handleSeekEnd}
-              className="w-full accent-baynes-forest"
-              aria-label="End point"
-            />
-            <div className="flex items-center justify-between text-[11px] text-gray-500">
-              <span>{formatOffsetTime(offset)}</span>
-              <span>{formatOffsetTime(endOffset ?? duration)}</span>
-            </div>
-          </div>
+          <p className="text-[11px] text-gray-400">Round steps always play to their own natural end — this only sets where the reveal starts and stops.</p>
 
           <div className="flex gap-2">
             <button type="button" onClick={playPreview} className="flex-1 text-xs font-medium px-3 py-2 rounded-lg border border-gray-200 hover:border-baynes-forest text-gray-700 transition-colors">
@@ -241,6 +262,7 @@ export default function BendleOffsetScrubber({ song }) {
             </button>
           </div>
           {saveError && <p className="text-xs text-red-500">Couldn&rsquo;t save the start/end points — try again.</p>}
+          {previewError && <p className="text-xs text-red-500">Couldn&rsquo;t play the preview — check connection and try again.</p>}
         </>
       )}
     </div>

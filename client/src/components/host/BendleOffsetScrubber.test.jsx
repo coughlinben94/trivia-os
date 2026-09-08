@@ -66,12 +66,21 @@ describe('<BendleOffsetScrubber>', () => {
     expect(container.querySelector('input[type="range"]')).toBeTruthy()
   })
 
-  it('caps the range at duration minus the minimum playable length', async () => {
+  it('clamps the start handle at duration minus the minimum playable length', async () => {
+    // Both handles share one 0..duration DOM domain now (2026-09-08 rebuild
+    // to a single visual track, Ben: "one in one out") — the maxOffset
+    // clamp happens in the onChange handler, not a DOM min/max, so this
+    // drags past it and checks the clamped result instead of a static
+    // range.max attribute.
     act(() => { root.render(<BendleOffsetScrubber song={SONG} />) })
     await settle()
-    const range = container.querySelector('input[type="range"]')
-    // duration 120, needs MIN_PLAYABLE_SECONDS (5) left -> max is 115
-    expect(range.max).toBe('115')
+    const startRange = container.querySelector('input[aria-label="Start point"]')
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+    act(() => {
+      nativeSetter.call(startRange, '118') // past maxOffset (120 - 5 = 115)
+      startRange.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(container.textContent).toContain('IN 1:55')
   })
 
   it('saves the clamped start offset (and end offset defaulted to duration) when saved', async () => {
@@ -94,12 +103,15 @@ describe('<BendleOffsetScrubber>', () => {
     expect(updateSpy).toHaveBeenCalledWith({ start_offset_seconds: 45, end_offset_seconds: 120 })
   })
 
-  it('renders an end-point slider bounded [start, duration] and saves both offsets together', async () => {
+  it('renders an end-point handle on the shared 0..duration track and saves both offsets together', async () => {
+    // Both handles share one DOM domain (0..duration) on the unified track
+    // (2026-09-08 rebuild, Ben: "one in one out") — the start<->end business
+    // rule is enforced in the onChange clamp, not the DOM min/max.
     act(() => { root.render(<BendleOffsetScrubber song={SONG} />) })
     await settle()
     const endRange = container.querySelector('input[aria-label="End point"]')
     expect(endRange).toBeTruthy()
-    expect(endRange.min).toBe('0') // offset starts at 0 in this fixture
+    expect(endRange.min).toBe('0')
     expect(endRange.max).toBe('120') // duration
     expect(endRange.value).toBe('120') // song.end_offset_seconds is unset -> defaults to duration
 
@@ -144,6 +156,18 @@ describe('<BendleOffsetScrubber>', () => {
     act(() => { button.click() })
     expect(playSpy).toHaveBeenCalledTimes(3)
     for (const a of audios) expect(a.currentTime).toBe(0)
+  })
+
+  it('surfaces an error when preview playback fails instead of silently doing nothing', async () => {
+    // Bug (2026-09-08, Ben: "there isnt a preview"): a rejected .play() was
+    // caught and dropped (`.catch(() => {})`) — a real failure looked
+    // identical to a working preview, no sound and no feedback either way.
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.reject(new Error('blocked')))
+    act(() => { root.render(<BendleOffsetScrubber song={SONG} />) })
+    await settle()
+    const button = [...container.querySelectorAll('button')].find(b => b.textContent.includes('Preview'))
+    await act(async () => { button.click(); await new Promise(r => setTimeout(r, 0)) })
+    expect(container.textContent).toContain("Couldn’t play the preview")
   })
 
   it('renders a bar for every bucket of the full song, dimming past the legal scrub range', async () => {
