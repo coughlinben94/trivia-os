@@ -297,39 +297,74 @@ git commit -m "feat: add Spotify search backend for Bendle song picker"
 
 - [ ] **Step 1: Write the failing test**
 
+**No `@testing-library/react` in this repo** — confirmed absent from `package.json`/`node_modules`, and `ShinyBendleQuestion.test.jsx` carries an explicit comment rejecting it in favor of the house `createRoot`+`act` pattern (same one `AddSlideWizard.test.jsx` uses). Do not add it as a dependency — write this test the same way:
+
 ```js
 // client/src/components/host/BendleSongSearch.test.jsx
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act } from 'react'
+import { createRoot } from 'react-dom/client'
 
-// Same reasoning as AddSlideWizard.test.jsx: stub the client at import time
-// so auth.getSession() doesn't reach a real network call in a unit test.
+// No @testing-library/react in this repo — createRoot + act(...) is the
+// house pattern (see AddSlideWizard.test.jsx, ShinyBendleQuestion.test.jsx),
+// so this follows it rather than pulling in a second testing library.
 vi.mock('../../lib/supabase.js', () => ({
   supabase: { auth: { getSession: () => Promise.resolve({ data: { session: { access_token: 'test-token' } } }) } },
 }))
 
 const { default: BendleSongSearch } = await import('./BendleSongSearch.jsx')
 
-describe('BendleSongSearch', () => {
-  beforeEach(() => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ tracks: [
-        { spotifyId: '1', title: 'Hey Jude', artist: 'The Beatles', artworkUrl: null },
-      ] }),
-    })
+let host, root
+beforeEach(() => {
+  vi.useFakeTimers()
+  host = document.createElement('div')
+  document.body.appendChild(host)
+  root = createRoot(host)
+  global.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ tracks: [
+      { spotifyId: '1', title: 'Hey Jude', artist: 'The Beatles', artworkUrl: null },
+    ] }),
   })
+})
+afterEach(() => {
+  act(() => root.unmount())
+  host.remove()
+  vi.useRealTimers()
+})
 
+describe('BendleSongSearch', () => {
   it('searches and calls onPick with the chosen track', async () => {
     const onPick = vi.fn()
-    render(<BendleSongSearch onPick={onPick} />)
-    fireEvent.change(screen.getByPlaceholderText(/search a song/i), { target: { value: 'hey jude' } })
-    await waitFor(() => expect(screen.getByText('Hey Jude')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Hey Jude'))
+    act(() => root.render(<BendleSongSearch onPick={onPick} />))
+
+    const input = host.querySelector('input')
+    act(() => {
+      input.value = 'hey jude'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+    // The component debounces 350ms before fetching; advance fake timers past
+    // that, then flush enough microtask turns for the fetch + json() promise
+    // chain and the resulting setState to land.
+    await act(async () => {
+      vi.advanceTimersByTime(350)
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const resultButton = [...host.querySelectorAll('button')].find(b => b.textContent.includes('Hey Jude'))
+    expect(resultButton).toBeTruthy()
+
+    act(() => { resultButton.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     expect(onPick).toHaveBeenCalledWith({ spotifyId: '1', title: 'Hey Jude', artist: 'The Beatles', artworkUrl: null })
   })
 })
 ```
+
+If the fetch/setState hasn't landed after 3 microtask ticks (the assertion on `resultButton` fails as `undefined`), add one or two more `await Promise.resolve()` calls inside the same `act` block rather than switching approach — this is a tick-count tuning issue, not a sign the pattern is wrong.
 
 - [ ] **Step 2: Run test to verify it fails**
 
