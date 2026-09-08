@@ -139,6 +139,19 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
     scheduleSave({ data: next })
   }
 
+  // Bendle's 3 step-slides share one song/tier-order — writes here must land
+  // on this slide (change, debounced like every other field) AND on the
+  // other two siblings (same shinyGroupId), immediately, so the group can't
+  // desync after creation.
+  function changeBendleField(key, value) {
+    change(key, value)
+    const siblings = show.slides.filter(s =>
+      s.id !== slide.id && s.data?.bendleStepIndex != null &&
+      s.data?.shinyGroupId != null && s.data.shinyGroupId === data.shinyGroupId
+    )
+    for (const sib of siblings) onUpdateSlide(sib.id, { data: { ...sib.data, [key]: value } })
+  }
+
   // Media upload helpers
   async function handleMediaUpload(file) {
     const result = await uploadMedia(file)
@@ -1035,17 +1048,17 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
             // enters points via Quick Entry), so there's nothing for a
             // team's phone to show.
             //
-            // KNOWN GAP: song/order are stamped once, identically, on all 3
-            // sibling step-slides at creation time. Editing this field on
-            // just ONE sibling here does NOT propagate to the other two —
-            // acceptable since a host normally sets these once at creation
-            // and never revisits a single step in isolation, but a real
-            // edit-after-creation could desync the group's audio.
+            // song/order must stay identical across all 3 sibling step-slides
+            // (same shinyGroupId) — they're one song, one guess. Editing
+            // either field here writes it to this slide (via onChange, which
+            // also drives the live-preview `data`) AND pushes the same value
+            // straight to the other two siblings via onUpdateSlide, so the
+            // group can never desync after creation.
             <BendleBuilder
               songId={data.bendleSongId}
-              onChangeSongId={id => onChange('bendleSongId', id)}
+              onChangeSongId={id => changeBendleField('bendleSongId', id)}
               tierOrder={data.bendleTierOrder}
-              onChangeTierOrder={order => onChange('bendleTierOrder', order)}
+              onChangeTierOrder={order => changeBendleField('bendleTierOrder', order)}
               stepIndex={data.bendleStepIndex}
             />
           )}
