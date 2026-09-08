@@ -24,11 +24,17 @@ export default function BendleSongSearch({ onPick }) {
       } catch {
         if (!ignore) setResults([])
       } finally {
-        if (!ignore) setLoading(false)
+        setLoading(false)
       }
     }, 350)
     return () => { ignore = true; clearTimeout(debounceRef.current) }
   }, [query])
+
+  function handlePick(track) {
+    setQuery('')
+    setResults([])
+    onPick(track)
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -44,7 +50,7 @@ export default function BendleSongSearch({ onPick }) {
           {results.map(track => (
             <li key={track.spotifyId}>
               <button
-                onClick={() => onPick(track)}
+                onClick={() => handlePick(track)}
                 className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-50"
               >
                 {track.artworkUrl && <img src={track.artworkUrl} alt="" className="w-8 h-8 rounded" />}

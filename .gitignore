@@ -39,3 +39,6 @@ concepts/tools/.cache/
 # Scratch output from the impeccable design-critique skill — same class as
 # .superpowers/ above: local working notes, not project history.
 .impeccable/
+
+worker/bendle/venv/
+worker/bendle/__pycache__/

@@ -187,6 +187,26 @@ function HostInner({ showApi }) {
     return () => supabase.removeChannel(channel)
   }, [show?.id])
 
+  // Separate from BendleAdmin.jsx's own realtime subscription (which keeps
+  // that panel's song list live while it's open) — this one fires a toast at
+  // the top level of /host regardless of whether the Bendle admin panel is
+  // currently open, so the host still sees the notification when they're not
+  // looking at that specific panel.
+  useEffect(() => {
+    const channel = supabase
+      .channel('host-bendle-alerts')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bendle_songs' }, payload => {
+        const song = payload.new
+        if (song.status === 'ready') {
+          addToast({ id: `bendle-${song.id}-ready`, type: 'info', message: `🎵 "${song.title}" is ready for Bendle!`, autoDismiss: 6000 })
+        } else if (song.status === 'failed') {
+          addToast({ id: `bendle-${song.id}-failed`, type: 'error', message: `❌ "${song.title}" failed: ${song.error_text ?? 'unknown error'}` })
+        }
+      })
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [])
+
   function addToast(toast) { setToasts(prev => [toast, ...prev]) }
   function dismissToast(id) { setToasts(prev => prev.filter(t => t.id !== id)) }
 

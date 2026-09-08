@@ -53,6 +53,12 @@ export default function BendleAdmin({ onClose }) {
     setTitle(''); setAnswer(''); setAliasesText(''); setSourceUrl(''); setFiles({}); setError(null)
   }
 
+  async function handleDeleteFailed(id) {
+    await supabase.from('bendle_songs').delete().eq('id', id)
+    const { data } = await supabase.from('bendle_songs').select('id, title, created_at, status, artist, error_text').order('created_at', { ascending: false })
+    setSongs(data ?? [])
+  }
+
   async function handleSpotifyPick(track) {
     setError(null)
     const id = `bnd_${nanoid(8)}`
@@ -155,14 +161,22 @@ export default function BendleAdmin({ onClose }) {
             <ul className="flex flex-col gap-1">
               {songs.map(s => (
                 <li key={s.id} className="flex items-center justify-between text-sm text-gray-700 gap-2">
-                  <span>{s.title}{s.artist ? ` — ${s.artist}` : ''}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block truncate">{s.title}{s.artist ? ` — ${s.artist}` : ''}</span>
+                    {s.status === 'failed' && s.error_text && (
+                      <span className="block text-xs text-red-500 truncate">{s.error_text}</span>
+                    )}
+                  </span>
                   <span className="text-xs shrink-0">{statusLabel(s.status)}</span>
+                  {s.status === 'failed' && (
+                    <button onClick={() => handleDeleteFailed(s.id)} className="text-xs text-gray-400 hover:text-red-500 shrink-0" title="Delete and try again">🗑</button>
+                  )}
                 </li>
               ))}
             </ul>
             {songs.some(s => s.status === 'failed') && (
               <p className="text-xs text-gray-400">
-                A failed song can be retried by deleting its row and picking it again — automatic retry isn't built, this is rare enough at this volume not to need it yet.
+                Delete a failed song above (🗑), then pick it again from Spotify search.
               </p>
             )}
           </div>
