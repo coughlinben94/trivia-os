@@ -8,7 +8,7 @@ export default async function handler(req, res) {
 
   const sb = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY)
   const { data: { user }, error: authError } = await sb.auth.getUser(accessToken)
-  if (authError || !user?.app_metadata?.host_verified) {
+  if (authError || user?.app_metadata?.host_verified !== true) {
     return res.status(403).json({ error: 'host verification required' })
   }
 
