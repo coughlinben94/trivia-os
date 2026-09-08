@@ -105,52 +105,61 @@ export function matchesBendleAnswer(guess, answer, aliases) {
   return (aliases ?? []).some(a => normalize(a) === g)
 }
 
-// Which tier a guess submitted during part `partIndex` counted in. Bendle is
-// now a 3-part host-advanced series (2026-09-08, Ben: "i want three
-// subslides, one per step") — the round no longer runs on an internal timer,
-// so tier resolution is just "which part was live on the show's own synced
-// state when the phone submitted," not a clock computation. Clamped so a
-// stray out-of-range value can't index past the tier list.
-export function resolveBendleTier(partIndex, tiers) {
+// Which tier was active at this many elapsed seconds. Tiers must be in
+// ascending atSeconds order (same load-bearing-order contract WAGER_TIERS
+// documents) — walks forward and returns the LAST tier whose atSeconds <=
+// elapsed, defaulting to the first tier for anything before/at zero.
+export function resolveBendleTier(elapsedSeconds, tiers) {
   const list = tiers ?? BENDLE_TIERS
-  const idx = Math.min(Math.max(partIndex ?? 0, 0), list.length - 1)
-  return list[idx]
+  let active = list[0]
+  for (const tier of list) {
+    if (tier.atSeconds <= elapsedSeconds) active = tier
+    else break
+  }
+  return active
 }
 
-// entries: [{ teamId, teamName, guess, submittedAtPart }]. song: { answer, aliases }.
+// entries: [{ teamId, teamName, guess, elapsedSeconds }]. song: { answer, aliases }.
 // A team with no guess (guess == null) scores 0, sorted last — same "no
 // guess isn't a bad guess, it's no guess" convention scoreWagerRound uses.
 //
-// `submittedAtPart` replaces the old client-clock `elapsedSeconds` (2026-09-08
-// rebuild, alongside the move to 3 host-advanced parts): BendleBoard.jsx now
-// sends whatever data.currentPart it has locally at submit time, which is
-// itself just a mirror of the show row's own currentPart via the existing
-// Realtime sync every other slide field already rides — not a client-side
-// wall clock. This kills the specific accidental-exposure case the old
-// TRUST NOTE flagged (a phone reload resetting a local timer to zero,
-// silently misscoring a late guess into the earliest tier): there's no local
-// timer left to reset. A deliberately spoofed submittedAtPart in a
-// hand-edited request is still possible and still not defended against
-// server-side — same low-probability/low-consequence/single-team-scoped
-// judgment the controller made 2026-09-05, carried forward rather than
-// re-litigated.
+// TRUST NOTE (deliberate, reviewed — do not "fix" without re-litigating):
+// `elapsedSeconds` on each entry is CLIENT-REPORTED (BendleBoard.jsx computes
+// it as Date.now() minus the phone's own slide-open timestamp) and this
+// function trusts it as-is for tier resolution. There is no server-recorded
+// "slide opened at" timestamp to check it against; the server's
+// `submitted_at` is used only for the late-answer lock cutoff, never for tier
+// resolution. The original spec (docs/superpowers/specs/
+// 2026-09-04-bendle-layered-audio-question-design.md, "Tier resolution at
+// lock time") called for resolving tier server-side from a server timestamp,
+// treating the client value as advisory only — this implementation inverts
+// that. The controller reviewed and accepted the gap 2026-09-05: this is a
+// casual, host-supervised bar-trivia game, not an adversarial one; a team
+// spoofing a faster elapsedSeconds via a hand-edited request is
+// low-probability, low-consequence, and bounded to that one team's own score.
+// The likelier exposure is accidental, not hostile: a phone reload mid-round,
+// or a team opening /join late, restarts BendleBoard's openedAtRef at zero —
+// a guess made at real t=55s reports elapsedSeconds≈5 and lands in the
+// drums-only tier it never actually heard. Also bounded to that one team's
+// own score, and rare enough in practice not to justify server-side timing.
+// Building server-side slide-open timing is explicitly OUT of scope.
 export function scoreBendleRound({ entries, song, tiers = BENDLE_TIERS }) {
   const rows = (entries ?? []).map(e => {
-    // submittedAtPart is REQUIRED for a correct guess to score, same as guess
+    // elapsedSeconds is REQUIRED for a correct guess to score, same as guess
     // itself: unreachable through the shipped BendleBoard.jsx (it always
-    // sends a real currentPart), but a malformed/manual insert with it
-    // missing should not fall back to the earliest/highest tier for free —
-    // that would score a team on data that was never actually attributed to
-    // a real step. Treated the same as "no guess": correct: false, points: 0,
-    // sorted last (2026-09-05 whole-branch review, Fix 5 — same convention).
-    const correct = e.guess != null && e.submittedAtPart != null
+    // sends a real elapsedSeconds), but a malformed/manual insert with
+    // elapsedSeconds missing should not fall back to the earliest/highest
+    // tier for free — that would score a team on data that was never
+    // actually timed. Treated the same as "no guess": correct: false,
+    // points: 0, sorted last (2026-09-05 whole-branch review, Fix 5).
+    const correct = e.guess != null && e.elapsedSeconds != null
       && matchesBendleAnswer(e.guess, song?.answer, song?.aliases)
-    const tier = correct ? resolveBendleTier(e.submittedAtPart, tiers) : null
+    const tier = correct ? resolveBendleTier(e.elapsedSeconds, tiers) : null
     return {
       teamId: e.teamId,
       teamName: e.teamName ?? null,
       guess: e.guess ?? null,
-      submittedAtPart: e.submittedAtPart ?? null,
+      elapsedSeconds: e.elapsedSeconds ?? null,
       correct,
       tierId: tier?.id ?? null,
       points: tier?.points ?? 0,
@@ -160,7 +169,7 @@ export function scoreBendleRound({ entries, song, tiers = BENDLE_TIERS }) {
   return rows.sort((a, b) => {
     if (a.correct !== b.correct) return a.correct ? -1 : 1
     if (!a.correct) return 0
-    return a.submittedAtPart - b.submittedAtPart
+    return a.elapsedSeconds - b.elapsedSeconds
   })
 }
 

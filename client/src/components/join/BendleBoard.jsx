@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import ShrinkToFit from './ShrinkToFit.jsx'
 
@@ -9,6 +9,9 @@ export default function BendleBoard({ slide, team, theme, preview = false, onAns
   const [guess, setGuess] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState(null)
+  const openedAtRef = useRef(Date.now())
+
+  useEffect(() => { openedAtRef.current = Date.now() }, [slide.id])
 
   // Restore this team's own row so a phone that reloads mid-question keeps
   // its submitted state — skipped in preview (mirrors WagerBoard.jsx:116).
@@ -24,17 +27,10 @@ export default function BendleBoard({ slide, team, theme, preview = false, onAns
     if (preview) return
     if (!guess.trim() || submitted || guessesLocked) return
     setError(null)
-    // data.currentPart is the host's own live step (0/1/2), mirrored onto
-    // this phone via the same Realtime sync every other slide field already
-    // rides — not a client-side clock. Replaced the old Date.now()-based
-    // elapsedSeconds (2026-09-08 rebuild to 3 host-advanced steps): that
-    // approach reset to 0 on any phone reload mid-round, silently misscoring
-    // a late guess into the earliest tier. Reading currentPart directly has
-    // no local state to reset.
-    const submittedAtPart = data.currentPart ?? 0
+    const elapsedSeconds = (Date.now() - openedAtRef.current) / 1000
     const { error: upsertError } = await supabase.from('phone_answers').upsert({
       show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id,
-      answer: { guess: guess.trim(), submittedAtPart },
+      answer: { guess: guess.trim(), elapsedSeconds },
     }, { onConflict: 'slide_id,team_id' })
     if (upsertError) { setError('Submission failed — check connection and retry'); return }
     setSubmitted(true)
