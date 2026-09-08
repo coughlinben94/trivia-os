@@ -30,8 +30,8 @@ const FADE_SECONDS = 1.5
 const FADE_FLOOR_DB = -50
 
 // The TV side of a Bendle question. Three beats, one component:
-//   1. Playing — the drums are already going; bass, everything-else and
-//      vocals layer in on the BENDLE_TIERS clock while the room guesses.
+//   1. Playing — the drums are already going; bass and everything-else layer
+//      in on the BENDLE_TIERS clock while the room guesses.
 //   2. Locked  — held after "lock guesses" until the host presses A, audio
 //      stopped (same held, legible-from-the-bar badge Wager/Order use).
 //   3. Reveal  — the song, then who got it and at which tier.
@@ -129,9 +129,11 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
 
       // The first tier's stems are audible from the first frame; every later
       // layer waits silent and is faded up when its tier's atSeconds arrives.
-      // Driven by tier.stems, not tier.id — a tier can bring in more than one
-      // stem (the last one lands `other` and `vocals` together), so the two
-      // lists are not one-to-one. See BENDLE_TIERS.
+      // Driven by tier.stems, not tier.id — each tier currently only ever
+      // fades in one stem, but this stays keyed off tier.stems rather than
+      // tier.id so it isn't hardcoded to a one-to-one shape. Vocals is
+      // deliberately never among them; it plays only at reveal. See
+      // BENDLE_TIERS.
       for (const key of BENDLE_TIERS[0].stems) {
         if (players[key]) players[key].volume.value = 0
       }

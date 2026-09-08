@@ -8,10 +8,14 @@ import BendleOffsetScrubber from './BendleOffsetScrubber.jsx'
 // house pattern (see ShinyBendleQuestion.test.jsx, BendleAdmin.test.jsx).
 
 let updateSpy
+let updateResult
 vi.mock('../../lib/supabase.js', () => ({
   supabase: {
     from: () => ({
-      update: (...args) => { updateSpy(...args); return { eq: () => Promise.resolve({ error: null }) } },
+      update: (...args) => {
+        updateSpy(...args)
+        return { eq: () => ({ select: () => Promise.resolve(updateResult) }) }
+      },
     }),
   },
 }))
@@ -38,6 +42,7 @@ describe('<BendleOffsetScrubber>', () => {
 
   beforeEach(() => {
     updateSpy = vi.fn()
+    updateResult = { data: [{ start_offset_seconds: 45 }], error: null }
     globalThis.IS_REACT_ACT_ENVIRONMENT = true
     global.fetch = vi.fn(() => Promise.resolve({ arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)) }))
     window.AudioContext = FakeAudioContext
@@ -85,6 +90,23 @@ describe('<BendleOffsetScrubber>', () => {
     const button = [...container.querySelectorAll('button')].find(b => b.textContent.includes('Set Start Here'))
     await act(async () => { button.click(); await new Promise(r => setTimeout(r, 0)) })
     expect(updateSpy).toHaveBeenCalledWith({ start_offset_seconds: 45 })
+  })
+
+  it('renders only as many envelope bars as the legal scrub range covers', async () => {
+    act(() => { root.render(<BendleOffsetScrubber song={SONG} />) })
+    await settle()
+    // duration 120, maxOffset 60 -> ceil(100 * 60 / 120) = 50 bars
+    const firstRow = container.querySelector('[data-testid="bendle-envelope-graph"] > div')
+    expect(firstRow.children).toHaveLength(50)
+  })
+
+  it('shows an error and no silent success when the save affects zero rows', async () => {
+    updateResult = { data: [], error: null }
+    act(() => { root.render(<BendleOffsetScrubber song={SONG} />) })
+    await settle()
+    const button = [...container.querySelectorAll('button')].find(b => b.textContent.includes('Set Start Here'))
+    await act(async () => { button.click(); await new Promise(r => setTimeout(r, 0)) })
+    expect(container.textContent).toContain("Couldn’t save the start point")
   })
 
   it('shows the too-short message when the song is under one round length', async () => {

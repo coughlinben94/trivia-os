@@ -140,32 +140,32 @@ describe('scoreBendleRound', () => {
     })
     expect(results.map(r => r.teamId)).toEqual(['t2', 't1', 't3'])
   })
+})
 
-  it('ROUND_LENGTH_SECONDS is 20s past the last tier', () => {
-    expect(ROUND_LENGTH_SECONDS).toBe(60)
+it('ROUND_LENGTH_SECONDS is 20s past the last tier', () => {
+  expect(ROUND_LENGTH_SECONDS).toBe(60)
+})
+
+describe('clampBendleOffset', () => {
+  it('passes through an offset that leaves a full round of runway', () => {
+    expect(clampBendleOffset(30, 200)).toBe(30)
   })
 
-  describe('clampBendleOffset', () => {
-    it('passes through an offset that leaves a full round of runway', () => {
-      expect(clampBendleOffset(30, 200)).toBe(30)
-    })
+  it('clamps an offset that would run past the end of the stem', () => {
+    // duration 100, round needs 60 -> latest legal offset is 40
+    expect(clampBendleOffset(90, 100)).toBe(40)
+  })
 
-    it('clamps an offset that would run past the end of the stem', () => {
-      // duration 100, round needs 60 -> latest legal offset is 40
-      expect(clampBendleOffset(90, 100)).toBe(40)
-    })
+  it('never goes negative', () => {
+    expect(clampBendleOffset(-5, 200)).toBe(0)
+  })
 
-    it('never goes negative', () => {
-      expect(clampBendleOffset(-5, 200)).toBe(0)
-    })
+  it('collapses to 0 when the stem is shorter than one round', () => {
+    expect(clampBendleOffset(10, 45)).toBe(0)
+  })
 
-    it('collapses to 0 when the stem is shorter than one round', () => {
-      expect(clampBendleOffset(10, 45)).toBe(0)
-    })
-
-    it('treats a missing offset as 0', () => {
-      expect(clampBendleOffset(undefined, 200)).toBe(0)
-    })
+  it('treats a missing offset as 0', () => {
+    expect(clampBendleOffset(undefined, 200)).toBe(0)
   })
 })
 

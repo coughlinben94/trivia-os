@@ -30,6 +30,7 @@ export default function BendleOffsetScrubber({ song }) {
   const [loadError, setLoadError] = useState(false)
   const [offset, setOffset] = useState(song.start_offset_seconds ?? 0)
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState(false)
   const audioRef = useRef(null)
   const previewTimerRef = useRef(null)
 
@@ -101,9 +102,14 @@ export default function BendleOffsetScrubber({ song }) {
 
   async function handleSetStart() {
     setSaving(true)
+    setSaveError(false)
     const clamped = clampBendleOffset(offset, duration)
-    await supabase.from('bendle_songs').update({ start_offset_seconds: Math.round(clamped) }).eq('id', song.id)
+    const { data, error } = await supabase.from('bendle_songs')
+      .update({ start_offset_seconds: Math.round(clamped) })
+      .eq('id', song.id)
+      .select('start_offset_seconds')
     setSaving(false)
+    if (error || !data?.length) setSaveError(true)
   }
 
   if (loadError) {
@@ -120,12 +126,14 @@ export default function BendleOffsetScrubber({ song }) {
       <div className="space-y-0.5" data-testid="bendle-envelope-graph">
         {GRAPH_ROWS.map(row => (
           <div key={row.key} className="flex items-end h-6 gap-px" title={row.label}>
-            {envelopes[row.key].map((v, i) => (
-              <div
-                key={i}
-                style={{ height: `${Math.max(4, v * 100)}%`, backgroundColor: row.color, flex: 1 }}
-              />
-            ))}
+            {envelopes[row.key]
+              .slice(0, Math.max(1, Math.ceil(BUCKET_COUNT * maxOffset / duration)))
+              .map((v, i) => (
+                <div
+                  key={i}
+                  style={{ height: `${Math.max(4, v * 100)}%`, backgroundColor: row.color, flex: 1 }}
+                />
+              ))}
           </div>
         ))}
       </div>
@@ -141,7 +149,7 @@ export default function BendleOffsetScrubber({ song }) {
           />
           <div className="flex items-center justify-between text-[11px] text-gray-500">
             <span>{formatOffsetTime(offset)}</span>
-            <span>{formatOffsetTime(duration)}</span>
+            <span>{formatOffsetTime(maxOffset)}</span>
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={playPreview} className="flex-1 text-xs font-medium px-3 py-2 rounded-lg border border-gray-200 hover:border-baynes-forest text-gray-700 transition-colors">
@@ -151,6 +159,7 @@ export default function BendleOffsetScrubber({ song }) {
               {saving ? 'Saving…' : '🎯 Set Start Here'}
             </button>
           </div>
+          {saveError && <p className="text-xs text-red-500">Couldn&rsquo;t save the start point — try again.</p>}
         </>
       )}
     </div>
