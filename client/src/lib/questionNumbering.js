@@ -47,9 +47,18 @@ export function renumberRoundQuestions(slides) {
   const patches = new Map() // slide id -> { questionNumber, questionLabel }
   for (const [key, group] of groups) {
     const isBonus = key.endsWith('::true')
+    let num = 0
     sortSlides(group)
-      .forEach((s, i) => {
-        const num = i + 1
+      .forEach(s => {
+        // Bendle's 3 step-slides are reveal beats of ONE question (one
+        // song, one guess), not 3 separate questions — but each is its own
+        // real `type: 'question'` slide (2026-09-08 rebuild), so without
+        // this every step advanced the counter, eating 3 numbers for one
+        // song (Q3/Q4/Q5) and visibly skipping straight from Q2 to Q6 in
+        // the sidebar. Ben: "bendle is 1 question." Only the first step
+        // advances the shared counter; steps 2/3 inherit its number.
+        const isBendleFollowupStep = (s.data?.bendleStepIndex ?? 0) > 0
+        if (!isBendleFollowupStep) num += 1
         patches.set(s.id, {
           questionNumber: num,
           questionLabel: s.data?.isShiny ? s.data.questionLabel : `${isBonus ? 'B' : 'Q'}${num}`,
