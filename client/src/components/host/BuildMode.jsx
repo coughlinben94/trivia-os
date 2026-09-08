@@ -836,7 +836,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.1 } }}
             transition={{ duration: 0.15, ease: EASE_OUT }}
-            onClick={closeAddModal}
           >
             <motion.div
               className={`w-full ${isQuestionModal ? 'max-w-md' : isShinyQuestionModal ? 'max-w-xl' : isRoundIntroModal ? 'max-w-lg' : 'max-w-md'}`}
@@ -904,7 +903,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.1 } }}
             transition={{ duration: 0.15, ease: EASE_OUT }}
-            onClick={() => setAddRoundWizardOpen(false)}
           >
             <motion.div
               className="w-full max-w-sm"
