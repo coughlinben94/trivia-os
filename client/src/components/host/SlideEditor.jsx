@@ -406,15 +406,16 @@ function TitleEditor({ data, onChange }) {
 // The standalone announce card that opens every shiny series (type
 // 'shiny-title', 2026-09-01). Field names are exactly what ShinyIntroScreen
 // reads: seriesTheme (title — falls back to shinyFormatName on the TV),
-// introSubtitle, hostPhotoUrl (unset = random shared pool, null = none).
+// hostPhotoUrl (unset = random shared pool, null = none). introSubtitle is
+// still a real field on data (FormatLibrary can still seed it from a
+// format's default_subtitle) but ShinyIntroScreen no longer renders it on
+// the TV (2026-09-08, Ben: "dont want them. at all") — no host-facing way
+// to set one left, so this editor doesn't show a field for it either.
 function ShinyTitleEditor({ data, onChange, uploadMedia, getHostPhotos, usedPhotoUrls }) {
   return (
     <>
       <Field label="Title" hint="The series name the room sees on the card">
         <TextInput value={data.seriesTheme ?? ''} onChange={v => onChange('seriesTheme', v)} placeholder={data.shinyFormatName || 'Shiny Question'} />
-      </Field>
-      <Field label="Subtitle" hint='Optional — e.g. "Dog Edition" or "Bluegrass Cover"'>
-        <TextInput value={data.introSubtitle ?? ''} onChange={v => onChange('introSubtitle', v)} placeholder="Optional subtitle…" />
       </Field>
       <Divider label="Ben Photo" />
       <HostPhotoLibrary

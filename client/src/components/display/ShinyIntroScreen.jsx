@@ -498,27 +498,6 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
         {title}
       </motion.p>
 
-      {/* Subtitle — optional per-instance line ("Dog Edition", "Bluegrass Cover").
-          Delayed past the landing instant so it doesn't precede the title. */}
-      {data.introSubtitle && (
-        <motion.p
-          initial={{ opacity: 0, y: quiet ? 0 : 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: quiet ? 0.35 : 1.45, duration: 0.35, ease: EASE_OUT }}
-          className="absolute z-10 text-center px-20"
-          style={{
-            top: 'calc(50% + 5.5rem)',
-            fontFamily: `'${theme.fonts.ui}', 'Inter', sans-serif`,
-            color: theme.colors.text,
-            fontSize: 'clamp(1.1rem, 2.2cqw, 1.6rem)',
-            fontWeight: 600,
-            letterSpacing: '0.04em',
-            textShadow: '0 2px 12px rgba(0,0,0,0.6)',
-          }}
-        >
-          {data.introSubtitle}
-        </motion.p>
-      )}
     </div>
   )
 }

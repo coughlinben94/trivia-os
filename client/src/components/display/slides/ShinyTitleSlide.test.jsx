@@ -58,8 +58,8 @@ describe('<ShinyTitleSlide>', () => {
     expect(container.textContent).toContain('Fallback Name')
   })
 
-  it('renders the optional introSubtitle line', () => {
+  it('never renders introSubtitle even when set (2026-09-08, Ben: "dont want them. at all")', () => {
     render(titleSlide({ seriesTheme: 'Name That Tune', introSubtitle: 'Bluegrass Cover' }))
-    expect(container.textContent).toContain('Bluegrass Cover')
+    expect(container.textContent).not.toContain('Bluegrass Cover')
   })
 })
