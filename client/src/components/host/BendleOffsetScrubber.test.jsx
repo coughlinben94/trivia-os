@@ -74,10 +74,10 @@ describe('<BendleOffsetScrubber>', () => {
     expect(range.max).toBe('60')
   })
 
-  it('saves the clamped offset when "Set Start Here" is clicked', async () => {
+  it('saves the clamped start offset (and end offset defaulted to duration) when saved', async () => {
     act(() => { root.render(<BendleOffsetScrubber song={SONG} />) })
     await settle()
-    const range = container.querySelector('input[type="range"]')
+    const range = container.querySelector('input[aria-label="Start point"]')
     // React's own value tracker swallows a plain `range.value = '45'` before
     // a dispatched 'change' event ever reaches the onChange handler — the
     // native setter bypasses that tracker. Same workaround this repo already
@@ -87,9 +87,47 @@ describe('<BendleOffsetScrubber>', () => {
       nativeSetter.call(range, '45')
       range.dispatchEvent(new Event('change', { bubbles: true }))
     })
-    const button = [...container.querySelectorAll('button')].find(b => b.textContent.includes('Set Start Here'))
+    const button = [...container.querySelectorAll('button')].find(b => b.textContent.includes('Set Start'))
     await act(async () => { button.click(); await new Promise(r => setTimeout(r, 0)) })
-    expect(updateSpy).toHaveBeenCalledWith({ start_offset_seconds: 45 })
+    // duration is 120 in this fixture; end was never touched, so it defaults
+    // to the full duration.
+    expect(updateSpy).toHaveBeenCalledWith({ start_offset_seconds: 45, end_offset_seconds: 120 })
+  })
+
+  it('renders an end-point slider bounded [start, duration] and saves both offsets together', async () => {
+    act(() => { root.render(<BendleOffsetScrubber song={SONG} />) })
+    await settle()
+    const endRange = container.querySelector('input[aria-label="End point"]')
+    expect(endRange).toBeTruthy()
+    expect(endRange.min).toBe('0') // offset starts at 0 in this fixture
+    expect(endRange.max).toBe('120') // duration
+    expect(endRange.value).toBe('120') // song.end_offset_seconds is unset -> defaults to duration
+
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+    act(() => {
+      nativeSetter.call(endRange, '80')
+      endRange.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    const button = [...container.querySelectorAll('button')].find(b => b.textContent.includes('Set Start'))
+    await act(async () => { button.click(); await new Promise(r => setTimeout(r, 0)) })
+    expect(updateSpy).toHaveBeenCalledWith({ start_offset_seconds: 0, end_offset_seconds: 80 })
+  })
+
+  it('clamps a too-small end offset to a minimum gap past the start when saving', async () => {
+    act(() => { root.render(<BendleOffsetScrubber song={{ ...SONG, start_offset_seconds: 40 }} />) })
+    await settle()
+    const endRange = container.querySelector('input[aria-label="End point"]')
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+    act(() => {
+      // Try to save an end point right on top of the start point.
+      nativeSetter.call(endRange, '40')
+      endRange.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    const button = [...container.querySelectorAll('button')].find(b => b.textContent.includes('Set Start'))
+    await act(async () => { button.click(); await new Promise(r => setTimeout(r, 0)) })
+    // start_offset_seconds clamps to maxOffset (60) since 40 <= 60; end must
+    // be at least MIN_END_GAP_SECONDS (3) past that.
+    expect(updateSpy).toHaveBeenCalledWith({ start_offset_seconds: 40, end_offset_seconds: 43 })
   })
 
   it('previews all three in-round stems together, not just one', async () => {
@@ -124,9 +162,9 @@ describe('<BendleOffsetScrubber>', () => {
     updateResult = { data: [], error: null }
     act(() => { root.render(<BendleOffsetScrubber song={SONG} />) })
     await settle()
-    const button = [...container.querySelectorAll('button')].find(b => b.textContent.includes('Set Start Here'))
+    const button = [...container.querySelectorAll('button')].find(b => b.textContent.includes('Set Start'))
     await act(async () => { button.click(); await new Promise(r => setTimeout(r, 0)) })
-    expect(container.textContent).toContain("Couldn’t save the start point")
+    expect(container.textContent).toContain("Couldn’t save the start/end points")
   })
 
   it('shows the too-short message when the song is under one round length', async () => {

@@ -229,6 +229,40 @@ describe('<ShinyBendleQuestion>', () => {
     expect(Tone.Player).toHaveBeenCalledTimes(4)
   })
 
+  it('schedules a fade-out and stop at end_offset_seconds when the host set one', async () => {
+    songRow = { ...SONG, start_offset_seconds: 0, end_offset_seconds: 50 }
+    const slide = bendleSlide({ bendleGuessesLocked: true, bendleRevealed: true, bendleResults: [] })
+    await render(slide)
+    await settle()
+
+    // buffer.duration is mocked at 300, so end_offset_seconds (50) is well
+    // within it. Fade starts FADE_SECONDS (1.5s) before the stop point, then
+    // the stop itself.
+    expect(transport.scheduleOnce.mock.calls.map(c => c[1])).toEqual([48.5, 50])
+    const players = Tone.Player.mock.results.map(r => r.value)
+    expect(players).toHaveLength(4) // reveal loads all four stems
+    // Firing the fade callback should ramp every player's volume down.
+    const [fadeCallback] = transport.scheduleOnce.mock.calls[0]
+    fadeCallback(0)
+    players.forEach(p => expect(p.volume.rampTo).toHaveBeenCalledWith(-Infinity, 1.5, 0))
+    // Firing the stop callback should stop the Transport.
+    const [stopCallback] = transport.scheduleOnce.mock.calls[1]
+    transport.stop.mockClear()
+    stopCallback()
+    expect(transport.stop).toHaveBeenCalled()
+  })
+
+  it('plays the reveal to the natural end with no scheduled stop when end_offset_seconds is unset', async () => {
+    // The common case: every song that predates this feature has no
+    // end_offset_seconds, so the reveal must keep playing fully, unchanged.
+    const slide = bendleSlide({ bendleGuessesLocked: true, bendleRevealed: true, bendleResults: [] })
+    await render(slide)
+    await settle()
+
+    expect(transport.start).toHaveBeenCalled()
+    expect(transport.scheduleOnce).not.toHaveBeenCalled()
+  })
+
   it('never touches audio in the build-mode preview pane, even revealed', async () => {
     await act(() => {
       root.render(<ShinyBendleQuestion slide={bendleSlide({})} show={show} theme={theme} isPreview />)

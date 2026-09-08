@@ -17,6 +17,9 @@ const GRAPH_ROWS = [
 ]
 const BUCKET_COUNT = 100
 const PREVIEW_SECONDS = 5
+// Floor on the start->end gap a host can save — stops an accidental
+// zero-length (or negative) reveal window from a slider drag gone wrong.
+const MIN_END_GAP_SECONDS = 3
 
 // props: song = { id, drums_url, bass_url, other_url, start_offset_seconds }
 export default function BendleOffsetScrubber({ song }) {
@@ -24,6 +27,10 @@ export default function BendleOffsetScrubber({ song }) {
   const [duration, setDuration] = useState(0)
   const [loadError, setLoadError] = useState(false)
   const [offset, setOffset] = useState(song.start_offset_seconds ?? 0)
+  // null until duration is known — then defaults to the natural end of the
+  // song (matching pre-existing songs, which have no end_offset_seconds and
+  // have always played to the stem's own end).
+  const [endOffset, setEndOffset] = useState(song.end_offset_seconds ?? null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(false)
   // Keyed by GRAPH_ROWS' row.key (drums_url/bass_url/other_url) — one
@@ -43,6 +50,12 @@ export default function BendleOffsetScrubber({ song }) {
   useEffect(() => {
     setOffset(song.start_offset_seconds ?? 0)
   }, [song.start_offset_seconds])
+
+  // Same re-sync rationale as the start offset above — a second host device
+  // could save a different end point while this one stays mounted.
+  useEffect(() => {
+    setEndOffset(song.end_offset_seconds ?? null)
+  }, [song.end_offset_seconds])
 
   // Decodes drums/bass/other once per song via the Web Audio API (never
   // Tone.js — see this plan's Global Constraints on keeping Tone out of the
@@ -116,12 +129,21 @@ export default function BendleOffsetScrubber({ song }) {
     }, PREVIEW_SECONDS * 1000)
   }
 
-  async function handleSetStart() {
+  function handleSeekEnd(e) {
+    setEndOffset(Number(e.target.value))
+  }
+
+  // Saves both the start and end point in one round-trip — the reveal beat
+  // plays exactly the start->end window this sets (Ben: "then that portion
+  // is what gets taken to the live show").
+  async function handleSave() {
     setSaving(true)
     setSaveError(false)
-    const clamped = clampBendleOffset(offset, duration)
+    const clampedStart = Math.round(clampBendleOffset(offset, duration))
+    const rawEnd = endOffset ?? duration
+    const clampedEnd = Math.round(Math.min(duration, Math.max(clampedStart + MIN_END_GAP_SECONDS, rawEnd)))
     const { data, error } = await supabase.from('bendle_songs')
-      .update({ start_offset_seconds: Math.round(clamped) })
+      .update({ start_offset_seconds: clampedStart, end_offset_seconds: clampedEnd })
       .eq('id', song.id)
       .select('start_offset_seconds')
     setSaving(false)
@@ -188,15 +210,37 @@ export default function BendleOffsetScrubber({ song }) {
             <span>{formatOffsetTime(offset)}</span>
             <span>{formatOffsetTime(maxOffset)}</span>
           </div>
+
+          {/* End point — where the REVEAL beat's playback stops (the round
+              itself is unaffected: always ROUND_LENGTH_SECONDS from `offset`,
+              see BENDLE_TIERS). Ranges from the current start up to the full
+              song duration this component knows (drums/bass/other's shared
+              min — vocals isn't decoded here, so an end point right at
+              `duration` may cut vocals slightly early; acceptable given this
+              component never loads vocals at all). */}
+          <div className="pt-1">
+            <label className="text-xs font-medium text-gray-600">End point (reveal stops here)</label>
+            <input
+              type="range" min={offset} max={duration} step="1" value={Math.min(Math.max(endOffset ?? duration, offset), duration)}
+              onChange={handleSeekEnd}
+              className="w-full accent-baynes-forest"
+              aria-label="End point"
+            />
+            <div className="flex items-center justify-between text-[11px] text-gray-500">
+              <span>{formatOffsetTime(offset)}</span>
+              <span>{formatOffsetTime(endOffset ?? duration)}</span>
+            </div>
+          </div>
+
           <div className="flex gap-2">
             <button type="button" onClick={playPreview} className="flex-1 text-xs font-medium px-3 py-2 rounded-lg border border-gray-200 hover:border-baynes-forest text-gray-700 transition-colors">
               ▶ Preview 5s
             </button>
-            <button type="button" onClick={handleSetStart} disabled={saving} className="flex-1 text-xs font-semibold px-3 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-700 transition-colors disabled:opacity-50">
-              {saving ? 'Saving…' : '🎯 Set Start Here'}
+            <button type="button" onClick={handleSave} disabled={saving} className="flex-1 text-xs font-semibold px-3 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-700 transition-colors disabled:opacity-50">
+              {saving ? 'Saving…' : '🎯 Set Start & End'}
             </button>
           </div>
-          {saveError && <p className="text-xs text-red-500">Couldn&rsquo;t save the start point — try again.</p>}
+          {saveError && <p className="text-xs text-red-500">Couldn&rsquo;t save the start/end points — try again.</p>}
         </>
       )}
     </div>

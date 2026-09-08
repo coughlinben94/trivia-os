@@ -352,11 +352,30 @@ function BendleReveal({ data, song, theme, shouldReduceMotion, isPreview }) {
 
       // Same shared-offset reasoning as the round-playing effect: one value,
       // derived from the shortest loaded buffer, applied to every stem.
-      const revealOffsetSeconds = clampBendleOffset(
-        song.start_offset_seconds,
-        Math.min(...players.map(p => p.buffer.duration)),
-      )
+      const stemDurationSeconds = Math.min(...players.map(p => p.buffer.duration))
+      const revealOffsetSeconds = clampBendleOffset(song.start_offset_seconds, stemDurationSeconds)
       players.forEach(p => p.sync().start(0, revealOffsetSeconds))
+
+      // Host-picked end point for the reveal beat only (the round above is
+      // untouched — always ROUND_LENGTH_SECONDS from start_offset_seconds).
+      // Null/unset means "play to the natural end," same as every song
+      // before this column existed — no scheduling needed for that case.
+      // Defense in depth: clamp against what's actually loaded right now,
+      // not what the scrubber saw — stems could differ (reprocessed) between
+      // when the offset was saved and when this plays, same pattern as
+      // revealOffsetSeconds above.
+      if (song.end_offset_seconds != null) {
+        const stopAtSeconds = Math.min(song.end_offset_seconds, stemDurationSeconds)
+        if (stopAtSeconds > revealOffsetSeconds) {
+          const fadeStartSeconds = Math.max(revealOffsetSeconds, stopAtSeconds - FADE_SECONDS)
+          transport.scheduleOnce(time => {
+            players.forEach(p => p.volume.rampTo(-Infinity, FADE_SECONDS, time))
+          }, fadeStartSeconds)
+          // transport.cancel(0) in this effect's cleanup already clears this
+          // if the slide unmounts first — no separate event id to track.
+          transport.scheduleOnce(() => { transport.stop() }, stopAtSeconds)
+        }
+      }
 
       Tone.start().catch(() => {})
       transport.start()
