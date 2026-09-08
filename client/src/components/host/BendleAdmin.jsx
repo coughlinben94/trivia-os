@@ -135,37 +135,47 @@ export default function BendleAdmin({ onClose }) {
             <p className="text-xs font-medium text-gray-500 mb-2">Pick from Spotify (automatic)</p>
             <BendleSongSearch onPick={handleSpotifyPick} />
           </div>
-          <p className="text-xs text-gray-400 text-center">— or upload stems manually below —</p>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Title</label>
-            <input value={title} onChange={e => setTitle(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm" placeholder="e.g. Hey Jude" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Answer (canonical)</label>
-            <input value={answer} onChange={e => setAnswer(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm" placeholder="e.g. Hey Jude" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Aliases (comma-separated, optional)</label>
-            <input value={aliasesText} onChange={e => setAliasesText(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm" placeholder="e.g. hey jude by the beatles" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Source URL (optional, for re-processing later)</label>
-            <input value={sourceUrl} onChange={e => setSourceUrl(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm" placeholder="https://youtube.com/..." />
-          </div>
-          {STEM_KEYS.map(key => (
-            <div key={key}>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5 capitalize">{key} stem (.wav/.mp3)</label>
-              <input type="file" accept="audio/*" onChange={e => setFiles(f => ({ ...f, [key]: e.target.files[0] }))} className="w-full text-sm" />
+          {/* Collapsed by default (2026-09-08, Ben) — Spotify search + the
+              worker is the normal path now; this manual upload form is the
+              fallback for a song Spotify/YouTube can't find, or if the
+              worker's down. */}
+          <details className="group">
+            <summary className="text-xs text-gray-400 text-center cursor-pointer select-none list-none">
+              — or upload stems manually below —
+            </summary>
+            <div className="flex flex-col gap-4 mt-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Title</label>
+                <input value={title} onChange={e => setTitle(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm" placeholder="e.g. Hey Jude" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Answer (canonical)</label>
+                <input value={answer} onChange={e => setAnswer(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm" placeholder="e.g. Hey Jude" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Aliases (comma-separated, optional)</label>
+                <input value={aliasesText} onChange={e => setAliasesText(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm" placeholder="e.g. hey jude by the beatles" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Source URL (optional, for re-processing later)</label>
+                <input value={sourceUrl} onChange={e => setSourceUrl(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm" placeholder="https://youtube.com/..." />
+              </div>
+              {STEM_KEYS.map(key => (
+                <div key={key}>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5 capitalize">{key} stem (.wav/.mp3)</label>
+                  <input type="file" accept="audio/*" onChange={e => setFiles(f => ({ ...f, [key]: e.target.files[0] }))} className="w-full text-sm" />
+                </div>
+              ))}
+              {error && <p className="text-xs text-red-600">{error}</p>}
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className={`w-full py-3 rounded-xl border-2 font-semibold text-sm ${saving ? 'border-gray-100 text-gray-300 cursor-not-allowed' : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'}`}
+              >
+                {saving ? 'Uploading…' : '+ Add Song'}
+              </button>
             </div>
-          ))}
-          {error && <p className="text-xs text-red-600">{error}</p>}
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className={`w-full py-3 rounded-xl border-2 font-semibold text-sm ${saving ? 'border-gray-100 text-gray-300 cursor-not-allowed' : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'}`}
-          >
-            {saving ? 'Uploading…' : '+ Add Song'}
-          </button>
+          </details>
           <div className="border-t border-gray-100 pt-4">
             <p className="text-xs font-medium text-gray-500 mb-2">{songs.length} song{songs.length === 1 ? '' : 's'} prepped</p>
             <ul className="flex flex-col gap-1">
