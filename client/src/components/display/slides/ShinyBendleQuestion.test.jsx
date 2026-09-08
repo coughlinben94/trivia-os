@@ -14,6 +14,7 @@ const SONG = {
   title: 'Hey Jude',
   answer: 'Hey Jude',
   drums_url: 'd.mp3', bass_url: 'b.mp3', other_url: 'o.mp3', vocals_url: 'v.mp3',
+  start_offset_seconds: 0,
 }
 
 let songRow = SONG
@@ -51,18 +52,21 @@ const transport = {
   stop: vi.fn(), start: vi.fn(), cancel: vi.fn(), scheduleOnce: vi.fn(),
 }
 
+// buffer.duration is generous (300s) so clampBendleOffset never engages
+// unless a test sets song.start_offset_seconds near/over that on purpose.
 vi.mock('tone', () => ({
   getTransport: () => transport,
   start: () => Promise.resolve(),
   Player: vi.fn().mockImplementation(function () {
     const player = {
       volume: { value: 0, rampTo: vi.fn(), setValueAtTime: vi.fn() },
+      buffer: { duration: 300 },
       toDestination: () => player,
       load: url => (loadFails.has(url)
         ? Promise.reject(new Error(`boom: ${url}`))
         : Promise.resolve(player)),
       sync: () => player,
-      start: () => player,
+      start: vi.fn(() => player),
       dispose: vi.fn(),
     }
     return player
@@ -118,28 +122,53 @@ describe('<ShinyBendleQuestion>', () => {
     await settle()
 
     expect(transport.start).toHaveBeenCalled()
-    // Three steps, four stems: drums is audible from the first frame, bass
-    // comes in at 20, and the last step lands `other` AND `vocals` together at
-    // 40 — so three fades are scheduled but only two of them are new steps.
-    expect(transport.scheduleOnce).toHaveBeenCalledTimes(3)
-    expect(transport.scheduleOnce.mock.calls.map(c => c[1])).toEqual([20, 40, 40])
+    // Three steps, but vocals is never one of them (2026-09-07: vocals only
+    // plays at reveal) — drums is audible from the first frame, bass comes
+    // in at 20, `other` alone lands at 40.
+    expect(transport.scheduleOnce).toHaveBeenCalledTimes(2)
+    expect(transport.scheduleOnce.mock.calls.map(c => c[1])).toEqual([20, 40])
     expect(container.textContent).toContain('2 of 5 teams guessed')
     expect(container.textContent).not.toContain('Loading song')
   })
 
+  it('starts every round stem player at the song\'s start_offset_seconds', async () => {
+    songRow = { ...SONG, start_offset_seconds: 45 }
+    await render(bendleSlide({}))
+    await settle()
+
+    // Round-only stems: drums, bass, other — vocals is never fetched during
+    // the round (see ROUND_STEM_KEYS).
+    const players = Tone.Player.mock.results.map(r => r.value)
+    expect(players).toHaveLength(3)
+    players.forEach(p => expect(p.start).toHaveBeenCalledWith(0, 45))
+  })
+
+  it('clamps an offset that would run past the end of the stem', async () => {
+    // buffer.duration is mocked at 300, round needs 60 -> latest legal offset is 240
+    songRow = { ...SONG, start_offset_seconds: 290 }
+    await render(bendleSlide({}))
+    await settle()
+
+    const players = Tone.Player.mock.results.map(r => r.value)
+    players.forEach(p => expect(p.start).toHaveBeenCalledWith(0, 240))
+  })
+
   it('skips a failed stem instead of failing the whole round', async () => {
-    loadFails = new Set(['v.mp3']) // vocals dies
+    loadFails = new Set(['o.mp3']) // the tier-3 stem dies
     await render(bendleSlide({}))
     await settle()
 
     expect(transport.start).toHaveBeenCalled()
-    // bass + other still scheduled; the dead vocals layer is simply never faded in.
-    expect(transport.scheduleOnce.mock.calls.map(c => c[1])).toEqual([20, 40])
+    // bass still scheduled at 20; other's would-be 40s fade is skipped since
+    // its player never loaded.
+    expect(transport.scheduleOnce.mock.calls.map(c => c[1])).toEqual([20])
     expect(container.textContent).not.toContain('Couldn')
   })
 
-  it('shows the error line when every stem fails', async () => {
-    loadFails = new Set(['d.mp3', 'b.mp3', 'o.mp3', 'v.mp3'])
+  it('shows the error line when every round stem fails', async () => {
+    // Only drums/bass/other are ever fetched during the round — vocals
+    // never gets a load attempt to fail.
+    loadFails = new Set(['d.mp3', 'b.mp3', 'o.mp3'])
     await render(bendleSlide({}))
     await settle()
 
@@ -151,7 +180,7 @@ describe('<ShinyBendleQuestion>', () => {
     await render(bendleSlide({}))
     await settle()
     const players = Tone.Player.mock.results.map(r => r.value)
-    expect(players).toHaveLength(4)
+    expect(players).toHaveLength(3) // drums, bass, other — round never loads vocals
 
     await render(bendleSlide({ bendleGuessesLocked: true }))
     await settle()
@@ -170,7 +199,7 @@ describe('<ShinyBendleQuestion>', () => {
     expect(container.textContent).not.toContain('Hey Jude') // the answer stays hidden
   })
 
-  it('reveals the song, each tier label and its points', async () => {
+  it('reveals the song, each tier label and its points, and plays every stem together', async () => {
     const slide = bendleSlide({
       bendleGuessesLocked: true,
       bendleRevealed: true,
@@ -192,11 +221,15 @@ describe('<ShinyBendleQuestion>', () => {
     expect(container.textContent).toContain('+10')
     // A wrong guess shows a dash and a zero, never the guess itself.
     expect(container.textContent).toContain('Gamma')
-    // No audio is ever set up in the reveal beat.
-    expect(transport.start).not.toHaveBeenCalled()
+    // The round never played (guessesLocked was true from the first render,
+    // so the round-playing effect's guard skipped it entirely) — every
+    // Player came from the reveal-beat effect instead, one per stem,
+    // vocals included this time.
+    expect(transport.start).toHaveBeenCalled()
+    expect(Tone.Player).toHaveBeenCalledTimes(4)
   })
 
-  it('never touches audio in the build-mode preview pane', async () => {
+  it('never touches audio in the build-mode preview pane, even revealed', async () => {
     await act(() => {
       root.render(<ShinyBendleQuestion slide={bendleSlide({})} show={show} theme={theme} isPreview />)
     })
@@ -205,5 +238,15 @@ describe('<ShinyBendleQuestion>', () => {
     expect(Tone.Player).not.toHaveBeenCalled()
     // No un-resolvable "Loading song…" in the host's build-mode editor.
     expect(container.textContent).not.toContain('Loading song')
+
+    await act(() => {
+      root.render(<ShinyBendleQuestion
+        slide={bendleSlide({ bendleGuessesLocked: true, bendleRevealed: true, bendleResults: [] })}
+        show={show} theme={theme} isPreview
+      />)
+    })
+    await settle()
+    expect(transport.start).not.toHaveBeenCalled()
+    expect(Tone.Player).not.toHaveBeenCalled()
   })
 })

@@ -19,19 +19,40 @@ import { normalizeRoundScore } from './scoreboardMath.js'
 // be 3 steps") — that's a house rule across the shiny step formats, not a
 // Bendle detail, so keep the count at three if these get retuned.
 //
-// Stems and steps are deliberately NOT one-to-one. Source separation gives
-// four tracks (drums/bass/other/vocals, the four NOT NULL url columns on
-// bendle_songs), and the last step brings in `other` AND `vocals` together —
-// so the final reveal is the whole song landing at once, which is the better
-// payoff moment anyway, and vocals are the giveaway so an "everything but
-// vocals" rung was the least interesting of the four. ShinyBendleQuestion
-// fades in every stem named in `stems` at that tier's atSeconds and derives
-// round length from the last tier, so `stems` must name real STEM_KEYS.
+// Vocals are deliberately NOT one of the three in-round tiers (2026-09-07,
+// Ben: "the vocals arent introduced until i reveal the answer — that's the
+// goal"). They used to land alongside `other` on the third tier, but vocals
+// are the giveaway, so having them audible before the round even locks
+// undercut the guess. `vocals` is still one of the four real stem columns,
+// but ShinyBendleQuestion's round-playing effect now skips fetching it
+// entirely — one less stem to download over show wifi for content nobody
+// is meant to hear yet. It's loaded only in the separate reveal-beat effect
+// (see BendleReveal in ShinyBendleQuestion.jsx), together with the other
+// three stems, as the "here's the answer" payoff.
 export const BENDLE_TIERS = [
   { id: 'drums', label: 'Drums Only',        atSeconds: 0,  points: 30, stems: ['drums'] },
   { id: 'bass',  label: '+ Bass',            atSeconds: 20, points: 15, stems: ['bass'] },
-  { id: 'full',  label: '+ Everything Else', atSeconds: 40, points: 10, stems: ['other', 'vocals'] },
+  { id: 'full',  label: '+ Everything Else', atSeconds: 40, points: 10, stems: ['other'] },
 ]
+
+// Total seconds a round runs for: the last tier's start plus a tail long
+// enough to actually hear it before the host locks. ShinyBendleQuestion
+// derives its progress bar from this; the admin scrubber (BendleOffsetScrubber)
+// uses it to cap how late a start point can be picked, so an offset can never
+// leave less than a full round's worth of audio in the file.
+export const ROUND_LENGTH_SECONDS = BENDLE_TIERS[BENDLE_TIERS.length - 1].atSeconds + 20
+
+// Keeps a host-picked start point from running a stem past its own end —
+// Tone.Player silently plays nothing (no error) if asked to start at or past
+// a buffer's duration, so an unclamped offset near the end of a short song
+// would go out on a silent TV with no indication anything is wrong. Clamps
+// into [0, duration - ROUND_LENGTH_SECONDS], collapsing to 0 if the stem is
+// shorter than one full round (nothing useful to offset in that case; the
+// round just plays what there is, same as any other short song today).
+export function clampBendleOffset(offsetSeconds, stemDurationSeconds) {
+  const maxOffset = Math.max(0, (stemDurationSeconds ?? 0) - ROUND_LENGTH_SECONDS)
+  return Math.min(Math.max(0, offsetSeconds ?? 0), maxOffset)
+}
 
 function normalize(s) {
   return (s ?? '').toString().trim().toLowerCase()

@@ -3,8 +3,17 @@ import { useState, useEffect } from 'react'
 import { nanoid } from 'nanoid'
 import { supabase } from '../../lib/supabase.js'
 import BendleSongSearch from './BendleSongSearch.jsx'
+import BendleOffsetScrubber, { formatOffsetTime } from './BendleOffsetScrubber.jsx'
 
 const STEM_KEYS = ['drums', 'bass', 'other', 'vocals']
+
+// Every refresh of the song list (initial load, after insert, after
+// delete-and-retry) needs the same columns: the scrubber needs the stem
+// URLs and the current offset, which the original list (id/title/
+// created_at/status/artist/error_text) never selected — a song already
+// `ready` at page-load time would otherwise render its scrubber with no
+// audio to fetch until the next realtime UPDATE happened to arrive.
+const SONG_LIST_COLUMNS = 'id, title, created_at, status, artist, error_text, drums_url, bass_url, other_url, start_offset_seconds'
 
 function cleanSpotifyTitle(title) {
   return title
@@ -31,10 +40,11 @@ export default function BendleAdmin({ onClose }) {
   const [files, setFiles] = useState({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [expandedId, setExpandedId] = useState(null)
 
   useEffect(() => {
     let cancelled = false
-    supabase.from('bendle_songs').select('id, title, created_at, status, artist, error_text').order('created_at', { ascending: false })
+    supabase.from('bendle_songs').select(SONG_LIST_COLUMNS).order('created_at', { ascending: false })
       .then(({ data }) => { if (!cancelled) setSongs(data ?? []) })
     return () => { cancelled = true }
   }, [])
@@ -55,7 +65,7 @@ export default function BendleAdmin({ onClose }) {
 
   async function handleDeleteFailed(id) {
     await supabase.from('bendle_songs').delete().eq('id', id)
-    const { data } = await supabase.from('bendle_songs').select('id, title, created_at, status, artist, error_text').order('created_at', { ascending: false })
+    const { data } = await supabase.from('bendle_songs').select(SONG_LIST_COLUMNS).order('created_at', { ascending: false })
     setSongs(data ?? [])
   }
 
@@ -75,7 +85,7 @@ export default function BendleAdmin({ onClose }) {
       drums_url: null, bass_url: null, other_url: null, vocals_url: null,
     })
     if (insertError) { setError(insertError.message); return }
-    const { data } = await supabase.from('bendle_songs').select('id, title, created_at, status, artist, error_text').order('created_at', { ascending: false })
+    const { data } = await supabase.from('bendle_songs').select(SONG_LIST_COLUMNS).order('created_at', { ascending: false })
     setSongs(data ?? [])
   }
 
@@ -103,7 +113,7 @@ export default function BendleAdmin({ onClose }) {
         source_url: sourceUrl.trim() || null, ...urls,
       })
       if (insertError) throw insertError
-      const { data } = await supabase.from('bendle_songs').select('id, title, created_at, status, artist, error_text').order('created_at', { ascending: false })
+      const { data } = await supabase.from('bendle_songs').select(SONG_LIST_COLUMNS).order('created_at', { ascending: false })
       setSongs(data ?? [])
       reset()
     } catch (e) {
@@ -160,17 +170,32 @@ export default function BendleAdmin({ onClose }) {
             <p className="text-xs font-medium text-gray-500 mb-2">{songs.length} song{songs.length === 1 ? '' : 's'} prepped</p>
             <ul className="flex flex-col gap-1">
               {songs.map(s => (
-                <li key={s.id} className="flex items-center justify-between text-sm text-gray-700 gap-2">
-                  <span className="flex-1 min-w-0">
-                    <span className="block truncate">{s.title}{s.artist ? ` — ${s.artist}` : ''}</span>
-                    {s.status === 'failed' && s.error_text && (
-                      <span className="block text-xs text-red-500 truncate">{s.error_text}</span>
+                <li key={s.id} className="flex flex-col gap-1.5 text-sm text-gray-700">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex-1 min-w-0">
+                      <span className="block truncate">{s.title}{s.artist ? ` — ${s.artist}` : ''}</span>
+                      {s.status === 'failed' && s.error_text && (
+                        <span className="block text-xs text-red-500 truncate">{s.error_text}</span>
+                      )}
+                      {s.status === 'ready' && s.start_offset_seconds > 0 && (
+                        <span className="block text-xs text-gray-400">Starts at {formatOffsetTime(s.start_offset_seconds)}</span>
+                      )}
+                    </span>
+                    <span className="text-xs shrink-0">{statusLabel(s.status)}</span>
+                    {s.status === 'ready' && (
+                      <button
+                        onClick={() => setExpandedId(id => id === s.id ? null : s.id)}
+                        className="text-xs text-gray-400 hover:text-gray-700 shrink-0"
+                        title="Pick where the song starts"
+                      >
+                        {expandedId === s.id ? '▲ Scrub' : '🎚 Scrub'}
+                      </button>
                     )}
-                  </span>
-                  <span className="text-xs shrink-0">{statusLabel(s.status)}</span>
-                  {s.status === 'failed' && (
-                    <button onClick={() => handleDeleteFailed(s.id)} className="text-xs text-gray-400 hover:text-red-500 shrink-0" title="Delete and try again">🗑</button>
-                  )}
+                    {s.status === 'failed' && (
+                      <button onClick={() => handleDeleteFailed(s.id)} className="text-xs text-gray-400 hover:text-red-500 shrink-0" title="Delete and try again">🗑</button>
+                    )}
+                  </div>
+                  {expandedId === s.id && <BendleOffsetScrubber song={s} />}
                 </li>
               ))}
             </ul>
