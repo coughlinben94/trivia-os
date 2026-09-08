@@ -93,10 +93,19 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function change(key, value) {
-    const next = { ...data, [key]: value }
-    setData(next)
-    scheduleSave({ data: next })
+  // `value` is normally a plain value, but also accepts an updater function
+  // `(prevValue) => nextValue` — needed by any caller that computes its
+  // write from state that might have moved since the caller started (e.g.
+  // an async media upload resolving after a sibling upload already landed;
+  // see uploadPartMedia below). A plain-value call always closes over
+  // whatever `data` this render captured, same as before.
+  function change(key, valueOrUpdater) {
+    setData(prev => {
+      const value = typeof valueOrUpdater === 'function' ? valueOrUpdater(prev[key]) : valueOrUpdater
+      const next = { ...prev, [key]: value }
+      scheduleSave({ data: next })
+      return next
+    })
   }
 
   function changeNested(key, index, subKey, value) {
@@ -589,9 +598,11 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
   }
 
   function updatePart(i, nextPart) {
-    const parts = [...(data.parts ?? [])]
-    parts[i] = nextPart
-    onChange('parts', parts)
+    onChange('parts', prevParts => {
+      const parts = [...(prevParts ?? [])]
+      parts[i] = nextPart
+      return parts
+    })
   }
 
   function addPart() {
@@ -605,11 +616,23 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
     onBatchChange({ parts, currentPart })
   }
 
+  // Uploading photos into two different assets close together (e.g. "Not So
+  // Different"'s 4 image slots) fires two of these concurrently. Each await
+  // above can resolve well after this function's `data` closure went stale
+  // — reading `data.parts[i]` here (or building the full array off it, as
+  // updatePart used to) would silently stomp whichever upload landed first.
+  // Routing through onChange's updater form (which reads React's actual
+  // latest state, not this closure) fixes that for both the per-part merge
+  // and the array rebuild. Bug: 2026-09-08, Ben — uploaded 4 photos, most
+  // didn't stay.
   async function uploadPartMedia(i, file) {
     const result = await uploadMedia(file)
     if (result?.url) {
-      const part = data.parts[i]
-      updatePart(i, { ...part, mediaSlots: [{ url: result.url, type: result.type }] })
+      onChange('parts', prevParts => {
+        const parts = [...(prevParts ?? [])]
+        parts[i] = { ...parts[i], mediaSlots: [{ url: result.url, type: result.type }] }
+        return parts
+      })
     }
     return result
   }
