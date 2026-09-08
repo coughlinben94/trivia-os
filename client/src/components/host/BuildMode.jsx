@@ -478,47 +478,66 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
     const afterId = roundSlides.length > 0
       ? roundSlides[roundSlides.length - 1].id
       : sortedAll[sortedAll.length - 1]?.id ?? null
-
-    // One pyl-reveal board per theme regardless of style — this is the
-    // Theme Picker/Lotto Animation board metadata, separate from the actual
-    // question content handled below.
-    const slidesData = themes.map((theme, i) => ({
-      type: 'pyl-reveal',
-      roundId: targetRoundId,
-      data: { themeName: theme.name, themeType: theme.type, title: theme.name, themeIndex: i },
-    }))
-    if (slidesData.length) {
-      await actions.addSiblingSlides(afterId, slidesData)
-    }
+    const introId = roundSlides.find(s => s.type === 'round-intro')?.id ?? afterId
 
     // Text-style themes: real question slides now, same shape Swing uses.
     // pylTheme tags which theme each question belongs to within the round.
+    // Created BEFORE the board below so the board's tiles can link straight
+    // to each theme's first question.
     const textThemes = themes.filter(t => t.style === 'text' && t.questions?.length)
-    if (textThemes.length) {
-      const sortedAfter = [...(show?.slides ?? []), ...slidesData].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      const existingQCount = sortedAfter.filter(s => s.roundId === targetRoundId && s.type === 'question' && !s.data?.isBonus).length
-      let n = existingQCount
-      const questionSlides = textThemes.flatMap(theme =>
-        theme.questions.map(q => {
-          n += 1
-          return {
-            type: 'question',
-            roundId: targetRoundId,
-            data: {
-              questionNumber: n,
-              questionLabel:  `Q${n}`,
-              questionMode:   'regular',
-              isShiny:        false,
-              pylTheme:       theme.name,
-              text:           q.text.trim(),
-              answer:         q.answer.trim(),
-              mediaSlots:     [],
-            },
-          }
-        })
-      )
-      if (questionSlides.length) await actions.addSiblingSlides(afterId, questionSlides)
+    const existingQCount = roundSlides.filter(s => s.type === 'question' && !s.data?.isBonus).length
+    let n = existingQCount
+    const meta = [] // parallel to questionSlides: which theme, is-it-that-theme's-first-question
+    const questionSlides = textThemes.flatMap(theme =>
+      theme.questions.map((q, i) => {
+        n += 1
+        meta.push({ themeName: theme.name, isFirst: i === 0 })
+        return {
+          type: 'question',
+          roundId: targetRoundId,
+          data: {
+            questionNumber: n,
+            questionLabel:  `Q${n}`,
+            questionMode:   'regular',
+            isShiny:        false,
+            pylTheme:       theme.name,
+            text:           q.text.trim(),
+            answer:         q.answer.trim(),
+            mediaSlots:     [],
+          },
+        }
+      })
+    )
+    const firstQuestionIdByTheme = new Map()
+    if (questionSlides.length) {
+      const created = await actions.addSiblingSlides(afterId, questionSlides)
+      created.forEach((slide, i) => {
+        if (meta[i].isFirst) firstQuestionIdByTheme.set(meta[i].themeName, slide.id)
+      })
     }
+
+    // One combined board — click a theme, jump straight to its first
+    // question. This is the actual shape PylRevealSlide.jsx reads
+    // (`items: [{ text, targetSlideId }]`); a stale per-theme shape
+    // (themeName/themeType/themeIndex) used to be written here instead,
+    // silently producing a board with no working tiles — nothing on
+    // display ever read those fields (2026-09-08, Ben: "its now just 18
+    // straight questions"). Shiny themes get no target yet — their content
+    // doesn't exist until the queued hand-off below finishes — same as any
+    // board a host wires by hand today via the row editor.
+    const boardSlide = {
+      type: 'pyl-reveal',
+      roundId: targetRoundId,
+      data: {
+        title: 'Which will it be?',
+        currentReveal: themes.length,
+        items: themes.map(theme => ({
+          text: theme.name,
+          targetSlideId: firstQuestionIdByTheme.get(theme.name) ?? null,
+        })),
+      },
+    }
+    await actions.addSiblingSlides(introId, [boardSlide])
 
     // Shiny-style themes: no format picked yet (see STYLE_OPTIONS' comment
     // in PYLWizard.jsx) — queue them and open AddSlideWizard for the first;
