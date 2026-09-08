@@ -907,3 +907,318 @@ git add docs/superpowers/specs/2026-09-04-bendle-layered-audio-question-design.m
 git commit -m "docs: point Bendle content pipeline at the new automation plan"
 git push
 ```
+
+---
+
+## Task 9 (queued, NOT part of the current execution pass — pick this up after Tasks 1-8 ship and are verified live)
+
+**Why this exists:** Ben's real Bendle rounds always play the same fixed reveal — Drums Only → +Bass → +Everything Else. He wants variation: sometimes bass should lead, sometimes drums; and separately, whether a fourth real instrument (guitar) can ever get its own reveal moment instead of disappearing into the "Everything Else" catch-all. Confirmed via web search: Demucs has a 6-source model (`htdemucs_6s`) that separates guitar and piano in addition to drums/bass/vocals/other — guitar quality is decent, piano has real bleeding/artifact problems, so piano is excluded as a lead stem and always folds into "other."
+
+**Design, keeping the house "always 3 steps" rule intact (`bendleScoring.js`'s own comment: "THREE steps, always ... a house rule across the shiny step formats"):** two independent knobs.
+1. **Prep-time (per song):** an "also split out guitar" toggle when requesting a song via Spotify search. If on, the worker runs the 6-stem model instead of the 4-stem one and uploads a 5th stem (`guitar_url`), folding piano into `other` via an audio mixdown rather than storing a poor-quality 5th URL nobody asked for.
+2. **Edit-time (per slide):** a "which 2 stems lead" picker — two dropdowns choosing from whatever stems that song actually has (`drums`/`bass`, plus `guitar` if that song was prepped with it). The third tier is always "everything else" — every stem not picked as a lead. Points/timing (30/10/40s... wait, 30/15/10 pts at 0/20/40s) never change — only which stems fill which slot.
+
+**Files:**
+- Modify: `supabase/migrations/` (new migration, timestamp after Task 1's)
+- Modify: `client/src/lib/bendleScoring.js` (add `buildBendleTiers()`, keep `BENDLE_TIERS` as its default-args result — zero breaking change for existing songs/slides with no order preference set)
+- Modify: `client/src/lib/bendleScoring.test.js`
+- Modify: `worker/bendle/bendle_worker.py`, `worker/bendle/test_bendle_worker.py`
+- Modify: `client/src/components/host/BendleAdmin.jsx` (guitar toggle on request)
+- Modify: `client/src/components/host/SlideEditor.jsx` (`BendleBuilder`'s lead-stem picker)
+- Modify: `client/src/components/display/slides/ShinyBendleQuestion.jsx` (build tiers dynamically instead of the static import)
+- Modify: `client/src/components/host/LiveMode.jsx` (`handleLockAndScoreBendle` passes the computed tiers into scoring)
+
+**Interfaces:**
+- Produces: `buildBendleTiers(leadOrder = ['drums', 'bass'], hasGuitar = false)` → the same `[{id,label,atSeconds,points,stems}]` shape `BENDLE_TIERS` already has. `BENDLE_TIERS` becomes `buildBendleTiers()` called with no args — byte-identical output to today's literal array (verify this in Step 2 below).
+- Consumes: `bendle_songs.guitar_url` (new, nullable), `bendle_songs.wants_guitar` (new, boolean), `slide.data.bendleTierOrder` (new, `[stem, stem]`, optional — absence means the existing default order).
+
+- [ ] **Step 1: Migration**
+
+```sql
+-- supabase/migrations/<next-timestamp>_bendle_guitar_and_tier_order.sql
+alter table public.bendle_songs
+  add column wants_guitar boolean not null default false,
+  add column guitar_url text;
+```
+No `tier_order` column on `bendle_songs` — reveal order is a per-slide editorial choice (the same song can be replayed across shows with a different order), so it belongs in `slide.data`, not on the reusable song row. Apply and verify the same way Task 1 did (controller-executed checkpoint, not a subagent — this mutates the live `qwtbgusqfoypvehnungr` project).
+
+- [ ] **Step 2: Write the failing test for `buildBendleTiers`**
+
+```js
+// client/src/lib/bendleScoring.test.js — add to the existing file
+import { buildBendleTiers } from './bendleScoring.js' // add to the existing import line
+
+describe('buildBendleTiers', () => {
+  it('matches the original BENDLE_TIERS literal exactly with default args', () => {
+    expect(buildBendleTiers()).toEqual([
+      { id: 'drums', label: 'Drums Only',        atSeconds: 0,  points: 30, stems: ['drums'] },
+      { id: 'bass',  label: '+ Bass',            atSeconds: 20, points: 15, stems: ['bass'] },
+      { id: 'full',  label: '+ Everything Else', atSeconds: 40, points: 10, stems: ['other', 'vocals'] },
+    ])
+  })
+
+  it('swaps lead order when bass is requested first', () => {
+    const tiers = buildBendleTiers(['bass', 'drums'])
+    expect(tiers[0]).toEqual({ id: 'bass', label: 'Bass Only', atSeconds: 0, points: 30, stems: ['bass'] })
+    expect(tiers[1]).toEqual({ id: 'drums', label: '+ Drums', atSeconds: 20, points: 15, stems: ['drums'] })
+    expect(tiers[2].stems.sort()).toEqual(['other', 'vocals'])
+  })
+
+  it('folds guitar into the final tier when not chosen as a lead', () => {
+    const tiers = buildBendleTiers(['drums', 'bass'], true)
+    expect(tiers[2].stems.sort()).toEqual(['guitar', 'other', 'vocals'])
+  })
+
+  it('lets guitar lead when the song has it', () => {
+    const tiers = buildBendleTiers(['guitar', 'drums'], true)
+    expect(tiers[0]).toEqual({ id: 'guitar', label: 'Guitar Only', atSeconds: 0, points: 30, stems: ['guitar'] })
+    expect(tiers[2].stems.sort()).toEqual(['bass', 'other', 'vocals'])
+  })
+})
+```
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `npm run test:unit -- bendleScoring.test.js`
+Expected: FAIL — `buildBendleTiers` not exported.
+
+- [ ] **Step 4: Implement `buildBendleTiers`, keep `BENDLE_TIERS` as its result**
+
+Replace the existing `BENDLE_TIERS` literal in `client/src/lib/bendleScoring.js` (the whole `export const BENDLE_TIERS = [...]` block and its long comment stay — the comment is still accurate, "not exposed for per-slide editing" becomes false as of this task, update that one line of the comment) with:
+
+```js
+const BENDLE_LEAD_LABELS = { drums: 'Drums', bass: 'Bass', guitar: 'Guitar' }
+
+// Building block for the fixed 3-tier reveal. `leadOrder` names which 2
+// stems get their own tier (in that order); everything else — always
+// including `other` and `vocals`, plus guitar when the song wasn't
+// prepped with a guitar stem, plus whichever of drums/bass wasn't chosen
+// as a lead — lands in the fixed final "+ Everything Else" tier. Points
+// and timing never move; only which stems occupy which slot does.
+export function buildBendleTiers(leadOrder = ['drums', 'bass'], hasGuitar = false) {
+  const available = ['drums', 'bass', 'other', 'vocals', ...(hasGuitar ? ['guitar'] : [])]
+  const [first, second] = leadOrder
+  const remaining = available.filter(s => s !== first && s !== second)
+  return [
+    { id: first, label: `${BENDLE_LEAD_LABELS[first]} Only`, atSeconds: 0, points: 30, stems: [first] },
+    { id: second, label: `+ ${BENDLE_LEAD_LABELS[second]}`, atSeconds: 20, points: 15, stems: [second] },
+    { id: 'full', label: '+ Everything Else', atSeconds: 40, points: 10, stems: remaining },
+  ]
+}
+
+export const BENDLE_TIERS = buildBendleTiers()
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `npm run test:unit -- bendleScoring.test.js`
+Expected: PASS, including the full existing suite in that file (confirms `BENDLE_TIERS` is still byte-identical, so `resolveBendleTier`/`scoreBendleRound`'s existing tests — which reference `BENDLE_TIERS` — need zero changes).
+
+- [ ] **Step 6: Worker — request-time guitar toggle**
+
+In `worker/bendle/bendle_worker.py`'s `process_song`, branch on `song.get("wants_guitar")`:
+
+```python
+STEMS_STANDARD = ["drums", "bass", "other", "vocals"]
+STEMS_EXTENDED = ["drums", "bass", "other", "vocals", "guitar", "piano"]
+
+def process_song(sb, song):
+    song_id = song["id"]
+    wants_guitar = bool(song.get("wants_guitar"))
+    model = "htdemucs_6s" if wants_guitar else "htdemucs"
+    stems_to_read = STEMS_EXTENDED if wants_guitar else STEMS_STANDARD
+
+    with tempfile.TemporaryDirectory() as tmp:
+        output_template = f"{tmp}/audio.%(ext)s"
+        query = build_search_query(song["title"], song.get("artist"))
+
+        result = subprocess.run(
+            [sys.executable, "-m", "yt_dlp", f"ytsearch1:{query}", "-x", "--audio-format", "wav", "-o", output_template],
+            capture_output=True, text=True,
+        )
+        matches = glob.glob(f"{tmp}/audio.*")
+        if result.returncode != 0 or not matches:
+            raise RuntimeError(f"couldn't find or download audio for \"{query}\"")
+        audio_path = matches[0]
+
+        demucs_out = f"{tmp}/separated"
+        result = subprocess.run(
+            [sys.executable, "-m", "demucs", "-n", model, "--mp3", "-o", demucs_out, audio_path],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError("stem separation failed — the audio may be corrupt or unsupported")
+
+        stem_dir = f"{demucs_out}/{model}/audio"
+        for stem in stems_to_read:
+            if not Path(f"{stem_dir}/{stem}.mp3").exists():
+                raise RuntimeError(f"missing {stem} stem after separation")
+
+        # Piano quality is poor enough (bleeding/artifacts, confirmed against
+        # Demucs's own known limitations for htdemucs_6s) that it never becomes
+        # its own reveal layer — mix it into `other` instead of uploading a
+        # 5th URL nobody would choose to lead with.
+        if wants_guitar:
+            mixed_other = f"{stem_dir}/other_mixed.mp3"
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-i", f"{stem_dir}/other.mp3", "-i", f"{stem_dir}/piano.mp3",
+                 "-filter_complex", "amix=inputs=2:duration=longest", mixed_other],
+                capture_output=True, text=True,
+            )
+            if result.returncode != 0:
+                raise RuntimeError("piano fold-in failed — ffmpeg couldn't mix other+piano")
+            os.replace(mixed_other, f"{stem_dir}/other.mp3")
+
+        upload_stems = STEMS_STANDARD + (["guitar"] if wants_guitar else [])
+        urls = {}
+        for stem in upload_stems:
+            local_path = f"{stem_dir}/{stem}.mp3"
+            storage_path = f"bendle/{song_id}/{stem}.mp3"
+            with open(local_path, "rb") as f:
+                sb.storage.from_("trivia-show-media").upload(
+                    storage_path, f, {"content-type": "audio/mpeg", "upsert": "true"}
+                )
+            urls[stem] = sb.storage.from_("trivia-show-media").get_public_url(storage_path)
+
+        update = build_ready_update({k: urls[k] for k in STEMS_STANDARD})
+        if wants_guitar:
+            update["guitar_url"] = urls["guitar"]
+        sb.table("bendle_songs").update(update).eq("id", song_id).execute()
+```
+
+This replaces the existing `process_song` body from Task 6 (same function name, same signature — the rest of the file is unchanged). Add this pure-function test to `worker/bendle/test_bendle_worker.py`:
+
+```python
+def test_stems_extended_includes_guitar_and_piano():
+    assert "guitar" in STEMS_EXTENDED and "piano" in STEMS_EXTENDED
+    assert "piano" not in STEMS_STANDARD and "guitar" not in STEMS_STANDARD
+```
+
+Run: `cd worker/bendle && python3 -m pytest test_bendle_worker.py -v` — expect PASS (4/4).
+
+- [ ] **Step 7: BendleAdmin — request-time toggle**
+
+In `handleSpotifyPick` (Task 4), add a `wantsGuitar` param sourced from a new checkbox next to the search box ("Also split out guitar — adds separation time, use for guitar-forward songs"), and include it in the insert:
+
+```jsx
+const [wantsGuitar, setWantsGuitar] = useState(false)
+// ...
+async function handleSpotifyPick(track) {
+  // ...unchanged...
+  const { error: insertError } = await supabase.from('bendle_songs').insert({
+    // ...unchanged fields...
+    wants_guitar: wantsGuitar,
+  })
+  // ...unchanged...
+}
+```
+```jsx
+<label className="flex items-center gap-2 text-xs text-gray-600">
+  <input type="checkbox" checked={wantsGuitar} onChange={e => setWantsGuitar(e.target.checked)} />
+  Also split out guitar (slower, use for guitar-forward songs)
+</label>
+```
+
+- [ ] **Step 8: SlideEditor — lead-stem order picker**
+
+Extend `BendleBuilder` (Task 6's design didn't touch this component, Task 9 does) to accept and set `tierOrder`:
+
+```jsx
+function BendleBuilder({ songId, onChangeSongId, tierOrder, onChangeTierOrder }) {
+  const [songs, setSongs] = useState([])
+  useEffect(() => {
+    let cancelled = false
+    supabase.from('bendle_songs').select('id, title, answer, aliases, guitar_url').eq('status', 'ready').order('title')
+      .then(({ data }) => { if (!cancelled) setSongs(data ?? []) })
+    return () => { cancelled = true }
+  }, [])
+  const selected = songs.find(s => s.id === songId)
+  const hasGuitar = !!selected?.guitar_url
+  const leadOptions = ['drums', 'bass', ...(hasGuitar ? ['guitar'] : [])]
+  const order = tierOrder ?? ['drums', 'bass']
+  const tiers = buildBendleTiers(order, hasGuitar)
+
+  function setLead(index, stem) {
+    const next = [...order]
+    next[index] = stem
+    // Same stem can't lead twice — bump the other slot to whatever's left.
+    if (next[0] === next[1]) next[1 - index] = leadOptions.find(s => s !== stem) ?? next[1 - index]
+    onChangeTierOrder(next)
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* ...existing Song select unchanged... */}
+      {selected && (
+        <div className="flex gap-2">
+          <select value={order[0]} onChange={e => setLead(0, e.target.value)} className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+            {leadOptions.map(s => <option key={s} value={s}>{BENDLE_LEAD_LABELS[s]} first</option>)}
+          </select>
+          <select value={order[1]} onChange={e => setLead(1, e.target.value)} className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+            {leadOptions.filter(s => s !== order[0]).map(s => <option key={s} value={s}>{BENDLE_LEAD_LABELS[s]} second</option>)}
+          </select>
+        </div>
+      )}
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">Bendle steps</label>
+        <div className="flex flex-col gap-1.5">
+          {tiers.map(t => (
+            <div key={t.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+              <span className="text-sm font-medium text-gray-800 flex-1">{t.label}</span>
+              <span className="text-sm font-semibold text-gray-900 tabular-nums">{t.points} pts</span>
+              <span className="text-xs text-gray-400">at {t.atSeconds}s</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+`BENDLE_LEAD_LABELS` needs exporting from `bendleScoring.js` alongside `buildBendleTiers` (change `const BENDLE_LEAD_LABELS` from Step 4 to `export const BENDLE_LEAD_LABELS`). Update the call site (`SlideEditor.jsx:1011`):
+```jsx
+<BendleBuilder
+  songId={data.bendleSongId}
+  onChangeSongId={id => onChange('bendleSongId', id)}
+  tierOrder={data.bendleTierOrder}
+  onChangeTierOrder={order => onChange('bendleTierOrder', order)}
+/>
+```
+
+- [ ] **Step 9: ShinyBendleQuestion.jsx — build tiers dynamically**
+
+Replace the static `BENDLE_TIERS` import and the local `STEM_KEYS` constant:
+```jsx
+import { buildBendleTiers } from '../../../lib/bendleScoring.js'
+```
+Inside the component, once `song` has loaded, compute once per song/data change:
+```jsx
+const tiers = song ? buildBendleTiers(data.bendleTierOrder ?? ['drums', 'bass'], !!song.guitar_url) : []
+const stemKeys = tiers.flatMap(t => t.stems)
+```
+Replace every remaining `STEM_KEYS` reference in the file with `stemKeys`, and every `BENDLE_TIERS` reference with `tiers` — except `ROUND_LENGTH_SECONDS` (top-level constant, timing never varies with lead order, leave it computed from the default `buildBendleTiers()` import, unchanged).
+
+- [ ] **Step 10: LiveMode.jsx — pass computed tiers into scoring**
+
+```jsx
+import { scoreBendleRound, computeBendleScoreUpdates, buildBendleTiers } from '../../lib/bendleScoring.js'
+// ...
+const tiers = buildBendleTiers(slide.data?.bendleTierOrder ?? ['drums', 'bass'], !!song.guitar_url)
+const results = scoreBendleRound({ entries, song, tiers })
+```
+
+- [ ] **Step 11: Run the full unit suite**
+
+Run: `npm run test:unit`
+Expected: all PASS, no regressions in the pre-existing Bendle/scoring tests.
+
+- [ ] **Step 12: Commit**
+
+```bash
+git add supabase/migrations/ client/src/lib/bendleScoring.js client/src/lib/bendleScoring.test.js worker/bendle/bendle_worker.py worker/bendle/test_bendle_worker.py client/src/components/host/BendleAdmin.jsx client/src/components/host/SlideEditor.jsx client/src/components/display/slides/ShinyBendleQuestion.jsx client/src/components/host/LiveMode.jsx
+git commit -m "feat: variable Bendle reveal order + optional guitar stem"
+git push
+```
+
+**Known limitation, not a gap to close later — this is the real ceiling of what any current tool can do:** the only lead-stem options are drums, bass, and guitar. Piano is never selectable (folded into "other") given Demucs's documented quality problems there. Sax, harmonica, or any other specifically-named instrument can NEVER be its own lead stem with Demucs or any other production-ready separation tool — isolating an arbitrary named instrument (as opposed to Demucs's fixed categories) is an unsolved research problem as of 2026 (text/query-prompted separation exists only in papers, not shipping tools). Those instruments always stay inside "other," permanently, regardless of future Demucs versions short of a fundamentally different model. Do not resurrect this ask without a genuinely new tool to point at — it isn't a build gap, it's a real capability wall.
+
