@@ -13,6 +13,15 @@ function cleanSpotifyTitle(title) {
     .trim()
 }
 
+export function statusLabel(status) {
+  return {
+    requested: '⏳ Queued',
+    processing: '⚙️ Processing',
+    ready: '✅ Ready',
+    failed: '❌ Failed',
+  }[status] ?? status
+}
+
 export default function BendleAdmin({ onClose }) {
   const [songs, setSongs] = useState([])
   const [title, setTitle] = useState('')
@@ -28,6 +37,16 @@ export default function BendleAdmin({ onClose }) {
     supabase.from('bendle_songs').select('id, title, created_at, status, artist, error_text').order('created_at', { ascending: false })
       .then(({ data }) => { if (!cancelled) setSongs(data ?? []) })
     return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('bendle_songs_status')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bendle_songs' }, payload => {
+        setSongs(prev => prev.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s))
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   function reset() {
@@ -134,8 +153,18 @@ export default function BendleAdmin({ onClose }) {
           <div className="border-t border-gray-100 pt-4">
             <p className="text-xs font-medium text-gray-500 mb-2">{songs.length} song{songs.length === 1 ? '' : 's'} prepped</p>
             <ul className="flex flex-col gap-1">
-              {songs.map(s => <li key={s.id} className="text-sm text-gray-700">{s.title}</li>)}
+              {songs.map(s => (
+                <li key={s.id} className="flex items-center justify-between text-sm text-gray-700 gap-2">
+                  <span>{s.title}{s.artist ? ` — ${s.artist}` : ''}</span>
+                  <span className="text-xs shrink-0">{statusLabel(s.status)}</span>
+                </li>
+              ))}
             </ul>
+            {songs.some(s => s.status === 'failed') && (
+              <p className="text-xs text-gray-400">
+                A failed song can be retried by deleting its row and picking it again — automatic retry isn't built, this is rare enough at this volume not to need it yet.
+              </p>
+            )}
           </div>
         </div>
       </div>
