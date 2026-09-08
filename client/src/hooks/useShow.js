@@ -551,9 +551,19 @@ export function useShow() {
   // construction instead of reconstructing it from a fixed segment shape.
   async function reorderRounds(orderedRoundIds, orderedSlideIds) {
     if (!show) return
+    // round.number is a stamped-at-creation field, not derived from array
+    // position (see roundLabel's comment in scoreboardMath.js — that's
+    // deliberate, fixes an older bug where a live position-derived label
+    // disagreed with Quick Entry's stored-number lookup). But that means
+    // without this, number never moves with a drag: a round created 3rd
+    // keeps showing "R3" forever even after being dragged to 2nd position
+    // (Ben, 2026-09-08: "when i reorder rounds they dont change numbers").
+    // Renumbering here — the one place order actually changes — keeps
+    // number and position as the same fact instead of two that can drift.
     const newRounds = orderedRoundIds
       .map(id => show.rounds.find(r => r.id === id))
       .filter(Boolean)
+      .map((r, i) => ({ ...r, number: i + 1 }))
     const newSlides = renumberRoundQuestions(
       orderedSlideIds
         .map((id, index) => {
