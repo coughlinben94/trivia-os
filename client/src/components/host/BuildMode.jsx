@@ -480,51 +480,40 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
       : sortedAll[sortedAll.length - 1]?.id ?? null
     const introId = roundSlides.find(s => s.type === 'round-intro')?.id ?? afterId
 
-    // Text-style themes: real question slides now, same shape Swing uses.
-    // pylTheme tags which theme each question belongs to within the round.
-    // Created BEFORE the board below so the board's tiles can link straight
-    // to each theme's first question.
+    // Text-style themes: ONE multi-question slide per theme (Ben: "each of
+    // the themes 6 questions live on one slide" — not 6 separate question
+    // slides). answer is stored per item even though MultiQuestionEditor/
+    // LiveMode don't currently surface it (both only read `.text`) — keeps
+    // the typed answers from being silently discarded; nothing renders it
+    // to /display either way. Created BEFORE the board below so the board's
+    // tiles can link straight to each theme's slide.
     const textThemes = themes.filter(t => t.style === 'text' && t.questions?.length)
-    const existingQCount = roundSlides.filter(s => s.type === 'question' && !s.data?.isBonus).length
-    let n = existingQCount
-    const meta = [] // parallel to questionSlides: which theme, is-it-that-theme's-first-question
-    const questionSlides = textThemes.flatMap(theme =>
-      theme.questions.map((q, i) => {
-        n += 1
-        meta.push({ themeName: theme.name, isFirst: i === 0 })
-        return {
-          type: 'question',
-          roundId: targetRoundId,
-          data: {
-            questionNumber: n,
-            questionLabel:  `Q${n}`,
-            questionMode:   'regular',
-            isShiny:        false,
-            pylTheme:       theme.name,
-            text:           q.text.trim(),
-            answer:         q.answer.trim(),
-            mediaSlots:     [],
-          },
-        }
-      })
-    )
-    const firstQuestionIdByTheme = new Map()
-    if (questionSlides.length) {
-      const created = await actions.addSiblingSlides(afterId, questionSlides)
-      created.forEach((slide, i) => {
-        if (meta[i].isFirst) firstQuestionIdByTheme.set(meta[i].themeName, slide.id)
-      })
+    const multiQuestionSlides = textThemes.map(theme => ({
+      type: 'multi-question',
+      roundId: targetRoundId,
+      data: {
+        seriesTitle: theme.name,
+        pylTheme:    theme.name,
+        questions:   theme.questions
+          .filter(q => q.text.trim() || q.answer.trim())
+          .map(q => ({ text: q.text.trim(), answer: q.answer.trim() })),
+      },
+    }))
+    const slideIdByTheme = new Map()
+    if (multiQuestionSlides.length) {
+      const created = await actions.addSiblingSlides(afterId, multiQuestionSlides)
+      created.forEach((slide, i) => slideIdByTheme.set(textThemes[i].name, slide.id))
     }
 
-    // One combined board — click a theme, jump straight to its first
-    // question. This is the actual shape PylRevealSlide.jsx reads
-    // (`items: [{ text, targetSlideId }]`); a stale per-theme shape
-    // (themeName/themeType/themeIndex) used to be written here instead,
-    // silently producing a board with no working tiles — nothing on
-    // display ever read those fields (2026-09-08, Ben: "its now just 18
-    // straight questions"). Shiny themes get no target yet — their content
-    // doesn't exist until the queued hand-off below finishes — same as any
-    // board a host wires by hand today via the row editor.
+    // One combined board — click a theme, jump straight to its slide. This
+    // is the actual shape PylRevealSlide.jsx reads (`items: [{ text,
+    // targetSlideId }]`); a stale per-theme shape (themeName/themeType/
+    // themeIndex) used to be written here instead, silently producing a
+    // board with no working tiles — nothing on display ever read those
+    // fields (2026-09-08, Ben: "its now just 18 straight questions").
+    // Shiny themes get no target yet — their content doesn't exist until
+    // the queued hand-off below finishes — same as any board a host wires
+    // by hand today via the row editor.
     const boardSlide = {
       type: 'pyl-reveal',
       roundId: targetRoundId,
@@ -533,7 +522,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
         currentReveal: themes.length,
         items: themes.map(theme => ({
           text: theme.name,
-          targetSlideId: firstQuestionIdByTheme.get(theme.name) ?? null,
+          targetSlideId: slideIdByTheme.get(theme.name) ?? null,
         })),
       },
     }
