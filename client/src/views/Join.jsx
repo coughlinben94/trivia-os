@@ -752,7 +752,7 @@ function SlideBody({ slide, show, theme, team, onInteractiveAnswered, overridePa
             <p style={{ color: `${text}b3`, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>{round.title}</p>
           )}
           <h3 style={{ color: text, fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>
-            {slide.data.title || 'Questions'}
+            {slide.data.seriesTitle || slide.data.title || 'Questions'}
           </h3>
           <ol style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {(slide.data.questions ?? []).map((q, i) => (
