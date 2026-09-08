@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   BENDLE_TIERS, matchesBendleAnswer, resolveBendleTier,
   scoreBendleRound, computeBendleScoreUpdates,
+  ROUND_LENGTH_SECONDS, clampBendleOffset,
 } from './bendleScoring.js'
 
 describe('matchesBendleAnswer', () => {
@@ -83,14 +84,15 @@ describe('scoreBendleRound', () => {
   // House rule, not a Bendle preference (Ben: "all shiny step questions will
   // always be 3 steps"). Also guards the half of the contract that lives in
   // ShinyBendleQuestion: it fades in each tier's `stems` on the transport, so
-  // every stem must be a real bendle_songs column and every stem must appear
+  // every SCHEDULED stem must be a real bendle_songs column and must appear
   // exactly once — a typo or a duplicate would silently drop a layer from
   // playback or double-fade one, neither of which shows up as a test failure
-  // anywhere else.
-  it('is exactly three steps covering all four stems once each', () => {
+  // anywhere else. `vocals` is deliberately absent — it plays only at reveal
+  // (see BendleReveal), never scheduled into an in-round tier.
+  it('is exactly three steps covering drums/bass/other once each, never vocals', () => {
     expect(BENDLE_TIERS).toHaveLength(3)
     const stems = BENDLE_TIERS.flatMap(t => t.stems)
-    expect([...stems].sort()).toEqual(['bass', 'drums', 'other', 'vocals'])
+    expect([...stems].sort()).toEqual(['bass', 'drums', 'other'])
     expect(BENDLE_TIERS.map(t => t.atSeconds)).toEqual([0, 20, 40])
   })
 
@@ -137,6 +139,33 @@ describe('scoreBendleRound', () => {
       song,
     })
     expect(results.map(r => r.teamId)).toEqual(['t2', 't1', 't3'])
+  })
+
+  it('ROUND_LENGTH_SECONDS is 20s past the last tier', () => {
+    expect(ROUND_LENGTH_SECONDS).toBe(60)
+  })
+
+  describe('clampBendleOffset', () => {
+    it('passes through an offset that leaves a full round of runway', () => {
+      expect(clampBendleOffset(30, 200)).toBe(30)
+    })
+
+    it('clamps an offset that would run past the end of the stem', () => {
+      // duration 100, round needs 60 -> latest legal offset is 40
+      expect(clampBendleOffset(90, 100)).toBe(40)
+    })
+
+    it('never goes negative', () => {
+      expect(clampBendleOffset(-5, 200)).toBe(0)
+    })
+
+    it('collapses to 0 when the stem is shorter than one round', () => {
+      expect(clampBendleOffset(10, 45)).toBe(0)
+    })
+
+    it('treats a missing offset as 0', () => {
+      expect(clampBendleOffset(undefined, 200)).toBe(0)
+    })
   })
 })
 
