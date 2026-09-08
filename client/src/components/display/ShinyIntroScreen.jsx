@@ -36,21 +36,29 @@ import { warmImages } from '../../lib/warmImages.js'
 //   - The show's rest-tilt convention (-6deg / +6deg) is preserved everywhere
 //     — direction of spin/roll/turn always implies which tilt it lands on,
 //     never an arbitrary coin flip independent of the motion.
-//   - Ben's explicit call: no bounce, ANY variant — grows/rolls/turns to its
-//     landing value and stops dead, no post-impact wobble. This drops the
-//     title's 3-cycle decaying spring "boing" the original prototype had
-//     (SETTLE_SWING is no longer used by the title track for this reason —
-//     it's still used by the host photo below, which is unchanged/untouched
-//     by this pass).
+//   - Bounce restored 2026-09-08 (Ben: "the bouncing at the end of the shiny
+//     question title landing needs to be turned back on" — reverses the
+//     2026-09-07 no-bounce call this comment used to document). Every
+//     variant carries the SAME decaying-spring "boing" the original
+//     single-spin prototype had (scale + primary rotation axis), restored
+//     verbatim from that prototype's approved keyframes (git show add941a).
+//     roll-forward/backward and turn-right/left never existed before the
+//     no-bounce pass, so their bounce is a mechanical extrapolation of the
+//     exact same approved overshoot/undershoot/overshoot deltas (+12/-4/+1.5,
+//     signed by direction of travel) onto their own primary axis — same
+//     "first-cut, tune live" caveat this file already carries for those two
+//     axes generally. The Z-axis tilt track for those two axes does NOT
+//     bounce independently (would be a 12deg wobble on top of a 6deg total
+//     move — reads as broken, not springy); it holds its resolved value
+//     once reached while the primary axis does the visible bouncing, same
+//     division of labor the original single-track design had (one bouncing
+//     rotate axis, nothing riding shotgun).
 //   - Every variant keeps the EXACT SAME impact instant (times fraction 0.8
-//     of LAND_T) the original bounce used to peak-overshoot at. Burst,
-//     sparks, and glow all key their own timing off that same instant
-//     already — by landing every variant's real rest value AT 0.8 instead of
-//     an overshoot, all three stay in sync with zero changes needed to their
-//     own transitions. From 0.8 to 1.0 the title just holds its landed value
-//     (still costs a keyframe/ease-array slot so `times` stays literal per
-//     the IMPACT_EASE mechanism below — a shorter array would just mean the
-//     title finishes before the burst does).
+//     of LAND_T) the bounce peak-overshoots at. Burst, sparks, and glow all
+//     key their own timing off that same instant already, unaffected by
+//     this change — the title's rest value still first arrives at 0.8, it
+//     just doesn't STAY there anymore; it overshoots and settles through
+//     1.0 instead of holding flat.
 //   - Two axes beyond the original Z-axis spin: rotateX ("Roll Forward" /
 //     "Roll Backward" — tumbles toward camera like a ball) and rotateY
 //     ("Turn Right" / "Turn Left" — spins like a coin). Both need
@@ -119,11 +127,16 @@ const SETTLE_ARRIVE = cubicBezier(0.39, 0.575, 0.565, 1) // easeOutSine — movi
 const SETTLE_SWING = cubicBezier(0.445, 0.05, 0.55, 0.95) // easeInOutSine — extremum to extremum, zero velocity at both ends (host photo only — see TITLE_TREATMENTS above)
 
 // Shared by every title-entrance variant: same `times` (impact at 0.8 of
-// LAND_T, held flat through 1.0 — see TITLE_TREATMENTS above) and the same
-// per-segment eases (HOLD for the untouched spin/hold feel, SETTLE_ARRIVE to
-// decelerate into the landing, HOLD again for the flat hold after).
-const TITLE_TIMES = [0, 0.03, 0.42, 0.68, 0.8, 1]
-const TITLE_EASE = [HOLD, HOLD, HOLD, SETTLE_ARRIVE, HOLD]
+// LAND_T, then a decaying 2-oscillation bounce through 1.0 — see
+// TITLE_TREATMENTS above) and the same per-segment eases (HOLD for the
+// untouched spin/hold feel, SETTLE_ARRIVE to decelerate into the first
+// overshoot, SETTLE_SWING for the two wobble segments after). Restored
+// verbatim from the pre-2026-09-07 approved prototype (git show add941a) —
+// tail offsets equalised (0.867/0.934 vs. the prototype's original
+// 0.9/0.96) so the wobble holds a constant frequency as it decays instead
+// of speeding up, per that commit's own fix.
+const TITLE_TIMES = [0, 0.03, 0.42, 0.68, 0.8, 0.867, 0.934, 1]
+const TITLE_EASE = [HOLD, HOLD, HOLD, SETTLE_ARRIVE, SETTLE_SWING, SETTLE_SWING, SETTLE_SWING]
 const TITLE_PERSPECTIVE_PX = 1600 // tune live on the real TV — see file-header note
 
 // Six variants, one Z-axis (the original spin) and two 3D axes (roll toward
@@ -144,12 +157,20 @@ const TITLE_TREATMENTS = {
   // final segment from 336 straight to -6 would be a -342deg snap backward
   // instead of the intended +18deg finish. 354deg and -6deg render identically
   // (same for -354/6), so this changes nothing visually, only the path taken.
-  'spin-right': { axis: 'rotate', spin: [0, 0, 196, 336, 354, 354] },
-  'spin-left': { axis: 'rotate', spin: [0, 0, -196, -336, -354, -354] },
-  'roll-forward': { axis: 'rotateX', spin: [-740, -740, -420, -140, 0, 0], tilt: [0, 0, 0, 0, -6, -6] },
-  'roll-backward': { axis: 'rotateX', spin: [740, 740, 420, 140, 0, 0], tilt: [0, 0, 0, 0, 6, 6] },
-  'turn-right': { axis: 'rotateY', spin: [-740, -740, -420, -140, 0, 0], tilt: [0, 0, 0, 0, -6, -6] },
-  'turn-left': { axis: 'rotateY', spin: [740, 740, 420, 140, 0, 0], tilt: [0, 0, 0, 0, 6, 6] },
+  //
+  // The last 3 keyframes of each `spin` array are the decaying-spring bounce
+  // (see file header, "Bounce restored 2026-09-08"): overshoot past rest by
+  // 12, undershoot by 4, overshoot by 1.5, then rest — the exact approved
+  // deltas from the original prototype, signed by each variant's own
+  // direction of travel. `tilt` (roll/turn's Z-axis passenger track) does
+  // NOT bounce independently — see file header for why — it just holds its
+  // resolved value once reached.
+  'spin-right': { axis: 'rotate', spin: [0, 0, 196, 336, 366, 350, 355.5, 354] },
+  'spin-left': { axis: 'rotate', spin: [0, 0, -196, -336, -366, -350, -355.5, -354] },
+  'roll-forward': { axis: 'rotateX', spin: [-740, -740, -420, -140, 12, -4, 1.5, 0], tilt: [0, 0, 0, 0, -6, -6, -6, -6] },
+  'roll-backward': { axis: 'rotateX', spin: [740, 740, 420, 140, -12, 4, -1.5, 0], tilt: [0, 0, 0, 0, 6, 6, 6, 6] },
+  'turn-right': { axis: 'rotateY', spin: [-740, -740, -420, -140, 12, -4, 1.5, 0], tilt: [0, 0, 0, 0, -6, -6, -6, -6] },
+  'turn-left': { axis: 'rotateY', spin: [740, 740, 420, 140, -12, 4, -1.5, 0], tilt: [0, 0, 0, 0, 6, 6, 6, 6] },
 }
 const TITLE_TREATMENT_KEYS = Object.keys(TITLE_TREATMENTS)
 
@@ -444,10 +465,11 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
 
       {/* Title — big, tilted, marker-style. Entrance is one of 6 treatments
           (TITLE_TREATMENTS, picked stably per slide — see the file-header
-          note); every one grows/rolls/turns to its rest value and stops
-          dead, no bounce. Final rest angle is always -6deg or +6deg,
-          matching this file's tilt convention — never a leftover spin
-          remainder. */}
+          note); every one grows/rolls/turns in, overshoots, and settles
+          into its rest value with a decaying spring "boing" (restored
+          2026-09-08 — see file header). Final rest angle is always -6deg or
+          +6deg, matching this file's tilt convention — never a leftover
+          spin remainder. */}
       <motion.p
         initial={
           quiet
@@ -464,11 +486,15 @@ export default function ShinyIntroScreen({ slide, theme, show }) {
           quiet
             ? { opacity: 1, scale: 1, rotate: restTilt, rotateX: 0, rotateY: 0 }
             : {
-                opacity: [0, 1, 1, 1, 1, 1],
-                scale: [0.05, 0.05, 0.42, 0.85, 1, 1],
+                opacity: [0, 1, 1, 1, 1, 1, 1, 1],
+                // Restored verbatim from the approved prototype (git show
+                // add941a) — decays geometrically toward rest (ratio ~0.42
+                // each half-cycle: +0.22 -> -0.09 -> +0.04), not a constant-
+                // amplitude ratchet.
+                scale: [0.05, 0.05, 0.42, 0.85, 1.22, 0.91, 1.04, 1],
                 rotate: treatment.axis === 'rotate' ? treatment.spin : treatment.tilt,
-                rotateX: treatment.axis === 'rotateX' ? treatment.spin : [0, 0, 0, 0, 0, 0],
-                rotateY: treatment.axis === 'rotateY' ? treatment.spin : [0, 0, 0, 0, 0, 0],
+                rotateX: treatment.axis === 'rotateX' ? treatment.spin : [0, 0, 0, 0, 0, 0, 0, 0],
+                rotateY: treatment.axis === 'rotateY' ? treatment.spin : [0, 0, 0, 0, 0, 0, 0, 0],
               }
         }
         transition={
