@@ -1,9 +1,10 @@
 import { normalizeRoundScore } from './scoreboardMath.js'
 
 // The default tier ladder: earlier layers are harder to guess, so they pay
-// more. Not exposed for per-slide editing in this build (mirrors WAGER_TIERS
-// being fixed, not configurable) — a follow-up if the defaults don't hold up
-// live. See docs/superpowers/specs/2026-09-04-bendle-layered-audio-question-design.md.
+// more. Which STEM occupies which position is now per-slide (data.bendleTierOrder,
+// edited in SlideEditor's BendleBuilder) — see buildBendleTiers below. Points
+// and timing (20/15/10 at 0/20/40s) stay fixed regardless of order.
+// See docs/superpowers/specs/2026-09-04-bendle-layered-audio-question-design.md.
 //
 // Earlier layers pay more so committing on a thinner mix is the right play
 // (2026-09-05, Ben: "i want them to guess earlier, ie less instruments ...
@@ -30,11 +31,45 @@ import { normalizeRoundScore } from './scoreboardMath.js'
 // is meant to hear yet. It's loaded only in the separate reveal-beat effect
 // (see BendleReveal in ShinyBendleQuestion.jsx), together with the other
 // three stems, as the "here's the answer" payoff.
-export const BENDLE_TIERS = [
-  { id: 'drums', label: 'Drums Only',        atSeconds: 0,  points: 20, stems: ['drums'] },
-  { id: 'bass',  label: '+ Bass',            atSeconds: 20, points: 15, stems: ['bass'] },
-  { id: 'full',  label: '+ Everything Else', atSeconds: 40, points: 10, stems: ['other'] },
+export const DEFAULT_STEP_ORDER = ['drums', 'bass', 'other']
+
+export const STEM_LABELS = { drums: 'Drums', bass: 'Bass', other: 'Everything Else' }
+
+// Position 0/1/2 always pay 20/15/10 at 0s/20s/40s — only WHICH stem sits in
+// which position varies per slide. (2026-09-08, Ben: "what if i wanted bass
+// first drums second sometimes" / "if i want bass first, or guitar first,
+// doesnt matter" — the order itself is the point, not the points/timing.)
+const STEP_POSITIONS = [
+  { atSeconds: 0, points: 20 },
+  { atSeconds: 20, points: 15 },
+  { atSeconds: 40, points: 10 },
 ]
+
+// 'other' keeps the id 'full' it always had (pre-reorder BENDLE_TIERS named
+// its tier that, not 'other') — shows played before per-slide order existed
+// have that literal string persisted in data.bendleResults[].tierId, and
+// this is what a reveal re-render looks it back up by (see
+// ShinyBendleQuestion's BendleReveal). Renaming it would blank out every
+// past show's reveal label the next time its history is viewed.
+const TIER_IDS = { drums: 'drums', bass: 'bass', other: 'full' }
+
+// stepOrder: a permutation of DEFAULT_STEP_ORDER's 3 stems, e.g.
+// ['bass', 'drums', 'other']. Falls back to the default order for anything
+// malformed (missing, wrong length) rather than throwing on a live TV.
+export function buildBendleTiers(stepOrder) {
+  const order = Array.isArray(stepOrder) && stepOrder.length === STEP_POSITIONS.length
+    ? stepOrder
+    : DEFAULT_STEP_ORDER
+  return order.map((stem, i) => ({
+    id: TIER_IDS[stem] ?? stem,
+    label: i === 0 ? `${STEM_LABELS[stem] ?? stem} Only` : `+ ${STEM_LABELS[stem] ?? stem}`,
+    atSeconds: STEP_POSITIONS[i].atSeconds,
+    points: STEP_POSITIONS[i].points,
+    stems: [stem],
+  }))
+}
+
+export const BENDLE_TIERS = buildBendleTiers(DEFAULT_STEP_ORDER)
 
 // Total seconds a round runs for: the last tier's start plus a tail long
 // enough to actually hear it before the host locks. ShinyBendleQuestion

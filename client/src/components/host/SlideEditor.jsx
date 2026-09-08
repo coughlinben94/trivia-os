@@ -17,7 +17,7 @@ import ChoiceBoard from '../join/ChoiceBoard.jsx'
 import { DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
 import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
-import { BENDLE_TIERS } from '../../lib/bendleScoring.js'
+import { DEFAULT_STEP_ORDER, STEM_LABELS, buildBendleTiers } from '../../lib/bendleScoring.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { overflowsBox, QUESTION_BOX } from '../../lib/autoFitText.js'
 import { isConcurrentShiny, isConcurrentMediaShiny } from '../../lib/shinySeries.js'
@@ -1032,7 +1032,12 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
 
           {schema.type === 'bendle' && (
             <>
-              <BendleBuilder songId={data.bendleSongId} onChangeSongId={id => onChange('bendleSongId', id)} />
+              <BendleBuilder
+                songId={data.bendleSongId}
+                onChangeSongId={id => onChange('bendleSongId', id)}
+                tierOrder={data.bendleTierOrder}
+                onChangeTierOrder={order => onChange('bendleTierOrder', order)}
+              />
               <div className="flex flex-col gap-2">
                 <label className="block text-xs font-medium text-gray-700">Phone preview — what teams see once guesses are open</label>
                 <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
@@ -1991,7 +1996,7 @@ function WagerBuilder({ answer }) {
   )
 }
 
-function BendleBuilder({ songId, onChangeSongId }) {
+function BendleBuilder({ songId, onChangeSongId, tierOrder, onChangeTierOrder }) {
   const [songs, setSongs] = useState([])
   useEffect(() => {
     let cancelled = false
@@ -2000,6 +2005,20 @@ function BendleBuilder({ songId, onChangeSongId }) {
     return () => { cancelled = true }
   }, [])
   const selected = songs.find(s => s.id === songId)
+  const order = Array.isArray(tierOrder) && tierOrder.length === DEFAULT_STEP_ORDER.length ? tierOrder : DEFAULT_STEP_ORDER
+  const tiers = buildBendleTiers(order)
+
+  // Two dropdowns pick the first two positions; the third stem is whatever's
+  // left — never a third dropdown, so an invalid (duplicate/missing) order
+  // can't be picked in the first place. Swap-based: choosing a stem already
+  // used elsewhere in `order` swaps the two positions instead of duplicating.
+  function setPosition(i, stem) {
+    const next = [...order]
+    const swapIndex = next.indexOf(stem)
+    ;[next[i], next[swapIndex]] = [next[swapIndex], next[i]]
+    onChangeTierOrder(next)
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div>
@@ -2017,9 +2036,22 @@ function BendleBuilder({ songId, onChangeSongId }) {
         )}
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Bendle steps</label>
+        <label className="block text-xs font-medium text-gray-700 mb-1">Instrument order</label>
+        <div className="flex items-center gap-1.5 mb-1.5">
+          {[0, 1].map(i => (
+            <select
+              key={i}
+              value={order[i]}
+              onChange={e => setPosition(i, e.target.value)}
+              className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+            >
+              {DEFAULT_STEP_ORDER.map(s => <option key={s} value={s}>{STEM_LABELS[s]}</option>)}
+            </select>
+          ))}
+          <span className="flex-1 text-xs text-gray-400 px-2 py-1.5">then {STEM_LABELS[order[2]]}</span>
+        </div>
         <div className="flex flex-col gap-1.5">
-          {BENDLE_TIERS.map(t => (
+          {tiers.map(t => (
             <div key={t.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
               <span className="text-sm font-medium text-gray-800 flex-1">{t.label}</span>
               <span className="text-sm font-semibold text-gray-900 tabular-nums">{t.points} pts</span>

@@ -11,7 +11,7 @@ import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { computeChoiceScoreUpdates, DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
-import { scoreBendleRound, computeBendleScoreUpdates } from '../../lib/bendleScoring.js'
+import { scoreBendleRound, computeBendleScoreUpdates, buildBendleTiers } from '../../lib/bendleScoring.js'
 import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
@@ -758,7 +758,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           const a = answerByTeam.get(t.id)
           return { teamId: t.id, teamName: t.name, guess: a?.guess ?? null, elapsedSeconds: a?.elapsedSeconds ?? null }
         })
-        const results = scoreBendleRound({ entries, song })
+        const tiers = buildBendleTiers(slide.data.bendleTierOrder)
+        const results = scoreBendleRound({ entries, song, tiers })
         const updates = computeBendleScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
         return {
           // Exactly what ShinyBendleQuestion's reveal and BendleBoard's phone

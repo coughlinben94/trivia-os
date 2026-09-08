@@ -10,18 +10,10 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
-import { BENDLE_TIERS, ROUND_LENGTH_SECONDS, clampBendleOffset } from '../../../lib/bendleScoring.js'
+import { ROUND_LENGTH_SECONDS, clampBendleOffset, buildBendleTiers } from '../../../lib/bendleScoring.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 
 const STEM_KEYS = ['drums', 'bass', 'other', 'vocals']
-// The round-playing effect (below) only ever needs the stems BENDLE_TIERS
-// actually schedules — vocals is deliberately excluded there (see
-// bendleScoring.js), so fetching it during the round would just be a wasted
-// download on show wifi for audio nobody will hear yet. Derived from
-// BENDLE_TIERS instead of hand-copied so a future tier retune can't silently
-// drift the two lists apart. STEM_KEYS (all four) is still what the reveal
-// effect loads.
-const ROUND_STEM_KEYS = BENDLE_TIERS.flatMap(tier => tier.stems)
 const FADE_SECONDS = 1.5
 // A layer waits at -Infinity dB (gain 0 — provably silent, no information
 // leaks under the drums) and is stepped to this floor at the instant its
@@ -91,8 +83,11 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
       transport.cancel(0)
       transport.seconds = 0
 
+      const tiers = buildBendleTiers(data.bendleTierOrder)
+      const roundStemKeys = tiers.flatMap(tier => tier.stems)
+
       const players = {}
-      for (const key of ROUND_STEM_KEYS) {
+      for (const key of roundStemKeys) {
         const url = song[`${key}_url`]
         if (!url) continue
         let player = null
@@ -136,10 +131,10 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
       // tier.id so it isn't hardcoded to a one-to-one shape. Vocals is
       // deliberately never among them; it plays only at reveal. See
       // BENDLE_TIERS.
-      for (const key of BENDLE_TIERS[0].stems) {
+      for (const key of tiers[0].stems) {
         if (players[key]) players[key].volume.value = 0
       }
-      for (const tier of BENDLE_TIERS.slice(1)) {
+      for (const tier of tiers.slice(1)) {
         for (const key of tier.stems) {
           const player = players[key]
           if (!player) continue
@@ -168,7 +163,7 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
       created.forEach(p => p.dispose())
       created.length = 0
     }
-  }, [song, guessesLocked, revealed, isPreview])
+  }, [song, guessesLocked, revealed, isPreview, data.bendleTierOrder])
 
   // Polled, not a postgres_changes subscription — same reason
   // ShinyWagerQuestion documents at length: phone_answers' SELECT policy only
@@ -302,6 +297,7 @@ function CountLine({ n, total, text, bodyFont }) {
 // cascade in underneath it — the order the host would say them out loud.
 function BendleReveal({ data, song, theme, shouldReduceMotion, isPreview }) {
   const results = data.bendleResults ?? []
+  const tiers = buildBendleTiers(data.bendleTierOrder)
   const text = theme.colors.text
   const displayFont = `'${theme.fonts.display}', 'Boogaloo', sans-serif`
   const bodyFont = `'${theme.fonts.body}', 'DM Sans', sans-serif`
@@ -444,7 +440,7 @@ function BendleReveal({ data, song, theme, shouldReduceMotion, isPreview }) {
                 {r.teamName}
               </span>
               <span style={{ fontFamily: bodyFont, fontSize: '1.1rem', color: `${text}70`, flexShrink: 0 }}>
-                {r.correct ? BENDLE_TIERS.find(t => t.id === r.tierId)?.label ?? '' : '—'}
+                {r.correct ? tiers.find(t => t.id === r.tierId)?.label ?? '' : '—'}
               </span>
               <span style={{
                 minWidth: '4.5rem', textAlign: 'right', flexShrink: 0,
