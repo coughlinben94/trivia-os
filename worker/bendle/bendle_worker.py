@@ -29,6 +29,34 @@ def build_search_query(title, artist):
     return " ".join(p for p in parts if p) + " official audio"
 
 
+def normalize_stem(local_path):
+    # Loudness-normalizes one separated stem before upload. The app layers
+    # drums/bass/other at equal 0dB gain once faded in (ShinyBendleQuestion.jsx
+    # never applies a per-stem gain), but raw Demucs output isn't level-matched
+    # across stems — the 2026-09-08 audio audit measured "other" ~6dB and
+    # vocals ~4.4dB quieter than drums/bass on a real song (no clipping or
+    # bleed otherwise). Single-pass EBU R128 loudnorm, not two-pass: good
+    # enough to even out a bar-show mix, not worth doubling ffmpeg runs
+    # (4 stems) for broadcast-grade accuracy. TP=-1.5 leaves true-peak
+    # headroom so normalizing up a quiet stem can't introduce clipping.
+    # Falls back to the un-normalized file on failure rather than failing the
+    # whole song — same per-stem-tolerant pattern as the round-playing effect
+    # skipping a stem that fails to load.
+    normalized_path = local_path.replace(".mp3", "_norm.mp3")
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", local_path, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", normalized_path],
+            capture_output=True, text=True, timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"[Bendle] loudnorm timed out for {local_path}, uploading unnormalized", flush=True)
+        return local_path
+    if result.returncode != 0 or not Path(normalized_path).exists():
+        print(f"[Bendle] loudnorm failed for {local_path}, uploading unnormalized:\n{result.stderr[-1000:]}", flush=True)
+        return local_path
+    return normalized_path
+
+
 def build_ready_update(urls):
     return {
         "status": "ready",
@@ -112,8 +140,9 @@ def process_song(sb, song):
             local_path = f"{stem_dir}/{stem}.mp3"
             if not Path(local_path).exists():
                 raise RuntimeError(f"missing {stem} stem after separation")
+            upload_path = normalize_stem(local_path)
             storage_path = f"bendle/{song_id}/{stem}.mp3"
-            with open(local_path, "rb") as f:
+            with open(upload_path, "rb") as f:
                 sb.storage.from_("trivia-show-media").upload(
                     storage_path, f, {"content-type": "audio/mpeg", "upsert": "true"}
                 )
