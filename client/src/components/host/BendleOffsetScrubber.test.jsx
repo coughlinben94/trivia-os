@@ -92,12 +92,16 @@ describe('<BendleOffsetScrubber>', () => {
     expect(updateSpy).toHaveBeenCalledWith({ start_offset_seconds: 45 })
   })
 
-  it('renders only as many envelope bars as the legal scrub range covers', async () => {
+  it('renders a bar for every bucket of the full song, dimming past the legal scrub range', async () => {
     act(() => { root.render(<BendleOffsetScrubber song={SONG} />) })
     await settle()
-    // duration 120, maxOffset 60 -> ceil(100 * 60 / 120) = 50 bars
+    // duration 120, maxOffset 60 -> ceil(100 * 60 / 120) = 50 legal buckets
+    // out of 100 total — the graph covers the whole song, not just the
+    // scrubbable range, so the off-limits tail is visible instead of hidden.
     const firstRow = container.querySelector('[data-testid="bendle-envelope-graph"] > div')
-    expect(firstRow.children).toHaveLength(50)
+    expect(firstRow.children).toHaveLength(100)
+    expect(firstRow.children[49].style.opacity).toBe('1')
+    expect(firstRow.children[50].style.opacity).toBe('0.2')
   })
 
   it('shows an error and no silent success when the save affects zero rows', async () => {

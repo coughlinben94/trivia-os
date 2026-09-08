@@ -129,29 +129,48 @@ export default function BendleOffsetScrubber({ song }) {
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <audio ref={audioRef} src={song.other_url} />
       <div className="space-y-0.5" data-testid="bendle-envelope-graph">
-        {GRAPH_ROWS.map(row => (
-          <div key={row.key} className="flex items-end h-6 gap-px" title={row.label}>
-            {envelopes[row.key]
-              .slice(0, Math.max(1, Math.ceil(BUCKET_COUNT * maxOffset / duration)))
-              .map((v, i) => (
+        {/* Renders every bucket across the FULL song (not just the legal
+            [0, maxOffset] range) so the slider's cutoff reads as a real
+            boundary against the whole track — bars past it are dimmed
+            instead of just not being there. Used to slice+flex-stretch to
+            only the legal range, which silently hid how much of the song
+            was off-limits (Ben, 2026-09-08: "there isn't a scrubbed out
+            part"). */}
+        {GRAPH_ROWS.map(row => {
+          const legalBuckets = Math.max(1, Math.ceil(BUCKET_COUNT * maxOffset / duration))
+          return (
+            <div key={row.key} className="flex items-end h-6 gap-px" title={row.label}>
+              {envelopes[row.key].map((v, i) => (
                 <div
                   key={i}
-                  style={{ height: `${Math.max(4, v * 100)}%`, backgroundColor: row.color, flex: 1 }}
+                  style={{
+                    height: `${Math.max(4, v * 100)}%`,
+                    backgroundColor: row.color,
+                    opacity: i < legalBuckets ? 1 : 0.2,
+                    flex: 1,
+                  }}
                 />
               ))}
-          </div>
-        ))}
+            </div>
+          )
+        })}
       </div>
       {tooShort ? (
         <p className="text-xs text-gray-400">Song&rsquo;s too short to pick a start point — it&rsquo;ll always play from 0:00.</p>
       ) : (
         <>
-          <input
-            type="range" min="0" max={maxOffset} step="1" value={Math.min(offset, maxOffset)}
-            onChange={handleSeek}
-            className="w-full accent-baynes-forest"
-            aria-label="Start point"
-          />
+          {/* Width-capped to the same fraction of the row as the graph's
+              undimmed (legal) portion above, so the slider's track lines up
+              with where the graph actually goes dim instead of spanning the
+              full song width at a different scale. */}
+          <div style={{ width: `${(maxOffset / duration) * 100}%` }}>
+            <input
+              type="range" min="0" max={maxOffset} step="1" value={Math.min(offset, maxOffset)}
+              onChange={handleSeek}
+              className="w-full accent-baynes-forest"
+              aria-label="Start point"
+            />
+          </div>
           <div className="flex items-center justify-between text-[11px] text-gray-500">
             <span>{formatOffsetTime(offset)}</span>
             <span>{formatOffsetTime(maxOffset)}</span>
