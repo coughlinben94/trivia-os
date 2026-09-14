@@ -1357,7 +1357,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                 busy: huesCuesBusy, error: huesCuesScoreError, zeroErr: null,
                 status: d.huesCuesLocked
                   ? 'Guesses locked and scored — press A to reveal the correct square on the TV.'
-                  : 'Hues and Cues — teams are guessing on their phones',
+                  : 'Hues, Cues, and Booze — teams are guessing on their phones',
                 label: huesCuesBusy ? 'Scoring…' : d.huesCuesLocked ? '🔁 Retry Scoring' : '🔒 Lock Guesses & Score',
                 act: () => handleLockAndScoreHuesCues(currentSlide),
               },
