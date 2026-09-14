@@ -734,20 +734,43 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
   // then read back stale-true by the SECOND — no real slide transition ever
   // happened, but the condition still tripped. Regular component state
   // doesn't have this failure mode: both of StrictMode's render passes read
-  // the same already-committed prevSlideId/prevWasShiny and reach the same
-  // conclusion, instead of a ref accumulating a mutation across a pass React
-  // throws away. See task-5-report.md for the captured frame log.
+  // the same already-committed prevShinySlideId/prevShinyGroupId and reach
+  // the same conclusion, instead of a ref accumulating a mutation across a
+  // pass React throws away. See task-5-report.md for the captured frame log.
   const [shinyWarp, setShinyWarp] = useState(null) // null | 'active'
   const [prevShinySlideId, setPrevShinySlideId] = useState(currentSlide?.id)
-  const [prevWasShiny, setPrevWasShiny] = useState(() => !!currentSlide?.data?.isShiny)
+  // Tracks which shiny GROUP (title + every question/sub-slide sharing its
+  // shinyGroupId) the previous slide belonged to, not just "was it shiny" —
+  // a shiny format can be one slide with internal parts OR several separate
+  // sibling slides (Bendle's 3 real step-slides, shinyWizardKinds.jsx's
+  // buildBendleSlide, each its own isShiny:true slide.id), and either shape
+  // needs the SAME two boundary moments, nothing in between (2026-09-14,
+  // Ben, live: "a shiny question can have x amount of slides... sometimes
+  // they all wrap together into one question, sometimes theyre all on
+  // their own, but under the same shiny type... intro in ie after title
+  // slide and intro out ie after the last slide is all we need"). Falls
+  // back to the slide's own id when shinyGroupId is ever absent, so a
+  // group-less shiny slide just acts as a singleton group of one (degrades
+  // safely, never crashes) instead of falsely matching a different slide.
+  const groupIdOf = s => (s?.data?.isShiny ? (s.data.shinyGroupId ?? s.id) : null)
+  const [prevShinyGroupId, setPrevShinyGroupId] = useState(() => groupIdOf(currentSlide))
+  const [prevWasTitle, setPrevWasTitle] = useState(() => currentSlide?.type === 'shiny-title')
   if (currentSlide?.id !== prevShinySlideId) {
-    // Only fires leaving a shiny slide for a genuinely different slide that
-    // is NOT the standalone announce card (that one has its own spin/land
-    // entrance — no vortex over a vortex).
-    if (prevWasShiny && currentSlide?.type !== 'shiny-title') {
+    const nextGroupId = groupIdOf(currentSlide)
+    // The only case to SUPPRESS: leaving a non-title slide for another slide
+    // in the exact same group — a hop between two questions/sub-slides of
+    // one shiny format. Leaving the title (prevWasTitle) always fires (the
+    // "intro in" beat into the first question), and leaving the group's
+    // last slide for anything outside the group always fires too (the
+    // "intro out" beat) — confirmed live that two shiny groups never sit
+    // back to back, so there's no "leaving one group straight into the next
+    // group's title" case to special-case here.
+    const sameGroupHop = !prevWasTitle && prevShinyGroupId != null && nextGroupId === prevShinyGroupId
+    if (prevShinyGroupId != null && !sameGroupHop) {
       setShinyWarp('active')
     }
-    setPrevWasShiny(!!currentSlide?.data?.isShiny)
+    setPrevShinyGroupId(nextGroupId)
+    setPrevWasTitle(currentSlide?.type === 'shiny-title')
     setPrevShinySlideId(currentSlide?.id)
   }
 
