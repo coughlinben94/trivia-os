@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { FIXED_SHAPE_KINDS, buildGridSlide, buildVennSlide } from './shinyWizardKinds.jsx'
+import { FIXED_SHAPE_KINDS, buildGridSlide, buildVennSlide, buildElimSlide } from './shinyWizardKinds.jsx'
 
 const baseFmt = { id: 'fmt_1', name: 'Test Format', icon: '✨' }
 
 describe('FIXED_SHAPE_KINDS registry', () => {
-  it('has exactly the seven known fixed-shape kinds', () => {
-    expect(Object.keys(FIXED_SHAPE_KINDS).sort()).toEqual(['bendle', 'choice', 'grid', 'matching', 'order', 'venn', 'wager'])
+  it('has exactly the eight known fixed-shape kinds', () => {
+    expect(Object.keys(FIXED_SHAPE_KINDS).sort()).toEqual(['bendle', 'choice', 'elimination', 'grid', 'matching', 'order', 'venn', 'wager'])
   })
 
   it('matching/wager/order/choice have no own controls or builder — they fall through to the generic flat-asset path', () => {
@@ -152,5 +152,50 @@ describe('buildVennSlide', () => {
     // Garbage input falls back to 1 (single slide), not a batch.
     expect(result.slides).toBeUndefined()
     expect(result.type).toBe('venn')
+  })
+})
+
+describe('elimination kind has no own controls but does have a builder', () => {
+  it('has hasOwnControls: false and a buildSlideData function', () => {
+    expect(FIXED_SHAPE_KINDS.elimination.hasOwnControls).toBe(false)
+    expect(typeof FIXED_SHAPE_KINDS.elimination.buildSlideData).toBe('function')
+  })
+})
+
+describe('buildElimSlide', () => {
+  it('builds a flip-em-down slide with 8 blank items, 3 blank hints, elimStep 0', () => {
+    const result = buildElimSlide({
+      qNum: 5,
+      roundId: 'round_1',
+      afterId: 'slide_before',
+      selectedShinyFmt: { id: 'fmt_1', name: 'Flip \'Em Down!', icon: '🫥' },
+    })
+    expect(result.type).toBe('flip-em-down')
+    expect(result.roundId).toBe('round_1')
+    expect(result.afterSlideId).toBe('slide_before')
+    expect(result.data.questionNumber).toBe(5)
+    expect(result.data.questionLabel).toBe('Q5')
+    expect(result.data.isShiny).toBe(true)
+    expect(result.data.shinyFormatId).toBe('fmt_1')
+    expect(result.data.shinyFormatName).toBe('Flip \'Em Down!')
+    expect(result.data.shinyFormatIcon).toBe('🫥')
+    expect(result.data.items).toHaveLength(8)
+    for (const item of result.data.items) {
+      expect(item).toMatchObject({ label: '', imageUrl: null })
+      expect(typeof item.id).toBe('string')
+      expect(item.id.length).toBeGreaterThan(0)
+    }
+    expect(result.data.hints).toHaveLength(3)
+    expect(result.data.hints[0]).toEqual({ text: '', survivors: [] })
+    expect(result.data.hints[1]).toEqual({ text: '', survivors: [] })
+    expect(result.data.hints[2]).toEqual({ text: '' })
+    expect(result.data.elimStep).toBe(0)
+    expect(result.data.answer).toBe('')
+  })
+
+  it('gives every item a distinct id', () => {
+    const result = buildElimSlide({ qNum: 1, roundId: 'r', afterId: 'a', selectedShinyFmt: { id: 'fmt_1', name: 'X', icon: '🫥' } })
+    const ids = result.data.items.map(i => i.id)
+    expect(new Set(ids).size).toBe(8)
   })
 })

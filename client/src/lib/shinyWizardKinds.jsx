@@ -20,13 +20,14 @@ import { nanoid } from 'nanoid'
 // so FIXED_SHAPE_TYPES can be *derived* from this registry's keys instead
 // of hand-maintained as a second, easy-to-forget list.
 export const FIXED_SHAPE_KINDS = {
-  matching: { hasOwnControls: false },
-  wager:    { hasOwnControls: false },
-  order:    { hasOwnControls: false },
-  choice:   { hasOwnControls: false },
-  grid:     { hasOwnControls: true, extraControls: gridExtraControls, buildSlideData: buildGridSlide },
-  venn:     { hasOwnControls: true, extraControls: vennExtraControls, buildSlideData: buildVennSlide },
-  bendle:   { hasOwnControls: true, extraControls: bendleExtraControls, buildSlideData: buildBendleSlide },
+  matching:    { hasOwnControls: false },
+  wager:       { hasOwnControls: false },
+  order:       { hasOwnControls: false },
+  choice:      { hasOwnControls: false },
+  grid:        { hasOwnControls: true, extraControls: gridExtraControls, buildSlideData: buildGridSlide },
+  venn:        { hasOwnControls: true, extraControls: vennExtraControls, buildSlideData: buildVennSlide },
+  bendle:      { hasOwnControls: true, extraControls: bendleExtraControls, buildSlideData: buildBendleSlide },
+  elimination: { hasOwnControls: false, buildSlideData: buildElimSlide },
 }
 
 // ── Grid ───────────────────────────────────────────────────────────────────
@@ -170,6 +171,40 @@ export function buildVennSlide(ctx) {
     answer:    ctx.shinyAnswer.trim(),
   }
   return { type: 'venn', roundId: ctx.roundId ?? null, afterSlideId: ctx.afterId, data }
+}
+
+// ── Elimination ("Flip 'Em Down!") ─────────────────────────────────────────
+// Fixed shape, always: 8 items, 3 hints. Unlike grid/venn there is no host
+// "how many" step at all — hasOwnControls: false, no extraControls — the
+// wizard goes straight from picking the format to creating this blank slide,
+// same speed as matching/wager/order. items[]/hints[] are authored entirely
+// afterward in ElimEditor (SlideEditor.jsx). Deliberately NOT `parts[]` —
+// that name is load-bearing for the shared isConcurrentShiny stepping
+// system (revealStepCount, QuestionSlide.jsx's dispatcher), which this
+// format does not use. See docs/superpowers/specs/2026-09-14-flip-em-down-
+// shiny-spec.md's "Architecture decision" section for why.
+export function buildElimSlide(ctx) {
+  const fmt = ctx.selectedShinyFmt
+  const items = Array.from({ length: 8 }, () => ({ id: nanoid(6), label: '', imageUrl: null }))
+  const hints = [
+    { text: '', survivors: [] },
+    { text: '', survivors: [] },
+    { text: '' },
+  ]
+  const data = {
+    questionNumber:  ctx.qNum,
+    questionLabel:   `Q${ctx.qNum}`,
+    questionMode:    'shiny',
+    isShiny:         true,
+    shinyFormatId:   fmt.id,
+    shinyFormatName: fmt.name,
+    shinyFormatIcon: fmt.icon,
+    items,
+    hints,
+    elimStep: 0,
+    answer: '',
+  }
+  return { type: 'flip-em-down', roundId: ctx.roundId ?? null, afterSlideId: ctx.afterId, data }
 }
 
 // ── Bendle ───────────────────────────────────────────────────────────────
