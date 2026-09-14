@@ -17,6 +17,7 @@ import TeamPickerSlide, { REVEAL_S } from './slides/TeamPickerSlide.jsx'
 import GridSlide from './slides/GridSlide.jsx'
 import VennDiagramSlide from './slides/VennDiagramSlide.jsx'
 import FlipEmDownSlide from './slides/FlipEmDownSlide.jsx'
+import RaceSlide from './slides/RaceSlide.jsx'
 import PreShowSlide from './slides/PreShowSlide.jsx'
 import ShinyTitleSlide from './slides/ShinyTitleSlide.jsx'
 import OverlayLayer from './OverlayLayer.jsx'
@@ -192,6 +193,7 @@ const SLIDE_COMPONENTS = {
   'grid':              GridSlide,
   'venn':              VennDiagramSlide,
   'flip-em-down':      FlipEmDownSlide,
+  'horse-race':        RaceSlide,
   'pre-show':          PreShowSlide,
   'shiny-title':       ShinyTitleSlide,
 }
@@ -265,7 +267,7 @@ export default function SlideRenderer({ slide, show, direction, isPreview = fals
   // own locked bgDeep box is a themed flat color, not a broken/unfinished
   // state — briefly seeing it during a 0.14-0.3s fade reads as a normal
   // crossfade, not as "the wrong background leaking through."
-  if (slide?.type === 'team-picker' || slide?.type === 'grid' || slide?.type === 'venn' || slide?.type === 'flip-em-down' || slide?.type === 'round-intro' || slide?.type === 'swing-round-intro') {
+  if (slide?.type === 'team-picker' || slide?.type === 'grid' || slide?.type === 'venn' || slide?.type === 'flip-em-down' || slide?.type === 'horse-race' || slide?.type === 'round-intro' || slide?.type === 'swing-round-intro') {
     variants = {
       initial: { ...variants.initial, opacity: 1 },
       animate: { ...variants.animate, opacity: 1 },
