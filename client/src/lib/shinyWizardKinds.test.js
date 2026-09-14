@@ -210,7 +210,7 @@ describe('buildRaceSlide', () => {
       shinyQuestion: '  Who wins the Kentucky Derby?  ',
       shinyAnswer: '',
     })
-    expect(result.type).toBe('race')
+    expect(result.type).toBe('horse-race')
     expect(result.roundId).toBe('round_1')
     expect(result.afterSlideId).toBe('slide_before')
     expect(result.data.questionNumber).toBe(7)

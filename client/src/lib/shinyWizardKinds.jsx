@@ -300,5 +300,5 @@ export function buildRaceSlide(ctx) {
     raceStartedAt: null,
     answer: '',
   }
-  return { type: 'race', roundId: ctx.roundId ?? null, afterSlideId: ctx.afterId, data }
+  return { type: 'horse-race', roundId: ctx.roundId ?? null, afterSlideId: ctx.afterId, data }
 }
