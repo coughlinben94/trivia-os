@@ -4,6 +4,7 @@ import {
   codeToColRow, colRowToCode, chebyshevDistance,
   getHuesCuesGrid, getHuesCuesCell,
 } from './huesCuesGrid.js'
+import { hexToRgb, rgbToOklab } from './oklab.js'
 
 describe('huesCuesGrid dimensions', () => {
   it('is 16 columns by 15 rows = 240 squares', () => {
@@ -71,6 +72,25 @@ describe('getHuesCuesGrid generation', () => {
   it('every cell has a valid 6-digit hex color', () => {
     for (const cell of getHuesCuesGrid()) {
       expect(cell.hex).toMatch(/^#[0-9a-f]{6}$/i)
+    }
+  })
+  it('every cell hex round-trips through OKLab with correct L and non-zero chroma', () => {
+    const L_TOLERANCE = 0.02
+    const MIN_CHROMA = 0.02
+    for (const cell of getHuesCuesGrid()) {
+      // Round-trip the hex color back through RGB and OKLab
+      const rgb = hexToRgb(cell.hex)
+      const [L, a, b] = rgbToOklab(rgb)
+      const chroma = Math.hypot(a, b)
+
+      // Expected L for this row: 0.35 + (0.55 * (row-1)) / 14
+      const expectedL = 0.35 + (0.55 * (cell.row - 1)) / (HUES_CUES_ROWS - 1)
+
+      // L should be close to the intended lightness (within tolerance for in-gamut rounding)
+      expect(Math.abs(L - expectedL)).toBeLessThanOrEqual(L_TOLERANCE)
+
+      // Chroma must be meaningfully above 0 (not collapsed to gray)
+      expect(chroma).toBeGreaterThan(MIN_CHROMA)
     }
   })
   it('no two horizontally adjacent cells are near-identical colors', () => {
