@@ -97,7 +97,8 @@ describe('getHuesCuesGrid generation', () => {
     // Perceptual distinctness floor: adjacent hues at the same row must not
     // collapse to the same visible color. Uses a plain hex-string check
     // (cheap, no re-import of oklab math) — real color-math distinctness is
-    // covered by the in-gamut round-trip in Task 1 Step 3 itself.
+    // covered by the in-gamut round-trip in Task 1 Step 3 itself, and by the
+    // full-grid OKLab pairwise-distance floor below.
     const grid = getHuesCuesGrid()
     for (let r = 0; r < HUES_CUES_ROWS; r++) {
       const rowCells = grid.filter(c => c.row === r + 1)
@@ -105,6 +106,38 @@ describe('getHuesCuesGrid generation', () => {
         expect(rowCells[c].hex).not.toBe(rowCells[c + 1].hex)
       }
     }
+  })
+
+  it('every pair of the 240 cells stays above a real OKLab perceptual-distance floor', () => {
+    // The horizontal-neighbor check above only compares adjacent hex strings
+    // (cheap, but not real color math, and it only ever checks same-row
+    // neighbors). This converts all 240 cells to OKLab (same rgbToOklab/
+    // hexToRgb pair the in-gamut round-trip test above already imports) and
+    // checks the MINIMUM pairwise Euclidean distance across every one of the
+    // 240*239/2 = 28,680 pairs — not just horizontal neighbors — against a
+    // real floor. The actual measured minimum in the current grid is ~0.0218
+    // (verified independently during the final whole-branch review); 0.015
+    // sits conservatively below that with real margin, while still catching
+    // a future palette regression that collapses two squares together.
+    const MIN_OKLAB_DISTANCE = 0.015
+    const grid = getHuesCuesGrid()
+    const labs = grid.map(cell => rgbToOklab(hexToRgb(cell.hex)))
+
+    let minDist = Infinity
+    let closestPair = null
+    for (let i = 0; i < labs.length; i++) {
+      for (let j = i + 1; j < labs.length; j++) {
+        const [L1, a1, b1] = labs[i]
+        const [L2, a2, b2] = labs[j]
+        const dist = Math.hypot(L1 - L2, a1 - a2, b1 - b2)
+        if (dist < minDist) {
+          minDist = dist
+          closestPair = [grid[i].code, grid[j].code]
+        }
+      }
+    }
+
+    expect(minDist, `closest pair: ${closestPair?.join(' vs ')}, distance ${minDist}`).toBeGreaterThan(MIN_OKLAB_DISTANCE)
   })
 })
 
