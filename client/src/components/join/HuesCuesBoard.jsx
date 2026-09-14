@@ -180,6 +180,14 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
           its own box); the sheet is never clipped, it just makes this row —
           and via ShrinkToFit, the whole board — taller, which ShrinkToFit
           then scales down to fit the screen exactly like every other board. */}
+      {data.text && (
+        <p style={{
+          color: text, fontSize: 'clamp(1.15rem, 4.5vw, 1.35rem)',
+          lineHeight: 1.55, margin: '0 0 1rem', fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
+        }}>
+          {data.text}
+        </p>
+      )}
       <div style={{ display: 'grid', width: '100%' }}>
         <div
           onPointerDown={onPointerDown}
@@ -323,6 +331,20 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
           )}
         </AnimatePresence>
       </div>
+
+      {/* Status line, same pattern as ChoiceBoard/OrderBoard — covers locked,
+          not-yet-picked, and (critically, since the grid itself carries no
+          memory of a prior pick once the picker sheet closes) what a team
+          already committed. */}
+      <p style={{ color: `${text}b3`, fontSize: '0.85rem', textAlign: 'center', margin: '1rem 0 0' }}>
+        {locked
+          ? 'Answers locked'
+          : committedCol && committedRow && !dirty
+            ? `Your guess: ${committedCol}${committedRow}`
+            : dirty && hasPick
+              ? 'Tap Lock In to submit'
+              : 'Tap "I\'m Ready" to pick a square'}
+      </p>
     </ShrinkToFit>
   )
 }

@@ -1,17 +1,24 @@
+import { useState, useEffect, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
+import { supabase } from '../../../lib/supabase.js'
 import { getHuesCuesCell } from '../../../lib/huesCuesGrid.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT, EASE_DROP } from '../../../lib/easings.js'
+import { useFitToBox, WAGER_Q_FLOOR, WAGER_Q_CEIL } from '../../../lib/autoFitText.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 
 // The TV side of Hues and Cues. Mirrors ShinyWagerQuestion's beat structure
 // (waiting -> locked -> reveal), minus wager's separate blind-tier phase:
-//   1. Waiting  — clue text only. The color grid + pan/zoom picker live on
-//      the phone (Task 5) — that's the priority surface for this mechanic
-//      (Ben, 2026-09-14: "the phone display is the a1 priorityy" / "its
-//      where i display the question"), so the TV just shows the clue the
-//      same generic way it does for every other slide type. No grid, no
-//      submitted-count polling here.
+//   1. Waiting  — the clue text, full-size measure-to-fit like every other
+//      shiny type's question text (see QuestionText below), plus a live
+//      submitted-count line. The color grid + pan/zoom picker live on the
+//      phone (Task 5) — that's the priority surface for this mechanic (Ben,
+//      2026-09-14: "the phone display is the a1 priorityy" / "its where i
+//      display the question") — but the clue itself is the one thing shown
+//      on the TV for the whole guessing phase, so it gets the same
+//      full-opacity treatment ShinyChoiceQuestion/ShinyOrderQuestion give
+//      their question text, not the small/dim reveal-secondary style. No
+//      grid here — that removal is intentional and stays.
 //   2. Locked   — held after "lock guesses" until the host presses A to reveal.
 //   3. Reveal   — the answer code, then its swatch, then who was close.
 export default function ShinyHuesCuesQuestion({ slide, show, theme }) {
@@ -20,7 +27,32 @@ export default function ShinyHuesCuesQuestion({ slide, show, theme }) {
   const revealed = !!data.huesCuesRevealed
   const shouldReduceMotion = useReducedMotion()
 
-  const bodyFont = `'${theme.fonts.body}', 'DM Sans', sans-serif`
+  const [submittedCount, setSubmittedCount] = useState(0)
+  const [teamCount, setTeamCount] = useState(0)
+
+  // Polled aggregate — same reasoning as ShinyChoiceQuestion/ShinyOrderQuestion's
+  // identical effect: /display is anonymous, phone_answers' SELECT policy never
+  // opens to it via Realtime, and phone_answers_count(slide_id) is already the
+  // generic SECURITY DEFINER count every phone-scored mechanic reuses.
+  useEffect(() => {
+    if (locked || revealed) return
+    let cancelled = false
+    async function load() {
+      const { data: count } = await supabase.rpc('phone_answers_count', { p_slide_id: slide.id })
+      if (!cancelled) setSubmittedCount(count ?? 0)
+    }
+    load()
+    const interval = setInterval(load, 2000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [slide.id, locked, revealed])
+
+  useEffect(() => {
+    if (!show?.id || revealed) return
+    let cancelled = false
+    supabase.from('teams').select('id', { count: 'exact', head: true }).eq('show_id', show.id)
+      .then(({ count }) => { if (!cancelled) setTeamCount(count ?? 0) })
+    return () => { cancelled = true }
+  }, [show?.id, revealed])
 
   if (revealed) {
     return <HuesCuesReveal data={data} theme={theme} shouldReduceMotion={shouldReduceMotion} />
@@ -31,14 +63,68 @@ export default function ShinyHuesCuesQuestion({ slide, show, theme }) {
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       width: '100%', height: '100%', padding: '2rem 3rem', gap: '1.25rem', overflow: 'hidden',
     }}>
-      {data.text && (
-        <p style={{ margin: 0, textAlign: 'center', maxWidth: 1200, fontFamily: bodyFont, fontSize: '1.4rem', lineHeight: 1.35, color: `${theme.colors.text}80` }}>
-          {data.text}
-        </p>
-      )}
+      <QuestionText text={data.text} theme={theme} />
 
-      {locked && <AnswersLockedBadge theme={theme} />}
+      <StatusSlot theme={theme}>
+        {!locked ? <CountLine n={submittedCount} total={teamCount} /> : <AnswersLockedBadge theme={theme} />}
+      </StatusSlot>
     </div>
+  )
+}
+
+// Measure-to-fit, same bounds and useFitToBox call as ShinyChoiceQuestion's/
+// ShinyWagerQuestion's own QuestionText — the clue is the only content on
+// screen during the guessing phase, same shape as those surfaces.
+function QuestionText({ text, theme }) {
+  const boxRef = useRef(null)
+  const size = useFitToBox(boxRef, text ?? '', {
+    family: theme.fonts.display,
+    floorPx: WAGER_Q_FLOOR * 16,
+    ceilPx: WAGER_Q_CEIL * 16,
+    maxLines: 3,
+    lineHeight: 1.15,
+  })
+  if (!text) return null
+  return (
+    <div ref={boxRef} style={{ width: '100%', maxWidth: 1300, height: '30vh', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{
+        margin: 0, textAlign: 'center',
+        fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
+        fontSize: `${size}px`, lineHeight: 1.15, color: theme.colors.text,
+      }}>
+        {text}
+      </p>
+    </div>
+  )
+}
+
+// Same fixed-height reserved slot as ShinyChoiceQuestion/ShinyOrderQuestion's
+// StatusSlot — keeps the count line / locked badge from shifting anything
+// else when it disappears on reveal.
+function StatusSlot({ theme, children }) {
+  return (
+    <div style={{
+      minHeight: '3.4rem', flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: `${theme.colors.text}d9`,
+      fontSize: 'clamp(1.6rem, 2vw, 2.3rem)',
+      fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
+    }}>
+      {children}
+    </div>
+  )
+}
+
+function CountLine({ n, total }) {
+  return (
+    <motion.span
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3, ease: EASE_OUT }}
+      style={{ fontVariantNumeric: 'tabular-nums' }}
+    >
+      {total > 0 ? `${n} of ${total} teams guessed` : `${n} team${n === 1 ? '' : 's'} guessed`}
+    </motion.span>
   )
 }
 
@@ -46,7 +132,7 @@ export default function ShinyHuesCuesQuestion({ slide, show, theme }) {
 // explicit call — flash the code, then the color, not dots-only), then each
 // team's guess and how close it landed, cascading in the order the host
 // would read them out loud. Structurally the same beat sequence as
-// ShinyWagerQuestion's reveal (EASE_DROP land, staggered EASE_OUT rows).
+// ShinyWagerQuestion's reveal (EASE_OUT land, staggered EASE_OUT rows).
 function HuesCuesReveal({ data, theme, shouldReduceMotion }) {
   const results = data.huesCuesResults ?? []
   const text = theme.colors.text
