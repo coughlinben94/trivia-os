@@ -150,6 +150,12 @@ def process_song(sb, song):
             # silently drop to 128k — see the comment there). Lossless WAV
             # here means there's exactly one lossy encode in the whole
             # pipeline, at full 320k, instead of two stacked ones.
+            # Requires the `soundfile` package (requirements.txt) — Demucs'
+            # WAV output goes through torchaudio.save(), which raises
+            # "Couldn't find appropriate backend" with an empty
+            # torchaudio.list_audio_backends() if it's missing. --mp3 used
+            # to route around torchaudio's save() entirely, which is why
+            # this dependency was never needed before 2026-09-14.
             result = subprocess.run(
                 [sys.executable, "-m", "demucs", "-n", "htdemucs", "-o", demucs_out, audio_path],
                 capture_output=True, text=True, timeout=DEMUCS_TIMEOUT_SECONDS,
