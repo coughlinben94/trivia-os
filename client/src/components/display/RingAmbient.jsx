@@ -652,7 +652,7 @@ export const RING_RETURN = 'return'
 // stations: [PANES x {key,prim,hue,accent}] } — see concepts/world-07-ring.html's
 // own WORLD literal. qColours is accepted but unused here (question-colour
 // styling belongs to the out-of-scope question-rendering system).
-const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, stationOverride, showStationDebug = false }, ref) {
+const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, stationOverride, showStationDebug = false, forceSnap = false }, ref) {
   // The ground behind the stage. Was a hardcoded '#01010a' — a blue-black
   // tuned to the purple world, which stayed blue-black under every recolour.
   // The sky ramp's terminal stop is the same near-black, already generated
@@ -878,15 +878,23 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     if (slideIndex == null) return
     const prev = lastSlideIndexRef.current
     lastSlideIndexRef.current = slideIndex
-    // Decision table lives in ringNavAction (pure, unit-tested): single
-    // steps glide either way, everything else jumps. 'jump' also covers
-    // prev == null — first real slide, align even if Go Live resumed mid-show.
-    const action = ringNavAction(prev, slideIndex)
+    // forceSnap (team-picker's own peek-triggered move, Display.jsx) always
+    // happens while team-picker's own black canvas is covering the ring —
+    // the audience never sees this transition, so there's no reason to
+    // glide it and no risk in an instant jump: a jumpTo() here reads
+    // identically to a turn() that happened to finish before the reveal,
+    // minus the race against the reveal's own timing (2026-09-14, Ben, live:
+    // "coming out of the team intro slide, it should already be on S1, not
+    // moving"). Decision table for every other case lives in ringNavAction
+    // (pure, unit-tested): single steps glide either way, everything else
+    // jumps. 'jump' also covers prev == null — first real slide, align even
+    // if Go Live resumed mid-show.
+    const action = forceSnap ? 'jump' : ringNavAction(prev, slideIndex)
     if (action === 'turn') turn()
     else if (action === 'turn-back') turn(-1)
     else if (action === 'jump') jumpTo(slideIndex)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slideIndex])
+  }, [slideIndex, forceSnap])
 
   // ── Station override: the jukebox grading-break's dedicated slot ──
   // Every other caller advances the ring by exactly one station per slide.

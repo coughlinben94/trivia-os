@@ -7,9 +7,8 @@ import ShinyWagerQuestion from './ShinyWagerQuestion.jsx'
 import ShinyOrderQuestion from './ShinyOrderQuestion.jsx'
 import ShinyBendleQuestion from './ShinyBendleQuestion.jsx'
 import ShinyChoiceQuestion from './ShinyChoiceQuestion.jsx'
-import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isChoiceShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView, isFirstOfShinyGroup } from '../../../lib/shinySeries.js'
-import { sortSlides, chunkParts } from '../../../lib/slideStepping.js'
-import ShinyGroupAnnounce from '../ShinyGroupAnnounce.jsx'
+import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isChoiceShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView } from '../../../lib/shinySeries.js'
+import { chunkParts } from '../../../lib/slideStepping.js'
 import { GridContent } from './GridSlide.jsx'
 import { fitToBox, QUESTION_BOX, QUOTE_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js'
@@ -1428,22 +1427,9 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
 
 // ─── Main dispatcher ──────────────────────────────────────────────────────────
 
-// Wraps the shinyType dispatch below with the group's mount-once
-// format-name beat (Task 4) — a single wrap point rather than editing every
-// branch's return, since the beat is identical regardless of which
-// shinyType renderer the dispatcher below picks.
-function ShinyContent(props) {
-  const { slide, show } = props
-  return (
-    <>
-      {dispatchShinyContent(props)}
-      {isFirstOfShinyGroup(sortSlides(show?.slides), slide) && (
-        <ShinyGroupAnnounce name={slide.data?.shinyFormatName} icon={slide.data?.shinyFormatIcon} />
-      )}
-    </>
-  )
-}
-
+// The announce card is its own permanent 'shiny-title' slide
+// (ShinyTitleSlide.jsx, 2026-09-01), which is a real Next-reachable stop
+// before content (restored 2026-09-09) — no corner-banner re-announce here.
 function dispatchShinyContent({ slide, show, theme, transitionKey, isPreview }) {
   const { data } = slide
   const part = resolveShinyPart(data)
@@ -1526,5 +1512,5 @@ export default function QuestionSlide({ slide, show, transitionKey, isPreview })
   if (!data.isShiny) {
     return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} isPreview={isPreview} />
   }
-  return <ShinyContent slide={slide} show={show} theme={theme} transitionKey={transitionKey} isPreview={isPreview} />
+  return dispatchShinyContent({ slide, show, theme, transitionKey, isPreview })
 }

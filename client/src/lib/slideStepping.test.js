@@ -118,19 +118,19 @@ describe('computeNextStep', () => {
     expect(dataOf(adv, 'a').currentPart ?? 0).toBe(0)
   })
 
-  // 2026-09-07 (shiny-exit-warp Task 3): a forward Next press that WOULD
-  // land on a shiny-title announce slide is a dead stop — the title is a
-  // label, not a destination. Skip one further step onto its first content
-  // sibling instead.
-  it('skips forward past a shiny-title landing onto its first content slide', async () => {
+  // Reverted 2026-09-09: the 2026-09-07 skip treated landing on a
+  // shiny-title slide as a "dead Next press" like the old closing-beat
+  // problem, but it isn't — this is the FIRST time the room sees the title,
+  // not a redundant repeat. Forward Next lands on it like any other slide.
+  it('lands on a shiny-title slide on a forward Next (no skip)', async () => {
     const slides = [
       slide('q1', 0),
       slide('title', 1, 'shiny-title', { shinyGroupId: 'g1' }),
       slide('q2', 2, 'question', { shinyGroupId: 'g1', isShiny: true }),
     ]
     const patch = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'q1' }, noTeams)
-    expect(patch.current_slide_index).toBe(2)
-    expect(patch.current_slide_id).toBe('q2')
+    expect(patch.current_slide_index).toBe(1)
+    expect(patch.current_slide_id).toBe('title')
   })
 
   it('does NOT skip when Next lands on an ordinary slide (no regression)', async () => {
@@ -486,13 +486,16 @@ describe('team-picker auto-roll ownership', () => {
       expect(ownsAutoRoll(cursor, { ...cursor, slideId: 'other', at: 1000 }, 1100)).toBe(false)
     })
 
-    it('never arms outside the auto-roll range, however clear the ownership', () => {
+    it('never arms on the opening or closing text, however clear the ownership', () => {
       const opening = { slideId: 'tp', part: 0, partsLen: 7 }
       const closing = { slideId: 'tp', part: 5, partsLen: 7 }
-      const landed  = { slideId: 'tp', part: 6, partsLen: 7 }
       expect(ownsAutoRoll(opening, { ...opening, at: 1000 }, 1100)).toBe(false)
       expect(ownsAutoRoll(closing, { ...closing, at: 1000 }, 1100)).toBe(false)
-      expect(ownsAutoRoll(landed,  { ...landed,  at: 1000 }, 1100)).toBe(false)
+    })
+
+    it('arms on landed too — Team Intro auto-advances into Team List (2026-09-14)', () => {
+      const landed = { slideId: 'tp', part: 6, partsLen: 7 }
+      expect(ownsAutoRoll(landed, { ...landed, at: 1000 }, 1100)).toBe(true)
     })
 
     it('expires stale ownership so the other window can never re-match it', () => {
@@ -518,9 +521,10 @@ describe('team-picker auto-roll ownership', () => {
         slides = patch.slides
         armed.push(ownsAutoRoll(teamPickerCursor(at(slides)), owned, 1100))
       }
-      // parts 1..4 are the four team names (auto), 5 = closing, 6 = landed;
+      // parts 1..4 are the four team names (auto), 5 = closing (waits for a
+      // real Next), 6 = landed (auto-advances into Team List, 2026-09-14);
       // the 7th press is a no-op (nothing after this slide) and breaks out.
-      expect(armed).toEqual([true, true, true, true, false, false])
+      expect(armed).toEqual([true, true, true, true, false, true])
     })
   })
 })
@@ -754,14 +758,9 @@ describe('shinyDisplay stepping', () => {
     expect(dataOf(back, 'a').currentPart).toBe(2)
   })
 
-  // 2026-09-07 (shiny-exit-warp Task 3): updated from the original "stepping
-  // is plain" version. A forward Next landing on ANY shiny-title slide is
-  // now a dead stop that gets skipped onto its first content sibling — that
-  // rule doesn't carve out an exception for a second series' own title, so
-  // run 1's last content slide now advances straight onto run 2's first
-  // content slide, and t2 is never a Next-reachable destination going
-  // forward (computePrevStep can still land a host on it deliberately).
-  it('two runs of the same format back to back: run 1 advances straight past run 2s own shiny-title', async () => {
+  // Reverted 2026-09-09 along with the skip itself: t2 IS a Next-reachable
+  // stop going forward now, same as t1 was.
+  it('two runs of the same format back to back: each run stops on its own shiny-title', async () => {
     const base = { isShiny: true, isSeries: true, shinyFormatId: 'f1', seriesTheme: 'Same Format' }
     const slides = [
       slide('t1', 0, 'shiny-title', { ...base, shinyGroupId: 'grp_1' }),
@@ -771,7 +770,7 @@ describe('shinyDisplay stepping', () => {
     ]
     let idx = 0
     let cur = slides
-    for (const expectedId of ['a', 'b']) {
+    for (const expectedId of ['a', 't2', 'b']) {
       const patch = await computeNextStep({ slides: cur, currentSlideIndex: idx, currentSlideId: cur[idx].id }, noTeams)
       expect(patch.current_slide_id).toBe(expectedId)
       idx = patch.current_slide_index

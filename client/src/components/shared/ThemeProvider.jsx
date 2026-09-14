@@ -13,15 +13,20 @@ const ThemeContext = createContext(null)
 // default — a host free-picking a text color in ThemeCustomizeControls
 // shouldn't be able to make the question itself unreadable on the TV.
 // `text` was added to the floor 2026-08-26 (host-color-picker audit found it
-// unguarded, unlike textMuted). `highlight`/`accent` stay intentionally
-// unfloored — they're decorative (titles, UI accents), not the copy guests
-// have to actually read to play.
+// unguarded, unlike textMuted). `accent` stays unfloored — it's genuinely
+// decorative (backdrop tints, borders). `highlight` was added 2026-09-14:
+// ScoreboardOverlay.jsx renders the #1 team's name and total SCORE in
+// `highlight` (not decoration — that's the actual number guests are there
+// to see), so a host picking a low-contrast highlight blanked out the
+// leading team's score on the TV (Ben, live show: "the changed color theme
+// blocked out scores").
 function floorReadableColors(colors) {
   const bgs = [colors.bg, colors.bgDeep]
   const flooredText = floorContrast(colors.text, bgs)
   const flooredMuted = floorContrast(colors.textMuted, bgs)
-  if (flooredText === colors.text && flooredMuted === colors.textMuted) return colors
-  return { ...colors, text: flooredText, textMuted: flooredMuted }
+  const flooredHighlight = floorContrast(colors.highlight, bgs)
+  if (flooredText === colors.text && flooredMuted === colors.textMuted && flooredHighlight === colors.highlight) return colors
+  return { ...colors, text: flooredText, textMuted: flooredMuted, highlight: flooredHighlight }
 }
 
 // Exported (2026-08-26) so ThemePickerModal's live preview can use the exact

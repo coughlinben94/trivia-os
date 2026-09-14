@@ -9,6 +9,7 @@ import { ringVisibleStationIndex, ringPeekIndex } from '../lib/ringStationIndex.
 import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
+import LateTeamQrOverlay from '../components/display/LateTeamQrOverlay.jsx'
 import LockCountdownOverlay from '../components/display/LockCountdownOverlay.jsx'
 import JukeboxBreakOverlay from '../components/display/JukeboxBreakOverlay.jsx'
 import WarpTransition from '../components/display/WarpTransition.jsx'
@@ -26,7 +27,9 @@ import {
   cursorAfterStep,
   teamPickerCursor,
   ownsAutoRoll,
+  isLandedPart,
   TEAM_PICKER_HOLD_MS,
+  TEAM_PICKER_LANDED_HOLD_MS,
 } from '../lib/slideStepping.js'
 import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
 
@@ -303,7 +306,7 @@ const isRingVisible = s =>
   s?.type === 'pre-show' || s?.type === 'round-intro' || s?.type === 'swing-round-intro' ||
   s?.type === 'shiny-title'
 
-function PersistentRing({ slideIndex, stationOverride, showStationDebug }) {
+function PersistentRing({ slideIndex, stationOverride, showStationDebug, forceSnap }) {
   const { theme } = useTheme()
   // ParticleBackground's own root is `absolute inset-0` — it needs a sized,
   // positioned ancestor of its own now that it's not nested inside
@@ -317,6 +320,7 @@ function PersistentRing({ slideIndex, stationOverride, showStationDebug }) {
         slideIndex={slideIndex}
         stationOverride={stationOverride}
         showStationDebug={showStationDebug}
+        forceSnap={forceSnap}
       />
     </div>
   )
@@ -738,8 +742,8 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
   const [prevWasShiny, setPrevWasShiny] = useState(() => !!currentSlide?.data?.isShiny)
   if (currentSlide?.id !== prevShinySlideId) {
     // Only fires leaving a shiny slide for a genuinely different slide that
-    // is NOT the standalone announce card (that one gets its own
-    // ShinyGroupAnnounce beat instead of a vortex over a vortex — Task 4).
+    // is NOT the standalone announce card (that one has its own spin/land
+    // entrance — no vortex over a vortex).
     if (prevWasShiny && currentSlide?.type !== 'shiny-title') {
       setShinyWarp('active')
     }
@@ -884,6 +888,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           slideIndex={ringVisibleStationIndex(sortedSlides, ringPeekIndex(sortedSlides, show.current_slide_index ?? 0), isRingVisible)}
           stationOverride={breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null)}
           showStationDebug={isPreview}
+          forceSnap={sortedSlides[show.current_slide_index ?? 0]?.type === 'team-picker'}
         />
       )}
 
@@ -999,6 +1004,9 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
             A crash here should just make the overlay disappear, not the TV. */}
         <ErrorBoundary fallback={null}>
           <ScoreboardOverlay show={show} />
+        </ErrorBoundary>
+        <ErrorBoundary fallback={null}>
+          <LateTeamQrOverlay show={show} />
         </ErrorBoundary>
         {/* "Next locks answers" — the 3-2-1-🔒 ceremony. Mounted unconditionally
             (startedAt falsy renders nothing) so it's always ready the instant
@@ -1270,7 +1278,8 @@ export default function Display() {
       currentSlideId: show.current_slide_id,
     })
     if (!ownsAutoRoll(cursor, ownedCursor)) return
-    const t = setTimeout(() => guardedStep(1), TEAM_PICKER_HOLD_MS)
+    const landed = isLandedPart(cursor.partsLen, cursor.part)
+    const t = setTimeout(() => guardedStep(1), landed ? TEAM_PICKER_LANDED_HOLD_MS : TEAM_PICKER_HOLD_MS)
     return () => clearTimeout(t)
   }, [
     isPreview,
@@ -1771,6 +1780,16 @@ export default function Display() {
                 return ringVisibleStationIndex(sorted, ringPeekIndex(sorted, show.current_slide_index), isRingVisible)
               })()
             : null}
+          // team-picker's own peek-triggered station change (ringPeekIndex
+          // above) always happens while its own black canvas is covering the
+          // ring (skipsLockedBackground) — the audience never sees this one.
+          // A glide (turn()) is a race against that canvas's reveal timing
+          // for no visual benefit; forceSnap makes it an instant jumpTo()
+          // instead, so the ring is simply already sitting at the target
+          // station the moment the sheet wipes away (2026-09-14, Ben, live:
+          // "coming out of the team intro slide, it should already be on
+          // S1, not moving").
+          forceSnap={show.is_live && sortSlides(show.slides)[show.current_slide_index ?? 0]?.type === 'team-picker'}
           {...ringState}
         />
         {show.is_live && show.current_slide_id !== null ? (

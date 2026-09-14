@@ -10,7 +10,7 @@ import { warmYoutubeAudio, claimYoutubeAudio } from '../../../lib/youtubeWarmAud
 // slide so it's not just a one-time pre-show gate. Host can place it as the
 // first slide, or return to it any time (e.g. a late-arriving team scans
 // while the show is already running a round).
-export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
+export default function PreShowSlide({ slide, show, isPreview }) {
   const { theme } = useTheme()
   const [teams, setTeams] = useState([])
   const [qrDataUrl, setQrDataUrl] = useState(null)
@@ -104,11 +104,9 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
             if (step >= FADE_STEPS) {
               clearInterval(fadeTimer)
               ytPlayerRef.current?.pauseVideo()
-              // Walkout song ending is the show's real "go" moment —
-              // advance off Pre-Show automatically right after the
-              // fade completes. Never in preview (would advance the
-              // real live show from the host's preview pane).
-              if (!isPreview) onAdvance?.()
+              // Reverted 2026-09-09 (Ben, live last night: the slide
+              // auto-advanced the instant the song finished — not wanted).
+              // Song just fades out and stops; the host advances manually.
             }
           }, FADE_MS / FADE_STEPS)
           ytWatchIntervalRef.current = fadeTimer
@@ -122,9 +120,8 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
       handle.destroy() // pauses + destroys the hidden body-level iframe
       ytPlayerRef.current = null
     }
-    // isPreview/onAdvance intentionally excluded — both are stable for the
-    // life of one mount (onAdvance is a useCallback from Display.jsx),
-    // re-running this effect on their identity would remount the player.
+    // isPreview intentionally excluded — stable for the life of one mount,
+    // re-running this effect on its identity would remount the player.
   }, [walkoutSong?.videoId, walkoutSong?.start, walkoutSong?.end, walkoutSong?.trigger, walkoutSong?.invoked]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const joinUrl = `${window.location.origin}/join?show=${show.id}`
@@ -222,13 +219,6 @@ export default function PreShowSlide({ slide, show, isPreview, onAdvance }) {
               textAlign: 'center',
               maxWidth: '120px',
             }}>Scan to join</span>
-            <span style={{
-              fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-              fontSize: '0.85rem',
-              color: `${theme.colors.textMuted}aa`,
-              textAlign: 'center',
-              maxWidth: '120px',
-            }}>then turn your phone sideways</span>
           </div>
         </div>
 

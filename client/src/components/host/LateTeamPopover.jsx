@@ -87,7 +87,7 @@ export default function LateTeamPopover({ show, onShowJoinQr, onClose }) {
             className="text-left text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg px-3 py-2"
           >
             📱 Add a new team
-            <span className="block text-xs text-gray-400 font-normal">Shows the join QR on the TV</span>
+            <span className="block text-xs text-gray-400 font-normal">Toggles the join QR on the TV, over whatever's live</span>
           </button>
           <button
             onClick={openTeamPicker}

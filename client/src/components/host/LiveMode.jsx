@@ -11,7 +11,7 @@ import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { computeChoiceScoreUpdates, DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
-import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
+import { isAutoRollPart, isLandedPart, TEAM_PICKER_HOLD_MS, TEAM_PICKER_LANDED_HOLD_MS, pendingLockPhase, pendingReveal, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
 // override for it — every other wager error is a real, unrecoverable-by-
@@ -219,18 +219,6 @@ function UpNextCard({ slide, offset }) {
 
 export default function LiveMode({ show, actions, onExitLive, onThemeChange, onOpenScoreboard, scoreboardModalOpen }) {
   const [lateTeamPopoverOpen, setLateTeamPopoverOpen] = useState(false)
-  // 📱 Late Team's "show join QR" jumps the WHOLE show's current_slide_index
-  // to the pre-show slide — goLiveFrom is a real navigation, broadcast to
-  // every connected phone (Join.jsx's hostIndex effect pulls every phone's
-  // viewedIndex toward it via Math.min, follow-mode or not) and to the TV.
-  // There was previously no way back to the exact position it interrupted —
-  // if the pre-show slide has a walkout song it auto-advances forward once
-  // the song ends, past wherever the round actually was, and otherwise the
-  // host had to manually re-navigate with nothing marking where they'd been
-  // (2026-08-26, phone-suite audit — flagged HIGH, this is likely a real
-  // contributor to "the app desynced/broke" reports). This ref-then-button
-  // just remembers the exact index to snap everyone straight back to.
-  const [preShowReturnIndex, setPreShowReturnIndex] = useState(null)
   const [scorePanelOpen, setScorePanelOpen] = useState(false)
   const [themePickerOpen, setThemePickerOpen] = useState(false)
   const [pylPickerBusy, setPylPickerBusy] = useState(false)
@@ -276,20 +264,6 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     setOrderScoreError(null)
     setChoiceScoreError(null)
   }, [currentSlide?.id])
-  // Jump-to-QR — a late team scans in mid-show. Only shown if the show
-  // actually has a Pre-Show slide; jumps the TV there without touching the
-  // current slide index otherwise (host navigates back manually after).
-  const preShowIndex = slides.findIndex(s => s.type === 'pre-show')
-
-  // If the host leaves the pre-show slide by any OTHER means while
-  // preShowReturnIndex is armed (Prev/Next, Go Live picker, Stream Deck)
-  // rather than the Resume button, drop the stale target — clicking Resume
-  // afterward must not snap the show backward over navigation the host
-  // already did on purpose.
-  useEffect(() => {
-    if (preShowReturnIndex != null && currentIndex !== preShowIndex) setPreShowReturnIndex(null)
-  }, [currentIndex, preShowIndex, preShowReturnIndex])
-
   // Which phone-scored mechanic (if any) this slide is — the ONE lookup the
   // lock/score control panel and the scoreboard-modal gate below both key off,
   // derived from PHONE_MECHANICS rather than four hand-written isXShiny calls.
@@ -801,8 +775,9 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     // slideStepping.js) so this component can't drift from it.
     const partsLen = currentSlide.data?.parts?.length ?? 0
     const curPart = currentSlide.data?.currentPart ?? 0
-    if (!isAutoRollPart(partsLen, curPart)) return
-    const t = setTimeout(() => guardNav(actionsRef.current.nextSlide), TEAM_PICKER_HOLD_MS)
+    const landed = isLandedPart(partsLen, curPart)
+    if (!isAutoRollPart(partsLen, curPart) && !landed) return
+    const t = setTimeout(() => guardNav(actionsRef.current.nextSlide), landed ? TEAM_PICKER_LANDED_HOLD_MS : TEAM_PICKER_HOLD_MS)
     return () => clearTimeout(t)
   }, [
     currentSlide?.type,
@@ -1121,36 +1096,26 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
             Edit
           </button>
           <NavButton onClick={handlePrevClick} disabled={atStart} label="◀ Prev" title="Previous (←)" />
-          {preShowIndex !== -1 && (
-            <div className="relative">
-              <button
-                onClick={() => setLateTeamPopoverOpen(v => !v)}
-                title="A team showed up late — add them as new, or reauth a phone that lost its session"
-                className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                📱 Late Team
-              </button>
-              {lateTeamPopoverOpen && (
-                <LateTeamPopover
-                  show={show}
-                  onShowJoinQr={() => {
-                    setPreShowReturnIndex(currentIndex)
-                    actions.goLiveFrom(preShowIndex)
-                  }}
-                  onClose={() => setLateTeamPopoverOpen(false)}
-                />
-              )}
-            </div>
-          )}
-          {preShowReturnIndex != null && (
+          <div className="relative">
             <button
-              onClick={() => { actions.goLiveFrom(preShowReturnIndex); setPreShowReturnIndex(null) }}
-              title="Jump the show (and every phone) back to where it was before showing the join QR"
-              className="flex items-center gap-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded-lg transition-colors"
+              onClick={() => setLateTeamPopoverOpen(v => !v)}
+              title="A team showed up late — add them as new, or reauth a phone that lost its session"
+              className={`flex items-center gap-1.5 text-sm font-medium px-2 py-1 rounded-lg transition-colors ${
+                show.showState.lateTeamQrVisible
+                  ? 'bg-green-500 text-white hover:bg-green-600'
+                  : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
+              }`}
             >
-              ▶ Resume Round
+              📱 Late Team
             </button>
-          )}
+            {lateTeamPopoverOpen && (
+              <LateTeamPopover
+                show={show}
+                onShowJoinQr={() => actions.setLateTeamQrVisible(!show.showState.lateTeamQrVisible)}
+                onClose={() => setLateTeamPopoverOpen(false)}
+              />
+            )}
+          </div>
         </div>
 
         {/* Center: slide counter + answer-live badge */}

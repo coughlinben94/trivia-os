@@ -2,9 +2,6 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
-import { isFirstOfShinyGroup } from '../../../lib/shinySeries.js'
-import { sortSlides } from '../../../lib/slideStepping.js'
-import ShinyGroupAnnounce from '../ShinyGroupAnnounce.jsx'
 
 // Circle only renders when this PERSON has a photo (not per-side) — a mixed
 // side (some photos, some text-only) shows a circle just for the ones who
@@ -41,21 +38,12 @@ function CastPhoto({ person, i, reduce, size, font, maxW }) {
   )
 }
 
-// The announce card is its own permanent 'shiny-title' slide now
-// (ShinyTitleSlide.jsx, 2026-09-01) — no introDone swap here. Also mounts
-// ShinyGroupAnnounce (final-review fix) — venn is a real, independent shiny
-// content type same as grid/question, but was out of scope for the task
-// that added the announce beat, so it never got mounted here.
-export default function VennDiagramSlide({ slide, show }) {
+// The announce card is its own permanent 'shiny-title' slide
+// (ShinyTitleSlide.jsx, 2026-09-01), which is a real Next-reachable stop
+// before content (restored 2026-09-09) — no corner-banner re-announce here.
+export default function VennDiagramSlide({ slide }) {
   const { theme } = useTheme()
-  return (
-    <>
-      <VennContent slide={slide} theme={theme} />
-      {isFirstOfShinyGroup(sortSlides(show?.slides), slide) && (
-        <ShinyGroupAnnounce name={slide.data?.shinyFormatName} icon={slide.data?.shinyFormatIcon} />
-      )}
-    </>
-  )
+  return <VennContent slide={slide} theme={theme} />
 }
 
 // Two overlapping circles, N cast entries (2-6, host's choice) biased toward

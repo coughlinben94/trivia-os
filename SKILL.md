@@ -271,7 +271,7 @@ Round object stamped: `{ roundType, roundNumber?, subtitle, title }`
 
 | Type | Component | Key data fields |
 |---|---|---|
-| `pre-show` | PreShowSlide | walkoutSong ({videoId, start, end}, optional) — QR-join + live team count, the same screen the show shows automatically before it goes live (`Display.jsx`'s `PreShowScreen`), now also a real placeable/revisitable slide. Auto-advances to the next slide when the walkout song's fade-out completes (never in preview). Added 2026-08-16. |
+| `pre-show` | PreShowSlide | walkoutSong ({videoId, start, end}, optional) — QR-join + live team count, the same screen the show shows automatically before it goes live (`Display.jsx`'s `PreShowScreen`), now also a real placeable/revisitable slide. Added 2026-08-16. Song fades out and stops on its own; does NOT auto-advance the slide (removed 2026-09-09 — Ben: unwanted live) — host advances manually. |
 | `title` | TitleSlide | title, subtitle |
 | `state-of-union` | StateOfUnionSlide | text, hostPhotoUrl |
 | `round-intro` | RoundIntroSlide | roundNumber, roundTitle, subtitle, roundType, hostPhotoUrl |

@@ -1229,7 +1229,7 @@ if (import.meta.env.DEV) {
 }
 
 // ─── Main Export ──────────────────────────────────────────────────────────
-export default function ParticleBackground({ theme, slideIndex, stationOverride, showStationDebug = false }) {
+export default function ParticleBackground({ theme, slideIndex, stationOverride, showStationDebug = false, forceSnap = false }) {
   const gradientMood = GRADIENT_MOODS[theme.id]
   const AmbientComponent = gradientMood ? null : AMBIENT_MAP[theme.id]
   // The ring world is FROZEN at mount. RingAmbient builds its DOM once and
@@ -1282,7 +1282,7 @@ export default function ParticleBackground({ theme, slideIndex, stationOverride,
           {gradientMood
             ? <BreathingGradient palette={theme.colors} mood={gradientMood} />
             : ringWorld
-              ? <RingAmbient worldData={ringWorld} slideIndex={slideIndex} stationOverride={stationOverride} showStationDebug={showStationDebug} />
+              ? <RingAmbient worldData={ringWorld} slideIndex={slideIndex} stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap} />
               : AmbientComponent && <AmbientComponent tint={tint} />}
         </ErrorBoundary>
         <Vignette

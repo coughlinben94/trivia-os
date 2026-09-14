@@ -214,13 +214,38 @@ export async function bakeTeamPickerParts(slides, slide, fetchTeamCount) {
 //   0            opening text   — waits for ONE explicit Next to start the roll
 //   1..len-3     team names     — auto-roll, no press per name
 //   len-2        closing text   — the roll lands here and STOPS, waits for Next
-//   len-1        landed         — ring-world reveal, then one more Next leaves
-// So part 0 is excluded (it would rob the host of the start press) and both
-// closing parts are excluded (they would blow past the closing statement and
-// the reveal). A zero-team roster bakes len 3, which yields an empty range.
+//   len-1        landed         — ring-world reveal, then AUTO-advances (see
+//                                  isLandedPart/TEAM_PICKER_LANDED_HOLD_MS below)
+// So part 0 is excluded (it would rob the host of the start press) and the
+// closing text is excluded (it would blow past the closing statement). A
+// zero-team roster bakes len 3, which yields an empty range.
 export function isAutoRollPart(partsLen, curPart) {
   return curPart >= 1 && curPart <= partsLen - 3
 }
+
+// The landed part is a SEPARATE auto-advance case from isAutoRollPart above,
+// not folded into its range: it needs a different, longer hold (the ring
+// reveal itself takes a couple seconds) and it's the step that actually
+// LEAVES team-picker, not one that rolls within it. Team Intro and Team List
+// are meant to read as one continuous beat, not two host-operated slides
+// (2026-09-14, Ben, live: "its like team intro and team list slides are
+// wrapped into one. cant have one without the other" / "the team list should
+// appear on S1 without me having to press next" — supersedes the 2026-08-24
+// "one more Next leaves" note above). ownsAutoRoll below recognizes this part
+// too, so the same single-driving-window ownership rule covers it.
+export function isLandedPart(partsLen, curPart) {
+  return partsLen > 0 && curPart === partsLen - 1
+}
+
+// How long the ring-world reveal (star-field decay + the black-sheet wipe,
+// TeamPickerSlide.jsx's `settled`/REVEAL_S) needs before it's actually
+// finished, so the auto-advance off `landed` doesn't cut the reveal off
+// mid-wipe. ~2.3s by the reveal's own math (SETTLED_WARP decay ≈1.4s once
+// covered + REVEAL_S 0.85s wipe) plus a beat of margin so the room can
+// actually register the reveal before the list appears. First-pass number,
+// same as TEAM_PICKER_HOLD_MS — retune here if it needs to feel faster/slower
+// once watched on the real TV.
+export const TEAM_PICKER_LANDED_HOLD_MS = 3000
 
 // How long each team-picker TEAM NAME holds before auto-rolling to the next.
 // Lived in LiveMode.jsx until /display grew its own copy of the timer (see
@@ -297,7 +322,7 @@ export function cursorAfterStep(show, patch, now = Date.now()) {
 // no coordination between them beyond the Supabase writes they already do.
 export function ownsAutoRoll(cursor, owned, now = Date.now()) {
   if (!cursor || !owned) return false
-  if (!isAutoRollPart(cursor.partsLen, cursor.part)) return false
+  if (!isAutoRollPart(cursor.partsLen, cursor.part) && !isLandedPart(cursor.partsLen, cursor.part)) return false
   if (cursor.slideId !== owned.slideId || cursor.part !== owned.part) return false
   return now - (owned.at ?? 0) <= AUTO_ROLL_OWNERSHIP_MAX_AGE_MS
 }
@@ -485,17 +510,13 @@ export async function computeNextStep(show, fetchTeamCount) {
   // render an outro, the beat had become a dead Next press for the host.
   let target = Math.min(cur + 1, sorted.length - 1)
   if (target === cur) return null
-  // A shiny-title slide is never a real stop when arrived at going FORWARD —
-  // see the "closing beat" history note above: a dead Next press here was
-  // already fought and removed once (2026-09-01). Its first content slide is
-  // guaranteed to exist immediately after it (buildShinyTitleSlide/
-  // withShinyTitleSlide always insert the title as slides[0] of its group,
-  // content following), so target+1 is always safe. Going BACKWARD
-  // (computePrevStep, unchanged) still lands on the title on purpose — a host
-  // revisiting a shiny series intentionally is a different action.
-  if (sorted[target]?.type === 'shiny-title' && target + 1 < sorted.length) {
-    target = target + 1
-  }
+  // A shiny-title slide IS a real stop going forward (reverted 2026-09-09 —
+  // the 2026-09-01 skip-it/replace-with-a-corner-banner design was made
+  // without Ben's input and was wrong for how he actually hosts: he needs a
+  // real pause on the announce card to explain the format to the room before
+  // content appears. Next lands here like any other slide; the next Next
+  // steps into its first content sibling via the plain "shiny-title is a
+  // plain slide" branch above.
   const targetSlide = sorted[target]
   const bakedSlides = await bakeTeamPickerParts(slides, targetSlide, fetchTeamCount)
   const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === targetSlide?.id) ?? targetSlide, { currentPart: 0 })
