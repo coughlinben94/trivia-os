@@ -1,17 +1,17 @@
-import { useState, useEffect, useRef } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
-import { supabase } from '../../../lib/supabase.js'
-import { getHuesCuesGrid, getHuesCuesCell, HUES_CUES_COLS, HUES_CUES_ROWS } from '../../../lib/huesCuesGrid.js'
+import { useReducedMotion } from 'framer-motion'
+import { getHuesCuesCell } from '../../../lib/huesCuesGrid.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT, EASE_DROP } from '../../../lib/easings.js'
-import { useFitToBox, WAGER_Q_FLOOR, WAGER_Q_CEIL } from '../../../lib/autoFitText.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 
 // The TV side of Hues and Cues. Mirrors ShinyWagerQuestion's beat structure
-// (waiting -> locked -> reveal), minus wager's separate blind-tier phase —
-// hues-cues has one guess, no tiers, so the clue + grid are up from the
-// first frame:
-//   1. Waiting  — clue + full color grid, teams guessing on their phones.
+// (waiting -> locked -> reveal), minus wager's separate blind-tier phase:
+//   1. Waiting  — clue text only. The color grid + pan/zoom picker live on
+//      the phone (Task 5) — that's the priority surface for this mechanic
+//      (Ben, 2026-09-14: "the phone display is the a1 priorityy" / "its
+//      where i display the question"), so the TV just shows the clue the
+//      same generic way it does for every other slide type. No grid, no
+//      submitted-count polling here.
 //   2. Locked   — held after "lock guesses" until the host presses A to reveal.
 //   3. Reveal   — the answer code, then its swatch, then who was close.
 export default function ShinyHuesCuesQuestion({ slide, show, theme }) {
@@ -19,36 +19,7 @@ export default function ShinyHuesCuesQuestion({ slide, show, theme }) {
   const locked = !!data.huesCuesLocked
   const revealed = !!data.huesCuesRevealed
   const shouldReduceMotion = useReducedMotion()
-  const grid = getHuesCuesGrid()
 
-  const [submittedCount, setSubmittedCount] = useState(0)
-  const [teamCount, setTeamCount] = useState(0)
-
-  // Polled, not realtime — same reasoning ShinyChoiceQuestion/ShinyWagerQuestion
-  // document: /display is anonymous, phone_answers' SELECT policy never opens
-  // to it, so phone_answers_count(slide_id) is the generic SECURITY DEFINER
-  // count every phone-scored mechanic reuses.
-  useEffect(() => {
-    if (locked || revealed) return
-    let cancelled = false
-    async function load() {
-      const { data: count } = await supabase.rpc('phone_answers_count', { p_slide_id: slide.id })
-      if (!cancelled) setSubmittedCount(count ?? 0)
-    }
-    load()
-    const interval = setInterval(load, 2000)
-    return () => { cancelled = true; clearInterval(interval) }
-  }, [slide.id, locked, revealed])
-
-  useEffect(() => {
-    if (!show?.id || revealed) return
-    let cancelled = false
-    supabase.from('teams').select('id', { count: 'exact', head: true }).eq('show_id', show.id)
-      .then(({ count }) => { if (!cancelled) setTeamCount(count ?? 0) })
-    return () => { cancelled = true }
-  }, [show?.id, revealed])
-
-  const displayFont = `'${theme.fonts.display}', 'Boogaloo', sans-serif`
   const bodyFont = `'${theme.fonts.body}', 'DM Sans', sans-serif`
 
   if (revealed) {
@@ -60,69 +31,13 @@ export default function ShinyHuesCuesQuestion({ slide, show, theme }) {
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       width: '100%', height: '100%', padding: '2rem 3rem', gap: '1.25rem', overflow: 'hidden',
     }}>
-      <ClueText text={data.text} theme={theme} displayFont={displayFont} />
-
-      {/* flex:1 + minHeight:0 lets the grid claim whatever vertical room the
-          clue/status rows leave, and the aspect-ratio (matching the real
-          16-col x 15-row shape) keeps it from stretching taller than its
-          own width would allow — a fixed maxWidth alone (the brief's
-          original approach) sized the grid at 900x844 regardless of
-          available height and clipped off the bottom rows. */}
-      <div style={{ flex: '1 1 auto', minHeight: 0, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${HUES_CUES_COLS}, 1fr)`,
-          gridTemplateRows: `repeat(${HUES_CUES_ROWS}, 1fr)`,
-          gap: 2,
-          height: '100%', maxHeight: '100%',
-          aspectRatio: `${HUES_CUES_COLS} / ${HUES_CUES_ROWS}`,
-          maxWidth: '100%',
-        }}>
-          {grid.map(cell => (
-            <div key={cell.code} style={{ background: cell.hex, borderRadius: 2 }} />
-          ))}
-        </div>
-      </div>
-
-      {locked ? (
-        <AnswersLockedBadge theme={theme} />
-      ) : (
-        <motion.p
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3, ease: EASE_OUT }}
-          style={{ margin: 0, color: `${theme.colors.text}70`, fontSize: '1.35rem', fontFamily: bodyFont, flexShrink: 0 }}
-        >
-          {teamCount > 0 ? `${submittedCount} of ${teamCount} teams guessed` : `${submittedCount} team${submittedCount === 1 ? '' : 's'} guessed`}
-        </motion.p>
+      {data.text && (
+        <p style={{ margin: 0, textAlign: 'center', maxWidth: 1200, fontFamily: bodyFont, fontSize: '1.4rem', lineHeight: 1.35, color: `${theme.colors.text}80` }}>
+          {data.text}
+        </p>
       )}
-    </div>
-  )
-}
 
-// Same measure-to-fit pattern ShinyChoiceQuestion/ShinyWagerQuestion's own
-// QuestionText use: a fixed-box ref div (useFitToBox measures the REF's own
-// clientWidth/Height, not the text node's — the brief's version put the ref
-// directly on the <p>, which has no fixed box to measure against and would
-// have fed the hook a moving target) sized to a real on-screen region, with
-// floor/ceil in px (the *_FLOOR/*_CEIL constants are rem — every other call
-// site multiplies by 16, the brief's own bare WAGER_Q_FLOOR/CEIL would have
-// asked for an unreadable ~2px floor). family is the bare font name, not
-// the quoted fallback-stack string — fitToBox builds its own `"${family}"`
-// canvas font string internally.
-function ClueText({ text, theme, displayFont }) {
-  const boxRef = useRef(null)
-  const size = useFitToBox(boxRef, text ?? '', {
-    family: theme.fonts.display,
-    floorPx: WAGER_Q_FLOOR * 16,
-    ceilPx: WAGER_Q_CEIL * 16,
-    maxLines: 3,
-    lineHeight: 1.15,
-  })
-  if (!text) return null
-  return (
-    <div ref={boxRef} style={{ width: '100%', maxWidth: 1300, height: '22vh', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <p style={{ margin: 0, textAlign: 'center', fontFamily: displayFont, fontSize: `${size}px`, lineHeight: 1.15, color: theme.colors.text }}>
-        {text}
-      </p>
+      {locked && <AnswersLockedBadge theme={theme} />}
     </div>
   )
 }
