@@ -42,7 +42,7 @@ describe('<FlipEmDownSlide>', () => {
   const render = slide => act(() => {
     root.render(
       <ThemeProvider>
-        <FlipEmDownSlide slide={slide} />
+        <FlipEmDownSlide slide={slide} show={undefined} />
       </ThemeProvider>
     )
   })
@@ -70,5 +70,37 @@ describe('<FlipEmDownSlide>', () => {
     expect(container.textContent).toContain('SNL cast member.')
     expect(container.textContent).toContain('Born in Illinois.')
     expect(container.textContent).toContain('Final spoken clue.')
+  })
+
+  it('applies grayscale filter to eliminated face cards at elimStep 1', () => {
+    render(makeSlide({ elimStep: 1 }))
+
+    // At elimStep 1 with survivors = ['id0', 'id1', 'id2', 'id3'],
+    // indices 4-7 should be eliminated
+    let eliminatedCount = 0
+    let survivingCount = 0
+
+    for (let i = 0; i < 8; i++) {
+      const label = `Face ${i}`
+      // Find the span with this label
+      const labelSpan = Array.from(container.querySelectorAll('span')).find(el => el.textContent.trim() === label)
+      expect(labelSpan).toBeTruthy()
+
+      // Get the parent div (FaceCard - motion.div)
+      const faceCard = labelSpan.parentElement
+      const hasGrayscale = faceCard?.style.filter?.includes('grayscale')
+
+      const isAlive = i < 4
+      if (isAlive) {
+        expect(hasGrayscale).toBeFalsy()
+        survivingCount++
+      } else {
+        expect(hasGrayscale).toBeTruthy()
+        eliminatedCount++
+      }
+    }
+
+    expect(eliminatedCount).toBe(4)
+    expect(survivingCount).toBe(4)
   })
 })

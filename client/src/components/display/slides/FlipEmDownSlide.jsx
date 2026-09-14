@@ -2,6 +2,9 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
+import { isFirstOfShinyGroup } from '../../../lib/shinySeries.js'
+import { sortSlides } from '../../../lib/slideStepping.js'
+import ShinyGroupAnnounce from '../ShinyGroupAnnounce.jsx'
 
 // Alive/eliminated state for one item at the current elimStep. Step 0 = grid
 // only, nobody eliminated yet. Steps 1-2 apply hints[0]/hints[1].survivors.
@@ -42,9 +45,9 @@ function FaceCard({ item, alive, confirmed, size }) {
   )
 }
 
-export default function FlipEmDownSlide({ slide }) {
+export default function FlipEmDownSlide({ slide, show }) {
   const { theme } = useTheme()
-  useReducedMotion() // FaceCard's opacity/scale-only animation is already reduced-motion-safe; no branch needed, keeping the hook call for future divergence would be premature — read once here so a future rotate/translate addition doesn't forget the gate.
+  const reduce = useReducedMotion()
   const { data } = slide
   const items = Array.isArray(data.items) ? data.items : []
   const step = data.elimStep ?? 0
@@ -52,34 +55,39 @@ export default function FlipEmDownSlide({ slide }) {
   const size = 190
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 28 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18 }}>
-        {items.map(item => (
-          <FaceCard
-            key={item.id}
-            item={item}
-            alive={isAlive(item.id, data)}
-            confirmed={step >= 2 && isAlive(item.id, data)}
-            size={size}
-          />
-        ))}
-      </div>
-      <div style={{ minHeight: 90, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
-        <AnimatePresence mode="popLayout">
-          {revealedHints.map((hint, i) => (
-            <motion.p
-              key={i}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.22, ease: EASE_OUT }}
-              style={{
-                color: theme.colors.text, fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-                fontSize: '1.4rem', fontWeight: 600, textShadow: '0 2px 8px rgba(0,0,0,0.6)', margin: 0,
-              }}
-            >{hint.text}</motion.p>
+    <>
+      <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 28 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18 }}>
+          {items.map(item => (
+            <FaceCard
+              key={item.id}
+              item={item}
+              alive={isAlive(item.id, data)}
+              confirmed={step >= 2 && isAlive(item.id, data)}
+              size={size}
+            />
           ))}
-        </AnimatePresence>
+        </div>
+        <div style={{ minHeight: 90, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+          <AnimatePresence mode="popLayout">
+            {revealedHints.map((hint, i) => (
+              <motion.p
+                key={i}
+                initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22, ease: EASE_OUT }}
+                style={{
+                  color: theme.colors.text, fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
+                  fontSize: '1.4rem', fontWeight: 600, textShadow: '0 2px 8px rgba(0,0,0,0.6)', margin: 0,
+                }}
+              >{hint.text}</motion.p>
+            ))}
+          </AnimatePresence>
+        </div>
       </div>
-    </div>
+      {isFirstOfShinyGroup(sortSlides(show?.slides), slide) && (
+        <ShinyGroupAnnounce name={slide.data?.shinyFormatName} icon={slide.data?.shinyFormatIcon} />
+      )}
+    </>
   )
 }
