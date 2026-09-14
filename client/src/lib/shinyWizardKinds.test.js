@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { FIXED_SHAPE_KINDS, buildGridSlide, buildVennSlide, buildElimSlide } from './shinyWizardKinds.jsx'
+import { FIXED_SHAPE_KINDS, buildGridSlide, buildVennSlide, buildElimSlide, buildRaceSlide } from './shinyWizardKinds.jsx'
 
 const baseFmt = { id: 'fmt_1', name: 'Test Format', icon: '✨' }
 
 describe('FIXED_SHAPE_KINDS registry', () => {
-  it('has exactly the nine known fixed-shape kinds', () => {
-    expect(Object.keys(FIXED_SHAPE_KINDS).sort()).toEqual(['bendle', 'choice', 'elimination', 'grid', 'hues-cues', 'matching', 'order', 'venn', 'wager'])
+  it('has exactly the ten known fixed-shape kinds', () => {
+    expect(Object.keys(FIXED_SHAPE_KINDS).sort()).toEqual(['bendle', 'choice', 'elimination', 'grid', 'hues-cues', 'matching', 'order', 'race', 'venn', 'wager'])
   })
 
   it('matching/wager/order/choice have no own controls or builder — they fall through to the generic flat-asset path', () => {
@@ -197,5 +197,56 @@ describe('buildElimSlide', () => {
     const result = buildElimSlide({ qNum: 1, roundId: 'r', afterId: 'a', selectedShinyFmt: { id: 'fmt_1', name: 'X', icon: '🫥' } })
     const ids = result.data.items.map(i => i.id)
     expect(new Set(ids).size).toBe(8)
+  })
+})
+
+describe('buildRaceSlide', () => {
+  it('builds a race slide with 4 blank contenders, 10 blank beats, format metadata', () => {
+    const result = buildRaceSlide({
+      qNum: 7,
+      roundId: 'round_1',
+      afterId: 'slide_before',
+      selectedShinyFmt: { id: 'fmt_1', name: 'And They\'re Off!', icon: '🏇' },
+      shinyQuestion: '  Who wins the Kentucky Derby?  ',
+      shinyAnswer: '',
+    })
+    expect(result.type).toBe('horse-race')
+    expect(result.roundId).toBe('round_1')
+    expect(result.afterSlideId).toBe('slide_before')
+    expect(result.data.questionNumber).toBe(7)
+    expect(result.data.questionLabel).toBe('Q7')
+    expect(result.data.questionMode).toBe('shiny')
+    expect(result.data.isShiny).toBe(true)
+    expect(result.data.shinyFormatId).toBe('fmt_1')
+    expect(result.data.shinyFormatName).toBe('And They\'re Off!')
+    expect(result.data.shinyFormatIcon).toBe('🏇')
+    expect(result.data.text).toBe('Who wins the Kentucky Derby?')
+    expect(result.data.contenders).toHaveLength(4)
+    result.data.contenders.forEach((c) => {
+      expect(c.id).toBeTruthy()
+      expect(c.name).toBe('')
+      expect(c.imageUrl).toBeNull()
+    })
+    expect(result.data.beats).toHaveLength(10)
+    result.data.beats.forEach((b) => expect(b.values).toEqual([0, 0, 0, 0]))
+    expect(result.data.raceStartedAt).toBeNull()
+    expect(result.data.answer).toBe('')
+  })
+
+  it('has hasOwnControls: false', () => {
+    expect(FIXED_SHAPE_KINDS.race.hasOwnControls).toBe(false)
+  })
+
+  it('gives every contender a distinct id', () => {
+    const result = buildRaceSlide({
+      qNum: 1,
+      roundId: 'r',
+      afterId: 'a',
+      selectedShinyFmt: { id: 'fmt_1', name: 'X', icon: '🏇' },
+      shinyQuestion: '',
+      shinyAnswer: '',
+    })
+    const ids = result.data.contenders.map(c => c.id)
+    expect(new Set(ids).size).toBe(4)
   })
 })

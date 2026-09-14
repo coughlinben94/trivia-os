@@ -344,6 +344,18 @@ describe('withEntryState', () => {
     const out = withEntryState([s], s, { currentPart: 0 })
     expect(out[0].data.currentPart).toBe(0)
   })
+
+  it('clears raceStartedAt on fresh forward entry into a horse-race slide', () => {
+    const s = slide('a', 0, 'horse-race', { raceStartedAt: 12345 })
+    const fresh = withEntryState([s], s, { currentPart: 0 })
+    expect(fresh[0].data.raceStartedAt).toBeNull()
+  })
+
+  it('preserves raceStartedAt on a protected re-entry into a horse-race slide', () => {
+    const s = slide('a', 0, 'horse-race', { raceStartedAt: 12345 })
+    const reentry = withEntryState([s], s, { currentPart: 0, protectInProgress: true })
+    expect(reentry[0].data.raceStartedAt).toBe(12345)
+  })
 })
 
 describe('bakeTeamPickerParts', () => {

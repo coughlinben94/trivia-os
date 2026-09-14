@@ -259,8 +259,16 @@ state, no Framer Motion on the lanes.
   changed, from "% along a straight" to "% of one lap".)
 - Convert each stop's fraction to an angle: `θ_i[k] = -90 - f_i[k] × 360`
   (degrees). Emit one keyframe block per lane: stop `0%` at
-  `translate(calc(cos(-90deg) × 50%), calc(sin(-90deg) × 50%)) scaleX(1)`
-  (the gate position, top of the ellipse), then stop `(k / N) × 100%` at
+  `translate(calc(cos(-90deg) × 50%), calc(sin(-90deg) × 50%))
+  scaleX(-1)` (the gate position, top of the ellipse — **the gate's flip
+  is `-1`, not `1`**: `sin(-90°) < 0`, so the general flip rule below
+  already puts the gate on the mirrored side. Task 1's `raceMath.js`
+  ruled on this explicitly — `keyframeStops()`'s own `stops[0].flip` is
+  `true` — and Task 4's review caught an earlier draft of this renderer
+  hardcoding the gate to `scaleX(1)`, which faced every horse backward at
+  the start and squashed them through zero width on the first beat. Always
+  read the gate's flip from the formula/from `stops[0]`, never hardcode
+  it), then stop `(k / N) × 100%` at
   `translate(calc(cos(θ_i[k]) × 50%), calc(sin(θ_i[k]) × 50%))
   scaleX(${sin(θ_i[k]) < 0 ? -1 : 1})` for each beat — CSS `calc()` with
   `cos()`/`sin()` trig functions (Baseline 2023, fine for the show's
@@ -303,6 +311,62 @@ state, no Framer Motion on the lanes.
   caption shows the last label. The race is skipped, the standings are not.
   (Critical Rule 3; `useReducedMotion()` for the Framer one-shot, the media
   query for the CSS.)
+
+### Cinematic treatment (Ben, 2026-09-14: "this is supposed to be as
+cinematic as it gets")
+
+Four additions on top of the base race, all computed in `RaceSlide.jsx`
+from `raceMath.js`'s existing output — **`raceMath.js` itself does not
+change** (it's already implemented and reviewed; these are a rendering-layer
+remap of its `percent` values plus three new visual layers, not a new data
+contract):
+
+1. **Photo-finish slow motion.** The final beat's leg plays at
+   `FINISH_SLOWMO_MS = BEAT_MS × 2.5` (≈1750 ms at the default 700 ms pace)
+   instead of one ordinary beat's worth of time — every earlier beat keeps
+   its normal `BEAT_MS` pace untouched. Computed locally in `RaceSlide.jsx`,
+   not in `raceMath.js`: let `N` = beat count,
+   `TOTAL_MS = (N - 1) × BEAT_MS + FINISH_SLOWMO_MS`; for stop `k < N`,
+   `percentCinematic[k] = (k × BEAT_MS) / TOTAL_MS × 100`; for the final
+   stop (`k = N`), `percentCinematic[N] = 100`. Use `percentCinematic`
+   instead of `keyframeStops()`'s raw `percent` field when emitting the
+   `@keyframes` text and set `animation-duration: ${TOTAL_MS}ms` (not
+   `N × BEAT_MS`) — everything else about the stop (`angleDeg`, `flip`,
+   translate math) is untouched. The effect: the pack runs at normal pace,
+   then the last leg to the line visibly stretches out — an actual photo
+   finish, not a data reveal.
+2. **Camera push-in.** A `scale()` keyframe on the **track container**
+   (the ancestor wrapping all 4 lane wrappers + the finish line — NOT the
+   individual lane wrappers, whose own `translate(%)` math must stay
+   relative to their own unscaled bounding box). Holds `scale(1)` through
+   `75%` of `TOTAL_MS`, eases to `scale(1.06)` by `100%` with `EASE_BAR`,
+   `transform-origin: center`. Scaling an ancestor scales every descendant
+   proportionally, so this reads as the whole track being pushed toward
+   camera into the finish — one extra `@keyframes` block, still
+   `transform`-only.
+3. **Dust/speed trail.** A second sprite element per lane, behind the main
+   sprite in z-order (`opacity: 0.3`, static `filter: blur(3px)` — a
+   *static* filter is fine under Critical Rule 2, only *animating* filter is
+   banned), driven by its own `@keyframes` using the SAME `percentCinematic`
+   timing and the same angle formula, but evaluated at a lagging fraction:
+   `f_trail[k] = max(0, f_i[k] - TRAIL_LAG)` with `TRAIL_LAG = 0.035` (3.5%
+   of a lap behind the real sprite). Visible only while running — `opacity:
+   0` at the gate and after the finish, `prefers-reduced-motion` omits this
+   layer entirely (it's a flourish, not standings-bearing information).
+4. **Finish vignette pulse.** One additional `motion.div` sibling to the
+   existing winner-name-slam one-shot (same `animationend`-triggered
+   moment, same Framer Motion usage the spec already allows for that
+   one-shot) — a full-bleed radial-gradient dark overlay animating opacity
+   `[0, 0.35, 0]` over ~500 ms, punctuating the slam rather than replacing
+   any of it. Static gradient shape, only `opacity` animates.
+
+All four respect the existing reduced-motion contract: under
+`prefers-reduced-motion`, the slow-mo remap, camera push-in, and dust trail
+are simply never rendered (the base reduced-motion behavior — instant final
+standings — already skips all track animation), and the vignette pulse
+degrades to the same opacity-only entrance the winner slam already uses.
+None of the four introduce a new animated property beyond `transform`/
+`opacity`, and none change what `raceMath.js` returns or its test coverage.
 
 ### Seek (why `raceStartedAt` is a timestamp)
 

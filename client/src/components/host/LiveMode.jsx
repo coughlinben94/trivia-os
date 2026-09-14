@@ -1249,6 +1249,34 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
               </button>
             </div>
           )}
+          {currentSlide?.type === 'horse-race' && (
+            <div className="flex items-center gap-1 ml-1">
+              <button
+                onClick={() =>
+                  actions.updateSlide(currentSlide.id, {
+                    data: { ...currentSlide.data, raceStartedAt: Date.now() },
+                  })
+                }
+                disabled={Boolean(currentSlide.data?.raceStartedAt)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors bg-baynes-forest text-white hover:bg-green-900 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Start the race"
+              >
+                🏁 Start Race
+              </button>
+              <button
+                onClick={() =>
+                  actions.updateSlide(currentSlide.id, {
+                    data: { ...currentSlide.data, raceStartedAt: null },
+                  })
+                }
+                disabled={!currentSlide.data?.raceStartedAt}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Reset the race"
+              >
+                ↺ Reset
+              </button>
+            </div>
+          )}
           {onOpenScoreboard && (
             <button
               onClick={onOpenScoreboard}

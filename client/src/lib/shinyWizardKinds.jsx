@@ -29,6 +29,7 @@ export const FIXED_SHAPE_KINDS = {
   venn:        { hasOwnControls: true, extraControls: vennExtraControls, buildSlideData: buildVennSlide },
   bendle:      { hasOwnControls: true, extraControls: bendleExtraControls, buildSlideData: buildBendleSlide },
   elimination: { hasOwnControls: false, buildSlideData: buildElimSlide },
+  race:        { hasOwnControls: false, buildSlideData: buildRaceSlide },
 }
 
 // ── Grid ───────────────────────────────────────────────────────────────────
@@ -272,4 +273,33 @@ export function buildBendleSlide(ctx) {
     },
   }))
   return { afterSlideId: ctx.afterId, slides }
+}
+
+// ── Race ("And They're Off!") ──────────────────────────────────────────────
+// Fixed shape, always: 4 blank contenders, 10 blank beats. No host "how many"
+// step — hasOwnControls: false, no extraControls — the wizard goes straight
+// from picking the format to creating this blank slide. Contenders, beats, and
+// race state are authored entirely afterward in RaceEditor (SlideEditor.jsx).
+// ctx: { qNum, roundId, afterId, selectedShinyFmt, shinyQuestion, shinyAnswer }
+export function buildRaceSlide(ctx) {
+  const fmt = ctx.selectedShinyFmt
+  const data = {
+    questionNumber:  ctx.qNum,
+    questionLabel:   `Q${ctx.qNum}`,
+    questionMode:    'shiny',
+    isShiny:         true,
+    shinyFormatId:   fmt.id,
+    shinyFormatName: fmt.name,
+    shinyFormatIcon: fmt.icon,
+    text:            ctx.shinyQuestion?.trim() ?? '',
+    contenders: Array.from({ length: 4 }, () => ({
+      id: nanoid(6),
+      name: '',
+      imageUrl: null,
+    })),
+    beats: Array.from({ length: 10 }, () => ({ label: '', values: [0, 0, 0, 0] })),
+    raceStartedAt: null,
+    answer: '',
+  }
+  return { type: 'horse-race', roundId: ctx.roundId ?? null, afterSlideId: ctx.afterId, data }
 }

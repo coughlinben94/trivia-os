@@ -142,6 +142,20 @@ export function slideToArchiveRow(slide, show) {
       }
     }
 
+    case 'horse-race': {
+      if (blank(data.text) && blank(data.answer)) return null
+      return {
+        ...base,
+        type: 'shiny',
+        text: data.text?.trim() ?? null,
+        answer: data.answer?.trim() ?? null,
+        is_shiny: true,
+        shiny_type: 'race',
+        shiny_format_name: data.shinyFormatName ?? null,
+        questions_data: { contenders: data.contenders ?? [], beats: data.beats ?? [] },
+      }
+    }
+
     case 'pyl-reveal': {
       if (blank(data.themeName)) return null
       return {

@@ -507,18 +507,27 @@ git commit -m "feat(race): add buildRaceSlide fixed-shape kind, skip shared answ
 - Produces: default export `RaceSlide({ slide })`, mounted by Task 5's
   `SLIDE_COMPONENTS['horse-race']`
 
-Read `FlipEmDownSlide.jsx` in full before starting — copy its shiny-signal
-header block (badge + glow, lines ~71–79 per the spec) verbatim, and match
-its component structure (props, how it reads `slide.data`, how it handles
-`prefers-reduced-motion`).
+**PREFLIGHT RULING (2026-09-14):** this repo has **no `@testing-library/react`
+dependency** (checked `package.json` — it isn't there). Every display-slide
+test in this codebase uses raw `react-dom/client`'s `createRoot` + `act()` +
+manual `querySelector`/`textContent` assertions, wrapped in `<ThemeProvider>`
+— see `FlipEmDownSlide.test.jsx` in full before writing this test, it is the
+exact pattern to copy (including its `beforeEach`/`afterEach` root
+lifecycle). Test rewritten below to that idiom. Reduced-motion is read via
+Framer Motion's `useReducedMotion()` (that's what `FlipEmDownSlide.jsx`
+itself uses at line 65, not raw `window.matchMedia`) — mocked below via
+`vi.mock('framer-motion', ...)` with `importActual` for everything else.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```jsx
 // client/src/components/display/slides/RaceSlide.test.jsx
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import RaceSlide from './RaceSlide';
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act } from 'react'
+import { createRoot } from 'react-dom/client'
+import { ThemeProvider } from '../../shared/ThemeProvider.jsx'
+import RaceSlide from './RaceSlide.jsx'
 
 const baseData = {
   text: 'Which movie made the most money?',
@@ -535,54 +544,98 @@ const baseData = {
   ],
   raceStartedAt: null,
   answer: 'Forrest Gump',
-};
+}
 
-describe('RaceSlide', () => {
+function makeSlide(overrides = {}) {
+  return { id: 's1', type: 'horse-race', data: { ...baseData, ...overrides } }
+}
+
+describe('<RaceSlide>', () => {
+  let container, root
+
+  beforeEach(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  const render = slide => act(() => {
+    root.render(
+      <ThemeProvider>
+        <RaceSlide slide={slide} />
+      </ThemeProvider>
+    )
+  })
+
   it('renders four lane wrappers at the gate position with no bob', () => {
-    const { container } = render(<RaceSlide slide={{ id: 's1', type: 'horse-race', data: baseData }} />);
-    const wrappers = container.querySelectorAll('[data-race-lane]');
-    expect(wrappers).toHaveLength(4);
-    wrappers.forEach((el) => {
-      expect(el.getAttribute('data-race-state')).toBe('gate');
-    });
-  });
+    render(makeSlide())
+    const wrappers = container.querySelectorAll('[data-race-lane]')
+    expect(wrappers.length).toBe(4)
+    wrappers.forEach(el => expect(el.getAttribute('data-race-state')).toBe('gate'))
+  })
 
   it('renders the finished state immediately when raceStartedAt is far in the past', () => {
-    const started = Date.now() - 60_000; // well past total duration (3 beats * 700ms)
-    const data = { ...baseData, raceStartedAt: started };
-    const { container } = render(<RaceSlide slide={{ id: 's1', type: 'horse-race', data }} />);
-    expect(container.querySelector('[data-race-winner="true"]')).toBeTruthy();
-  });
+    const started = Date.now() - 60_000 // well past total duration (3 beats * 700ms)
+    render(makeSlide({ raceStartedAt: started }))
+    expect(container.querySelector('[data-race-winner="true"]')).toBeTruthy()
+  })
 
   it('generates one keyframe rule with N+1 stops per lane', () => {
-    const data = { ...baseData, raceStartedAt: Date.now() };
-    const { container } = render(<RaceSlide slide={{ id: 's1', type: 'horse-race', data }} />);
-    const styleTag = container.querySelector('style[data-race-keyframes]');
-    expect(styleTag).toBeTruthy();
-    // 4 lanes worth of @keyframes blocks
-    const matches = styleTag.textContent.match(/@keyframes/g) || [];
-    expect(matches).toHaveLength(4);
-  });
+    render(makeSlide({ raceStartedAt: Date.now() }))
+    const styleTag = container.querySelector('style[data-race-keyframes]')
+    expect(styleTag).toBeTruthy()
+    const matches = styleTag.textContent.match(/@keyframes/g) || []
+    expect(matches.length).toBe(4) // one block per lane
+  })
+})
 
-  it('renders final positions with animation: none under reduced motion', () => {
-    window.matchMedia = vi.fn().mockImplementation((query) => ({
-      matches: query === '(prefers-reduced-motion: reduce)',
-      media: query,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    }));
-    const data = { ...baseData, raceStartedAt: Date.now() };
-    const { container } = render(<RaceSlide slide={{ id: 's1', type: 'horse-race', data }} />);
-    const lane = container.querySelector('[data-race-lane]');
-    expect(lane.style.animation).toMatch(/none/);
-  });
-});
+describe('<RaceSlide> — reduced motion', () => {
+  let container, root
+
+  beforeEach(async () => {
+    vi.resetModules()
+    vi.doMock('framer-motion', async () => {
+      const actual = await vi.importActual('framer-motion')
+      return { ...actual, useReducedMotion: () => true }
+    })
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+    vi.doUnmock('framer-motion')
+  })
+
+  it('renders final positions with animation: none under reduced motion', async () => {
+    const { default: RaceSlideReduced } = await import('./RaceSlide.jsx')
+    const { ThemeProvider: TP } = await import('../../shared/ThemeProvider.jsx')
+    act(() => {
+      root.render(
+        <TP>
+          <RaceSlideReduced slide={makeSlide({ raceStartedAt: Date.now() })} />
+        </TP>
+      )
+    })
+    const lane = container.querySelector('[data-race-lane]')
+    expect(lane.style.animation).toMatch(/none/)
+  })
+})
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run client/src/components/display/slides/RaceSlide.test.jsx`
-Expected: FAIL — module not found
+Expected: FAIL — `./RaceSlide.jsx` does not exist yet
 
 - [ ] **Step 3: Implement `RaceSlide.jsx`**
 
@@ -607,6 +660,58 @@ state) so they're testable:
 Use `keyframeStops(beats)` for the per-lane stop list, `BEAT_MS` for pacing,
 and `computeWinner(contenders, beats)` to know which lane's `animationend`
 to listen for and what name to slam in at the finish.
+
+**Cinematic layer (Ben, 2026-09-14 — see the spec's "Cinematic treatment"
+section, added after this task was originally drafted; read it before
+implementing this step).** Four additions, all computed here in
+`RaceSlide.jsx` — `raceMath.js` does not change:
+
+1. **Photo-finish slow motion.** Don't use `keyframeStops()`'s raw
+   `percent`/duration directly. Compute `FINISH_SLOWMO_MS = BEAT_MS * 2.5`,
+   `TOTAL_MS = (N - 1) * BEAT_MS + FINISH_SLOWMO_MS` (N = beat count), and
+   remap each stop's percent to `percentCinematic[k] = (k * BEAT_MS /
+   TOTAL_MS) * 100` for `k < N`, and `100` for the final stop `k = N`. Use
+   `percentCinematic` in the generated `@keyframes` text and set
+   `animation-duration: ${TOTAL_MS}ms` (not `N * BEAT_MS`). `angleDeg`/
+   `flip`/translate values from `keyframeStops()` are unchanged — only the
+   *timing* is remapped.
+2. **Camera push-in.** One more `@keyframes` block on the track container
+   element (the ancestor of all 4 lane wrappers + the finish line, given
+   `data-race-track`): holds `scale(1)` through `75%`, eases to
+   `scale(1.06)` by `100%` (`cubic-bezier(0.4, 0, 0.2, 1)`, same curve as
+   the lane keyframes), `transform-origin: center`. Same `animation-duration:
+   ${TOTAL_MS}ms` so it stays in sync with the lanes.
+3. **Dust trail.** A second sprite element per lane, behind the main sprite,
+   marked `data-race-trail`, `opacity: 0.3`, static `filter: blur(3px)`
+   (static filter is fine — only *animating* filter is banned). Its own
+   `@keyframes` use the same `percentCinematic` stops but with each angle
+   computed from a lagging fraction `f_trail[k] = Math.max(0, f_i[k] -
+   0.035)`. `opacity: 0` at the gate and finished states — only visible
+   while `data-race-state="running"`.
+4. **Finish vignette pulse.** A `motion.div` sibling to the existing
+   winner-name-slam one-shot, marked `data-race-vignette`, full-bleed
+   radial-gradient, animating `opacity: [0, 0.35, 0]` over ~500ms on the
+   same `animationend` trigger as the winner slam.
+
+All four are Framer-Motion/CSS-keyframe only (`transform`/`opacity`, one
+static `filter`) and all four are simply omitted under
+`prefers-reduced-motion` — the existing reduced-motion path (instant final
+standings) already covers it, these are pure flourish layers with no
+standings-bearing information.
+
+Add one more test to Step 1's test file, in the first `describe` block:
+
+```jsx
+it('stretches the final beat into a photo-finish slow-motion duration', () => {
+  render(makeSlide({ raceStartedAt: Date.now() }))
+  const styleTag = container.querySelector('style[data-race-keyframes]')
+  const track = container.querySelector('[data-race-track]')
+  expect(track).toBeTruthy()
+  // 3 beats at 700ms = 2100ms raw; cinematic remap stretches the last
+  // beat to 700*2.5 = 1750ms, so TOTAL_MS = 2*700 + 1750 = 3150ms
+  expect(styleTag.textContent).toMatch(/3150ms/)
+})
+```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -672,33 +777,72 @@ git commit -m "feat(race): wire horse-race slide type into renderer, full-bleed 
 
 ### Task 6: `RaceEditor` in `SlideEditor.jsx`
 
+**PREFLIGHT RULING (2026-09-14):** the draft below originally assumed
+`RaceEditor` was its own file taking `{ slide, actions }` props. Checked
+against the real codebase: `ElimEditor` (Flip 'Em Down!'s editor) is a
+**private, unexported** `function ElimEditor({ data, onChange, setData,
+scheduleSave, onMediaUpload })` defined inline in `SlideEditor.jsx` at line
+2501 and dispatched at line 260 — no separate file, no `slide`/`actions`
+props, it receives already-unwrapped `data` plus callbacks the parent
+`SlideEditor` closure provides. `CustomEditor` (line 2270) is the one sibling
+editor that IS a **named export** from the same file — that's the
+precedent to follow here so the piece is unit-testable without mounting the
+whole `SlideEditor`. `TextInput`, `TextArea`, `NumberInput`, `Field`,
+`Divider` are local components already defined in this file (lines
+328–410) — use them, don't reinvent. Corrected task below.
+
 **Files:**
-- Modify: `client/src/components/host/SlideEditor.jsx`
-- Test: `client/src/components/host/RaceEditor.test.jsx` (or colocated with
-  whatever test pattern `ElimEditor` already uses — check first)
+- Modify: `client/src/components/host/SlideEditor.jsx` — add `export
+  function RaceEditor({ data, onChange, setData, scheduleSave,
+  onMediaUpload })` (same signature as `ElimEditor`, exported like
+  `CustomEditor`), dispatched at line ~259/260 alongside `ElimEditor`
+- Test: `client/src/components/host/RaceEditor.test.jsx`, importing `{
+  RaceEditor }` (named import) from `./SlideEditor.jsx`
 
 **Interfaces:**
-- Consumes: `raceMath.js`'s `formatWinnerLine`; `cleanPastedText` from
-  `lib/cleanPaste.js`; the existing `MediaUpload` component's
-  `onMediaUpload` callback (spec warns: resolves to `{url, type, filename}`,
-  not a bare URL — unwrap `.url`)
-- Produces: a `RaceEditor` component dispatched at `slide.type ===
-  'horse-race'` (find the dispatch switch near line ~259 per the spec,
-  alongside where `ElimEditor` is dispatched at line ~2501), which writes
-  `data.contenders`, `data.beats`, and a derived `data.answer` via
-  `actions.updateSlide`
+- Consumes: `raceMath.js`'s `formatWinnerLine`/`computeWinner`;
+  `cleanPastedText` from `lib/cleanPaste.js`; `onMediaUpload` (resolves to
+  `{url, type, filename}`, not a bare URL — unwrap `.url`, exactly as
+  `ElimEditor.uploadItemPhoto` does at line 2526)
+- Produces: on any contenders/beats edit, calls `setData(next)` then
+  `scheduleSave({ data: next })` — the exact two-call pattern
+  `ElimEditor.writeItem`/`writeHint` use (lines 2509–2515) — where `next =
+  { ...data, contenders/beats: updatedArray, answer: derivedAnswer }`. Use
+  `onChange('text', value)` for the plain question-text field, matching
+  `ElimEditor`'s `onChange('answer', v)` call for its own text field.
 
-Read `ElimEditor` (Flip 'Em Down!'s editor, line ~2501) in full first and
-match its structural conventions (how it reads/writes `data`, how it calls
-`actions.updateSlide`, its warning-banner pattern) before writing this.
+**Test convention (no RTL — see `CustomEditor.test.jsx` in full before
+writing this):** `createRoot` + `act()`, `lib/supabase.js` mocked before
+import (this file's top-level `createClient()` call throws with no real env
+vars otherwise), `SlideEditor.jsx` imported via top-level `await import(...)`
+AFTER the mock is registered, and a small `Harness` that holds `data` in
+`useState` so `setData` writes round-trip into a re-render (mirroring how
+`CustomEditor.test.jsx`'s harness checks writes by re-render, not by
+inspecting a spy's raw call args) while `scheduleSave` stays a plain spy.
+Query contender-name inputs by their distinct `placeholder` (`"Contender 1
+name"` … `"Contender 4 name"`, same placeholder-based query style
+`CustomEditor.test.jsx` uses for its YouTube URL input). Beat-value inputs
+are queried positionally: each beat row renders as `<div data-beat-row={k}>`
+containing the row's label input first, then its 4 contender-value inputs
+in order — a test reaches contender *i*'s value in beat *k* via
+`container.querySelectorAll('[data-beat-row]')[k].querySelectorAll('input')[1 + i]`
+(index 0 is the label).
 
 - [ ] **Step 1: Write the failing test**
 
 ```jsx
 // client/src/components/host/RaceEditor.test.jsx
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
-import RaceEditor from './RaceEditor'; // adjust import path to wherever Step 3 exports it from
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act } from 'react'
+import { createRoot } from 'react-dom/client'
+import { useState } from 'react'
+
+vi.mock('../../lib/supabase.js', () => ({
+  supabase: { from: () => ({ select: () => ({ eq: () => Promise.resolve({ data: [] }), order: () => Promise.resolve({ data: [] }) }) }) },
+}))
+
+const { RaceEditor } = await import('./SlideEditor.jsx')
 
 const baseData = {
   text: '',
@@ -714,53 +858,102 @@ const baseData = {
   ],
   raceStartedAt: null,
   answer: '',
-};
+}
 
-describe('RaceEditor', () => {
+function nativeInputSet(input, value) {
+  const proto = input.type === 'textarea' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype
+  Object.getOwnPropertyDescriptor(proto, 'value').set.call(input, value)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+describe('<RaceEditor>', () => {
+  let container, root
+
+  beforeEach(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  // Mirrors real usage: SlideEditor owns `data` and passes setData/scheduleSave
+  // down; this harness does the same so RaceEditor's writes are checked via
+  // the round-trip re-render, not by inspecting a spy's call args.
+  function Harness({ initial = baseData, scheduleSave = vi.fn() }) {
+    const [data, setData] = useState(initial)
+    return (
+      <RaceEditor
+        data={data}
+        onChange={(key, value) => setData(d => ({ ...d, [key]: value }))}
+        setData={setData}
+        scheduleSave={scheduleSave}
+        onMediaUpload={vi.fn()}
+      />
+    )
+  }
+
   it('derives data.answer from the current beats whenever a value changes', () => {
-    const updateSlide = vi.fn();
-    render(<RaceEditor slide={{ id: 's1', data: baseData }} actions={{ updateSlide }} />);
+    const scheduleSave = vi.fn()
+    act(() => { root.render(<Harness scheduleSave={scheduleSave} />) })
 
-    fireEvent.change(screen.getByLabelText(/contender 1 name/i), { target: { value: 'Lion King' } });
-    fireEvent.change(screen.getByLabelText(/contender 2 name/i), { target: { value: 'Forrest Gump' } });
-    fireEvent.change(screen.getByLabelText(/week 1.*contender 2/i), { target: { value: '50' } });
+    const nameInputs = container.querySelectorAll('input[placeholder^="Contender"]')
+    expect(nameInputs.length).toBe(4)
+    act(() => { nativeInputSet(nameInputs[0], 'Lion King') })
+    act(() => { nativeInputSet(nameInputs[1], 'Forrest Gump') })
 
-    expect(updateSlide).toHaveBeenCalled();
-    const lastCallData = updateSlide.mock.calls.at(-1)[1].data;
-    expect(lastCallData.answer).toBe('Forrest Gump');
-  });
+    const row0 = container.querySelectorAll('[data-beat-row]')[0]
+    const contender2ValueInput = row0.querySelectorAll('input')[2] // [0]=label, [1]=contender1, [2]=contender2
+    act(() => { nativeInputSet(contender2ValueInput, '50') })
+
+    expect(scheduleSave).toHaveBeenCalled()
+    const lastCall = scheduleSave.mock.calls.at(-1)[0]
+    expect(lastCall.data.answer).toBe('Forrest Gump')
+  })
 
   it('shows an inline warning and clears the answer on a final-beat tie', () => {
-    const updateSlide = vi.fn();
     const tiedData = {
       ...baseData,
       contenders: baseData.contenders.map((c, i) => ({ ...c, name: `C${i}` })),
       beats: [{ label: 'Week 1', values: [10, 10, 5, 5] }],
-    };
-    render(<RaceEditor slide={{ id: 's1', data: tiedData }} actions={{ updateSlide }} />);
-    expect(screen.getByText(/no winner/i)).toBeInTheDocument();
-  });
-});
+    }
+    act(() => { root.render(<Harness initial={tiedData} />) })
+    expect(container.textContent).toMatch(/no winner/i)
+  })
+})
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run client/src/components/host/RaceEditor.test.jsx`
-Expected: FAIL — module not found
+Expected: FAIL — `RaceEditor` is not exported from `SlideEditor.jsx`
 
 - [ ] **Step 3: Implement `RaceEditor`**
 
 Build the four pieces the spec's Host Authoring section describes:
-question-text field, 4 fixed contender rows (name + optional `MediaUpload`),
-a beats table (beat-count control 2–20 default 10, one row per beat = label
-+ 4 numeric inputs), and a paste-from-spreadsheet textarea above the table
-that runs `cleanPastedText()` on paste and fills the grid. On every
-contenders/beats change, call `formatWinnerLine` and `computeWinner` from
-`raceMath.js`, write the read-only winner line into the UI, and write
-`data.answer` via `actions.updateSlide(slide.id, { data: { ...data, answer:
-tie ? '' : winnerName } })`. Render the amber warning banner (matching
-Flip's pattern) for: a final-beat tie, any blank/negative cell, fewer than 2
-beats, a contender with no name, or an all-zero beat.
+question-text field (`Field` + `TextArea`, wired via `onChange('text', v)`),
+4 fixed contender rows (`TextInput` with `placeholder={'Contender ' + (i+1)
++ ' name'}` + optional `MediaUpload`, matching `uploadItemPhoto`'s
+`result?.url` unwrap), a beats table (`NumberInput` for beat count 2–20
+default 10; each row wrapped `<div data-beat-row={k}>` containing a
+`TextInput` for `label` first, then 4 numeric `TextInput`s in contender
+order — the row-wrapper + positional order is what the test above depends
+on, don't reorder), and a paste-from-spreadsheet `TextArea` above the table
+that runs `cleanPastedText()` on its value and fills the grid on an "Apply"
+button click. On every contenders/beats edit, build `next = { ...data,
+contenders, beats }`, compute `{ tie, winnerName } =
+computeWinner(next.contenders, next.beats)`, set `next.answer = tie ? '' :
+winnerName`, then `setData(next); scheduleSave({ data: next })` — the exact
+two-call sequence `ElimEditor.writeItem` uses (lines 2509–2515). Render
+`formatWinnerLine(next.contenders, next.beats)` as a read-only line, and an
+amber warning banner for: a final-beat tie (text must contain "no winner" —
+the test above matches `/no winner/i` against the whole rendered text), any
+blank/negative cell, fewer than 2 beats, a contender with no name, or an
+all-zero beat.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -843,53 +1036,68 @@ git commit -m "feat(race): add Start Race / Reset controls to Live Mode"
 - Modify: `client/src/lib/slideStepping.js`
 - Test: `client/src/lib/slideStepping.test.js` (add to existing file)
 
+**PREFLIGHT RULING (2026-09-14):** checked against the real file — the
+exported signature is `withEntryState(slides, slide, { currentPart,
+protectInProgress = false } = {})`, taking the WHOLE slides array plus the
+one slide entering, and returning an updated slides array (via the internal
+`patch`/`patchSlideData` mechanism) — not `withEntryState(slide, opts)`
+returning `{ data }` as originally drafted. `client/src/lib/slideStepping.test.js`
+already has a `slide(id, order, type, data)` fixture helper (line 23) and an
+existing `describe('withEntryState', ...)` block (line 298) with the exact
+call shape to copy: `withEntryState([s], s, { currentPart: 0, ... })`, read
+result as `out[0].data.<field>`. Test corrected below.
+
 **Interfaces:**
-- Consumes: the existing `withEntryState()` function and its
-  `protectInProgress` gate (used today for `elimStep`, line ~181 per the
-  spec)
+- Consumes: the existing `withEntryState()` function, its `patch` object
+  pattern and `protectInProgress` gate (used today for `elimStep`, line
+  187), and the file's existing `slide()` test fixture helper (don't
+  redefine it)
 - Produces: `withEntryState()` also clears `data.raceStartedAt` to `null` on
-  a fresh forward entry into a `horse-race` slide, gated the same way
+  a fresh forward entry into a `horse-race` slide, gated the same way as
+  `elimStep`
 
 - [ ] **Step 1: Write the failing test**
 
 ```js
-// client/src/lib/slideStepping.test.js (append)
-describe('withEntryState — horse-race', () => {
-  it('clears raceStartedAt on fresh forward entry', () => {
-    const slide = { type: 'horse-race', data: { raceStartedAt: 12345 } };
-    const result = withEntryState(slide, { protectInProgress: false });
-    expect(result.data.raceStartedAt).toBeNull();
-  });
+// client/src/lib/slideStepping.test.js — add inside the existing
+// describe('withEntryState', ...) block (line 298), using the file's own
+// slide() helper already defined at line 23
+it('clears raceStartedAt on fresh forward entry into a horse-race slide', () => {
+  const s = slide('a', 0, 'horse-race', { raceStartedAt: 12345 })
+  const fresh = withEntryState([s], s, { currentPart: 0 })
+  expect(fresh[0].data.raceStartedAt).toBeNull()
+})
 
-  it('preserves raceStartedAt when protectInProgress is true', () => {
-    const slide = { type: 'horse-race', data: { raceStartedAt: 12345 } };
-    const result = withEntryState(slide, { protectInProgress: true });
-    expect(result.data.raceStartedAt).toBe(12345);
-  });
-});
+it('preserves raceStartedAt on a protected re-entry into a horse-race slide', () => {
+  const s = slide('a', 0, 'horse-race', { raceStartedAt: 12345 })
+  const reentry = withEntryState([s], s, { currentPart: 0, protectInProgress: true })
+  expect(reentry[0].data.raceStartedAt).toBe(12345)
+})
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run client/src/lib/slideStepping.test.js`
-Expected: FAIL (or passes vacuously if `raceStartedAt` isn't touched yet —
-confirm it actually fails by checking `result.data.raceStartedAt` is still
-`12345` before the fix)
+Expected: FAIL — `fresh[0].data.raceStartedAt` is still `12345` (no patch
+applied yet)
 
 - [ ] **Step 3: Implement**
 
-Find the `elimStep` reset block at line ~181 and add an equivalent block for
-`horse-race`:
+Find the `elimStep` reset block (line 187, inside `withEntryState`, right
+after the `lockCountdownPhase`/`lockCountdownStartedAt` block) and add an
+equivalent block in the same `patch`-object style:
 
 ```js
-if (slide.type === 'horse-race' && !protectInProgress) {
-  data.raceStartedAt = null;
+// Fresh entry also resets And They're Off!'s raceStartedAt — same
+// stale-state class as elimStep above: a rehearsal that finished the race
+// must not bleed into the next genuinely fresh entry.
+if (!protectInProgress && slide.data?.raceStartedAt != null) {
+  patch.raceStartedAt = null
 }
 ```
 
-Match the exact surrounding structure (how `data` is cloned/mutated) that
-the existing `elimStep` block uses — don't mutate the input slide directly
-if the existing pattern doesn't.
+Place it adjacent to the `elimStep` block, before the final
+`if (Object.keys(patch).length === 0) return slides` line.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -911,20 +1119,33 @@ git commit -m "feat(race): reset raceStartedAt on fresh slide entry"
 - Modify: `client/src/lib/questionRows.js`
 - Test: `client/src/lib/questionRows.test.js` (add to existing file)
 
+**PREFLIGHT RULING (2026-09-14):** checked against the real file — the
+exported function is `slideToArchiveRow(slide, show)`, not `buildQuestionRow`,
+and it takes a `show` object (used only for `show.id`/`show.title`/
+`show.date`/round lookup, spread into every case via a shared `base` object
+— see `grid`/`venn`/`flip-em-down` cases at lines 100–143). Test corrected
+below to the real signature and to assert only the `horse-race`-specific
+fields via `toMatchObject`, not the full row (the `base` fields are common
+to every case and not this task's concern).
+
 **Interfaces:**
-- Consumes: the existing `case` dispatch pattern in this file (read 2-3
-  existing cases first, e.g. whatever handles `grid` or `flip-em-down`, to
-  match the exact return shape)
-- Produces: `case 'horse-race'` returning `{ type: 'shiny', text:
-  data.text, answer: data.answer, is_shiny: true, shiny_type: 'race',
-  shiny_format_name: data.shinyFormatName, questions_data: { contenders:
-  data.contenders, beats: data.beats } }`, or `null` when both `text` and
-  `answer` are blank
+- Consumes: `slideToArchiveRow(slide, show)`'s existing `blank()` helper and
+  `base` object (both already defined in the file, don't redefine); the
+  `grid`/`venn`/`flip-em-down` cases (lines 100–143) as the pattern to copy
+- Produces: `case 'horse-race'` inside the same `switch (slide.type)`,
+  returning `{ ...base, type: 'shiny', text: data.text?.trim() ?? null,
+  answer: data.answer?.trim() ?? null, is_shiny: true, shiny_type: 'race',
+  shiny_format_name: data.shinyFormatName ?? null, questions_data: {
+  contenders: data.contenders ?? [], beats: data.beats ?? [] } }`, or `null`
+  when `blank(data.text) && blank(data.answer)` (the exact guard every
+  sibling case uses)
 
 - [ ] **Step 1: Write the failing test**
 
 ```js
 // client/src/lib/questionRows.test.js (append)
+import { slideToArchiveRow } from './questionRows.js'; // adjust if already imported at top of file
+
 describe('questionRows — horse-race', () => {
   const data = {
     text: 'Which movie made the most money?',
@@ -933,9 +1154,10 @@ describe('questionRows — horse-race', () => {
     contenders: [{ id: 'a', name: 'Lion King', imageUrl: null }],
     beats: [{ label: 'Week 1', values: [1, 2, 3, 4] }],
   };
+  const show = { id: 'show1', title: 'Test Show', date: '2026-09-14', rounds: [] };
 
   it('builds an archive row from race data', () => {
-    const row = buildQuestionRow({ type: 'horse-race', data });
+    const row = slideToArchiveRow({ id: 'slide1', type: 'horse-race', data }, show);
     expect(row).toMatchObject({
       type: 'shiny',
       text: data.text,
@@ -948,24 +1170,37 @@ describe('questionRows — horse-race', () => {
   });
 
   it('returns null when text and answer are both blank', () => {
-    const row = buildQuestionRow({ type: 'horse-race', data: { ...data, text: '', answer: '' } });
+    const row = slideToArchiveRow({ id: 'slide1', type: 'horse-race', data: { ...data, text: '', answer: '' } }, show);
     expect(row).toBeNull();
   });
 });
 ```
 
-(Adjust `buildQuestionRow` to whatever this file's actual exported function
-is named — check the file first; it may be named differently.)
-
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run client/src/lib/questionRows.test.js`
-Expected: FAIL — no `horse-race` case, falls through to default/undefined
+Expected: FAIL — no `horse-race` case, falls through to `default`/`undefined`
 
 - [ ] **Step 3: Implement**
 
-Add the `case 'horse-race':` block matching the exact style of the case
-above/below it in the existing `switch`.
+Add inside the existing `switch (slide.type)`, in the same style as the
+`grid`/`venn` cases immediately above it (lines 100–125):
+
+```js
+case 'horse-race': {
+  if (blank(data.text) && blank(data.answer)) return null
+  return {
+    ...base,
+    type: 'shiny',
+    text: data.text?.trim() ?? null,
+    answer: data.answer?.trim() ?? null,
+    is_shiny: true,
+    shiny_type: 'race',
+    shiny_format_name: data.shinyFormatName ?? null,
+    questions_data: { contenders: data.contenders ?? [], beats: data.beats ?? [] },
+  }
+}
+```
 
 - [ ] **Step 4: Run test to verify it passes**
 

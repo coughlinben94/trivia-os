@@ -421,7 +421,8 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const showSharedFields = effectiveRel !== 'separate' && !(isVenn && vennNum > 1)
   // Bendle's answer comes from the picked song, not free text — the generic
   // Answer field doesn't apply, so it's gated separately from Question-text.
-  const showAnswerField  = showSharedFields && shinyFmtType !== 'bendle'
+  // Race has no typed answer either — it's filled in by the race engine.
+  const showAnswerField  = showSharedFields && shinyFmtType !== 'bendle' && shinyFmtType !== 'race'
   // A plain single-asset question — and every fixed-shape format — still
   // needs its answer up front, unchanged. Multi-asset tied questions usually
   // answer per-asset in the editor, so the shared answer is optional there.
