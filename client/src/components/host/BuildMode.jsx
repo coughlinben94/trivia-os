@@ -116,7 +116,7 @@ const REST_STATE_BOX_ORDER_KEY = 'trivia-os:rest-state-box-order'
 function defaultRestStateBoxOrder() {
   return [
     ...TYPE_CARDS.filter(c => !c.hidden).map(c => c.type),
-    'theme', 'swing', 'pyl', 'shiny', 'bendle', 'database', 'ticker', 'data', 'shows', 'music',
+    'theme', 'swing', 'pyl', 'shiny', 'transitions', 'database', 'ticker', 'data', 'shows', 'music',
   ]
 }
 
@@ -709,9 +709,20 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
               )
             })()
           ) : (
-            /* Dashboard rest state — type picker grid */
-            <div className="h-full flex flex-col items-center justify-center p-8 overflow-y-auto">
-              <div className="w-full max-w-5xl -translate-y-[6%]">
+            /* Dashboard rest state — type picker grid.
+               justify-center here used to clip the TOP of this block (the
+               round-tabs row, being the first child) whenever it grew
+               taller than the viewport — a centered flex item inside a
+               scrollable container can overflow equally on both sides, but
+               the scrollbar only ever reaches the BOTTOM overflow, so the
+               top stayed permanently unreachable (2026-09-14, Ben, live:
+               "the rounds at the top are clipped" — a real show's round
+               count plus the -translate-y nudge below pushed the tabs
+               row above the scrollable area with no way to scroll up to
+               it). justify-start + natural padding instead of a translate
+               hack means growth always just scrolls, never hides content. */
+            <div className="h-full flex flex-col items-center justify-start p-8 overflow-y-auto">
+              <div className="w-full max-w-5xl">
 
                 {/* Round context filter */}
                 {show.rounds.length > 0 && (
@@ -749,15 +760,22 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                       swing:    { icon: '🎷', name: 'Swing Round', desc: 'Bulk-add all swing questions at once', styleKey: 'swing', onClick: () => setShowSwingWizard(true) },
                       pyl:      { icon: '🎰', name: 'Press Your Luck!', desc: 'Set up PYL themes and slides', styleKey: 'pyl', onClick: () => setShowPylMenu(v => !v), menu: true },
                       shiny:    { icon: '✨', name: 'Shiny Formats', desc: 'Add or edit shiny question styles', styleKey: 'shiny', onClick: () => setShowFormatLibrary(true) },
-                      bendle:   { icon: '🎧', name: 'Bendle Songs', desc: 'Upload stems for the Bendle format', styleKey: 'bendle', onClick: () => setShowBendleAdmin(true) },
                       database: { icon: '🗃️', name: 'Question Database', desc: 'Browse and search your archive', styleKey: 'database', onClick: () => window.open('/questions', '_blank') },
                       ticker:   { icon: '👥', name: 'Team List', desc: 'Show all team names on screen', styleKey: 'ticker', onClick: () => openAddModal({ type: 'team-preview', roundId: activeRoundId }) },
                       data:     { icon: '📊', name: 'Data', desc: 'Shows history & analytics', styleKey: 'data', onClick: () => window.open('/dashboard', '_blank') },
                       shows:    { icon: '📋', name: 'My Shows', desc: 'Browse past shows', styleKey: 'shows', onClick: () => window.open('/shows', '_blank') },
+                      // 2026-09-14, Ben: Bendle Songs used to be its own standalone
+                      // box — a 14th box broke the "13 has no clean divisor, 5-5-3"
+                      // grid math the comment above documents, leaving it alone in
+                      // an orphaned 4th row. Sharing this box with Bendle instead of
+                      // Album Transitions keeps the total box count at 13 (still 2
+                      // subtiles here, just swapped which one) — Album Transitions
+                      // moves to its own standalone box below, box count unchanged.
                       music:    { icon: '🎵', name: 'Music Library', desc: 'Jukebox songs, sets & trim points', styleKey: 'music', subtiles: [
                         { icon: '🎵', label: 'Music Library', onClick: () => window.open('/music', '_blank') },
-                        { icon: '🌀', label: 'Album Transitions', onClick: () => window.open('https://claude.ai/code/artifact/a831a530-6ac5-47ed-8486-66a2b3a53352', '_blank') },
+                        { icon: '🎧', label: 'Bendle Songs', onClick: () => setShowBendleAdmin(true) },
                       ] },
+                      transitions: { icon: '🌀', name: 'Album Transitions', desc: 'Preview the jukebox switch-song animation', styleKey: 'music', onClick: () => window.open('https://claude.ai/code/artifact/a831a530-6ac5-47ed-8486-66a2b3a53352', '_blank') },
                     }
 
                     return restBoxOrder.map(id => {
