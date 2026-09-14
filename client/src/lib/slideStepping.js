@@ -173,6 +173,15 @@ export function withEntryState(slides, slide, { currentPart, protectInProgress =
     patch.lockCountdownPhase = null
     patch.lockCountdownStartedAt = null
   }
+  // Fresh entry also resets Flip 'Em Down!'s elimStep — same stale-state
+  // bug class as the lock/reveal flags above: a rehearsal/test left on
+  // step 2-3 must not bleed into the next genuinely fresh entry. Gated on
+  // protectInProgress like protectLockedFlags above, so goLiveFrom's jump-
+  // back-in and computePrevStep's cross-slide re-entry still preserve
+  // wherever the host had it (2026-09-14 final review fix).
+  if (!protectInProgress && (slide.data?.elimStep ?? 0) > 0) {
+    patch.elimStep = 0
+  }
   if (Object.keys(patch).length === 0) return slides
   return patchSlideData(slides, slide.id, patch)
 }
