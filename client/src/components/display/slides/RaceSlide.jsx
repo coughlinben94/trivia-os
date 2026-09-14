@@ -196,7 +196,7 @@ export default function RaceSlide({ slide }) {
     trackStyle.transform = 'scale(1)'
   }
 
-  const captionText = state === 'gate' ? 'At the gate' : (beats[Math.max(0, beatIdx - 1)]?.label ?? '')
+  const captionText = state === 'gate' ? 'At the gate' : (beats[Math.max(0, beatIdx - 1)]?.label || `Beat ${beatIdx}`)
 
   const qFamily = theme.fonts.display
   const qSizePx = data.text
@@ -346,7 +346,7 @@ export default function RaceSlide({ slide }) {
 
       {/* Beat caption, bottom-center. */}
       <div style={{ position: 'absolute', bottom: 24, left: 0, right: 0, textAlign: 'center', zIndex: 40 }}>
-        <span style={{
+        <span data-race-caption style={{
           color: theme.colors.text, fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
           fontSize: '1.3rem', fontWeight: 600, textShadow: '0 2px 8px rgba(0,0,0,0.6)',
         }}>{captionText}</span>

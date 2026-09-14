@@ -92,6 +92,23 @@ describe('<RaceSlide>', () => {
     )
   })
 
+  it('falls back to a generated beat caption when the real label is blank', () => {
+    // buildRaceSlide() stamps beats with label: '' until a host fills them in
+    // via RaceEditor (SlideEditor.jsx) — the caption must not render empty.
+    const started = Date.now() - 60_000
+    render(makeSlide({
+      raceStartedAt: started,
+      beats: [
+        { label: '', values: [40.9, 24.5, 25.9, 14.5] },
+        { label: '', values: [10, 20, 8, 6] },
+        { label: '', values: [5, 25, 3, 4] },
+      ],
+    }))
+    const caption = container.querySelector('[data-race-caption]')
+    expect(caption).toBeTruthy()
+    expect(caption.textContent).toBe('Beat 3')
+  })
+
   it('stretches the final beat into a photo-finish slow-motion duration', () => {
     render(makeSlide({ raceStartedAt: Date.now() }))
     const styleTag = container.querySelector('style[data-race-keyframes]')
@@ -143,5 +160,21 @@ describe('<RaceSlide> — reduced motion', () => {
     })
     const lane = container.querySelector('[data-race-lane]')
     expect(lane.style.animation).toMatch(/none/)
+
+    // animation: none alone doesn't prove the FINISHED state rendered —
+    // RaceSlide.jsx sets it in the gate branch too. Assert the state
+    // attribute directly, and check the winner's transform reflects the
+    // finish position, not the gate.
+    expect(lane.getAttribute('data-race-state')).toBe('finished')
+
+    const winnerLane = container.querySelector('[data-race-winner="true"]')
+    expect(winnerLane).toBeTruthy()
+    // The winner's fraction at the last beat is always 1 (raceMath.js
+    // normalizes to the winner's own total), so finalStop.angleDeg is
+    // always -90 - 360 = -450 (one full lap, back to the top) — never the
+    // gate's -90deg. If reduced motion incorrectly rendered the gate instead
+    // of jumping straight to finished, this would read cos(-90deg) instead.
+    expect(winnerLane.style.transform).toContain('cos(-450deg)')
+    expect(winnerLane.style.transform).not.toContain('cos(-90deg)')
   })
 })
