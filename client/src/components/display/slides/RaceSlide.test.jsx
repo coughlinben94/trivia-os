@@ -72,6 +72,23 @@ describe('<RaceSlide>', () => {
     expect(container.querySelector('[data-race-winner="true"]')).toBeTruthy()
   })
 
+  it('resets to running after Reset + Start Race following a finished race (no instant-spoiler regression)', () => {
+    const finishedStart = Date.now() - 60_000
+    render(makeSlide({ raceStartedAt: finishedStart }))
+    expect(container.querySelector('[data-race-winner="true"]')).toBeTruthy()
+
+    // Host presses Reset: raceStartedAt -> null
+    render(makeSlide({ raceStartedAt: null }))
+    let wrappers = container.querySelectorAll('[data-race-lane]')
+    wrappers.forEach(el => expect(el.getAttribute('data-race-state')).toBe('gate'))
+
+    // Host presses Start Race again: a fresh, recent raceStartedAt
+    render(makeSlide({ raceStartedAt: Date.now() }))
+    wrappers = container.querySelectorAll('[data-race-lane]')
+    wrappers.forEach(el => expect(el.getAttribute('data-race-state')).toBe('running'))
+    expect(container.querySelector('[data-race-winner="true"]')).toBeFalsy()
+  })
+
   it('generates one keyframe rule with N+1 stops per lane', () => {
     render(makeSlide({ raceStartedAt: Date.now() }))
     const styleTag = container.querySelector('style[data-race-keyframes]')

@@ -2745,7 +2745,10 @@ export function RaceEditor({ data, onChange, setData, scheduleSave, onMediaUploa
     const cleaned = cleanPastedText(pasteText, { multiline: true })
     const lines = cleaned.split('\n').map(l => l.trim()).filter(Boolean)
     if (!lines.length) return
-    const rows = lines.map(line => line.split('\t').map(c => c.trim()))
+    // Cap at 20 beats, same as the +/- beat-count control below — a paste
+    // past that is a chart pretending to be a race (spec: 700ms/beat, 20
+    // beats = 14s + finish, past that is out of pace).
+    const rows = lines.slice(0, 20).map(line => line.split('\t').map(c => c.trim()))
     const nextBeats = rows.map((cells, k) => ({
       label: cells[0] || `Week ${k + 1}`,
       values: [1, 2, 3, 4].map(i => {

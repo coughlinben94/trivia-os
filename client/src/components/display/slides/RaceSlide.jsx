@@ -89,15 +89,21 @@ export default function RaceSlide({ slide }) {
     return beatIndexAt(initialElapsed, n)
   })
 
-  // useState's initializer only reads `reduce` on first render — if
-  // useReducedMotion() resolves after mount, re-sync here instead of never
-  // finishing the race.
+  // Re-sync on every raceStartedAt transition, not just on mount. useState's
+  // initializer only runs once, so without this a Reset (raceStartedAt -> null)
+  // followed by a fresh Start Race leaves `finished` stuck true from the
+  // previous run — the display jumps straight to the winner slam with no
+  // race, spoiling the answer live. Also covers useReducedMotion() resolving
+  // after mount (it starts `undefined`/false on first render in some browsers).
   useEffect(() => {
     if (reduce) {
       setFinished(true)
       setBeatIdx(n)
+      return
     }
-  }, [reduce, n])
+    setFinished(startedFinished)
+    setBeatIdx(raceStartedAt ? beatIndexAt(initialElapsed, n) : 0)
+  }, [reduce, n, raceStartedAt, startedFinished, initialElapsed])
 
   // Beat caption ticker + safety-net finish — the real finish trigger is the
   // winner lane's animationend below; this just keeps the caption current
