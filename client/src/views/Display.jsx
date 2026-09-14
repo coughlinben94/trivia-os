@@ -674,19 +674,19 @@ const BREAK_DELAY_MS = 10000
 // (0ms) meant a fast handoff could go audible while the vortex is still in
 // its deliberately-readable wind-up — WarpTransition's veil stays under
 // ~30% opaque through roughly this point (veil = (t/0.94)^2, t = elapsed/
-// 2500ms). Not pushed all the way back to onDone — that's the pre-
+// 5000ms). Not pushed all the way back to onDone — that's the pre-
 // 2026-08-24 behavior this feature exists to improve on — just far enough
 // that a fast handoff's audio lands once the swirl is visually taking over,
 // not while the grading-break slide is still mostly readable underneath.
 // One-line tunable if it still needs to move.
-const HEAD_START_DELAY_MS = 1200
+const HEAD_START_DELAY_MS = 2400
 
 // Duration for the shiny-question-exit warp — same vortex as the jukebox
 // handoff (WarpTransition.jsx), much shorter: this fires on every shiny
-// exit, potentially several times a round, where the jukebox's 2.5s
+// exit, potentially several times a round, where the jukebox's 5s
 // cinematic pacing would feel slow. Start conservative; this is the one
 // number to retune live if it reads too fast or too slow.
-const SHINY_WARP_MS = 1100
+const SHINY_WARP_MS = 2200
 
 function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRingStateChange }) {
   const { theme } = useTheme()
@@ -714,10 +714,10 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
   const lastSlideIdRef = useRef(currentSlide?.id)
 
   // ── The shiny-exit warp (Task 5) ──
-  // Independent of the jukebox `warp` state above — different dir semantics
-  // (always 'back', the mirrored-return look, never 'out'), and must never
-  // collide with a break's own warp if a break slide and a shiny slide are
-  // somehow adjacent.
+  // Independent of the jukebox `warp` state above — shinyWarp itself holds
+  // the direction ('out'/'back', see the trigger effect below for which),
+  // and must never collide with a break's own warp if a break slide and a
+  // shiny slide are somehow adjacent.
   //
   // Trigger is derived DURING RENDER, not in an effect — React's own
   // "adjusting state when a prop changes" pattern (react.dev, "You Might Not
@@ -736,7 +736,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
   // the same already-committed prevShinySlideId/prevShinyGroupId and reach
   // the same conclusion, instead of a ref accumulating a mutation across a
   // pass React throws away. See task-5-report.md for the captured frame log.
-  const [shinyWarp, setShinyWarp] = useState(null) // null | 'active'
+  const [shinyWarp, setShinyWarp] = useState(null) // null | 'out' | 'back'
   const [prevShinySlideId, setPrevShinySlideId] = useState(currentSlide?.id)
   // Tracks which shiny GROUP (title + every question/sub-slide sharing its
   // shinyGroupId) the previous slide belonged to, not just "was it shiny" —
@@ -766,7 +766,15 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
     // group's title" case to special-case here.
     const sameGroupHop = !prevWasTitle && prevShinyGroupId != null && nextGroupId === prevShinyGroupId
     if (prevShinyGroupId != null && !sameGroupHop) {
-      setShinyWarp('active')
+      // prevWasTitle = leaving the title into the group's first question —
+      // the "intro in" beat, spins the jukebox 'out' direction (wind-up into
+      // opaque). Otherwise this is the group's last slide leaving for
+      // something outside it — "intro out" — the mirrored 'back' unwind.
+      // Ben, 2026-09-14 live: wanted the two ends of a shiny format to spin
+      // opposite ways, same as the jukebox's own out/back pair; this used to
+      // always fire 'back' regardless of direction (see WarpTransition dir
+      // history below) and read as the same effect both ways.
+      setShinyWarp(prevWasTitle ? 'out' : 'back')
     }
     setPrevShinyGroupId(nextGroupId)
     setPrevWasTitle(currentSlide?.type === 'shiny-title')
@@ -1083,16 +1091,18 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
       )}
 
       {/* The shiny-exit warp (Task 5) — same vortex, independent trigger.
-          Always dir="back" (the mirrored-return look, never the jukebox's
-          'out' wind-into-black), shorter duration (SHINY_WARP_MS). Same
-          key-by-state-value reasoning as the jukebox block above: keying on
-          shinyWarp alone (not the slide id) means a real advance mid-warp
+          shinyWarp itself now carries the direction ('out' entering the
+          group past its title, 'back' leaving it) — see the trigger effect
+          above (2026-09-14, Ben live: the two ends should spin opposite
+          ways, same as the jukebox's own out/back pair). Shorter duration
+          (SHINY_WARP_MS). Same key-by-state-value reasoning as the jukebox
+          block above: keying on shinyWarp means a real advance mid-warp
           can't stutter-remount this canvas. */}
       {shinyWarp && (
         <ErrorBoundary fallback={null}>
           <WarpTransition
             key={shinyWarp}
-            dir="back"
+            dir={shinyWarp}
             durationMs={SHINY_WARP_MS}
             onDone={() => setShinyWarp(null)}
           />

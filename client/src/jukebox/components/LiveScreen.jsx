@@ -1238,7 +1238,12 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
         style={{ background: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.32) 100%)' }}
       />
 
-      <div className="relative z-10 flex flex-col items-center gap-8 px-10 text-center max-w-lg w-full">
+      {/* translate-y-8 (2026-09-14, Ben, live: top of album art + ring was
+          clipped off the TV). StationRingLayer derives its ring center from
+          this box's own live getBoundingClientRect (see StationRingLayer.jsx
+          measure()), so nudging this wrapper moves the ring with it — no
+          second value to keep in sync. */}
+      <div className="relative z-10 flex flex-col items-center gap-8 px-10 text-center max-w-lg w-full translate-y-8">
         {shown ? (
           <>
             {/* Record + tonearm scene */}

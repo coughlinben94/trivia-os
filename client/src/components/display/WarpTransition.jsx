@@ -151,7 +151,7 @@ import { hexToRgb } from '../../lib/oklab.js'
 // durationMs is a prop (default below) so a faster non-jukebox use of this
 // same vortex (the shiny-question exit) can run a shorter choreography
 // without touching this tuned default.
-const DURATION_MS = 2500
+const DURATION_MS = 5000
 const W = 1920
 const H = 1080
 const CX = W / 2

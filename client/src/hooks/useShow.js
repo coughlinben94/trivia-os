@@ -681,9 +681,26 @@ export function useShow() {
 
   // Applies a shared-stepping patch (shows COLUMN names) to local normalized
   // state, then persists it. The only place the two shapes are bridged.
-  async function applyStepPatch(patch) {
+  // audio_playing is sticky in Postgres — only ever written by
+  // setAudioPlaying below, and nothing was clearing it on navigation. A
+  // shiny-audio slide's flag armed once (rehearsal, a stray Next/Prev pass
+  // while paused on it) stayed true in the DB, so the NEXT time the host
+  // landed on that same slide it autoplayed on mere arrival instead of
+  // waiting for a fresh invoke (confirmed live: Round 2 Q8, 2026-09-14).
+  // Called from every function below that writes current_slide_id, so a
+  // slide change always leaves the flag either matching the new slide or
+  // cleared — never stale.
+  function withAudioReset(patch) {
+    if (!show?.audio_playing || patch.current_slide_id === undefined) return patch
+    if (patch.current_slide_id === show.audio_playing.slideId) return patch
+    return { ...patch, audio_playing: null }
+  }
+
+  async function applyStepPatch(rawPatch) {
+    const patch = withAudioReset(rawPatch)
     setShow(s => ({
       ...s,
+      ...(patch.audio_playing !== undefined ? { audio_playing: patch.audio_playing } : {}),
       slides: patch.slides,
       showState: {
         ...s.showState,
@@ -713,19 +730,21 @@ export function useShow() {
     const now = new Date().toISOString()
     const bakedSlides = await bakeTeamPickerParts(show.slides, first)
     const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === first?.id) ?? first, { currentPart: 0 })
-    setShow(s => ({
-      ...s,
-      slides: newSlides,
-      updatedAt: now,
-      showState: { ...s.showState, isLive: true, currentSlideIndex: 0, currentSlideId: null },
-    }))
-    const wroteShow = await updateShowRow(show.id, {
+    const goLivePatch = withAudioReset({
       slides: newSlides,
       is_live: true,
       current_slide_index: 0,
       current_slide_id: null,
       updated_at: now,
     })
+    setShow(s => ({
+      ...s,
+      ...(goLivePatch.audio_playing !== undefined ? { audio_playing: goLivePatch.audio_playing } : {}),
+      slides: newSlides,
+      updatedAt: now,
+      showState: { ...s.showState, isLive: true, currentSlideIndex: 0, currentSlideId: null },
+    }))
+    const wroteShow = await updateShowRow(show.id, goLivePatch)
     // Best-effort, non-blocking — don't hold up the live transition on it, and
     // don't let a successful archive clear a real shows-write failure toast.
     if (wroteShow) {
@@ -746,19 +765,21 @@ export function useShow() {
     const now = new Date().toISOString()
     const bakedSlides = await bakeTeamPickerParts(show.slides, slide)
     const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === slide?.id) ?? slide, { currentPart: 0, protectInProgress: true })
-    setShow(s => ({
-      ...s,
-      slides: newSlides,
-      updatedAt: now,
-      showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: slide?.id ?? null },
-    }))
-    const wroteShow = await updateShowRow(show.id, {
+    const goLiveFromPatch = withAudioReset({
       slides: newSlides,
       is_live: true,
       current_slide_index: target,
       current_slide_id: slide?.id ?? null,
       updated_at: now,
     })
+    setShow(s => ({
+      ...s,
+      ...(goLiveFromPatch.audio_playing !== undefined ? { audio_playing: goLiveFromPatch.audio_playing } : {}),
+      slides: newSlides,
+      updatedAt: now,
+      showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: slide?.id ?? null },
+    }))
+    const wroteShow = await updateShowRow(show.id, goLiveFromPatch)
     // Best-effort, non-blocking — don't hold up the live transition on it, and
     // don't let a successful archive clear a real shows-write failure toast.
     if (wroteShow) {
