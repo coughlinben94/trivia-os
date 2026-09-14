@@ -661,6 +661,58 @@ Use `keyframeStops(beats)` for the per-lane stop list, `BEAT_MS` for pacing,
 and `computeWinner(contenders, beats)` to know which lane's `animationend`
 to listen for and what name to slam in at the finish.
 
+**Cinematic layer (Ben, 2026-09-14 — see the spec's "Cinematic treatment"
+section, added after this task was originally drafted; read it before
+implementing this step).** Four additions, all computed here in
+`RaceSlide.jsx` — `raceMath.js` does not change:
+
+1. **Photo-finish slow motion.** Don't use `keyframeStops()`'s raw
+   `percent`/duration directly. Compute `FINISH_SLOWMO_MS = BEAT_MS * 2.5`,
+   `TOTAL_MS = (N - 1) * BEAT_MS + FINISH_SLOWMO_MS` (N = beat count), and
+   remap each stop's percent to `percentCinematic[k] = (k * BEAT_MS /
+   TOTAL_MS) * 100` for `k < N`, and `100` for the final stop `k = N`. Use
+   `percentCinematic` in the generated `@keyframes` text and set
+   `animation-duration: ${TOTAL_MS}ms` (not `N * BEAT_MS`). `angleDeg`/
+   `flip`/translate values from `keyframeStops()` are unchanged — only the
+   *timing* is remapped.
+2. **Camera push-in.** One more `@keyframes` block on the track container
+   element (the ancestor of all 4 lane wrappers + the finish line, given
+   `data-race-track`): holds `scale(1)` through `75%`, eases to
+   `scale(1.06)` by `100%` (`cubic-bezier(0.4, 0, 0.2, 1)`, same curve as
+   the lane keyframes), `transform-origin: center`. Same `animation-duration:
+   ${TOTAL_MS}ms` so it stays in sync with the lanes.
+3. **Dust trail.** A second sprite element per lane, behind the main sprite,
+   marked `data-race-trail`, `opacity: 0.3`, static `filter: blur(3px)`
+   (static filter is fine — only *animating* filter is banned). Its own
+   `@keyframes` use the same `percentCinematic` stops but with each angle
+   computed from a lagging fraction `f_trail[k] = Math.max(0, f_i[k] -
+   0.035)`. `opacity: 0` at the gate and finished states — only visible
+   while `data-race-state="running"`.
+4. **Finish vignette pulse.** A `motion.div` sibling to the existing
+   winner-name-slam one-shot, marked `data-race-vignette`, full-bleed
+   radial-gradient, animating `opacity: [0, 0.35, 0]` over ~500ms on the
+   same `animationend` trigger as the winner slam.
+
+All four are Framer-Motion/CSS-keyframe only (`transform`/`opacity`, one
+static `filter`) and all four are simply omitted under
+`prefers-reduced-motion` — the existing reduced-motion path (instant final
+standings) already covers it, these are pure flourish layers with no
+standings-bearing information.
+
+Add one more test to Step 1's test file, in the first `describe` block:
+
+```jsx
+it('stretches the final beat into a photo-finish slow-motion duration', () => {
+  render(makeSlide({ raceStartedAt: Date.now() }))
+  const styleTag = container.querySelector('style[data-race-keyframes]')
+  const track = container.querySelector('[data-race-track]')
+  expect(track).toBeTruthy()
+  // 3 beats at 700ms = 2100ms raw; cinematic remap stretches the last
+  // beat to 700*2.5 = 1750ms, so TOTAL_MS = 2*700 + 1750 = 3150ms
+  expect(styleTag.textContent).toMatch(/3150ms/)
+})
+```
+
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run client/src/components/display/slides/RaceSlide.test.jsx`
