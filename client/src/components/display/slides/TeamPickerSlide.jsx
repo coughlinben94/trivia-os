@@ -140,7 +140,7 @@ function makeSprite(text, color, glowHi, glowAcc, fontFamily, fsOverride) {
 // intro slide and the team list slide are fighting with each other." Folding
 // the roster into this slide's own part sequence removes the second slide
 // (and the cross-window handoff) entirely instead of fixing the race.
-export default function TeamPickerSlide({ slide, show }) {
+export default function TeamPickerSlide({ slide, show, isPreview }) {
   const { theme } = useTheme();
   const reduce = useMemo(() =>
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches, []);
@@ -210,7 +210,19 @@ export default function TeamPickerSlide({ slide, show }) {
   function setVol(a, v) { a.volume = Math.max(0, Math.min(1, v)); }
   useEffect(() => {
     const a = audioRef.current;
-    if (!a) return;
+    // isPreview: SlideCanvasEditor mounts this same component, with the
+    // slide's REAL live currentPart (BuildMode has no reason to reset it),
+    // inside an audible unsandboxed iframe (CanvasIframe.jsx) any time a
+    // host selects an already-progressed team-picker slide to edit text —
+    // without this guard every one of the two branches below plays the
+    // ceremony theme out loud on the host's own machine mid-edit, and the
+    // currentPart>0 branch (added for reload-resume, below) is worse than
+    // the fresh-entry one since it has no fade at all: full volume,
+    // immediately (found by code-review's adversarial pass, 2026-09-14 —
+    // real gap this component never had, every other audio-playing slide
+    // already guards its play effect on isPreview, see QuestionSlide.jsx/
+    // PreShowSlide.jsx).
+    if (!a || isPreview) return;
     stopVolAnim();
     // Fresh entry (currentPart 0 — the opening text, before the host's first
     // Next) plays the real intro: silent hold, fade up from 0 in step with
