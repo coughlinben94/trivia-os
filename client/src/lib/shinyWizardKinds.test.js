@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { FIXED_SHAPE_KINDS, buildGridSlide, buildVennSlide, buildElimSlide } from './shinyWizardKinds.jsx'
+import { FIXED_SHAPE_KINDS, buildGridSlide, buildVennSlide, buildElimSlide, buildRaceSlide } from './shinyWizardKinds.jsx'
 
 const baseFmt = { id: 'fmt_1', name: 'Test Format', icon: '✨' }
 
 describe('FIXED_SHAPE_KINDS registry', () => {
-  it('has exactly the eight known fixed-shape kinds', () => {
-    expect(Object.keys(FIXED_SHAPE_KINDS).sort()).toEqual(['bendle', 'choice', 'elimination', 'grid', 'matching', 'order', 'venn', 'wager'])
+  it('has exactly the nine known fixed-shape kinds', () => {
+    expect(Object.keys(FIXED_SHAPE_KINDS).sort()).toEqual(['bendle', 'choice', 'elimination', 'grid', 'matching', 'order', 'race', 'venn', 'wager'])
   })
 
   it('matching/wager/order/choice have no own controls or builder — they fall through to the generic flat-asset path', () => {
@@ -197,5 +197,32 @@ describe('buildElimSlide', () => {
     const result = buildElimSlide({ qNum: 1, roundId: 'r', afterId: 'a', selectedShinyFmt: { id: 'fmt_1', name: 'X', icon: '🫥' } })
     const ids = result.data.items.map(i => i.id)
     expect(new Set(ids).size).toBe(8)
+  })
+})
+
+describe('race fixed-shape kind', () => {
+  it('stamps 4 blank contenders and 10 blank beats', () => {
+    const data = buildRaceSlide({ text: 'Who won?' })
+    expect(data.contenders).toHaveLength(4)
+    data.contenders.forEach((c) => {
+      expect(c.id).toBeTruthy()
+      expect(c.name).toBe('')
+      expect(c.imageUrl).toBeNull()
+    })
+    expect(data.beats).toHaveLength(10)
+    data.beats.forEach((b) => expect(b.values).toEqual([0, 0, 0, 0]))
+    expect(data.raceStartedAt).toBeNull()
+    expect(data.answer).toBe('')
+    expect(data.text).toBe('Who won?')
+  })
+
+  it('has hasOwnControls: false', () => {
+    expect(FIXED_SHAPE_KINDS.race.hasOwnControls).toBe(false)
+  })
+
+  it('gives every contender a distinct id', () => {
+    const data = buildRaceSlide({ text: '' })
+    const ids = data.contenders.map(c => c.id)
+    expect(new Set(ids).size).toBe(4)
   })
 })

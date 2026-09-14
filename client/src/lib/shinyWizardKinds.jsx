@@ -28,6 +28,7 @@ export const FIXED_SHAPE_KINDS = {
   venn:        { hasOwnControls: true, extraControls: vennExtraControls, buildSlideData: buildVennSlide },
   bendle:      { hasOwnControls: true, extraControls: bendleExtraControls, buildSlideData: buildBendleSlide },
   elimination: { hasOwnControls: false, buildSlideData: buildElimSlide },
+  race:        { hasOwnControls: false, buildSlideData: buildRaceSlide },
 }
 
 // ── Grid ───────────────────────────────────────────────────────────────────
@@ -271,4 +272,24 @@ export function buildBendleSlide(ctx) {
     },
   }))
   return { afterSlideId: ctx.afterId, slides }
+}
+
+// ── Race ("And They're Off!") ──────────────────────────────────────────────
+// Fixed shape, always: 4 blank contenders, 10 blank beats. No host "how many"
+// step — hasOwnControls: false, no extraControls — the wizard goes straight
+// from picking the format to creating this blank slide. Contenders, beats, and
+// race state are authored entirely afterward in RaceEditor (SlideEditor.jsx).
+// ctx: { text }
+export function buildRaceSlide(ctx) {
+  return {
+    text: ctx.text ?? '',
+    contenders: Array.from({ length: 4 }, () => ({
+      id: nanoid(6),
+      name: '',
+      imageUrl: null,
+    })),
+    beats: Array.from({ length: 10 }, () => ({ label: '', values: [0, 0, 0, 0] })),
+    raceStartedAt: null,
+    answer: '',
+  }
 }
