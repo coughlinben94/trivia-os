@@ -187,7 +187,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
         ? withShinyGroupId(payload)
         : withShinyTitleSlide(payload, selectedShinyFmt)
     )
-    const nonBonusQ   = roundSlides.filter(s => (s.type === 'question' || s.type === 'pixelate-series' || s.type === 'grid') && !s.data?.isBonus)
+    const nonBonusQ   = roundSlides.filter(s => (s.type === 'question' || s.type === 'pixelate-series' || s.type === 'grid' || s.type === 'flip-em-down') && !s.data?.isBonus)
     const bonusQ      = roundSlides.filter(s => s.type === 'question' && s.data?.isBonus)
     const qNum = nonBonusQ.length + 1
     const bNum = bonusQ.length + 1

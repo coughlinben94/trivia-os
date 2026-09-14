@@ -45,6 +45,15 @@ describe('renumberRoundQuestions', () => {
     expect(result.map(s => s.data.questionLabel)).toEqual(['Q1', 'Q2', 'Q3'])
   })
 
+  // A flip-em-down slide must occupy a slot in the count, same as grid —
+  // otherwise the next plain question after it collides on the same number.
+  it('counts a flip-em-down slide in the sequence, not just question/pixelate-series/grid', () => {
+    const flipEmDown = { id: 'shiny1', type: 'flip-em-down', order: 1, roundId: 'r1', data: {} }
+    const slides = [q('a', 0), flipEmDown, q('c', 2)]
+    const result = renumberRoundQuestions(slides)
+    expect(result.map(s => s.data.questionNumber)).toEqual([1, 2, 3])
+  })
+
   // Bendle's 3 step-slides are reveal beats of ONE question (one song, one
   // guess) — but each is its own real `type: 'question'` slide (2026-09-08
   // rebuild). Ben, reproducing this live: "bendle is 1 question" — the 3

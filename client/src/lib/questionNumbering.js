@@ -38,7 +38,7 @@ export function insertAfterSlideId(roundSlides, allSortedSlides) {
 export function renumberRoundQuestions(slides) {
   const groups = new Map() // `${roundId}::${isBonus}` -> slides, insertion order arbitrary
   for (const s of slides) {
-    if (s.type !== 'question' && s.type !== 'pixelate-series' && s.type !== 'grid') continue
+    if (s.type !== 'question' && s.type !== 'pixelate-series' && s.type !== 'grid' && s.type !== 'flip-em-down') continue
     const key = `${s.roundId}::${!!s.data?.isBonus}`
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key).push(s)
