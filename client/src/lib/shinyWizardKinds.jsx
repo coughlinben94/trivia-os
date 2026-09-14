@@ -279,10 +279,18 @@ export function buildBendleSlide(ctx) {
 // step — hasOwnControls: false, no extraControls — the wizard goes straight
 // from picking the format to creating this blank slide. Contenders, beats, and
 // race state are authored entirely afterward in RaceEditor (SlideEditor.jsx).
-// ctx: { text }
+// ctx: { qNum, roundId, afterId, selectedShinyFmt, shinyQuestion, shinyAnswer }
 export function buildRaceSlide(ctx) {
-  return {
-    text: ctx.text ?? '',
+  const fmt = ctx.selectedShinyFmt
+  const data = {
+    questionNumber:  ctx.qNum,
+    questionLabel:   `Q${ctx.qNum}`,
+    questionMode:    'shiny',
+    isShiny:         true,
+    shinyFormatId:   fmt.id,
+    shinyFormatName: fmt.name,
+    shinyFormatIcon: fmt.icon,
+    text:            ctx.shinyQuestion?.trim() ?? '',
     contenders: Array.from({ length: 4 }, () => ({
       id: nanoid(6),
       name: '',
@@ -292,4 +300,5 @@ export function buildRaceSlide(ctx) {
     raceStartedAt: null,
     answer: '',
   }
+  return { type: 'race', roundId: ctx.roundId ?? null, afterSlideId: ctx.afterId, data }
 }
