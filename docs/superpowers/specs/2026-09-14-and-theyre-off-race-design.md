@@ -12,13 +12,15 @@ Host presents 4 real, named contenders and a real historical dataset — four
 1994 movies and their weekly box office, say. Teams write down which ONE of
 the 4 ultimately won. Plain paper answer, graded like any other question.
 
-The reveal is the show: the host triggers an animated horse race. Four
-horse-and-jockey sprites on four parallel lanes, each one's position along the
-track driven beat by beat by the real numbers (one week of box office per
+The reveal is the show: the host triggers an animated horse race. **One lap
+around an oval track** (Ben, 2026-09-14 — supersedes the straight-parallel-
+lanes draft below this line in the original pass) — four horse-and-jockey
+sprites on four concentric lanes of one ellipse, each one's position around
+the lap driven beat by beat by the real numbers (one week of box office per
 beat), so the horses visibly trade the lead exactly as the real data did,
-until the true winner crosses the finish line.
+until the true winner crosses the finish line at the top of the final lap.
 
-**Not a bar chart.** Sprites on a track, a finish post, a gallop bob, a
+**Not a bar chart.** Sprites on a track, a finish line, a gallop bob, a
 winner's slam. No axes, no gridlines, no numbers on the track. If it reads as
 data-viz it has failed (`references/brand.md`, AI Slop Test).
 
@@ -159,26 +161,47 @@ pretending to be a race; the editor caps it.
 - Question text (`data.text`) in a top band, `theme.fonts.display`, fitted
   with `fitToBox` from `lib/autoFitText.js` (same as every fixed-region
   slide). Present because phones show the same text; skipped if blank.
-- Four lanes stacked vertically filling the middle ~62% of the stage height.
-  Each lane: a soft track band (a flat `linear-gradient` from
-  `theme.colors.bgDeep` toward transparent — no hard-edged rectangles, per
-  `references/themes.md` rule 6), a rail line between lanes at low alpha, a
-  left-side label chip (contender name in `theme.fonts.display`, optional
-  `imageUrl` thumbnail 64px circle), and the sprite.
-- Track geometry: the run starts at 14% of stage width (just right of the
-  label chips) and the finish post stands at 90%. Each lane has an invisible
-  **runner wrapper** — `position: absolute; left: 14%; width: 76%` — and the
-  sprite is anchored at that wrapper's left edge. A sprite at running-total
-  fraction *f* is `transform: translateX(f × 100%)` **on the wrapper**:
-  `translateX(%)` is relative to the element's own width, which is exactly
-  the track length, so the mapping needs no pixel measurement at all. That
-  matters because `SlideCanvasEditor` renders this same tree inside a
-  `transform: scale(k)` box, where `getBoundingClientRect` returns scaled
-  pixels but `translateX(px)` is unscaled — a measured-pixel version would
-  be wrong in the preview and right on the TV. Percent is right in both.
-- Finish post at 90%: a vertical bar in `SHINY_GOLD` with a checkered flag
-  head drawn with `repeating-conic-gradient` (a checker, not the banned
-  `repeating-linear-gradient` diagonal stripes). Static, no animation.
+- **One oval track, four concentric lanes** (real racetrack shape, not
+  parallel straight lanes). The track is a single ellipse centered in the
+  middle ~62% of the stage; lane *i* (0 = innermost, contender order from
+  `data.contenders`) is a smaller ellipse than lane *i+1*, each lane a fixed
+  radial gap apart. Track surface is a flat `linear-gradient` ring
+  (`theme.colors.bgDeep` toward transparent, no hard edges, per
+  `references/themes.md` rule 6) with a faint rail stroke per lane boundary.
+  A label chip for each contender (name in `theme.fonts.display`, optional
+  `imageUrl` thumbnail) sits outside the outer lane, positioned near that
+  lane's starting point, connected to the sprite by a short leader line —
+  labels do not ride the track (they'd rotate upside-down on the back
+  stretch).
+- **Per-lane wrapper = that lane's bounding box**, the same "percent is
+  right in both real DOM and the scaled preview" trick the straight-lane
+  draft used, generalised to two axes: lane *i*'s wrapper is
+  `position: absolute; inset: 0; margin: auto; width: ${2×rx_i}%; height:
+  ${2×ry_i}%` — a box centered on the shared track center, sized to exactly
+  that lane's ellipse bounding box, where `rx_i`/`ry_i` are percentages of
+  the track container. The sprite is centered inside the wrapper (`position:
+  absolute; top: 50%; left: 50%`). A sprite at lap fraction *f* (0 at the
+  start/finish line, 1 = one full lap) sits at angle `θ(f) = -90° - f×360°`
+  (start at the top of the ellipse, run counter-clockwise, the racing
+  convention) and its transform is
+  `translate(calc(cos(θ)×50%), calc(sin(θ)×50%))` — 50% of the *wrapper's
+  own* width/height is exactly `rx_i`/`ry_i`, so this needs no pixel math
+  and no `getBoundingClientRect`, identical in the TV render and inside
+  `SlideCanvasEditor`'s `transform: scale(k)` preview.
+- **Facing direction:** the horse-and-jockey sprite art faces right (running
+  pose). On the top half of the ellipse (`sin θ < 0`, moving right-to-left
+  as counter-clockwise motion crosses the top) it renders mirrored
+  (`scaleX(-1)`); on the bottom half it renders as-drawn. This flips exactly
+  twice per lap, at the two points where the path crosses horizontal — bake
+  it into the same per-beat keyframe stop as the position transform, don't
+  compute it live.
+- **Finish line** at the start point (top of the ellipse, `θ = -90°`): a
+  radial bar in `SHINY_GOLD` crossing all four lanes with a checkered
+  flag pattern drawn via `repeating-conic-gradient` (a checker, not the
+  banned `repeating-linear-gradient` diagonal stripes). Static, no
+  animation. Because every lane starts and finishes at this same angle,
+  the finish line reads correctly for all four lanes without per-lane
+  offset math.
 - Beat caption bottom-center: the current beat's `label` ("Week 6"), in
   `theme.fonts.body`. Updates once per beat, not per frame (see Timeline).
 - Safe-area note: Critical Rule 6 (keep the centre 60%×45% clear) governs
@@ -227,24 +250,34 @@ ambient in `ParticleBackground.jsx` already uses. No `rAF`, no per-frame React
 state, no Framer Motion on the lanes.
 
 - For lane *i*, compute running totals `T_i[k]` for beats `k = 1..N`, then
-  the fraction `f_i[k] = T_i[k] / max_j T_j[N]`. The divisor is the **final
-  running total of the eventual winner** — one number for the whole race —
-  so the finish post is literally the winner's last value and no lead ever
-  visually resets. (This is the "normalise against the max across the whole
-  series, not per beat" requirement.)
-- Emit one keyframe block per lane: stop `0%` at `translateX(0%)`, then stop
-  `(k / N) × 100%` at `translateX(${f_i[k] × 100}%)` for each beat. Each
-  segment gets `animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1)`
-  (`EASE_BAR`'s value — generated CSS text can't import the JS array, same
-  as the Tailwind className case noted in `SKILL.md`), so each beat reads as
-  a surge-and-settle rather than a constant-speed slide. Duration
-  `N × BEAT_MS` with `BEAT_MS = 700`, `fill-mode: forwards`.
-- Base transform rule: the wrapper's inline `transform` is `translateX(0%)`
-  normally (the gate; the running animation overrides it) and
-  `translateX(${f_i[N] × 100}%)` only under reduced motion, where the
-  animation is `none` and the base transform is what shows. Spell this out
-  in code — getting it backwards puts every horse at the finish before the
-  race starts.
+  the lap fraction `f_i[k] = T_i[k] / max_j T_j[N]`. The divisor is the
+  **final running total of the eventual winner** — one number for the whole
+  race — so the winner's fraction reaches exactly `1` (one full lap, crossing
+  the finish line) and no lead ever visually resets. (This is the "normalise
+  against the max across the whole series, not per beat" requirement,
+  unchanged from the straight-track draft — only the fraction's meaning
+  changed, from "% along a straight" to "% of one lap".)
+- Convert each stop's fraction to an angle: `θ_i[k] = -90 - f_i[k] × 360`
+  (degrees). Emit one keyframe block per lane: stop `0%` at
+  `translate(calc(cos(-90deg) × 50%), calc(sin(-90deg) × 50%)) scaleX(1)`
+  (the gate position, top of the ellipse), then stop `(k / N) × 100%` at
+  `translate(calc(cos(θ_i[k]) × 50%), calc(sin(θ_i[k]) × 50%))
+  scaleX(${sin(θ_i[k]) < 0 ? -1 : 1})` for each beat — CSS `calc()` with
+  `cos()`/`sin()` trig functions (Baseline 2023, fine for the show's
+  fixed browser) takes the angle directly, no JS-side trig-to-percent
+  conversion needed in the generated string beyond computing `θ_i[k]`
+  itself. Each segment gets `animation-timing-function:
+  cubic-bezier(0.4, 0, 0.2, 1)` (`EASE_BAR`'s value — generated CSS text
+  can't import the JS array, same as the Tailwind className case noted in
+  `SKILL.md`), so each beat reads as a surge-and-settle rather than a
+  constant-speed slide. Duration `N × BEAT_MS` with `BEAT_MS = 700`,
+  `fill-mode: forwards`.
+- Base transform rule: the wrapper's inline `transform` is the gate position
+  (`f = 0`, top of the ellipse) normally — the running animation overrides
+  it — and the lane's final position (`f = f_i[N]`) only under reduced
+  motion, where the animation is `none` and the base transform is what
+  shows. Spell this out in code — getting it backwards puts every horse at
+  the finish before the race starts.
 - Gallop bob: a second, shared keyframe on the sprite's inner wrapper —
   `translateY(0) → translateY(-6px) → translateY(0)` at ~280 ms, `infinite`
   while running, with per-lane `animation-delay` offsets from a prime-number
