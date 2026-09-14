@@ -42,7 +42,7 @@ describe('<FlipEmDownSlide>', () => {
   const render = slide => act(() => {
     root.render(
       <ThemeProvider>
-        <FlipEmDownSlide slide={slide} show={undefined} />
+        <FlipEmDownSlide slide={slide} />
       </ThemeProvider>
     )
   })

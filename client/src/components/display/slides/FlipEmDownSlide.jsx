@@ -3,9 +3,6 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { VISUAL_CAPTION_FLOOR } from '../../../lib/autoFitText.js'
-import { isFirstOfShinyGroup } from '../../../lib/shinySeries.js'
-import { sortSlides } from '../../../lib/slideStepping.js'
-import ShinyGroupAnnounce from '../ShinyGroupAnnounce.jsx'
 
 // Alive/eliminated state for one item at the current elimStep. Step 0 = grid
 // only, nobody eliminated yet. Steps 1-2 apply hints[0]/hints[1].survivors.
@@ -58,7 +55,12 @@ function FaceCard({ item, alive, confirmed, size, reduce }) {
   )
 }
 
-export default function FlipEmDownSlide({ slide, show }) {
+// The announce card is its own permanent 'shiny-title' slide
+// (ShinyTitleSlide.jsx, 2026-09-01), a real Next-reachable stop before
+// content — no corner-banner re-announce here, same as GridSlide/
+// VennDiagramSlide (ShinyGroupAnnounce.jsx was removed repo-wide, commit
+// 9be7685, "the standalone shiny-title slide now covers that beat").
+export default function FlipEmDownSlide({ slide }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const { data } = slide
@@ -67,8 +69,7 @@ export default function FlipEmDownSlide({ slide, show }) {
   const revealedHints = (data.hints ?? []).slice(0, step)
 
   return (
-    <>
-      <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
+    <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
         {/* Gold glow burst — fixed gold, theme-independent, same as every
             other shiny content renderer (GridSlide/VennDiagramSlide). */}
         <div aria-hidden style={{
@@ -109,9 +110,5 @@ export default function FlipEmDownSlide({ slide, show }) {
           </div>
         </div>
       </div>
-      {isFirstOfShinyGroup(sortSlides(show?.slides), slide) && (
-        <ShinyGroupAnnounce name={slide.data?.shinyFormatName} icon={slide.data?.shinyFormatIcon} />
-      )}
-    </>
   )
 }
