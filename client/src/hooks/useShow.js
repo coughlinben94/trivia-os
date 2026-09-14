@@ -40,7 +40,6 @@ function normalizeShow(row) {
       scoreboardVisible: row.scoreboard_visible ?? false,
       scoresRevealed: row.scores_revealed ?? false,
       answerReveal: row.answer_reveal ?? false,
-      lateTeamQrVisible: row.late_team_qr_visible ?? false,
     },
   }
 }
@@ -155,7 +154,6 @@ export function useShow() {
                 scoreboardVisible: row.scoreboard_visible ?? prev.showState.scoreboardVisible,
                 scoresRevealed: row.scores_revealed ?? prev.showState.scoresRevealed,
                 answerReveal: row.answer_reveal ?? prev.showState.answerReveal,
-                lateTeamQrVisible: row.late_team_qr_visible ?? prev.showState.lateTeamQrVisible,
               },
             }
           })
@@ -803,17 +801,6 @@ export function useShow() {
     await updateShowRow(show.id, { scoreboard_visible: visible })
   }
 
-  // Late-team join QR — an overlay on top of whatever's currently live
-  // (TV + phones untouched), not a navigation. Replaces the old
-  // goLiveFrom(preShowIndex) jump (2026-08-26), which broadcast a real slide
-  // change to every phone and could get stranded by the pre-show walkout
-  // song's own auto-advance — see LiveMode.jsx's history comment.
-  async function setLateTeamQrVisible(visible) {
-    if (!show) return
-    setShow(s => ({ ...s, showState: { ...s.showState, lateTeamQrVisible: visible } }))
-    await updateShowRow(show.id, { late_team_qr_visible: visible })
-  }
-
   async function setAnswerReveal(visible) {
     if (!show) return
     setShow(s => ({ ...s, showState: { ...s.showState, answerReveal: visible } }))
@@ -923,7 +910,6 @@ export function useShow() {
     nextSlide,
     prevSlide,
     setScoreboardVisible,
-    setLateTeamQrVisible,
     setAnswerReveal,
     setAudioPlaying,
     setScoresRevealed,

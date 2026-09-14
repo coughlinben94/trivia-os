@@ -1105,8 +1105,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
               onClick={() => setLateTeamPopoverOpen(v => !v)}
               title="A team showed up late — add them as new, or reauth a phone that lost its session"
               className={`flex items-center gap-1.5 text-sm font-medium px-2 py-1 rounded-lg transition-colors ${
-                show.showState.lateTeamQrVisible
-                  ? 'bg-green-500 text-white hover:bg-green-600'
+                lateTeamPopoverOpen
+                  ? 'bg-gray-200 text-gray-900'
                   : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
               }`}
             >
@@ -1115,7 +1115,6 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
             {lateTeamPopoverOpen && (
               <LateTeamPopover
                 show={show}
-                onShowJoinQr={() => actions.setLateTeamQrVisible(!show.showState.lateTeamQrVisible)}
                 onClose={() => setLateTeamPopoverOpen(false)}
               />
             )}

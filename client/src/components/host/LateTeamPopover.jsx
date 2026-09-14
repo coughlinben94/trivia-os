@@ -3,8 +3,16 @@ import QRCode from 'qrcode'
 import { supabase } from '../../lib/supabase.js'
 
 // Two ways a late-arriving team needs help, from one button:
-//   "Add a new team" — they never registered at all. Same existing action
-//   the 📱 QR button always did — show the join QR on the TV.
+//   "Add a new team" — they never registered at all. Shows the plain join QR
+//   right here in the popover, on the host's own screen — Ben scans it
+//   himself or holds the laptop out, same as the reauth QR below. Used to
+//   toggle a full-screen overlay on the TV instead (LateTeamQrOverlay.jsx,
+//   2026-09-09 fix for an even older bug where it jumped the whole show back
+//   to the pre-show slide) — replaced entirely (2026-09-14, Ben, live: "i
+//   asked an agent a few days ago to change it so i can just scan a qr code
+//   on my computer... instead of just jumping back to main screen on the
+//   TV" / "like the reauth qr code does"). Nothing on the TV or the show's
+//   state changes for this flow now — it's host-local, same as reauth.
 //   "Reauth a team's phone" — they DID register, but their phone lost its
 //   Supabase auth session (cleared history, iOS eviction) and can no longer
 //   write to phone_answers/teams under RLS. There's no self-service fix for
@@ -27,13 +35,27 @@ import { supabase } from '../../lib/supabase.js'
 // a perfectly fine phone as gone.
 const PRESENCE_STALE_MS = 90 * 1000
 
-export default function LateTeamPopover({ show, onShowJoinQr, onClose }) {
+export default function LateTeamPopover({ show, onClose }) {
   const [mode, setMode] = useState('choose') // 'choose' | 'pick-team' | 'qr'
+  const [qrKind, setQrKind] = useState(null) // 'join' | 'reauth' — which caption to show in 'qr' mode
   const [teams, setTeams] = useState([])
   const [loadingTeams, setLoadingTeams] = useState(false)
   const [qrDataUrl, setQrDataUrl] = useState(null)
   const [error, setError] = useState(null)
   const ref = useRef(null)
+
+  async function showJoinQr() {
+    setError(null)
+    const url = `${window.location.origin}/join?show=${show.id}`
+    try {
+      const dataUrl = await QRCode.toDataURL(url, { width: 260, margin: 1 })
+      setQrDataUrl(dataUrl)
+      setQrKind('join')
+      setMode('qr')
+    } catch {
+      setError('Couldn’t generate the QR — try again')
+    }
+  }
 
   useEffect(() => {
     function onClickOutside(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
@@ -65,6 +87,7 @@ export default function LateTeamPopover({ show, onShowJoinQr, onClose }) {
     try {
       const dataUrl = await QRCode.toDataURL(url, { width: 260, margin: 1 })
       setQrDataUrl(dataUrl)
+      setQrKind('reauth')
       setMode('qr')
     } catch {
       // Token's already minted (it'll just expire unused in 15 min) — the
@@ -83,11 +106,11 @@ export default function LateTeamPopover({ show, onShowJoinQr, onClose }) {
       {mode === 'choose' && (
         <div className="flex flex-col gap-1">
           <button
-            onClick={() => { onShowJoinQr(); onClose() }}
+            onClick={showJoinQr}
             className="text-left text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg px-3 py-2"
           >
             📱 Add a new team
-            <span className="block text-xs text-gray-400 font-normal">Toggles the join QR on the TV, over whatever's live</span>
+            <span className="block text-xs text-gray-400 font-normal">Shows the join QR right here — scan it yourself</span>
           </button>
           <button
             onClick={openTeamPicker}
@@ -148,9 +171,11 @@ export default function LateTeamPopover({ show, onShowJoinQr, onClose }) {
       {mode === 'qr' && (
         <div className="flex flex-col items-center gap-2 p-2">
           <p className="text-xs text-gray-500 text-center">
-            Have them scan this on their own phone — pairs it to the team's existing score. Expires in 15 minutes.
+            {qrKind === 'reauth'
+              ? 'Have them scan this on their own phone — pairs it to the team’s existing score. Expires in 15 minutes.'
+              : 'Scan this yourself, or hold it out for the new team to scan.'}
           </p>
-          {qrDataUrl && <img src={qrDataUrl} alt="Reauth QR" className="w-56 h-56" />}
+          {qrDataUrl && <img src={qrDataUrl} alt={qrKind === 'reauth' ? 'Reauth QR' : 'Join QR'} className="w-56 h-56" />}
           <button onClick={onClose} className="text-xs text-gray-400 hover:text-gray-600 mt-1">Done</button>
         </div>
       )}
