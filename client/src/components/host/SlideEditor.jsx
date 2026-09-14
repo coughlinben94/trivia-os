@@ -13,6 +13,7 @@ import MatchingBoard from '../join/MatchingBoard.jsx'
 import WagerBoard from '../join/WagerBoard.jsx'
 import OrderBoard from '../join/OrderBoard.jsx'
 import ChoiceBoard from '../join/ChoiceBoard.jsx'
+import HuesCuesBoard from '../join/HuesCuesBoard.jsx'
 import { DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
 import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
@@ -1164,7 +1165,20 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
           )}
 
           {schema.type === 'hues-cues' && (
-            <HuesCuesAnswerPicker data={data} onChange={onChange} />
+            <>
+              <HuesCuesAnswerPicker data={data} onChange={onChange} />
+              <div className="flex flex-col gap-2">
+                <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
+                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
+                  <HuesCuesBoard
+                    preview
+                    theme={theme}
+                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
+                    slide={{ id: slide.id, showId: show?.id, data: { ...data, huesCuesLocked: false } }}
+                  />
+                </div>
+              </div>
+            </>
           )}
         </>
       )}
