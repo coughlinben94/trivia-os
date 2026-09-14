@@ -17,6 +17,7 @@ import { DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
 import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
 import { DEFAULT_STEP_ORDER, STEM_LABELS, buildBendleTiers } from '../../lib/bendleScoring.js'
+import { getHuesCuesGrid, HUES_CUES_COLS } from '../../lib/huesCuesGrid.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { overflowsBox, QUESTION_BOX } from '../../lib/autoFitText.js'
 import { isConcurrentShiny, isConcurrentMediaShiny } from '../../lib/shinySeries.js'
@@ -1149,7 +1150,7 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
               field too gave the host two "what's correct" controls on
               screen, only one of which scoring ever reads — found live
               2026-09-06 walking through a real Mandela Effect slide. */}
-          {schema.type !== 'choice' && (
+          {schema.type !== 'choice' && schema.type !== 'hues-cues' && (
             <Field
               label={schema.type === 'wager' ? 'Answer — the true number' : 'Answer'}
               hint={schema.type === 'wager' ? 'Every guess is scored by how close it lands to this. Must be a number.' : undefined}
@@ -1160,6 +1161,10 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
                 placeholder={schema.type === 'wager' ? 'e.g. 412' : 'The answer…'}
               />
             </Field>
+          )}
+
+          {schema.type === 'hues-cues' && (
+            <HuesCuesAnswerPicker data={data} onChange={onChange} />
           )}
         </>
       )}
@@ -2004,6 +2009,45 @@ function WagerBuilder({ answer }) {
         <p className="text-xs text-gray-400">Guesses will be scored against <strong>{trueNumber}</strong>.</p>
       )}
     </div>
+  )
+}
+
+// A click-to-select picker over the full 240-square Hues and Cues grid.
+// Writes the SAME data.answer field the generic Answer TextInput uses for
+// every other type — never a separate field (a prior shiny type's duplicate
+// answer field caused a real production bug, see the comment above the
+// generic Answer field).
+function HuesCuesAnswerPicker({ data, onChange }) {
+  const grid = getHuesCuesGrid()
+  const selectedCode = data.answer ?? null
+
+  return (
+    <Field label="Correct square" hint="Click the target square. Teams are scored by how close their guess lands to this.">
+      <div
+        className="gap-0.5"
+        style={{ display: 'grid', gridTemplateColumns: `repeat(${HUES_CUES_COLS}, 1fr)`, maxWidth: 480 }}
+      >
+        {grid.map(cell => (
+          <button
+            key={cell.code}
+            type="button"
+            onClick={() => onChange('answer', cell.code)}
+            title={cell.code}
+            className="aspect-square rounded-sm p-0 cursor-pointer"
+            style={{
+              background: cell.hex,
+              border: selectedCode === cell.code ? '3px solid white' : '1px solid rgba(0,0,0,0.15)',
+              boxShadow: selectedCode === cell.code ? '0 0 0 1px rgba(0,0,0,0.4)' : 'none',
+            }}
+          />
+        ))}
+      </div>
+      {selectedCode && (
+        <p className="text-xs text-gray-500 mt-2">
+          Selected: <strong>{selectedCode}</strong>
+        </p>
+      )}
+    </Field>
   )
 }
 
