@@ -1663,8 +1663,8 @@ function MatchingBuilder({ pairs, pointsPerMatch, onChangePairs, onChangePoints,
   // adding a photo is what actually switches that side's tile to an image.
   async function uploadImage(i, side, file) {
     if (!file) return
-    const url = await onMediaUpload(file)
-    if (url) updatePair(i, { [side === 'left' ? 'leftImage' : 'rightImage']: url })
+    const result = await onMediaUpload(file)
+    if (result?.url) updatePair(i, { [side === 'left' ? 'leftImage' : 'rightImage']: result.url })
   }
 
   return (
@@ -1769,8 +1769,8 @@ function OrderBuilder({ items, correctOrder, pointsForOrder, onChangeItems, onCh
   }
   async function uploadImage(i, file) {
     if (!file) return
-    const url = await onMediaUpload(file)
-    if (url) onChangeItems(items.map((it, idx) => idx === i ? { ...it, url } : it))
+    const result = await onMediaUpload(file)
+    if (result?.url) onChangeItems(items.map((it, idx) => idx === i ? { ...it, url: result.url } : it))
   }
   // Pulls the item out of its current slot and re-inserts it at the chosen
   // 1-based position — correctOrder stays a valid permutation of every
@@ -1873,8 +1873,8 @@ function ChoiceBuilder({ options, correctIds, multiSelect, pointsForChoice, onCh
   }
   async function uploadImage(i, file) {
     if (!file) return
-    const url = await onMediaUpload(file)
-    if (url) updateOption(i, { image: url })
+    const result = await onMediaUpload(file)
+    if (result?.url) updateOption(i, { image: result.url })
   }
   function toggleCorrect(id) {
     if (multiSelect) {
@@ -2448,8 +2448,8 @@ function VennEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uplo
 
   async function uploadCastPhoto(side, i, file) {
     if (!file) return
-    const url = await onMediaUpload(file)
-    if (url) writeCast(side, i, { mediaUrl: url })
+    const result = await onMediaUpload(file)
+    if (result?.url) writeCast(side, i, { mediaUrl: result.url })
   }
 
   function castColumn(side, cast, label) {
@@ -2518,11 +2518,11 @@ function ElimEditor({ data, onChange, setData, scheduleSave, onMediaUpload }) {
     if (!file) return
     // onMediaUpload is wired to SlideEditor's handleMediaUpload, which resolves
     // to the raw uploadMedia() result ({url, type, filename}), not a bare URL
-    // string — verified live: storing the object outright renders a broken
-    // image (src="[object Object]"). VennEditor's uploadCastPhoto and
-    // GridEditor have this same `const url = await onMediaUpload(file)` shape,
-    // so this looks like a pre-existing shared issue, not new here; fixed only
-    // in this function to stay isolated to ElimEditor's own scope.
+    // string — storing the object outright renders a broken image
+    // (src="[object Object]"). Same bug used to exist in every other
+    // `const url = await onMediaUpload(file)` call site in this file
+    // (VennEditor, GridEditor, MatchingBuilder, OrderBuilder, ChoiceBuilder);
+    // all fixed to this `result?.url` shape in the same pass.
     const result = await onMediaUpload(file)
     if (result?.url) writeItem(i, { imageUrl: result.url })
   }
@@ -2627,8 +2627,8 @@ function GridEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uplo
 
   async function uploadTileImage(ci, ri, file) {
     if (!file) return
-    const url = await onMediaUpload(file)
-    if (url) writeTile(ci, ri, { mediaUrl: url })
+    const result = await onMediaUpload(file)
+    if (result?.url) writeTile(ci, ri, { mediaUrl: result.url })
   }
 
   return (
