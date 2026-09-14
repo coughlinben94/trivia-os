@@ -5,24 +5,30 @@ import { computeRmsEnvelope, resampleEnvelope, normalizeEnvelope } from '../../l
 import { formatTime as formatOffsetTime } from '../../lib/formatTime.js'
 export { formatOffsetTime }
 
-// Which stems get a bar graph — drums/bass/other are the three in-round
-// tiers (see BENDLE_TIERS), so this is literally "show me where all three
-// tiers would already sound full." Vocals is deliberately excluded: it
+// Which stems get a bar graph — drums/bass/other are the in-round tiers
+// (see BENDLE_TIERS), so this is literally "show me where the round's
+// stems would already sound full." Vocals is deliberately excluded: it
 // never plays during the round (see bendleScoring.js's BENDLE_TIERS
 // comment), so its timing is irrelevant to picking a start point here.
+// Guitar joins this list per-song (see GUITAR_ROW below) — only songs
+// reprocessed through worker/bendle/guitar_stem.py have one, and it's a
+// candidate round stem same as the other three, so a host picking an
+// offset for a guitar-tiered song needs to see its waveform too.
 const GRAPH_ROWS = [
   { key: 'drums_url', label: 'Drums', color: '#9333ea' },
   { key: 'bass_url', label: 'Bass', color: '#2563eb' },
   { key: 'other_url', label: 'Other', color: '#16a34a' },
 ]
+const GUITAR_ROW = { key: 'guitar_url', label: 'Guitar', color: '#ea580c' }
 const BUCKET_COUNT = 100
 const PREVIEW_SECONDS = 5
 // Floor on the start->end gap a host can save — stops an accidental
 // zero-length (or negative) reveal window from a slider drag gone wrong.
 const MIN_END_GAP_SECONDS = 3
 
-// props: song = { id, drums_url, bass_url, other_url, start_offset_seconds }
+// props: song = { id, drums_url, bass_url, other_url, guitar_url, start_offset_seconds }
 export default function BendleOffsetScrubber({ song }) {
+  const rows = song.guitar_url ? [...GRAPH_ROWS, GUITAR_ROW] : GRAPH_ROWS
   const [envelopes, setEnvelopes] = useState(null)
   const [duration, setDuration] = useState(0)
   const [loadError, setLoadError] = useState(false)
@@ -85,7 +91,7 @@ export default function BendleOffsetScrubber({ song }) {
         // memory together — each decoded buffer is tens of MB (a few
         // minutes of float32 PCM), and only the small resulting envelope
         // array needs to survive past this loop.
-        for (const row of GRAPH_ROWS) {
+        for (const row of rows) {
           const res = await fetch(song[row.key])
           const arrayBuffer = await res.arrayBuffer()
           const buffer = await ctx.decodeAudioData(arrayBuffer)
@@ -170,7 +176,7 @@ export default function BendleOffsetScrubber({ song }) {
 
   return (
     <div className="space-y-2">
-      {GRAPH_ROWS.map(row => (
+      {rows.map(row => (
         // eslint-disable-next-line jsx-a11y/media-has-caption
         <audio key={row.key} ref={el => { audioRefs.current[row.key] = el }} src={song[row.key]} />
       ))}
@@ -182,7 +188,7 @@ export default function BendleOffsetScrubber({ song }) {
             only the legal range, which silently hid how much of the song
             was off-limits (Ben, 2026-09-08: "there isn't a scrubbed out
             part"). */}
-        {GRAPH_ROWS.map(row => {
+        {rows.map(row => {
           const legalBuckets = Math.max(1, Math.ceil(BUCKET_COUNT * maxOffset / duration))
           return (
             <div key={row.key} className="flex items-end h-6 gap-px" title={row.label}>

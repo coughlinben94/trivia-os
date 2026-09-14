@@ -24,7 +24,12 @@
 // key (see ShinyBendleQuestion.jsx).
 export const DEFAULT_STEP_ORDER = ['drums', 'bass', 'other']
 
-export const STEM_LABELS = { drums: 'Drums', bass: 'Bass', other: 'Everything Else' }
+export const STEM_LABELS = { drums: 'Drums', bass: 'Bass', other: 'Everything Else', guitar: 'Guitar' }
+
+// Guitar is only offered for songs that have a guitar_url (reprocessed
+// through worker/bendle/guitar_stem.py, not every song) — see
+// SlideEditor.jsx's BendleBuilder, which picks the pool per selected song.
+export const AVAILABLE_STEMS = ['drums', 'bass', 'other', 'guitar']
 
 // Position 0/1/2 always pay 20/15/10 — only WHICH stem sits in which
 // position varies per slide. (2026-09-08, Ben: "what if i wanted bass first

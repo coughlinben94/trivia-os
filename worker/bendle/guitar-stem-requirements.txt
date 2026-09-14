@@ -1,0 +1,8 @@
+# Separate throwaway venv for guitar_stem.py — NOT bendle_worker.py's
+# requirements.txt. Keeps the heavy BS-Roformer-SW dependency (audio-
+# separator + torch) out of the production launchd worker entirely.
+audio-separator[cpu]
+demucs
+soundfile
+supabase==2.9.1
+python-dotenv

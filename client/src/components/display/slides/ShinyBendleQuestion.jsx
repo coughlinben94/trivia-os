@@ -12,7 +12,11 @@ import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { clampBendleOffset, buildBendleTiers } from '../../../lib/bendleScoring.js'
 
-const STEM_KEYS = ['drums', 'bass', 'other', 'vocals']
+// 'guitar' is optional per-song (only songs reprocessed through
+// worker/bendle/guitar_stem.py have a guitar_url) — the player-load loop
+// below already skips any stem whose url is missing, so listing it here
+// unconditionally is safe for songs that don't have it.
+const STEM_KEYS = ['drums', 'bass', 'other', 'guitar', 'vocals']
 const FADE_SECONDS = 1.5
 
 // The TV side of ONE Bendle step-slide. A round is 3 REAL sibling slides
