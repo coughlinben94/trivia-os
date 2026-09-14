@@ -124,6 +124,24 @@ export function slideToArchiveRow(slide, show) {
       }
     }
 
+    case 'flip-em-down': {
+      const hintText = (data.hints ?? [])
+        .map(h => h?.text?.trim())
+        .filter(t => !blank(t))
+        .join(' / ')
+      if (blank(hintText) && blank(data.answer)) return null
+      return {
+        ...base,
+        type: 'shiny',
+        text: hintText || null,
+        answer: data.answer?.trim() ?? null,
+        is_shiny: true,
+        shiny_type: 'elimination',
+        shiny_format_name: data.shinyFormatName ?? null,
+        questions_data: { items: data.items ?? [], hints: data.hints ?? [] },
+      }
+    }
+
     case 'pyl-reveal': {
       if (blank(data.themeName)) return null
       return {

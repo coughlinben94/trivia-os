@@ -1194,6 +1194,26 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
             <span style={{ fontSize: '0.85em' }}>📊</span>
             Score
           </button>
+          {currentSlide?.type === 'flip-em-down' && (
+            <div className="flex items-center gap-1 ml-1">
+              <button
+                onClick={() => actions.updateSlide(currentSlide.id, { data: { ...currentSlide.data, elimStep: Math.max(0, (currentSlide.data?.elimStep ?? 0) - 1) } })}
+                disabled={(currentSlide.data?.elimStep ?? 0) === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Undo last hint"
+              >
+                ↩ Hint
+              </button>
+              <button
+                onClick={() => actions.updateSlide(currentSlide.id, { data: { ...currentSlide.data, elimStep: Math.min(3, (currentSlide.data?.elimStep ?? 0) + 1) } })}
+                disabled={(currentSlide.data?.elimStep ?? 0) >= 3}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors bg-baynes-forest text-white hover:bg-green-900 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Reveal next hint"
+              >
+                Next Hint ({Math.min(3, (currentSlide.data?.elimStep ?? 0) + 1)}/3) →
+              </button>
+            </div>
+          )}
           {onOpenScoreboard && (
             <button
               onClick={onOpenScoreboard}

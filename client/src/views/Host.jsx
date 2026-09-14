@@ -332,6 +332,7 @@ function slidePickerLabel(slide) {
     return data.questionLabel || `Q${data.questionNumber || '?'}`
   }
   if (type === 'shiny-title') return data.seriesTheme || data.shinyFormatName || '✨ Shiny'
+  if (type === 'flip-em-down') return data.shinyFormatName || "Flip 'Em Down!"
   if (type === 'round-intro' || type === 'swing-round-intro') return data.roundTitle || 'Round Intro'
   if (type === 'grading-break') return 'Grading Break'
   if (type === 'scoreboard-reveal') return data.title || 'Scoreboard'

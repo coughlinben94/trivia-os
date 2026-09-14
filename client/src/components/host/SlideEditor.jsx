@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { nanoid } from 'nanoid'
 import { analyzeAudioGain } from '../../lib/audioNormalize.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
 import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
@@ -254,6 +255,9 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
               {slide.type === 'venn' && (
                 <VennEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload}
                   uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} usedPhotoUrls={usedPhotoUrls} />
+              )}
+              {slide.type === 'flip-em-down' && (
+                <ElimEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload} />
               )}
               {slide.type === 'winner-reveal' && (
                 <WinnerRevealEditor data={data} onChange={change} />
@@ -2490,6 +2494,122 @@ function VennEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uplo
 
       {castColumn('left', leftCast, 'Left Movie Cast')}
       {castColumn('right', rightCast, 'Right Movie Cast')}
+    </div>
+  )
+}
+
+function ElimEditor({ data, onChange, setData, scheduleSave, onMediaUpload }) {
+  // Fixed at 8 items / 3 hints, unlike VennEditor's variable 2-6 per side —
+  // no "+ Add" control, nothing to grow.
+  const blankItems = () => Array.from({ length: 8 }, () => ({ id: nanoid(6), label: '', imageUrl: null }))
+  const blankHints = () => [{ text: '', survivors: [] }, { text: '', survivors: [] }, { text: '' }]
+  const items = data.items?.length === 8 ? data.items : blankItems()
+  const hints = data.hints?.length === 3 ? data.hints : blankHints()
+
+  function writeItem(i, patch) {
+    const arr = items.slice()
+    arr[i] = { ...arr[i], ...patch }
+    const next = { ...data, items: arr }
+    setData(next)
+    scheduleSave({ data: next })
+  }
+
+  async function uploadItemPhoto(i, file) {
+    if (!file) return
+    // onMediaUpload is wired to SlideEditor's handleMediaUpload, which resolves
+    // to the raw uploadMedia() result ({url, type, filename}), not a bare URL
+    // string — verified live: storing the object outright renders a broken
+    // image (src="[object Object]"). VennEditor's uploadCastPhoto and
+    // GridEditor have this same `const url = await onMediaUpload(file)` shape,
+    // so this looks like a pre-existing shared issue, not new here; fixed only
+    // in this function to stay isolated to ElimEditor's own scope.
+    const result = await onMediaUpload(file)
+    if (result?.url) writeItem(i, { imageUrl: result.url })
+  }
+
+  function writeHint(i, patch) {
+    const arr = hints.slice()
+    arr[i] = { ...arr[i], ...patch }
+    const next = { ...data, hints: arr }
+    setData(next)
+    scheduleSave({ data: next })
+  }
+
+  function toggleSurvivor(hintIdx, itemId) {
+    const current = hints[hintIdx]?.survivors ?? []
+    let next = current.includes(itemId) ? current.filter(id => id !== itemId) : [...current, itemId]
+    // Hint 2's survivors must always be a subset of hint 1's — a face
+    // eliminated at hint 1 can't come back at hint 2 (final review fix).
+    // Intersection computed live, right here, per the spec's own framing.
+    if (hintIdx === 1) {
+      const hint1Survivors = hints[0]?.survivors ?? []
+      next = next.filter(id => hint1Survivors.includes(id))
+    }
+    writeHint(hintIdx, { survivors: next })
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Divider label="Flip 'Em Down!" />
+      <Field label="Answer">
+        <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="The one who survives all 3 hints" />
+      </Field>
+
+      <Divider label="8 Faces" />
+      <div className="grid grid-cols-2 gap-3">
+        {items.map((item, i) => (
+          <div key={item.id} className="flex items-center gap-2 border border-gray-200 rounded-lg p-2">
+            <MediaUpload
+              accept="image"
+              label={`Face ${i + 1}`}
+              currentUrl={item.imageUrl}
+              currentType={item.imageUrl ? 'image/jpeg' : null}
+              onUpload={file => uploadItemPhoto(i, file)}
+              onRemove={() => writeItem(i, { imageUrl: null })}
+            />
+            <TextInput value={item.label ?? ''} onChange={v => writeItem(i, { label: v })} placeholder="Name" />
+          </div>
+        ))}
+      </div>
+
+      <Divider label="Hints" />
+      {[0, 1].map(hi => {
+        const survivorCount = hints[hi]?.survivors?.length ?? 0
+        const warn = hi === 0
+          ? survivorCount > 0 && (survivorCount < 3 || survivorCount > 5)
+          : survivorCount > 0 && survivorCount !== 1
+        return (
+          <div key={hi} className="flex flex-col gap-2">
+            <Field label={`Hint ${hi + 1}`}>
+              <TextInput value={hints[hi]?.text ?? ''} onChange={v => writeHint(hi, { text: v })} placeholder="e.g. SNL cast member." />
+            </Field>
+            <div className="flex flex-wrap gap-2">
+              {items.map(item => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => toggleSurvivor(hi, item.id)}
+                  className={`text-xs px-2 py-1 rounded border transition-colors ${
+                    (hints[hi]?.survivors ?? []).includes(item.id)
+                      ? 'bg-gray-900 text-white border-gray-900'
+                      : 'bg-gray-100 border-gray-200 text-gray-600'
+                  }`}
+                >
+                  {item.label || `Face ${items.indexOf(item) + 1}`}
+                </button>
+              ))}
+            </div>
+            <p className={`text-[11px] ${warn ? 'text-amber-600' : 'text-gray-400'}`}>
+              {survivorCount} survive{hi === 1 && survivorCount === 1 ? ' — locked' : ''}
+              {warn && hi === 0 && ' — hint 1 usually narrows to 3-5'}
+              {warn && hi === 1 && ' — hint 2 needs to land on exactly 1'}
+            </p>
+          </div>
+        )
+      })}
+      <Field label="Hint 3 (spoken, not a filter)">
+        <TextInput value={hints[2]?.text ?? ''} onChange={v => writeHint(2, { text: v })} placeholder="A flavor clue the host reads aloud before giving the answer" />
+      </Field>
     </div>
   )
 }
