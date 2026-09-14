@@ -631,6 +631,7 @@ function TeamRosterBeat({ teamNames, theme, font, reduce }) {
           fontWeight: 700,
           letterSpacing: '-0.01em',
           marginBottom: '2rem',
+          textShadow: `0 0 18px ${theme.colors.accent}, 0 0 8px ${theme.colors.highlight}`,
         }}
       >
         Tonight's Teams
@@ -643,8 +644,17 @@ function TeamRosterBeat({ teamNames, theme, font, reduce }) {
             animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
             transition={{ delay: reduce ? 0 : Math.min(i * 0.045, 0.9), duration: 0.28, ease: EASE_OUT }}
             style={{
-              background: `${theme.colors.accent}18`,
-              border: `1.5px solid ${theme.colors.accent}50`,
+              // Team-picker's own bg is pure black (fixed, not theme-linked —
+              // see the file-top comment), unlike TeamPreviewSlide's ring-
+              // world backdrop this look was borrowed from. accent-tinted
+              // fill/border at TeamPreviewSlide's opacities read as nearly
+              // invisible against flat black (measured: ~1.1:1 contrast,
+              // under WCAG's 3:1 floor for UI shapes) — highlight is this
+              // slide's own established "visible on black" color (already
+              // what the bottom team-counter and every canvas name glow
+              // use), so the pill borrows that instead of accent.
+              background: `${theme.colors.highlight}14`,
+              border: `1.5px solid ${theme.colors.highlight}60`,
               borderRadius: '999px',
               padding: '0.5rem 1.3rem',
               fontFamily: font,
@@ -652,6 +662,7 @@ function TeamRosterBeat({ teamNames, theme, font, reduce }) {
               color: theme.colors.text,
               fontWeight: 600,
               whiteSpace: 'nowrap',
+              textShadow: `0 0 10px ${theme.colors.accent}`,
             }}
           >
             {name}
