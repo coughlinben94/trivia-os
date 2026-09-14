@@ -187,6 +187,12 @@ export function withEntryState(slides, slide, { currentPart, protectInProgress =
   if (!protectInProgress && (slide.data?.elimStep ?? 0) > 0) {
     patch.elimStep = 0
   }
+  // Fresh entry also resets And They're Off!'s raceStartedAt — same
+  // stale-state class as elimStep above: a rehearsal that finished the race
+  // must not bleed into the next genuinely fresh entry.
+  if (!protectInProgress && slide.data?.raceStartedAt != null) {
+    patch.raceStartedAt = null
+  }
   if (Object.keys(patch).length === 0) return slides
   return patchSlideData(slides, slide.id, patch)
 }
