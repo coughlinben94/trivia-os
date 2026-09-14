@@ -2537,7 +2537,14 @@ function ElimEditor({ data, onChange, setData, scheduleSave, onMediaUpload }) {
 
   function toggleSurvivor(hintIdx, itemId) {
     const current = hints[hintIdx]?.survivors ?? []
-    const next = current.includes(itemId) ? current.filter(id => id !== itemId) : [...current, itemId]
+    let next = current.includes(itemId) ? current.filter(id => id !== itemId) : [...current, itemId]
+    // Hint 2's survivors must always be a subset of hint 1's — a face
+    // eliminated at hint 1 can't come back at hint 2 (final review fix).
+    // Intersection computed live, right here, per the spec's own framing.
+    if (hintIdx === 1) {
+      const hint1Survivors = hints[0]?.survivors ?? []
+      next = next.filter(id => hint1Survivors.includes(id))
+    }
     writeHint(hintIdx, { survivors: next })
   }
 
