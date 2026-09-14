@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { supabase } from '../../../lib/supabase.js';
 import { useTheme } from '../../shared/ThemeProvider.jsx';
 import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js';
-import { nextSlideAfter } from '../../../lib/slideStepping.js';
+import { nextSlideAfter, TEAM_PICKER_HOLD_MS } from '../../../lib/slideStepping.js';
 import { hexToRgb as hexToRgbArr } from '../../../lib/oklab.js';
 
 const DISP_CAP = 150, SS = 1.6;
@@ -212,6 +212,26 @@ export default function TeamPickerSlide({ slide, show }) {
     const a = audioRef.current;
     if (!a) return;
     stopVolAnim();
+    // Fresh entry (currentPart 0 — the opening text, before the host's first
+    // Next) plays the real intro: silent hold, fade up from 0 in step with
+    // the reveal. A MOUNT that starts mid-ceremony (currentPart > 0) is not
+    // a fresh entry — it's this component remounting while teams are
+    // already rolling (a page reload, main.jsx's stale-chunk safety net
+    // firing on a flaky chunk fetch, anything that tears down and rebuilds
+    // this slide). Reseeking to AUDIO_START_S and fading up from silence in
+    // that case read as the music clipping and restarting from the
+    // beginning (2026-09-14, Ben, live: "clipping then looping weird" /
+    // "restarts from the beginning" — reproduced by forcing a mid-roll
+    // remount). Estimate roughly where the roll would have the music by now
+    // (each auto-rolled part is TEAM_PICKER_HOLD_MS apart) and resume there
+    // at full volume, no fade — an estimate, not a synced clock, but
+    // "already playing" reads far less broken than "restarting."
+    if (currentPart > 0) {
+      a.currentTime = AUDIO_START_S + (currentPart * TEAM_PICKER_HOLD_MS) / 1000;
+      setVol(a, AUDIO_VOL);
+      a.play().catch(() => {});
+      return;
+    }
     a.volume = 0;
     const t = setTimeout(() => {
       a.currentTime = AUDIO_START_S;
