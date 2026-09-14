@@ -7,7 +7,8 @@ import ShinyWagerQuestion from './ShinyWagerQuestion.jsx'
 import ShinyOrderQuestion from './ShinyOrderQuestion.jsx'
 import ShinyBendleQuestion from './ShinyBendleQuestion.jsx'
 import ShinyChoiceQuestion from './ShinyChoiceQuestion.jsx'
-import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isChoiceShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView, isFirstOfShinyGroup } from '../../../lib/shinySeries.js'
+import ShinyHuesCuesQuestion from './ShinyHuesCuesQuestion.jsx'
+import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isChoiceShiny, isHuesCuesShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView, isFirstOfShinyGroup } from '../../../lib/shinySeries.js'
 import { sortSlides, chunkParts } from '../../../lib/slideStepping.js'
 import ShinyGroupAnnounce from '../ShinyGroupAnnounce.jsx'
 import { GridContent } from './GridSlide.jsx'
@@ -1503,6 +1504,9 @@ function dispatchShinyContent({ slide, show, theme, transitionKey, isPreview }) 
   }
   if (isChoiceShiny(data)) {
     return <ShinyChoiceQuestion slide={slide} show={show} theme={theme} />
+  }
+  if (isHuesCuesShiny(data)) {
+    return <ShinyHuesCuesQuestion slide={slide} show={show} theme={theme} />
   }
   return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} isPreview={isPreview} />
 }
