@@ -21,7 +21,7 @@
 // Callers own the write + their own local-state update; nothing here
 // touches the network or React.
 
-import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
+import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isHuesCuesShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
 
 // Chunks `parts` into fixed-size reveal groups of `groupSize`, in authored
 // order — the single implementation both revealStepCount's Next/Prev step
@@ -352,6 +352,7 @@ export const PHONE_MECHANICS = {
   wager:    { guard: isWagerShiny,    lockFields: ['wagerTiersLocked', 'wagerGuessesLocked'], revealField: 'wagerRevealed' },
   order:    { guard: isOrderShiny,    lockFields: ['orderLocked'], revealField: 'orderRevealed' },
   choice:   { guard: isChoiceShiny,   lockFields: ['choiceLocked'], revealField: 'choiceRevealed' },
+  huesCues: { guard: isHuesCuesShiny, lockFields: ['huesCuesLocked'], revealField: 'huesCuesRevealed' },
 }
 
 // Wager is the only mechanic with TWO lock phases on one slide (blind tiers
