@@ -111,6 +111,18 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
   const previewCell = hasPick ? getHuesCuesCell(`${col}${row}`) : null
 
   // --- Pan/zoom handlers (browse phase) ---
+  // Pan is bounded relative to zoom — at scale:1 the whole grid already fits
+  // its box (per the fit-baseline comment below), so no pan offset is ever
+  // needed or allowed; the bound grows linearly with zoom so there's always
+  // room to reach every corner of a zoomed-in view. Without this, a drag or
+  // pinch could fling the grid fully off-screen with no way back except a
+  // page reload — "move around with ease" means never getting lost, not
+  // just having drag/pinch wired up.
+  const PAN_BOUND_PER_SCALE_UNIT = 180
+  function clampPan(v, scale) {
+    const bound = Math.max(0, scale - 1) * PAN_BOUND_PER_SCALE_UNIT
+    return Math.max(-bound, Math.min(bound, v))
+  }
   // pointersRef tracks every currently-down pointer by id (Pointer Events
   // unify mouse/touch/pen — one finger drags, two fingers pinch). onWheel
   // alone (mouse/trackpad only) was the brief's original plan, but a real
@@ -138,13 +150,14 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
       const [a, b] = [...pointersRef.current.values()]
       const dist = Math.hypot(a.x - b.x, a.y - b.y)
       const ratio = dist / pinchRef.current.startDist
-      setPan(p => ({ ...p, scale: Math.max(0.5, Math.min(4, pinchRef.current.startScale * ratio)) }))
+      const scale = Math.max(0.5, Math.min(4, pinchRef.current.startScale * ratio))
+      setPan(p => ({ x: clampPan(p.x, scale), y: clampPan(p.y, scale), scale }))
       return
     }
     if (!dragRef.current) return
     const dx = e.clientX - dragRef.current.startX
     const dy = e.clientY - dragRef.current.startY
-    setPan(p => ({ ...p, x: dragRef.current.originX + dx, y: dragRef.current.originY + dy }))
+    setPan(p => ({ ...p, x: clampPan(dragRef.current.originX + dx, p.scale), y: clampPan(dragRef.current.originY + dy, p.scale) }))
   }
   function onPointerUp(e) {
     pointersRef.current.delete(e.pointerId)
@@ -161,7 +174,10 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
   function onWheel(e) {
     if (pickerOpen) return
     e.preventDefault()
-    setPan(p => ({ ...p, scale: Math.max(0.5, Math.min(4, p.scale - e.deltaY * 0.001)) }))
+    setPan(p => {
+      const scale = Math.max(0.5, Math.min(4, p.scale - e.deltaY * 0.001))
+      return { x: clampPan(p.x, scale), y: clampPan(p.y, scale), scale }
+    })
   }
 
   return (
@@ -189,6 +205,18 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
         </p>
       )}
       <div style={{ display: 'grid', width: '100%' }}>
+        {/* The clip boundary lives on this OUTER, never-transformed box.
+            overflow:hidden clips to an element's own layout box — CSS
+            transforms don't change layout size, only paint — so putting
+            overflow:hidden on the SAME element as the pan/zoom transform
+            (the original approach here) let the clip boundary itself grow
+            with pan.scale: at 4x zoom the "clipped" box was 4x wider than
+            the phone viewport, no longer actually clipping anything.
+            Splitting the transform onto an unclipped inner child fixes it —
+            the outer box's auto-height/width come from the inner grid's
+            pre-transform natural size (transforms don't reflow ancestors),
+            so the clip boundary stays pinned to the real viewport-fit size
+            at every zoom level. */}
         <div
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -198,23 +226,29 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
           style={{
             gridRow: 1, gridColumn: 1, alignSelf: 'start',
             overflow: 'hidden', touchAction: 'none',
-            display: 'grid',
-            gridTemplateColumns: `repeat(${HUES_CUES_COLS}, 1fr)`,
-            gap: 1,
-            // 100% (not a hardcoded px canvas) so scale:1 means "whole grid
-            // fits the phone's actual width" — verified live: a fixed
-            // 600px canvas left ~40% of the grid (cols J-P) clipped off-
-            // screen at 390px viewport width with zero visual hint more
-            // columns existed. Zoom (pan.scale) still multiplies from this
-            // fit baseline, so 4x still zooms in the same way.
             width: '100%',
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${pan.scale})`,
-            transformOrigin: 'center center',
           }}
         >
-          {grid.map(cell => (
-            <div key={cell.code} style={{ aspectRatio: '1 / 1', background: cell.hex }} />
-          ))}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${HUES_CUES_COLS}, 1fr)`,
+              gap: 1,
+              // 100% (not a hardcoded px canvas) so scale:1 means "whole grid
+              // fits the phone's actual width" — verified live: a fixed
+              // 600px canvas left ~40% of the grid (cols J-P) clipped off-
+              // screen at 390px viewport width with zero visual hint more
+              // columns existed. Zoom (pan.scale) still multiplies from this
+              // fit baseline, so 4x still zooms in the same way.
+              width: '100%',
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${pan.scale})`,
+              transformOrigin: 'center center',
+            }}
+          >
+            {grid.map(cell => (
+              <div key={cell.code} style={{ aspectRatio: '1 / 1', background: cell.hex }} />
+            ))}
+          </div>
         </div>
 
         {!locked && !pickerOpen && (
