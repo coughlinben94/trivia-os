@@ -68,10 +68,13 @@ def normalize_stem(local_path):
     # audio/mpeg content-type. Same per-stem-tolerant pattern as before
     # (don't fail the whole song over one bad stem), one level down.
     plain_path = local_path.replace(".wav", "_plain.mp3")
-    result = subprocess.run(
-        ["ffmpeg", "-y", "-i", local_path, "-c:a", "libmp3lame", "-b:a", "320k", plain_path],
-        capture_output=True, text=True, timeout=120,
-    )
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", local_path, "-c:a", "libmp3lame", "-b:a", "320k", plain_path],
+            capture_output=True, text=True, timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"plain mp3 encode timed out for {local_path}")
     if result.returncode != 0 or not Path(plain_path).exists():
         raise RuntimeError(f"couldn't encode stem to mp3: {result.stderr[-1000:]}")
     return plain_path
