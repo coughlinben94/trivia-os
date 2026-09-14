@@ -26,9 +26,7 @@ import {
   cursorAfterStep,
   teamPickerCursor,
   ownsAutoRoll,
-  isLandedPart,
   TEAM_PICKER_HOLD_MS,
-  TEAM_PICKER_LANDED_HOLD_MS,
 } from '../lib/slideStepping.js'
 import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
 
@@ -1307,8 +1305,7 @@ export default function Display() {
       currentSlideId: show.current_slide_id,
     })
     if (!ownsAutoRoll(cursor, ownedCursor)) return
-    const landed = isLandedPart(cursor.partsLen, cursor.part)
-    const t = setTimeout(() => guardedStep(1), landed ? TEAM_PICKER_LANDED_HOLD_MS : TEAM_PICKER_HOLD_MS)
+    const t = setTimeout(() => guardedStep(1), TEAM_PICKER_HOLD_MS)
     return () => clearTimeout(t)
   }, [
     isPreview,

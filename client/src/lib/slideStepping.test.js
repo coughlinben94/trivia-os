@@ -4,7 +4,6 @@ import {
   computePrevStep,
   withEntryState,
   bakeTeamPickerParts,
-  patchSlideData,
   isAutoRollPart,
   teamPickerCursor,
   cursorAfterStep,
@@ -231,7 +230,7 @@ describe('computeNextStep', () => {
   it('bakes team-picker parts from the live team count on entry', async () => {
     const slides = [slide('a', 0), slide('b', 1, 'team-picker', {})]
     const patch = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, async () => 4)
-    expect(dataOf(patch, 'b').parts).toHaveLength(7) // intro + 4 teams + outro + landed
+    expect(dataOf(patch, 'b').parts).toHaveLength(8) // intro + 4 teams + roster + outro + landed
   })
 
   it('returns null at the end of the show', async () => {
@@ -358,7 +357,7 @@ describe('bakeTeamPickerParts', () => {
   it('re-bakes from the live count even when a parts array already exists', async () => {
     const s = slide('a', 0, 'team-picker', { parts: [null, null] })
     const out = await bakeTeamPickerParts([s], s, async () => 9)
-    expect(out[0].data.parts).toHaveLength(9 + 3)
+    expect(out[0].data.parts).toHaveLength(9 + 4)
   })
 
   it('leaves non-team-picker slides untouched', async () => {
@@ -372,8 +371,8 @@ describe('bakeTeamPickerParts', () => {
 // front of a live room as a skipped team, a skipped closing statement, or a
 // roll that never starts — so it gets its own asserts.
 describe('isAutoRollPart', () => {
-  // 4 teams -> bakeTeamPickerParts length 7: [intro, t1, t2, t3, t4, outro, landed]
-  const LEN = 4 + 3
+  // 4 teams -> bakeTeamPickerParts length 8: [intro, t1, t2, t3, t4, roster, outro, landed]
+  const LEN = 4 + 4
 
   it('never fires on the opening text — that press is the host\'s roll trigger', () => {
     expect(isAutoRollPart(LEN, 0)).toBe(false)
@@ -383,26 +382,31 @@ describe('isAutoRollPart', () => {
     expect([1, 2, 3, 4].map(p => isAutoRollPart(LEN, p))).toEqual([true, true, true, true])
   })
 
+  it('rolls the last team name so the roll lands ON the roster beat', () => {
+    // The final auto-fire must come from the last team (LEN-4), moving to the
+    // roster — otherwise the roll stalls one name short and Ben has to press.
+    expect(isAutoRollPart(LEN, LEN - 4)).toBe(true)
+  })
+
+  it('fires on the roster beat too, rolling straight into the closing statement', () => {
+    expect(isAutoRollPart(LEN, LEN - 3)).toBe(true)
+  })
+
   it('stops on the closing statement and the landed reveal', () => {
     expect(isAutoRollPart(LEN, LEN - 2)).toBe(false) // outro
     expect(isAutoRollPart(LEN, LEN - 1)).toBe(false) // landed
   })
 
-  it('rolls the last team name so the roll lands ON the closing statement', () => {
-    // The final auto-fire must come from the last team (LEN-3), moving to the
-    // outro — otherwise the roll stalls one name short and Ben has to press.
-    expect(isAutoRollPart(LEN, LEN - 3)).toBe(true)
-  })
-
-  it('never fires for a zero-team roster (baked length 3) or an unbaked slide', () => {
-    expect([0, 1, 2].map(p => isAutoRollPart(3, p))).toEqual([false, false, false])
+  it('a zero-team roster (baked length 4) only auto-rolls its roster beat', () => {
+    expect([0, 1, 2, 3].map(p => isAutoRollPart(4, p))).toEqual([false, true, false, false])
     expect(isAutoRollPart(0, 0)).toBe(false)
   })
 
   it('scales to any roster size without hardcoded indices', () => {
-    const big = 21 + 3
+    const big = 21 + 4
     expect(isAutoRollPart(big, 21)).toBe(true)   // last team
-    expect(isAutoRollPart(big, 22)).toBe(false)  // outro
+    expect(isAutoRollPart(big, 22)).toBe(true)   // roster
+    expect(isAutoRollPart(big, 23)).toBe(false)  // outro
   })
 })
 
@@ -417,7 +421,7 @@ describe('team-picker auto-roll ownership', () => {
 
   describe('teamPickerCursor', () => {
     it('reads slide id, part and baked length off the live slide', () => {
-      expect(teamPickerCursor(at([picker(3)]))).toEqual({ slideId: 'tp', part: 3, partsLen: 7, backEntry: false })
+      expect(teamPickerCursor(at([picker(3)]))).toEqual({ slideId: 'tp', part: 3, partsLen: 7 })
     })
 
     it('is null before the queued slide is revealed (currentSlideId null)', () => {
@@ -431,7 +435,7 @@ describe('team-picker auto-roll ownership', () => {
     })
 
     it('defaults an unbaked/unstarted slide to part 0', () => {
-      expect(teamPickerCursor(at([slide('tp', 0, 'team-picker', {})]))).toEqual({ slideId: 'tp', part: 0, partsLen: 0, backEntry: false })
+      expect(teamPickerCursor(at([slide('tp', 0, 'team-picker', {})]))).toEqual({ slideId: 'tp', part: 0, partsLen: 0 })
     })
   })
 
@@ -439,7 +443,7 @@ describe('team-picker auto-roll ownership', () => {
     it('describes where a window\'s own press just left the show', async () => {
       const slides = [picker(1)]
       const patch = await computeNextStep(at(slides), noTeams)
-      expect(cursorAfterStep(at(slides), patch, 1000)).toEqual({ slideId: 'tp', part: 2, partsLen: 7, at: 1000, backEntry: false })
+      expect(cursorAfterStep(at(slides), patch, 1000)).toEqual({ slideId: 'tp', part: 2, partsLen: 7, at: 1000 })
     })
 
     it('follows a step that crosses ONTO a team-picker slide', async () => {
@@ -449,7 +453,7 @@ describe('team-picker auto-roll ownership', () => {
       const slides = [slide('a', 0), slide('tp', 1, 'team-picker', {})]
       const patch = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, async () => 4)
       const c = cursorAfterStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, patch, 5)
-      expect(c).toEqual({ slideId: 'tp', part: 0, partsLen: 7, at: 5, backEntry: false })
+      expect(c).toEqual({ slideId: 'tp', part: 0, partsLen: 8, at: 5 })
     })
 
     it('is null when the press stepped off the team-picker entirely', async () => {
@@ -494,43 +498,9 @@ describe('team-picker auto-roll ownership', () => {
       expect(ownsAutoRoll(closing, { ...closing, at: 1000 }, 1100)).toBe(false)
     })
 
-    it('arms on landed too — Team Intro auto-advances into Team List (2026-09-14)', () => {
+    it('never arms on the landed reveal either — that step waits for an explicit Next', () => {
       const landed = { slideId: 'tp', part: 6, partsLen: 7 }
-      expect(ownsAutoRoll(landed, { ...landed, at: 1000 }, 1100)).toBe(true)
-    })
-
-    // Found in review the same day the landed auto-advance shipped: Prev
-    // resumes team-picker at the exact same (partsLen - 1) part a genuine
-    // forward landing does — with no backEntry check, a host pressing Prev
-    // to review the reveal got auto-advanced right back off it 3s later.
-    it('does NOT arm on a Prev-resumed landed part, even with clean ownership', () => {
-      const backEntered = { slideId: 'tp', part: 6, partsLen: 7, backEntry: true }
-      expect(ownsAutoRoll(backEntered, { ...backEntered, at: 1000 }, 1100)).toBe(false)
-    })
-
-    it('computePrevStep marks _backEntry when it resumes team-picker at its landed part', async () => {
-      // bakeTeamPickerParts re-bakes on every cross-slide entry — 4 teams to
-      // match the len-7 shape (intro + 4 teams + outro + landed) this test
-      // asserts against, same fixture the other bake tests use.
-      const slides = [picker(0), slide('a', 1)] // Prev from 'a' lands back on 'tp'
-      const patch = await computePrevStep({ slides, currentSlideIndex: 1, currentSlideId: 'a' }, async () => 4)
-      expect(patch.current_slide_id).toBe('tp')
-      expect(dataOf(patch, 'tp').currentPart).toBe(6)
-      expect(dataOf(patch, 'tp')._backEntry).toBe(true)
-      expect(teamPickerCursor(at(patch.slides))).toEqual({ slideId: 'tp', part: 6, partsLen: 7, backEntry: true })
-    })
-
-    it('a real forward landing after a Prev-in clears the stale _backEntry flag', async () => {
-      // Prev lands on landed (part 6) with _backEntry set, host presses Prev
-      // again (to the outro, part 5), then Next (forward, back to part 6) —
-      // this second landing is a genuine roll-forward and must auto-advance.
-      const backEntered = patchSlideData([picker(6)], 'tp', { _backEntry: true })
-      const toOutro = await computePrevStep({ slides: backEntered, currentSlideIndex: 0, currentSlideId: 'tp' }, noTeams)
-      expect(dataOf(toOutro, 'tp').currentPart).toBe(5)
-      const toLanded = await computeNextStep({ slides: toOutro.slides, currentSlideIndex: 0, currentSlideId: 'tp' }, noTeams)
-      expect(dataOf(toLanded, 'tp').currentPart).toBe(6)
-      expect(dataOf(toLanded, 'tp')._backEntry).toBe(false)
-      expect(ownsAutoRoll(teamPickerCursor(at(toLanded.slides)), { slideId: 'tp', part: 6, at: 1000 }, 1100)).toBe(true)
+      expect(ownsAutoRoll(landed, { ...landed, at: 1000 }, 1100)).toBe(false)
     })
 
     it('expires stale ownership so the other window can never re-match it', () => {
@@ -557,9 +527,9 @@ describe('team-picker auto-roll ownership', () => {
         armed.push(ownsAutoRoll(teamPickerCursor(at(slides)), owned, 1100))
       }
       // parts 1..4 are the four team names (auto), 5 = closing (waits for a
-      // real Next), 6 = landed (auto-advances into Team List, 2026-09-14);
-      // the 7th press is a no-op (nothing after this slide) and breaks out.
-      expect(armed).toEqual([true, true, true, true, false, true])
+      // real Next), 6 = landed (also waits for a real Next); the 7th press is
+      // a no-op (nothing after this slide) and breaks out.
+      expect(armed).toEqual([true, true, true, true, false, false])
     })
   })
 })

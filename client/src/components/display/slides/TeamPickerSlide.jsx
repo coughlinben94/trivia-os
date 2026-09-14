@@ -120,11 +120,26 @@ function makeSprite(text, color, glowHi, glowAcc, fontFamily, fsOverride) {
 // slide.data: { openingText?, closingText?, parts, currentPart }
 // parts/currentPart are the same stepping mechanism shiny series use (see
 // useShow.js's withEntryState/nextSlide/prevSlide) — parts is baked once,
-// on first entry, to [intro, ...teams, outro, landed].length by
+// on first entry, to [intro, ...teams, roster, outro, landed].length by
 // bakeTeamPickerParts; this component just reads currentPart as a prop and
 // reacts, same as PylRevealSlide/PixelateSeriesSlide. It does NOT listen for
 // its own keydown — Stream Deck lives on /host (LiveMode.jsx), not /display,
 // so a local listener here would never see the real hardware.
+//
+// The 'roster' part (2026-09-14, Ben, live: "cant all the team names just be
+// listed after the last name... and then we only need one slide type") shows
+// every team name at once, right after the one-by-one roll and before the
+// closing line — the same beat the separate team-preview ("Team List") slide
+// used to cover. That slide type still exists (old shows still reference it,
+// and it still renders fine), but a new show no longer needs to add it after
+// Team Intro. This also kills the 2026-09-14 same-day attempt at bridging the
+// two slides with a cross-slide auto-advance off the ring-world reveal
+// (isLandedPart/TEAM_PICKER_LANDED_HOLD_MS, since reverted) — that mechanism
+// needed two windows (/host, /display) to agree on ownership of a timer that
+// fired a real slide change, which is exactly the race Ben saw as "the team
+// intro slide and the team list slide are fighting with each other." Folding
+// the roster into this slide's own part sequence removes the second slide
+// (and the cross-window handoff) entirely instead of fixing the race.
 export default function TeamPickerSlide({ slide, show }) {
   const { theme } = useTheme();
   const reduce = useMemo(() =>
@@ -242,19 +257,20 @@ export default function TeamPickerSlide({ slide, show }) {
     return () => { ok = false; };
   }, [font]);
 
-  // slide.data.parts is baked to a fixed length (intro + teams + outro +
-  // landed) the first time the slide is entered live — use that as the
-  // authoritative team count so the sequence can't resize mid-reveal if
+  // slide.data.parts is baked to a fixed length (intro + teams + roster +
+  // outro + landed) the first time the slide is entered live — use that as
+  // the authoritative team count so the sequence can't resize mid-reveal if
   // someone registers late. Falls back to the live team count when parts
   // hasn't been baked yet (e.g. viewing this slide in the editor preview,
   // which never goes through useShow.js's live-entry path).
-  const bakedCount = Array.isArray(slide?.data?.parts) ? slide.data.parts.length - 3 : null;
+  const bakedCount = Array.isArray(slide?.data?.parts) ? slide.data.parts.length - 4 : null;
   const teamCount = bakedCount !== null ? Math.max(0, bakedCount) : teams.length;
   const teamNames = useMemo(() => teams.slice(0, teamCount), [teams, teamCount]);
 
   const seq = useMemo(() => [
     { kind: 'intro', text: openingText },
     ...teamNames.map((n) => ({ kind: 'team', text: n })),
+    { kind: 'roster' },
     { kind: 'outro', text: closingText },
     { kind: 'landed' },
   ], [teamNames, openingText, closingText]);
@@ -375,7 +391,7 @@ export default function TeamPickerSlide({ slide, show }) {
   // loop captured getSprite's closure on mount (same reason theme does).
   useEffect(() => {
     ctl.current.teamFs = uniformTeamFs;
-    if (fontsReady) { spriteCache.current.clear(); seq.forEach(it => { if (it.kind !== 'landed') getSprite(it); }); }
+    if (fontsReady) { spriteCache.current.clear(); seq.forEach(it => { if (it.kind !== 'landed' && it.kind !== 'roster') getSprite(it); }); }
   }, [fontsReady, seq, uniformTeamFs]); // eslint-disable-line
 
   useEffect(() => {
@@ -498,7 +514,10 @@ export default function TeamPickerSlide({ slide, show }) {
           }
         }
         if (c.reduce) { disp = 1; op = Math.min(1, pt / 260); }
-        if (op > 0.001) {
+        // 'roster' runs this same approach/hold/exit clock (so the DOM
+        // TeamRosterBeat below gets the same timing every other item does)
+        // but has no single-string canvas sprite of its own to draw.
+        if (op > 0.001 && item.kind !== 'roster') {
           const spr = getSprite(item), drawScale = disp / SS;
           dctx.globalAlpha = op;
           dctx.drawImage(spr.canvas, CX - (spr.w * drawScale) / 2, CY - (spr.h * drawScale) / 2, spr.w * drawScale, spr.h * drawScale);
@@ -548,11 +567,70 @@ export default function TeamPickerSlide({ slide, show }) {
       </motion.div>
       {revealed ? (
         nextIsRoundOne ? <RoundOneBeat theme={theme} font={font} reduce={reduce} /> : null
+      ) : cur?.kind === 'roster' ? (
+        <TeamRosterBeat teamNames={teamNames} theme={theme} font={font} reduce={reduce} />
       ) : cur?.kind === 'team' ? (
         <div className="absolute bottom-10 inset-x-0 text-center" style={{ fontFamily: font, letterSpacing: 4, color: theme.colors.highlight, opacity: 0.5, fontSize: 26 }}>
           {String(hudIdx).padStart(2, '0')} / {String(teamCount).padStart(2, '0')}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// Every team name at once, right after the one-by-one roll — the beat that
+// used to be its own slide (Team List / team-preview). Reuses that slide's
+// pill-grid look (TeamPreviewSlide.jsx) rather than inventing a second one,
+// just without its own Supabase fetch (teamNames is already the roll's own
+// live-baked roster) and without its dark-radial "sits on the ring world"
+// treatment, since this beat plays over team-picker's own fixed black/
+// starfield background instead.
+function TeamRosterBeat({ teamNames, theme, font, reduce }) {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center px-16 pointer-events-none">
+      <motion.div
+        initial={{ opacity: 0, transform: reduce ? 'none' : 'translateY(-16px)' }}
+        animate={{ opacity: 1, transform: 'translateY(0px)' }}
+        transition={{ duration: 0.35, ease: EASE_OUT }}
+        style={{
+          fontFamily: font,
+          fontSize: 'clamp(1.6rem, 3vw, 2.6rem)',
+          color: theme.colors.text,
+          fontWeight: 700,
+          letterSpacing: '-0.01em',
+          marginBottom: '2rem',
+        }}
+      >
+        Tonight's Teams
+      </motion.div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'center', maxWidth: '82%' }}>
+        {teamNames.map((name, i) => (
+          <motion.div
+            key={name + i}
+            initial={{ opacity: 0, transform: reduce ? 'none' : 'scale(0.85) translateY(14px)' }}
+            animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
+            transition={{ delay: reduce ? 0 : Math.min(i * 0.045, 0.9), duration: 0.28, ease: EASE_OUT }}
+            style={{
+              background: `${theme.colors.accent}18`,
+              border: `1.5px solid ${theme.colors.accent}50`,
+              borderRadius: '999px',
+              padding: '0.5rem 1.3rem',
+              fontFamily: font,
+              fontSize: 'clamp(0.95rem, 1.8vw, 1.5rem)',
+              color: theme.colors.text,
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {name}
+          </motion.div>
+        ))}
+        {teamNames.length === 0 && (
+          <div style={{ fontFamily: font, color: theme.colors.textMuted, opacity: 0.5, fontSize: '1.2rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            No teams yet
+          </div>
+        )}
+      </div>
     </div>
   );
 }

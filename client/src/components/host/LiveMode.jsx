@@ -13,7 +13,7 @@ import { computeChoiceScoreUpdates, DEFAULT_CHOICE_POINTS } from '../../lib/choi
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 import { scoreHuesCuesRound, computeHuesCuesScoreUpdates } from '../../lib/huesCuesScoring.js'
 import { HUES_CUES_CODE_RE } from '../../lib/huesCuesGrid.js'
-import { isAutoRollPart, isLandedPart, TEAM_PICKER_HOLD_MS, TEAM_PICKER_LANDED_HOLD_MS, pendingLockPhase, pendingReveal, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
+import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
 // override for it — every other wager error is a real, unrecoverable-by-
@@ -809,22 +809,17 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     // timer fire that reveal press itself, so landing on Team Intro would
     // start the ceremony with no host input at all.
     if ((show.showState.currentSlideId ?? null) === null) return
-    // parts = [intro, ...teams, outro, landed] — bakeTeamPickerParts() bakes
-    // length = teamCount + 3. isAutoRollPart owns that index law (same file,
-    // slideStepping.js) so this component can't drift from it.
+    // parts = [intro, ...teams, roster, outro, landed] — bakeTeamPickerParts()
+    // bakes length = teamCount + 4. isAutoRollPart owns that index law (same
+    // file, slideStepping.js) so this component can't drift from it.
     const partsLen = currentSlide.data?.parts?.length ?? 0
     const curPart = currentSlide.data?.currentPart ?? 0
-    // A Prev press resumes team-picker at this exact same part — see
-    // computePrevStep's _backEntry comment (slideStepping.js) for why that's
-    // indistinguishable from a real forward landing without it.
-    const landed = isLandedPart(partsLen, curPart) && !currentSlide.data?._backEntry
-    if (!isAutoRollPart(partsLen, curPart) && !landed) return
-    const t = setTimeout(() => guardNav(actionsRef.current.nextSlide), landed ? TEAM_PICKER_LANDED_HOLD_MS : TEAM_PICKER_HOLD_MS)
+    if (!isAutoRollPart(partsLen, curPart)) return
+    const t = setTimeout(() => guardNav(actionsRef.current.nextSlide), TEAM_PICKER_HOLD_MS)
     return () => clearTimeout(t)
   }, [
     currentSlide?.type,
     currentSlide?.data?.currentPart,
-    currentSlide?.data?._backEntry,
     currentSlide?.data?.parts?.length,
     show.showState.currentSlideId,
     guardNav,
