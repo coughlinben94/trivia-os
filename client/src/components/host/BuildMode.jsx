@@ -116,7 +116,7 @@ const REST_STATE_BOX_ORDER_KEY = 'trivia-os:rest-state-box-order'
 function defaultRestStateBoxOrder() {
   return [
     ...TYPE_CARDS.filter(c => !c.hidden).map(c => c.type),
-    'theme', 'swing', 'pyl', 'shiny', 'transitions', 'database', 'ticker', 'data', 'shows', 'music',
+    'theme', 'swing', 'pyl', 'shiny', 'database', 'ticker', 'data', 'shows', 'music',
   ]
 }
 
@@ -768,14 +768,14 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                       // box — a 14th box broke the "13 has no clean divisor, 5-5-3"
                       // grid math the comment above documents, leaving it alone in
                       // an orphaned 4th row. Sharing this box with Bendle instead of
-                      // Album Transitions keeps the total box count at 13 (still 2
-                      // subtiles here, just swapped which one) — Album Transitions
-                      // moves to its own standalone box below, box count unchanged.
+                      // adding a new one keeps the total box count at 13. (Album
+                      // Transitions briefly got its own standalone box in this same
+                      // swap — Ben: "isnt needed" — dropped entirely, not just
+                      // demoted back into a subtile.)
                       music:    { icon: '🎵', name: 'Music Library', desc: 'Jukebox songs, sets & trim points', styleKey: 'music', subtiles: [
                         { icon: '🎵', label: 'Music Library', onClick: () => window.open('/music', '_blank') },
                         { icon: '🎧', label: 'Bendle Songs', onClick: () => setShowBendleAdmin(true) },
                       ] },
-                      transitions: { icon: '🌀', name: 'Album Transitions', desc: 'Preview the jukebox switch-song animation', styleKey: 'music', onClick: () => window.open('https://claude.ai/code/artifact/a831a530-6ac5-47ed-8486-66a2b3a53352', '_blank') },
                     }
 
                     return restBoxOrder.map(id => {
