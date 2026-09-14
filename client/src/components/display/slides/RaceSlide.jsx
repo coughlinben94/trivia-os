@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { EASE_OUT, EASE_DROP } from '../../../lib/easings.js'
@@ -25,8 +25,22 @@ const GATE_ANGLE = -90
 const LANE_RX = [22, 30, 38, 46]
 const LANE_RY = [15, 20.5, 26, 31.5]
 
+// Fixed jockey-silk colors, one per lane, theme-independent (a race signal,
+// same reasoning as SHINY_GOLD staying constant across themes) — lets the
+// room tell a name chip apart from its horse without reading a leader line.
+const LANE_COLORS = ['#ff6b6b', '#4ecdc4', '#ffd166', '#7b7bff']
+
 function transformFor(angleDeg, flip) {
   return `translate(calc(cos(${angleDeg}deg) * 50%), calc(sin(${angleDeg}deg) * 50%)) scaleX(${flip ? -1 : 1})`
+}
+
+// keyframeStops()'s gate stop is shared across every lane and its `flip` is
+// always true (sin(-90deg) < 0) — read it from the real stop (raceMath.js,
+// Task 1) rather than re-deriving or hardcoding it here, so a horse at the
+// gate faces the direction it's about to run instead of squashing through
+// zero width on beat 1.
+function gateFlipFor(stops) {
+  return stops?.[0]?.flip ?? true
 }
 
 // 1-indexed current beat number (1..n) for the caption, given elapsed ms.
@@ -61,7 +75,11 @@ export default function RaceSlide({ slide }) {
     ? Array.from({ length: n + 1 }, (_, k) => (k === n ? 100 : (k * BEAT_MS / totalMs) * 100))
     : []
 
-  const initialElapsed = raceStartedAt ? Date.now() - raceStartedAt : 0
+  // Frozen once per raceStartedAt (Seek) — recomputing Date.now() - raceStartedAt
+  // on every re-render (the beat ticker re-renders every 700ms) would re-seek
+  // the CSS animation-delay forward each beat, running the race at ~2x speed
+  // with visible teleports instead of seeking only on mount/reload/reconnect.
+  const initialElapsed = useMemo(() => (raceStartedAt ? Date.now() - raceStartedAt : 0), [raceStartedAt])
   const startedFinished = raceStartedAt != null && n > 0 && initialElapsed >= totalMs
 
   const [finished, setFinished] = useState(() => reduce || startedFinished)
@@ -70,6 +88,16 @@ export default function RaceSlide({ slide }) {
     if (!raceStartedAt) return 0
     return beatIndexAt(initialElapsed, n)
   })
+
+  // useState's initializer only reads `reduce` on first render — if
+  // useReducedMotion() resolves after mount, re-sync here instead of never
+  // finishing the race.
+  useEffect(() => {
+    if (reduce) {
+      setFinished(true)
+      setBeatIdx(n)
+    }
+  }, [reduce, n])
 
   // Beat caption ticker + safety-net finish — the real finish trigger is the
   // winner lane's animationend below; this just keeps the caption current
@@ -104,7 +132,7 @@ export default function RaceSlide({ slide }) {
   const laneKeyframeName = (i) => `race-lane-${slideKey}-${i}`
   const laneKeyframesCSS = contenders.map((c, i) => {
     const stops = laneStops[i] ?? []
-    const rules = [`0% { transform: ${transformFor(GATE_ANGLE, false)}; }`]
+    const rules = [`0% { transform: ${transformFor(GATE_ANGLE, gateFlipFor(stops))}; }`]
     for (let k = 0; k < n; k += 1) {
       const stop = stops[k + 1]
       if (!stop) continue
@@ -132,7 +160,8 @@ export default function RaceSlide({ slide }) {
     const trailName = (i) => `race-trail-${slideKey}-${i}`
     const trailKeyframesCSS = contenders.map((c, i) => {
       const col = fractions.map((row) => row[i] ?? 0)
-      const rules = [`0% { transform: ${transformFor(GATE_ANGLE, false)}; }`]
+      const stops = laneStops[i] ?? []
+      const rules = [`0% { transform: ${transformFor(GATE_ANGLE, gateFlipFor(stops))}; }`]
       for (let k = 0; k < n; k += 1) {
         const f = Math.max(0, (col[k] ?? 0) - TRAIL_LAG)
         const angleDeg = GATE_ANGLE - f * 360
@@ -149,8 +178,13 @@ export default function RaceSlide({ slide }) {
   }
 
   const trackAnimated = !reduce && !!raceStartedAt && n > 0
+  // Track surface: a flat gradient ring (references/themes.md rule 6, no
+  // hard edges) — otherwise this is four emoji floating with nothing
+  // readable as a racetrack underneath them.
   const trackStyle = {
     position: 'absolute', inset: 0, margin: 'auto', width: '62%', height: '62%', transformOrigin: 'center',
+    borderRadius: '50%',
+    background: `radial-gradient(ellipse at center, transparent 32%, ${theme.colors.bgDeep} 58%, transparent 92%)`,
   }
   let trackClassName
   if (trackAnimated && !finished) {
@@ -185,7 +219,7 @@ export default function RaceSlide({ slide }) {
 
       {data.text && (
         <div style={{ position: 'absolute', top: 30, left: 0, right: 0, textAlign: 'center', zIndex: 40, padding: '0 60px' }}>
-          <p style={{ margin: 0, color: theme.colors.text, fontFamily: `'${qFamily}', 'Boogaloo', cursive`, fontSize: `${qSizePx}px`, textShadow: '0 2px 10px rgba(0,0,0,0.6)' }}>{data.text}</p>
+          <p style={{ margin: 0, color: theme.colors.text, fontFamily: `'${qFamily}', 'Boogaloo', sans-serif`, fontSize: `${qSizePx}px`, textShadow: '0 2px 10px rgba(0,0,0,0.6)' }}>{data.text}</p>
         </div>
       )}
 
@@ -206,8 +240,13 @@ export default function RaceSlide({ slide }) {
                 boxShadow: ring ? `0 0 0 3px ${SHINY_GOLD}` : 'none',
               }}
             >
+              <span aria-hidden style={{
+                width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+                background: LANE_COLORS[i % LANE_COLORS.length],
+                boxShadow: '0 0 6px rgba(0,0,0,0.4)',
+              }} />
               {c.imageUrl && <img src={c.imageUrl} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }} />}
-              <span style={{ color: theme.colors.text, fontFamily: `'${theme.fonts.display}', 'Boogaloo', cursive`, fontSize: '1.2rem' }}>{c.name}</span>
+              <span style={{ color: theme.colors.text, fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`, fontSize: '1.2rem' }}>{c.name}</span>
             </motion.div>
           )
         })}
@@ -226,11 +265,22 @@ export default function RaceSlide({ slide }) {
           boxShadow: `0 0 14px ${SHINY_GOLD_GLOW}`,
         }} />
 
+        {/* Faint rail stroke per lane boundary — static (never animated),
+            so it reads as a fixed track under the moving sprites rather
+            than a shape that flips/translates along with them. */}
+        {contenders.map((c, i) => (
+          <div key={`rail-${c.id}`} aria-hidden style={{
+            position: 'absolute', inset: 0, margin: 'auto',
+            width: `${2 * LANE_RX[i % LANE_RX.length]}%`, height: `${2 * LANE_RY[i % LANE_RY.length]}%`,
+            borderRadius: '50%', border: `1px solid ${theme.colors.text}22`, zIndex: 1,
+          }} />
+        ))}
+
         {contenders.map((c, i) => {
           const rx = LANE_RX[i % LANE_RX.length]
           const ry = LANE_RY[i % LANE_RY.length]
           const stops = laneStops[i] ?? []
-          const finalStop = stops[n] ?? { angleDeg: GATE_ANGLE, flip: false }
+          const finalStop = stops[n] ?? { angleDeg: GATE_ANGLE, flip: gateFlipFor(stops) }
           const isWinnerLane = winner.winnerIndex === i
           const laneName = laneKeyframeName(i)
 
@@ -240,13 +290,13 @@ export default function RaceSlide({ slide }) {
           let className
           if (state === 'running') {
             className = laneName
-            wrapperStyle.transform = transformFor(GATE_ANGLE, false)
+            wrapperStyle.transform = transformFor(GATE_ANGLE, gateFlipFor(stops))
             wrapperStyle.animationDelay = `-${initialElapsed}ms`
           } else if (state === 'finished') {
             wrapperStyle.transform = transformFor(finalStop.angleDeg, finalStop.flip)
             wrapperStyle.animation = 'none'
           } else {
-            wrapperStyle.transform = transformFor(GATE_ANGLE, false)
+            wrapperStyle.transform = transformFor(GATE_ANGLE, gateFlipFor(stops))
             wrapperStyle.animation = 'none'
           }
 
@@ -260,7 +310,7 @@ export default function RaceSlide({ slide }) {
               {!reduce && state === 'running' && (
                 <div
                   data-race-trail
-                  style={{ position: 'absolute', inset: 0, margin: 'auto', width: `${2 * rx}%`, height: `${2 * ry}%`, zIndex: 5 + i }}
+                  style={{ position: 'absolute', inset: 0, margin: 'auto', width: `${2 * rx}%`, height: `${2 * ry}%`, zIndex: 5 + i, animationDelay: `-${initialElapsed}ms` }}
                   className={`race-trail-${slideKey}-${i}`}
                 >
                   <span aria-hidden style={{
@@ -279,8 +329,14 @@ export default function RaceSlide({ slide }) {
               >
                 <div style={{ position: 'absolute', top: '50%', left: '50%', ...bobStyle }}>
                   {/* Build placeholder — swap for public/race/horse-{i+1}.png
-                      once the sprite art passes review (spec's Sprites section). */}
-                  <span style={{ fontSize: 48, display: 'block' }}>🐎</span>
+                      once the sprite art passes review (spec's Sprites section).
+                      Colored disc = the same jockey-silk color as this lane's
+                      label chip, so the room can track a name to a horse. */}
+                  <span style={{
+                    fontSize: 48, display: 'block', borderRadius: '50%',
+                    background: `${LANE_COLORS[i % LANE_COLORS.length]}33`,
+                    boxShadow: `0 0 0 2px ${LANE_COLORS[i % LANE_COLORS.length]}`,
+                  }}>🐎</span>
                 </div>
               </div>
             </div>
@@ -301,11 +357,14 @@ export default function RaceSlide({ slide }) {
           <motion.div
             data-race-vignette
             initial={{ opacity: 0 }}
-            animate={reduce ? { opacity: 0.35 } : { opacity: [0, 0.35, 0] }}
+            animate={{ opacity: [0, 0.35, 0] }}
             transition={{ duration: 0.5 }}
             style={{
               position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 45,
-              background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.7) 0%, transparent 70%)',
+              // Dark at the EDGES fading to transparent at center — a
+              // vignette frames the shot, it doesn't darken the subject
+              // (the horses/winner name) it's supposed to be punctuating.
+              background: 'radial-gradient(ellipse at center, transparent 0%, transparent 45%, rgba(0,0,0,0.55) 100%)',
             }}
           />
           <motion.div
@@ -314,11 +373,11 @@ export default function RaceSlide({ slide }) {
             transition={{ duration: 0.32, ease: EASE_DROP }}
             style={{
               position: 'absolute', bottom: 70, left: 0, right: 0, textAlign: 'center', zIndex: 46,
-              color: SHINY_GOLD, fontFamily: `'${theme.fonts.display}', 'Boogaloo', cursive`,
+              color: SHINY_GOLD, fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
               fontSize: '3rem', fontWeight: 700, textShadow: `0 0 20px ${SHINY_GOLD_GLOW}`,
             }}
           >
-            🏆 {winner.winnerName}
+            {winner.winnerIndex === null ? "It's a tie!" : `🏆 ${winner.winnerName}`}
           </motion.div>
         </>
       )}

@@ -78,6 +78,18 @@ describe('<RaceSlide>', () => {
     expect(styleTag).toBeTruthy()
     const matches = styleTag.textContent.match(/@keyframes/g) || []
     expect(matches.length).toBe(4) // one block per lane
+
+    // 3 beats -> N+1 = 4 stops per lane, 4 lanes -> 16 stop rules total.
+    const stopCount = (styleTag.textContent.match(/transform:/g) || []).length
+    expect(stopCount).toBe(16)
+
+    // Gate frame (0%) must face the direction the horse is about to run —
+    // keyframeStops()'s gate stop has flip: true (sin(-90deg) < 0), so this
+    // must be scaleX(-1), not the identity scaleX(1) a hardcoded `false`
+    // would produce (regression guard for the gate-flip fix).
+    expect(styleTag.textContent).toMatch(
+      /0% \{ transform: translate\(calc\(cos\(-90deg\) \* 50%\), calc\(sin\(-90deg\) \* 50%\)\) scaleX\(-1\); \}/
+    )
   })
 
   it('stretches the final beat into a photo-finish slow-motion duration', () => {
