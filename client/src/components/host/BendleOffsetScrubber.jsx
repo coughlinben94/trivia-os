@@ -115,8 +115,13 @@ export default function BendleOffsetScrubber({ song }) {
       ctx.close().catch(() => {})
       clearTimeout(previewTimerRef.current)
     }
+    // song.guitar_url (not just song.id) is a real dep: it starts null and
+    // flips once when a song gets reprocessed through guitar_stem.py, so
+    // this needs to re-decode and pick up the new row — without it, a
+    // realtime update that adds guitar_url mid-session would add GUITAR_ROW
+    // to `rows` (below) with no matching envelope ever computed for it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [song.id])
+  }, [song.id, song.guitar_url])
 
   const maxOffset = duration ? Math.max(0, duration - MIN_PLAYABLE_SECONDS) : 0
   const tooShort = duration > 0 && maxOffset === 0
@@ -188,7 +193,12 @@ export default function BendleOffsetScrubber({ song }) {
             only the legal range, which silently hid how much of the song
             was off-limits (Ben, 2026-09-08: "there isn't a scrubbed out
             part"). */}
-        {rows.map(row => {
+        {/* rows.filter, not rows.map directly: `rows` reacts to song.guitar_url
+            immediately (synchronous), but `envelopes` only catches up once the
+            analyze effect above finishes re-running — without this filter, the
+            one render in between has a row with no matching envelopes[row.key]
+            and throws. */}
+        {rows.filter(row => envelopes[row.key]).map(row => {
           const legalBuckets = Math.max(1, Math.ceil(BUCKET_COUNT * maxOffset / duration))
           return (
             <div key={row.key} className="flex items-end h-6 gap-px" title={row.label}>

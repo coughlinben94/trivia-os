@@ -36,7 +36,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from bendle_worker import get_client, normalize_stem  # noqa: E402
+from bendle_worker import build_ready_update, get_client, normalize_stem  # noqa: E402
 
 MODELS_DIR = os.environ.get("BENDLE_SW_MODELS_DIR", os.path.expanduser("~/bendle-sw-models"))
 CKPT, YAML = "BS-Roformer-SW.ckpt", "bs_roformer_sw.yaml"
@@ -71,10 +71,14 @@ def separate(source_audio, out_dir, overlap):
 
 def refine_guitar(guitar_wav, out_dir):
     refine_dir = os.path.join(out_dir, "refine")
-    result = subprocess.run(
-        [sys.executable, "-m", "demucs", "-n", "htdemucs", "-o", refine_dir, guitar_wav],
-        capture_output=True, text=True, timeout=1800,
-    )
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "demucs", "-n", "htdemucs", "-o", refine_dir, guitar_wav],
+            capture_output=True, text=True, timeout=1800,
+        )
+    except subprocess.TimeoutExpired:
+        print("[guitar_stem] refine pass timed out, keeping raw guitar stem", flush=True)
+        return guitar_wav
     if result.returncode != 0:
         print(f"[guitar_stem] refine pass failed, keeping raw guitar stem:\n{result.stderr[-1000:]}", flush=True)
         return guitar_wav
@@ -121,8 +125,7 @@ def main():
         urls[stem] = sb.storage.from_("trivia-show-media").get_public_url(storage_path)
 
     sb.table("bendle_songs").update({
-        "guitar_url": urls["guitar"], "bass_url": urls["bass"], "drums_url": urls["drums"],
-        "other_url": urls["other"], "vocals_url": urls["vocals"], "status": "ready", "error_text": None,
+        **build_ready_update(urls), "guitar_url": urls["guitar"],
     }).eq("id", args.song_id).execute()
     print(f"[guitar_stem] done: {urls}", flush=True)
 
