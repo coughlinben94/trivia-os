@@ -791,6 +791,29 @@ function SlideBody({ slide, show, theme, team, onInteractiveAnswered, overridePa
       )
     }
 
+    case 'horse-race': {
+      const contenders = (slide.data.contenders ?? []).filter(c => c?.name)
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {slide.data.text && (
+            <p style={{
+              color: text, fontSize: 'clamp(1.35rem, 5.5vw, 1.6rem)',
+              lineHeight: 1.55, margin: 0, fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
+            }}>
+              {slide.data.text}
+            </p>
+          )}
+          {contenders.length > 0 && (
+            <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {contenders.map((c) => (
+                <li key={c.id} style={{ color: text, fontSize: '1rem', lineHeight: 1.4, margin: 0 }}>{c.name}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )
+    }
+
     // Every remaining slide type — winner-reveal, team-picker, pyl-reveal,
     // pre-show, pixelate-series, state-of-union, grid, custom, team-preview.
     // Used to be an unconditional "look up at the screen" (2026-08-25, Ben,
