@@ -202,7 +202,7 @@ export function buildElimSlide(ctx) {
     items,
     hints,
     elimStep: 0,
-    answer: '',
+    answer: ctx.shinyAnswer?.trim() ?? '',
   }
   return { type: 'flip-em-down', roundId: ctx.roundId ?? null, afterSlideId: ctx.afterId, data }
 }
