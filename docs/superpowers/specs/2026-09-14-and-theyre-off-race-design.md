@@ -259,8 +259,16 @@ state, no Framer Motion on the lanes.
   changed, from "% along a straight" to "% of one lap".)
 - Convert each stop's fraction to an angle: `θ_i[k] = -90 - f_i[k] × 360`
   (degrees). Emit one keyframe block per lane: stop `0%` at
-  `translate(calc(cos(-90deg) × 50%), calc(sin(-90deg) × 50%)) scaleX(1)`
-  (the gate position, top of the ellipse), then stop `(k / N) × 100%` at
+  `translate(calc(cos(-90deg) × 50%), calc(sin(-90deg) × 50%))
+  scaleX(-1)` (the gate position, top of the ellipse — **the gate's flip
+  is `-1`, not `1`**: `sin(-90°) < 0`, so the general flip rule below
+  already puts the gate on the mirrored side. Task 1's `raceMath.js`
+  ruled on this explicitly — `keyframeStops()`'s own `stops[0].flip` is
+  `true` — and Task 4's review caught an earlier draft of this renderer
+  hardcoding the gate to `scaleX(1)`, which faced every horse backward at
+  the start and squashed them through zero width on the first beat. Always
+  read the gate's flip from the formula/from `stops[0]`, never hardcode
+  it), then stop `(k / N) × 100%` at
   `translate(calc(cos(θ_i[k]) × 50%), calc(sin(θ_i[k]) × 50%))
   scaleX(${sin(θ_i[k]) < 0 ? -1 : 1})` for each beat — CSS `calc()` with
   `cos()`/`sin()` trig functions (Baseline 2023, fine for the show's
