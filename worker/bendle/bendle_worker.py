@@ -30,31 +30,51 @@ def build_search_query(title, artist):
 
 
 def normalize_stem(local_path):
-    # Loudness-normalizes one separated stem before upload. The app layers
-    # drums/bass/other at equal 0dB gain once faded in (ShinyBendleQuestion.jsx
-    # never applies a per-stem gain), but raw Demucs output isn't level-matched
-    # across stems — the 2026-09-08 audio audit measured "other" ~6dB and
-    # vocals ~4.4dB quieter than drums/bass on a real song (no clipping or
-    # bleed otherwise). Single-pass EBU R128 loudnorm, not two-pass: good
-    # enough to even out a bar-show mix, not worth doubling ffmpeg runs
-    # (4 stems) for broadcast-grade accuracy. TP=-1.5 leaves true-peak
-    # headroom so normalizing up a quiet stem can't introduce clipping.
-    # Falls back to the un-normalized file on failure rather than failing the
-    # whole song — same per-stem-tolerant pattern as the round-playing effect
-    # skipping a stem that fails to load.
-    normalized_path = local_path.replace(".mp3", "_norm.mp3")
+    # Loudness-normalizes one separated stem before upload AND is the single
+    # lossy encode in the pipeline: Demucs now writes lossless WAV (no
+    # --mp3 flag, see process_song), so this is the only place PCM turns
+    # into mp3 — explicit -b:a 320k matches Demucs' own former default.
+    # (Previously Demucs encoded to 320k mp3 itself and this step re-encoded
+    # THAT down to ffmpeg's silent default of 128k mp3 — a double-lossy
+    # re-encode that quietly halved stem quality on every song. 2026-09-14
+    # audit caught it via docs, not audible listening — nobody had chosen
+    # 128k, it was just ffmpeg's unset-bitrate default.)
+    # The app layers drums/bass/other at equal 0dB gain once faded in
+    # (ShinyBendleQuestion.jsx never applies a per-stem gain), but raw
+    # Demucs output isn't level-matched across stems — the 2026-09-08 audio
+    # audit measured "other" ~6dB and vocals ~4.4dB quieter than drums/bass
+    # on a real song (no clipping or bleed otherwise). Single-pass EBU R128
+    # loudnorm, not two-pass: good enough to even out a bar-show mix, not
+    # worth doubling ffmpeg runs (4 stems) for broadcast-grade accuracy.
+    # TP=-1.5 leaves true-peak headroom so normalizing up a quiet stem can't
+    # introduce clipping.
+    normalized_path = local_path.replace(".wav", "_norm.mp3")
     try:
         result = subprocess.run(
-            ["ffmpeg", "-y", "-i", local_path, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", normalized_path],
+            ["ffmpeg", "-y", "-i", local_path, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+             "-c:a", "libmp3lame", "-b:a", "320k", normalized_path],
             capture_output=True, text=True, timeout=120,
         )
+        if result.returncode == 0 and Path(normalized_path).exists():
+            return normalized_path
+        print(f"[Bendle] loudnorm failed for {local_path}, falling back to plain encode:\n{result.stderr[-1000:]}", flush=True)
     except subprocess.TimeoutExpired:
-        print(f"[Bendle] loudnorm timed out for {local_path}, uploading unnormalized", flush=True)
-        return local_path
-    if result.returncode != 0 or not Path(normalized_path).exists():
-        print(f"[Bendle] loudnorm failed for {local_path}, uploading unnormalized:\n{result.stderr[-1000:]}", flush=True)
-        return local_path
-    return normalized_path
+        print(f"[Bendle] loudnorm timed out for {local_path}, falling back to plain encode", flush=True)
+
+    # Fallback skips normalization but still must produce an mp3 — the
+    # source is now lossless WAV (not, as before this fix, an already-mp3
+    # file safe to upload as-is), so a failed loudnorm pass can't just
+    # upload local_path raw: wrong bytes for the .mp3 storage path/
+    # audio/mpeg content-type. Same per-stem-tolerant pattern as before
+    # (don't fail the whole song over one bad stem), one level down.
+    plain_path = local_path.replace(".wav", "_plain.mp3")
+    result = subprocess.run(
+        ["ffmpeg", "-y", "-i", local_path, "-c:a", "libmp3lame", "-b:a", "320k", plain_path],
+        capture_output=True, text=True, timeout=120,
+    )
+    if result.returncode != 0 or not Path(plain_path).exists():
+        raise RuntimeError(f"couldn't encode stem to mp3: {result.stderr[-1000:]}")
+    return plain_path
 
 
 def build_ready_update(urls):
@@ -122,8 +142,13 @@ def process_song(sb, song):
 
         demucs_out = f"{tmp}/separated"
         try:
+            # No --mp3: Demucs' own mp3 encode was getting thrown away and
+            # re-encoded anyway by normalize_stem below (that used to
+            # silently drop to 128k — see the comment there). Lossless WAV
+            # here means there's exactly one lossy encode in the whole
+            # pipeline, at full 320k, instead of two stacked ones.
             result = subprocess.run(
-                [sys.executable, "-m", "demucs", "-n", "htdemucs", "--mp3", "-o", demucs_out, audio_path],
+                [sys.executable, "-m", "demucs", "-n", "htdemucs", "-o", demucs_out, audio_path],
                 capture_output=True, text=True, timeout=DEMUCS_TIMEOUT_SECONDS,
             )
         except subprocess.TimeoutExpired:
@@ -137,7 +162,7 @@ def process_song(sb, song):
         stem_dir = f"{demucs_out}/htdemucs/audio"
         urls = {}
         for stem in STEMS:
-            local_path = f"{stem_dir}/{stem}.mp3"
+            local_path = f"{stem_dir}/{stem}.wav"
             if not Path(local_path).exists():
                 raise RuntimeError(f"missing {stem} stem after separation")
             upload_path = normalize_stem(local_path)
