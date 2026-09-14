@@ -11,6 +11,8 @@ import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { computeChoiceScoreUpdates, DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
+import { scoreHuesCuesRound, computeHuesCuesScoreUpdates } from '../../lib/huesCuesScoring.js'
+import { HUES_CUES_CODE_RE } from '../../lib/huesCuesGrid.js'
 import { isAutoRollPart, isLandedPart, TEAM_PICKER_HOLD_MS, TEAM_PICKER_LANDED_HOLD_MS, pendingLockPhase, pendingReveal, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
@@ -230,6 +232,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [orderScoreError, setOrderScoreError] = useState(null)
   const [choiceBusy, setChoiceBusy] = useState(false)
   const [choiceScoreError, setChoiceScoreError] = useState(null)
+  const [huesCuesBusy, setHuesCuesBusy] = useState(false)
+  const [huesCuesScoreError, setHuesCuesScoreError] = useState(null)
 
   // scoringBusy + the 12s cap below (2026-08-31, Opus second-opinion review
   // of the maybeStartLockCountdown fix): the fix that blocks Next during
@@ -240,7 +244,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // a real scoring round (three SELECTs + one upsert, normally 1-2s); past
   // that the host gets Next back and any real failure is already showing
   // its error on-screen via the Retry Scoring button.
-  const scoringBusy = matchingBusy || orderBusy || wagerBusy || choiceBusy
+  const scoringBusy = matchingBusy || orderBusy || wagerBusy || choiceBusy || huesCuesBusy
   const scoringSinceRef = useRef(0)
   useEffect(() => { scoringSinceRef.current = scoringBusy ? Date.now() : 0 }, [scoringBusy])
 
@@ -263,6 +267,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     setMatchingScoreError(null)
     setOrderScoreError(null)
     setChoiceScoreError(null)
+    setHuesCuesScoreError(null)
   }, [currentSlide?.id])
   // Which phone-scored mechanic (if any) this slide is — the ONE lookup the
   // lock/score control panel and the scoreboard-modal gate below both key off,
@@ -550,6 +555,40 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         }
       },
       setBusy: setChoiceBusy, setError: setChoiceScoreError,
+    })
+  }
+
+  // Hues and Cues: absolute scoring against slide.data.answer (no scoreboard-
+  // relative tiers like wager), and unlike Choice/Order/Matching it DOES
+  // persist a results snapshot (huesCuesResults) — the TV reveal (Task 6)
+  // needs per-team guess/distance/points to render, not just a scoreboard
+  // fold-in.
+  async function handleLockAndScoreHuesCues(slide) {
+    await lockAndScore({
+      slide,
+      lockField: 'huesCuesLocked', lockedAtField: 'huesCuesLockedAt',
+      resultsField: 'huesCuesResults',
+      preCheck: s => HUES_CUES_CODE_RE.test(s.data.answer ?? '') ? null : 'Set a correct square before locking — pick one on the grid',
+      lateLogLabel: 'hues-cues lock',
+      buildResults: ({ answers, teams, scoreboardTeams, roundKey, slideId }) => {
+        const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name]))
+        const entries = (answers ?? []).map(a => ({
+          teamId: a.team_id,
+          teamName: teamIdToName.get(a.team_id) ?? null,
+          guess: a.answer,
+        }))
+        const results = scoreHuesCuesRound({ entries, correctAnswer: slide.data.answer })
+        const updates = computeHuesCuesScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
+        return {
+          results,
+          updates,
+          unmatchedError: answers.length > 0 && updates.length === 0
+            ? 'No answers could be matched to the scoreboard — check team names match, then retry'
+            : null,
+        }
+      },
+      setBusy: setHuesCuesBusy,
+      setError: setHuesCuesScoreError,
     })
   }
 
@@ -923,6 +962,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     'wager-guesses': handleLockAndScoreWagers,
     order: handleLockAndScoreOrder,
     choice: handleLockAndScoreChoice,
+    huesCues: handleLockAndScoreHuesCues,
   }
 
   // Mirrors currentSlide into a ref for the same reason actionsRef exists —
@@ -1312,6 +1352,14 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                   : 'Choice question — teams are picking on their phones',
                 label: choiceBusy ? 'Scoring…' : d.choiceLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score',
                 act: () => handleLockAndScoreChoice(currentSlide),
+              },
+              huesCues: {
+                busy: huesCuesBusy, error: huesCuesScoreError, zeroErr: null,
+                status: d.huesCuesLocked
+                  ? 'Guesses locked and scored — press A to reveal the correct square on the TV.'
+                  : 'Hues and Cues — teams are guessing on their phones',
+                label: huesCuesBusy ? 'Scoring…' : d.huesCuesLocked ? '🔁 Retry Scoring' : '🔒 Lock Guesses & Score',
+                act: () => handleLockAndScoreHuesCues(currentSlide),
               },
             }[phoneMechanic]
             if (d[REVEAL_FIELD[phoneMechanic]] && !panel.error) return null

@@ -108,6 +108,10 @@ export function isChoiceShiny(data) {
   return data.shinyInputSchema?.type === 'choice'
 }
 
+export function isHuesCuesShiny(data) {
+  return data.shinyInputSchema?.type === 'hues-cues'
+}
+
 // THE one place "is this slide shown all at once" is decided — the TV
 // dispatcher, the step-count math, and the host editor all read it here
 // rather than restating the condition (they used to disagree by luck).

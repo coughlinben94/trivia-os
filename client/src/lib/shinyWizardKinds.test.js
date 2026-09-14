@@ -4,8 +4,8 @@ import { FIXED_SHAPE_KINDS, buildGridSlide, buildVennSlide, buildElimSlide } fro
 const baseFmt = { id: 'fmt_1', name: 'Test Format', icon: '✨' }
 
 describe('FIXED_SHAPE_KINDS registry', () => {
-  it('has exactly the eight known fixed-shape kinds', () => {
-    expect(Object.keys(FIXED_SHAPE_KINDS).sort()).toEqual(['bendle', 'choice', 'elimination', 'grid', 'matching', 'order', 'venn', 'wager'])
+  it('has exactly the nine known fixed-shape kinds', () => {
+    expect(Object.keys(FIXED_SHAPE_KINDS).sort()).toEqual(['bendle', 'choice', 'elimination', 'grid', 'hues-cues', 'matching', 'order', 'venn', 'wager'])
   })
 
   it('matching/wager/order/choice have no own controls or builder — they fall through to the generic flat-asset path', () => {
