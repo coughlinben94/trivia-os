@@ -1,4 +1,4 @@
-import { useReducedMotion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { getHuesCuesCell } from '../../../lib/huesCuesGrid.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT, EASE_DROP } from '../../../lib/easings.js'
