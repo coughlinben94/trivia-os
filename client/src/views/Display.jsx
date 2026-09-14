@@ -1770,15 +1770,17 @@ export default function Display() {
   // StageFrame boundary below IS keyed per slide, and it wraps the slide
   // content most likely to throw. Do not re-add a key here — put it on an
   // inner boundary that does not sit above ParticleBackground.
+  // Computed once and reused below (slideIndex + forceSnap) — this component
+  // re-renders on every realtime show update during a live show, so sorting
+  // the slide array twice per render for the same live-only computation is
+  // needless repeated work.
+  const sortedForRing = show.is_live ? sortSlides(show.slides) : null
   return (
     <ErrorBoundary fallback={null}>
       <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
         <PersistentRing
-          slideIndex={show.is_live && show.current_slide_index != null
-            ? (() => {
-                const sorted = sortSlides(show.slides)
-                return ringVisibleStationIndex(sorted, ringPeekIndex(sorted, show.current_slide_index), isRingVisible)
-              })()
+          slideIndex={sortedForRing && show.current_slide_index != null
+            ? ringVisibleStationIndex(sortedForRing, ringPeekIndex(sortedForRing, show.current_slide_index), isRingVisible)
             : null}
           // team-picker's own peek-triggered station change (ringPeekIndex
           // above) always happens while its own black canvas is covering the
@@ -1789,7 +1791,7 @@ export default function Display() {
           // station the moment the sheet wipes away (2026-09-14, Ben, live:
           // "coming out of the team intro slide, it should already be on
           // S1, not moving").
-          forceSnap={show.is_live && sortSlides(show.slides)[show.current_slide_index ?? 0]?.type === 'team-picker'}
+          forceSnap={sortedForRing?.[show.current_slide_index ?? 0]?.type === 'team-picker'}
           {...ringState}
         />
         {show.is_live && show.current_slide_id !== null ? (

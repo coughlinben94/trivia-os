@@ -128,6 +128,11 @@ export function withEntryState(slides, slide, { currentPart, protectInProgress =
   if (currentPart !== undefined && (slide.data?.parts?.length ?? 0) > 1 && (slide.data.currentPart ?? 0) !== currentPart) {
     patch.currentPart = currentPart
   }
+  // Fresh (forward) entry always clears a stale _backEntry flag — see
+  // computePrevStep's own comment for what sets it and why. protectInProgress
+  // (backward re-entry) leaves it alone; computePrevStep sets it separately,
+  // right after this call, for the one case that needs it true.
+  if (!protectInProgress && slide.data?._backEntry) patch._backEntry = false
   // protectInProgress — passed by goLiveFrom's "jump to a slide" picker and
   // computePrevStep's cross-slide entry: jumping/backing into an in-progress
   // or already-graded locked question is a RE-entry, not a fresh one, so its
@@ -285,6 +290,7 @@ export function teamPickerCursor(show) {
     slideId: slide.id,
     part: slide.data?.currentPart ?? 0,
     partsLen: slide.data?.parts?.length ?? 0,
+    backEntry: !!slide.data?._backEntry,
   }
 }
 
@@ -322,7 +328,13 @@ export function cursorAfterStep(show, patch, now = Date.now()) {
 // no coordination between them beyond the Supabase writes they already do.
 export function ownsAutoRoll(cursor, owned, now = Date.now()) {
   if (!cursor || !owned) return false
-  if (!isAutoRollPart(cursor.partsLen, cursor.part) && !isLandedPart(cursor.partsLen, cursor.part)) return false
+  const onLandedPart = isLandedPart(cursor.partsLen, cursor.part)
+  // A Prev press can resume team-picker at the exact same (partsLen - 1)
+  // part a genuine forward landing does — cursor.backEntry is the only
+  // thing that tells them apart. Only the landed case needs this check:
+  // Prev never resumes mid-roll (isAutoRollPart's range), only at the last
+  // part — see computePrevStep's own comment on _backEntry.
+  if (!isAutoRollPart(cursor.partsLen, cursor.part) && !(onLandedPart && !cursor.backEntry)) return false
   if (cursor.slideId !== owned.slideId || cursor.part !== owned.part) return false
   return now - (owned.at ?? 0) <= AUTO_ROLL_OWNERSHIP_MAX_AGE_MS
 }
@@ -496,7 +508,13 @@ export async function computeNextStep(show, fetchTeamCount) {
   if (isMultiPart) {
     const curPart = data.currentPart ?? 0
     if (curPart < stepCount - 1) {
-      return { slides: patchSlideData(slides, curSlide.id, { currentPart: curPart + 1 }), answer_reveal: false }
+      // This step bypasses withEntryState (same slide, no entry event), so a
+      // stale _backEntry from an earlier Prev-in needs its own explicit
+      // clear here — a real forward press always means "not a back-entry
+      // state anymore," including the step that lands back on the last part.
+      const patch = { currentPart: curPart + 1 }
+      if (data._backEntry) patch._backEntry = false
+      return { slides: patchSlideData(slides, curSlide.id, patch), answer_reveal: false }
     }
   }
   // Last part reached (or no parts at all) — advance to the next slide.
@@ -563,11 +581,23 @@ export async function computePrevStep(show, fetchTeamCount) {
   const resolvedTarget = bakedSlides.find(s => s.id === targetSlide?.id) ?? targetSlide
   // Backing into a shiny or team-picker slide lands on its last revealed
   // state — the natural "undo" of advancing forward through it.
-  const lastPartIdx = Math.max(revealStepCount(resolvedTarget?.data ?? {}) - 1, 0)
+  const targetStepCount = revealStepCount(resolvedTarget?.data ?? {})
+  const lastPartIdx = Math.max(targetStepCount - 1, 0)
   // protectInProgress: backing into an already-locked/revealed question is a
   // RE-entry, not a fresh one — its lock/reveal flags must survive (see
   // withEntryState's protectLockedFlags).
-  const newSlides = withEntryState(bakedSlides, resolvedTarget, { currentPart: lastPartIdx, protectInProgress: true })
+  let newSlides = withEntryState(bakedSlides, resolvedTarget, { currentPart: lastPartIdx, protectInProgress: true })
+  // _backEntry marks "landed here by backing IN, not by rolling forward" —
+  // team-picker's isLandedPart auto-advance (LiveMode.jsx/Display.jsx) reads
+  // this to tell the two apart, since both produce the identical currentPart
+  // (partsLen - 1) with no other signal to distinguish them. Without it, a
+  // host pressing Prev to review the Team List reveal got auto-advanced
+  // right back off it 3s later by the same timer that fires on a genuine
+  // forward landing (found in review, 2026-09-14 — the auto-advance shipped
+  // same-day as this landing behavior and never accounted for Prev).
+  if (targetStepCount > 1) {
+    newSlides = patchSlideData(newSlides, resolvedTarget.id, { _backEntry: true })
+  }
   return {
     slides: newSlides,
     current_slide_index: target,

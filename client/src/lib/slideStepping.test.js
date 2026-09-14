@@ -4,6 +4,7 @@ import {
   computePrevStep,
   withEntryState,
   bakeTeamPickerParts,
+  patchSlideData,
   isAutoRollPart,
   teamPickerCursor,
   cursorAfterStep,
@@ -416,7 +417,7 @@ describe('team-picker auto-roll ownership', () => {
 
   describe('teamPickerCursor', () => {
     it('reads slide id, part and baked length off the live slide', () => {
-      expect(teamPickerCursor(at([picker(3)]))).toEqual({ slideId: 'tp', part: 3, partsLen: 7 })
+      expect(teamPickerCursor(at([picker(3)]))).toEqual({ slideId: 'tp', part: 3, partsLen: 7, backEntry: false })
     })
 
     it('is null before the queued slide is revealed (currentSlideId null)', () => {
@@ -430,7 +431,7 @@ describe('team-picker auto-roll ownership', () => {
     })
 
     it('defaults an unbaked/unstarted slide to part 0', () => {
-      expect(teamPickerCursor(at([slide('tp', 0, 'team-picker', {})]))).toEqual({ slideId: 'tp', part: 0, partsLen: 0 })
+      expect(teamPickerCursor(at([slide('tp', 0, 'team-picker', {})]))).toEqual({ slideId: 'tp', part: 0, partsLen: 0, backEntry: false })
     })
   })
 
@@ -438,7 +439,7 @@ describe('team-picker auto-roll ownership', () => {
     it('describes where a window\'s own press just left the show', async () => {
       const slides = [picker(1)]
       const patch = await computeNextStep(at(slides), noTeams)
-      expect(cursorAfterStep(at(slides), patch, 1000)).toEqual({ slideId: 'tp', part: 2, partsLen: 7, at: 1000 })
+      expect(cursorAfterStep(at(slides), patch, 1000)).toEqual({ slideId: 'tp', part: 2, partsLen: 7, at: 1000, backEntry: false })
     })
 
     it('follows a step that crosses ONTO a team-picker slide', async () => {
@@ -448,7 +449,7 @@ describe('team-picker auto-roll ownership', () => {
       const slides = [slide('a', 0), slide('tp', 1, 'team-picker', {})]
       const patch = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, async () => 4)
       const c = cursorAfterStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, patch, 5)
-      expect(c).toEqual({ slideId: 'tp', part: 0, partsLen: 7, at: 5 })
+      expect(c).toEqual({ slideId: 'tp', part: 0, partsLen: 7, at: 5, backEntry: false })
     })
 
     it('is null when the press stepped off the team-picker entirely', async () => {
@@ -496,6 +497,40 @@ describe('team-picker auto-roll ownership', () => {
     it('arms on landed too — Team Intro auto-advances into Team List (2026-09-14)', () => {
       const landed = { slideId: 'tp', part: 6, partsLen: 7 }
       expect(ownsAutoRoll(landed, { ...landed, at: 1000 }, 1100)).toBe(true)
+    })
+
+    // Found in review the same day the landed auto-advance shipped: Prev
+    // resumes team-picker at the exact same (partsLen - 1) part a genuine
+    // forward landing does — with no backEntry check, a host pressing Prev
+    // to review the reveal got auto-advanced right back off it 3s later.
+    it('does NOT arm on a Prev-resumed landed part, even with clean ownership', () => {
+      const backEntered = { slideId: 'tp', part: 6, partsLen: 7, backEntry: true }
+      expect(ownsAutoRoll(backEntered, { ...backEntered, at: 1000 }, 1100)).toBe(false)
+    })
+
+    it('computePrevStep marks _backEntry when it resumes team-picker at its landed part', async () => {
+      // bakeTeamPickerParts re-bakes on every cross-slide entry — 4 teams to
+      // match the len-7 shape (intro + 4 teams + outro + landed) this test
+      // asserts against, same fixture the other bake tests use.
+      const slides = [picker(0), slide('a', 1)] // Prev from 'a' lands back on 'tp'
+      const patch = await computePrevStep({ slides, currentSlideIndex: 1, currentSlideId: 'a' }, async () => 4)
+      expect(patch.current_slide_id).toBe('tp')
+      expect(dataOf(patch, 'tp').currentPart).toBe(6)
+      expect(dataOf(patch, 'tp')._backEntry).toBe(true)
+      expect(teamPickerCursor(at(patch.slides))).toEqual({ slideId: 'tp', part: 6, partsLen: 7, backEntry: true })
+    })
+
+    it('a real forward landing after a Prev-in clears the stale _backEntry flag', async () => {
+      // Prev lands on landed (part 6) with _backEntry set, host presses Prev
+      // again (to the outro, part 5), then Next (forward, back to part 6) —
+      // this second landing is a genuine roll-forward and must auto-advance.
+      const backEntered = patchSlideData([picker(6)], 'tp', { _backEntry: true })
+      const toOutro = await computePrevStep({ slides: backEntered, currentSlideIndex: 0, currentSlideId: 'tp' }, noTeams)
+      expect(dataOf(toOutro, 'tp').currentPart).toBe(5)
+      const toLanded = await computeNextStep({ slides: toOutro.slides, currentSlideIndex: 0, currentSlideId: 'tp' }, noTeams)
+      expect(dataOf(toLanded, 'tp').currentPart).toBe(6)
+      expect(dataOf(toLanded, 'tp')._backEntry).toBe(false)
+      expect(ownsAutoRoll(teamPickerCursor(at(toLanded.slides)), { slideId: 'tp', part: 6, at: 1000 }, 1100)).toBe(true)
     })
 
     it('expires stale ownership so the other window can never re-match it', () => {

@@ -775,13 +775,17 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     // slideStepping.js) so this component can't drift from it.
     const partsLen = currentSlide.data?.parts?.length ?? 0
     const curPart = currentSlide.data?.currentPart ?? 0
-    const landed = isLandedPart(partsLen, curPart)
+    // A Prev press resumes team-picker at this exact same part — see
+    // computePrevStep's _backEntry comment (slideStepping.js) for why that's
+    // indistinguishable from a real forward landing without it.
+    const landed = isLandedPart(partsLen, curPart) && !currentSlide.data?._backEntry
     if (!isAutoRollPart(partsLen, curPart) && !landed) return
     const t = setTimeout(() => guardNav(actionsRef.current.nextSlide), landed ? TEAM_PICKER_LANDED_HOLD_MS : TEAM_PICKER_HOLD_MS)
     return () => clearTimeout(t)
   }, [
     currentSlide?.type,
     currentSlide?.data?.currentPart,
+    currentSlide?.data?._backEntry,
     currentSlide?.data?.parts?.length,
     show.showState.currentSlideId,
     guardNav,
