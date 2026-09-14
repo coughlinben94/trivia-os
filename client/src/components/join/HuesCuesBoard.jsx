@@ -251,28 +251,6 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
           </div>
         </div>
 
-        {!locked && !pickerOpen && (
-          <button
-            type="button"
-            onClick={() => setPickerOpen(true)}
-            style={{
-              gridRow: 1, gridColumn: 1, alignSelf: 'end', justifySelf: 'center', marginBottom: 16,
-              // zIndex:1 (not just DOM order) because the canvas div's own
-              // transform (pan/zoom) promotes IT into a stacking context —
-              // without an explicit z-index here this button silently sits
-              // BEHIND the canvas and eats no clicks (verified live via
-              // Playwright's elementFromPoint: the canvas intercepted every
-              // click at this button's own coordinates).
-              zIndex: 1,
-              padding: '0.9rem 2rem', borderRadius: 999, border: 'none',
-              background: highlight, color: '#000', fontWeight: 700, fontSize: '1.1rem',
-              transition: 'transform 160ms ease-out',
-            }}
-          >
-            I'm Ready
-          </button>
-        )}
-
         <AnimatePresence>
           {pickerOpen && (
             <motion.div
@@ -366,19 +344,35 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
         </AnimatePresence>
       </div>
 
-      {/* Status line, same pattern as ChoiceBoard/OrderBoard — covers locked,
-          not-yet-picked, and (critically, since the grid itself carries no
-          memory of a prior pick once the picker sheet closes) what a team
-          already committed. */}
-      <p style={{ color: `${text}b3`, fontSize: '0.85rem', textAlign: 'center', margin: '1rem 0 0' }}>
-        {locked
-          ? 'Answers locked'
-          : committedCol && committedRow && !dirty
-            ? `Your guess: ${committedCol}${committedRow}`
-            : dirty && hasPick
-              ? 'Tap Lock In to submit'
-              : 'Tap "I\'m Ready" to pick a square'}
-      </p>
+      {!locked && !pickerOpen && (
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          style={{
+            display: 'block', margin: '2rem auto 0',
+            padding: '0.9rem 2.5rem', borderRadius: 999, border: 'none',
+            background: highlight, color: '#000', fontWeight: 700, fontSize: '1.1rem',
+            transition: 'transform 160ms ease-out',
+          }}
+        >
+          I'm Ready
+        </button>
+      )}
+
+      {/* Status line, same pattern as ChoiceBoard/OrderBoard — covers locked
+          and (critically, since the grid itself carries no memory of a prior
+          pick once the picker sheet closes) what a team already committed.
+          The not-yet-picked case now sits under the "I'm Ready" button
+          itself instead of here — the button is its own instruction. */}
+      {(locked || (committedCol && committedRow && !dirty) || (dirty && hasPick)) && (
+        <p style={{ color: `${text}b3`, fontSize: '0.85rem', textAlign: 'center', margin: '1rem 0 0' }}>
+          {locked
+            ? 'Answers locked'
+            : committedCol && committedRow && !dirty
+              ? `Your guess: ${committedCol}${committedRow}`
+              : 'Tap Lock In to submit'}
+        </p>
+      )}
     </ShrinkToFit>
   )
 }
