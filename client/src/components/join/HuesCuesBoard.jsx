@@ -217,7 +217,7 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
           ))}
         </div>
 
-        {!locked && (
+        {!locked && !pickerOpen && (
           <button
             type="button"
             onClick={() => setPickerOpen(true)}
