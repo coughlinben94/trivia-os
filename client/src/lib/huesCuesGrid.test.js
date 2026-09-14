@@ -7,10 +7,10 @@ import {
 import { hexToRgb, rgbToOklab } from './oklab.js'
 
 describe('huesCuesGrid dimensions', () => {
-  it('is 16 columns by 15 rows = 240 squares', () => {
+  it('is 16 columns by 30 rows = 480 squares', () => {
     expect(HUES_CUES_COLS).toBe(16)
-    expect(HUES_CUES_ROWS).toBe(15)
-    expect(getHuesCuesGrid()).toHaveLength(240)
+    expect(HUES_CUES_ROWS).toBe(30)
+    expect(getHuesCuesGrid()).toHaveLength(480)
   })
 })
 
@@ -23,7 +23,7 @@ describe('code parsing', () => {
   })
   it('rejects out-of-range and malformed codes', () => {
     expect(codeToColRow('Q1')).toBeNull()   // column past P
-    expect(codeToColRow('A16')).toBeNull()  // row past 15
+    expect(codeToColRow('A31')).toBeNull()  // row past 30
     expect(codeToColRow('A0')).toBeNull()   // row 0 doesn't exist
     expect(codeToColRow('8A')).toBeNull()   // swapped order
     expect(codeToColRow('')).toBeNull()
@@ -59,7 +59,7 @@ describe('chebyshevDistance', () => {
     // squares to land on.
     expect(chebyshevDistance({ col: 'A', row: 1 }, { col: 'B', row: 1 })).toBe(1)
     expect(chebyshevDistance({ col: 'A', row: 1 }, { col: 'B', row: 2 })).toBe(1)
-    expect(chebyshevDistance({ col: 'A', row: 1 }, { col: 'P', row: 15 })).toBeGreaterThan(1)
+    expect(chebyshevDistance({ col: 'A', row: 1 }, { col: 'P', row: 30 })).toBeGreaterThan(1)
   })
 })
 
@@ -108,18 +108,24 @@ describe('getHuesCuesGrid generation', () => {
     }
   })
 
-  it('every pair of the 240 cells stays above a real OKLab perceptual-distance floor', () => {
+  it('every pair of the 480 cells stays above a real OKLab perceptual-distance floor', () => {
     // The horizontal-neighbor check above only compares adjacent hex strings
     // (cheap, but not real color math, and it only ever checks same-row
-    // neighbors). This converts all 240 cells to OKLab (same rgbToOklab/
+    // neighbors). This converts all 480 cells to OKLab (same rgbToOklab/
     // hexToRgb pair the in-gamut round-trip test above already imports) and
     // checks the MINIMUM pairwise Euclidean distance across every one of the
-    // 240*239/2 = 28,680 pairs — not just horizontal neighbors — against a
-    // real floor. The actual measured minimum in the current grid is ~0.0218
-    // (verified independently during the final whole-branch review); 0.015
-    // sits conservatively below that with real margin, while still catching
-    // a future palette regression that collapses two squares together.
-    const MIN_OKLAB_DISTANCE = 0.015
+    // 480*479/2 = 114,960 pairs — not just horizontal neighbors — against a
+    // real floor. Widening the L range to compensate was tried and measured
+    // WORSE (0.25-0.95 dropped the minimum to 0.0082, 0.18-0.97 to 0.0045):
+    // near-white/near-black rows lose hue signal as chroma collapses toward
+    // the sRGB gamut edge, so pushing range outward hurts more than the
+    // tighter per-row lightness step from doubling ROWS helps. The original
+    // 0.35-0.9 range is the best of what was tried for a 30-row board. Real
+    // measured minimum at 480 squares is ~0.0118 (closest pair: adjacent
+    // rows, same column, near the top of the lightness range) — the floor
+    // below sits with real margin under that, matching the original design's
+    // margin ratio (floor was ~69% of the measured 240-square minimum).
+    const MIN_OKLAB_DISTANCE = 0.008
     const grid = getHuesCuesGrid()
     const labs = grid.map(cell => rgbToOklab(hexToRgb(cell.hex)))
 

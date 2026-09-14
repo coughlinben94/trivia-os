@@ -1,8 +1,8 @@
 import { oklabToRgb, rgbToOklab, rgbToHex } from './oklab.js'
 
 export const HUES_CUES_COLS = 16 // A-P
-export const HUES_CUES_ROWS = 15 // 1-15
-export const HUES_CUES_CODE_RE = /^([A-P])(1[0-5]|[1-9])$/
+export const HUES_CUES_ROWS = 30 // 1-30 — full 480-square board, matches the real Hues and Cues (16x30)
+export const HUES_CUES_CODE_RE = /^([A-P])(30|[12][0-9]|[1-9])$/
 
 const COL_LETTERS = Array.from({ length: HUES_CUES_COLS }, (_, i) => String.fromCharCode(65 + i)) // A..P
 

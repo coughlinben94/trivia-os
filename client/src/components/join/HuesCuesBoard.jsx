@@ -8,9 +8,85 @@ import ShrinkToFit from './ShrinkToFit.jsx'
 const COL_LETTERS = Array.from({ length: HUES_CUES_COLS }, (_, i) => String.fromCharCode(65 + i))
 const ROW_NUMBERS = Array.from({ length: HUES_CUES_ROWS }, (_, i) => i + 1)
 
+// Picker geometry — a scroll-snap wheel per axis instead of a button grid,
+// so a 30-row board doesn't need 10 rows of number buttons. Native CSS
+// scroll-snap gives free momentum/physics; no drag library needed.
+const WHEEL_ITEM_H = 44
+const WHEEL_VISIBLE = 5
+const WHEEL_H = WHEEL_ITEM_H * WHEEL_VISIBLE
+const WHEEL_PAD = (WHEEL_H - WHEEL_ITEM_H) / 2
+
+// One scrollable axis (letters or numbers). Selection is derived from
+// scroll position, not tapped — the centered item under the highlight band
+// IS the pick. `onSelect` fires live as the user scrolls (rAF-throttled,
+// not per scroll-event) so the swatch preview above updates in step with
+// the wheel settling, the same "see it before you commit" feel the old
+// tap-grid had. Restoring a prior pick (phone reload mid-question) jumps
+// the wheel there once, instantly — real scrolling is always native touch
+// physics, this component never drives an animated scroll itself.
+function WheelColumn({ items, selected, onSelect, disabled, highlight, text }) {
+  const ref = useRef(null)
+  const rafRef = useRef(null)
+  const initializedRef = useRef(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el || initializedRef.current || selected == null) return
+    const idx = items.indexOf(selected)
+    if (idx < 0) return
+    el.scrollTop = idx * WHEEL_ITEM_H
+    initializedRef.current = true
+  }, [selected, items])
+
+  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }, [])
+
+  function handleScroll() {
+    if (disabled || rafRef.current) return
+    const el = ref.current
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
+      if (!el) return
+      const idx = Math.max(0, Math.min(items.length - 1, Math.round(el.scrollTop / WHEEL_ITEM_H)))
+      onSelect(items[idx])
+    })
+  }
+
+  return (
+    <div
+      ref={ref}
+      onScroll={handleScroll}
+      style={{
+        flex: 1, height: WHEEL_H, overflowY: disabled ? 'hidden' : 'auto',
+        scrollSnapType: disabled ? 'none' : 'y mandatory', WebkitOverflowScrolling: 'touch',
+        touchAction: 'pan-y', paddingTop: WHEEL_PAD, paddingBottom: WHEEL_PAD,
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      {items.map(item => (
+        <div
+          key={item}
+          style={{
+            height: WHEEL_ITEM_H, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            scrollSnapAlign: 'center', fontFamily: 'inherit', fontSize: '1.15rem',
+            fontWeight: item === selected ? 800 : 500,
+            color: item === selected ? highlight : `${text}80`,
+            // scale, not fontSize, for the selected-item pop — fontSize
+            // triggers layout on every settle (this fires on every scroll
+            // frame while the wheel is moving); transform is compositor-only.
+            transform: item === selected ? 'scale(1.2)' : 'scale(1)',
+            transition: 'color 120ms ease-out, transform 120ms ease-out',
+          }}
+        >
+          {item}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // Two phases, mirroring the two-phase intent Ben asked for explicitly:
 //   1. Browse — the full grid, free pan/zoom, no selection state at all.
-//   2. Pick   — an "I'm Ready" sheet with two tap rows (letter, number),
+//   2. Pick   — an "I'm Ready" sheet with two scroll wheels (letter, number),
 //      never typed input (fat-finger risk on a phone keyboard ruled this
 //      out — see the design spec). Locking in follows the same
 //      committed-vs-local / explicit-commit / restore-on-mount contract
@@ -280,55 +356,34 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
                 </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
-                {COL_LETTERS.map(letter => (
-                  <button
-                    key={letter}
-                    type="button"
-                    disabled={locked}
-                    onClick={() => setCol(letter)}
-                    style={{
-                      padding: '0.9rem 0', minHeight: 44, borderRadius: 8,
-                      background: col === letter ? highlight : 'rgba(255,255,255,0.08)',
-                      color: col === letter ? '#000' : text,
-                      border: 'none', fontWeight: 700, fontSize: '1.1rem',
-                      transition: 'transform 150ms ease-out',
-                    }}
-                  >
-                    {letter}
-                  </button>
-                ))}
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
-                {ROW_NUMBERS.map(n => (
-                  <button
-                    key={n}
-                    type="button"
-                    disabled={locked}
-                    onClick={() => setRow(n)}
-                    style={{
-                      padding: '0.9rem 0', minHeight: 44, borderRadius: 8,
-                      background: row === n ? highlight : 'rgba(255,255,255,0.08)',
-                      color: row === n ? '#000' : text,
-                      border: 'none', fontWeight: 700, fontSize: '1.1rem',
-                      transition: 'transform 150ms ease-out',
-                    }}
-                  >
-                    {n}
-                  </button>
-                ))}
+              <div style={{ position: 'relative' }}>
+                <div
+                  style={{
+                    position: 'absolute', left: 0, right: 0, top: WHEEL_PAD, height: WHEEL_ITEM_H,
+                    background: `${highlight}22`,
+                    borderTop: `1px solid ${highlight}88`, borderBottom: `1px solid ${highlight}88`,
+                    borderRadius: 8, pointerEvents: 'none',
+                  }}
+                />
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <WheelColumn items={COL_LETTERS} selected={col} onSelect={setCol} disabled={locked} highlight={highlight} text={text} />
+                  <WheelColumn items={ROW_NUMBERS} selected={row} onSelect={setRow} disabled={locked} highlight={highlight} text={text} />
+                </div>
               </div>
 
               <button
                 type="button"
                 disabled={!hasPick || !dirty || saving || locked}
                 onClick={handleLockIn}
+                onPointerDown={e => { if (hasPick && dirty && !saving && !locked) e.currentTarget.style.transform = 'scale(0.97)' }}
+                onPointerUp={e => { e.currentTarget.style.transform = 'scale(1)' }}
+                onPointerLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
                 style={{
                   marginTop: 'auto', padding: '1rem', borderRadius: 12, border: 'none',
                   background: (!hasPick || !dirty || saving || locked) ? 'rgba(255,255,255,0.15)' : highlight,
                   color: (!hasPick || !dirty || saving || locked) ? text : '#000',
                   fontWeight: 700, fontSize: '1.15rem',
+                  transition: 'transform 140ms cubic-bezier(0.23,1,0.32,1)',
                 }}
               >
                 {saving ? 'Locking In…' : committedCol && !dirty ? '🔒 Locked In' : 'Lock In Guess'}
@@ -348,11 +403,14 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
         <button
           type="button"
           onClick={() => setPickerOpen(true)}
+          onPointerDown={e => { e.currentTarget.style.transform = 'scale(0.97)' }}
+          onPointerUp={e => { e.currentTarget.style.transform = 'scale(1)' }}
+          onPointerLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
           style={{
             display: 'block', margin: '2rem auto 0',
             padding: '0.9rem 2.5rem', borderRadius: 999, border: 'none',
             background: highlight, color: '#000', fontWeight: 700, fontSize: '1.1rem',
-            transition: 'transform 160ms ease-out',
+            transition: 'transform 140ms cubic-bezier(0.23,1,0.32,1)',
           }}
         >
           I'm Ready
