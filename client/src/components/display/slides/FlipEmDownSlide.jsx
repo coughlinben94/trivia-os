@@ -2,6 +2,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
+import { VISUAL_CAPTION_FLOOR } from '../../../lib/autoFitText.js'
 import { isFirstOfShinyGroup } from '../../../lib/shinySeries.js'
 import { sortSlides } from '../../../lib/slideStepping.js'
 import ShinyGroupAnnounce from '../ShinyGroupAnnounce.jsx'
@@ -14,16 +15,28 @@ function isAlive(itemId, data) {
   if (step === 0) return true
   const hintIndex = Math.min(step, 2) - 1
   const survivors = data.hints?.[hintIndex]?.survivors
-  return Array.isArray(survivors) ? survivors.includes(itemId) : true
+  // Empty/unticked survivors means the host hasn't set a filter for this
+  // hint yet — treat as "no filter", not "everybody eliminated" (final
+  // review fix: an untouched [] used to grey out the whole board).
+  return survivors?.length ? survivors.includes(itemId) : true
 }
 
-function FaceCard({ item, alive, confirmed, size }) {
+// Fixed 260px face size for the 8-item 4x2 grid — clears the legibility
+// floor and fills the available shiny canvas proportionately. Not derived
+// from GridSlide's vBand/hBand budget formula (this grid's shape is fixed,
+// unlike Grid's host-chosen columns/rows), a plain constant is the simplest
+// fix that clears the floor per the final review finding.
+const FACE_SIZE = 260
+
+function FaceCard({ item, alive, confirmed, size, reduce }) {
   const eliminated = !alive
   return (
     <motion.div
       animate={{
         opacity: eliminated ? 0.25 : 1,
-        scale: eliminated ? 0.92 : (confirmed ? 1.04 : 1),
+        // Reduced motion: opacity/filter only, no scale (plan's Global
+        // Constraints + spec require this — final review fix).
+        scale: reduce ? 1 : (eliminated ? 0.92 : (confirmed ? 1.04 : 1)),
       }}
       transition={{ duration: 0.22, ease: EASE_OUT }}
       style={{
@@ -38,7 +51,7 @@ function FaceCard({ item, alive, confirmed, size }) {
       )}
       <span style={{
         position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 1, color: '#fff', fontWeight: 700,
-        fontSize: 16, textShadow: '0 2px 8px rgba(0,0,0,0.85)', padding: '6px 8px', textAlign: 'center',
+        fontSize: 22, textShadow: '0 2px 8px rgba(0,0,0,0.85)', padding: '6px 8px', textAlign: 'center',
         background: 'linear-gradient(to top, rgba(0,0,0,0.6), transparent)',
       }}>{item.label}</span>
     </motion.div>
@@ -52,37 +65,48 @@ export default function FlipEmDownSlide({ slide, show }) {
   const items = Array.isArray(data.items) ? data.items : []
   const step = data.elimStep ?? 0
   const revealedHints = (data.hints ?? []).slice(0, step)
-  const size = 190
 
   return (
     <>
-      <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 28 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18 }}>
-          {items.map(item => (
-            <FaceCard
-              key={item.id}
-              item={item}
-              alive={isAlive(item.id, data)}
-              confirmed={step >= 2 && isAlive(item.id, data)}
-              size={size}
-            />
-          ))}
-        </div>
-        <div style={{ minHeight: 90, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
-          <AnimatePresence mode="popLayout">
-            {revealedHints.map((hint, i) => (
-              <motion.p
-                key={i}
-                initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.22, ease: EASE_OUT }}
-                style={{
-                  color: theme.colors.text, fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-                  fontSize: '1.4rem', fontWeight: 600, textShadow: '0 2px 8px rgba(0,0,0,0.6)', margin: 0,
-                }}
-              >{hint.text}</motion.p>
+      <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
+        {/* Gold glow burst — fixed gold, theme-independent, same as every
+            other shiny content renderer (GridSlide/VennDiagramSlide). */}
+        <div aria-hidden style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5,
+          background: `radial-gradient(ellipse at center, ${SHINY_GOLD_GLOW}55 0%, transparent 58%)`,
+          animation: 'shinyGlow 0.75s ease-out forwards',
+        }} />
+        <div style={{ position: 'absolute', top: 28, left: 30, zIndex: 40, fontSize: 40, filter: `drop-shadow(0 0 12px ${SHINY_GOLD_GLOW})` }}>✨</div>
+
+        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 28 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18 }}>
+            {items.map(item => (
+              <FaceCard
+                key={item.id}
+                item={item}
+                alive={isAlive(item.id, data)}
+                confirmed={step >= 2 && isAlive(item.id, data)}
+                size={FACE_SIZE}
+                reduce={reduce}
+              />
             ))}
-          </AnimatePresence>
+          </div>
+          <div style={{ minHeight: 90, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+            <AnimatePresence mode="popLayout">
+              {revealedHints.map((hint, i) => (
+                <motion.p
+                  key={i}
+                  initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.22, ease: EASE_OUT }}
+                  style={{
+                    color: theme.colors.text, fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
+                    fontSize: `${VISUAL_CAPTION_FLOOR}rem`, fontWeight: 600, textShadow: '0 2px 8px rgba(0,0,0,0.6)', margin: 0,
+                  }}
+                >{hint.text}</motion.p>
+              ))}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
       {isFirstOfShinyGroup(sortSlides(show?.slides), slide) && (

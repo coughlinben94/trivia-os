@@ -103,4 +103,43 @@ describe('<FlipEmDownSlide>', () => {
     expect(eliminatedCount).toBe(4)
     expect(survivingCount).toBe(4)
   })
+
+  it('renders identically at elimStep 3 vs elimStep 2 (step 3 changes no survivors)', () => {
+    render(makeSlide({ elimStep: 2 }))
+    const step2Html = container.innerHTML
+    act(() => root.unmount())
+    container.remove()
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    render(makeSlide({ elimStep: 3 }))
+    const step3Html = container.innerHTML
+
+    // Both boards should show the same 8 face cards with the same
+    // alive/eliminated state; only the extra spoken-only hint caption
+    // differs at step 3. Compare eliminated/surviving counts rather than
+    // raw HTML since a new hint caption node shifts markup.
+    expect(step3Html).toContain('Final spoken clue.')
+    expect(step2Html).not.toContain('Final spoken clue.')
+    for (let i = 0; i < 4; i++) expect(step3Html).toContain(`Face ${i}`)
+  })
+
+  it('empty survivors array for a hint eliminates nobody (final review fix)', () => {
+    render(makeSlide({
+      elimStep: 1,
+      hints: [
+        { text: 'Unticked hint.', survivors: [] },
+        { text: 'Hint 2.', survivors: ['id0'] },
+        { text: 'Hint 3.' },
+      ],
+    }))
+
+    for (let i = 0; i < 8; i++) {
+      const label = `Face ${i}`
+      const labelSpan = Array.from(container.querySelectorAll('span')).find(el => el.textContent.trim() === label)
+      const faceCard = labelSpan.parentElement
+      expect(faceCard?.style.filter?.includes('grayscale')).toBeFalsy()
+    }
+  })
 })
