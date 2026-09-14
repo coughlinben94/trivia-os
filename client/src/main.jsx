@@ -37,6 +37,22 @@ if (import.meta.env.VITE_SENTRY_DSN) {
 // deploy-time chunk miss files a spurious "Cannot read properties of undefined
 // (reading 'default')" in Sentry (TRIVIA-OS-5/6, 0 users impacted, all of it
 // during a deploy). Real errors are unaffected: the flag is only ever set here.
+// Diagnostic only — records how /display booted (fresh navigation vs a
+// reload vs back/forward, plus what referred it) so a real prod reload, if
+// it ever fires again mid-show, leaves evidence instead of just a jarring
+// music blip and no way to confirm a cause (2026-09-14: investigated Ben's
+// "team intro music clips then loops" report, reproduced a reload locally
+// under `vite dev`, but traced that one to the DEV-SERVER HMR client, which
+// doesn't exist in the prod build — the real prod trigger is still
+// unconfirmed; this is what closes that gap next time it happens live).
+if (import.meta.env.VITE_SENTRY_DSN && window.location.pathname === '/display') {
+  const nav = performance.getEntriesByType('navigation')[0]
+  Sentry.captureMessage('display boot', {
+    level: 'info',
+    extra: { navigationType: nav?.type, referrer: document.referrer },
+  })
+}
+
 window.addEventListener('vite:preloadError', (event) => {
   event.preventDefault()
   if (!sessionStorage.getItem('chunk-reload')) {
