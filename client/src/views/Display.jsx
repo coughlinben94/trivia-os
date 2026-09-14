@@ -16,7 +16,7 @@ import { RING_RETURN } from '../components/display/RingAmbient.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import StageFrame from '../display/StageFrame.jsx'
 import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
-import { resolveShinyPart, isWagerShiny } from '../lib/shinySeries.js'
+import { resolveShinyPart, isWagerShiny, isHuesCuesShiny } from '../lib/shinySeries.js'
 import { EASE_OUT } from '../lib/easings.js'
 import { resolvePreviewShow } from '../lib/previewSlide.js'
 import {
@@ -519,7 +519,7 @@ function AnswerRevealOverlay({ show, currentSlide }) {
   // accidental Stream Deck "A" during the blind-wager beat would spoil the
   // whole round. The mechanic has its own reveal, so this generic overlay is
   // suppressed on wager slides outright rather than merely phase-gated.
-  const suppressed = currentSlide ? isWagerShiny(currentSlide.data) : false
+  const suppressed = currentSlide ? (isWagerShiny(currentSlide.data) || isHuesCuesShiny(currentSlide.data)) : false
 
   return (
     <AnimatePresence>
