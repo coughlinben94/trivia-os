@@ -23,6 +23,8 @@ import { overflowsBox, QUESTION_BOX } from '../../lib/autoFitText.js'
 import { isConcurrentShiny, isConcurrentMediaShiny } from '../../lib/shinySeries.js'
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 import { sortSlides } from '../../lib/slideStepping.js'
+import { computeWinner, formatWinnerLine } from '../../lib/raceMath.js'
+import { cleanPastedText } from '../../lib/cleanPaste.js'
 
 export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos }) {
   const { theme } = useTheme()
@@ -258,6 +260,9 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
               )}
               {slide.type === 'flip-em-down' && (
                 <ElimEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload} />
+              )}
+              {slide.type === 'horse-race' && (
+                <RaceEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload} />
               )}
               {slide.type === 'winner-reveal' && (
                 <WinnerRevealEditor data={data} onChange={change} />
@@ -2609,6 +2614,165 @@ function ElimEditor({ data, onChange, setData, scheduleSave, onMediaUpload }) {
       })}
       <Field label="Hint 3 (spoken, not a filter)">
         <TextInput value={hints[2]?.text ?? ''} onChange={v => writeHint(2, { text: v })} placeholder="A flavor clue the host reads aloud before giving the answer" />
+      </Field>
+    </div>
+  )
+}
+
+// And They're Off! host editor — 4 fixed contenders, a variable-length beats
+// table (label + one numeric cell per contender), a paste-from-spreadsheet
+// shortcut for filling the whole table at once, and a derived read-only
+// winner line. `answer` is never typed by hand — it's recomputed from
+// contenders+beats via raceMath's computeWinner on every edit, same as
+// ElimEditor recomputes nothing but follows its identical
+// setData(next)+scheduleSave({data:next}) write pattern.
+export function RaceEditor({ data, onChange, setData, scheduleSave, onMediaUpload }) {
+  const blankContenders = () => Array.from({ length: 4 }, () => ({ id: nanoid(6), name: '', imageUrl: null }))
+  const blankBeats = () => Array.from({ length: 10 }, (_, k) => ({ label: `Week ${k + 1}`, values: [0, 0, 0, 0] }))
+  const contenders = data.contenders?.length === 4 ? data.contenders : blankContenders()
+  const beats = data.beats?.length ? data.beats : blankBeats()
+  const [pasteText, setPasteText] = useState('')
+
+  // Every contenders/beats write goes through here: recompute the derived
+  // `answer` (blank on a tie — never point at a wrong winner) and fire the
+  // same two-call save ElimEditor's writeItem/writeHint use.
+  function recompute(next) {
+    const { tie, winnerName } = computeWinner(next.contenders, next.beats)
+    const withAnswer = { ...next, answer: tie ? '' : winnerName }
+    setData(withAnswer)
+    scheduleSave({ data: withAnswer })
+  }
+
+  function writeContender(i, patch) {
+    const arr = contenders.slice()
+    arr[i] = { ...arr[i], ...patch }
+    recompute({ ...data, contenders: arr })
+  }
+
+  async function uploadContenderPhoto(i, file) {
+    if (!file) return
+    // onMediaUpload resolves to {url, type, filename}, not a bare URL —
+    // same unwrap ElimEditor.uploadItemPhoto uses.
+    const result = await onMediaUpload(file)
+    if (result?.url) writeContender(i, { imageUrl: result.url })
+  }
+
+  function writeBeatLabel(k, label) {
+    const arr = beats.slice()
+    arr[k] = { ...arr[k], label }
+    recompute({ ...data, beats: arr })
+  }
+
+  function writeBeatValue(k, i, raw) {
+    const trimmed = raw.trim()
+    const value = trimmed === '' ? '' : Number(trimmed)
+    const arr = beats.slice()
+    const values = arr[k].values.slice()
+    values[i] = Number.isNaN(value) ? '' : value
+    arr[k] = { ...arr[k], values }
+    recompute({ ...data, beats: arr })
+  }
+
+  function setBeatCount(n) {
+    const count = Math.max(2, Math.min(20, Number(n) || 2))
+    const arr = Array.from({ length: count }, (_, k) => beats[k] ?? { label: `Week ${k + 1}`, values: [0, 0, 0, 0] })
+    recompute({ ...data, beats: arr })
+  }
+
+  // Ben copies a Week/contender-columns table straight out of a spreadsheet:
+  // one row per line, cells tab-separated (label, then up to 4 values).
+  // Replaces the whole beats table on Apply — pasting a full table means
+  // starting fresh, same "full replace" call as cleanPaste's question-paste.
+  function applyPaste() {
+    const cleaned = cleanPastedText(pasteText, { multiline: true })
+    const lines = cleaned.split('\n').map(l => l.trim()).filter(Boolean)
+    if (!lines.length) return
+    const rows = lines.map(line => line.split('\t').map(c => c.trim()))
+    const nextBeats = rows.map((cells, k) => ({
+      label: cells[0] || `Week ${k + 1}`,
+      values: [1, 2, 3, 4].map(i => {
+        const n = Number(cells[i])
+        return cells[i] === undefined || cells[i] === '' || Number.isNaN(n) ? '' : n
+      }),
+    }))
+    recompute({ ...data, beats: nextBeats })
+    setPasteText('')
+  }
+
+  const hasUnnamed = contenders.some(c => !c.name?.trim())
+  const hasBlankOrNegative = beats.some(b => b.values.some(v => v === '' || (typeof v === 'number' && v < 0)))
+  const hasAllZeroBeat = beats.some(b => b.values.every(v => Number(v) === 0))
+  const tooFewBeats = beats.length < 2
+  const { tie } = computeWinner(contenders, beats)
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Divider label="And They're Off!" />
+      <Field label="Question">
+        <TextArea value={data.text ?? ''} onChange={v => onChange('text', v)} placeholder="Who will win the race?" rows={2} />
+      </Field>
+
+      <Divider label="4 Contenders" />
+      <div className="grid grid-cols-2 gap-3">
+        {contenders.map((c, i) => (
+          <div key={c.id} className="flex items-center gap-2 border border-gray-200 rounded-lg p-2">
+            <MediaUpload
+              accept="image"
+              label={`Contender ${i + 1}`}
+              currentUrl={c.imageUrl}
+              currentType={c.imageUrl ? 'image/jpeg' : null}
+              onUpload={file => uploadContenderPhoto(i, file)}
+              onRemove={() => writeContender(i, { imageUrl: null })}
+            />
+            <TextInput value={c.name ?? ''} onChange={v => writeContender(i, { name: v })} placeholder={`Contender ${i + 1} name`} />
+          </div>
+        ))}
+      </div>
+
+      <Divider label="Beats" />
+      <Field label="Paste from a spreadsheet" hint="One row per line, tab-separated: label, then 4 values in contender order. Replaces the table below.">
+        <TextArea value={pasteText} onChange={setPasteText} placeholder={'Week 1\t10\t20\t5\t0\nWeek 2\t15\t25\t10\t5'} rows={3} />
+        <button
+          type="button"
+          onClick={applyPaste}
+          disabled={!pasteText.trim()}
+          className="mt-2 text-xs text-baynes-forest hover:text-green-800 font-medium transition-colors disabled:text-gray-300"
+        >
+          Apply
+        </button>
+      </Field>
+
+      <Field label="Number of beats">
+        <NumberInput value={beats.length} onChange={setBeatCount} min={2} max={20} placeholder="10" />
+      </Field>
+
+      <div className="flex flex-col gap-2">
+        {beats.map((beat, k) => (
+          <div key={k} data-beat-row={k} className="flex items-center gap-2">
+            <TextInput value={beat.label ?? ''} onChange={v => writeBeatLabel(k, v)} placeholder={`Week ${k + 1}`} className="w-28 shrink-0" />
+            {contenders.map((c, i) => (
+              <TextInput
+                key={c.id}
+                value={beat.values[i] === '' || beat.values[i] == null ? '' : String(beat.values[i])}
+                onChange={v => writeBeatValue(k, i, v)}
+                placeholder="0"
+                className="w-16"
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {tooFewBeats && <p className="text-xs text-amber-600">⚠️ Add at least 2 beats to compute a winner.</p>}
+      {hasUnnamed && <p className="text-xs text-amber-600">⚠️ Every contender needs a name.</p>}
+      {hasBlankOrNegative && <p className="text-xs text-amber-600">⚠️ Every cell needs a value ≥ 0 — blank or negative cells break the race.</p>}
+      {hasAllZeroBeat && <p className="text-xs text-amber-600">⚠️ A beat with every value at 0 doesn't move anyone.</p>}
+      {tie && <p className="text-xs text-amber-600">⚠️ Two contenders tie — the race has no winner. Fix the data.</p>}
+
+      <Field label="Winner (derived, not typed)">
+        <div className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2 leading-relaxed">
+          {formatWinnerLine(contenders, beats)}
+        </div>
       </Field>
     </div>
   )
