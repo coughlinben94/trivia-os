@@ -8,6 +8,16 @@ import ShrinkToFit from './ShrinkToFit.jsx'
 const COL_LETTERS = Array.from({ length: HUES_CUES_COLS }, (_, i) => String.fromCharCode(65 + i))
 const ROW_NUMBERS = Array.from({ length: HUES_CUES_ROWS }, (_, i) => i + 1)
 
+// Letter/number rail around the browse grid — a function (not a static
+// object) since it needs the current theme's text color, but it's still
+// re-created fresh each render just like the plain style objects elsewhere
+// in this component; not worth memoizing for ~47 label cells.
+const LABEL_CELL_STYLE = (text) => ({
+  aspectRatio: '1 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  color: `${text}99`, fontSize: '0.55rem', fontWeight: 700, fontFamily: 'DM Sans, sans-serif',
+  userSelect: 'none',
+})
+
 // Picker geometry — a scroll-snap wheel per axis instead of a button grid,
 // so a 30-row board doesn't need 10 rows of number buttons. Native CSS
 // scroll-snap gives free momentum/physics; no drag library needed.
@@ -308,7 +318,15 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${HUES_CUES_COLS}, 1fr)`,
+              // +1 column for the row-number rail — labels live INSIDE this
+              // same transformed grid (not a fixed overlay) so they pan/zoom
+              // in lockstep with the cells they name and are never
+              // misaligned. Coordinates were otherwise unreadable off the
+              // grid itself (live guest-journey audit, 2026-09-14: "480 tiny
+              // color squares, no letter row / number column anywhere on
+              // screen" — a guest had no way to read a color's code without
+              // guessing from an unmarked edge).
+              gridTemplateColumns: `1fr repeat(${HUES_CUES_COLS}, 1fr)`,
               gap: 1,
               // 100% (not a hardcoded px canvas) so scale:1 means "whole grid
               // fits the phone's actual width" — verified live: a fixed
@@ -321,9 +339,16 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
               transformOrigin: 'center center',
             }}
           >
-            {grid.map(cell => (
-              <div key={cell.code} style={{ aspectRatio: '1 / 1', background: cell.hex }} />
+            <div aria-hidden />
+            {COL_LETTERS.map(letter => (
+              <div key={`h-${letter}`} style={LABEL_CELL_STYLE(text)}>{letter}</div>
             ))}
+            {ROW_NUMBERS.flatMap((n, r) => [
+              <div key={`rl-${n}`} style={LABEL_CELL_STYLE(text)}>{n}</div>,
+              ...grid.slice(r * HUES_CUES_COLS, (r + 1) * HUES_CUES_COLS).map(cell => (
+                <div key={cell.code} style={{ aspectRatio: '1 / 1', background: cell.hex }} />
+              )),
+            ])}
           </div>
         </div>
 
