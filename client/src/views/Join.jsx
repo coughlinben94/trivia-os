@@ -1341,18 +1341,27 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
 
   const forceInteractive = liveSlideIsInteractive && !interactiveSatisfied
 
-  // Anti-cheat lockout: a team that backgrounds the tab for 8s+ (not a
-  // phone-lock blip — visibilitychange also fires on that, hence the grace
-  // window) while an interactive shiny question is live gets locked out of
-  // THIS question only. Resets on interactivePhaseKey, same key
-  // interactiveSatisfied resets on, so a new question/phase always starts
-  // unlocked. Client-side only — same trust level as the rest of /join,
-  // this is an honor-system nudge, not enforcement.
+  // Anti-cheat lockout: a team that backgrounds the tab for 30s+ while an
+  // interactive shiny question is live gets locked out of THIS question
+  // only. Resets on interactivePhaseKey, same key interactiveSatisfied
+  // resets on, so a new question/phase always starts unlocked. Client-side
+  // only — same trust level as the rest of /join, this is an honor-system
+  // nudge, not enforcement.
+  //
+  // 30s, not shorter: visibilitychange fires identically for a genuine
+  // screen-lock (phone face-down mid-discussion, very common on a
+  // multi-second wager/matching/hues&cues/order/choice question) and an
+  // actual alt-tab-to-Google. An 8s grace window was tried and rejected —
+  // it's shorter than most real phone auto-lock timeouts, so it would have
+  // locked out normal deliberation, not just cheating. 30s favors real
+  // false positives over instant reactivity; it does not clear until the
+  // phase advances (see interactivePhaseKey reset above), so getting this
+  // threshold too short is worse than too long.
   const [leftDuringQuestion, setLeftDuringQuestion] = useState(false)
   useEffect(() => { setLeftDuringQuestion(false) }, [interactivePhaseKey])
   useEffect(() => {
     if (!liveSlideIsInteractive) return
-    const LOCK_GRACE_MS = 8000
+    const LOCK_GRACE_MS = 30000
     let timer = null
     function arm() {
       timer = setTimeout(() => setLeftDuringQuestion(true), LOCK_GRACE_MS)
