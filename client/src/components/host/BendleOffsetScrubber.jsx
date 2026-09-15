@@ -21,7 +21,6 @@ const GRAPH_ROWS = [
 ]
 const GUITAR_ROW = { key: 'guitar_url', label: 'Guitar', color: '#ea580c' }
 const BUCKET_COUNT = 100
-const PREVIEW_SECONDS = 5
 // Floor on the start->end gap a host can save — stops an accidental
 // zero-length (or negative) reveal window from a slider drag gone wrong.
 const MIN_END_GAP_SECONDS = 3
@@ -45,6 +44,10 @@ export default function BendleOffsetScrubber({ song }) {
   // no error, no feedback, nothing (Ben, 2026-09-08: "there isnt a
   // preview"). Surfaced instead of silently eaten.
   const [previewError, setPreviewError] = useState(false)
+  // Which single stem is soloing, or null when the full mix (or nothing) is
+  // playing — drives the "which button is lit" state on the per-row solo
+  // buttons below.
+  const [previewingKey, setPreviewingKey] = useState(null)
   // Keyed by GRAPH_ROWS' row.key (drums_url/bass_url/other_url) — one
   // <audio> per in-round stem so Preview actually plays what the round
   // sounds like (layered drums+bass+other), not just one track. Was a
@@ -133,22 +136,31 @@ export default function BendleOffsetScrubber({ song }) {
     }
   }
 
-  function playPreview() {
+  // onlyKey: solo one stem (row.key, e.g. 'drums_url') instead of the full
+  // layered mix. Either way, plays the real start->end window a host just
+  // set — not a fixed clip length — so Preview actually answers "does this
+  // window sound right" (2026-09-15, Ben: full mix only + hardcoded 5s
+  // couldn't answer either question).
+  function playPreview(onlyKey = null) {
     clearTimeout(previewTimerRef.current)
     setPreviewError(false)
+    setPreviewingKey(onlyKey)
     let anyPlayed = false
-    for (const el of Object.values(audioRefs.current)) {
+    for (const [key, el] of Object.entries(audioRefs.current)) {
       if (!el) continue
+      if (onlyKey && key !== onlyKey) { el.pause(); continue }
       el.currentTime = offset
       el.play().then(() => { anyPlayed = true }).catch(e => {
         console.error('[Bendle] preview playback failed:', e)
         setPreviewError(true)
       })
     }
+    const playSeconds = Math.max(1, (endOffset ?? duration) - offset)
     previewTimerRef.current = setTimeout(() => {
       for (const el of Object.values(audioRefs.current)) el?.pause()
+      setPreviewingKey(null)
       if (!anyPlayed) setPreviewError(true)
-    }, PREVIEW_SECONDS * 1000)
+    }, playSeconds * 1000)
   }
 
   function handleSeekEnd(value) {
@@ -200,19 +212,31 @@ export default function BendleOffsetScrubber({ song }) {
             and throws. */}
         {rows.filter(row => envelopes[row.key]).map(row => {
           const legalBuckets = Math.max(1, Math.ceil(BUCKET_COUNT * maxOffset / duration))
+          const soloing = previewingKey === row.key
           return (
-            <div key={row.key} className="flex items-end h-6 gap-px" title={row.label}>
-              {envelopes[row.key].map((v, i) => (
-                <div
-                  key={i}
-                  style={{
-                    height: `${Math.max(4, v * 100)}%`,
-                    backgroundColor: row.color,
-                    opacity: i < legalBuckets ? 1 : 0.2,
-                    flex: 1,
-                  }}
-                />
-              ))}
+            <div key={row.key} className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => playPreview(row.key)}
+                className={`w-16 shrink-0 text-left text-[10px] font-semibold px-1.5 py-0.5 rounded transition-colors host-button ${soloing ? 'bg-gray-900 text-white' : 'hover:bg-gray-100'}`}
+                style={soloing ? {} : { color: row.color }}
+                title={`Preview ${row.label} only`}
+              >
+                ▶ {row.label}
+              </button>
+              <div className="flex items-end h-6 gap-px flex-1">
+                {envelopes[row.key].map((v, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      height: `${Math.max(4, v * 100)}%`,
+                      backgroundColor: row.color,
+                      opacity: i < legalBuckets ? 1 : 0.2,
+                      flex: 1,
+                    }}
+                  />
+                ))}
+              </div>
             </div>
           )
         })}
@@ -270,8 +294,8 @@ export default function BendleOffsetScrubber({ song }) {
           <p className="text-[11px] text-gray-400">Round steps always play to their own natural end — this only sets where the reveal starts and stops.</p>
 
           <div className="flex gap-2">
-            <button type="button" onClick={playPreview} className="flex-1 text-xs font-medium px-3 py-2 rounded-lg border border-gray-200 hover:border-baynes-forest text-gray-700 transition-colors">
-              ▶ Preview 5s
+            <button type="button" onClick={() => playPreview()} className="flex-1 text-xs font-medium px-3 py-2 rounded-lg border border-gray-200 hover:border-baynes-forest text-gray-700 transition-colors">
+              ▶ Preview Full Mix
             </button>
             <button type="button" onClick={handleSave} disabled={saving} className="flex-1 text-xs font-semibold px-3 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-700 transition-colors disabled:opacity-50">
               {saving ? 'Saving…' : '🎯 Set Start & End'}

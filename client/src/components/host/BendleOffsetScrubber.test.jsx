@@ -176,10 +176,13 @@ describe('<BendleOffsetScrubber>', () => {
     // duration 120, maxOffset 115 -> ceil(100 * 115 / 120) = 96 legal buckets
     // out of 100 total — the graph covers the whole song, not just the
     // scrubbable range, so the off-limits tail is visible instead of hidden.
-    const firstRow = container.querySelector('[data-testid="bendle-envelope-graph"] > div')
-    expect(firstRow.children).toHaveLength(100)
-    expect(firstRow.children[95].style.opacity).toBe('1')
-    expect(firstRow.children[96].style.opacity).toBe('0.2')
+    // Each row is now [solo button, bars container] — the bars themselves
+    // moved one level deeper than the row div (2026-09-15: added a per-stem
+    // solo-preview button beside each bar graph).
+    const firstBars = container.querySelector('[data-testid="bendle-envelope-graph"] > div > div:last-child')
+    expect(firstBars.children).toHaveLength(100)
+    expect(firstBars.children[95].style.opacity).toBe('1')
+    expect(firstBars.children[96].style.opacity).toBe('0.2')
   })
 
   it('shows an error and no silent success when the save affects zero rows', async () => {
