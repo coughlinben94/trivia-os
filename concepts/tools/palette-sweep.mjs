@@ -15,6 +15,8 @@
 
 import { runChecks, startStaticServer, ensureViteServer } from './ring-verify.mjs'
 import { midnightGalaxyRing } from '../../client/src/worlds/midnightGalaxy.ring.js'
+import { drawWorld } from '../../client/src/lib/drawWorld.js'
+import { RING_POOL } from '../../client/src/worlds/ringPool.js'
 import { RING_VERSION } from '../../client/src/lib/ringCertification.js'
 import { generatePalette, seedFrom, BASE_PALETTE, PRESETS } from '../../client/src/lib/paletteGenerator.js'
 import { createClient } from '@supabase/supabase-js'
@@ -122,6 +124,111 @@ async function certifyPalette(browser, { colors, weights, drift }) {
   }
 }
 
+function worldStationsQuery(stations) {
+  return `stations=${stations.map(s => encodeURIComponent(s.key)).join(',')}`
+}
+
+async function certifyWorld(browser, { colors, weights, drift, stations }) {
+  const pq = paletteQuery({ colors, weights, drift })
+  const sq = worldStationsQuery(stations)
+  const results = []
+  for (const [label, url] of [
+    ['html', `http://127.0.0.1:${staticPort}/concepts/world-07-ring.html?${pq}&${sq}`],
+    ['react-live', `${viteServer.url}&${pq}&${sq}`],
+  ]) {
+    const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } })
+    try {
+      const r = await runChecks({ label, prefix: label === 'react-live' ? 'ring-' : '', page, gotoUrl: url })
+      results.push(...r.regression, ...r.spec)
+    } finally {
+      await page.close()
+    }
+  }
+  const regressionFails = results.filter(r => r.tier === 'regression' && r.status === 'FAIL')
+  return {
+    passed: regressionFails.length === 0,
+    summary: {
+      regression_fail_count: regressionFails.length,
+      regression_fail_names: regressionFails.map(r => r.name),
+      spec_fail_count: results.filter(r => r.tier === 'spec' && r.status === 'FAIL').length,
+    },
+  }
+}
+
+// Draws N worlds against the LIVE RING_POOL and today's certified whole-ring
+// shelf (rows with stations = null — a world needs a palette AND a station
+// draw). Per this plan's Global Constraints: RING_POOL has 5 radial-mass
+// members against LANE_CAP(13)=4, so drawWorld() throws
+// "cannot fill 13 slots under the caps" for every showId here, deterministically,
+// until step 6 (pool growth, a separate art-project plan) lands. Each
+// showId's failure is caught and written as its own row — one bad/every draw
+// must never crash the batch, same discipline runSeedBatch already has for a
+// bad generated palette.
+async function runWorldBatch(n, browser) {
+  const { data: shelf, error: shelfErr } = await sb.from('ring_palettes')
+    .select('colors, weights, drift')
+    .eq('status', 'certified').eq('ring_version', RING_VERSION).is('stations', null)
+  if (shelfErr) throw new Error(`world-batch: failed to read certified shelf: ${shelfErr.message}`)
+  if (!shelf.length) {
+    console.log('world-batch: no certified whole-ring palettes on the shelf — run --seed-batch first.')
+    return
+  }
+
+  const rows = []
+  for (let s = 1; s <= n; s++) {
+    const showId = String(s)
+    let drawn
+    try {
+      drawn = drawWorld({
+        base: midnightGalaxyRing, pool: RING_POOL, shelf,
+        showId, baseTheme: { colors: { bg: '#08001a', bgDeep: '#040010' } },
+      })
+    } catch (err) {
+      rows.push({
+        // colors/weights/drift are NOT NULL on ring_palettes (confirmed live) —
+        // a draw failure has no palette to store, so use empty placeholders
+        // rather than SQL NULL. stations stays null (that column IS nullable).
+        colors: [], weights: [], drift: {}, stations: null,
+        status: 'failed', source: 'generated', seed: `showSeed:${showId}`,
+        ring_version: RING_VERSION,
+        gate_summary: { stage: 'draw', error: err.message },
+        checked_at: new Date().toISOString(),
+      })
+      console.log(`show ${showId}: DRAW FAILED (${err.message})`)
+      continue
+    }
+    const { world, showSeed } = drawn
+    const { passed, summary } = await certifyWorld(browser, {
+      colors: world.palette.colors, weights: world.palette.weights, drift: world.palette.drift,
+      stations: world.stations,
+    })
+    rows.push({
+      colors: world.palette.colors, weights: world.palette.weights, drift: world.palette.drift,
+      stations: world.stations.map(st => st.key),
+      status: passed ? 'certified' : 'failed', source: 'generated', seed: `showSeed:${showSeed.toString(16)}`,
+      ring_version: RING_VERSION, gate_summary: summary, checked_at: new Date().toISOString(),
+    })
+    console.log(`show ${showId}: ${passed ? 'CERTIFIED' : 'FAILED'} (stage: gate)`)
+  }
+
+  if (rows.length) {
+    // Same two-step insert-pending-then-update pattern as runSeedBatch, and
+    // the same reason (INSERT policy only allows status='pending'). See that
+    // function's own comment for the full RLS explanation.
+    const asPending = rows.map(r => ({ ...r, status: 'pending' }))
+    const { error: insErr } = await sb.from('ring_palettes')
+      .upsert(asPending, { onConflict: 'source,seed,ring_version' })
+    if (insErr) throw new Error(`world-batch upsert (pending) failed: ${insErr.message}`)
+    for (const r of rows) {
+      const { error: updErr } = await sb.from('ring_palettes')
+        .update({ status: r.status })
+        .eq('source', r.source).eq('seed', r.seed).eq('ring_version', r.ring_version)
+      if (updErr) throw new Error(`world-batch status update failed for seed=${r.seed}: ${updErr.message}`)
+    }
+  }
+  console.log(`\n${rows.filter(r => r.status === 'certified').length}/${rows.length} worlds certified, written to ring_palettes.`)
+}
+
 async function runSeedBatch(n, browser) {
   const rows = []
   // Presets (and the picker's own default, which is byte-identical to
@@ -206,12 +313,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   try {
     await knownAnswerProbe(browser)
     if (mode === '--seed-batch') await runSeedBatch(Number(process.argv[3] ?? 10), browser)
+    else if (mode === '--world-batch') await runWorldBatch(Number(process.argv[3] ?? 10), browser)
     else if (mode === '--pending') await runPending(browser)
     else if (mode === '--label') {
       // Fable's original Phase 2b one-off mode — --label X --colors '...' --weights '...' [--drift N], prints a summary line, writes nothing to the DB. Left for Ben's manual spot-checks.
       console.log('(--label mode: manual one-off, prints only, matches Phase 2b of the 2026-09-02 plan — implement identically to that plan section if not already present)')
     } else {
-      console.error('Usage: node concepts/tools/palette-sweep.mjs --seed-batch N | --pending | --label ...')
+      console.error('Usage: node concepts/tools/palette-sweep.mjs --seed-batch N | --world-batch N | --pending | --label ...')
       process.exit(2)
     }
   } finally {
