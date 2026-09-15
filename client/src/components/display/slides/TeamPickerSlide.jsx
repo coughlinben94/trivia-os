@@ -60,6 +60,19 @@ const BG_FIXED = '#000000'
 const STAR_ACCENT_FIXED = '#3a3a3a'
 const STAR_HIGHLIGHT_FIXED = '#e8e8e8'
 
+// Real gaps baked into the source file itself, not a playback bug — Ben
+// reported the ceremony music "falls silent" around team 5-8, every time.
+// Measured directly (ffmpeg silencedetect, -35dB/0.5s floor): the track
+// has ~6s of genuine dead air at 196.6s, 399.1s, 601.6s, 804.2s, 1006.7s
+// (a looped/reused bed with visible seams). Starting at AUDIO_START_S
+// (181s) lands the FIRST one 15.6s in — right at team #6-7 for a normal
+// roster, exactly the reported symptom. Skipped in real time (see the
+// timeupdate effect below) rather than moving AUDIO_START_S, which would
+// lose the track's own deliberate 3:01-3:04 fade-in this start point was
+// chosen for. Re-measure with the same ffmpeg command if this file is ever
+// re-encoded/replaced — these numbers go stale silently otherwise.
+const SILENT_GAPS = [[196.6, 202.8], [399.1, 405.4], [601.6, 607.9], [804.2, 810.4], [1006.7, 1012.9]]
+
 // Deterministic seeded shuffle (mulberry32 + Fisher-Yates) — same seed
 // always produces the same order, so a reload or Stream Deck back/forward
 // over the sequence doesn't reshuffle teams the host has already announced.
@@ -258,6 +271,28 @@ export default function TeamPickerSlide({ slide, show, isPreview }) {
     }, Math.max(0, REVEAL_S * 1000 - START_LEAD_MS));
     volAnimRef.current.timeout = t;
     return stopVolAnim;
+  }, []);
+
+  // Skip real dead air in the source file in real time (see SILENT_GAPS
+  // above) — fires ~4x/sec natively via the audio element's own `timeupdate`,
+  // no rAF loop needed. Jumping straight to a gap's end reads as a clean cut,
+  // not a stutter, since there's nothing audible to interrupt. Also covers
+  // the currentPart>0 mount-resume estimate above landing inside a gap: that
+  // effect's `a.currentTime =` write queues its own `timeupdate` as a task
+  // rather than firing synchronously, and this effect (declared after it)
+  // attaches its listener in the same commit, before that task runs — so
+  // reordering these two effects would need re-checking this still holds.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    function skipSilence() {
+      const t = a.currentTime;
+      for (const [start, end] of SILENT_GAPS) {
+        if (t >= start && t < end) { a.currentTime = end; break; }
+      }
+    }
+    a.addEventListener('timeupdate', skipSilence);
+    return () => a.removeEventListener('timeupdate', skipSilence);
   }, []);
 
   // live from teams table, baked on mount (everyone who scanned the QR).
