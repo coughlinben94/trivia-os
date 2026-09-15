@@ -8,16 +8,16 @@ import { RING_VERSION } from './ringCertification.js'
 export async function fetchCertifiedPalettes() {
   const { data, error } = await supabase
     .from('ring_palettes')
-    .select('id, colors, weights, drift, source, seed')
+    .select('id, colors, weights, drift, source, seed, stations')
     .eq('status', 'certified')
     .eq('ring_version', RING_VERSION)
   if (error) throw error
   return data ?? []
 }
 
-export async function saveAsPending({ colors, weights, drift }) {
+export async function saveAsPending({ colors, weights, drift, stations = null }) {
   const { error } = await supabase.from('ring_palettes').insert({
-    colors, weights, drift, source: 'manual', ring_version: RING_VERSION, status: 'pending',
+    colors, weights, drift, stations, source: 'manual', ring_version: RING_VERSION, status: 'pending',
   })
   if (error) throw error
 }
@@ -28,9 +28,14 @@ export async function saveAsPending({ colors, weights, drift }) {
 // match still matters for the "Surprise me" round-trip (drawing an
 // existing certified row and re-finding it) and for re-opening a show that
 // already has a certified worldPalette applied.
-export function findMatch(shelf, { colors, weights, drift }) {
+//
+// stations defaults to null (today's palette-only shape) so an existing
+// call site that never passes it keeps matching exactly as before a row's
+// missing `stations` key and an explicit `null` compare equal.
+export function findMatch(shelf, { colors, weights, drift, stations = null }) {
   return shelf.find(row =>
     JSON.stringify(row.colors) === JSON.stringify(colors) &&
     JSON.stringify(row.weights) === JSON.stringify(weights) &&
-    JSON.stringify(row.drift) === JSON.stringify(drift))
+    JSON.stringify(row.drift) === JSON.stringify(drift) &&
+    JSON.stringify(row.stations ?? null) === JSON.stringify(stations))
 }
