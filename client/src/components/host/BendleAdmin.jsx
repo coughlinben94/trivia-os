@@ -13,7 +13,7 @@ const STEM_KEYS = ['drums', 'bass', 'other', 'vocals']
 // created_at/status/artist/error_text) never selected — a song already
 // `ready` at page-load time would otherwise render its scrubber with no
 // audio to fetch until the next realtime UPDATE happened to arrive.
-const SONG_LIST_COLUMNS = 'id, title, created_at, status, artist, error_text, drums_url, bass_url, other_url, guitar_url, start_offset_seconds'
+const SONG_LIST_COLUMNS = 'id, title, created_at, status, artist, error_text, drums_url, bass_url, other_url, guitar_url, guitar_status, guitar_error, start_offset_seconds'
 
 function cleanSpotifyTitle(title) {
   return title
@@ -29,6 +29,14 @@ export function statusLabel(status) {
     ready: '✅ Ready',
     failed: '❌ Failed',
   }[status] ?? status
+}
+
+function guitarStatusLabel(status) {
+  return {
+    requested: '🎸 Queued',
+    processing: '🎸 Processing…',
+    failed: '🎸 Failed',
+  }[status] ?? null
 }
 
 export default function BendleAdmin({ onClose }) {
@@ -67,6 +75,15 @@ export default function BendleAdmin({ onClose }) {
     await supabase.from('bendle_songs').delete().eq('id', id)
     const { data } = await supabase.from('bendle_songs').select(SONG_LIST_COLUMNS).order('created_at', { ascending: false })
     setSongs(data ?? [])
+  }
+
+  // bendle_worker.py's poll loop (bens-server) picks this up and launches
+  // worker/bendle/guitar_stem.py detached — 10-20min, no UI blocking. The
+  // song's realtime subscription above picks up guitar_status/guitar_url as
+  // the worker updates them, no polling needed here.
+  async function handleAddGuitar(id) {
+    await supabase.from('bendle_songs').update({ guitar_status: 'requested', guitar_error: null }).eq('id', id)
+    setSongs(prev => prev.map(s => s.id === id ? { ...s, guitar_status: 'requested', guitar_error: null } : s))
   }
 
   async function handleSpotifyPick(track) {
@@ -190,8 +207,27 @@ export default function BendleAdmin({ onClose }) {
                       {s.status === 'ready' && s.start_offset_seconds > 0 && (
                         <span className="block text-xs text-gray-400">Starts at {formatOffsetTime(s.start_offset_seconds)}</span>
                       )}
+                      {s.guitar_status === 'failed' && s.guitar_error && (
+                        <span className="block text-xs text-red-500 truncate">Guitar: {s.guitar_error}</span>
+                      )}
                     </span>
                     <span className="text-xs shrink-0">{statusLabel(s.status)}</span>
+                    {s.status === 'ready' && !s.guitar_url && (
+                      guitarStatusLabel(s.guitar_status)
+                        ? <span className="text-xs shrink-0 text-gray-400">{guitarStatusLabel(s.guitar_status)}</span>
+                        : (
+                          <button
+                            onClick={() => handleAddGuitar(s.id)}
+                            className="text-xs text-gray-400 hover:text-gray-700 shrink-0"
+                            title="Reprocess this song through the guitar-stem model (10-20min)"
+                          >
+                            🎸 Add Guitar
+                          </button>
+                        )
+                    )}
+                    {s.status === 'ready' && s.guitar_url && (
+                      <span className="text-xs shrink-0 text-gray-400" title="This song has a guitar stem">🎸</span>
+                    )}
                     {s.status === 'ready' && (
                       <button
                         onClick={() => setExpandedId(id => id === s.id ? null : s.id)}

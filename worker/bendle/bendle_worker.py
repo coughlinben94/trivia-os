@@ -23,6 +23,12 @@ STEMS = ["drums", "bass", "other", "vocals"]
 DOWNLOAD_TIMEOUT_SECONDS = 1800
 DEMUCS_TIMEOUT_SECONDS = 3600
 
+# guitar_stem.py lives in its own throwaway venv (audio-separator + torch),
+# deliberately never merged into this file's requirements.txt — see its own
+# docstring. Invoked via that venv's own interpreter, not sys.executable.
+SW_VENV_PYTHON = os.path.expanduser("~/bendle-sw-venv/bin/python3")
+GUITAR_TMP_DIR = os.path.expanduser("~/.bendle-guitar-tmp")
+
 
 def build_search_query(title, artist):
     parts = [artist, title] if artist else [title]
@@ -100,48 +106,52 @@ def get_client():
     return create_client(url, key)
 
 
+def download_source_audio(query, output_dir, timeout=DOWNLOAD_TIMEOUT_SECONDS):
+    # %(ext)s, not a fixed "audio.wav" — yt-dlp's own recommended pattern for
+    # -x/--audio-format, since the extractor's native format is unknown up
+    # front and the postprocessor conversion step needs a template it controls.
+    output_template = f"{output_dir}/audio.%(ext)s"
+
+    # player_client fallback list (not a single client): YouTube has been
+    # retiring extraction clients one at a time (yt-dlp issue #12482 broke
+    # the default set; #17348 shows android itself losing formats next) —
+    # a comma list lets yt-dlp fall through to whichever client still
+    # works instead of hardcoding a single one that will eventually break
+    # the same way. android/tv skip PO-token-gated formats and fall back
+    # to a lower-bitrate format — fine for a Demucs stem-separation
+    # source, quality loss is inaudible after further splitting.
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "yt_dlp", f"ytsearch1:{query}", "-x", "--audio-format", "wav",
+             "--extractor-args", "youtube:player_client=android,tv,web",
+             "--match-filter", "duration<900",  # reject anything over 15min — a mis-matched
+                                                  # search result landing on a long video/podcast/
+                                                  # livestream would otherwise mean an hours-long
+                                                  # download and Demucs run on a machine shared
+                                                  # with other always-on services
+             "-o", output_template],
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"download timed out after {timeout}s for \"{query}\"")
+    matches = glob.glob(f"{output_dir}/audio.*")
+    if result.returncode != 0 or not matches:
+        # Previously discarded yt-dlp's actual stderr entirely — every
+        # failure looked identical regardless of real cause. Print the
+        # tail of it (flush=True: launchd's log redirect is otherwise
+        # block-buffered and this may never appear before the process
+        # exits) so a future failure is diagnosable from the log instead
+        # of requiring another live manual repro.
+        print(f"[Bendle] yt-dlp failed for \"{query}\":\n{result.stderr[-2000:]}", flush=True)
+        raise RuntimeError(f"couldn't find or download audio for \"{query}\"")
+    return matches[0]
+
+
 def process_song(sb, song):
     song_id = song["id"]
     with tempfile.TemporaryDirectory() as tmp:
-        # %(ext)s, not a fixed "audio.wav" — yt-dlp's own recommended pattern for
-        # -x/--audio-format, since the extractor's native format is unknown up
-        # front and the postprocessor conversion step needs a template it controls.
-        output_template = f"{tmp}/audio.%(ext)s"
         query = build_search_query(song["title"], song.get("artist"))
-
-        # player_client fallback list (not a single client): YouTube has been
-        # retiring extraction clients one at a time (yt-dlp issue #12482 broke
-        # the default set; #17348 shows android itself losing formats next) —
-        # a comma list lets yt-dlp fall through to whichever client still
-        # works instead of hardcoding a single one that will eventually break
-        # the same way. android/tv skip PO-token-gated formats and fall back
-        # to a lower-bitrate format — fine for a Demucs stem-separation
-        # source, quality loss is inaudible after further splitting.
-        try:
-            result = subprocess.run(
-                [sys.executable, "-m", "yt_dlp", f"ytsearch1:{query}", "-x", "--audio-format", "wav",
-                 "--extractor-args", "youtube:player_client=android,tv,web",
-                 "--match-filter", "duration<900",  # reject anything over 15min — a mis-matched
-                                                      # search result landing on a long video/podcast/
-                                                      # livestream would otherwise mean an hours-long
-                                                      # download and Demucs run on a machine shared
-                                                      # with other always-on services
-                 "-o", output_template],
-                capture_output=True, text=True, timeout=DOWNLOAD_TIMEOUT_SECONDS,
-            )
-        except subprocess.TimeoutExpired:
-            raise RuntimeError(f"download timed out after {DOWNLOAD_TIMEOUT_SECONDS}s for \"{query}\"")
-        matches = glob.glob(f"{tmp}/audio.*")
-        if result.returncode != 0 or not matches:
-            # Previously discarded yt-dlp's actual stderr entirely — every
-            # failure looked identical regardless of real cause. Print the
-            # tail of it (flush=True: launchd's log redirect is otherwise
-            # block-buffered and this may never appear before the process
-            # exits) so a future failure is diagnosable from the log instead
-            # of requiring another live manual repro.
-            print(f"[Bendle] yt-dlp failed for \"{query}\":\n{result.stderr[-2000:]}", flush=True)
-            raise RuntimeError(f"couldn't find or download audio for \"{query}\"")
-        audio_path = matches[0]
+        audio_path = download_source_audio(query, tmp)
 
         demucs_out = f"{tmp}/separated"
         try:
@@ -214,6 +224,54 @@ def run_once(sb):
     return True
 
 
+def launch_guitar_request(sb, song):
+    song_id = song["id"]
+    query = build_search_query(song["title"], song.get("artist"))
+    song_tmp_dir = os.path.join(GUITAR_TMP_DIR, song_id)
+    os.makedirs(song_tmp_dir, exist_ok=True)
+    try:
+        audio_path = download_source_audio(query, song_tmp_dir)
+    except Exception as e:
+        sb.table("bendle_songs").update(
+            {"guitar_status": "failed", "guitar_error": str(e)[:500]}
+        ).eq("id", song_id).execute()
+        return
+    # Detached (Popen, no .wait()): separation takes 10-20min and must never
+    # block this loop's normal song queue. guitar_stem.py owns reporting its
+    # own guitar_status/guitar_error and cleaning up audio_path when it's
+    # done — this function's job ends at "the child is running."
+    subprocess.Popen(
+        [SW_VENV_PYTHON, "guitar_stem.py", song_id, audio_path],
+        cwd=os.path.dirname(os.path.abspath(__file__)),
+    )
+
+
+def check_guitar_requests(sb):
+    # One guitar job at a time — bens-server also runs the jukebox worker
+    # and other always-on services; several 10-20min BS-Roformer-SW passes
+    # competing for CPU at once isn't worth the throughput for a feature a
+    # host clicks occasionally, not in bulk.
+    in_flight = (
+        sb.table("bendle_songs").select("id").eq("guitar_status", "processing").limit(1).execute().data
+    )
+    if in_flight:
+        return
+    rows = (
+        sb.table("bendle_songs").select("*").eq("guitar_status", "requested")
+        .order("created_at").limit(1).execute().data
+    )
+    if not rows:
+        return
+    song = rows[0]
+    claim = (
+        sb.table("bendle_songs").update({"guitar_status": "processing"})
+        .eq("id", song["id"]).eq("guitar_status", "requested").execute()
+    )
+    if not claim.data:
+        return
+    launch_guitar_request(sb, song)
+
+
 def recover_stuck_jobs(sb):
     # Only one worker process is EXPECTED to run (this launchd job, KeepAlive-
     # restarted on crash). A row stuck 'processing' means the previous attempt
@@ -233,15 +291,34 @@ def recover_stuck_jobs(sb):
     )).eq("status", "processing").execute()
 
 
+def recover_stuck_guitar_jobs(sb):
+    # Startup-only, unlike recover_stuck_jobs above — a guitar_status of
+    # 'processing' does NOT mean stuck the way the main status column does.
+    # Guitar jobs run detached (launch_guitar_request's Popen, no .wait()),
+    # so "processing" is the expected state for the entire 10-20min a real
+    # job is legitimately running; calling this every idle poll cycle would
+    # falsely fail an actively-running job the very first time the loop went
+    # idle. Only safe to assume orphaned at process startup, when any
+    # detached child from a previous worker instance is presumably gone too.
+    sb.table("bendle_songs").update({
+        "guitar_status": "failed", "guitar_error": "worker restarted mid-job — request guitar again",
+    }).eq("guitar_status", "processing").execute()
+
+
 def main_loop():
     sb = get_client()
     recover_stuck_jobs(sb)
+    recover_stuck_guitar_jobs(sb)
     while True:
         try:
             did_work = run_once(sb)
         except Exception as e:
             print(f"worker loop error: {e}", flush=True)
             did_work = False
+        try:
+            check_guitar_requests(sb)
+        except Exception as e:
+            print(f"guitar request check error: {e}", flush=True)
         if not did_work:
             recover_stuck_jobs(sb)
             time.sleep(POLL_SECONDS)

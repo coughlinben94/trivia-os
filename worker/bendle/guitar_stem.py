@@ -1,11 +1,15 @@
-"""Offline batch tool: re-separate a song via BS-Roformer-SW in a single
-pass, uploading all 5 stems the jukebox uses (guitar, bass, drums, other,
-vocals — piano dropped, no piano in the show's music).
+"""Re-separates a song via BS-Roformer-SW in a single pass, uploading all 5
+stems the show uses (guitar, bass, drums, other, vocals — piano dropped, no
+piano in the show's music).
 
-Run BY HAND, per song, from its own throwaway venv (see
-guitar-stem-requirements.txt) — NOT wired into bendle_worker.py's launchd
-loop. bendle_worker.py's requirements.txt / htdemucs pipeline are untouched;
-this is a separate, better-quality path a song can be reprocessed through.
+Runs from its own throwaway venv (see guitar-stem-requirements.txt) — never
+merged into bendle_worker.py's requirements.txt / htdemucs pipeline, kept
+separate so the launchd worker's one real dependency stays Demucs. Two ways
+this gets invoked: by hand (as originally built), or launched detached by
+bendle_worker.py's poll loop when a host clicks "Add Guitar" in BendleAdmin
+(guitar_status='requested' -> this script -> 'ready'/'failed'). Either way
+sets guitar_status/guitar_error on the row so BendleAdmin's realtime
+subscription can show progress without polling this process directly.
 
 Why a single SW pass instead of Demucs-then-SW: SW is natively a 6-stem
 model (vocals/drums/bass/guitar/piano/other) that takes the raw mix
@@ -30,6 +34,7 @@ import argparse
 import functools
 import logging
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -99,6 +104,11 @@ def main():
     parser.add_argument("--overlap", type=int, default=4)
     parser.add_argument("--no-refine", action="store_true")
     parser.add_argument("--out-dir", default=None)
+    # Cleanup defaults ON now that this runs unattended (auto-triggered),
+    # not just by-hand where inspecting /tmp afterward was occasionally
+    # useful — repeated auto-runs left uncleaned would otherwise fill
+    # bens-server's disk with ~700MB+ of intermediate wavs each.
+    parser.add_argument("--keep-temp", action="store_true")
     args = parser.parse_args()
 
     out_dir = args.out_dir or f"/tmp/guitar_stem_{args.song_id}"
@@ -126,9 +136,34 @@ def main():
 
     sb.table("bendle_songs").update({
         **build_ready_update(urls), "guitar_url": urls["guitar"],
+        "guitar_status": "ready", "guitar_error": None,
     }).eq("id", args.song_id).execute()
     print(f"[guitar_stem] done: {urls}", flush=True)
 
+    if not args.keep_temp:
+        shutil.rmtree(out_dir, ignore_errors=True)
+        # Also the caller's downloaded source file (bendle_worker.py's
+        # launch_guitar_request), not just our own out_dir — nothing else
+        # cleans it up once we're done with it, and it's fire-and-forget
+        # Popen so the caller can't wait to do it itself.
+        Path(args.source_audio).unlink(missing_ok=True)
+
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        # Sets guitar_status='failed' regardless of WHERE it broke (model
+        # load, separation, refine, upload) — bendle_worker.py's launch is
+        # fire-and-forget (Popen, no wait()), so this is the only place that
+        # can tell BendleAdmin's realtime subscription what happened.
+        song_id = sys.argv[1] if len(sys.argv) > 1 else None
+        print(f"[guitar_stem] FAILED: {e}", flush=True)
+        if song_id:
+            try:
+                get_client().table("bendle_songs").update({
+                    "guitar_status": "failed", "guitar_error": str(e)[:500],
+                }).eq("id", song_id).execute()
+            except Exception as report_error:
+                print(f"[guitar_stem] couldn't even report the failure: {report_error}", flush=True)
+        raise
