@@ -1341,6 +1341,41 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
 
   const forceInteractive = liveSlideIsInteractive && !interactiveSatisfied
 
+  // Anti-cheat lockout: a team that backgrounds the tab for 8s+ (not a
+  // phone-lock blip — visibilitychange also fires on that, hence the grace
+  // window) while an interactive shiny question is live gets locked out of
+  // THIS question only. Resets on interactivePhaseKey, same key
+  // interactiveSatisfied resets on, so a new question/phase always starts
+  // unlocked. Client-side only — same trust level as the rest of /join,
+  // this is an honor-system nudge, not enforcement.
+  const [leftDuringQuestion, setLeftDuringQuestion] = useState(false)
+  useEffect(() => { setLeftDuringQuestion(false) }, [interactivePhaseKey])
+  useEffect(() => {
+    if (!liveSlideIsInteractive) return
+    const LOCK_GRACE_MS = 8000
+    let timer = null
+    function arm() {
+      timer = setTimeout(() => setLeftDuringQuestion(true), LOCK_GRACE_MS)
+    }
+    function handleVisibility() {
+      if (document.hidden) {
+        arm()
+      } else if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+    }
+    // Covers the case where the interactive phase starts while the tab is
+    // already backgrounded (host opens a wager while the phone's asleep) —
+    // visibilitychange won't fire again on its own since hidden stays hidden.
+    if (document.hidden) arm()
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      if (timer) clearTimeout(timer)
+    }
+  }, [liveSlideIsInteractive, interactivePhaseKey])
+
   // This team's own wager outcome, once revealed — win/lose and points only,
   // matched by name against wagerResults the same way scoring itself does
   // (no id link between `teams` and the snapshot LiveMode wrote). Never reads
@@ -1623,6 +1658,20 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
                 </ErrorBoundary>
               </motion.div>
             </AnimatePresence>
+            {visibleSlide?.id === liveSlide?.id && liveSlideIsInteractive && leftDuringQuestion && (
+              <div
+                style={{
+                  position: 'absolute', inset: 0, zIndex: 5,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: '2rem', textAlign: 'center',
+                  background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(2px)',
+                }}
+              >
+                <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: 'clamp(1rem, 4.5vw, 1.15rem)', lineHeight: 1.5, margin: 0 }}>
+                  📵 You stepped away during this question — sit this one out.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Back / catch-up navigation */}
