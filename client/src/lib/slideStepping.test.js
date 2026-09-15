@@ -394,30 +394,31 @@ describe('isAutoRollPart', () => {
     expect([1, 2, 3, 4].map(p => isAutoRollPart(LEN, p))).toEqual([true, true, true, true])
   })
 
-  it('rolls the last team name so the roll lands ON the roster beat', () => {
+  it('rolls the last team name so the roll lands ON the roster beat, then stops', () => {
     // The final auto-fire must come from the last team (LEN-4), moving to the
     // roster — otherwise the roll stalls one name short and Ben has to press.
     expect(isAutoRollPart(LEN, LEN - 4)).toBe(true)
   })
 
-  it('fires on the roster beat too, rolling straight into the closing statement', () => {
-    expect(isAutoRollPart(LEN, LEN - 3)).toBe(true)
-  })
-
-  it('stops on the closing statement and the landed reveal', () => {
+  it('stops on the roster beat, the closing statement, and the landed reveal — each needs its own Next', () => {
+    // Ben, live: "it just moved past it before i hit next" — the roster used
+    // to auto-roll straight through into the closing statement, same as a
+    // team name. Fixed 2026-09-14: it now stops and waits, like outro/landed
+    // already did.
+    expect(isAutoRollPart(LEN, LEN - 3)).toBe(false) // roster
     expect(isAutoRollPart(LEN, LEN - 2)).toBe(false) // outro
     expect(isAutoRollPart(LEN, LEN - 1)).toBe(false) // landed
   })
 
-  it('a zero-team roster (baked length 4) only auto-rolls its roster beat', () => {
-    expect([0, 1, 2, 3].map(p => isAutoRollPart(4, p))).toEqual([false, true, false, false])
+  it('a zero-team roster (baked length 4) never auto-rolls anything', () => {
+    expect([0, 1, 2, 3].map(p => isAutoRollPart(4, p))).toEqual([false, false, false, false])
     expect(isAutoRollPart(0, 0)).toBe(false)
   })
 
   it('scales to any roster size without hardcoded indices', () => {
     const big = 21 + 4
     expect(isAutoRollPart(big, 21)).toBe(true)   // last team
-    expect(isAutoRollPart(big, 22)).toBe(true)   // roster
+    expect(isAutoRollPart(big, 22)).toBe(false)  // roster — stops, waits for Next
     expect(isAutoRollPart(big, 23)).toBe(false)  // outro
   })
 })
@@ -527,8 +528,11 @@ describe('team-picker auto-roll ownership', () => {
     it('survives a full roll: each own step re-arms, the last one lands and stops', async () => {
       // The chain the live show actually runs, one window driving: press ->
       // write -> echo -> arm -> write -> echo ... and it must stop ON the
-      // closing statement, not blow through it.
-      let slides = [picker(0)]
+      // roster beat, not blow through it (this fixture used len=7, the
+      // pre-roster shape — bumped to the real bakeTeamPickerParts length
+      // (4 teams + roster + outro + landed = 8) so this test actually
+      // exercises production's current shape instead of a stale one).
+      let slides = [picker(0, 8)]
       let owned = null
       const armed = []
       for (let i = 0; i < 8; i++) {
@@ -538,10 +542,10 @@ describe('team-picker auto-roll ownership', () => {
         slides = patch.slides
         armed.push(ownsAutoRoll(teamPickerCursor(at(slides)), owned, 1100))
       }
-      // parts 1..4 are the four team names (auto), 5 = closing (waits for a
-      // real Next), 6 = landed (also waits for a real Next); the 7th press is
-      // a no-op (nothing after this slide) and breaks out.
-      expect(armed).toEqual([true, true, true, true, false, false])
+      // parts 1..4 are the four team names (auto); 5 = roster, 6 = closing,
+      // 7 = landed all wait for a real Next; the 8th press is a no-op
+      // (nothing after this slide) and breaks out.
+      expect(armed).toEqual([true, true, true, true, false, false, false])
     })
   })
 })

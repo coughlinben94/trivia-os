@@ -228,18 +228,22 @@ export async function bakeTeamPickerParts(slides, slide, fetchTeamCount) {
 // Ben's confirmed Team Intro flow (2026-08-20, re-confirmed 2026-08-24; the
 // roster beat added 2026-09-14 — see TeamPickerSlide.jsx's `seq` comment for
 // why Team Intro now carries the whole roster itself instead of handing off
-// to a separate Team List slide):
+// to a separate Team List slide; roster corrected to stop-and-wait 2026-09-14
+// after Ben watched it live: "it just moved past it before i hit next" — the
+// roster needs to actually be read, not flash by on the same per-name timer):
 //   0            opening text   — waits for ONE explicit Next to start the roll
-//   1..len-4     team names     — auto-roll, no press per name
-//   len-3        roster         — every name at once, still auto-rolling
-//   len-2        closing text   — the roll lands here and STOPS, waits for Next
+//   1..len-4     team names     — auto-roll, no press per name, landing ON roster
+//   len-3        roster         — the roll lands here and STOPS, waits for Next
+//   len-2        closing text   — also stops, waits for Next
 //   len-1        landed         — ring-world reveal, then one more Next leaves
 // So part 0 is excluded (it would rob the host of the start press) and the
-// closing text and landed reveal are excluded (they would blow past the
-// closing statement, or cut the reveal short). A zero-team roster bakes len
-// 4 — only the roster part (showing "no teams yet") is in range.
+// roster/closing text/landed reveal are all excluded (each needs its own
+// explicit press — auto-rolling any of them would blow past what the host or
+// the room needs to actually read). A zero-team roster bakes len 4 — no part
+// is ever in auto-roll range (nothing to roll through, and roster itself
+// waits for Next like everything else).
 export function isAutoRollPart(partsLen, curPart) {
-  return curPart >= 1 && curPart <= partsLen - 3
+  return curPart >= 1 && curPart <= partsLen - 4
 }
 
 // How long each team-picker TEAM NAME holds before auto-rolling to the next.
