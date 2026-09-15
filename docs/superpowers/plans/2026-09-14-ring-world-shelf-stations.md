@@ -30,7 +30,7 @@
 - Create: `supabase/migrations/20260915000000_ring_palettes_stations_column.sql`
 
 **Interfaces:**
-- Produces: `ring_palettes.stations jsonb null` — an array of 13 `{key, prim, hue, accent, family}` objects (the shape `RING_POOL` entries already have) when set, `null` when the row means "the authored ring."
+- Produces: `ring_palettes.stations jsonb null` — a `string[]` of 13 station keys when set, `null` when the row means "the authored ring."
 
 - [ ] **Step 1: Write the migration**
 

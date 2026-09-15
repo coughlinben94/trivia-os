@@ -262,7 +262,6 @@ header.pg b{color:#ddd8e8;font-weight:500}
 // `dom` object — no call site ever passes a literal prefix string again.
 import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints, applyTints } from '../client/src/lib/ringPrimitives.js';
 import { rng, lerp, skyFromTheme, fillOf, buildArc } from '../client/src/lib/ringEngine.js';
-import { recolorWorld } from '../client/src/lib/ringRecolor.js';
 import { SLOTS } from '../client/src/worlds/midnightGalaxy.slots.js';
 import { worldFromParams } from '../client/src/lib/drawWorld.js';
 
@@ -467,7 +466,7 @@ let WORLD = {
     weightsParam: q.get('weights'),
     driftParam: q.get('drift'),
     stationsParam: q.get('stations'),
-  }, { base: WORLD, pool: WORLD.stations, slots: SLOTS, baseTheme: { colors: { bg: SKY_BG, bgDeep: SKY_BG_DEEP } } });
+  }, { base: WORLD, pool: WORLD.stations, baseTheme: { colors: { bg: SKY_BG, bgDeep: SKY_BG_DEEP } } });
 }
 
 /* target mean luma per station — the arc: a cosine base, a seeded jitter

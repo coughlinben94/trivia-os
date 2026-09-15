@@ -10,6 +10,7 @@
 //
 // Usage:
 //   node concepts/tools/palette-sweep.mjs --seed-batch N   # shelves 6 presets + N generated seeds
+//   node concepts/tools/palette-sweep.mjs --world-batch N  # draws N full worlds (noun + palette) and shelves them
 //   node concepts/tools/palette-sweep.mjs --pending        # certifies whatever hosts saved as pending
 //   node concepts/tools/palette-sweep.mjs --label X --colors '...' --weights '...' [--drift N]  # manual spot-check, prints only
 

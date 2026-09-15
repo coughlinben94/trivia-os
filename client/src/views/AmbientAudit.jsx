@@ -5,7 +5,6 @@ import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import RingAmbient from '../components/display/RingAmbient.jsx'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 import { worldFromParams } from '../lib/drawWorld.js'
-import { SLOTS } from '../worlds/midnightGalaxy.slots.js'
 
 export default function AmbientAudit() {
   const [params] = useSearchParams()
@@ -13,9 +12,9 @@ export default function AmbientAudit() {
   const theme = themeId ? getTheme(themeId) : null
   const ringMode = params.get('ring') === '1'
   const ringRef = useRef(null)
-  // ?colors=%23ff2200,%23ffd400&weights=0.55,0.45 — same recolorWorld the
-  // app and the CLI script use, synced with world-07-ring.html's own
-  // ?colors= handling. No colors param -> the authored base, unchanged.
+  // ?colors=%23ff2200,%23ffd400&weights=0.55,0.45 — same worldFromParams
+  // the app and world-07-ring.html use, so the two never drift out of sync.
+  // No colors param -> the authored base, unchanged.
   // Keyed on the raw query string so a param edit recomputes without
   // re-running on every unrelated render.
   const searchString = params.toString()
@@ -29,9 +28,9 @@ export default function AmbientAudit() {
         weightsParam: params.get('weights'),
         driftParam: params.get('drift'),
         stationsParam,
-      }, { base: midnightGalaxyRing, pool: midnightGalaxyRing.stations, slots: SLOTS, baseTheme: getTheme('midnight-galaxy') })
+      }, { base: midnightGalaxyRing, pool: midnightGalaxyRing.stations, baseTheme: getTheme('midnight-galaxy') })
     } catch (err) {
-      console.warn('[AmbientAudit] bad ?colors=/?stations= params, using base:', err.message)
+      console.error('[AmbientAudit] bad ?colors=/?stations= params, using base:', err.message)
       return midnightGalaxyRing
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -7,15 +7,25 @@ const selectMock = vi.fn()
 vi.mock('./supabase.js', () => ({
   supabase: {
     from: () => ({
-      select: (...args) => { selectMock(...args); return { eq: () => ({ eq: () => ({ then: () => {} }) }) } },
+      select: (...args) => {
+        selectMock(...args)
+        return { eq: () => ({ eq: () => ({ then: resolve => resolve({ data: [], error: null }) }) }) }
+      },
       insert: (...args) => insertMock(...args),
     }),
   },
 }))
 
-const { findMatch, saveAsPending } = await import('./ringPalettesClient.js')
+const { findMatch, saveAsPending, fetchCertifiedPalettes } = await import('./ringPalettesClient.js')
 
 const PALETTE = { colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35], drift: { arc: 60 } }
+
+describe('fetchCertifiedPalettes', () => {
+  it('selects the stations column alongside the palette fields', async () => {
+    await fetchCertifiedPalettes()
+    expect(selectMock).toHaveBeenCalledWith(expect.stringContaining('stations'))
+  })
+})
 
 describe('findMatch', () => {
   it('matches an existing palette-only row (no stations on either side)', () => {

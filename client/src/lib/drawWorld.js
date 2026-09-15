@@ -35,20 +35,11 @@ export function assertWorld(world) {
   return true
 }
 
-// slots is optional — see this task's header note on why real render call
-// sites pass it (client/src/worlds/midnightGalaxy.slots.js's SLOTS) and this
-// file's own synthetic test pool doesn't need to. Merged fields are keyed by
-// OUTPUT position (slots[i]), not the pool entry's original position — a
-// drawn noun takes on the layout of the slot it lands in, never the one it
-// came from. `family` is deliberately never merged: it's draw-time-only
-// (ringDraw.js's lane-spacing math), not a rendering field.
-export function resolveStations(pool, keys, slots) {
-  return keys.map((key, i) => {
+export function resolveStations(pool, keys) {
+  return keys.map(key => {
     const found = pool.find(s => s.key === key)
     if (!found) throw new Error(`resolveStations: no pool entry for key "${key}"`)
-    if (!slots) return found
-    const { cornerLeft, bandUpper, companionUpper, companionBoost } = slots[i]
-    return { ...found, cornerLeft, bandUpper, companionUpper, companionBoost }
+    return found
   })
 }
 
@@ -59,10 +50,10 @@ export function resolveStations(pool, keys, slots) {
 // plain strings or undefined. stationsParam applies before colorsParam so a
 // recolor always sees the swapped set, matching drawWorld()'s own order
 // (draw stations, then recolorWorld over them).
-export function worldFromParams({ colorsParam, weightsParam, driftParam, stationsParam }, { base, pool, baseTheme, slots }) {
+export function worldFromParams({ colorsParam, weightsParam, driftParam, stationsParam }, { base, pool, baseTheme }) {
   let result = base
   if (stationsParam) {
-    result = { ...result, stations: resolveStations(pool, stationsParam.split(','), slots) }
+    result = { ...result, stations: resolveStations(pool, stationsParam.split(',')) }
   }
   if (colorsParam) {
     result = recolorWorld(result, {
