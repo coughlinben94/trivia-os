@@ -43,3 +43,13 @@ export function regionFontSizeCSS(fontSizePx) {
   if (fontSizePx == null) return undefined
   return `calc(${fontSizePx} / ${REGION_CANVAS_H} * 100cqh)`
 }
+
+// A region's width override — width-relative like dx (both share the
+// REGION_CANVAS_W reference frame), same ??-able contract as
+// regionFontSizeCSS. 2026-09-15: backs the region width-drag handles
+// (SlideCanvasEditor's startRegionWidthResize) — currently only wired up
+// for CustomSlide's body region.
+export function regionWidthCSS(widthPx) {
+  if (widthPx == null) return undefined
+  return `calc(${widthPx} / ${REGION_CANVAS_W} * 100cqw)`
+}

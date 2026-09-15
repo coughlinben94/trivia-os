@@ -4,7 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { fitToBox, CUSTOM_BODY_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { youtubeEmbedUrl } from '../../../lib/youtube.js'
-import { regionTransformCSS, regionFontSizeCSS } from '../../../lib/regionTransform.js'
+import { regionTransformCSS, regionFontSizeCSS, regionWidthCSS } from '../../../lib/regionTransform.js'
 
 // Visible YouTube video for Custom Slide — Ben wants it playing on the TV,
 // not just its audio (every other YouTube integration here, e.g.
@@ -70,10 +70,11 @@ export default function CustomSlide({ slide }) {
   // Same measure-once-per-change idea as GradingBreakSlide's messageSize —
   // fitToBox does canvas text measurement + up to 8 binary-search
   // iterations, so it shouldn't re-run on every unrelated re-render.
+  const bodyBoxWidthPx = rt.body?.boxWidthPx
   const bodySize = useMemo(
-    () => fitToBox(data.body, { ...CUSTOM_BODY_BOX, family: theme.fonts.body }),
+    () => fitToBox(data.body, { ...CUSTOM_BODY_BOX, boxW: bodyBoxWidthPx ?? CUSTOM_BODY_BOX.boxW, family: theme.fonts.body }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data.body, theme.fonts.body, fontsReady]
+    [data.body, theme.fonts.body, fontsReady, bodyBoxWidthPx]
   )
 
   return (
@@ -138,13 +139,16 @@ export default function CustomSlide({ slide }) {
             initial={{ opacity: 0, y: reduce ? 0 : 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15, duration: 0.25, ease: EASE_OUT }}
-            className="relative z-10 text-center leading-relaxed max-w-4xl"
+            className="relative z-10 text-center leading-relaxed"
             style={{
               fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
               color: theme.colors.text,
               fontSize: regionFontSizeCSS(rt.body?.fontSizePx) ?? bodySize,
               fontWeight: 400,
               whiteSpace: 'pre-line',
+              // 896px matches the max-w-4xl this replaces — same default,
+              // now overridable by the body region's width-drag handles.
+              width: regionWidthCSS(bodyBoxWidthPx) ?? '896px',
             }}
           >
             {data.body}

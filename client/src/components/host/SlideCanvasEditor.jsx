@@ -727,6 +727,51 @@ export default function SlideCanvasEditor({
     document.addEventListener('pointercancel', onUp)
   }
 
+  // Region width-only resize (left/right edge handles) — currently wired up
+  // for CustomSlide's body region only (region.field === 'body'), not every
+  // text region: unlike fontSizePx (read generically by every region-carrying
+  // slide's `rt.<id>?.fontSizePx ??` guard), a width override needs each
+  // renderer to actually apply it to both fitToBox's boxW AND the real
+  // element's CSS width — only CustomSlide.jsx does that today (2026-09-15).
+  // Wiring the handle up for a region no renderer reads would drag silently
+  // with no visible effect, so it's gated to the one field that's wired.
+  //
+  // No re-centering math (contrast startOverlayWidthResize, which fights an
+  // absolute x/y position): a region with no dx/dy override sits centered by
+  // its parent's flexbox, so a plain width change stays centered on its own.
+  function startRegionWidthResize(e, region, edge) {
+    e.stopPropagation(); e.preventDefault()
+    const oRect = overlayRef.current.getBoundingClientRect()
+    const startWpxScreen = region.w
+    const rt = data._regionTransforms ?? {}
+    const curRot = rt[region.id]?.rotate ?? 0
+    const theta = curRot * Math.PI / 180
+    const axisX = Math.cos(theta), axisY = Math.sin(theta)
+    const sign = edge === 'right' ? 1 : -1
+    const startClientX = e.clientX, startClientY = e.clientY
+    function onMove(ev) {
+      const dxScreen = ev.clientX - startClientX, dyScreen = ev.clientY - startClientY
+      const localDx = dxScreen * axisX + dyScreen * axisY
+      const newWpxScreen = clamp(startWpxScreen + sign * localDx, 60, oRect.width)
+      const newWpxStored = newWpxScreen / dynScale
+      setData(d => {
+        const c = d._regionTransforms ?? {}
+        const n = { ...d, _regionTransforms: { ...c, [region.id]: { ...c[region.id], boxWidthPx: newWpxStored } } }
+        scheduleSave({ data: n })
+        return n
+      })
+    }
+    function onUp() {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onUp)
+      setTimeout(() => detectRegionsRef.current(), 50)
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onUp)
+  }
+
   // Baseline for the font-size stepper/drag: the stored override if one
   // exists, else the REAL rendered size (findTextLeaf drills past the
   // wrapping <span data-slide-region>/motion.* to the actual text-bearing
@@ -1074,6 +1119,16 @@ export default function SlideCanvasEditor({
                     <div key={idx} title={region.field === 'photo' ? 'Resize' : 'Resize — sets a manual font size, overriding auto-fit'}
                       style={{ position: 'absolute', ...pos, width: 12, height: 12, borderRadius: 3, background: 'white', border: '2px solid #6366f1', zIndex: 1, pointerEvents: 'auto' }}
                       onPointerDown={e => (region.field === 'photo' ? startRegionScale(e, region) : startRegionFontResize(e, region))} />
+                  ))}
+                  {/* Width-only edge handles — body region only, see
+                      startRegionWidthResize for why this isn't generic yet. */}
+                  {isSelReg && region.field === 'body' && [
+                    { left: -6, top: '50%', edge: 'left' },
+                    { right: -6, top: '50%', edge: 'right' },
+                  ].map(({ edge, ...pos }) => (
+                    <div key={edge} title="Resize width"
+                      style={{ position: 'absolute', ...pos, transform: 'translateY(-50%)', width: 8, height: 22, borderRadius: 3, background: 'white', border: '2px solid #6366f1', cursor: 'ew-resize', zIndex: 1, pointerEvents: 'auto' }}
+                      onPointerDown={e => startRegionWidthResize(e, region, edge)} />
                   ))}
                 </div>
               )
