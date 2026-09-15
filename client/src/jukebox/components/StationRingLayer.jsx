@@ -64,6 +64,10 @@ export const EH_PHASES = Object.freeze({
   emergeStart: 0.52,  // new record starts blooming open (overlaps flash's tail)
   emergeEnd: 0.86,    // new record at full size, band settled
 })
+// Shortest the ring/star color blend gets when a new palette lands mid-
+// transition (see the colors effect below) — keeps a late palette a quick
+// fade, never a one-frame snap.
+const EH_BLEND_MIN_MS = 250
 const easeIn  = p => p * p * p
 const easeOut = p => 1 - Math.pow(1 - p, 3)
 const seg = (p, a, b) => clamp((p - a) / (b - a), 0, 1)
@@ -132,7 +136,7 @@ function drawCometAt(ctx, t, cx, cy, nr, c0, k, alpha) {
 // the other (idle playback never calls this; this never runs outside an
 // active transition). Reuses the same GROOVE_COUNT/grooveAlphas idle
 // drawing uses, so the ring band reads as the same object, just live.
-function drawEventHorizon(ctx, t, p, geom, rgbPair, grooveAlphas) {
+function drawEventHorizon(ctx, t, p, geom, rgbPair, grooveAlphas, lockStartNr) {
   const { cx, cy, recordR, bandInner, bandOuter, k, R0 } = geom
   const [c0, c1] = rgbPair
 
@@ -159,13 +163,21 @@ function drawEventHorizon(ctx, t, p, geom, rgbPair, grooveAlphas) {
   // true center, R0 * 0.16, which sat well under the opaque record and was
   // never actually seen — Ben's call, decision B over shipping the invisible
   // strike as-is). recordR holds steady through the whole lock phase
-  // (recordScaleMV doesn't start shrinking until lockEnd), so this is a
-  // fixed target for the entire ride, same shape as before, just aimed at
-  // something that's actually on screen. Gone through the collapse (no comet
-  // drawn p 0.22-0.86, matching the mockup), reappears riding back out to
-  // the groove band during settle.
+  // (recordScaleMV doesn't start shrinking until lockEnd), so that end is a
+  // fixed target for the entire ride. The START of the ride is NOT bandInner
+  // — that assumed the idle comet (nr = lerp(bandOuter,bandInner,progress))
+  // was always exactly at bandInner (progress===1) the instant the
+  // transition began. It rarely is: songs normally advance at their
+  // authored trim-out point (useSpotifyPlayer's startMonitor), well before
+  // raw Spotify duration, so progress is typically well under 1 here.
+  // Hardcoding bandInner made the comet SNAP from wherever it actually was
+  // on the band straight to bandInner in the transition's first frame — the
+  // "jumps from the non-middle to middle once the song ends" bug (2026-09-14).
+  // lockStartNr is the caller's last real idle radius, captured every idle
+  // frame and frozen once the transition takes over, so the ride continues
+  // from the comet's true on-screen position instead of a fixed default.
   if (p < 0.22) {
-    drawCometAt(ctx, t, cx, cy, lerp(bandInner, recordR, easeIn(lock)), c0, k, 1)
+    drawCometAt(ctx, t, cx, cy, lerp(lockStartNr, recordR, easeIn(lock)), c0, k, 1)
   }
   if (settle > 0) {
     drawCometAt(ctx, t, cx, cy, lerp(R0 * 0.4, bandOuter, easeOut(settle)), c0, k, easeOut(settle))
@@ -236,6 +248,12 @@ export default function StationRingLayer({
   const sizeRef = useRef({ w: 0, h: 0 })
   const geomRef = useRef(null)      // { cx, cy, recordR } — measured from the real record box
   const lastMeasureRef = useRef(0)
+  // Last real idle needle-comet radius (nr in the idle draw block below),
+  // written every idle frame. The idle block never runs while an Event
+  // Horizon transition is active, so this freezes on the comet's true
+  // last on-screen position the instant the transition takes over — the
+  // lock phase's "from" radius, so it doesn't snap to a hardcoded default.
+  const lockStartNrRef = useRef(null)
   // Event Horizon transition state — refs, not direct closure reads. Not for
   // the stale-closure reason this comment used to give: useRafLoop's own
   // callbackRef (see useRafLoop.js) already makes tick() call the CURRENT
@@ -313,11 +331,25 @@ export default function StationRingLayer({
       blendRef.current = null
       return
     }
+    // Mid-Event-Horizon (2026-09-14): the new palette lands when LiveScreen
+    // swaps identity at emergeStart, and the ~7.5s blend above then outlived
+    // the 2.7s transition by seconds — new record fully bloomed, ring band
+    // and stars still wearing the OLD song's color. The mockup resolves its
+    // ring/star mix by emergeEnd (mixT = easeInOut(seg(p, 0.30, 0.86))), so
+    // end this blend at that same wall-clock instant instead: same blend
+    // machinery, same eased curve in draw(), just a duration cut to fit the
+    // transition. Outside a transition (or if the palette lands late, past
+    // emergeEnd) the floor keeps it a short fade rather than a snap; the
+    // idle ~7.5s path is untouched.
+    const now = performance.now()
+    const ehEndMs = transitioningRef.current && transitionStartRef.current != null
+      ? transitionStartRef.current + EH_DUR_MS * EH_PHASES.emergeEnd
+      : null
     blendRef.current = {
       fromOklab: rgbRef.current.map(rgbToOklab),
       toOklab: target.map(rgbToOklab),
-      startMs: performance.now(),
-      durMs: blendDurationMs(),
+      startMs: now,
+      durMs: ehEndMs != null ? Math.max(EH_BLEND_MIN_MS, ehEndMs - now) : blendDurationMs(),
     }
   }, [colors, reducedMotion])
 
@@ -422,7 +454,7 @@ export default function StationRingLayer({
     // prop (see the transitionStartMs prop comment above).
     if (eh && transitionStartRef.current != null) {
       const p = clamp((t * 1000 - transitionStartRef.current) / EH_DUR_MS, 0, 1)
-      drawEventHorizon(ctx, t, p, { cx, cy, recordR, bandInner, bandOuter, k, R0 }, [c0, c1], grooveAlphas)
+      drawEventHorizon(ctx, t, p, { cx, cy, recordR, bandInner, bandOuter, k, R0 }, [c0, c1], grooveAlphas, lockStartNrRef.current ?? bandInner)
       return
     }
 
@@ -437,6 +469,7 @@ export default function StationRingLayer({
     // ── needle comet riding the groove band inward (drawDemo3 ~774-793) ──
     const th = t * 1.15
     const nr = lerp(bandOuter, bandInner, progressRef.current)
+    lockStartNrRef.current = nr // last real position — see drawEventHorizon's lockStartNr comment
     for (let i = TRAIL_LEN; i >= 1; i--) {
       const ta = th - i * 0.055
       ctx.globalAlpha = (1 - i / (TRAIL_LEN + 1)) * 0.5

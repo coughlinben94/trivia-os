@@ -2035,7 +2035,7 @@ function WagerBuilder({ answer }) {
   )
 }
 
-// A click-to-select picker over the full 240-square Hues and Cues grid.
+// A click-to-select picker over the full 480-square Hues and Cues grid.
 // Writes the SAME data.answer field the generic Answer TextInput uses for
 // every other type — never a separate field (a prior shiny type's duplicate
 // answer field caused a real production bug, see the comment above the

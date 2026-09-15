@@ -192,7 +192,18 @@ const isReduced = () =>
   typeof window !== 'undefined' && window.matchMedia &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export default function WarpTransition({ dir = 'out', onDone, durationMs = DURATION_MS }) {
+// coverAt: fraction of the 'out' run by which the canvas is fully opaque.
+// The default (0.94) is the jukebox's slow reveal-to-black, tuned for a
+// scene that is still genuinely on screen underneath while the vortex
+// winds up. The shiny-question entry passes a much smaller value: there,
+// Display has ALREADY swapped currentSlide to the destination question in
+// the same render that mounts this, so anything the veil leaves see-through
+// is the NEW question bleeding through the swirl (2026-09-14, Ben, live:
+// read as "a circle in the middle" with the question visible around it).
+// Only 'out' consults it; 'back' opens opaque and unwinds on its own curve.
+const COVER_AT = 0.94
+
+export default function WarpTransition({ dir = 'out', onDone, durationMs = DURATION_MS, coverAt = COVER_AT }) {
   const canvasRef = useRef(null)
   // onDone is an inline arrow in Display's JSX (new identity every render) —
   // held in a ref so the loop below never restarts because of it.
@@ -373,7 +384,8 @@ export default function WarpTransition({ dir = 'out', onDone, durationMs = DURAT
       // 1 in the limit leaves the real final frame at ~0.97 and the live scene
       // ghosts through the handover. Reaching full cover early makes the
       // "ends fully opaque" contract hold regardless of where frames fall.
-      const veil = Math.min(1, Math.pow(t / 0.94, 2))
+      // 'out' saturates at coverAt instead (default is this same 0.94).
+      const veil = Math.min(1, Math.pow(t / (out ? coverAt : 0.94), 2))
       // The snap: a spin spike and a warm bloom at peak pull, just before the
       // drain closes over it. 'back' opens on this beat releasing.
       const pl = Math.max(0, 1 - Math.abs(t - 0.82) / 0.13)
@@ -567,7 +579,7 @@ export default function WarpTransition({ dir = 'out', onDone, durationMs = DURAT
     const watchdog = setTimeout(finish, durationMs + 400)
 
     return () => { cancelAnimationFrame(raf); clearTimeout(watchdog) }
-  }, [dir, durationMs])
+  }, [dir, durationMs, coverAt])
 
   return (
     <canvas

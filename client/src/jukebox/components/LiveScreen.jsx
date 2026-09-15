@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, memo } from 'react'
-import { motion, useAnimation, useMotionValue, animate } from 'framer-motion'
+import { motion, useAnimation, useMotionValue, useMotionTemplate, animate } from 'framer-motion'
 // 2026-08-04, owner request: after looking at the pre-mesh circle-blobs
 // engine live (AlbumGradient.jsx, temp-revert earlier this session), the
 // 'screen' composite blob centers read as washed-out/white -- switched to
@@ -16,6 +16,13 @@ import { RECORD_HUE } from '../../worlds/midnightGalaxy.ring.js'
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
+// Event Horizon iris clip's resting circle() radius, % of the record box
+// (see recordClipMV). circle()'s % resolves against the box's own diagonal/√2,
+// i.e. the side for a square, so 50% = the disc's edge; 90% (317px @352,
+// 352px @391) clears the -9px platter shoulder and the 32px-offset/80px-blur
+// drop shadow (≈288px / ≈307px from center) on both breakpoints — nothing
+// is clipped at rest.
+const EH_CLIP_REST_PCT = 90
 const ARM_ON  = { rotate: 8,  y: 0 }   // needle resting on record
 const ARM_OFF = { rotate: -30, y: -8 } // lifted and rotated back (y -5 -> -8, 2026-08-04: Ben wanted a hair more lift)
 
@@ -160,7 +167,19 @@ function Tonearm({ controls }) {
 // forcing a re-render of everything under Jukebox. None of this component's props
 // change on that cadence, so memo() keeps it from redoing its render work — title-fit
 // measurement, palette lookups, the whole record/tonearm JSX tree — 3.3x/second for nothing.
-function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey, onUpcomingTrack, entranceSong, onEntranceStart, onRegisterTransition, onTransitionAudioStart, ringMode = false, progress = 0 }) {
+// revealed (2026-09-14): holds the ENTRANCE choreography (record fly-in, arm
+// drop, text reveal) until the screen is actually visible to the viewer.
+// Display.jsx pre-mounts the grading-break overlay HEAD_START_DELAY_MS into
+// the warp under `visibility:hidden` so Spotify sync/connect/play can start
+// early — but visibility:hidden only stops paint, not JS/Framer springs, so
+// the whole entrance used to play out off-screen and the TV revealed its
+// tail: "screen goes black then the vinyl just appears out of nowhere"
+// (Ben, live). Only the break overlay passes this (Display's breakActive);
+// /music and the tuning screen leave the default and enter instantly, as
+// before. While pending, busyRef is held true so the isPaused effect below
+// can't drop the arm early (it runs on mount and would otherwise beat the
+// entrance to ARM_ON, leaving no arm-drop beat to show at reveal).
+function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey, onUpcomingTrack, entranceSong, onEntranceStart, onRegisterTransition, onTransitionAudioStart, ringMode = false, progress = 0, revealed = true }) {
   // entranceSong (2026-08-04): the chosen first song, handed down BEFORE
   // Spotify is asked to play it (see Jukebox.jsx's startShuffle) — falls
   // back to currentTrack for the tuning screen and any other caller that
@@ -290,6 +309,19 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
   // created (hooks can't be conditional) but only ever animated when
   // ringMode is true; harmless at its default 1 otherwise.
   const recordScaleMV = useMotionValue(1)
+  // Event Horizon iris-open reveal (2026-09-14): the mockup's new record
+  // blooms as a GROWING CLIP (clipR = R * easeOut(emerge)), not a scale-up
+  // from nothing — the disc opens from a point outward at full size, with
+  // the overshoot bounce riding on top. This is that clip, as a circle()
+  // radius in % on the record's content wrapper (platter + art + spindle +
+  // shadow all clip together, same as the mockup's shoulder/art/rim). A
+  // single clip-path keyframe on one composited element — nothing like the
+  // 6-copy canvas smear 7629fdf dropped. EH_CLIP_REST_PCT is the resting
+  // radius: past the platter's -9px inset AND the 32px/80px drop shadow on
+  // both record breakpoints, so at rest nothing is clipped at all.
+  const recordClipMV = useMotionValue(EH_CLIP_REST_PCT)
+  const recordClipPath = useMotionTemplate`circle(${recordClipMV}%)`
+  const clipAnimRef = useRef(null)
   // { startMs } while an Event Horizon sequence is in flight, else null —
   // StationRingLayer reads startMs once (a normal prop, not per-frame) and
   // derives its own progress from wall-clock elapsed against it.
@@ -300,6 +332,19 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
   // within a couple of frames, so without .stop() here the collapse keeps
   // running unopposed underneath whatever's supposed to take over next.
   const animRef = useRef(null)
+  // Identity of the CURRENT Event Horizon attempt (2026-09-14, adversarial
+  // review) — same `const token = {}` idiom as the onUpcomingTrack/
+  // onRegisterTransition registrations above. Framer's .stop() resolves
+  // (never rejects) an animation's promise, so a sequence the ending
+  // effect's cleanup stopped (restart within the close window, or unmount)
+  // still wakes from its awaits and would run its tail — tonearm, the
+  // unconditional busyRef/transitioning/textVisible resets, even
+  // swapIdentity's audio fire — over whatever superseded it. Post-unmount
+  // that tonearmCtrl.start also trips Framer's hasMounted invariant. Each
+  // attempt stamps its own token here; the cleanups null it; every await in
+  // runEventHorizonTransition re-checks before touching any state.
+  const ehTokenRef = useRef(null)
+  useEffect(() => () => { ehTokenRef.current = null }, [])
   const busyRef      = useRef(false)
   // Set only by the ending effect below, read only by runTransition's three
   // remaining animation calls (2026-08-07, Opus review) — both `ending` and
@@ -379,11 +424,16 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
     tonearmCtrl.set(ARM_OFF)
   }, [])
 
-  // Entrance: fires once, the first time `shown` becomes non-null.
+  // Entrance: fires once, the first time `shown` is non-null AND the screen
+  // is revealed (see the revealed prop's comment above the component).
   // By depending on [shown] we guarantee the fly wrapper is mounted before flyCtrl fires.
   useEffect(() => {
     if (!shown) return           // track not ready yet
     if (mountedRef.current) return  // entrance already ran
+    // Not on screen yet — park. No ref flips here besides busyRef (idempotent),
+    // so StrictMode's discarded first pass can't leave mountedRef stale-true
+    // the way the shiny-warp trigger's ref once did (see Display.jsx).
+    if (!revealed) { busyRef.current = true; return }
     mountedRef.current = true
 
     async function runEntrance() {
@@ -537,7 +587,7 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
     }
 
     runEntrance()
-  }, [shown])
+  }, [shown, revealed])
 
   // Play/pause tonearm nudge when not mid-transition or entrance
   useEffect(() => {
@@ -649,8 +699,11 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
       // (and animRef always null) in the non-ring build.
       if (ringMode) {
         animRef.current?.stop()
+        clipAnimRef.current?.stop()
         recordScaleMV.set(1)
+        recordClipMV.set(EH_CLIP_REST_PCT)
         setRingTransition(null)
+        ehTokenRef.current = null // the stopped sequence's tail must not run (see ehTokenRef)
       }
     }
   }, [ending, ringMode])
@@ -705,6 +758,12 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const newArtUrl = target?.album?.images?.[0]?.url
     const preloadPromise = newArtUrl ? preloadImage(newArtUrl) : Promise.resolve()
+    // See ehTokenRef. Checked after every await below: a stale token means
+    // the ending cleanup (or unmount) already reset ring/scale/clip/busy
+    // state and owns it now — bail silently, touch nothing.
+    const token = {}
+    ehTokenRef.current = token
+    const superseded = () => ehTokenRef.current !== token
 
     const swapIdentity = () => {
       setShown(target)
@@ -724,6 +783,7 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
       // StationRingLayer never takes the Event Horizon draw path either;
       // recordScaleMV never leaves 1, so the record never visibly shrinks.
       await preloadPromise
+      if (superseded()) return null
       if (!endingRef.current) swapIdentity()
     } else {
       tonearmCtrl.start({ ...ARM_OFF, transition: { type: 'spring', stiffness: 220, damping: 30 } })
@@ -732,17 +792,41 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
       // Scripted collapse/bloom, not a physics spring — matches the
       // mockup's own eased phase timeline (easeIn fall, easeOut emerge with
       // a small overshoot bounce) rather than runTransition's other springs.
-      const scaleAnim = animate(recordScaleMV, [1, 1, 0, 0, 1.05, 1, 1], {
+      // Scale: collapse 1→0 through the fall, hold 0, then JUMP back to 1
+      // at emergeStart (the duplicated emergeStart time makes a zero-width
+      // 0→1 segment that framer-motion 10.18's interpolate() never selects —
+      // its segment scan takes the first i with t < times[i+1], so t just
+      // below emergeStart lands in the 0→0 hold and t at/above it lands in
+      // the 1→1.05 bounce; the flanking segments hold the right values on
+      // both sides, so it's an instant cut, invisible because the clip
+      // below is at 0 that frame) and ride the mockup's small overshoot
+      // bounce from there.
+      // Used to grow 0→1.05 across emerge in place of the clip; with the
+      // real iris reveal that would multiply the two (scale × clip) and
+      // bury the bounce under a still-half-open clip.
+      const scaleAnim = animate(recordScaleMV, [1, 1, 0, 0, 1, 1.05, 1, 1], {
         duration: EH_DUR_MS / 1000,
-        times: [0, EH_PHASES.lockEnd, EH_PHASES.fallEnd, EH_PHASES.emergeStart, 0.69, EH_PHASES.emergeEnd, 1],
-        ease: ['linear', 'easeIn', 'linear', 'easeOut', 'easeOut', 'linear'],
+        times: [0, EH_PHASES.lockEnd, EH_PHASES.fallEnd, EH_PHASES.emergeStart, EH_PHASES.emergeStart, 0.69, EH_PHASES.emergeEnd, 1],
+        ease: ['linear', 'easeIn', 'linear', 'linear', 'easeOut', 'easeOut', 'linear'],
       })
       animRef.current = scaleAnim
+      // Clip: full at rest, closes to 0 while the record is already at
+      // scale 0 (fallEnd→emergeStart, so the close itself is never seen),
+      // then irises open 0→50% (the disc's own edge) with the mockup's
+      // easeOut across exactly the emerge window, and finishes opening past
+      // the platter shoulder + drop shadow during settle.
+      const clipAnim = animate(recordClipMV, [EH_CLIP_REST_PCT, EH_CLIP_REST_PCT, 0, 50, EH_CLIP_REST_PCT], {
+        duration: EH_DUR_MS / 1000,
+        times: [0, EH_PHASES.fallEnd, EH_PHASES.emergeStart, EH_PHASES.emergeEnd, 1],
+        ease: ['linear', 'linear', 'easeOut', 'easeOut'],
+      })
+      clipAnimRef.current = clipAnim
 
       // Swap identity once the old record is fully collapsed and the new one
       // is about to start blooming (mirrors the fly path's Step 3: preload
       // before swap, fire audio at the same moment the new visual begins).
       await Promise.all([preloadPromise, sleep(EH_DUR_MS * EH_PHASES.emergeStart)])
+      if (superseded()) return null
 
       // A skip that arrived before this point must never let swapIdentity()
       // fire below — that call also fires onTransitionAudioStart for
@@ -754,6 +838,7 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
       // played, it's just a visual handoff at that point.
       if (pendingRef.current && pendingRef.current.uri !== target.uri) {
         animRef.current?.stop()
+        clipAnimRef.current?.stop()
         const pending = pendingRef.current
         pendingRef.current = null
         setRingTransition(null)
@@ -765,7 +850,10 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
       }
       if (!endingRef.current) swapIdentity()
 
-      await scaleAnim
+      await Promise.all([scaleAnim, clipAnim])
+      // .stop() from the ending cleanup RESOLVES these — this is the wake-up
+      // the token exists for.
+      if (superseded()) return null
       if (!endingRef.current) {
         tonearmCtrl.start({ ...ARM_ON, transition: { type: 'spring', stiffness: 180, damping: 26 } })
       }
@@ -1001,6 +1089,18 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
       }
     } catch (err) {
       console.error('[runTransition]', err)
+      // Event Horizon threw mid-flight (2026-09-14, adversarial review):
+      // nothing below touches the ring layer, so StationRingLayer would stay
+      // on drawEventHorizon's last frame (comet/grooves frozen) and the
+      // record stranded mid-collapse until a reload. Same reset the ending
+      // cleanup does; idempotent with it, so no endingRef guard needed.
+      if (ringMode) {
+        animRef.current?.stop()
+        clipAnimRef.current?.stop()
+        recordScaleMV.set(1)
+        recordClipMV.set(EH_CLIP_REST_PCT)
+        setRingTransition(null)
+      }
       // Same endingRef guard as the happy-path block above (2026-08-07 —
       // clearing busyRef re-opens pendingRef draining and un-hides text, so
       // an exception during a transition that overlaps a close would relocate
@@ -1301,7 +1401,12 @@ function LiveScreen({ currentTrack, isPaused, error, ending, onClose, shuffleKey
                      not as a bigger travel constant. */}
                 <motion.div
                   className="absolute inset-0"
-                  style={{ willChange: 'opacity' }}
+                  // ringMode: clipPath bound to recordClipMV (see its
+                  // declaration) for the Event Horizon iris reveal. Rests
+                  // at EH_CLIP_REST_PCT, which clips nothing, so outside an
+                  // active sequence this is visually inert; non-ring mode
+                  // spreads {} — byte-identical to before.
+                  style={{ willChange: 'opacity', ...(ringMode ? { clipPath: recordClipPath } : {}) }}
                   animate={{ opacity: artOpacity }}
                   transition={artOpacity === 1
                     ? { duration: 0.35, ease: [0.23, 1, 0.32, 1] }

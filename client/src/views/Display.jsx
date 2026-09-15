@@ -682,9 +682,31 @@ const HEAD_START_DELAY_MS = 2400
 // Duration for the shiny-question-exit warp — same vortex as the jukebox
 // handoff (WarpTransition.jsx), much shorter: this fires on every shiny
 // exit, potentially several times a round, where the jukebox's 5s
-// cinematic pacing would feel slow. Start conservative; this is the one
-// number to retune live if it reads too fast or too slow.
-const SHINY_WARP_MS = 2200
+// cinematic pacing would feel slow. Was briefly 2200 (the 9cb0328 "double
+// warp durations" commit doubled this alongside the jukebox's own
+// DURATION_MS/HEAD_START_DELAY_MS, but SHINY_WARP_MS isn't coupled to that
+// jukebox rescale — nothing here referenced it, it was just swept along).
+// Reverted same day (Ben, live): at 2200ms, once COVER_AT below hides the
+// bleed, the rest of the run is a long opaque hold — title-exit and
+// question-arrival stopped reading as two beats and blurred into one
+// continuous motion. Back to the original tuned value; retune live if it
+// reads too fast or too slow.
+const SHINY_WARP_MS = 1100
+// How far into the shiny ENTRY warp ('out') the vortex is fully opaque, as
+// a fraction of SHINY_WARP_MS — 0.24 = ~260ms. Unlike the jukebox warp
+// (which covers a scene still genuinely on screen, its new content deferred
+// to onDone), the shiny group's first question has ALREADY replaced
+// currentSlide by the time the warp mounts, so the jukebox's slow
+// (t/0.94)^2 veil let the new question show through the swirl: "the
+// question bleeds through the animation ... a circle in the middle" (Ben,
+// live 2026-09-14). ~260ms lines up with the outgoing shiny-title's own
+// 0.2s exit (AnimatePresence mode="wait" — the incoming question doesn't
+// start fading in until ~250ms), so the swirl covers the whole TV before
+// the destination content is ever visible. Expressed as a fraction of
+// SHINY_WARP_MS so it keeps landing at that same ~260ms if the duration
+// above is retuned again — the fraction, not this comment, is the source
+// of truth.
+const SHINY_WARP_COVER_AT = 0.24
 
 function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRingStateChange }) {
   const { theme } = useTheme()
@@ -1095,13 +1117,16 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           ways, same as the jukebox's own out/back pair). Shorter duration
           (SHINY_WARP_MS). Same key-by-state-value reasoning as the jukebox
           block above: keying on shinyWarp means a real advance mid-warp
-          can't stutter-remount this canvas. */}
+          can't stutter-remount this canvas. coverAt only affects the 'out'
+          leg (see SHINY_WARP_COVER_AT); 'back' opens already-opaque and is
+          untouched. */}
       {shinyWarp && (
         <ErrorBoundary fallback={null}>
           <WarpTransition
             key={shinyWarp}
             dir={shinyWarp}
             durationMs={SHINY_WARP_MS}
+            coverAt={SHINY_WARP_COVER_AT}
             onDone={() => setShinyWarp(null)}
           />
         </ErrorBoundary>
@@ -1126,7 +1151,14 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           — so an unhidden overlay would slam its opaque bg-black over the
           still-visible grading-break slide mid-wind-up. Hidden, nothing paints
           and the visual timeline is byte-identical to before; only the DATA/
-          PLAYBACK work starts early. The reveal is the same commit as before:
+          PLAYBACK work starts early. Except: visibility:hidden stops paint,
+          not JS — LiveScreen's turntable entrance (a Framer spring chain)
+          used to run to completion under the hood before onDone, so the TV
+          revealed a record already landed (2026-09-14, Ben, live: "screen
+          goes black then the vinyl just appears out of nowhere"). The
+          `revealed` prop below hands breakActive down to LiveScreen, which
+          holds that entrance until it flips — the data/play chain above is
+          untouched and still starts here. The reveal is the same commit as before:
           onDone sets activeBreakId -> breakActive flips true (visibility on)
           AND warp goes null (canvas unmounts) in one batched commit, so the
           mount condition below never goes false across it — Jukebox does NOT
@@ -1146,6 +1178,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
               key={currentSlide.id}
               lib={currentSlide?.data?.jukeboxLib ?? 'random'}
               onExit={onBreakAdvance}
+              revealed={breakActive}
             />
           </div>
         </ErrorBoundary>
