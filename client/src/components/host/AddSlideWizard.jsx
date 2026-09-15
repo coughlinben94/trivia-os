@@ -39,6 +39,50 @@ const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber
 
 const BTN = 'host-button'
 
+function NoRoundsHint({ creating, onCreate }) {
+  return (
+    <div className="flex items-center gap-2">
+      <p className="text-sm text-gray-400">No rounds yet.</p>
+      <button
+        type="button"
+        onClick={onCreate}
+        disabled={creating}
+        className={`text-sm font-semibold text-[#1a6b4a] hover:text-green-800 underline underline-offset-2 disabled:opacity-50 ${BTN}`}
+      >
+        {creating ? 'Creating…' : '+ Create Round 1'}
+      </button>
+    </div>
+  )
+}
+
+// One shared round-picker instead of 4 near-identical copies of the same
+// empty-state/dropdown conditional (root-cause finding behind the 4x "no
+// rounds yet" duplication patched separately, 2026-09-15 pipeline-friction
+// audit). onChange defaults to just setting the round; round-intro's
+// "associate with round" usage overrides it to also sync roundType/roundNumber.
+function RoundPicker({ id, label, rounds, value, onChange, creating, onCreateRound }) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-xs font-medium text-gray-500 mb-1.5">{label}</label>
+      {rounds.length === 0 ? (
+        <NoRoundsHint creating={creating} onCreate={onCreateRound} />
+      ) : (
+        <select
+          id={id}
+          value={value ?? ''}
+          onChange={e => onChange(e.target.value)}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+        >
+          <option value="">Select a round…</option>
+          {rounds.map(r => (
+            <option key={r.id} value={r.id}>R{r.number} — {r.title}</option>
+          ))}
+        </select>
+      )}
+    </div>
+  )
+}
+
 // ── Shiny creation shape (2026-08-26 rebuild) ────────────────────────────────
 // One popup for every asset-capable format: how many ASSETS come after the
 // title card, and how those assets relate to each other. Nothing branches on
@@ -88,12 +132,27 @@ export const ROUND_TYPES = [
   { id: 'pyl',    label: 'Press Your Luck!', needsNumber: false, title: 'Press Your Luck!' },
 ]
 
-export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange, initialData = {}, shinyFormats, shinyLoading }) {
+export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange, initialData = {}, shinyFormats, shinyLoading, onQuickAddRound, onOpenBendleAdmin, bendleAdminOpen }) {
   const [type, setType] = useState(initialData.type ?? null)
   const typeCard = TYPE_CARDS.find(c => c.type === type)
 
   // Shared
   const [roundId, setRoundId] = useState(initialData.roundId ?? null)
+  // Lets the 4 "no rounds yet" dead-ends below create Round 1 inline instead
+  // of forcing the host to close this modal (losing whatever they'd typed),
+  // hunt down "+ Add Round" separately, then reopen and retype from scratch
+  // (nav-friction audit finding #4, 2026-09-14).
+  const [creatingRound, setCreatingRound] = useState(false)
+  async function quickCreateRound() {
+    if (!onQuickAddRound || creatingRound) return
+    setCreatingRound(true)
+    try {
+      const id = await onQuickAddRound()
+      setRoundId(id)
+    } finally {
+      setCreatingRound(false)
+    }
+  }
 
   // Question (plain)
   const [questionText,   setQuestionText]   = useState('')
@@ -113,11 +172,16 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const [bendleSongId, setBendleSongId] = useState(null)
 
   useEffect(() => {
+    // Skip while Bendle admin is open on top of this modal — refetch once it
+    // closes instead, so a song added there shows up without losing the
+    // round/format/text the host already picked here (this modal never
+    // unmounts for that trip any more — see BuildMode's onOpenBendleAdmin).
+    if (bendleAdminOpen) return
     let cancelled = false
     supabase.from('bendle_songs').select('id, title, answer, aliases').eq('status', 'ready').order('title')
       .then(({ data }) => { if (!cancelled) setBendleSongs(data ?? []) })
     return () => { cancelled = true }
-  }, [])
+  }, [bendleAdminOpen])
   // "How many assets" for venn means how many SEPARATE venn questions to
   // create in one go (Ben, 2026-09-01: "I'll be asking three separate venn
   // diagrams" — a round of 3 standalone puzzles, not 3 people on one side).
@@ -532,23 +596,20 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               <p className="text-xs text-gray-400">{selectedShinyFmt.blurb}</p>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Round</label>
-              {show.rounds.length === 0 ? (
-                <p className="text-sm text-gray-400">No rounds yet — use "+ Add Round" first.</p>
-              ) : (
-                <select
-                  value={roundId ?? ''}
-                  onChange={e => pickRound(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                >
-                  <option value="">Select a round…</option>
-                  {show.rounds.map(r => (
-                    <option key={r.id} value={r.id}>R{r.number} — {r.title}</option>
-                  ))}
-                </select>
-              )}
-            </div>
+            {fixedShapeKind?.nextStepHint && (
+              <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5">
+                <p className="text-xs text-blue-800">{fixedShapeKind.nextStepHint}</p>
+              </div>
+            )}
+
+            <RoundPicker
+              label="Round"
+              rounds={show.rounds}
+              value={roundId}
+              onChange={pickRound}
+              creating={creatingRound}
+              onCreateRound={quickCreateRound}
+            />
 
             {/* How many assets — one input, always visible, always editable.
                 A format's `slots` preset only pre-fills it. It used to HIDE
@@ -612,7 +673,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             {fixedShapeKind?.extraControls?.({
               gridCols, setGridCols, gridRows, setGridRows,
               vennSlideCount, setVennSlideCount, vennNum, vennPerSide, setVennPerSide,
-              bendleSongs, bendleSongId, setBendleSongId,
+              bendleSongs, bendleSongId, setBendleSongId, onOpenBendleAdmin,
             })}
 
             {/* Question + answer — the two tied modes share one of each.
@@ -707,26 +768,15 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               />
             </div>
 
-            <div>
-              <label htmlFor="add-question-round" className="block text-xs font-medium text-gray-500 mb-1.5">
-                Round
-              </label>
-              {show.rounds.length === 0 ? (
-                <p className="text-sm text-gray-400">No rounds yet — use "+ Add Round" first.</p>
-              ) : (
-                <select
-                  id="add-question-round"
-                  value={roundId ?? ''}
-                  onChange={e => pickRound(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                >
-                  <option value="">Select a round…</option>
-                  {show.rounds.map(r => (
-                    <option key={r.id} value={r.id}>R{r.number} — {r.title}</option>
-                  ))}
-                </select>
-              )}
-            </div>
+            <RoundPicker
+              id="add-question-round"
+              label="Round"
+              rounds={show.rounds}
+              value={roundId}
+              onChange={pickRound}
+              creating={creatingRound}
+              onCreateRound={quickCreateRound}
+            />
 
             {/* Bonus checkbox */}
             <div className="flex items-center gap-2">
@@ -813,6 +863,14 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                             <span className="text-[11px] text-gray-400 leading-none">{mediaType}</span>
                           </div>
                         )}
+                        {/* Blank-shell formats (matching/wager/order/choice/
+                            hues-cues/elimination/race) used to look exactly
+                            like every other question at pick-time, then
+                            silently need a second pass in the slide editor
+                            (pipeline-friction audit finding #2, 2026-09-15). */}
+                        {FIXED_SHAPE_KINDS[mediaType]?.nextStepHint && (
+                          <p className="text-[10px] text-amber-600 mt-0.5 leading-tight">Finish in slide editor after</p>
+                        )}
                       </div>
                       {slots != null && (
                         <span className="text-[11px] text-gray-400 shrink-0 self-start mt-0.5">×{slots}</span>
@@ -848,62 +906,47 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
 
             {/* Round selector — sources from show.rounds (the real registry) */}
             {needsRound && (
-              <div>
-                <label htmlFor="add-round-select" className="block text-xs font-medium text-gray-500 mb-1.5">
-                  {type === 'grading-break' ? 'End of which round?' : 'Round'}
-                </label>
-                {show.rounds.length === 0 ? (
-                  <p className="text-sm text-gray-400">No rounds yet — use "+ Add Round" in the sidebar first.</p>
-                ) : (
-                  <select
-                    id="add-round-select"
-                    value={roundId ?? ''}
-                    onChange={e => pickRound(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                  >
-                    <option value="">Select a round…</option>
-                    {show.rounds.map(r => (
-                      <option key={r.id} value={r.id}>R{r.number} — {r.title}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
+              <RoundPicker
+                id="add-round-select"
+                label={type === 'grading-break' ? 'End of which round?' : 'Round'}
+                rounds={show.rounds}
+                value={roundId}
+                onChange={pickRound}
+                creating={creatingRound}
+                onCreateRound={quickCreateRound}
+              />
             )}
 
             {/* ── ROUND INTRO: associate round → subtitle ── */}
             {type === 'round-intro' && (
               <>
-                {/* Round association — only shown when not pre-filled from AddRoundWizard */}
-                {!roundId && (
-                  <div>
-                    <label htmlFor="add-round-assoc" className="block text-xs font-medium text-gray-500 mb-1.5">
-                      Associate with round
-                    </label>
-                    {show.rounds.length === 0 ? (
-                      <p className="text-sm text-gray-400">No rounds yet — use "+ Add Round" in the sidebar first.</p>
-                    ) : (
-                      <select
-                        id="add-round-assoc"
-                        value={roundId ?? ''}
-                        onChange={e => {
-                          pickRound(e.target.value)
-                          const r = show.rounds.find(r => r.id === e.target.value)
-                          if (r) {
-                            setRoundType(r.roundType ?? 'normal')
-                            setRoundNumber(r.roundNumber ?? r.number ?? 1)
-                          }
-                        }}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-                      >
-                        <option value="">Select a round…</option>
-                        {show.rounds.map(r => (
-                          <option key={r.id} value={r.id}>R{r.number} — {r.title}</option>
-                        ))}
-                      </select>
-                    )}
+                {/* This modal chains straight in right after Add Round with
+                    no transition — reads like a double-click bug without
+                    this (nav-friction audit finding #5, 2026-09-14). */}
+                {initialData.justCreatedRound && (
+                  <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2.5">
+                    <p className="text-sm font-semibold text-[#1a6b4a]">✓ Round created — now set up its intro slide</p>
                   </div>
                 )}
-
+                {/* Round association — only shown when not pre-filled from AddRoundWizard */}
+                {!roundId && (
+                  <RoundPicker
+                    id="add-round-assoc"
+                    label="Associate with round"
+                    rounds={show.rounds}
+                    value={roundId}
+                    onChange={id => {
+                      pickRound(id)
+                      const r = show.rounds.find(r => r.id === id)
+                      if (r) {
+                        setRoundType(r.roundType ?? 'normal')
+                        setRoundNumber(r.roundNumber ?? r.number ?? 1)
+                      }
+                    }}
+                    creating={creatingRound}
+                    onCreateRound={quickCreateRound}
+                  />
+                )}
                 {/* Subtitle — optional punchline, fully controlled so clearing sticks */}
                 <div>
                   <label htmlFor="add-round-subtitle" className="block text-xs font-medium text-gray-500 mb-1.5">

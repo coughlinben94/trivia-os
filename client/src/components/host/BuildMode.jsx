@@ -116,7 +116,7 @@ const REST_STATE_BOX_ORDER_KEY = 'trivia-os:rest-state-box-order'
 function defaultRestStateBoxOrder() {
   return [
     ...TYPE_CARDS.filter(c => !c.hidden).map(c => c.type),
-    'theme', 'swing', 'pyl', 'shiny', 'database', 'ticker', 'data', 'shows', 'music',
+    'swing', 'pyl', 'shiny', 'database', 'ticker', 'data', 'shows', 'music',
   ]
 }
 
@@ -631,6 +631,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
       roundType: data.roundType,
       roundNumber: data.roundNumber,
       roundSubtitle: data.subtitle,
+      justCreatedRound: true,
     })
   }
 
@@ -653,6 +654,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
         onSyncArchive={actions.syncArchive}
         onOpenLibrary={onOpenLibrary}
         onOpenScoreboard={onOpenScoreboard}
+        onOpenThemePicker={() => setShowThemePicker(true)}
         onDashboard={mode !== 'wizard' ? returnToDashboard : undefined}
         previewSlideId={syncedSelectedSlide?.id ?? null}
       />
@@ -745,6 +747,22 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                   </div>
                 )}
 
+                {/* Empty-show CTA — nothing below works without a round yet,
+                    but the sidebar's "+ Add Round" button used to be the
+                    quietest thing on the page next to 20 equally-styled
+                    tiles (nav-friction audit finding #3, 2026-09-14). */}
+                {show.rounds.length === 0 && (
+                  <div className="mb-5 flex flex-col items-center gap-2 text-center">
+                    <button
+                      onClick={handleAddRound}
+                      className={`bg-[#1a6b4a] text-white text-base font-semibold px-6 py-3.5 rounded-xl hover:bg-green-900 ${BTN}`}
+                    >
+                      + Add your first round
+                    </button>
+                    <p className="text-xs text-gray-400">Rounds hold your questions, slides, and round-specific formats.</p>
+                  </div>
+                )}
+
                 {/* 5-5-3 grid: all 13 boxes flat, drag the ⠿ grip to reorder.
                     5-wide (not 4) so the last row holds 3 tiles instead of a
                     single orphaned one — 13 has no clean divisor, but a
@@ -756,7 +774,6 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                         icon: card.icon, name: card.name, desc: card.desc, styleKey: card.type,
                         onClick: () => openAddModal({ type: card.type, roundId: activeRoundId }),
                       }])),
-                      theme:    { icon: '🌌', name: 'World', desc: 'Change the display world', styleKey: 'theme', onClick: () => setShowThemePicker(true) },
                       swing:    { icon: '🎷', name: 'Swing Round', desc: 'Bulk-add all swing questions at once', styleKey: 'swing', onClick: () => setShowSwingWizard(true) },
                       pyl:      { icon: '🎰', name: 'Press Your Luck!', desc: 'Set up PYL themes and slides', styleKey: 'pyl', onClick: () => setShowPylMenu(v => !v), menu: true },
                       shiny:    { icon: '✨', name: 'Shiny Formats', desc: 'Add or edit shiny question styles', styleKey: 'shiny', onClick: () => setShowFormatLibrary(true) },
@@ -915,6 +932,16 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                 onClose={closeAddModal}
                 shinyFormats={shinyFormats}
                 shinyLoading={shinyFormatsLoading}
+                onQuickAddRound={() => ensureRound(null, { roundType: 'normal', title: `Round ${nextRoundNumber}` })}
+                // Deliberately doesn't closeAddModal() — closing would unmount
+                // AddSlideWizard and drop everything the host already picked
+                // (round, asset count, question text). BendleAdmin renders as
+                // an overlay on top instead, same z-50 as this modal but later
+                // in the DOM so it paints over it; the wizard underneath stays
+                // exactly as the host left it (code-review finding, 2026-09-15:
+                // the first version of this fix only half-closed the loop).
+                bendleAdminOpen={showBendleAdmin}
+                onOpenBendleAdmin={() => setShowBendleAdmin(true)}
               />
             </motion.div>
           </motion.div>

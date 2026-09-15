@@ -19,17 +19,25 @@ import { nanoid } from 'nanoid'
 // the generic count/relationship UI for this kind either" — they're here
 // so FIXED_SHAPE_TYPES can be *derived* from this registry's keys instead
 // of hand-maintained as a second, easy-to-forget list.
+// nextStepHint: shown on the format-picker tile AND at the top of the
+// details step, so a host can tell what a format needs before AND after
+// picking it — every shiny format used to look like it needed the same
+// "text + answer" as a plain question, which it never does (2026-09-15
+// pipeline-friction audit: "shiny question" tested as ~6 structurally
+// different forms with zero warning which one you'd landed on). null means
+// the format's own extraControls already make the next step self-evident
+// (grid's Columns/Rows, venn's counts, bendle's song picker).
 export const FIXED_SHAPE_KINDS = {
-  matching:    { hasOwnControls: false },
-  wager:       { hasOwnControls: false },
-  order:       { hasOwnControls: false },
-  choice:      { hasOwnControls: false },
-  'hues-cues': { hasOwnControls: false },
-  grid:        { hasOwnControls: true, extraControls: gridExtraControls, buildSlideData: buildGridSlide },
-  venn:        { hasOwnControls: true, extraControls: vennExtraControls, buildSlideData: buildVennSlide },
-  bendle:      { hasOwnControls: true, extraControls: bendleExtraControls, buildSlideData: buildBendleSlide },
-  elimination: { hasOwnControls: false, buildSlideData: buildElimSlide },
-  race:        { hasOwnControls: false, buildSlideData: buildRaceSlide },
+  matching:    { hasOwnControls: false, nextStepHint: 'Creates a blank slide — build the matching pairs afterward in the slide editor.' },
+  wager:       { hasOwnControls: false, nextStepHint: 'Creates a blank slide — set up the wager afterward in the slide editor.' },
+  order:       { hasOwnControls: false, nextStepHint: 'Creates a blank slide — set the items to order afterward in the slide editor.' },
+  choice:      { hasOwnControls: false, nextStepHint: 'Creates a blank slide — set up the multiple-choice options afterward in the slide editor.' },
+  'hues-cues': { hasOwnControls: false, nextStepHint: 'Creates a blank slide — set up the board afterward in the slide editor.' },
+  grid:        { hasOwnControls: true, extraControls: gridExtraControls, buildSlideData: buildGridSlide, nextStepHint: null },
+  venn:        { hasOwnControls: true, extraControls: vennExtraControls, buildSlideData: buildVennSlide, nextStepHint: null },
+  bendle:      { hasOwnControls: true, extraControls: bendleExtraControls, buildSlideData: buildBendleSlide, nextStepHint: null },
+  elimination: { hasOwnControls: false, buildSlideData: buildElimSlide, nextStepHint: 'Creates a blank slide — add the 8 items and 3 hints afterward in the slide editor.' },
+  race:        { hasOwnControls: false, buildSlideData: buildRaceSlide, nextStepHint: 'Creates a blank slide — add contenders and beats afterward in the slide editor.' },
 }
 
 // ── Grid ───────────────────────────────────────────────────────────────────
@@ -211,25 +219,44 @@ export function buildElimSlide(ctx) {
 
 // ── Bendle ───────────────────────────────────────────────────────────────
 
-// ctx: { bendleSongs, bendleSongId, setBendleSongId }
+// ctx: { bendleSongs, bendleSongId, setBendleSongId, onOpenBendleAdmin }
+// A dropdown with nothing in it and a hint pointing at "the Bendle admin
+// panel" — no link, no button — was a confirmed dead end for a host who
+// doesn't already know that panel exists: submit stays disabled forever
+// with no way out of this modal toward the fix (pipeline-friction audit
+// finding #1, 2026-09-15). onOpenBendleAdmin is optional so this still
+// renders standalone if a future caller doesn't wire it.
 export function bendleExtraControls(ctx) {
+  const noSongs = (ctx.bendleSongs ?? []).length === 0
   return (
     <div>
       <label className="block text-xs font-medium text-gray-500 mb-1.5">Song</label>
-      <select
-        value={ctx.bendleSongId ?? ''}
-        onChange={e => ctx.setBendleSongId(e.target.value || null)}
-        className="w-full border border-gray-200 rounded-lg px-3 py-3 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
-      >
-        <option value="">Pick a song…</option>
-        {(ctx.bendleSongs ?? []).map(s => (
-          <option key={s.id} value={s.id}>{s.title}</option>
-        ))}
-      </select>
-      {(ctx.bendleSongs ?? []).length === 0 && (
-        <p className="text-[11px] text-gray-400 mt-1">
-          No songs prepped yet — upload stems from the Bendle admin panel first.
-        </p>
+      {noSongs ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+          <p className="text-sm text-amber-800">No songs prepped yet.</p>
+          {ctx.onOpenBendleAdmin ? (
+            <button
+              type="button"
+              onClick={ctx.onOpenBendleAdmin}
+              className="mt-1.5 text-sm font-semibold text-[#1a6b4a] hover:text-green-800 underline underline-offset-2 host-button"
+            >
+              Open Bendle Song Admin →
+            </button>
+          ) : (
+            <p className="text-[11px] text-amber-700 mt-1">Upload stems from the Bendle admin panel first.</p>
+          )}
+        </div>
+      ) : (
+        <select
+          value={ctx.bendleSongId ?? ''}
+          onChange={e => ctx.setBendleSongId(e.target.value || null)}
+          className="w-full border border-gray-200 rounded-lg px-3 py-3 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+        >
+          <option value="">Pick a song…</option>
+          {ctx.bendleSongs.map(s => (
+            <option key={s.id} value={s.id}>{s.title}</option>
+          ))}
+        </select>
       )}
     </div>
   )

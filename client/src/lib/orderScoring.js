@@ -1,4 +1,5 @@
 import { normalizeRoundScore } from './scoreboardMath.js'
+import { hashSeed, mulberry32 } from './seededRandom.js'
 
 // Host-set default for a fresh Order format/slide (shiny_formats.input_schema's
 // pointsForOrder, and SlideEditor/LiveMode's per-slide fallback) — one shared
@@ -22,29 +23,6 @@ export function scoreOrderSubmission(answer, correctOrder, points) {
   if (answer.length !== correctOrder.length) return 0
   if (answer.every((id, i) => id === correctOrder[i])) return Number(points) || 0
   return 0
-}
-
-// Deterministic string hash -> a seed number, used to drive the shuffle below.
-// Same seed always produces the same shuffle for a given slide (stable across
-// re-renders, different across slides) — deterministic, not just "sorted".
-function hashSeed(str) {
-  let h = 0
-  for (let i = 0; i < str.length; i++) {
-    h = (Math.imul(31, h) + str.charCodeAt(i)) | 0
-  }
-  return h >>> 0
-}
-
-// mulberry32 — small, fast, seedable PRNG. Good enough for shuffling a
-// question's image row; not cryptographic, doesn't need to be.
-function mulberry32(seed) {
-  let a = seed
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0
-    let t = Math.imul(a ^ (a >>> 15), 1 | a)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
 }
 
 // Fisher-Yates, seeded by `seed` (typically a slide id) so the shuffle is

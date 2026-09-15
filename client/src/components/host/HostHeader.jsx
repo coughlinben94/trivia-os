@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onSyncArchive, onOpenLibrary, onOpenScoreboard, onDashboard, previewSlideId }) {
+export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onSyncArchive, onOpenLibrary, onOpenScoreboard, onOpenThemePicker, onDashboard, previewSlideId }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [copied, setCopied] = useState(false)
@@ -104,6 +104,13 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onS
             className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
           >
             Score
+          </button>
+          <button
+            onClick={onOpenThemePicker}
+            title="Change the display world for the whole show"
+            className="text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-3 py-2 rounded-lg host-button"
+          >
+            World
           </button>
           <button
             onClick={() => window.open(
