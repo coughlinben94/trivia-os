@@ -48,6 +48,14 @@ describe('roundLabel', () => {
     expect(roundLabel(round, [])).toBe('R1')
   })
 
+  it('labels a normal round by its host-typed roundNumber, not the internal creation-order number', () => {
+    // Real bug: Round1(number:1), Round2(number:2), Swing(number:3, never
+    // shown), PYL(number:5, never shown, number 4 already burned earlier),
+    // Round3(number:6, roundNumber:3) — badge showed "R6", title "Round 3".
+    const round = { id: 'r5', roundType: 'normal', number: 6, roundNumber: 3 }
+    expect(roundLabel(round, [])).toBe('R3')
+  })
+
   it('falls back to slide-type sniffing for legacy rounds with no roundType', () => {
     const legacySwing = { id: 'r2', number: null }
     const slides = [{ roundId: 'r2', type: 'swing-round-intro' }]

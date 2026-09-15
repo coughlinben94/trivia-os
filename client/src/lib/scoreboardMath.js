@@ -37,7 +37,18 @@ export function roundLabel(round, slides) {
   const roundSlides = (slides ?? []).filter(s => s.roundId === round.id)
   if (roundSlides.some(s => s.type === 'swing-round-intro')) return 'SW'
   if (roundSlides.some(s => s.type === 'pyl-reveal')) return 'PYL'
-  return `R${round.number ?? '?'}`
+  // roundNumber (host-typed in AddRoundWizard, also what the round's own
+  // title is built from) takes priority over `number` (an internal
+  // creation-order counter stamped on every round, including Swing/PYL —
+  // which never display it, so it silently drifts ahead: a show with
+  // Round1, Round2, Swing, PYL, Round3 stamps number 1,2,3,4,5 in order,
+  // but the last round's own roundNumber is 3, badge without this fix
+  // reads "R5" while its title says "Round 3"). `number` stays the sort
+  // key (scoreboardMath's own deriveRoundCols, ShowDetail.jsx) since it's
+  // guaranteed unique and monotonic — roundNumber is host-typed free text
+  // and isn't. Legacy rounds with no roundNumber field fall back to number
+  // unchanged.
+  return `R${round.roundNumber ?? round.number ?? '?'}`
 }
 
 export function deriveRoundCols(show) {

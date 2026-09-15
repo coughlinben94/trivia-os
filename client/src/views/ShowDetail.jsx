@@ -1,15 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
-import { deriveRoundCols, computeTotal, normalizeRoundScore, MEDALS } from '../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, normalizeRoundScore, roundLabel, MEDALS } from '../lib/scoreboardMath.js'
 import { sortSlides } from '../lib/slideStepping.js'
-
-function getRoundLabel(round, slides) {
-  const roundSlides = slides.filter(s => s.roundId === round.id)
-  if (roundSlides.some(s => s.type === 'swing-round-intro')) return 'SW'
-  if (roundSlides.some(s => s.type === 'pyl-reveal')) return 'PYL'
-  return `R${round.number ?? round.roundNumber ?? ''}`
-}
 
 export default function ShowDetail() {
   const { showId } = useParams()
@@ -69,7 +62,7 @@ export default function ShowDetail() {
   const roundCols = sortedRounds.map(r => ({
     round: r,
     key: `r_${r.id}`,
-    label: getRoundLabel(r, slides),
+    label: roundLabel(r, slides),
   }))
   const totalCols = deriveRoundCols(show)
 
