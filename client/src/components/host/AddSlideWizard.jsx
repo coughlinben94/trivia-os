@@ -558,15 +558,17 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // Answer field doesn't apply, so it's gated separately from Question-text.
   // Race has no typed answer either — it's filled in by the race engine.
   const showAnswerField  = showSharedFields && shinyFmtType !== 'bendle' && shinyFmtType !== 'race'
-  // A plain single-asset question, and a single-count fixed-shape format,
-  // still needs its answer up front, unchanged. Multi-asset tied questions
-  // and a multi-count fixed-shape run (fixedShapeCount > 1, via
-  // showSharedFields above) answer per-slide in the editor instead, so the
-  // shared answer is optional there.
-  // Bendle has no typed answer to require (see showAnswerField above) — its
-  // song is optional here too, since Task 6's upload panel may not have
-  // shipped any songs yet.
-  const sharedAnswerRequired = showAnswerField && (isFixedShapeFmt || assetNum === 1)
+  // Never required up front, regardless of asset count — the answer can
+  // always be set afterward on the slide editor's right rail (the generic
+  // Answer field there covers every shiny type except choice/hues-cues,
+  // which have their own answer-setting UI). Previously a single-asset
+  // shared question blocked "Add X" until an answer was typed in this
+  // popup; that's exactly the friction the 2026-09-15 pipeline-friction
+  // audit flagged for other steps in this same wizard — Ben's ask here was
+  // to answer on the right rail, not in a popup, so this extends the same
+  // "fill in after" treatment multi-asset/fixed-shape runs already had to
+  // the single-asset case too.
+  const sharedAnswerRequired = false
   // Bendle has no typed answer to gate on (see showAnswerField above), but it
   // still needs SOMETHING required before create — a song. Without this, "Pick
   // a song…" (the blank option) + Create silently ships bendleSongId: null,
@@ -772,8 +774,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             {showAnswerField && (
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  Answer
-                  {!sharedAnswerRequired && <span className="font-normal text-gray-400"> (optional — each asset can have its own)</span>}
+                  Answer <span className="font-normal text-gray-400">(optional — set it in the slide editor after)</span>
                 </label>
                 <input
                   type="text"
@@ -783,7 +784,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                   // takes the focus the count would otherwise have had —
                   // except venn, which has its own count input to focus.
                   autoFocus={isFixedShapeFmt && !isVenn}
-                  placeholder={sharedAnswerRequired ? 'The answer…' : 'Leave blank for per-asset answers'}
+                  placeholder="Leave blank to set it after creating"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
                 />
               </div>
@@ -799,9 +800,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               </button>
               {!canAddShiny && (
                 <p className="text-xs text-gray-400 text-center">
-                  {!roundId ? 'Select a round to continue'
-                    : (bendleSongRequired && !bendleSongId) ? 'Pick a song to continue'
-                    : 'Add an answer to continue'}
+                  {!roundId ? 'Select a round to continue' : 'Pick a song to continue'}
                 </p>
               )}
             </div>
