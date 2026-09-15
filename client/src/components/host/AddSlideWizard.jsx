@@ -561,7 +561,9 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // Bendle's answer comes from the picked song, not free text — the generic
   // Answer field doesn't apply, so it's gated separately from Question-text.
   // Race has no typed answer either — it's filled in by the race engine.
-  const showAnswerField  = showSharedFields && shinyFmtType !== 'bendle' && shinyFmtType !== 'race'
+  // Hues & Cues answer is a picked grid square, set in HuesCuesAnswerPicker
+  // in the slide editor — a typed value here would be silently ignored.
+  const showAnswerField  = showSharedFields && shinyFmtType !== 'bendle' && shinyFmtType !== 'race' && shinyFmtType !== 'hues-cues'
   // Never required up front, regardless of asset count — the answer can
   // always be set afterward on the slide editor's right rail (the generic
   // Answer field there covers every shiny type except choice/hues-cues,

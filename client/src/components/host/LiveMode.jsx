@@ -1131,7 +1131,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     // own result instead of toggling the show-level plain-question answer
     // overlay (unrelated flag, unrelated mechanism — see revealCurrentSlide).
     // Every other slide keeps the original toggle, untouched.
-    if (e.code === 'KeyA' && !revealCurrentSlide()) actions.setAnswerReveal(!show.showState.answerReveal)
+    if (e.code === 'KeyA' && !scoringBusy && !revealCurrentSlide()) actions.setAnswerReveal(!show.showState.answerReveal)
     if (e.code === 'KeyR')       actions.setScoresRevealed?.(!show.showState.scoresRevealed)
   }, [scorePanelOpen, themePickerOpen, scoreboardModalOpen, actions, show.showState.answerReveal, show.showState.scoresRevealed, guardNav, currentSlide])
 

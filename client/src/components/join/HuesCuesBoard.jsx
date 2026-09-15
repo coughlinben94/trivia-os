@@ -129,8 +129,17 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
   const dragRef = useRef(null)
   const pinchRef = useRef(null)
   const pointersRef = useRef(new Map())
+  const panRafRef = useRef(null)
+  useEffect(() => () => { if (panRafRef.current) cancelAnimationFrame(panRafRef.current) }, [])
 
   const saveChainRef = useRef(Promise.resolve())
+  // Set true the moment the team touches a wheel, so the restore-on-mount
+  // fetch below (which can resolve after a slow/venue-wifi round trip)
+  // never clobbers a pick already in progress — see handleColSelect/
+  // handleRowSelect and the restore effect.
+  const userTouchedRef = useRef(false)
+  const handleColSelect = useCallback((v) => { userTouchedRef.current = true; setCol(v) }, [])
+  const handleRowSelect = useCallback((v) => { userTouchedRef.current = true; setRow(v) }, [])
 
   const save = useCallback((nextCol, nextRow) => {
     if (preview) return Promise.resolve(true)
@@ -172,7 +181,7 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
       .eq('team_id', team.id)
       .maybeSingle()
       .then(({ data: row }) => {
-        if (cancelled || !row?.answer) return
+        if (cancelled || !row?.answer || userTouchedRef.current) return
         if (row.answer.col) { setCol(row.answer.col); setCommittedCol(row.answer.col) }
         if (row.answer.row) { setRow(row.answer.row); setCommittedRow(row.answer.row) }
       })
@@ -236,21 +245,31 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
       pinchRef.current = { startDist: Math.hypot(a.x - b.x, a.y - b.y), startScale: pan.scale }
     }
   }
+  // rAF-throttled like WheelColumn's handleScroll above — a touch drag/pinch
+  // fires pointermove at up to 60-120Hz, and setPan on every raw event was
+  // re-rendering the full 480-cell grid that often, causing visible jank on
+  // exactly the phones this board ships to.
   function onPointerMove(e) {
     if (!pointersRef.current.has(e.pointerId)) return
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    if (pointersRef.current.size >= 2 && pinchRef.current) {
-      const [a, b] = [...pointersRef.current.values()]
-      const dist = Math.hypot(a.x - b.x, a.y - b.y)
-      const ratio = dist / pinchRef.current.startDist
-      const scale = Math.max(0.5, Math.min(4, pinchRef.current.startScale * ratio))
-      setPan(p => ({ x: clampPan(p.x, scale), y: clampPan(p.y, scale), scale }))
-      return
-    }
-    if (!dragRef.current) return
-    const dx = e.clientX - dragRef.current.startX
-    const dy = e.clientY - dragRef.current.startY
-    setPan(p => ({ ...p, x: clampPan(dragRef.current.originX + dx, p.scale), y: clampPan(dragRef.current.originY + dy, p.scale) }))
+    if (panRafRef.current) return
+    panRafRef.current = requestAnimationFrame(() => {
+      panRafRef.current = null
+      if (pointersRef.current.size >= 2 && pinchRef.current) {
+        const [a, b] = [...pointersRef.current.values()]
+        const dist = Math.hypot(a.x - b.x, a.y - b.y)
+        const ratio = dist / pinchRef.current.startDist
+        const scale = Math.max(0.5, Math.min(4, pinchRef.current.startScale * ratio))
+        setPan(p => ({ x: clampPan(p.x, scale), y: clampPan(p.y, scale), scale }))
+        return
+      }
+      if (!dragRef.current) return
+      const pt = pointersRef.current.values().next().value
+      if (!pt) return
+      const dx = pt.x - dragRef.current.startX
+      const dy = pt.y - dragRef.current.startY
+      setPan(p => ({ ...p, x: clampPan(dragRef.current.originX + dx, p.scale), y: clampPan(dragRef.current.originY + dy, p.scale) }))
+    })
   }
   function onPointerUp(e) {
     pointersRef.current.delete(e.pointerId)
@@ -398,8 +417,8 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
                   }}
                 />
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <WheelColumn items={COL_LETTERS} selected={col} onSelect={setCol} disabled={locked} highlight={highlight} text={text} />
-                  <WheelColumn items={ROW_NUMBERS} selected={row} onSelect={setRow} disabled={locked} highlight={highlight} text={text} />
+                  <WheelColumn items={COL_LETTERS} selected={col} onSelect={handleColSelect} disabled={locked} highlight={highlight} text={text} />
+                  <WheelColumn items={ROW_NUMBERS} selected={row} onSelect={handleRowSelect} disabled={locked} highlight={highlight} text={text} />
                 </div>
               </div>
 
