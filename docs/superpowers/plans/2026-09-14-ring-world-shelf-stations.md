@@ -1,5 +1,7 @@
 # Ring World — Shelf `stations` Column + World Batch + Match/Save Implementation Plan
 
+> **Amendment, 2026-09-14 (separate session):** Task 2/3 patched to fix a render-fidelity gap the original draft missed — resolving a drawn world's stations against `RING_POOL` (its reduced, draw-only shape) would have silently stripped every noun's `region`/`companionKind`/`maxDetail`/`variant` at render time. `resolveStations` gained an optional third `slots` argument; real call sites now resolve against full station objects (`midnightGalaxyRing.stations` / `world-07-ring.html`'s own `WORLD.stations` literal) plus `SLOTS`'s positional layout fields, instead of `RING_POOL`. Everything else in this plan (schema, `--world-batch`, `findMatch`/`saveAsPending`) is unchanged from the original draft. See Task 2's header note for the full reasoning.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Also read `references/ring-world-continuity.md` before starting — this plan lives in the ring-world system's mandatory-read set.
 
 **Goal:** Build step 4 of the unified noun-color draw design — the `ring_palettes` schema, render-route, and sweep-tool plumbing that lets a *composed world* (drawn stations + a palette, not just a palette) be certified, stored, and matched — so step 5 (picker UI) has something to call.
@@ -75,8 +77,10 @@ git commit -m "feat(ring): add nullable stations column to ring_palettes"
 **Interfaces:**
 - Consumes: nothing new — uses only what `drawWorld.js` already imports (`recolorWorld`).
 - Produces:
-  - `resolveStations(pool, keys)` → `Array<{key, prim, hue, accent, family}>`, throws `Error` naming the missing key if any `keys` entry isn't in `pool`.
-  - `worldFromParams({ colorsParam, weightsParam, driftParam, stationsParam }, { base, pool, baseTheme })` → a world object (`{...base, stations?}`, optionally recolored). Both are pure — no DOM, no fetch, no `URLSearchParams` inside them (callers parse their own query string and pass plain strings/undefined).
+  - `resolveStations(pool, keys, slots)` → `Array<station>`, throws `Error` naming the missing key if any `keys` entry isn't in `pool`. `slots` is optional (third param, default `undefined`).
+  - `worldFromParams({ colorsParam, weightsParam, driftParam, stationsParam }, { base, pool, baseTheme, slots })` → a world object (`{...base, stations?}`, optionally recolored). Both are pure — no DOM, no fetch, no `URLSearchParams` inside them (callers parse their own query string and pass plain strings/undefined).
+
+**Why `resolveStations` takes an optional third `slots` argument — a gap this plan's original draft missed:** `RING_POOL` (`client/src/worlds/ringPool.js`) is a *reduced* projection of the real ring — `{key, prim, hue, accent, family}` only, built for `drawStations`'s lane-spacing math. It drops `region`, `regionSource`, `companionKind`, `variant`, `maxDetail` — fields `RingAmbient.jsx`'s DOM builder (`ringDom` in `ringPrimitives.js`) reads to actually render a station's companion, sky-region tint, and detail level. If Task 3's render routes resolved drawn keys against `RING_POOL`, a drawn world would render every noun stripped of its own visual identity — no companion, no region tint, silently degraded, not crashed, so nothing would catch it except a human noticing the TV looks wrong. The fix: **real render call sites resolve against `midnightGalaxyRing.stations` (the full authored objects, keyed the same way) instead of `RING_POOL`**, recovering every noun-intrinsic field for free. The one thing still missing after that swap is purely positional: `cornerLeft`/`bandUpper`/`companionUpper`/`companionBoost` (`client/src/worlds/midnightGalaxy.slots.js`'s `SLOTS`) describe where in the frame a station's companion sits — that's about the *slot* a noun lands in, not the noun itself, so a drawn noun placed in a new slot must take on that slot's layout, not carry its original one. `resolveStations`'s optional `slots` param merges exactly those four fields, keyed by output position (`slots[i]`), while leaving `family` out (draw-time-only, never a rendering field) and leaving every noun-intrinsic field alone. `SATISFIABLE_POOL` (this file's existing synthetic test fixture) never had these fields to begin with, so every existing test in this file is unaffected by the new optional parameter — it's additive.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -93,6 +97,25 @@ describe('resolveStations', () => {
   it('throws naming the missing key', () => {
     expect(() => resolveStations(SATISFIABLE_POOL, ['r2', 'nope']))
       .toThrow(/no pool entry for key "nope"/)
+  })
+
+  it('merges layout fields from slots, keyed by output position, when slots is given', () => {
+    const slots = [
+      { cornerLeft: true, bandUpper: false, companionUpper: true, companionBoost: false, family: 'ignored' },
+      { cornerLeft: false, bandUpper: true, companionUpper: false, companionBoost: true, family: 'ignored' },
+    ]
+    const result = resolveStations(SATISFIABLE_POOL, ['r2', 'c1'], slots)
+    expect(result[0]).toMatchObject({ key: 'r2', cornerLeft: true, bandUpper: false, companionUpper: true, companionBoost: false })
+    expect(result[1]).toMatchObject({ key: 'c1', cornerLeft: false, bandUpper: true, companionUpper: false, companionBoost: true })
+    // family is draw-time-only, never a rendering field — never merged in,
+    // even though the slots fixture above carries one (to prove it's ignored).
+    expect(result[0].family).toBe(SATISFIABLE_POOL.find(s => s.key === 'r2').family)
+  })
+
+  it('returns pool entries unchanged when slots is omitted', () => {
+    const result = resolveStations(SATISFIABLE_POOL, ['r2', 'c1'])
+    expect(result[0]).toEqual(SATISFIABLE_POOL.find(s => s.key === 'r2'))
+    expect(result[1]).toEqual(SATISFIABLE_POOL.find(s => s.key === 'c1'))
   })
 })
 
@@ -144,11 +167,20 @@ Expected: FAIL — `resolveStations`/`worldFromParams` are not exported yet.
 Add to `client/src/lib/drawWorld.js`, after `assertWorld` (after line 36) and before the `NOUN_SALT`/`COLR_SALT` constants:
 
 ```javascript
-export function resolveStations(pool, keys) {
-  return keys.map(key => {
+// slots is optional — see this task's header note on why real render call
+// sites pass it (client/src/worlds/midnightGalaxy.slots.js's SLOTS) and this
+// file's own synthetic test pool doesn't need to. Merged fields are keyed by
+// OUTPUT position (slots[i]), not the pool entry's original position — a
+// drawn noun takes on the layout of the slot it lands in, never the one it
+// came from. `family` is deliberately never merged: it's draw-time-only
+// (ringDraw.js's lane-spacing math), not a rendering field.
+export function resolveStations(pool, keys, slots) {
+  return keys.map((key, i) => {
     const found = pool.find(s => s.key === key)
     if (!found) throw new Error(`resolveStations: no pool entry for key "${key}"`)
-    return found
+    if (!slots) return found
+    const { cornerLeft, bandUpper, companionUpper, companionBoost } = slots[i]
+    return { ...found, cornerLeft, bandUpper, companionUpper, companionBoost }
   })
 }
 
@@ -159,10 +191,10 @@ export function resolveStations(pool, keys) {
 // plain strings or undefined. stationsParam applies before colorsParam so a
 // recolor always sees the swapped set, matching drawWorld()'s own order
 // (draw stations, then recolorWorld over them).
-export function worldFromParams({ colorsParam, weightsParam, driftParam, stationsParam }, { base, pool, baseTheme }) {
+export function worldFromParams({ colorsParam, weightsParam, driftParam, stationsParam }, { base, pool, baseTheme, slots }) {
   let result = base
   if (stationsParam) {
-    result = { ...result, stations: resolveStations(pool, stationsParam.split(',')) }
+    result = { ...result, stations: resolveStations(pool, stationsParam.split(','), slots) }
   }
   if (colorsParam) {
     result = recolorWorld(result, {
@@ -178,7 +210,7 @@ export function worldFromParams({ colorsParam, weightsParam, driftParam, station
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `npm run test:unit -- drawWorld`
-Expected: PASS, all tests in the file (prior `assertWorld`/`drawWorld` tests + this task's 6 new ones).
+Expected: PASS, all tests in the file (prior `assertWorld`/`drawWorld` tests + this task's 8 new ones: 4 `resolveStations` + 4 `worldFromParams`).
 
 - [ ] **Step 5: Commit**
 
@@ -196,8 +228,8 @@ git commit -m "feat(ring): add resolveStations + worldFromParams to drawWorld.js
 - Modify: `client/src/views/AmbientAudit.jsx:1-37`
 
 **Interfaces:**
-- Consumes: `worldFromParams`, `resolveStations` (Task 2, `client/src/lib/drawWorld.js`); `RING_POOL` (`client/src/worlds/ringPool.js`, unchanged export).
-- Produces: both render routes now accept `?stations=key1,key2,...,key13` (13 comma-separated pool keys, slot order) alongside the existing `?colors=&weights=&drift=`. No stations param → behavior byte-identical to today (design doc §10's "no claim about how any composed world looks" still holds — nothing renders differently until a caller passes `stations`).
+- Consumes: `worldFromParams`, `resolveStations` (Task 2, `client/src/lib/drawWorld.js`). The pool passed to `worldFromParams` must be FULL station objects (not `RING_POOL`, which drops `region`/`companionKind`/`maxDetail`/`variant` — fine for the draw's lane-spacing math, but would silently strip a drawn noun's own look if used to render it — see Task 2's header note). `world-07-ring.html` already defines its own full-fidelity `WORLD.stations` literal (this file has no `midnightGalaxyRing` import — it's a standalone reference build, synced by hand, not by import); `AmbientAudit.jsx` already imports the real `midnightGalaxyRing` (`client/src/worlds/midnightGalaxy.ring.js:6`) — use that. Both files need `SLOTS` (`client/src/worlds/midnightGalaxy.slots.js`) for the render-position layout fields Task 2's `slots` param merges in — `world-07-ring.html` already imports it (line 266); `AmbientAudit.jsx` does not yet.
+- Produces: both render routes now accept `?stations=key1,key2,...,key13` (13 comma-separated pool keys, slot order) alongside the existing `?colors=&weights=&drift=`. No stations param → behavior byte-identical to today (design doc §10's "no claim about how any composed world looks" still holds — nothing renders differently until a caller passes `stations`). A drawn noun renders with its own region/companion/detail level intact, using the layout of the slot it's placed in.
 
 - [ ] **Step 1: Replace `world-07-ring.html`'s inline param block**
 
@@ -211,15 +243,16 @@ Replace lines 462-473 (the `{ const q = new URLSearchParams(...) ... }` block) w
     weightsParam: q.get('weights'),
     driftParam: q.get('drift'),
     stationsParam: q.get('stations'),
-  }, { base: WORLD, pool: RING_POOL, baseTheme: { colors: { bg: SKY_BG, bgDeep: SKY_BG_DEEP } } });
+  }, { base: WORLD, pool: WORLD.stations, slots: SLOTS, baseTheme: { colors: { bg: SKY_BG, bgDeep: SKY_BG_DEEP } } });
 }
 ```
 
-Add two imports at the top of the module script block, alongside the existing ones at line 263-266:
+`pool: WORLD.stations` reads this file's own pre-recolor authored literal (defined above at line 381) — the same full-fidelity source `RING_POOL` is itself derived from, just not stripped down. `SLOTS` is already imported (line 266); no new import needed for it.
+
+Add one import at the top of the module script block, alongside the existing ones at line 263-266:
 
 ```javascript
 import { worldFromParams } from '../client/src/lib/drawWorld.js';
-import { RING_POOL } from '../client/src/worlds/ringPool.js';
 ```
 
 - [ ] **Step 2: Replace `AmbientAudit.jsx`'s `ringWorldData` memo**
@@ -237,7 +270,7 @@ Replace lines 21-37 with:
         weightsParam: params.get('weights'),
         driftParam: params.get('drift'),
         stationsParam,
-      }, { base: midnightGalaxyRing, pool: RING_POOL, baseTheme: getTheme('midnight-galaxy') })
+      }, { base: midnightGalaxyRing, pool: midnightGalaxyRing.stations, slots: SLOTS, baseTheme: getTheme('midnight-galaxy') })
     } catch (err) {
       console.warn('[AmbientAudit] bad ?colors=/?stations= params, using base:', err.message)
       return midnightGalaxyRing
@@ -246,11 +279,11 @@ Replace lines 21-37 with:
   }, [searchString])
 ```
 
-Replace the import on line 7 (`import { recolorWorld } from '../lib/ringRecolor.js'`) with:
+`pool: midnightGalaxyRing.stations` — the full authored objects (this file already imports `midnightGalaxyRing`, line 6), never the reduced `RING_POOL` (see this task's Interfaces note). Replace the import on line 7 (`import { recolorWorld } from '../lib/ringRecolor.js'`) with:
 
 ```javascript
 import { worldFromParams } from '../lib/drawWorld.js'
-import { RING_POOL } from '../worlds/ringPool.js'
+import { SLOTS } from '../worlds/midnightGalaxy.slots.js'
 ```
 
 - [ ] **Step 3: Manual verification (no unit test — this step touches only render-route wiring, already covered by Task 2's pure-function tests)**
