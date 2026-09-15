@@ -15,14 +15,19 @@ export default function AddRoundWizard({ defaultRoundNumber, onAdd, onClose }) {
 
   const type = ROUND_TYPES.find(t => t.id === selectedTypeId)
 
+  // roundNum (parsed) is what actually gets saved — the preview must derive
+  // from it too, not the raw typed string, or a leading zero ("04") shows
+  // one title in preview and saves a different one ("Round 4") (code-review
+  // finding, 2026-09-15).
+  const roundNum = parseInt(roundNumber, 10)
+  const roundNumValid = roundNumber.trim() && roundNum > 0
   const derivedTitle = type
     ? type.needsNumber
-      ? type.titleTemplate.replace('{n}', roundNumber.trim() || '?')
+      ? type.titleTemplate.replace('{n}', roundNumValid ? roundNum : '?')
       : type.title
     : ''
 
-  const roundNum = parseInt(roundNumber, 10)
-  const canAdd = !!type && (!type.needsNumber || (roundNumber.trim() && roundNum > 0))
+  const canAdd = !!type && (!type.needsNumber || roundNumValid)
 
   function handleAdd() {
     if (!canAdd) return

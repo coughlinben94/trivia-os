@@ -1,4 +1,4 @@
-import { normalizeRoundScore } from './scoreboardMath.js'
+import { applyPhoneScoreUpdates } from './scoreboardMath.js'
 
 // A wager question is scored RELATIVE TO THE ROOM, not against a fixed
 // tolerance band around the true answer. Every team that submitted a guess is
@@ -225,24 +225,5 @@ export function scoreWagerRound({ entries, correctAnswer }) {
 // Re-running for the SAME slideId still overwrites just that one entry, so
 // re-scoring after a failed attempt stays idempotent.
 export function computeWagerScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId }) {
-  const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name.trim().toLowerCase()]))
-  const updates = []
-  for (const r of results ?? []) {
-    const teamName = teamIdToName.get(r.teamId)
-    if (!teamName) continue // no live registration — nothing to attribute this to
-    const sbTeam = (scoreboardTeams ?? []).find(t => t.name.trim().toLowerCase() === teamName)
-    if (!sbTeam) continue // host hasn't added this team to the admin scoreboard yet
-    const prevSplit = normalizeRoundScore(sbTeam.scores?.[roundKey])
-    const nextPhone = { ...prevSplit.phoneBySlide, [slideId]: r.points }
-    const nextScores = { ...sbTeam.scores, [roundKey]: { written: prevSplit.written, phone: nextPhone } }
-    updates.push({ id: sbTeam.id, show_id: sbTeam.show_id, name: sbTeam.name, scores: nextScores, sort_order: sbTeam.sort_order })
-  }
-  // Two scoreboard_teams rows can normalize to the same name (host data-entry
-  // accident), which makes .find() above resolve multiple real teams onto the
-  // same sbTeam.id — a duplicate id in this array makes the upsert's
-  // ON CONFLICT clause fail outright and scores NOTHING for the round. Dedupe
-  // by id (last write wins) so the crash can't happen; this is a guard against
-  // bad host data, not a policy for how to split points between the colliding
-  // teams.
-  return [...new Map(updates.map(u => [u.id, u])).values()]
+  return applyPhoneScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
 }

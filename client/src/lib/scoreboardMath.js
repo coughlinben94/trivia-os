@@ -91,6 +91,37 @@ export function normalizeRoundScore(raw) {
   return { written: Number.isFinite(n) ? n : 0, phone: 0, phoneBySlide: {} }
 }
 
+// Shared fold-in tail for every phone-scored format's computeXScoreUpdates
+// (Wager/HuesCues/Choice/Matching/Order all had a byte-identical copy of
+// this loop — code-review finding, 2026-09-15): given per-team points for
+// ONE slide, merge each into that team's phoneBySlide bucket for roundKey,
+// preserving `written` and every other phone-scored slide already in the
+// round (a second phone question in the same round adds instead of
+// overwriting). Re-running for the same slideId still overwrites just that
+// one entry, so re-scoring after a failed attempt stays idempotent. Dedupe
+// by scoreboard team id (last write wins) guards against a host data-entry
+// accident (two rows normalizing to the same name) making the upsert's ON
+// CONFLICT clause fail and scoring nothing for the round.
+//
+// results: array of { teamId, points } — the caller does its own format-
+// specific scoring first (scoreWagerRound, scoreHuesCuesRound, per-answer
+// scoreChoiceSubmission, …) and hands the {teamId, points} pairs in here.
+export function applyPhoneScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId }) {
+  const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name.trim().toLowerCase()]))
+  const updates = []
+  for (const r of results ?? []) {
+    const teamName = teamIdToName.get(r.teamId)
+    if (!teamName) continue // no live registration — nothing to attribute this to
+    const sbTeam = (scoreboardTeams ?? []).find(t => t.name.trim().toLowerCase() === teamName)
+    if (!sbTeam) continue // host hasn't added this team to the admin scoreboard yet
+    const prevSplit = normalizeRoundScore(sbTeam.scores?.[roundKey])
+    const nextPhone = { ...prevSplit.phoneBySlide, [slideId]: r.points }
+    const nextScores = { ...sbTeam.scores, [roundKey]: { written: prevSplit.written, phone: nextPhone } }
+    updates.push({ id: sbTeam.id, show_id: sbTeam.show_id, name: sbTeam.name, scores: nextScores, sort_order: sbTeam.sort_order })
+  }
+  return [...new Map(updates.map(u => [u.id, u])).values()]
+}
+
 // Single-round scalar for display (history chips, exports) — same shape
 // resolution as normalizeRoundScore, collapsed to one number.
 export function roundScoreTotal(raw) {

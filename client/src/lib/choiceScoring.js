@@ -1,4 +1,4 @@
-import { normalizeRoundScore } from './scoreboardMath.js'
+import { applyPhoneScoreUpdates } from './scoreboardMath.js'
 
 // Host-set default for a fresh Choice format/slide (shiny_formats.input_schema's
 // pointsForChoice, and SlideEditor/LiveMode's per-slide fallback) — one shared
@@ -29,18 +29,9 @@ export function scoreChoiceSubmission(answer, correctIds, points) {
 // for the full reasoning (case-insensitive name matching, phoneBySlide
 // additive merge, dedupe-by-id guard against colliding scoreboard rows).
 export function computeChoiceScoreUpdates({ answers, teams, scoreboardTeams, roundKey, points, correctIds, slideId }) {
-  const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name.trim().toLowerCase()]))
-  const updates = []
-  for (const ans of answers ?? []) {
-    const teamName = teamIdToName.get(ans.team_id)
-    if (!teamName) continue
-    const sbTeam = (scoreboardTeams ?? []).find(t => t.name.trim().toLowerCase() === teamName)
-    if (!sbTeam) continue
-    const score = scoreChoiceSubmission(ans.answer, correctIds, points)
-    const prevSplit = normalizeRoundScore(sbTeam.scores?.[roundKey])
-    const nextPhone = { ...prevSplit.phoneBySlide, [slideId]: score }
-    const nextScores = { ...sbTeam.scores, [roundKey]: { written: prevSplit.written, phone: nextPhone } }
-    updates.push({ id: sbTeam.id, show_id: sbTeam.show_id, name: sbTeam.name, scores: nextScores, sort_order: sbTeam.sort_order })
-  }
-  return [...new Map(updates.map(u => [u.id, u])).values()]
+  const results = (answers ?? []).map(ans => ({
+    teamId: ans.team_id,
+    points: scoreChoiceSubmission(ans.answer, correctIds, points),
+  }))
+  return applyPhoneScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
 }

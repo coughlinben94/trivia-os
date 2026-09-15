@@ -1,4 +1,4 @@
-import { normalizeRoundScore } from './scoreboardMath.js'
+import { applyPhoneScoreUpdates } from './scoreboardMath.js'
 import { hashSeed, mulberry32 } from './seededRandom.js'
 
 // A matching submission is scored purely from its own shape — no answer-key
@@ -74,25 +74,9 @@ export function seededShuffle(items, seed) {
 // same reasoning as computeWagerScoreUpdates: a second phone-scored question
 // in the same round must add its points, not overwrite the first one's.
 export function computeMatchingScoreUpdates({ answers, teams, scoreboardTeams, roundKey, pointsPerMatch, slideId }) {
-  const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name.trim().toLowerCase()]))
-  const updates = []
-  for (const ans of answers ?? []) {
-    const teamName = teamIdToName.get(ans.team_id)
-    if (!teamName) continue // team_id has no matching live registration — nothing to attribute the score to
-    const sbTeam = (scoreboardTeams ?? []).find(t => t.name.trim().toLowerCase() === teamName)
-    if (!sbTeam) continue // no scoreboard_teams row for this name yet — host hasn't added them to the admin scoreboard
-    const points = scoreMatchingSubmission(ans.answer, pointsPerMatch)
-    const prevSplit = normalizeRoundScore(sbTeam.scores?.[roundKey])
-    const nextPhone = { ...prevSplit.phoneBySlide, [slideId]: points }
-    const nextScores = { ...sbTeam.scores, [roundKey]: { written: prevSplit.written, phone: nextPhone } }
-    updates.push({ id: sbTeam.id, show_id: sbTeam.show_id, name: sbTeam.name, scores: nextScores, sort_order: sbTeam.sort_order })
-  }
-  // Two scoreboard_teams rows can normalize to the same name (host data-entry
-  // accident), which makes .find() above resolve multiple real teams onto the
-  // same sbTeam.id — a duplicate id in this array makes the upsert's
-  // ON CONFLICT clause fail outright and scores NOTHING for the round. Dedupe
-  // by id (last write wins) so the crash can't happen; this is a guard against
-  // bad host data, not a policy for how to split points between the colliding
-  // teams.
-  return [...new Map(updates.map(u => [u.id, u])).values()]
+  const results = (answers ?? []).map(ans => ({
+    teamId: ans.team_id,
+    points: scoreMatchingSubmission(ans.answer, pointsPerMatch),
+  }))
+  return applyPhoneScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
 }
