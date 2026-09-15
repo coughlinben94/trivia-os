@@ -6,6 +6,7 @@ import { EASE_OUT } from '../../../lib/easings.js'
 import { WAGER_TIERS, getWagerTier, wagerOddsLine, wagerTierReachable, parseWagerNumber } from '../../../lib/wagerScoring.js'
 import { fitToBox, SHINY_WAGER_Q_BOX } from '../../../lib/autoFitText.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
+import ShinySignal from '../ShinySignal.jsx'
 
 // Fixed tier signal colors, same rule as SHINY_GOLD: the calm → dangerous
 // escalation must read identically on all 21 themes, so it is not derived
@@ -82,9 +83,11 @@ export default function ShinyWagerQuestion({ slide, show, theme }) {
 
   return (
     <div style={{
+      position: 'relative',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       width: '100%', height: '100%', padding: '4rem', gap: '2.5rem',
     }}>
+      <ShinySignal />
       {!tiersLocked ? (
         <>
           <motion.h2
@@ -241,9 +244,11 @@ function WagerReveal({ data, theme, shouldReduceMotion }) {
 
   return (
     <div style={{
+      position: 'relative',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       width: '100%', height: '100%', padding: '3rem 4rem', gap: '1.75rem',
     }}>
+      <ShinySignal />
       {/* The prompt stays on screen, small — the reveal is meaningless
           without the question still in front of the room. */}
       {data.text && (

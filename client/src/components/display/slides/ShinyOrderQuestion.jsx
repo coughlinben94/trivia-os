@@ -6,6 +6,7 @@ import { EASE_PANEL, EASE_OUT } from '../../../lib/easings.js'
 import { seededShuffle } from '../../../lib/orderScoring.js'
 import { fitToBox, SHINY_CHOICE_Q_BOX } from '../../../lib/autoFitText.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
+import ShinySignal from '../ShinySignal.jsx'
 
 // The TV side of an Order Up question. Same two-beat pan mechanic as
 // ShinyMatchingQuestion.jsx (see that file's own comment for the
@@ -72,6 +73,7 @@ export default function ShinyOrderQuestion({ slide, show, theme }) {
 
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
+      <ShinySignal />
       <motion.div
         className="absolute left-0 right-0 top-0"
         style={{ height: '200%' }}

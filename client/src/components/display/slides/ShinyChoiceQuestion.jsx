@@ -5,6 +5,7 @@ import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { fitToBox, SHINY_CHOICE_Q_BOX } from '../../../lib/autoFitText.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
+import ShinySignal from '../ShinySignal.jsx'
 
 // The TV side of a Choice question — Mandela Effect (single-select images)
 // and Mixology 101 (multi-select ingredient chips) are both this one
@@ -63,6 +64,7 @@ export default function ShinyChoiceQuestion({ slide, show, theme }) {
 
   return (
     <div className="w-full h-full relative overflow-hidden flex flex-col items-center justify-center gap-8 px-12 py-12" style={{ background: theme.colors.shinyBg }}>
+      <ShinySignal />
       <QuestionText text={data.text} theme={theme} />
       <ChoiceRow options={options} correctIds={correctIds} revealed={revealed} theme={theme} reduce={reduce} />
       <StatusSlot theme={theme}>

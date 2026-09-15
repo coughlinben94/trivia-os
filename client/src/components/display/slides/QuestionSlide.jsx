@@ -14,6 +14,7 @@ import { GridContent } from './GridSlide.jsx'
 import { fitToBox, QUESTION_BOX, QUOTE_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
+import ShinySignal from '../ShinySignal.jsx'
 import { youtubeEmbedUrl } from '../../../lib/youtube.js'
 import { warmYoutubeAudio, claimYoutubeAudio } from '../../../lib/youtubeWarmAudio.js'
 import { warmImages, slideImageUrls } from '../../../lib/warmImages.js'
@@ -1153,7 +1154,7 @@ function ShinyListQuestion({ slide, theme }) {
         </ol>
       </div>
 
-      <div className="absolute top-5 left-5 z-20 text-2xl" style={{ filter: `drop-shadow(0 0 8px ${SHINY_GOLD_GLOW})` }}>✨</div>
+      <ShinySignal />
     </div>
   )
 }
@@ -1421,7 +1422,7 @@ function ShinyConcurrentQuestion({ slide, theme, isPreview }) {
         )}
       </div>
 
-      <div className="absolute top-5 left-5 z-20 text-2xl" style={{ filter: `drop-shadow(0 0 8px ${SHINY_GOLD_GLOW})` }}>✨</div>
+      <ShinySignal />
     </div>
   )
 }

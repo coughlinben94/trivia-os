@@ -2,6 +2,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
+import ShinySignal from '../ShinySignal.jsx'
 
 // Circle only renders when this PERSON has a photo (not per-side) — a mixed
 // side (some photos, some text-only) shows a circle just for the ones who
@@ -88,13 +89,8 @@ function VennContent({ slide, theme }) {
 
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
-      {/* Gold glow burst — fixed gold, theme-independent, same as GridSlide/other shiny types */}
-      <div aria-hidden style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5,
-        background: `radial-gradient(ellipse at center, ${SHINY_GOLD_GLOW}55 0%, transparent 58%)`,
-        animation: 'shinyGlow 0.75s ease-out forwards',
-      }} />
-      <div style={{ position: 'absolute', top: 28, left: 30, zIndex: 40, fontSize: 40, filter: `drop-shadow(0 0 12px ${SHINY_GOLD_GLOW})` }}>✨</div>
+      {/* Gold glow burst + ✨ badge — fixed gold, theme-independent, same as GridSlide/other shiny types */}
+      <ShinySignal />
 
       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingBottom: 30 }}>
         <div style={{ position: 'relative', width: CIRCLE * 2 - OVERLAP, height: CIRCLE }}>

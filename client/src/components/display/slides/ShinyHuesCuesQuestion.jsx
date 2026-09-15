@@ -6,6 +6,7 @@ import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT, EASE_DROP } from '../../../lib/easings.js'
 import { fitToBox, SHINY_CHOICE_Q_BOX } from '../../../lib/autoFitText.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
+import ShinySignal from '../ShinySignal.jsx'
 
 // The TV side of Hues and Cues. Mirrors ShinyWagerQuestion's beat structure
 // (waiting -> locked -> reveal), minus wager's separate blind-tier phase:
@@ -60,9 +61,11 @@ export default function ShinyHuesCuesQuestion({ slide, show, theme }) {
 
   return (
     <div style={{
+      position: 'relative',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       width: '100%', height: '100%', padding: '2rem 3rem', gap: '1.25rem', overflow: 'hidden',
     }}>
+      <ShinySignal />
       <QuestionText text={data.text} theme={theme} />
 
       <StatusSlot theme={theme}>
@@ -145,9 +148,11 @@ function HuesCuesReveal({ data, theme, shouldReduceMotion }) {
 
   return (
     <div style={{
+      position: 'relative',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       width: '100%', height: '100%', padding: '3rem 4rem', gap: '1.75rem',
     }}>
+      <ShinySignal />
       {data.text && (
         <p style={{ margin: 0, textAlign: 'center', maxWidth: 1200, fontFamily: bodyFont, fontSize: '1.4rem', lineHeight: 1.35, color: `${text}80` }}>
           {data.text}

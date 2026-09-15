@@ -5,6 +5,7 @@ import { EASE_PANEL, EASE_OUT } from '../../../lib/easings.js'
 import { seededShuffle } from '../../../lib/matchingScoring.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 import { supabase } from '../../../lib/supabase.js'
+import ShinySignal from '../ShinySignal.jsx'
 
 // Two-beat pan reveal (2026-08-18, Ben: "make it not so different — pans
 // up, so does the swing round questions") — same mechanic as
@@ -59,6 +60,7 @@ export default function ShinyMatchingQuestion({ slide, show, theme }) {
 
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
+      <ShinySignal />
       <motion.div
         className="absolute left-0 right-0 top-0"
         style={{ height: '200%' }}

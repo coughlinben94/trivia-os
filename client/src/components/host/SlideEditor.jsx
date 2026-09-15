@@ -2902,29 +2902,34 @@ function GridEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uplo
       </div>
 
       {/* Tile grid — columns left→right, tiles top→bottom */}
-      <div className="flex gap-3 overflow-x-auto pb-2">
-        {columns.map((col, ci) => (
-          <div key={ci} className="flex flex-col gap-2">
-            <p className="text-[11px] text-gray-400 text-center font-medium">Col {ci + 1}</p>
-            {col.map((tile, ri) => (
-              <div key={ri} className="flex items-center gap-1.5 border border-gray-200 rounded-lg p-1.5">
-                {tile.mediaUrl ? (
-                  <img src={tile.mediaUrl} alt="" className="w-10 h-10 rounded object-cover" />
-                ) : (
-                  <input
-                    type="color"
-                    value={tile.color ?? '#888888'}
-                    onChange={e => writeTile(ci, ri, { color: e.target.value })}
-                    className="w-10 h-10 rounded cursor-pointer border-0 bg-transparent p-0"
-                    title={`Column ${ci + 1}, square ${ri + 1}`}
+      <div className="relative">
+        <div className="flex gap-3 overflow-x-auto pb-2">
+          {columns.map((col, ci) => (
+            <div key={ci} className="flex flex-col gap-2 shrink-0">
+              <p className="text-[11px] text-gray-400 text-center font-medium">Col {ci + 1}</p>
+              {col.map((tile, ri) => (
+                <div key={ri} className="flex items-center gap-1.5 border border-gray-200 rounded-lg p-1.5">
+                  {/* Color is the fallback fill when no image is set — image wins over
+                      color at render time (SlideRenderer/GridSlide), so the color input
+                      only makes sense to show/edit while there's no image on the tile. */}
+                  {!tile.mediaUrl && (
+                    <input
+                      type="color"
+                      value={tile.color ?? '#888888'}
+                      onChange={e => writeTile(ci, ri, { color: e.target.value })}
+                      className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent p-0 shrink-0"
+                      title={`Column ${ci + 1}, square ${ri + 1} — fallback color`}
+                    />
+                  )}
+                  <MediaUpload
+                    accept="image"
+                    popup
+                    label={`Col ${ci + 1}, square ${ri + 1}`}
+                    currentUrl={tile.mediaUrl}
+                    currentType={tile.mediaUrl ? 'image/jpeg' : null}
+                    onUpload={file => uploadTileImage(ci, ri, file)}
+                    onRemove={() => writeTile(ci, ri, { mediaUrl: null })}
                   />
-                )}
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-700">
-                    🖼
-                    <input type="file" accept="image/*" className="hidden"
-                      onChange={e => uploadTileImage(ci, ri, e.target.files?.[0])} />
-                  </label>
                   {(tile.mediaUrl || tile.color) && (
                     <button
                       onClick={() => writeTile(ci, ri, { color: null, mediaUrl: null })}
@@ -2933,11 +2938,21 @@ function GridEditor({ data, onChange, setData, scheduleSave, onMediaUpload, uplo
                     >↺</button>
                   )}
                 </div>
-              </div>
-            ))}
-          </div>
-        ))}
+              ))}
+            </div>
+          ))}
+        </div>
+        {columns.length > 3 && (
+          <div
+            className="pointer-events-none absolute top-0 right-0 bottom-2 w-8"
+            style={{ background: 'linear-gradient(to right, transparent, white)' }}
+            title="Scroll for more columns →"
+          />
+        )}
       </div>
+      {columns.length > 3 && (
+        <p className="text-[11px] text-gray-400 -mt-2">Scroll for more columns →</p>
+      )}
 
       <Field label="Answer">
         <TextInput value={data.answer ?? ''} onChange={v => onChange('answer', v)} placeholder="The answer…" />

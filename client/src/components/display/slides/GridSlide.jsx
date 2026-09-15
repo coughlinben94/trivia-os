@@ -4,6 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { useFitToBox, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
+import ShinySignal from '../ShinySignal.jsx'
 function Tile({ tile, size, reduce }) {
   const common = { width: size, height: size, borderRadius: 10, overflow: 'hidden', boxShadow: '0 6px 22px rgba(0,0,0,0.55)' }
   if (tile?.mediaUrl) {
@@ -54,15 +55,9 @@ export function GridContent({ slide, theme }) {
 
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
-      {/* Gold glow burst — fixed gold, theme-independent. No white flash: the
-          shiny wrapper transition in SlideRenderer owns the entrance. */}
-      <div aria-hidden style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5,
-        background: `radial-gradient(ellipse at center, ${SHINY_GOLD_GLOW}55 0%, transparent 58%)`,
-        animation: 'shinyGlow 0.75s ease-out forwards',
-      }} />
-
-      <div style={{ position: 'absolute', top: 28, left: 30, zIndex: 40, fontSize: 40, filter: `drop-shadow(0 0 12px ${SHINY_GOLD_GLOW})` }}>✨</div>
+      {/* Gold glow burst + ✨ badge — fixed gold, theme-independent. No white
+          flash: the shiny wrapper transition in SlideRenderer owns the entrance. */}
+      <ShinySignal />
 
       {/* Centered column group */}
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingBottom: 130 }}>

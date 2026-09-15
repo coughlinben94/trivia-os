@@ -11,6 +11,7 @@ import { supabase } from '../../../lib/supabase.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { clampBendleOffset, buildBendleTiers } from '../../../lib/bendleScoring.js'
+import ShinySignal from '../ShinySignal.jsx'
 
 // 'guitar' is optional per-song (only songs reprocessed through
 // worker/bendle/guitar_stem.py have a guitar_url) — the player-load loop
@@ -157,9 +158,11 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
 
   return (
     <div style={{
+      position: 'relative',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       width: '100%', height: '100%', padding: '4rem', gap: '2.5rem',
     }}>
+      <ShinySignal />
       <motion.h2
         initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: 'translateY(14px)' }}
         animate={{ opacity: 1, transform: 'translateY(0px)' }}
