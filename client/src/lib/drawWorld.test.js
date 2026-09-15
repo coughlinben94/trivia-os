@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { assertWorld, drawWorld } from './drawWorld.js'
+import { assertWorld, drawWorld, resolveStations, worldFromParams } from './drawWorld.js'
 
 const s = (key, family, prim, hue, accent = false) => ({ key, family, prim, hue, accent })
 
@@ -152,3 +152,57 @@ describe('drawWorld', () => {
 })
 
 function assertWorldPassed() { return true } // assertWorld already ran inside drawWorld; a throw would have failed the test above
+
+describe('resolveStations', () => {
+  it('looks up each key in slot order, returning the pool entries', () => {
+    const result = resolveStations(SATISFIABLE_POOL, ['r2', 'c1', 'b3'])
+    expect(result.map(s => s.key)).toEqual(['r2', 'c1', 'b3'])
+    expect(result[0]).toEqual(SATISFIABLE_POOL.find(s => s.key === 'r2'))
+  })
+
+  it('throws naming the missing key', () => {
+    expect(() => resolveStations(SATISFIABLE_POOL, ['r2', 'nope']))
+      .toThrow(/no pool entry for key "nope"/)
+  })
+
+  it('returns pool entries unchanged, in key order', () => {
+    const result = resolveStations(SATISFIABLE_POOL, ['r2', 'c1'])
+    expect(result[0]).toEqual(SATISFIABLE_POOL.find(s => s.key === 'r2'))
+    expect(result[1]).toEqual(SATISFIABLE_POOL.find(s => s.key === 'c1'))
+  })
+})
+
+describe('worldFromParams', () => {
+  it('returns base unchanged when no params are given', () => {
+    const result = worldFromParams({}, { base: BASE, pool: SATISFIABLE_POOL, baseTheme: THEME })
+    expect(result).toBe(BASE)
+  })
+
+  it('swaps stations when stationsParam is given, without recoloring', () => {
+    const stationsParam = SATISFIABLE_POOL.map(s => s.key).reverse().join(',')
+    const result = worldFromParams(
+      { stationsParam },
+      { base: BASE, pool: SATISFIABLE_POOL, baseTheme: THEME },
+    )
+    expect(result.stations.map(s => s.key)).toEqual(SATISFIABLE_POOL.map(s => s.key).reverse())
+  })
+
+  it('recolors when colorsParam is given, without touching stations', () => {
+    const result = worldFromParams(
+      { colorsParam: '#ff2200,#2563eb', weightsParam: '0.55,0.45', driftParam: '0' },
+      { base: BASE, pool: SATISFIABLE_POOL, baseTheme: THEME },
+    )
+    expect(result.stations.map(s => s.key)).toEqual(BASE.stations.map(s => s.key))
+    expect(result.palette.colors).toEqual(['#ff2200', '#2563eb'])
+  })
+
+  it('applies stations first, then recolors the swapped set, when both are given', () => {
+    const stationsParam = SATISFIABLE_POOL.map(s => s.key).slice().reverse().join(',')
+    const result = worldFromParams(
+      { colorsParam: '#ff2200,#2563eb', weightsParam: '0.55,0.45', driftParam: '0', stationsParam },
+      { base: BASE, pool: SATISFIABLE_POOL, baseTheme: THEME },
+    )
+    expect(result.stations.map(s => s.key)).toEqual(SATISFIABLE_POOL.map(s => s.key).reverse())
+    expect(result.palette.colors).toEqual(['#ff2200', '#2563eb'])
+  })
+})

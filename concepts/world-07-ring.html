@@ -262,8 +262,8 @@ header.pg b{color:#ddd8e8;font-weight:500}
 // `dom` object — no call site ever passes a literal prefix string again.
 import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints, applyTints } from '../client/src/lib/ringPrimitives.js';
 import { rng, lerp, skyFromTheme, fillOf, buildArc } from '../client/src/lib/ringEngine.js';
-import { recolorWorld } from '../client/src/lib/ringRecolor.js';
 import { SLOTS } from '../client/src/worlds/midnightGalaxy.slots.js';
+import { worldFromParams } from '../client/src/lib/drawWorld.js';
 
 /* The base sky's two source colours, GENERATED: scripts/ring-recolor.mjs
    rewrites both from the palette in the same run that rewrites the hues, so
@@ -461,15 +461,12 @@ let WORLD = {
 // `&weights=` must still render, not throw.
 {
   const q = new URLSearchParams(location.search);
-  if (q.get('colors')) {
-    const weightsParam = q.get('weights');
-    const driftParam = q.get('drift');
-    WORLD = recolorWorld(WORLD, {
-      colors: q.get('colors').split(','),
-      weights: weightsParam ? weightsParam.split(',').map(Number) : undefined,
-      drift: driftParam ? { arc: Number(driftParam) } : undefined,
-    }, { colors: { bg: SKY_BG, bgDeep: SKY_BG_DEEP } });
-  }
+  WORLD = worldFromParams({
+    colorsParam: q.get('colors'),
+    weightsParam: q.get('weights'),
+    driftParam: q.get('drift'),
+    stationsParam: q.get('stations'),
+  }, { base: WORLD, pool: WORLD.stations, baseTheme: { colors: { bg: SKY_BG, bgDeep: SKY_BG_DEEP } } });
 }
 
 /* target mean luma per station — the arc: a cosine base, a seeded jitter

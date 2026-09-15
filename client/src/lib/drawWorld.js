@@ -35,6 +35,36 @@ export function assertWorld(world) {
   return true
 }
 
+export function resolveStations(pool, keys) {
+  return keys.map(key => {
+    const found = pool.find(s => s.key === key)
+    if (!found) throw new Error(`resolveStations: no pool entry for key "${key}"`)
+    return found
+  })
+}
+
+// Unifies the query-param-to-world logic concepts/world-07-ring.html and
+// AmbientAudit.jsx each used to duplicate inline (kept in sync by comment
+// discipline only — see either file's pre-2026-09-15 history). Pure: no
+// URLSearchParams, no DOM — callers parse their own query string and pass
+// plain strings or undefined. stationsParam applies before colorsParam so a
+// recolor always sees the swapped set, matching drawWorld()'s own order
+// (draw stations, then recolorWorld over them).
+export function worldFromParams({ colorsParam, weightsParam, driftParam, stationsParam }, { base, pool, baseTheme }) {
+  let result = base
+  if (stationsParam) {
+    result = { ...result, stations: resolveStations(pool, stationsParam.split(',')) }
+  }
+  if (colorsParam) {
+    result = recolorWorld(result, {
+      colors: colorsParam.split(','),
+      weights: weightsParam ? weightsParam.split(',').map(Number) : undefined,
+      drift: driftParam ? { arc: Number(driftParam) } : undefined,
+    }, baseTheme)
+  }
+  return result
+}
+
 const NOUN_SALT = 0x4E4F554E // 'NOUN'
 const COLR_SALT = 0x434F4C52 // 'COLR'
 
