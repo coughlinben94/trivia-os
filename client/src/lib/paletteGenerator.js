@@ -46,6 +46,14 @@ export const PRESETS = [
   // applying instantly, defeating the point of a preset per this file's
   // own header comment.
   { name: 'Solar Flare', colors: ['#ea580c', '#facc15'], weights: [0.6, 0.4] },
+  // Certified 2026-09-15, same manual --pending path as Solar Flare above.
+  // First real-weight green to certify -- every prior certified palette
+  // used green/teal only as a minority accent; here it's the DOMINANT
+  // color (55%) and still cleared the safe-box luminance cap. Three
+  // deliberately-similar candidates (magenta+acid-green, navy+teal,
+  // sky-blue+rose) failed the same session, so this isn't "green is safe
+  // now" -- just proof it's not automatically excluded either.
+  { name: 'Amazon Dusk', colors: ['#166534', '#7c3aed'], weights: [0.55, 0.45] },
 ]
 
 export function seedFrom(text) {

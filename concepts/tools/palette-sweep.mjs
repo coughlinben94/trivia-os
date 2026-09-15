@@ -115,12 +115,19 @@ async function certifyPalette(browser, { colors, weights, drift }) {
     }
   }
   const regressionFails = results.filter(r => r.tier === 'regression' && r.status === 'FAIL')
+  // Safe-box luminance detail (per-station mean/p99.5) is already computed
+  // by ring-verify.mjs's check #15 and embedded in its `detail` string —
+  // captured here (pass, warn, or fail) so a "failed by how much" question
+  // doesn't require re-running the gate. Was previously discarded, keeping
+  // only the fail/pass name.
+  const safeBoxChecks = results.filter(r => r.name.includes('safe-box luminance cap'))
   return {
     passed: regressionFails.length === 0,
     summary: {
       regression_fail_count: regressionFails.length,
       regression_fail_names: regressionFails.map(r => r.name),
       spec_fail_count: results.filter(r => r.tier === 'spec' && r.status === 'FAIL').length,
+      safe_box_detail: safeBoxChecks.map(r => ({ label: r.name, status: r.status, detail: r.detail })),
     },
   }
 }
@@ -146,12 +153,14 @@ async function certifyWorld(browser, { colors, weights, drift, stations }) {
     }
   }
   const regressionFails = results.filter(r => r.tier === 'regression' && r.status === 'FAIL')
+  const safeBoxChecks = results.filter(r => r.name.includes('safe-box luminance cap'))
   return {
     passed: regressionFails.length === 0,
     summary: {
       regression_fail_count: regressionFails.length,
       regression_fail_names: regressionFails.map(r => r.name),
       spec_fail_count: results.filter(r => r.tier === 'spec' && r.status === 'FAIL').length,
+      safe_box_detail: safeBoxChecks.map(r => ({ label: r.name, status: r.status, detail: r.detail })),
     },
   }
 }
