@@ -180,20 +180,19 @@ test('realtime websocket connects on /join', async ({ page }) => {
   expect(ws.isClosed()).toBe(false)
 })
 
-test.describe('landscape-only rotate gate', () => {
-  test('portrait viewport shows the rotate prompt', async ({ page }) => {
+// Rotate gate DISABLED 2026-09-08 (Ben: "it should be portrait" — see
+// index.css's .join-rotate-gate comment). No media query re-enables it, so
+// both orientations now assert the same hidden state.
+test.describe('rotate gate (disabled 2026-09-08)', () => {
+  test('stays hidden in portrait', async ({ page }) => {
     await page.setViewportSize({ width: 400, height: 800 })
     await page.goto(`/join?show=${SHOW_ID}`, { waitUntil: 'networkidle' })
     const gate = page.locator('.join-rotate-gate')
-    await expect(gate).toHaveCSS('opacity', '1')
-    // opacity alone doesn't distinguish shown-vs-hidden to Playwright (a 0-opacity
-    // element still counts as "visible") — pointer-events is the real gate: index.css
-    // toggles both together, and Join.jsx's RotateGate comment (~line 45-48) documents
-    // exactly this as the mechanism a display:none/opacity-only version got wrong.
-    await expect(gate).toHaveCSS('pointer-events', 'auto')
+    await expect(gate).toHaveCSS('opacity', '0')
+    await expect(gate).toHaveCSS('pointer-events', 'none')
   })
 
-  test('landscape viewport hides the rotate prompt', async ({ page }) => {
+  test('stays hidden in landscape', async ({ page }) => {
     await page.setViewportSize({ width: 800, height: 400 })
     await page.goto(`/join?show=${SHOW_ID}`, { waitUntil: 'networkidle' })
     const gate = page.locator('.join-rotate-gate')
