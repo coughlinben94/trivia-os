@@ -436,6 +436,37 @@ export function pendingReveal(slide) {
   return null
 }
 
+// Host-triggered manual safety-net unlock (2026-09-14, Ben: "every question
+// with a lock ie phone questions should have an unlock function... just
+// incase something were to happen. misclick on my end or something") — same
+// shape as the automatic fresh-entry reset in withEntryState above, but
+// callable on demand against the slide that's currently live, not only when
+// leaving and re-entering it. Clears every lockField and the revealField for
+// the given mechanic, reopening phone submissions. Safe even after
+// scoring/reveal: every mechanic's score write is keyed by slideId (upsert,
+// not additive — see e.g. huesCuesScoring.js's computeHuesCuesScoreUpdates),
+// so a team resubmitting after unlock and the host re-locking just re-scores
+// fresh off whatever's in phone_answers at that point, nothing double-counts.
+// Only clears the LAST lockField, not every one — same "last field is the
+// one that matters" convention pendingReveal above already uses, and for a
+// real reason, not just consistency: WagerBoard.jsx (the phone UI) gates
+// its own screen purely on `!data.wagerTiersLocked`, so clearing that field
+// too sent a team's phone all the way back to blind tier-picking with no
+// path back to the numeric keypad — verified live, 2026-09-14, before this
+// fix (the tier snapshot itself survived untouched, so scoring was never at
+// risk, but the team was stuck unable to actually resubmit a guess, exactly
+// the thing Unlock exists to let them do). Clearing only the last field
+// reopens precisely the phase the host's own status text already claims it
+// does. Undoing the FIRST (tier) lock specifically is a narrower case this
+// still doesn't cover — same as before, just no longer silently broken for
+// the common case.
+export function unlockPatch(mechanicKey, data) {
+  const m = PHONE_MECHANICS[mechanicKey]
+  if (!m || !data) return null
+  const lastField = m.lockFields[m.lockFields.length - 1]
+  return { [lastField]: false, [m.revealField]: false }
+}
+
 /**
  * One Next press. `show` is { slides, currentSlideIndex, currentSlideId }.
  * Returns a shows-row patch, or null when the press is a no-op.

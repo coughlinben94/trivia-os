@@ -12,8 +12,9 @@ import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderS
 import { computeChoiceScoreUpdates, DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 import { scoreHuesCuesRound, computeHuesCuesScoreUpdates } from '../../lib/huesCuesScoring.js'
+import { computeHorseRaceScoreUpdates, DEFAULT_RACE_POINTS } from '../../lib/raceScoring.js'
 import { HUES_CUES_CODE_RE } from '../../lib/huesCuesGrid.js'
-import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
+import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, unlockPatch, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
 // override for it — every other wager error is a real, unrecoverable-by-
@@ -234,6 +235,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [choiceScoreError, setChoiceScoreError] = useState(null)
   const [huesCuesBusy, setHuesCuesBusy] = useState(false)
   const [huesCuesScoreError, setHuesCuesScoreError] = useState(null)
+  const [raceBusy, setRaceBusy] = useState(false)
+  const [raceScoreError, setRaceScoreError] = useState(null)
 
   // scoringBusy + the 12s cap below (2026-08-31, Opus second-opinion review
   // of the maybeStartLockCountdown fix): the fix that blocks Next during
@@ -268,6 +271,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     setOrderScoreError(null)
     setChoiceScoreError(null)
     setHuesCuesScoreError(null)
+    setRaceScoreError(null)
   }, [currentSlide?.id])
   // Which phone-scored mechanic (if any) this slide is — the ONE lookup the
   // lock/score control panel and the scoreboard-modal gate below both key off,
@@ -555,6 +559,35 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         }
       },
       setBusy: setChoiceBusy, setError: setChoiceScoreError,
+    })
+  }
+
+  // Horse race: same shape as Choice — one lock field, no results snapshot
+  // (the race animation itself is the reveal, not a TV cascade — Ben's
+  // call). Scores against slide.data.answer, the derived winner name
+  // RaceEditor already recomputes from contenders+beats — never a second
+  // typed answer field to drift from what the race itself shows.
+  async function handleLockAndScoreHorseRace(slide) {
+    await lockAndScore({
+      slide,
+      lockField: 'raceLocked', lockedAtField: 'raceLockedAt',
+      lateLogLabel: 'horse-race lock',
+      buildResults: ({ answers, teams, scoreboardTeams, roundKey, slideId }) => {
+        const updates = computeHorseRaceScoreUpdates({
+          answers, teams, scoreboardTeams, roundKey,
+          points: slide.data.pointsForRace ?? DEFAULT_RACE_POINTS,
+          correctAnswer: slide.data.answer ?? '',
+          slideId,
+        })
+        return {
+          results: null,
+          updates,
+          unmatchedError: answers.length > 0 && updates.length === 0
+            ? 'No answers could be matched to the scoreboard — check team names match, then retry'
+            : null,
+        }
+      },
+      setBusy: setRaceBusy, setError: setRaceScoreError,
     })
   }
 
@@ -939,6 +972,21 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       data: { ...currentSlide.data, [REVEAL_FIELD[mechanic]]: true },
     })
     return true
+  }
+
+  // Manual safety-net unlock (2026-09-14, Ben: "every question with a lock
+  // ie phone questions should have an unlock function... just incase
+  // something were to happen. misclick on my end or something"). Reopens
+  // phone submissions for the CURRENT slide's mechanic — see unlockPatch's
+  // own comment (slideStepping.js) for why this is safe even after
+  // scoring/reveal. Button lives in the lock/score panel below, shown
+  // whenever the mechanic is locked, independent of whether it's also
+  // already revealed.
+  function unlockCurrentSlide() {
+    if (!phoneMechanic || !currentSlide) return
+    const patch = unlockPatch(phoneMechanic, currentSlide.data)
+    if (!patch) return
+    actions.updateSlide(currentSlide.id, { data: { ...currentSlide.data, ...patch } })
   }
 
   // Same actionsRef reasoning above, plus: handleLockAndScoreMatching/
@@ -1385,38 +1433,103 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                 act: () => handleLockAndScoreHuesCues(currentSlide),
               },
             }[phoneMechanic]
-            if (d[REVEAL_FIELD[phoneMechanic]] && !panel.error) return null
+            // isLocked (any lockField true) is checked separately from the
+            // reveal gate below — Unlock stays available even after reveal
+            // (2026-09-14, Ben: misclick recovery "just incase something
+            // were to happen"), so the panel container must keep rendering
+            // for that case even when the normal scoring button is hidden.
+            const isLocked = PHONE_MECHANICS[phoneMechanic].lockFields.some(f => d[f])
+            const hideMainPanel = d[REVEAL_FIELD[phoneMechanic]] && !panel.error
+            if (hideMainPanel && !isLocked) return null
             return (
               <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
-                <p className="text-xs text-gray-400 mb-3">{panel.status}</p>
+                {!hideMainPanel && (
+                  <>
+                    <p className="text-xs text-gray-400 mb-3">{panel.status}</p>
+                    <button
+                      onClick={panel.act}
+                      disabled={panel.busy}
+                      className={`w-full py-3 rounded-xl border-2 font-semibold text-sm transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
+                        panel.busy
+                          ? 'border-gray-100 text-gray-300 cursor-not-allowed'
+                          : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'
+                      }`}
+                    >
+                      {panel.label}
+                    </button>
+                    {panel.error && (
+                      <p className="text-xs text-red-600 mt-2 text-center">{panel.error}</p>
+                    )}
+                    {/* Manual override — ONLY for the empty-answers refusal, only
+                        on the two mechanics that HAVE one (wager/bendle score from
+                        `teams`, so an empty fetch is ambiguous), and only after it
+                        has actually fired once. Retry alone can't get past it if
+                        it's a genuine zero-submission round (small crowd, phones
+                        failed) rather than a transient fetch blip — before this
+                        existed, Retry just hit the same wall forever. */}
+                    {panel.zeroErr && panel.error === panel.zeroErr && (
+                      <button
+                        onClick={panel.force}
+                        disabled={panel.busy}
+                        className="w-full mt-2 py-2 rounded-lg border border-amber-300 text-amber-700 text-xs font-semibold hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Score anyway — 0 for every team
+                      </button>
+                    )}
+                  </>
+                )}
+                {isLocked && (
+                  <button
+                    onClick={unlockCurrentSlide}
+                    className="w-full mt-2 py-2 rounded-lg border border-gray-200 text-gray-500 text-xs font-semibold hover:bg-gray-50"
+                  >
+                    🔓 Unlock — let teams resubmit
+                  </button>
+                )}
+              </div>
+            )
+          })()}
+
+          {/* Horse race isn't type:'question', so it sits outside the shared
+              PHONE_MECHANICS panel above — its own lock+score button, same
+              lockAndScore helper underneath, no results snapshot since the
+              race animation itself is the reveal (no TV cascade). Unlock
+              (2026-09-14, same misclick-recovery reasoning as the shared
+              panel's) is inlined here too rather than folded into
+              unlockCurrentSlide, since that helper is built around
+              PHONE_MECHANICS/phoneMechanic and horse-race isn't in it. */}
+          {currentSlide?.type === 'horse-race' && (() => {
+            const d = currentSlide.data ?? {}
+            const isLocked = !!d.raceLocked
+            return (
+              <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
+                <p className="text-xs text-gray-400 mb-3">
+                  {isLocked
+                    ? 'Picks locked and scored — start the race whenever you\'re ready.'
+                    : 'And They\'re Off! — teams are picking a winner on their phones'}
+                </p>
                 <button
-                  onClick={panel.act}
-                  disabled={panel.busy}
+                  onClick={() => handleLockAndScoreHorseRace(currentSlide)}
+                  disabled={raceBusy}
                   className={`w-full py-3 rounded-xl border-2 font-semibold text-sm transition-[color,background-color,border-color,transform] duration-[120ms] active:scale-[0.97] ${
-                    panel.busy
+                    raceBusy
                       ? 'border-gray-100 text-gray-300 cursor-not-allowed'
                       : 'border-[#1a6b4a] text-[#1a6b4a] hover:bg-green-50'
                   }`}
                 >
-                  {panel.label}
+                  {raceBusy ? 'Scoring…' : isLocked ? '🔁 Retry Scoring' : '🔒 Lock Picks & Score'}
                 </button>
-                {panel.error && (
-                  <p className="text-xs text-red-600 mt-2 text-center">{panel.error}</p>
+                {raceScoreError && (
+                  <p className="text-xs text-red-600 mt-2 text-center">{raceScoreError}</p>
                 )}
-                {/* Manual override — ONLY for the empty-answers refusal, only
-                    on the two mechanics that HAVE one (wager/bendle score from
-                    `teams`, so an empty fetch is ambiguous), and only after it
-                    has actually fired once. Retry alone can't get past it if
-                    it's a genuine zero-submission round (small crowd, phones
-                    failed) rather than a transient fetch blip — before this
-                    existed, Retry just hit the same wall forever. */}
-                {panel.zeroErr && panel.error === panel.zeroErr && (
+                {isLocked && (
                   <button
-                    onClick={panel.force}
-                    disabled={panel.busy}
-                    className="w-full mt-2 py-2 rounded-lg border border-amber-300 text-amber-700 text-xs font-semibold hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={() => actions.updateSlide(currentSlide.id, {
+                      data: { ...currentSlide.data, raceLocked: false },
+                    })}
+                    className="w-full mt-2 py-2 rounded-lg border border-gray-200 text-gray-500 text-xs font-semibold hover:bg-gray-50"
                   >
-                    Score anyway — 0 for every team
+                    🔓 Unlock — let teams resubmit
                   </button>
                 )}
               </div>

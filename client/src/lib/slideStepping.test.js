@@ -11,6 +11,7 @@ import {
   AUTO_ROLL_OWNERSHIP_MAX_AGE_MS,
   pendingLockPhase,
   pendingReveal,
+  unlockPatch,
   REVEAL_FIELD,
   PHONE_MECHANICS,
   nextSlideAfter,
@@ -683,6 +684,48 @@ describe('pendingReveal', () => {
     expect(pendingReveal(midWager)).toBeNull()
     const readyWager = { data: { isShiny: true, shinyInputSchema: { type: 'wager' }, wagerTiersLocked: true, wagerGuessesLocked: true, wagerRevealed: false } }
     expect(pendingReveal(readyWager)).toBe('wager')
+  })
+})
+
+describe('unlockPatch', () => {
+  it('clears the lock field and reveal field for a single-lock-field mechanic', () => {
+    expect(unlockPatch('matching', { matchingLocked: true, matchingRevealed: true })).toEqual({
+      matchingLocked: false, matchingRevealed: false,
+    })
+    expect(unlockPatch('order', { orderLocked: true, orderRevealed: true })).toEqual({
+      orderLocked: false, orderRevealed: false,
+    })
+    expect(unlockPatch('choice', { choiceLocked: true, choiceRevealed: true })).toEqual({
+      choiceLocked: false, choiceRevealed: false,
+    })
+    expect(unlockPatch('huesCues', { huesCuesLocked: true, huesCuesRevealed: true })).toEqual({
+      huesCuesLocked: false, huesCuesRevealed: false,
+    })
+  })
+
+  it('clears only the LAST wager lock field, leaving wagerTiersLocked and the tier snapshot untouched', () => {
+    // Real bug, live-verified 2026-09-14: clearing wagerTiersLocked too sent
+    // the phone (WagerBoard.jsx gates its screen on `!wagerTiersLocked`) all
+    // the way back to blind tier-picking with no path back to the guess
+    // keypad, even though the host's own status text claimed guess-entry
+    // reopened. Only the last field — the one a misclick actually means to
+    // undo — gets cleared, matching pendingReveal's own "last field" rule.
+    const data = { wagerTiersLocked: true, wagerGuessesLocked: true, wagerRevealed: true, wagerTiers: { teamA: 'high' } }
+    expect(unlockPatch('wager', data)).toEqual({
+      wagerGuessesLocked: false, wagerRevealed: false,
+    })
+  })
+
+  it('is a no-op patch (all-false) even when nothing was actually locked', () => {
+    // Firing unlock on an already-unlocked slide should never throw or write
+    // something surprising — just redundantly confirms the off state.
+    expect(unlockPatch('matching', {})).toEqual({ matchingLocked: false, matchingRevealed: false })
+  })
+
+  it('returns null for an unknown mechanic or missing data, never throws', () => {
+    expect(unlockPatch('not-a-real-mechanic', { foo: true })).toBeNull()
+    expect(unlockPatch('matching', null)).toBeNull()
+    expect(unlockPatch('matching', undefined)).toBeNull()
   })
 })
 
