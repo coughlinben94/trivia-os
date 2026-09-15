@@ -39,6 +39,13 @@ export const PRESETS = [
   { name: 'Violet & Coral',    colors: ['#7c3aed', '#f97316'], weights: [0.6, 0.4] },
   { name: 'Purple & Teal',     colors: ['#9333ea', '#0d9488'], weights: [0.65, 0.35] },
   { name: 'Violet / Teal / Rose', colors: ['#7c3aed', '#0d9488', '#f43f5e'], weights: [0.5, 0.25, 0.25] },
+  // Certified 2026-09-15 via a manual palette-sweep.mjs --pending run
+  // (ring_palettes row, ring_version v1-2026-09-06) -- colors/weights must
+  // stay byte-identical to that certified row or a preset click here stops
+  // exact-matching it and Apply falls back to "saved, pending" instead of
+  // applying instantly, defeating the point of a preset per this file's
+  // own header comment.
+  { name: 'Solar Flare', colors: ['#ea580c', '#facc15'], weights: [0.6, 0.4] },
 ]
 
 export function seedFrom(text) {
