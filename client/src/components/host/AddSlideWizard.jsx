@@ -185,8 +185,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // "How many assets" for venn means how many SEPARATE venn questions to
   // create in one go (Ben, 2026-09-01: "I'll be asking three separate venn
   // diagrams" — a round of 3 standalone puzzles, not 3 people on one side).
-  // Blank-able string state, same idiom as assetCount.
-  const [vennSlideCount, setVennSlideCount] = useState('1')
+  // Blank-able string state, same idiom as assetCount. Seeded from
+  // initialData too (Swing Round's shiny hand-off, same as assetCount) so
+  // picking Venn there starts pre-filled at the round's count instead of 1
+  // — Ben, 2026-09-15: "should be for every swing round shiny." Still a
+  // plain editable input the host can change; this only sets the default.
+  const [vennSlideCount, setVennSlideCount] = useState(initialData.assetCount ?? '1')
   // The two — and only two — shape questions the shiny popup asks: how many
   // assets come after the title card, and how they relate to each other.
   // Both are pre-filled from the format and both are always editable.
@@ -528,18 +532,22 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // batch of standalone ones," so it skips the relationship picker entirely.
   const isVenn          = shinyFmtType === 'venn'
   const vennNum         = Math.min(20, Math.max(1, parseInt(vennSlideCount, 10) || 1))
-  // A fixed-shape format with no own count control (matching/wager/order/
-  // choice/hues-cues/elimination/race — NOT grid/venn/bendle, which have
-  // real extraControls of their own and are untouched by this) still honors
-  // a count seeded via initialData (Swing Round's shiny hand-off —
-  // BuildMode.jsx's handleSwingGoShiny). Outside that hand-off assetCount
-  // is never seeded, so this stays 1 and every other fixed-shape entry
-  // point behaves exactly as before (Ben, 2026-09-15: reported "Hues, Cues,
-  // and Booze" via Swing Round only created 1 slide, not the count he'd
-  // just set, then "it asks me for an answer... dont want it to... just
-  // insert the slides" — N blank slides, no shared answer, same as the
-  // generic 'separate' path already does for non-fixed-shape formats).
-  const fixedShapeCount = (isFixedShapeFmt && !fixedShapeKind.hasOwnControls && initialData.assetCount != null)
+  // A fixed-shape format still honors a count seeded via initialData (Swing
+  // Round's shiny hand-off — BuildMode.jsx's handleSwingGoShiny), EXCEPT
+  // venn (has its own real "how many separate questions" control,
+  // vennSlideCount, seeded separately below — doubling this on top of that
+  // would double-count) and bendle (each slide needs an actual song picked,
+  // no blank placeholder makes sense — auto-creating N bendles all pointing
+  // at the same one song isn't "N different questions"). Outside the Swing
+  // Round hand-off assetCount is never seeded, so this stays 1 and every
+  // other entry point (clicking the Shiny Question tile directly) behaves
+  // exactly as before. Ben, 2026-09-15: first reported "Hues, Cues, and
+  // Booze" via Swing Round only created 1 slide, not 6; then, after that was
+  // fixed for the no-own-controls formats, "should be for every swing round
+  // shiny" — widened from "only matching/wager/order/choice/hues-cues/
+  // elimination/race" to also cover grid, which has its own Columns/Rows
+  // shape controls but no own "how many separate questions" concept either.
+  const fixedShapeCount = (isFixedShapeFmt && shinyFmtType !== 'venn' && shinyFmtType !== 'bendle' && initialData.assetCount != null)
     ? Math.min(20, Math.max(1, parseInt(assetCount, 10) || 1))
     : 1
   // Separate questions can't share one typed answer — those slides start
