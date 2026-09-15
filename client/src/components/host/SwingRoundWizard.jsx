@@ -6,30 +6,46 @@ const BTN = 'host-button'
 // shiny, only introducing it once" — that exact mechanic (N slides, one
 // shinyFormatId/seriesTheme, intro skipped on siblings) already exists in
 // AddSlideWizard's shiny-question batch-add path (the 'separate' relationship
-// + assetCount). Rather than duplicate that branching logic here, the Shiny
-// choice below hands off to it directly (onGoShiny, wired in BuildMode.jsx)
-// instead of continuing this wizard's own text-entry flow — but it fires
-// straight from the style screen, before the 'count' step, so `count` (this
-// wizard's own local state, default 6) rides along as a second argument
-// instead of the host ever seeing/confirming it here.
+// + assetCount). Rather than duplicate that branching logic here, both style
+// choices below route through the SAME 'count' step (styleChoice remembers
+// which one), then the Shiny path hands off to it directly (onGoShiny, wired
+// in BuildMode.jsx's handleSwingGoShiny) with the confirmed count instead of
+// continuing this wizard's own text-entry flow.
 //
-// 2026-09-15, Ben: reported this only created 1 slide, not 6 — the count
-// above was captured in local state but never actually passed to onGoShiny
-// (this line used to read `onGoShiny(activeRoundId)`). Fixed by passing
-// `count` through; BuildMode.jsx's handleSwingGoShiny now seeds
-// AddSlideWizard's assetCount + relationship('separate') from it. Formats in
-// FIXED_SHAPE_KINDS (matching/wager/order/choice/hues-cues/elimination/race
-// — shinyWizardKinds.jsx) still create exactly 1 blank slide regardless —
-// that's a separate, deliberate design constraint this fix does not touch.
+// 2026-09-15, Ben: reported this only created 1 slide, not 6 — the Shiny
+// button used to fire `onGoShiny(activeRoundId)` straight from the style
+// screen, skipping 'count' entirely, so no count ever reached the shiny
+// wizard. Then, after wiring count through silently (default 6, no
+// confirmation), Ben: "it should just ask me how many slides i want to
+// add" — so Shiny now visits 'count' same as Text-based, instead of
+// skipping it. BuildMode.jsx's handleSwingGoShiny seeds AddSlideWizard's
+// assetCount + relationship('separate') from the confirmed count. Formats
+// in FIXED_SHAPE_KINDS (matching/wager/order/choice/hues-cues/elimination/
+// race — shinyWizardKinds.jsx) still create exactly 1 blank slide
+// regardless — a separate, deliberate design constraint this does not touch.
 export default function SwingRoundWizard({ activeRoundId, onAdd, onGoShiny, onClose }) {
   const [step, setStep] = useState('style')
+  const [styleChoice, setStyleChoice] = useState(null) // 'text' | 'shiny'
   const [count, setCount] = useState(6)
   const [questions, setQuestions] = useState([])
+
+  function pickStyle(choice) {
+    setStyleChoice(choice)
+    setStep('count')
+  }
 
   function goToQuestions() {
     const n = Math.max(1, count)
     setQuestions(Array.from({ length: n }, () => ({ text: '', answer: '' })))
     setStep('questions')
+  }
+
+  function confirmCount() {
+    if (styleChoice === 'shiny') {
+      onGoShiny(activeRoundId, Math.max(1, count))
+    } else {
+      goToQuestions()
+    }
   }
 
   function updateQ(i, field, val) {
@@ -66,7 +82,7 @@ export default function SwingRoundWizard({ activeRoundId, onAdd, onGoShiny, onCl
           <div className="flex flex-col gap-3 items-center">
             <p className="text-xs font-medium text-gray-500 text-center">How should these questions look?</p>
             <button
-              onClick={() => setStep('count')}
+              onClick={() => pickStyle('text')}
               className={`w-full flex items-center gap-3 p-4 rounded-xl border border-gray-200 hover:border-[#1a6b4a] text-left transition-colors ${BTN}`}
             >
               <span className="text-2xl">📝</span>
@@ -76,7 +92,7 @@ export default function SwingRoundWizard({ activeRoundId, onAdd, onGoShiny, onCl
               </span>
             </button>
             <button
-              onClick={() => onGoShiny(activeRoundId, count)}
+              onClick={() => pickStyle('shiny')}
               className={`w-full flex items-center gap-3 p-4 rounded-xl border border-gray-200 hover:border-[#1a6b4a] text-left transition-colors ${BTN}`}
             >
               <span className="text-2xl">✨</span>
@@ -97,17 +113,22 @@ export default function SwingRoundWizard({ activeRoundId, onAdd, onGoShiny, onCl
                 max={20}
                 value={count}
                 onChange={e => setCount(Math.max(1, parseInt(e.target.value) || 1))}
-                onKeyDown={e => { if (e.key === 'Enter') goToQuestions() }}
+                onKeyDown={e => { if (e.key === 'Enter') confirmCount() }}
                 className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
+            {styleChoice === 'shiny' && (
+              <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-center">
+                Pick a shiny format next, then {count} blank slides get created — fill each in from the sidebar after.
+              </p>
+            )}
             {!activeRoundId && (
               <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
                 This will create a new Swing Round.
               </p>
             )}
             <button
-              onClick={goToQuestions}
+              onClick={confirmCount}
               className={`w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 ${BTN}`}
             >
               Next →
