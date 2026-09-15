@@ -222,7 +222,7 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
                 // slots are in "YouTube" mode, the format-library modal, etc.)
                 // resets when switching to a different question slide instead
                 // of leaking across slides that share this same component type.
-                <QuestionEditor key={slide.id} data={data} onChange={change} onBatchChange={batchChange} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} theme={theme} show={show} slide={slide} usedPhotoUrls={usedPhotoUrls} />
+                <QuestionEditor key={slide.id} data={data} onChange={change} onBatchChange={batchChange} onChangeBendleField={changeBendleField} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} theme={theme} show={show} slide={slide} usedPhotoUrls={usedPhotoUrls} />
               )}
               {slide.type === 'grading-break' && (
                 <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
@@ -480,7 +480,7 @@ function RoundIntroEditor({ data, onChange, isSwing, uploadMedia, getHostPhotos,
   )
 }
 
-function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPhotos, theme, show, slide, usedPhotoUrls }) {
+function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, uploadMedia, getHostPhotos, theme, show, slide, usedPhotoUrls }) {
   const [showFormatLibrary, setShowFormatLibrary] = useState(false)
   const { formats: shinyFormats, loading: shinyFormatsLoading } = useShinyFormats()
 
@@ -1067,9 +1067,9 @@ function QuestionEditor({ data, onChange, onBatchChange, uploadMedia, getHostPho
             // group can never desync after creation.
             <BendleBuilder
               songId={data.bendleSongId}
-              onChangeSongId={id => changeBendleField('bendleSongId', id)}
+              onChangeSongId={id => onChangeBendleField('bendleSongId', id)}
               tierOrder={data.bendleTierOrder}
-              onChangeTierOrder={order => changeBendleField('bendleTierOrder', order)}
+              onChangeTierOrder={order => onChangeBendleField('bendleTierOrder', order)}
               stepIndex={data.bendleStepIndex}
             />
           )}
