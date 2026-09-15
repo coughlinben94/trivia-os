@@ -181,6 +181,23 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
         </p>
       )}
 
+      {/* Title was already fetched into `song` state for the *_url fields
+          the audio effect reads (line 62) but never rendered — the reveal
+          played the full mix with no visual confirmation of what it was. */}
+      {revealed && song?.title && (
+        <motion.p
+          initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: 'translateY(10px)' }}
+          animate={{ opacity: 1, transform: 'translateY(0px)' }}
+          transition={{ duration: 0.3, ease: EASE_OUT }}
+          style={{
+            margin: 0, fontFamily: displayFont, fontSize: '2.6rem', lineHeight: 1.15,
+            color: SHINY_GOLD, textAlign: 'center', maxWidth: 1200,
+          }}
+        >
+          {song.title}{song.artist ? ` — ${song.artist}` : ''}
+        </motion.p>
+      )}
+
       {/* !isPreview: the preview pane never loads audio, so its loadState is
           pinned at 'loading' — without this the host's build-mode editor shows
           a "Loading song…" that can never resolve. */}
