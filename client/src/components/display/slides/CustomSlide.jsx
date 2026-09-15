@@ -144,6 +144,7 @@ export default function CustomSlide({ slide }) {
               color: theme.colors.text,
               fontSize: regionFontSizeCSS(rt.body?.fontSizePx) ?? bodySize,
               fontWeight: 400,
+              whiteSpace: 'pre-line',
             }}
           >
             {data.body}

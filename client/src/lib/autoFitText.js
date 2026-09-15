@@ -91,21 +91,29 @@ function _ctx() {
   return _measureCtx
 }
 
-// greedy word-wrap at a given px size → array of line strings
+// greedy word-wrap at a given px size → array of line strings. Splits on
+// explicit '\n' first so a manual line break (e.g. a host-typed numbered
+// list in CustomSlide's body) is honored as a forced break rather than
+// getting swallowed into the \s+ word-split and wrapped as if it were a
+// single space — that mismatch used to mean the measured line count (used
+// to pick a font size that fits maxLines) didn't match what the browser
+// actually rendered once the caller applied `white-space: pre-line`.
 function wrapToWidth(text, family, sizePx, maxW, letterSpacing = 0, weight = '') {
   const c = _ctx()
   c.font = weight ? `${weight} ${sizePx}px "${family}"` : `${sizePx}px "${family}"`
   const measure = s => c.measureText(s).width + Math.max(0, s.length - 1) * letterSpacing
-  const words = String(text).split(/\s+/).filter(Boolean)
-  if (!words.length) return ['']
   const lines = []
-  let line = words[0]
-  for (let i = 1; i < words.length; i++) {
-    const test = line + ' ' + words[i]
-    if (measure(test) <= maxW) line = test
-    else { lines.push(line); line = words[i] }
+  for (const para of String(text).split('\n')) {
+    const words = para.split(/\s+/).filter(Boolean)
+    if (!words.length) { lines.push(''); continue }
+    let line = words[0]
+    for (let i = 1; i < words.length; i++) {
+      const test = line + ' ' + words[i]
+      if (measure(test) <= maxW) line = test
+      else { lines.push(line); line = words[i] }
+    }
+    lines.push(line)
   }
-  lines.push(line)
   return lines
 }
 

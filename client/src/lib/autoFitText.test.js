@@ -57,6 +57,21 @@ describe('fitToBox', () => {
     expect(warn).toHaveBeenCalledTimes(1)
     warn.mockRestore()
   })
+
+  it('treats an explicit \\n as a forced line break, not a collapsible space', () => {
+    // Each of these 3 short lines fits easily on its own at the ceiling size
+    // in a wide box — if '\n' were treated as ordinary whitespace (the old
+    // behavior), the whole string would greedy-wrap onto a single line and
+    // easily fit within maxLines: 2. Forcing the 3 explicit breaks means it
+    // needs 3 lines, which must NOT fit a 2-line cap.
+    const threeLines = 'one\ntwo\nthree'
+    const box = { family: 'F', boxW: 1000, boxH: 300, floorPx: 16, ceilPx: 48, maxLines: 2 }
+    expect(overflowsBox(threeLines, box)).toBe(true)
+    // The same 3 short words with spaces instead of newlines DO fit on one
+    // line in this wide box, confirming the overflow above is caused by the
+    // forced breaks, not by the text simply being too wide.
+    expect(overflowsBox('one two three', box)).toBe(false)
+  })
 })
 
 describe('overflowsBox', () => {
