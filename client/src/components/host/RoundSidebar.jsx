@@ -48,6 +48,7 @@ const SLIDE_TYPE_META = {
   'grading-break':     { label: 'Grading Break',     icon: '⏸️' },
   'scoreboard-reveal': { label: 'Scoreboard',        icon: '🏆' },
   'custom':            { label: 'Custom Slide',      icon: '✏️' },
+  'bonus':             { label: 'Bonus',              icon: '🎁' },
   'pixelate-series':   { label: 'Pixelate Series',   icon: '🎨' },
   'multi-question':    { label: 'Multi-Question',    icon: '📋' },
   'pyl-reveal':        { label: 'PYL Reveal',        icon: '🎰' },

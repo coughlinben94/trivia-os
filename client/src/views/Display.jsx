@@ -301,7 +301,7 @@ const isRingVisible = s =>
   s?.type === 'team-preview' || s?.type === 'grading-break' ||
   s?.type === 'question' ||
   s?.type === 'pre-show' || s?.type === 'round-intro' || s?.type === 'swing-round-intro' ||
-  s?.type === 'shiny-title'
+  s?.type === 'shiny-title' || s?.type === 'bonus'
 
 function PersistentRing({ slideIndex, stationOverride, showStationDebug, forceSnap }) {
   const { theme } = useTheme()

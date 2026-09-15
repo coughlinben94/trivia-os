@@ -234,6 +234,9 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
               {slide.type === 'custom' && (
                 <CustomEditor data={data} onChange={change} uploadMedia={uploadMedia} />
               )}
+              {slide.type === 'bonus' && (
+                <BonusEditor data={data} onChange={change} />
+              )}
               {slide.type === 'pixelate-series' && (
                 <PixelateSeriesEditor data={data} onChange={change} onStageUpload={handleStageUpload} />
               )}
@@ -2396,6 +2399,17 @@ export function CustomEditor({ data, onChange, uploadMedia }) {
         <MediaUpload accept="image" label="+ Add image" currentUrl={null} onUpload={uploadNew} />
       </Field>
     </>
+  )
+}
+
+// Bonus slide — one field, no media. Renders over the live ring/ambient
+// background (skipsLockedBackground() in SlideRenderer.jsx), not the opaque
+// backdrop every other freeform slide (Custom) gets — that's the whole
+// point of this slide type, so keep this editor minimal rather than
+// growing it toward Custom's media/video options.
+function BonusEditor({ data, onChange }) {
+  return (
+    <Field label="Text"><TextArea value={data.text} onChange={v => onChange('text', v)} placeholder="Bonus round…" rows={4} /></Field>
   )
 }
 

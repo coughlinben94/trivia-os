@@ -6,6 +6,7 @@ import QuestionSlide from './slides/QuestionSlide.jsx'
 import GradingBreakSlide from './slides/GradingBreakSlide.jsx'
 import ScoreboardRevealSlide from './slides/ScoreboardRevealSlide.jsx'
 import CustomSlide from './slides/CustomSlide.jsx'
+import BonusSlide from './slides/BonusSlide.jsx'
 import PixelateSeriesSlide from './slides/PixelateSeriesSlide.jsx'
 import MultiQuestionSlide from './slides/MultiQuestionSlide.jsx'
 import PylRevealSlide from './slides/PylRevealSlide.jsx'
@@ -42,7 +43,7 @@ export function skipsLockedBackground(slide) {
   return isRingWorldSlide ||
     slide?.type === 'team-picker' || slide?.type === 'pre-show' ||
     slide?.type === 'round-intro' || slide?.type === 'swing-round-intro' ||
-    slide?.type === 'shiny-title'
+    slide?.type === 'shiny-title' || slide?.type === 'bonus'
 }
 
 // Per-slide content animation config — tune these without touching component logic
@@ -182,6 +183,7 @@ const SLIDE_COMPONENTS = {
   'grading-break':     GradingBreakSlide,
   'scoreboard-reveal': ScoreboardRevealSlide,
   'custom':            CustomSlide,
+  'bonus':             BonusSlide,
   'pixelate-series':   PixelateSeriesSlide,
   'multi-question':    MultiQuestionSlide,
   'pyl-reveal':        PylRevealSlide,

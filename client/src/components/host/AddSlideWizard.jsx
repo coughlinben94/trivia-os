@@ -26,6 +26,7 @@ export const TYPE_CARDS = [
   { type: 'pyl-lotto',      icon: '🎰', name: 'Lotto Animation',     desc: 'Press Your Luck — pick animation live, same as any PYL spin', hidden: true },
   { type: 'pyl-board',      icon: '🎯', name: 'Theme Picker',        desc: 'Press Your Luck — on-screen board naming the 2-3 embedded themes', hidden: true },
   { type: 'custom',         icon: '✏️', name: 'Custom',              desc: 'Freeform slide' },
+  { type: 'bonus',          icon: '🎁', name: 'Bonus',               desc: 'A bonus-round announcement over the ring background' },
   // utility-only — not shown in the picker grid, but provides icon/name metadata for header + sidebar
   { type: 'team-preview',   icon: '👥', name: 'Team List',           desc: 'Show all team names on screen', hidden: true },
   // Never created from the picker — every shiny creation prepends one
@@ -463,6 +464,9 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
 
     } else if (type === 'custom') {
       data = { title: '', body: '', mediaUrl: null, mediaType: null }
+
+    } else if (type === 'bonus') {
+      data = { text: '' }
 
     } else if (type === 'pyl-lotto') {
       // Bare pyl-reveal slide, no animationId/pool/winnerId — the host
