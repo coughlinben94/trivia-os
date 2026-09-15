@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   HUES_CUES_COLS, HUES_CUES_ROWS, HUES_CUES_CODE_RE,
   codeToColRow, colRowToCode, chebyshevDistance,
-  getHuesCuesGrid, getHuesCuesCell,
+  getHuesCuesGrid, getHuesCuesCell, nearestHuesCuesCell,
 } from './huesCuesGrid.js'
 import { hexToRgb, rgbToOklab } from './oklab.js'
 
@@ -156,5 +156,27 @@ describe('getHuesCuesCell', () => {
   })
   it('returns null for an invalid code', () => {
     expect(getHuesCuesCell('Z99')).toBeNull()
+  })
+})
+
+describe('nearestHuesCuesCell', () => {
+  it('finds the exact cell when given its own hex', () => {
+    const target = getHuesCuesCell('H8')
+    expect(nearestHuesCuesCell(target.hex).code).toBe('H8')
+  })
+  it('works with or without a leading #', () => {
+    const target = getHuesCuesCell('C20')
+    const bare = target.hex.slice(1)
+    expect(nearestHuesCuesCell(bare).code).toBe('C20')
+  })
+  it('is case-insensitive', () => {
+    const target = getHuesCuesCell('P1')
+    expect(nearestHuesCuesCell(target.hex.toUpperCase()).code).toBe('P1')
+  })
+  it('returns null for malformed input', () => {
+    expect(nearestHuesCuesCell('not-a-color')).toBeNull()
+    expect(nearestHuesCuesCell('#fff')).toBeNull()
+    expect(nearestHuesCuesCell('')).toBeNull()
+    expect(nearestHuesCuesCell(null)).toBeNull()
   })
 })

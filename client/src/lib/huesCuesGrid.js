@@ -1,4 +1,4 @@
-import { oklabToRgb, rgbToOklab, rgbToHex } from './oklab.js'
+import { oklabToRgb, rgbToOklab, rgbToHex, hexToRgb } from './oklab.js'
 
 export const HUES_CUES_COLS = 16 // A-P
 export const HUES_CUES_ROWS = 30 // 1-30 — full 480-square board, matches the real Hues and Cues (16x30)
@@ -69,4 +69,28 @@ export function getHuesCuesGrid() {
 
 export function getHuesCuesCell(code) {
   return getHuesCuesGrid().find(cell => cell.code === code) ?? null
+}
+
+const HEX_RE = /^#?[0-9a-fA-F]{6}$/
+
+// Nearest grid cell to an arbitrary hex color, by OKLab distance (same
+// space the grid itself was generated in, so "nearest" matches how the
+// board's own colors were spaced). Returns null for an unparseable hex —
+// hexToRgb itself has no validation (silently falls back to near-black),
+// so the format check happens here, before it's called.
+export function nearestHuesCuesCell(hex) {
+  if (!HEX_RE.test(hex ?? '')) return null
+  const normalized = hex.startsWith('#') ? hex : `#${hex}`
+  const lab = rgbToOklab(hexToRgb(normalized))
+  let best = null
+  let bestDist = Infinity
+  for (const cell of getHuesCuesGrid()) {
+    const cellLab = rgbToOklab(hexToRgb(cell.hex))
+    const dist = Math.hypot(lab[0] - cellLab[0], lab[1] - cellLab[1], lab[2] - cellLab[2])
+    if (dist < bestDist) {
+      bestDist = dist
+      best = cell
+    }
+  }
+  return best
 }

@@ -19,7 +19,7 @@ import { DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
 import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
 import { DEFAULT_STEP_ORDER, STEM_LABELS, AVAILABLE_STEMS, buildBendleTiers } from '../../lib/bendleScoring.js'
-import { getHuesCuesGrid, HUES_CUES_COLS } from '../../lib/huesCuesGrid.js'
+import { getHuesCuesGrid, HUES_CUES_COLS, nearestHuesCuesCell } from '../../lib/huesCuesGrid.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { overflowsBox, QUESTION_BOX } from '../../lib/autoFitText.js'
 import { isConcurrentShiny, isConcurrentMediaShiny } from '../../lib/shinySeries.js'
@@ -226,7 +226,7 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
               )}
               {slide.type === 'grading-break' && (
                 <GradingBreakEditor data={data} onChange={change} roundSlides={roundSlides}
-                  uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} theme={theme} usedPhotoUrls={usedPhotoUrls} />
+                  uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} jukeboxLibs={jukeboxLibs} usedPhotoUrls={usedPhotoUrls} />
               )}
               {slide.type === 'scoreboard-reveal' && (
                 <ScoreboardRevealEditor data={data} onChange={change} show={show} />
@@ -235,13 +235,13 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
                 <CustomEditor data={data} onChange={change} uploadMedia={uploadMedia} />
               )}
               {slide.type === 'pixelate-series' && (
-                <PixelateSeriesEditor data={data} onChange={change} onStageUpload={handleStageUpload} theme={theme} />
+                <PixelateSeriesEditor data={data} onChange={change} onStageUpload={handleStageUpload} />
               )}
               {slide.type === 'multi-question' && (
-                <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} theme={theme} />
+                <MultiQuestionEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} />
               )}
               {slide.type === 'pyl-reveal' && (
-                <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} theme={theme} show={show} slide={slide} />
+                <PylRevealEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} show={show} slide={slide} />
               )}
               {slide.type === 'state-of-union' && (
                 <StateOfUnionEditor data={data} onChange={change} getHostPhotos={getHostPhotos} uploadMedia={uploadMedia} usedPhotoUrls={usedPhotoUrls} />
@@ -2043,12 +2043,38 @@ function WagerBuilder({ answer }) {
 function HuesCuesAnswerPicker({ data, onChange }) {
   const grid = getHuesCuesGrid()
   const selectedCode = data.answer ?? null
+  const [hexInput, setHexInput] = useState('')
+  const [hexError, setHexError] = useState(false)
+
+  function submitHex() {
+    const cell = nearestHuesCuesCell(hexInput)
+    if (!cell) {
+      setHexError(true)
+      return
+    }
+    setHexError(false)
+    onChange('answer', cell.code)
+  }
 
   return (
-    <Field label="Correct square" hint="Click the target square. Teams are scored by how close their guess lands to this.">
+    <Field label="Correct square" hint="Click the target square, or type a hex code to jump to the nearest one. Teams are scored by how close their guess lands to this.">
+      <div className="flex items-center gap-2 mb-2">
+        <input
+          type="text"
+          value={hexInput}
+          onChange={e => { setHexInput(e.target.value); setHexError(false) }}
+          onKeyDown={e => { if (e.key === 'Enter') submitHex() }}
+          placeholder="#RRGGBB"
+          className="w-28 rounded border border-gray-300 px-2 py-1 text-xs font-mono"
+        />
+        <button type="button" onClick={submitHex} className="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200">
+          Set
+        </button>
+        {hexError && <span className="text-xs text-red-500">Not a valid hex code</span>}
+      </div>
       <div
-        className="gap-0.5"
-        style={{ display: 'grid', gridTemplateColumns: `repeat(${HUES_CUES_COLS}, 1fr)`, maxWidth: 480 }}
+        className="gap-1 overflow-x-auto"
+        style={{ display: 'grid', gridTemplateColumns: `repeat(${HUES_CUES_COLS}, 22px)`, gridAutoRows: '22px', maxWidth: 480 }}
       >
         {grid.map(cell => (
           <button
@@ -2213,7 +2239,7 @@ function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostP
   )
 }
 
-function WinnerRevealEditor({ data, onChange }) {
+function WinnerRevealEditor() {
   return (
     <div className="flex flex-col gap-3 py-2">
       <p className="text-sm text-gray-500 leading-relaxed">
