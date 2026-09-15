@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_PANEL, EASE_OUT } from '../../../lib/easings.js'
 import { seededShuffle } from '../../../lib/orderScoring.js'
+import { fitToBox, SHINY_CHOICE_Q_BOX } from '../../../lib/autoFitText.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 
 // The TV side of an Order Up question. Same two-beat pan mechanic as
@@ -117,13 +118,27 @@ export default function ShinyOrderQuestion({ slide, show, theme }) {
   )
 }
 
+// Fixed design-resolution box (SHINY_CHOICE_Q_BOX), same fix as
+// ShinyChoiceQuestion/ShinyWagerQuestion/ShinyHuesCuesQuestion — this was
+// still on the raw `clamp(vw)` pattern those three were already moved off
+// of (2026-09-14 TV-vs-preview text-size fix): the host's editor preview
+// always renders inside a 1920x1080-pinned iframe, so 3.2vw always hit its
+// 3.2rem cap there — but any real TV narrower than ~1600px computed a
+// smaller value live than the host ever saw in preview.
 function QuestionText({ text, theme }) {
+  const [fontsReady, setFontsReady] = useState(false)
+  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+  const size = useMemo(
+    () => fitToBox(text ?? '', { ...SHINY_CHOICE_Q_BOX, family: theme.fonts.display }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [text, theme.fonts.display, fontsReady]
+  )
   if (!text) return null
   return (
     <p style={{
-      margin: 0, textAlign: 'center', maxWidth: 1300, flexShrink: 0,
+      margin: 0, textAlign: 'center', maxWidth: SHINY_CHOICE_Q_BOX.boxW, flexShrink: 0,
       fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
-      fontSize: 'clamp(1.8rem, 3.2vw, 3.2rem)', lineHeight: 1.15, color: theme.colors.text,
+      fontSize: `${size}px`, lineHeight: 1.15, color: theme.colors.text,
     }}>
       {text}
     </p>
