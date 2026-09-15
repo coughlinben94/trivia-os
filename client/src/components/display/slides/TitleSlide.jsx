@@ -1,13 +1,14 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { EASE_OUT } from '../../../lib/easings.js'
+import { regionTransformCSS, regionFontSizeCSS } from '../../../lib/regionTransform.js'
 
 export default function TitleSlide({ slide, show }) {
   const { theme } = useTheme()
   const { data } = slide
   const reduce = useReducedMotion()
   const rt = data._regionTransforms ?? {}
-  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
+  const xf = id => rt[id] ? { transform: regionTransformCSS(rt[id]), transformOrigin: 'center', display: 'inline-block' } : {}
 
   const dateStr = show?.date
     ? new Date(show.date + 'T12:00:00').toLocaleDateString('en-US', {
@@ -39,7 +40,7 @@ export default function TitleSlide({ slide, show }) {
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
             color: theme.colors.text,
-            fontSize: rt.title?.fontSizePx ? `${rt.title.fontSizePx}px` : 'clamp(3rem, 7vw, 6rem)',
+            fontSize: regionFontSizeCSS(rt.title?.fontSizePx) ?? 'clamp(3rem, 7vw, 6rem)',
             lineHeight: 1,
             letterSpacing: '-0.02em',
           }}
@@ -58,7 +59,7 @@ export default function TitleSlide({ slide, show }) {
             className="relative z-10 mt-5 text-center"
             style={{
               color: theme.colors.text,
-              fontSize: rt.subtitle?.fontSizePx ? `${rt.subtitle.fontSizePx}px` : 'clamp(1.25rem, 2.5vw, 2.5rem)',
+              fontSize: regionFontSizeCSS(rt.subtitle?.fontSizePx) ?? 'clamp(1.25rem, 2.5vw, 2.5rem)',
               fontWeight: 300,
             }}
           >

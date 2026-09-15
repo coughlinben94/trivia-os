@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { fitToBox, GRADING_BREAK_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
+import { regionTransformCSS, regionFontSizeCSS } from '../../../lib/regionTransform.js'
 
 const DEFAULT_MESSAGE = "Now, please sit back, relax, and enjoy each other's company as Ben grades papers 😊"
 
@@ -11,7 +12,7 @@ export default function GradingBreakSlide({ slide, show, isPreview = false }) {
   const { data } = slide
   const reduce = useReducedMotion()
   const rt = data._regionTransforms ?? {}
-  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
+  const xf = id => rt[id] ? { transform: regionTransformCSS(rt[id]), transformOrigin: 'center', display: 'inline-block' } : {}
 
   const message = data.message || DEFAULT_MESSAGE
 
@@ -94,7 +95,7 @@ export default function GradingBreakSlide({ slide, show, isPreview = false }) {
             style={{
               color: theme.colors.text,
               fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-              fontSize: rt.message?.fontSizePx ?? messageSize,
+              fontSize: regionFontSizeCSS(rt.message?.fontSizePx) ?? messageSize,
               fontWeight: 400,
             }}
           >

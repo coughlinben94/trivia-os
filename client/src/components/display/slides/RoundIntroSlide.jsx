@@ -4,6 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { fitToBox, LINE_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { prevSlideBefore } from '../../../lib/slideStepping.js'
+import { regionTransformCSS, regionFontSizeCSS } from '../../../lib/regionTransform.js'
 
 export default function RoundIntroSlide({ slide, show }) {
   const { theme } = useTheme()
@@ -21,7 +22,7 @@ export default function RoundIntroSlide({ slide, show }) {
   // ShinyIntroScreen's isClosing uses for its own repeated-beat case.
   const alreadyTeased = data.roundNumber === 1 && prevSlideBefore(show?.slides, slide.id)?.type === 'team-picker'
   const rt = data._regionTransforms ?? {}
-  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg) scale(${t.scale??1})`, transformOrigin: 'center', display: 'inline-block' } : {} }
+  const xf = id => rt[id] ? { transform: regionTransformCSS(rt[id]), transformOrigin: 'center', display: 'inline-block' } : {}
 
   // fitToBox measures via canvas — a first paint before web fonts load
   // measures fallback-font metrics. This flips once fonts are ready purely
@@ -81,7 +82,7 @@ export default function RoundIntroSlide({ slide, show }) {
           style={{
             fontFamily: `'${theme.fonts.display}', sans-serif`,
             color: theme.colors.text,
-            fontSize: rt.roundTitle?.fontSizePx ? `${rt.roundTitle.fontSizePx}px` : 'clamp(2.5rem, 5vw, 5rem)',
+            fontSize: regionFontSizeCSS(rt.roundTitle?.fontSizePx) ?? 'clamp(2.5rem, 5vw, 5rem)',
             fontWeight: 700,
             letterSpacing: '-0.01em',
           }}
@@ -101,7 +102,7 @@ export default function RoundIntroSlide({ slide, show }) {
             style={{
               fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
               color: theme.colors.text,
-              fontSize: rt.subtitle?.fontSizePx ?? subtitleSize,
+              fontSize: regionFontSizeCSS(rt.subtitle?.fontSizePx) ?? subtitleSize,
               fontWeight: 300,
             }}
           >

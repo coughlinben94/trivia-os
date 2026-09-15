@@ -5,6 +5,7 @@ import { fitToBox, TITLE_CARD_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import DEFAULT_PHOTO from '../../../assets/state-of-union-photo.png'
 import { claimYoutubeAudio } from '../../../lib/youtubeWarmAudio.js'
+import { regionTransformCSS, regionFontSizeCSS } from '../../../lib/regionTransform.js'
 
 // Fixed RWB palette — deliberately NOT theme.colors, anywhere in this
 // component. "State of the Union" is patriotic by identity; it must read
@@ -113,7 +114,7 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const rt = slide.data?._regionTransforms ?? {}
-  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg) scale(${t.scale??1})`, transformOrigin: 'center', display: 'inline-block' } : {} }
+  const xf = id => rt[id] ? { transform: regionTransformCSS(rt[id]), transformOrigin: 'center', display: 'inline-block' } : {}
 
   // fitToBox measures via canvas — a first paint before the display font
   // loads measures fallback-font metrics. This flips once web fonts are
@@ -260,7 +261,7 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
             style={{
               fontFamily: `'${theme.fonts.display}', sans-serif`,
               fontWeight: 700,
-              fontSize: rt.message?.fontSizePx ?? messageSize,
+              fontSize: regionFontSizeCSS(rt.message?.fontSizePx) ?? messageSize,
               lineHeight: 1.15,
               textAlign: 'center',
               textWrap: 'balance',

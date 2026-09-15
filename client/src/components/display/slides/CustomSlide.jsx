@@ -4,6 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { fitToBox, CUSTOM_BODY_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { youtubeEmbedUrl } from '../../../lib/youtube.js'
+import { regionTransformCSS, regionFontSizeCSS } from '../../../lib/regionTransform.js'
 
 // Visible YouTube video for Custom Slide — Ben wants it playing on the TV,
 // not just its audio (every other YouTube integration here, e.g.
@@ -59,7 +60,7 @@ export default function CustomSlide({ slide }) {
   const [fontsReady, setFontsReady] = useState(false)
   useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
   const rt = data._regionTransforms ?? {}
-  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
+  const xf = id => rt[id] ? { transform: regionTransformCSS(rt[id]), transformOrigin: 'center', display: 'inline-block' } : {}
 
   // data.images is the current shape (host can attach any number); data.mediaUrl
   // is the legacy single-image shape, still read for slides built before this.
@@ -121,7 +122,7 @@ export default function CustomSlide({ slide }) {
             style={{
               fontFamily: `'${theme.fonts.display}', sans-serif`,
               color: theme.colors.highlight,
-              fontSize: rt.title?.fontSizePx ? `${rt.title.fontSizePx}px` : 'clamp(2.5rem, 6vw, 6rem)',
+              fontSize: regionFontSizeCSS(rt.title?.fontSizePx) ?? 'clamp(2.5rem, 6vw, 6rem)',
               fontWeight: 700,
               letterSpacing: '-0.01em',
             }}
@@ -141,7 +142,7 @@ export default function CustomSlide({ slide }) {
             style={{
               fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
               color: theme.colors.text,
-              fontSize: rt.body?.fontSizePx ?? bodySize,
+              fontSize: regionFontSizeCSS(rt.body?.fontSizePx) ?? bodySize,
               fontWeight: 400,
             }}
           >

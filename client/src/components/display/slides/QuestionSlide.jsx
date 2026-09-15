@@ -18,6 +18,7 @@ import ShinySignal from '../ShinySignal.jsx'
 import { youtubeEmbedUrl } from '../../../lib/youtube.js'
 import { warmYoutubeAudio, claimYoutubeAudio } from '../../../lib/youtubeWarmAudio.js'
 import { warmImages, slideImageUrls } from '../../../lib/warmImages.js'
+import { regionTransformCSS, regionFontSizeCSS } from '../../../lib/regionTransform.js'
 
 // ─── Standard question ────────────────────────────────────────────────────────
 
@@ -195,7 +196,7 @@ function StandardQuestion({ slide, show, theme, transitionKey, isPreview }) {
   const { data } = slide
   const part = resolveShinyPart(data)
   const rt = data._regionTransforms ?? {}
-  const xf = id => { const t = rt[id]; return t ? { transform: `translate(${t.dx??0}px,${t.dy??0}px) rotate(${t.rotate??0}deg)`, transformOrigin: 'center', display: 'inline-block' } : {} }
+  const xf = id => rt[id] ? { transform: regionTransformCSS(rt[id]), transformOrigin: 'center', display: 'inline-block' } : {}
   const isAssemble = transitionKey === 'assemble'
   // mediaType is the upload's real MIME ('audio/mpeg'), not the bare word —
   // startsWith covers both that and anything already stored as plain 'audio'.
@@ -311,7 +312,7 @@ function StandardQuestion({ slide, show, theme, transitionKey, isPreview }) {
               style={{
                 color: theme.colors.textMuted ?? theme.colors.text,
                 fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-                fontSize: rt.subtitle?.fontSizePx ?? subtitleFontSize,
+                fontSize: regionFontSizeCSS(rt.subtitle?.fontSizePx) ?? subtitleFontSize,
                 fontWeight: 500,
                 maxWidth: '80ch',
                 textShadow: '0 2px 18px rgba(0,0,0,0.85), 0 1px 4px rgba(0,0,0,0.6)',
@@ -327,7 +328,7 @@ function StandardQuestion({ slide, show, theme, transitionKey, isPreview }) {
             style={{
               color: theme.colors.text,
               fontFamily: `'${theme.fonts.body}', 'Inter', sans-serif`,
-              fontSize: rt.text?.fontSizePx ?? uniformFontSize,
+              fontSize: regionFontSizeCSS(rt.text?.fontSizePx) ?? uniformFontSize,
               // Matches QUESTION_BOX.lineHeight (autoFitText.js) — fitToBox's
               // fit check and the real rendered line height must agree, or a
               // size fitToBox okayed wraps one line past its box on screen
@@ -440,7 +441,7 @@ function ShinyVisualQuestion({ slide, theme }) {
     ceilPx: VISUAL_CAPTION_CEIL * 16,
     maxLines: 5, lineHeight: 1.15,
   })
-  const captionSize1 = rt.caption?.fontSizePx ?? autoCaptionSize1
+  const captionSize1 = regionFontSizeCSS(rt.caption?.fontSizePx) ?? autoCaptionSize1
   const captionBoxRef2 = useRef(null)
   const autoCaptionSize2 = useFitToBox(captionBoxRef2, part.text, {
     family: theme.fonts.body,
@@ -448,7 +449,7 @@ function ShinyVisualQuestion({ slide, theme }) {
     ceilPx: VISUAL_CAPTION_CEIL * 16,
     maxLines: 5, lineHeight: 1.15,
   })
-  const captionSize2 = rt.caption?.fontSizePx ?? autoCaptionSize2
+  const captionSize2 = regionFontSizeCSS(rt.caption?.fontSizePx) ?? autoCaptionSize2
 
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
