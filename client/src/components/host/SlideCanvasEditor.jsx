@@ -1152,7 +1152,7 @@ export default function SlideCanvasEditor({
                   }
 
                   {isSel && !isEditing && (
-                    <OverlayHandles ov={ov} onResize={startOverlayResize} onRotate={startOverlayRotate} />
+                    <OverlayHandles ov={ov} onResize={startOverlayResize} onRotate={startOverlayRotate} onWidthResize={startOverlayWidthResize} />
                   )}
                 </div>
               )
@@ -1206,6 +1206,59 @@ export default function SlideCanvasEditor({
     document.addEventListener('pointercancel', onUp)
   }
 
+  // ── overlay width-only resize (left/right edge handles) ──
+  // No height field exists on an overlay at all — OverlayLayer always
+  // renders images at `height:auto` (aspect-locked) and text with no
+  // explicit height (content+fontSize wrapping decides it) — so "resize
+  // just one axis" can only ever mean width; height already follows width
+  // on its own for both kinds, same as dragging a corner handle in
+  // PowerPoint/Keynote with the image's aspect ratio locked.
+  // Rotation-aware: drags are measured in screen px, then projected onto
+  // the box's own (possibly rotated) local +X axis via dot product with
+  // that axis's screen-space unit vector — otherwise a rotated box would
+  // grow diagonally instead of along its own width. The opposite edge is
+  // kept visually fixed by shifting the center half the width delta along
+  // that same local axis, toward the dragged edge.
+  function startOverlayWidthResize(e, ov, edge) {
+    e.stopPropagation(); e.preventDefault()
+    const boxEl = e.currentTarget.closest('[data-ov-box]')
+    if (!boxEl) return
+    const bh = boxEl.offsetHeight
+    const startW = ov.w ?? 20
+    const startCxPct = (ov.x ?? 0) + startW / 2
+    const startHpct = bh / scaledH * 100
+    const startCyPct = (ov.y ?? 0) + startHpct / 2
+    const theta = (ov.rotation ?? 0) * Math.PI / 180
+    const axisX = Math.cos(theta), axisY = Math.sin(theta)
+    const sign = edge === 'right' ? 1 : -1
+    const startClientX = e.clientX, startClientY = e.clientY
+    const before = cloneOverlays(overlaysRef.current)
+    let changed = false
+    function onMove(ev) {
+      changed = true
+      const dxScreen = ev.clientX - startClientX, dyScreen = ev.clientY - startClientY
+      const localDx = dxScreen * axisX + dyScreen * axisY
+      const newW = clamp(startW + (sign * localDx) / scaledW * 100, 3, 100)
+      const halfDeltaPx = ((newW - startW) / 100 * scaledW / 2) * sign
+      const newCxPct = startCxPct + (halfDeltaPx * axisX) / scaledW * 100
+      const newCyPct = startCyPct + (halfDeltaPx * axisY) / scaledH * 100
+      patchOverlay(ov.id, {
+        w: newW,
+        x: clamp(newCxPct - newW / 2, 0, 95),
+        y: clamp(newCyPct - startHpct / 2, 0, 95),
+      })
+    }
+    function onUp() {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onUp)
+      if (changed) pushHistorySnapshot(before)
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onUp)
+  }
+
   // ── overlay rotate (lollipop handle; Shift snaps to 15°) ──
   function startOverlayRotate(e, ov) {
     e.stopPropagation(); e.preventDefault()
@@ -1246,11 +1299,18 @@ function fontOptions(show) {
   return list
 }
 
-// Selection handles: 4 corner resize squares + a rotate lollipop above.
-function OverlayHandles({ ov, onResize, onRotate }) {
+// Selection handles: 4 corner resize squares (uniform scale), 2 edge
+// handles (width-only — see startOverlayWidthResize for why there's no
+// height-only counterpart), and a rotate lollipop above.
+function OverlayHandles({ ov, onResize, onRotate, onWidthResize }) {
   const corner = (pos) => ({
     position: 'absolute', width: 11, height: 11, background: 'white',
     border: '2px solid #6366f1', borderRadius: 2, pointerEvents: 'auto', zIndex: 2, ...pos,
+  })
+  const edge = (pos) => ({
+    position: 'absolute', width: 8, height: 22, background: 'white',
+    border: '2px solid #6366f1', borderRadius: 3, pointerEvents: 'auto', zIndex: 2,
+    cursor: 'ew-resize', top: '50%', transform: 'translateY(-50%)', ...pos,
   })
   return (
     <>
@@ -1258,6 +1318,8 @@ function OverlayHandles({ ov, onResize, onRotate }) {
       <div style={corner({ right: -6, top: -6, cursor: 'nesw-resize' })} onPointerDown={e => onResize(e, ov)} />
       <div style={corner({ left: -6, bottom: -6, cursor: 'nesw-resize' })} onPointerDown={e => onResize(e, ov)} />
       <div style={corner({ right: -6, bottom: -6, cursor: 'nwse-resize' })} onPointerDown={e => onResize(e, ov)} />
+      <div title="Resize width" style={edge({ left: -5 })} onPointerDown={e => onWidthResize(e, ov, 'left')} />
+      <div title="Resize width" style={edge({ right: -5 })} onPointerDown={e => onWidthResize(e, ov, 'right')} />
       {/* rotate lollipop */}
       <div style={{ position: 'absolute', left: '50%', top: -26, width: 1, height: 20, background: '#6366f1', transform: 'translateX(-50%)', pointerEvents: 'none' }} />
       <div
