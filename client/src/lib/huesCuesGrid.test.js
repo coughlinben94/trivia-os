@@ -179,4 +179,36 @@ describe('nearestHuesCuesCell', () => {
     expect(nearestHuesCuesCell('')).toBeNull()
     expect(nearestHuesCuesCell(null)).toBeNull()
   })
+
+  it('matches an independently brute-forced nearest cell for arbitrary hexes', () => {
+    // Reference search, deliberately NOT calling nearestHuesCuesCell — walks
+    // all 480 cells itself so a bug in the real function's distance/loop
+    // logic (wrong axis, off-by-one, wrong cell) would show up as a mismatch
+    // instead of passing because both sides share the same bug.
+    function bruteForceNearestCode(hex) {
+      const lab = rgbToOklab(hexToRgb(hex))
+      let bestCode = null
+      let bestDist = Infinity
+      for (const cell of getHuesCuesGrid()) {
+        const cellLab = rgbToOklab(hexToRgb(cell.hex))
+        const dist = Math.hypot(lab[0] - cellLab[0], lab[1] - cellLab[1], lab[2] - cellLab[2])
+        if (dist < bestDist) {
+          bestDist = dist
+          bestCode = cell.code
+        }
+      }
+      return bestCode
+    }
+
+    const gridHexes = new Set(getHuesCuesGrid().map(c => c.hex.toLowerCase()))
+    const candidates = ['#FF0000', '#3A7D44', '#1E3A5F']
+
+    for (const hex of candidates) {
+      // Part of the test's job: confirm this candidate isn't secretly one of
+      // the grid's own 480 hexes (which would make it a self-match, not a
+      // real nearest-neighbor search).
+      expect(gridHexes.has(hex.toLowerCase())).toBe(false)
+      expect(nearestHuesCuesCell(hex).code).toBe(bruteForceNearestCode(hex))
+    }
+  })
 })

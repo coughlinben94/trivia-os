@@ -437,7 +437,7 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
                   <div className="flex gap-2">
                     {[1,2,3,4,5,6].map(n => (
                       <button key={n} onClick={() => setGridCols(n)}
-                        className={`${BTN} w-9 h-9 rounded-lg text-sm font-semibold border ${gridCols === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
+                        className={`${BTN} w-9 h-9 rounded-lg text-sm font-semibold border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a6b4a] focus-visible:ring-offset-1 ${gridCols === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
                     ))}
                   </div>
                 </div>
@@ -446,7 +446,7 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
                   <div className="flex gap-2">
                     {[1,2,3,4,5].map(n => (
                       <button key={n} onClick={() => setGridRows(n)}
-                        className={`${BTN} w-9 h-9 rounded-lg text-sm font-semibold border ${gridRows === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
+                        className={`${BTN} w-9 h-9 rounded-lg text-sm font-semibold border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a6b4a] focus-visible:ring-offset-1 ${gridRows === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
                     ))}
                   </div>
                 </div>
