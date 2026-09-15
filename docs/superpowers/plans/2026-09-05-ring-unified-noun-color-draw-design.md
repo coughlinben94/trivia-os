@@ -63,8 +63,19 @@ Answering §11's numbered list:
     before it airs, item 4 above most of all.
 
 **Net effect:** items 1, 2, 3, 5, 9, 10, 11 are settled. Item 4 is a working default, not a decision.
-Items 6, 7, 8 are working defaults by silence, explicitly flagged as still-open threshold/schema/policy
-calls that need a real yes before they ship, not just an absence of objection.
+
+## 11b. Decisions, 2026-09-14 (Ben, "go with recommended")
+
+6. **Slot-class thresholds — DECIDED.** 0.2/0.6 loudness cuts confirmed as the real numbers, not a
+   silent default.
+7. **Schema — DECIDED.** `stations jsonb null` on `ring_palettes` confirmed, not a new `ring_worlds`
+   table. Migration still needs Ben's sign-off at the moment it actually runs (shared infra), but the
+   shape is settled.
+8. **Certification policy — DECIDED.** Full gate run per composed world, nightly batch on existing
+   always-on infra, hosts only ever pick certified worlds.
+
+**Net effect after 11b:** items 1, 2, 3, 5, 6, 7, 8, 9, 10, 11 settled. Item 4 (eclipse noun) remains
+the only working-default-not-decision — still pending Ben seeing it built (item 12, standing).
 
 ---
 

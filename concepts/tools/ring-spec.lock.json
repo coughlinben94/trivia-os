@@ -98,8 +98,18 @@
       "ground",
       "nebulaCloud",
       "ring",
-      "sprite"
+      "sprite",
+      "lens",
+      "dots",
+      "planet",
+      "pulsar",
+      "streak",
+      "binary",
+      "asteroidField",
+      "eclipse",
+      "ribbon",
+      "spikes"
     ],
-    "src": "ART-DIRECTION-SPEC.md:294 §6.0"
+    "src": "ART-DIRECTION-SPEC.md:294 §6.0; expanded 2026-09-14 per design doc §11a item 1 (every real drawn kind in midnightGalaxy.ring.js, plus eclipse replacing record) — docs/superpowers/plans/2026-09-05-ring-unified-noun-color-draw-design.md"
   }
 }
