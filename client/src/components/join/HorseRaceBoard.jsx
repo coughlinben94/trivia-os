@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
+import { LANE_COLORS } from '../../lib/raceMath.js'
 import ShrinkToFit from './ShrinkToFit.jsx'
 
 // The phone side of "And They're Off!" — pick one of 4 named contenders
@@ -101,27 +102,39 @@ export default function HorseRaceBoard({ slide, team, theme, preview = false, on
           </p>
         )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-          {contenders.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => tapContender(c.name)}
-              disabled={locked}
-              style={{
-                minHeight: 52, padding: '0.9rem 1.1rem', borderRadius: 12,
-                border: selected === c.name ? `2px solid ${highlight}` : '1px solid rgba(255,255,255,0.15)',
-                background: selected === c.name ? highlight : 'rgba(255,255,255,0.06)',
-                color: selected === c.name ? '#1a1a1a' : text,
-                fontSize: '1rem', fontWeight: 600, fontFamily: 'DM Sans, sans-serif',
-                textAlign: 'left', WebkitTapHighlightColor: 'transparent',
-              }}
-            >
-              <span aria-hidden="true" style={{ marginRight: '0.6rem', opacity: selected === c.name ? 1 : 0.6 }}>
-                {selected === c.name ? '●' : '○'}
-              </span>
-              {c.name}
-            </button>
-          ))}
+          {contenders.map((c, i) => {
+            const laneColor = LANE_COLORS[i % LANE_COLORS.length]
+            const isSelected = selected === c.name
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => tapContender(c.name)}
+                disabled={locked}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '0.7rem',
+                  minHeight: 52, padding: '0.9rem 1.1rem', borderRadius: 12,
+                  border: isSelected ? `2px solid ${highlight}` : '1px solid rgba(255,255,255,0.15)',
+                  background: isSelected ? highlight : 'rgba(255,255,255,0.06)',
+                  color: isSelected ? '#1a1a1a' : text,
+                  fontSize: '1rem', fontWeight: 600, fontFamily: 'DM Sans, sans-serif',
+                  textAlign: 'left', WebkitTapHighlightColor: 'transparent',
+                }}
+              >
+                {/* Same jockey-silk color the TV lane chip and horse sprite
+                    carry (LANE_COLORS, raceMath.js) — a pick reads as
+                    "that colored horse" on the phone before it ever reads
+                    as a leaderboard row. */}
+                <span aria-hidden="true" style={{
+                  width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+                  background: isSelected ? laneColor : 'transparent',
+                  border: `2px solid ${laneColor}`,
+                  boxShadow: isSelected ? `0 0 6px ${laneColor}99` : 'none',
+                }} />
+                {c.name}
+              </button>
+            )
+          })}
         </div>
         {!locked && (
           <button

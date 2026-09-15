@@ -1,4 +1,8 @@
-export const BEAT_MS = 700;
+// Fixed jockey-silk colors, one per lane, theme-independent (a race signal,
+// same reasoning as SHINY_GOLD staying constant across themes) — shared by
+// the TV lane chips (RaceSlide.jsx) and the phone pick board
+// (HorseRaceBoard.jsx) so a team's pick color always matches its horse.
+export const LANE_COLORS = ['#ff6b6b', '#4ecdc4', '#ffd166', '#7b7bff'];
 
 export function runningTotals(beats) {
   if (!beats.length) return [];
@@ -48,25 +52,20 @@ export function computeWinner(contenders, beats) {
   };
 }
 
+// Straight left-to-right track (Ben, 2026-09-15: carnival-derby-game read,
+// supersedes the earlier one-lap oval design — see design spec's Track
+// heading for the full history). `fraction` is the lane's progress from the
+// start line (0) to the finish line (1) — the winner's own last stop always
+// lands at exactly 1, everyone else proportionally short of it.
 export function keyframeStops(beats) {
   const { fractions } = computeFractions(beats);
   const laneCount = fractions[0]?.length ?? 0;
   const n = beats.length;
-  // Gate at top of ellipse: -90 degrees
-  const gateAngle = -90;
-  const gateRad = (gateAngle * Math.PI) / 180;
-  const gate = { percent: 0, angleDeg: gateAngle, flip: Math.sin(gateRad) < 0 };
+  const gate = { percent: 0, fraction: 0 };
   return Array.from({ length: laneCount }, (_, i) => {
     const stops = [gate];
     for (let k = 0; k < n; k += 1) {
-      const f = fractions[k][i];
-      const angleDeg = -90 - f * 360;
-      const rad = (angleDeg * Math.PI) / 180;
-      stops.push({
-        percent: ((k + 1) / n) * 100,
-        angleDeg,
-        flip: Math.sin(rad) < 0,
-      });
+      stops.push({ percent: ((k + 1) / n) * 100, fraction: fractions[k][i] });
     }
     return stops;
   });

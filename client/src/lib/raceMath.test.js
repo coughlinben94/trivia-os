@@ -5,7 +5,6 @@ import {
   computeWinner,
   keyframeStops,
   formatWinnerLine,
-  BEAT_MS,
 } from './raceMath';
 
 const contenders = [
@@ -86,20 +85,22 @@ describe('keyframeStops', () => {
     const lanes = keyframeStops(beats);
     expect(lanes).toHaveLength(4);
     lanes.forEach((stops) => expect(stops).toHaveLength(beats.length + 1));
-    // gate stop is always the top of the ellipse, 0%
+    // gate stop is always the start line, fraction 0
     lanes.forEach((stops) => {
-      expect(stops[0]).toEqual({ percent: 0, angleDeg: -90, flip: true });
+      expect(stops[0]).toEqual({ percent: 0, fraction: 0 });
     });
-    // winner's final stop lands exactly one full lap from the gate: -90 - 360
+    // winner's final stop lands exactly at the finish line: fraction 1
     const winnerLane = lanes[1];
-    expect(winnerLane[winnerLane.length - 1].angleDeg).toBeCloseTo(-90 - 360, 10);
+    expect(winnerLane[winnerLane.length - 1].fraction).toBeCloseTo(1, 10);
   });
 
-  it('flips a lane exactly when its angle is on the top half of the ellipse (sin < 0)', () => {
+  it('matches computeFractions() exactly, one stop per beat', () => {
     const lanes = keyframeStops(beats);
-    lanes.flat().forEach((stop) => {
-      const rad = (stop.angleDeg * Math.PI) / 180;
-      expect(stop.flip).toBe(Math.sin(rad) < 0);
+    const { fractions } = computeFractions(beats);
+    lanes.forEach((stops, i) => {
+      stops.slice(1).forEach((stop, k) => {
+        expect(stop.fraction).toBeCloseTo(fractions[k][i], 10);
+      });
     });
   });
 });
@@ -120,8 +121,4 @@ describe('formatWinnerLine', () => {
   it('flags too few beats', () => {
     expect(formatWinnerLine(contenders, [beats[0]])).toMatch(/at least 2 beats/i);
   });
-});
-
-it('BEAT_MS is the 700ms pace constant', () => {
-  expect(BEAT_MS).toBe(700);
 });

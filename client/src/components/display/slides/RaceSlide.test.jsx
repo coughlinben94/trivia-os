@@ -89,24 +89,37 @@ describe('<RaceSlide>', () => {
     expect(container.querySelector('[data-race-winner="true"]')).toBeFalsy()
   })
 
-  it('generates one keyframe rule with N+1 stops per lane', () => {
+  it('generates one keyframe rule with N+2 stops per lane (gate hold + N beats)', () => {
     render(makeSlide({ raceStartedAt: Date.now() }))
     const styleTag = container.querySelector('style[data-race-keyframes]')
     expect(styleTag).toBeTruthy()
     const matches = styleTag.textContent.match(/@keyframes/g) || []
     expect(matches.length).toBe(4) // one block per lane
 
-    // 3 beats -> N+1 = 4 stops per lane, 4 lanes -> 16 stop rules total.
+    // 3 beats -> gate hold (0%, gatePercent%) + 3 beat stops = 5 stops per
+    // lane, 4 lanes -> 20 stop rules total.
     const stopCount = (styleTag.textContent.match(/transform:/g) || []).length
-    expect(stopCount).toBe(16)
+    expect(stopCount).toBe(20)
 
-    // Gate frame (0%) must face the direction the horse is about to run —
-    // keyframeStops()'s gate stop has flip: true (sin(-90deg) < 0), so this
-    // must be scaleX(-1), not the identity scaleX(1) a hardcoded `false`
-    // would produce (regression guard for the gate-flip fix).
+    // Gate frame (0%) sits at the start line — fraction 0, no travel yet.
+    // Plain transform, no per-stop timing-function — the mechanical clack
+    // easing (Fable idea #5) was reverted (Ben, 2026-09-15: "choppy and not
+    // smooth"); one smooth curve for the whole run now.
     expect(styleTag.textContent).toMatch(
-      /0% \{ transform: translate\(calc\(cos\(-90deg\) \* 50%\), calc\(sin\(-90deg\) \* 50%\)\) scaleX\(-1\); \}/
+      /0% \{ transform: translateY\(-50%\) translateX\(0%\); \}/
     )
+  })
+
+  it('shows a gate-hold caption during the pre-roll, then "And they\'re off!" for beat 1', () => {
+    // Fresh Start Race: still inside the GATE_MS hold (Fable idea #2).
+    render(makeSlide({ raceStartedAt: Date.now() }))
+    let caption = container.querySelector('[data-race-caption]')
+    expect(caption.textContent).toBe('Riders, to the line…')
+
+    // Just past GATE_MS (1100ms): beat 1 has begun.
+    render(makeSlide({ raceStartedAt: Date.now() - 1150 }))
+    caption = container.querySelector('[data-race-caption]')
+    expect(caption.textContent).toBe("And they're off!")
   })
 
   it('falls back to a generated beat caption when the real label is blank', () => {
@@ -126,14 +139,16 @@ describe('<RaceSlide>', () => {
     expect(caption.textContent).toBe('Beat 3')
   })
 
-  it('stretches the final beat into a photo-finish slow-motion duration', () => {
+  it('always fills the fixed 30s race + gate-hold envelope, regardless of beat count', () => {
     render(makeSlide({ raceStartedAt: Date.now() }))
     const styleTag = container.querySelector('style[data-race-keyframes]')
     const track = container.querySelector('[data-race-track]')
     expect(track).toBeTruthy()
-    // 3 beats at 700ms = 2100ms raw; cinematic remap stretches the last
-    // beat to 700*2.5 = 1750ms, so TOTAL_MS = 2*700 + 1750 = 3150ms
-    expect(styleTag.textContent).toMatch(/3150ms/)
+    // TOTAL_RACE_MS (30000) + GATE_MS (1100) = 31100ms total on-screen
+    // duration — leg pacing (not total duration) is what adapts to beat
+    // count; the final leg still plays slower than a normal one within
+    // that fixed envelope.
+    expect(styleTag.textContent).toMatch(/31100ms/)
   })
 })
 
@@ -187,11 +202,11 @@ describe('<RaceSlide> — reduced motion', () => {
     const winnerLane = container.querySelector('[data-race-winner="true"]')
     expect(winnerLane).toBeTruthy()
     // The winner's fraction at the last beat is always 1 (raceMath.js
-    // normalizes to the winner's own total), so finalStop.angleDeg is
-    // always -90 - 360 = -450 (one full lap, back to the top) — never the
-    // gate's -90deg. If reduced motion incorrectly rendered the gate instead
-    // of jumping straight to finished, this would read cos(-90deg) instead.
-    expect(winnerLane.style.transform).toContain('cos(-450deg)')
-    expect(winnerLane.style.transform).not.toContain('cos(-90deg)')
+    // normalizes to the winner's own total) — the finish position is
+    // translateX(100%), never the gate's translateX(0%). If reduced motion
+    // incorrectly rendered the gate instead of jumping straight to
+    // finished, this would read translateX(0%) instead.
+    expect(winnerLane.style.transform).toContain('translateX(100%)')
+    expect(winnerLane.style.transform).not.toContain('translateX(0%)')
   })
 })
