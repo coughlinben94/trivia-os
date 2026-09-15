@@ -46,21 +46,21 @@ export const FIXED_SHAPE_KINDS = {
 export function gridExtraControls(ctx) {
   return (
     <div className="flex gap-4">
-      <div className="flex-1">
+      <div>
         <label className="block text-xs font-medium text-gray-500 mb-1.5">Columns</label>
         <div className="flex gap-2">
           {[1,2,3,4,5,6].map(n => (
             <button key={n} onClick={() => ctx.setGridCols(n)}
-              className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${ctx.gridCols === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
+              className={`host-button w-9 h-9 rounded-lg text-sm font-semibold border ${ctx.gridCols === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
           ))}
         </div>
       </div>
-      <div className="flex-1">
+      <div>
         <label className="block text-xs font-medium text-gray-500 mb-1.5">Rows</label>
         <div className="flex gap-2">
           {[1,2,3,4,5].map(n => (
             <button key={n} onClick={() => ctx.setGridRows(n)}
-              className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-all ${ctx.gridRows === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
+              className={`host-button w-9 h-9 rounded-lg text-sm font-semibold border ${ctx.gridRows === n ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}>{n}</button>
           ))}
         </div>
       </div>
