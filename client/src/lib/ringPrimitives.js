@@ -110,6 +110,72 @@ const ROTATION_MAX_DEG = { lens: 30, streak: 26, ribbon: 18 }
 // the (separately reviewed) body/tail gradient paint, so the fix narrows
 // this kind's peak swing instead of dimming the curtain's resting look.
 const PA2_MULT = { ribbon: 1.25 }
+// 2026-09-15, Phase-4 pool noun #3 ('constellation' kind). Ben: "need 3-4
+// diff constellation shapes in reality" — real, named asterisms, not a
+// made-up dot cluster, and more than one shape so a draw doesn't put the
+// same silhouette at every constellation slot. Points normalized 0..1 in
+// each constellation's own bounding box (not real sky coordinates — this
+// codebase already has a `dots` kind for an unresolved cluster; the whole
+// point of a separate `constellation` kind is the connecting lines making
+// a NAMED shape, so approximate-but-recognizable relative geometry is what
+// matters, not celestial accuracy). `mag` (rough apparent-magnitude proxy,
+// 0-1) only scales dot size/brightness, brighter for the asterism's named
+// bright stars. `edges` are index pairs into `points`, the traditional
+// stick-figure lines for that asterism.
+const CONSTELLATIONS = {
+  bigDipper: { // Ursa Major's asterism — bowl + handle
+    points: [
+      { x: 0.06, y: 0.18, mag: 1.0 },  // Alkaid
+      { x: 0.24, y: 0.32, mag: 0.6 },  // Mizar
+      { x: 0.40, y: 0.40, mag: 0.75 }, // Alioth
+      { x: 0.54, y: 0.42, mag: 0.7 },  // Megrez (bowl/handle junction)
+      { x: 0.52, y: 0.64, mag: 0.65 }, // Phecda
+      { x: 0.78, y: 0.70, mag: 0.75 }, // Merak
+      { x: 0.86, y: 0.44, mag: 1.0 },  // Dubhe
+    ],
+    edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 3]],
+  },
+  orion: { // shoulders + belt + feet — the hourglass
+    points: [
+      { x: 0.16, y: 0.14, mag: 1.0 },  // Betelgeuse
+      { x: 0.76, y: 0.20, mag: 0.85 }, // Bellatrix
+      { x: 0.62, y: 0.48, mag: 0.65 }, // Alnitak
+      { x: 0.50, y: 0.50, mag: 0.65 }, // Alnilam
+      { x: 0.38, y: 0.52, mag: 0.65 }, // Mintaka
+      { x: 0.70, y: 0.86, mag: 0.85 }, // Saiph
+      { x: 0.20, y: 0.88, mag: 1.0 },  // Rigel
+    ],
+    // 2026-09-15 round 2 (Fable-5: shoulder lines crossed in an X above the
+    // belt — "a bow tie more than a figure," real Orion never crosses
+    // here). Was [0,2]/[1,4] (each shoulder to the FAR belt star); fixed to
+    // each shoulder's NEAREST belt star — Betelgeuse(0, left, x0.16) to
+    // Mintaka(4, left belt, x0.38), Bellatrix(1, right, x0.76) to
+    // Alnitak(2, right belt, x0.62).
+    edges: [[0, 4], [1, 2], [2, 3], [3, 4], [2, 5], [4, 6]],
+  },
+  cassiopeia: { // the W
+    points: [
+      { x: 0.05, y: 0.60, mag: 0.75 },
+      { x: 0.28, y: 0.20, mag: 0.85 },
+      { x: 0.50, y: 0.55, mag: 0.75 },
+      { x: 0.72, y: 0.15, mag: 0.85 },
+      { x: 0.95, y: 0.50, mag: 0.75 },
+    ],
+    edges: [[0, 1], [1, 2], [2, 3], [3, 4]],
+  },
+  // 2026-09-15 round 2 (Fable-5: the unconnected 5th star "reads as a
+  // stray dot" — Epsilon Crucis dropped; the classic 4-star cross is both
+  // the more common depiction and reads cleaner with no dangling point).
+  southernCross: { // Crux — the kite
+    points: [
+      { x: 0.50, y: 0.06, mag: 1.0 },  // Gacrux
+      { x: 0.50, y: 0.92, mag: 1.0 },  // Acrux
+      { x: 0.14, y: 0.46, mag: 0.75 }, // Becrux
+      { x: 0.84, y: 0.42, mag: 0.75 }, // Delta Crucis
+    ],
+    edges: [[0, 1], [2, 3]],
+  },
+}
 // Per-call id for the eclipse rim's SVG <linearGradient> — a counter, not
 // an r() draw, for the same reason occCounter (below) is: a seeded draw
 // here would shift every later draw in the caller's stream.
@@ -2247,6 +2313,285 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     f.appendChild(disc)
   }
 
+  else if (kind === 'moon') {
+    // 2026-09-15, first Phase-4 pool noun (docs/superpowers/plans/
+    // 2026-09-02-ring-station-variety.md §Phase 4: "variants of the one
+    // anatomy Ben has already accepted... before inventing new object
+    // kinds"). Same geometry/positioning as 'planet' — same discSize,
+    // same clipped-circle box — but drawPlanetDisc's new phaseMul/satMul
+    // knobs push it toward a thin, near-monochrome crescent instead of
+    // 'planet's fat, colored one, which is the actual visual difference
+    // between "a moon" and "a lit planet" at a glance, not a new shape.
+    // phaseMul 0.41 (vs planet's 1.0): SMALLER offRatio, not larger — first
+    // self-render at 1.6 read as a half-lit ball, backwards from intent.
+    // 'planet's own 2026-08-24 comment records its PRIOR value (off=0.55R,
+    // before that comment's fix moved it to today's 1.35R) as "~2/3 of the
+    // disc near-black with a thin bright sliver" — exactly the crescent this
+    // kind wants. 0.55/1.35 = 0.41 reproduces that old ratio deliberately,
+    // not a fresh guess, still short of "eclipse territory" (a wholly
+    // separate corona-first construction, not this function at all).
+    // satMul 0.15: keeps a faint cool tint rather than flat gray (fully
+    // desaturated hsla reads as a dead, flat disc against a colored sky —
+    // this file's own house style avoids pure grayscale elsewhere too).
+    // glowMul 0.3 (round 2, Fable-5 consult after a real 50/50 eclipse-vs-
+    // moon blind read on round 1): the shared d-glow halo, even masked to
+    // the lit limb, still wrapped enough of the disc to read as a corona —
+    // the actual eclipse cue, per Fable's read, not the crescent sliver
+    // itself. Cutting peak glow alpha 0.55->0.165 and dropping the dark-
+    // limb mask floor to fully transparent (drawPlanetDisc's `darkLimb`)
+    // lets the unlit side sink into the sky instead of glowing faintly all
+    // the way around. Rim stroke deliberately untouched — a sharp bright
+    // limb is a crescent cue, not an eclipse one.
+    // PASS criterion (protocol, frozen before round 1): "a fresh viewer
+    // names this as a crescent moon" — not a planet, not an eclipse.
+    // Round 1 (phaseMul alone) read 50/50 against eclipse (Fable-5 blind
+    // read). This is round 2, re-render pending; still not Ben's TV sign-
+    // off (STAYS HUMAN) and still not a certified pool entry.
+    const discSize = Math.min(w, h)
+    const disc = el('')
+    disc.style.position = 'absolute'; disc.style.borderRadius = '50%'
+    disc.style.left = px((w - discSize) / 2); disc.style.top = px((h - discSize) / 2)
+    disc.style.width = disc.style.height = px(discSize)
+    drawPlanetDisc(el, disc, discSize, hue, fill, LIGHT_DEG, { phaseMul: 0.41, satMul: 0.15, glowMul: 0.3 })
+    f.appendChild(disc)
+  }
+
+  else if (kind === 'bandedGiant') {
+    // 2026-09-15, Phase-4 pool noun #2 (docs/superpowers/plans/
+    // 2026-09-02-ring-station-variety.md §Phase 4 order: crescent moon,
+    // banded giant, constellation, eclipse[shipped], saucer). Same accepted
+    // drawPlanetDisc anatomy as 'planet'/'moon' — default phaseMul/glowMul/
+    // satMul (fully lit, full color, normal glow — a gas giant reads by
+    // its bands, not by phase, so there's no reason to touch the terminator
+    // knobs this time), only `bandStyle: 'giant'` changes: 3 horizontal
+    // cloud-band strokes replace the 2 light-angle crescent arcs (see that
+    // branch's own comment in drawPlanetDisc for why this stays inside the
+    // <=3-marks budget rather than adding to it).
+    // PASS criterion (protocol, frozen before first render): "a fresh
+    // viewer names this as a gas giant / banded planet" — not a plain lit
+    // planet (the existing 'planet' kind), not a ringed planet (st0/st3,
+    // a different prim entirely). Fable-5 blind read: PASS clean ("a
+    // striped planet, Jupiter-like gas giant, in half shadow"), no
+    // ambiguity with eclipse/Saturn/a ball — then flagged the bands as
+    // flat/hard-edged, painted over rather than dimmed by the terminator;
+    // fixed in drawPlanetDisc's `bandStyle==='giant'` branch (shadow now
+    // occludes the belts, edges fade toward the limb). Still not wired to
+    // any station, not a certified pool entry — Ben's TV sign-off pending.
+    const discSize = Math.min(w, h)
+    const disc = el('')
+    disc.style.position = 'absolute'; disc.style.borderRadius = '50%'
+    disc.style.left = px((w - discSize) / 2); disc.style.top = px((h - discSize) / 2)
+    disc.style.width = disc.style.height = px(discSize)
+    drawPlanetDisc(el, disc, discSize, hue, fill, LIGHT_DEG, { bandStyle: 'giant' })
+    f.appendChild(disc)
+  }
+
+  else if (kind === 'constellation') {
+    // 2026-09-15, Phase-4 pool noun #3. Unlike moon/bandedGiant this is a
+    // NEW kind, not a drawPlanetDisc variant — a constellation isn't a
+    // solid body (no terminator/light-angle relevance; CONSTELLATIONS
+    // above, module scope). `variant` selects which real asterism (Ben:
+    // "need 3-4 diff constellation shapes in reality" — 4 provided, not
+    // one dot-cluster reused with a different name); unrecognized/unset
+    // variant falls back to bigDipper rather than throwing, matching this
+    // file's `dust`-variant precedent (st3's ring) of a silent default for
+    // an optional per-station treatment flag.
+    // Family note for the pool-growth math (docs/superpowers/plans/
+    // 2026-09-14-ring-world-shelf-stations.md's documented radial-mass
+    // cap-overflow blocker): this kind is NOT radial-mass, so adding it to
+    // RING_POOL (once certified) is a real, useful pool-growth entry, not
+    // just an art addition — see that plan's comment for why any non-
+    // radial-mass pool entry unblocks --world-batch regardless of order.
+    // PASS criterion (protocol, frozen before first render): "a fresh
+    // viewer names this as stars connected by lines / a constellation" —
+    // not a plain star cluster (the existing 'dots' kind, an unresolved
+    // haze by design) and not random scattered specks. Unrendered as of
+    // this comment — self-render + blind read pending, same discipline as
+    // every other Phase-4 noun. Not wired to any station, not pooled.
+    // 2026-09-15 round 3 (Fable-5: Southern Cross's top star "touches the
+    // quadrant edge... check it has clearance"): not a Southern-Cross-only
+    // problem — the largest star's glow radius (r0*3, up to ~15 viewBox
+    // units at mag=1.0, see below) can clip ANY point authored near 0 or 1
+    // in any of the 4 sets (Big Dipper's Alkaid at x=0.06, Orion's
+    // Betelgeuse/Rigel at y=0.14/0.88 are the same risk). Fixed once, at
+    // render time, instead of hand-nudging every near-edge point in
+    // CONSTELLATIONS: remap the authored 0..1 coordinates into a centered
+    // inset box before placing anything, so the data stays the "real"
+    // relative geometry and the margin is a rendering-safety concern only.
+    // MARGIN 0.16 clears the ~15-unit max glow radius with a small buffer.
+    const MARGIN = 0.16
+    const remap = (v) => MARGIN + v * (1 - 2 * MARGIN)
+    const SET = CONSTELLATIONS[variant] || CONSTELLATIONS.bigDipper
+    const NS = 'http://www.w3.org/2000/svg'
+    const svg = document.createElementNS(NS, 'svg')
+    svg.setAttribute('viewBox', '0 0 100 100')
+    svg.style.position = 'absolute'; svg.style.inset = '0'
+    svg.style.width = '100%'; svg.style.height = '100%'
+    const defs = document.createElementNS(NS, 'defs')
+    svg.appendChild(defs)
+    // lines first, under the stars
+    SET.edges.forEach(([a, b]) => {
+      const pa = SET.points[a], pb = SET.points[b]
+      const line = document.createElementNS(NS, 'line')
+      line.setAttribute('x1', (remap(pa.x) * 100).toFixed(2)); line.setAttribute('y1', (remap(pa.y) * 100).toFixed(2))
+      line.setAttribute('x2', (remap(pb.x) * 100).toFixed(2)); line.setAttribute('y2', (remap(pb.y) * 100).toFixed(2))
+      line.setAttribute('stroke', hsla(hue, 40, 70, A(0.35, fill)))
+      line.setAttribute('stroke-width', '0.6')
+      line.setAttribute('vector-effect', 'non-scaling-stroke')
+      svg.appendChild(line)
+    })
+    // stars on top — soft glow + a near-white core per point, sized by mag.
+    // 2026-09-15 round 2 (Fable-5: "star sizes are near-uniform"): was a
+    // linear 1.6+mag*1.8 (2.4-3.4 across mag 0.45-1.0, ~40% spread, easy to
+    // read as uniform next to the glow blur). mag^2-weighted now (1.0-5.0,
+    // ~2x spread) so the named bright stars (mag 1.0) actually stand out
+    // from the fainter ones instead of everything reading one size.
+    SET.points.forEach((p) => {
+      const r0 = 1.0 + p.mag * p.mag * 4
+      const glowId = `constGlow${occCounter++}`
+      const rg = document.createElementNS(NS, 'radialGradient')
+      rg.setAttribute('id', glowId)
+      ;[[0, hsla(hue, 30, 92, A(0.9, fill))], [35, hsla(hue, 40, 80, A(0.45, fill))], [100, hsla(hue, 40, 70, 0)]].forEach(([off, color]) => {
+        const stop = document.createElementNS(NS, 'stop')
+        stop.setAttribute('offset', `${off}%`)
+        stop.setAttribute('stop-color', color)
+        rg.appendChild(stop)
+      })
+      defs.appendChild(rg)
+      const glow = document.createElementNS(NS, 'circle')
+      glow.setAttribute('cx', (remap(p.x) * 100).toFixed(2)); glow.setAttribute('cy', (remap(p.y) * 100).toFixed(2))
+      glow.setAttribute('r', (r0 * 3).toFixed(2))
+      glow.setAttribute('fill', `url(#${glowId})`)
+      svg.appendChild(glow)
+      const core = document.createElementNS(NS, 'circle')
+      core.setAttribute('cx', (remap(p.x) * 100).toFixed(2)); core.setAttribute('cy', (remap(p.y) * 100).toFixed(2))
+      core.setAttribute('r', r0.toFixed(2))
+      core.setAttribute('fill', hsla(hue, 25, 95, A(0.95, fill)))
+      svg.appendChild(core)
+    })
+    f.appendChild(svg)
+  }
+
+  else if (kind === 'saucer') {
+    // 2026-09-15, Phase-4 pool noun #4, last in the plan's order (crescent
+    // moon, banded giant, constellation, eclipse[shipped], saucer). Not a
+    // drawPlanetDisc variant — a saucer's silhouette (flat wide body +
+    // dome) isn't the "one accepted anatomy," it's a genuinely new iconic
+    // shape. Per OBJECT-RENDERING-PROTOCOL.md's noun test: fully
+    // specifiable in one sentence of pure geometry (a flattened ellipse
+    // body + a smaller dome ellipse overlapping its top half, a thin rim
+    // highlight along the body's edge) — iconic, hand-coded directly, no
+    // reference-trace escalation needed.
+    // Flagged in the research doc as "reads instantly but is a taste
+    // call" — not a craft-risk noun like moon/eclipse ambiguity, a genuine
+    // "does Ben want this in the world" question. Built anyway per his
+    // explicit "next" — STAYS HUMAN is the acceptance gate either way.
+    // New family tag ('saucer', not reused from an existing family) — its
+    // silhouette doesn't actually match radial-mass/cluster/burst/streak/
+    // cloud/lens, and forcing it into one would misrepresent the spacing
+    // rule's own intent (keep visually-similar silhouettes apart).
+    // PASS criterion (protocol, frozen before first render): "a fresh
+    // viewer names this as a flying saucer / UFO" — not a ring, not a
+    // lens/galaxy (the existing 'lens' kind, a very different construction
+    // despite both being wide ellipses). Unrendered as of this comment —
+    // self-render + blind read pending, same discipline as every other
+    // Phase-4 noun. Not wired to any station, not pooled.
+    const NS = 'http://www.w3.org/2000/svg'
+    const svg = document.createElementNS(NS, 'svg')
+    svg.setAttribute('viewBox', '0 0 100 100')
+    svg.style.position = 'absolute'; svg.style.inset = '0'
+    svg.style.width = '100%'; svg.style.height = '100%'
+    const defs = document.createElementNS(NS, 'defs')
+    svg.appendChild(defs)
+    const cx = 50, cy = 54
+    const bodyRx = 46, bodyRy = 12
+    const domeRx = 17, domeRy = 13, domeCy = cy - 9
+
+    // under-glow: a soft wash beneath the body, same idiom as this file's
+    // other headline glows (d-glow), anchored low so it reads as light
+    // spilling from the hull's underside, not a generic halo
+    const glow = el('d-glow')
+    glow.style.left = px(w * 0.5 - w * 0.55); glow.style.top = px(h * 0.5 - h * 0.35)
+    glow.style.width = px(w * 1.1); glow.style.height = px(h * 0.9)
+    glow.style.background = `radial-gradient(ellipse 50% 40% at 50% 62%,
+      ${hsla(hue, 45, 75, A(0.35, fill))} 0%, ${hsla(hue, 40, 62, A(0.14, fill))} 55%, transparent 82%)`
+    f.appendChild(glow)
+
+    // body — flat wide ellipse, cool low-saturation metal tone (a hull
+    // reads by shape/rim, not surface color — same "silhouette carries the
+    // read" principle drawPlanetDisc's own comments state for planets)
+    const bodyGradId = `saucerBody${occCounter++}`
+    const bodyGrad = document.createElementNS(NS, 'radialGradient')
+    bodyGrad.setAttribute('id', bodyGradId)
+    bodyGrad.setAttribute('cx', '50%'); bodyGrad.setAttribute('cy', '35%'); bodyGrad.setAttribute('r', '75%')
+    ;[[0, hsla(hue, 18, 62, 1)], [55, hsla(hue, 15, 42, 1)], [100, hsla(hue, 15, 20, 1)]].forEach(([off, color]) => {
+      const stop = document.createElementNS(NS, 'stop')
+      stop.setAttribute('offset', `${off}%`)
+      stop.setAttribute('stop-color', color)
+      bodyGrad.appendChild(stop)
+    })
+    defs.appendChild(bodyGrad)
+    const body = document.createElementNS(NS, 'ellipse')
+    body.setAttribute('cx', String(cx)); body.setAttribute('cy', String(cy))
+    body.setAttribute('rx', String(bodyRx)); body.setAttribute('ry', String(bodyRy))
+    body.setAttribute('fill', `url(#${bodyGradId})`)
+    svg.appendChild(body)
+
+    // dome — smaller ellipse overlapping the body's top half.
+    // 2026-09-15 round 2 (Fable-5: "the dome sits on the ellipse rather
+    // than in it... looks pasted on"): a flat-rect clip at y=cy cut the
+    // dome's bottom along a straight horizontal line, ignoring the body's
+    // own curved top edge — the actual cause of the "pasted on" read. A
+    // <mask> (white full-area minus a black body-shaped ellipse) hides the
+    // dome only where the BODY ellipse already covers it, so the visible
+    // boundary follows the body's real curvature instead of a straight cut.
+    const domeMaskId = `saucerDomeMask${occCounter++}`
+    const domeMask = document.createElementNS(NS, 'mask')
+    domeMask.setAttribute('id', domeMaskId)
+    const maskBg = document.createElementNS(NS, 'rect')
+    maskBg.setAttribute('x', '0'); maskBg.setAttribute('y', '0')
+    maskBg.setAttribute('width', '100'); maskBg.setAttribute('height', '100')
+    maskBg.setAttribute('fill', 'white')
+    domeMask.appendChild(maskBg)
+    const maskHole = document.createElementNS(NS, 'ellipse')
+    maskHole.setAttribute('cx', String(cx)); maskHole.setAttribute('cy', String(cy))
+    maskHole.setAttribute('rx', String(bodyRx)); maskHole.setAttribute('ry', String(bodyRy))
+    maskHole.setAttribute('fill', 'black')
+    domeMask.appendChild(maskHole)
+    defs.appendChild(domeMask)
+    const domeGradId = `saucerDome${occCounter++}`
+    const domeGrad = document.createElementNS(NS, 'radialGradient')
+    domeGrad.setAttribute('id', domeGradId)
+    domeGrad.setAttribute('cx', '38%'); domeGrad.setAttribute('cy', '30%'); domeGrad.setAttribute('r', '75%')
+    ;[[0, hsla(hue + 15, 40, 82, A(0.9, fill))], [60, hsla(hue + 10, 30, 55, A(0.6, fill))], [100, hsla(hue, 20, 35, A(0.35, fill))]].forEach(([off, color]) => {
+      const stop = document.createElementNS(NS, 'stop')
+      stop.setAttribute('offset', `${off}%`)
+      stop.setAttribute('stop-color', color)
+      domeGrad.appendChild(stop)
+    })
+    defs.appendChild(domeGrad)
+    const dome = document.createElementNS(NS, 'ellipse')
+    dome.setAttribute('cx', String(cx)); dome.setAttribute('cy', String(domeCy))
+    dome.setAttribute('rx', String(domeRx)); dome.setAttribute('ry', String(domeRy))
+    dome.setAttribute('fill', `url(#${domeGradId})`)
+    dome.setAttribute('mask', `url(#${domeMaskId})`)
+    svg.appendChild(dome)
+
+    // rim highlight — thin bright arc along the body's upper edge, the
+    // same "sharp bright limb" cue drawPlanetDisc's rim comment describes,
+    // here doubling as the hull's metallic edge-light
+    const rim = document.createElementNS(NS, 'ellipse')
+    rim.setAttribute('cx', String(cx)); rim.setAttribute('cy', String(cy))
+    rim.setAttribute('rx', String(bodyRx - 1)); rim.setAttribute('ry', String(bodyRy - 1))
+    rim.setAttribute('fill', 'none')
+    rim.setAttribute('stroke', hsla(hue + 10, 35, 85, A(0.55, fill)))
+    rim.setAttribute('stroke-width', '1.4')
+    rim.setAttribute('vector-effect', 'non-scaling-stroke')
+    svg.appendChild(rim)
+
+    f.appendChild(svg)
+  }
+
   else if (kind === 'asteroidField') {
     // scattered-cluster family: was 3 rocks (6 DOM elements, exact) — see
     // the 2026-08-11 comment further down for why this went to 10 rocks
@@ -2670,9 +3015,16 @@ const GLOW_FRAC = 1.35 // glow container as a multiple of size — overflows the
 // rim/glow geometry, two different callers/sizes/fill-invariance needs.
 // Appends glow + svg (clip/lit/shadow/bands/rim) into `container`, which
 // must already be exactly `size`x`size` (the caller positions/sizes it).
-function drawPlanetDisc(el, container, size, hue, fill, lightDeg) {
+// phaseMul/satMul (2026-09-15, `moon` kind): both default to 1, reproducing
+// every existing caller's exact geometry/color byte-for-byte — see moon's own
+// comment at its makePrim branch for why a thinner terminator + desaturated
+// surface, not a new anatomy, is what separates "moon" from "lit planet"
+// reusing the identical drawPlanetDisc geometry.
+function drawPlanetDisc(el, container, size, hue, fill, lightDeg, { phaseMul = 1, satMul = 1, glowMul = 1, bandStyle = 'crescent' } = {}) {
   const cx = 50, cy = 50, R = 50 * RING_OCCLUSION_DISC_FRAC
   const Lx = Math.cos(lightDeg * Math.PI / 180), Ly = Math.sin(lightDeg * Math.PI / 180)
+  const sat = (s) => s * satMul
+  const ga = (a) => a * glowMul
 
   // fill channel (spec: rim intensity, detail alpha and glow extent scale
   // with fill; the disc's own occluding silhouette does not — see
@@ -2710,14 +3062,14 @@ function drawPlanetDisc(el, container, size, hue, fill, lightDeg) {
   // the alpha drop reads as sudden rather than gradual, same issue as
   // makeNebulaRing's outer band. Two intermediate decay stops added
   // between the peak and the final transparent edge.
-  const glowPeak = hsla(hue + 10, 55, 72, A(0.55, fill))
-  const glowHalf = hsla(hue + 10, 55, 72, A(0.28, fill))
+  const glowPeak = hsla(hue + 10, sat(55), 72, A(ga(0.55), fill))
+  const glowHalf = hsla(hue + 10, sat(55), 72, A(ga(0.28), fill))
   const peakPct = Number(glowInnerPct) + 6, outerPct = E(125, fill)
   const q1Pct = peakPct + (outerPct - peakPct) * 0.4
   const q2Pct = peakPct + (outerPct - peakPct) * 0.72
   glow.style.background = `radial-gradient(circle closest-side, transparent 0%, transparent ${glowInnerPct}%, ${glowHalf} ${(Number(glowInnerPct) + 3).toFixed(1)}%, ${glowPeak} ${peakPct.toFixed(1)}%,
-    ${hsla(hue + 10, 52, 60, A(0.22, fill))} ${q1Pct.toFixed(1)}%,
-    ${hsla(hue + 10, 48, 50, A(0.08, fill))} ${q2Pct.toFixed(1)}%, transparent ${outerPct.toFixed(0)}%)`
+    ${hsla(hue + 10, sat(52), 60, A(ga(0.22), fill))} ${q1Pct.toFixed(1)}%,
+    ${hsla(hue + 10, sat(48), 50, A(ga(0.08), fill))} ${q2Pct.toFixed(1)}%, transparent ${outerPct.toFixed(0)}%)`
   // 2026-08-24 (same Opus-5 critique as the terminator change below): the
   // glow ring encircled the ENTIRE silhouette — a corona wrapping a
   // near-black ball is the single strongest eclipse cue there is. A real
@@ -2729,7 +3081,17 @@ function drawPlanetDisc(el, container, size, hue, fill, lightDeg) {
   // limb so the silhouette doesn't vanish against the sky entirely.
   // Same inline-mask idiom as `pulsar`'s beam and RingAmbient's glow masks.
   const maskDeg = (Math.atan2(-Lx, Ly) * 180 / Math.PI).toFixed(1)
-  const glowMask = `linear-gradient(${maskDeg}deg, black 0%, black 44%, rgba(0,0,0,0.45) 60%, rgba(0,0,0,0.10) 78%, rgba(0,0,0,0.10) 100%)`
+  // 2026-09-15 (moon kind, Fable-5 consult, round 2): round-1 fix (a 0.10->0
+  // dark-limb floor) still left a visible halo — diagnosed why: these mask
+  // percentages span the GLOW BOX (size*GLOW_FRAC), not the disc, and the
+  // disc's own dark limb sits at ~70% of that box, inside the old 44-60%
+  // ramp — still catching ~0.15 glow. At glowMul<1 the ramp now dies
+  // (38%->54%) before the disc's dark limb is reached at all, instead of
+  // just lowering the floor it fades toward. Every other caller (glowMul=1)
+  // keeps the exact original 44/60/78/100 stops, byte-identical.
+  const glowMask = glowMul < 1
+    ? `linear-gradient(${maskDeg}deg, black 0%, black 38%, rgba(0,0,0,0) 54%)`
+    : `linear-gradient(${maskDeg}deg, black 0%, black 44%, rgba(0,0,0,0.45) 60%, rgba(0,0,0,0.10) 78%, rgba(0,0,0,0.10) 100%)`
   glow.style.maskImage = glowMask; glow.style.webkitMaskImage = glowMask
   container.appendChild(glow)
 
@@ -2777,10 +3139,10 @@ function drawPlanetDisc(el, container, size, hue, fill, lightDeg) {
   litGrad.setAttribute('cy', (cy + Ly * R * 0.45).toFixed(2))
   litGrad.setAttribute('r', (R * 1.35).toFixed(2))
   const litStops = [
-    [0, hsla(hue + 8, 42, 62, 1)],
-    [38, hsla(hue + 2, 36, 40, 1)],
-    [72, hsla(hue - 4, 32, 22, 1)],
-    [100, hsla(hue, 30, 14, 1)],
+    [0, hsla(hue + 8, sat(42), 62, 1)],
+    [38, hsla(hue + 2, sat(36), 40, 1)],
+    [72, hsla(hue - 4, sat(32), 22, 1)],
+    [100, hsla(hue, sat(30), 14, 1)],
   ]
   litStops.forEach(([off, color]) => {
     const stop = document.createElementNS(NS, 'stop')
@@ -2832,36 +3194,107 @@ function drawPlanetDisc(el, container, size, hue, fill, lightDeg) {
   // invented. The larger circle also flattens the terminator's curvature:
   // an occluding body carves a same-curvature bite (eclipse), a phase
   // terminator is much flatter — flatness itself is a planet cue.
-  const shadowOff = R * 1.35, shadowR = R * 1.68
+  // phaseMul scales the offset ratio (1.35 at phaseMul=1, byte-identical to
+  // every pre-existing caller); shadowR is re-derived from the SAME
+  // sqrt(1+off^2)*R constraint the 2026-08-24 comment above establishes, so
+  // a thinner (moon) or fatter phase still lands its terminator endpoints
+  // exactly on the disc's poles, not just proportionally scaled.
+  const offRatio = 1.35 * phaseMul
+  // phaseMul===1 (every caller before moon) keeps the exact literal 1.68 —
+  // sqrt(1+1.35^2) is 1.680029..., not 1.68 on the nose, and this function's
+  // callers get zero regression drift, not a float-rounding one.
+  const shadowR = R * (phaseMul === 1 ? 1.68 : Math.sqrt(1 + offRatio * offRatio))
+  const shadowOff = R * offRatio
   const shC = { x: cx - Lx * shadowOff, y: cy - Ly * shadowOff }
   const shadow = document.createElementNS(NS, 'circle')
   shadow.setAttribute('cx', shC.x.toFixed(2)); shadow.setAttribute('cy', shC.y.toFixed(2)); shadow.setAttribute('r', shadowR.toFixed(2))
-  shadow.setAttribute('fill', hsla(hue - 12, 22, 3, 0.99))
+  shadow.setAttribute('fill', hsla(hue - 12, sat(22), 3, 0.99))
   shadow.setAttribute('filter', `url(#${termBlurId})`)
-  g.appendChild(shadow)
-  // 2 surface bands (detail budget), arcs at decreasing radius centered on
-  // the light angle so they always sit inside the lit crescent regardless
-  // of where LIGHT_DEG points.
-  const bandA = ptOnCircle(cx, cy, R * 0.87, lightDeg - 34), bandB = ptOnCircle(cx, cy, R * 0.87, lightDeg + 8)
-  const bandC = ptOnCircle(cx, cy, R * 0.72, lightDeg - 42), bandD = ptOnCircle(cx, cy, R * 0.72, lightDeg + 14)
-  const bands = document.createElementNS(NS, 'path')
-  bands.setAttribute('d',
-    `M ${bandA.x.toFixed(2)},${bandA.y.toFixed(2)} A ${(R * 0.87).toFixed(2)},${(R * 0.87).toFixed(2)} 0 0,1 ${bandB.x.toFixed(2)},${bandB.y.toFixed(2)} ` +
-    `M ${bandC.x.toFixed(2)},${bandC.y.toFixed(2)} A ${(R * 0.72).toFixed(2)},${(R * 0.72).toFixed(2)} 0 0,1 ${bandD.x.toFixed(2)},${bandD.y.toFixed(2)}`)
-  bands.setAttribute('fill', 'none')
-  // 2026-08-12 (st0 "too much going on" — bbox-verified against the actual
-  // review mark, not the moon complaint): this quadrant converges the rim
-  // arc, these 2 band strokes, the ring's own crossing, the layer-level
-  // anchor arc, and the pair-bridge line — 5 line elements in one small
-  // area. Only these bands are safely dial-back-able without touching
-  // shared cross-station code (the ring/anchor/bridge are separate
-  // systems/stations). Ben's call: dial back, don't remove — alpha
-  // 0.6->0.28, stroke-width 5->3, so the texture read survives at a
-  // fraction of the visual weight instead of disappearing.
-  bands.setAttribute('stroke', hsla(hue - 15, 25, 20, A(0.28, fill)))
-  bands.setAttribute('stroke-width', '3')
-  bands.setAttribute('vector-effect', 'non-scaling-stroke')
-  g.appendChild(bands)
+  if (bandStyle === 'giant') {
+    // 2026-09-15 (bandedGiant kind, Phase-4 pool noun #2 — same accepted
+    // drawPlanetDisc anatomy, different surface treatment, per the plan's
+    // "variants before new kinds" order). 3 horizontal BELTS (house rule
+    // 7's <=3-marks budget — REPLACES the 2 crescent arcs below, not
+    // additive, so total marks stay <=3 either way), independent of
+    // lightDeg (a real gas giant's cloud bands run with its own rotation
+    // axis, not the light angle) — full-width so the circular clip (`g`'s
+    // clip-path) does the actual edge-trimming, not hand-computed chord
+    // endpoints.
+    // Round 2 (first self-render, thin strokes at alpha 0.32, read as "a
+    // planet with 3 faint lines," not "banded" — failed the noun test):
+    // filled rects, not stroked lines — a belt is a colored BAND, not an
+    // outline, and a 1-2px stroke can never carry enough area to read at
+    // headline distance the way a filled strip does. Alpha 0.32->0.55 and
+    // hue spread widened (-15/+18/-8 -> -22/+26/-12) for stronger belt/
+    // zone contrast on the same 3-mark budget.
+    // Round 3 (Fable-5: reads clean as a gas giant, but flagged the bands
+    // as flat/hard-edged and "painted over" by the shadow rather than
+    // dimmed by it): two fixes, both about how bands meet the rest of the
+    // disc, not the belt colors/positions above. (1) Bands are appended
+    // to `g` BEFORE `shadow` now (shadow moves below, out of this branch)
+    // — shadow's own near-opaque fill (alpha 0.99) then naturally occludes
+    // the belts on the unlit side instead of the belts painting flatly
+    // over a dark circle that's already been drawn. Crescent bandStyle is
+    // untouched — its bands already stayed inside the lit arc by
+    // construction, so it never had this ordering problem, and it still
+    // appends after shadow exactly as before (byte-identical). (2) each
+    // belt's fill is a linearGradient that fades to transparent at both
+    // x-ends instead of a flat solid — a hard-edged full-width rect reads
+    // as a sticker; fading the last ~15% of each end toward the limb is a
+    // cheap foreshortening cue (a belt wrapping a sphere thins visually
+    // near the edge) without hand-computing a true curved/tapered path.
+    const bandYs = [cy - R * 0.42, cy - R * 0.06, cy + R * 0.34]
+    const bandHeights = [11, 15, 12]
+    const bandHues = [hue - 22, hue + 26, hue - 12]
+    bandYs.forEach((by, i) => {
+      const gradId = `giantBandGrad${occCounter++}`
+      const grad = document.createElementNS(NS, 'linearGradient')
+      grad.setAttribute('id', gradId)
+      grad.setAttribute('gradientUnits', 'userSpaceOnUse')
+      grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0')
+      grad.setAttribute('x2', '100'); grad.setAttribute('y2', '0')
+      const bandColor = hsla(bandHues[i], sat(30), 24, A(0.55, fill))
+      const bandColorEdge = hsla(bandHues[i], sat(30), 24, 0)
+      ;[[0, bandColorEdge], [15, bandColor], [85, bandColor], [100, bandColorEdge]].forEach(([off, color]) => {
+        const stop = document.createElementNS(NS, 'stop')
+        stop.setAttribute('offset', `${off}%`)
+        stop.setAttribute('stop-color', color)
+        grad.appendChild(stop)
+      })
+      defs.appendChild(grad)
+      const band = document.createElementNS(NS, 'rect')
+      band.setAttribute('x', '0'); band.setAttribute('y', (by - bandHeights[i] / 2).toFixed(2))
+      band.setAttribute('width', '100'); band.setAttribute('height', String(bandHeights[i]))
+      band.setAttribute('fill', `url(#${gradId})`)
+      g.appendChild(band)
+    })
+    g.appendChild(shadow)
+  } else {
+    g.appendChild(shadow)
+    // 2 surface bands (detail budget), arcs at decreasing radius centered on
+    // the light angle so they always sit inside the lit crescent regardless
+    // of where LIGHT_DEG points.
+    const bandA = ptOnCircle(cx, cy, R * 0.87, lightDeg - 34), bandB = ptOnCircle(cx, cy, R * 0.87, lightDeg + 8)
+    const bandC = ptOnCircle(cx, cy, R * 0.72, lightDeg - 42), bandD = ptOnCircle(cx, cy, R * 0.72, lightDeg + 14)
+    const bands = document.createElementNS(NS, 'path')
+    bands.setAttribute('d',
+      `M ${bandA.x.toFixed(2)},${bandA.y.toFixed(2)} A ${(R * 0.87).toFixed(2)},${(R * 0.87).toFixed(2)} 0 0,1 ${bandB.x.toFixed(2)},${bandB.y.toFixed(2)} ` +
+      `M ${bandC.x.toFixed(2)},${bandC.y.toFixed(2)} A ${(R * 0.72).toFixed(2)},${(R * 0.72).toFixed(2)} 0 0,1 ${bandD.x.toFixed(2)},${bandD.y.toFixed(2)}`)
+    bands.setAttribute('fill', 'none')
+    // 2026-08-12 (st0 "too much going on" — bbox-verified against the actual
+    // review mark, not the moon complaint): this quadrant converges the rim
+    // arc, these 2 band strokes, the ring's own crossing, the layer-level
+    // anchor arc, and the pair-bridge line — 5 line elements in one small
+    // area. Only these bands are safely dial-back-able without touching
+    // shared cross-station code (the ring/anchor/bridge are separate
+    // systems/stations). Ben's call: dial back, don't remove — alpha
+    // 0.6->0.28, stroke-width 5->3, so the texture read survives at a
+    // fraction of the visual weight instead of disappearing.
+    bands.setAttribute('stroke', hsla(hue - 15, sat(25), 20, A(0.28, fill)))
+    bands.setAttribute('stroke-width', '3')
+    bands.setAttribute('vector-effect', 'non-scaling-stroke')
+    g.appendChild(bands)
+  }
   svg.appendChild(g)
 
   // rim / limb highlight: an open arc over ONLY the lit crescent's outer
@@ -2873,7 +3306,7 @@ function drawPlanetDisc(el, container, size, hue, fill, lightDeg) {
   const rim = document.createElementNS(NS, 'path')
   rim.setAttribute('d', `M ${rimA.x.toFixed(2)},${rimA.y.toFixed(2)} A ${R},${R} 0 0,1 ${rimB.x.toFixed(2)},${rimB.y.toFixed(2)}`)
   rim.setAttribute('fill', 'none')
-  rim.setAttribute('stroke', hsla(hue + 10, 70, 82, A(0.85, fill)))
+  rim.setAttribute('stroke', hsla(hue + 10, sat(70), 82, A(0.85, fill)))
   rim.setAttribute('stroke-width', '4')
   rim.setAttribute('stroke-linecap', 'round')
   rim.setAttribute('vector-effect', 'non-scaling-stroke')
