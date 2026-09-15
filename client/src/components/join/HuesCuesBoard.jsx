@@ -67,6 +67,13 @@ function WheelColumn({ items, selected, onSelect, disabled, highlight, text }) {
       onScroll={handleScroll}
       style={{
         flex: 1, height: WHEEL_H, overflowY: disabled ? 'hidden' : 'auto',
+        // Explicit, not just implied by touchAction — leaving this unset lets
+        // the CSS overflow spec's own rule ("if one axis is non-visible, the
+        // other computes to auto too") silently turn overflow-x auto, which
+        // touchAction: 'pan-y' does NOT block (that only governs touch/pen
+        // gesture routing, not trackpad wheel scrolling or overflow-x itself)
+        // — Ben, 2026-09-15: "the wheel is letting it go left and right."
+        overflowX: 'hidden',
         scrollSnapType: disabled ? 'none' : 'y mandatory', WebkitOverflowScrolling: 'touch',
         touchAction: 'pan-y', paddingTop: WHEEL_PAD, paddingBottom: WHEEL_PAD,
         opacity: disabled ? 0.5 : 1,
